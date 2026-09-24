@@ -1,0 +1,14 @@
+{
+  "name": "@raptoru/studio-desktop",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "npm run build && electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.4.5"
+  }
+}

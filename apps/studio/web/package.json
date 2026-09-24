@@ -1,0 +1,14 @@
+{
+  "name": "@raptoru/studio-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "vite --port 5173 --strictPort",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.3.1"
+  }
+}

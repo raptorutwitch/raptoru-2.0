@@ -1,0 +1,14 @@
+{
+  "name": "@raptoru/twitch-extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "vite --port 5175 --strictPort",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.3.1"
+  }
+}

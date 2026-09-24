@@ -1,0 +1,38 @@
+{
+  "name": "raptoru",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/core-api",
+    "apps/twitch-bot",
+    "apps/twitch-extension",
+    "apps/viewer-web",
+    "apps/studio/server",
+    "apps/studio/web",
+    "apps/studio/desktop"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm run build",
+    "studio:desktop": "npm run start -w @raptoru/studio-desktop"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.2",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.1"
+  }
+}
