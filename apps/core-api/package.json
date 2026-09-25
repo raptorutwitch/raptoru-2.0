@@ -3,9 +3,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "db:migrate": "tsx --env-file-if-exists=.env src/scripts/migrate.ts",
+    "daily:import-legacy": "tsx --env-file-if-exists=.env src/scripts/import-legacy-daily.ts",
+    "test:integration": "vitest run test/postgres.integration.test.ts"
+  },
+  "dependencies": {
+    "@raptoru/schemas": "*",
+    "pg": "^8.23.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/pg": "^8.23.1"
   }
 }

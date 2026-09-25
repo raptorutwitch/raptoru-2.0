@@ -13,7 +13,8 @@
     "apps/viewer-web",
     "apps/studio/server",
     "apps/studio/web",
-    "apps/studio/desktop"
+    "apps/studio/desktop",
+    "packages/schemas"
   ],
   "scripts": {
     "build": "turbo run build",
@@ -22,8 +23,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm run build",
-    "studio:desktop": "npm run start -w @raptoru/studio-desktop"
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build",
+    "studio:desktop": "npm run start -w @raptoru/studio-desktop",
+    "test": "turbo run test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -33,6 +35,7 @@
     "tsx": "^4.23.15",
     "turbo": "^2.11.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^5.0.1"
   }
 }
