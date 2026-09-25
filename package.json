@@ -25,7 +25,8 @@
     "format:check": "prettier --check .",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build",
     "studio:desktop": "npm run start -w @raptoru/studio-desktop",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "studio": "turbo run build && npm run start -w @raptoru/studio-desktop"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
