@@ -19,6 +19,7 @@ await core.credits.processPending();
 createApp({
   daily: core.daily,
   streams: core.streams,
+  presence: core.presence,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
 }).listen(config.PORT, () => {

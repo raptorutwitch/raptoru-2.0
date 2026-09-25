@@ -7,7 +7,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
-    "start": "node --env-file-if-exists=.env dist/index.js"
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "presence:preflight": "tsx --env-file-if-exists=.env src/scripts/presence-preflight.ts",
+    "twitch:auth": "tsx --env-file-if-exists=.env src/scripts/twitch-auth.ts"
   },
   "dependencies": {
     "@raptoru/schemas": "*",

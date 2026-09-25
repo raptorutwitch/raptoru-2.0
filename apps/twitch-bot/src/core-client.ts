@@ -1,9 +1,13 @@
 import {
   DailyClaimResponse,
   DailyStreakResponse,
+  PresenceLeaseResponse,
+  PresenceObservationResponse,
   StreamStateResponse,
   type DailyClaimRequest,
   type DailyStreakRequest,
+  type PresenceLeaseRequest,
+  type PresenceObservationRequest,
   type StreamOfflineRequest,
   type StreamOnlineRequest,
   type StreamSyncRequest,
@@ -16,6 +20,10 @@ export interface CoreClient {
   streamSync(body: StreamSyncRequest): Promise<StreamStateResponse>;
   dailyClaim(body: DailyClaimRequest): Promise<DailyClaimResponse>;
   dailyStreak(body: DailyStreakRequest): Promise<DailyStreakResponse>;
+  presenceLease(body: PresenceLeaseRequest): Promise<PresenceLeaseResponse>;
+  presenceObservation(
+    body: PresenceObservationRequest,
+  ): Promise<PresenceObservationResponse>;
 }
 
 class CoreHttpError extends Error {
@@ -25,7 +33,7 @@ class CoreHttpError extends Error {
 }
 
 /**
- * Every call is idempotent on the Core side (claims are keyed by the Twitch message id), so a
+ * Every call is idempotent on the Core side (claims keyed by Twitch message id, presence cycles by cycleId), so a
  * failed call is retried once: a lost response is replayed, never paid twice.
  */
 export function createCoreClient(
@@ -69,5 +77,9 @@ export function createCoreClient(
     dailyClaim: (body) => call('/v1/bot/daily/claim', body, DailyClaimResponse),
     dailyStreak: (body) =>
       call('/v1/bot/daily/streak', body, DailyStreakResponse),
+    presenceLease: (body) =>
+      call('/v1/bot/presence/lease', body, PresenceLeaseResponse),
+    presenceObservation: (body) =>
+      call('/v1/bot/presence/observations', body, PresenceObservationResponse),
   };
 }

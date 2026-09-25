@@ -7,6 +7,8 @@ import {
 } from 'node:http';
 import {
   DailyClaimRequest,
+  PresenceLeaseRequest,
+  PresenceObservationRequest,
   DailyStreakRequest,
   StreamOfflineRequest,
   StreamOnlineRequest,
@@ -15,6 +17,7 @@ import {
 } from '@raptoru/schemas';
 import { z } from 'zod';
 import type { DailyService } from '../daily/daily-service.js';
+import type { PresenceService } from '../presence/presence-service.js';
 import type {
   ActiveSession,
   StreamSessions,
@@ -23,6 +26,7 @@ import type {
 export interface AppDeps {
   daily: DailyService;
   streams: StreamSessions;
+  presence: PresenceService;
   botSecret: string;
   studioSecret: string;
 }
@@ -76,7 +80,7 @@ function streamState(session: ActiveSession | null): StreamStateResponse {
   };
 }
 
-function routes({ daily, streams }: AppDeps): Route[] {
+function routes({ daily, streams, presence }: AppDeps): Route[] {
   return [
     {
       method: 'GET',
@@ -154,7 +158,33 @@ function routes({ daily, streams }: AppDeps): Route[] {
         daily.status(parse(TwitchUserId, params[0])),
     },
 
+    // --- presence tracker (shadow mode) ---
+    {
+      method: 'POST',
+      pattern: /^\/v1\/bot\/presence\/lease$/,
+      auth: 'bot',
+      handle: async ({ body }) =>
+        presence.acquireLease(parse(PresenceLeaseRequest, body)),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/v1\/bot\/presence\/observations$/,
+      auth: 'bot',
+      handle: async ({ body }) =>
+        presence.record(parse(PresenceObservationRequest, body)),
+    },
+
     // --- Studio / admin ---
+    {
+      method: 'GET',
+      pattern: /^\/v1\/admin\/presence\/streams\/([^/]+)$/,
+      auth: 'studio',
+      handle: async ({ params }) => {
+        const report = await presence.report(params[0]!);
+        if (!report) throw new HttpError(404, { error: 'unknown_stream' });
+        return report;
+      },
+    },
     {
       method: 'GET',
       pattern: /^\/v1\/admin\/daily\/viewers\/([^/]+)$/,

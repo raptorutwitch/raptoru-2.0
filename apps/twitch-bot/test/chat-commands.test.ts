@@ -15,6 +15,8 @@ function fakeCore(overrides: Partial<CoreClient> = {}): CoreClient {
     streamSync: vi.fn(),
     dailyClaim: vi.fn(async () => ({ message: 'core says claimed' }) as never),
     dailyStreak: vi.fn(async () => ({ message: 'core says streak' }) as never),
+    presenceLease: vi.fn(),
+    presenceObservation: vi.fn(),
     ...overrides,
   };
 }

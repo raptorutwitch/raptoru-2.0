@@ -21,6 +21,7 @@ beforeEach(async () => {
   const server = createApp({
     daily: core.daily,
     streams: core.streams,
+    presence: core.presence,
     botSecret: BOT,
     studioSecret: STUDIO,
   });

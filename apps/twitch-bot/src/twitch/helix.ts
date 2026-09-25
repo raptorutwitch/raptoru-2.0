@@ -1,34 +1,83 @@
+import type { Chatter } from '@raptoru/schemas';
 import type { HelixStream } from '../stream-watch.js';
 
+/** Token provider for Helix; implemented by TwitchAuth. */
 export interface HelixAuth {
   clientId: string;
-  accessToken: string;
+  getAccessToken(): Promise<string>;
+  /** Called once after a 401; true when a new token is available for one retry. */
+  handleUnauthorized(rejectedAccessToken: string): Promise<boolean>;
 }
+
+/** Per-request timeout; callers may also pass their own abort signal. */
+export const HELIX_REQUEST_TIMEOUT_MS = 10_000;
 
 export class HelixError extends Error {
   constructor(
     readonly status: number,
     readonly body: string,
+    /** From the `Ratelimit-Reset` header (epoch ms), when Twitch sent it. */
+    readonly rateLimitResetMs: number | null = null,
   ) {
     super(`helix ${status}: ${body.slice(0, 200)}`);
   }
 }
 
+interface HelixResponse {
+  data?: unknown[];
+  pagination?: { cursor?: string };
+  total?: number;
+}
+
+export interface ChattersPage {
+  chatters: Chatter[];
+  cursor: string | null;
+  total: number | null;
+}
+
 export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
-  async function request(method: 'GET' | 'POST', path: string, body?: unknown) {
+  async function request(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+    signal?: AbortSignal,
+    retried = false,
+  ): Promise<HelixResponse> {
+    let accessToken: string;
+    try {
+      accessToken = await auth.getAccessToken();
+    } catch (error) {
+      // No usable token (refresh rejected, scopes lost…): surface it as an auth failure.
+      throw new HelixError(401, `auth: ${(error as Error).message}`);
+    }
+    const timeout = AbortSignal.timeout(HELIX_REQUEST_TIMEOUT_MS);
     const res = await fetchImpl(`https://api.twitch.tv/helix${path}`, {
       method,
       headers: {
-        authorization: `Bearer ${auth.accessToken}`,
+        authorization: `Bearer ${accessToken}`,
         'client-id': auth.clientId,
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(10_000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     const text = await res.text();
-    if (!res.ok) throw new HelixError(res.status, text);
-    return text ? (JSON.parse(text) as { data?: unknown[] }) : {};
+    if (
+      res.status === 401 &&
+      !retried &&
+      (await auth.handleUnauthorized(accessToken))
+    ) {
+      return request(method, path, body, signal, true);
+    }
+    if (!res.ok) {
+      const reset = Number(res.headers.get('ratelimit-reset'));
+      throw new HelixError(
+        res.status,
+        text,
+        Number.isFinite(reset) && reset > 0 ? reset * 1000 : null,
+      );
+    }
+    return text ? (JSON.parse(text) as HelixResponse) : {};
   }
 
   return {
@@ -42,6 +91,44 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       return stream?.type === 'live'
         ? { id: stream.id, started_at: stream.started_at }
         : null;
+    },
+
+    /** One page of Get Chatters (scope moderator:read:chatters; token user = broadcaster or mod). */
+    async getChattersPage(
+      broadcasterId: string,
+      moderatorId: string,
+      after: string | null,
+      signal?: AbortSignal,
+      first = 1000,
+    ): Promise<ChattersPage> {
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        moderator_id: moderatorId,
+        first: String(first),
+      });
+      if (after) qs.set('after', after);
+      const res = await request(
+        'GET',
+        `/chat/chatters?${qs}`,
+        undefined,
+        signal,
+      );
+      const rows = (res.data ?? []) as {
+        user_id: string;
+        user_login: string;
+        user_name: string;
+      }[];
+      return {
+        chatters: rows
+          .filter((r) => /^\d+$/.test(String(r.user_id)) && r.user_login)
+          .map((r) => ({
+            twitchUserId: String(r.user_id),
+            login: String(r.user_login).slice(0, 25),
+            displayName: String(r.user_name || r.user_login).slice(0, 50),
+          })),
+        cursor: res.pagination?.cursor || null,
+        total: typeof res.total === 'number' ? res.total : null,
+      };
     },
 
     async sendChatMessage(
@@ -71,19 +158,4 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
   };
 }
 
-/** Throws unless the user access token is valid; returns its login and remaining lifetime. */
-export async function validateToken(
-  accessToken: string,
-  fetchImpl: typeof fetch = fetch,
-) {
-  const res = await fetchImpl('https://id.twitch.tv/oauth2/validate', {
-    headers: { authorization: `OAuth ${accessToken}` },
-  });
-  if (!res.ok) throw new Error(`Twitch token rejected (${res.status})`);
-  return (await res.json()) as {
-    login: string;
-    user_id: string;
-    expires_in: number;
-    scopes: string[];
-  };
-}
+export type Helix = ReturnType<typeof createHelix>;

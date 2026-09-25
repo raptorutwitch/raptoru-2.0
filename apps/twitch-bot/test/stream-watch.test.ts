@@ -9,6 +9,8 @@ function fakeCore() {
     streamSync: vi.fn(async () => ({})),
     dailyClaim: vi.fn(),
     dailyStreak: vi.fn(),
+    presenceLease: vi.fn(),
+    presenceObservation: vi.fn(),
   } satisfies Record<keyof CoreClient, unknown>;
 }
 

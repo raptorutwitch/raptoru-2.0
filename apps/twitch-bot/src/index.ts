@@ -1,12 +1,14 @@
-import { handleChatMessage } from './chat-commands.js';
-import { loadConfig } from './config.js';
+import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
+import { loadConfig, requiredScopes } from './config.js';
 import { createCoreClient } from './core-client.js';
-import { createStreamWatcher, type HelixStream } from './stream-watch.js';
+import { createBotRuntime } from './runtime.js';
+import { AuthError, fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { runEventSub } from './twitch/eventsub.js';
-import { createHelix, validateToken } from './twitch/helix.js';
+import { createHelix } from './twitch/helix.js';
 
-// Safety switch: while SAMMI still runs the production Daily, the bot must never answer !daily on
-// the real channel. It only connects to Twitch when explicitly enabled.
+// Safety switch: the bot only connects to Twitch when explicitly enabled. Chat commands and the
+// presence tracker are separate opt-ins (see config.ts).
 if (process.env.TWITCH_ENABLED !== 'true') {
   console.log(
     '[twitch-bot] Twitch disabled (TWITCH_ENABLED is not "true"): not connecting.',
@@ -15,78 +17,77 @@ if (process.env.TWITCH_ENABLED !== 'true') {
 }
 
 const config = loadConfig();
-const token = await validateToken(config.TWITCH_USER_ACCESS_TOKEN);
+const auth = new TwitchAuth({
+  clientId: config.TWITCH_CLIENT_ID,
+  clientSecret: config.TWITCH_CLIENT_SECRET,
+  store: fileTokenStore(config.TWITCH_TOKEN_FILE),
+  requiredScopes: requiredScopes(config),
+});
+try {
+  await auth.init();
+} catch (error) {
+  console.error(
+    `[twitch-bot] Twitch auth unusable: ${(error as Error).message}`,
+  );
+  process.exit(1);
+}
+const status = auth.status();
 console.log(
-  `[twitch-bot] token ok for ${token.login}, expires in ${token.expires_in}s`,
+  `[twitch-bot] token ok for ${status.login} (${status.userId}), expires ${status.expiresAt}, refresh ${status.hasRefreshToken ? 'available' : 'missing'} · chat commands ${config.DAILY_CHAT_COMMANDS} · presence shadow ${config.PRESENCE_SHADOW}`,
 );
 
-const helix = createHelix({
-  clientId: config.TWITCH_CLIENT_ID,
-  accessToken: config.TWITCH_USER_ACCESS_TOKEN,
-});
-const core = createCoreClient(config.CORE_API_URL, config.BOT_SECRET);
-const broadcaster = config.TWITCH_BROADCASTER_ID;
-const streams = createStreamWatcher({
-  core,
-  getStream: () => helix.getStream(broadcaster),
-});
-const say = (text: string) =>
-  helix.sendChatMessage(broadcaster, config.TWITCH_BOT_USER_ID, text);
-
-runEventSub({
-  async subscribe(sessionId) {
-    await helix.subscribe(
-      'stream.online',
-      { broadcaster_user_id: broadcaster },
-      sessionId,
-    );
-    await helix.subscribe(
-      'stream.offline',
-      { broadcaster_user_id: broadcaster },
-      sessionId,
-    );
-    await helix.subscribe(
-      'channel.chat.message',
-      { broadcaster_user_id: broadcaster, user_id: config.TWITCH_BOT_USER_ID },
-      sessionId,
-    );
-    console.log('[twitch-bot] EventSub subscriptions created');
-  },
-  async notification(type, event) {
-    try {
-      if (type === 'stream.online')
-        await streams.online(event as unknown as HelixStream);
-      else if (type === 'stream.offline') await streams.offline();
-      else if (type === 'channel.chat.message') {
-        if (event.chatter_user_id === config.TWITCH_BOT_USER_ID) return;
-        await handleChatMessage(
-          {
-            messageId: String(event.message_id),
-            text: String(
-              (event.message as { text?: string } | undefined)?.text ?? '',
-            ),
-            chatter: {
-              twitchUserId: String(event.chatter_user_id),
-              login: String(event.chatter_user_login),
-              displayName: String(event.chatter_user_name),
-            },
-          },
-          { core, say },
-        );
-      }
-    } catch (error) {
-      console.error(`[twitch-bot] ${type} handling failed`, error);
-    }
-  },
+const runtime = createBotRuntime({
+  config,
+  tokenUserId: status.userId!,
+  helix: createHelix({
+    clientId: config.TWITCH_CLIENT_ID,
+    getAccessToken: () => auth.getAccessToken(),
+    handleUnauthorized: (rejected) => auth.handleUnauthorized(rejected),
+  }),
+  core: createCoreClient(config.CORE_API_URL, config.BOT_SECRET),
+  workerId: `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`,
 });
 
-await streams
-  .sync()
-  .catch((error) =>
-    console.error('[twitch-bot] initial stream sync failed', error),
-  );
-setInterval(() => {
-  streams
+runEventSub(runtime.eventSub);
+
+// Helix repair loop: chained timeouts, a sync never overlaps the previous one.
+const syncLoop = async () => {
+  await runtime.streams
     .sync()
     .catch((error) => console.error('[twitch-bot] stream sync failed', error));
-}, config.STREAM_SYNC_INTERVAL_MS);
+  setTimeout(syncLoop, config.STREAM_SYNC_INTERVAL_MS);
+};
+await syncLoop();
+
+// Hourly token validation (required by Twitch). Lost scopes or a dead refresh token stop the
+// presence tracker cleanly instead of letting it fail every cycle.
+const validateLoop = () =>
+  setTimeout(
+    async () => {
+      try {
+        await auth.validate();
+      } catch (error) {
+        if (error instanceof AuthError && auth.status().state === 'failed') {
+          console.error(
+            `[twitch-bot] Twitch auth lost (${error.code}): presence tracker stopped`,
+          );
+          runtime.presence?.stop();
+          return;
+        }
+        console.error(
+          '[twitch-bot] token validation failed, will retry',
+          (error as Error).message,
+        );
+      }
+      validateLoop();
+    },
+    60 * 60 * 1000,
+  );
+validateLoop();
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    runtime.presence?.stop();
+    process.exit(0);
+  });
+}
