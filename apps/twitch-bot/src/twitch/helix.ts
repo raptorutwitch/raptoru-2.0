@@ -131,6 +131,23 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       };
     },
 
+    /** Twitch identity of a login, or null if it does not exist. */
+    async getUserByLogin(login: string): Promise<Chatter | null> {
+      const { data = [] } = await request(
+        'GET',
+        `/users?login=${encodeURIComponent(login)}`,
+      );
+      const user = data[0] as
+        { id: string; login: string; display_name: string } | undefined;
+      return user
+        ? {
+            twitchUserId: user.id,
+            login: user.login,
+            displayName: user.display_name || user.login,
+          }
+        : null;
+    },
+
     async sendChatMessage(
       broadcasterId: string,
       senderId: string,

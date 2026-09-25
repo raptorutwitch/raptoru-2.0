@@ -145,6 +145,9 @@ describe('bot guard (shadow test preconditions)', () => {
     expect(
       botGuard({ DAILY_CHAT_COMMANDS: 'false', PRESENCE_SHADOW: 'false' }),
     ).toMatch(/PRESENCE_SHADOW/);
+    expect(
+      botGuard({ LOYALTY_CHAT_COMMANDS: 'true', PRESENCE_SHADOW: 'true' }),
+    ).toMatch(/LOYALTY_CHAT_COMMANDS/);
     expect(botGuard({ PRESENCE_SHADOW: 'true' })).toBeNull();
   });
 
@@ -167,6 +170,7 @@ describe('bot guard (shadow test preconditions)', () => {
     expect(bot.start).toHaveBeenCalledWith({
       TWITCH_ENABLED: 'true',
       DAILY_CHAT_COMMANDS: 'false',
+      LOYALTY_CHAT_COMMANDS: 'false',
       PRESENCE_SHADOW: 'true',
     });
   });

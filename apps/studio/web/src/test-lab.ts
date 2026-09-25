@@ -150,6 +150,7 @@ function render(s: Status): string {
       <h2>Twitch Bot ${botRunning ? badge('Running', 'ok') : s.bot.state === 'error' ? badge('Error', 'ko') : badge('Stopped', 'idle')}</h2>
       ${row('Process', `${esc(s.bot.state)}${s.bot.pid ? ` · pid ${s.bot.pid}` : ''}`)}
       ${row('DAILY_CHAT_COMMANDS', s.bot.flags.DAILY_CHAT_COMMANDS === 'false' ? badge('false', 'ok') : badge(s.bot.flags.DAILY_CHAT_COMMANDS ?? '?', 'ko'))}
+      ${row('LOYALTY_CHAT_COMMANDS', s.bot.flags.LOYALTY_CHAT_COMMANDS === 'false' ? badge('false', 'ok') : badge(s.bot.flags.LOYALTY_CHAT_COMMANDS ?? '?', 'ko'))}
       ${row('PRESENCE_SHADOW', s.bot.flags.PRESENCE_SHADOW === 'true' ? badge('true', 'ok') : badge(s.bot.flags.PRESENCE_SHADOW ?? '?', 'ko'))}
       ${row('Connexion Twitch', esc(s.bot.twitch))}
       ${row('Dernière erreur', esc(s.bot.lastError))}

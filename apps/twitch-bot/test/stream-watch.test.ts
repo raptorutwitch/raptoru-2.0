@@ -11,6 +11,9 @@ function fakeCore() {
     dailyStreak: vi.fn(),
     presenceLease: vi.fn(),
     presenceObservation: vi.fn(),
+    walletBalance: vi.fn(),
+    walletTransfer: vi.fn(),
+    walletAdmin: vi.fn(),
   } satisfies Record<keyof CoreClient, unknown>;
 }
 

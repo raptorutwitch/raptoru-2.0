@@ -61,7 +61,21 @@ export function fileTokenStore(path: string): TokenStore {
         encoding: 'utf8',
         mode: 0o600,
       });
-      await rename(tmp, path);
+      // Windows briefly refuses a rename over a file another process is replacing: retry shortly.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await rename(tmp, path);
+          return;
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (
+            attempt >= 10 ||
+            (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')
+          )
+            throw error;
+          await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
+        }
+      }
     },
   };
 }

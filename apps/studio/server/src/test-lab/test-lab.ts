@@ -77,6 +77,9 @@ export function botGuard(env: EnvFile): string | null {
   if ((env.DAILY_CHAT_COMMANDS ?? 'false') !== 'false') {
     return 'refused: DAILY_CHAT_COMMANDS must be false in apps/twitch-bot/.env';
   }
+  if ((env.LOYALTY_CHAT_COMMANDS ?? 'false') !== 'false') {
+    return 'refused: LOYALTY_CHAT_COMMANDS must be false in apps/twitch-bot/.env';
+  }
   if (env.PRESENCE_SHADOW !== 'true')
     return 'refused: PRESENCE_SHADOW must be true in apps/twitch-bot/.env';
   return null;
@@ -272,6 +275,7 @@ export class TestLab {
         lastExit: bot.lastExit,
         flags: {
           DAILY_CHAT_COMMANDS: botEnv.DAILY_CHAT_COMMANDS ?? 'false',
+          LOYALTY_CHAT_COMMANDS: botEnv.LOYALTY_CHAT_COMMANDS ?? 'false',
           PRESENCE_SHADOW: botEnv.PRESENCE_SHADOW ?? 'false',
           TWITCH_ENABLED_IN_FILE: botEnv.TWITCH_ENABLED ?? 'false',
         },
@@ -498,6 +502,7 @@ export class TestLab {
     this.deps.bot.start({
       TWITCH_ENABLED: 'true',
       DAILY_CHAT_COMMANDS: 'false',
+      LOYALTY_CHAT_COMMANDS: 'false',
       PRESENCE_SHADOW: 'true',
     });
     for (let i = 0; i < 40; i++) {

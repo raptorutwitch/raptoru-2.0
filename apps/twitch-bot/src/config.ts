@@ -17,6 +17,8 @@ const TwitchApp = z.object({
   TWITCH_TOKEN_FILE: z.string().min(1).default(DEFAULT_TOKEN_FILE),
   // Answers !daily / !streak in chat. Never 'true' on the production channel before the cutover.
   DAILY_CHAT_COMMANDS: Flag,
+  // !solde / !give / !wallet in chat. Never 'true' on the production channel before the cutover.
+  LOYALTY_CHAT_COMMANDS: Flag,
   // Shadow presence tracker (Get Chatters, read-only). Needs scope moderator:read:chatters.
   PRESENCE_SHADOW: Flag,
 });
@@ -55,10 +57,14 @@ export function loadTwitchAppConfig(
 
 /** Scopes the token needs for the enabled features, nothing more. */
 export function requiredScopes(
-  config: Pick<TwitchAppConfig, 'DAILY_CHAT_COMMANDS' | 'PRESENCE_SHADOW'>,
+  config: Pick<
+    TwitchAppConfig,
+    'DAILY_CHAT_COMMANDS' | 'LOYALTY_CHAT_COMMANDS' | 'PRESENCE_SHADOW'
+  >,
 ): string[] {
   return [
-    ...(config.DAILY_CHAT_COMMANDS === 'true'
+    ...(config.DAILY_CHAT_COMMANDS === 'true' ||
+    config.LOYALTY_CHAT_COMMANDS === 'true'
       ? ['user:read:chat', 'user:write:chat']
       : []),
     ...(config.PRESENCE_SHADOW === 'true' ? ['moderator:read:chatters'] : []),

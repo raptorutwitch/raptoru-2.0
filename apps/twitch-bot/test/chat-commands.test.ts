@@ -17,6 +17,9 @@ function fakeCore(overrides: Partial<CoreClient> = {}): CoreClient {
     dailyStreak: vi.fn(async () => ({ message: 'core says streak' }) as never),
     presenceLease: vi.fn(),
     presenceObservation: vi.fn(),
+    walletBalance: vi.fn(),
+    walletTransfer: vi.fn(),
+    walletAdmin: vi.fn(),
     ...overrides,
   };
 }

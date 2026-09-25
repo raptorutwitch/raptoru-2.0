@@ -267,7 +267,7 @@ describe('stream lifecycle', () => {
 });
 
 describe('shadow mode', () => {
-  it('never creates a Daily claim, credit or wallet row', async () => {
+  it('never creates a Daily claim, credit, wallet or ledger row', async () => {
     const core = await live();
     for (let m = 0; m <= 20; m += 2)
       await observe(core, at(m), ['1', '2', '3']);
@@ -279,10 +279,14 @@ describe('shadow mode', () => {
     ]) {
       expect(await count(core.db, table)).toBe(0);
     }
-    const tables = await core.db.query<{ tablename: string }>(
-      "select tablename from pg_tables where schemaname = 'public' and (tablename like '%wallet%' or tablename like '%ledger%')",
-    );
-    expect(tables).toEqual([]);
+    // Presence never feeds the wallet in this slice.
+    for (const table of [
+      'wallets',
+      'wallet_transactions',
+      'wallet_operations',
+    ]) {
+      expect(await count(core.db, table)).toBe(0);
+    }
   });
 
   it('reports coverage, gaps, errors and per-viewer watch time', async () => {

@@ -65,6 +65,10 @@ export async function createTestDb(): Promise<Db> {
   await db.query(
     `truncate ${tables.map((t) => t.tablename).join(', ')} restart identity cascade`,
   );
+  // Seed rows of the migrations that the truncate removed.
+  await db.query(
+    "insert into currencies (id, singular, plural, is_primary) values ('main', 'Jeton', 'Jetons', true)",
+  );
   return db;
 }
 

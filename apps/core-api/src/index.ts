@@ -20,6 +20,7 @@ createApp({
   daily: core.daily,
   streams: core.streams,
   presence: core.presence,
+  wallet: core.wallet,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
 }).listen(config.PORT, () => {

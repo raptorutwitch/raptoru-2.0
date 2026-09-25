@@ -65,3 +65,16 @@ npm run presence:preflight -w @raptoru/twitch-bot              # read-only token
 npm run presence:report -w @raptoru/core-api -- --latest       # read-only report (works during the live too)
 npm run presence:report -w @raptoru/core-api -- --stream <id> --csv presence.csv
 ```
+
+## Wallet / Loyalty (Core V1, dev/test only)
+
+Core is the only economic source of truth. StreamElements and SAMMI stay in charge of production until the cutover. Nothing is imported, and Presence and Daily are not connected to the wallet.
+
+- **Model**: multi-currency (`currencies`, primary `main` = Jeton/Jetons, renamable), `wallets` (balance per viewer and currency), and an append-only ledger (`wallet_transactions`).
+- **Idempotency**: every change is a `wallet_operations` row with an idempotency key; a retry replays the outcome, and a different payload under the same key is refused.
+- **Concurrency**: only the wallets involved are locked (stable order), independent viewers run in parallel, and there is no global queue.
+- **Debt**: spends and transfers never go below 0 and are refused while in debt. Admin corrections and penalties may go negative if the currency allows it, and gains repay the debt.
+- **Loyalty**: a personal rate replaces the standard rate, then the global boost applies (x3 × x2 = x6). Resolution only for now: no feature uses it yet.
+- **Permissions**: internal `staff_roles` (owner/supermod), independent from the Twitch moderator badge.
+- **Chat** (`LOYALTY_CHAT_COMMANDS=true`, off by default): `!solde` / `!balance` / `!compte`, `!give` / `!trade @pseudo montant` (either order), and `!wallet add|remove|set @pseudo montant [motif]` for staff.
+- **Core routes**: bot `/v1/bot/wallet/{balance,transfer,admin}`; public `/v1/wallet/{currencies,leaderboard,viewers/:id}`; Studio `/v1/admin/wallet/*`, `/v1/admin/loyalty/*`, `/v1/admin/staff*`.

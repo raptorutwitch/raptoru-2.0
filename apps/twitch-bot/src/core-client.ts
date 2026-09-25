@@ -3,11 +3,15 @@ import {
   DailyStreakResponse,
   PresenceLeaseResponse,
   PresenceObservationResponse,
+  WalletChatResponse,
   StreamStateResponse,
   type DailyClaimRequest,
   type DailyStreakRequest,
   type PresenceLeaseRequest,
   type PresenceObservationRequest,
+  type WalletBalanceRequest,
+  type WalletChatAdminRequest,
+  type WalletTransferRequest,
   type StreamOfflineRequest,
   type StreamOnlineRequest,
   type StreamSyncRequest,
@@ -24,6 +28,9 @@ export interface CoreClient {
   presenceObservation(
     body: PresenceObservationRequest,
   ): Promise<PresenceObservationResponse>;
+  walletBalance(body: WalletBalanceRequest): Promise<WalletChatResponse>;
+  walletTransfer(body: WalletTransferRequest): Promise<WalletChatResponse>;
+  walletAdmin(body: WalletChatAdminRequest): Promise<WalletChatResponse>;
 }
 
 class CoreHttpError extends Error {
@@ -81,5 +88,11 @@ export function createCoreClient(
       call('/v1/bot/presence/lease', body, PresenceLeaseResponse),
     presenceObservation: (body) =>
       call('/v1/bot/presence/observations', body, PresenceObservationResponse),
+    walletBalance: (body) =>
+      call('/v1/bot/wallet/balance', body, WalletChatResponse),
+    walletTransfer: (body) =>
+      call('/v1/bot/wallet/transfer', body, WalletChatResponse),
+    walletAdmin: (body) =>
+      call('/v1/bot/wallet/admin', body, WalletChatResponse),
   };
 }

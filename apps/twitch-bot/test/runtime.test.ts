@@ -13,6 +13,7 @@ const baseConfig: BotConfig = {
   TWITCH_BROADCASTER_ID: '100',
   STREAM_SYNC_INTERVAL_MS: 60_000,
   DAILY_CHAT_COMMANDS: 'false',
+  LOYALTY_CHAT_COMMANDS: 'false',
   PRESENCE_SHADOW: 'true',
 };
 
@@ -26,6 +27,7 @@ function build(config: Partial<BotConfig> = {}) {
     })),
     sendChatMessage: vi.fn<Helix['sendChatMessage']>(async () => {}),
     subscribe: vi.fn<Helix['subscribe']>(async () => {}),
+    getUserByLogin: vi.fn<Helix['getUserByLogin']>(async () => null),
   };
   const core = {
     streamOnline: vi.fn(async () => ({})),
@@ -45,6 +47,15 @@ function build(config: Partial<BotConfig> = {}) {
       creditedViewers: 0,
       gapReason: null,
     })),
+    walletBalance: vi.fn(async () => ({
+      message: 'balance reply',
+      result: null,
+    })),
+    walletTransfer: vi.fn(async () => ({
+      message: 'transfer reply',
+      result: null,
+    })),
+    walletAdmin: vi.fn(async () => ({ message: 'admin reply', result: null })),
   };
   const runtime = createBotRuntime({
     config: { ...baseConfig, ...config },
@@ -135,6 +146,54 @@ describe('bot runtime in presence shadow mode', () => {
     await runtime.eventSub.subscribe('sess');
     expect(helix.subscribe.mock.calls.map((c) => c[0])).toContain(
       'channel.chat.message',
+    );
+  });
+
+  it('loyalty commands are off by default: !solde and !give are never read nor answered', async () => {
+    const { runtime, helix, core } = build({ DAILY_CHAT_COMMANDS: 'true' });
+    for (const text of ['!solde', '!give @Bob 500']) {
+      await runtime.eventSub.notification('channel.chat.message', {
+        ...chatEvent,
+        message: { text },
+      });
+    }
+    expect(core.walletBalance).not.toHaveBeenCalled();
+    expect(core.walletTransfer).not.toHaveBeenCalled();
+    expect(helix.sendChatMessage).not.toHaveBeenCalled();
+  });
+
+  it('with LOYALTY_CHAT_COMMANDS only: Daily stays off, loyalty uses the mention identity', async () => {
+    const { runtime, helix, core } = build({ LOYALTY_CHAT_COMMANDS: 'true' });
+    await runtime.eventSub.subscribe('sess');
+    expect(helix.subscribe.mock.calls.map((c) => c[0])).toContain(
+      'channel.chat.message',
+    );
+    await runtime.eventSub.notification('channel.chat.message', {
+      ...chatEvent,
+      message: {
+        text: '!give @Bob 500',
+        fragments: [
+          { type: 'text', text: '!give ' },
+          {
+            type: 'mention',
+            text: '@Bob',
+            mention: { user_id: '400', user_login: 'bob', user_name: 'Bob' },
+          },
+        ],
+      },
+    });
+    await runtime.eventSub.notification('channel.chat.message', chatEvent); // !daily
+    expect(core.walletTransfer).toHaveBeenCalledWith({
+      requestId: 'm1',
+      from: { twitchUserId: '300', login: 'viewer', displayName: 'Viewer' },
+      to: { twitchUserId: '400', login: 'bob', displayName: 'Bob' },
+      amount: 500,
+    });
+    expect(core.dailyClaim).not.toHaveBeenCalled();
+    expect(helix.sendChatMessage).toHaveBeenCalledWith(
+      '100',
+      '200',
+      'transfer reply',
     );
   });
 });

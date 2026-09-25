@@ -18,6 +18,13 @@ import {
 import { z } from 'zod';
 import type { DailyService } from '../daily/daily-service.js';
 import type { PresenceService } from '../presence/presence-service.js';
+import { BoostConflictError } from '../wallet/loyalty.js';
+import type { WalletModule } from '../wallet/index.js';
+import {
+  WalletIdempotencyError,
+  WalletInputError,
+} from '../wallet/wallet-service.js';
+import { walletRoutes } from './wallet-routes.js';
 import type {
   ActiveSession,
   StreamSessions,
@@ -27,13 +34,14 @@ export interface AppDeps {
   daily: DailyService;
   streams: StreamSessions;
   presence: PresenceService;
+  wallet: WalletModule;
   botSecret: string;
   studioSecret: string;
 }
 
 type Auth = 'public' | 'bot' | 'studio';
 
-interface Route {
+export interface Route {
   method: 'GET' | 'POST';
   pattern: RegExp;
   auth: Auth;
@@ -44,7 +52,7 @@ interface Route {
   }) => Promise<unknown>;
 }
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(
     readonly status: number,
     readonly body: unknown,
@@ -56,7 +64,7 @@ class HttpError extends Error {
 const MAX_BODY_BYTES = 64 * 1024;
 const TwitchUserId = z.string().regex(/^\d+$/);
 
-function parse<T>(schema: z.ZodType<T>, value: unknown): T {
+export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) {
     throw new HttpError(400, {
@@ -67,7 +75,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data;
 }
 
-function limitParam(url: URL, fallback: number, max: number): number {
+export function limitParam(url: URL, fallback: number, max: number): number {
   const raw = Number(url.searchParams.get('limit') ?? fallback);
   return Number.isInteger(raw) && raw > 0 ? Math.min(raw, max) : fallback;
 }
@@ -80,8 +88,9 @@ function streamState(session: ActiveSession | null): StreamStateResponse {
   };
 }
 
-function routes({ daily, streams, presence }: AppDeps): Route[] {
+function routes({ daily, streams, presence, wallet }: AppDeps): Route[] {
   return [
+    ...walletRoutes(wallet),
     {
       method: 'GET',
       pattern: /^\/health$/,
@@ -259,6 +268,17 @@ export function createApp(deps: AppDeps): Server {
       const body = req.method === 'POST' ? await readJson(req) : undefined;
       send(res, 200, await route.handle({ params, body, url }));
     } catch (error) {
+      if (error instanceof WalletInputError) {
+        send(res, 400, { error: 'invalid_amount', message: error.message });
+        return;
+      }
+      if (
+        error instanceof WalletIdempotencyError ||
+        error instanceof BoostConflictError
+      ) {
+        send(res, 409, { error: 'conflict', message: error.message });
+        return;
+      }
       if (error instanceof HttpError) {
         send(res, error.status, error.body);
         return;
