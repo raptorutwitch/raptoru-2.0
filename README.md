@@ -48,8 +48,8 @@ detect an update, but never downloads or installs on its own). Built on `electro
 custom updater logic.
 
 - **Version**: `apps/studio/desktop/package.json`'s `version` field is the single source of
-  truth (`stage.mjs` copies it into the packaged app; `app.getVersion()` reads it at runtime). To
-  cut a release: bump that field, then `npm run studio:package`.
+  truth (`stage.mjs` copies it into the packaged app; `app.getVersion()` reads it at runtime).
+  Never bump it by hand: `npm run studio:release` does it (see "Studio releases" below).
 - **Artifacts to publish**: a GitHub Release tagged `v<version>` with these 3 files from
   `apps/studio/desktop/release/` attached: `Raptoru Studio Setup <version>.exe`, its
   `.blockmap` (enables differential/delta downloads), and `latest.yml` (the update manifest
@@ -57,9 +57,8 @@ custom updater logic.
   hyphenated name and `latest.yml` already points at that name).
 - **Feed**: public releases-only repo `raptorutwitch/raptoru-studio-releases` (no source code;
   the source repo stays private — a private feed would need a token inside the app). Nothing
-  publishes on its own: `package:win` always runs with `--publish never`. Publishing is a
-  separate, explicit step: a GitHub Release `v<version>` on that repo with the 3 artifacts
-  (e.g. `gh release create`).
+  publishes on its own: `package:win` always runs with `--publish never`; only
+  `npm run studio:release` publishes.
 - **Install**: silent NSIS update then forced relaunch (`quitAndInstall(true, true)`): with the
   assisted installer, this is the only combination that relaunches the app by itself.
 - **UX**: a widget in the top bar — current version, "Rechercher une mise à jour", then
@@ -71,6 +70,63 @@ custom updater logic.
   electron-updater at any local "generic" feed (a folder with a `latest.yml` + installer served
   over plain HTTP) and logs every event — see the file's header comment for exact usage. This is
   how "no update available", "update available" and "download + progress" were validated for V1.
+
+## Studio releases (`npm run studio:release`)
+
+One local command takes a validated Studio change to the installed apps. No CI, no publish on
+commit.
+
+```sh
+npm run studio:release -- --dry-run   # full validation + build + checks, publishes nothing, bump undone
+npm run studio:release                # same, then publishes v<next patch> and commits the bump (never pushed)
+```
+
+Pipeline (`apps/studio/desktop/scripts/release.mjs`), stopping at the first failing step:
+
+1. **Preflight**: Raptoru workspace root, branch `main`, clean working tree, `electron-builder.json`
+   publishes to `raptorutwitch/raptoru-studio-releases` (must be public), `gh` logged in.
+2. **Version**: next patch (`0.1.1 → 0.1.2`); refused if that tag already exists (draft or not).
+3. **Bump** `apps/studio/desktop/package.json` + `package-lock.json` (restored byte for byte on
+   failure or dry run).
+4. **Validation**: `npm run check` (lint, format, typecheck, tests, build).
+5. **Package**: `npm run studio:package` (clean `release/` first).
+6. **Verify artifacts**: exact names, `latest.yml` version / url / size / sha512 = installer,
+   valid blockmap, embedded app version, `app-update.yml` feed, Extension Lab files present, no
+   secret/runtime file packaged, and no local secret value (`.env` secrets, OAuth tokens) inside
+   any packaged text file.
+7. **Publish** (skipped in dry run): GitHub Release created as a **draft** (invisible to the
+   updater) with only the installer, the blockmap and `latest.yml`; asset names and sizes checked;
+   then made public and marked latest.
+8. **Verify public assets**: anonymous download of the 3 assets, byte-identical to the local
+   files; the "latest" feed serves the new version.
+9. **Commit** `chore: release Raptoru Studio <version>` (local only).
+
+On failure: the step is named, nothing else runs, the draft/release created by this run is
+deleted (with its tag) and the version bump is undone; if the deletion itself fails, the command
+says so explicitly. The installed Studio is never touched; the source repository is never pushed;
+the GitHub token stays in `gh`'s own store (never written to the repo, the app or the artifacts).
+
+### Does a change need a Studio release?
+
+Studio ships its own copy of everything below (`apps/studio/desktop/scripts/stage.mjs`):
+
+| Changed                                                                 | Studio release                                    |
+| ----------------------------------------------------------------------- | ------------------------------------------------- |
+| `apps/studio/desktop` (Electron shell, updater)                         | yes                                               |
+| `apps/studio/web` (Studio UI)                                           | yes                                               |
+| `apps/studio/server` (local server, Test Lab, Extension Lab EBS)        | yes                                               |
+| `apps/twitch-extension/extension` when the Extension Lab must show it   | yes                                               |
+| `apps/core-api`, `apps/twitch-bot`, `supabase/migrations` run by Studio | yes, when Studio must run the new version locally |
+| Core server change deployed elsewhere, nothing for local Studio         | no                                                |
+| Twitch extension for viewers only                                       | no (separate Twitch upload)                       |
+| Docs, tests only                                                        | no                                                |
+
+This is decided explicitly per slice ("this slice impacts Studio"), not guessed by a script.
+
+**Rule**: when a slice impacting Raptoru Studio is finished, tested and explicitly validated by the
+user ("c'est bon", "validé", "go"), run `npm run studio:release` right away — no separate
+permission is needed to bump, package and publish Studio. Never publish a change that has not
+been validated.
 
 Default ports: core-api `3000`, studio/server `4100`, studio/web `5173`, viewer-web `5174`, twitch-extension `5175`.
 

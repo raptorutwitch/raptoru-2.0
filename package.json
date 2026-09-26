@@ -27,7 +27,8 @@
     "studio:desktop": "npm run start -w @raptoru/studio-desktop",
     "test": "turbo run test",
     "studio": "turbo run build && npm run start -w @raptoru/studio-desktop",
-    "studio:package": "turbo run build && npm run package:win -w @raptoru/studio-desktop"
+    "studio:package": "turbo run build && npm run package:win -w @raptoru/studio-desktop",
+    "studio:release": "node apps/studio/desktop/scripts/release.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
