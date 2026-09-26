@@ -55,11 +55,13 @@ custom updater logic.
   `.blockmap` (enables differential/delta downloads), and `latest.yml` (the update manifest
   electron-updater reads — do not rename or edit it; GitHub uploads the `.exe` under a
   hyphenated name and `latest.yml` already points at that name).
-- **Before this works for real**: set the real `owner`/`repo` in
-  `apps/studio/desktop/electron-builder.json`'s `publish` block (currently placeholders). Nothing
-  publishes on its own: `package:win` always runs with `--publish never`. To actually publish,
-  run `electron-builder --publish always` with a `GH_TOKEN` env var (a repo-scope PAT) — a
-  separate, explicit step, never part of `studio:package`.
+- **Feed**: public releases-only repo `raptorutwitch/raptoru-studio-releases` (no source code;
+  the source repo stays private — a private feed would need a token inside the app). Nothing
+  publishes on its own: `package:win` always runs with `--publish never`. Publishing is a
+  separate, explicit step: a GitHub Release `v<version>` on that repo with the 3 artifacts
+  (e.g. `gh release create`).
+- **Install**: silent NSIS update then forced relaunch (`quitAndInstall(true, true)`): with the
+  assisted installer, this is the only combination that relaunches the app by itself.
 - **UX**: a widget in the top bar — current version, "Rechercher une mise à jour", then
   "Nouvelle version : x.y.z" + "Mettre à jour", then "Téléchargement… NN %", then "Redémarrer et
   installer". On click, the app stops its local server (bot/Core shut down cleanly) before

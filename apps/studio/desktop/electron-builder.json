@@ -12,8 +12,8 @@
   "files": ["**/*", "!**/*.map"],
   "publish": {
     "provider": "github",
-    "owner": "REPLACE_WITH_GITHUB_OWNER",
-    "repo": "REPLACE_WITH_GITHUB_REPO"
+    "owner": "raptorutwitch",
+    "repo": "raptoru-studio-releases"
   },
   "win": {
     "target": [

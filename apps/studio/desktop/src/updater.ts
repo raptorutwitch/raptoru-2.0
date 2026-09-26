@@ -86,7 +86,9 @@ export function setupUpdater(deps: {
   });
   ipcMain.handle('studio:update:install', async () => {
     await deps.stopServer();
-    autoUpdater.quitAndInstall();
+    // Silent + forced run: with the assisted NSIS installer (oneClick: false) the app is relaunched
+    // only in this combination (installSection.nsh); otherwise the wizard shows and waits.
+    autoUpdater.quitAndInstall(true, true);
   });
 
   return {
