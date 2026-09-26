@@ -1,11 +1,15 @@
 // Real Postgres, real connection pool: proves the claim is safe under true parallelism.
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
+import type { LoyaltyConfig, LoyaltyEvent } from '@raptoru/schemas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createCore } from '../src/app.js';
 import { DevFakeCreditProvider } from '../src/daily/credits.js';
 import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
+import { progressiveReward } from '../src/loyalty/calc.js';
+import { DEFAULT_LOYALTY_CONFIG } from '../src/loyalty/config.js';
+import { LoyaltyIdempotencyError } from '../src/loyalty/engine.js';
 import { FakeClock, paris, viewer } from './helpers.js';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -330,5 +334,208 @@ describe.skipIf(!isLocal)('Core on a real Postgres', () => {
       "select count(*)::int as n from loyalty_rewards where source = 'follow' and twitch_user_id like '7%'",
     );
     expect(follows!.n).toBe(5); // 15 follow events but only 5 distinct viewers: refollows are replays
+  });
+
+  it('Rewards Twitch V1 in preview: 3 Cores, duplicates, conflicts, hot config change, zero Wallet write', async () => {
+    const clock = new FakeClock(paris('2026-09-28', 20));
+    const provider = new DevFakeCreditProvider();
+    const modes = { preview: true, passiveCredits: false, eventCredits: false };
+    const cores = [db, createPgDb(url!), createPgDb(url!)].map((d) =>
+      createCore(d, clock, provider, modes),
+    );
+    await cores[0]!.loyalty.setConfig(DEFAULT_LOYALTY_CONFIG, 'itest');
+    const q = <T>(sql: string) => db.query<T>(sql);
+    const walletRows = async () =>
+      (
+        await q<{ n: number }>(
+          `select (select count(*) from wallet_operations) + (select count(*) from wallet_transactions)
+             + (select count(*) from wallets) as n`,
+        )
+      )[0]!.n;
+    const walletBefore = Number(await walletRows());
+
+    const people = Array.from({ length: 30 }, (_, i) =>
+      viewer(String(80_000 + i), `R${i}`),
+    );
+    const minecraft = viewer('112568845', 'Minecraft');
+    const tiers = ['t1', 't2', 't3'] as const;
+    // Logical actions (one expected reward each, except skipped ones and repeated follows).
+    const actions: LoyaltyEvent[] = [];
+    for (let i = 0; i < 30; i++) {
+      const v = people[i]!;
+      const tier = tiers[i % 3]!;
+      actions.push(
+        { type: 'sub', eventId: `v-sub-${i}`, viewer: v, tier, isGift: false },
+        { type: 'resub', eventId: `v-resub-${i}`, viewer: v, tier },
+        {
+          type: 'subgift',
+          eventId: `v-gift-${i}`,
+          gifter: v,
+          tier,
+          count: [1, 4, 5, 9, 10, 19, 20, 100][i % 8]!,
+        },
+        {
+          type: 'bits',
+          eventId: `v-bits-${i}`,
+          viewer: v,
+          bits: [1, 499, 500, 999, 1000, 1200][i % 6]!,
+        },
+        // Every viewer follows, then half of them refollow (new EventSub message id).
+        { type: 'follow', eventId: `v-follow-${i}`, viewer: v },
+        ...(i % 2
+          ? [
+              {
+                type: 'follow' as const,
+                eventId: `v-refollow-${i}`,
+                viewer: v,
+              },
+            ]
+          : []),
+        // Gift recipients: tier state only, never a reward.
+        {
+          type: 'sub',
+          eventId: `v-recipient-${i}`,
+          viewer: viewer(String(90_000 + i), `G${i}`),
+          tier,
+          isGift: true,
+        },
+      );
+    }
+    actions.push(
+      {
+        type: 'subgift',
+        eventId: 'v-anon',
+        gifter: null,
+        tier: 't1',
+        count: 5,
+      },
+      { type: 'bits', eventId: 'v-anon-bits', viewer: null, bits: 500 },
+      // Twitch-sponsored gift (Subtember): rewarded to the brand account like any gifter.
+      {
+        type: 'subgift',
+        eventId: 'v-sponsor',
+        gifter: minecraft,
+        tier: 't1',
+        count: 1,
+      },
+    );
+
+    // Every action is delivered 2 or 3 times, to different Cores, concurrently (redeliveries,
+    // Core restarts, bot retries), while the config changes in the middle.
+    const deliveries = actions.flatMap((e, i) =>
+      Array.from({ length: 2 + (i % 2) }, (_, k) => ({
+        e,
+        core: cores[(i + k) % 3]!,
+      })),
+    );
+    const newConfig: LoyaltyConfig = {
+      ...DEFAULT_LOYALTY_CONFIG,
+      sub: { t1: 2500, t2: 4500, t3: 11000 },
+      bits: { brackets: [{ from: 1, per100: 800 }] },
+      follow: { amount: 600 },
+    };
+    const half = Math.floor(deliveries.length / 2);
+    const run = (d: (typeof deliveries)[number]) =>
+      d.core.loyalty.handleEvent(d.e);
+    const first = await Promise.all(deliveries.slice(0, half).map(run));
+    const [second] = await Promise.all([
+      Promise.all(deliveries.slice(half).map(run)),
+      cores[2]!.loyalty.setConfig(newConfig, 'itest'),
+    ]);
+    const results = [...first, ...second];
+
+    // Same event id with a different payload: explicit conflict, nothing stored.
+    let conflicts = 0;
+    for (const e of [
+      {
+        ...(actions[3] as Extract<LoyaltyEvent, { type: 'bits' }>),
+        bits: 5000,
+      },
+      {
+        ...(actions[0] as Extract<LoyaltyEvent, { type: 'sub' }>),
+        tier: 't3' as const,
+      },
+    ]) {
+      await expect(cores[1]!.loyalty.handleEvent(e)).rejects.toBeInstanceOf(
+        LoyaltyIdempotencyError,
+      );
+      conflicts++;
+    }
+
+    const rows = await q<{
+      idempotency_key: string;
+      source: string;
+      twitch_user_id: string;
+      amount: number;
+      status: string;
+      breakdown: Record<string, unknown>;
+    }>(
+      "select idempotency_key, source, twitch_user_id, amount, status, breakdown from loyalty_rewards where idempotency_key like 'twitch:%:v-%' or idempotency_key like 'follow:8%' or twitch_user_id = '112568845'",
+    );
+
+    // Exactly one reward per logical action.
+    const expected = {
+      sub: 30,
+      resub: 30,
+      subgift: 31, // 30 + sponsor; anonymous rewards nobody
+      bits: 30, // anonymous rewards nobody
+      follow: 30, // 45 follow events, 30 identities
+    };
+    const bySource = (s: string) => rows.filter((r) => r.source === s);
+    for (const [source, n] of Object.entries(expected))
+      expect(bySource(source), source).toHaveLength(n);
+    expect(new Set(rows.map((r) => r.idempotency_key)).size).toBe(rows.length);
+    expect(rows.every((r) => r.status === 'preview')).toBe(true);
+    expect(rows.some((r) => r.twitch_user_id.startsWith('9'))).toBe(false); // recipients
+
+    // Each amount = its frozen breakdown, computed from ONE config (old or new, never a mix).
+    for (const r of rows) {
+      const b = r.breakdown;
+      expect(r.amount).toBe(b.final);
+      expect(b.mode).toBe('preview');
+      if (r.source === 'sub' || r.source === 'resub') {
+        const tier = b.tier as 't1' | 't2' | 't3';
+        expect([
+          DEFAULT_LOYALTY_CONFIG.sub[tier],
+          newConfig.sub[tier],
+        ]).toContain(b.base);
+      }
+      if (r.source === 'bits') {
+        const units = b.units as number;
+        expect([
+          progressiveReward(units, DEFAULT_LOYALTY_CONFIG.bits.brackets).final,
+          progressiveReward(units, newConfig.bits.brackets).final,
+        ]).toContain(r.amount);
+      }
+      if (r.source === 'follow') expect([500, 600]).toContain(r.amount);
+    }
+    // Replays: every delivery beyond the first of a stored action is a replay, nothing else.
+    const stored = results.filter((r) => r.rewardId !== null);
+    const originals = stored.filter((r) => !r.replayed);
+    expect(originals).toHaveLength(rows.length);
+
+    // Preview: not a single Wallet row written.
+    expect(Number(await walletRows())).toBe(walletBefore);
+
+    // Validation report per source.
+    const report = Object.fromEntries(
+      ['sub', 'resub', 'subgift', 'bits', 'follow'].map((source) => {
+        // results[i] is the answer to deliveries[i].
+        const res = results.filter((_, i) => deliveries[i]!.e.type === source);
+        return [
+          source,
+          {
+            received: res.length,
+            rewards: bySource(source).length,
+            duplicatesIgnored: res.filter((r) => r.replayed).length,
+            skipped: res.filter((r) => r.status === 'skipped').length,
+          },
+        ];
+      }),
+    );
+    console.log(
+      '[rewards-v1 report]',
+      JSON.stringify({ ...report, conflicts, walletWrites: 0 }, null, 1),
+    );
   });
 });

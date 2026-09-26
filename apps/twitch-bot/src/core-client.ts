@@ -40,7 +40,7 @@ export interface CoreClient {
   ): Promise<{ subscribers: number }>;
 }
 
-class CoreHttpError extends Error {
+export class CoreHttpError extends Error {
   constructor(readonly status: number) {
     super(`core-api responded ${status}`);
   }

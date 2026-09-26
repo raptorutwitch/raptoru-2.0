@@ -3,6 +3,7 @@ import { hostname } from 'node:os';
 import { BROADCASTER_SCOPES, loadConfig, requiredScopes } from './config.js';
 import { createCoreClient } from './core-client.js';
 import { createBroadcasterEvents } from './loyalty-events.js';
+import { fileOutbox } from './loyalty-outbox.js';
 import { createBotRuntime } from './runtime.js';
 import { AuthError, fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { runEventSub } from './twitch/eventsub.js';
@@ -112,13 +113,17 @@ if (config.LOYALTY_TWITCH_EVENTS === 'true') {
       core: createCoreClient(config.CORE_API_URL, config.BOT_SECRET),
       subscribe: (type, condition, sessionId, version) =>
         broadcasterHelix.subscribe(type, condition, sessionId, version),
+      listEnabledSubscriptions: () =>
+        broadcasterHelix.listEnabledSubscriptions(),
       getSubscriptionsPage: (after) =>
         broadcasterHelix.getSubscriptionsPage(
           config.TWITCH_BROADCASTER_ID,
           after,
         ),
       broadcasterId: config.TWITCH_BROADCASTER_ID,
+      outbox: fileOutbox(config.LOYALTY_OUTBOX_FILE),
     });
+    events.resumePending(); // events a previous run could not deliver to Core
     runEventSub(events.eventSub);
     // Tier reconciliation: full snapshot at startup, then every 6 hours (chained, never overlapping).
     const snapshotLoop = async () => {

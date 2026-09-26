@@ -22,6 +22,10 @@ export const DEFAULT_TOKEN_FILE = fileURLToPath(
   new URL('../.twitch-tokens.json', import.meta.url),
 );
 
+export const DEFAULT_LOYALTY_OUTBOX_FILE = fileURLToPath(
+  new URL('../.loyalty-outbox.json', import.meta.url),
+);
+
 // Twitch application of Raptoru 2.0 (Developer Console, confidential client). Shared by the bot,
 // `twitch:auth` and the preflight.
 const TwitchApp = z.object({
@@ -40,6 +44,8 @@ const TwitchApp = z.object({
   // Forwards subs, gifts, cheers and follows to Core (needs the broadcaster token). Core alone
   // decides shadow / preview / credit; nothing is written to chat.
   LOYALTY_TWITCH_EVENTS: Flag,
+  // Loyalty events not yet answered by Core (survives bot restarts), git-ignored.
+  LOYALTY_OUTBOX_FILE: z.string().min(1).default(DEFAULT_LOYALTY_OUTBOX_FILE),
   // Shadow presence tracker (Get Chatters, read-only). Needs scope moderator:read:chatters.
   PRESENCE_SHADOW: Flag,
 });

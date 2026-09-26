@@ -537,3 +537,110 @@ describe('system accounts excluded from passive gains', () => {
     ).toBe(10500);
   });
 });
+
+describe('Rewards Twitch V1: frozen breakdowns and history', () => {
+  it('each source stores its full breakdown; a later config never re-prices history nor a redelivery', async () => {
+    const core = await live({ preview: true });
+    const events: LoyaltyEvent[] = [
+      {
+        type: 'sub',
+        eventId: 'h-sub',
+        viewer: aouh,
+        tier: 't2',
+        isGift: false,
+      },
+      { type: 'resub', eventId: 'h-resub', viewer: bea, tier: 't3' },
+      { type: 'subgift', eventId: 'h-gift', gifter: cid, tier: 't2', count: 5 },
+      { type: 'bits', eventId: 'h-bits', viewer: aouh, bits: 999 },
+      { type: 'follow', eventId: 'h-follow', viewer: bea },
+    ];
+    for (const ev of events) await core.loyalty.handleEvent(ev);
+    const before = await rewards(core);
+    expect(before.map((r) => [r.source, r.twitch_user_id, r.amount])).toEqual([
+      ['sub', '2001', 4000],
+      ['resub', '2002', 10000],
+      ['subgift', '2003', 21000],
+      ['bits', '2001', 7993],
+      ['follow', '2002', 500],
+    ]);
+    const common = { mode: 'preview' };
+    expect(before.map((r) => r.breakdown)).toEqual([
+      {
+        ...common,
+        source: 'sub',
+        eventId: 'h-sub',
+        tier: 't2',
+        base: 4000,
+        final: 4000,
+      },
+      {
+        ...common,
+        source: 'resub',
+        eventId: 'h-resub',
+        tier: 't3',
+        base: 10000,
+        final: 10000,
+      },
+      {
+        ...common,
+        source: 'subgift',
+        eventId: 'h-gift',
+        tier: 't2',
+        count: 5,
+        unitValue: 4000,
+        base: 20000,
+        bonusThreshold: 5,
+        bonusPercent: 5,
+        final: 21000,
+      },
+      {
+        ...common,
+        source: 'bits',
+        eventId: 'h-bits',
+        units: 999,
+        parts: [
+          { from: 1, to: 499, units: 499, per100: 700, amount: 3493 },
+          { from: 500, to: 999, units: 500, per100: 900, amount: 4500 },
+        ],
+        exact: 7993,
+        final: 7993,
+      },
+      {
+        ...common,
+        source: 'follow',
+        eventId: 'h-follow',
+        base: 500,
+        final: 500,
+      },
+    ]);
+
+    await core.loyalty.setConfig(
+      {
+        ...DEFAULT_LOYALTY_CONFIG,
+        sub: { t1: 1, t2: 1, t3: 1 },
+        bits: { brackets: [{ from: 1, per100: 1 }] },
+        follow: { amount: 1 },
+      },
+      'studio',
+    );
+    // EventSub redeliveries after the change: replays of the stored reward, old amounts.
+    for (const ev of events) {
+      const res = await core.loyalty.handleEvent(ev);
+      expect(res.replayed).toBe(true);
+    }
+    expect(await rewards(core)).toEqual(before);
+    // A new action uses the new config.
+    expect(
+      (
+        await core.loyalty.handleEvent({
+          type: 'bits',
+          eventId: 'h-bits-2',
+          viewer: aouh,
+          bits: 999,
+        })
+      ).amount,
+    ).toBe(10);
+    for (const t of ['wallets', 'wallet_transactions', 'wallet_operations'])
+      expect(await count(core.db, t)).toBe(0);
+  });
+});

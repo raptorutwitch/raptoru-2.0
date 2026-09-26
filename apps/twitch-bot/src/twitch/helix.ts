@@ -190,6 +190,37 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       });
     },
 
+    /** Enabled EventSub subscriptions of this token (all pages): used to detect another consumer. */
+    async listEnabledSubscriptions(): Promise<
+      { type: string; sessionId: string | null; createdAt: string }[]
+    > {
+      const all: {
+        type: string;
+        sessionId: string | null;
+        createdAt: string;
+      }[] = [];
+      let after: string | null = null;
+      for (let page = 0; page < 20; page++) {
+        const qs = new URLSearchParams({ status: 'enabled' });
+        if (after) qs.set('after', after);
+        const res = await request('GET', `/eventsub/subscriptions?${qs}`);
+        for (const s of (res.data ?? []) as {
+          type: string;
+          created_at: string;
+          transport?: { session_id?: string };
+        }[])
+          all.push({
+            type: s.type,
+            sessionId: s.transport?.session_id ?? null,
+            createdAt: s.created_at,
+          });
+        after = res.pagination?.cursor || null;
+        if (!after) return all;
+      }
+      // An incomplete list could hide another consumer: never decide on it.
+      throw new Error('eventsub subscriptions: too many pages');
+    },
+
     async subscribe(
       type: string,
       condition: Record<string, string>,

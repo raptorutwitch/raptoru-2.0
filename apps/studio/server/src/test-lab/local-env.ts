@@ -27,6 +27,7 @@ export const paths = {
     'twitch-bot',
     '.twitch-tokens.broadcaster.json',
   ),
+  loyaltyOutbox: join(DATA_ROOT, 'apps', 'twitch-bot', '.loyalty-outbox.json'),
   runtimeDir: join(DATA_ROOT, 'apps', 'studio', 'server', '.runtime'),
 };
 
@@ -41,6 +42,9 @@ export function applyDataRootEnv(): void {
   process.env.TWITCH_TOKEN_FILE ??= botEnv.TWITCH_TOKEN_FILE ?? paths.tokenFile;
   process.env.TWITCH_BROADCASTER_TOKEN_FILE ??=
     botEnv.TWITCH_BROADCASTER_TOKEN_FILE ?? paths.broadcasterTokenFile;
+  // Unsent loyalty events must survive a reinstall too: kept in the data folder.
+  process.env.LOYALTY_OUTBOX_FILE ??=
+    botEnv.LOYALTY_OUTBOX_FILE ?? paths.loyaltyOutbox;
 }
 
 export type EnvFile = Record<string, string>;

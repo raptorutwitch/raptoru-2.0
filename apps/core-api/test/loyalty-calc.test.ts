@@ -65,6 +65,13 @@ describe('Twitch one-off rewards', () => {
     expect([1, 4, 5, 9, 10, 19, 20, 50].map((n) => t1(n).final)).toEqual([
       2000, 8000, 10500, 18900, 22000, 41800, 48000, 120000,
     ]);
+    // T2/T3 use their own unit value; large actions keep the 20+ bonus.
+    expect([
+      subgiftReward(C, 't2', 5).final,
+      subgiftReward(C, 't3', 20).final,
+      t1(100).final,
+      t1(1000).final,
+    ]).toEqual([21000, 240000, 240000, 2400000]);
     expect(t1(10)).toMatchObject({
       unitValue: 2000,
       base: 20000,
@@ -87,6 +94,7 @@ describe('Twitch one-off rewards', () => {
     expect(bits(100)).toBe(700);
     expect(bits(499)).toBe(3493);
     expect(bits(500)).toBe(3502);
+    expect(bits(999)).toBe(7993); // 499×7 + 500×9
     expect(bits(1000)).toBe(8003);
     // 1200 bits = 499×7 + 500×9 + 201×10, not 1200 × 10.
     expect(progressiveReward(1200, C.bits.brackets)).toMatchObject({

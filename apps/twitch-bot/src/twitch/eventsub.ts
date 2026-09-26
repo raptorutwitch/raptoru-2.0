@@ -7,6 +7,7 @@ interface EventSubMessage {
   metadata: {
     message_id: string;
     message_type: string;
+    message_timestamp?: string;
     subscription_type?: string;
   };
   payload: {
@@ -23,11 +24,15 @@ interface EventSubMessage {
 export interface EventSubHandlers {
   /** Called on the first welcome of a fresh connection: create subscriptions for `sessionId`. */
   subscribe(sessionId: string): Promise<void>;
-  /** `messageId` is stable across Twitch redeliveries: usable as an idempotency key. */
+  /**
+   * `messageId` is stable across Twitch redeliveries: usable as an idempotency key. `timestamp` is
+   * the Twitch time of the message.
+   */
   notification(
     type: string,
     event: Record<string, unknown>,
     messageId: string,
+    timestamp: string,
   ): Promise<void>;
   log?: (...args: unknown[]) => void;
 }
@@ -73,6 +78,7 @@ export function createEventSubRouter(
           message.metadata.subscription_type!,
           message.payload.event ?? {},
           id,
+          message.metadata.message_timestamp ?? new Date().toISOString(),
         );
         return { kind: 'other' };
       case 'revocation':

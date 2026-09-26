@@ -13,6 +13,7 @@ const baseConfig: BotConfig = {
   TWITCH_BROADCASTER_ID: '100',
   STREAM_SYNC_INTERVAL_MS: 60_000,
   TWITCH_BROADCASTER_TOKEN_FILE: 'unused-broadcaster.json',
+  LOYALTY_OUTBOX_FILE: 'unused-outbox.json',
   DAILY_CHAT_COMMANDS: 'false',
   LOYALTY_TWITCH_EVENTS: 'false',
   LOYALTY_CHAT_COMMANDS: 'false',
@@ -25,7 +26,13 @@ const notify = (
   runtime: ReturnType<typeof createBotRuntime>,
   type: string,
   event: Record<string, unknown>,
-) => runtime.eventSub.notification(type, event, 'msg-' + ++messageSeq);
+) =>
+  runtime.eventSub.notification(
+    type,
+    event,
+    'msg-' + ++messageSeq,
+    new Date().toISOString(),
+  );
 
 function build(config: Partial<BotConfig> = {}) {
   const helix = {

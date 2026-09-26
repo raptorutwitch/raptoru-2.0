@@ -52,6 +52,7 @@ describe('EventSub routing', () => {
       'stream.online',
       { id: '317', started_at: 'x' },
       'n1',
+      expect.any(String),
     );
   });
 
