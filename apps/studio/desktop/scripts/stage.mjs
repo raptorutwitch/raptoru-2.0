@@ -37,6 +37,9 @@ const copies = [
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
   'apps/studio/desktop/package.json',
+  // Production extension served by the Extension Lab (package.json: ES module type).
+  'apps/twitch-extension/extension',
+  'apps/twitch-extension/package.json',
   'supabase/migrations',
 ];
 for (const path of copies) {

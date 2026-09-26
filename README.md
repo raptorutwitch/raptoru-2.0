@@ -43,6 +43,30 @@ The NSIS installer is the only official format. The portable build was dropped, 
 
 Default ports: core-api `3000`, studio/server `4100`, studio/web `5173`, viewer-web `5174`, twitch-extension `5175`.
 
+## Extension Lab (Studio → "Extension Lab" tab)
+
+Local test bench for the Twitch extension, without a stream: the production extension
+(`apps/twitch-extension/extension`, imported unchanged) runs inside realistic Twitch frames.
+
+- **Surfaces**: panel viewer (318 × 496), mobile viewer (phone presets), video component (60 % of
+  the player height, 3:2, minus Twitch's 48 px column; normal / theatre / fullscreen players),
+  config, live config.
+- **Simulated context**: viewer / moderator / broadcaster, identity shared or not (the
+  extension's "share identity" request is answered from the Studio), Twitch URL parameters
+  (`anchor`, `mode`, `platform`…).
+- **Local Lab EBS** (Studio server, `/ext-lab/api`): same contract as the production EBS for
+  session, jetons, channel-points credits, Soundboard, Bonk, TTS (instant or approval), Tombola and
+  moderation. Fictitious jetons in memory: no StreamElements, no SAMMI, no Twitch write, no Core
+  Wallet. The lab pages' CSP only allows the Studio origin.
+- **Local stage**: accepted actions are played in the Studio (sound file, TTS voice, Bonk
+  animation, raffle) with a journal; wallets, modules and raffle are controllable.
+
+```sh
+npm run studio                # build everything, open Raptoru Studio → "Extension Lab" tab
+# Browser alternative: node apps/studio/server/dist/index.js, then
+# http://127.0.0.1:4100/?tab=extension-lab&surface=video&role=moderator   (deep link)
+```
+
 ## Daily (status: dev/test only)
 
 SAMMI still runs the production Daily. Until the cutover:

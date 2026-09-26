@@ -1,0 +1,505 @@
+/* Extension Lab — scoped under .xlab (Test Lab styles untouched). */
+body.lab-open {
+  overflow: hidden;
+}
+main.tab-full {
+  padding: 0;
+  display: block;
+}
+.xlab {
+  --tw-bg: #0e0e10;
+  --tw-panel: #18181b;
+  --tw-line: #2f2f35;
+  --tw-purple: #9147ff;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 320px;
+  height: calc(100vh - var(--topbar-h, 49px));
+  min-height: 560px;
+}
+.xlab h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+.xlab-muted {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 4px 0 8px;
+}
+.xlab-center {
+  text-align: center;
+}
+.xlab-error {
+  color: var(--ko);
+}
+
+/* --- left column ------------------------------------------------------------------------------ */
+.xlab-side {
+  border-right: 1px solid var(--line);
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+.xlab-surfaces {
+  display: grid;
+  gap: 6px;
+}
+.xlab-surfaces button {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.xlab-surfaces button small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.xlab-surfaces button.active,
+.xlab-seg button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.xlab-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 10px 0 6px;
+}
+.xlab-seg {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.xlab-seg--col {
+  flex-direction: column;
+}
+.xlab-seg button {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 12px;
+  background: transparent;
+}
+.xlab-switch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.xlab-side-actions {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+}
+.xlab-link {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* --- center ------------------------------------------------------------------------------------ */
+.xlab-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: radial-gradient(circle at 50% 0%, #1d1f26, var(--bg) 60%);
+}
+.xlab-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.xlab-pill {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+.xlab-pill--lab {
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+  color: var(--warn);
+}
+.xlab-url {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.xlab-stage {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 20px 12px;
+}
+.xlab-stage iframe {
+  border: 0;
+  display: block;
+  background: transparent;
+}
+.xlab-toast {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  box-shadow: 0 8px 30px #0008;
+}
+
+/* Twitch-like surroundings (not the extension: just context) */
+.tw-channel {
+  width: 1000px;
+  max-width: 100%;
+  display: grid;
+  gap: 14px;
+}
+.tw-player-mini {
+  height: 120px;
+  background: #000;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: #555;
+}
+.tw-panels {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  align-items: flex-start;
+}
+.tw-panel,
+.tw-panel-ext {
+  width: 318px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.tw-panel--ghost {
+  height: 160px;
+  background: var(--tw-panel);
+  border: 1px dashed var(--tw-line);
+  display: grid;
+  place-items: center;
+  color: #555;
+}
+.tw-panel-ext {
+  outline: 2px solid var(--tw-purple);
+  outline-offset: 2px;
+  background: var(--tw-bg);
+}
+.tw-phone {
+  border: 10px solid #222;
+  border-radius: 36px;
+  overflow: hidden;
+  background: var(--tw-bg);
+  box-shadow: 0 20px 60px #000a;
+  display: flex;
+  flex-direction: column;
+  box-sizing: content-box;
+}
+.tw-phone-status {
+  height: 28px;
+  font-size: 11px;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+}
+.tw-phone-player {
+  background: #000;
+  display: grid;
+  place-items: center;
+  color: #555;
+}
+.tw-phone-tabs {
+  height: 40px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--tw-line);
+  font-size: 13px;
+  color: #aaa;
+}
+.tw-phone-tabs .on {
+  color: #fff;
+  border-bottom: 2px solid var(--tw-purple);
+  padding: 10px 0 8px;
+}
+.tw-player-scale {
+  position: relative;
+  flex: none;
+}
+.tw-player {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  background: #000;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.tw-player-video {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #333;
+  font-size: 28px;
+  background: linear-gradient(135deg, #111 0%, #1a1025 100%);
+}
+.tw-component {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  outline: 2px dashed color-mix(in srgb, var(--tw-purple) 70%, transparent);
+}
+.tw-component-column {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: #0008;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: #aaa;
+  font-style: normal;
+}
+.tw-window {
+  border: 1px solid var(--tw-line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--tw-bg);
+  box-shadow: 0 12px 40px #0008;
+}
+.tw-window-bar {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #aaa;
+  background: var(--tw-panel);
+  border-bottom: 1px solid var(--tw-line);
+}
+.tw-dashboard {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.tw-dashboard-main {
+  width: 420px;
+  height: 640px;
+  border: 1px dashed var(--tw-line);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #555;
+}
+
+/* --- right column ----------------------------------------------------------------------------- */
+.xlab-scene {
+  border-left: 1px solid var(--line);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+.xlab-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+.xlab-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.xlab-card-head h3 {
+  margin: 0;
+}
+.xlab-sound {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.xlab-sound.on {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.xlab-ghost {
+  font-size: 12px;
+  padding: 4px 8px;
+  background: transparent;
+}
+.xlab-screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #111 0%, #1a1025 100%);
+  display: grid;
+  place-items: center;
+}
+.xlab-screen-idle {
+  color: #555;
+  font-size: 12px;
+}
+.xlab-fx {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #000b;
+  font-size: 13px;
+  display: grid;
+  gap: 2px;
+  animation: xlab-in 0.25s ease-out;
+}
+.xlab-fx small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.xlab-fx--tts {
+  border-left: 3px solid var(--accent);
+}
+.xlab-fx--sound {
+  border-left: 3px solid #3b82f6;
+}
+.xlab-fx--raffle {
+  border-left: 3px solid var(--ok);
+}
+.xlab-fx--muted {
+  border-left: 3px solid var(--muted);
+}
+.xlab-fx--bonk {
+  inset: 0;
+  background: none;
+  place-items: center;
+  text-align: center;
+}
+.xlab-bonk-mark {
+  font-size: 44px;
+  font-weight: 800;
+  color: #ffd166;
+  text-shadow: 0 4px 18px #000;
+  animation: xlab-bonk 0.6s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes xlab-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes xlab-bonk {
+  0% {
+    transform: translate(-160px, -80px) rotate(-60deg) scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: translate(0, 0) rotate(10deg) scale(1.25);
+    opacity: 1;
+  }
+}
+.xlab-wallets {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+.xlab-wallets label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.xlab-wallets input {
+  width: 90px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin-right: 4px;
+}
+.xlab-modules {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.xlab-raffle {
+  margin-top: 12px;
+  font-size: 13px;
+  display: grid;
+  gap: 6px;
+}
+.xlab-row-btns {
+  display: flex;
+  gap: 6px;
+}
+.xlab-row-btns button {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.xlab-log-card {
+  flex: 1;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+}
+.xlab-log {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.xlab-log li {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.xlab-log small {
+  color: var(--muted);
+}
+.xlab-log time {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 1180px) {
+  .xlab {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .xlab-scene {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}

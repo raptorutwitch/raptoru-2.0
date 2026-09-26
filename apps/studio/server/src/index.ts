@@ -5,6 +5,17 @@ import {
   type ServerResponse,
 } from 'node:http';
 import { extname, join, normalize } from 'node:path';
+import { LabEbs } from './extension-lab/lab-ebs.js';
+import {
+  EXT_PREFIX,
+  EXTENSION_CSP,
+  extensionFile,
+  LAB_API_PREFIX,
+} from './extension-lab/serve.js';
+import {
+  TWITCH_EXT_MOCK_JS,
+  TWITCH_EXT_MOCK_PATH,
+} from './extension-lab/twitch-mock.js';
 import {
   applyDataRootEnv,
   DATA_ROOT,
@@ -16,6 +27,13 @@ const port = Number(process.env.PORT ?? 4100);
 // Studio is local-only: bind to loopback, never to a public interface.
 const host = '127.0.0.1';
 const webDir = join(REPO_ROOT, 'apps', 'studio', 'web', 'dist');
+/** Production extension, served as is to the Extension Lab (see extension-lab/serve.ts). */
+export const EXTENSION_DIR = join(
+  REPO_ROOT,
+  'apps',
+  'twitch-extension',
+  'extension',
+);
 /** Custom header: a cross-site page cannot send it without a CORS preflight, which is never granted. */
 export const STUDIO_HEADER = 'x-raptoru-studio';
 
@@ -57,6 +75,81 @@ async function serveStatic(pathname: string, res: ServerResponse) {
   }
 }
 
+const sameHost = (req: IncomingMessage) =>
+  req.headers.host === `${host}:${port}` ||
+  req.headers.host === `localhost:${port}`;
+
+async function readJson(
+  req: IncomingMessage,
+): Promise<Record<string, unknown>> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > 64 * 1024) throw new Error('body too large');
+    chunks.push(chunk as Buffer);
+  }
+  if (!size) return {};
+  const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/** Extension Lab routes that the extension frames call (no Studio header: they are the extension). */
+async function extensionLabRoute(
+  extLab: LabEbs | null,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  if (req.method === 'GET' && url.pathname === TWITCH_EXT_MOCK_PATH) {
+    res.writeHead(200, {
+      'content-type': 'text/javascript; charset=utf-8',
+      'cache-control': 'no-store',
+    });
+    res.end(TWITCH_EXT_MOCK_JS);
+    return true;
+  }
+  if (url.pathname.startsWith(EXT_PREFIX)) {
+    if (req.method !== 'GET') {
+      send(res, 405, { error: 'method_not_allowed' });
+      return true;
+    }
+    const file = await extensionFile(EXTENSION_DIR, url.pathname);
+    res.writeHead(file.status, {
+      'content-type': file.contentType,
+      'cache-control': 'no-store',
+      'content-security-policy': EXTENSION_CSP,
+      'x-frame-options': 'SAMEORIGIN',
+    });
+    res.end(file.body);
+    return true;
+  }
+  if (url.pathname.startsWith(`${LAB_API_PREFIX}/`)) {
+    if (!sameHost(req)) {
+      send(res, 403, { ok: false, error: 'forbidden_host' });
+      return true;
+    }
+    if (!extLab) {
+      send(res, 503, { ok: false, error: 'extension_lab_unavailable' });
+      return true;
+    }
+    const reply = await extLab.handle(
+      req.method ?? 'GET',
+      url.pathname.slice(LAB_API_PREFIX.length) + url.search,
+      req.method === 'POST' ? await readJson(req) : undefined,
+      {
+        authorization: req.headers.authorization,
+        idempotencyKey: req.headers['idempotency-key'] as string | undefined,
+      },
+    );
+    send(res, reply.status, reply.body);
+    return true;
+  }
+  return false;
+}
+
 type Action = (lab: TestLab) => Promise<unknown>;
 
 const actions: Record<string, Action> = {
@@ -74,25 +167,25 @@ const actions: Record<string, Action> = {
   'logs/clear': async (lab) => lab.logs.clear(),
 };
 
-export function createStudioServer(lab: TestLab, onShutdown: () => void) {
+export function createStudioServer(
+  lab: TestLab,
+  onShutdown: () => void,
+  extLab: LabEbs | null = null,
+) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
     try {
       if (req.method === 'GET' && url.pathname === '/health') {
         return send(res, 200, { service: 'studio-server', status: 'ok' });
       }
+      if (await extensionLabRoute(extLab, req, res, url)) return;
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET')
           return send(res, 405, { error: 'method_not_allowed' });
         return await serveStatic(url.pathname, res);
       }
       // API: same-host only (DNS rebinding) and custom header (cross-site requests).
-      if (
-        req.headers.host !== `${host}:${port}` &&
-        req.headers.host !== `localhost:${port}`
-      ) {
-        return send(res, 403, { error: 'forbidden_host' });
-      }
+      if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
       if (req.headers[STUDIO_HEADER] !== '1')
         return send(res, 403, { error: 'missing_studio_header' });
 
@@ -104,6 +197,27 @@ export function createStudioServer(lab: TestLab, onShutdown: () => void) {
           200,
           lab.logs.since(Number(url.searchParams.get('since') ?? 0)),
         );
+      }
+      // Extension Lab: state and controls of the local Lab EBS (fictitious data only).
+      if (url.pathname.startsWith('/api/ext-lab/')) {
+        if (!extLab)
+          return send(res, 503, { error: 'extension_lab_unavailable' });
+        if (req.method === 'GET' && url.pathname === '/api/ext-lab/state')
+          return send(
+            res,
+            200,
+            extLab.snapshot(Number(url.searchParams.get('since') ?? 0)),
+          );
+        const control = /^\/api\/ext-lab\/control\/([a-z-]+)$/.exec(
+          url.pathname,
+        );
+        if (req.method === 'POST' && control)
+          return send(
+            res,
+            200,
+            extLab.control(control[1]!, await readJson(req)),
+          );
+        return send(res, 404, { error: 'not_found' });
       }
       if (req.method === 'POST' && url.pathname === '/api/shutdown') {
         send(res, 200, { ok: true });
@@ -147,7 +261,15 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     );
     void lab.shutdown().finally(() => process.exit(0));
   };
-  createStudioServer(lab, shutdown).listen(port, host, () => {
+  const extLab = await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
+    lab.logs.add(
+      'studio',
+      `Extension Lab unavailable: ${error.message}`,
+      'error',
+    );
+    return null;
+  });
+  createStudioServer(lab, shutdown, extLab).listen(port, host, () => {
     console.log(
       `[studio-server] Test Lab on http://${host}:${port} (data: ${DATA_ROOT})`,
     );
