@@ -2,6 +2,7 @@ import './style.css';
 import './extension-lab.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
+import { mountUpdateWidget } from './update.js';
 
 type TabId = 'test-lab' | 'extension-lab';
 const TAB_KEY = 'raptoru-studio-tab';
@@ -16,6 +17,7 @@ if (app) {
         <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
       </nav>
+      <div class="update-widget"></div>
       <span class="topbar-safety">Local uniquement · aucun crédit réel</span>
     </header>
     <main id="tab-test-lab"></main>
@@ -24,6 +26,7 @@ if (app) {
   const extensionLab = mountExtensionLab(
     app.querySelector<HTMLElement>('#tab-extension-lab')!,
   );
+  mountUpdateWidget(app.querySelector<HTMLElement>('.update-widget')!);
 
   const show = (tab: TabId) => {
     for (const button of app.querySelectorAll<HTMLElement>('[data-tab]'))

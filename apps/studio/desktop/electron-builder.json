@@ -10,6 +10,11 @@
   "asar": false,
   "npmRebuild": false,
   "files": ["**/*", "!**/*.map"],
+  "publish": {
+    "provider": "github",
+    "owner": "REPLACE_WITH_GITHUB_OWNER",
+    "repo": "REPLACE_WITH_GITHUB_REPO"
+  },
   "win": {
     "target": [
       {
@@ -22,6 +27,6 @@
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
-    "artifactName": "Raptoru Studio Setup.exe"
+    "artifactName": "Raptoru Studio Setup ${version}.exe"
   }
 }

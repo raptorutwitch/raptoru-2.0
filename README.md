@@ -27,7 +27,7 @@ npm install
 npm run dev            # all apps in watch mode (except the Electron shell)
 npm run studio:desktop # build and open the Electron shell (loads http://127.0.0.1:5173)
 npm run check          # lint + format check + typecheck + tests + build
-npm run studio:package # build the Windows installer: apps/studio/desktop/release/Raptoru Studio Setup.exe
+npm run studio:package # build the Windows installer: apps/studio/desktop/release/Raptoru Studio Setup <version>.exe
 ```
 
 ## Studio for Windows (installer)
@@ -40,6 +40,35 @@ The NSIS installer is the only official format. The portable build was dropped, 
 - Closing the window stops what the Studio started (bot, Core); Postgres keeps running.
 - The package contains code only. The `.env` files, tokens and runtime PIDs stay in the local Raptoru folder, which is named in `%APPDATA%\Raptoru Studio\studio.json`: `{"dataRoot": "C:/path/to/Raptoru 2.0"}`.
 - No Raptoru `.ico` exists yet, so the app uses the default Electron icon. The exe is unsigned, so SmartScreen warns on the first run.
+
+## Auto-update (V1)
+
+One channel, GitHub Releases, driven only by explicit user action (a silent startup check may
+detect an update, but never downloads or installs on its own). Built on `electron-updater` — no
+custom updater logic.
+
+- **Version**: `apps/studio/desktop/package.json`'s `version` field is the single source of
+  truth (`stage.mjs` copies it into the packaged app; `app.getVersion()` reads it at runtime). To
+  cut a release: bump that field, then `npm run studio:package`.
+- **Artifacts to publish**: a GitHub Release tagged `v<version>` with these 3 files from
+  `apps/studio/desktop/release/` attached: `Raptoru Studio Setup <version>.exe`, its
+  `.blockmap` (enables differential/delta downloads), and `latest.yml` (the update manifest
+  electron-updater reads — do not rename or edit it; GitHub uploads the `.exe` under a
+  hyphenated name and `latest.yml` already points at that name).
+- **Before this works for real**: set the real `owner`/`repo` in
+  `apps/studio/desktop/electron-builder.json`'s `publish` block (currently placeholders). Nothing
+  publishes on its own: `package:win` always runs with `--publish never`. To actually publish,
+  run `electron-builder --publish always` with a `GH_TOKEN` env var (a repo-scope PAT) — a
+  separate, explicit step, never part of `studio:package`.
+- **UX**: a widget in the top bar — current version, "Rechercher une mise à jour", then
+  "Nouvelle version : x.y.z" + "Mettre à jour", then "Téléchargement… NN %", then "Redémarrer et
+  installer". On click, the app stops its local server (bot/Core shut down cleanly) before
+  installing and relaunching. Never touches `%APPDATA%\Raptoru Studio` or the repo's local
+  `.env`/tokens — only the `%LOCALAPPDATA%\Programs\Raptoru Studio` install directory changes.
+- **Testing without a GitHub Release**: `apps/studio/desktop/scripts/test-update-feed.mjs` points
+  electron-updater at any local "generic" feed (a folder with a `latest.yml` + installer served
+  over plain HTTP) and logs every event — see the file's header comment for exact usage. This is
+  how "no update available", "update available" and "download + progress" were validated for V1.
 
 Default ports: core-api `3000`, studio/server `4100`, studio/web `5173`, viewer-web `5174`, twitch-extension `5175`.
 

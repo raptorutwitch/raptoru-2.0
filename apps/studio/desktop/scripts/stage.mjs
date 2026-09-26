@@ -92,6 +92,7 @@ writeFileSync(
       dependencies: {
         pg: version('pg'),
         zod: version('zod'),
+        'electron-updater': version('electron-updater'),
         '@raptoru/schemas': 'file:../raptoru-schemas-0.0.0.tgz',
       },
     },

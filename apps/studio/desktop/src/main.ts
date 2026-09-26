@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow } from 'electron';
+import { setupUpdater } from './updater.js';
 
 // Electron shell: starts the local Studio server (hidden), shows its web UI, and on exit asks the
 // server to stop what it started (bot, Core) before quitting. Postgres is left running.
@@ -117,14 +118,23 @@ void app.whenReady().then(async () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: join(dirname(fileURLToPath(import.meta.url)), 'preload.cjs'),
     },
   });
   win.on('closed', () => {
     win = null;
   });
+  const updater = setupUpdater({
+    getWindow: () => win,
+    stopServer,
+    log: (...args) => console.log(...args),
+  });
   try {
     await ensureServer();
     await win.loadURL(studioUrl);
+    // Silent: only ever surfaces 'available' (renderer shows the button) — never downloads,
+    // never installs without the user clicking "Mettre à jour" / "Redémarrer et installer".
+    setTimeout(() => updater.checkSilently(), 3000);
   } catch (error) {
     await win.loadURL(
       `data:text/plain;charset=utf-8,${encodeURIComponent(`Raptoru Studio: ${(error as Error).message}`)}`,

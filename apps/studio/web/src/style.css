@@ -63,6 +63,29 @@ body {
   border-radius: 999px;
   padding: 3px 10px;
 }
+.update-widget {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.update-widget[hidden] {
+  display: none;
+}
+.update-version strong {
+  color: var(--text);
+}
+.update-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.update-status {
+  color: var(--muted);
+}
+.update-status.error {
+  color: var(--ko);
+}
 main {
   padding: 16px 20px;
   display: grid;
