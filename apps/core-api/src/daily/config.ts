@@ -7,8 +7,23 @@ export const DEFAULT_DAILY_CONFIG: DailyConfig = {
 };
 
 export function rewardForStreak(streak: number, config: DailyConfig): number {
+  return dailyRewardBreakdown(streak, config).final;
+}
+
+/** Reward calculation as stored with each claim (frozen: a later config never changes it). */
+export function dailyRewardBreakdown(streak: number, config: DailyConfig) {
   const { base, perStreak, max } = config.reward;
-  return Math.min(max, base + perStreak * (Math.max(1, streak) - 1));
+  const uncapped = base + perStreak * (Math.max(1, streak) - 1);
+  const final = Math.min(max, uncapped);
+  return {
+    streak,
+    base,
+    perStreak,
+    max,
+    bonus: final - base,
+    capped: uncapped > max,
+    final,
+  };
 }
 
 /** Stored config (edited later from Studio) or the defaults. Invalid stored config fails loudly. */

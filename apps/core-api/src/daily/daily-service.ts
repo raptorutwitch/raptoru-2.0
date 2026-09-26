@@ -13,7 +13,11 @@ import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import { streamDayWindow } from '../stream/stream-day.js';
 import { activeSession } from '../stream/stream-sessions.js';
-import { loadDailyConfig, rewardForStreak } from './config.js';
+import {
+  dailyRewardBreakdown,
+  loadDailyConfig,
+  rewardForStreak,
+} from './config.js';
 import type { DailyCredits } from './credits.js';
 import { dailyMessages } from './messages.js';
 import { effectiveStreak, streakAfterClaim } from './streak.js';
@@ -235,7 +239,8 @@ export class DailyService {
     );
     const totalAfter = before.total_daily + 1;
     const bestAfter = Math.max(before.best_streak, streakAfter);
-    const reward = rewardForStreak(streakAfter, await loadDailyConfig(q));
+    const calc = dailyRewardBreakdown(streakAfter, await loadDailyConfig(q));
+    const reward = calc.final;
 
     await q.query(
       `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3)
@@ -246,8 +251,8 @@ export class DailyService {
     const claimId = (
       await q.query<{ id: number }>(
         `insert into daily_claims (twitch_user_id, stream_day, stream_id, request_id, source, claimed_at,
-           streak_before, streak_after, total_before, total_after, best_after, reward)
-         values ($1, $2, $3, $4, 'chat', $5, $6, $7, $8, $9, $10, $11) returning id`,
+           streak_before, streak_after, total_before, total_after, best_after, reward, breakdown)
+         values ($1, $2, $3, $4, 'chat', $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
         [
           viewer.twitchUserId,
           session.streamDay,
@@ -260,6 +265,7 @@ export class DailyService {
           totalAfter,
           bestAfter,
           reward,
+          JSON.stringify({ ...calc, streakBefore: before.current_streak }),
         ],
       )
     )[0]!.id;
@@ -279,14 +285,15 @@ export class DailyService {
     );
     if (reward > 0) {
       await q.query(
-        `insert into daily_credits (claim_id, twitch_user_id, login, amount, provider, status)
-         values ($1, $2, $3, $4, $5, 'pending')`,
+        `insert into daily_credits (claim_id, twitch_user_id, login, amount, provider, status, idempotency_key)
+         values ($1, $2, $3, $4, $5, 'pending', $6)`,
         [
           claimId,
           viewer.twitchUserId,
           viewer.login,
           reward,
           this.credits.providerName,
+          `daily-claim:${claimId}`,
         ],
       );
     }
@@ -411,8 +418,10 @@ export class DailyService {
     limit = 100,
   ): Promise<Record<string, unknown>[]> {
     return this.db.query(
-      `select a.*, cr.status as credit_status, cr.last_error as credit_error
+      `select a.*, cr.status as credit_status, cr.last_error as credit_error, cr.provider as credit_provider,
+         cr.idempotency_key as credit_key, cr.wallet_operation_id, c.breakdown
        from daily_attempts a left join daily_credits cr on cr.claim_id = a.claim_id and a.outcome = 'claimed'
+         left join daily_claims c on c.id = a.claim_id and a.outcome = 'claimed'
        where a.twitch_user_id = $1 order by a.attempted_at desc, a.id desc limit $2`,
       [twitchUserId, limit],
     );

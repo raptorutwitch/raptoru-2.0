@@ -4,7 +4,10 @@
 import type { LoyaltyConfig, LoyaltyEvent } from '@raptoru/schemas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createCore } from '../src/app.js';
-import { DevFakeCreditProvider } from '../src/daily/credits.js';
+import {
+  DevFakeCreditProvider,
+  WalletCreditProvider,
+} from '../src/daily/credits.js';
 import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
 import { progressiveReward } from '../src/loyalty/calc.js';
@@ -334,6 +337,139 @@ describe.skipIf(!isLocal)('Core on a real Postgres', () => {
       "select count(*)::int as n from loyalty_rewards where source = 'follow' and twitch_user_id like '7%'",
     );
     expect(follows!.n).toBe(5); // 15 follow events but only 5 distinct viewers: refollows are replays
+  });
+
+  it('Daily → Wallet: preview writes nothing, test credit mode = exactly one Wallet operation per claim', async () => {
+    const clock = new FakeClock(paris('2026-09-29', 20));
+    const q = <T>(sql: string, params?: unknown[]) => db.query<T>(sql, params);
+    const walletRows = async () =>
+      Number(
+        (
+          await q<{ n: string }>(
+            `select (select count(*) from wallet_operations) + (select count(*) from wallet_transactions)
+               + (select count(*) from wallets) as n`,
+          )
+        )[0]!.n,
+      );
+    const setDailyBase = (base: number) =>
+      q(
+        `insert into daily_config (id, config) values (1, $1)
+         on conflict (id) do update set config = excluded.config`,
+        [JSON.stringify({ reward: { base, perStreak: 150, max: 2000 } })],
+      );
+    const people = Array.from({ length: 12 }, (_, i) =>
+      viewer(String(60_000 + i), `D${i}`),
+    );
+    // Each viewer: 3 double clicks + the same message retried on another Core, all concurrent;
+    // the Daily config changes in the middle.
+    const storm = async (
+      cores: ReturnType<typeof createCore>[],
+      day: string,
+      newBase: number,
+    ) => {
+      const calls = people.flatMap((v, i) => [
+        ...[0, 1, 2].map(
+          (k) => () =>
+            cores[(i + k) % 3]!.daily.claim({
+              viewer: v,
+              requestId: `${day}-${v.twitchUserId}-click-${k}`,
+            }),
+        ),
+        ...[0, 1].map(
+          (k) => () =>
+            cores[(i + k + 1) % 3]!.daily.claim({
+              viewer: v,
+              requestId: `${day}-${v.twitchUserId}-retry`,
+            }),
+        ),
+      ]);
+      const half = Math.floor(calls.length / 2);
+      const first = await Promise.all(calls.slice(0, half).map((c) => c()));
+      const [second] = await Promise.all([
+        Promise.all(calls.slice(half).map((c) => c())),
+        setDailyBase(newBase),
+      ]);
+      return [...first, ...second];
+    };
+
+    // --- Preview (DAILY_WALLET_CREDITS=false): real claims, zero Wallet write ---
+    await setDailyBase(500);
+    const walletBefore = await walletRows();
+    // Two extra pools, shared by both phases and closed at the end.
+    const pools = [db, createPgDb(url!), createPgDb(url!)];
+    const previewCores = pools.map((d) =>
+      createCore(d, clock, new DevFakeCreditProvider()),
+    );
+    await previewCores[0]!.streams.online({
+      streamId: 'daily-w1',
+      startedAt: paris('2026-09-29', 20),
+    });
+    clock.set(paris('2026-09-29', 21));
+    const preview = await storm(previewCores, '2026-09-29', 800);
+    expect(
+      preview.filter((r) => r.outcome === 'claimed' && !r.replayed),
+    ).toHaveLength(12);
+    expect(await walletRows()).toBe(walletBefore);
+
+    // --- Test credit mode (DAILY_WALLET_CREDITS=true) on the next stream-day ---
+    const creditCores = pools.map((d) =>
+      createCore(d, clock, new WalletCreditProvider(d)),
+    );
+    await setDailyBase(500);
+    clock.set(paris('2026-09-30', 20));
+    await creditCores[1]!.streams.online({
+      streamId: 'daily-w2',
+      startedAt: paris('2026-09-30', 20),
+    });
+    clock.set(paris('2026-09-30', 21));
+    const credit = await storm(creditCores, '2026-09-30', 900);
+    // Periodic retry sweeps on all Cores at once, twice: nothing left, nothing paid twice.
+    await Promise.all(creditCores.map((c) => c.credits.retryTick()));
+    await Promise.all(creditCores.map((c) => c.credits.retryTick()));
+    expect(
+      credit.filter((r) => r.outcome === 'claimed' && !r.replayed),
+    ).toHaveLength(12);
+
+    const rows = await q<{
+      twitch_user_id: string;
+      reward: number;
+      status: string;
+      ops: string;
+      op_matches: boolean;
+      breakdown: { streak: number; base: number; final: number };
+    }>(
+      `select c.twitch_user_id, c.reward, cr.status, c.breakdown,
+         (select count(*) from wallet_operations o where o.idempotency_key = cr.idempotency_key) as ops,
+         (select o.id from wallet_operations o where o.idempotency_key = cr.idempotency_key) = cr.wallet_operation_id as op_matches
+       from daily_claims c join daily_credits cr on cr.claim_id = c.id
+       where c.stream_id = 'daily-w2'`,
+    );
+    expect(rows).toHaveLength(12);
+    for (const r of rows) {
+      expect(r.status).toBe('credited');
+      expect(Number(r.ops)).toBe(1); // exactly one Wallet operation per claim
+      expect(r.op_matches).toBe(true);
+      // streak 2 (consecutive aired days); base from whichever config the claim saw, frozen.
+      expect(r.breakdown.streak).toBe(2);
+      expect([500, 900]).toContain(r.breakdown.base);
+      expect(r.reward).toBe(r.breakdown.base + 150);
+      expect(r.reward).toBe(r.breakdown.final);
+    }
+    for (const p of people) {
+      const [w] = await q<{ balance: string }>(
+        "select balance from wallets where twitch_user_id = $1 and currency_id = 'main'",
+        [p.twitchUserId],
+      );
+      const paid = rows.find(
+        (r) => r.twitch_user_id === p.twitchUserId,
+      )!.reward;
+      expect(Number(w!.balance)).toBe(paid); // preview day paid nothing, credit day paid once
+    }
+    const [dailyTx] = await q<{ n: string }>(
+      "select count(*) as n from wallet_transactions where source = 'daily'",
+    );
+    expect(Number(dailyTx!.n)).toBe(12);
+    await Promise.all(pools.slice(1).map((p) => p.close()));
   });
 
   it('Rewards Twitch V1 in preview: 3 Cores, duplicates, conflicts, hot config change, zero Wallet write', async () => {
