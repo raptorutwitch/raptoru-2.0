@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raptoru Live — configuration</title>
+  <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="config.css">
+</head>
+<body class="config">
+  <main class="config-shell">
+    <section class="config-card">
+      <h1>Raptoru Live</h1>
+      <p>État de l'extension et contrôles non destructifs. Les actions utilisent l'EBS configuré côté serveur.</p>
+      <div class="config-status">
+        <span class="config-dot" aria-hidden="true"></span>
+        <strong id="status">Connexion à Twitch en cours…</strong>
+      </div>
+      <div id="config-runtime" class="config-runtime" aria-live="polite"></div>
+      <section class="config-section" aria-labelledby="modules-title">
+        <h2 id="modules-title">Modules</h2>
+        <ul id="config-modules" class="config-list">
+          <li>Lecture de la configuration…</li>
+        </ul>
+      </section>
+      <section id="config-controls" class="config-section config-controls" aria-labelledby="controls-title" hidden>
+        <div class="config-section__head">
+          <span>
+            <small>Contrôles en direct</small>
+            <h2 id="controls-title">TTS</h2>
+          </span>
+          <span id="config-tts-state" class="config-pill">Lecture instantanée</span>
+        </div>
+        <div class="config-actions">
+          <button id="config-tts-pause" class="config-button" type="button">Mettre le TTS en pause</button>
+          <button id="config-tts-mode" class="config-button config-button--secondary" type="button">Valider avant lecture</button>
+        </div>
+        <p id="config-feedback" class="config-feedback" aria-live="polite"></p>
+      </section>
+      <section class="config-section" aria-labelledby="safe-title">
+        <h2 id="safe-title">Garde-fous</h2>
+        <ul class="config-list">
+          <li>Aucun secret Twitch ou SAMMI n'est envoyé au navigateur.</li>
+          <li>Si SAMMI est indisponible, aucune dépense ne part.</li>
+          <li>La pause et le mode de validation TTS sont réservés au broadcaster et aux modérateurs.</li>
+          <li>La file technique ne peut pas être vidée depuis cette page : une action jouée ne doit jamais être relancée par erreur.</li>
+        </ul>
+      </section>
+      <p id="config-help" class="config-help">Les réglages sont enregistrés côté serveur et s'appliquent aux viewers sans modifier SAMMI.</p>
+    </section>
+  </main>
+  <script type="module" src="config.js"></script>
+</body>
+</html>

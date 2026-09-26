@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="BetterTTV">
+  <defs>
+    <linearGradient id="better-twitch-tv" x1="4" y1="4" x2="20" y2="21" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#78e7ff"/>
+      <stop offset="1" stop-color="#2c8fe0"/>
+    </linearGradient>
+  </defs>
+  <path d="m5.2 8-1.4-3.7 4.05 2.25L12 4.9l4.15 1.65 4.05-2.25L18.8 8H20v9.35H4V8Z" fill="url(#better-twitch-tv)"/>
+  <path d="M7.4 10.6h2.25v2.35H7.4zM14.35 10.6h2.25v2.35h-2.25z" fill="#12304b"/>
+  <path d="M9.1 15.2c1.7 1.05 4.1 1.05 5.8 0" fill="none" stroke="#12304b" stroke-linecap="round" stroke-width="1.2"/>
+</svg>

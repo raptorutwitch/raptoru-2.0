@@ -9,6 +9,8 @@ export default defineConfig(
       '**/.turbo/**',
       'apps/studio/desktop/stage/**',
       'apps/studio/desktop/release/**',
+      // Production extension imported as is (see apps/twitch-extension/README.md).
+      'apps/twitch-extension/extension/**',
     ],
   },
   js.configs.recommended,

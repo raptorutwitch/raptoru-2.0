@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raptoru Live — actions</title>
+  <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body class="overlay">
+  <!-- Video Overlay : la page couvre tout le player mais reste TRANSPARENTE et
+       ne capte les clics que sur ses éléments (pointer-events sur .dock/.drawer).
+       Au repos : un simple onglet au bord gauche. -->
+  <div class="dock">
+    <button id="toggle" class="dock__btn" type="button" aria-expanded="false" aria-controls="drawer"
+            title="Actions Raptoru Live">
+      <span class="dock__icon" aria-hidden="true">ϟ</span>
+      <span id="dock-count" class="dock__count" hidden></span>
+      <span class="sr-only">Ouvrir les actions Raptoru Live</span>
+    </button>
+  </div>
+
+  <aside id="drawer" class="drawer" hidden aria-label="Actions Raptoru Live">
+    <header class="drawer__head">
+      <span class="drawer__mark" aria-hidden="true">ϟ</span>
+      <span class="drawer__title">
+        <strong>Interactions</strong>
+        <small>Choisis sans écrire dans le chat</small>
+      </span>
+      <button id="close" class="drawer__close" type="button" aria-label="Fermer">✕</button>
+    </header>
+    <div id="panel" class="drawer__body"></div>
+  </aside>
+
+  <script type="module" src="overlay.js"></script>
+</body>
+</html>

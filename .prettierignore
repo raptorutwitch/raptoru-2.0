@@ -1,2 +1,4 @@
 package-lock.json
 Raptoru Studio — Infrastructure Spec.md
+# Production extension imported as is (see apps/twitch-extension/README.md)
+apps/twitch-extension/extension/

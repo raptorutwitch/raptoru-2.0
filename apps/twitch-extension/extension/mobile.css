@@ -1,0 +1,5033 @@
+/* Viewer mobile : page pleine, opaque, tactile.
+   Volontairement PAS l'overlay rétréci — les contraintes sont différentes
+   (pas de survol, pouce, encoches, clavier virtuel). */
+
+html, body.mobile {
+  min-height: 100%;
+  background: var(--jdm-bg-solid);
+}
+
+
+body.mobile {
+  padding:
+    env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.m-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--jdm-bg-solid);
+  border-bottom: 1px solid var(--jdm-line);
+}
+.m-mark { flex: 0 0 auto; }
+.m-title { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.m-title h1 { margin: 0; font-size: 16px; }
+.m-title small { color: var(--jdm-muted); font-size: 11px; }
+
+.m-refresh {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--jdm-line);
+  border-radius: 10px;
+  background: var(--jdm-surface);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.m-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 32px;
+}
+
+/* Cibles tactiles : tout ce qui est cliquable fait au moins 44 px de haut. */
+.mobile .jdm-module__head { min-height: 52px; padding: 14px 14px; }
+.mobile .jdm-btn { min-height: 48px; }
+.mobile .jdm-input { min-height: 48px; padding: 12px; font-size: 16px; } /* 16px = pas de zoom iOS */
+.mobile textarea.jdm-input { min-height: 92px; }
+.mobile .jdm-sound { min-height: 64px; }
+.mobile .jdm-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mobile .jdm-sound__label { font-size: 10px; }
+.mobile .jdm-wallet { padding: 12px 14px; }
+.mobile .jdm-wallet__value { font-size: 19px; }
+.mobile .jdm-link { min-height: 48px; display: flex; align-items: center; justify-content: center; }
+
+/* Écran large en paysage : on aère plutôt que d'étirer. */
+@media (min-width: 620px) {
+  .m-body { max-width: 560px; margin: 0 auto; }
+  .mobile .jdm-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Paysage très bas de plafond : on compacte l'en-tête. */
+@media (max-height: 420px) and (orientation: landscape) {
+  .m-head { padding: 8px 14px; }
+  .m-body { padding: 10px 14px 20px; }
+}
+
+/* --- finition mobile ----------------------------------------------------- */
+html, body.mobile {
+  background:
+    radial-gradient(circle at 100% 0, rgba(168, 85, 247, .18), transparent 34%),
+    radial-gradient(circle at 0 100%, rgba(76, 29, 149, .14), transparent 38%),
+    var(--jdm-bg-solid);
+}
+.m-head {
+  background: rgba(11, 9, 18, .82);
+  border-bottom-color: rgba(216, 180, 254, .16);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .2);
+  backdrop-filter: blur(14px);
+}
+.m-mark {
+  background: linear-gradient(135deg, #c084fc, #6d28d9);
+  box-shadow: 0 0 18px rgba(168, 85, 247, .35), inset 0 1px 0 rgba(255, 255, 255, .3);
+  font-size: 17px;
+}
+.m-refresh {
+  border-color: rgba(216, 180, 254, .2);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .1), rgba(76, 29, 149, .16));
+}
+/* --- UI/UX pass 1 : le panneau n’affiche plus un grand header permanent --- */
+.m-head {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: block;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+.m-refresh {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 9px;
+  opacity: .72;
+  pointer-events: auto;
+}
+.m-refresh:hover,
+.m-refresh:focus-visible { opacity: 1; outline: 0; }
+.mobile .m-body {
+  min-height: 100vh;
+  padding: 6px 10px 24px;
+  gap: 0;
+}
+.mobile .jdm-home__topbar {
+  min-height: 40px;
+  padding-left: 42px;
+}
+.mobile .jdm-home .jdm-wallet--home {
+  min-height: 36px;
+  padding: 7px 10px;
+}
+.mobile .jdm-home__utilities {
+  min-height: 48px;
+  gap: 6px;
+}
+.mobile .jdm-utility-access {
+  min-height: 42px;
+  padding-inline: 11px;
+}
+.mobile .jdm-tutorial-handle {
+  min-height: 38px;
+  padding: 7px 12px 10px;
+}
+.mobile .jdm-module__screen-head {
+  min-height: 44px;
+  padding-inline: 0;
+}
+.mobile .jdm-back {
+  min-height: 44px;
+  padding-inline: 11px;
+}
+.mobile .jdm-module__screen-side--right .jdm-wallet--shell-header {
+  min-height: 34px;
+  padding-inline: 9px;
+}
+.mobile .jdm-module-screen > .jdm-module > .jdm-module__body { padding-bottom: 12px; }
+
+/* Le bouton de rafraîchissement reste disponible à l’accueil. En module, le
+   header de l’écran porte déjà le retour, le titre et le wallet sur une ligne. */
+body.mobile:has(#panel[data-view="module"]) .m-head { display: none; }
+body.mobile:has(#panel[data-view="module"]) .m-body { padding-top: 4px; }
+
+@media (max-width: 390px), (max-height: 320px) {
+  .mobile .m-body { padding-inline: 7px; }
+  .mobile .jdm-home__topbar { min-height: 36px; padding-left: 38px; }
+  .mobile .jdm-home .jdm-wallet--home { min-height: 32px; padding: 5px 8px; }
+  .mobile .jdm-home__utilities { min-height: 44px; gap: 4px; }
+  .mobile .jdm-utility-access { min-height: 40px; padding-inline: 8px; }
+  .mobile .jdm-tutorial-handle { min-height: 34px; }
+  .mobile .jdm-module__screen-head { min-height: 42px; }
+  .mobile .jdm-back { min-height: 42px; padding-inline: 9px; }
+}
+
+/* --- UI/UX pass 2 : surfaces tactiles Soundboard ------------------------- */
+.mobile .jdm-module[data-module="actions"] .jdm-module__body {
+  padding: 5px 7px 8px;
+}
+.mobile .jdm-module[data-module="actions"] .jdm-history__item {
+  min-height: 32px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
+  gap: 4px;
+  padding-block: 3px;
+}
+.mobile .jdm-module[data-module="actions"] .jdm-history__icon { width: 18px; height: 18px; }
+.mobile .jdm-module[data-module="actions"] .jdm-history__action { font-size: 9.5px; }
+.mobile .jdm-module[data-module="actions"] .jdm-history__cost,
+.mobile .jdm-module[data-module="actions"] .jdm-history__status,
+.mobile .jdm-module[data-module="actions"] .jdm-history__when { font-size: 8px; }
+.mobile .jdm-module[data-module="actions"] .jdm-history__cost { max-width: 76px; }
+.mobile .jdm-module[data-module="actions"] .jdm-history__status { max-width: 72px; }
+
+.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-wallet {
+  min-height: 38px;
+  padding-inline: 8px;
+}
+.mobile .jdm-soundboard-wallet__value { font-size: 11px; }
+.mobile .jdm-soundboard-wallet__unit { font-size: 8px; }
+.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound {
+  min-height: 48px;
+}
+.mobile .jdm-soundboard-body .jdm-sound-search {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+}
+.mobile .jdm-soundboard-body .jdm-sound-search__toggle {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+}
+.mobile .jdm-soundboard-body .jdm-sound-search.is-open {
+  width: auto;
+  min-width: 0;
+}
+.mobile .jdm-soundboard-body .jdm-grid,
+.mobile .jdm-soundboard-body.has-search-open .jdm-grid {
+  padding-top: 42px;
+}
+.mobile .jdm-sound-payment.is-open { max-height: 126px; }
+.mobile .jdm-sound-payment__option .jdm-sound-payment__choice {
+  min-height: 42px;
+}
+.mobile .jdm-soundboard-volume__handle {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+}
+.mobile .jdm-soundboard-body.has-payment-open .jdm-soundboard-volume { bottom: 130px; }
+.mobile .jdm-soundboard-volume__popover {
+  width: min(232px, calc(100vw - 16px));
+}
+
+@media (max-width: 390px), (max-height: 320px) {
+  .mobile .jdm-module[data-module="actions"] .jdm-history__item {
+    min-height: 30px;
+    grid-template-columns: 17px minmax(0, 1fr) auto auto auto;
+  }
+  .mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound { min-height: 42px; }
+  .mobile .jdm-module__screen-head--soundboard .jdm-soundboard-wallet {
+    min-height: 34px;
+    padding-inline: 6px;
+  }
+  .mobile .jdm-soundboard-body .jdm-sound-search,
+  .mobile .jdm-soundboard-body .jdm-sound-search__toggle {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    flex-basis: 36px;
+  }
+  .mobile .jdm-soundboard-body .jdm-grid,
+  .mobile .jdm-soundboard-body.has-search-open .jdm-grid { padding-top: 40px; }
+}
+
+/* --- UI/UX pass 3 : moderation tactile, compacte et sans double scroll ---- */
+.mobile .jdm-module[data-module="moderation"] .jdm-module__body {
+  gap: 0;
+  padding: 4px 7px 8px;
+  overflow: hidden;
+}
+.mobile .jdm-module__screen-head--moderation .jdm-back {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+.mobile .jdm-moderation__subnav {
+  min-height: 44px;
+  gap: 4px;
+  justify-content: space-between;
+  padding-bottom: 4px;
+}
+.mobile .jdm-moderation__tab {
+  width: auto;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 8px 10px;
+}
+.mobile .jdm-moderation__tab:not(.jdm-btn--primary) {
+  width: 44px;
+  padding-inline: 0;
+}
+.mobile .jdm-moderation__tab-icon { width: 20px; height: 20px; flex-basis: 20px; font-size: 15px; }
+.mobile .jdm-moderation--screen .jdm-moderation__controls .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-moderation__actions .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-mod-history__filters .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-mod-users__user,
+.mobile .jdm-moderation--screen .jdm-mod-modules__list .jdm-btn,
+.mobile .jdm-mod-user-card__group .jdm-btn {
+  min-height: 44px;
+}
+.mobile .jdm-moderation--screen .jdm-moderation__controls .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-moderation__actions .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-mod-history__filters .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-mod-users__user,
+.mobile .jdm-moderation--screen .jdm-mod-modules__list .jdm-btn,
+.mobile .jdm-mod-user-card__group .jdm-btn { padding-inline: 8px; }
+.mobile .jdm-moderation--screen .jdm-mod-history__filters .jdm-input { min-height: 48px; padding-inline: 10px; font-size: 16px; }
+.mobile .jdm-moderation--screen .jdm-mod-history__list { overflow: visible; }
+.mobile .jdm-moderation--screen .jdm-history__item {
+  min-height: 34px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
+  gap: 4px;
+  padding-block: 5px;
+}
+.mobile .jdm-moderation--screen .jdm-history__icon { width: 18px; height: 18px; font-size: 12px; }
+.mobile .jdm-moderation--screen .jdm-history__action { font-size: 10px; }
+.mobile .jdm-moderation--screen .jdm-history__cost,
+.mobile .jdm-moderation--screen .jdm-history__status,
+.mobile .jdm-moderation--screen .jdm-history__when { font-size: 8px; }
+.mobile .jdm-mod-user-card__group .jdm-input { min-height: 44px; }
+
+@media (max-width: 390px) {
+  .mobile .jdm-module[data-module="moderation"] .jdm-module__body { padding-inline: 5px; }
+  .mobile .jdm-moderation__subnav { gap: 2px; }
+  .mobile .jdm-moderation__tab { padding-inline: 8px; }
+  .mobile .jdm-moderation__tab:not(.jdm-btn--primary) { width: 42px; min-width: 42px; }
+  .mobile .jdm-moderation--screen .jdm-history__item {
+    grid-template-columns: 17px minmax(0, 1fr) auto auto auto;
+    gap: 3px;
+  }
+  .mobile .jdm-moderation--screen .jdm-history__icon { width: 17px; height: 17px; font-size: 11px; }
+  .mobile .jdm-moderation--screen .jdm-history__cost { max-width: 70px; }
+  .mobile .jdm-moderation--screen .jdm-history__status { max-width: 74px; }
+  .mobile .jdm-moderation--screen .jdm-history__when { max-width: 38px; }
+}
+
+/* --- UI/UX pass 4 : Bonk mobile touch targets ---------------------------- */
+.mobile .jdm-module[data-module="bonk"] .jdm-emote-sources {
+  min-height: 44px;
+  flex-basis: 44px;
+  padding-bottom: 3px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-emote-search__toggle {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  flex-basis: 42px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-emote-source {
+  height: 40px;
+  min-width: 40px;
+  padding-inline: 7px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-emote-source__icon {
+  width: 26px;
+  height: 26px;
+  font-size: 16px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-emote-search.is-open {
+  height: 44px;
+  min-height: 44px;
+  flex-basis: 44px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-emote-grid {
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  gap: 5px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell { min-height: 42px; }
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-composer {
+  position: fixed;
+  z-index: 20;
+  right: 0;
+  bottom: env(safe-area-inset-bottom);
+  left: 0;
+  width: min(100%, 390px);
+  height: 50px;
+  min-height: 50px;
+  padding: 5px 4px 3px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-choice,
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-actions .jdm-btn {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-choice__favorite { width: 36px; height: 36px; }
+
+@media (min-width: 620px) {
+  .mobile .jdm-module[data-module="bonk"] .jdm-emote-grid {
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+    gap: 6px;
+  }
+  .mobile .jdm-module[data-module="bonk"] .jdm-emote-cell { min-height: 54px; }
+  .mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__glyph { font-size: 27px; }
+  .mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__image { max-height: 36px; }
+  .mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__mark { width: 34px; height: 34px; }
+}
+
+@media (max-width: 390px) {
+  .mobile .jdm-module[data-module="bonk"] .jdm-module__body { padding-inline: 5px; }
+  .mobile .jdm-module[data-module="bonk"] .jdm-emote-source__label { max-width: 72px; font-size: 8px; }
+  .mobile .jdm-module[data-module="bonk"] .jdm-bonk-composer {
+    height: 50px;
+    min-height: 50px;
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+}
+
+/* --- UI/UX pass 5 : munitions Bonk tactiles ------------------------------ */
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-modebar {
+  min-height: 44px;
+  flex-basis: 44px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo-toggle {
+  min-height: 42px;
+  padding-inline: 11px;
+  font-size: 10px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-loop-toggle {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  font-size: 17px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo-status { font-size: 9px; }
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo.is-visible {
+  min-height: 46px;
+  flex-basis: 46px;
+  max-height: 52px;
+  padding: 5px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__item {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__image { max-width: 30px; max-height: 30px; }
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__glyph { font-size: 22px; }
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__mark { width: 28px; height: 28px; font-size: 8px; }
+.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__clear { min-height: 36px; padding-inline: 8px; }
+
+/* --- UX V2 / UX-4 : contrôles tactiles Soundboard + Modération ------------ */
+.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound {
+  min-height: 44px;
+  padding: 6px 16px 6px 8px;
+}
+.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid,
+.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-search-open .jdm-grid {
+  padding-top: 40px;
+}
+.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment.is-open {
+  max-height: 116px;
+  padding: 6px 7px 7px;
+}
+.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__cta,
+.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__switch {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__switch {
+  min-width: 76px;
+  padding-inline: 8px;
+}
+.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__lab { min-height: 38px; }
+
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-users__search .jdm-input {
+  min-height: 44px;
+  padding-inline: 10px;
+  font-size: 16px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-users__search-button {
+  min-height: 44px;
+  padding-inline: 10px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-users__list {
+  max-height: 88px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-users__user {
+  min-height: 44px;
+  padding-inline: 9px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card {
+  gap: 5px 8px;
+  padding: 8px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__avatar {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group {
+  gap: 5px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group .jdm-input {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__credit-button,
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-history-toggle,
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--credits {
+  grid-template-columns: auto auto 44px minmax(44px, 52px) 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--suspension {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--suspension .jdm-mod-user-history-toggle {
+  grid-column: 2 / -1;
+  justify-self: end;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--suspension .jdm-mod-user-card__suspension-button {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspensions,
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-picker {
+  grid-column: 1 / -1;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-picker {
+  gap: 5px;
+  padding: 6px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-option {
+  min-height: 44px;
+  padding-inline: 8px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-option input {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-actions {
+  gap: 5px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-actions .jdm-input,
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-actions .jdm-mod-user-card__suspension-button {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__duration-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__duration-controls .jdm-input {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__custom-duration {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__custom-duration .jdm-input {
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 0;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-actions .jdm-mod-user-card__suspension-button {
+  flex: 1 1 auto;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-history {
+  max-height: min(300px, 42vh);
+  padding: 8px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-history__close {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-history__list { max-height: 240px; }
+
+@media (max-width: 390px) {
+  .mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__switch { min-width: 72px; }
+  .mobile .jdm-module[data-module="moderation"] .jdm-mod-users__list { max-height: 82px; }
+  .mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--credits {
+    grid-template-columns: auto auto 42px minmax(40px, 1fr) 42px;
+  }
+}
+
+/* --- UX V2 / UX-4.1 : paiement commun TTS tactile ------------------------- */
+.mobile .jdm-module[data-module="tts"] .jdm-tts-actions.is-visible {
+  max-height: 82px;
+}
+.mobile .jdm-module[data-module="tts"] .jdm-multi-payment__cta,
+.mobile .jdm-module[data-module="tts"] .jdm-multi-payment__switch {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="tts"] .jdm-multi-payment__switch {
+  min-width: 76px;
+  padding-inline: 8px;
+}
+.mobile .jdm-module[data-module="tts"] .jdm-tts-action--lab { min-height: 38px; }
+
+@media (max-width: 390px) {
+  .mobile .jdm-module[data-module="tts"] .jdm-multi-payment__switch { min-width: 72px; }
+}
+/* --- UX-7 : final Soundboard mobile overrides --------------------------- */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body {
+  gap: 7px;
+  padding: 7px 8px 10px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar {
+  min-height: 44px;
+  flex-basis: 44px;
+  gap: 8px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume {
+  position: relative;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  flex-basis: 44px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-soundboard-volume {
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__handle {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume.is-open {
+  width: min(250px, calc(100vw - 20px));
+  flex-basis: min(250px, calc(100vw - 20px));
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__popover {
+  height: 42px;
+  min-height: 42px;
+  padding-left: 47px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-search {
+  position: relative;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: 44px;
+  min-width: 44px;
+  height: 42px;
+  min-height: 42px;
+  flex-basis: 44px;
+  padding-inline: 2px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-search.is-open {
+  width: min(290px, 100%);
+  min-width: 0;
+  flex-basis: 290px;
+  padding-inline: 3px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search__toggle {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  flex-basis: 40px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 2px 10px 0;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+  padding-bottom: 72px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item {
+  min-height: 54px;
+  transform: scale(.98);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected {
+  grid-column: 1 / -1;
+  transform: scale(1);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound {
+  min-height: 54px;
+  padding: 9px 46px 9px 11px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound.is-selected {
+  min-height: 82px;
+  padding: 12px 78px 12px 14px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound__label {
+  font-size: 10px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound.is-selected .jdm-sound__label {
+  font-size: 13px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview {
+  right: 7px;
+  bottom: 7px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-preview {
+  width: 82px;
+  min-width: 82px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__label {
+  font-size: 9px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment {
+  bottom: 8px;
+  width: min(152px, calc(100% - 16px));
+  max-width: calc(100% - 16px);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment.is-open {
+  max-height: none;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__cta {
+  width: 100%;
+  height: 58px;
+  min-height: 58px;
+  font-size: 12px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__switch {
+  width: 38px;
+  min-width: 38px;
+  height: 22px;
+  min-height: 22px;
+  font-size: 16px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone {
+  right: 8px;
+  bottom: 8px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-soundboard-help-zone {
+  bottom: 80px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help {
+  bottom: 47px;
+  width: min(300px, calc(100vw - 16px));
+  max-height: min(300px, calc(100vh - 72px));
+  padding: 12px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help__copy {
+  min-height: 52px;
+  font-size: 11px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help__arrow {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help__dot {
+  width: 9px;
+  height: 9px;
+  min-width: 9px;
+  min-height: 9px;
+}
+@media (max-height: 320px) {
+  /* Le petit viewport doit rester un cadre fixe : le catalogue défile dans sa
+     propre grille et le CTA flottant reste donc dans la capture visible. */
+  body.mobile:has(#panel[data-view="module"]) .m-body {
+    height: 100vh;
+    max-height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body *,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* --- UX-9 : wallet tactile compact et légèrement inset ----------------- */
+body.mobile .jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+body.mobile .jdm-home .jdm-wallet--home.jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+body.mobile .jdm-module__screen-side--right .jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-wallet.jdm-ui-wallet:not(.jdm-wallet--bonk-header) {
+  width: min(122px, calc(100vw - 20px));
+  height: 36px;
+  min-height: 36px;
+  align-self: center;
+  margin-right: 4px;
+  padding: 3px 7px;
+}
+@media (max-width: 390px), (max-height: 320px) {
+body.mobile .jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+body.mobile .jdm-home .jdm-wallet--home.jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+body.mobile .jdm-module__screen-side--right .jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-wallet.jdm-ui-wallet:not(.jdm-wallet--bonk-header) {
+  width: min(112px, calc(100vw - 20px));
+  height: 34px;
+    min-height: 34px;
+    padding: 2px 5px;
+  }
+}
+
+/* --- UI/UX finale mobile : mêmes états, cibles tactiles généreuses ------- */
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-composer > .jdm-row {
+  position: static;
+  display: flex;
+  min-height: 16px;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-input {
+  height: 104px;
+  min-height: 104px;
+  max-height: 140px;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-actions {
+  display: flex;
+  max-height: 0;
+  overflow: visible;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-actions.is-visible {
+  max-height: 62px;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__switch {
+  min-width: 76px;
+  min-height: 44px;
+  padding-inline: 9px;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__switch[hidden] {
+  display: none !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar {
+  justify-content: flex-end;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume {
+  order: 2;
+  width: 44px;
+  min-width: 44px;
+  flex-basis: 44px;
+  overflow: visible;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume.is-open {
+  width: 44px;
+  min-width: 44px;
+  flex-basis: 44px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__handle {
+  top: 0;
+  right: 0;
+  left: auto;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__popover {
+  top: 0;
+  right: 0;
+  left: auto;
+  width: min(250px, calc(100vw - 20px));
+  transform-origin: right center;
+  padding-right: 47px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume.is-open .jdm-soundboard-volume__popover {
+  transform: scaleX(1);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search {
+  order: 1;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item {
+  transform: none;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected {
+  grid-column: 1 / -1;
+  transform: none;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound {
+  border-color: rgba(138, 203, 255, .22);
+  background: linear-gradient(145deg, rgba(26, 76, 112, .28), rgba(4, 14, 29, .78));
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound.is-selected {
+  border-color: rgba(138, 203, 255, .9);
+  background: linear-gradient(145deg, rgba(31, 124, 181, .46), rgba(9, 49, 85, .82));
+  box-shadow: inset 0 0 0 1px rgba(201, 239, 255, .14), 0 7px 18px rgba(2, 35, 64, .3);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment {
+  position: static;
+  order: 3;
+  max-height: 0;
+  padding: 0;
+  transform: translateY(5px);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment.is-open {
+  max-height: 56px;
+  padding: 0;
+  transform: translateY(0);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  justify-content: center;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+  width: auto;
+  min-width: 82px;
+  height: 29px;
+  min-height: 29px;
+  border-radius: 9px 9px 5px 5px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle::after {
+  display: none;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help {
+  right: auto;
+  bottom: 35px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+@media (max-width: 390px) {
+  body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__switch {
+    min-width: 72px;
+  }
+}
+
+/* --- Passe corrective visuelle : CTA intégrés et cartes Soundboard ------- */
+
+/* Le shell technique du wallet ne dessine jamais une troisième surface. */
+body.mobile .jdm-wallet-stack {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0;
+  overflow: visible;
+  padding: 2px 1px 4px 7px;
+}
+body.mobile .jdm-wallet-stack::before,
+body.mobile .jdm-wallet-stack::after {
+  display: none !important;
+  content: none !important;
+}
+body.mobile .jdm-wallet-stack > .jdm-wallet__face {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--wallet-tint) 42%, transparent),
+    0 3px 7px rgba(0, 0, 0, .38);
+}
+
+/* TTS : un seul bloc violet, avec le contrôle de monnaie intégré en bas. */
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment.jdm-multi-payment--integrated-switch {
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment.jdm-multi-payment--integrated-switch .jdm-tts-payment__row {
+  position: relative;
+  display: grid !important;
+  grid-template-columns: 1fr;
+  min-width: 0;
+  min-height: 70px;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__cta {
+  display: flex;
+  width: 136px;
+  min-width: 136px;
+  min-height: 70px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 10px 16px 21px;
+  border: 1px solid rgba(207, 145, 255, .78);
+  border-radius: 11px;
+  background: linear-gradient(160deg, #9c4bea 0%, #7132bf 56%, #442078 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .24),
+    inset 0 -5px 12px rgba(28, 8, 65, .2),
+    0 5px 12px rgba(26, 5, 61, .38);
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
+  transition: transform .15s ease, border-color .15s ease, filter .15s ease,
+    box-shadow .15s ease;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__cta .jdm-multi-payment__icon,
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__cta .jdm-multi-payment__unit {
+  display: none;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__label {
+  display: block;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .13em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__value {
+  display: block;
+  min-width: 3ch;
+  margin-top: 4px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__cta:hover:not(:disabled),
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__cta:focus-visible {
+  border-color: #e7caff;
+  outline: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3),
+    0 8px 16px rgba(26, 5, 61, .44),
+    0 0 0 2px rgba(197, 133, 255, .2);
+  filter: brightness(1.07);
+  transform: translateY(-2px);
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__cta:active:not(:disabled) {
+  transform: translateY(1px) scale(.985);
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__switch {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  width: 23px;
+  min-width: 23px;
+  height: 16px;
+  min-height: 16px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .46);
+  border-radius: 5px;
+  background: rgba(35, 10, 70, .72);
+  color: #ffe0a1;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateX(-50%);
+  transition: transform .14s ease, border-color .14s ease, background .14s ease,
+    color .14s ease, box-shadow .14s ease;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__switch[data-payment="credits"] {
+  color: #a9e3ff;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__switch:hover:not(:disabled),
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__switch:focus-visible {
+  border-color: #fff;
+  outline: 2px solid rgba(216, 170, 255, .7);
+  outline-offset: 1px;
+  background: rgba(117, 48, 183, .9);
+  box-shadow: 0 2px 7px rgba(24, 2, 54, .35);
+  transform: translate(-50%, -1px);
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__switch:active:not(:disabled) {
+  transform: translate(-50%, 0) scale(.92);
+}
+
+/* Soundboard : l'icône du titre porte le volume, le toolbar ne le duplique pas. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header {
+  position: relative;
+  z-index: 14;
+  display: inline-flex;
+  width: 21px;
+  min-width: 21px;
+  height: 22px;
+  min-height: 22px;
+  flex: 0 0 21px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  overflow: visible;
+}
+body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  max-width: min(220px, 100%);
+  overflow: visible;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-title-volume {
+  display: inline-grid;
+  width: 21px;
+  min-width: 21px;
+  height: 22px;
+  min-height: 22px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #b9e8ff;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color .14s ease, background .14s ease, border-color .14s ease,
+    transform .14s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-title-volume:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-title-volume:focus-visible {
+  border-color: rgba(126, 215, 255, .68);
+  outline: 2px solid rgba(126, 215, 255, .48);
+  outline-offset: 1px;
+  background: rgba(33, 111, 158, .38);
+  color: #fff;
+  transform: translateY(-1px);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header .jdm-soundboard-volume__popover {
+  top: calc(100% + 5px);
+  right: -2px;
+  left: auto;
+  width: min(188px, calc(100vw - 20px));
+  transform: translateY(-4px) scale(.96);
+  transform-origin: top right;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header.is-open .jdm-soundboard-volume__popover {
+  transform: translateY(0) scale(1);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar > .jdm-soundboard-volume {
+  display: none;
+}
+
+/* Soundboard : cartes opaques, zone d'actions dans la carte sélectionnée. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body {
+  display: flex;
+  min-height: 0;
+  gap: 7px;
+  padding: 7px 8px 7px;
+  overflow: hidden !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: start;
+  gap: 7px;
+  padding: 0 2px 3px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: rgba(78, 204, 255, .5) transparent;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item {
+  display: grid;
+  min-width: 0;
+  min-height: 54px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 3px 5px;
+  padding: 4px;
+  border: 1px solid rgba(111, 206, 255, .38);
+  border-radius: 9px;
+  background: linear-gradient(155deg, rgba(16, 75, 111, .98), rgba(7, 30, 53, .98));
+  box-shadow: inset 0 1px 0 rgba(226, 248, 255, .12),
+    0 4px 10px rgba(0, 11, 25, .38);
+  opacity: 1;
+  overflow: hidden;
+  transform: none !important;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:focus-within {
+  border-color: rgba(137, 226, 255, .78);
+  box-shadow: inset 0 1px 0 rgba(226, 248, 255, .16),
+    0 6px 14px rgba(0, 20, 42, .45);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected {
+  grid-column: span 2;
+  min-height: 104px;
+  align-content: start;
+  border-color: rgba(135, 225, 255, .92);
+  background: linear-gradient(155deg, rgba(23, 111, 161, .99), rgba(7, 46, 79, .99));
+  box-shadow: inset 0 1px 0 rgba(235, 252, 255, .2),
+    0 7px 16px rgba(0, 25, 54, .5);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 43px;
+  grid-column: 1;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 7px 4px 7px 6px;
+  border: 0 !important;
+  border-radius: 5px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #e9f8ff;
+  text-align: left;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:focus-visible {
+  outline: 2px solid rgba(139, 228, 255, .72);
+  outline-offset: -2px;
+  color: #fff;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound__label {
+  overflow: hidden;
+  color: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item__actions {
+  display: none;
+  min-width: 0;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  min-height: 27px;
+  padding: 3px 2px 0;
+  border-top: 1px solid rgba(144, 222, 255, .24);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-item__actions {
+  display: flex;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:not(.is-selected) .jdm-sound-preview {
+  display: none !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview {
+  position: static;
+  display: inline-flex;
+  width: auto;
+  min-width: 58px;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border: 1px solid rgba(135, 225, 255, .54);
+  border-radius: 6px;
+  background: rgba(4, 31, 55, .82);
+  color: #bceeff;
+  font-size: 8px;
+  line-height: 1;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:focus-visible {
+  border-color: #a5ebff;
+  outline: 2px solid rgba(120, 215, 255, .42);
+  outline-offset: 1px;
+  background: rgba(16, 100, 143, .92);
+  color: #fff;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite {
+  position: static;
+  display: grid;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  grid-column: 2;
+  grid-row: 1;
+  place-items: center;
+  align-self: start;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(194, 239, 255, .78);
+  font-size: 14px;
+  line-height: 1;
+  text-shadow: none;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:focus-visible {
+  border-color: rgba(153, 231, 255, .7);
+  outline: 0;
+  background: rgba(22, 117, 160, .5);
+  color: #fff;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite[aria-label^="Retirer"] {
+  color: #d6b7ff;
+}
+
+/* CTA Soundboard dans son propre flux, avec la couleur du module. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment {
+  position: static;
+  z-index: 3;
+  display: block;
+  width: 142px;
+  max-width: calc(100% - 12px);
+  max-height: 0;
+  min-height: 0;
+  flex: 0 0 auto;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: max-height .18s ease, opacity .16s ease, transform .18s ease,
+    visibility 0s linear .18s;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment.is-open {
+  max-height: 62px;
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+  display: block !important;
+  min-height: 52px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+  display: flex;
+  width: 138px;
+  min-width: 138px;
+  min-height: 52px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 7px 13px;
+  border: 1px solid rgba(112, 220, 255, .78);
+  border-radius: 9px;
+  background: linear-gradient(160deg, #1d91c8 0%, #126391 54%, #0a355e 100%);
+  box-shadow: inset 0 1px 0 rgba(235, 252, 255, .22),
+    inset 0 -4px 10px rgba(0, 18, 43, .22),
+    0 5px 12px rgba(0, 17, 36, .42);
+  color: #f2fbff;
+  font-size: 9px;
+  line-height: 1;
+  transition: transform .15s ease, border-color .15s ease, filter .15s ease,
+    box-shadow .15s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__icon,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__unit {
+  display: none;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__label {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__value {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment[data-payment="tokens"] .jdm-multi-payment__value {
+  color: #ffe1a0;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment[data-payment="credits"] .jdm-multi-payment__value {
+  color: #b7e9ff;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:hover:not(:disabled),
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:focus-visible {
+  border-color: #b6efff;
+  outline: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3),
+    0 8px 16px rgba(0, 17, 36, .5), 0 0 0 2px rgba(89, 211, 255, .2);
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:active:not(:disabled) {
+  transform: translateY(1px) scale(.985);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__hint:empty {
+  display: none;
+}
+
+/* La languette garde sa place propre sous le CTA ; le catalogue peut défiler. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  display: flex;
+  min-height: 25px;
+  flex: 0 0 25px;
+  align-items: flex-end;
+  justify-content: center;
+  margin: 0;
+  pointer-events: none;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+  position: static;
+  min-width: 82px;
+  height: 24px;
+  min-height: 24px;
+  pointer-events: auto;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help {
+  right: auto;
+  bottom: 29px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-soundboard-help-zone {
+  position: relative !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  flex: 0 0 25px;
+}
+
+@media (max-width: 660px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 390px), (max-height: 320px) {
+  body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__cta {
+    width: 124px;
+    min-width: 124px;
+    min-height: 64px;
+    padding-bottom: 19px;
+  }
+  body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment.jdm-multi-payment--integrated-switch .jdm-tts-payment__row {
+    min-height: 64px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body {
+    gap: 5px;
+    padding: 5px 6px 6px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+    gap: 5px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item {
+    min-height: 49px;
+  }
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected {
+    min-height: 94px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound {
+    min-height: 38px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    min-height: 47px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__cta,
+  body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment__switch,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-title-volume,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__popover,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+    transition: none;
+  }
+}
+
+/* Priorité finale sur les anciennes variantes de couleur propres à la méthode. */
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment.jdm-multi-payment--integrated-switch[data-payment="tokens"] .jdm-tts-payment__cta,
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-payment.jdm-multi-payment--integrated-switch[data-payment="credits"] .jdm-tts-payment__cta {
+  border-color: rgba(207, 145, 255, .78) !important;
+  background: linear-gradient(160deg, #9c4bea 0%, #7132bf 56%, #442078 100%) !important;
+  color: #fff !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment {
+  width: 138px;
+  max-width: 100%;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+/* --- Passe Soundboard V2 : catalogue compact, reflow centre ------------- */
+/*
+   La grille de repos reste volontairement en 2 x 2 sur le viewport Twitch
+   de reference. Avec une selection, elle devient un flux flex reel : la
+   carte active est centree dans sa propre rangee et les petites cartes
+   gardent une largeur et une hauteur communes dans les rangees suivantes.
+*/
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 96px;
+  align-content: start;
+  justify-content: center;
+  gap: 10px;
+  padding: 2px 2px 5px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 96px;
+  height: 96px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 6px;
+  border-radius: 12px;
+  background: linear-gradient(155deg, rgba(18, 86, 126, .99), rgba(5, 29, 53, .99));
+  box-shadow: inset 0 1px 0 rgba(231, 250, 255, .14),
+    0 5px 12px rgba(0, 11, 25, .42);
+  overflow: hidden;
+  transform: none !important;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease,
+    transform .16s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:focus-within {
+  border-color: rgba(140, 229, 255, .82);
+  box-shadow: inset 0 1px 0 rgba(237, 252, 255, .2),
+    0 8px 16px rgba(0, 20, 42, .5);
+  transform: translateY(-1px) !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 7px 4px;
+  border: 0 !important;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #e9f8ff;
+  text-align: center;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:focus-visible {
+  outline: 2px solid rgba(139, 228, 255, .72);
+  outline-offset: -2px;
+  color: #fff;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound__label {
+  max-width: 100%;
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: .02em;
+  line-height: 1.15;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item__actions {
+  display: flex;
+  min-width: 0;
+  min-height: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 1px 1px;
+  border: 0;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:not(.is-selected) .jdm-sound-preview {
+  display: none !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview {
+  position: static;
+  display: none;
+  width: 38px;
+  min-width: 38px;
+  height: 34px;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(139, 229, 255, .72);
+  border-radius: 10px;
+  background: rgba(5, 38, 67, .9);
+  color: #c3f2ff;
+  font-size: 20px;
+  line-height: 1;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-preview {
+  display: inline-flex;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__icon {
+  display: block;
+  font-size: 20px;
+  line-height: 1;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__label {
+  display: none !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:focus-visible {
+  border-color: #b7f2ff;
+  outline: 2px solid rgba(120, 215, 255, .42);
+  outline-offset: 1px;
+  background: rgba(16, 110, 157, .96);
+  color: #fff;
+  transform: translateY(-1px);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview.is-previewing {
+  border-color: #dec1ff;
+  background: rgba(84, 45, 139, .9);
+  color: #fff;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite {
+  position: static;
+  display: grid;
+  width: 25px;
+  min-width: 25px;
+  height: 23px;
+  min-height: 23px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px 11px 8px 10px;
+  background: transparent;
+  color: rgba(193, 236, 255, .74);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 13, 31, .45);
+  transition: color .14s ease, background .14s ease, border-color .14s ease,
+    transform .14s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:focus-visible {
+  border-color: rgba(153, 231, 255, .7);
+  outline: 0;
+  background: rgba(22, 117, 160, .54);
+  color: #fff;
+  transform: rotate(-4deg) scale(1.04);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite[aria-label^="Retirer"] {
+  border-color: rgba(207, 169, 255, .44);
+  background: rgba(104, 63, 160, .34);
+  color: #e2c8ff;
+  font-size: 18px;
+}
+
+/* La selection est une vraie rangee centree, jamais une banniere span 2. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+  width: calc((100% - 20px) / 3);
+  min-width: 0;
+  min-height: 82px;
+  height: 82px;
+  flex: 0 0 calc((100% - 20px) / 3);
+  aspect-ratio: 1.7;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  order: -1;
+  width: min(260px, calc(100% - 10px));
+  min-width: min(260px, calc(100% - 10px));
+  min-height: 148px;
+  height: 148px;
+  flex: 0 0 min(260px, calc(100% - 10px));
+  align-self: center;
+  aspect-ratio: 1.76;
+  border-color: rgba(145, 232, 255, .98);
+  background: linear-gradient(155deg, rgba(26, 126, 181, .99), rgba(8, 56, 94, .99));
+  box-shadow: inset 0 1px 0 rgba(243, 253, 255, .26),
+    0 10px 20px rgba(0, 25, 54, .58);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound {
+  align-items: center;
+  padding: 9px 10px 5px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound__label {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: .025em;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-item__actions {
+  min-height: 42px;
+  height: 42px;
+  flex-basis: 42px;
+  justify-content: center;
+  gap: 13px;
+  padding: 0 2px 2px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-favorite {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border-radius: 12px 15px 11px 14px;
+  background: rgba(22, 105, 151, .52);
+  color: #d1f5ff;
+  font-size: 24px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-favorite[aria-label^="Retirer"] {
+  border-color: rgba(216, 183, 255, .62);
+  background: rgba(102, 61, 166, .62);
+  color: #ead8ff;
+}
+
+/* CTA principal : plus present a 60 %, toujours dans son propre flux. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment {
+  width: 180px;
+  max-width: calc(100% - 12px);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment.is-open {
+  max-height: 86px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+  min-height: 72px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+  width: 176px;
+  min-width: 176px;
+  min-height: 72px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #25a9df 0%, #146d9f 54%, #082f58 100%);
+  box-shadow: inset 0 1px 0 rgba(239, 253, 255, .28),
+    inset 0 -5px 12px rgba(0, 18, 43, .24),
+    0 7px 16px rgba(0, 17, 36, .48);
+  font-size: 10px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__label {
+  font-size: 10px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__value {
+  font-size: 17px;
+}
+
+@media (max-width: 660px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 82px;
+    gap: 7px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item {
+    min-height: 82px;
+    height: 82px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    gap: 7px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+    width: calc((100% - 7px) / 2);
+    height: 72px;
+    min-height: 72px;
+    flex-basis: calc((100% - 7px) / 2);
+    aspect-ratio: 1.7;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    width: min(236px, calc(100% - 8px));
+    min-width: min(236px, calc(100% - 8px));
+    height: 132px;
+    min-height: 132px;
+    flex-basis: min(236px, calc(100% - 8px));
+    aspect-ratio: 1.78;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    width: 158px;
+    min-width: 158px;
+    min-height: 64px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+    min-height: 64px;
+  }
+}
+
+@media (max-width: 390px), (max-height: 320px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+    grid-auto-rows: 70px;
+    gap: 5px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item {
+    min-height: 70px;
+    height: 70px;
+    padding: 5px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound__label {
+    font-size: 11px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+    height: 64px;
+    min-height: 64px;
+    flex-basis: calc((100% - 5px) / 2);
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    height: 116px;
+    min-height: 116px;
+    flex-basis: min(210px, calc(100% - 6px));
+    min-width: min(210px, calc(100% - 6px));
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound__label {
+    font-size: 14px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    width: 148px;
+    min-width: 148px;
+    min-height: 58px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+    min-height: 58px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    transition: none;
+  }
+}
+
+/* V2 final : le catalogue, le CTA et la languette suivent un ordre vertical
+   explicite ; la selection obtient sa propre rangee centree. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-soundboard-toolbar {
+  order: 1;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  order: 2;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-payment {
+  position: static !important;
+  order: 3;
+  margin-inline: auto;
+  transform: none !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-soundboard-help-zone {
+  position: static !important;
+  order: 4;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  margin-inline: auto;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  flex-basis: 100%;
+  max-width: 260px;
+  margin-inline: auto;
+}
+@media (max-width: 660px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    max-width: 236px;
+  }
+}
+
+/* La carte active occupe une rangee de grille, mais sa silhouette reste
+   compacte et centree ; les trois cartes restantes tiennent ensemble a 60 %. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: 148px 82px;
+  grid-auto-rows: 82px;
+  align-content: start;
+  justify-content: center;
+  gap: 10px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+  width: 100%;
+  height: 82px;
+  min-height: 82px;
+  flex: none;
+  align-self: center;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  grid-column: 1 / -1;
+  width: min(260px, calc(100% - 10px));
+  max-width: 260px;
+  min-width: 0;
+  height: 148px;
+  min-height: 148px;
+  margin-inline: auto;
+  justify-self: center;
+}
+@media (max-width: 660px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: 132px 72px;
+    grid-auto-rows: 72px;
+    gap: 7px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+    width: 100%;
+    height: 72px;
+    min-height: 72px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    width: min(236px, calc(100% - 8px));
+    max-width: 236px;
+    height: 132px;
+    min-height: 132px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-catalog-orphan {
+    grid-column: 1 / -1;
+    width: calc((100% - 7px) / 2);
+    justify-self: center;
+  }
+}
+
+
+/* --- Soundboard carte blanche V3 : boutons sonores tactiles -----------------
+   Les hooks DOM restent ceux du catalogue existant ; cette couche reconstruit
+   la surface visible sans ajouter de carte interne ni de second contrôle. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body {
+  gap: 7px;
+  min-width: 0;
+  overflow: visible;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-soundboard-toolbar,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-payment,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-soundboard-help-zone {
+  max-width: 100%;
+  min-width: 0;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 106px;
+  align-content: start;
+  gap: 9px;
+  overflow: visible;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 106px;
+  height: 106px;
+  overflow: visible;
+  isolation: isolate;
+  border: 1px solid rgba(91, 195, 246, .62);
+  border-radius: 17px 15px 18px 14px;
+  background: linear-gradient(145deg, rgba(11, 74, 122, .98), rgba(6, 35, 72, .99));
+  box-shadow: inset 0 1px 0 rgba(226, 250, 255, .17),
+    inset 0 -8px 16px rgba(0, 12, 34, .22),
+    0 5px 12px rgba(0, 17, 42, .4);
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease,
+    background .16s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item::before {
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  content: '';
+  border-radius: inherit;
+  background: linear-gradient(120deg, rgba(103, 221, 255, .11), transparent 42%);
+  pointer-events: none;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:hover {
+  border-color: rgba(126, 224, 255, .9);
+  background: linear-gradient(145deg, rgba(15, 94, 148, .99), rgba(7, 45, 88, .99));
+  box-shadow: inset 0 1px 0 rgba(244, 254, 255, .22),
+    inset 0 -8px 16px rgba(0, 12, 34, .18),
+    0 8px 17px rgba(0, 19, 48, .52);
+  transform: translateY(-2px);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:active {
+  transform: translateY(1px) scale(.988);
+  transition-duration: .06s;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 12px 3px;
+  border: 0 !important;
+  border-radius: 16px 14px 0 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #eefbff;
+  cursor: pointer;
+  text-align: center;
+  transition: color .16s ease, transform .12s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:hover {
+  color: #fff;
+  transform: translateY(-1px);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:active {
+  transform: translateY(1px) scale(.985);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:focus-visible {
+  outline: 2px solid rgba(169, 239, 255, .98);
+  outline-offset: 3px;
+  border-radius: 14px;
+  background: transparent !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound__label {
+  max-width: 100%;
+  overflow: hidden;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 4px rgba(0, 12, 34, .48);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item__actions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  min-height: 29px;
+  height: 29px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 0 7px 5px;
+  border: 0 !important;
+  background: transparent !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview {
+  display: none;
+  width: 42px;
+  min-width: 42px;
+  height: 36px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 12px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #d7f7ff;
+  cursor: pointer;
+  transition: color .14s ease, transform .14s ease, background .14s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-preview {
+  display: inline-flex;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__icon {
+  display: block;
+  font-size: 25px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 3px rgba(0, 15, 38, .45));
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__label {
+  display: none !important;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:focus-visible {
+  outline: 2px solid rgba(166, 238, 255, .92);
+  outline-offset: 2px;
+  background: rgba(107, 218, 255, .1) !important;
+  color: #fff;
+  transform: translateY(-1px) scale(1.04);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:active {
+  transform: translateY(1px) scale(.94);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview.is-previewing {
+  color: #f0d8ff;
+  text-shadow: 0 0 11px rgba(221, 183, 255, .75);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite {
+  display: grid;
+  width: 30px;
+  min-width: 30px;
+  height: 32px;
+  min-height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 12px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(205, 240, 255, .78);
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 2px 4px rgba(0, 12, 34, .5);
+  cursor: pointer;
+  transition: color .14s ease, transform .14s ease, background .14s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:focus-visible {
+  outline: 2px solid rgba(166, 238, 255, .92);
+  outline-offset: 2px;
+  background: rgba(107, 218, 255, .1) !important;
+  color: #fff;
+  transform: rotate(-4deg) scale(1.08);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:active {
+  transform: rotate(-2deg) scale(.94);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite[aria-label^="Retirer"] {
+  color: #ead7ff;
+  font-size: 22px;
+  text-shadow: 0 0 10px rgba(215, 173, 255, .7), 0 2px 4px rgba(0, 12, 34, .48);
+}
+
+/* La sélection devient un grand bouton du même langage, avec trois voisins. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: 156px 84px;
+  grid-auto-rows: 84px;
+  gap: 9px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+  width: 100%;
+  height: 84px;
+  min-height: 84px;
+  align-self: center;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  grid-column: 1 / -1;
+  width: min(276px, calc(100% - 10px));
+  max-width: 276px;
+  height: 156px;
+  min-height: 156px;
+  margin-inline: auto;
+  justify-self: center;
+  border-color: rgba(151, 235, 255, .98);
+  border-radius: 19px 17px 20px 16px;
+  background: linear-gradient(145deg, rgba(20, 130, 188, .99), rgba(8, 58, 102, .99));
+  box-shadow: inset 0 1px 0 rgba(247, 254, 255, .28),
+    inset 0 -10px 20px rgba(0, 12, 34, .2),
+    0 11px 22px rgba(0, 22, 52, .58);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected:hover {
+  transform: translateY(-2px);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound {
+  align-items: center;
+  padding: 11px 15px 2px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound__label {
+  font-size: 21px;
+  letter-spacing: .025em;
+  line-height: 1.1;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-item__actions {
+  min-height: 47px;
+  height: 47px;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 4px 5px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-preview {
+  width: 48px;
+  min-width: 48px;
+  height: 42px;
+  min-height: 42px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-preview__icon {
+  font-size: 31px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-favorite {
+  width: 44px;
+  min-width: 44px;
+  height: 42px;
+  min-height: 42px;
+  font-size: 29px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-favorite[aria-label^="Retirer"] {
+  font-size: 31px;
+}
+
+/* CTA bleu opaque, dans le flux après le catalogue, puis Tutoriel. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment {
+  width: 194px;
+  max-width: calc(100% - 12px);
+  margin-inline: auto;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+  width: 190px;
+  min-width: 190px;
+  min-height: 76px;
+  padding: 10px 15px;
+  border: 1px solid rgba(158, 238, 255, .74);
+  border-radius: 15px 13px 16px 12px;
+  background: linear-gradient(155deg, #31b8ec 0%, #177cae 55%, #092f5d 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(246, 254, 255, .3),
+    inset 0 -7px 14px rgba(0, 15, 40, .25),
+    0 8px 17px rgba(0, 16, 39, .5);
+  font-size: 11px;
+  transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:hover,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:focus-visible {
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 rgba(246, 254, 255, .36),
+    inset 0 -7px 14px rgba(0, 15, 40, .2),
+    0 11px 21px rgba(0, 16, 39, .58);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:active {
+  transform: translateY(1px) scale(.985);
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__label {
+  font-size: 10px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__value {
+  font-size: 18px;
+}
+
+@media (max-width: 660px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+    grid-auto-rows: 90px;
+    gap: 7px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item {
+    min-height: 90px;
+    height: 90px;
+    border-radius: 15px 14px 16px 13px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: 140px 74px;
+    grid-auto-rows: 74px;
+    gap: 7px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+    height: 74px;
+    min-height: 74px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    width: min(246px, calc(100% - 8px));
+    max-width: 246px;
+    height: 140px;
+    min-height: 140px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound__label {
+    font-size: 19px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    width: 168px;
+    min-width: 168px;
+    min-height: 66px;
+  }
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+    grid-auto-rows: 76px;
+    gap: 5px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item {
+    min-height: 76px;
+    height: 76px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound__label {
+    font-size: 12px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    grid-template-rows: 124px 64px;
+    grid-auto-rows: 64px;
+    gap: 5px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+    height: 64px;
+    min-height: 64px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    width: min(216px, calc(100% - 6px));
+    max-width: 216px;
+    height: 124px;
+    min-height: 124px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound__label {
+    font-size: 16px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    width: 150px;
+    min-width: 150px;
+    min-height: 58px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    transition: none;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:hover,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:active,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:hover,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:active,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:hover,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:active,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:hover,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:active,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:hover,
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:active {
+    transform: none;
+  }
+}
+
+/* A 50/40 %, les trois sons secondaires restent sur une seule ligne :
+   la grille garde sa hauteur et le CTA ne peut jamais passer dessus. */
+@media (max-width: 660px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: 140px 74px;
+    grid-auto-rows: 74px;
+    overflow: visible;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+    width: 100%;
+    height: 74px;
+    min-height: 74px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    width: min(246px, calc(100% - 8px));
+    max-width: 246px;
+    height: 140px;
+    min-height: 140px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-catalog-orphan {
+    grid-column: auto;
+    width: 100%;
+    justify-self: stretch;
+  }
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: 124px 64px;
+    grid-auto-rows: 64px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+    height: 64px;
+    min-height: 64px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    width: min(216px, calc(100% - 6px));
+    max-width: 216px;
+    height: 124px;
+    min-height: 124px;
+  }
+}
+
+
+
+/* Cible 40 % : le flux reste lisible dans la hauteur courte du player. */
+@media (max-height: 430px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    grid-template-rows: 112px 58px;
+    grid-auto-rows: 58px;
+    gap: 6px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item {
+    height: 58px;
+    min-height: 58px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    width: min(224px, calc(100% - 6px));
+    max-width: 224px;
+    height: 112px;
+    min-height: 112px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound {
+    padding: 7px 10px 1px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound__label {
+    font-size: 17px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-item__actions {
+    min-height: 35px;
+    height: 35px;
+    gap: 9px;
+    padding-bottom: 2px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-preview {
+    width: 38px;
+    min-width: 38px;
+    height: 32px;
+    min-height: 32px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-preview__icon {
+    font-size: 25px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected .jdm-sound-favorite {
+    width: 36px;
+    min-width: 36px;
+    height: 32px;
+    min-height: 32px;
+    font-size: 24px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    width: 150px;
+    min-width: 150px;
+    min-height: 56px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone {
+    min-height: 22px;
+    flex-basis: 22px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+    height: 22px;
+    min-height: 22px;
+  }
+}
+
+
+
+@media (max-height: 430px) {
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected) .jdm-sound {
+    padding: 5px 7px 1px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected) .jdm-sound__label {
+    font-size: 12px;
+    line-height: 1.05;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected) .jdm-sound-item__actions {
+    min-height: 22px;
+    height: 22px;
+    padding: 0 4px 2px;
+  }
+  body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected) .jdm-sound-favorite {
+    width: 24px;
+    min-width: 24px;
+    height: 22px;
+    min-height: 22px;
+    font-size: 17px;
+  }
+}
+
+
+
+/* Le focus est porté par la carte entière : aucune fausse carte interne autour du titre. */
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:focus-within {
+  outline: 2px solid rgba(169, 239, 255, .98);
+  outline-offset: 1px;
+}
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:focus-visible {
+  outline: 0;
+}
+
+
+
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:focus,
+body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:focus-visible {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+/* --- Soundboard V3 catalogue : grille dense, selection in situ -------------
+   Le catalogue garde sa position et son propre scroll. Le CTA et le tutoriel
+   vivent dans un footer distinct afin de ne jamais recouvrir une carte. */
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.jdm-soundboard-body {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: 32px minmax(0, 1fr) auto !important;
+  align-content: stretch !important;
+  gap: 6px !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: 6px 8px 4px !important;
+  overflow: hidden !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  display: flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 32px !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  padding: 0 1px !important;
+  overflow: visible !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar > .jdm-soundboard-volume {
+  display: flex !important;
+  position: relative !important;
+  order: initial !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  flex: 0 0 32px !important;
+  margin: 0 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar > .jdm-soundboard-volume .jdm-soundboard-volume__handle {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  left: auto !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  grid-template-rows: none !important;
+  grid-auto-rows: 64px !important;
+  align-content: start !important;
+  gap: 7px !important;
+  width: 100% !important;
+  height: 100% !important;
+  align-self: stretch !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 3px 4px 8px !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 203, 255, .48) transparent;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid::-webkit-scrollbar {
+  width: 6px;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(113, 203, 255, .45);
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item {
+  position: relative !important;
+  display: grid !important;
+  grid-column: auto !important;
+  grid-row: auto !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  align-self: stretch !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 64px !important;
+  height: 64px !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(83, 190, 242, .62) !important;
+  border-radius: 12px 11px 13px 10px !important;
+  background: linear-gradient(150deg, rgba(13, 91, 145, .98), rgba(6, 37, 75, .99)) !important;
+  box-shadow: inset 0 1px 0 rgba(226, 250, 255, .18),
+    inset 0 -7px 12px rgba(0, 12, 34, .28),
+    0 4px 9px rgba(0, 17, 42, .4) !important;
+  transform: none !important;
+  transition: border-color .14s ease, background .14s ease, box-shadow .14s ease,
+    transform .12s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item::before {
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(120deg, rgba(122, 226, 255, .13), transparent 48%);
+  content: '';
+  pointer-events: none;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:hover {
+  border-color: rgba(131, 229, 255, .96) !important;
+  background: linear-gradient(150deg, rgba(18, 111, 170, .99), rgba(7, 48, 92, .99)) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 254, 255, .24),
+    inset 0 -7px 12px rgba(0, 12, 34, .2),
+    0 7px 13px rgba(0, 19, 48, .52) !important;
+  transform: translateY(-1px) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:active {
+  transform: translateY(1px) scale(.99) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  grid-column: auto !important;
+  grid-row: auto !important;
+  order: initial !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 64px !important;
+  height: 64px !important;
+  margin: 0 !important;
+  justify-self: stretch !important;
+  border-color: rgba(174, 243, 255, .98) !important;
+  border-radius: 12px 11px 13px 10px !important;
+  background: linear-gradient(148deg, rgba(31, 142, 201, 1), rgba(11, 66, 122, 1) 66%, rgba(32, 44, 121, .98)) !important;
+  box-shadow: inset 0 1px 0 rgba(251, 255, 255, .36),
+    inset 0 -7px 12px rgba(0, 14, 43, .2),
+    0 0 0 1px rgba(144, 221, 255, .28),
+    0 7px 14px rgba(0, 24, 64, .55) !important;
+  transform: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-catalog-orphan {
+  grid-column: auto !important;
+  width: 100% !important;
+  justify-self: stretch !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound {
+  position: relative !important;
+  z-index: 1 !important;
+  display: flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 6px 10px !important;
+  border: 0 !important;
+  border-radius: inherit !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #effcff !important;
+  text-align: center !important;
+  transform: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:active {
+  transform: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound:focus-visible {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:focus-within {
+  outline: 2px solid rgba(176, 242, 255, .98) !important;
+  outline-offset: 2px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound__label {
+  display: block !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  color: inherit !important;
+  font-size: 13px !important;
+  font-weight: 850 !important;
+  letter-spacing: .015em !important;
+  line-height: 1.12 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  text-shadow: 0 2px 4px rgba(0, 12, 34, .5) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound {
+  align-items: center !important;
+  padding: 5px 10px 22px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound__label {
+  color: #fff !important;
+  font-size: 13.5px !important;
+  font-weight: 950 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item__actions {
+  display: none !important;
+  position: absolute !important;
+  right: 5px !important;
+  bottom: 3px !important;
+  z-index: 3 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 23px !important;
+  min-height: 23px !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 3px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-item__actions {
+  display: flex !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview {
+  display: inline-flex !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 23px !important;
+  min-height: 23px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #d9f8ff !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:not(.is-selected) .jdm-sound-preview {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:focus-visible {
+  outline: 2px solid rgba(177, 242, 255, .95) !important;
+  outline-offset: 1px !important;
+  color: #fff !important;
+  transform: translateY(-1px) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview:disabled {
+  cursor: not-allowed !important;
+  opacity: .4 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__icon {
+  display: block !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__label {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite {
+  display: grid !important;
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 23px !important;
+  min-height: 23px !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(215, 244, 255, .88) !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+  text-shadow: 0 2px 3px rgba(0, 12, 34, .55) !important;
+  transform: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:not(.is-selected) .jdm-sound-favorite {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:not(.is-selected) .jdm-sound-favorite[aria-label^="Retirer"] {
+  position: absolute !important;
+  top: 3px !important;
+  right: 4px !important;
+  display: grid !important;
+  width: 19px !important;
+  min-width: 19px !important;
+  height: 19px !important;
+  min-height: 19px !important;
+  font-size: 13px !important;
+  opacity: .82 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:focus-visible {
+  outline: 2px solid rgba(177, 242, 255, .95) !important;
+  outline-offset: 1px !important;
+  color: #fff !important;
+  transform: rotate(-4deg) scale(1.06) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite[aria-label^="Retirer"] {
+  color: #f2ddff !important;
+  text-shadow: 0 0 8px rgba(216, 175, 255, .75), 0 2px 3px rgba(0, 12, 34, .48) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+  grid-column: 1 !important;
+  grid-row: 3 !important;
+  display: grid !important;
+  grid-template-rows: auto 25px !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  align-content: end !important;
+  overflow: visible !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment {
+  grid-row: 1 !important;
+  position: static !important;
+  width: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  transform: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment {
+  width: 100% !important;
+  max-width: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+  display: flex !important;
+  width: 100% !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment[hidden] {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+  display: flex !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  justify-content: center !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+  width: min(220px, 100%) !important;
+  min-width: 0 !important;
+  height: 54px !important;
+  min-height: 54px !important;
+  padding: 5px 12px !important;
+  border: 1px solid rgba(167, 239, 255, .8) !important;
+  border-radius: 12px 11px 13px 10px !important;
+  background: linear-gradient(155deg, #32bcef 0%, #1679ab 58%, #082e5a 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(246, 254, 255, .34),
+    inset 0 -6px 12px rgba(0, 15, 40, .25),
+    0 7px 15px rgba(0, 16, 39, .48) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:focus-visible {
+  filter: brightness(1.08) !important;
+  transform: translateY(-1px) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:active {
+  transform: translateY(1px) scale(.99) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__label {
+  font-size: 10px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__value {
+  font-size: 18px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone {
+  grid-row: 2 !important;
+  position: static !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  display: flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 25px !important;
+  height: 25px !important;
+  flex: none !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+  width: min(142px, 100%) !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 3px 10px !important;
+  border-radius: 999px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help {
+  position: absolute !important;
+  right: 0 !important;
+  bottom: calc(100% + 5px) !important;
+  left: 0 !important;
+  z-index: 10 !important;
+  max-width: min(360px, calc(100% - 12px)) !important;
+  margin-inline: auto !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+  padding-bottom: 8px !important;
+}
+
+@media (max-width: 660px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-auto-rows: 60px !important;
+    gap: 6px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    min-height: 60px !important;
+    height: 60px !important;
+  }
+}
+@media (max-width: 390px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-auto-rows: 58px !important;
+    gap: 6px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    min-height: 58px !important;
+    height: 58px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound__label { font-size: 12px !important; }
+}
+@media (max-height: 430px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.jdm-soundboard-body {
+    grid-template-rows: 28px minmax(0, 1fr) auto !important;
+    gap: 4px !important;
+    padding: 4px 6px 3px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar { min-height: 28px !important; }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+    grid-auto-rows: 52px !important;
+    gap: 5px !important;
+    padding: 2px 3px 5px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    min-height: 52px !important;
+    height: 52px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+    grid-template-rows: auto 22px !important;
+    gap: 3px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+    min-height: 22px !important;
+    height: 22px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    transition: none !important;
+  }
+}
+
+/* --- Soundboard V3.1 polish : volume d'en-tête, navigation compacte et
+   accents de paiement ---------------------------------------------------- */
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.jdm-soundboard-body {
+  grid-template-rows: 38px minmax(0, 1fr) auto !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-module__screen-head--soundboard {
+  overflow: visible !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header {
+  position: relative !important;
+  z-index: 8 !important;
+  display: flex !important;
+  width: 31px !important;
+  min-width: 31px !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  flex: 0 0 31px !important;
+  align-items: center !important;
+  overflow: visible !important;
+  transform-origin: left center !important;
+  transition: width .18s ease, flex-basis .18s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header.is-open {
+  width: min(196px, calc(100vw - 124px)) !important;
+  min-width: min(196px, calc(100vw - 124px)) !important;
+  flex-basis: min(196px, calc(100vw - 124px)) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__handle {
+  position: relative !important;
+  z-index: 3 !important;
+  display: grid !important;
+  width: 31px !important;
+  min-width: 31px !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  flex: 0 0 31px !important;
+  place-items: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid rgba(142, 218, 255, .48) !important;
+  border-radius: 10px 9px 11px 8px !important;
+  background: rgba(5, 31, 64, .72) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .15), 0 3px 8px rgba(0, 8, 24, .3) !important;
+  color: #dff9ff !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__handle:hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__handle:focus-visible {
+  border-color: rgba(196, 244, 255, .94) !important;
+  background: rgba(16, 74, 112, .9) !important;
+  box-shadow: 0 4px 10px rgba(0, 13, 38, .42) !important;
+  transform: translateY(-1px) !important;
+  outline: 2px solid rgba(181, 241, 255, .9) !important;
+  outline-offset: 2px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__popover {
+  position: absolute !important;
+  top: 0 !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: 0 !important;
+  z-index: 2 !important;
+  display: flex !important;
+  width: min(196px, calc(100vw - 124px)) !important;
+  max-width: min(196px, calc(100vw - 124px)) !important;
+  min-height: 31px !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 7px 4px 36px !important;
+  border: 1px solid rgba(118, 205, 248, .62) !important;
+  border-radius: 10px 9px 11px 8px !important;
+  background: linear-gradient(135deg, rgba(8, 45, 82, .98), rgba(6, 24, 55, .98)) !important;
+  box-shadow: 0 7px 16px rgba(0, 8, 25, .44), inset 0 1px 0 rgba(255, 255, 255, .12) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: scaleX(.22) !important;
+  transform-origin: left center !important;
+  transition: opacity .16s ease, transform .18s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header.is-open .jdm-soundboard-volume__popover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume.is-open .jdm-soundboard-volume__popover {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: scaleX(1) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__head {
+  display: flex !important;
+  min-width: 0 !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin: 0 !important;
+  color: #e7fbff !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__head strong {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__close {
+  display: grid !important;
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #dff9ff !important;
+  font-size: 16px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header .jdm-preview-volume {
+  display: grid !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  grid-template-columns: 15px minmax(44px, 1fr) auto !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header .jdm-preview-volume__label,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header .jdm-preview-volume__value {
+  font-size: 10px !important;
+  line-height: 1 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header .jdm-preview-volume__range {
+  width: 100% !important;
+  min-width: 0 !important;
+  accent-color: #78d9ff !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar {
+  min-height: 38px !important;
+  gap: 7px !important;
+  overflow: visible !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar > .jdm-soundboard-volume {
+  width: 31px !important;
+  min-width: 31px !important;
+  flex-basis: 31px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-catalog-tools {
+  display: flex !important;
+  min-width: 0 !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin-inline-start: auto !important;
+  overflow: visible !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-catalog-tools[hidden] {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-sort {
+  width: 104px !important;
+  min-width: 88px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 20px 0 8px !important;
+  border: 1px solid rgba(120, 208, 249, .42) !important;
+  border-radius: 8px !important;
+  background: rgba(4, 29, 61, .76) !important;
+  color: #dff8ff !important;
+  font-size: 10px !important;
+  font-weight: 750 !important;
+  line-height: 30px !important;
+  cursor: pointer !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-sort:focus-visible,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-favorites-toggle:focus-visible {
+  outline: 2px solid rgba(178, 240, 255, .92) !important;
+  outline-offset: 2px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-favorites-toggle {
+  display: grid !important;
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border: 1px solid rgba(120, 208, 249, .42) !important;
+  border-radius: 8px !important;
+  background: rgba(4, 29, 61, .76) !important;
+  color: rgba(218, 246, 255, .74) !important;
+  font-size: 16px !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease, transform .15s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-favorites-toggle[aria-pressed="true"] {
+  border-color: rgba(245, 210, 112, .82) !important;
+  background: rgba(118, 79, 23, .42) !important;
+  color: #ffd879 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-favorites-toggle:hover {
+  transform: translateY(-1px) !important;
+  color: #fff !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search {
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  flex: 0 0 32px !important;
+  overflow: hidden !important;
+  border-radius: 9px !important;
+  transition: width .18s ease, flex-basis .18s ease, height .18s ease, border-color .16s ease, background-color .16s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search.is-open {
+  width: min(318px, 100%) !important;
+  min-width: min(318px, 100%) !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  flex: 1 1 min(318px, 100%) !important;
+  border-color: rgba(156, 229, 255, .72) !important;
+  background: rgba(4, 28, 60, .84) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search__toggle {
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search.is-open .jdm-sound-search__toggle {
+  height: 36px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search__input {
+  min-width: 0 !important;
+  height: 36px !important;
+  padding: 0 10px 0 2px !important;
+  color: #f2fdff !important;
+  font-size: 13px !important;
+  line-height: 36px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search__input:focus {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  padding-bottom: 26px !important;
+  scroll-padding-bottom: 26px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item::before {
+  inset: 0 !important;
+  border: 0 !important;
+  border-radius: inherit !important;
+  background: linear-gradient(120deg, rgba(176, 235, 255, .13), transparent 46%) !important;
+  opacity: .72 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:hover {
+  transform: translateY(-1px) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  transform: translateY(-1px) scale(1.012) !important;
+  transform-origin: center !important;
+  z-index: 2 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound {
+  padding: 6px 30px 20px 12px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item__actions {
+  inset: 0 !important;
+  display: block !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  pointer-events: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:not(.is-selected) .jdm-sound-item__actions {
+  display: block !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item .jdm-sound-favorite {
+  pointer-events: auto !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-favorite {
+  position: absolute !important;
+  top: 5px !important;
+  right: 7px !important;
+  width: 23px !important;
+  min-width: 23px !important;
+  height: 23px !important;
+  min-height: 23px !important;
+  color: rgba(239, 250, 255, .92) !important;
+  font-size: 16px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-preview {
+  position: absolute !important;
+  right: auto !important;
+  bottom: 3px !important;
+  left: 50% !important;
+  display: inline-grid !important;
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  place-items: center !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: rgba(228, 249, 255, .78) !important;
+  opacity: .82 !important;
+  pointer-events: auto !important;
+  transform: translateX(-50%) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-preview:hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-preview:focus-visible {
+  outline: 0 !important;
+  color: #fff !important;
+  opacity: 1 !important;
+  transform: translateX(-50%) translateY(-1px) scale(1.06) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__icon {
+  font-family: Arial, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-favorite[aria-label^="Retirer"] {
+  color: #ffd777 !important;
+  text-shadow: 0 0 7px rgba(245, 198, 76, .54) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+  position: relative !important;
+  z-index: 6 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone {
+  pointer-events: auto !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment {
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  min-height: 0 !important;
+  padding: 0 0 2px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment {
+  width: auto !important;
+  max-width: 100% !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+  position: relative !important;
+  display: grid !important;
+  width: min(158px, calc(100vw - 32px)) !important;
+  min-width: min(148px, calc(100vw - 32px)) !important;
+  min-height: 70px !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+  display: grid !important;
+  width: 158px !important;
+  max-width: 100% !important;
+  height: 68px !important;
+  min-height: 68px !important;
+  grid-template-rows: auto auto !important;
+  align-content: center !important;
+  justify-items: center !important;
+  gap: 3px !important;
+  padding: 6px 12px 19px !important;
+  border: 1px solid rgba(158, 231, 255, .8) !important;
+  border-radius: 14px 13px 15px 12px !important;
+  background: linear-gradient(155deg, #2caee2 0%, #146e9f 58%, #082b56 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 9px 18px rgba(0, 9, 27, .45) !important;
+  color: #f2fdff !important;
+  transition: filter .15s ease, transform .14s ease, box-shadow .15s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:hover:not(:disabled),
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:focus-visible {
+  filter: brightness(1.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 11px 21px rgba(0, 11, 33, .52) !important;
+  transform: translateY(-2px) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:focus-visible {
+  outline: 2px solid rgba(203, 248, 255, .96) !important;
+  outline-offset: 3px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:active:not(:disabled) {
+  transform: translateY(1px) scale(.99) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__label {
+  font-size: 10px !important;
+  letter-spacing: .08em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__value {
+  font-size: 20px !important;
+  line-height: 1 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch {
+  position: absolute !important;
+  z-index: 4 !important;
+  right: auto !important;
+  bottom: 5px !important;
+  left: 50% !important;
+  display: grid !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  place-items: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: rgba(3, 28, 57, .34) !important;
+  color: #e9fcff !important;
+  font-size: 14px !important;
+  line-height: 1 !important;
+  transform: translateX(-50%) !important;
+  transition: background-color .14s ease, color .14s ease, outline-color .14s ease, transform .14s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:hover:not(:disabled),
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:focus-visible {
+  background: rgba(255, 255, 255, .14) !important;
+  color: #fff !important;
+  outline: 2px solid currentColor !important;
+  outline-offset: 1px !important;
+  transform: translateX(-50%) translateY(-1px) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch[hidden] {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__hint:empty {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__hint {
+  max-width: 240px !important;
+  margin: 3px auto 0 !important;
+  color: rgba(222, 246, 255, .7) !important;
+  font-size: 10px !important;
+  text-align: center !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control[data-payment="tokens"] .jdm-multi-payment__cta {
+  border-color: rgba(255, 218, 128, .88) !important;
+  background: linear-gradient(155deg, #e8b94e 0%, #9a6724 58%, #3e2b20 100%) !important;
+  color: #fff7df !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control[data-payment="tokens"] .jdm-multi-payment__switch {
+  color: #ffe39a !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control[data-payment="credits"] .jdm-multi-payment__cta {
+  border-color: rgba(161, 239, 255, .88) !important;
+  background: linear-gradient(155deg, #34b9eb 0%, #147dae 58%, #092f5e 100%) !important;
+  color: #effcff !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control[data-payment="credits"] .jdm-multi-payment__switch {
+  color: #b9f1ff !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body[data-payment-method="tokens"] .jdm-sound-item.is-selected {
+  border-color: rgba(255, 216, 116, .96) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 249, 213, .38), 0 0 0 1px rgba(239, 185, 67, .32), 0 8px 16px rgba(99, 54, 12, .38) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body[data-payment-method="credits"] .jdm-sound-item.is-selected {
+  border-color: rgba(174, 243, 255, .98) !important;
+  box-shadow: inset 0 1px 0 rgba(251, 255, 255, .36), 0 0 0 1px rgba(144, 221, 255, .28), 0 8px 16px rgba(0, 24, 64, .55) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-wallet[data-wallet-mode="tokens"] .jdm-wallet-face.is-active {
+  border-color: rgba(245, 210, 112, .8) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-wallet[data-wallet-mode="credits"] .jdm-wallet-face.is-active {
+  border-color: rgba(145, 229, 255, .82) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone {
+  background: transparent !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-reopen {
+  display: grid !important;
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border: 1px solid rgba(126, 209, 246, .48) !important;
+  border-radius: 50% !important;
+  background: rgba(5, 32, 68, .72) !important;
+  color: #d9f7ff !important;
+  font-size: 12px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-reopen:focus-visible {
+  outline: 2px solid rgba(178, 240, 255, .92) !important;
+  outline-offset: 2px !important;
+}
+@media (max-width: 660px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.jdm-soundboard-body {
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar {
+    flex-wrap: wrap !important;
+    min-height: 38px !important;
+    height: auto !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-catalog-tools {
+    order: 1 !important;
+    margin-inline-start: 0 !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search {
+    order: 2 !important;
+    margin-inline-start: auto !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search.is-open {
+    flex-basis: 100% !important;
+    width: 100% !important;
+    min-width: 100% !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header.is-open,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__popover {
+    width: min(184px, calc(100vw - 96px)) !important;
+    min-width: min(184px, calc(100vw - 96px)) !important;
+    max-width: min(184px, calc(100vw - 96px)) !important;
+    flex-basis: min(184px, calc(100vw - 96px)) !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    width: 148px !important;
+    height: 64px !important;
+    min-height: 64px !important;
+  }
+}
+@media (max-height: 430px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.jdm-soundboard-body {
+    grid-template-rows: 32px minmax(0, 1fr) auto !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-toolbar {
+    min-height: 32px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+    min-height: 58px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    height: 56px !important;
+    min-height: 56px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume--header,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__handle,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__popover,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-favorites-toggle,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch {
+    transition: none !important;
+  }
+}
+
+/* Le titre et son icône vivent dans le header du screen, frère direct du
+   module. Ces sélecteurs gardent la capsule volume dans le même contexte. */
+html body.mobile .jdm-module__screen-head--soundboard,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  overflow: visible !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header {
+  position: relative !important;
+  z-index: 8 !important;
+  display: flex !important;
+  width: 31px !important;
+  min-width: 31px !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  flex: 0 0 31px !important;
+  align-items: center !important;
+  overflow: visible !important;
+  transition: width .18s ease, flex-basis .18s ease !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open {
+  width: min(196px, calc(100vw - 124px)) !important;
+  min-width: min(196px, calc(100vw - 124px)) !important;
+  flex-basis: min(196px, calc(100vw - 124px)) !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__handle {
+  position: relative !important;
+  z-index: 3 !important;
+  display: grid !important;
+  width: 31px !important;
+  min-width: 31px !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  flex: 0 0 31px !important;
+  place-items: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid rgba(142, 218, 255, .48) !important;
+  border-radius: 10px 9px 11px 8px !important;
+  background: rgba(5, 31, 64, .72) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .15), 0 3px 8px rgba(0, 8, 24, .3) !important;
+  color: #dff9ff !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__handle:hover,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__handle:focus-visible {
+  border-color: rgba(196, 244, 255, .94) !important;
+  background: rgba(16, 74, 112, .9) !important;
+  box-shadow: 0 4px 10px rgba(0, 13, 38, .42) !important;
+  transform: translateY(-1px) !important;
+  outline: 2px solid rgba(181, 241, 255, .9) !important;
+  outline-offset: 2px !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__popover {
+  position: absolute !important;
+  top: 0 !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: 0 !important;
+  z-index: 2 !important;
+  display: flex !important;
+  width: min(196px, calc(100vw - 124px)) !important;
+  max-width: min(196px, calc(100vw - 124px)) !important;
+  min-height: 31px !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 7px 4px 36px !important;
+  border: 1px solid rgba(118, 205, 248, .62) !important;
+  border-radius: 10px 9px 11px 8px !important;
+  background: linear-gradient(135deg, rgba(8, 45, 82, .98), rgba(6, 24, 55, .98)) !important;
+  box-shadow: 0 7px 16px rgba(0, 8, 25, .44), inset 0 1px 0 rgba(255, 255, 255, .12) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: scaleX(.22) !important;
+  transform-origin: left center !important;
+  transition: opacity .16s ease, transform .18s ease !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open .jdm-soundboard-volume__popover {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: scaleX(1) !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__head {
+  display: flex !important;
+  min-width: 0 !important;
+  align-items: center !important;
+  margin: 0 !important;
+  color: #e7fbff !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__head strong {
+  display: none !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__close {
+  display: grid !important;
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #dff9ff !important;
+  font-size: 16px !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-preview-volume {
+  display: grid !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  grid-template-columns: 15px minmax(44px, 1fr) auto !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-preview-volume__range {
+  width: 100% !important;
+  min-width: 0 !important;
+  accent-color: #78d9ff !important;
+}
+
+/* V3.1 final scope overrides */
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open {
+  width: 31px !important;
+  min-width: 31px !important;
+  flex-basis: 31px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment {
+  position: static !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  display: flex !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  transform: none !important;
+  justify-self: center !important;
+  justify-content: center !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment {
+  margin-inline: auto !important;
+}
+
+/* V3.1 floating CTA composition */
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.jdm-soundboard-body {
+  position: relative !important;
+  grid-template-rows: 38px minmax(0, 1fr) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  grid-row: 2 !important;
+  padding-bottom: 112px !important;
+  scroll-padding-bottom: 112px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+  position: absolute !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  display: grid !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 96px !important;
+  grid-row: auto !important;
+  grid-template-rows: auto 25px !important;
+  align-content: end !important;
+  padding: 0 0 2px !important;
+  background: linear-gradient(180deg, rgba(7, 27, 57, 0), rgba(7, 27, 57, .18) 42%, rgba(7, 27, 57, .42)) !important;
+}
+
+/* V3.1 keep scroll room above the floating CTA */
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+  padding-bottom: 112px !important;
+  scroll-padding-bottom: 112px !important;
+}
+
+/* --- Soundboard V3.2 polish : hiérarchie finale du catalogue ------------- */
+html body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  column-gap: 3px !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  flex: 0 0 28px !important;
+  transition: width .16s ease, flex-basis .16s ease !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__handle {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  flex-basis: 28px !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(226, 249, 255, .9) !important;
+  font-size: 15px !important;
+  opacity: .9 !important;
+  transform: none !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__handle:hover,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__handle:focus-visible,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open .jdm-soundboard-volume__handle {
+  border: 1px solid rgba(136, 214, 247, .45) !important;
+  background: rgba(47, 133, 177, .2) !important;
+  box-shadow: 0 2px 7px rgba(0, 8, 25, .24) !important;
+  color: #f1fdff !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search {
+  width: 25px !important;
+  min-width: 25px !important;
+  height: 27px !important;
+  min-height: 27px !important;
+  flex: 0 0 25px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search__toggle {
+  width: 25px !important;
+  min-width: 25px !important;
+  height: 27px !important;
+  min-height: 27px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: rgba(213, 243, 255, .72) !important;
+  font-size: 15px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search:hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search:focus-within {
+  background: rgba(47, 133, 177, .16) !important;
+  box-shadow: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search__toggle:hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search__toggle:focus-visible {
+  color: #f4fdff !important;
+  outline: 2px solid rgba(173, 236, 255, .82) !important;
+  outline-offset: 1px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search.is-open {
+  width: min(318px, 100%) !important;
+  min-width: min(318px, 100%) !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  flex: 1 1 min(318px, 100%) !important;
+  padding: 1px 5px 1px 1px !important;
+  border: 1px solid rgba(157, 228, 255, .68) !important;
+  border-radius: 10px !important;
+  background: rgba(4, 28, 60, .9) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 4px 10px rgba(0, 9, 29, .24) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search.is-open .jdm-sound-search__toggle {
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-search.is-open .jdm-sound-search__input {
+  height: 38px !important;
+  line-height: 38px !important;
+  padding-inline: 5px 10px !important;
+  font-size: 13px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__icon {
+  display: block !important;
+  width: 17px !important;
+  height: 17px !important;
+  overflow: visible !important;
+  color: currentColor !important;
+  filter: none !important;
+  transform: none !important;
+  transition: transform .14s ease, filter .14s ease, opacity .14s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__icon[data-playing="true"] {
+  filter: drop-shadow(0 0 4px currentColor) !important;
+  transform: scale(1.06) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-preview:hover .jdm-sound-preview__icon,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-preview:focus-visible .jdm-sound-preview__icon {
+  transform: scale(1.1) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-preview:active .jdm-sound-preview__icon {
+  transform: scale(.92) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item::before {
+  opacity: .38 !important;
+  background: linear-gradient(120deg, rgba(191, 241, 255, .1), transparent 44%) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  transform: translateY(-2px) scale(1.035) !important;
+  z-index: 4 !important;
+  filter: saturate(1.08) brightness(1.04) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .34), 0 0 0 1px rgba(180, 236, 255, .28), 0 12px 24px rgba(0, 13, 40, .6) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected) {
+  filter: saturate(.93) brightness(.94) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound__label {
+  font-size: 14.5px !important;
+  font-weight: 950 !important;
+  text-shadow: 0 2px 7px rgba(0, 10, 32, .72) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-favorite {
+  top: 6px !important;
+  right: 8px !important;
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  font-size: 15px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+  padding-bottom: 176px !important;
+  scroll-padding-bottom: 176px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+  min-height: 132px !important;
+  grid-template-rows: auto 25px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+  width: min(208px, calc(100vw - 28px)) !important;
+  min-width: min(196px, calc(100vw - 28px)) !important;
+  min-height: 100px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+  width: 208px !important;
+  max-width: 100% !important;
+  height: 94px !important;
+  min-height: 94px !important;
+  gap: 8px !important;
+  padding: 12px 18px 26px !important;
+  border-radius: 16px 15px 17px 14px !important;
+  opacity: 1 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .34), 0 12px 24px rgba(0, 9, 28, .52) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__label {
+  font-size: 11px !important;
+  letter-spacing: .1em !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__value {
+  font-size: 26px !important;
+  line-height: 1.05 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch {
+  bottom: 7px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 23px !important;
+  min-height: 23px !important;
+  border-radius: 7px !important;
+  background: rgba(4, 27, 55, .42) !important;
+  font-family: Arial, sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: -.28em !important;
+  white-space: nowrap !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:hover:not(:disabled),
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:focus-visible {
+  transform: translateX(-50%) translateY(-1px) rotate(-4deg) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:disabled {
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+  filter: saturate(.25) brightness(.78) !important;
+  background: linear-gradient(155deg, #76818d 0%, #4e5964 58%, #28323e 100%) !important;
+  border-color: rgba(205, 218, 226, .56) !important;
+  color: rgba(244, 249, 252, .78) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone {
+  position: absolute !important;
+  right: auto !important;
+  bottom: 5px !important;
+  left: 7px !important;
+  z-index: 9 !important;
+  display: block !important;
+  width: auto !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  margin: 0 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+  display: flex !important;
+  width: 26px !important;
+  min-width: 26px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  padding: 3px 5px !important;
+  border: 1px solid rgba(127, 209, 244, .28) !important;
+  border-radius: 7px !important;
+  background: rgba(5, 28, 59, .42) !important;
+  color: rgba(218, 246, 255, .72) !important;
+  overflow: hidden !important;
+  transition: width .16s ease, background-color .16s ease, color .16s ease, border-color .16s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle__label {
+  display: block !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  white-space: nowrap !important;
+  transition: max-width .16s ease, opacity .16s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone:hover .jdm-soundboard-help-handle,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle:focus-visible,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle:focus {
+  width: 94px !important;
+  justify-content: flex-start !important;
+  gap: 5px !important;
+  border-color: rgba(145, 222, 250, .6) !important;
+  background: rgba(8, 49, 84, .82) !important;
+  color: #e9fcff !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone:hover .jdm-soundboard-help-handle__label,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle:focus-visible .jdm-soundboard-help-handle__label,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle:focus .jdm-soundboard-help-handle__label {
+  max-width: 66px !important;
+  opacity: 1 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help {
+  right: auto !important;
+  bottom: calc(100% + 7px) !important;
+  left: 0 !important;
+  margin: 0 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-reopen {
+  width: 25px !important;
+  min-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  border-color: rgba(127, 209, 244, .3) !important;
+  border-radius: 7px !important;
+  background: rgba(5, 28, 59, .42) !important;
+  color: rgba(218, 246, 255, .72) !important;
+}
+@media (max-width: 660px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    width: 194px !important;
+    height: 86px !important;
+    min-height: 86px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+    min-height: 92px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+    min-height: 124px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    padding-bottom: 168px !important;
+    scroll-padding-bottom: 168px !important;
+  }
+}
+@media (max-height: 430px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+    min-height: 114px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    width: 184px !important;
+    height: 80px !important;
+    min-height: 80px !important;
+    padding-bottom: 22px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    padding-bottom: 154px !important;
+    scroll-padding-bottom: 154px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-preview__icon,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle__label {
+    transition: none !important;
+  }
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment {
+  position: static !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  display: flex !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  transform: none !important;
+  justify-self: center !important;
+  justify-content: center !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment {
+  margin-inline: auto !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.jdm-soundboard-body {
+  position: relative !important;
+  grid-template-rows: 38px minmax(0, 1fr) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  grid-row: 2 !important;
+  padding-bottom: 112px !important;
+  scroll-padding-bottom: 112px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+  padding-bottom: 112px !important;
+  scroll-padding-bottom: 112px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+  position: absolute !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  display: grid !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 96px !important;
+  grid-row: auto !important;
+  grid-template-rows: auto 25px !important;
+  align-content: end !important;
+  padding: 0 0 2px !important;
+  background: linear-gradient(180deg, rgba(7, 27, 57, 0), rgba(7, 27, 57, .18) 42%, rgba(7, 27, 57, .42)) !important;
+}
+
+@media (max-width: 390px), (max-height: 320px) {
+  body.component-view .jdm-module__body { padding: 6px 7px 34px; }
+  body.component-view .jdm-tab__name { font-size: 8px; }
+  body.component-view .jdm-module[data-module="soundboard"] .jdm-sound { min-height: 42px; }
+  body.component-view .jdm-module[data-module="bonk"] .jdm-emote-grid {
+    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  }
+}
+
+/* V3.2 final cascade: keep the floating CTA clear of the last catalogue row. */
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+  padding-bottom: 176px !important;
+  scroll-padding-bottom: 176px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+  min-height: 132px !important;
+}
+@media (max-width: 660px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    padding-bottom: 168px !important;
+    scroll-padding-bottom: 168px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+    min-height: 124px !important;
+  }
+}
+@media (max-height: 430px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-grid {
+    padding-bottom: 154px !important;
+    scroll-padding-bottom: 154px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+    min-height: 114px !important;
+  }
+}
+
+/* --- Soundboard V3.3 : corrections chirurgicales finales ------------------ */
+@keyframes jdm-soundboard-select-pop {
+  0% { --jdm-soundboard-selected-scale: 1; }
+  38% { --jdm-soundboard-selected-scale: 1.18; }
+  68% { --jdm-soundboard-selected-scale: 1.12; }
+  100% { --jdm-soundboard-selected-scale: 1.15; }
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item {
+  transform-origin: center center !important;
+  transition: transform .44s cubic-bezier(.2, .78, .28, 1), border-color .16s ease, background .16s ease, box-shadow .2s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  --jdm-soundboard-selected-scale: 1.15;
+  transform: scale(var(--jdm-soundboard-selected-scale)) !important;
+  transform-origin: center center !important;
+  animation: jdm-soundboard-select-pop .44s cubic-bezier(.22, .88, .3, 1.04) both !important;
+  z-index: 8 !important;
+  border-color: rgba(205, 247, 255, .98) !important;
+  background: linear-gradient(148deg, rgba(40, 158, 218, 1), rgba(10, 70, 132, 1) 66%, rgba(36, 51, 137, .99)) !important;
+  box-shadow: 0 0 0 1px rgba(190, 241, 255, .62), 0 14px 28px rgba(0, 18, 58, .62) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected) {
+  filter: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected::before {
+  inset: 0 !important;
+  border: 0 !important;
+  opacity: .58 !important;
+  background: linear-gradient(120deg, rgba(255, 255, 255, .16), transparent 48%) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  transform: translateX(-50%) !important;
+  transition: color .14s ease, background-color .14s ease, border-color .14s ease, box-shadow .14s ease, transform .14s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:hover:not(:disabled),
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:focus-visible {
+  border: 1px solid rgba(178, 235, 255, .48) !important;
+  background: rgba(83, 173, 212, .16) !important;
+  box-shadow: 0 0 9px rgba(108, 213, 248, .22) !important;
+  outline: 2px solid rgba(189, 239, 255, .58) !important;
+  outline-offset: 1px !important;
+  transform: translateX(-50%) translateY(-1px) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-multi-payment__switch-icon {
+  display: block !important;
+  width: 22px !important;
+  height: 16px !important;
+  overflow: visible !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  pointer-events: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:hover:not(:disabled),
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:focus-visible,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:active:not(:disabled) {
+  transform: none !important;
+  transition: filter .15s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  display: flex !important;
+  align-items: center !important;
+  line-height: 1.1 !important;
+  vertical-align: middle !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header {
+  align-self: center !important;
+  margin-top: 0 !important;
+  vertical-align: middle !important;
+  transform: none !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__handle {
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  vertical-align: middle !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    transition: none !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    animation: none !important;
+    --jdm-soundboard-selected-scale: 1.06;
+    transform: scale(var(--jdm-soundboard-selected-scale)) !important;
+  }
+}
+
+/* --- Soundboard V3.4 : micro-polish final -------------------------------- */
+@keyframes jdm-soundboard-select-pop-v34 {
+  0% { --jdm-soundboard-selected-scale: 1; }
+  38% { --jdm-soundboard-selected-scale: 1.22; }
+  70% { --jdm-soundboard-selected-scale: 1.13; }
+  100% { --jdm-soundboard-selected-scale: 1.17; }
+}
+@keyframes jdm-soundboard-switch-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(180deg); }
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  --jdm-soundboard-selected-scale: 1.17;
+  animation: jdm-soundboard-select-pop-v34 .48s cubic-bezier(.2, .86, .28, 1.02) both !important;
+  transform: scale(var(--jdm-soundboard-selected-scale)) !important;
+  z-index: 8 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(4n+1) {
+  transform-origin: left center !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(4n) {
+  transform-origin: right center !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(-n+4) {
+  transform-origin: center top !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-last-child(-n+4) {
+  transform-origin: center bottom !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(4n+1):nth-child(-n+4) {
+  transform-origin: left top !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(4n):nth-child(-n+4) {
+  transform-origin: right top !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(4n+1):nth-last-child(-n+4) {
+  transform-origin: left bottom !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(4n):nth-last-child(-n+4) {
+  transform-origin: right bottom !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch-icon {
+  transform-box: fill-box !important;
+  transform-origin: center center !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch-icon.is-spinning {
+  animation: jdm-soundboard-switch-spin .19s cubic-bezier(.32, .72, .35, 1) both !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:hover:not(:disabled),
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:focus-visible {
+  transform: translateX(-50%) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:hover:not(:disabled),
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch:focus-visible {
+  transform: translateX(-50%) translateY(-1px) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:hover:not(:disabled),
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:focus-visible,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta:active:not(:disabled) {
+  transform: none !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle:hover,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle:focus-visible,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open .jdm-soundboard-volume__handle {
+  transform: translateY(1px) !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__close {
+  display: none !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__popover {
+  max-width: min(196px, calc(100vw - 16px)) !important;
+}
+@media (max-width: 660px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(3n+1) {
+    transform-origin: left center !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(3n) {
+    transform-origin: right center !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(-n+3) {
+    transform-origin: center top !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-last-child(-n+3) {
+    transform-origin: center bottom !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(3n+1):nth-child(-n+3) {
+    transform-origin: left top !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(3n):nth-child(-n+3) {
+    transform-origin: right top !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(3n+1):nth-last-child(-n+3) {
+    transform-origin: left bottom !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected:nth-child(3n):nth-last-child(-n+3) {
+    transform-origin: right bottom !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    animation: none !important;
+    --jdm-soundboard-selected-scale: 1.06;
+    transform: scale(var(--jdm-soundboard-selected-scale)) !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__switch-icon.is-spinning {
+    animation: none !important;
+  }
+}
+
+/* --- Soundboard V3.5 : alignement et transitions finales ----------------- */
+@keyframes jdm-soundboard-select-pop-v35 {
+  0% { --jdm-soundboard-selected-scale-x: 1; --jdm-soundboard-selected-scale-y: 1; }
+  38% { --jdm-soundboard-selected-scale-x: 1.22; --jdm-soundboard-selected-scale-y: 1.25; }
+  70% { --jdm-soundboard-selected-scale-x: 1.13; --jdm-soundboard-selected-scale-y: 1.16; }
+  100% { --jdm-soundboard-selected-scale-x: 1.17; --jdm-soundboard-selected-scale-y: 1.2; }
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  --jdm-soundboard-selected-scale-x: 1.17;
+  --jdm-soundboard-selected-scale-y: 1.2;
+  animation: jdm-soundboard-select-pop-v35 .48s cubic-bezier(.2, .86, .28, 1.02) both !important;
+  transform: scale(var(--jdm-soundboard-selected-scale-x), var(--jdm-soundboard-selected-scale-y)) !important;
+  z-index: 8 !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:not(.is-selected):hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected):hover {
+  z-index: 7 !important;
+  filter: saturate(1.03) brightness(1.04) !important;
+  transform: translateY(-1px) scale(1.025) !important;
+  box-shadow: inset 0 1px 0 rgba(244, 254, 255, .26),
+    inset 0 -7px 12px rgba(0, 12, 34, .18),
+    0 8px 16px rgba(0, 19, 48, .56) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:not(.is-selected):focus-within {
+  z-index: 7 !important;
+  transform: scale(1.02) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-grid {
+  isolation: isolate !important;
+  overflow-clip-margin: 12px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control {
+  position: relative !important;
+  z-index: 9 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateY(30px) !important;
+  transition: opacity .32s ease, transform .32s cubic-bezier(.22, .78, .28, 1) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment.is-open .jdm-sound-payment__control {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: translateY(0) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+  width: min(200px, calc(100vw - 28px)) !important;
+  min-width: min(188px, calc(100vw - 28px)) !important;
+  min-height: 106px !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+  width: 200px !important;
+  height: 100px !important;
+  min-height: 100px !important;
+  padding: 13px 16px 29px !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle:hover,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle:focus-visible,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open .jdm-soundboard-volume__handle {
+  transform: translateY(3px) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-multi-payment__switch-icon {
+  width: 20px !important;
+  height: 15px !important;
+  aspect-ratio: 4 / 3 !important;
+}
+@media (max-height: 430px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__row {
+    width: min(188px, calc(100vw - 28px)) !important;
+    min-width: min(176px, calc(100vw - 28px)) !important;
+    min-height: 92px !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment .jdm-multi-payment__cta {
+    width: 188px !important;
+    height: 86px !important;
+    min-height: 86px !important;
+    padding: 11px 14px 25px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:not(.is-selected):hover,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:not(.is-selected):focus-within {
+    transform: none !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+    animation: none !important;
+    --jdm-soundboard-selected-scale-x: 1.06;
+    --jdm-soundboard-selected-scale-y: 1.08;
+    transform: scale(var(--jdm-soundboard-selected-scale-x), var(--jdm-soundboard-selected-scale-y)) !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-payment__control {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* --- Soundboard V3.6 : volume plus discret, aide locale retirée --------- */
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-help-zone {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+  grid-template-rows: auto !important;
+  min-height: 108px !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle:hover,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle:focus-visible,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open .jdm-soundboard-volume__handle {
+  transform: translateY(3px) !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle {
+  font-size: 14px !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume__popover {
+  min-height: 26px !important;
+  padding: 2px 7px 2px 34px !important;
+  gap: 4px !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-preview-volume {
+  min-height: 20px !important;
+  grid-template-columns: 14px minmax(44px, 1fr) auto !important;
+  gap: 4px !important;
+}
+@media (max-height: 430px) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-footer {
+    min-height: 94px !important;
+  }
+}
+
+/* --- Soundboard V3.6.2 : position unifiée speaker + volume ------------- */
+html body.mobile .jdm-module__screen-head--soundboard {
+  --soundboard-volume-offset-y: 4px;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  position: relative !important;
+  top: 3px !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle:hover,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-soundboard-volume__handle:focus-visible,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open .jdm-soundboard-volume__handle {
+  transform: none !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header.is-open {
+  transform: translateY(var(--soundboard-volume-offset-y)) !important;
+}
+
+/* --- Soundboard V3.6.3 : retrait du speaker interne -------------------- */
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-preview-volume__label {
+  display: none !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-volume--header .jdm-preview-volume {
+  grid-template-columns: minmax(44px, 1fr) auto !important;
+}
+
+/* --- Soundboard favoris directs : état indépendant --------------------- */
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-favorite .jdm-sound {
+  background: rgba(255, 255, 255, .045) !important;
+  filter: brightness(1.035) saturate(1.02) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item .jdm-sound-favorite,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-favorite,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:not(.is-selected) .jdm-sound-favorite,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:not(.is-selected) .jdm-sound-favorite[aria-label^="Retirer"] {
+  position: absolute !important;
+  top: 6px !important;
+  right: 8px !important;
+  display: grid !important;
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(229, 246, 255, .66) !important;
+  font-size: 16px !important;
+  line-height: 1 !important;
+  opacity: .72 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  text-shadow: 0 1px 3px rgba(0, 12, 34, .55) !important;
+  transform: none !important;
+  transition: color .14s ease, opacity .14s ease, background .14s ease,
+    outline-color .14s ease, transform .14s ease !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-favorite .jdm-sound-favorite,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item.is-selected .jdm-sound-favorite[aria-pressed="true"],
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-item:not(.is-selected) .jdm-sound-favorite[aria-pressed="true"] {
+  color: #fff !important;
+  opacity: 1 !important;
+  text-shadow: 0 0 7px rgba(255, 255, 255, .34), 0 1px 3px rgba(0, 12, 34, .48) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:focus-visible {
+  outline: 2px solid rgba(177, 242, 255, .82) !important;
+  outline-offset: 2px !important;
+  background: rgba(170, 235, 255, .1) !important;
+  color: #fff !important;
+  opacity: 1 !important;
+  transform: scale(1.05) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:active {
+  transform: scale(.94) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite {
+    transition: none !important;
+  }
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:hover,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:focus-visible,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-sound-favorite:active {
+    transform: none !important;
+  }
+}
+
+/* --- Soundboard V4 : micro-polish hover / selected ---------------------- */
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:not(.is-selected):hover,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected):hover {
+  z-index: 7 !important;
+  border-color: rgba(83, 190, 242, .62) !important;
+  background: linear-gradient(145deg, rgba(22, 111, 169, .99), rgba(7, 50, 96, .99) 68%, rgba(18, 46, 100, .99)) !important;
+  filter: none !important;
+  transform: translateY(-1px) scale(1.025) !important;
+  box-shadow: none !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:not(.is-selected):hover::before,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected):hover::before {
+  opacity: .82 !important;
+  background: linear-gradient(125deg, rgba(247, 253, 255, .17), rgba(168, 235, 255, .06) 44%, transparent 72%) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected {
+  background: linear-gradient(148deg, rgba(35, 149, 209, 1), rgba(12, 77, 137, 1) 66%, rgba(34, 49, 129, .99)) !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item.is-selected::before,
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item.is-selected::before {
+  opacity: .68 !important;
+  background: linear-gradient(125deg, rgba(255, 255, 255, .19), rgba(171, 235, 255, .07) 46%, transparent 74%) !important;
+}
+/* Older Soundboard cascades put an inset outline on the inner button. */
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound:hover:not(:focus-visible),
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound:hover:not(:focus-visible) {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body .jdm-sound-item:not(.is-selected):hover,
+  html body.mobile .jdm-module[data-module="soundboard"] .jdm-soundboard-body.has-payment-open .jdm-sound-item:not(.is-selected):hover {
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* Bonk V4 mobile cascade: the sequence stays in the module flow so the
+   catalogue remains scrollable and the action dock never covers a tile. */
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock {
+  display: grid !important;
+  min-height: 0 !important;
+  flex: 0 0 auto !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: auto auto auto !important;
+  gap: 4px !important;
+  padding: 5px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock__meta {
+  display: flex !important;
+  min-height: 22px !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-modebar {
+  display: flex !important;
+  min-height: 22px !important;
+  flex: 1 1 auto !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo-toggle[hidden],
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-drawer-toggle[hidden],
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-drawer[hidden] {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-picker .jdm-bonk-dock .jdm-bonk-composer {
+  position: relative !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  display: grid !important;
+  width: 100% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  grid-template-columns: minmax(76px, .7fr) minmax(0, 1.3fr) !important;
+  gap: 4px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: none !important;
+  visibility: hidden !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-picker .jdm-bonk-dock .jdm-bonk-composer.is-visible {
+  height: 46px !important;
+  min-height: 46px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock .jdm-bonk-choice,
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock .jdm-bonk-actions .jdm-btn {
+  min-height: 46px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo.is-visible {
+  min-height: 42px !important;
+  max-height: 48px !important;
+  padding: 4px !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-composer,
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo {
+    transition: none !important;
+  }
+}
+
+/* --- Bonk V4.1 mobile : même rail, cibles tactiles conservées ----------- */
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  display: grid !important;
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-sources {
+  grid-column: 1 !important;
+  grid-row: 1 / span 2 !important;
+  display: flex !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  min-height: 0 !important;
+  height: auto !important;
+  flex: none !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 3px !important;
+  overflow: hidden !important;
+  padding: 1px 2px 2px !important;
+  border: 0 !important;
+  border-right: 1px solid rgba(238, 228, 255, .1) !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-sources > .jdm-emote-search__toggle {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  flex: 0 0 36px !important;
+  border: 0 !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-source-scroll {
+  display: flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 3px !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-source {
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  flex: 0 0 36px !important;
+  gap: 0 !important;
+  padding: 0 !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-source__label {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-search {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin-inline: 0 !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-gallery {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 1px 3px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-feedback {
+  grid-column: 1 / span 2 !important;
+  grid-row: 3 !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock {
+  grid-column: 1 / span 2 !important;
+  grid-row: 4 !important;
+  display: flex !important;
+  min-width: 0 !important;
+  min-height: 45px !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock__meta {
+  display: contents !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock__mode:not(.is-empty) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-modebar {
+  order: 2 !important;
+  display: flex !important;
+  min-height: 36px !important;
+  flex: 0 0 auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo-toggle[hidden],
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-drawer-toggle[hidden],
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-drawer[hidden] {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-loop-toggle {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 9px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo-status {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo {
+  order: 1 !important;
+  display: flex !important;
+  width: auto !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  background: transparent !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo.is-visible {
+  min-height: 40px !important;
+  max-height: 44px !important;
+  padding: 2px 0 2px 2px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__summary {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__list {
+  display: flex !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  align-items: center !important;
+  gap: 4px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: thin !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__item {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  flex-basis: 34px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__clear {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  flex-basis: 34px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-picker .jdm-bonk-dock .jdm-bonk-composer:not(.is-visible) {
+  display: none !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-picker .jdm-bonk-dock .jdm-bonk-composer.is-visible {
+  display: contents !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock .jdm-bonk-choice {
+  order: 3 !important;
+  display: flex !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  flex: 0 0 32px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-choice__preview,
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-choice__name {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-choice__favorite {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  border-radius: 9px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock .jdm-bonk-actions {
+  order: 4 !important;
+  display: flex !important;
+  min-width: 0 !important;
+  flex: 0 0 auto !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock .jdm-bonk-actions .jdm-btn {
+  display: grid !important;
+  width: 82px !important;
+  min-width: 78px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  flex: 0 0 82px !important;
+  align-content: center !important;
+  justify-items: center !important;
+  gap: 1px !important;
+  padding: 3px 4px !important;
+  white-space: normal !important;
+}
+html body.mobile .jdm-module__screen-head--bonk .jdm-wallet--bonk-header {
+  width: max-content !important;
+  max-width: none !important;
+  gap: 3px !important;
+  padding: 2px 5px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-oauth-button {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-loop-toggle,
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo,
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-ammo__item,
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-dock .jdm-bonk-actions .jdm-btn {
+    transition: none !important;
+  }
+}
+
+/* --- Bonk V4.2 : favoris de cartes et rail distinct --------------------- */
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell {
+  position: relative !important;
+  overflow: visible !important;
+  isolation: isolate !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__select {
+  position: relative !important;
+  z-index: 1 !important;
+  display: grid !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  place-items: center !important;
+  padding: 3px !important;
+  border: 0 !important;
+  border-radius: inherit !important;
+  background: transparent !important;
+  color: inherit !important;
+  cursor: pointer !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__select:hover:not(:disabled) {
+  background: rgba(255, 255, 255, .035) !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__select:focus-visible {
+  outline: 2px solid rgba(225, 199, 255, .92) !important;
+  outline-offset: 1px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__select:disabled {
+  cursor: not-allowed !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__favorite {
+  position: absolute !important;
+  top: 3px !important;
+  right: 3px !important;
+  z-index: 4 !important;
+  display: grid !important;
+  width: 16px !important;
+  min-width: 16px !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  color: rgba(247, 239, 255, .64) !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+  transition: background-color .14s ease, color .14s ease, transform .14s ease,
+    text-shadow .14s ease !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__favorite:hover,
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__favorite:focus-visible {
+  background: rgba(173, 108, 255, .18) !important;
+  color: #fff !important;
+  outline: 2px solid rgba(225, 199, 255, .86) !important;
+  outline-offset: 1px !important;
+  transform: scale(1.06) !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__favorite.is-active,
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__favorite[aria-pressed="true"] {
+  background: rgba(173, 108, 255, .1) !important;
+  color: #fff !important;
+  text-shadow: 0 0 7px rgba(231, 207, 255, .64) !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell.is-favorite:not(.is-selected):not(.is-queued) {
+  background: rgba(173, 108, 255, .065) !important;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__favorite {
+    width: 14px !important;
+    min-width: 14px !important;
+    height: 14px !important;
+    min-height: 14px !important;
+    font-size: 10px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell__favorite {
+    transition: none !important;
+  }
+}
+
+/* --- Bonk V4.3 mobile : conserver des cartes faciles à toucher ----------- */
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-grid {
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)) !important;
+  gap: 5px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell {
+  min-height: 48px !important;
+  border-radius: 10px !important;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-grid {
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)) !important;
+    gap: 4px !important;
+  }
+  html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-cell { min-height: 44px !important; }
+}
+
+/* --- Bonk V4.4 mobile : scrollbar discrète, cibles tactiles conservées -- */
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-source-scroll {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  scrollbar-color: rgba(255, 255, 255, .48) transparent !important;
+  scrollbar-width: thin !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-source-scroll::-webkit-scrollbar {
+  display: block !important;
+  width: 2px !important;
+  height: 2px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-source-scroll::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-source-scroll::-webkit-scrollbar-thumb {
+  min-height: 24px !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, .48) !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-source-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, .68) !important;
+}

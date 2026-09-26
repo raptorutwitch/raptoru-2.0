@@ -1,0 +1,63 @@
+html, body.config {
+  min-height: 100%;
+  background: var(--jdm-bg-solid);
+}
+
+.config-shell {
+  width: min(680px, calc(100% - 32px));
+  margin: 32px auto;
+}
+
+.config-card {
+  padding: 24px;
+  border: 1px solid var(--jdm-line);
+  border-radius: 16px;
+  background: var(--jdm-surface);
+}
+
+.config-card h1 { margin: 0 0 6px; font-size: 22px; }
+.config-card > p { margin: 0 0 20px; color: var(--jdm-muted); }
+.config-section { margin-top: 22px; }
+.config-section h2 { margin: 0 0 8px; font-size: 13px; }
+.config-section__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.config-section__head small { display: block; margin-bottom: 3px; color: var(--jdm-muted); font-size: 11px; }
+.config-section__head h2 { margin: 0; font-size: 18px; }
+.config-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(74, 222, 128, .1);
+  color: var(--jdm-ok);
+}
+.config-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.config-runtime { display: grid; gap: 6px; margin-top: 14px; }
+.config-runtime__row { display: flex; justify-content: space-between; gap: 16px; padding: 9px 10px; border: 1px solid var(--jdm-line); border-radius: 9px; background: rgba(255,255,255,.03); }
+.config-runtime__label { color: var(--jdm-muted); }
+.config-runtime__value { font-weight: 700; text-align: right; }
+.config-runtime__value.is-ok { color: var(--jdm-ok); }
+.config-runtime__value.is-warn { color: #fbbf24; }
+.config-list { margin: 18px 0 0; padding-left: 20px; color: var(--jdm-muted); }
+.config-list li + li { margin-top: 8px; }
+.config-help { margin: 22px 0 0; color: var(--jdm-muted); font-size: 12px; }
+.config-controls { padding: 16px; border: 1px solid rgba(169, 112, 255, .38); border-radius: 12px; background: rgba(169, 112, 255, .07); }
+.config-pill { flex: 0 0 auto; padding: 5px 9px; border: 1px solid rgba(74, 222, 128, .35); border-radius: 999px; color: var(--jdm-ok); font-size: 11px; font-weight: 800; }
+.config-pill.is-paused { border-color: rgba(251, 191, 36, .4); color: #fbbf24; }
+.config-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.config-button { min-height: 42px; padding: 9px 12px; border: 0; border-radius: 9px; background: var(--jdm-accent); color: white; font: inherit; font-weight: 800; cursor: pointer; }
+.config-button--secondary { border: 1px solid var(--jdm-line); background: rgba(255,255,255,.05); }
+.config-button:disabled { cursor: wait; opacity: .55; }
+.config-feedback { min-height: 18px; margin: 10px 0 0; color: var(--jdm-muted); font-size: 12px; }
+.config-feedback.is-ok { color: var(--jdm-ok); }
+.config-feedback.is-error { color: #fb7185; }
+
+@media (max-width: 520px) {
+  .config-shell { width: min(100% - 20px, 680px); margin: 10px auto; }
+  .config-card { padding: 16px; }
+  .config-actions { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; }
+}
