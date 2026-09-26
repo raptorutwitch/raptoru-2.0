@@ -27,7 +27,19 @@ npm install
 npm run dev            # all apps in watch mode (except the Electron shell)
 npm run studio:desktop # build and open the Electron shell (loads http://127.0.0.1:5173)
 npm run check          # lint + format check + typecheck + tests + build
+npm run studio:package # build the Windows installer: apps/studio/desktop/release/Raptoru Studio Setup.exe
 ```
+
+## Studio for Windows (installer)
+
+The NSIS installer is the only official format. The portable build was dropped, because a second launch could break an instance already running. The `release/win-unpacked` folder is only for debug and tests.
+
+- The app installs per user into `%LOCALAPPDATA%\Programs\Raptoru Studio`, with Start menu and Desktop shortcuts.
+- The Studio server, Core and the bot run on the Node embedded in the exe, with no console window.
+- Only one instance runs: a second launch focuses the open window.
+- Closing the window stops what the Studio started (bot, Core); Postgres keeps running.
+- The package contains code only. The `.env` files, tokens and runtime PIDs stay in the local Raptoru folder, which is named in `%APPDATA%\Raptoru Studio\studio.json`: `{"dataRoot": "C:/path/to/Raptoru 2.0"}`.
+- No Raptoru `.ico` exists yet, so the app uses the default Electron icon. The exe is unsigned, so SmartScreen warns on the first run.
 
 Default ports: core-api `3000`, studio/server `4100`, studio/web `5173`, viewer-web `5174`, twitch-extension `5175`.
 

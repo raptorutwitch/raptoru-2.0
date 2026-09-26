@@ -6,9 +6,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "npm run build && electron ."
+    "start": "npm run build && electron .",
+    "package:win": "npm run build && node scripts/stage.mjs && electron-builder --config electron-builder.json --win --x64"
   },
   "devDependencies": {
-    "electron": "^44.4.5"
-  }
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  },
+  "version": "0.1.0"
 }

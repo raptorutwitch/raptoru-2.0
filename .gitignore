@@ -13,3 +13,7 @@ dist/
 .runtime/
 
 .twitch-tokens.broadcaster.json*
+
+# Studio packaging output
+apps/studio/desktop/stage/
+apps/studio/desktop/release/

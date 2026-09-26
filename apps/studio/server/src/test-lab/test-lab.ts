@@ -43,7 +43,7 @@ export function createTestLab(): TestLab {
   const core = new ManagedProcess({
     name: 'core',
     cwd: paths.coreDir,
-    args: ['--env-file-if-exists=.env', 'dist/index.js'],
+    args: [`--env-file-if-exists=${paths.coreEnv}`, 'dist/index.js'],
     pids,
     onLine: (line, stream) =>
       logs.add('core', line, stream === 'stderr' ? 'error' : 'info'),
@@ -51,7 +51,7 @@ export function createTestLab(): TestLab {
   const bot = new ManagedProcess({
     name: 'bot',
     cwd: paths.botDir,
-    args: ['--env-file-if-exists=.env', 'dist/index.js'],
+    args: [`--env-file-if-exists=${paths.botEnv}`, 'dist/index.js'],
     pids,
     onLine: (line, stream) => lab?.onBotLine(line, stream),
   });
@@ -411,7 +411,10 @@ export class TestLab {
   private async migrate(): Promise<StepResult> {
     const { code, lines } = await this.deps.runScript(
       paths.coreDir,
-      ['--env-file-if-exists=.env', join('dist', 'scripts', 'migrate.js')],
+      [
+        `--env-file-if-exists=${paths.coreEnv}`,
+        join('dist', 'scripts', 'migrate.js'),
+      ],
       (line, stream) =>
         this.log(
           'core',
@@ -505,7 +508,7 @@ export class TestLab {
     const { code, lines } = await this.deps.runScript(
       paths.botDir,
       [
-        '--env-file-if-exists=.env',
+        `--env-file-if-exists=${paths.botEnv}`,
         join('dist', 'scripts', 'presence-preflight.js'),
       ],
       (line, stream) =>
@@ -686,7 +689,7 @@ export class TestLab {
     const { code, lines } = await this.deps.runScript(
       paths.botDir,
       [
-        '--env-file-if-exists=.env',
+        `--env-file-if-exists=${paths.botEnv}`,
         join('dist', 'scripts', 'stream-reconcile.js'),
       ],
       (line, stream) =>

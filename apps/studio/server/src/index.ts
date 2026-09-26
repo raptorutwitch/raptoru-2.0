@@ -5,7 +5,11 @@ import {
   type ServerResponse,
 } from 'node:http';
 import { extname, join, normalize } from 'node:path';
-import { REPO_ROOT } from './test-lab/local-env.js';
+import {
+  applyDataRootEnv,
+  DATA_ROOT,
+  REPO_ROOT,
+} from './test-lab/local-env.js';
 import { createTestLab, type TestLab } from './test-lab/test-lab.js';
 
 const port = Number(process.env.PORT ?? 4100);
@@ -124,6 +128,7 @@ export function createStudioServer(lab: TestLab, onShutdown: () => void) {
 }
 
 if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
+  applyDataRootEnv();
   const lab = createTestLab();
   for (const service of [lab.deps.core, lab.deps.bot]) {
     if (await service.adoptPrevious())
@@ -143,7 +148,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     void lab.shutdown().finally(() => process.exit(0));
   };
   createStudioServer(lab, shutdown).listen(port, host, () => {
-    console.log(`[studio-server] Test Lab on http://${host}:${port}`);
+    console.log(
+      `[studio-server] Test Lab on http://${host}:${port} (data: ${DATA_ROOT})`,
+    );
   });
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

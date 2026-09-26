@@ -9,20 +9,39 @@ export const REPO_ROOT =
   process.env.RAPTORU_ROOT ??
   fileURLToPath(new URL('../../../../../', import.meta.url));
 
+/**
+ * Local data (.env files, OAuth tokens, runtime PIDs). Same as the code root in development; the
+ * packaged app points it at the local Raptoru folder, so no secret is ever inside the package.
+ */
+export const DATA_ROOT = process.env.RAPTORU_DATA_ROOT ?? REPO_ROOT;
+
 export const paths = {
   coreDir: join(REPO_ROOT, 'apps', 'core-api'),
   botDir: join(REPO_ROOT, 'apps', 'twitch-bot'),
-  coreEnv: join(REPO_ROOT, 'apps', 'core-api', '.env'),
-  botEnv: join(REPO_ROOT, 'apps', 'twitch-bot', '.env'),
-  tokenFile: join(REPO_ROOT, 'apps', 'twitch-bot', '.twitch-tokens.json'),
+  coreEnv: join(DATA_ROOT, 'apps', 'core-api', '.env'),
+  botEnv: join(DATA_ROOT, 'apps', 'twitch-bot', '.env'),
+  tokenFile: join(DATA_ROOT, 'apps', 'twitch-bot', '.twitch-tokens.json'),
   broadcasterTokenFile: join(
-    REPO_ROOT,
+    DATA_ROOT,
     'apps',
     'twitch-bot',
     '.twitch-tokens.broadcaster.json',
   ),
-  runtimeDir: join(REPO_ROOT, 'apps', 'studio', 'server', '.runtime'),
+  runtimeDir: join(DATA_ROOT, 'apps', 'studio', 'server', '.runtime'),
 };
+
+/**
+ * When code and data are apart (packaged app), the bot's default token paths (next to its code)
+ * would be wrong: point them at the data folder, unless apps/twitch-bot/.env already sets them.
+ * Children inherit this environment.
+ */
+export function applyDataRootEnv(): void {
+  if (DATA_ROOT === REPO_ROOT) return;
+  const botEnv = readEnvFile(paths.botEnv);
+  process.env.TWITCH_TOKEN_FILE ??= botEnv.TWITCH_TOKEN_FILE ?? paths.tokenFile;
+  process.env.TWITCH_BROADCASTER_TOKEN_FILE ??=
+    botEnv.TWITCH_BROADCASTER_TOKEN_FILE ?? paths.broadcasterTokenFile;
+}
 
 export type EnvFile = Record<string, string>;
 

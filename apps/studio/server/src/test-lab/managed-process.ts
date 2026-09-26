@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 
@@ -59,7 +59,16 @@ export async function isNodeProcess(pid: number): Promise<boolean> {
           windowsHide: true,
         },
       );
-      return /^"node\.exe"/i.test(stdout.trim());
+      // node.exe, or the Studio's own executable when packaged (children run as ELECTRON_RUN_AS_NODE).
+      const image = stdout
+        .trim()
+        .split('","')[0]!
+        .replace(/^"/, '')
+        .toLowerCase();
+      return (
+        image === 'node.exe' ||
+        image === basename(process.execPath).toLowerCase()
+      );
     }
     const { stdout } = await execFileAsync('ps', [
       '-p',
