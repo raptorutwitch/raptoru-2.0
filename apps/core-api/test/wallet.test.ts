@@ -712,6 +712,81 @@ describe('ranking', () => {
   });
 });
 
+describe('chat layer (!solde / !give / !wallet)', () => {
+  it('transfer via chat: applied, self-transfer and insufficient-funds messages', async () => {
+    const core = await setup();
+    await give(core, alice, 1000);
+    expect(
+      (
+        await core.wallet.chat.transfer({
+          requestId: 'msg-1',
+          from: alice,
+          to: bob,
+          amount: 300,
+        })
+      ).message,
+    ).toBe('✅ @Alice → @Bob : 300 Jetons envoyés.');
+    expect(
+      (
+        await core.wallet.chat.transfer({
+          requestId: 'msg-2',
+          from: alice,
+          to: alice,
+          amount: 1,
+        })
+      ).message,
+    ).toMatch(/toi-même/);
+    expect(
+      (
+        await core.wallet.chat.transfer({
+          requestId: 'msg-3',
+          from: bob,
+          to: alice,
+          amount: 99999,
+        })
+      ).message,
+    ).toMatch(/solde insuffisant/);
+  });
+
+  it('the same chat message id received twice replays the outcome without a second transfer', async () => {
+    const core = await setup();
+    await give(core, alice, 1000);
+    const req = { requestId: 'twitch-msg-42', from: alice, to: bob, amount: 300 };
+    const first = await core.wallet.chat.transfer(req);
+    const second = await core.wallet.chat.transfer(req);
+    expect(second.message).toBe(first.message);
+    expect(second.result?.replayed).toBe(true);
+    expect(await balance(core, '1001')).toBe(700);
+    expect(await balance(core, '1002')).toBe(300);
+  });
+});
+
+describe('viewer identity', () => {
+  it('a login change keeps the same wallet under the canonical twitch_user_id', async () => {
+    const core = await setup();
+    await give(core, viewer('1001', 'OldName'), 500);
+    const renamed = { twitchUserId: '1001', login: 'newname', displayName: 'NewName' };
+    // The next write (any wallet op) refreshes the cached identity from the fresh Viewer.
+    expect(
+      (
+        await core.wallet.chat.transfer({
+          requestId: 'rename-1',
+          from: renamed,
+          to: bob,
+          amount: 100,
+        })
+      ).message,
+    ).toBe('✅ @NewName → @Bob : 100 Jetons envoyés.');
+    const rows = await core.db.query<{ login: string; display_name: string }>(
+      'select login, display_name from viewers where twitch_user_id = $1',
+      ['1001'],
+    );
+    expect(rows[0]).toEqual({ login: 'newname', display_name: 'NewName' });
+    // Same Twitch ID, same wallet: the balance is unaffected by the login change itself.
+    expect(await balance(core, '1001')).toBe(400);
+  });
+});
+
 describe('isolation from other slices', () => {
   it('wallet operations never touch Daily or presence tables', async () => {
     const core = await setup();
