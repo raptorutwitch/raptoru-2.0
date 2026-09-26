@@ -751,7 +751,12 @@ describe('chat layer (!solde / !give / !wallet)', () => {
   it('the same chat message id received twice replays the outcome without a second transfer', async () => {
     const core = await setup();
     await give(core, alice, 1000);
-    const req = { requestId: 'twitch-msg-42', from: alice, to: bob, amount: 300 };
+    const req = {
+      requestId: 'twitch-msg-42',
+      from: alice,
+      to: bob,
+      amount: 300,
+    };
     const first = await core.wallet.chat.transfer(req);
     const second = await core.wallet.chat.transfer(req);
     expect(second.message).toBe(first.message);
@@ -765,7 +770,11 @@ describe('viewer identity', () => {
   it('a login change keeps the same wallet under the canonical twitch_user_id', async () => {
     const core = await setup();
     await give(core, viewer('1001', 'OldName'), 500);
-    const renamed = { twitchUserId: '1001', login: 'newname', displayName: 'NewName' };
+    const renamed = {
+      twitchUserId: '1001',
+      login: 'newname',
+      displayName: 'NewName',
+    };
     // The next write (any wallet op) refreshes the cached identity from the fresh Viewer.
     expect(
       (
