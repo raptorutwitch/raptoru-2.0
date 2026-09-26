@@ -82,6 +82,10 @@ let currentStep = '';
 async function step(name, fn) {
   currentStep = name;
   say(`▶ ${name}`);
+  // Debug/test hook: STUDIO_RELEASE_FAIL_AT=<step prefix> makes that step fail (rollback test).
+  const failAt = process.env.STUDIO_RELEASE_FAIL_AT;
+  if (failAt && name.startsWith(failAt))
+    fail(`injected failure (STUDIO_RELEASE_FAIL_AT=${failAt})`);
   const result = await fn();
   say(`✓ ${name}`);
   return result;
