@@ -78,3 +78,26 @@ Core is the only economic source of truth. StreamElements and SAMMI stay in char
 - **Permissions**: internal `staff_roles` (owner/supermod), independent from the Twitch moderator badge.
 - **Chat** (`LOYALTY_CHAT_COMMANDS=true`, off by default): `!solde` / `!balance` / `!compte`, `!give` / `!trade @pseudo montant` (either order), and `!wallet add|remove|set @pseudo montant [motif]` for staff.
 - **Core routes**: bot `/v1/bot/wallet/{balance,transfer,admin}`; public `/v1/wallet/{currencies,leaderboard,viewers/:id}`; Studio `/v1/admin/wallet/*`, `/v1/admin/loyalty/*`, `/v1/admin/staff*`.
+
+## Loyalty Engine (V1: preview only until the cutover)
+
+The pipeline is: source event → Loyalty calculation → Wallet. Presence and Twitch never see amounts; the Wallet never sees Twitch.
+
+- **Modes** (core-api env, all `false` by default):
+  - no flag: shadow, nothing computed;
+  - `LOYALTY_PREVIEW`: rewards are computed and stored with their breakdown, with no Wallet write;
+  - `LOYALTY_PASSIVE_CREDITS` / `LOYALTY_EVENT_CREDITS`: the rewards are also credited, idempotently.
+- **Passive**: Presence hands over validated intervals only. Each 6 validated minutes is one tick (`passive:{stream}:{viewer}:{n}`), worth 50 × tier multiplier (none ×1, T1 ×2, T2 ×2.5, T3 ×4). A personal rate replaces the tier multiplier. Excluded accounts (`loyalty_exclusions`, admin API; for example system bots) never enter the passive aggregation: no progress and no tick, but Presence still records them. Excluded accounts keep their wallet and event rewards. Rounding is always up.
+- **Tiers**: the `viewer_subscriptions` cache is fed by events and full snapshots. Without a recent snapshot the tier is `tier_unknown` and is never guessed.
+- **Events**:
+  - sub/resub: 2000/4000/10000;
+  - subgift: tier × count, plus a per-action bonus tier;
+  - bits and tips: progressive brackets;
+  - follow: 500, once per Twitch identity.
+    All values live in `loyalty_config`, read at each reward. Breakdowns are frozen in `loyalty_rewards`.
+- **Twitch**: the broadcaster token (`npm run twitch:auth -w @raptoru/twitch-bot -- --broadcaster`, logged in as the broadcaster) and `LOYALTY_TWITCH_EVENTS=true` enable the sub/gift/cheer/follow events and the subscriber snapshots.
+
+```sh
+npm run loyalty:report -w @raptoru/core-api -- --latest [--csv loyalty.csv]   # read-only preview/credit report
+npm run loyalty:preflight -w @raptoru/twitch-bot                              # read-only broadcaster token check
+```

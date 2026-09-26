@@ -4,19 +4,22 @@ import {
   PresenceLeaseResponse,
   PresenceObservationResponse,
   WalletChatResponse,
+  LoyaltyEventResponse,
   StreamStateResponse,
   type DailyClaimRequest,
   type DailyStreakRequest,
   type PresenceLeaseRequest,
   type PresenceObservationRequest,
   type WalletBalanceRequest,
+  type LoyaltyEvent,
+  type SubscriptionSnapshot,
   type WalletChatAdminRequest,
   type WalletTransferRequest,
   type StreamOfflineRequest,
   type StreamOnlineRequest,
   type StreamSyncRequest,
 } from '@raptoru/schemas';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 export interface CoreClient {
   streamOnline(body: StreamOnlineRequest): Promise<StreamStateResponse>;
@@ -31,6 +34,10 @@ export interface CoreClient {
   walletBalance(body: WalletBalanceRequest): Promise<WalletChatResponse>;
   walletTransfer(body: WalletTransferRequest): Promise<WalletChatResponse>;
   walletAdmin(body: WalletChatAdminRequest): Promise<WalletChatResponse>;
+  loyaltyEvent(body: LoyaltyEvent): Promise<LoyaltyEventResponse>;
+  subscriptionSnapshot(
+    body: SubscriptionSnapshot,
+  ): Promise<{ subscribers: number }>;
 }
 
 class CoreHttpError extends Error {
@@ -94,5 +101,13 @@ export function createCoreClient(
       call('/v1/bot/wallet/transfer', body, WalletChatResponse),
     walletAdmin: (body) =>
       call('/v1/bot/wallet/admin', body, WalletChatResponse),
+    loyaltyEvent: (body) =>
+      call('/v1/bot/loyalty/events', body, LoyaltyEventResponse),
+    subscriptionSnapshot: (body) =>
+      call(
+        '/v1/bot/loyalty/subscriptions/snapshot',
+        body,
+        z.object({ subscribers: z.number() }),
+      ),
   };
 }

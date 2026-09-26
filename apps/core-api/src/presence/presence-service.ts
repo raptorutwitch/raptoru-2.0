@@ -25,12 +25,23 @@ import {
 export const PRESENCE_CHANNEL = 'default';
 export const LEASE_TTL_MS = (PRESENCE_INTERVAL_SECONDS + 60) * 1000;
 export const MAX_CREDITED_GAP_SECONDS = PRESENCE_INTERVAL_SECONDS * 1.5;
+/**
+ * An interval is credited only if Twitch confirmed the live recently at both ends (EventSub or the
+ * bot's Helix check). Chat stays readable after a stream ends: without this bound, a missed
+ * stream.offline plus a Helix outage would keep crediting presence after the real offline.
+ * The bot confirms every minute except during the 5-minute EventSub trust window.
+ */
+export const MAX_LIVE_STATE_AGE_SECONDS = 10 * 60;
+
+const liveConfirmed = (ageSeconds: number | null) =>
+  ageSeconds !== null && ageSeconds <= MAX_LIVE_STATE_AGE_SECONDS;
 
 type GapReason = NonNullable<PresenceObservationResponse['gapReason']>;
 
 interface CycleRow {
   id: number;
   worker_id: string;
+  live_state_age_s: number | null;
   observed_at: Date;
   status: 'ok' | 'error';
   credited_seconds: number;
@@ -48,6 +59,24 @@ const rejected = (
   gapReason: null,
 });
 
+/** Validated presence interval: these viewers were present in two consecutive snapshots. */
+export interface ValidatedPresence {
+  streamId: string;
+  seconds: number;
+  viewerIds: string[];
+  at: Date;
+}
+
+/**
+ * Optional consumer of validated intervals (the Loyalty Engine). `validated` runs inside the cycle
+ * transaction (exactly-once with the cycle); `committed` runs after it. Presence never knows what
+ * the consumer does with it.
+ */
+export interface PresenceListener {
+  validated(q: Queryable, interval: ValidatedPresence): Promise<void>;
+  committed?(): Promise<void>;
+}
+
 async function lockPresence(q: Queryable): Promise<void> {
   await q.query('select pg_advisory_xact_lock(hashtext($1))', ['presence']);
 }
@@ -56,6 +85,7 @@ export class PresenceService {
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
+    private readonly listener: PresenceListener | null = null,
   ) {}
 
   /** Grants or renews the channel lease unless another worker holds a non-expired one. */
@@ -96,7 +126,23 @@ export class PresenceService {
     });
   }
 
-  record(
+  async record(
+    obs: PresenceObservationRequest,
+  ): Promise<PresenceObservationResponse> {
+    const response = await this.recordCycle(obs);
+    if (
+      response.accepted &&
+      response.creditedViewers > 0 &&
+      this.listener?.committed
+    ) {
+      await this.listener.committed().catch((error: unknown) => {
+        console.error('[presence] listener failed after commit', error);
+      });
+    }
+    return response;
+  }
+
+  private recordCycle(
     obs: PresenceObservationRequest,
   ): Promise<PresenceObservationResponse> {
     return this.db.tx(async (q) => {
@@ -187,6 +233,11 @@ export class PresenceService {
           ? (observedAt.getTime() - previous.observed_at.getTime()) / 1000
           : 0;
         if (!previous) gapReason = 'first_snapshot';
+        else if (
+          !liveConfirmed(obs.liveStateAgeSeconds) ||
+          !liveConfirmed(previous.live_state_age_s)
+        )
+          gapReason = 'live_unconfirmed';
         else if (previous.status !== 'ok') gapReason = 'previous_failed';
         else if (previous.worker_id !== obs.workerId)
           gapReason = 'worker_changed';
@@ -195,7 +246,7 @@ export class PresenceService {
         else creditedSeconds = Math.round(gapSeconds);
 
         const chatters = uniqueChatters(snap.chatters);
-        creditedViewers = await this.applySnapshot(
+        const credited = await this.applySnapshot(
           q,
           obs.streamId,
           cycleId,
@@ -204,6 +255,15 @@ export class PresenceService {
           creditedSeconds > 0 ? previous!.id : null,
           creditedSeconds,
         );
+        creditedViewers = credited.length;
+        if (credited.length && this.listener) {
+          await this.listener.validated(q, {
+            streamId: obs.streamId,
+            seconds: creditedSeconds,
+            viewerIds: credited,
+            at: observedAt,
+          });
+        }
       }
 
       await q.query(
@@ -236,8 +296,8 @@ export class PresenceService {
     chatters: Chatter[],
     creditFromCycle: number | null,
     creditedSeconds: number,
-  ): Promise<number> {
-    if (chatters.length === 0) return 0;
+  ): Promise<string[]> {
+    if (chatters.length === 0) return [];
     const ids = chatters.map((c) => c.twitchUserId);
     await q.query(
       `insert into viewers (twitch_user_id, login, display_name)
@@ -249,14 +309,14 @@ export class PresenceService {
     // Present in the previous snapshot = its row still points at the previous cycle.
     const creditedViewers =
       creditFromCycle === null
-        ? 0
+        ? []
         : (
-            await q.query<{ n: number }>(
-              `select count(*)::int as n from presence_viewer_streams
+            await q.query<{ twitch_user_id: string }>(
+              `select twitch_user_id from presence_viewer_streams
                where stream_id = $1 and last_seen_cycle = $2 and twitch_user_id = any($3::text[])`,
               [streamId, creditFromCycle, ids],
             )
-          )[0]!.n;
+          ).map((r) => r.twitch_user_id);
     await q.query(
       `insert into presence_viewer_streams as p (stream_id, twitch_user_id, snapshots_present,
          first_seen_at, last_seen_at, last_seen_cycle)

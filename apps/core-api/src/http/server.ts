@@ -21,6 +21,11 @@ import type { PresenceService } from '../presence/presence-service.js';
 import { BoostConflictError } from '../wallet/loyalty.js';
 import type { WalletModule } from '../wallet/index.js';
 import {
+  LoyaltyIdempotencyError,
+  type LoyaltyEngine,
+} from '../loyalty/engine.js';
+import { loyaltyRoutes } from './loyalty-routes.js';
+import {
   WalletIdempotencyError,
   WalletInputError,
 } from '../wallet/wallet-service.js';
@@ -35,6 +40,7 @@ export interface AppDeps {
   streams: StreamSessions;
   presence: PresenceService;
   wallet: WalletModule;
+  loyalty: LoyaltyEngine;
   botSecret: string;
   studioSecret: string;
 }
@@ -88,9 +94,16 @@ function streamState(session: ActiveSession | null): StreamStateResponse {
   };
 }
 
-function routes({ daily, streams, presence, wallet }: AppDeps): Route[] {
+function routes({
+  daily,
+  streams,
+  presence,
+  wallet,
+  loyalty,
+}: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
+    ...loyaltyRoutes(loyalty),
     {
       method: 'GET',
       pattern: /^\/health$/,
@@ -274,6 +287,7 @@ export function createApp(deps: AppDeps): Server {
       }
       if (
         error instanceof WalletIdempotencyError ||
+        error instanceof LoyaltyIdempotencyError ||
         error instanceof BoostConflictError
       ) {
         send(res, 409, { error: 'conflict', message: error.message });

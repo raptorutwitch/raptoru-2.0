@@ -23,7 +23,12 @@ interface EventSubMessage {
 export interface EventSubHandlers {
   /** Called on the first welcome of a fresh connection: create subscriptions for `sessionId`. */
   subscribe(sessionId: string): Promise<void>;
-  notification(type: string, event: Record<string, unknown>): Promise<void>;
+  /** `messageId` is stable across Twitch redeliveries: usable as an idempotency key. */
+  notification(
+    type: string,
+    event: Record<string, unknown>,
+    messageId: string,
+  ): Promise<void>;
   log?: (...args: unknown[]) => void;
 }
 
@@ -67,6 +72,7 @@ export function createEventSubRouter(
         await handlers.notification(
           message.metadata.subscription_type!,
           message.payload.event ?? {},
+          id,
         );
         return { kind: 'other' };
       case 'revocation':

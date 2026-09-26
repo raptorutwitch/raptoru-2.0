@@ -15,6 +15,12 @@ export const paths = {
   coreEnv: join(REPO_ROOT, 'apps', 'core-api', '.env'),
   botEnv: join(REPO_ROOT, 'apps', 'twitch-bot', '.env'),
   tokenFile: join(REPO_ROOT, 'apps', 'twitch-bot', '.twitch-tokens.json'),
+  broadcasterTokenFile: join(
+    REPO_ROOT,
+    'apps',
+    'twitch-bot',
+    '.twitch-tokens.broadcaster.json',
+  ),
   runtimeDir: join(REPO_ROOT, 'apps', 'studio', 'server', '.runtime'),
 };
 
@@ -95,6 +101,16 @@ export function collectSecrets(): string[] {
     }
   } catch {
     /* no token file */
+  }
+  try {
+    const b = JSON.parse(
+      readFileSync(paths.broadcasterTokenFile, 'utf8'),
+    ) as Record<string, unknown>;
+    for (const key of ['accessToken', 'refreshToken']) {
+      if (typeof b[key] === 'string') values.push(b[key]);
+    }
+  } catch {
+    /* no broadcaster token */
   }
   return values.filter((v) => v.length >= 6);
 }

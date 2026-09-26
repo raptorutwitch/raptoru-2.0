@@ -9,6 +9,7 @@ import { LogBuffer } from '../src/test-lab/log-buffer.js';
 import { ManagedProcess, PidStore } from '../src/test-lab/managed-process.js';
 import {
   botGuard,
+  coreGuard,
   TestLab,
   type TestLabDeps,
 } from '../src/test-lab/test-lab.js';
@@ -75,7 +76,19 @@ function fakeLab(
     sleep: async () => {},
     runScript: vi.fn(async (_cwd: string, args: string[]) => {
       const script = args.at(-1)!;
-      calls.push(script.includes('migrate') ? 'migrate' : 'preflight');
+      calls.push(
+        script.includes('migrate')
+          ? 'migrate'
+          : script.includes('stream-reconcile')
+            ? 'reconcile'
+            : 'preflight',
+      );
+      if (script.includes('stream-reconcile')) {
+        return {
+          code: 0,
+          lines: ['offline on Twitch: session closed (live=false)'],
+        };
+      }
       if (script.includes('migrate'))
         return { code: overrides.migrateCode ?? 0, lines: ['applied'] };
       return overrides.preflightCode
@@ -235,7 +248,8 @@ describe('Start All / Stop All', () => {
     await lab.startAll();
     calls.length = 0;
     await lab.stopAll();
-    expect(calls).toEqual(['bot stop', 'core stop']);
+    // The live state is reconciled with Twitch between the bot stop and the Core stop.
+    expect(calls).toEqual(['bot stop', 'reconcile', 'core stop']);
     expect((await lab.status()).postgres.state).toBe('running');
   });
 
@@ -370,5 +384,31 @@ describe('managed child processes (real node children)', () => {
     pids.set('bot', 999_999);
     expect(await next.adoptPrevious()).toBe(false);
     expect(pids.read().bot).toBeUndefined();
+  });
+});
+
+describe('loyalty credits guard', () => {
+  it('refuses a Core configured with loyalty credits, and forces them off at start', async () => {
+    expect(coreGuard({ LOYALTY_PASSIVE_CREDITS: 'true' })).toMatch(
+      /LOYALTY_PASSIVE_CREDITS/,
+    );
+    expect(coreGuard({ LOYALTY_EVENT_CREDITS: 'true' })).toMatch(
+      /LOYALTY_EVENT_CREDITS/,
+    );
+    expect(coreGuard({ LOYALTY_PREVIEW: 'true' })).toBeNull();
+
+    const { lab, core } = fakeLab();
+    await lab.startCore();
+    expect(core.start).toHaveBeenCalledWith({
+      LOYALTY_PASSIVE_CREDITS: 'false',
+      LOYALTY_EVENT_CREDITS: 'false',
+    });
+    const status = await lab.status();
+    expect(status.loyalty.flags).toEqual({
+      LOYALTY_PREVIEW: 'false',
+      LOYALTY_TWITCH_EVENTS: 'false',
+      LOYALTY_PASSIVE_CREDITS: 'false',
+      LOYALTY_EVENT_CREDITS: 'false',
+    });
   });
 });

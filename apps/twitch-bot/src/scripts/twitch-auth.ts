@@ -5,7 +5,11 @@
 // Scopes are derived from the enabled features only. Tokens are never printed.
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
-import { loadTwitchAppConfig, requiredScopes } from '../config.js';
+import {
+  BROADCASTER_SCOPES,
+  loadTwitchAppConfig,
+  requiredScopes,
+} from '../config.js';
 import {
   fileTokenStore,
   requestToken,
@@ -17,7 +21,12 @@ const DEFAULT_REDIRECT_URI = 'http://localhost:3789/callback';
 const TIMEOUT_MS = 5 * 60 * 1000;
 
 const config = loadTwitchAppConfig();
-const scopes = requiredScopes(config);
+// --broadcaster: separate token owned by the broadcaster, for subscriptions/cheers/follows.
+const broadcasterMode = process.argv.includes('--broadcaster');
+const scopes = broadcasterMode ? BROADCASTER_SCOPES : requiredScopes(config);
+const tokenFile = broadcasterMode
+  ? config.TWITCH_BROADCASTER_TOKEN_FILE
+  : config.TWITCH_TOKEN_FILE;
 if (scopes.length === 0) {
   throw new Error(
     'no feature enabled: set PRESENCE_SHADOW=true (or DAILY_CHAT_COMMANDS=true) first',
@@ -108,8 +117,13 @@ if (!info) throw new Error('Twitch rejected the new token');
 const missing = scopes.filter((s) => !(info.scopes ?? []).includes(s));
 if (missing.length)
   throw new Error(`granted token lacks scopes: ${missing.join(', ')}`);
+if (broadcasterMode && info.user_id !== config.TWITCH_BROADCASTER_ID) {
+  throw new Error(
+    `this token belongs to ${info.login}, not to the broadcaster (${config.TWITCH_BROADCASTER_ID}): not saved. Log in as the broadcaster.`,
+  );
+}
 
-await fileTokenStore(config.TWITCH_TOKEN_FILE).save({
+await fileTokenStore(tokenFile).save({
   accessToken: exchanged.token.access_token,
   refreshToken: exchanged.token.refresh_token,
   scopes: info.scopes ?? [],
@@ -118,7 +132,7 @@ await fileTokenStore(config.TWITCH_TOKEN_FILE).save({
   login: info.login,
 });
 
-console.log(`Token saved to ${config.TWITCH_TOKEN_FILE} (git-ignored).`);
+console.log(`Token saved to ${tokenFile} (git-ignored).`);
 console.log(
   `Owner: ${info.login} (${info.user_id}) · scopes: ${(info.scopes ?? []).join(' ')}`,
 );

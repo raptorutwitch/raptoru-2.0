@@ -23,6 +23,7 @@ beforeEach(async () => {
     streams: core.streams,
     presence: core.presence,
     wallet: core.wallet,
+    loyalty: core.loyalty,
     botSecret: BOT,
     studioSecret: STUDIO,
   });
@@ -204,5 +205,51 @@ describe('wallet HTTP', () => {
       (await post('/v1/admin/wallet/adjust', { ...adjust, amount: 11 }, STUDIO))
         .status,
     ).toBe(409);
+  });
+});
+
+describe('loyalty HTTP', () => {
+  it('bot events need the bot secret; shadow mode by default computes nothing', async () => {
+    const ev = { type: 'bits', eventId: 'e1', viewer: chatter, bits: 100 };
+    expect((await post('/v1/bot/loyalty/events', ev, null)).status).toBe(401);
+    expect(
+      await (await post('/v1/bot/loyalty/events', ev)).json(),
+    ).toMatchObject({ status: 'skipped', reason: 'shadow_mode' });
+    expect(
+      (await post('/v1/bot/loyalty/events', { ...ev, bits: 0 })).status,
+    ).toBe(400);
+  });
+
+  it('admin config is validated and readable with the Studio secret only', async () => {
+    const get = (secret: string) =>
+      fetch(base + '/v1/admin/loyalty/config', {
+        headers: { authorization: 'Bearer ' + secret },
+      });
+    expect((await get(BOT)).status).toBe(401);
+    const current = await (await get(STUDIO)).json();
+    expect(current.modes).toEqual({
+      preview: false,
+      passiveCredits: false,
+      eventCredits: false,
+    });
+    const bad = {
+      actor: 'x',
+      config: { ...current.config, follow: { amount: -1 } },
+    };
+    expect((await post('/v1/admin/loyalty/config', bad, STUDIO)).status).toBe(
+      400,
+    );
+    const good = {
+      actor: 'x',
+      config: { ...current.config, follow: { amount: 800 } },
+    };
+    expect(
+      (await (await post('/v1/admin/loyalty/config', good, STUDIO)).json())
+        .config.follow.amount,
+    ).toBe(800);
+    const report = await fetch(base + '/v1/admin/loyalty/report/latest', {
+      headers: { authorization: 'Bearer ' + STUDIO },
+    });
+    expect(report.status).toBe(404);
   });
 });

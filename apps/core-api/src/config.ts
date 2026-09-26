@@ -7,6 +7,11 @@ const Env = z.object({
   STUDIO_SECRET: z.string().min(16),
   // Only a fake provider exists before the StreamElements cutover: no real jetons can move.
   DAILY_CREDIT_PROVIDER: z.enum(['dev-fake']).default('dev-fake'),
+  // Loyalty Engine. Preview computes and stores rewards without any Wallet write. The two credit
+  // flags are the only way to write Jetons from loyalty rewards: never enable them before cutover.
+  LOYALTY_PREVIEW: z.enum(['true', 'false']).default('false'),
+  LOYALTY_PASSIVE_CREDITS: z.enum(['true', 'false']).default('false'),
+  LOYALTY_EVENT_CREDITS: z.enum(['true', 'false']).default('false'),
 });
 
 export type CoreConfig = z.infer<typeof Env>;

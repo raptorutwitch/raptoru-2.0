@@ -20,6 +20,8 @@ function fakeCore(overrides: Partial<CoreClient> = {}): CoreClient {
     walletBalance: vi.fn(),
     walletTransfer: vi.fn(),
     walletAdmin: vi.fn(),
+    loyaltyEvent: vi.fn(),
+    subscriptionSnapshot: vi.fn(),
     ...overrides,
   };
 }

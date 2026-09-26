@@ -72,6 +72,15 @@ export function createTestLab(): TestLab {
   return lab;
 }
 
+/** Test Lab never starts a Core able to write Jetons from loyalty rewards. */
+export function coreGuard(env: EnvFile): string | null {
+  for (const flag of ['LOYALTY_PASSIVE_CREDITS', 'LOYALTY_EVENT_CREDITS']) {
+    if ((env[flag] ?? 'false') !== 'false')
+      return `refused: ${flag} must be false in apps/core-api/.env`;
+  }
+  return null;
+}
+
 /** Shadow test preconditions: the bot may only run with chat commands off and presence on. */
 export function botGuard(env: EnvFile): string | null {
   if ((env.DAILY_CHAT_COMMANDS ?? 'false') !== 'false') {
@@ -113,6 +122,8 @@ export class TestLab {
     lastChatters: null as number | null,
     lastSnapshotAt: null as string | null,
     lastPresenceError: null as string | null,
+    loyaltyEvents: 'unknown' as string,
+    lastSubSnapshot: null as string | null,
   };
 
   constructor(readonly deps: TestLabDeps) {}
@@ -141,6 +152,17 @@ export class TestLab {
     if (line.includes('token ok for')) this.botInfo.twitch = 'authenticated';
     if (line.includes('EventSub subscriptions created'))
       this.botInfo.twitch = 'eventsub';
+    if (line.includes('loyalty Twitch events on'))
+      this.botInfo.loyaltyEvents = 'on';
+    const off = /loyalty Twitch events OFF: (.*)/.exec(line);
+    if (off) this.botInfo.loyaltyEvents = `OFF: ${this.deps.redact(off[1]!)}`;
+    if (line.includes('broadcaster EventSub subscriptions created'))
+      this.botInfo.loyaltyEvents = 'on (EventSub ready)';
+    const snap = /subscription snapshot: (\d+) subscribers/.exec(line);
+    if (snap)
+      this.botInfo.lastSubSnapshot = `${snap[1]} subscribers at ${new Date().toISOString()}`;
+    if (line.includes('subscription snapshot failed'))
+      this.botInfo.lastSubSnapshot = `failed: ${clean}`;
     const started = /shadow worker started for stream (\S+)/.exec(line);
     if (started) this.botInfo.presenceStream = started[1]!;
     if (/shadow worker stopped/.test(line)) this.botInfo.presenceStream = null;
@@ -181,6 +203,25 @@ export class TestLab {
       };
     }
     return this.health.ok;
+  }
+
+  /** Logins excluded from passive gains (read from Core, display only). */
+  private async passiveExclusions(): Promise<string[] | null> {
+    const secret = this.deps.readCoreEnv().STUDIO_SECRET;
+    if (!this.health.ok || !secret) return null;
+    try {
+      const res = await this.deps.fetch(
+        `http://127.0.0.1:${this.corePort()}/v1/admin/loyalty/exclusions`,
+        {
+          headers: { authorization: `Bearer ${secret}` },
+          signal: AbortSignal.timeout(3000),
+        },
+      );
+      if (!res.ok) return null;
+      return ((await res.json()) as { login: string }[]).map((e) => e.login);
+    } catch {
+      return null;
+    }
   }
 
   private async presenceSummary() {
@@ -233,6 +274,8 @@ export class TestLab {
     await this.checkHealth();
     const botEnv = this.deps.readBotEnv();
     const token = this.deps.readToken();
+    const coreEnv = this.deps.readCoreEnv();
+    const broadcaster = this.deps.readToken(paths.broadcasterTokenFile);
     const { core, bot } = this.deps;
     return {
       busy: this.busy,
@@ -282,6 +325,23 @@ export class TestLab {
         guard: botGuard(botEnv),
         twitch: bot.running ? this.botInfo.twitch : 'not connected',
         lastError: this.botInfo.lastError,
+      },
+      loyalty: {
+        flags: {
+          LOYALTY_PREVIEW: coreEnv.LOYALTY_PREVIEW ?? 'false',
+          LOYALTY_TWITCH_EVENTS: botEnv.LOYALTY_TWITCH_EVENTS ?? 'false',
+          LOYALTY_PASSIVE_CREDITS: coreEnv.LOYALTY_PASSIVE_CREDITS ?? 'false',
+          LOYALTY_EVENT_CREDITS: coreEnv.LOYALTY_EVENT_CREDITS ?? 'false',
+        },
+        creditsGuard: coreGuard(coreEnv),
+        broadcasterToken: {
+          login: broadcaster.login,
+          scopes: broadcaster.scopes,
+          hasRefreshToken: broadcaster.hasRefreshToken,
+        },
+        events: bot.running ? this.botInfo.loyaltyEvents : 'bot stopped',
+        lastSubSnapshot: this.botInfo.lastSubSnapshot,
+        passiveExclusions: await this.passiveExclusions(),
       },
       presence: {
         worker:
@@ -378,8 +438,14 @@ export class TestLab {
       };
     }
     if (!this.deps.core.running) {
-      this.log('studio', 'starting Core');
-      this.deps.core.start();
+      const refused = coreGuard(this.deps.readCoreEnv());
+      if (refused) return { step: 'Core', ok: false, detail: refused };
+      this.log('studio', 'starting Core (loyalty credits forced off)');
+      // Parent env wins over --env-file: credits stay off even if the file changes later.
+      this.deps.core.start({
+        LOYALTY_PASSIVE_CREDITS: 'false',
+        LOYALTY_EVENT_CREDITS: 'false',
+      });
     }
     for (let i = 0; i < 40; i++) {
       if (await this.checkHealth())
@@ -588,6 +654,7 @@ export class TestLab {
       this.sequence = { running: true, action: 'Stop All', steps: [] };
       try {
         this.sequence.steps.push(await this.doStopBot());
+        this.sequence.steps.push(await this.reconcileStream());
         this.sequence.steps.push(await this.doStopCore());
         return this.sequence.steps;
       } finally {
@@ -599,6 +666,41 @@ export class TestLab {
   /** Studio closing: stop what the Studio started, never Postgres. */
   async shutdown(): Promise<void> {
     await this.deps.bot.stop().catch(() => {});
+    await this.reconcileStream().catch(() => {});
     await this.deps.core.stop().catch(() => {});
+  }
+
+  /**
+   * With the bot stopped, nothing would receive stream.offline anymore: ask Twitch once (Helix,
+   * read-only) and report the live state to Core before Core stops. If Twitch still says live,
+   * the session stays open and the next bot start closes it at the last live confirmation.
+   */
+  private async reconcileStream(): Promise<StepResult> {
+    if (!this.deps.core.running || !(await this.checkHealth())) {
+      return {
+        step: 'Stream state',
+        ok: true,
+        detail: 'Core not running: nothing to reconcile',
+      };
+    }
+    const { code, lines } = await this.deps.runScript(
+      paths.botDir,
+      [
+        '--env-file-if-exists=.env',
+        join('dist', 'scripts', 'stream-reconcile.js'),
+      ],
+      (line, stream) =>
+        this.log(
+          'bot',
+          `[reconcile] ${line}`,
+          stream === 'stderr' ? 'error' : 'info',
+        ),
+      20_000,
+    );
+    return {
+      step: 'Stream state',
+      ok: code === 0,
+      detail: this.deps.redact(lines.at(-1) ?? `exit ${code}`),
+    };
   }
 }

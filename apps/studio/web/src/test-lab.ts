@@ -28,6 +28,18 @@ type Status = {
     twitch: string;
     lastError: string | null;
   };
+  loyalty: {
+    flags: Record<string, string>;
+    creditsGuard: string | null;
+    broadcasterToken: {
+      login: string | null;
+      scopes: string[];
+      hasRefreshToken: boolean;
+    };
+    events: string;
+    lastSubSnapshot: string | null;
+    passiveExclusions: string[] | null;
+  };
   presence: {
     worker: string;
     lastChatters: number | null;
@@ -156,6 +168,20 @@ function render(s: Status): string {
       ${row('Dernière erreur', esc(s.bot.lastError))}
       ${s.bot.guard ? `<p class="error">${esc(s.bot.guard)}</p>` : ''}
       <div class="actions">${button('bot/start', 'Start', `${disabled} ${s.bot.guard ? 'disabled' : ''}`)}${button('bot/stop', 'Stop', disabled)}${button('bot/restart', 'Restart', `${disabled} ${s.bot.guard ? 'disabled' : ''}`)}</div>
+    </div>
+
+    <div class="card">
+      <h2>Loyalty ${s.loyalty.flags.LOYALTY_PASSIVE_CREDITS === 'false' && s.loyalty.flags.LOYALTY_EVENT_CREDITS === 'false' ? badge('NO CREDITS', 'ok') : badge('CREDITS ON', 'ko')}</h2>
+      ${row('LOYALTY_PREVIEW', s.loyalty.flags.LOYALTY_PREVIEW === 'true' ? badge('true', 'ok') : badge(s.loyalty.flags.LOYALTY_PREVIEW ?? '?', 'warn'))}
+      ${row('LOYALTY_TWITCH_EVENTS', s.loyalty.flags.LOYALTY_TWITCH_EVENTS === 'true' ? badge('true', 'ok') : badge(s.loyalty.flags.LOYALTY_TWITCH_EVENTS ?? '?', 'warn'))}
+      ${row('LOYALTY_PASSIVE_CREDITS', s.loyalty.flags.LOYALTY_PASSIVE_CREDITS === 'false' ? badge('false', 'ok') : badge(s.loyalty.flags.LOYALTY_PASSIVE_CREDITS ?? '?', 'ko'))}
+      ${row('LOYALTY_EVENT_CREDITS', s.loyalty.flags.LOYALTY_EVENT_CREDITS === 'false' ? badge('false', 'ok') : badge(s.loyalty.flags.LOYALTY_EVENT_CREDITS ?? '?', 'ko'))}
+      ${row('Token broadcaster', esc(s.loyalty.broadcasterToken.login ?? 'aucun'))}
+      ${row('Événements broadcaster', esc(s.loyalty.events))}
+      ${row('Snapshot abonnés', esc(s.loyalty.lastSubSnapshot))}
+      ${row('Exclus du passif', esc(s.loyalty.passiveExclusions ? s.loyalty.passiveExclusions.join(', ') || 'aucun' : 'Core arrêté'))}
+      ${s.loyalty.creditsGuard ? `<p class="error">${esc(s.loyalty.creditsGuard)}</p>` : ''}
+      <p class="hint">Rapport : <code>npm run loyalty:report -w @raptoru/core-api -- --latest</code></p>
     </div>
 
     <div class="card wide">

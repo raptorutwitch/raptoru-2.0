@@ -12,10 +12,20 @@ const baseConfig: BotConfig = {
   TWITCH_TOKEN_FILE: 'unused.json',
   TWITCH_BROADCASTER_ID: '100',
   STREAM_SYNC_INTERVAL_MS: 60_000,
+  TWITCH_BROADCASTER_TOKEN_FILE: 'unused-broadcaster.json',
   DAILY_CHAT_COMMANDS: 'false',
+  LOYALTY_TWITCH_EVENTS: 'false',
   LOYALTY_CHAT_COMMANDS: 'false',
   PRESENCE_SHADOW: 'true',
 };
+
+let messageSeq = 0;
+/** Delivers an EventSub notification with a unique message id, like the real router. */
+const notify = (
+  runtime: ReturnType<typeof createBotRuntime>,
+  type: string,
+  event: Record<string, unknown>,
+) => runtime.eventSub.notification(type, event, 'msg-' + ++messageSeq);
 
 function build(config: Partial<BotConfig> = {}) {
   const helix = {
@@ -56,6 +66,8 @@ function build(config: Partial<BotConfig> = {}) {
       result: null,
     })),
     walletAdmin: vi.fn(async () => ({ message: 'admin reply', result: null })),
+    loyaltyEvent: vi.fn(),
+    subscriptionSnapshot: vi.fn(),
   };
   const runtime = createBotRuntime({
     config: { ...baseConfig, ...config },
@@ -88,7 +100,7 @@ describe('bot runtime in presence shadow mode', () => {
       'stream.offline',
     ]);
 
-    await runtime.eventSub.notification('channel.chat.message', chatEvent);
+    await notify(runtime, 'channel.chat.message', chatEvent);
     expect(core.dailyClaim).not.toHaveBeenCalled();
     expect(helix.sendChatMessage).not.toHaveBeenCalled();
   });
@@ -96,8 +108,8 @@ describe('bot runtime in presence shadow mode', () => {
   it('starts one worker on stream.online, ignores duplicates, stops on stream.offline', async () => {
     const { runtime, helix, core } = build();
     const online = { id: '555', started_at: '2026-09-26T18:00:00Z' };
-    await runtime.eventSub.notification('stream.online', online);
-    await runtime.eventSub.notification('stream.online', online);
+    await notify(runtime, 'stream.online', online);
+    await notify(runtime, 'stream.online', online);
     await vi.advanceTimersByTimeAsync(0);
 
     expect(runtime.presence?.activeStreamId).toBe('555');
@@ -109,7 +121,7 @@ describe('bot runtime in presence shadow mode', () => {
     ]);
     expect(vi.getTimerCount()).toBe(1);
 
-    await runtime.eventSub.notification('stream.offline', {});
+    await notify(runtime, 'stream.offline', {});
     expect(runtime.presence?.activeStreamId).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
     expect(core.streamOffline).toHaveBeenCalledTimes(1);
@@ -119,7 +131,7 @@ describe('bot runtime in presence shadow mode', () => {
   it('does not start the worker if Core did not record the live', async () => {
     const { runtime, core } = build();
     core.streamOnline.mockRejectedValue(new Error('core down'));
-    await runtime.eventSub.notification('stream.online', {
+    await notify(runtime, 'stream.online', {
       id: '555',
       started_at: '2026-09-26T18:00:00Z',
     });
@@ -152,7 +164,7 @@ describe('bot runtime in presence shadow mode', () => {
   it('loyalty commands are off by default: !solde and !give are never read nor answered', async () => {
     const { runtime, helix, core } = build({ DAILY_CHAT_COMMANDS: 'true' });
     for (const text of ['!solde', '!give @Bob 500']) {
-      await runtime.eventSub.notification('channel.chat.message', {
+      await notify(runtime, 'channel.chat.message', {
         ...chatEvent,
         message: { text },
       });
@@ -168,7 +180,7 @@ describe('bot runtime in presence shadow mode', () => {
     expect(helix.subscribe.mock.calls.map((c) => c[0])).toContain(
       'channel.chat.message',
     );
-    await runtime.eventSub.notification('channel.chat.message', {
+    await notify(runtime, 'channel.chat.message', {
       ...chatEvent,
       message: {
         text: '!give @Bob 500',
@@ -182,7 +194,7 @@ describe('bot runtime in presence shadow mode', () => {
         ],
       },
     });
-    await runtime.eventSub.notification('channel.chat.message', chatEvent); // !daily
+    await notify(runtime, 'channel.chat.message', chatEvent); // !daily
     expect(core.walletTransfer).toHaveBeenCalledWith({
       requestId: 'm1',
       from: { twitchUserId: '300', login: 'viewer', displayName: 'Viewer' },

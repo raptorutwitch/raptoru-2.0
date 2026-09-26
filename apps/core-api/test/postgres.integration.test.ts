@@ -211,4 +211,124 @@ describe.skipIf(!isLocal)('Core on a real Postgres', () => {
     );
     expect(Number(total!.n)).toBe(20 * 1000 + moved); // transfers conserve funds exactly
   });
+
+  it('loyalty credit mode: presence ticks + duplicated events on 3 Cores, concurrent crediting, config change', async () => {
+    const clock = new FakeClock(paris('2026-09-27', 20));
+    const provider = new DevFakeCreditProvider();
+    const modes = { preview: false, passiveCredits: true, eventCredits: true };
+    const cores = [db, createPgDb(url!), createPgDb(url!)].map((d) =>
+      createCore(d, clock, provider, modes),
+    );
+    const [a, , c] = cores as [
+      (typeof cores)[0],
+      (typeof cores)[0],
+      (typeof cores)[0],
+    ];
+    const people = Array.from({ length: 20 }, (_, i) =>
+      viewer(String(70_000 + i), `L${i}`),
+    );
+
+    await a.streams.online({
+      streamId: 'L1',
+      startedAt: paris('2026-09-27', 20),
+    });
+    await a.loyalty.applySubscriptionSnapshot({
+      fetchedAt: clock.now().toISOString(),
+      subscribers: people.slice(0, 6).map((v, i) => ({
+        viewer: v,
+        tier: (['t1', 't2', 't3'] as const)[i % 3]!,
+        isGift: false,
+      })),
+    });
+
+    // Presence: one worker (lease), 13 cycles = 24 validated minutes = 4 ticks per viewer.
+    const presence = (async () => {
+      for (let m = 0; m <= 24; m += 2) {
+        clock.set(new Date(paris('2026-09-27', 20).getTime() + m * 60_000));
+        await a.presence.acquireLease({ workerId: 'wl', streamId: 'L1' });
+        await a.presence.record({
+          cycleId: `loyalty-${m}`,
+          workerId: 'wl',
+          streamId: 'L1',
+          observedAt: clock.now().toISOString(),
+          durationMs: 5,
+          liveStateAgeSeconds: 1,
+          snapshot: {
+            status: 'ok',
+            chatters: people,
+            reportedTotal: 20,
+            pages: 1,
+          },
+        });
+      }
+    })();
+
+    // Events: each delivered to two different Cores at the same time (EventSub redelivery).
+    const events = Array.from({ length: 60 }, (_, i) => {
+      const v = people[i % 20]!;
+      const kind = i % 4;
+      return kind === 0
+        ? {
+            type: 'bits' as const,
+            eventId: `lb-${i}`,
+            viewer: v,
+            bits: 100 + i * 17,
+          }
+        : kind === 1
+          ? {
+              type: 'resub' as const,
+              eventId: `lr-${i}`,
+              viewer: v,
+              tier: 't1' as const,
+            }
+          : kind === 2
+            ? {
+                type: 'subgift' as const,
+                eventId: `lg-${i}`,
+                gifter: v,
+                tier: 't1' as const,
+                count: 1 + (i % 12),
+              }
+            : { type: 'follow' as const, eventId: `lf-${i}`, viewer: v };
+    });
+    const sent = Promise.all(
+      events.flatMap((e, i) => [
+        cores[i % 3]!.loyalty.handleEvent(e),
+        cores[(i + 1) % 3]!.loyalty.handleEvent(e),
+      ]),
+    );
+    const configChange = c.loyalty
+      .getConfig()
+      .then((cfg) =>
+        c.loyalty.setConfig({ ...cfg, follow: { amount: 600 } }, 'itest'),
+      );
+    await Promise.all([presence, sent, configChange]);
+    await Promise.all(cores.map((core) => core.loyalty.processPending())); // concurrent crediting
+    await Promise.all(cores.map((core) => core.loyalty.processPending())); // and again: no-op
+
+    const q = <T>(sql: string) => db.query<T>(sql);
+    const [ticks] = await q<{ n: number }>(
+      "select count(*)::int as n from loyalty_rewards where source = 'passive_watch' and stream_id = 'L1'",
+    );
+    expect(ticks!.n).toBe(20 * 4);
+    const notCredited = await q(
+      "select id, status from loyalty_rewards where status <> 'credited' and (stream_id = 'L1' or idempotency_key like 'follow:7%' or idempotency_key like 'twitch:%:l%')",
+    );
+    expect(notCredited).toEqual([]);
+    // One Wallet operation per credited reward: nothing lost, nothing paid twice.
+    const [pairs] = await q<{ rewards: number; ops: number }>(
+      `select (select count(*)::int from loyalty_rewards where status = 'credited' and twitch_user_id like '7%') as rewards,
+              (select count(*)::int from wallet_operations where idempotency_key like 'loyalty:%' and status = 'applied') as ops`,
+    );
+    expect(pairs!.ops).toBe(pairs!.rewards);
+    const mismatch = await q(
+      `select r.twitch_user_id from loyalty_rewards r join wallets w on w.twitch_user_id = r.twitch_user_id and w.currency_id = 'main'
+       where r.twitch_user_id like '7%' group by r.twitch_user_id, w.balance having w.balance <> sum(r.amount)`,
+    );
+    expect(mismatch).toEqual([]); // each wallet = exactly the sum of its credited rewards
+    const [follows] = await q<{ n: number }>(
+      "select count(*)::int as n from loyalty_rewards where source = 'follow' and twitch_user_id like '7%'",
+    );
+    expect(follows!.n).toBe(5); // 15 follow events but only 5 distinct viewers: refollows are replays
+  });
 });

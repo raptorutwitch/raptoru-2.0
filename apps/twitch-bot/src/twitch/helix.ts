@@ -148,6 +148,36 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
         : null;
     },
 
+    /** One page of Get Broadcaster Subscriptions (broadcaster token, channel:read:subscriptions). */
+    async getSubscriptionsPage(
+      broadcasterId: string,
+      after: string | null,
+      signal?: AbortSignal,
+    ) {
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        first: '100',
+      });
+      if (after) qs.set('after', after);
+      const res = await request(
+        'GET',
+        `/subscriptions?${qs}`,
+        undefined,
+        signal,
+      );
+      return {
+        subscriptions: (res.data ?? []) as {
+          user_id: string;
+          user_login: string;
+          user_name: string;
+          tier: string;
+          is_gift: boolean;
+        }[],
+        cursor: res.pagination?.cursor || null,
+        total: typeof res.total === 'number' ? res.total : null,
+      };
+    },
+
     async sendChatMessage(
       broadcasterId: string,
       senderId: string,
@@ -164,10 +194,11 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       type: string,
       condition: Record<string, string>,
       sessionId: string,
+      version = '1',
     ): Promise<void> {
       await request('POST', '/eventsub/subscriptions', {
         type,
-        version: '1',
+        version,
         condition,
         transport: { method: 'websocket', session_id: sessionId },
       });

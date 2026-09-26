@@ -14,6 +14,8 @@ function fakeCore() {
     walletBalance: vi.fn(),
     walletTransfer: vi.fn(),
     walletAdmin: vi.fn(),
+    loyaltyEvent: vi.fn(),
+    subscriptionSnapshot: vi.fn(),
   } satisfies Record<keyof CoreClient, unknown>;
 }
 

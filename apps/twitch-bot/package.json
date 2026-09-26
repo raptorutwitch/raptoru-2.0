@@ -9,7 +9,9 @@
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "presence:preflight": "tsx --env-file-if-exists=.env src/scripts/presence-preflight.ts",
-    "twitch:auth": "tsx --env-file-if-exists=.env src/scripts/twitch-auth.ts"
+    "twitch:auth": "tsx --env-file-if-exists=.env src/scripts/twitch-auth.ts",
+    "loyalty:preflight": "tsx --env-file-if-exists=.env src/scripts/loyalty-preflight.ts",
+    "stream:reconcile": "tsx --env-file-if-exists=.env src/scripts/stream-reconcile.ts"
   },
   "dependencies": {
     "@raptoru/schemas": "*",

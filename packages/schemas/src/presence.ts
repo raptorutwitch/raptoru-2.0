@@ -83,6 +83,7 @@ export const PresenceObservationResponse = z.object({
       'gap_too_long',
       'worker_changed',
       'snapshot_failed',
+      'live_unconfirmed',
     ])
     .nullable(),
 });

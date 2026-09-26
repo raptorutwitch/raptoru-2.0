@@ -28,9 +28,9 @@ export function loyaltyMultiplier(input: {
   return (input.personalRate ?? input.standardRate ?? 1) * (input.boost ?? 1);
 }
 
-/** Gain after multipliers, rounded down to an integer amount. */
+/** Gain after multipliers, rounded UP to an integer amount (125.1 → 126). */
 export function applyMultiplier(base: number, multiplier: number): number {
-  return Math.floor(base * multiplier + 1e-9);
+  return Math.ceil(Math.round(base * multiplier * 1e6) / 1e6);
 }
 
 export class BoostConflictError extends Error {}

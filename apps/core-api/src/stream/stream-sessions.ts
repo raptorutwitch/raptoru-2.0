@@ -110,9 +110,37 @@ export class StreamSessions {
   /** Reconciles with a Twitch snapshot. `null` must only be passed when Twitch confirmed offline. */
   async sync(live: StreamLiveInput | null): Promise<ActiveSession | null> {
     if (live) return this.online(live);
-    await this.offline();
+    await this.db.tx(async (q) => {
+      await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+        'stream_sessions',
+      ]);
+      await closeOpenSessions(q, await reconciledEnd(q, this.clock.now()));
+    });
     return null;
   }
+}
+
+/** Beyond this delay, a Helix "offline" is a late reconciliation, not the moment the live ended. */
+export const LATE_RECONCILIATION_MS = 5 * 60 * 1000;
+
+/**
+ * End time for an offline found by reconciliation (missed stream.offline, bot stopped…): the last
+ * time Twitch confirmed the live (recorded by the presence cycles) when that is older than a few
+ * minutes, so a late reconciliation never stretches the stream up to "now".
+ */
+async function reconciledEnd(q: Queryable, now: Date): Promise<Date> {
+  const row = (
+    await q.query<{ confirmed: Date | null }>(
+      `select max(c.observed_at - make_interval(secs => c.live_state_age_s)) as confirmed
+       from presence_cycles c join stream_sessions s using (stream_id)
+       where s.ended_at is null and c.live_state_age_s is not null`,
+    )
+  )[0];
+  const confirmed = row?.confirmed ?? null;
+  return confirmed &&
+    now.getTime() - confirmed.getTime() > LATE_RECONCILIATION_MS
+    ? confirmed
+    : now;
 }
 
 async function closeOpenSessions(q: Queryable, endedAt: Date): Promise<void> {

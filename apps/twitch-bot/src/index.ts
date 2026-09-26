@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import { loadConfig, requiredScopes } from './config.js';
+import { BROADCASTER_SCOPES, loadConfig, requiredScopes } from './config.js';
 import { createCoreClient } from './core-client.js';
+import { createBroadcasterEvents } from './loyalty-events.js';
 import { createBotRuntime } from './runtime.js';
 import { AuthError, fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { runEventSub } from './twitch/eventsub.js';
@@ -84,6 +85,56 @@ const validateLoop = () =>
     60 * 60 * 1000,
   );
 validateLoop();
+
+// Loyalty Twitch events (opt-in): a separate broadcaster token and EventSub connection. Without a
+// valid broadcaster token they stay off; presence keeps running.
+if (config.LOYALTY_TWITCH_EVENTS === 'true') {
+  const broadcasterAuth = new TwitchAuth({
+    clientId: config.TWITCH_CLIENT_ID,
+    clientSecret: config.TWITCH_CLIENT_SECRET,
+    store: fileTokenStore(config.TWITCH_BROADCASTER_TOKEN_FILE),
+    requiredScopes: BROADCASTER_SCOPES,
+  });
+  try {
+    await broadcasterAuth.init();
+    if (broadcasterAuth.status().userId !== config.TWITCH_BROADCASTER_ID) {
+      throw new Error(
+        'broadcaster token does not belong to TWITCH_BROADCASTER_ID',
+      );
+    }
+    const broadcasterHelix = createHelix({
+      clientId: config.TWITCH_CLIENT_ID,
+      getAccessToken: () => broadcasterAuth.getAccessToken(),
+      handleUnauthorized: (rejected) =>
+        broadcasterAuth.handleUnauthorized(rejected),
+    });
+    const events = createBroadcasterEvents({
+      core: createCoreClient(config.CORE_API_URL, config.BOT_SECRET),
+      subscribe: (type, condition, sessionId, version) =>
+        broadcasterHelix.subscribe(type, condition, sessionId, version),
+      getSubscriptionsPage: (after) =>
+        broadcasterHelix.getSubscriptionsPage(
+          config.TWITCH_BROADCASTER_ID,
+          after,
+        ),
+      broadcasterId: config.TWITCH_BROADCASTER_ID,
+    });
+    runEventSub(events.eventSub);
+    // Tier reconciliation: full snapshot at startup, then every 6 hours (chained, never overlapping).
+    const snapshotLoop = async () => {
+      await events.syncSubscriptions();
+      setTimeout(snapshotLoop, 6 * 60 * 60 * 1000);
+    };
+    await snapshotLoop();
+    console.log(
+      '[twitch-bot] loyalty Twitch events on (subs, gifts, cheers, follows)',
+    );
+  } catch (error) {
+    console.error(
+      `[twitch-bot] loyalty Twitch events OFF: ${(error as Error).message}`,
+    );
+  }
+}
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {

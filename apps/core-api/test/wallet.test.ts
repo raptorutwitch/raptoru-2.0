@@ -622,7 +622,7 @@ describe('loyalty rate and boost', () => {
     expect(
       loyaltyMultiplier({ personalRate: 3, standardRate: 2, boost: null }),
     ).toBe(3);
-    expect(applyMultiplier(125, 1.5)).toBe(187);
+    expect(applyMultiplier(125, 1.5)).toBe(188);
   });
 
   it('stores, resolves and resets a personal rate; one active boost at a time', async () => {

@@ -11,3 +11,5 @@ dist/
 
 # Studio runtime state (PIDs of processes it started)
 .runtime/
+
+.twitch-tokens.broadcaster.json*

@@ -48,10 +48,11 @@ describe('EventSub routing', () => {
     await route(online, true);
     await route(online, true);
     expect(notification).toHaveBeenCalledTimes(1);
-    expect(notification).toHaveBeenCalledWith('stream.online', {
-      id: '317',
-      started_at: 'x',
-    });
+    expect(notification).toHaveBeenCalledWith(
+      'stream.online',
+      { id: '317', started_at: 'x' },
+      'n1',
+    );
   });
 
   it('returns the reconnect URL', async () => {

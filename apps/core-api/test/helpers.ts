@@ -1,6 +1,7 @@
 import { PGlite, type Transaction } from '@electric-sql/pglite';
 import type { Viewer } from '@raptoru/schemas';
 import { createCore, type Core } from '../src/app.js';
+import { SHADOW_MODES, type LoyaltyModes } from '../src/loyalty/engine.js';
 import type { Clock } from '../src/clock.js';
 import {
   DevFakeCreditProvider,
@@ -106,12 +107,16 @@ export async function setup(
     provider?: CreditProvider;
     db?: Db;
     clock?: FakeClock;
+    loyalty?: Partial<LoyaltyModes>;
   } = {},
 ): Promise<TestCore> {
   const db = options.db ?? (await createTestDb());
   const clock = options.clock ?? new FakeClock(paris('2026-09-24', 12));
   const provider = options.provider ?? new DevFakeCreditProvider();
-  const core = createCore(db, clock, provider);
+  const core = createCore(db, clock, provider, {
+    ...SHADOW_MODES,
+    ...options.loyalty,
+  });
   return { ...core, db, clock, provider };
 }
 
