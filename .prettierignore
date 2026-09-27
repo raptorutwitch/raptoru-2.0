@@ -5,3 +5,6 @@ apps/twitch-extension/extension/
 
 # Legacy trajectory engine copied unchanged (provenance in docs/bonk-lab.md)
 apps/studio/server/bonk-overlay/bonk-v3-core.js
+
+# Continuity document maintained by hand (never reformatted)
+Raptoru-2.0-ETAT-PROJET.md
