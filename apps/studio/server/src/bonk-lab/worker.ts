@@ -21,7 +21,11 @@ type Journal = {
   token: string;
   entries: Entry[];
 };
-export type CoreCall = <T>(path: string, body?: unknown) => Promise<T>;
+export type CoreCall = <T>(
+  path: string,
+  body?: unknown,
+  options?: { timeoutMs?: number },
+) => Promise<T>;
 export const CHANNEL = '900100';
 
 export function localCoreClient(base: string, secret: string): CoreCall {
@@ -33,7 +37,11 @@ export function localCoreClient(base: string, secret: string): CoreCall {
     !secret
   )
     throw new Error('local_bonk_core_required');
-  return async <T>(path: string, body?: unknown): Promise<T> => {
+  return async <T>(
+    path: string,
+    body?: unknown,
+    options: { timeoutMs?: number } = {},
+  ): Promise<T> => {
     if (!path.startsWith('/v1/lab/bonk/'))
       throw new Error('bonk_route_required');
     const res = await fetch(new URL(path, url), {
@@ -44,7 +52,7 @@ export function localCoreClient(base: string, secret: string): CoreCall {
         'content-type': 'application/json',
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 4000),
     });
     const result = (await res.json()) as T & { error?: string };
     if (!res.ok)

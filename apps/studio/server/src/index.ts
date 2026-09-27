@@ -291,7 +291,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     return null;
   });
   if (bonk && extLab) {
-    extLab.connectBonk(bonk.worker);
+    extLab.connectBonk(bonk.worker, bonk.viewerAuth);
     bonk.start();
   }
   createStudioServer(lab, shutdown, extLab, bonk).listen(port, host, () => {

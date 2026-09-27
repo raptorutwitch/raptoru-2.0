@@ -3,6 +3,7 @@ import { join, extname } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { BonkWorker, localCoreClient } from './worker.js';
 import { LabObs } from './obs.js';
+import { ViewerAuth } from './viewer-auth.js';
 import { paths, REPO_ROOT } from '../test-lab/local-env.js';
 
 export class BonkRuntime {
@@ -14,6 +15,7 @@ export class BonkRuntime {
   private constructor(
     readonly worker: BonkWorker,
     readonly origin: string,
+    readonly viewerAuth: ViewerAuth,
   ) {}
   get overlayUrl() {
     return `${this.origin}/bonk-lab/overlay.html#${this.worker.token}`;
@@ -28,7 +30,7 @@ export class BonkRuntime {
       join(paths.runtimeDir, 'bonk-lab', 'journal.json'),
       core,
     );
-    return new BonkRuntime(worker, origin);
+    return new BonkRuntime(worker, origin, new ViewerAuth(core));
   }
   start() {
     const loop = async () => {
@@ -47,6 +49,7 @@ export class BonkRuntime {
     this.running = false;
     clearTimeout(this.timer);
     this.obs.disconnect();
+    this.viewerAuth.stop();
   }
 
   async handle(
@@ -94,7 +97,7 @@ export class BonkRuntime {
         )[extname(file)]!,
         'cache-control': 'no-store',
         'content-security-policy':
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self'; media-src 'self'; frame-ancestors 'none'",
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' https://static-cdn.jtvnw.net; media-src 'self'; frame-ancestors 'none'",
       });
       res.end(data);
       return true;

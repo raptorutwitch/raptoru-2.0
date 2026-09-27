@@ -13,7 +13,7 @@ export const BonkLabAdmitRequest = z.strictObject({
   viewer: z.strictObject({ id: Id, display_name: z.string().min(1).max(64) }),
   lab_session_id: z.string().min(1).max(64),
   emote: z.strictObject({
-    provider: z.literal('unicode'),
+    provider: z.enum(['unicode', 'twitch']),
     id: z.string().min(1).max(64),
     glyph: z.string().max(32).nullable().optional(),
   }),
@@ -55,7 +55,7 @@ export const BonkLabInteraction = z.object({
   viewer_id: z.string(),
   viewer_display_name: z.string(),
   type: z.literal('bonk'),
-  provider: z.literal('unicode'),
+  provider: z.enum(['unicode', 'twitch']),
   emote_id: z.string(),
   emote_glyph: z.string().nullable(),
   /** Resolved by Core; relative to the extension asset root (served locally by Studio). */
@@ -125,3 +125,55 @@ export const BonkLabAckRequest = z.strictObject({
     .optional(),
 });
 export type BonkLabAckRequest = z.infer<typeof BonkLabAckRequest>;
+
+// --- Twitch viewer identity & personal emote catalog (Lab) -----------------------------------------
+
+export const BonkLabViewerAuthComplete = z.strictObject({
+  code: z.string().min(1).max(512),
+  state: z.string().min(1).max(128),
+});
+export type BonkLabViewerAuthComplete = z.infer<
+  typeof BonkLabViewerAuthComplete
+>;
+
+/** Linked Twitch viewer (never includes a token). */
+export const BonkLabViewer = z.object({
+  user_id: z.string(),
+  login: z.string(),
+  display_name: z.string(),
+  scopes: z.array(z.string()),
+});
+export type BonkLabViewer = z.infer<typeof BonkLabViewer>;
+
+/** One Twitch emote as returned for this viewer, with the CDN URLs built by Core. */
+export const BonkLabTwitchEmote = z.object({
+  provider: z.literal('twitch'),
+  id: z.string(),
+  name: z.string(),
+  emote_type: z.string(),
+  emote_set_id: z.string(),
+  owner_id: z.string(),
+  owner_login: z.string().nullable(),
+  owner_display_name: z.string().nullable(),
+  formats: z.array(z.string()),
+  animated: z.boolean(),
+  url: z.string(),
+  static_url: z.string(),
+});
+export type BonkLabTwitchEmote = z.infer<typeof BonkLabTwitchEmote>;
+
+export const BonkLabTwitchOwner = z.object({
+  id: z.string(),
+  login: z.string(),
+  display_name: z.string(),
+  profile_image_url: z.string().nullable(),
+});
+export type BonkLabTwitchOwner = z.infer<typeof BonkLabTwitchOwner>;
+
+export const BonkLabCatalog = z.object({
+  user_id: z.string(),
+  fetched_at: z.string(),
+  emotes: z.array(BonkLabTwitchEmote),
+  owners: z.array(BonkLabTwitchOwner),
+});
+export type BonkLabCatalog = z.infer<typeof BonkLabCatalog>;

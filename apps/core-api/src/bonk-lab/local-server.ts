@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { BonkLabService } from './bonk-lab-service.js';
+import { TwitchViewerCatalog } from './twitch-viewer.js';
 import { bonkLabRoutes } from '../http/bonk-lab-routes.js';
 import { HttpError } from '../http/server.js';
 import { systemClock } from '../clock.js';
@@ -16,7 +17,17 @@ if (
 const secret = process.env.BONK_LAB_SECRET ?? '';
 if (secret.length < 32) throw new Error('bonk_secret_required');
 const db = createPgDb(url.href);
-const routes = bonkLabRoutes(new BonkLabService(db, systemClock));
+// Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
+const clientId = process.env.BONK_LAB_TWITCH_CLIENT_ID ?? '';
+const clientSecret = process.env.BONK_LAB_TWITCH_CLIENT_SECRET ?? '';
+const viewers =
+  clientId && clientSecret
+    ? new TwitchViewerCatalog(db, systemClock, { clientId, clientSecret })
+    : null;
+const routes = bonkLabRoutes(
+  new BonkLabService(db, systemClock, viewers),
+  viewers,
+);
 const server = createServer(async (req, res) => {
   const send = (status: number, body: unknown) => {
     res.writeHead(status, { 'content-type': 'application/json' });

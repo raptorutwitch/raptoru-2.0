@@ -1,3 +1,5 @@
+import type { BonkLabCatalog, BonkLabViewer } from '@raptoru/schemas';
+import type { ViewerAuth } from '../bonk-lab/viewer-auth.js';
 import type { BonkWorker } from '../bonk-lab/worker.js';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -131,10 +133,110 @@ export function parseLabToken(
   }
 }
 
+/**
+ * Personal Twitch catalog (from Core) → picker groups: one group per emote owner (channel), globals
+ * last. Only ids and Core-built CDN URLs; the picker sends back `twitch:<id>`, never a URL.
+ */
+export function twitchGroups(catalog: BonkLabCatalog): Json[] {
+  const owners = new Map(catalog.owners.map((o) => [o.id, o]));
+  const groups = new Map<string, Json & { emotes: Json[] }>();
+  for (const e of catalog.emotes) {
+    const owner = owners.get(e.owner_id);
+    const key = owner ? `twitch-channel-${owner.id}` : 'twitch-global';
+    if (!groups.has(key))
+      groups.set(key, {
+        id: key,
+        label: owner?.display_name ?? 'Twitch',
+        icon: 'twitch',
+        source: 'twitch',
+        provider: 'twitch',
+        scope: owner ? 'channel' : 'global',
+        ...(owner
+          ? {
+              channel_id: owner.id,
+              channel_login: owner.login,
+              channel_display_name: owner.display_name,
+              ...(owner.profile_image_url
+                ? { channel_avatar_url: owner.profile_image_url }
+                : {}),
+            }
+          : {}),
+        emotes: [],
+      });
+    groups.get(key)!.emotes.push({
+      id: `twitch:${e.id}`,
+      label: e.name,
+      source: 'twitch',
+      provider: 'twitch',
+      image_url: e.url,
+      animated: e.animated,
+      emote_set_id: e.emote_set_id,
+      emote_type: e.emote_type,
+    });
+  }
+  return [...groups.values()].sort(
+    (a, b) => Number(a.scope === 'global') - Number(b.scope === 'global'),
+  );
+}
+
 export class LabEbs {
   private bonkWorker: BonkWorker | null = null;
-  connectBonk(worker: BonkWorker) {
+  private viewerAuth: ViewerAuth | null = null;
+  /** Linked real Twitch viewer (Bonk Lab) and its catalog, refreshed from Core. */
+  private twitch: {
+    viewer: BonkLabViewer | null;
+    groups: Json[];
+    error: string | null;
+    at: number;
+  } = { viewer: null, groups: [], error: null, at: 0 };
+  connectBonk(worker: BonkWorker, viewerAuth: ViewerAuth | null = null) {
     this.bonkWorker = worker;
+    this.viewerAuth = viewerAuth;
+  }
+
+  /** ViewerAuth generation already reflected in `twitch` (a new link invalidates the cache). */
+  private twitchGeneration = -1;
+
+  private async refreshTwitch(force = false) {
+    if (!this.viewerAuth) return;
+    const generation = this.viewerAuth.generation;
+    if (
+      !force &&
+      generation === this.twitchGeneration &&
+      Date.now() - this.twitch.at < 5000
+    )
+      return;
+    this.twitchGeneration = generation;
+    try {
+      const viewer = (await this.viewerAuth.viewers()).viewers[0] ?? null;
+      let groups: Json[] = [];
+      let error: string | null = null;
+      if (viewer) {
+        try {
+          groups = twitchGroups(
+            await this.viewerAuth.catalog(viewer.user_id, force),
+          );
+        } catch (e) {
+          error = (e as Error).message;
+          // Never replace a good catalog with an empty one on a failed reload: keep the last
+          // catalog of the same viewer (the extension would otherwise store the empty one).
+          if (this.twitch.viewer?.user_id === viewer.user_id)
+            groups = this.twitch.groups;
+        }
+      }
+      this.twitch = {
+        viewer: error === 'reauth_required' ? null : viewer,
+        groups,
+        error,
+        at: Date.now(),
+      };
+    } catch {
+      this.twitch = {
+        ...this.twitch,
+        error: 'core_unavailable',
+        at: Date.now(),
+      };
+    }
   }
 
   private users = new Map<string, LabUser>();
@@ -299,8 +401,41 @@ export class LabEbs {
     body: Json | undefined,
     headers: { authorization?: string; idempotencyKey?: string },
   ): Promise<Reply> {
-    const caller = parseLabToken(headers.authorization);
+    let caller = parseLabToken(headers.authorization);
     if (!caller) return this.fail(401, 'unauthorized');
+    // Bonk Lab with a connected Twitch account: the viewer role IS that account (user_id = token
+    // owner), like a real Twitch JWT would say. Other roles keep their fictitious identities.
+    if (this.viewerAuth && caller.identity.role === 'viewer') {
+      if (path.startsWith('/emotes/oauth/start') && method === 'POST') {
+        try {
+          return this.ok(await this.viewerAuth.start());
+        } catch (e) {
+          return this.fail(503, (e as Error).message.split(':')[0]!);
+        }
+      }
+      await this.refreshTwitch(
+        path.startsWith('/emotes/refresh') || path.startsWith('/emotes/oauth'),
+      );
+      const linked = this.twitch.viewer;
+      if (path.startsWith('/emotes/oauth/disconnect') && method === 'POST') {
+        if (linked)
+          await this.viewerAuth
+            .disconnect(linked.user_id)
+            .catch(() => undefined);
+        this.twitch = { viewer: null, groups: [], error: null, at: 0 };
+        return this.ok({ revoked: true });
+      }
+      if (linked && caller.identityShared)
+        caller = {
+          ...caller,
+          identity: {
+            role: 'viewer',
+            twitchUserId: linked.user_id,
+            login: linked.login,
+            displayName: linked.display_name,
+          },
+        };
+    }
     // Bonk real Lab execution uses Core idempotency, never the in-memory simulated delivery path.
     if (
       this.bonkWorker &&
@@ -319,11 +454,12 @@ export class LabEbs {
       const p = body.payload as Json | undefined;
       if (
         !p ||
-        p.emote_source !== 'unicode' ||
+        !['unicode', 'twitch'].includes(String(p.emote_source)) ||
         !Array.isArray(p.emotes) ||
         p.emotes.length !== 1
       )
         return this.fail(400, 'invalid_payload');
+      const provider = p.emote_source === 'twitch' ? 'twitch' : 'unicode';
       try {
         const result = await this.bonkWorker.admit(
           {
@@ -332,9 +468,13 @@ export class LabEbs {
           },
           headers.idempotencyKey,
           {
-            provider: 'unicode',
+            provider,
             id: String(p.emotes[0]),
-            glyph: typeof p.emote_glyph === 'string' ? p.emote_glyph : null,
+            // Twitch emotes carry no glyph; Core resolves the image from its own catalog.
+            glyph:
+              provider === 'unicode' && typeof p.emote_glyph === 'string'
+                ? p.emote_glyph
+                : null,
           },
         );
         return this.ok({
@@ -434,8 +574,9 @@ export class LabEbs {
     if (path === '/emotes' || path === '/emotes/refresh')
       return this.ok({
         connected: true,
-        twitch_connected: true,
-        groups: this.bonkGroups(),
+        twitch_connected: this.viewerAuth ? Boolean(this.twitch.viewer) : true,
+        ...(this.twitch.error ? { twitch_error: this.twitch.error } : {}),
+        groups: [...this.twitch.groups, ...this.bonkGroups()],
       });
 
     // Identity is required for anything that spends or joins (like the real EBS).
@@ -773,7 +914,9 @@ export class LabEbs {
       m.id === 'bonk' && this.bonkWorker
         ? {
             ...m,
-            emote_catalog: { groups: this.bonkGroups() },
+            emote_catalog: {
+              groups: [...this.twitch.groups, ...this.bonkGroups()],
+            },
             description: 'Bonk OBS Lab · coût simulé, aucun débit',
           }
         : m.id === 'soundboard'
@@ -801,6 +944,16 @@ export class LabEbs {
       ok: true,
       demo_mode: true, // fixture emotes are "preview" ones: selectable only in demo mode
       demo_scenario: 'lab',
+      ...(this.viewerAuth
+        ? {
+            // Real Twitch connection state for the extension's "authorize your emotes" flow.
+            emotes: {
+              connected: true,
+              twitch_connected: Boolean(this.twitch.viewer),
+              connect_url: null,
+            },
+          }
+        : {}),
       test_mode: true,
       environment: 'lab',
       role: identity.role,

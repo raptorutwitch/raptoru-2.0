@@ -3,6 +3,7 @@ import {
   BonkLabAdmitRequest,
   BonkLabClaimRequest,
   BonkLabHeartbeat,
+  BonkLabViewerAuthComplete,
 } from '@raptoru/schemas';
 import { z } from 'zod';
 import {
@@ -11,6 +12,10 @@ import {
   BonkLabUnavailableError,
   type BonkLabService,
 } from '../bonk-lab/bonk-lab-service.js';
+import {
+  TwitchViewerError,
+  type TwitchViewerCatalog,
+} from '../bonk-lab/twitch-viewer.js';
 import { HttpError, limitParam, parse, type Route } from './server.js';
 
 // Bonk V2 Lab routes. Studio only (STUDIO_SECRET): the Studio server is both the Lab façade of the
@@ -29,12 +34,20 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
       throw new HttpError(409, { error: error.code, message: error.message });
     if (error instanceof BonkLabNotFoundError)
       throw new HttpError(404, { error: 'interaction_not_found' });
+    if (error instanceof TwitchViewerError)
+      throw new HttpError(error.code.startsWith('oauth_') ? 400 : 409, {
+        error: error.code,
+      });
     throw error;
   }
 }
 
-export function bonkLabRoutes(bonk: BonkLabService): Route[] {
+export function bonkLabRoutes(
+  bonk: BonkLabService,
+  viewers: TwitchViewerCatalog | null = null,
+): Route[] {
   return [
+    ...(viewers ? viewerRoutes(viewers) : []),
     {
       method: 'POST',
       pattern: /^\/v1\/lab\/bonk\/interactions$/,
@@ -92,6 +105,52 @@ export function bonkLabRoutes(bonk: BonkLabService): Route[] {
       handle: ({ params, body }) =>
         mapped(() =>
           bonk.ack(parse(Uuid, params[0]), parse(BonkLabAckRequest, body)),
+        ),
+    },
+  ];
+}
+
+/** Twitch viewer identity + personal emote catalog (Lab Core only). Never returns a token. */
+function viewerRoutes(viewers: TwitchViewerCatalog): Route[] {
+  return [
+    {
+      method: 'POST',
+      pattern: /^\/v1\/lab\/bonk\/viewer-auth\/start$/,
+      auth: 'studio',
+      handle: () => mapped(() => viewers.startAuth()),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/v1\/lab\/bonk\/viewer-auth\/complete$/,
+      auth: 'studio',
+      handle: ({ body }) =>
+        mapped(async () => {
+          const req = parse(BonkLabViewerAuthComplete, body);
+          return { viewer: await viewers.completeAuth(req.code, req.state) };
+        }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/v1\/lab\/bonk\/viewers$/,
+      auth: 'studio',
+      handle: () => mapped(async () => ({ viewers: await viewers.viewers() })),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/v1\/lab\/bonk\/viewers\/([^/]+)\/disconnect$/,
+      auth: 'studio',
+      handle: ({ params }) =>
+        mapped(() => viewers.disconnect(parse(Digits, params[0]))),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/v1\/lab\/bonk\/viewers\/([^/]+)\/catalog$/,
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() =>
+          viewers.catalog(parse(Digits, params[0]), {
+            force: url.searchParams.get('refresh') === '1',
+          }),
         ),
     },
   ];

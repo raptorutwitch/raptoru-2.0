@@ -10,6 +10,11 @@ import type {
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import {
+  CATALOG_MAX_AGE_MS,
+  TwitchViewerError,
+  type TwitchViewerCatalog,
+} from './twitch-viewer.js';
 
 // Bonk V2, Lab slice. Core owns validation, the authoritative interaction, its durable order
 // (channel_sequence) and its status; Studio only executes and acknowledges. Test only: the payment
@@ -65,6 +70,7 @@ export class BonkLabNotFoundError extends Error {}
 
 interface Row {
   interaction_id: string;
+  provider: 'unicode' | 'twitch';
   idempotency_key: string;
   request_hash: string;
   channel_id: string;
@@ -104,7 +110,7 @@ function toInteraction(r: Row): BonkLabInteraction {
     viewer_id: r.viewer_id,
     viewer_display_name: r.viewer_display_name,
     type: 'bonk',
-    provider: 'unicode',
+    provider: r.provider,
     emote_id: r.emote_id,
     emote_glyph: r.emote_glyph,
     emote_url: r.emote_url,
@@ -145,7 +151,62 @@ export class BonkLabService {
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
+    /** Twitch viewer catalog (Lab). Without it, only the local Twemoji is admitted. */
+    private readonly twitch: TwitchViewerCatalog | null = null,
   ) {}
+
+  /**
+   * Emote resolved by Core from its own data: the local Twemoji table, or the viewer's stored
+   * Twitch catalog (Get User Emotes). Never a URL from the caller.
+   */
+  private async resolveEmote(
+    q: Queryable,
+    req: BonkLabAdmitRequest,
+    twitchError: string | null,
+  ): Promise<{ glyph: string | null; url: string; animated: boolean }> {
+    if (req.emote.provider === 'unicode') {
+      const emote = BONK_LAB_EMOTES[req.emote.id];
+      if (!emote)
+        throw new BonkLabError409(
+          'emote_not_available',
+          `emote ${req.emote.id} is not available in this Lab slice`,
+        );
+      if (req.emote.glyph && req.emote.glyph !== emote.glyph)
+        throw new BonkLabError409(
+          'emote_mismatch',
+          'glyph does not match the emote id',
+        );
+      return emote;
+    }
+    const id = /^twitch:([A-Za-z0-9_]{1,64})$/.exec(req.emote.id)?.[1];
+    if (!id || req.emote.glyph)
+      throw new BonkLabError409(
+        'emote_not_available',
+        'invalid Twitch emote id',
+      );
+    if (!this.twitch)
+      throw new BonkLabError409(
+        'emote_not_available',
+        'Twitch catalog disabled',
+      );
+    const catalog = await this.twitch.storedCatalog(req.viewer.id, q);
+    if (
+      !catalog ||
+      this.clock.now().getTime() - Date.parse(catalog.fetched_at) >
+        CATALOG_MAX_AGE_MS
+    )
+      throw new BonkLabError409(
+        twitchError ?? 'catalog_unavailable',
+        'no recent Twitch emote catalog for this viewer',
+      );
+    const emote = catalog.emotes.find((e) => e.id === id);
+    if (!emote)
+      throw new BonkLabError409(
+        'emote_not_in_catalog',
+        'this viewer cannot use this emote',
+      );
+    return { glyph: null, url: emote.url, animated: emote.animated };
+  }
 
   // --- readiness ---------------------------------------------------------------------------------
 
@@ -207,6 +268,15 @@ export class BonkLabService {
         ]),
       )
       .digest('hex');
+    // Network outside the transaction: refresh a stale Twitch catalog (errors kept for the answer).
+    let twitchError: string | null = null;
+    if (req.emote.provider === 'twitch' && this.twitch)
+      await this.twitch.catalog(req.viewer.id).catch((error: unknown) => {
+        twitchError =
+          error instanceof TwitchViewerError
+            ? error.code
+            : 'catalog_unavailable';
+      });
 
     return this.db.tx(async (q) => {
       // Channel row lock: serializes admissions of the channel (durable sequence allocation).
@@ -234,17 +304,7 @@ export class BonkLabService {
         return { interaction: toInteraction(prior), replayed: true };
       }
 
-      const emote = BONK_LAB_EMOTES[req.emote.id];
-      if (!emote)
-        throw new BonkLabError409(
-          'emote_not_available',
-          `emote ${req.emote.id} is not available in this Lab slice`,
-        );
-      if (req.emote.glyph && req.emote.glyph !== emote.glyph)
-        throw new BonkLabError409(
-          'emote_mismatch',
-          'glyph does not match the emote id',
-        );
+      const emote = await this.resolveEmote(q, req, twitchError);
 
       await this.sweep(q, req.channel_id);
       await this.assertReady(q);
@@ -271,7 +331,7 @@ export class BonkLabService {
            viewer_id, viewer_display_name, type, provider, emote_id, emote_glyph, emote_url, emote_animated,
            quantity, created_at, channel_sequence, test_mode, payment_mode, simulated_cost, simulated_currency,
            real_debited, status, lab_session_id, expires_at, error, updated_at)
-         values ($1, $2, $3, 'extension_lab', $4, $5, $6, 'bonk', 'unicode', $7, $8, $9, $10,
+         values ($1, $2, $3, 'extension_lab', $4, $5, $6, 'bonk', $17, $7, $8, $9, $10,
            1, $11, $12, true, 'simulated', $13, $14, 0, 'queued', $15, $16, null, $11)`,
         [
           id,
@@ -290,6 +350,7 @@ export class BonkLabService {
           BONK_LAB_RULES.simulatedCurrency,
           req.lab_session_id,
           new Date(now.getTime() + BONK_LAB_RULES.expiresAfterMs),
+          req.emote.provider,
         ],
       );
       return { interaction: (await this.byId(q, id))!, replayed: false };

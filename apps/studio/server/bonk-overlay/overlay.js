@@ -40,16 +40,22 @@ async function play(i) {
   if (seen.size > 1000) seen.delete(seen.values().next().value);
   const image = new Image();
   image.className = 'projectile';
-  // One trusted asset for the slice. No remote URL or user supplied URL is interpreted.
-  if (
-    i.emote_url !== 'assets/twemoji/svg/1f600.svg' ||
-    i.test_mode !== true ||
-    i.payment_mode !== 'simulated'
-  ) {
+  // Only two URL shapes, both built by Core: the local Twemoji, or a Twitch CDN emote URL.
+  // Anything else fails explicitly (never substituted by another image).
+  const twitchUrl =
+    /^https:\/\/static-cdn\.jtvnw\.net\/emoticons\/v2\/[A-Za-z0-9_]{1,64}\/(static|animated)\/dark\/3\.0$/;
+  const src =
+    i.provider === 'unicode' && i.emote_url === 'assets/twemoji/svg/1f600.svg'
+      ? '/ext/' + i.emote_url
+      : i.provider === 'twitch' && twitchUrl.test(i.emote_url)
+        ? i.emote_url
+        : null;
+  if (!src || i.test_mode !== true || i.payment_mode !== 'simulated') {
     await ack(i, 'failed');
     return;
   }
-  image.src = '/ext/' + i.emote_url;
+  image.referrerPolicy = 'no-referrer';
+  image.src = src;
   try {
     await Promise.race([
       image.decode(),
@@ -114,7 +120,10 @@ async function play(i) {
   await started;
 }
 setInterval(() => void call('heartbeat', {}).catch(() => {}), 1500);
-await call('heartbeat', {});
+// After an OBS refresh, the previous page still counts as the live renderer for a few seconds and
+// this first heartbeat is refused (renderer_already_connected). It must not stop the page: the
+// interval keeps announcing us, and `next` simply returns nothing until we are the renderer.
+await call('heartbeat', {}).catch(() => {});
 while (true) {
   try {
     const { interaction } = await call('next', {});

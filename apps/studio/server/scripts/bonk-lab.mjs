@@ -50,14 +50,19 @@ try {
   await db.query(
     'create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now())',
   );
-  const migration = '20260929120000_bonk_lab.sql';
-  if (
-    !(
-      await db.query('select 1 from schema_migrations where name=$1', [
-        migration,
-      ])
-    ).rowCount
-  ) {
+  // Only the Bonk Lab migrations, in order: never the Wallet/Loyalty/Daily schema.
+  for (const migration of [
+    '20260929120000_bonk_lab.sql',
+    '20260930120000_bonk_lab_twitch.sql',
+  ]) {
+    if (
+      (
+        await db.query('select 1 from schema_migrations where name=$1', [
+          migration,
+        ])
+      ).rowCount
+    )
+      continue;
     await db.query(
       await readFile(
         new URL(
@@ -79,6 +84,21 @@ try {
   await db.end();
 }
 const secret = randomBytes(32).toString('hex');
+const botEnv = await readFile(
+  new URL('../../../twitch-bot/.env', import.meta.url),
+  'utf8',
+).catch(() => '');
+const twitchApp = Object.fromEntries(
+  botEnv
+    .split(/\r?\n/)
+    .map((l) => /^(TWITCH_CLIENT_ID|TWITCH_CLIENT_SECRET)=(.*)$/.exec(l.trim()))
+    .filter(Boolean)
+    .map((m) => [m[1], m[2].trim().replace(/^(['"])(.*)\1$/, '$2')]),
+);
+if (!twitchApp.TWITCH_CLIENT_ID || !twitchApp.TWITCH_CLIENT_SECRET)
+  console.warn(
+    'Twitch app missing in apps/twitch-bot/.env: Twitch emotes disabled, Twemoji only.',
+  );
 const children = [];
 let stopping = false;
 const stop = () => {
@@ -89,7 +109,12 @@ const stop = () => {
 for (const [path, extra] of [
   [
     'apps/core-api/dist/bonk-lab/local-server.js',
-    { BONK_LAB_DATABASE_URL: dbUrl.href },
+    {
+      BONK_LAB_DATABASE_URL: dbUrl.href,
+      // Twitch app of Raptoru 2.0 (read from the local bot .env): Lab Core only, never Studio.
+      BONK_LAB_TWITCH_CLIENT_ID: twitchApp.TWITCH_CLIENT_ID ?? '',
+      BONK_LAB_TWITCH_CLIENT_SECRET: twitchApp.TWITCH_CLIENT_SECRET ?? '',
+    },
   ],
   [
     'apps/studio/server/dist/index.js',

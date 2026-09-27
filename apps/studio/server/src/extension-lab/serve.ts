@@ -39,7 +39,8 @@ export const EXTENSION_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // Twitch CDN images only (emotes/avatars of the Bonk Lab catalog); still no network calls.
+  "img-src 'self' data: blob: https://static-cdn.jtvnw.net",
   "media-src 'self' blob:",
   "connect-src 'self'",
   "frame-ancestors 'self'",

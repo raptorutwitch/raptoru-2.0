@@ -134,6 +134,8 @@ describe('Bonk vertical Lab transport (real Core HTTP + PGlite + durable Studio)
       );
     const starts: number[] = [];
     for (let n = 0; n < 20; n++) {
+      // Like the real overlay (heartbeat every 1.5 s): readiness expires after 5 s without one.
+      await f.worker.rendererHeartbeat('renderer-1');
       await f.worker.tick();
       const c = (await f.worker.command('renderer-1'))!;
       expect(c).not.toBeNull();
@@ -155,7 +157,8 @@ describe('Bonk vertical Lab transport (real Core HTTP + PGlite + durable Studio)
     await f.worker.tick();
     expect(starts).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
     expect(await count(f.core.db, 'bonk_lab_interactions')).toBe(20);
-  });
+    // ~80 HTTP round trips to PGlite: above the default 5 s on a loaded machine.
+  }, 30_000);
 
   it('restarts do not replay sent visuals, and replay only durable ACKs after a lost Core response', async () => {
     const f = await fixture();
