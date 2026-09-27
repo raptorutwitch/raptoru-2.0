@@ -167,7 +167,10 @@ export class BonkLabService {
   }
 
   /** Throws the precise reason when no fresh, ready Studio can execute a Bonk now. */
-  private async assertReady(q: Queryable): Promise<void> {
+  private async assertReady(
+    q: Queryable,
+    studioId: string | null = null,
+  ): Promise<void> {
     const since = new Date(
       this.clock.now().getTime() - BONK_LAB_RULES.heartbeatFreshMs,
     );
@@ -177,8 +180,8 @@ export class BonkLabService {
         source_ready: boolean;
         overlay_ready: boolean;
       }>(
-        'select obs, source_ready, overlay_ready from bonk_lab_studios where last_seen >= $1 order by last_seen desc limit 1',
-        [since],
+        'select obs, source_ready, overlay_ready from bonk_lab_studios where last_seen >= $1 and ($2::text is null or studio_instance_id = $2) order by last_seen desc limit 1',
+        [since, studioId],
       )
     )[0];
     if (!studio) throw new BonkLabUnavailableError('studio_offline');
@@ -194,7 +197,15 @@ export class BonkLabService {
   async admit(req: BonkLabAdmitRequest): Promise<BonkLabAdmitResponse> {
     // Hash of what the viewer asked for: a retry with the same key must ask for the same Bonk.
     const requestHash = createHash('sha256')
-      .update(JSON.stringify(['bonk', req.emote.provider, req.emote.id]))
+      .update(
+        JSON.stringify([
+          'bonk',
+          req.emote.provider,
+          req.emote.id,
+          req.emote.glyph ?? null,
+          req.lab_session_id,
+        ]),
+      )
       .digest('hex');
 
     return this.db.tx(async (q) => {
@@ -235,6 +246,7 @@ export class BonkLabService {
           'glyph does not match the emote id',
         );
 
+      await this.sweep(q, req.channel_id);
       await this.assertReady(q);
       const open = (
         await q.query<{ n: number | string }>(
@@ -296,13 +308,19 @@ export class BonkLabService {
     viewerId: string | null,
     limit = 20,
   ): Promise<BonkLabInteraction[]> {
-    await this.sweep(this.db, channelId);
-    const rows = await this.db.query<Row>(
-      `${SELECT} where i.channel_id = $1 and ($2::text is null or i.viewer_id = $2)
+    return this.db.tx(async (q) => {
+      await q.query(
+        'select 1 from bonk_lab_channels where channel_id = $1 for update',
+        [channelId],
+      );
+      await this.sweep(q, channelId);
+      const rows = await q.query<Row>(
+        `${SELECT} where i.channel_id = $1 and ($2::text is null or i.viewer_id = $2)
        order by i.channel_sequence desc limit $3`,
-      [channelId, viewerId, limit],
-    );
-    return rows.map(toInteraction);
+        [channelId, viewerId, limit],
+      );
+      return rows.map(toInteraction);
+    });
   }
 
   // --- execution (Studio worker) --------------------------------------------------------------------
@@ -325,7 +343,7 @@ export class BonkLabService {
         [channelId],
       );
       await this.sweep(q, channelId);
-      await this.assertReady(q);
+      await this.assertReady(q, studioInstanceId);
       const pendingStart = (
         await q.query<{ n: number | string }>(
           `select count(*) as n from bonk_lab_interactions i join bonk_lab_deliveries d using (interaction_id)
@@ -365,6 +383,19 @@ export class BonkLabService {
     a: BonkLabAckRequest,
   ): Promise<BonkLabInteraction> {
     return this.db.tx(async (q) => {
+      // All transitions share the channel lock, including sweeps: an expiry query must not
+      // evaluate a stale joined delivery while a started ACK renews its lease.
+      const channel = (
+        await q.query<{ channel_id: string }>(
+          'select channel_id from bonk_lab_interactions where interaction_id = $1',
+          [interactionId],
+        )
+      )[0];
+      if (!channel) throw new BonkLabNotFoundError(interactionId);
+      await q.query(
+        'select 1 from bonk_lab_channels where channel_id = $1 for update',
+        [channel.channel_id],
+      );
       // Lock first, then read in a new statement: under READ COMMITTED a waiting transaction must
       // see the delivery row committed by the ACK it waited for (a join read in the locking
       // statement would keep the old delivery values).

@@ -298,3 +298,43 @@ describe('Bonk Lab execution (Studio worker contract)', () => {
     );
   });
 });
+
+describe('Bonk Lab admission and claimant isolation', () => {
+  it('does not let an offline worker borrow another Studio heartbeat', async () => {
+    const core = await setup();
+    await ready(core);
+    await core.bonkLab.admit(admitReq());
+    expect(await code(core.bonkLab.claim('offline-studio', CHANNEL))).toBe(
+      'studio_offline',
+    );
+    expect((await core.bonkLab.claim(STUDIO, CHANNEL))?.channel_sequence).toBe(
+      1,
+    );
+  });
+  it('rejects a changed session or glyph under the same key', async () => {
+    const core = await setup();
+    await ready(core);
+    const r = admitReq();
+    await core.bonkLab.admit(r);
+    expect(
+      await code(core.bonkLab.admit({ ...r, lab_session_id: 'other' })),
+    ).toBe('idempotency_conflict');
+    expect(
+      await code(
+        core.bonkLab.admit({ ...r, emote: { ...r.emote, glyph: '😈' } }),
+      ),
+    ).toBe('idempotency_conflict');
+  });
+  it('expires a full abandoned queue before admitting new work', async () => {
+    const core = await setup();
+    await ready(core);
+    for (let n = 0; n < BONK_LAB_RULES.maxOpenPerChannel; n++)
+      await core.bonkLab.admit(admitReq());
+    expect(await code(core.bonkLab.admit(admitReq()))).toBe('queue_full');
+    core.clock.advance(BONK_LAB_RULES.expiresAfterMs + 1);
+    await ready(core);
+    expect((await core.bonkLab.admit(admitReq())).interaction.status).toBe(
+      'queued',
+    );
+  });
+});
