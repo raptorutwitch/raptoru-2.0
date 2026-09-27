@@ -1,3 +1,4 @@
+import type { BonkWorker } from '../bonk-lab/worker.js';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -131,6 +132,11 @@ export function parseLabToken(
 }
 
 export class LabEbs {
+  private bonkWorker: BonkWorker | null = null;
+  connectBonk(worker: BonkWorker) {
+    this.bonkWorker = worker;
+  }
+
   private users = new Map<string, LabUser>();
   private modules: Record<ModuleId, boolean> = {
     tts: true,
@@ -295,11 +301,90 @@ export class LabEbs {
   ): Promise<Reply> {
     const caller = parseLabToken(headers.authorization);
     if (!caller) return this.fail(401, 'unauthorized');
+    // Bonk real Lab execution uses Core idempotency, never the in-memory simulated delivery path.
+    if (
+      this.bonkWorker &&
+      method === 'POST' &&
+      body?.module_id === 'bonk' &&
+      path.startsWith('/actions/')
+    ) {
+      if (!caller.identityShared) return this.fail(403, 'identity_required');
+      if (!this.modules.bonk) return this.fail(409, 'module_disabled');
+      if (!['/actions/tokens', '/actions/lab'].includes(path))
+        return this.fail(400, 'unsupported_payment');
+      if (path === '/actions/lab' && caller.identity.role === 'viewer')
+        return this.fail(403, 'forbidden');
+      if (!headers.idempotencyKey)
+        return this.fail(400, 'idempotency_key_required');
+      const p = body.payload as Json | undefined;
+      if (
+        !p ||
+        p.emote_source !== 'unicode' ||
+        !Array.isArray(p.emotes) ||
+        p.emotes.length !== 1
+      )
+        return this.fail(400, 'invalid_payload');
+      try {
+        const result = await this.bonkWorker.admit(
+          {
+            id: caller.identity.twitchUserId,
+            display_name: caller.identity.displayName,
+          },
+          headers.idempotencyKey,
+          {
+            provider: 'unicode',
+            id: String(p.emotes[0]),
+            glyph: typeof p.emote_glyph === 'string' ? p.emote_glyph : null,
+          },
+        );
+        return this.ok({
+          status: result.interaction.status,
+          module_id: 'bonk',
+          reference_id: result.interaction.interaction_id,
+          interaction: result.interaction,
+          charged: false,
+          test_mode: true,
+          payment_mode: 'simulated',
+          cost: result.interaction.simulated_cost,
+        });
+      } catch (e) {
+        return this.fail(
+          (e as { status?: number }).status ?? 503,
+          (e as Error).message,
+        );
+      }
+    }
     const key = headers.idempotencyKey
       ? `${caller.identity.twitchUserId}:${headers.idempotencyKey}`
       : null;
     if (key && this.replies.has(key)) return this.replies.get(key)!;
     const reply = this.route(method, path, body ?? {}, caller);
+    if (
+      this.bonkWorker &&
+      method === 'GET' &&
+      ['/session', '/state'].includes(path.split('?')[0]!)
+    ) {
+      try {
+        const { interactions } = await this.bonkWorker.recent(
+          caller.identity.twitchUserId,
+        );
+        reply.body.action_receipts = [
+          ...interactions.map((i) => ({
+            id: i.interaction_id,
+            action: 'bonk',
+            label: 'Bonk Lab',
+            detail: i.status,
+            currency: 'lab',
+            cost: i.simulated_cost,
+            status: i.status,
+            created_at: i.created_at,
+          })),
+          ...((reply.body.action_receipts as Json[]) ?? []),
+        ];
+      } catch {
+        /* Studio status separately shows Core unavailable; admission fails closed. */
+      }
+    }
     if (key && method === 'POST') this.replies.set(key, reply);
     return reply;
   }
@@ -685,21 +770,27 @@ export class LabEbs {
     const base = this.demo(isMod ? 'moderator' : 'paid');
     const user = this.user(identity.twitchUserId);
     const modules = (base.modules as Json[]).map((m) =>
-      m.id === 'soundboard'
+      m.id === 'bonk' && this.bonkWorker
         ? {
             ...m,
-            sounds: [
-              ...this.sounds,
-              {
-                id: 'random',
-                label: 'Aléatoire',
-                emoji: '🎲',
-                credit_cost: 1,
-                token_cost: 600,
-              },
-            ],
+            emote_catalog: { groups: this.bonkGroups() },
+            description: 'Bonk OBS Lab · coût simulé, aucun débit',
           }
-        : m,
+        : m.id === 'soundboard'
+          ? {
+              ...m,
+              sounds: [
+                ...this.sounds,
+                {
+                  id: 'random',
+                  label: 'Aléatoire',
+                  emoji: '🎲',
+                  credit_cost: 1,
+                  token_cost: 600,
+                },
+              ],
+            }
+          : m,
     );
     const baseRaffle = base.raffle as Json;
     const joined = this.raffle.participants.some(
@@ -770,6 +861,23 @@ export class LabEbs {
   }
 
   private bonkGroups(): Json[] {
+    if (this.bonkWorker)
+      return [
+        {
+          id: 'unicode',
+          label: 'Twemoji Lab',
+          source: 'unicode',
+          emotes: [
+            {
+              id: 'unicode:1f600',
+              label: 'Sourire',
+              glyph: '😀',
+              source: 'unicode',
+              image_url: 'assets/twemoji/svg/1f600.svg',
+            },
+          ],
+        },
+      ];
     const bonk = (this.demo('paid').modules as Json[]).find(
       (m) => m.id === 'bonk',
     );

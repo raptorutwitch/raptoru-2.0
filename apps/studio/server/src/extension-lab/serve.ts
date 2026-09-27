@@ -55,6 +55,7 @@ export interface ExtensionFile {
 export async function extensionFile(
   extensionDir: string,
   pathname: string,
+  bonkLab = false,
 ): Promise<ExtensionFile> {
   const rel = normalize(
     decodeURIComponent(pathname.slice(EXT_PREFIX.length)),
@@ -64,6 +65,12 @@ export async function extensionFile(
   const type = MIME[extname(rel).toLowerCase()] ?? 'application/octet-stream';
   if (rel.replace(/\\/g, '/') === 'shared/runtime-config.js')
     return { status: 200, contentType: type, body: LAB_RUNTIME_CONFIG_JS };
+  if (bonkLab && rel.replace(/\\/g, '/') === 'shared/unicode-emojis.js')
+    return {
+      status: 200,
+      contentType: type,
+      body: "export const UNICODE_EMOJI_GROUPS = [{id:'unicode',label:'Twemoji Lab',source:'unicode',emotes:[['unicode:1f600','😀','Sourire']]}];",
+    };
   try {
     const content = await readFile(join(extensionDir, rel));
     if (extname(rel) === '.html') {

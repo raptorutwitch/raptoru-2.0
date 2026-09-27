@@ -11,6 +11,7 @@ export default defineConfig(
       'apps/studio/desktop/release/**',
       // Production extension imported as is (see apps/twitch-extension/README.md).
       'apps/twitch-extension/extension/**',
+      'apps/studio/server/bonk-overlay/bonk-v3-core.js',
     ],
   },
   js.configs.recommended,

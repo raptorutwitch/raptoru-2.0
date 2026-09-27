@@ -1,3 +1,4 @@
+import { BonkRuntime } from './bonk-lab/runtime.js';
 import { readFile } from 'node:fs/promises';
 import {
   createServer,
@@ -116,7 +117,11 @@ async function extensionLabRoute(
       send(res, 405, { error: 'method_not_allowed' });
       return true;
     }
-    const file = await extensionFile(EXTENSION_DIR, url.pathname);
+    const file = await extensionFile(
+      EXTENSION_DIR,
+      url.pathname,
+      process.env.BONK_LAB_ONLY === '1',
+    );
     res.writeHead(file.status, {
       'content-type': file.contentType,
       'cache-control': 'no-store',
@@ -171,6 +176,7 @@ export function createStudioServer(
   lab: TestLab,
   onShutdown: () => void,
   extLab: LabEbs | null = null,
+  bonk: BonkRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -178,6 +184,9 @@ export function createStudioServer(
       if (req.method === 'GET' && url.pathname === '/health') {
         return send(res, 200, { service: 'studio-server', status: 'ok' });
       }
+      if (bonk && (await bonk.handle(req, res, url))) return;
+      if (url.pathname === '/api/bonk-lab/status' && !bonk)
+        return send(res, 200, { enabled: false });
       if (await extensionLabRoute(extLab, req, res, url)) return;
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET')
@@ -189,6 +198,11 @@ export function createStudioServer(
       if (req.headers[STUDIO_HEADER] !== '1')
         return send(res, 403, { error: 'missing_studio_header' });
 
+      if (
+        process.env.BONK_LAB_ONLY === '1' &&
+        url.pathname.startsWith('/api/test-lab/')
+      )
+        return send(res, 403, { error: 'bonk_lab_only' });
       if (req.method === 'GET' && url.pathname === '/api/test-lab/status')
         return send(res, 200, await lab.status());
       if (req.method === 'GET' && url.pathname === '/api/test-lab/logs') {
@@ -244,22 +258,29 @@ export function createStudioServer(
 if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   applyDataRootEnv();
   const lab = createTestLab();
-  for (const service of [lab.deps.core, lab.deps.bot]) {
+  for (const service of process.env.BONK_LAB_ONLY === '1'
+    ? []
+    : [lab.deps.core, lab.deps.bot]) {
     if (await service.adoptPrevious())
       lab.logs.add(
         'studio',
         `found ${service.name} (pid ${service.pid}) left running by a previous Studio session`,
       );
   }
+  const bonk = process.env.BONK_LAB_CORE_URL
+    ? await BonkRuntime.create(`http://${host}:${port}`)
+    : null;
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
+    bonk?.stop();
     lab.logs.add(
       'studio',
       'Studio closing: stopping bot and Core (Postgres keeps running)',
     );
-    void lab.shutdown().finally(() => process.exit(0));
+    if (process.env.BONK_LAB_ONLY === '1') process.exit(0);
+    else void lab.shutdown().finally(() => process.exit(0));
   };
   const extLab = await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
     lab.logs.add(
@@ -269,7 +290,11 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     );
     return null;
   });
-  createStudioServer(lab, shutdown, extLab).listen(port, host, () => {
+  if (bonk && extLab) {
+    extLab.connectBonk(bonk.worker);
+    bonk.start();
+  }
+  createStudioServer(lab, shutdown, extLab, bonk).listen(port, host, () => {
     console.log(
       `[studio-server] Test Lab on http://${host}:${port} (data: ${DATA_ROOT})`,
     );

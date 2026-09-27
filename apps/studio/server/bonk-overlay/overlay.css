@@ -1,0 +1,30 @@
+html,
+body {
+  margin: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: transparent;
+}
+#stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+}
+.projectile {
+  position: absolute;
+  left: 960px;
+  top: 400px;
+  width: 150px;
+  height: 150px;
+}
+.impact {
+  position: absolute;
+  left: 900px;
+  top: 340px;
+  width: 120px;
+  height: 120px;
+  border: 8px solid #ffd84a;
+  border-radius: 50%;
+  box-sizing: border-box;
+}

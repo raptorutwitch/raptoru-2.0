@@ -33,6 +33,7 @@ const copies = [
   'apps/twitch-bot/dist',
   'apps/twitch-bot/package.json',
   'apps/studio/server/dist',
+  'apps/studio/server/bonk-overlay',
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
