@@ -15,23 +15,42 @@ import {
   TwitchViewerError,
   type TwitchViewerCatalog,
 } from './twitch-viewer.js';
+import {
+  THIRD_PARTY_PROVIDERS,
+  type ThirdPartyEmote,
+  type ThirdPartyEmotes,
+  type ThirdPartyProvider,
+} from './third-party-emotes.js';
 
 // Bonk V2, Lab slice. Core owns validation, the authoritative interaction, its durable order
 // (channel_sequence) and its status; Studio only executes and acknowledges. Test only: the payment
 // is a simulated snapshot (real_debited = 0). This module deliberately imports nothing from
 // Wallet, Loyalty or stats: a Lab Bonk can never move real Jetons, credits or progression.
 
-/** First slice: a single local Twemoji, resolved by Core (never a URL from the caller). */
-export const BONK_LAB_EMOTES: Record<
-  string,
-  { glyph: string; url: string; animated: boolean }
-> = {
-  'unicode:1f600': {
-    glyph: '😀',
-    url: 'assets/twemoji/svg/1f600.svg',
+/**
+ * Unicode emoji -> local Twemoji, resolved by Core (never a URL from the caller). The id carries
+ * the exact code points: the glyph must match them, and the asset path is derived with the same
+ * rule as the extension (FE0F dropped, leading zeros trimmed). A path without a Twemoji asset
+ * makes the renderer fail explicitly; it is never substituted.
+ */
+export function twemojiEmote(
+  id: string,
+): { glyph: string; url: string; animated: boolean } | null {
+  const hex = /^unicode:([0-9a-f]{1,6}(?:-[0-9a-f]{1,6}){0,9})$/.exec(id)?.[1];
+  if (!hex) return null;
+  const parts = hex.split('-');
+  const points = parts.map((part) => parseInt(part, 16));
+  if (points.some((point) => point > 0x10ffff)) return null;
+  const path = parts
+    .filter((part) => part !== 'fe0f')
+    .map((part) => part.replace(/^0+(?=[0-9a-f])/, ''))
+    .join('-');
+  return {
+    glyph: String.fromCodePoint(...points),
+    url: `assets/twemoji/svg/${path}.svg`,
     animated: false,
-  },
-};
+  };
+}
 
 export const BONK_LAB_RULES = {
   simulatedCost: 200,
@@ -68,9 +87,12 @@ export class BonkLabUnavailableError extends Error {
 
 export class BonkLabNotFoundError extends Error {}
 
+const isThirdParty = (provider: string): provider is ThirdPartyProvider =>
+  (THIRD_PARTY_PROVIDERS as readonly string[]).includes(provider);
+
 interface Row {
   interaction_id: string;
-  provider: 'unicode' | 'twitch';
+  provider: BonkLabInteraction['provider'];
   idempotency_key: string;
   request_hash: string;
   channel_id: string;
@@ -153,7 +175,19 @@ export class BonkLabService {
     private readonly clock: Clock,
     /** Twitch viewer catalog (Lab). Without it, only the local Twemoji is admitted. */
     private readonly twitch: TwitchViewerCatalog | null = null,
+    /** 7TV/BTTV/FFZ public catalogs of the channel (Lab). Without it, those providers are refused. */
+    private readonly thirdParty: ThirdPartyEmotes | null = null,
   ) {}
+
+  /** Public 7TV/BTTV/FFZ catalog of the channel (for the Studio façade). */
+  async thirdPartyCatalog(force = false) {
+    if (!this.thirdParty)
+      throw new BonkLabError409(
+        'emote_not_available',
+        'third-party emotes disabled',
+      );
+    return this.thirdParty.catalog({ force });
+  }
 
   /**
    * Emote resolved by Core from its own data: the local Twemoji table, or the viewer's stored
@@ -163,13 +197,34 @@ export class BonkLabService {
     q: Queryable,
     req: BonkLabAdmitRequest,
     twitchError: string | null,
+    thirdParty: ThirdPartyEmote | 'unavailable' | null = null,
   ): Promise<{ glyph: string | null; url: string; animated: boolean }> {
+    if (isThirdParty(req.emote.provider)) {
+      // Resolved before the transaction from the channel's public catalog: provider + id only.
+      if (req.emote.glyph)
+        throw new BonkLabError409('emote_not_available', 'unexpected glyph');
+      if (thirdParty === 'unavailable')
+        throw new BonkLabError409(
+          'catalog_unavailable',
+          `${req.emote.provider} catalog unavailable`,
+        );
+      if (!thirdParty)
+        throw new BonkLabError409(
+          'emote_not_in_catalog',
+          `not a ${req.emote.provider} emote of this channel`,
+        );
+      return {
+        glyph: null,
+        url: thirdParty.url,
+        animated: thirdParty.animated,
+      };
+    }
     if (req.emote.provider === 'unicode') {
-      const emote = BONK_LAB_EMOTES[req.emote.id];
+      const emote = twemojiEmote(req.emote.id);
       if (!emote)
         throw new BonkLabError409(
           'emote_not_available',
-          `emote ${req.emote.id} is not available in this Lab slice`,
+          `emote ${req.emote.id} is not a Unicode emoji id`,
         );
       if (req.emote.glyph && req.emote.glyph !== emote.glyph)
         throw new BonkLabError409(
@@ -277,6 +332,19 @@ export class BonkLabService {
             ? error.code
             : 'catalog_unavailable';
       });
+    let thirdParty: ThirdPartyEmote | 'unavailable' | null = null;
+    const provider = req.emote.provider;
+    if (isThirdParty(provider)) {
+      const prefix = `${provider}:`;
+      const id = req.emote.id.startsWith(prefix)
+        ? req.emote.id.slice(prefix.length)
+        : '';
+      thirdParty = this.thirdParty
+        ? await this.thirdParty
+            .resolve(provider, id)
+            .catch(() => 'unavailable' as const)
+        : null;
+    }
 
     return this.db.tx(async (q) => {
       // Channel row lock: serializes admissions of the channel (durable sequence allocation).
@@ -304,7 +372,7 @@ export class BonkLabService {
         return { interaction: toInteraction(prior), replayed: true };
       }
 
-      const emote = await this.resolveEmote(q, req, twitchError);
+      const emote = await this.resolveEmote(q, req, twitchError, thirdParty);
 
       await this.sweep(q, req.channel_id);
       await this.assertReady(q);

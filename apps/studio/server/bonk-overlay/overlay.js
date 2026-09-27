@@ -40,14 +40,22 @@ async function play(i) {
   if (seen.size > 1000) seen.delete(seen.values().next().value);
   const image = new Image();
   image.className = 'projectile';
-  // Only two URL shapes, both built by Core: the local Twemoji, or a Twitch CDN emote URL.
+  // Only the URL shapes built by Core: the local Twemoji, or one CDN template per provider.
   // Anything else fails explicitly (never substituted by another image).
-  const twitchUrl =
-    /^https:\/\/static-cdn\.jtvnw\.net\/emoticons\/v2\/[A-Za-z0-9_]{1,64}\/(static|animated)\/dark\/3\.0$/;
+  const cdnUrl = {
+    twitch:
+      /^https:\/\/static-cdn\.jtvnw\.net\/emoticons\/v2\/[A-Za-z0-9_]{1,64}\/(static|animated)\/dark\/3\.0$/,
+    '7tv': /^https:\/\/cdn\.7tv\.app\/emote\/[0-9A-Za-z]{24,26}\/4x\.webp$/,
+    bttv: /^https:\/\/cdn\.betterttv\.net\/emote\/[0-9a-f]{24}\/3x$/,
+    ffz: /^https:\/\/cdn\.frankerfacez\.com\/emote\/[0-9]{1,10}\/(animated\/)?[124]$/,
+  };
+  const twemojiUrl =
+    /^assets\/twemoji\/svg\/[0-9a-f]{1,6}(-[0-9a-f]{1,6}){0,9}\.svg$/;
   const src =
-    i.provider === 'unicode' && i.emote_url === 'assets/twemoji/svg/1f600.svg'
+    i.provider === 'unicode' && twemojiUrl.test(i.emote_url)
       ? '/ext/' + i.emote_url
-      : i.provider === 'twitch' && twitchUrl.test(i.emote_url)
+      : Object.hasOwn(cdnUrl, i.provider) &&
+          cdnUrl[i.provider].test(i.emote_url)
         ? i.emote_url
         : null;
   if (!src || i.test_mode !== true || i.payment_mode !== 'simulated') {

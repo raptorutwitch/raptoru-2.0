@@ -1,4 +1,11 @@
-import type { BonkLabCatalog, BonkLabViewer } from '@raptoru/schemas';
+import {
+  BonkLabProvider,
+  type BonkLabCatalog,
+  type BonkLabThirdPartyCatalog,
+  type BonkLabViewer,
+} from '@raptoru/schemas';
+
+const BONK_PROVIDERS: readonly BonkLabProvider[] = BonkLabProvider.options;
 import type { ViewerAuth } from '../bonk-lab/viewer-auth.js';
 import type { BonkWorker } from '../bonk-lab/worker.js';
 import { readdirSync } from 'node:fs';
@@ -169,6 +176,8 @@ export function twitchGroups(catalog: BonkLabCatalog): Json[] {
       source: 'twitch',
       provider: 'twitch',
       image_url: e.url,
+      // Grid shows the static frame; the picker swaps to image_url on hover/selection.
+      static_url: e.static_url,
       animated: e.animated,
       emote_set_id: e.emote_set_id,
       emote_type: e.emote_type,
@@ -179,9 +188,75 @@ export function twitchGroups(catalog: BonkLabCatalog): Json[] {
   );
 }
 
+/**
+ * 7TV/BTTV/FFZ catalog (resolved by Core) -> picker groups: one group per provider and scope
+ * (channel, then globals). The extension only ever sends back `provider` + `provider:id`.
+ */
+export function thirdPartyGroups(catalog: BonkLabThirdPartyCatalog): Json[] {
+  const groups: Json[] = [];
+  for (const provider of ['7tv', 'bttv', 'ffz'] as const)
+    for (const scope of ['channel', 'global'] as const) {
+      const emotes = catalog.emotes.filter(
+        (e) => e.provider === provider && e.scope === scope,
+      );
+      if (!emotes.length) continue;
+      groups.push({
+        id: `${provider}-${scope}`,
+        label:
+          scope === 'global'
+            ? 'Globales'
+            : (catalog.channel_display_name ?? 'Chaîne'),
+        source: provider,
+        provider,
+        scope,
+        emotes: emotes.map((e) => ({
+          id: `${provider}:${e.id}`,
+          label: e.name,
+          source: provider,
+          provider,
+          image_url: e.url,
+          animated: e.animated,
+        })),
+      });
+    }
+  return groups;
+}
+
 export class LabEbs {
   private bonkWorker: BonkWorker | null = null;
   private viewerAuth: ViewerAuth | null = null;
+  private thirdPartyCatalog:
+    ((refresh?: boolean) => Promise<BonkLabThirdPartyCatalog>) | null = null;
+  /** 7TV/BTTV/FFZ groups of the channel (last good catalog kept on a failed refresh). */
+  private thirdParty: { groups: Json[]; at: number } = { groups: [], at: 0 };
+
+  private thirdPartyLoading: Promise<void> | null = null;
+
+  /** Same stale-while-revalidate rule as the Twitch catalog (never blocks once known). */
+  private async refreshThirdParty(force = false) {
+    if (!this.thirdPartyCatalog) return;
+    if (!force && Date.now() - this.thirdParty.at < 60_000) return;
+    if (force) return this.loadThirdParty(true);
+    this.thirdPartyLoading ??= this.loadThirdParty(false).finally(() => {
+      this.thirdPartyLoading = null;
+    });
+    if (!this.thirdParty.groups.length) await this.thirdPartyLoading;
+  }
+
+  private async loadThirdParty(force: boolean) {
+    if (!this.thirdPartyCatalog) return;
+    try {
+      const groups = thirdPartyGroups(await this.thirdPartyCatalog(force));
+      this.thirdParty = {
+        groups: groups.length ? groups : this.thirdParty.groups,
+        at: Date.now(),
+      };
+    } catch {
+      // Core not ready yet (e.g. warm-up at startup) or unreachable: keep the last groups and
+      // retry shortly instead of caching the failure for a minute.
+      this.thirdParty = { ...this.thirdParty, at: Date.now() - 55_000 };
+    }
+  }
   /** Linked real Twitch viewer (Bonk Lab) and its catalog, refreshed from Core. */
   private twitch: {
     viewer: BonkLabViewer | null;
@@ -189,23 +264,49 @@ export class LabEbs {
     error: string | null;
     at: number;
   } = { viewer: null, groups: [], error: null, at: 0 };
-  connectBonk(worker: BonkWorker, viewerAuth: ViewerAuth | null = null) {
+  connectBonk(
+    worker: BonkWorker,
+    viewerAuth: ViewerAuth | null = null,
+    thirdPartyCatalog:
+      ((refresh?: boolean) => Promise<BonkLabThirdPartyCatalog>) | null = null,
+  ) {
     this.bonkWorker = worker;
     this.viewerAuth = viewerAuth;
+    this.thirdPartyCatalog = thirdPartyCatalog;
+    // Warm the public 7TV/BTTV/FFZ catalog now: extension requests never wait for it.
+    void this.refreshThirdParty();
   }
 
   /** ViewerAuth generation already reflected in `twitch` (a new link invalidates the cache). */
   private twitchGeneration = -1;
 
+  private twitchLoading: Promise<void> | null = null;
+
+  /**
+   * Stale-while-revalidate: with a catalog already known for the same linked viewer, answer now
+   * and reload in the background. A Helix reload takes 8-9 s for a big catalog (measured with
+   * 1141 emotes), around the extension request timeout (8 s). A forced refresh waits for it at
+   * most 6 s when a catalog is already known, then answers with it (the reload still completes).
+   */
   private async refreshTwitch(force = false) {
     if (!this.viewerAuth) return;
     const generation = this.viewerAuth.generation;
-    if (
-      !force &&
-      generation === this.twitchGeneration &&
-      Date.now() - this.twitch.at < 5000
-    )
+    const sameViewer = generation === this.twitchGeneration;
+    if (!force && sameViewer && Date.now() - this.twitch.at < 5000) return;
+    if (force) {
+      const load = this.loadTwitch(generation, true);
+      if (!(sameViewer && this.twitch.viewer)) return load;
+      await Promise.race([load, new Promise((r) => setTimeout(r, 6000))]);
       return;
+    }
+    this.twitchLoading ??= this.loadTwitch(generation, false).finally(() => {
+      this.twitchLoading = null;
+    });
+    if (!(sameViewer && this.twitch.viewer)) await this.twitchLoading;
+  }
+
+  private async loadTwitch(generation: number, force: boolean) {
+    if (!this.viewerAuth) return;
     this.twitchGeneration = generation;
     try {
       const viewer = (await this.viewerAuth.viewers()).viewers[0] ?? null;
@@ -403,6 +504,9 @@ export class LabEbs {
   ): Promise<Reply> {
     let caller = parseLabToken(headers.authorization);
     if (!caller) return this.fail(401, 'unauthorized');
+    if (this.bonkWorker && (path === '/session' || path.startsWith('/emotes')))
+      // Never forced from the extension: Core caches the public catalogs 10 min.
+      await this.refreshThirdParty();
     // Bonk Lab with a connected Twitch account: the viewer role IS that account (user_id = token
     // owner), like a real Twitch JWT would say. Other roles keep their fictitious identities.
     if (this.viewerAuth && caller.identity.role === 'viewer') {
@@ -454,12 +558,12 @@ export class LabEbs {
       const p = body.payload as Json | undefined;
       if (
         !p ||
-        !['unicode', 'twitch'].includes(String(p.emote_source)) ||
+        !BONK_PROVIDERS.includes(p.emote_source as BonkLabProvider) ||
         !Array.isArray(p.emotes) ||
         p.emotes.length !== 1
       )
         return this.fail(400, 'invalid_payload');
-      const provider = p.emote_source === 'twitch' ? 'twitch' : 'unicode';
+      const provider = p.emote_source as BonkLabProvider;
       try {
         const result = await this.bonkWorker.admit(
           {
@@ -470,7 +574,7 @@ export class LabEbs {
           {
             provider,
             id: String(p.emotes[0]),
-            // Twitch emotes carry no glyph; Core resolves the image from its own catalog.
+            // Only Unicode carries a glyph; Core resolves every image from its own catalog.
             glyph:
               provider === 'unicode' && typeof p.emote_glyph === 'string'
                 ? p.emote_glyph
@@ -1014,23 +1118,9 @@ export class LabEbs {
   }
 
   private bonkGroups(): Json[] {
-    if (this.bonkWorker)
-      return [
-        {
-          id: 'unicode',
-          label: 'Twemoji Lab',
-          source: 'unicode',
-          emotes: [
-            {
-              id: 'unicode:1f600',
-              label: 'Sourire',
-              glyph: '😀',
-              source: 'unicode',
-              image_url: 'assets/twemoji/svg/1f600.svg',
-            },
-          ],
-        },
-      ];
+    // Bonk Lab: the extension's own Unicode/Twemoji bank is the emoji catalog (Core validates
+    // any Unicode id); 7TV/BTTV/FFZ come from the channel's public catalog resolved by Core.
+    if (this.bonkWorker) return this.thirdParty.groups;
     const bonk = (this.demo('paid').modules as Json[]).find(
       (m) => m.id === 'bonk',
     );

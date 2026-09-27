@@ -1,7 +1,8 @@
 # Raptoru Live — Twitch extension
 
-`extension/` is the production extension, imported **unchanged** from the package currently
-published on Twitch:
+`extension/` started as the production extension, imported unchanged from the package currently
+published on Twitch, and is now the source of the next upload (first change: Bonk picker V2,
+`shared/emote-picker.js` + `picker.css`):
 
 - source: `raptoru-live-production-20260920-095259Z-consolidated-final.zip`
   (sha256 `ea20acd07acafb39d78d06abce357d0922f10388b260975d2f161ce8c4c1bfe3`, 2014 files);
@@ -17,6 +18,7 @@ scale 1024), config and live config `config.html`.
 
 ```sh
 npm run build -w @raptoru/twitch-extension   # dist/ = upload package (checks entry points and production config)
+npm test -w @raptoru/twitch-extension        # pure logic of shared/emote-picker.js (search, sections, grid)
 ```
 
 ## Local testing: Raptoru Studio → Extension Lab

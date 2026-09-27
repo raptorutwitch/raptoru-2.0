@@ -6,6 +6,20 @@ import { z } from 'zod';
 const Id = z.string().regex(/^\d+$/).max(32);
 const Key = z.string().min(1).max(128);
 
+/**
+ * Emote origin. Core resolves every emote from its own data (never a URL from the caller):
+ * Unicode -> local Twemoji, Twitch -> the viewer's catalog, 7TV/BTTV/FFZ -> public catalog of the
+ * channel (global + channel sets).
+ */
+export const BonkLabProvider = z.enum([
+  'unicode',
+  'twitch',
+  '7tv',
+  'bttv',
+  'ffz',
+]);
+export type BonkLabProvider = z.infer<typeof BonkLabProvider>;
+
 /** Admission of one Bonk (one click = one interaction), sent by the Studio Lab façade. */
 export const BonkLabAdmitRequest = z.strictObject({
   idempotency_key: Key,
@@ -13,7 +27,7 @@ export const BonkLabAdmitRequest = z.strictObject({
   viewer: z.strictObject({ id: Id, display_name: z.string().min(1).max(64) }),
   lab_session_id: z.string().min(1).max(64),
   emote: z.strictObject({
-    provider: z.enum(['unicode', 'twitch']),
+    provider: BonkLabProvider,
     id: z.string().min(1).max(64),
     glyph: z.string().max(32).nullable().optional(),
   }),
@@ -55,7 +69,7 @@ export const BonkLabInteraction = z.object({
   viewer_id: z.string(),
   viewer_display_name: z.string(),
   type: z.literal('bonk'),
-  provider: z.enum(['unicode', 'twitch']),
+  provider: BonkLabProvider,
   emote_id: z.string(),
   emote_glyph: z.string().nullable(),
   /** Resolved by Core; relative to the extension asset root (served locally by Studio). */
@@ -177,3 +191,22 @@ export const BonkLabCatalog = z.object({
   owners: z.array(BonkLabTwitchOwner),
 });
 export type BonkLabCatalog = z.infer<typeof BonkLabCatalog>;
+
+/** One 7TV/BTTV/FFZ emote of the channel's public catalog (URL built by Core). */
+export const BonkLabThirdPartyEmote = z.object({
+  provider: z.enum(['7tv', 'bttv', 'ffz']),
+  id: z.string(),
+  name: z.string(),
+  scope: z.enum(['global', 'channel']),
+  animated: z.boolean(),
+  url: z.string(),
+});
+export type BonkLabThirdPartyEmote = z.infer<typeof BonkLabThirdPartyEmote>;
+
+export const BonkLabThirdPartyCatalog = z.object({
+  fetched_at: z.string(),
+  channel_display_name: z.string().nullable(),
+  emotes: z.array(BonkLabThirdPartyEmote),
+  errors: z.record(z.string(), z.string()),
+});
+export type BonkLabThirdPartyCatalog = z.infer<typeof BonkLabThirdPartyCatalog>;

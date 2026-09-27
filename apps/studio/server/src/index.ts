@@ -117,11 +117,7 @@ async function extensionLabRoute(
       send(res, 405, { error: 'method_not_allowed' });
       return true;
     }
-    const file = await extensionFile(
-      EXTENSION_DIR,
-      url.pathname,
-      process.env.BONK_LAB_ONLY === '1',
-    );
+    const file = await extensionFile(EXTENSION_DIR, url.pathname);
     res.writeHead(file.status, {
       'content-type': file.contentType,
       'cache-control': 'no-store',
@@ -291,7 +287,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     return null;
   });
   if (bonk && extLab) {
-    extLab.connectBonk(bonk.worker, bonk.viewerAuth);
+    extLab.connectBonk(bonk.worker, bonk.viewerAuth, bonk.thirdPartyCatalog);
     bonk.start();
   }
   createStudioServer(lab, shutdown, extLab, bonk).listen(port, host, () => {

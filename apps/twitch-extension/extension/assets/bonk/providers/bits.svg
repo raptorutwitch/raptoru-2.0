@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Bits">
+  <!-- Gemme Bits dessinée localement (pas d'asset externe) : facettes violettes façon Twitch. -->
+  <path d="M16 2 4 19.5 16 30 28 19.5Z" fill="#772ce8"/>
+  <path d="M16 2 4 19.5 16 15.5Z" fill="#d1b3ff"/>
+  <path d="M16 2 28 19.5 16 15.5Z" fill="#a970ff"/>
+  <path d="M4 19.5 16 15.5 16 30Z" fill="#9147ff"/>
+  <path d="M28 19.5 16 15.5 16 30Z" fill="#6b21c8"/>
+  <path d="M16 2 4 19.5 16 30 28 19.5Z" fill="none" stroke="#f4edff" stroke-opacity=".35" stroke-width=".8" stroke-linejoin="round"/>
+</svg>

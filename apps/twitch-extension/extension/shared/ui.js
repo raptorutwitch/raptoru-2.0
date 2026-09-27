@@ -15,7 +15,6 @@ import {
 import { RUNTIME } from './runtime-config.js';
 import { walletPaymentMethods, walletCanPayTokens } from './wallet-payment.js';
 import {
-  closeDisclosureSearch,
   createFeedbackSlot,
   createIconButton,
   createWalletFace,
@@ -29,6 +28,8 @@ import {
   updateIconButton,
 } from './ui-primitives.js';
 import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
+import { createEmotePicker } from './emote-picker.js';
+import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -1187,6 +1188,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let bonkAmmoIndex = 0;
   let bonkAmmoLoop = false;
   let bonkDrawerOpen = false;
+  let bonkEmotePicker = null;
   let raffleHistoryOpen = false;
   let raffleTimer = null;
   let raffleTimerSnapshot = null;
@@ -3172,6 +3174,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     bonkDrawerOpen = false;
 
     const emoteStateKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
+    let oauthControls = null;
     const emoteCatalogExpired = !emoteCatalogLoadedAt
       || Date.now() - emoteCatalogLoadedAt >= EMOTE_CATALOG_REFRESH_MS;
     if (state?.emotes?.connected
@@ -3189,7 +3192,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       body.append(connect);
       body.append(el('p', 'jdm-emote-connect__hint', 'Accès minimal user:read:emotes. Les emotes publiques restent utilisables sans autorisation.'));
     } else if (state?.emotes?.twitch_connected === true) {
-      const oauthControls = el('div', 'jdm-emote-oauth-controls');
+      oauthControls = el('div', 'jdm-emote-oauth-controls');
       const refresh = createIconButton({
         icon: UI_ICONS.refresh,
         label: 'Actualiser les emotes Twitch',
@@ -3207,7 +3210,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       });
       disconnect.addEventListener('click', () => disconnectEmoteAuthorization(body));
       oauthControls.append(refresh, disconnect);
-      body.append(oauthControls);
+      // Placés dans la ligne de recherche du picker (voir plus bas), plus au-dessus de la grille.
     }
     if (emoteLoading) {
       body.append(el('p', 'jdm-hint', 'Chargement de tes emotes Twitch…'));
@@ -3242,115 +3245,93 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       favoriteIds: favorites,
       recentIds: recents,
     });
-    const getDefaultGroupId = (availableGroups = getGroups()) => availableGroups.find(
-      (group) => group.id === 'unicode-smileys-emotion',
-    )?.id
-      ?? availableGroups.find((group) => !['favorites', 'recents'].includes(group.id))?.id
-      ?? availableGroups[0]?.id;
-    const initialGroups = getGroups();
-    let activeGroupId = initialGroups.some((group) => group.id === drafts.bonk.activeGroupId)
-      ? drafts.bonk.activeGroupId
-      : getDefaultGroupId(initialGroups);
-    let query = drafts.bonk.query;
-    let searchOpen = Boolean(drafts.bonk.searchOpen);
-
-    const ensureActiveGroup = () => {
-      const availableGroups = getGroups();
-      if (!availableGroups.some((group) => group.id === activeGroupId)) {
-        activeGroupId = getDefaultGroupId(availableGroups);
-        drafts.bonk.activeGroupId = activeGroupId;
-      }
-      return availableGroups;
-    };
-
     const groupEmotes = (group) => {
       if (group.id === 'favorites') return favorites.map((id) => emoteById.get(id)).filter(Boolean);
       if (group.id === 'recents') return recents.map((id) => emoteById.get(id)).filter(Boolean);
       return group.emotes.map((item) => normalizeBonkEmote(group, item));
     };
 
-    const picker = el('div', 'jdm-bonk-picker');
-    const searchWrap = el('div', `jdm-ui-search jdm-emote-search${searchOpen ? ' is-open' : ''}`);
-    searchWrap.id = 'bonk-emote-search';
-    searchWrap.setAttribute('role', 'search');
-    const searchField = el('label', 'jdm-ui-search__field jdm-emote-search__field');
-    const search = el('input', 'jdm-ui-search__input jdm-emote-search__input');
-    search.type = 'search';
-    search.placeholder = 'Rechercher une emote';
-    search.value = query;
-    search.disabled = !searchOpen;
-    search.setAttribute('aria-hidden', String(!searchOpen));
-    search.setAttribute('aria-label', 'Rechercher une emote');
-    search.dataset.draftKey = 'bonk-search';
-    search.autocomplete = 'off';
-    searchField.append(search);
-    const searchClose = createIconButton({
-      icon: UI_ICONS.close,
-      label: 'Fermer la recherche Bonk',
-      title: 'Fermer la recherche',
-      className: 'jdm-emote-search__close',
-      iconClassName: 'jdm-emote-search__close-icon',
-    });
-    searchWrap.append(searchField, searchClose);
-
-    const searchToggle = createIconButton({
-      icon: UI_ICONS.search,
-      label: 'Ouvrir la recherche Bonk',
-      title: 'Rechercher une emote',
-      className: 'jdm-emote-search__toggle',
-      iconClassName: 'jdm-emote-search__icon',
-    });
-    searchToggle.setAttribute('aria-controls', searchWrap.id);
-
-    const sourceRail = el('div', 'jdm-emote-sources');
-    sourceRail.setAttribute('aria-label', 'Catégories d’emotes');
-    const sourceScroll = el('div', 'jdm-emote-source-scroll');
-    sourceScroll.dataset.scrollKey = 'bonk-emote-sources';
-    sourceScroll.setAttribute('role', 'tablist');
-    sourceScroll.setAttribute('aria-label', 'Catégories d’emotes');
-    sourceRail.append(searchToggle, sourceScroll);
-
-    const setSearchOpen = (open, { focus = false } = {}) => {
-      searchOpen = Boolean(open);
-      drafts.bonk.searchOpen = searchOpen;
-      searchWrap.classList.toggle('is-open', searchOpen);
-      searchToggle.setAttribute('aria-expanded', String(searchOpen));
-      updateIconButton(searchToggle, {
-        icon: UI_ICONS.search,
-        label: searchOpen ? 'Fermer la recherche Bonk' : 'Ouvrir la recherche Bonk',
-        title: searchOpen ? 'Fermer la recherche' : 'Rechercher une emote',
+    // Adaptateur vers le picker générique : grille statique (static_url), animation au survol
+    // ou à la sélection via image_url. Twemoji reste la couche visuelle des emotes Unicode.
+    const demoMode = state?.demo_mode === true;
+    const pickerItem = (emote) => {
+      const twemoji = bonkTwemojiAssetPath(emote);
+      return {
+        id: emote.id,
+        label: emote.label,
+        // image_url est l'URL animée quand l'emote l'est : animée directement dans la grille.
+        src: twemoji ?? emote.image_url ?? null,
+        animated: emote.animated === true,
+        glyph: emote.mark ?? emote.glyph,
+        disabled: !isBonkEmoteSelectable(emote, { demoMode }),
+      };
+    };
+    // Familles (Récents, Favoris, Twitch, Bits, Extension, Emoji) : voir bonk-picker-groups.js.
+    const PROVIDER_KEYWORDS = {
+      bits: ['bits'],
+      '7tv': ['7tv', 'seventv'],
+      bttv: ['bttv', 'betterttv'],
+      ffz: ['ffz', 'frankerfacez'],
+    };
+    const pickerGroups = () => {
+      const arranged = arrangeBonkPickerGroups(getGroups(), groupEmotes);
+      // Avatar Twitch d'une chaîne (s'il est connu) réutilisé pour son contexte Extension.
+      const avatars = new Map();
+      for (const { group } of arranged) {
+        if (group?.source !== 'twitch') continue;
+        const avatar = providerPresentation(group).avatarUrl;
+        if (avatar) avatars.set(String(group.channel_display_name ?? group.label).toLowerCase(), avatar);
+      }
+      return arranged.map((entry) => {
+        const { group, family } = entry;
+        const provider = group ? providerPresentation(group) : null;
+        const isExtension = family?.id === 'extension';
+        const label = entry.label ?? (group.id === 'twitch-global'
+          ? 'Twitch'
+          : String(group.label || provider.label || 'Emoji'));
+        const globalContext = isExtension && entry.scope === 'global';
+        const parts = entry.parts?.map((part) => ({
+          id: part.id,
+          label: part.label,
+          iconSrc: part.iconSrc,
+          keywords: PROVIDER_KEYWORDS[part.provider] ?? [],
+          emotes: part.emotes.map(pickerItem),
+        }));
+        return {
+          id: entry.id,
+          label,
+          keywords: [
+            group?.channel_login,
+            group?.channel_display_name,
+            ...(PROVIDER_KEYWORDS[family?.id] ?? []),
+            ...(isExtension ? ['extension'] : []),
+          ].filter(Boolean),
+          matchLabel: family?.id !== 'emoji',
+          icon: isExtension || provider?.icon === 'twitch' ? label.slice(0, 1).toUpperCase() : provider?.icon ?? '•',
+          iconSrc: entry.iconSrc ?? (globalContext ? 'assets/twemoji/svg/1f310.svg' : null),
+          iconNode: group?.id === 'twitch-global' ? createTwitchBrandIcon() : null,
+          avatarUrl: isExtension
+            ? (globalContext ? null : avatars.get(label.toLowerCase()) ?? null)
+            : provider?.avatarUrl ?? null,
+          family: family
+            ? { ...family, iconNode: family.id === 'twitch' ? createTwitchBrandIcon() : null }
+            : null,
+          virtual: group?.source === 'virtual',
+          // Ordre personnel : glisser-déposer (souris) dans la section Favoris uniquement.
+          reorderable: entry.id === 'favorites',
+          ...(parts ? { parts } : {}),
+          emotes: parts ? parts.flatMap((part) => part.emotes) : entry.emotes.map(pickerItem),
+        };
       });
-      search.disabled = !searchOpen;
-      search.setAttribute('aria-hidden', String(!searchOpen));
-      searchClose.disabled = !searchOpen;
-      searchClose.tabIndex = searchOpen ? 0 : -1;
-      searchWrap.setAttribute('aria-hidden', String(!searchOpen));
-      if (focus && searchOpen) queueMicrotask(() => search.focus({ preventScroll: true }));
     };
-    const closeSearch = ({ restoreFocus = true } = {}) => {
-      const next = closeDisclosureSearch({ open: searchOpen, query });
-      searchOpen = next.open;
-      query = next.query;
-      drafts.bonk.searchOpen = next.open;
-      drafts.bonk.query = next.query;
-      search.value = next.query;
-      setSearchOpen(false);
-      renderSources();
-      renderGallery();
-      if (restoreFocus) searchToggle.focus({ preventScroll: true });
-    };
-    setSearchOpen(searchOpen);
-    searchToggle.addEventListener('click', () => {
-      if (searchOpen) closeSearch();
-      else setSearchOpen(!searchOpen, { focus: true });
+
+    // Instance unique : le rendu global (polling) la déplace sans reconstruire ses cellules.
+    bonkEmotePicker ??= createEmotePicker({
+      label: 'Emotes Bonk',
+      railKey: 'raptoru-live:bonk-rail-open',
     });
-    searchClose.addEventListener('click', () => closeSearch());
-    search.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeSearch();
-    });
+    const emotePicker = bonkEmotePicker;
+    const picker = el('div', 'jdm-bonk-picker rl-bonk-picker');
 
     const modeBar = el('div', 'jdm-bonk-modebar');
     const modeToggle = el('button', 'jdm-bonk-ammo-toggle', '+ Munitions');
@@ -3403,11 +3384,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     drawerHead.append(drawerTitle, drawerHint, drawerClose);
     drawer.append(drawerHead, modeBar, ammoTray);
 
-    const gallery = el('div', 'jdm-emote-gallery');
-    gallery.dataset.scrollKey = 'bonk-emote-gallery';
-    gallery.setAttribute('role', 'tabpanel');
-    gallery.setAttribute('aria-label', 'Galerie des emotes');
-
     const chosen = el('div', 'jdm-bonk-choice');
     chosen.setAttribute('aria-label', 'Emote sélectionnée');
     chosen.setAttribute('aria-live', 'polite');
@@ -3450,246 +3426,43 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       return bonkAmmunition[bonkAmmoIndex] ?? null;
     };
 
-    const syncFavoriteVisuals = () => {
-      for (const card of gallery.querySelectorAll('.jdm-emote-cell')) {
-        const favorite = card.querySelector('.jdm-emote-cell__favorite');
-        if (!favorite) continue;
-        const isFavorite = favorites.includes(String(card.dataset.emoteId));
-        card.classList.toggle('is-favorite', isFavorite);
-        favorite.textContent = isFavorite ? UI_ICONS.favoriteActive : UI_ICONS.favorite;
-        favorite.classList.toggle('is-active', isFavorite);
-        favorite.setAttribute('aria-pressed', String(isFavorite));
-        favorite.setAttribute('aria-label', isFavorite
-          ? `Retirer ${card.dataset.emoteLabel} des favoris`
-          : `Ajouter ${card.dataset.emoteLabel} aux favoris`);
-        favorite.title = favorite.getAttribute('aria-label');
-      }
-    };
-
     const toggleFavorite = (emoteId) => {
       const id = String(emoteId ?? '');
       if (!emoteById.has(id)) return false;
       favorites = toggleBonkFavoriteIds(favorites, id, emoteById.keys());
       writeStoredIds(favoriteKey, favorites);
-
-      const activeWasFavorites = activeGroupId === 'favorites';
-      const galleryScrollTop = gallery.scrollTop;
-      const availableGroups = getGroups();
-      if (activeWasFavorites && !favorites.length) {
-        activeGroupId = getDefaultGroupId(availableGroups);
-        drafts.bonk.activeGroupId = activeGroupId;
-      }
-      renderSources();
-      if (activeWasFavorites || activeGroupId === 'favorites') {
-        renderGallery();
-        gallery.scrollTop = galleryScrollTop;
-      } else syncFavoriteVisuals();
+      emotePicker.setData(pickerGroups());
       syncSelection();
       return true;
     };
 
-    const renderEmote = (emote) => {
-      const card = el('div', 'jdm-emote-cell');
-      card.dataset.emoteId = emote.id;
-      card.dataset.emoteLabel = emote.label;
-      card.setAttribute('role', 'group');
-      card.setAttribute('aria-label', emote.label);
-      const selectButton = el('button', 'jdm-emote-cell__select');
-      selectButton.type = 'button';
-      selectButton.title = emote.label;
-      selectButton.setAttribute('aria-label', `Ajouter ${emote.label} à la séquence Bonk`);
-      const queued = bonkAmmunition.some((item) => item.id === emote.id);
-      selectButton.setAttribute('aria-pressed', String(queued || selectedEmote?.id === emote.id));
-      if (!isBonkEmoteSelectable(emote, { demoMode: state?.demo_mode === true })) {
-        selectButton.disabled = true;
-        card.classList.add('is-disabled');
-        card.setAttribute('aria-disabled', 'true');
-        selectButton.title = `${emote.label} · autorisation Twitch requise`;
-        selectButton.setAttribute('aria-label', `${emote.label}, autorisation Twitch requise`);
-      }
-      if (queued || selectedEmote?.id === emote.id) card.classList.add('is-selected');
-      if (queued) card.classList.add('is-queued');
-      if (favorites.includes(emote.id)) card.classList.add('is-favorite');
-
-      const emoteImageUrl = bonkTwemojiAssetPath(emote) ?? emote.image_url;
-      if (emoteImageUrl) {
-        const image = el('img', 'jdm-emote-cell__image');
-        image.src = emoteImageUrl;
-        image.alt = '';
-        image.loading = 'lazy';
-        image.decoding = 'async';
-        selectButton.append(image);
-      } else if (emote.mark) {
-        const mark = el('span', 'jdm-emote-cell__mark', emote.mark);
-        mark.dataset.tone = emote.tone ?? 'violet';
-        selectButton.append(mark);
-      } else {
-        selectButton.append(el('span', 'jdm-emote-cell__glyph', emote.glyph ?? '◌'));
-      }
-
-      const favorite = el('button', 'jdm-emote-cell__favorite', favorites.includes(emote.id)
-        ? UI_ICONS.favoriteActive
-        : UI_ICONS.favorite);
-      favorite.type = 'button';
-      favorite.classList.toggle('is-active', favorites.includes(emote.id));
-      favorite.setAttribute('aria-pressed', String(favorites.includes(emote.id)));
-      favorite.setAttribute('aria-label', favorites.includes(emote.id)
-        ? `Retirer ${emote.label} des favoris`
-        : `Ajouter ${emote.label} aux favoris`);
-      favorite.title = favorite.getAttribute('aria-label');
-      favorite.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleFavorite(emote.id);
-      });
-
-      selectButton.addEventListener('click', () => {
+    emotePicker.setHandlers({
+      onSelect: (id) => {
+        const emote = emoteById.get(id);
+        if (!emote || !isBonkEmoteSelectable(emote, { demoMode })) return;
         bonkAmmoMode = true;
         if (!bonkAmmunition.length) bonkAmmoIndex = 0;
         bonkAmmunition.push(emote);
         selectedEmote = emote;
         drafts.bonk.selectedId = emote.id;
-        recents = [emote.id, ...recents.filter((id) => id !== emote.id)].slice(0, 36);
+        recents = [emote.id, ...recents.filter((item) => item !== emote.id)].slice(0, 36);
         writeStoredIds(recentKey, recents);
         renderAmmo();
         syncBonkDrawer();
         syncSelection();
-        renderSources();
-        if (activeGroupId === 'recents') renderGallery();
-      });
-      card.append(selectButton, favorite);
-      return card;
-    };
-
-    const appendSection = (parent, label, emotes) => {
-      if (!emotes.length) return;
-      const section = el('section', 'jdm-emote-section');
-      const heading = el('div', 'jdm-emote-section__head');
-      heading.append(
-        el('strong', 'jdm-emote-section__title', label),
-        el('span', 'jdm-emote-section__count', String(emotes.length)),
-      );
-      const grid = el('div', 'jdm-emote-grid');
-      for (const emote of emotes) grid.append(renderEmote(emote));
-      section.append(heading, grid);
-      parent.append(section);
-    };
-
-    function renderGallery() {
-      gallery.replaceChildren();
-      const availableGroups = ensureActiveGroup();
-      const normalizedQuery = query.trim().toLocaleLowerCase('fr');
-      if (normalizedQuery) {
-        const activeGroup = availableGroups.find((group) => group.id === activeGroupId);
-        const searchableEmotes = activeGroup?.id === 'favorites'
-          ? groupEmotes(activeGroup)
-          : [...emoteById.values()];
-        const allMatches = searchableEmotes.filter((emote) =>
-          emote.label.toLocaleLowerCase('fr').includes(normalizedQuery));
-        const matches = allMatches.slice(0, 240);
-        appendSection(gallery, `Résultats pour « ${query.trim()} »`, matches);
-        if (!allMatches.length) gallery.append(el('p', 'jdm-emote-empty', 'Aucune emote trouvée.'));
-        if (allMatches.length > matches.length) {
-          gallery.append(el('p', 'jdm-emote-empty', `${allMatches.length - matches.length} autres résultats · précise ta recherche.`));
-        }
-        return;
-      }
-
-      const group = availableGroups.find((candidate) => candidate.id === activeGroupId)
-        ?? availableGroups[0];
-      const emotes = groupEmotes(group);
-      appendSection(gallery, group.label, emotes);
-      if (!emotes.length) {
-        gallery.append(el('p', 'jdm-emote-empty', group.id === 'favorites'
-          ? 'Ajoute une emote avec l’étoile après l’avoir choisie.'
-          : 'Tes dernières emotes apparaîtront ici.'));
-      }
-    }
-
-    function renderSources() {
-      sourceScroll.replaceChildren();
-      const availableGroups = ensureActiveGroup();
-      for (const [index, group] of availableGroups.entries()) {
-        const button = el('button', 'jdm-emote-source');
-        button.type = 'button';
-        button.id = `bonk-emote-source-${index}`;
-        button.dataset.groupId = group.id;
-        button.dataset.source = group.source || 'unicode';
-        const provider = providerPresentation(group);
-        const accessibleLabel = ['7tv', 'bttv', 'ffz'].includes(provider.key)
-          ? String(provider.label || group.label || provider.key)
-          : String(group.label || provider.label || 'Unicode');
-        button.title = accessibleLabel;
-        button.setAttribute('role', 'tab');
-        button.setAttribute('aria-label', accessibleLabel);
-        button.setAttribute('aria-selected', String(group.id === activeGroupId && !query));
-        if (group.id === activeGroupId && !query) button.classList.add('is-active');
-        if (group.id === activeGroupId) gallery.setAttribute('aria-labelledby', button.id);
-        if ((group.id === 'favorites' && !favorites.length) || (group.id === 'recents' && !recents.length)) {
-          button.classList.add('is-empty');
-        }
-        const icon = el(
-          'span',
-          `jdm-emote-source__icon jdm-provider-icon jdm-provider-icon--${provider.key}`,
-        );
-        icon.dataset.provider = provider.key;
-        const iconFallback = el('span', 'jdm-emote-source__fallback', provider.icon);
-        iconFallback.setAttribute('aria-hidden', 'true');
-        const isTwitchGlobal = group.source === 'twitch' && group.id === 'twitch-global';
-        if (isTwitchGlobal) {
-          icon.classList.add('is-global');
-          icon.append(createTwitchBrandIcon());
-        } else if (provider.asset && ['7tv', 'bttv', 'ffz'].includes(provider.key)) {
-          icon.classList.add('is-brand');
-          const brand = el('img', 'jdm-emote-source__brand');
-          brand.src = provider.asset;
-          brand.alt = '';
-          brand.loading = 'eager';
-          brand.decoding = 'async';
-          brand.setAttribute('aria-hidden', 'true');
-          brand.addEventListener('error', () => {
-            icon.classList.remove('is-brand');
-            brand.remove();
-            icon.append(iconFallback);
-          }, { once: true });
-          icon.append(brand);
-        } else {
-          icon.append(iconFallback);
-        }
-        if (provider.avatarUrl) {
-          icon.classList.add('has-avatar');
-          const avatar = el('img', 'jdm-emote-source__avatar');
-          avatar.src = provider.avatarUrl;
-          avatar.alt = '';
-          avatar.loading = 'lazy';
-          avatar.decoding = 'async';
-          avatar.setAttribute('aria-hidden', 'true');
-          avatar.addEventListener('error', () => {
-            icon.classList.remove('has-avatar');
-            avatar.remove();
-          }, { once: true });
-          icon.prepend(avatar);
-        }
-        if (group.source === 'twitch') icon.classList.add('is-channel');
-        const label = group.source === 'twitch'
-          ? (group.id === 'twitch-global' ? 'Twitch' : String(group.label || 'Twitch'))
-          : ['7tv', 'bttv', 'ffz'].includes(provider.key)
-            ? String(provider.label || group.label || provider.key)
-              : String(group.label || 'Unicode');
-        button.append(icon, el('span', 'jdm-emote-source__label', label));
-        button.addEventListener('click', () => {
-          activeGroupId = group.id;
-          query = '';
-          drafts.bonk.activeGroupId = group.id;
-          drafts.bonk.query = '';
-          search.value = '';
-          setSearchOpen(false);
-          renderSources();
-          renderGallery();
-        });
-        sourceScroll.append(button);
-      }
-    }
+        emotePicker.setData(pickerGroups());
+      },
+      onFavorite: (id) => toggleFavorite(id),
+      onReorder: (ids) => {
+        // Même ensemble, nouvel ordre : aucune emote ne peut être ajoutée ou perdue ici.
+        const next = normalizeBonkFavoriteIds(ids, emoteById.keys());
+        if (next.length !== favorites.length || next.some((id) => !favorites.includes(id))) return;
+        favorites = next;
+        writeStoredIds(favoriteKey, favorites);
+        emotePicker.setData(pickerGroups());
+        syncSelection();
+      },
+    });
 
     function renderAmmo() {
       const count = bonkAmmunition.length;
@@ -3764,19 +3537,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
     function syncSelection() {
       const dockEmote = bonkAmmoMode ? nextBonkAmmo() : selectedEmote;
-      const queuedIds = new Set(bonkAmmunition.map((item) => item.id));
-      for (const card of gallery.querySelectorAll('.jdm-emote-cell')) {
-        const isQueued = queuedIds.has(card.dataset.emoteId);
-        const isNext = card.dataset.emoteId === dockEmote?.id;
-        const queueIndex = bonkAmmunition.findIndex((item) => item.id === card.dataset.emoteId);
-        card.classList.toggle('is-selected', isQueued || card.dataset.emoteId === selectedEmote?.id);
-        card.classList.toggle('is-queued', isQueued);
-        card.classList.toggle('is-next', isNext);
-        if (queueIndex >= 0) card.dataset.queueIndex = String(queueIndex + 1);
-        else delete card.dataset.queueIndex;
-        const selectButton = card.querySelector('.jdm-emote-cell__select');
-        selectButton?.setAttribute('aria-pressed', String(isQueued || card.dataset.emoteId === selectedEmote?.id));
+      const queue = new Map();
+      for (const [index, item] of bonkAmmunition.entries()) {
+        if (!queue.has(item.id)) queue.set(item.id, index + 1);
       }
+      emotePicker.setState({
+        selected: [...queue.keys(), ...(selectedEmote ? [selectedEmote.id] : [])],
+        favorites,
+        queue,
+        next: dockEmote?.id ?? null,
+      });
       chosen.classList.toggle('is-empty', !dockEmote);
       chosen.classList.toggle('is-selected', Boolean(dockEmote));
       chosen.classList.toggle('is-next', bonkAmmoMode && Boolean(dockEmote));
@@ -3787,6 +3557,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         chosenName.textContent = 'Choisis une emote';
         favoriteButton.textContent = '☆';
         favoriteButton.disabled = true;
+        favoriteButton.classList.remove('is-active');
+        favoriteButton.setAttribute('aria-pressed', 'false');
       } else {
         const emoteImageUrl = bonkTwemojiAssetPath(dockEmote) ?? dockEmote.image_url;
         if (emoteImageUrl) {
@@ -3807,9 +3579,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         const isFavorite = favorites.includes(favoriteTarget.id);
         favoriteButton.textContent = isFavorite ? '★' : '☆';
         favoriteButton.disabled = !favoriteTarget;
+        // Tactile : ce bouton gère le favori de l'emote touchée en dernier, nommée explicitement
+        // (la barre peut afficher une autre emote : la prochaine de la séquence).
+        favoriteButton.classList.toggle('is-active', isFavorite);
+        favoriteButton.setAttribute('aria-pressed', String(isFavorite));
         favoriteButton.setAttribute('aria-label', isFavorite
-          ? 'Retirer l’emote sélectionnée des favoris'
-          : 'Ajouter l’emote sélectionnée aux favoris');
+          ? `Retirer ${favoriteTarget.label} des favoris`
+          : `Ajouter ${favoriteTarget.label} aux favoris`);
+        favoriteButton.title = favoriteButton.getAttribute('aria-label');
       }
       for (const button of actionButtons) button.disabled = !dockEmote || !interactionsAvailable;
       if (instantBonkButton) instantBonkButton.disabled = !dockEmote || !interactionsAvailable;
@@ -3817,12 +3594,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       composer.setAttribute('aria-hidden', String(!dockEmote));
     }
 
-    search.addEventListener('input', () => {
-      query = search.value;
-      drafts.bonk.query = query;
-      renderSources();
-      renderGallery();
-    });
     favoriteButton.addEventListener('click', () => {
       const favoriteTarget = selectedEmote ?? nextBonkAmmo();
       if (!favoriteTarget) return;
@@ -3840,7 +3611,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       renderAmmo();
       syncBonkDrawer();
-      renderGallery();
       syncSelection();
     });
     loopToggle.addEventListener('click', () => {
@@ -3981,15 +3751,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       syncBonkDrawer();
       queueMicrotask(() => drawerToggle.focus({ preventScroll: true }));
     });
-    picker.append(sourceRail, searchWrap, gallery, bonkFeedback, dock, drawer);
+    picker.append(emotePicker.nav, emotePicker.searchRow, emotePicker.scroller, bonkFeedback, dock, drawer);
     body.append(picker);
     if (!interactionsAvailable && !state?.lab_mode) {
       body.append(el('p', 'jdm-hint', identityShared()
         ? 'Interactions temporairement indisponibles : SAMMI se reconnecte. Aucun jeton ne sera consommé.'
         : 'Partage ton identité Twitch pour utiliser les interactions. Aucun jeton ne sera consommé.'));
     }
-    renderSources();
-    renderGallery();
+    emotePicker.setExtras(oauthControls);
+    emotePicker.setData(pickerGroups());
+    emotePicker.attached();
     renderAmmo();
     syncBonkDrawer();
     syncSelection();

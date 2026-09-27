@@ -6,6 +6,7 @@ import {
   BonkLabError409,
   BonkLabService,
   BonkLabUnavailableError,
+  twemojiEmote,
 } from '../src/bonk-lab/bonk-lab-service.js';
 import { count, setup, type TestCore } from './helpers.js';
 
@@ -112,14 +113,46 @@ describe('Bonk Lab admission', () => {
         }),
       ),
     ).toBe('idempotency_conflict');
+    for (const id of ['unicode:zz', 'unicode:110000', 'twemoji:1f603'])
+      expect(
+        await code(
+          core.bonkLab.admit(admitReq({ emote: { provider: 'unicode', id } })),
+        ),
+      ).toBe('emote_not_available');
     expect(
       await code(
         core.bonkLab.admit(
-          admitReq({ emote: { provider: 'unicode', id: 'unicode:1f603' } }),
+          admitReq({
+            emote: { provider: 'unicode', id: 'unicode:1f603', glyph: '😀' },
+          }),
         ),
       ),
-    ).toBe('emote_not_available');
+    ).toBe('emote_mismatch');
     expect(await count(core.db, 'bonk_lab_interactions')).toBe(1);
+  });
+
+  it('any Unicode emoji resolves to its local Twemoji path, built by Core', async () => {
+    expect(twemojiEmote('unicode:1f603')).toEqual({
+      glyph: '😃',
+      url: 'assets/twemoji/svg/1f603.svg',
+      animated: false,
+    });
+    // FE0F dropped and leading zeros trimmed, like the extension asset lookup.
+    expect(twemojiEmote('unicode:2764-fe0f')?.url).toBe(
+      'assets/twemoji/svg/2764.svg',
+    );
+    expect(twemojiEmote('unicode:0023-fe0f-20e3')).toMatchObject({
+      glyph: '#️⃣',
+      url: 'assets/twemoji/svg/23-20e3.svg',
+    });
+    const core = await setup();
+    await ready(core);
+    const { interaction } = await core.bonkLab.admit(
+      admitReq({
+        emote: { provider: 'unicode', id: 'unicode:1f44d-1f3fd', glyph: '👍🏽' },
+      }),
+    );
+    expect(interaction.emote_url).toBe('assets/twemoji/svg/1f44d-1f3fd.svg');
   });
 
   it('channel_sequence is monotone and gap-free under concurrent admissions', async () => {

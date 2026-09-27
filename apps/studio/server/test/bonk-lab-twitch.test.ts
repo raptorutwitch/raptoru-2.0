@@ -213,7 +213,7 @@ describe('Bonk Lab: real Twitch viewer identity → personal catalog → Core-va
     expect(JSON.stringify(session)).not.toMatch(/AT-secret|RT-secret|csecret/);
   });
 
-  it('personal catalog in picker format (per channel, globals last) + Twemoji; Twitch Bonk validated by Core', async () => {
+  it('personal catalog in picker format (per channel, globals last; emoji come from the extension bank); Twitch Bonk validated by Core', async () => {
     const f = await fixture();
     await f.connect();
     const emotes = (await f.call('viewer', 'GET', '/emotes')).body;
@@ -227,7 +227,6 @@ describe('Bonk Lab: real Twitch viewer identity → personal catalog → Core-va
     expect(groups.map((g) => g.id)).toEqual([
       `twitch-channel-${VIEWER}`,
       'twitch-global',
-      'unicode',
     ]);
     expect(groups[0]).toMatchObject({
       channel_login: 'raptoru_',
@@ -237,6 +236,8 @@ describe('Bonk Lab: real Twitch viewer identity → personal catalog → Core-va
       id: 'twitch:emotesv2_anim1',
       image_url:
         'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_anim1/animated/dark/3.0',
+      static_url:
+        'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_anim1/static/dark/3.0',
       animated: true,
     });
 

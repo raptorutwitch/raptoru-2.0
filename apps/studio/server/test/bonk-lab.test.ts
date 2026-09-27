@@ -9,7 +9,7 @@ import {
   localCoreClient,
   type CoreCall,
 } from '../src/bonk-lab/worker.js';
-import { LabEbs } from '../src/extension-lab/lab-ebs.js';
+import { LabEbs, thirdPartyGroups } from '../src/extension-lab/lab-ebs.js';
 import { extensionFile } from '../src/extension-lab/serve.js';
 import { EXTENSION_DIR } from '../src/index.js';
 import { LabObs } from '../src/bonk-lab/obs.js';
@@ -245,21 +245,93 @@ describe('Bonk vertical Lab transport (real Core HTTP + PGlite + durable Studio)
     expect(await count(f.core.db, 'bonk_lab_interactions')).toBe(0);
   });
 
-  it('restricts Unicode catalog only in explicit Bonk Lab, leaving imported files untouched', async () => {
-    const normal = await extensionFile(
+  it('serves the extension Unicode bank unchanged (full emoji catalog in Bonk Lab too)', async () => {
+    const served = await extensionFile(
       EXTENSION_DIR,
       '/ext/shared/unicode-emojis.js',
     );
-    const bonk = await extensionFile(
-      EXTENSION_DIR,
-      '/ext/shared/unicode-emojis.js',
-      true,
+    expect(String(served.body)).toBe(
+      await readFile(
+        join(EXTENSION_DIR, 'shared', 'unicode-emojis.js'),
+        'utf8',
+      ),
     );
-    expect(String(bonk.body)).toContain('unicode:1f600');
-    expect(String(bonk.body)).not.toContain('unicode:1f603');
-    expect(String(normal.body).length).toBeGreaterThan(
-      String(bonk.body).length,
+    expect(String(served.body)).toContain('unicode:1f603');
+  });
+
+  it('7TV/BTTV/FFZ: Core catalog -> picker groups; the façade forwards provider + id only', async () => {
+    const groups = thirdPartyGroups({
+      fetched_at: new Date().toISOString(),
+      channel_display_name: 'Raptoru_',
+      errors: {},
+      emotes: [
+        {
+          provider: '7tv',
+          id: '01FF53DH2000037W021V2MN0SS',
+          name: '199Yoooo',
+          scope: 'channel',
+          animated: true,
+          url: 'https://cdn.7tv.app/emote/01FF53DH2000037W021V2MN0SS/4x.webp',
+        },
+        {
+          provider: 'ffz',
+          id: '9',
+          name: 'ZrehplaR',
+          scope: 'global',
+          animated: false,
+          url: 'https://cdn.frankerfacez.com/emote/9/4',
+        },
+      ],
+    });
+    expect(groups.map((g) => [g.id, g.label])).toEqual([
+      ['7tv-channel', 'Raptoru_'],
+      ['ffz-global', 'Globales'],
+    ]);
+    expect((groups[0]!.emotes as Record<string, unknown>[])[0]).toEqual({
+      id: '7tv:01FF53DH2000037W021V2MN0SS',
+      label: '199Yoooo',
+      source: '7tv',
+      provider: '7tv',
+      image_url: 'https://cdn.7tv.app/emote/01FF53DH2000037W021V2MN0SS/4x.webp',
+      animated: true,
+    });
+    const f = await fixture();
+    await f.ready();
+    const lab = await LabEbs.create(EXTENSION_DIR);
+    lab.connectBonk(f.worker);
+    const reply = await lab.handle(
+      'POST',
+      '/actions/tokens',
+      {
+        module_id: 'bonk',
+        payload: {
+          target_login: 'streamer',
+          emotes: ['7tv:01FF53DH2000037W021V2MN0SS'],
+          emote_source: '7tv',
+          emote_glyph: null,
+        },
+      },
+      {
+        authorization: `Bearer lab.${Buffer.from(JSON.stringify({ role: 'viewer', identity_shared: true })).toString('base64url')}`,
+        idempotencyKey: 'seven-1',
+      },
     );
+    // Core decides (this test Core has no third-party catalog): refused there, not by the façade.
+    expect(reply.status).toBe(409);
+    expect(reply.body.error).toBe('emote_not_in_catalog');
+  });
+
+  it('any Unicode emoji Bonk is admitted with the Twemoji path built by Core', async () => {
+    const f = await fixture();
+    await f.ready();
+    const result = await f.worker.admit(
+      { id: '900101', display_name: 'Viewer Lab' },
+      'thumbs',
+      { provider: 'unicode', id: 'unicode:1f44d', glyph: '👍' },
+    );
+    expect(
+      (await f.core.bonkLab.get(result.interaction.interaction_id)).emote_url,
+    ).toBe('assets/twemoji/svg/1f44d.svg');
   });
 });
 

@@ -49,6 +49,16 @@ export function bonkLabRoutes(
   return [
     ...(viewers ? viewerRoutes(viewers) : []),
     {
+      // Public 7TV/BTTV/FFZ catalog of the channel: metadata + CDN URLs built by Core, no images.
+      method: 'GET',
+      pattern: /^\/v1\/lab\/bonk\/third-party\/catalog$/,
+      auth: 'studio',
+      handle: ({ url }) =>
+        mapped(() =>
+          bonk.thirdPartyCatalog(url.searchParams.get('refresh') === '1'),
+        ),
+    },
+    {
       method: 'POST',
       pattern: /^\/v1\/lab\/bonk\/interactions$/,
       auth: 'studio',

@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { BonkWorker, localCoreClient } from './worker.js';
+import type { BonkLabThirdPartyCatalog } from '@raptoru/schemas';
+import { BonkWorker, localCoreClient, type CoreCall } from './worker.js';
 import { LabObs } from './obs.js';
 import { ViewerAuth } from './viewer-auth.js';
 import { paths, REPO_ROOT } from '../test-lab/local-env.js';
@@ -16,7 +17,15 @@ export class BonkRuntime {
     readonly worker: BonkWorker,
     readonly origin: string,
     readonly viewerAuth: ViewerAuth,
+    private readonly core: CoreCall,
   ) {}
+  /** Public 7TV/BTTV/FFZ catalog of the channel, resolved by Lab Core (metadata + CDN URLs). */
+  readonly thirdPartyCatalog = (refresh = false) =>
+    this.core<BonkLabThirdPartyCatalog>(
+      '/v1/lab/bonk/third-party/catalog' + (refresh ? '?refresh=1' : ''),
+      undefined,
+      { timeoutMs: 20_000 },
+    );
   get overlayUrl() {
     return `${this.origin}/bonk-lab/overlay.html#${this.worker.token}`;
   }
@@ -30,7 +39,7 @@ export class BonkRuntime {
       join(paths.runtimeDir, 'bonk-lab', 'journal.json'),
       core,
     );
-    return new BonkRuntime(worker, origin, new ViewerAuth(core));
+    return new BonkRuntime(worker, origin, new ViewerAuth(core), core);
   }
   start() {
     const loop = async () => {
@@ -97,7 +106,7 @@ export class BonkRuntime {
         )[extname(file)]!,
         'cache-control': 'no-store',
         'content-security-policy':
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' https://static-cdn.jtvnw.net; media-src 'self'; frame-ancestors 'none'",
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com; media-src 'self'; frame-ancestors 'none'",
       });
       res.end(data);
       return true;

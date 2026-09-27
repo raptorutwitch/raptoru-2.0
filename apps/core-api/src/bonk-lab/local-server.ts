@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { BonkLabService } from './bonk-lab-service.js';
 import { TwitchViewerCatalog } from './twitch-viewer.js';
+import { ThirdPartyEmotes } from './third-party-emotes.js';
 import { bonkLabRoutes } from '../http/bonk-lab-routes.js';
 import { HttpError } from '../http/server.js';
 import { systemClock } from '../clock.js';
@@ -24,8 +25,13 @@ const viewers =
   clientId && clientSecret
     ? new TwitchViewerCatalog(db, systemClock, { clientId, clientSecret })
     : null;
+// 7TV/BTTV/FFZ public catalogs of the channel (no token), only when the launcher passes its id.
+const channelTwitchId = process.env.BONK_LAB_CHANNEL_TWITCH_ID ?? '';
+const thirdParty = /^\d+$/.test(channelTwitchId)
+  ? new ThirdPartyEmotes(channelTwitchId, systemClock)
+  : null;
 const routes = bonkLabRoutes(
-  new BonkLabService(db, systemClock, viewers),
+  new BonkLabService(db, systemClock, viewers, thirdParty),
   viewers,
 );
 const server = createServer(async (req, res) => {

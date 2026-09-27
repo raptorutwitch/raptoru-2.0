@@ -1,0 +1,415 @@
+/* Picker d'emotes V2.1 (shared/emote-picker.js). Chargé après base/mobile/overlay : ces règles
+   reprennent la main sur l'ancienne mise en page Bonk sans la supprimer. */
+
+html body .jdm-module[data-module="bonk"] .jdm-bonk-picker.rl-bonk-picker {
+  display: grid !important;
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  gap: 5px 6px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker.rl-bonk-picker {
+  grid-template-columns: 36px minmax(0, 1fr) !important;
+}
+html body .jdm-module[data-module="bonk"] .rl-bonk-picker > :not(.rl-picker__nav, .rl-picker__search, .rl-picker__scroll) {
+  grid-column: 1 / -1 !important;
+}
+
+/* --- rail compacte : icônes/avatars ronds, familles repliables -------------------------------- */
+.rl-picker__nav {
+  --rl-tone: #b873ff;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 4px 0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(173, 108, 255, .09), rgba(255, 255, 255, .02) 40%);
+  scrollbar-width: none;
+}
+.rl-picker__nav::-webkit-scrollbar { display: none; }
+.rl-picker__nav-item {
+  position: relative;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--jdm-muted, #b3b3bd);
+  cursor: pointer;
+  transition: background-color .12s ease, box-shadow .12s ease;
+}
+.rl-picker__nav-item:hover { background: rgba(255, 255, 255, .07); }
+.rl-picker__nav-item:focus-visible { outline: 2px solid var(--jdm-accent, #a970ff); outline-offset: -2px; }
+.rl-picker__nav-item.is-active {
+  background: rgba(173, 108, 255, .2);
+  box-shadow: inset 0 0 0 1px rgba(226, 150, 255, .55), 0 0 10px rgba(192, 100, 255, .22);
+}
+.rl-picker__nav.is-searching .rl-picker__nav-item.is-active { background: transparent; box-shadow: none; }
+.rl-picker__nav-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 1;
+}
+.rl-picker__nav-icon svg { width: 18px; height: 18px; }
+.rl-picker__nav-avatar { width: 100%; height: 100%; object-fit: cover; }
+.rl-picker__nav-emoji { width: 20px; height: 20px; object-fit: contain; }
+
+.rl-picker__nav-block {
+  display: flex;
+  width: 34px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border-radius: 12px;
+  transition: background-color .15s ease;
+}
+.rl-picker__nav-block.is-open {
+  padding-bottom: 3px;
+  background: color-mix(in srgb, var(--rl-tone) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rl-tone) 18%, transparent);
+}
+.rl-picker__nav-family .rl-picker__nav-icon {
+  background: color-mix(in srgb, var(--rl-tone) 16%, rgba(255, 255, 255, .04));
+  color: var(--jdm-text, #efeff1);
+}
+.rl-picker__nav-caret {
+  position: absolute;
+  right: -1px;
+  bottom: 0;
+  color: color-mix(in srgb, var(--rl-tone) 70%, #fff);
+  font-size: 8px;
+  line-height: 1;
+  transition: transform .15s ease;
+}
+.rl-picker__nav-block.is-open .rl-picker__nav-caret { transform: rotate(90deg); }
+/* Section active dans une famille repliée : petit point de couleur sur le parent. */
+.rl-picker__nav-block.has-active:not(.is-open) .rl-picker__nav-family::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rl-tone);
+  box-shadow: 0 0 6px var(--rl-tone);
+}
+.rl-picker__nav-children { display: none; flex-direction: column; align-items: center; gap: 3px; }
+.rl-picker__nav-block.is-open .rl-picker__nav-children { display: flex; }
+.rl-picker__nav-children .rl-picker__nav-item { width: 30px; height: 30px; flex-basis: 30px; }
+.rl-picker__nav-children .rl-picker__nav-icon { width: 24px; height: 24px; }
+.rl-picker__nav-children .rl-picker__nav-item.is-active {
+  background: color-mix(in srgb, var(--rl-tone) 26%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rl-tone) 65%, transparent);
+}
+html body.component-view .rl-picker__nav-item { width: 30px; height: 30px; flex-basis: 30px; }
+html body.component-view .rl-picker__nav-block { width: 32px; }
+html body.component-view .rl-picker__nav-icon { width: 24px; height: 24px; }
+html body.component-view .rl-picker__nav-children .rl-picker__nav-item { width: 28px; height: 28px; flex-basis: 28px; }
+html body.component-view .rl-picker__nav-children .rl-picker__nav-icon { width: 22px; height: 22px; }
+
+/* --- recherche compacte ---------------------------------------------------------------------- */
+.rl-picker__search {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  min-width: 0;
+  height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 10px;
+  border: 1px solid rgba(238, 228, 255, .08);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .045);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.rl-picker__search:focus-within {
+  border-color: rgba(200, 140, 255, .6);
+  box-shadow: 0 0 0 3px rgba(173, 108, 255, .14);
+}
+.rl-picker__search-icon { color: #9a92a6; font-size: 15px; line-height: 1; }
+.rl-picker__input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--jdm-text, #efeff1);
+  font: inherit;
+  font-size: 12px;
+}
+.rl-picker__input::placeholder { color: #7f7889; }
+.rl-picker__input::-webkit-search-cancel-button { filter: invert(1); opacity: .55; }
+
+/* --- défilement continu ---------------------------------------------------------------------- */
+.rl-picker__scroll {
+  --rl-cell: 44px;
+  --rl-gap: 4px;
+  --rl-tone: #b873ff;
+  position: relative;
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 3px 6px 0;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(183, 121, 255, .45) transparent;
+  scrollbar-width: thin;
+}
+/* Taille par surface : panel 5 colonnes, mobile ~6, vidéo ~10 (emotes plus présentes). */
+html body.mobile:not(.panel-view) .rl-picker__scroll { --rl-cell: 50px; }
+html body.component-view .rl-picker__scroll { --rl-cell: 46px; }
+.rl-picker__section + .rl-picker__section { margin-top: 8px; }
+.rl-picker__family {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 2px 5px;
+  color: color-mix(in srgb, var(--rl-tone) 75%, #fff);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.rl-picker__family::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--rl-tone) 45%, transparent), transparent);
+}
+.rl-picker__section:first-child .rl-picker__family { margin-top: 1px; }
+/* En-tête de section : teinté, translucide, intégré au fond (plus de bandeau noir). */
+.rl-picker__head {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 4px 8px;
+  border-radius: 9px;
+  background: rgba(24, 17, 38, .9);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--rl-tone) 20%, rgba(24, 17, 38, .92)), rgba(24, 17, 38, .86) 75%);
+  box-shadow: 0 4px 10px -6px rgba(0, 0, 0, .6);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #eee8f6;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.rl-picker__head::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--rl-tone);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--rl-tone) 70%, transparent);
+}
+.rl-picker__head-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-picker__head-count {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .06);
+  color: #a79fb3;
+  font-size: 9px;
+  font-weight: 600;
+}
+.rl-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--rl-cell), 1fr));
+  gap: var(--rl-gap);
+}
+.rl-picker__grid + .rl-picker__grid { margin-top: var(--rl-gap); }
+.rl-picker__cell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  aspect-ratio: 1;
+  place-items: center;
+  padding: 5px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color .1s ease, box-shadow .1s ease, transform .1s ease;
+}
+.rl-picker__cell:hover { background: rgba(255, 255, 255, .07); }
+.rl-picker__cell:active { transform: scale(.94); }
+.rl-picker__cell:focus-visible { outline: 2px solid var(--jdm-accent, #a970ff); outline-offset: -2px; }
+.rl-picker__cell.is-selected {
+  background: rgba(173, 108, 255, .17);
+  box-shadow: inset 0 0 0 1.5px rgba(226, 160, 255, .75);
+}
+.rl-picker__cell.is-next { box-shadow: inset 0 0 0 1.5px rgba(240, 200, 110, .85), 0 0 8px rgba(240, 200, 110, .25); }
+.rl-picker__cell.is-disabled { cursor: not-allowed; opacity: .35; }
+.rl-picker__cell[data-queue-index]::before {
+  content: attr(data-queue-index);
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  color: #f3e8ff;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+}
+/* Indicateur discret et permanent des favoris. */
+.rl-picker__cell.is-favorite::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #e9dcff;
+  box-shadow: 0 0 0 1px rgba(20, 12, 34, .55), 0 0 4px rgba(214, 180, 255, .6);
+}
+.rl-picker__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.rl-picker__glyph { font-size: 28px; line-height: 1; pointer-events: none; }
+html body.component-view .rl-picker__glyph { font-size: 25px; }
+
+/* Étoile unique, posée dans le coin de la cellule survolée/focalisée (desktop uniquement).
+   Au repos : contour très léger, presque fondu dans la cellule. Survol de l'étoile : contour
+   lumineux, léger remplissage translucide, halo doux. Favori : remplie, lavande claire. La zone
+   cliquable (24 px) reste collée à l'étoile. */
+.rl-picker__star {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: .45;
+  transition: opacity .12s ease, transform .12s ease, filter .12s ease;
+}
+.rl-picker__star svg { width: 17px; height: 17px; overflow: visible; pointer-events: none; }
+.rl-picker__star path {
+  fill: transparent;
+  stroke: rgba(244, 238, 255, .75);
+  stroke-width: 1.4;
+  transition: fill .12s ease, stroke .12s ease;
+}
+.rl-picker__star:hover {
+  opacity: 1;
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 4px rgba(214, 180, 255, .75));
+}
+.rl-picker__star:hover path { fill: rgba(237, 225, 255, .28); stroke: #faf5ff; }
+.rl-picker__star.is-active { opacity: 1; filter: drop-shadow(0 0 2.5px rgba(214, 180, 255, .55)); }
+.rl-picker__star.is-active path { fill: #efe6ff; stroke: #efe6ff; }
+.rl-picker__star.is-active:hover path { fill: #fff; stroke: #fff; }
+.rl-picker__star:focus-visible { outline: 2px solid var(--jdm-accent, #a970ff); outline-offset: -2px; border-radius: 6px; opacity: 1; }
+.rl-picker__star[hidden] { display: none; }
+@media (hover: none) {
+  .rl-picker__star { display: none; }
+}
+
+/* Réorganisation des favoris (souris) : cellule d'origine estompée, fantôme sous le pointeur,
+   repère vertical à l'emplacement de dépôt. */
+.rl-picker__cell[data-reorder] { cursor: grab; }
+.rl-picker__scroll.is-reordering, .rl-picker__scroll.is-reordering .rl-picker__cell { cursor: grabbing; }
+.rl-picker__cell.is-dragging { opacity: .3; }
+.rl-picker__ghost {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  width: calc(var(--rl-cell) + 4px);
+  height: calc(var(--rl-cell) + 4px);
+  place-items: center;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(40, 26, 64, .92);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .45), inset 0 0 0 1.5px rgba(226, 160, 255, .7);
+  pointer-events: none;
+}
+.rl-picker__ghost > * { width: 100%; height: 100%; object-fit: contain; }
+.rl-picker__drop {
+  position: absolute;
+  z-index: 3;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #f0abfc, #a970ff);
+  box-shadow: 0 0 8px rgba(226, 150, 255, .8);
+  pointer-events: none;
+}
+.rl-picker__drop[hidden] { display: none; }
+
+.rl-picker__empty { margin: 8px 2px; color: #8f889a; font-size: 11px; }
+
+/* Contrôles OAuth Twitch (actualiser/retirer) au bout de la ligne de recherche. */
+html body .jdm-module[data-module="bonk"] .rl-picker__search .jdm-emote-oauth-controls {
+  flex: 0 0 auto;
+  gap: 2px !important;
+}
+html body .jdm-module[data-module="bonk"] .rl-picker__search .jdm-emote-oauth-button {
+  width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-picker__nav-item, .rl-picker__nav-caret, .rl-picker__cell, .rl-picker__search { transition: none; }
+  .rl-picker__cell:active { transform: none; }
+}
+
+/* Famille Extension : provenance (7TV / BTTV / FFZ) en petit sous-titre dans le contexte. */
+.rl-picker__sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 7px 3px 4px;
+  color: #b9b1c6;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.rl-picker__head + .rl-picker__sub { margin-top: 2px; }
+.rl-picker__sub-icon { width: 12px; height: 12px; object-fit: contain; opacity: .9; }
+.rl-picker__sub-count { color: #7c7584; font-weight: 500; }
+.rl-picker__sub-count::before { content: '· '; }
+
+/* Bouton Favori de la barre du bas : desktop = étoile sur l'emote (bouton masqué) ; tactile =
+   ce bouton, pour l'emote sélectionnée, avec un état favori explicite. */
+@media (hover: hover) and (pointer: fine) {
+  html body .jdm-module[data-module="bonk"] .rl-bonk-picker .jdm-bonk-choice__favorite { display: none !important; }
+}
+html body .jdm-module[data-module="bonk"] .rl-bonk-picker .jdm-bonk-choice__favorite.is-active {
+  color: #efe6ff !important;
+  border-color: rgba(214, 180, 255, .55) !important;
+  background: rgba(173, 108, 255, .22) !important;
+  text-shadow: 0 0 6px rgba(214, 180, 255, .6);
+}

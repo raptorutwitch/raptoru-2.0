@@ -54,6 +54,7 @@ try {
   for (const migration of [
     '20260929120000_bonk_lab.sql',
     '20260930120000_bonk_lab_twitch.sql',
+    '20261001120000_bonk_lab_third_party.sql',
   ]) {
     if (
       (
@@ -91,7 +92,11 @@ const botEnv = await readFile(
 const twitchApp = Object.fromEntries(
   botEnv
     .split(/\r?\n/)
-    .map((l) => /^(TWITCH_CLIENT_ID|TWITCH_CLIENT_SECRET)=(.*)$/.exec(l.trim()))
+    .map((l) =>
+      /^(TWITCH_CLIENT_ID|TWITCH_CLIENT_SECRET|TWITCH_BROADCASTER_ID)=(.*)$/.exec(
+        l.trim(),
+      ),
+    )
     .filter(Boolean)
     .map((m) => [m[1], m[2].trim().replace(/^(['"])(.*)\1$/, '$2')]),
 );
@@ -114,6 +119,8 @@ for (const [path, extra] of [
       // Twitch app of Raptoru 2.0 (read from the local bot .env): Lab Core only, never Studio.
       BONK_LAB_TWITCH_CLIENT_ID: twitchApp.TWITCH_CLIENT_ID ?? '',
       BONK_LAB_TWITCH_CLIENT_SECRET: twitchApp.TWITCH_CLIENT_SECRET ?? '',
+      // Public channel id: 7TV/BTTV/FFZ channel sets (public APIs, no token).
+      BONK_LAB_CHANNEL_TWITCH_ID: twitchApp.TWITCH_BROADCASTER_ID ?? '',
     },
   ],
   [
