@@ -1,3 +1,4 @@
+import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
 import type { Clock } from './clock.js';
 import { DailyCredits, type CreditProvider } from './daily/credits.js';
 import { DailyService } from './daily/daily-service.js';
@@ -18,6 +19,7 @@ export interface Core {
   presence: PresenceService;
   wallet: WalletModule;
   loyalty: LoyaltyEngine;
+  bonkLab: BonkLabService;
 }
 
 export function createCore(
@@ -36,5 +38,6 @@ export function createCore(
     presence: new PresenceService(db, clock, loyalty.presenceListener),
     wallet,
     loyalty,
+    bonkLab: new BonkLabService(db, clock),
   };
 }

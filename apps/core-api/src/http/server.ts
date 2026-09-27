@@ -24,6 +24,8 @@ import {
   LoyaltyIdempotencyError,
   type LoyaltyEngine,
 } from '../loyalty/engine.js';
+import type { BonkLabService } from '../bonk-lab/bonk-lab-service.js';
+import { bonkLabRoutes } from './bonk-lab-routes.js';
 import { loyaltyRoutes } from './loyalty-routes.js';
 import {
   WalletIdempotencyError,
@@ -41,6 +43,8 @@ export interface AppDeps {
   presence: PresenceService;
   wallet: WalletModule;
   loyalty: LoyaltyEngine;
+  /** Bonk V2 Lab slice (test only). */
+  bonkLab?: BonkLabService;
   botSecret: string;
   studioSecret: string;
 }
@@ -100,10 +104,12 @@ function routes({
   presence,
   wallet,
   loyalty,
+  bonkLab,
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
     ...loyaltyRoutes(loyalty),
+    ...(bonkLab ? bonkLabRoutes(bonkLab) : []),
     {
       method: 'GET',
       pattern: /^\/health$/,

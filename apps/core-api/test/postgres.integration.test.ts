@@ -472,6 +472,87 @@ describe.skipIf(!isLocal)('Core on a real Postgres', () => {
     await Promise.all(pools.slice(1).map((p) => p.close()));
   });
 
+  it('Bonk Lab: 3 Cores, concurrent admissions + retries, ordered claims, idempotent ACKs, zero Wallet', async () => {
+    const clock = new FakeClock(paris('2026-09-30', 21));
+    const pools = [db, createPgDb(url!), createPgDb(url!)];
+    const cores = pools.map((d) =>
+      createCore(d, clock, new DevFakeCreditProvider()),
+    );
+    try {
+      const walletBefore = (
+        await db.query<{ n: string }>(
+          'select (select count(*) from wallet_operations) + (select count(*) from wallets) as n',
+        )
+      )[0]!.n;
+      await cores[0]!.bonkLab.heartbeat({
+        studio_instance_id: 'itest-studio',
+        obs: 'connected',
+        source_ready: true,
+        overlay_ready: true,
+      });
+      const reqs = Array.from({ length: 30 }, (_, i) => ({
+        idempotency_key: `bk-${i}`,
+        channel_id: '990001',
+        viewer: { id: String(990100 + (i % 4)), display_name: `B${i}` },
+        lab_session_id: 'itest',
+        emote: { provider: 'unicode' as const, id: 'unicode:1f600' },
+      }));
+      // Every admission sent twice, to two different Cores, at the same time.
+      const results = await Promise.all(
+        reqs.flatMap((r, i) => [
+          cores[i % 3]!.bonkLab.admit(r),
+          cores[(i + 1) % 3]!.bonkLab.admit(r),
+        ]),
+      );
+      expect(results.filter((r) => !r.replayed)).toHaveLength(30);
+      const seqs = results
+        .filter((r) => !r.replayed)
+        .map((r) => r.interaction.channel_sequence)
+        .sort((a, b) => a - b);
+      expect(seqs).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+
+      // Claims race on 3 Cores: each Bonk is handed out once, in sequence order.
+      const started: number[] = [];
+      for (let round = 0; round < 30; round++) {
+        const claimed = (
+          await Promise.all(
+            cores.map((c) => c.bonkLab.claim('itest-studio', '990001')),
+          )
+        ).filter((c) => c !== null);
+        expect(claimed).toHaveLength(1);
+        const c = claimed[0]!;
+        started.push(c.channel_sequence);
+        const a = {
+          studio_instance_id: 'itest-studio',
+          attempt_id: c.delivery.attempt_id!,
+        };
+        await Promise.all([
+          cores[0]!.bonkLab.ack(c.interaction_id, { ...a, event: 'started' }),
+          cores[1]!.bonkLab.ack(c.interaction_id, { ...a, event: 'started' }),
+        ]);
+        await cores[2]!.bonkLab.ack(c.interaction_id, {
+          ...a,
+          event: 'completed',
+        });
+      }
+      expect(started).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+      const states = await db.query<{ status: string; n: string }>(
+        "select status, count(*) as n from bonk_lab_interactions where channel_id = '990001' group by status",
+      );
+      expect(states.map((r) => [r.status, Number(r.n)])).toEqual([
+        ['completed', 30],
+      ]);
+      const walletAfter = (
+        await db.query<{ n: string }>(
+          'select (select count(*) from wallet_operations) + (select count(*) from wallets) as n',
+        )
+      )[0]!.n;
+      expect(walletAfter).toBe(walletBefore);
+    } finally {
+      await Promise.all(pools.slice(1).map((p) => p.close()));
+    }
+  });
+
   it('Rewards Twitch V1 in preview: 3 Cores, duplicates, conflicts, hot config change, zero Wallet write', async () => {
     const clock = new FakeClock(paris('2026-09-28', 20));
     const provider = new DevFakeCreditProvider();
