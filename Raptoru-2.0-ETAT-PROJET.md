@@ -1,6 +1,6 @@
 # Raptoru 2.0 — État du projet / fichier de reprise
 
-**Dernière mise à jour : 27 septembre 2026 — Bonk V2 validé visuellement (Lab → Core → Studio → OBS, picker V2 + providers), checkpoint Git et release Studio**
+**Dernière mise à jour : 28 septembre 2026 — Soundboard V2 Lab validé, wallet switch global validé, Hub Pop Premium validé / fermé, anciens wallets migrés (checkpoint Git, pas de release Studio)**
 
 ## But de ce fichier
 Ce fichier est la source de continuité du projet. Il doit permettre de reprendre Raptoru 2.0 dans une nouvelle conversation sans perdre :
@@ -145,6 +145,10 @@ Historique principal :
 - `45e6cd9 — feat: add Twitch viewer identity and emote catalog to Bonk Lab`
 - `717d97b — feat: complete Bonk V2 picker and emote providers`
 - commit `docs: update Raptoru 2.0 project state` (ce fichier, désormais versionné), puis commit de release Studio créé par `npm run studio:release` : SHA à lire dans `git log -n 10`.
+- `cd7b411 — chore: release Raptoru Studio 0.1.3`
+- `4df6af5 — feat: add Soundboard V2 Lab execution and Studio configuration`
+- `0a5c4e9 — feat: add Pop Premium Hub, global wallet switch and Soundboard V2 UI`
+- commit `docs: update Raptoru 2.0 project state` (28/09/2026) : SHA à lire dans `git log -n 10`. Pas de release Studio pour ce checkpoint (en attente d'un feu vert explicite).
 
 Règles Git inchangées :
 - branche `main` ;
@@ -615,7 +619,9 @@ Le Lab actuel permet de tester visuellement :
 - Tombola ;
 - modération/états UI.
 
-**Soundboard / TTS / Tombola : le Lab reste une simulation locale d’exécution** (wallet fictif en mémoire, journal local, rendu dans Studio).
+**TTS / Tombola : le Lab reste une simulation locale d’exécution** (wallet fictif en mémoire, journal local, rendu dans Studio).
+
+**Soundboard : exécution réelle en mode Lab** depuis le 28/09/2026 (même Core Lab que Bonk) : extension → façade LabEbs → Core local/test → worker Studio → page lecteur audio locale (à activer d’un clic) → ACK. Voir § 16 « Soundboard V2 — état validé ».
 
 **Bonk : exécution réelle en mode Bonk Lab** (`npm run bonk:lab`, Studio sur 4101, Core Lab sur 4301, base `raptoru_bonk_lab`) :
 ```text
@@ -1026,9 +1032,39 @@ Façade Lab : catalogues en stale-while-revalidate (aucune requête ne dépasse 
 **Bonk V2 est techniquement validé mais n’est PAS activé en production.**
 SAMMI / StreamElements / système actuel restent production jusqu’au feu vert global Raptoru 2.0.
 
+## Soundboard V2 — état validé
+Validé fonctionnellement, visuellement et à l’écoute le 28/09/2026 (Lab uniquement). Commits `4df6af5` (Core + Studio) et `0a5c4e9` (extension).
+- Banque complète : 69 sons (hello / on-est-bien-d-accord / sarah corrigés, sarah = 3 variantes, « Aléatoire »). Le catalogue vient de Core ; le client n’envoie que le `sound_id`.
+- Réglages par son dans Studio (onglet « Soundboard config ») : nom, actif, prix jetons, prix crédits, cooldown, lecture Superposer / File / Ignorer si actif, volume ; persistés et validés par Core.
+- Protection volume globale (Désactivée / Légère / Moyenne) : atténuation progressive du seul mix Soundboard quand plusieurs sons se superposent.
+- Cooldown par son décidé par Core (deux viewers simultanés : un seul passe), idempotence, ACK, `execution_unknown` après redémarrage (jamais de rejeu aveugle), fichier manquant / son désactivé / lecteur hors ligne refusés proprement.
+- Extension : cartes de sons, aperçu distinct de l’achat, favoris / récents / recherche / tri, barre d’action compacte, états cooldown / en cours / indisponible, volume des aperçus.
+- test_mode=true, payment_mode=simulated, real_debited=0 ; aucun Wallet réel, aucune prod.
+- Le lecteur audio Studio doit être activé d’un clic à chaque chargement (règle d’autoplay des navigateurs).
+
+## Wallet switch global — validé
+Composant `createCurrencySwitch` (extension, `shared/ui-primitives.js` + `currency-switch.css`), variante « Peek slide » validée le 28/09/2026 :
+- largeur fixe, montant immobile dans sa case, abréviation 1,2K / 12K / 985K / 1,2M ;
+- zone sombre autour de la pill, survol = amorce du changement, clic = fin du mouvement ;
+- infobulle du solde exact au survol / focus clavier, fermée au clic, jamais au tactile ;
+- utilisé dans le Hub (Jetons + total des crédits, détail par module dans l’infobulle ; consultation seulement), l’Historique (idem), les en-têtes Soundboard / TTS (monnaie de paiement), les barres de paiement Soundboard / TTS, et Bonk / Tombola (jetons seuls, sans bascule).
+- **Ancien wallet Historique : migré** (ainsi que les en-têtes Bonk et Tombola). Plus aucun ancien rendu wallet actif dans l’extension.
+- Les crédits restent propres à chaque module : le total affiché n’en fait pas une monnaie globale. Aucune logique Wallet / paiement modifiée.
+
+## Hub Pop Premium — validé / fermé
+Nouveau Hub de l’extension, validé définitivement le 28/09/2026 (`shared/hub-carousel.js` + `hub.css` + vue d’accueil de `shared/ui.js`) :
+- carousel horizontal aimanté, boucle infinie sans clone, cartes de face, carte active plus grande, animation amortie sans rebond (y compris en rafale) ;
+- flèches, clic voisin, glisser / swipe, molette horizontale, clavier ← → / Entrée ;
+- rail d’accès rapide + popover « Tous » (fermé au clic extérieur et par Échap) ;
+- style « Pop Premium » (couleur franche par module, disque blanc + pictogramme, Bonk = emote projetée) ;
+- vrais modules uniquement : TTS, Soundboard, Bonk, Tombola, Modération (modérateurs seulement) ; « Ouverte » seulement si la Tombola est ouverte, « En pause » pour le TTS en pause ou un module désactivé (non ouvrable) ;
+- Historique et Classement visibles sur le Hub, Tutoriel conservé (contenu à refaire plus tard), « Actualiser » dans Préférences (plus de bouton ↻ visible) ;
+- en Vidéo, Échap ne vide plus le composant (il ne ferme que les couches internes).
+Validé dans le Lab en Viewer / Modérateur × Panel / Mobile / Vidéo. Extension non publiée.
+
 ## Roadmap après Bonk
-Ordre recommandé à date (Bonk V2 validé) :
-1. Soundboard ;
+Ordre recommandé à date (Bonk V2 et Soundboard V2 validés, Hub fermé) :
+1. ~~Soundboard~~ (validé en Lab le 28/09/2026) ;
 2. TTS ;
 3. Tombola ;
 4. Bonk Fidelity (polish, non bloquant) ;
@@ -1154,6 +1190,9 @@ VALIDÉ TECHNIQUEMENT, mais pas activé prod :
 - auto-update Studio
 - pipeline studio:release
 - Bonk V2 Lab (validé visuellement le 27/09/2026)
+- Soundboard V2 Lab (validé le 28/09/2026)
+- wallet switch global de l’extension (validé le 28/09/2026)
+- Hub Pop Premium (validé / fermé le 28/09/2026)
 
 Studio :
 - updater réel validé en 0.1.0 → 0.1.1
@@ -1164,8 +1203,10 @@ Studio :
 
 Extension :
 - vraie extension prod importée
-- Lab local permet Soundboard/TTS/Tombola avec économie fictive (simulation locale)
-- nouvelle extension (picker V2) NON publiée sur Twitch
+- Lab local permet TTS/Tombola avec économie fictive (simulation locale)
+- Soundboard V2 exécuté réellement en Lab (Core Lab → Studio → lecteur audio local)
+- Hub Pop Premium + wallet switch global (anciens wallets migrés)
+- nouvelle extension (picker V2, Soundboard V2, Hub) NON publiée sur Twitch
 
 BONK V2 = VALIDÉ (Lab), PAS ACTIVÉ EN PROD :
 - Extension Lab → Core local/test → Studio → OBS → overlay (ACK started/completed/failed)
@@ -1180,7 +1221,7 @@ BONK V2 = VALIDÉ (Lab), PAS ACTIVÉ EN PROD :
 - reste (non bloquant) : Bonk Fidelity (impact FX, centre caméra, tailles, disparition)
 
 PROCHAIN CHANTIER :
-Soundboard → TTS → Tombola → stats/profils → Jeu des mots 2.0 → achievements/cosmétiques → FX → modération sociale → Spotify/casino.
+TTS → Tombola → stats/profils → Jeu des mots 2.0 → achievements/cosmétiques → FX → modération sociale → Spotify/casino.
 
 Production réelle actuelle :
 SAMMI + StreamElements.
