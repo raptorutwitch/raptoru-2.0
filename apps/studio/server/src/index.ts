@@ -1,4 +1,5 @@
 import { BonkRuntime } from './bonk-lab/runtime.js';
+import { SoundRuntime } from './sound-lab/runtime.js';
 import { readFile } from 'node:fs/promises';
 import {
   createServer,
@@ -173,6 +174,7 @@ export function createStudioServer(
   onShutdown: () => void,
   extLab: LabEbs | null = null,
   bonk: BonkRuntime | null = null,
+  sound: SoundRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -181,6 +183,9 @@ export function createStudioServer(
         return send(res, 200, { service: 'studio-server', status: 'ok' });
       }
       if (bonk && (await bonk.handle(req, res, url))) return;
+      if (sound && (await sound.handle(req, res, url))) return;
+      if (url.pathname === '/api/sound-lab/status' && !sound)
+        return send(res, 200, { enabled: false });
       if (url.pathname === '/api/bonk-lab/status' && !bonk)
         return send(res, 200, { enabled: false });
       if (await extensionLabRoute(extLab, req, res, url)) return;
@@ -266,11 +271,16 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   const bonk = process.env.BONK_LAB_CORE_URL
     ? await BonkRuntime.create(`http://${host}:${port}`)
     : null;
+  // Soundboard V2 Lab: same Lab Core (test only), local player page.
+  const sound = process.env.BONK_LAB_CORE_URL
+    ? await SoundRuntime.create(`http://${host}:${port}`)
+    : null;
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
     bonk?.stop();
+    sound?.stop();
     lab.logs.add(
       'studio',
       'Studio closing: stopping bot and Core (Postgres keeps running)',
@@ -290,11 +300,20 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     extLab.connectBonk(bonk.worker, bonk.viewerAuth, bonk.thirdPartyCatalog);
     bonk.start();
   }
-  createStudioServer(lab, shutdown, extLab, bonk).listen(port, host, () => {
-    console.log(
-      `[studio-server] Test Lab on http://${host}:${port} (data: ${DATA_ROOT})`,
-    );
-  });
+  if (sound && extLab) {
+    extLab.connectSound(sound.worker);
+    sound.onConfigChange = () => extLab.invalidateSoundCatalog();
+    sound.start();
+  }
+  createStudioServer(lab, shutdown, extLab, bonk, sound).listen(
+    port,
+    host,
+    () => {
+      console.log(
+        `[studio-server] Test Lab on http://${host}:${port} (data: ${DATA_ROOT})`,
+      );
+    },
+  );
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }

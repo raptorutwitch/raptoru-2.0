@@ -52,6 +52,7 @@ createApp({
   wallet: core.wallet,
   loyalty: core.loyalty,
   bonkLab: core.bonkLab,
+  soundLab: core.soundLab,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
 }).listen(config.PORT, () => {

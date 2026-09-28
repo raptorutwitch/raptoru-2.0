@@ -4,6 +4,8 @@ import { BonkLabService } from './bonk-lab-service.js';
 import { TwitchViewerCatalog } from './twitch-viewer.js';
 import { ThirdPartyEmotes } from './third-party-emotes.js';
 import { bonkLabRoutes } from '../http/bonk-lab-routes.js';
+import { soundLabRoutes } from '../http/sound-lab-routes.js';
+import { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import { HttpError } from '../http/server.js';
 import { systemClock } from '../clock.js';
 import { createPgDb } from '../db/db.js';
@@ -30,10 +32,14 @@ const channelTwitchId = process.env.BONK_LAB_CHANNEL_TWITCH_ID ?? '';
 const thirdParty = /^\d+$/.test(channelTwitchId)
   ? new ThirdPartyEmotes(channelTwitchId, systemClock)
   : null;
-const routes = bonkLabRoutes(
-  new BonkLabService(db, systemClock, viewers, thirdParty),
-  viewers,
-);
+const routes = [
+  ...bonkLabRoutes(
+    new BonkLabService(db, systemClock, viewers, thirdParty),
+    viewers,
+  ),
+  // Soundboard V2 Lab: same isolated Lab Core process and database.
+  ...soundLabRoutes(new SoundLabService(db, systemClock)),
+];
 const server = createServer(async (req, res) => {
   const send = (status: number, body: unknown) => {
     res.writeHead(status, { 'content-type': 'application/json' });

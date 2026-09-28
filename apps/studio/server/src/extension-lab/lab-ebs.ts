@@ -3,7 +3,9 @@ import {
   type BonkLabCatalog,
   type BonkLabThirdPartyCatalog,
   type BonkLabViewer,
+  type SoundLabSound,
 } from '@raptoru/schemas';
+import type { SoundWorker } from '../sound-lab/worker.js';
 
 const BONK_PROVIDERS: readonly BonkLabProvider[] = BonkLabProvider.options;
 import type { ViewerAuth } from '../bonk-lab/viewer-auth.js';
@@ -264,6 +266,43 @@ export class LabEbs {
     error: string | null;
     at: number;
   } = { viewer: null, groups: [], error: null, at: 0 };
+  private soundWorker: SoundWorker | null = null;
+  /** Core Soundboard catalog (last good one kept when Core is unreachable). */
+  private soundCatalog: SoundLabSound[] = [];
+  private soundCatalogAt = 0;
+  private soundCatalogLoading: Promise<void> | null = null;
+
+  connectSound(worker: SoundWorker) {
+    this.soundWorker = worker;
+    void this.refreshSoundCatalog();
+  }
+
+  /** Streamer settings changed in Studio: the next request reads the catalog again. */
+  invalidateSoundCatalog() {
+    this.soundCatalogAt = 0;
+  }
+
+  /**
+   * Catalog with live prices / cooldowns / running state, read from the local Lab Core at most once
+   * a second (bounded to 1.5 s by the client). On failure the last good catalog is kept.
+   */
+  private async refreshSoundCatalog() {
+    if (!this.soundWorker) return;
+    if (!this.soundCatalogLoading && Date.now() - this.soundCatalogAt >= 1000) {
+      this.soundCatalogAt = Date.now();
+      this.soundCatalogLoading = this.soundWorker
+        .catalog()
+        .then(({ sounds }) => {
+          this.soundCatalog = sounds;
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          this.soundCatalogLoading = null;
+        });
+    }
+    if (this.soundCatalogLoading) await this.soundCatalogLoading;
+  }
+
   connectBonk(
     worker: BonkWorker,
     viewerAuth: ViewerAuth | null = null,
@@ -504,6 +543,11 @@ export class LabEbs {
   ): Promise<Reply> {
     let caller = parseLabToken(headers.authorization);
     if (!caller) return this.fail(401, 'unauthorized');
+    if (
+      this.soundWorker &&
+      ['/session', '/state'].includes(path.split('?')[0]!)
+    )
+      await this.refreshSoundCatalog();
     if (this.bonkWorker && (path === '/session' || path.startsWith('/emotes')))
       // Never forced from the extension: Core caches the public catalogs 10 min.
       await this.refreshThirdParty();
@@ -539,6 +583,60 @@ export class LabEbs {
             displayName: linked.display_name,
           },
         };
+    }
+    // Soundboard Lab: Core admission (idempotent, simulated payment), played by the Studio player.
+    // Never the in-memory wallet/event path, whatever the payment method chosen in the extension.
+    if (
+      this.soundWorker &&
+      method === 'POST' &&
+      body?.module_id === 'soundboard' &&
+      path.startsWith('/actions/')
+    ) {
+      if (!caller.identityShared) return this.fail(403, 'identity_required');
+      if (!this.modules.soundboard) return this.fail(409, 'module_disabled');
+      if (!['/actions/tokens', '/actions/redemption'].includes(path))
+        return this.fail(400, 'unsupported_payment');
+      if (!headers.idempotencyKey)
+        return this.fail(400, 'idempotency_key_required');
+      const soundId = (body.payload as Json | undefined)?.sound_id;
+      if (typeof soundId !== 'string' || !soundId)
+        return this.fail(400, 'invalid_payload');
+      const paymentMethod =
+        path === '/actions/redemption' ? 'credits' : 'tokens';
+      // Simulated balance check only (fictitious Lab jetons): nothing is ever debited.
+      const listed = this.soundCatalog.find((s) => s.id === soundId);
+      if (
+        paymentMethod === 'tokens' &&
+        listed &&
+        this.user(caller.identity.twitchUserId).wallet < listed.token_cost
+      )
+        return this.fail(409, 'insufficient_tokens');
+      try {
+        const result = await this.soundWorker.admit(
+          {
+            id: caller.identity.twitchUserId,
+            display_name: caller.identity.displayName,
+          },
+          headers.idempotencyKey,
+          soundId,
+          paymentMethod,
+        );
+        return this.ok({
+          status: result.interaction.status,
+          module_id: 'soundboard',
+          reference_id: result.interaction.interaction_id,
+          interaction: result.interaction,
+          charged: false,
+          test_mode: true,
+          payment_mode: 'simulated',
+          cost: result.interaction.simulated_cost,
+        });
+      } catch (e) {
+        return this.fail(
+          (e as { status?: number }).status ?? 503,
+          (e as Error).message,
+        );
+      }
     }
     // Bonk real Lab execution uses Core idempotency, never the in-memory simulated delivery path.
     if (
@@ -662,6 +760,9 @@ export class LabEbs {
             'action_receipts',
             'recent_activity',
             'notifications',
+            // The extension only re-reads /state after its first load: the Soundboard Lab catalog
+            // (prices, cooldowns, enabled) must follow, or a Studio change never reaches it.
+            ...(this.soundWorker ? ['modules'] : []),
           ].map((k) => [k, s[k]]),
         ),
       );
@@ -1023,21 +1124,49 @@ export class LabEbs {
             },
             description: 'Bonk OBS Lab · coût simulé, aucun débit',
           }
-        : m.id === 'soundboard'
-          ? {
+        : m.id === 'soundboard' && this.soundWorker
+          ? // Soundboard Lab: the Core catalog with its live state, simulated payment.
+            {
               ...m,
-              sounds: [
-                ...this.sounds,
-                {
-                  id: 'random',
-                  label: 'Aléatoire',
-                  emoji: '🎲',
-                  credit_cost: 1,
-                  token_cost: 600,
-                },
-              ],
+              description: 'Soundboard Lab · coût simulé, aucun débit',
+              // Presentation only (a status pill): Core still refuses without a ready player.
+              player_ready: this.soundWorker.ready,
+              sounds: this.soundCatalog.map((s) => ({
+                id: s.id,
+                label: s.label,
+                emoji: s.id === 'random' ? '🎲' : '🔊',
+                credit_cost: s.credit_cost,
+                token_cost: s.token_cost,
+                preview_url: s.preview_url,
+                duration_ms: s.duration_ms,
+                playback_mode: s.playback_mode,
+                enabled: s.enabled,
+                cooldown_ms: s.cooldown_ms,
+                // Rounded to the second: a stable state between polls (no needless re-render).
+                cooldown_until: s.cooldown_remaining_ms
+                  ? new Date(
+                      Math.ceil((Date.now() + s.cooldown_remaining_ms) / 1000) *
+                        1000,
+                    ).toISOString()
+                  : null,
+                running: s.running,
+              })),
             }
-          : m,
+          : m.id === 'soundboard'
+            ? {
+                ...m,
+                sounds: [
+                  ...this.sounds,
+                  {
+                    id: 'random',
+                    label: 'Aléatoire',
+                    emoji: '🎲',
+                    credit_cost: 1,
+                    token_cost: 600,
+                  },
+                ],
+              }
+            : m,
     );
     const baseRaffle = base.raffle as Json;
     const joined = this.raffle.participants.some(

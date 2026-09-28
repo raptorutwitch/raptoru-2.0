@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Raptoru Soundboard Lab</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 10px 12px;
+        background: #14111c;
+        color: #efeff1;
+        font:
+          13px system-ui,
+          sans-serif;
+      }
+      button {
+        padding: 6px 12px;
+        border: 1px solid #a970ff;
+        border-radius: 8px;
+        background: #2a1f3d;
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+      button[hidden] {
+        display: none;
+      }
+      #status {
+        margin-left: 8px;
+        color: #cfc8d6;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="enable" type="button">Activer le son</button>
+    <span id="status">Son désactivé : clique pour autoriser la lecture.</span>
+    <script type="module" src="player.js"></script>
+  </body>
+</html>

@@ -26,6 +26,8 @@ import {
 } from '../loyalty/engine.js';
 import type { BonkLabService } from '../bonk-lab/bonk-lab-service.js';
 import { bonkLabRoutes } from './bonk-lab-routes.js';
+import { soundLabRoutes } from './sound-lab-routes.js';
+import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import { loyaltyRoutes } from './loyalty-routes.js';
 import {
   WalletIdempotencyError,
@@ -45,6 +47,8 @@ export interface AppDeps {
   loyalty: LoyaltyEngine;
   /** Bonk V2 Lab slice (test only). */
   bonkLab?: BonkLabService;
+  /** Soundboard V2 Lab slice (test only). */
+  soundLab?: SoundLabService;
   botSecret: string;
   studioSecret: string;
 }
@@ -105,11 +109,13 @@ function routes({
   wallet,
   loyalty,
   bonkLab,
+  soundLab,
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
     ...loyaltyRoutes(loyalty),
     ...(bonkLab ? bonkLabRoutes(bonkLab) : []),
+    ...(soundLab ? soundLabRoutes(soundLab) : []),
     {
       method: 'GET',
       pattern: /^\/health$/,

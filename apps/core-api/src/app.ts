@@ -1,4 +1,5 @@
 import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
+import { SoundLabService } from './sound-lab/sound-lab-service.js';
 import type { Clock } from './clock.js';
 import { DailyCredits, type CreditProvider } from './daily/credits.js';
 import { DailyService } from './daily/daily-service.js';
@@ -20,6 +21,7 @@ export interface Core {
   wallet: WalletModule;
   loyalty: LoyaltyEngine;
   bonkLab: BonkLabService;
+  soundLab: SoundLabService;
 }
 
 export function createCore(
@@ -39,5 +41,6 @@ export function createCore(
     wallet,
     loyalty,
     bonkLab: new BonkLabService(db, clock),
+    soundLab: new SoundLabService(db, clock),
   };
 }
