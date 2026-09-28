@@ -1,0 +1,676 @@
+/* Hub « Pop Premium » (shared/hub-carousel.js + vue d'accueil de shared/ui.js). Classes rh-*,
+   indépendantes des anciennes feuilles du Hub. Chargé après currency-switch.css. */
+
+/* Le bouton ↻ de la page n'est plus visible : « Actualiser » vit dans Préférences. */
+html body .m-refresh {
+  display: none !important;
+}
+
+.rh-hub {
+  --rh-line: rgba(196, 164, 255, 0.13);
+  --rh-line-strong: rgba(214, 170, 255, 0.4);
+  --rh-muted: #a99cc4;
+  --rh-faint: #7a6f93;
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  /* Hauteur disponible sous le haut du Hub (mesurée au rendu) : pas de défilement parasite. */
+  height: calc(100dvh - var(--rh-top, 8px) - var(--rh-bottom, 8px));
+  min-height: 330px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(196, 164, 255, 0.12);
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 50% at 100% 0%, rgba(168, 85, 247, 0.14), transparent 62%),
+    linear-gradient(180deg, #160f27, #0f0a1c);
+  color: #f4efff;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* --- En-tête : identité, notifications, préférences, wallet ------------------------------------ */
+.rh-top {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 4px;
+}
+.rh-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+}
+.rh-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #c98cff, #7c3aed);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  font-size: 14px;
+  font-weight: 900;
+}
+.rh-brand__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.1;
+}
+.rh-brand__copy small {
+  color: var(--rh-faint);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.rh-brand__copy strong {
+  font-size: 14px;
+  white-space: nowrap;
+}
+.rh-hub.is-narrow .rh-brand__copy small {
+  display: none;
+}
+
+/* --- Scène du carousel ----------------------------------------------------------------------- */
+.rh-stage {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.rh-car {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+  outline: none;
+  touch-action: pan-y;
+  user-select: none;
+}
+.rh-car:focus-visible {
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 2px rgba(220, 196, 255, 0.5);
+}
+.rh-nav {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  margin-top: -15px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  background: rgba(12, 8, 24, 0.72);
+  color: #e9dffb;
+  cursor: pointer;
+  opacity: 0.8;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.15s, transform 0.15s, background 0.15s;
+}
+.rh-nav:hover {
+  background: rgba(40, 26, 70, 0.92);
+  opacity: 1;
+  transform: scale(1.06);
+}
+.rh-nav:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 2px;
+}
+.rh-nav svg {
+  width: 15px;
+  height: 15px;
+}
+.rh-nav--prev {
+  left: 6px;
+}
+.rh-nav--next {
+  right: 6px;
+}
+
+/* --- Carte Pop Premium ---------------------------------------------------------------------- */
+.rh-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  width: var(--rh-cw, 200px);
+  height: var(--rh-ch, 300px);
+  box-sizing: border-box;
+  flex-direction: column;
+  margin: calc(var(--rh-ch, 300px) / -2) 0 0 calc(var(--rh-cw, 200px) / -2);
+  overflow: hidden;
+  isolation: isolate;
+  border: 1.5px solid rgba(255, 255, 255, 0.34);
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 55% at 50% -8%, rgba(255, 255, 255, 0.34), transparent 58%),
+    linear-gradient(180deg, transparent 48%, rgba(14, 8, 28, 0.5) 100%),
+    linear-gradient(155deg, color-mix(in srgb, var(--m) 88%, white 12%) 0%, var(--m) 38%, var(--m2) 100%);
+  box-shadow:
+    0 12px 26px color-mix(in srgb, var(--m2) 35%, rgba(0, 0, 0, 0.5)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  color: #fff;
+  cursor: pointer;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.rh-card::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.12) 48%, transparent 58%);
+  content: '';
+  pointer-events: none;
+}
+.rh-card.is-active {
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 20px 44px color-mix(in srgb, var(--m) 50%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--m) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+}
+.rh-card:not(.is-active):hover {
+  filter: brightness(1.12) !important;
+}
+.rh-card.is-off {
+  filter: saturate(0.3) brightness(0.8) !important;
+  cursor: not-allowed;
+}
+.rh-motif {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 62%;
+  color: #fff;
+  opacity: 0.16;
+  pointer-events: none;
+}
+.rh-card.is-active .rh-motif {
+  opacity: 0.22;
+}
+.rh-art {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+}
+.rh-orb {
+  position: relative;
+  display: grid;
+  width: 86px;
+  height: 86px;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #ffffff, #f4f0ff 60%, #e7e0f7);
+  box-shadow: 0 10px 24px rgba(10, 4, 30, 0.35), 0 0 0 7px rgba(255, 255, 255, 0.22), inset 0 -4px 8px rgba(80, 40, 140, 0.12);
+  color: var(--m);
+  transition: transform 0.35s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.rh-orb::before {
+  position: absolute;
+  inset: -20px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  content: '';
+}
+.rh-orb .rh-icon {
+  width: 40px;
+  height: 40px;
+}
+.rh-card.is-active:hover .rh-orb {
+  transform: translateY(-3px) scale(1.05);
+}
+.rh-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+  padding: 0 5px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #a855f7;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 900;
+  line-height: 16px;
+  text-align: center;
+}
+.rh-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 14px 14px;
+  text-align: center;
+}
+.rh-chip {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  align-self: center;
+  gap: 5px;
+  margin-bottom: 2px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(12, 6, 26, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.rh-chip::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d9d2ea;
+  content: '';
+}
+.rh-chip--live::before {
+  background: #5ee6a0;
+  box-shadow: 0 0 6px #5ee6a0;
+  animation: rh-pulse 1.6s ease-in-out infinite;
+}
+.rh-chip--staff::before {
+  background: #7fe0c4;
+}
+.rh-name {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  text-shadow: 0 2px 10px rgba(20, 6, 40, 0.45);
+}
+.rh-name::after {
+  display: block;
+  width: 24px;
+  height: 3px;
+  margin: 6px auto 2px;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+  content: '';
+}
+.rh-desc {
+  min-height: 2.6em;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  opacity: 0.95;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.rh-cta {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 0 14px 0 16px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(10, 4, 30, 0.3);
+  color: color-mix(in srgb, var(--m) 72%, #1a0b2e);
+  font-size: 12.5px;
+  font-weight: 800;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.25s, transform 0.25s;
+}
+.rh-cta .rh-icon {
+  width: 14px;
+  height: 14px;
+}
+.rh-card.is-active .rh-cta {
+  opacity: 1;
+  transform: none;
+}
+.rh-card.is-off .rh-cta {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+/* --- Bas : rail + « Tous », puis Historique · Classement et Tutoriel -------------------------- */
+.rh-dock {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 10px 10px;
+}
+.rh-rail {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.rh-dot {
+  position: relative;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: color-mix(in srgb, var(--m) 70%, #8a7ea6);
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.15s, background 0.2s, box-shadow 0.2s;
+}
+.rh-dot .rh-icon {
+  width: 13px;
+  height: 13px;
+}
+.rh-dot:hover {
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+}
+.rh-dot.is-on {
+  background: color-mix(in srgb, var(--m) 40%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--m) 70%, transparent), 0 0 10px color-mix(in srgb, var(--m) 35%, transparent);
+  color: #fff;
+  opacity: 1;
+}
+.rh-dot:focus-visible,
+.rh-all-toggle:focus-visible,
+.rh-util-btn:focus-visible,
+.rh-tuto:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 2px;
+}
+.rh-dot__tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  padding: 4px 8px;
+  border: 1px solid rgba(206, 170, 255, 0.22);
+  border-radius: 7px;
+  background: rgba(24, 17, 42, 0.97);
+  color: #f4efff;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 3px);
+  transition: opacity 0.12s, transform 0.12s;
+}
+.rh-dot:hover .rh-dot__tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 0.25s;
+}
+@media (hover: none) {
+  .rh-dot__tip {
+    display: none;
+  }
+}
+.rh-rail__sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--rh-line);
+}
+.rh-all-toggle {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--rh-line);
+  border-radius: 8px;
+  background: rgba(8, 5, 18, 0.5);
+  color: var(--rh-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rh-all-toggle:hover,
+.rh-all-toggle.is-open {
+  border-color: var(--rh-line-strong);
+  color: #fff;
+}
+.rh-all-toggle .rh-icon {
+  width: 12px;
+  height: 12px;
+}
+.rh-hub.is-narrow .rh-dot {
+  width: 21px;
+  height: 21px;
+  border-radius: 7px;
+}
+.rh-hub.is-narrow .rh-dot .rh-icon {
+  width: 12px;
+  height: 12px;
+}
+.rh-all {
+  position: absolute;
+  z-index: 40;
+  right: 10px;
+  bottom: 82px;
+  left: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(206, 170, 255, 0.24);
+  border-radius: 14px;
+  background: rgba(28, 20, 50, 0.98);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+  animation: rh-pop 0.16s ease-out;
+}
+.rh-all[hidden] {
+  display: none;
+}
+.rh-all__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e6ddf5;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rh-all__item:hover {
+  border-color: color-mix(in srgb, var(--m) 50%, transparent);
+  background: color-mix(in srgb, var(--m) 14%, transparent);
+}
+.rh-all__item.is-on {
+  border-color: color-mix(in srgb, var(--m) 70%, transparent);
+}
+.rh-all__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--m) 30%, transparent);
+  color: #fff;
+}
+.rh-all__icon .rh-icon {
+  width: 15px;
+  height: 15px;
+}
+.rh-util {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.rh-util__group {
+  display: flex;
+  gap: 4px;
+}
+.rh-util-btn {
+  position: relative;
+  display: inline-flex;
+  height: 28px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--rh-line);
+  border-radius: 9px;
+  background: rgba(8, 5, 18, 0.45);
+  color: var(--rh-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.14s, border-color 0.14s, background 0.14s;
+}
+.rh-util-btn:hover {
+  border-color: var(--rh-line-strong);
+  background: rgba(184, 115, 255, 0.12);
+  color: #fff;
+}
+.rh-util-btn .rh-icon {
+  width: 14px;
+  height: 14px;
+}
+.rh-util-btn__count {
+  min-width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #a855f7;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+}
+.rh-tuto {
+  display: inline-flex;
+  height: 28px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px 0 4px;
+  border: 1px solid rgba(214, 170, 255, 0.3);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.24), rgba(99, 102, 241, 0.1));
+  color: #e9dcff;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.14s, color 0.14s;
+}
+.rh-tuto:hover {
+  border-color: rgba(214, 170, 255, 0.6);
+  color: #fff;
+}
+.rh-tuto__q {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #c98cff, #7c3aed);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+}
+.rh-hub.is-narrow .rh-util__group {
+  gap: 3px;
+}
+.rh-hub.is-narrow .rh-util-btn {
+  gap: 5px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+.rh-hub.is-narrow .rh-util-btn .rh-icon {
+  width: 13px;
+  height: 13px;
+}
+.rh-hub.is-narrow .rh-tuto {
+  gap: 5px;
+  padding-right: 9px;
+  font-size: 11px;
+}
+
+/* Tiroirs Notifications / Préférences : ancrés sous l'en-tête du Hub. */
+.rh-hub > .jdm-notification-center,
+.rh-hub > .jdm-viewer-preferences {
+  z-index: 50;
+  top: 46px;
+}
+.jdm-viewer-preferences__refresh {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(216, 180, 254, 0.2);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #e6ddf5;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.jdm-viewer-preferences__refresh:hover {
+  border-color: rgba(216, 180, 254, 0.5);
+  color: #fff;
+}
+.jdm-viewer-preferences__refresh:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+@keyframes rh-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes rh-pop {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rh-orb,
+  .rh-cta,
+  .rh-dot,
+  .rh-nav {
+    transition: none;
+  }
+  .rh-chip--live::before,
+  .rh-all {
+    animation: none;
+  }
+}

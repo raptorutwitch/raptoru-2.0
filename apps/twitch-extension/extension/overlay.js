@@ -120,7 +120,9 @@ closeBtn.addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !drawer.hidden) setOpen(false);
+  // En vue Component, le dock est masqué : fermer le tiroir laisserait le composant vide.
+  // Échap y ferme seulement les couches internes (tutoriel, « Tous »…), pas le tiroir.
+  if (event.key === 'Escape' && !drawer.hidden && !isComponentView) setOpen(false);
 });
 
 const twitch = window.Twitch?.ext;

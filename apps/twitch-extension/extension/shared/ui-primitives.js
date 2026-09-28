@@ -388,6 +388,179 @@ function normalizePaymentMethods(methods) {
   return normalized.length ? normalized : ['tokens'];
 }
 
+const CURRENCY_SWITCH_LABELS = Object.freeze({ tokens: 'Jetons', credits: 'Crédits' });
+const CURRENCY_SWITCH_UNITS = Object.freeze({
+  tokens: () => 'jetons',
+  credits: (amount) => `crédit${amount > 1 ? 's' : ''}`,
+});
+let currencySwitchSequence = 0;
+
+/**
+ * Solde compact pour une case de largeur fixe : jusqu'à 999 tel quel, puis K / M avec une
+ * décimale sous 10 (1,2K · 12K · 985K · 1,2M). Tronqué : jamais surestimé.
+ */
+export function formatCompactBalance(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '—';
+  const amount = Math.max(0, Math.trunc(numeric));
+  if (amount < 1_000) return String(amount);
+  const [divisor, unit] = amount < 1_000_000 ? [1_000, 'K'] : [1_000_000, 'M'];
+  const scaled = amount / divisor;
+  if (scaled < 10) {
+    const truncated = Math.floor(scaled * 10) / 10;
+    return `${Number.isInteger(truncated) ? String(truncated) : truncated.toFixed(1).replace('.', ',')}${unit}`;
+  }
+  return `${Math.floor(scaled)}${unit}`;
+}
+
+/**
+ * Switch de monnaie Jetons / Crédits « Peek slide » (classes rl-cswitch, currency-switch.css).
+ * Une pill à largeur fixe posée dans une zone sombre : la pièce active s'écarte au survol et
+ * laisse apparaître l'autre, le clic termine le mouvement ; le montant reste immobile dans sa
+ * case (fondu seul). Infobulle du solde exact au survol / focus clavier, fermée au clic, absente
+ * au tactile. Purement visuel : onChange(nouvelle, précédente) ; aucune règle métier.
+ */
+export function createCurrencySwitch({
+  document: documentRef = globalThis.document,
+  variant = 'label',
+  className = '',
+  ariaLabel = 'Monnaie de paiement',
+  tipPlacement = 'below',
+  onChange = null,
+} = {}) {
+  const document = requireDocument(documentRef);
+  const mode = variant === 'balance' ? 'balance' : 'label';
+  const make = (tag, cls) => {
+    const node = document.createElement(tag);
+    node.className = cls;
+    return node;
+  };
+  const root = make('span', ['rl-cswitch', `rl-cswitch--${mode}`,
+    tipPlacement === 'above' ? 'rl-cswitch--tip-above' : '', className].filter(Boolean).join(' '));
+  const chip = make('button', 'rl-cswitch__chip');
+  chip.type = 'button';
+  const stage = make('span', 'rl-cswitch__stage');
+  stage.setAttribute('aria-hidden', 'true');
+  const box = make('span', 'rl-cswitch__val');
+  box.setAttribute('aria-hidden', 'true');
+  const texts = {};
+  for (const method of ['tokens', 'credits']) {
+    const coin = make('i', 'rl-cswitch__coin');
+    coin.dataset.coin = method;
+    stage.append(coin);
+    texts[method] = make('span', 'rl-cswitch__v');
+    texts[method].dataset.v = method;
+    box.append(texts[method]);
+  }
+  chip.append(stage, box);
+  const tip = make('span', 'rl-cswitch__tip');
+  tip.id = `rl-cswitch-tip-${++currencySwitchSequence}`;
+  tip.setAttribute('role', 'tooltip');
+  chip.setAttribute('aria-describedby', tip.id);
+  root.append(chip, tip);
+
+  let current = null;
+  let available = ['tokens', 'credits'];
+  let locked = false;
+  const toggle = () => {
+    const next = available.find((method) => method !== current);
+    if (!locked && next) onChange?.(next, current);
+  };
+  // Infobulle : un clic / appui / Entrée la ferme tout de suite ; elle ne revient qu'au
+  // prochain survol. Un appui tactile ne la laisse jamais ouverte.
+  let lastPointer = 'mouse';
+  const closeTip = () => root.classList.add('tip-off');
+  chip.addEventListener('pointerdown', (event) => {
+    lastPointer = event.pointerType || 'mouse';
+    closeTip();
+  });
+  root.addEventListener('pointerleave', (event) => {
+    if (event.pointerType !== 'touch') root.classList.remove('tip-off');
+  });
+  root.addEventListener('pointerenter', (event) => {
+    if (event.pointerType === 'mouse' && lastPointer === 'touch') {
+      lastPointer = 'mouse';
+      root.classList.remove('tip-off');
+    }
+  });
+  chip.addEventListener('blur', () => {
+    if (lastPointer !== 'touch') root.classList.remove('tip-off');
+  });
+  chip.addEventListener('click', (event) => {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    toggle();
+  });
+  chip.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') closeTip();
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault?.();
+      closeTip();
+      toggle();
+    }
+  });
+
+  const exact = (amount) => Math.max(0, Math.trunc(Number(amount))).toLocaleString('fr-FR');
+  const known = (amount) => amount !== null && amount !== undefined && Number.isFinite(Number(amount));
+  const tipLine = (method, amounts, className) => {
+    const line = make('span', className);
+    const dot = make('i', 'rl-cswitch__dot');
+    dot.dataset.coin = method;
+    const amount = amounts[method];
+    if (known(amount)) {
+      const value = make('b', '');
+      value.textContent = exact(amount);
+      line.append(dot, value, ` ${CURRENCY_SWITCH_UNITS[method](Number(amount))}`);
+    } else {
+      line.append(dot, `${CURRENCY_SWITCH_LABELS[method]} : solde indisponible`);
+    }
+    return line;
+  };
+
+  const sync = ({
+    method = 'tokens',
+    methods = ['tokens', 'credits'],
+    amounts = {},
+    details = {},
+    disabled = false,
+  } = {}) => {
+    available = normalizePaymentMethods(methods);
+    const active = available.includes(method) ? method : available[0];
+    const other = available.find((candidate) => candidate !== active) ?? null;
+    current = active;
+    locked = !other || Boolean(disabled);
+    root.dataset.method = active;
+    chip.dataset.m = active;
+    root.classList.toggle('is-locked', locked);
+    chip.setAttribute('aria-disabled', String(locked));
+    for (const candidate of ['tokens', 'credits']) {
+      texts[candidate].textContent = mode === 'balance'
+        ? (known(amounts[candidate]) ? formatCompactBalance(amounts[candidate]) : '—')
+        : CURRENCY_SWITCH_LABELS[candidate];
+    }
+    const hasAmounts = known(amounts.tokens) || known(amounts.credits);
+    tip.hidden = !hasAmounts;
+    tip.replaceChildren();
+    if (hasAmounts) {
+      tip.append(tipLine(active, amounts, 'rl-cswitch__tip-main'));
+      if (other) tip.append(tipLine(other, amounts, 'rl-cswitch__tip-other'));
+      if (details[active]) {
+        const note = make('span', 'rl-cswitch__tip-other');
+        note.textContent = String(details[active]);
+        tip.append(note);
+      }
+    }
+    const balance = known(amounts[active])
+      ? ` · ${exact(amounts[active])} ${CURRENCY_SWITCH_UNITS[active](Number(amounts[active]))}`
+      : '';
+    chip.setAttribute('aria-label', `${ariaLabel} : ${CURRENCY_SWITCH_LABELS[active]}${balance}${
+      locked ? '' : `. Changer pour ${CURRENCY_SWITCH_LABELS[other]}`}`);
+    return active;
+  };
+  sync();
+  return { node: root, root, chip, sync };
+}
+
 /**
  * Primitive purement visuelle pour une action payable. Elle ne connaît aucun
  * contrat réseau : l'intégration fournit la méthode, le coût, la disponibilité
@@ -405,10 +578,14 @@ export function createMultiCurrencyPayment({
   enableMethodSwitch = false,
   integratedMethodSwitch = false,
   switchIcon = '',
+  modern = false,
   onAction = null,
   onMethodChange = null,
 } = {}) {
   const document = requireDocument(documentRef);
+  if (modern) {
+    return createModernPayment({ document, className, actionLabel, enableMethodSwitch, onAction, onMethodChange });
+  }
   const root = document.createElement('div');
   root.className = [
     'jdm-multi-payment',
@@ -546,6 +723,83 @@ export function createMultiCurrencyPayment({
     row,
     actionButton: cta,
     switchButton,
+    valueNode: value,
+    unitNode: unit,
+    hintNode: hint,
+    sync,
+  };
+}
+
+// Ligne de paiement moderne (rl-pay) : [Jetons | Crédits]  [Envoyer · prix]. Même contrat que
+// createMultiCurrencyPayment ; aucune règle métier.
+function createModernPayment({ document, className, actionLabel, enableMethodSwitch, onAction, onMethodChange }) {
+  const root = document.createElement('div');
+  root.className = ['rl-pay', className].filter(Boolean).join(' ');
+  const row = document.createElement('div');
+  row.className = 'rl-pay__row';
+  const currencySwitch = enableMethodSwitch
+    ? createCurrencySwitch({ document, tipPlacement: 'above', onChange: (next, previous) => onMethodChange?.(next, previous) })
+    : null;
+  const cta = document.createElement('button');
+  cta.type = 'button';
+  cta.className = 'rl-pay__cta';
+  const label = document.createElement('span');
+  label.className = 'rl-pay__label';
+  const price = document.createElement('span');
+  price.className = 'rl-pay__price';
+  const value = document.createElement('strong');
+  value.className = 'rl-pay__value';
+  const unit = document.createElement('span');
+  unit.className = 'rl-pay__unit';
+  price.append(value, unit);
+  cta.append(label, price);
+  const hint = document.createElement('span');
+  hint.className = 'rl-pay__hint';
+  let currentMethod = 'tokens';
+
+  const sync = ({
+    method = 'tokens',
+    methods = ['tokens', 'credits'],
+    cost = '—',
+    unit: unitText = '',
+    disabled = false,
+    hint: hintText = '',
+    label: labelText = actionLabel,
+    ariaLabel = '',
+    title = '',
+    amounts = {},
+  } = {}) => {
+    const available = normalizePaymentMethods(methods);
+    currentMethod = available.includes(method) ? method : available[0];
+    const actionText = String(labelText ?? actionLabel);
+    const costText = cost == null ? '—' : String(cost);
+    root.dataset.payment = currentMethod;
+    cta.dataset.payment = currentMethod;
+    label.textContent = actionText;
+    value.textContent = costText;
+    unit.textContent = String(unitText ?? '');
+    cta.disabled = Boolean(disabled);
+    cta.setAttribute('aria-label', String(ariaLabel || `${actionText} pour ${costText} ${unitText ?? ''}`.trim()));
+    cta.title = String(title || cta.getAttribute('aria-label'));
+    currencySwitch?.sync({ method: currentMethod, methods: available, amounts });
+    hint.textContent = String(hintText ?? '');
+    const nextMethod = available.find((candidate) => candidate !== currentMethod) ?? null;
+    return { method: currentMethod, nextMethod, methods: [...available] };
+  };
+  cta.addEventListener('click', () => {
+    if (!cta.disabled) return onAction?.(currentMethod);
+  });
+  if (currencySwitch) row.append(currencySwitch.node);
+  row.append(cta);
+  root.append(row, hint);
+  sync();
+  return {
+    node: root,
+    root,
+    row,
+    actionButton: cta,
+    switchButton: null,
+    currencySwitch,
     valueNode: value,
     unitNode: unit,
     hintNode: hint,

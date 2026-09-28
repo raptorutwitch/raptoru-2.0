@@ -18,9 +18,9 @@ import {
   createFeedbackSlot,
   createIconButton,
   createWalletFace,
+  createCurrencySwitch,
   createMultiCurrencyPayment,
   formatWalletExactValue,
-  formatWalletValue,
   normalizeSearchQuery,
   providerPresentation,
   UI_ICONS,
@@ -29,6 +29,7 @@ import {
 } from './ui-primitives.js';
 import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
 import { createEmotePicker } from './emote-picker.js';
+import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 
 const el = (tag, className, text) => {
@@ -57,32 +58,33 @@ export function bonkTwemojiAssetPath(emote) {
   return codepoints ? `assets/twemoji/svg/${codepoints}.svg` : null;
 }
 
-function createPreviewSpeakerIcon() {
-  const createNode = typeof document.createElementNS === 'function'
-    ? (tag) => document.createElementNS('http://www.w3.org/2000/svg', tag)
-    : (tag) => document.createElement(tag);
-  const svg = createNode('svg');
-  svg.classList.add('jdm-sound-preview__icon');
+// Icônes du Soundboard (sbx-*) : tracés simples, couleur héritée.
+const SBX_ICON_PATHS = {
+  play: '<path d="M8.5 6.2v11.6a.9.9 0 0 0 1.4.8l9.2-5.8a.9.9 0 0 0 0-1.6L9.9 5.4a.9.9 0 0 0-1.4.8Z" fill="currentColor"/>',
+  star: '<path class="sbx-star" d="M11.1 3.9a1 1 0 0 1 1.8 0l2.07 4.2 4.63.68a1 1 0 0 1 .56 1.7l-3.35 3.27.79 4.61a1 1 0 0 1-1.45 1.06L12 17.24l-4.15 2.18a1 1 0 0 1-1.45-1.06l.79-4.61-3.35-3.27a1 1 0 0 1 .56-1.7l4.63-.68Z" stroke-linejoin="round"/>',
+  speaker: '<path d="M4.5 9.6v4.8h3.2l4.3 3.7V5.9L7.7 9.6Z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path class="sbx-wave sbx-wave--1" d="M15.3 9.4a3.6 3.6 0 0 1 0 5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path class="sbx-wave sbx-wave--2" d="M17.9 6.9a7.2 7.2 0 0 1 0 10.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path class="sbx-mute" d="m15.6 9.8 4.4 4.4m0-4.4-4.4 4.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
+  search: '<circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  close: '<path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  sort: '<path d="M8 5v14m0 0-3-3m3 3 3-3M16 19V5m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+  send: '<path d="M5 12h12m-4.5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>',
+  clock: '<circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8.2v4.3l2.8 1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+};
+
+function sbxIcon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('role', 'img');
   svg.setAttribute('aria-hidden', 'true');
-  const cone = createNode('path');
-  cone.setAttribute('d', 'M4 9v6h4l5 4V5L8 9H4Z');
-  cone.setAttribute('fill', 'currentColor');
-  const wave = createNode('path');
-  wave.setAttribute('d', 'M16 9c1.8 1.5 1.8 4.5 0 6');
-  wave.setAttribute('fill', 'none');
-  wave.setAttribute('stroke', 'currentColor');
-  wave.setAttribute('stroke-linecap', 'round');
-  wave.setAttribute('stroke-width', '1.8');
-  const waveOuter = createNode('path');
-  waveOuter.setAttribute('d', 'M19 6.5c3.2 3 3.2 8 0 11');
-  waveOuter.setAttribute('fill', 'none');
-  waveOuter.setAttribute('stroke', 'currentColor');
-  waveOuter.setAttribute('stroke-linecap', 'round');
-  waveOuter.setAttribute('stroke-width', '1.5');
-  svg.append(cone, wave, waveOuter);
+  svg.setAttribute('class', `sbx-icon sbx-icon--${name}`);
+  svg.innerHTML = SBX_ICON_PATHS[name];
   return svg;
+}
+
+function sbxEqualizer() {
+  const eq = document.createElement('span');
+  eq.className = 'sbx-eq';
+  eq.setAttribute('aria-hidden', 'true');
+  eq.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
+  return eq;
 }
 
 function createNotificationBellIcon() {
@@ -510,6 +512,15 @@ const ACTIONS_MODULE = Object.freeze({
   icon: '✓',
   description: 'Suis chaque interaction, de la file jusqu’à sa lecture ou son remboursement.',
 });
+// Hub « Pop Premium » : icône et couleurs propres à chaque module (présentation uniquement).
+const HUB_MODULE_STYLES = Object.freeze({
+  tts: { icon: 'tts', color: '#a855f7', color2: '#6366f1' },
+  soundboard: { icon: 'soundboard', color: '#06b6d4', color2: '#3b82f6' },
+  bonk: { icon: 'bonk', color: '#f59e0b', color2: '#ef4444' },
+  raffle_join: { icon: 'raffle_join', color: '#ec4899', color2: '#a855f7' },
+  moderation: { icon: 'moderation', color: '#10b981', color2: '#0e7490' },
+});
+const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
 const MODERATION_MODULE = Object.freeze({
   id: 'moderation',
   label: 'Modération',
@@ -1140,7 +1151,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let soundboardSearchClose = null;
   let soundboardDeselect = null;
   let soundboardDragCancel = null;
+  // Compte à rebours des cooldowns Soundboard (mis à jour sur place, sans reconstruire la grille).
+  let soundboardCooldownTimer = null;
   let soundboardVolumeHeaderButton = null;
+  // Hub : module sélectionné dans le carousel et monnaie affichée par le wallet (consultation).
+  let hubSelectedId = null;
+  let hubWalletMethod = 'tokens';
+  let hubCarousel = null;
   let soundboardFeedback = null;
   let soundboardFeedbackTimer = null;
   let soundboardFeedbackSequence = 0;
@@ -1209,9 +1226,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     soundboard: {
       selectedId: null,
       query: '',
-      searchOpen: false,
+      searchOpen: true,
       sort: 'custom',
       favoritesOnly: false,
+      // Tous / Favoris / Récents (filtre toujours visible).
+      view: 'all',
     },
     bonk: { selectedId: null, activeGroupId: null, query: '', searchOpen: false },
   };
@@ -1273,7 +1292,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   // replie automatiquement la zone ; le bouton et Escape restent explicites.
   root.addEventListener('click', (event) => {
     if (!drafts.soundboard.searchOpen
-      || event.target?.closest?.('.jdm-sound-search, .jdm-soundboard-catalog-tools, .jdm-soundboard-body')) return;
+      || event.target?.closest?.('.rl-soundboard')) return;
     const closeSearch = soundboardSearchClose;
     queueMicrotask(() => {
       if (drafts.soundboard.searchOpen) closeSearch?.();
@@ -1281,14 +1300,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }, true);
   root.addEventListener('click', (event) => {
     const target = event.target;
-    if (soundboardVolumeOpen && !event.target?.closest?.('.jdm-soundboard-volume')) {
+    if (soundboardVolumeOpen && !event.target?.closest?.('.sbx-vol')) {
       soundboardVolumeOpen = false;
       soundboardVolumeSync?.(false);
     }
-    if (!soundboardDeselect || !target?.closest?.('.jdm-soundboard-body')) return;
+    if (!soundboardDeselect || !target?.closest?.('.rl-soundboard')) return;
     // Une carte et ses contrôles restent dans leur flux d'interaction. Tout
     // clic dans le reste du module désélectionne la carte courante.
-    if (target.closest('.jdm-sound-item, .jdm-sound-payment, .jdm-soundboard-volume')) return;
+    if (target.closest('.sbx-card, .sbx-dock, .sbx-head, .sbx-vol')) return;
     soundboardDeselect();
   });
   document.addEventListener('click', (event) => {
@@ -1458,6 +1477,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function updateState(next, { render = true } = {}) {
+    // Soundboard ouvert et poll identique : rien à redessiner (grille, scroll et aperçu intacts).
+    const unchanged = render && (openModule === 'soundboard' || !openModule) && !loadError
+      && JSON.stringify(state) === JSON.stringify(next);
     const previousKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
     const nextKey = emoteCatalogStateKey(next?.emotes, next?.twitch_user_id);
     const nextRaffle = next?.raffle;
@@ -1489,7 +1511,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     actionError = null;
     ttsActionError = null;
     syncViewerPreferenceIdentity(next);
-    if (render) renderPreservingViewport();
+    if (render && !unchanged) renderPreservingViewport();
   }
 
   function closeEmoteAuthorizationPopup() {
@@ -1672,46 +1694,30 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       // Retire uniquement la couche déjà montée. Un rerender ici pourrait
       // déplacer le caret/viewport d’une autre interaction qui vient juste
       // de commencer, et le feedback est purement décoratif.
-      try { root.querySelector('.jdm-soundboard-feedback-layer')?.remove(); } catch { /* vue déjà démontée */ }
+      try { root.querySelector('.sbx-toast')?.remove(); } catch { /* vue déjà démontée */ }
     }, duration);
   }
 
   function createSoundboardFeedbackOverlay() {
-    const layer = el('div', 'jdm-soundboard-feedback-layer');
     const feedback = soundboardFeedback;
+    const toast = el('div', 'sbx-toast');
     if (!feedback) {
-      layer.hidden = true;
-      layer.setAttribute('aria-hidden', 'true');
-      return layer;
+      toast.hidden = true;
+      toast.setAttribute('aria-hidden', 'true');
+      return toast;
     }
-
     const isError = feedback.kind === 'error';
-    layer.classList.add(`jdm-soundboard-feedback-layer--${isError ? 'error' : 'success'}`);
-    if (feedback.reason) layer.classList.add('jdm-soundboard-feedback-layer--has-reason');
-    const toastText = isError ? '✕ Erreur' : '✓ Envoyé';
-    const announcement = feedback.reason ? `${toastText}. ${feedback.reason}` : toastText;
-    layer.setAttribute('role', isError ? 'alert' : 'status');
-    layer.setAttribute('aria-live', isError ? 'assertive' : 'polite');
-    layer.setAttribute('aria-atomic', 'true');
-    layer.setAttribute('aria-label', announcement);
-
-    const toast = el(
-      'div',
-      `jdm-soundboard-feedback-toast jdm-soundboard-feedback-toast--${isError ? 'error' : 'success'}`,
-    );
-    toast.setAttribute('aria-hidden', 'true');
-    toast.append(
-      el('span', 'jdm-soundboard-feedback-toast__mark', isError ? '✕' : '✓'),
-      el('span', 'jdm-soundboard-feedback-toast__text', isError ? 'Erreur' : 'Envoyé'),
-    );
-    layer.append(toast);
-
-    if (feedback.reason) {
-      const banner = el('div', 'jdm-soundboard-error-banner', feedback.reason);
-      banner.setAttribute('aria-hidden', 'true');
-      layer.append(banner);
-    }
-    return layer;
+    toast.classList.add(isError ? 'is-error' : 'is-success');
+    toast.setAttribute('role', isError ? 'alert' : 'status');
+    toast.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+    toast.setAttribute('aria-atomic', 'true');
+    const title = isError ? 'Non envoyé' : 'Envoyé au stream';
+    toast.append(el('span', 'sbx-toast__mark', isError ? '!' : '✓'));
+    const text = el('span', 'sbx-toast__text');
+    text.append(el('strong', '', title));
+    if (feedback.reason) text.append(el('span', '', feedback.reason));
+    toast.append(text);
+    return toast;
   }
 
   async function beginEmoteAuthorization(node) {
@@ -2100,18 +2106,18 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         label: actionLabel,
         ariaLabel: hasText ? `${actionLabel} pour ${costLabel}` : actionLabel,
         title: hasText ? `${actionLabel} pour ${costLabel}` : actionLabel,
+        amounts: {
+          tokens: state?.wallet?.unavailable ? null : state?.wallet?.available,
+          credits: Array.isArray(state?.pending_actions) ? pending.length : null,
+        },
       });
     };
 
     paymentControl = createMultiCurrencyPayment({
-      className: 'jdm-tts-payment',
-      rowClassName: 'jdm-tts-payment__row',
-      ctaClassName: 'jdm-tts-payment__cta jdm-tts-action',
-      switchClassName: 'jdm-tts-payment__switch',
-      hintClassName: 'jdm-tts-payment__hint',
+      className: 'rl-pay--tts',
+      modern: true,
       actionLabel,
       enableMethodSwitch: true,
-      integratedMethodSwitch: true,
       onMethodChange: (method) => {
         ttsPaymentMethod = method;
         syncControls();
@@ -2184,306 +2190,203 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function syncSoundboardPreviewButtons() {
-    for (const button of root.querySelectorAll('.jdm-sound-preview')) {
+    for (const button of root.querySelectorAll('.sbx-card__play')) {
+      if (button.disabled) continue;
       const active = Boolean(previewSoundId) && button.dataset.soundId === previewSoundId;
-      const unavailable = button.disabled;
+      const label = button.dataset.soundLabel || 'ce son';
       button.classList.toggle('is-previewing', active);
-      const icon = button.querySelector('.jdm-sound-preview__icon');
-      icon?.classList.toggle('is-playing', active);
-      icon?.setAttribute('data-playing', String(active));
+      button.closest('.sbx-card')?.classList.toggle('is-previewing', active);
       button.setAttribute('aria-pressed', String(active));
-      button.title = unavailable
-        ? 'Aucun fichier audio pour ce placeholder Studio'
-        : active
-        ? `Arrêter l’aperçu de ${button.dataset.soundLabel || 'ce son'}`
-        : `Préécouter ${button.dataset.soundLabel || 'ce son'}`;
-      button.setAttribute('aria-label', unavailable
-        ? `Aperçu indisponible pour ${button.dataset.soundLabel || 'ce son'} dans le Studio`
-        : active
-        ? `Arrêter l’aperçu de ${button.dataset.soundLabel || 'ce son'}`
-        : `Préécouter ${button.dataset.soundLabel || 'ce son'}`);
+      button.title = active ? 'Arrêter l’aperçu' : 'Écouter (aperçu, rien n’est envoyé)';
+      button.setAttribute('aria-label', active ? `Arrêter l’aperçu de ${label}` : `Écouter ${label}`);
     }
   }
 
-  function syncSoundboardVolumeIndicators() {
-    for (const handle of root.querySelectorAll('.jdm-soundboard-volume__handle')) {
-      handle.textContent = previewVolume ? '🔊' : '🔇';
-    }
-  }
-
-  function previewVolumeControl() {
-    const previewControls = el('label', 'jdm-preview-volume jdm-preview-volume--utility');
-    previewControls.title = 'Volume des aperçus Soundboard';
-    const previewLabel = el('span', 'jdm-preview-volume__label', previewVolume ? '🔊' : '🔇');
-    const previewValue = el('span', 'jdm-preview-volume__value', previewVolume ? `${previewVolume}%` : 'Muet');
-    const volume = el('input', 'jdm-preview-volume__range');
-    volume.type = 'range';
-    volume.min = '0';
-    volume.max = '100';
-    volume.step = '5';
-    volume.value = String(previewVolume);
-    volume.setAttribute('aria-label', 'Volume des aperçus Soundboard');
-    volume.addEventListener('input', () => {
-      previewVolume = clampPreviewVolume(volume.value);
-      savePreviewVolume(previewVolume);
-      previewLabel.textContent = previewVolume ? '🔊' : '🔇';
-      previewValue.textContent = previewVolume ? `${previewVolume}%` : 'Muet';
-      if (previewAudio) previewAudio.volume = previewVolume / 100;
-      syncSoundboardVolumeIndicators();
-    });
-    previewControls.append(previewLabel, volume, previewValue);
-    return previewControls;
-  }
-
+  // Soundboard viewer (markup sbx-*, feuille soundboard.css). Le son est la star : cartes lisibles,
+  // aperçu distinct de l'achat, prix et envoi regroupés dans la barre d'action du bas.
   function soundboardForm(mod, body) {
     const pending = pendingFor('soundboard');
     const interactionsAvailable = interactionsAvailableForState();
     const sounds = Array.isArray(mod.sounds) ? mod.sounds : [];
     const soundById = new Map(sounds.map((sound) => [String(sound.id), sound]));
-    const grid = el('div', 'jdm-grid');
-    grid.setAttribute('role', 'region');
-    grid.setAttribute('aria-label', 'Catalogue Soundboard');
-    const soundIds = new Set(sounds.map((sound) => String(sound.id)));
+    const soundIds = new Set(soundById.keys());
     if (!soundIds.has(drafts.soundboard.selectedId)) drafts.soundboard.selectedId = null;
+    if (!['custom', 'alpha', 'price'].includes(drafts.soundboard.sort)) drafts.soundboard.sort = 'custom';
+    if (!['all', 'favorites', 'recents'].includes(drafts.soundboard.view)) drafts.soundboard.view = 'all';
+    drafts.soundboard.searchOpen = true;
     let selectedSound = drafts.soundboard.selectedId;
     let selectedCreditRedemption = null;
-    let paymentDrawer = null;
-    let paymentControl = null;
-    let hidePaymentTimer = null;
     let favorites = readStoredIds(SOUNDBOARD_FAVORITES_KEY).filter((id) => soundIds.has(id));
     let recents = readStoredIds(SOUNDBOARD_RECENTS_KEY).filter((id) => soundIds.has(id));
-    let customOrder = normalizeSoundboardOrder(
-      readStoredIds(SOUNDBOARD_ORDER_KEY),
-      [...soundIds],
-    );
+    let customOrder = normalizeSoundboardOrder(readStoredIds(SOUNDBOARD_ORDER_KEY), [...soundIds]);
     let aliases = readStoredAliases(SOUNDBOARD_ALIASES_KEY, soundIds);
     writeStoredIds(SOUNDBOARD_FAVORITES_KEY, favorites);
     writeStoredIds(SOUNDBOARD_RECENTS_KEY, recents);
     writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
     writeStoredAliases(SOUNDBOARD_ALIASES_KEY, aliases);
-
     const displayLabelFor = (sound) => soundboardSoundLabel(sound, aliases);
 
-    body.classList.add('jdm-soundboard-body');
-    if (drafts.soundboard.query) drafts.soundboard.searchOpen = true;
+    body.classList.add('rl-soundboard', 'sbx');
 
     const { displayMethods, spendMethods } = walletPaymentMethods(mod, state);
+    const methods = displayMethods.length ? displayMethods : ['tokens'];
     const supportsPaymentMethod = (method) => spendMethods.includes(method);
-    const paymentMethodsFor = () => displayMethods;
+    if (!methods.includes(selectedPaymentMethod)) selectedPaymentMethod = methods[0];
+    const tokenCostOf = (sound) => Number(sound?.token_cost ?? mod.token_cost ?? 500);
+    const creditCostOf = (sound) => Number(sound?.credit_cost ?? 1);
 
-    const normalizePaymentMethod = (methods) => {
-      const available = methods.length ? methods : ['tokens'];
-      if (available.includes(selectedPaymentMethod)) return selectedPaymentMethod;
-      selectedPaymentMethod = available[0];
-      return selectedPaymentMethod;
+    // État d'un son vu par le viewer. Core reste l'autorité (il refuse de toute façon) : ceci
+    // n'est qu'un affichage, recalculé chaque seconde pendant un cooldown.
+    const availability = (sound) => {
+      if (sound?.enabled === false) return { kind: 'disabled', label: 'Indisponible', hint: 'Ce son est désactivé' };
+      const left = (sound?.cooldown_until ? Date.parse(sound.cooldown_until) : 0) - Date.now();
+      if (left > 0) {
+        const seconds = Math.ceil(left / 1000);
+        return { kind: 'cooldown', label: `${seconds} s`, hint: `Disponible dans ${seconds} s`, left };
+      }
+      if (sound?.running && sound.playback_mode === 'ignore_if_running') {
+        return { kind: 'running', label: 'En cours', hint: 'Ce son est déjà en cours de lecture' };
+      }
+      return null;
+    };
+    const durationText = (sound) => {
+      if (String(sound.id) === 'random') return 'Son surprise';
+      const ms = Number(sound.duration_ms || 0);
+      return ms ? `${(ms / 1000).toFixed(1).replace('.', ',')} s` : '';
     };
 
-    const setPaymentVisibility = (open) => {
-      if (!paymentDrawer) return;
-      clearTimeout(hidePaymentTimer);
-      if (open) {
-        paymentDrawer.hidden = false;
-        paymentDrawer.setAttribute('aria-hidden', 'false');
-        requestAnimationFrame(() => {
-          if (selectedSound && paymentDrawer) paymentDrawer.classList.add('is-open');
-        });
-        return;
-      }
-      paymentDrawer.classList.remove('is-open');
-      paymentDrawer.setAttribute('aria-hidden', 'true');
-      hidePaymentTimer = window.setTimeout(() => {
-        if (!selectedSound && paymentDrawer) paymentDrawer.hidden = true;
-      }, 340);
-    };
-
-    const setActionState = () => {
-      const sound = soundById.get(String(selectedSound || ''));
-      const studioPlaceholder = isStudioPreview && sound?.studio_placeholder === true;
-      const creditCost = Number(sound?.credit_cost ?? 1);
-      const tokenCost = Number(sound?.token_cost ?? mod.token_cost ?? 500);
-      selectedCreditRedemption = selectedSound
-        ? pending.find((action) => Number(action.credits_remaining ?? 0) >= creditCost) ?? null
-        : null;
-      const methods = paymentMethodsFor();
-      const method = normalizePaymentMethod(methods);
-      const usingCredits = method === 'credits';
-
-      paymentWalletSync?.(methods, (next) => {
-        selectedPaymentMethod = next;
-        setActionState();
-      });
-
-      const walletUnavailable = state?.wallet?.unavailable === true;
-      const hasEnoughTokens = walletCanPayTokens(state.wallet, tokenCost);
-      const methodSupported = supportsPaymentMethod(method);
-      const methodAvailable = usingCredits ? Boolean(selectedCreditRedemption) : hasEnoughTokens;
-      const cost = usingCredits ? creditCost : tokenCost;
-      const unit = usingCredits
-        ? `crédit${creditCost > 1 ? 's' : ''}`
-        : 'jetons';
-
-      body.dataset.paymentMethod = method;
-      paymentControl?.sync({
-        method,
-        methods,
-        cost: sound ? fmt(cost) : '—',
-        unit: '',
-        disabled: studioPlaceholder || !sound || !methodSupported || !interactionsAvailable || !methodAvailable,
-        hint: studioPlaceholder
-          ? 'Placeholder Studio · aucune action réelle'
-          : !methodSupported
-            ? 'Paiement indisponible pour cette monnaie'
-            : usingCredits && sound && !selectedCreditRedemption
-              ? 'Crédits Soundboard indisponibles pour ce son'
-              : sound && !usingCredits && !hasEnoughTokens
-                ? walletUnavailable ? 'Solde de jetons indisponible' : 'Jetons insuffisants ou solde indisponible'
-                : '',
-        label: 'Envoyer',
-        ariaLabel: sound ? `Envoyer ${displayLabelFor(sound)} pour ${fmt(cost)} ${unit}` : 'Envoyer',
-        title: sound ? `Envoyer ${displayLabelFor(sound)} pour ${fmt(cost)} ${unit}` : 'Envoyer',
-      });
-      for (const candidate of grid.querySelectorAll('.jdm-sound')) {
-        candidate.classList.toggle('is-selected', candidate.dataset.soundId === selectedSound);
-        candidate.setAttribute('aria-pressed', String(candidate.dataset.soundId === selectedSound));
-      }
-      for (const candidate of grid.querySelectorAll('.jdm-sound-item')) {
-        candidate.classList.toggle('is-selected', candidate.dataset.soundId === selectedSound);
-      }
-      body.classList.toggle('has-payment-open', Boolean(sound));
-      setPaymentVisibility(Boolean(sound));
-    };
-
-    const searchWrap = el('div', `jdm-ui-search jdm-sound-search${drafts.soundboard.searchOpen ? ' is-open' : ''}`);
-    const searchToggle = createIconButton({
-      icon: UI_ICONS.search,
-      label: 'Ouvrir la recherche',
-      title: 'Ouvrir la recherche',
-      className: 'jdm-sound-search__toggle',
-      iconClassName: 'jdm-sound-search__icon',
-    });
-    searchToggle.setAttribute('aria-controls', 'soundboard-search');
-    searchToggle.setAttribute('aria-expanded', String(drafts.soundboard.searchOpen));
-    searchToggle.setAttribute('aria-label', drafts.soundboard.searchOpen
-      ? 'Fermer la recherche'
-      : 'Ouvrir la recherche');
-    const search = el('input', 'jdm-ui-search__input jdm-sound-search__input');
+    // --- En-tête : recherche, tri, filtres, état du lecteur -------------------------------------
+    const head = el('div', 'sbx-head');
+    const searchBox = el('label', 'sbx-search');
+    const search = el('input', 'sbx-search__input');
     search.id = 'soundboard-search';
     search.type = 'search';
     search.placeholder = 'Rechercher un son';
     search.value = drafts.soundboard.query;
     search.autocomplete = 'off';
+    search.spellcheck = false;
     search.setAttribute('aria-label', 'Rechercher un son');
     search.dataset.draftKey = 'soundboard-query';
-    searchWrap.append(searchToggle, search);
+    const clearSearch = el('button', 'sbx-search__clear');
+    clearSearch.type = 'button';
+    clearSearch.setAttribute('aria-label', 'Effacer la recherche');
+    clearSearch.append(sbxIcon('close'));
+    searchBox.append(sbxIcon('search'), search, clearSearch);
 
-    const catalogTools = el('div', 'jdm-soundboard-catalog-tools');
-    catalogTools.setAttribute('role', 'group');
-    catalogTools.setAttribute('aria-label', 'Trier et filtrer le catalogue Soundboard');
-    const sortSelect = el('select', 'jdm-soundboard-sort');
-    sortSelect.setAttribute('aria-label', 'Trier le catalogue');
-    sortSelect.title = 'Trier le catalogue';
-    const sortOptions = [
-      ['custom', 'Personnalisé'],
-      ['recent', 'Récents'],
-      ['alpha', 'A → Z'],
-      ['price', 'Prix'],
-    ];
-    for (const [value, label] of sortOptions) {
-      const option = el('option', '', label);
-      option.value = value;
-      option.selected = drafts.soundboard.sort === value;
-      sortSelect.append(option);
-    }
-    // Aucun son du catalogue ne porte une durée fiable. L'option reste
-    // explicitement indisponible plutôt que d'afficher une valeur inventée.
-    const unavailableDuration = el('option', '', 'Durée indisponible');
-    unavailableDuration.value = 'duration';
-    unavailableDuration.disabled = true;
-    unavailableDuration.title = 'La durée n’est pas fournie par les données Soundboard';
-    sortSelect.append(unavailableDuration);
-    const favoritesToggle = el('button', 'jdm-soundboard-favorites-toggle', '★');
-    favoritesToggle.type = 'button';
-    favoritesToggle.setAttribute('aria-pressed', String(Boolean(drafts.soundboard.favoritesOnly)));
-    favoritesToggle.setAttribute('aria-label', drafts.soundboard.favoritesOnly
-      ? 'Afficher tous les sons'
-      : 'Afficher uniquement les favoris');
-    favoritesToggle.title = drafts.soundboard.favoritesOnly
-      ? 'Afficher tous les sons'
-      : 'Favoris uniquement';
-    catalogTools.append(sortSelect, favoritesToggle);
-
-    const syncFavoritesToggle = () => {
-      const active = Boolean(drafts.soundboard.favoritesOnly);
-      favoritesToggle.setAttribute('aria-pressed', String(active));
-      favoritesToggle.setAttribute('aria-label', active
-        ? 'Afficher tous les sons'
-        : 'Afficher uniquement les favoris');
-      favoritesToggle.title = active ? 'Afficher tous les sons' : 'Favoris uniquement';
-    };
-
-    const syncSearch = (focus = false) => {
-      const open = Boolean(drafts.soundboard.searchOpen);
-      searchWrap.classList.toggle('is-open', open);
-      catalogTools.hidden = !open;
-      body.classList.toggle('has-search-open', open);
-      searchToggle.setAttribute('aria-expanded', String(open));
-      search.disabled = !open;
-      search.setAttribute('aria-hidden', String(!open));
-      updateIconButton(searchToggle, {
-        icon: open ? UI_ICONS.close : UI_ICONS.search,
-        label: open ? 'Fermer la recherche' : 'Ouvrir la recherche',
-        title: open ? 'Fermer la recherche' : 'Ouvrir la recherche',
+    const sortWrap = el('div', 'sbx-sort');
+    const sortButton = el('button', 'sbx-iconbtn sbx-sort__button');
+    sortButton.type = 'button';
+    sortButton.title = 'Trier';
+    sortButton.setAttribute('aria-haspopup', 'menu');
+    sortButton.setAttribute('aria-expanded', 'false');
+    sortButton.setAttribute('aria-label', 'Trier le catalogue');
+    sortButton.append(sbxIcon('sort'));
+    const sortMenu = el('div', 'sbx-menu');
+    sortMenu.setAttribute('role', 'menu');
+    sortMenu.hidden = true;
+    const SORTS = [['custom', 'Mon ordre'], ['alpha', 'A → Z'], ['price', 'Prix croissant']];
+    const sortItems = SORTS.map(([value, label]) => {
+      const item = el('button', 'sbx-menu__item', label);
+      item.type = 'button';
+      item.dataset.sort = value;
+      item.setAttribute('role', 'menuitemradio');
+      item.addEventListener('click', () => {
+        drafts.soundboard.sort = value;
+        openSortMenu(false);
+        syncSort();
+        renderGrid();
       });
-      if (focus && open) requestAnimationFrame(() => search.focus({ preventScroll: true }));
+      return item;
+    });
+    const sortNote = el('p', 'sbx-menu__note', 'Mon ordre : maintiens une carte pour la déplacer.');
+    sortMenu.append(...sortItems, sortNote);
+    sortWrap.append(sortButton, sortMenu);
+    const syncSort = () => {
+      for (const item of sortItems) {
+        const on = item.dataset.sort === drafts.soundboard.sort;
+        item.classList.toggle('is-active', on);
+        item.setAttribute('aria-checked', String(on));
+      }
+      sortButton.classList.toggle('is-set', drafts.soundboard.sort !== 'custom');
     };
-    const closeSearch = () => {
-      const hadQuery = Boolean(
-        search.value
-        || drafts.soundboard.query
-      );
-      drafts.soundboard.searchOpen = false;
-      drafts.soundboard.query = '';
-      search.value = '';
-      if (hadQuery) renderGrid();
-      syncFavoritesToggle();
-      syncSearch();
+    const openSortMenu = (open) => {
+      sortMenu.hidden = !open;
+      sortWrap.classList.toggle('is-open', open);
+      sortButton.setAttribute('aria-expanded', String(open));
     };
-    soundboardSearchClose = closeSearch;
-    searchToggle.addEventListener('click', () => {
-      const opening = !drafts.soundboard.searchOpen;
-      drafts.soundboard.searchOpen = opening;
-      if (opening) syncSearch(true);
-      else closeSearch();
+    sortButton.addEventListener('click', () => openSortMenu(sortMenu.hidden));
+    sortWrap.addEventListener('focusout', () => queueMicrotask(() => {
+      if (!sortWrap.contains(document.activeElement)) openSortMenu(false);
+    }));
+    sortWrap.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || sortMenu.hidden) return;
+      event.stopPropagation();
+      openSortMenu(false);
+      sortButton.focus({ preventScroll: true });
     });
-    search.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      closeSearch();
-      searchToggle.focus({ preventScroll: true });
+    syncSort();
+
+    const filters = el('div', 'sbx-filters');
+    filters.setAttribute('role', 'group');
+    filters.setAttribute('aria-label', 'Afficher');
+    const VIEWS = [['all', 'Tous'], ['favorites', 'Favoris'], ['recents', 'Récents']];
+    const filterButtons = VIEWS.map(([id, label]) => {
+      const chip = el('button', 'sbx-filter');
+      chip.type = 'button';
+      chip.dataset.view = id;
+      if (id === 'favorites') chip.append(sbxIcon('star'));
+      chip.append(el('span', 'sbx-filter__label', label), el('span', 'sbx-filter__count'));
+      chip.addEventListener('click', () => {
+        drafts.soundboard.view = id;
+        drafts.soundboard.favoritesOnly = id === 'favorites';
+        syncFilters();
+        renderGrid();
+      });
+      return chip;
     });
-    sortSelect.addEventListener('change', () => {
-      drafts.soundboard.sort = ['custom', 'recent', 'alpha', 'price'].includes(sortSelect.value)
-        ? sortSelect.value
-        : 'custom';
-      renderGrid();
-    });
-    favoritesToggle.addEventListener('click', () => {
-      drafts.soundboard.favoritesOnly = !drafts.soundboard.favoritesOnly;
-      syncFavoritesToggle();
-      renderGrid();
-    });
-    // La recherche reste ouverte pendant les interactions du panneau. Le
-    // bouton et Escape sont les sorties explicites de la zone.
-    syncSearch();
+    filters.append(...filterButtons);
+    const syncFilters = () => {
+      for (const chip of filterButtons) {
+        const on = chip.dataset.view === drafts.soundboard.view;
+        chip.classList.toggle('is-active', on);
+        chip.setAttribute('aria-pressed', String(on));
+        const count = chip.dataset.view === 'favorites' ? favorites.length
+          : chip.dataset.view === 'recents' ? recents.length : sounds.length;
+        chip.querySelector('.sbx-filter__count').textContent = String(count);
+      }
+    };
+    syncFilters();
+
+    // Lecteur du Studio : information discrète (Core refuse de toute façon sans lecteur prêt).
+    const status = el('span', 'sbx-status');
+    if (mod.player_ready === false) {
+      status.classList.add('is-offline');
+      status.title = 'Le lecteur audio du Studio n’est pas prêt : un envoi serait refusé sans rien consommer.';
+      status.append(el('span', 'sbx-status__dot'), el('span', '', 'Lecteur hors ligne'));
+    } else if (mod.player_ready === true) {
+      status.classList.add('is-online');
+      status.title = 'Lecteur audio du Studio prêt';
+      status.append(el('span', 'sbx-status__dot'), el('span', '', 'Lecteur prêt'));
+    }
+
+    const searchRow = el('div', 'sbx-head__row');
+    searchRow.append(searchBox, sortWrap);
+    const filterRow = el('div', 'sbx-head__row sbx-head__row--filters');
+    filterRow.append(filters, status);
+    head.append(searchRow, filterRow);
+
+    // --- Grille ----------------------------------------------------------------------------------
+    const grid = el('div', 'sbx-grid');
+    grid.setAttribute('role', 'list');
+    grid.setAttribute('aria-label', 'Catalogue Soundboard');
+    grid.dataset.scrollKey = 'soundboard-grid';
 
     const visibleSounds = () => {
-      let candidates = sounds.filter((sound) => soundboardSoundMatchesQuery(
-        sound,
-        drafts.soundboard.query,
-        aliases,
-      ));
-      if (drafts.soundboard.favoritesOnly) {
+      let candidates = sounds.filter((sound) => soundboardSoundMatchesQuery(sound, drafts.soundboard.query, aliases));
+      if (drafts.soundboard.view === 'favorites') {
         candidates = candidates.filter((sound) => favorites.includes(String(sound.id)));
+      } else if (drafts.soundboard.view === 'recents') {
+        return recents.map((id) => candidates.find((sound) => String(sound.id) === id)).filter(Boolean);
       }
       return sortSoundboardSounds(candidates, {
         sort: drafts.soundboard.sort,
@@ -2496,10 +2399,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     };
 
     const playSoundPreview = async (sound, trigger = null) => {
-      const previewUrls = soundPreviewUrls(sound);
-      if (!previewUrls.length) return;
+      if (!soundPreviewUrls(sound).length) return;
       if (!previewVolume) {
-        flash(body, 'Monte le volume des aperçus pour écouter ce son.');
+        showBarNotice('Monte le volume des aperçus (🔊 en haut) pour écouter.');
         return;
       }
       let audio = null;
@@ -2516,17 +2418,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const previewUrl = chooseSoundPreviewUrl(sound);
       try {
         stopSoundPreview();
-        const source = new URL(String(previewUrl), document.baseURI).href;
         audio = new Audio();
         previewAudio = audio;
-        previewAudio.preload = 'auto';
-        previewAudio.src = source;
-        previewAudio.volume = previewVolume / 100;
+        audio.preload = 'auto';
+        audio.src = new URL(String(previewUrl), document.baseURI).href;
+        audio.volume = previewVolume / 100;
         previewRestore = restore;
         previewSoundId = soundId;
-        trigger?.classList.add('is-previewing');
         syncSoundboardPreviewButtons();
-        previewAudio.addEventListener('ended', restore, { once: true });
+        audio.addEventListener('ended', restore, { once: true });
         await audio.play();
       } catch (error) {
         if (previewAudio !== audio) {
@@ -2539,26 +2439,23 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           code: errorCode,
           source: String(previewUrl || ''),
           message: String(error?.message || audio?.error?.message || 'preview_failed').slice(0, 180),
-          network_state: audio?.networkState ?? null,
-          ready_state: audio?.readyState ?? null,
         });
         stopSoundPreview();
-        flash(body, `Aperçu audio indisponible (${errorCode}). Aucun jeton ni crédit n’a été utilisé.`);
+        showBarNotice(`Aperçu indisponible (${errorCode}). Rien n’a été envoyé.`);
       }
     };
 
     const selectSound = (sound) => {
-      const soundId = String(sound.id);
-      selectedSound = soundId;
-      drafts.soundboard.selectedId = soundId;
+      selectedSound = String(sound.id);
+      drafts.soundboard.selectedId = selectedSound;
       setActionState();
     };
 
+    // Réordonnancement personnel (tri « Mon ordre ») : appui long puis glisser, ou Alt+flèches.
     let dragPending = null;
     let dragSession = null;
     let dragJustDroppedId = null;
     const dragDelayMs = 300;
-
     const bindGlobalPointerTracking = (onMove, onUp, onCancel) => {
       const target = globalThis.window;
       if (!target || typeof target.addEventListener !== 'function') return () => {};
@@ -2566,63 +2463,38 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       target.addEventListener('pointerup', onUp);
       target.addEventListener('pointercancel', onCancel);
       return () => {
-        if (typeof target.removeEventListener !== 'function') return;
         target.removeEventListener('pointermove', onMove);
         target.removeEventListener('pointerup', onUp);
         target.removeEventListener('pointercancel', onCancel);
       };
     };
-
     const clearDragPending = () => {
-      const pending = dragPending;
+      const current = dragPending;
       dragPending = null;
-      if (!pending) return;
-      if (pending.timer !== null) globalThis.clearTimeout?.(pending.timer);
-      pending.detach?.();
-      pending.detach = null;
-      pending.timer = null;
+      if (!current) return;
+      if (current.timer !== null) globalThis.clearTimeout?.(current.timer);
+      current.detach?.();
     };
-
-    const setDragStyle = (node, property, value) => {
-      node?.style?.setProperty?.(property, value, 'important');
-    };
-
-    const clearDragStyles = (node) => {
-      for (const property of [
-        '--jdm-soundboard-drag-x',
-        '--jdm-soundboard-drag-y',
-        '--jdm-soundboard-drag-width',
-        '--jdm-soundboard-drag-height',
-      ]) node?.style?.removeProperty?.(property);
-    };
-
     const positionDraggedItem = (session, event) => {
-      const x = Number(event.clientX) || 0;
-      const y = Number(event.clientY) || 0;
-      setDragStyle(session.item, '--jdm-soundboard-drag-x', `${x - session.offsetX}px`);
-      setDragStyle(session.item, '--jdm-soundboard-drag-y', `${y - session.offsetY}px`);
+      session.item.style.setProperty('--sbx-drag-x', `${(Number(event.clientX) || 0) - session.offsetX}px`);
+      session.item.style.setProperty('--sbx-drag-y', `${(Number(event.clientY) || 0) - session.offsetY}px`);
     };
-
     const moveDragPlaceholder = (session, event) => {
-      const candidates = [...grid.querySelectorAll('.jdm-sound-item')];
-      if (!candidates.length || typeof grid.insertBefore !== 'function') return;
       const x = Number(event.clientX) || 0;
       const y = Number(event.clientY) || 0;
       let target = null;
       let targetRect = null;
       let nearest = Number.POSITIVE_INFINITY;
-      for (const candidate of candidates) {
-        const rect = candidate.getBoundingClientRect?.();
-        if (!rect) continue;
-        const distance = ((rect.left + rect.width / 2) - x) ** 2
-          + ((rect.top + rect.height / 2) - y) ** 2;
+      for (const candidate of grid.querySelectorAll('.sbx-card')) {
+        const rect = candidate.getBoundingClientRect();
+        const distance = ((rect.left + rect.width / 2) - x) ** 2 + ((rect.top + rect.height / 2) - y) ** 2;
         if (distance < nearest) {
           nearest = distance;
           target = candidate;
           targetRect = rect;
         }
       }
-      if (!target || !targetRect) {
+      if (!target) {
         grid.append(session.placeholder);
         return;
       }
@@ -2634,43 +2506,28 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       if (sibling) grid.insertBefore(session.placeholder, sibling);
       else grid.append(session.placeholder);
     };
-
     const finishDrag = ({ commit = false } = {}) => {
       clearDragPending();
       const session = dragSession;
       if (!session) return;
       dragSession = null;
       session.detach?.();
-      session.detach = null;
       const parent = session.placeholder.parentNode;
       if (parent && !commit) {
-        const current = [...grid.querySelectorAll('.jdm-sound-item')];
-        const originalIndex = session.visibleIds.indexOf(session.soundId);
-        const reference = current[originalIndex] ?? null;
+        const reference = [...grid.querySelectorAll('.sbx-card')][session.visibleIds.indexOf(session.soundId)] ?? null;
         if (reference) parent.insertBefore(session.placeholder, reference);
-        else parent.append(session.placeholder);
       }
-      if (parent && typeof parent.replaceChild === 'function') {
-        parent.replaceChild(session.item, session.placeholder);
-      } else if (parent) {
-        parent.append(session.item);
-        session.placeholder.remove?.();
-      }
+      if (parent) parent.replaceChild(session.item, session.placeholder);
       session.item.classList.remove('is-dragging');
-      session.item.removeAttribute('aria-grabbed');
-      clearDragStyles(session.item);
+      session.item.style.removeProperty('--sbx-drag-x');
+      session.item.style.removeProperty('--sbx-drag-y');
+      session.item.style.removeProperty('--sbx-drag-w');
+      session.item.style.removeProperty('--sbx-drag-h');
       grid.classList.remove('is-dragging');
-      grid.removeAttribute('aria-busy');
       soundboardDragCancel = null;
       if (!commit) return;
-
-      const reorderedVisibleIds = [...grid.querySelectorAll('.jdm-sound-item')]
-        .map((item) => String(item.dataset.soundId));
-      customOrder = reorderSoundboardVisibleSubset(
-        customOrder,
-        session.visibleIds,
-        reorderedVisibleIds,
-      );
+      const reordered = [...grid.querySelectorAll('.sbx-card')].map((item) => String(item.dataset.soundId));
+      customOrder = reorderSoundboardVisibleSubset(customOrder, session.visibleIds, reordered);
       writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
       dragJustDroppedId = session.soundId;
       renderGrid();
@@ -2678,78 +2535,62 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         if (dragJustDroppedId === session.soundId) dragJustDroppedId = null;
       }, 0);
     };
-
-    const beginDrag = (pending) => {
-      if (dragPending !== pending || dragSession || drafts.soundboard.sort !== 'custom') return;
-      pending.detach?.();
-      pending.detach = null;
-      pending.timer = null;
+    const beginDrag = (current) => {
+      if (dragPending !== current || dragSession || drafts.soundboard.sort !== 'custom') return;
+      current.detach?.();
       dragPending = null;
-      const item = pending.item;
+      const item = current.item;
       const parent = item?.parentNode;
-      if (!item || !parent || typeof parent.insertBefore !== 'function') return;
-      const rect = item.getBoundingClientRect?.();
-      if (!rect) return;
-      const placeholder = el('div', 'jdm-sound-drag-placeholder');
+      if (!parent) return;
+      const rect = item.getBoundingClientRect();
+      const placeholder = el('div', 'sbx-card-placeholder');
       placeholder.setAttribute('aria-hidden', 'true');
-      setDragStyle(placeholder, '--jdm-soundboard-drag-width', `${rect.width}px`);
-      setDragStyle(placeholder, '--jdm-soundboard-drag-height', `${rect.height}px`);
-      const visibleIds = [...grid.querySelectorAll('.jdm-sound-item')]
-        .map((candidate) => String(candidate.dataset.soundId));
+      placeholder.style.setProperty('--sbx-drag-h', `${rect.height}px`);
+      const visibleIds = [...grid.querySelectorAll('.sbx-card')].map((candidate) => String(candidate.dataset.soundId));
       parent.insertBefore(placeholder, item);
-      item.remove?.();
       root.append(item);
       item.classList.add('is-dragging');
-      item.setAttribute('aria-grabbed', 'true');
       grid.classList.add('is-dragging');
-      grid.setAttribute('aria-busy', 'true');
-      setDragStyle(item, '--jdm-soundboard-drag-width', `${rect.width}px`);
-      setDragStyle(item, '--jdm-soundboard-drag-height', `${rect.height}px`);
+      item.style.setProperty('--sbx-drag-w', `${rect.width}px`);
+      item.style.setProperty('--sbx-drag-h', `${rect.height}px`);
       const session = {
         item,
         placeholder,
-        soundId: pending.soundId,
-        pointerId: pending.pointerId,
-        offsetX: (Number(pending.clientX) || 0) - rect.left,
-        offsetY: (Number(pending.clientY) || 0) - rect.top,
+        soundId: current.soundId,
+        pointerId: current.pointerId,
+        offsetX: current.clientX - rect.left,
+        offsetY: current.clientY - rect.top,
         visibleIds,
         detach: null,
       };
       dragSession = session;
-      try { item.setPointerCapture?.(pending.pointerId); } catch { /* capture facultative */ }
-      positionDraggedItem(session, pending);
-      const onMove = (event) => {
-        if (event.pointerId !== session.pointerId) return;
-        event.preventDefault?.();
-        positionDraggedItem(session, event);
-        moveDragPlaceholder(session, event);
-      };
-      const onUp = (event) => {
-        if (event.pointerId !== session.pointerId) return;
-        event.preventDefault?.();
-        finishDrag({ commit: true });
-      };
-      const onCancel = (event) => {
-        if (event.pointerId !== session.pointerId) return;
-        finishDrag();
-      };
-      session.detach = bindGlobalPointerTracking(onMove, onUp, onCancel);
+      positionDraggedItem(session, current);
+      session.detach = bindGlobalPointerTracking(
+        (event) => {
+          if (event.pointerId !== session.pointerId) return;
+          event.preventDefault?.();
+          positionDraggedItem(session, event);
+          moveDragPlaceholder(session, event);
+        },
+        (event) => {
+          if (event.pointerId !== session.pointerId) return;
+          event.preventDefault?.();
+          finishDrag({ commit: true });
+        },
+        (event) => {
+          if (event.pointerId === session.pointerId) finishDrag();
+        },
+      );
       soundboardDragCancel = () => finishDrag();
     };
-
-    const dragExcludedTarget = (target) => Boolean(target?.closest?.(
-      '.jdm-sound-preview, .jdm-sound-favorite, .jdm-sound-alias, .jdm-sound-alias-editor',
-    ));
-
+    const dragExcludedTarget = (target) => Boolean(target?.closest?.('.sbx-card__play, .sbx-card__fav, .sbx-alias'));
     const startDragPending = (item, soundId, event) => {
-      if (drafts.soundboard.sort !== 'custom'
-        || dragSession
-        || event.isPrimary === false
-        || (event.button !== undefined && event.button !== 0)
+      if (drafts.soundboard.sort !== 'custom' || drafts.soundboard.view !== 'all' || dragSession
+        || event.isPrimary === false || (event.button !== undefined && event.button !== 0)
         || dragExcludedTarget(event.target)) return;
       clearDragPending();
       const pointerId = event.pointerId ?? 1;
-      const pending = {
+      const current = {
         item,
         soundId,
         pointerId,
@@ -2758,41 +2599,33 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         timer: null,
         detach: null,
       };
-      dragPending = pending;
-      const cancelIfMoved = (moveEvent) => {
-        if (moveEvent.pointerId !== pointerId || dragPending !== pending) return;
-        const dx = (Number(moveEvent.clientX) || 0) - pending.clientX;
-        const dy = (Number(moveEvent.clientY) || 0) - pending.clientY;
-        if (Math.hypot(dx, dy) > 10) clearDragPending();
-      };
-      const cancelOnUp = (upEvent) => {
-        if (upEvent.pointerId === pointerId && dragPending === pending) clearDragPending();
-      };
-      pending.detach = bindGlobalPointerTracking(cancelIfMoved, cancelOnUp, cancelOnUp);
-      pending.timer = globalThis.setTimeout?.(() => beginDrag(pending), dragDelayMs) ?? null;
+      dragPending = current;
+      current.detach = bindGlobalPointerTracking(
+        (moveEvent) => {
+          if (moveEvent.pointerId !== pointerId || dragPending !== current) return;
+          const dx = (Number(moveEvent.clientX) || 0) - current.clientX;
+          const dy = (Number(moveEvent.clientY) || 0) - current.clientY;
+          if (Math.hypot(dx, dy) > 10) clearDragPending();
+        },
+        (upEvent) => {
+          if (upEvent.pointerId === pointerId && dragPending === current) clearDragPending();
+        },
+        (upEvent) => {
+          if (upEvent.pointerId === pointerId && dragPending === current) clearDragPending();
+        },
+      );
+      current.timer = globalThis.setTimeout?.(() => beginDrag(current), dragDelayMs) ?? null;
     };
-
-    const gridColumnCount = () => {
-      try {
-        const columns = globalThis.getComputedStyle?.(grid)?.gridTemplateColumns
-          ?.trim().split(/\s+/u).filter(Boolean).length;
-        return Math.max(1, Number(columns) || 1);
-      } catch {
-        return 1;
-      }
-    };
-
     const reorderWithKeyboard = (soundId, key) => {
-      if (drafts.soundboard.sort !== 'custom') return false;
-      const visibleIds = [...grid.querySelectorAll('.jdm-sound-item')]
-        .map((item) => String(item.dataset.soundId));
+      if (drafts.soundboard.sort !== 'custom' || drafts.soundboard.view !== 'all') return false;
+      const visibleIds = [...grid.querySelectorAll('.sbx-card')].map((item) => String(item.dataset.soundId));
       const index = visibleIds.indexOf(String(soundId));
       if (index < 0) return false;
-      const columns = gridColumnCount();
-      const delta = key === 'ArrowLeft' ? -1
-        : key === 'ArrowRight' ? 1
-          : key === 'ArrowUp' ? -columns
-            : columns;
+      let columns = 1;
+      try {
+        columns = Math.max(1, getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/u).length);
+      } catch { /* une colonne par défaut */ }
+      const delta = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : key === 'ArrowUp' ? -columns : columns;
       const target = Math.min(visibleIds.length - 1, Math.max(0, index + delta));
       if (target === index) return false;
       const reordered = [...visibleIds];
@@ -2800,20 +2633,20 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       customOrder = reorderSoundboardVisibleSubset(customOrder, visibleIds, reordered);
       writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
       renderGrid();
-      globalThis.queueMicrotask?.(() => [...grid.querySelectorAll('.jdm-sound')]
-        .find((candidate) => candidate.dataset.soundId === String(soundId))
-        ?.focus?.({ preventScroll: true }));
+      queueMicrotask(() => grid.querySelector(`.sbx-card[data-sound-id="${CSS.escape(String(soundId))}"] .sbx-card__main`)
+        ?.focus({ preventScroll: true }));
       return true;
     };
 
-    const openAliasEditor = (sound, item, returnFocus = null) => {
-      if (item.querySelector('.jdm-sound-alias-editor')) return;
+    // Nom personnel (clic droit / Maj+F2) : stocké localement, n'affecte que ce viewer.
+    const openAliasEditor = (sound, card, returnFocus = null) => {
+      if (card.querySelector('.sbx-alias')) return;
       const soundId = String(sound.id);
       const originalLabel = String(sound.label ?? soundId);
       const currentAlias = aliasValue(aliases, soundId);
-      const form = el('form', 'jdm-sound-alias-editor');
+      const form = el('form', 'sbx-alias');
       form.setAttribute('aria-label', `Nom personnel de ${originalLabel}`);
-      const input = el('input', 'jdm-sound-alias-editor__input');
+      const input = el('input', 'sbx-alias__input');
       input.type = 'text';
       input.maxLength = SOUNDBOARD_ALIAS_MAX_LENGTH;
       input.value = currentAlias;
@@ -2821,44 +2654,33 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       input.autocomplete = 'off';
       input.setAttribute('aria-label', `Nom personnel de ${originalLabel}`);
       input.dataset.draftKey = `soundboard-alias-${soundId}`;
-      const save = el('button', 'jdm-sound-alias-editor__save', '✓');
+      const save = el('button', 'sbx-alias__btn sbx-alias__btn--save', '✓');
       save.type = 'submit';
       save.setAttribute('aria-label', 'Valider le nom personnel');
-      save.title = 'Valider';
-      const restore = el('button', 'jdm-sound-alias-editor__restore', '↺');
+      const restore = el('button', 'sbx-alias__btn', '↺');
       restore.type = 'button';
       restore.hidden = !currentAlias;
       restore.setAttribute('aria-label', 'Restaurer le nom original');
       restore.title = 'Restaurer le nom original';
       form.append(input, save, restore);
-      const stopEditorEvent = (event) => event.stopPropagation();
-      form.addEventListener('click', stopEditorEvent);
-      form.addEventListener('pointerdown', stopEditorEvent);
+      for (const type of ['click', 'pointerdown']) form.addEventListener(type, (event) => event.stopPropagation());
       form.addEventListener('contextmenu', (event) => {
         event.preventDefault();
         event.stopPropagation();
       });
       const persistAlias = (value) => {
         const next = normalizeSoundboardAlias(value);
-        if (!next || normalizeSearchQuery(next) === normalizeSearchQuery(originalLabel)) {
-          delete aliases[soundId];
-        } else {
-          aliases[soundId] = next;
-        }
+        if (!next || normalizeSearchQuery(next) === normalizeSearchQuery(originalLabel)) delete aliases[soundId];
+        else aliases[soundId] = next;
         writeStoredAliases(SOUNDBOARD_ALIASES_KEY, aliases);
         renderGrid();
-        globalThis.queueMicrotask?.(() => [...grid.querySelectorAll('.jdm-sound-alias')]
-          .find((candidate) => candidate.dataset.soundId === soundId)
-          ?.focus?.({ preventScroll: true }));
       };
       form.addEventListener('submit', (event) => {
         event.preventDefault();
-        event.stopPropagation();
         persistAlias(input.value);
       });
       restore.addEventListener('click', (event) => {
         event.preventDefault();
-        event.stopPropagation();
         persistAlias('');
       });
       input.addEventListener('keydown', (event) => {
@@ -2866,157 +2688,300 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         event.preventDefault();
         event.stopPropagation();
         renderGrid();
-        globalThis.queueMicrotask?.(() => returnFocus?.focus?.({ preventScroll: true }));
+        queueMicrotask(() => returnFocus?.focus?.({ preventScroll: true }));
       });
-      item.classList.add('is-alias-editing');
-      item.append(form);
-      input.focus?.({ preventScroll: true });
-      input.select?.();
+      card.classList.add('is-editing');
+      card.append(form);
+      input.focus({ preventScroll: true });
+      input.select();
+    };
+
+    const syncCard = (card) => {
+      const sound = soundById.get(String(card.dataset.soundId));
+      if (!sound) return;
+      const soundId = String(sound.id);
+      const unavailable = availability(sound);
+      const playing = !unavailable && sound.running === true;
+      card.dataset.state = unavailable?.kind ?? (playing ? 'playing' : 'available');
+      const selected = soundId === selectedSound;
+      card.classList.toggle('is-selected', selected);
+      const main = card.querySelector('.sbx-card__main');
+      main.disabled = Boolean(unavailable);
+      main.setAttribute('aria-pressed', String(selected));
+      main.title = unavailable ? unavailable.hint : aliases[soundId] ? `Nom original : ${sound.label ?? soundId}` : '';
+      const meta = card.querySelector('.sbx-card__meta');
+      meta.replaceChildren();
+      if (unavailable?.kind === 'cooldown') {
+        meta.append(sbxIcon('clock'), el('span', '', unavailable.label));
+        const total = Number(sound.cooldown_ms || 0);
+        card.style.setProperty('--sbx-cd', total > 0 ? String(Math.min(1, unavailable.left / total)) : '0');
+      } else {
+        card.style.removeProperty('--sbx-cd');
+        if (unavailable) meta.append(el('span', '', unavailable.label));
+        else if (playing) meta.append(sbxEqualizer(), el('span', '', 'En lecture'));
+        else meta.append(el('span', '', durationText(sound)));
+      }
+      const favoriteOn = favorites.includes(soundId);
+      card.classList.toggle('is-favorite', favoriteOn);
+      const fav = card.querySelector('.sbx-card__fav');
+      fav.setAttribute('aria-pressed', String(favoriteOn));
+      fav.setAttribute('aria-label', favoriteOn
+        ? `Retirer ${displayLabelFor(sound)} des favoris`
+        : `Ajouter ${displayLabelFor(sound)} aux favoris`);
+      fav.title = favoriteOn ? 'Retirer des favoris' : 'Ajouter aux favoris';
+    };
+
+    const buildCard = (sound) => {
+      const soundId = String(sound.id);
+      const label = displayLabelFor(sound);
+      const card = el('div', 'sbx-card');
+      card.dataset.soundId = soundId;
+      card.setAttribute('role', 'listitem');
+      if (soundId === 'random') card.classList.add('is-random');
+
+      const main = el('button', 'sbx-card__main');
+      main.type = 'button';
+      main.setAttribute('aria-label', `Sélectionner ${label}`);
+      main.setAttribute('aria-keyshortcuts', 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown');
+
+      const play = el('button', 'sbx-card__play');
+      play.type = 'button';
+      play.dataset.soundId = soundId;
+      play.dataset.soundLabel = label;
+      if (!soundPreviewUrls(sound).length || sound.studio_placeholder === true) {
+        play.disabled = true;
+        play.classList.add('is-empty');
+        play.append(el('span', 'sbx-card__dice', soundId === 'random' ? '🎲' : '·'));
+        play.title = soundId === 'random' ? 'Son choisi au hasard à l’envoi' : 'Aperçu indisponible';
+        play.setAttribute('aria-label', play.title);
+      } else {
+        play.append(sbxIcon('play'), sbxEqualizer());
+      }
+      play.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (previewSoundId === soundId) stopSoundPreview();
+        else void playSoundPreview(sound, play);
+      });
+
+      const text = el('span', 'sbx-card__text');
+      text.append(el('span', 'sbx-card__name', label), el('span', 'sbx-card__meta'));
+
+      const fav = el('button', 'sbx-card__fav');
+      fav.type = 'button';
+      fav.append(sbxIcon('star'));
+      fav.addEventListener('pointerdown', (event) => event.stopPropagation());
+      fav.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        favorites = favorites.includes(soundId) ? favorites.filter((id) => id !== soundId) : [soundId, ...favorites];
+        writeStoredIds(SOUNDBOARD_FAVORITES_KEY, favorites);
+        syncFilters();
+        if (drafts.soundboard.view === 'favorites') renderGrid();
+        else syncCard(card);
+        fav.classList.toggle('is-popping', favorites.includes(soundId));
+      });
+      fav.addEventListener('animationend', () => fav.classList.remove('is-popping'));
+
+      main.addEventListener('click', (event) => {
+        if (dragJustDroppedId === soundId) {
+          event.preventDefault();
+          dragJustDroppedId = null;
+          return;
+        }
+        selectSound(sound);
+      });
+      main.addEventListener('keydown', (event) => {
+        if (event.key === 'F2' && event.shiftKey) {
+          event.preventDefault();
+          openAliasEditor(sound, card, main);
+          return;
+        }
+        if (event.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
+          && reorderWithKeyboard(soundId, event.key)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      });
+      card.addEventListener('pointerdown', (event) => startDragPending(card, soundId, event));
+      card.addEventListener('contextmenu', (event) => {
+        if (dragExcludedTarget(event.target)) return;
+        event.preventDefault();
+        openAliasEditor(sound, card, main);
+      });
+      card.append(main, play, text, fav);
+      syncCard(card);
+      return card;
+    };
+
+    const emptyMessage = () => {
+      if (drafts.soundboard.query.trim()) return ['Aucun son trouvé', `Rien ne correspond à « ${drafts.soundboard.query.trim()} ».`];
+      if (drafts.soundboard.view === 'favorites') return ['Pas encore de favori', 'Touche l’étoile d’une carte pour la retrouver ici.'];
+      if (drafts.soundboard.view === 'recents') return ['Aucun son récent', 'Tes derniers envois apparaîtront ici.'];
+      return ['Soundboard vide', 'Aucun son n’est disponible pour le moment.'];
     };
 
     const renderGrid = () => {
       const previousScrollTop = grid.scrollTop;
-      const previousScrollLeft = grid.scrollLeft;
-      grid.replaceChildren();
       const candidates = visibleSounds();
       if (!candidates.length) {
-        grid.append(el('p', 'jdm-sound-empty', 'Aucun son ne correspond à ta recherche.'));
-        setActionState();
-        grid.scrollTop = previousScrollTop;
-        grid.scrollLeft = previousScrollLeft;
-        return;
+        const [title, copy] = emptyMessage();
+        const empty = el('div', 'sbx-empty');
+        empty.append(el('strong', '', title), el('span', '', copy));
+        grid.replaceChildren(empty);
+      } else {
+        grid.replaceChildren(...candidates.map(buildCard));
       }
-
-      for (const sound of candidates) {
-        const soundId = String(sound.id);
-        const creditCost = Number(sound.credit_cost ?? 1);
-        const tokenCost = Number(sound.token_cost ?? mod.token_cost ?? 500);
-        const originalLabel = String(sound.label ?? soundId);
-        const displayLabel = displayLabelFor(sound);
-        const item = el('div', 'jdm-sound-item');
-        item.dataset.soundId = soundId;
-        item.setAttribute('role', 'listitem');
-        const button = el('button', 'jdm-sound');
-        button.type = 'button';
-        button.dataset.soundId = soundId;
-        button.setAttribute('aria-label', aliases[soundId]
-          ? `Sélectionner ${displayLabel} (nom original : ${originalLabel}) · ${creditCost} crédit${creditCost > 1 ? 's' : ''} ou ${fmt(tokenCost)} jetons`
-          : `Sélectionner ${displayLabel} · ${creditCost} crédit${creditCost > 1 ? 's' : ''} ou ${fmt(tokenCost)} jetons`);
-        button.title = aliases[soundId]
-          ? `${displayLabel} · nom original : ${originalLabel}`
-          : `Sélectionner ${displayLabel}`;
-        button.setAttribute('aria-pressed', String(selectedSound === soundId));
-        button.setAttribute('aria-keyshortcuts', 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown');
-        button.append(el('span', 'jdm-sound__label', displayLabel));
-        if (selectedSound === soundId) {
-          button.classList.add('is-selected');
-          item.classList.add('is-selected');
-        }
-
-        const preview = el('button', 'jdm-sound-preview');
-        preview.type = 'button';
-        preview.dataset.soundId = soundId;
-        preview.dataset.soundLabel = displayLabel;
-        if (sound.studio_placeholder === true) {
-          preview.disabled = true;
-          preview.setAttribute('aria-label', `Aperçu indisponible pour ${displayLabel} dans le Studio`);
-          preview.title = 'Aucun fichier audio pour ce placeholder Studio';
-        }
-        preview.setAttribute('aria-pressed', String(previewSoundId === soundId));
-        const previewIcon = createPreviewSpeakerIcon();
-        preview.append(previewIcon);
-        preview.addEventListener('click', (event) => {
-          event.stopPropagation();
-          if (previewSoundId === soundId) {
-            stopSoundPreview();
-            return;
-          }
-          void playSoundPreview(sound, preview);
-        });
-        if (previewSoundId === soundId) preview.classList.add('is-previewing');
-
-        const favoriteOn = favorites.includes(soundId);
-        const favorite = el('button', 'jdm-sound-favorite', favoriteOn ? '★' : '☆');
-        item.classList.toggle('is-favorite', favoriteOn);
-        favorite.type = 'button';
-        favorite.setAttribute('aria-pressed', String(favoriteOn));
-        favorite.setAttribute('aria-label', favoriteOn
-          ? `Retirer ${displayLabel} des favoris`
-          : `Ajouter ${displayLabel} aux favoris`);
-        const stopFavoritePointer = (event) => event.stopPropagation();
-        favorite.addEventListener('pointerdown', stopFavoritePointer);
-        favorite.addEventListener('mousedown', stopFavoritePointer);
-        favorite.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
-        });
-        favorite.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          favorites = favorites.includes(soundId)
-            ? favorites.filter((id) => id !== soundId)
-            : [soundId, ...favorites];
-          writeStoredIds(SOUNDBOARD_FAVORITES_KEY, favorites);
-          renderGrid();
-        });
-        const aliasButton = el('button', 'jdm-sound-alias', '✎');
-        aliasButton.type = 'button';
-        aliasButton.dataset.soundId = soundId;
-        aliasButton.setAttribute('aria-label', aliases[soundId]
-          ? `Modifier le nom personnel de ${originalLabel}`
-          : `Renommer ${originalLabel}`);
-        aliasButton.title = aliases[soundId] ? 'Modifier le nom personnel' : 'Renommer ce son';
-        aliasButton.addEventListener('pointerdown', (event) => event.stopPropagation());
-        aliasButton.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          openAliasEditor(sound, item, aliasButton);
-        });
-        const actions = el('div', 'jdm-sound-item__actions');
-        actions.append(preview, favorite);
-        button.addEventListener('click', (event) => {
-          if (dragJustDroppedId === soundId) {
-            event.preventDefault();
-            event.stopImmediatePropagation?.();
-            dragJustDroppedId = null;
-          }
-        }, true);
-        button.addEventListener('click', () => selectSound(sound));
-        button.addEventListener('keydown', (event) => {
-          if (event.key === 'F2' && event.shiftKey) {
-            event.preventDefault();
-            event.stopPropagation();
-            openAliasEditor(sound, item, aliasButton);
-            return;
-          }
-          if (!event.altKey || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
-          if (reorderWithKeyboard(soundId, event.key)) {
-            event.preventDefault();
-            event.stopPropagation();
-          }
-        });
-        item.addEventListener('pointerdown', (event) => startDragPending(item, soundId, event));
-        item.addEventListener('contextmenu', (event) => {
-          if (dragExcludedTarget(event.target)) return;
-          event.preventDefault();
-          event.stopPropagation();
-          openAliasEditor(sound, item, aliasButton);
-        });
-        item.append(button, actions, aliasButton);
-
-        grid.append(item);
-      }
+      grid.classList.toggle('is-reorderable', drafts.soundboard.sort === 'custom' && drafts.soundboard.view === 'all');
       setActionState();
       syncSoundboardPreviewButtons();
       grid.scrollTop = previousScrollTop;
-      grid.scrollLeft = previousScrollLeft;
     };
 
+    grid.addEventListener('click', (event) => {
+      if (event.target === grid || event.target?.closest?.('.sbx-empty')) deselectSound();
+    });
     search.addEventListener('input', () => {
       drafts.soundboard.query = search.value;
+      clearSearch.hidden = !search.value;
       renderGrid();
     });
-    grid.dataset.scrollKey = 'soundboard-grid';
-    renderGrid();
+    const resetSearch = () => {
+      const had = Boolean(search.value || drafts.soundboard.query);
+      drafts.soundboard.query = '';
+      search.value = '';
+      clearSearch.hidden = true;
+      if (had) renderGrid();
+    };
+    soundboardSearchClose = resetSearch;
+    clearSearch.hidden = !search.value;
+    clearSearch.addEventListener('click', (event) => {
+      event.preventDefault();
+      resetSearch();
+      search.focus({ preventScroll: true });
+    });
+    search.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !search.value) return;
+      event.preventDefault();
+      event.stopPropagation();
+      resetSearch();
+    });
+
+    // --- Barre d'action : son choisi, monnaie, prix, envoi -----------------------------------------
+    const dock = el('div', 'sbx-dock');
+    const toastSlot = el('div', 'sbx-toast-slot');
+    const bar = el('div', 'sbx-bar');
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', 'Envoyer le son sélectionné');
+    const barSound = el('div', 'sbx-bar__sound');
+    const barEyebrow = el('span', 'sbx-bar__eyebrow');
+    const barName = el('strong', 'sbx-bar__name');
+    barSound.append(barEyebrow, barName);
+
+    const walletSwitch = createCurrencySwitch({
+      className: 'sbx-wallet',
+      ariaLabel: 'Payer avec',
+      tipPlacement: 'above',
+      onChange: (method) => {
+        selectedPaymentMethod = method;
+        setActionState();
+        if (drafts.soundboard.sort === 'price') renderGrid();
+      },
+    });
+    const wallet = walletSwitch.node;
+
+    const price = el('div', 'sbx-price');
+    const priceValue = el('span', 'sbx-price__value');
+    const priceUnit = el('span', 'sbx-price__unit');
+    price.append(el('span', 'sbx-price__coin'), priceValue, priceUnit);
+
+    const send = el('button', 'sbx-send');
+    send.type = 'button';
+    send.append(el('span', 'sbx-send__label', 'Envoyer'), sbxIcon('send'), el('span', 'sbx-send__spinner'));
+    bar.append(barSound, wallet, price, send);
+    dock.append(toastSlot, bar);
+
+    let barNotice = null;
+    let barNoticeTimer = null;
+    function showBarNotice(message) {
+      barNotice = message;
+      clearTimeout(barNoticeTimer);
+      barNoticeTimer = setTimeout(() => {
+        barNotice = null;
+        if (body.isConnected) setActionState();
+      }, 3500);
+      setActionState();
+    }
+
+    const setActionState = () => {
+      const sound = soundById.get(String(selectedSound || ''));
+      const studioPlaceholder = isStudioPreview && sound?.studio_placeholder === true;
+      const creditCost = creditCostOf(sound);
+      const tokenCost = tokenCostOf(sound);
+      selectedCreditRedemption = sound
+        ? pending.find((action) => Number(action.credits_remaining ?? 0) >= creditCost) ?? null
+        : null;
+      if (!methods.includes(selectedPaymentMethod)) selectedPaymentMethod = methods[0];
+      const method = selectedPaymentMethod;
+      paymentWalletSync?.(methods, (next) => {
+        selectedPaymentMethod = next;
+        setActionState();
+      });
+      const usingCredits = method === 'credits';
+      const unavailable = sound ? availability(sound) : null;
+      const hasEnoughTokens = walletCanPayTokens(state.wallet, tokenCost);
+      const methodSupported = supportsPaymentMethod(method);
+      const methodAvailable = usingCredits ? Boolean(selectedCreditRedemption) : hasEnoughTokens;
+      const cost = usingCredits ? creditCost : tokenCost;
+      const unit = usingCredits ? `crédit${creditCost > 1 ? 's' : ''}` : 'jetons';
+      const hint = !sound ? ''
+        : studioPlaceholder ? 'Placeholder Studio · aucune action réelle'
+          : unavailable ? unavailable.hint
+            : mod.player_ready === false ? 'Lecteur du Studio hors ligne'
+            : !interactionsAvailable && !state?.lab_mode
+              ? identityShared() ? 'Interactions en pause, rien ne sera consommé' : 'Partage ton identité Twitch pour envoyer'
+              : !methodSupported ? 'Paiement indisponible pour cette monnaie'
+                : usingCredits && !selectedCreditRedemption ? 'Aucun crédit Soundboard disponible'
+                  : !usingCredits && !hasEnoughTokens
+                    ? state?.wallet?.unavailable === true ? 'Solde de jetons indisponible' : 'Jetons insuffisants'
+                    : '';
+
+      body.dataset.paymentMethod = method;
+      body.classList.toggle('has-selection', Boolean(sound));
+      bar.dataset.empty = String(!sound);
+      bar.dataset.method = method;
+      walletSwitch.sync({
+        method,
+        methods,
+        amounts: {
+          tokens: state?.wallet?.unavailable ? null : state?.wallet?.available,
+          credits: Array.isArray(state?.pending_actions) ? soundboardCreditBalance() : null,
+        },
+      });
+      const eyebrow = barNotice || (!sound
+        ? mod.player_ready === false ? 'Lecteur du Studio hors ligne' : 'Écoute avec ▶, puis choisis'
+        : hint || 'Prêt à envoyer');
+      barEyebrow.textContent = eyebrow;
+      barEyebrow.dataset.tone = barNotice || hint || mod.player_ready === false ? 'warn' : sound ? 'ok' : 'muted';
+      barName.textContent = sound ? displayLabelFor(sound) : 'Choisis un son';
+      const nextPrice = sound ? fmt(cost) : '—';
+      if (priceValue.textContent !== nextPrice || price.dataset.method !== method) {
+        priceValue.textContent = nextPrice;
+        price.classList.remove('is-bump');
+        void price.offsetWidth;
+        price.classList.add('is-bump');
+      }
+      price.dataset.method = method;
+      priceUnit.textContent = unit;
+      send.disabled = studioPlaceholder || !sound || !methodSupported || !methodAvailable || Boolean(unavailable)
+        || (!interactionsAvailable && !state?.lab_mode);
+      const summary = sound ? `Envoyer ${displayLabelFor(sound)} pour ${fmt(cost)} ${unit}` : 'Choisis d’abord un son';
+      send.setAttribute('aria-label', summary);
+      send.title = summary;
+      for (const card of grid.querySelectorAll('.sbx-card')) {
+        const selected = card.dataset.soundId === selectedSound;
+        if (card.classList.contains('is-selected') !== selected) syncCard(card);
+      }
+    };
 
     const deselectSound = () => {
       stopSoundPreview();
@@ -3034,92 +2999,95 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       selectedSound = null;
       drafts.soundboard.selectedId = null;
-      setActionState();
-      // En mode Récents, la nouvelle utilisation doit devenir visible tout de
-      // suite. Le mode Personnalisé relit le même ordre canonique et reste donc
-      // strictement stable lors de ce rerender.
+      syncFilters();
       renderGrid();
     };
 
-    grid.addEventListener('click', (event) => {
-      if (event.target === grid || event.target?.closest?.('.jdm-sound-empty')) deselectSound();
-    });
-
-    paymentDrawer = el('div', 'jdm-sound-payment jdm-sound-payment--currencies');
-    paymentDrawer.hidden = true;
-    paymentDrawer.setAttribute('aria-hidden', 'true');
-    paymentDrawer.setAttribute('role', 'group');
-    paymentDrawer.setAttribute('aria-label', 'Envoyer le son sélectionné');
-    paymentControl = createMultiCurrencyPayment({
-      className: 'jdm-sound-payment__control',
-      ctaClassName: 'jdm-currency-payment__cta jdm-btn--primary jdm-btn--payment',
-      hintClassName: 'jdm-sound-payment__hint',
-      actionLabel: 'Envoyer',
-      compact: true,
-      switchClassName: 'jdm-sound-payment__switch',
-      enableMethodSwitch: true,
-      integratedMethodSwitch: true,
-      switchIcon: '↻↺',
-      onMethodChange: (method) => {
-        selectedPaymentMethod = method;
-        setActionState();
-      },
-      onAction: (method) => {
-        const sound = soundById.get(String(selectedSound || ''));
-        if (!sound || !interactionsAvailable || !supportsPaymentMethod(method)) return;
-        if (method === 'tokens' && !walletCanPayTokens(state.wallet, Number(sound.token_cost ?? mod.token_cost ?? 500))) return;
-        if (method === 'credits') {
-          return run(body, () => selectedCreditRedemption
-            ? client.useRedemption(selectedCreditRedemption.redemption_id, 'soundboard', { sound_id: selectedSound })
-            : Promise.reject(Object.assign(new Error('insufficient_credits'), { code: 'insufficient_credits' })), {
-              feedbackScope: 'soundboard',
-              onSuccess: clearSound,
-            });
-        }
-        return run(body, () => client.spendTokens('soundboard', { sound_id: selectedSound }), {
+    send.addEventListener('click', () => {
+      const sound = soundById.get(String(selectedSound || ''));
+      const method = selectedPaymentMethod;
+      if (!sound || send.disabled || !supportsPaymentMethod(method)) return;
+      if (method === 'credits') {
+        return run(body, () => selectedCreditRedemption
+          ? client.useRedemption(selectedCreditRedemption.redemption_id, 'soundboard', { sound_id: selectedSound })
+          : Promise.reject(Object.assign(new Error('insufficient_credits'), { code: 'insufficient_credits' })), {
           feedbackScope: 'soundboard',
           onSuccess: clearSound,
         });
-      },
+      }
+      if (!walletCanPayTokens(state.wallet, tokenCostOf(sound))) return;
+      return run(body, () => client.spendTokens('soundboard', { sound_id: selectedSound }), {
+        feedbackScope: 'soundboard',
+        onSuccess: clearSound,
+      });
     });
-    paymentDrawer.append(paymentControl.node);
+
+    // --- Volume des aperçus (haut-parleur du titre) : réglage local, n'affecte que ce viewer ---
     const volumeHeading = soundboardVolumeHeaderButton?.parentNode || null;
-    const volumeZone = el('div', `jdm-soundboard-volume${soundboardVolumeOpen ? ' is-open' : ''}`);
-    const volumeHandle = soundboardVolumeHeaderButton || el(
-      'button',
-      'jdm-soundboard-volume__handle jdm-module__screen-icon jdm-soundboard-title-volume',
-      previewVolume ? '🔊' : '🔇',
-    );
-    volumeHandle.classList.add('jdm-soundboard-volume__handle');
+    const volumeZone = el('div', 'sbx-vol');
+    const volumeHandle = soundboardVolumeHeaderButton || el('button', 'sbx-vol-trigger');
     volumeHandle.type = 'button';
+    if (!volumeHandle.querySelector('svg')) volumeHandle.replaceChildren(sbxIcon('speaker'));
     volumeHandle.setAttribute('aria-controls', 'soundboard-preview-volume-popover');
-    const volumePopover = el('div', 'jdm-soundboard-volume__popover');
+    const volumePopover = el('div', 'sbx-vol__pop');
     volumePopover.id = 'soundboard-preview-volume-popover';
     volumePopover.setAttribute('role', 'dialog');
-    volumePopover.setAttribute('aria-label', 'Volume des aperçus Soundboard');
+    volumePopover.setAttribute('aria-label', 'Volume des aperçus');
     volumePopover.addEventListener('click', (event) => event.stopPropagation());
-    const volumeHead = el('div', 'jdm-soundboard-volume__head');
-    const volumeTitle = el('strong', '', 'Volume');
-    volumeHead.append(volumeTitle);
-    volumePopover.append(volumeHead, previewVolumeControl());
+    const volumeHead = el('div', 'sbx-vol__head');
+    const volumeValue = el('span', 'sbx-vol__value');
+    volumeHead.append(el('strong', '', 'Volume des aperçus'), volumeValue);
+    const volumeRow = el('div', 'sbx-vol__row');
+    const volumeMute = el('button', 'sbx-vol__mute');
+    volumeMute.type = 'button';
+    volumeMute.append(sbxIcon('speaker'));
+    const volumeRange = el('input', 'sbx-vol__range');
+    volumeRange.type = 'range';
+    volumeRange.min = '0';
+    volumeRange.max = '100';
+    volumeRange.step = '5';
+    volumeRange.setAttribute('aria-label', 'Volume des aperçus');
+    volumeRow.append(volumeMute, volumeRange);
+    volumePopover.append(volumeHead, volumeRow, el('p', 'sbx-vol__note', 'Pour toi seulement · rien n’est joué sur le stream'));
     volumeZone.append(volumeHandle, volumePopover);
-
+    let volumeBeforeMute = previewVolume || 60;
+    const paintVolume = () => {
+      const level = previewVolume === 0 ? 'mute' : previewVolume < 50 ? 'low' : 'high';
+      volumeZone.dataset.level = level;
+      volumeValue.textContent = previewVolume ? `${previewVolume} %` : 'Muet';
+      volumeRange.value = String(previewVolume);
+      volumeRange.style.setProperty('--v', `${previewVolume}%`);
+      volumeMute.setAttribute('aria-label', previewVolume ? 'Couper les aperçus' : 'Réactiver les aperçus');
+      volumeMute.title = volumeMute.getAttribute('aria-label');
+      if (previewAudio) previewAudio.volume = previewVolume / 100;
+    };
+    const setPreviewVolume = (value) => {
+      previewVolume = clampPreviewVolume(value);
+      savePreviewVolume(previewVolume);
+      paintVolume();
+    };
+    volumeRange.addEventListener('input', () => setPreviewVolume(volumeRange.value));
+    volumeMute.addEventListener('click', () => {
+      if (previewVolume) {
+        volumeBeforeMute = previewVolume;
+        setPreviewVolume(0);
+      } else setPreviewVolume(volumeBeforeMute || 60);
+    });
+    paintVolume();
     const syncVolume = (open, { focus = false } = {}) => {
       soundboardVolumeOpen = Boolean(open);
       volumeZone.classList.toggle('is-open', soundboardVolumeOpen);
       volumePopover.setAttribute('aria-hidden', String(!soundboardVolumeOpen));
       volumeHandle.setAttribute('aria-expanded', String(soundboardVolumeOpen));
       volumeHandle.setAttribute('aria-label', soundboardVolumeOpen
-        ? 'Volume des aperçus Soundboard ouvert'
-        : 'Ouvrir le volume des aperçus Soundboard');
-      volumeHandle.title = soundboardVolumeOpen
-        ? 'Volume des aperçus Soundboard'
-        : 'Volume des aperçus Soundboard';
+        ? 'Fermer le volume des aperçus'
+        : 'Régler le volume des aperçus');
+      volumeHandle.title = 'Volume des aperçus';
       for (const control of volumePopover.querySelectorAll('input, button')) {
         control.tabIndex = soundboardVolumeOpen ? 0 : -1;
       }
       if (focus && soundboardVolumeOpen) {
-        requestAnimationFrame(() => volumePopover.querySelector('input')?.focus({ preventScroll: true }));
+        requestAnimationFrame(() => volumeRange.focus({ preventScroll: true }));
       }
     };
     soundboardVolumeSync = syncVolume;
@@ -3133,28 +3101,32 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       });
     });
     syncVolume(soundboardVolumeOpen);
-
-    const toolbar = el('div', 'jdm-soundboard-toolbar');
-    toolbar.setAttribute('aria-label', 'Outils Soundboard');
     if (soundboardVolumeHeaderButton) {
-      volumeZone.classList.add('jdm-soundboard-volume--header');
-      volumeZone.append(volumeHandle, volumePopover);
       volumeHeading?.prepend(volumeZone);
       soundboardVolumeHeaderButton = null;
     } else {
-      toolbar.append(volumeZone);
+      searchRow.append(volumeZone);
     }
-    toolbar.append(catalogTools, searchWrap);
 
-    const footer = el('div', 'jdm-soundboard-footer');
-    footer.append(paymentDrawer);
-    body.append(toolbar, grid, footer);
-    setActionState();
-    if (!interactionsAvailable && !state?.lab_mode) {
-      body.append(el('p', 'jdm-hint', identityShared()
-        ? 'Interactions temporairement indisponibles : SAMMI se reconnecte. Aucun jeton ni crédit ne sera consommé.'
-        : 'Partage ton identité Twitch pour utiliser les interactions. Aucun jeton ni crédit ne sera consommé.'));
+    body.append(head, grid, dock);
+    renderGrid();
+    // Compte à rebours sur place tant qu'un son est en cooldown (arrêté au prochain rendu).
+    if (sounds.some((sound) => sound.cooldown_until && Date.parse(sound.cooldown_until) > Date.now())) {
+      soundboardCooldownTimer = setInterval(() => {
+        for (const card of grid.querySelectorAll('.sbx-card[data-state="cooldown"]')) syncCard(card);
+        if (selectedSound) setActionState();
+      }, 1000);
     }
+    // Hauteur disponible sous l'en-tête : la grille défile dans le module, la barre reste visible.
+    requestAnimationFrame(() => {
+      if (!body.isConnected) return;
+      const top = body.getBoundingClientRect().top + (document.scrollingElement?.scrollTop ?? 0);
+      body.style.setProperty('--sb-top', `${Math.max(0, Math.round(top))}px`);
+      // Marges du conteneur sous le module (padding bas du panel) : rien ne doit déborder la page.
+      const page = document.scrollingElement;
+      const overflow = page ? page.scrollHeight - page.clientHeight : 0;
+      if (overflow > 0) body.style.setProperty('--sb-bottom', `${6 + overflow}px`);
+    });
   }
 
   function bonkForm(mod, body) {
@@ -5456,7 +5428,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       status.setAttribute('role', 'status');
       option.append(status);
     }
-    panel.append(header, option);
+    const refreshAction = el('button', 'jdm-viewer-preferences__refresh', '↻ Actualiser');
+    refreshAction.type = 'button';
+    refreshAction.addEventListener('click', async () => {
+      refreshAction.disabled = true;
+      try { await onRefresh?.(); } catch { /* le polling reprendra */ }
+      refreshAction.disabled = false;
+    });
+    panel.append(header, option, refreshAction);
     return panel;
   }
 
@@ -5555,8 +5534,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function render() {
+    hubCarousel?.destroy();
+    hubCarousel = null;
     soundboardDragCancel?.();
     soundboardDragCancel = null;
+    clearInterval(soundboardCooldownTimer);
+    soundboardCooldownTimer = null;
     root.replaceChildren();
     // Les callbacks pointent toujours vers le Soundboard actuellement rendu.
     // Un rerender d’état ne doit jamais conserver un listener vers une vue
@@ -5632,24 +5615,42 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const ttsView = openModule === 'tts';
     const raffleView = openModule === 'raffle_join';
     const paymentView = soundboardView || ttsView;
+    const hubView = !openModule;
+    const historyView = openModule === ACTIONS_MODULE.id;
+    const consultView = hubView || historyView;
+    const informativeView = !paymentView && !consultView && !moderationView;
     const updatedWalletView = paymentView || raffleView;
-    const walletRow = el(paymentView ? 'button' : 'div', updatedWalletView
-      ? 'jdm-wallet-stack'
-      : 'jdm-wallet jdm-ui-wallet jdm-wallet--informative');
     let changeWalletMethod = null;
-    if (paymentView) {
-      walletRow.tabIndex = 0;
-      walletRow.type = 'button';
-      walletRow.dataset.draftKey = 'payment-currency';
-      walletRow.addEventListener('click', () => changeWalletMethod?.());
-    } else {
+    const headerSwitch = paymentView || consultView || informativeView
+      ? createCurrencySwitch({
+        variant: 'balance',
+        className: 'rl-cswitch--header',
+        ariaLabel: consultView ? 'Soldes' : informativeView ? 'Solde de jetons' : 'Monnaie de paiement',
+        onChange: () => changeWalletMethod?.(),
+      })
+      : null;
+    const walletRow = headerSwitch
+      ? headerSwitch.node
+      : el('div', updatedWalletView
+        ? 'jdm-wallet-stack'
+        : 'jdm-wallet jdm-ui-wallet jdm-wallet--informative');
+    if (!headerSwitch) {
       walletRow.setAttribute('role', 'group');
     }
-    if (soundboardView) walletRow.classList.add('jdm-soundboard-wallet');
+    if (soundboardView && !headerSwitch) walletRow.classList.add('jdm-soundboard-wallet');
     // Une récompense TTS en attente = une utilisation, comme dans ttsForm.
     // Sans liste API, aucun zéro/solde fictif n'est présenté.
     const creditsKnown = Array.isArray(state.pending_actions);
-    const moduleCredits = ttsView ? pendingFor('tts').length : soundboardCreditBalance();
+    // Hub : total des crédits de tous les modules ; ils restent propres à chaque module.
+    const creditRows = Array.isArray(state.pending_actions) ? state.pending_actions : [];
+    const hubCreditsByModule = new Map();
+    for (const row of creditRows) {
+      const amount = Math.max(0, Number(row.credits_remaining ?? 1));
+      hubCreditsByModule.set(row.module_id, (hubCreditsByModule.get(row.module_id) ?? 0) + amount);
+    }
+    const moduleCredits = consultView
+      ? [...hubCreditsByModule.values()].reduce((sum, value) => sum + value, 0)
+      : ttsView ? pendingFor('tts').length : soundboardCreditBalance();
     const creditModule = ttsView ? 'TTS' : 'Soundboard';
     const creditWord = `crédit${moduleCredits > 1 ? 's' : ''}`;
     const exactCreditValue = creditsKnown ? formatWalletExactValue(moduleCredits) : 'Solde indisponible';
@@ -5667,9 +5668,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       value: moduleCredits,
       unavailable: !creditsKnown,
     });
-    walletRow.append(tokenView, creditView);
+    if (!headerSwitch) walletRow.append(tokenView, creditView);
     const syncWalletView = (methods = [], onMethodChange = null) => {
-      const mode = soundboardView ? selectedPaymentMethod : ttsView ? ttsPaymentMethod : 'tokens';
+      const mode = soundboardView ? selectedPaymentMethod : ttsView ? ttsPaymentMethod : consultView ? hubWalletMethod : 'tokens';
       const showingCredits = mode === 'credits';
       tokenView.classList.toggle('is-active', !showingCredits);
       creditView.classList.toggle('is-active', showingCredits);
@@ -5681,14 +5682,31 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         ? `${exactCreditValue} ${creditWord} ${creditModule}`
         : `${wallet.unavailable ? exactTokenValue : `${exactTokenValue} jetons`}`;
       const next = methods.find((candidate) => candidate !== mode);
-      const canSwitch = paymentView && Boolean(next);
+      const canSwitch = (paymentView || consultView) && Boolean(next);
       walletRow.dataset.payment = mode;
       walletRow.dataset.canSwitch = String(canSwitch);
       const switchLabel = next === 'credits' ? `Afficher les crédits ${creditModule}` : 'Afficher les jetons';
       const holdLabel = Number(wallet.reserved) > 0 ? ` · ${formatWalletExactValue(wallet.reserved)} jetons réservés` : '';
-      walletRow.setAttribute('aria-label', `${balanceLabel}${holdLabel}${canSwitch ? `. ${switchLabel}.` : ''}`);
-      walletRow.title = `${balanceLabel}${holdLabel}${canSwitch ? ` · ${switchLabel}` : ''}`;
-      if (paymentView) {
+      if (!headerSwitch) {
+        walletRow.setAttribute('aria-label', `${balanceLabel}${holdLabel}${canSwitch ? `. ${switchLabel}.` : ''}`);
+        walletRow.title = `${balanceLabel}${holdLabel}${canSwitch ? ` · ${switchLabel}` : ''}`;
+      }
+      if (headerSwitch) {
+        headerSwitch.sync({
+          method: mode,
+          methods: methods.length ? methods : [mode],
+          amounts: {
+            tokens: wallet.unavailable ? null : wallet.available,
+            credits: creditsKnown ? moduleCredits : null,
+          },
+          details: {
+            tokens: Number(wallet.reserved) > 0 ? `${formatWalletExactValue(wallet.reserved)} jetons réservés` : '',
+            credits: consultView && hubCreditsByModule.size
+              ? `${[...hubCreditsByModule].map(([id, amount]) => `${visibleModuleLabel((state.modules ?? []).find((m) => m.id === id) ?? { label: id })} ${formatWalletExactValue(amount)}`).join(' · ')} — propres à chaque module`
+              : '',
+          },
+        });
+      } else if (paymentView) {
         walletRow.setAttribute('aria-disabled', String(!canSwitch));
         tokenView.hidden = !methods.includes('tokens') && mode !== 'tokens';
         creditView.hidden = !methods.includes('credits') && mode !== 'credits';
@@ -5703,6 +5721,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       changeWalletMethod = canSwitch ? () => onMethodChange?.(next) : null;
     };
     syncWalletView();
+    if (informativeView) syncWalletView(['tokens']);
+    if (consultView) {
+      const syncHubWallet = () => syncWalletView(['tokens', 'credits'], (nextMethod) => {
+        hubWalletMethod = nextMethod;
+        syncHubWallet();
+      });
+      syncHubWallet();
+    }
     if (paymentView) paymentWalletSync = syncWalletView;
     if (!moderationView) {
       if (successMessage) {
@@ -5719,7 +5745,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (!moderationView) {
       const pending = Array.isArray(state.pending_actions) ? state.pending_actions : [];
       const availableCredits = pending.reduce((sum, row) => sum + Math.max(0, Number(row.credits_remaining ?? 1)), 0);
-      if (availableCredits) {
+      if (availableCredits && openModule) {
         root.append(el('p', 'jdm-queue-hint',
           `${availableCredits} crédit${availableCredits > 1 ? 's' : ''} PDC disponible${availableCredits > 1 ? 's' : ''}`));
       }
@@ -5736,99 +5762,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
     const moduleNotices = (mod) => notificationCount(state, mod.id);
 
-    const appendModuleChoice = (parent, mod) => {
-      const disabledByControl = state?.module_states?.[mod.id]?.enabled === false;
-      const disabled = disabledByControl;
-      const choice = el('button', `jdm-module-choice jdm-home-control jdm-home-control--card${disabled ? ' is-locked' : ''}`);
-      choice.type = 'button';
-      choice.disabled = disabled;
-      choice.dataset.module = mod.id;
-      choice.dataset.accent = modulePresentation(mod.id).accent;
-      choice.setAttribute('aria-label', `Ouvrir ${mod.label}`);
-      const accent = el('span', 'jdm-module-choice__accent');
-      accent.setAttribute('aria-hidden', 'true');
-      const copy = el('span', 'jdm-module-choice__copy');
-      copy.append(
-        el('strong', 'jdm-module-choice__name', mod.label),
-        el('span', 'jdm-module-choice__description', homeModuleDescription(mod)),
-      );
-      const arrow = el('span', 'jdm-module-choice__arrow', '→');
-      arrow.setAttribute('aria-hidden', 'true');
-      choice.append(accent, el('span', 'jdm-module-choice__icon', mod.icon), copy);
-      const notices = moduleNotices(mod);
-      if (notices) {
-        const badge = el('span', 'jdm-module-choice__pill', String(notices));
-        // La forme est une décision de présentation : le compteur métier reste
-        // celui fourni par moduleNotices/notificationCount.
-        badge.classList.toggle('is-multi', String(notices).length > 1);
-        choice.append(badge);
-      }
-      choice.append(arrow);
-      if (!disabled) choice.addEventListener('click', () => navigateTo(mod.id));
-      parent.append(choice);
-    };
-
-    // La modération est une capacité conditionnelle : elle reste accessible
-    // depuis le Hub lorsqu'elle est autorisée, mais ne doit pas prendre la
-    // place d'une des cartes d'interaction principales.
-    const appendModerationChoice = (parent, mod) => {
-      const disabled = state?.module_states?.[mod.id]?.enabled === false;
-      const choice = el('button', `jdm-home-control jdm-home-control--moderation${disabled ? ' is-locked' : ''}`);
-      choice.type = 'button';
-      choice.disabled = disabled;
-      choice.dataset.module = mod.id;
-      choice.dataset.accent = modulePresentation(mod.id).accent;
-      choice.setAttribute('aria-label', `Ouvrir ${mod.label}`);
-      choice.title = 'Ouvrir la console de modération';
-
-      const icon = el('span', 'jdm-home-moderation__icon', mod.icon);
-      icon.setAttribute('aria-hidden', 'true');
-      const copy = el('span', 'jdm-home-moderation__copy');
-      copy.append(
-        el('strong', 'jdm-home-moderation__name', mod.label),
-        el('span', 'jdm-home-moderation__description', 'Outils du stream'),
-      );
-      const arrow = el('span', 'jdm-home-moderation__arrow', '→');
-      arrow.setAttribute('aria-hidden', 'true');
-      choice.append(icon, copy);
-      const notices = moduleNotices(mod);
-      if (notices) {
-        const badge = el('span', 'jdm-home-moderation__pill', String(notices));
-        badge.setAttribute('aria-label', `${notices} notification${notices > 1 ? 's' : ''} non lue${notices > 1 ? 's' : ''}`);
-        choice.append(badge);
-      }
-      choice.append(arrow);
-      if (!disabled) choice.addEventListener('click', () => navigateTo(mod.id));
-      parent.append(choice);
-    };
-
-    const createUtilityAccess = ({ icon, label, title, href, onClick, className = '', badgeCount = 0 }) => {
-      const classes = ['jdm-utility-access', 'jdm-home-control', 'jdm-home-control--secondary', 'jdm-home-control--capsule', className]
-        .filter(Boolean)
-        .join(' ');
-      const access = el(href ? 'a' : 'button', classes);
-      if (!href) access.type = 'button';
-      if (href) {
-        access.href = href;
-        access.target = '_blank';
-        access.rel = 'noopener noreferrer';
-      }
-      access.title = title;
-      access.setAttribute('aria-label', title);
-      const glyph = el('span', 'jdm-utility-access__icon', icon);
-      glyph.setAttribute('aria-hidden', 'true');
-      const arrow = el('span', 'jdm-utility-access__arrow', href ? '↗' : '→');
-      arrow.setAttribute('aria-hidden', 'true');
-      access.append(glyph, el('span', 'jdm-utility-access__label', label));
-      if (badgeCount) {
-        access.setAttribute('aria-label', `${title} · ${badgeCount} notification${badgeCount > 1 ? 's' : ''} non lue${badgeCount > 1 ? 's' : ''}`);
-        access.append(el('span', 'jdm-utility-access__pill', String(badgeCount)));
-      }
-      access.append(arrow);
-      if (onClick) access.addEventListener('click', onClick);
-      return access;
-    };
-
     const openTutorial = () => {
       tutorialStep = 0;
       tutorialOpen = true;
@@ -5836,19 +5769,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     };
 
     if (!openModule) {
-      const home = el('section', 'jdm-home');
-      home.setAttribute('aria-label', 'Interactions disponibles');
-      const topbar = el('div', 'jdm-home__topbar');
-      const homeIdentity = el('div', 'jdm-home__identity');
-      const homeMark = el('span', 'jdm-home__mark', 'R');
-      homeMark.setAttribute('aria-hidden', 'true');
-      const homeIdentityCopy = el('span', 'jdm-home__identity-copy');
-      homeIdentityCopy.append(
-        el('span', 'jdm-home__eyebrow', 'Raptoru Live'),
-        el('strong', 'jdm-home__title', 'Interactions'),
-      );
-      homeIdentity.append(homeMark, homeIdentityCopy);
-      walletRow.classList.add('jdm-wallet--home');
+      const hub = el('section', 'rh-hub');
+      hub.setAttribute('aria-label', 'Interactions disponibles');
+      const top = el('header', 'rh-top');
+      const brand = el('div', 'rh-brand');
+      const mark = el('span', 'rh-mark', 'R');
+      mark.setAttribute('aria-hidden', 'true');
+      const brandCopy = el('span', 'rh-brand__copy');
+      brandCopy.append(el('small', '', 'Raptoru Live'), el('strong', '', 'Interactions'));
+      brand.append(mark, brandCopy);
       const notificationToggle = el('button', 'jdm-notification-toggle');
       notificationToggle.type = 'button';
       notificationToggle.setAttribute('aria-label', 'Ouvrir les notifications');
@@ -5885,56 +5814,100 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           queueMicrotask(() => root.querySelector('.jdm-viewer-preferences__close')?.focus({ preventScroll: true }));
         }
       });
-      topbar.append(homeIdentity, notificationToggle, preferencesToggle, walletRow);
-      home.append(topbar);
-      const choices = el('div', 'jdm-home__choices');
-      choices.setAttribute('role', 'group');
-      choices.setAttribute('aria-label', 'Modules disponibles');
-      for (const mod of modules.filter((candidate) => (
-        candidate.id !== ACTIONS_MODULE.id && candidate.id !== MODERATION_MODULE.id
-      ))) {
-        appendModuleChoice(choices, mod);
-      }
-      const moderation = modules.find((candidate) => candidate.id === MODERATION_MODULE.id);
-      const moderationAccess = el('div', 'jdm-home__moderation');
-      moderationAccess.setAttribute('role', 'group');
-      moderationAccess.setAttribute('aria-label', 'Accès modération');
-      moderationAccess.hidden = !moderation;
-      if (moderation) appendModerationChoice(moderationAccess, moderation);
-      const utilities = el('nav', 'jdm-home__utilities');
-      utilities.setAttribute('aria-label', 'Accès utiles');
+      top.append(brand, notificationToggle, preferencesToggle, walletRow);
+
+      // Modules du carousel : les vrais modules (Historique reste un accès secondaire).
+      const raffleOpen = raffleIsActive(state?.raffle ?? {});
+      const hubModules = modules
+        .filter((candidate) => candidate.id !== ACTIONS_MODULE.id)
+        .map((mod) => {
+          const style = HUB_MODULE_STYLES[mod.id] ?? HUB_DEFAULT_STYLE;
+          const off = state?.module_states?.[mod.id]?.enabled === false;
+          const chip = off
+            ? { text: 'En pause', tone: 'neutral' }
+            : mod.id === 'raffle_join' && raffleOpen
+              ? { text: 'Ouverte', tone: 'live' }
+              : mod.id === 'tts' && state?.moderation?.tts?.paused
+                ? { text: 'En pause', tone: 'neutral' }
+                : mod.id === MODERATION_MODULE.id
+                  ? { text: 'Modérateurs', tone: 'staff' }
+                  : null;
+          return {
+            id: mod.id,
+            label: visibleModuleLabel(mod),
+            description: mod.id === MODERATION_MODULE.id ? 'Outils du stream' : homeModuleDescription(mod),
+            icon: style.icon,
+            color: style.color,
+            color2: style.color2,
+            chip,
+            off,
+            badge: moduleNotices(mod),
+          };
+        });
+      const stage = el('div', 'rh-stage');
+      const dock = el('div', 'rh-dock');
+      const rail = el('nav', 'rh-rail');
+      rail.setAttribute('aria-label', 'Accès direct aux modules');
+      const allModules = el('div', 'rh-all');
+      allModules.setAttribute('role', 'dialog');
+      allModules.setAttribute('aria-label', 'Tous les modules');
+      const util = el('div', 'rh-util');
+      const utilGroup = el('div', 'rh-util__group');
       if (modules.some((mod) => mod.id === ACTIONS_MODULE.id)) {
-        utilities.append(createUtilityAccess({
-          icon: '◷',
-          label: 'Historique',
-          title: 'Historique',
-          className: 'jdm-utility-access--history',
-          badgeCount: moduleNotices(ACTIONS_MODULE),
-          onClick: () => navigateTo(ACTIONS_MODULE.id),
-        }));
+        const history = el('button', 'rh-util-btn');
+        history.type = 'button';
+        history.append(hubIcon(document, 'clock'), el('span', '', 'Historique'));
+        const historyNotices = moduleNotices(ACTIONS_MODULE);
+        if (historyNotices) history.append(el('span', 'rh-util-btn__count', String(historyNotices)));
+        history.setAttribute('aria-label', historyNotices ? `Historique · ${historyNotices} non lue${historyNotices > 1 ? 's' : ''}` : 'Historique');
+        history.addEventListener('click', () => navigateTo(ACTIONS_MODULE.id));
+        utilGroup.append(history);
       }
       if (state.site_url) {
-        utilities.append(createUtilityAccess({
-          icon: '🏆',
-          label: 'Classement',
-          title: 'Classement',
-          className: 'jdm-utility-access--ranking',
-          href: state.site_url,
-        }));
+        const ranking = el('a', 'rh-util-btn');
+        ranking.href = state.site_url;
+        ranking.target = '_blank';
+        ranking.rel = 'noopener noreferrer';
+        ranking.append(hubIcon(document, 'trophy'), el('span', '', 'Classement'));
+        ranking.setAttribute('aria-label', 'Classement (nouvel onglet)');
+        utilGroup.append(ranking);
       }
-      const tutorial = el('button', 'jdm-tutorial-handle jdm-home-control jdm-home-control--tab');
+      const tutorial = el('button', 'rh-tuto');
       tutorial.type = 'button';
-      tutorial.title = 'Tutoriel';
       tutorial.setAttribute('aria-label', 'Ouvrir le tutoriel');
       tutorial.setAttribute('aria-haspopup', 'dialog');
-      const tutorialIcon = el('span', 'jdm-tutorial-handle__icon', '?');
-      tutorialIcon.setAttribute('aria-hidden', 'true');
-      tutorial.append(tutorialIcon, el('span', 'jdm-tutorial-handle__label', 'Tutoriel'));
+      tutorial.append(el('span', 'rh-tuto__q', '?'), el('span', '', 'Tutoriel'));
       tutorial.addEventListener('click', openTutorial);
-      home.append(choices, moderationAccess, utilities, tutorial);
-      if (notificationCenterOpen) home.append(notificationCenterDrawer());
-      if (viewerPreferencesOpen) home.append(viewerPreferencesPanel());
-      root.append(home);
+      util.append(utilGroup, tutorial);
+      dock.append(rail, util);
+      hub.append(top, stage, dock, allModules);
+      if (notificationCenterOpen) hub.append(notificationCenterDrawer());
+      if (viewerPreferencesOpen) hub.append(viewerPreferencesPanel());
+      root.append(hub);
+      if (hubModules.length) {
+        if (!hubModules.some((mod) => mod.id === hubSelectedId)) hubSelectedId = hubModules[0].id;
+        hubCarousel = createHubCarousel({
+          document,
+          stage,
+          rail,
+          popover: allModules,
+          modules: hubModules,
+          selectedId: hubSelectedId,
+          onSelect: (id) => { hubSelectedId = id; },
+          onOpen: (id) => navigateTo(id),
+        });
+      }
+      // Hauteur disponible sous le haut du Hub : rien ne déborde de la surface Twitch.
+      hub.classList.toggle('is-narrow', hub.clientWidth <= 340);
+      requestAnimationFrame(() => {
+        if (!hub.isConnected) return;
+        hub.classList.toggle('is-narrow', hub.clientWidth <= 340);
+        const page = document.scrollingElement;
+        const topOffset = hub.getBoundingClientRect().top + (page?.scrollTop ?? 0);
+        hub.style.setProperty('--rh-top', `${Math.max(0, Math.round(topOffset))}px`);
+        const overflow = page ? page.scrollHeight - page.clientHeight : 0;
+        if (overflow > 0) hub.style.setProperty('--rh-bottom', `${8 + overflow}px`);
+      });
     } else {
       const mod = modules.find((candidate) => candidate.id === openModule);
       const screen = el('section', 'jdm-module-screen');
@@ -5968,7 +5941,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       const heading = el('div', 'jdm-module__screen-title');
       const screenIcon = isSoundboard
-        ? el('button', 'jdm-module__screen-icon jdm-soundboard-title-volume', mod.icon)
+        ? el('button', 'sbx-vol-trigger')
         : el('span', 'jdm-module__screen-icon', mod.icon);
       screenIcon.setAttribute('aria-hidden', 'true');
       if (isSoundboard) {
@@ -5981,7 +5954,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       if (!isModeration) heading.append(screenIcon);
       heading.append(el('strong', 'jdm-module__screen-name', visibleModuleLabel(mod)));
       head.append(headLeft, heading, headRight);
-      if (!isModeration) {
+      if (!isModeration && !walletRow.classList.contains('rl-cswitch')) {
         walletRow.classList.add('jdm-wallet--shell-header');
         if (isBonk) {
           walletRow.classList.add('jdm-wallet--bonk-header');
@@ -6019,7 +5992,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         FORMS[mod.id]?.(mod, body);
       }
       item.append(body);
-      if (isSoundboard) item.append(createSoundboardFeedbackOverlay());
+      if (isSoundboard) (body.querySelector('.sbx-toast-slot') ?? item).append(createSoundboardFeedbackOverlay());
       screen.append(head, item);
       root.append(screen);
       if (isSoundboard) syncSoundboardPreviewButtons();
