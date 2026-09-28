@@ -1,6 +1,6 @@
 # Raptoru 2.0 — État du projet / fichier de reprise
 
-**Dernière mise à jour : 28 septembre 2026 — Soundboard V2 Lab validé, wallet switch global validé, Hub Pop Premium validé / fermé, anciens wallets migrés (checkpoint Git, pas de release Studio)**
+**Dernière mise à jour : 28 septembre 2026 — Soundboard V2 (noms des sons default_label + custom_label validés), Studio 0.1.4 publié, wallet switch global et Hub Pop Premium fermés**
 
 ## But de ce fichier
 Ce fichier est la source de continuité du projet. Il doit permettre de reprendre Raptoru 2.0 dans une nouvelle conversation sans perdre :
@@ -149,6 +149,8 @@ Historique principal :
 - `4df6af5 — feat: add Soundboard V2 Lab execution and Studio configuration`
 - `0a5c4e9 — feat: add Pop Premium Hub, global wallet switch and Soundboard V2 UI`
 - commit `docs: update Raptoru 2.0 project state` (28/09/2026) : SHA à lire dans `git log -n 10`. Pas de release Studio pour ce checkpoint (en attente d'un feu vert explicite).
+- `31dfd7a — chore: release Raptoru Studio 0.1.4` (release validée explicitement, pipeline existant)
+- `dbfb91b — feat: separate Soundboard default and custom sound names` (pas de release Studio supplémentaire à ce stade)
 
 Règles Git inchangées :
 - branche `main` ;
@@ -1042,6 +1044,16 @@ Validé fonctionnellement, visuellement et à l’écoute le 28/09/2026 (Lab uni
 - test_mode=true, payment_mode=simulated, real_debited=0 ; aucun Wallet réel, aucune prod.
 - Le lecteur audio Studio doit être activé d’un clic à chaque chargement (règle d’autoplay des navigateurs).
 
+### Noms des sons — validé (28/09/2026, commit `dbfb91b`)
+- `sound_id` = identifiant technique stable, jamais modifié ; fichiers audio et mappings inchangés.
+- `default_label` = nom canonique dans la banque Core (`bank.ts`) ; `custom_label` = renommage Studio optionnel (base, colonne `sound_lab_sounds.custom_label`).
+- Nom affiché partout (configuration, catalogue viewer, historique d’achat) = `custom_label ?? default_label`.
+- Renommage Studio persistant validé (accents, apostrophes et caractères français, survit au redémarrage du Core).
+- Bouton « ↺ Nom par défaut » validé (visible seulement si un nom personnalisé existe) ; vider le champ revient aussi au nom par défaut.
+- 6 labels canoniques corrigés : « Sigma - À genoux », « Maintenant, tais-toi », « Sardoche - C’était sûr ! », « C’est moi qui les ai plantés », « Sac à merde - Ptitchef », « Hell’s Kitchen Violin ». Cas douteux laissés tels quels : « Sigma freudonne », « Lacrimatica ».
+- Migration `20261003120000_sound_lab_custom_label.sql` déterministe : une valeur égale à l’ancien nom par défaut de son `sound_id` → null ; les 19 renommages existants du Lab ont été préservés à l’identique (prix, cooldowns, modes, volumes et historique inchangés).
+- Tests : Core 158/158, Studio 40/40, extension 10/10.
+
 ## Wallet switch global — validé
 Composant `createCurrencySwitch` (extension, `shared/ui-primitives.js` + `currency-switch.css`), variante « Peek slide » validée le 28/09/2026 :
 - largeur fixe, montant immobile dans sa case, abréviation 1,2K / 12K / 985K / 1,2M ;
@@ -1190,7 +1202,7 @@ VALIDÉ TECHNIQUEMENT, mais pas activé prod :
 - auto-update Studio
 - pipeline studio:release
 - Bonk V2 Lab (validé visuellement le 27/09/2026)
-- Soundboard V2 Lab (validé le 28/09/2026)
+- Soundboard V2 Lab (validé le 28/09/2026 ; noms des sons default_label + custom_label validés)
 - wallet switch global de l’extension (validé le 28/09/2026)
 - Hub Pop Premium (validé / fermé le 28/09/2026)
 
