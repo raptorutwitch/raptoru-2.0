@@ -1,14 +1,25 @@
+import { PGlite } from '@electric-sql/pglite';
 import { existsSync } from 'node:fs';
+import { copyFile, mkdtemp, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SoundLabAdmitRequest } from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
+import { systemClock } from '../src/clock.js';
+import { DEFAULT_MIGRATIONS_DIR, migrate } from '../src/db/migrate.js';
 import { SOUND_BANK } from '../src/sound-lab/bank.js';
 import {
   SoundLabError409,
   SoundLabService,
   SoundLabUnavailableError,
 } from '../src/sound-lab/sound-lab-service.js';
-import { count, MINUTE, setup, type TestCore } from './helpers.js';
+import {
+  count,
+  createPgliteDb,
+  MINUTE,
+  setup,
+  type TestCore,
+} from './helpers.js';
 
 const CHANNEL = '900100';
 const STUDIO = 'studio-A';
@@ -119,6 +130,118 @@ describe('Soundboard Lab catalog and configuration (Core)', () => {
     expect(await code(core.soundLab.updateSound('nope', { volume: 1 }))).toBe(
       'sound_not_found',
     );
+  });
+
+  it('names: default from the bank, Studio rename survives a restart, empty / null / default name reset it', async () => {
+    const core = await setup();
+    const find = async (lab: SoundLabService, id: string) =>
+      (await lab.config()).sounds.find((s) => s.id === id)!;
+    // Default names come from the bank, typography fixed where certain.
+    expect(await find(core.soundLab, 'sigma-a-genoux')).toMatchObject({
+      label: 'Sigma - À genoux',
+      default_label: 'Sigma - À genoux',
+      custom_label: null,
+    });
+    expect((await find(core.soundLab, 'hells-kitchen-violin')).label).toBe(
+      "Hell's Kitchen Violin",
+    );
+    // A rename with accents, apostrophes and French characters survives a Core restart.
+    const name = "Ça c'est l'été à côté — œuvre !";
+    await core.soundLab.updateSound('boop', { label: `  ${name}  ` });
+    const restarted = new SoundLabService(core.db, core.clock);
+    expect(await find(restarted, 'boop')).toMatchObject({
+      label: name,
+      default_label: 'Boop',
+      custom_label: name,
+    });
+    expect(
+      (await restarted.catalog(CHANNEL)).find((s) => s.id === 'boop')!.label,
+    ).toBe(name);
+    // The purchase keeps the name shown at that moment (history).
+    await ready(core, true, restarted);
+    const bought = (await restarted.admit(admitReq())).interaction;
+    expect(bought.sound_label).toBe(name);
+    // Empty field, null, or typing the default name: back to the default name.
+    for (const reset of ['', '   ', null, 'Boop']) {
+      await restarted.updateSound('boop', { label: 'Temporaire' });
+      const back = await restarted.updateSound('boop', { label: reset });
+      expect(back).toMatchObject({ label: 'Boop', custom_label: null });
+    }
+    // Other settings are untouched by a rename or a reset.
+    expect(await find(restarted, 'boop')).toMatchObject({
+      token_cost: 500,
+      enabled: true,
+    });
+    expect(bought.sound_label).toBe(name);
+  });
+
+  it('migration: a previous default name becomes null, every real rename is kept, nothing else changes', async () => {
+    // Database as it was before the custom_label migration, with Lab-like data.
+    const dir = await mkdtemp(join(tmpdir(), 'sound-lab-migrations-'));
+    const all = (await readdir(DEFAULT_MIGRATIONS_DIR)).filter((f) =>
+      f.endsWith('.sql'),
+    );
+    for (const file of all.filter(
+      (f) => f < '20261003120000_sound_lab_custom_label.sql',
+    ))
+      await copyFile(join(DEFAULT_MIGRATIONS_DIR, file), join(dir, file));
+    const db = createPgliteDb(new PGlite());
+    await migrate(db, dir);
+    const rows: [string, string, number][] = [
+      ['boop', 'Boop', 500], // previous default → default name
+      ['sigma-a-genoux', 'Sigma - A genoux', 700], // previous default (now fixed) → default name
+      ['sardoche-c-etait-sur', "C'était sur !", 500], // real rename → kept
+      ['hells-kitchen-violin', 'Violon creepy', 2000], // real rename → kept
+      ['prowler', 'Prowler', 500], // case change of 'PROWLER' → real rename, kept
+      ['j-comprends-rien', "J'comprends rien", 500], // previous default with apostrophe
+    ];
+    for (const [id, label, tokens] of rows)
+      await db.query(
+        `insert into sound_lab_sounds (sound_id, label, enabled, token_cost, credit_cost, cooldown_ms, playback_mode, volume, updated_at)
+         values ($1, $2, true, $3, 2, 7000, 'queue', 80, now())`,
+        [id, label, tokens],
+      );
+    await migrate(db);
+    const after = new Map(
+      (
+        await db.query<{
+          sound_id: string;
+          custom_label: string | null;
+          token_cost: number;
+          credit_cost: number;
+          cooldown_ms: number;
+          playback_mode: string;
+          volume: number;
+        }>('select * from sound_lab_sounds')
+      ).map((r) => [r.sound_id, r]),
+    );
+    expect(
+      Object.fromEntries([...after].map(([id, r]) => [id, r.custom_label])),
+    ).toEqual({
+      boop: null,
+      'sigma-a-genoux': null,
+      'sardoche-c-etait-sur': "C'était sur !",
+      'hells-kitchen-violin': 'Violon creepy',
+      prowler: 'Prowler',
+      'j-comprends-rien': null,
+    });
+    for (const [id, , tokens] of rows)
+      expect(after.get(id)).toMatchObject({
+        token_cost: tokens,
+        credit_cost: 2,
+        cooldown_ms: 7000,
+        playback_mode: 'queue',
+        volume: 80,
+      });
+    // The service then shows the fixed default names and keeps the renames.
+    const lab = new SoundLabService(db, systemClock);
+    const labels = new Map(
+      (await lab.config()).sounds.map((s) => [s.id, s.label]),
+    );
+    expect(labels.get('sigma-a-genoux')).toBe('Sigma - À genoux');
+    expect(labels.get('hells-kitchen-violin')).toBe('Violon creepy');
+    expect(labels.get('prowler')).toBe('Prowler');
+    await db.close();
   });
 });
 

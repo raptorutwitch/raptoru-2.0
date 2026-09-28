@@ -7,7 +7,10 @@ type Mode = 'stack' | 'queue' | 'ignore_if_running';
 type Protection = 'off' | 'light' | 'medium';
 type Sound = {
   id: string;
+  /** Shown to viewers: custom_label ?? default_label. */
   label: string;
+  default_label: string;
+  custom_label: string | null;
   enabled: boolean;
   token_cost: number;
   credit_cost: number;
@@ -172,7 +175,7 @@ export function mountSoundConfig(root: HTMLElement) {
   const summaryHtml = (s: Sound) => `
       <button type="button" class="scfg-play${previewId === s.id ? ' is-playing' : ''}" data-action="preview" ${s.preview_url ? '' : 'disabled'}
         aria-label="${previewId === s.id ? 'Arrêter' : 'Écouter'} ${esc(s.label)}" title="${s.preview_url ? 'Écouter (Studio uniquement)' : 'Son tiré au hasard : pas d’aperçu'}">${s.preview_url ? (previewId === s.id ? STOP : PLAY) : '🎲'}</button>
-      <span class="scfg-name"><strong>${esc(s.label)}</strong><small>${esc(s.id)}${s.variants > 1 ? ` · ${s.variants} variantes` : ''}${s.duration_ms ? ` · ${seconds(s.duration_ms)}` : ''}</small></span>
+      <span class="scfg-name"><strong>${esc(s.label)}</strong><small>${esc(s.id)}${s.custom_label !== null ? ` · par défaut : ${esc(s.default_label)}` : ''}${s.variants > 1 ? ` · ${s.variants} variantes` : ''}${s.duration_ms ? ` · ${seconds(s.duration_ms)}` : ''}</small></span>
       <span class="scfg-toggle-wrap"><button type="button" role="switch" class="scfg-switch" data-action="toggle" aria-checked="${s.enabled}" aria-label="Actif"><i></i></button><span class="scfg-toggle-label">${s.enabled ? 'Actif' : 'Off'}</span></span>
       <span class="scfg-cell scfg-price"><b class="is-token">${fmt(s.token_cost)}</b><em>J</em><span class="scfg-sep">/</span><b class="is-credit">${fmt(s.credit_cost)}</b><em>C</em></span>
       <span class="scfg-cell scfg-chip${s.cooldown_ms ? ' is-cooldown' : ''}">${s.cooldown_ms ? `⏱ ${seconds(s.cooldown_ms)}` : 'Sans cooldown'}</span>
@@ -181,10 +184,16 @@ export function mountSoundConfig(root: HTMLElement) {
       ${saveMark(s.id)}
       <span class="scfg-chevron">${CHEVRON}</span>`;
 
+  const labelMetaHtml = (s: Sound) =>
+    s.custom_label !== null
+      ? `<small>Nom par défaut : ${esc(s.default_label)}</small><button type="button" class="scfg-reset" data-action="reset-label">↺ Nom par défaut</button>`
+      : '<small>Nom par défaut</small>';
+
   const editorHtml = (s: Sound) => `
     <div class="scfg-editor" data-editor="${esc(s.id)}">
       <label class="scfg-field scfg-field--name"><span>Nom affiché</span>
-        <input type="text" data-field="label" maxlength="40" value="${esc(s.label)}"></label>
+        <input type="text" data-field="label" maxlength="40" value="${esc(s.label)}" placeholder="${esc(s.default_label)}">
+        <span class="scfg-label-meta" data-label-meta>${labelMetaHtml(s)}</span></label>
       <label class="scfg-field"><span>Prix jetons</span>
         <span class="scfg-input scfg-input--token"><input type="number" data-field="token_cost" min="0" max="1000000" step="50" value="${s.token_cost}"><em>jetons</em></span></label>
       <label class="scfg-field"><span>Prix crédits</span>
@@ -272,7 +281,7 @@ export function mountSoundConfig(root: HTMLElement) {
   const save = async (
     id: string,
     field: Field,
-    value: string | number | boolean,
+    value: string | number | boolean | null,
   ) => {
     setSaveState(id, 'saving');
     try {
@@ -281,6 +290,10 @@ export function mountSoundConfig(root: HTMLElement) {
       })) as Sound;
       const i = config!.sounds.findIndex((s) => s.id === id);
       config!.sounds[i] = updated;
+      if (field === 'label') {
+        const meta = rowOf(id)?.querySelector<HTMLElement>('[data-label-meta]');
+        if (meta) meta.innerHTML = labelMetaHtml(updated);
+      }
       setSaveState(id, 'saved');
       summary();
       notifyExtension();
@@ -351,6 +364,13 @@ export function mountSoundConfig(root: HTMLElement) {
     const mode = target.closest<HTMLElement>('[data-mode]')?.dataset.mode as
       Mode | undefined;
     if (action === 'preview') return playPreview(id);
+    if (action === 'reset-label') {
+      // Back to the default name: the field shows it again, the viewer gets it on the next refresh.
+      const input = row.querySelector<HTMLInputElement>('[data-field="label"]');
+      if (input) input.value = find(id)!.default_label;
+      clearTimeout(inputTimers.get(`${id}:label`));
+      return void save(id, 'label', null);
+    }
     if (action === 'toggle')
       return void save(id, 'enabled', !find(id)!.enabled);
     if (mode) {

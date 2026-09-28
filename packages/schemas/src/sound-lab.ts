@@ -133,7 +133,12 @@ export type SoundLabAckRequest = z.infer<typeof SoundLabAckRequest>;
 /** Streamer settings of one sound (Studio configuration panel). */
 export const SoundLabSoundConfig = z.object({
   id: z.string(),
+  /** Name shown to viewers: custom_label ?? default_label. */
   label: z.string(),
+  /** Canonical name from the Core bank (read-only). */
+  default_label: z.string(),
+  /** Streamer rename, or null when the default name is used. */
+  custom_label: z.string().nullable(),
   enabled: z.boolean(),
   token_cost: z.number().int(),
   credit_cost: z.number().int(),
@@ -150,7 +155,8 @@ export type SoundLabSoundConfig = z.infer<typeof SoundLabSoundConfig>;
 /** Partial update, validated by Core. */
 export const SoundLabSoundUpdate = z
   .strictObject({
-    label: z.string().trim().min(1).max(40),
+    /** Rename; an empty value, null or the default name removes the custom name. */
+    label: z.union([z.string().trim().max(40), z.null()]),
     enabled: z.boolean(),
     token_cost: z.number().int().min(0).max(1_000_000),
     credit_cost: z.number().int().min(0).max(100),

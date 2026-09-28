@@ -491,6 +491,33 @@
   color: var(--s-faint);
   font-size: 12px;
 }
+.scfg-label-meta {
+  display: flex;
+  min-height: 22px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.scfg-label-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scfg-reset {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--s-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--s-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.scfg-reset:hover {
+  border-color: var(--s-line-strong);
+  color: var(--s-ink);
+}
 .scfg-field--mode {
   grid-column: 1 / 3;
 }

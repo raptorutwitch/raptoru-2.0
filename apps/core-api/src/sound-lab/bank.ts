@@ -2,7 +2,9 @@
 // measured durations) and checked against the MP3 files shipped with the extension. The legacy ids
 // are kept; a few ids map to a differently named file (hello, on-est-bien-d-accord) and `sarah`
 // has three variants, one picked at random by Core. `random` picks any playable sound.
-// Editable settings (enabled, prices, cooldown, playback mode, volume) live in the database.
+// Labels are the canonical default names (typography fixed where certain); a Studio rename is
+// stored as custom_label. Editable settings (enabled, prices, cooldown, playback mode, volume)
+// live in the database.
 
 export interface SoundBankEntry {
   id: string;
@@ -151,7 +153,7 @@ export const SOUND_BANK: readonly SoundBankEntry[] = [
   },
   {
     id: 'hells-kitchen-violin',
-    label: 'Hells Kitchen Violin',
+    label: "Hell's Kitchen Violin",
     token_cost: 2000,
     credit_cost: 3,
     files: [
@@ -181,7 +183,7 @@ export const SOUND_BANK: readonly SoundBankEntry[] = [
   },
   {
     id: 'maintenant-tais-toi',
-    label: 'Maintenant tais toi',
+    label: 'Maintenant, tais-toi',
     token_cost: 500,
     credit_cost: 1,
     files: [
@@ -304,7 +306,7 @@ export const SOUND_BANK: readonly SoundBankEntry[] = [
   },
   {
     id: 'sigma-a-genoux',
-    label: 'Sigma - A genoux',
+    label: 'Sigma - À genoux',
     token_cost: 500,
     credit_cost: 1,
     files: [{ file: 'assets/sounds/sigma-a-genoux.mp3', duration_ms: 1426 }],
@@ -434,7 +436,7 @@ export const SOUND_BANK: readonly SoundBankEntry[] = [
   },
   {
     id: 'sardoche-c-etait-sur',
-    label: "Sardoche - C'était sur !",
+    label: "Sardoche - C'était sûr !",
     token_cost: 2000,
     credit_cost: 3,
     files: [
@@ -459,7 +461,7 @@ export const SOUND_BANK: readonly SoundBankEntry[] = [
   },
   {
     id: 'c-est-moi-qui-les-ai-plante',
-    label: "C'est moi qui les ai planté",
+    label: "C'est moi qui les ai plantés",
     token_cost: 2000,
     credit_cost: 3,
     files: [
@@ -538,7 +540,7 @@ export const SOUND_BANK: readonly SoundBankEntry[] = [
   },
   {
     id: 'sac-a-merde-ptitchef',
-    label: 'Sac a merde - Ptitchef',
+    label: 'Sac à merde - Ptitchef',
     token_cost: 500,
     credit_cost: 1,
     files: [

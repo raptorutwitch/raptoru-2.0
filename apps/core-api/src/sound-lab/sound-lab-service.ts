@@ -49,7 +49,6 @@ export function defaultSoundConfig(entry: SoundBankEntry) {
         ? 'queue'
         : 'ignore_if_running';
   return {
-    label: entry.label.slice(0, 40),
     enabled: true,
     token_cost: entry.token_cost,
     credit_cost: entry.credit_cost,
@@ -80,7 +79,8 @@ export class SoundLabNotFoundError extends Error {}
 
 type ConfigRow = {
   sound_id: string;
-  label: string;
+  /** Studio rename (null = default name from the bank). */
+  custom_label: string | null;
   enabled: boolean;
   token_cost: number;
   credit_cost: number;
@@ -124,6 +124,9 @@ const SELECT = `select i.*, d.studio_instance_id, d.attempt_id, d.lease_expires_
 const TERMINAL: SoundLabStatus[] = ['completed', 'failed', 'execution_unknown'];
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 const BANK = new Map(SOUND_BANK.map((s) => [s.id, s]));
+/** Name shown to viewers: the Studio rename if any, else the bank's canonical name. */
+const labelOf = (entry: SoundBankEntry, c: ConfigRow) =>
+  c.custom_label ?? entry.label;
 
 function toInteraction(r: Row): SoundLabInteraction {
   return {
@@ -187,11 +190,10 @@ export class SoundLabService {
     for (const entry of SOUND_BANK) {
       const d = defaultSoundConfig(entry);
       await q.query(
-        `insert into sound_lab_sounds (sound_id, label, enabled, token_cost, credit_cost, cooldown_ms, playback_mode, volume, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9) on conflict (sound_id) do nothing`,
+        `insert into sound_lab_sounds (sound_id, custom_label, enabled, token_cost, credit_cost, cooldown_ms, playback_mode, volume, updated_at)
+         values ($1, null, $2, $3, $4, $5, $6, $7, $8) on conflict (sound_id) do nothing`,
         [
           entry.id,
-          d.label,
           d.enabled,
           d.token_cost,
           d.credit_cost,
@@ -232,7 +234,9 @@ export class SoundLabService {
   private toConfig(entry: SoundBankEntry, c: ConfigRow): SoundLabSoundConfig {
     return {
       id: entry.id,
-      label: c.label,
+      label: labelOf(entry, c),
+      default_label: entry.label,
+      custom_label: c.custom_label,
       enabled: c.enabled,
       token_cost: c.token_cost,
       credit_cost: c.credit_cost,
@@ -254,7 +258,13 @@ export class SoundLabService {
     const entry = BANK.get(soundId);
     if (!entry) throw new SoundLabError409('sound_not_found', 'unknown sound');
     await this.seed(this.db);
-    const fields = Object.entries(update);
+    // Rename: an empty value, null or the default name clears custom_label (back to default).
+    const { label, ...rest } = update;
+    const fields: [string, unknown][] = Object.entries(rest);
+    if (label !== undefined) {
+      const name = label?.trim() ?? '';
+      fields.push(['custom_label', name && name !== entry.label ? name : null]);
+    }
     const sets = fields.map(([key], i) => `${key} = $${i + 2}`);
     const rows = await this.db.query<ConfigRow>(
       `update sound_lab_sounds set ${sets.join(', ')}, updated_at = $${fields.length + 2}
@@ -310,7 +320,7 @@ export class SoundLabService {
       const at = last.get(entry.id);
       return {
         id: entry.id,
-        label: c.label,
+        label: labelOf(entry, c),
         preview_url: entry.files[0]?.file ?? null,
         duration_ms: entry.files.length
           ? Math.max(...entry.files.map((f) => f.duration_ms))
@@ -501,8 +511,11 @@ export class SoundLabService {
           entry.id,
           played.id,
           entry.id === 'random'
-            ? `${config.label} · ${playedConfig.label}`.slice(0, 80)
-            : config.label,
+            ? `${labelOf(entry, config)} · ${labelOf(played, playedConfig)}`.slice(
+                0,
+                80,
+              )
+            : labelOf(entry, config),
           file.file,
           file.duration_ms,
           playedConfig.playback_mode,

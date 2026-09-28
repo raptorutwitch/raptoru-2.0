@@ -142,6 +142,34 @@ describe('Soundboard Lab: Extension Lab → Core → Studio worker → local pla
     )!.sounds as Record<string, unknown>[];
     expect(polledSounds.find((s) => s.id === 'boop')!.token_cost).toBe(350);
     expect(polledSounds.find((s) => s.id === 'ohlala')!.enabled).toBe(false);
+
+    // Names, through the Studio panel path (worker → Core): rename, then back to the default.
+    const shownLabel = async () => {
+      lab.invalidateSoundCatalog();
+      const state = (await lab.handle('GET', '/state', undefined, viewer)).body;
+      const sounds = (state.modules as Record<string, unknown>[]).find(
+        (m) => m.id === 'soundboard',
+      )!.sounds as Record<string, unknown>[];
+      return sounds.find((s) => s.id === 'boop')!.label;
+    };
+    const renamed = (await f.worker.updateSound('boop', {
+      label: "Boîte à meuh — c'est ça",
+    })) as Record<string, unknown>;
+    expect(renamed).toMatchObject({
+      label: "Boîte à meuh — c'est ça",
+      default_label: 'Boop',
+      custom_label: "Boîte à meuh — c'est ça",
+    });
+    expect(await shownLabel()).toBe("Boîte à meuh — c'est ça");
+    // « ↺ Nom par défaut » sends null; an emptied field sends ''.
+    for (const reset of [null, '']) {
+      await f.worker.updateSound('boop', { label: 'Autre nom' });
+      const back = (await f.worker.updateSound('boop', {
+        label: reset,
+      })) as Record<string, unknown>;
+      expect(back).toMatchObject({ label: 'Boop', custom_label: null });
+      expect(await shownLabel()).toBe('Boop');
+    }
   });
 
   it('player-driven lifecycle: started then completed; a replayed ACK after cleanup is accepted', async () => {

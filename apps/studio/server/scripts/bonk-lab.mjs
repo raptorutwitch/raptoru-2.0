@@ -57,6 +57,7 @@ try {
     '20261001120000_bonk_lab_third_party.sql',
     // Soundboard V2 Lab (same isolated Lab database).
     '20261002120000_sound_lab.sql',
+    '20261003120000_sound_lab_custom_label.sql',
   ]) {
     if (
       (
