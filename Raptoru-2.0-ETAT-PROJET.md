@@ -151,6 +151,9 @@ Historique principal :
 - commit `docs: update Raptoru 2.0 project state` (28/09/2026) : SHA à lire dans `git log -n 10`. Pas de release Studio pour ce checkpoint (en attente d'un feu vert explicite).
 - `31dfd7a — chore: release Raptoru Studio 0.1.4` (release validée explicitement, pipeline existant)
 - `dbfb91b — feat: separate Soundboard default and custom sound names` (pas de release Studio supplémentaire à ce stade)
+- `4454c8f — docs: update Raptoru 2.0 project state`
+- `5538111 — feat: refine Hub carousel navigation and launcher` (29/09/2026 : dots, grille + lanceur dense, molette verticale, glow adouci ; pas de release Studio, extension non publiée)
+- commit `docs: update Raptoru 2.0 project state` (29/09/2026) : SHA à lire dans `git log -n 10`.
 
 Règles Git inchangées :
 - branche `main` ;
@@ -1067,12 +1070,26 @@ Composant `createCurrencySwitch` (extension, `shared/ui-primitives.js` + `curren
 Nouveau Hub de l’extension, validé définitivement le 28/09/2026 (`shared/hub-carousel.js` + `hub.css` + vue d’accueil de `shared/ui.js`) :
 - carousel horizontal aimanté, boucle infinie sans clone, cartes de face, carte active plus grande, animation amortie sans rebond (y compris en rafale) ;
 - flèches, clic voisin, glisser / swipe, molette horizontale, clavier ← → / Entrée ;
-- rail d’accès rapide + popover « Tous » (fermé au clic extérieur et par Échap) ;
+- ~~rail d’accès rapide + popover « Tous »~~ → remplacés le 29/09/2026 par dots + grille (voir « Navigation Hub » ci-dessous) ;
 - style « Pop Premium » (couleur franche par module, disque blanc + pictogramme, Bonk = emote projetée) ;
 - vrais modules uniquement : TTS, Soundboard, Bonk, Tombola, Modération (modérateurs seulement) ; « Ouverte » seulement si la Tombola est ouverte, « En pause » pour le TTS en pause ou un module désactivé (non ouvrable) ;
 - Historique et Classement visibles sur le Hub, Tutoriel conservé (contenu à refaire plus tard), « Actualiser » dans Préférences (plus de bouton ↻ visible) ;
 - en Vidéo, Échap ne vide plus le composant (il ne ferme que les couches internes).
 Validé dans le Lab en Viewer / Modérateur × Panel / Mobile / Vidéo. Extension non publiée.
+
+### Navigation Hub — validée (29/09/2026, commit `5538111`)
+Issue des prototypes locaux `prototypes/hub-nav-dots/` et `prototypes/hub-nav-dots-footer/` (non versionnés), variante retenue **C · Tous dominant** :
+- rangée permanente de mini-logos **retirée** ;
+- **dots de position** sous le carousel : un par carte, dot actif allongé à la couleur du module, synchronisés avec flèches, clavier, glisser, clic voisin, molettes et boucle (repère visuel seulement, non cliquables) ;
+- **navigation secondaire** sous un trait fin : Historique discret à gauche · **bouton grille** au centre · Classement discret à droite (Historique et Classement ne sont pas des cartes du carousel) ;
+- **bouton grille** : icône seule (ni texte « Tous », ni compteur), infobulle « Voir tous les modules », ouvre le **lanceur dense** (petites cases icône + nom + pastille d’état, uniquement les modules du carousel) ; choisir un module ferme le lanceur, positionne le carousel et le dot ; fermeture aussi par clic extérieur / Échap ;
+- **molette verticale** sur la zone du carousel (cartes et flèches) : bas = carte suivante, haut = précédente, **1 geste = 1 carte** (inertie trackpad / molette libre absorbées) ; aucun effet hors carousel ; Ctrl+molette non bloqué ; molette horizontale et Maj+molette inchangées ;
+- **glow de la carte active adouci** : plus d’anneau net, ombres en couches + aura radiale fondue à la couleur du module ;
+- **Tutoriel « ? » conservé provisoirement** au bord droit du pied de page.
+- Refonte tutoriel / onboarding **repoussée** à après la migration des modules principaux. Piste : tutoriel automatique à la première ouverture, possibilité de le passer, et de le rouvrir ensuite. Non implémenté.
+- Tests : extension 10/10, build extension OK ; validé dans l’Extension Lab (source) en Vidéo / Panel / Mobile avec de vraies molettes système.
+- Le Studio installé (0.1.4) embarque une copie figée de l’extension : il ne montrera cette navigation qu’après une future release Studio (non faite).
+- Toujours aucune publication Twitch, aucune production.
 
 ## Roadmap après Bonk
 Ordre recommandé à date (Bonk V2 et Soundboard V2 validés, Hub fermé) :
@@ -1089,6 +1106,8 @@ Ordre recommandé à date (Bonk V2 et Soundboard V2 validés, Hub fermé) :
 11. duel/roulette/slots/oracle et satellites.
 
 Cette roadmap reste modulable après audit réel de chaque feature.
+
+**Prochain chantier (après le checkpoint Hub du 29/09/2026) : implémentation réelle de la Modération V2 D4** — Core-first, vraies permissions, vrais blocages, vrais cooldowns, vrais états de module, historique/audit, UI D4 branchée, tests en Extension Lab, toujours hors production. Référence UX : prototype local non versionné `prototypes/moderation-v2-d4/`. Non commencé.
 
 # 17. Import des données historiques / cutover
 
