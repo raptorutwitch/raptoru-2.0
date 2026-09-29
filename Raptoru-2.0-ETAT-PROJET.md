@@ -153,7 +153,8 @@ Historique principal :
 - `dbfb91b — feat: separate Soundboard default and custom sound names` (pas de release Studio supplémentaire à ce stade)
 - `4454c8f — docs: update Raptoru 2.0 project state`
 - `5538111 — feat: refine Hub carousel navigation and launcher` (29/09/2026 : dots, grille + lanceur dense, molette verticale, glow adouci ; pas de release Studio, extension non publiée)
-- commit `docs: update Raptoru 2.0 project state` (29/09/2026) : SHA à lire dans `git log -n 10`.
+- `6b75309 — docs: update Raptoru 2.0 project state` (29/09/2026)
+- commit `docs: sync Raptoru 2.0 project state` (29/09/2026, synchronisation de ce fichier) : SHA à lire dans `git log -n 10`.
 
 Règles Git inchangées :
 - branche `main` ;
@@ -1091,6 +1092,14 @@ Issue des prototypes locaux `prototypes/hub-nav-dots/` et `prototypes/hub-nav-do
 - Le Studio installé (0.1.4) embarque une copie figée de l’extension : il ne montrera cette navigation qu’après une future release Studio (non faite).
 - Toujours aucune publication Twitch, aucune production.
 
+## Modération V2 — direction UX D4 validée (29/09/2026)
+Conception UX/UI réalisée et validée au niveau prototype (aucune implémentation Core / backend / extension) :
+- exploration A/B/C (`prototypes/moderation-v2/`), puis direction minimaliste D1/D2/D3 (`prototypes/moderation-v2-refined/`), puis convergence **D4** (`prototypes/moderation-v2-d4/`) — prototypes HTML locaux, **non versionnés**, données fictives ;
+- D4 = base D2 (colonne gauche : recherche + modules + Historique ; zone droite : une seule intention — module, fiche viewer, historique ou détail), file TTS / Soundboard complète reprise de D3 ;
+- contenus validés : états module Actif / En pause / Désactivé via menu compact, pause avec « garder la file / annuler + rembourser », retrait / stop avec ou sans remboursement (poubelle + menu), fiche viewer compacte (restrictions avec ×, Bloquer / Cooldown / Plus, activité récente, Activité Jetons), blocage global ou par module (30 s / 1 min / 5 min / personnalisé, aucune sanction Twitch), cooldown personnel (délai imposé + durée), notes internes discrètes, historique léger + détails techniques au clic, **Activité Jetons** (mouvements automatiques masqués via un futur `visible_in_moderation_activity`), **mots surveillés TTS** (« À vérifier », jamais bloqué automatiquement ; mots bloqués = concept seulement), pause globale supermod (refuse les nouvelles interactions sans stopper / purger / rembourser), permissions Mod / Supermod / Broadcaster avec délégation individuelle, infobulles ;
+- surface de référence Video Component 600×432 ; **Moderator Window** = Panel Twitch ouvert en pop-out (pop-out documenté par Twitch pour les Panels et la Live Config, pas pour le Video Component ; option à vérifier dans la console Twitch ; non configuré) ; portail web `raptoru.fr/moderation` non nécessaire pour la V1, non créé.
+- **Non fait** : implémentation réelle (Core, permissions, blocages, cooldowns, états module, audit, API, branchement UI). La modération actuelle de l’extension reste l’ancienne.
+
 ## Roadmap après Bonk
 Ordre recommandé à date (Bonk V2 et Soundboard V2 validés, Hub fermé) :
 1. ~~Soundboard~~ (validé en Lab le 28/09/2026) ;
@@ -1107,7 +1116,7 @@ Ordre recommandé à date (Bonk V2 et Soundboard V2 validés, Hub fermé) :
 
 Cette roadmap reste modulable après audit réel de chaque feature.
 
-**Prochain chantier (après le checkpoint Hub du 29/09/2026) : implémentation réelle de la Modération V2 D4** — Core-first, vraies permissions, vrais blocages, vrais cooldowns, vrais états de module, historique/audit, UI D4 branchée, tests en Extension Lab, toujours hors production. Référence UX : prototype local non versionné `prototypes/moderation-v2-d4/`. Non commencé.
+**Prochain chantier : à définir** (aucun chantier suivant choisi explicitement au 29/09/2026). La liste ci-dessus reste un ordre indicatif.
 
 # 17. Import des données historiques / cutover
 
@@ -1195,10 +1204,11 @@ Rapport :
 Le rapport est un audit statique. Aucun test OBS/SAMMI/prod n’a été exécuté pendant cet audit.
 
 ### État Git à revérifier
-Après la clôture Bonk V2 du 27/09/2026 :
+Au 29/09/2026 :
 - branche `main` ;
-- dernier commit fonctionnel `717d97b`, puis commit doc et commit de release Studio ;
-- tree propre attendu (hors runtime/.env ignorés).
+- dernier commit fonctionnel `5538111` (navigation Hub), puis `6b75309` (docs) et le commit `docs: sync Raptoru 2.0 project state` ;
+- dernière release Studio : 0.1.4 (`31dfd7a`) ;
+- tree propre attendu, hors `prototypes/` (local, non versionné) et runtime/.env ignorés.
 
 Toujours vérifier l’état actuel avant toute modification.
 
@@ -1224,6 +1234,10 @@ VALIDÉ TECHNIQUEMENT, mais pas activé prod :
 - Soundboard V2 Lab (validé le 28/09/2026 ; noms des sons default_label + custom_label validés)
 - wallet switch global de l’extension (validé le 28/09/2026)
 - Hub Pop Premium (validé / fermé le 28/09/2026)
+- navigation Hub : dots + grille / lanceur dense + molette verticale (validée le 29/09/2026, `5538111`)
+
+VALIDÉ EN CONCEPTION SEULEMENT (prototype local, rien d’implémenté) :
+- Modération V2 direction UX D4 (29/09/2026)
 
 Studio :
 - updater réel validé en 0.1.0 → 0.1.1
@@ -1251,8 +1265,8 @@ BONK V2 = VALIDÉ (Lab), PAS ACTIVÉ EN PROD :
 - zéro Wallet réel, zéro stats/progression réelle, zéro prod
 - reste (non bloquant) : Bonk Fidelity (impact FX, centre caméra, tailles, disparition)
 
-PROCHAIN CHANTIER :
-TTS → Tombola → stats/profils → Jeu des mots 2.0 → achievements/cosmétiques → FX → modération sociale → Spotify/casino.
+PROCHAIN CHANTIER : à définir.
+Roadmap indicative : TTS → Tombola → stats/profils → Jeu des mots 2.0 → achievements/cosmétiques → FX → modération sociale → Spotify/casino.
 
 Production réelle actuelle :
 SAMMI + StreamElements.
