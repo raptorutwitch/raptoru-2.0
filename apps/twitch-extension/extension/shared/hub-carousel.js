@@ -56,15 +56,17 @@ function motif(document, name) {
 }
 
 /**
- * Monte le carousel dans `stage` et le rail d'accès rapide dans `rail`.
+ * Monte le carousel dans `stage`, les dots de position dans `rail` et le lanceur dans `popover`.
  * modules : [{ id, label, description, icon, color, color2, chip: { text, tone } | null, off, badge }]
  * onOpen(id) : ouverture du module actif ; onSelect(id) : mémorisation de la sélection.
+ * rail : reçoit les dots de position ; launcherHost : reçoit le bouton grille (lanceur « Tous »).
  */
 export function createHubCarousel({
   document = globalThis.document,
   stage,
   rail,
   popover,
+  launcherHost = null,
   modules,
   selectedId = null,
   onSelect = null,
@@ -162,6 +164,8 @@ export function createHubCarousel({
       button.setAttribute('aria-current', String(i === current));
     });
     popButtons.forEach((button, i) => button.classList.toggle('is-on', i === current));
+    // Couleur de l'aura douce derrière la carte active (hub.css, .rh-car::before).
+    track.style.setProperty('--rh-glow', modules[current].color);
   };
   // Amorti exponentiel indépendant de la fréquence d'images : départ vif, arrivée douce,
   // jamais de dépassement ; des clics en rafale font simplement glisser plus loin.
@@ -263,6 +267,32 @@ export function createHubCarousel({
   track.addEventListener('pointercancel', end);
   // Molette horizontale / trackpad : suit le geste puis s'aimante.
   let wheelIdle = 0;
+  // Molette verticale sur le carousel : une carte par cran. Un verrou absorbe la suite du
+  // geste (inertie de trackpad, molette libre) ; il tombe après une courte pause, ou après
+  // un délai pour une molette à crans afin que des crans rapprochés avancent quand même.
+  const notch = { acc: 0, lockedAt: 0, lastAt: 0 };
+  const verticalStep = (event) => {
+    const now = performance.now();
+    const unit = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 400 : 1;
+    const dy = event.deltaY * unit;
+    const discrete = event.deltaMode !== 0 || Math.abs(dy) >= 50;
+    const idle = now - notch.lastAt;
+    notch.lastAt = now;
+    if (notch.lockedAt && (idle >= 150 || (discrete && now - notch.lockedAt >= 280))) notch.lockedAt = 0;
+    if (notch.lockedAt) return;
+    if (idle >= 150 || Math.sign(dy) !== Math.sign(notch.acc)) notch.acc = 0;
+    notch.acc += dy;
+    if (Math.abs(notch.acc) < 40) return;
+    go(notch.acc > 0 ? 1 : -1);
+    notch.acc = 0;
+    notch.lockedAt = now;
+  };
+  // Écouté sur la scène (cartes + flèches) : le curseur peut être n'importe où sur le carousel.
+  stage.addEventListener('wheel', (event) => {
+    if (event.ctrlKey || event.shiftKey || !event.deltaY || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    verticalStep(event);
+  }, { passive: false });
   track.addEventListener('wheel', (event) => {
     const dx = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.shiftKey ? event.deltaY : 0;
     if (!dx) return;
@@ -279,24 +309,21 @@ export function createHubCarousel({
     }, 120);
   }, { passive: false });
 
-  // Rail d'accès rapide + « Tous ».
+  // Dots de position (repère visuel seulement) + lanceur « Tous ».
+  rail.setAttribute('aria-hidden', 'true');
   modules.forEach((mod, i) => {
-    const button = make('button', 'rh-dot');
-    button.type = 'button';
-    button.style.setProperty('--m', mod.color);
-    button.setAttribute('aria-label', mod.label);
-    button.append(hubIcon(document, mod.icon), make('span', 'rh-dot__tip', mod.label));
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      goTo(i);
-    });
-    rail.append(button);
-    railButtons.push(button);
+    const dot = make('span', 'rh-pos');
+    dot.style.setProperty('--m', mod.color);
+    rail.append(dot);
+    railButtons.push(dot);
     const tile = make('button', 'rh-all__item');
     tile.type = 'button';
     tile.style.setProperty('--m', mod.color);
+    tile.style.setProperty('--m2', mod.color2);
+    tile.setAttribute('aria-label', `${mod.label}${mod.chip ? ` · ${mod.chip.text}` : ''}`);
     const tileIcon = make('span', 'rh-all__icon');
     tileIcon.append(hubIcon(document, mod.icon));
+    if (mod.chip) tileIcon.append(make('span', `rh-all__pip rh-all__pip--${mod.chip.tone || 'neutral'}`));
     tile.append(tileIcon, make('span', 'rh-all__name', mod.label));
     tile.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -309,8 +336,9 @@ export function createHubCarousel({
   const allButton = make('button', 'rh-all-toggle');
   allButton.type = 'button';
   allButton.setAttribute('aria-haspopup', 'dialog');
-  allButton.setAttribute('aria-label', 'Tous les modules');
-  allButton.append(hubIcon(document, 'grid'), make('span', 'rh-all-toggle__label', 'Tous'));
+  allButton.setAttribute('aria-label', 'Voir tous les modules');
+  allButton.title = 'Voir tous les modules';
+  allButton.append(hubIcon(document, 'grid'));
   const setPopover = (open) => {
     popover.hidden = !open;
     allButton.classList.toggle('is-open', open);
@@ -321,7 +349,7 @@ export function createHubCarousel({
     setPopover(popover.hidden);
   });
   popover.addEventListener('click', (event) => event.stopPropagation());
-  rail.append(make('span', 'rh-rail__sep'), allButton);
+  (launcherHost || rail).append(allButton);
   setPopover(false);
   // « Tous » se ferme sur un clic à côté ou avec Échap (sans remonter jusqu'au tiroir).
   const onOutside = (event) => {

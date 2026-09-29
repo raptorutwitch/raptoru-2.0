@@ -5846,13 +5846,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         });
       const stage = el('div', 'rh-stage');
       const dock = el('div', 'rh-dock');
-      const rail = el('nav', 'rh-rail');
-      rail.setAttribute('aria-label', 'Accès direct aux modules');
+      const rail = el('div', 'rh-rail');
       const allModules = el('div', 'rh-all');
       allModules.setAttribute('role', 'dialog');
       allModules.setAttribute('aria-label', 'Tous les modules');
-      const util = el('div', 'rh-util');
-      const utilGroup = el('div', 'rh-util__group');
+      // Navigation secondaire : Historique · grille (lanceur) · Classement ; Tutoriel au bord droit.
+      const util = el('nav', 'rh-util');
+      util.setAttribute('aria-label', 'Navigation secondaire');
+      const utilLeft = el('div', 'rh-util__side rh-util__side--left');
+      const launcherHost = el('div', 'rh-util__center');
+      const utilRight = el('div', 'rh-util__side rh-util__side--right');
       if (modules.some((mod) => mod.id === ACTIONS_MODULE.id)) {
         const history = el('button', 'rh-util-btn');
         history.type = 'button';
@@ -5861,7 +5864,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         if (historyNotices) history.append(el('span', 'rh-util-btn__count', String(historyNotices)));
         history.setAttribute('aria-label', historyNotices ? `Historique · ${historyNotices} non lue${historyNotices > 1 ? 's' : ''}` : 'Historique');
         history.addEventListener('click', () => navigateTo(ACTIONS_MODULE.id));
-        utilGroup.append(history);
+        utilLeft.append(history);
       }
       if (state.site_url) {
         const ranking = el('a', 'rh-util-btn');
@@ -5870,15 +5873,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         ranking.rel = 'noopener noreferrer';
         ranking.append(hubIcon(document, 'trophy'), el('span', '', 'Classement'));
         ranking.setAttribute('aria-label', 'Classement (nouvel onglet)');
-        utilGroup.append(ranking);
+        utilRight.append(ranking);
       }
       const tutorial = el('button', 'rh-tuto');
       tutorial.type = 'button';
       tutorial.setAttribute('aria-label', 'Ouvrir le tutoriel');
       tutorial.setAttribute('aria-haspopup', 'dialog');
-      tutorial.append(el('span', 'rh-tuto__q', '?'), el('span', '', 'Tutoriel'));
+      tutorial.title = 'Tutoriel';
+      tutorial.append(el('span', 'rh-tuto__q', '?'));
       tutorial.addEventListener('click', openTutorial);
-      util.append(utilGroup, tutorial);
+      util.append(utilLeft, launcherHost, utilRight, tutorial);
       dock.append(rail, util);
       hub.append(top, stage, dock, allModules);
       if (notificationCenterOpen) hub.append(notificationCenterDrawer());
@@ -5891,6 +5895,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           stage,
           rail,
           popover: allModules,
+          launcherHost,
           modules: hubModules,
           selectedId: hubSelectedId,
           onSelect: (id) => { hubSelectedId = id; },
