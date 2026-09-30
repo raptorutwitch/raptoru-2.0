@@ -1,5 +1,12 @@
 export type LogSource =
-  'studio' | 'postgres' | 'core' | 'bot' | 'presence' | 'preflight';
+  | 'studio'
+  | 'postgres'
+  | 'core'
+  | 'bot'
+  | 'presence'
+  | 'preflight'
+  | 'runtime'
+  | 'labcore';
 
 export interface LogLine {
   seq: number;

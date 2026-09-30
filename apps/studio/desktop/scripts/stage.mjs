@@ -34,6 +34,8 @@ const copies = [
   'apps/twitch-bot/package.json',
   'apps/studio/server/dist',
   'apps/studio/server/bonk-overlay',
+  // Soundboard V2 local player page (served by the Studio server, played in the Studio window).
+  'apps/studio/server/sound-player',
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
@@ -49,6 +51,19 @@ for (const path of copies) {
     throw new Error(`missing ${path}: run the build first`);
   cpSync(from, join(app, path), { recursive: true });
 }
+
+// Files the local runtime needs at run time (standalone Studio: no repository next to it).
+const runtimeFiles = [
+  'apps/core-api/dist/bonk-lab/local-server.js',
+  'apps/studio/server/sound-player/player.html',
+  'apps/studio/server/bonk-overlay/overlay.html',
+  'apps/studio/web/dist/index.html',
+  'apps/twitch-extension/extension/panel.html',
+  'supabase/migrations/20261003120000_sound_lab_custom_label.sql',
+];
+for (const path of runtimeFiles)
+  if (!existsSync(join(app, path)))
+    throw new Error(`runtime file missing from the package: ${path}`);
 
 // @raptoru/schemas is a workspace package: pack a real copy of its build.
 const schemasCopy = join(stage, 'schemas');

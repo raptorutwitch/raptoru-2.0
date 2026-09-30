@@ -1,6 +1,6 @@
 import { BonkRuntime } from './bonk-lab/runtime.js';
 import { SoundRuntime } from './sound-lab/runtime.js';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import {
   createServer,
   type IncomingMessage,
@@ -24,6 +24,10 @@ import {
   REPO_ROOT,
 } from './test-lab/local-env.js';
 import { createTestLab, type TestLab } from './test-lab/test-lab.js';
+import {
+  createLocalRuntime,
+  type LocalRuntime,
+} from './runtime/local-runtime.js';
 
 const port = Number(process.env.PORT ?? 4100);
 // Studio is local-only: bind to loopback, never to a public interface.
@@ -45,6 +49,68 @@ const MIME: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
 };
+
+// Dev/Lab: prototypes are local, unversioned work. They are never packaged; Studio only serves them
+// when it runs from the repository (the folder exists), read-only, from two allowlisted trees
+// (prototypes link the real extension stylesheets and the TTS player assets by relative paths).
+const DEV_PREFIX = '/dev/';
+const DEV_ROOTS = ['prototypes/', 'apps/twitch-extension/extension/'];
+const DEV_MIME: Record<string, string> = {
+  ...MIME,
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg',
+  '.md': 'text/plain; charset=utf-8',
+};
+
+async function serveDev(pathname: string, res: ServerResponse) {
+  const rel = normalize(decodeURIComponent(pathname.slice(DEV_PREFIX.length)))
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
+  if (rel.startsWith('..') || !DEV_ROOTS.some((root) => rel.startsWith(root)))
+    return send(res, 404, { error: 'not_found' });
+  try {
+    const body = await readFile(join(REPO_ROOT, rel));
+    res.writeHead(200, {
+      'content-type':
+        DEV_MIME[extname(rel).toLowerCase()] ?? 'application/octet-stream',
+      'cache-control': 'no-store',
+    });
+    res.end(body);
+  } catch {
+    send(res, 404, { error: 'not_found' });
+  }
+}
+
+/** Prototype folders with an entry page, when Studio runs from the repository. */
+async function listPrototypes() {
+  const dir = join(REPO_ROOT, 'prototypes');
+  const out: { name: string; entry: string; updatedAt: string }[] = [];
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return { available: false, items: out };
+  }
+  for (const name of names.sort()) {
+    for (const entry of ['index.html', 'calibrate.html']) {
+      try {
+        const info = await stat(join(dir, name, entry));
+        out.push({
+          name,
+          entry: `${DEV_PREFIX}prototypes/${encodeURIComponent(name)}/${entry}`,
+          updatedAt: info.mtime.toISOString(),
+        });
+      } catch {
+        /* no such entry */
+      }
+    }
+  }
+  return { available: true, items: out };
+}
 
 function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, {
@@ -175,6 +241,7 @@ export function createStudioServer(
   extLab: LabEbs | null = null,
   bonk: BonkRuntime | null = null,
   sound: SoundRuntime | null = null,
+  runtime: LocalRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -189,6 +256,10 @@ export function createStudioServer(
       if (url.pathname === '/api/bonk-lab/status' && !bonk)
         return send(res, 200, { enabled: false });
       if (await extensionLabRoute(extLab, req, res, url)) return;
+      if (req.method === 'GET' && url.pathname.startsWith(DEV_PREFIX)) {
+        if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
+        return await serveDev(url.pathname, res);
+      }
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET')
           return send(res, 405, { error: 'method_not_allowed' });
@@ -204,6 +275,21 @@ export function createStudioServer(
         url.pathname.startsWith('/api/test-lab/')
       )
         return send(res, 403, { error: 'bonk_lab_only' });
+      // Local Runtime Manager (Lab Core, base Lab, Postgres) and Dev/Lab entry points.
+      if (req.method === 'GET' && url.pathname === '/api/runtime/status')
+        return send(res, 200, {
+          enabled: Boolean(runtime),
+          packaged: process.env.RAPTORU_PACKAGED === '1',
+          dataRoot: DATA_ROOT,
+          ...(runtime ? runtime.status() : {}),
+        });
+      if (req.method === 'POST' && url.pathname === '/api/runtime/restart') {
+        if (!runtime) return send(res, 404, { error: 'runtime_disabled' });
+        void runtime.restart();
+        return send(res, 200, { ok: true });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/dev/prototypes')
+        return send(res, 200, await listPrototypes());
       if (req.method === 'GET' && url.pathname === '/api/test-lab/status')
         return send(res, 200, await lab.status());
       if (req.method === 'GET' && url.pathname === '/api/test-lab/logs') {
@@ -259,6 +345,17 @@ export function createStudioServer(
 if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   applyDataRootEnv();
   const lab = createTestLab();
+  // Standalone Studio: the local runtime (Postgres → base Lab → Core local) is started and watched
+  // here; Bonk and Soundboard workers use its per-session secret. `npm run bonk:lab` (BONK_LAB_ONLY)
+  // keeps its own launcher and environment.
+  const runtime =
+    process.env.BONK_LAB_ONLY === '1'
+      ? null
+      : createLocalRuntime(lab.logs, lab.deps.redact);
+  if (runtime) {
+    process.env.BONK_LAB_CORE_URL = runtime.coreUrl;
+    process.env.BONK_LAB_SECRET = runtime.secret;
+  }
   for (const service of process.env.BONK_LAB_ONLY === '1'
     ? []
     : [lab.deps.core, lab.deps.bot]) {
@@ -286,7 +383,10 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       'Studio closing: stopping bot and Core (Postgres keeps running)',
     );
     if (process.env.BONK_LAB_ONLY === '1') process.exit(0);
-    else void lab.shutdown().finally(() => process.exit(0));
+    else
+      void Promise.allSettled([lab.shutdown(), runtime?.stop()]).finally(() =>
+        process.exit(0),
+      );
   };
   const extLab = await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
     lab.logs.add(
@@ -305,13 +405,14 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     sound.onConfigChange = () => extLab.invalidateSoundCatalog();
     sound.start();
   }
-  createStudioServer(lab, shutdown, extLab, bonk, sound).listen(
+  createStudioServer(lab, shutdown, extLab, bonk, sound, runtime).listen(
     port,
     host,
     () => {
       console.log(
         `[studio-server] Test Lab on http://${host}:${port} (data: ${DATA_ROOT})`,
       );
+      void runtime?.start();
     },
   );
   process.on('SIGINT', shutdown);

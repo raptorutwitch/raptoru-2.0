@@ -1,12 +1,14 @@
 import './style.css';
 import './extension-lab.css';
 import './sound-config.css';
+import './studio-home.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
 import { mountSoundConfig } from './sound-config.js';
 import { mountUpdateWidget } from './update.js';
+import { mountStudioHome } from './studio-home.js';
 
-type TabId = 'test-lab' | 'extension-lab' | 'soundboard';
+type TabId = 'studio' | 'test-lab' | 'extension-lab' | 'soundboard';
 const TAB_KEY = 'raptoru-studio-tab';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -16,6 +18,7 @@ if (app) {
     <header class="topbar">
       <strong class="brand">Raptoru Studio</strong>
       <nav class="tabs">
+        <button class="tab" type="button" data-tab="studio">Studio <em>runtime</em></button>
         <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
         <button class="tab" type="button" data-tab="soundboard">Soundboard <em>config</em></button>
@@ -23,9 +26,11 @@ if (app) {
       <div class="update-widget"></div>
       <span class="topbar-safety">Local uniquement · aucun crédit réel</span>
     </header>
-    <main id="tab-test-lab"></main>
+    <main id="tab-studio"></main>
+    <main id="tab-test-lab" hidden></main>
     <main id="tab-extension-lab" class="tab-full" hidden></main>
     <main id="tab-soundboard" hidden></main>`;
+  const home = mountStudioHome(app.querySelector<HTMLElement>('#tab-studio')!);
   mountTestLab(app.querySelector<HTMLElement>('#tab-test-lab')!);
   const extensionLab = mountExtensionLab(
     app.querySelector<HTMLElement>('#tab-extension-lab')!,
@@ -38,6 +43,8 @@ if (app) {
   const show = (tab: TabId) => {
     for (const button of app.querySelectorAll<HTMLElement>('[data-tab]'))
       button.classList.toggle('active', button.dataset.tab === tab);
+    app.querySelector<HTMLElement>('#tab-studio')!.hidden = tab !== 'studio';
+    home.setVisible(tab === 'studio');
     app.querySelector<HTMLElement>('#tab-test-lab')!.hidden =
       tab !== 'test-lab';
     app.querySelector<HTMLElement>('#tab-extension-lab')!.hidden =
@@ -64,16 +71,21 @@ if (app) {
     if (tab) show(tab);
   });
   // ?tab=extension-lab (deep link) wins over the remembered tab.
-  let initial: TabId = 'test-lab';
+  let initial: TabId = 'studio';
   try {
     const remembered = localStorage.getItem(TAB_KEY);
-    if (remembered === 'extension-lab' || remembered === 'soundboard')
+    if (
+      remembered === 'extension-lab' ||
+      remembered === 'soundboard' ||
+      remembered === 'test-lab'
+    )
       initial = remembered;
   } catch {
     /* ignore */
   }
   const asked = new URLSearchParams(location.search).get('tab');
   if (
+    asked === 'studio' ||
     asked === 'test-lab' ||
     asked === 'extension-lab' ||
     asked === 'soundboard'

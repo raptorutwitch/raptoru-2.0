@@ -154,6 +154,29 @@ npm run studio                # build everything, open Raptoru Studio → "Exten
 # http://127.0.0.1:4100/?tab=extension-lab&surface=video&role=moderator   (deep link)
 ```
 
+## Studio local runtime (Studio → "Studio" tab)
+
+Studio (installed or from the repo) starts and watches by itself what Hub + Bonk + Soundboard need —
+no terminal and no `npm run bonk:lab`:
+
+```text
+Docker Postgres (raptoru2-pg) → base raptoru_bonk_lab + Lab migrations → Core local 127.0.0.1:4301
+  (apps/core-api/dist/bonk-lab/local-server.js: test_mode, simulated payment, no Wallet/Loyalty/bot)
+→ Studio Bonk / Soundboard workers (per-session secret) → Extension Lab, OBS overlay, sound player
+```
+
+- Crash: detected by `/health` + process watch, restarted automatically at most 3 times in
+  5 minutes, then « Réessayer » in the Studio tab (no crash loop). Closing Studio stops it.
+- Port 4301 already taken (e.g. `npm run bonk:lab` running): refused and shown, never a second Core.
+- Docker Desktop must be running (Studio starts the container, not Docker itself).
+- Twitch app / channel id are read from `apps/twitch-bot/.env` in the data folder; never packaged.
+- Core 3000 and the bot (Twitch shadow services) stay on the Test Lab buttons.
+- Dev/Lab: when Studio runs from the repository, `prototypes/` (unversioned, never packaged) are
+  listed in the Studio tab and served read-only under `/dev/`.
+
+`npm run bonk:lab` (Studio 4101 + Lab Core 4301) still works for source work, but not at the same
+time as a Studio that already runs its local Core.
+
 ## Daily (status: dev/test only)
 
 SAMMI still runs the production Daily. Until the cutover:

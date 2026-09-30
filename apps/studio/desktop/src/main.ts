@@ -74,6 +74,7 @@ async function ensureServer(): Promise<void> {
         env: {
           ...process.env,
           ELECTRON_RUN_AS_NODE: '1',
+          RAPTORU_PACKAGED: '1',
           ...(root ? { RAPTORU_DATA_ROOT: root } : {}),
         },
       })
