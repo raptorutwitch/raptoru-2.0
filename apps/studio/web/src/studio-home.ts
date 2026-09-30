@@ -99,7 +99,7 @@ export function mountStudioHome(root: HTMLElement) {
           <a class="home-module" href="/?tab=soundboard"><b>Soundboard</b><span>Banque, réglages, lecteur local</span></a>
           <a class="home-module" href="/?tab=extension-lab&amp;surface=panel"><b>TTS V2</b><span data-slot="tts-module">Core local · lecteur OBS · Lab</span></a>
           <span class="home-module is-off"><b>Tombola V2</b><span>Simulation du Lab · migration à venir</span></span>
-          <span class="home-module is-off"><b>Modération V2</b><span>Conception D4 · non implémentée</span></span>
+          <a class="home-module" href="/?tab=moderation"><b>Modération V2</b><span>Core local · files, sanctions, remboursements, audit</span></a>
         </div>
       </article>
       <article class="card">

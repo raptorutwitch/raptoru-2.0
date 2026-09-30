@@ -41,6 +41,15 @@ export class BonkRuntime {
     );
     return new BonkRuntime(worker, origin, new ViewerAuth(core), core);
   }
+  /** Live OBS / overlay state (moderation cockpit). */
+  summary() {
+    return {
+      obs: this.obs.connected,
+      ready: this.worker.ready,
+      source_ready: this.sourceReady,
+    };
+  }
+
   start() {
     const loop = async () => {
       if (!this.running) return;

@@ -6,6 +6,8 @@ import type { TtsLabInteraction } from '@raptoru/schemas';
 import { createApp } from '../../../core-api/src/http/server.js';
 import { setup } from '../../../core-api/test/helpers.js';
 import { localTtsCoreClient, TtsWorker } from '../src/tts-lab/worker.js';
+import { LabModerationService } from '../../../core-api/src/lab-moderation/service.js';
+import { localLabCoreClient } from '../src/lab-moderation/proxy.js';
 import { LabEbs } from '../src/extension-lab/lab-ebs.js';
 import { EXTENSION_DIR } from '../src/index.js';
 
@@ -26,6 +28,13 @@ async function fixture() {
   core.clock.set(new Date());
   const server = createApp({
     ...core,
+    labModeration: new LabModerationService(
+      core.db,
+      core.clock,
+      core.ttsLab,
+      core.soundLab,
+      core.bonkLab,
+    ),
     botSecret: 'bot-test-secret',
     studioSecret: 'studio-test-secret',
   });
@@ -47,6 +56,13 @@ async function fixture() {
   };
   const lab = await LabEbs.create(EXTENSION_DIR);
   lab.connectTts(worker);
+  // Test wallet, module states and moderation live in the Lab Core (as in the Studio runtime).
+  lab.connectLab(
+    localLabCoreClient(
+      `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+      'studio-test-secret',
+    ),
+  );
   const buy = (
     key: string,
     text: string,
@@ -357,6 +373,96 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
     expect((bought.body.interaction as TtsLabInteraction).viewer_id).toBe(
       '41414141',
     );
+  });
+
+  it('extension moderation goes through Core: same states, permissions and audit as Studio', async () => {
+    const f = await fixture();
+    await f.ready();
+    // A viewer can never moderate.
+    expect(
+      (await f.lab.handle('POST', '/moderation/tts/pause', {}, viewer)).status,
+    ).toBe(403);
+    const paused = await f.lab.handle(
+      'POST',
+      '/moderation/tts/pause',
+      { command_id: 'c1' },
+      token('moderator'),
+    );
+    expect(paused.body).toMatchObject({
+      status: 'executed',
+      final_status: 'executed',
+    });
+    expect((await f.buy('k-p', 'Pendant la pause')).body.error).toBe(
+      'tts_paused',
+    );
+    await f.lab.handle(
+      'POST',
+      '/moderation/tts/resume',
+      { command_id: 'c2' },
+      token('moderator'),
+    );
+    // Disabling a module needs a supermod: refused for a Twitch moderator, allowed for the broadcaster.
+    expect(
+      (
+        await f.lab.handle(
+          'POST',
+          '/moderation/modules',
+          { module_id: 'soundboard', enabled: false },
+          token('moderator'),
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await f.lab.handle(
+          'POST',
+          '/moderation/modules',
+          { module_id: 'soundboard', enabled: false },
+          token('broadcaster'),
+        )
+      ).status,
+    ).toBe(200);
+    // Suspension (all modules picked in the extension) → Core blocks.
+    const suspended = await f.lab.handle(
+      'POST',
+      '/moderation/users/suspend',
+      {
+        twitch_user_id: '900101',
+        module_ids: ['tts', 'soundboard'],
+        duration_ms: 300_000,
+        reason: 'Suspension depuis la console',
+      },
+      token('moderator'),
+    );
+    expect(suspended.body).toMatchObject({ scope: 'modules', errors: [] });
+    expect((await f.buy('k-s', 'Suspendu')).body.error).toBe('viewer_blocked');
+    const history = (
+      await f.lab.handle(
+        'GET',
+        '/moderation/history',
+        undefined,
+        token('moderator'),
+      )
+    ).body.items as Json[];
+    expect(history.map((h) => h.label)).toEqual(
+      expect.arrayContaining([
+        'module_paused',
+        'module_active',
+        'module_disabled',
+        'block_viewer',
+      ]),
+    );
+  });
+
+  it('Studio Lab wallet controls write the Core test wallet (the extension shows it)', async () => {
+    const f = await fixture();
+    await f.ready();
+    await f.lab.control('wallet', { role: 'viewer', amount: 1_000_000 });
+    expect(await f.wallet()).toBe(1_000_000);
+    await f.buy('k-w', 'Riche');
+    expect(await f.wallet()).toBe(992_500);
+    await f.lab.control('reset');
+    expect(await f.wallet()).toBe(12_000);
   });
 
   it('queue full blocks before any payment (count cap from the Core rules)', async () => {

@@ -1,6 +1,7 @@
 import { BonkRuntime } from './bonk-lab/runtime.js';
 import { SoundRuntime } from './sound-lab/runtime.js';
 import { TtsRuntime } from './tts-lab/runtime.js';
+import { labProxy, localLabCoreClient } from './lab-moderation/proxy.js';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import {
   createServer,
@@ -248,6 +249,7 @@ export function createStudioServer(
   sound: SoundRuntime | null = null,
   runtime: LocalRuntime | null = null,
   tts: TtsRuntime | null = null,
+  labApi: ReturnType<typeof labProxy> | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -260,6 +262,12 @@ export function createStudioServer(
       if (url.pathname === '/api/sound-lab/status' && !sound)
         return send(res, 200, { enabled: false });
       if (tts && (await tts.handle(req, res, url))) return;
+      // Moderation V2 cockpit / TTS configuration / Lab test wallet (relayed to the local Lab Core).
+      if (url.pathname.startsWith('/api/lab/')) {
+        if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
+        if (!labApi) return send(res, 503, { error: 'lab_core_unavailable' });
+        if (await labApi(req, res, url)) return;
+      }
       if (url.pathname === '/api/tts-lab/status' && !tts)
         return send(res, 200, { enabled: false });
       if (url.pathname === '/api/bonk-lab/status' && !bonk)
@@ -325,7 +333,7 @@ export function createStudioServer(
           return send(
             res,
             200,
-            extLab.control(control[1]!, await readJson(req)),
+            await extLab.control(control[1]!, await readJson(req)),
           );
         return send(res, 404, { error: 'not_found' });
       }
@@ -449,6 +457,34 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     extLab.connectTts(tts.worker);
     tts.start();
   }
+  // Moderation V2 + TTS configuration + Lab test wallet: Core decides, Studio relays.
+  const labCore = process.env.BONK_LAB_CORE_URL
+    ? localLabCoreClient(
+        process.env.BONK_LAB_CORE_URL,
+        process.env.BONK_LAB_SECRET ?? '',
+      )
+    : null;
+  if (labCore && extLab) extLab.connectLab(labCore);
+  const labApi = labCore
+    ? labProxy({
+        core: labCore,
+        players: async () => ({
+          tts: tts
+            ? {
+                ready: tts.worker.ready,
+                player: tts.worker.playerInfo,
+                current: tts.worker.current?.interaction_id ?? null,
+                overlay_url: tts.overlayUrl,
+                preview_url: tts.previewUrl,
+              }
+            : null,
+          soundboard: sound ? { ready: sound.worker.ready } : null,
+          bonk: bonk ? bonk.summary() : null,
+        }),
+        identities: () => extLab?.labIdentities() ?? [],
+        onChange: () => extLab?.invalidateLab(),
+      })
+    : null;
   const httpServer = createStudioServer(
     lab,
     shutdown,
@@ -457,6 +493,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     sound,
     runtime,
     tts,
+    labApi,
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(

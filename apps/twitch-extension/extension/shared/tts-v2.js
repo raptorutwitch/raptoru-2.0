@@ -597,7 +597,8 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     if (!current) return paint();
     const i = current.interaction;
     const mine = store.interaction_id === i.interaction_id;
-    if (!OPEN.includes(i.status) && (!mine || store.dismissed === i.interaction_id)) return paint();
+    // Left with « Retour au Hub »: stays dismissed (a new message can be written if Core allows it).
+    if (store.dismissed === i.interaction_id || (!OPEN.includes(i.status) && !mine)) return paint();
     tx = { key: i.idempotency_key, text: i.message, currency: i.payment_method, interaction: i, queue: current.queue };
     S.text = i.message;
     S.currency = i.payment_method;
