@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <title>Raptoru Studio</title>
+    <style>
+      /* Electron-owned page: shown while the Studio server starts, is lost or restarts. Works with
+         127.0.0.1:4100 completely down (local file + IPC only). */
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #111317;
+        color: #e8e6ef;
+        font:
+          15px/1.45 'Segoe UI',
+          system-ui,
+          sans-serif;
+      }
+      main {
+        width: min(640px, 92vw);
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+      }
+      .state {
+        margin: 0 0 18px;
+        color: #a9a3bd;
+      }
+      ol {
+        margin: 0 0 18px;
+        padding: 0;
+        list-style: none;
+      }
+      li {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 8px 12px;
+        border: 1px solid #2a2d36;
+        border-radius: 10px;
+        margin-bottom: 6px;
+      }
+      li::before {
+        content: '○';
+        width: 16px;
+        color: #6b6780;
+      }
+      li[data-s='run']::before {
+        content: '◌';
+        color: #ffbf6e;
+      }
+      li[data-s='ok']::before {
+        content: '✓';
+        color: #5ee6a0;
+      }
+      li[data-s='ko']::before {
+        content: '✕';
+        color: #ff7a8a;
+      }
+      .detail {
+        min-height: 22px;
+        margin: 0 0 16px;
+      }
+      .detail.bad {
+        color: #ff9aa6;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      button {
+        padding: 9px 16px;
+        border: 1px solid #a970ff;
+        border-radius: 9px;
+        background: #2a1f3d;
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.secondary {
+        border-color: #3a3d48;
+        background: #1b1d23;
+      }
+      button[hidden] {
+        display: none;
+      }
+      details {
+        margin-top: 18px;
+        color: #a9a3bd;
+      }
+      pre {
+        max-height: 240px;
+        overflow: auto;
+        padding: 10px;
+        border-radius: 8px;
+        background: #0b0c0f;
+        color: #cfcadf;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Raptoru Studio</h1>
+      <p class="state" id="state">Démarrage…</p>
+      <ol>
+        <li id="step-server">Serveur Studio</li>
+        <li id="step-core">Core local</li>
+        <li id="step-ready">Prêt</li>
+      </ol>
+      <p class="detail" id="detail"></p>
+      <div class="actions">
+        <button id="restart" type="button" hidden>
+          Relancer le serveur Studio
+        </button>
+        <button id="relaunch" class="secondary" type="button" hidden>
+          Redémarrer Raptoru Studio
+        </button>
+      </div>
+      <details>
+        <summary>Journal du serveur Studio</summary>
+        <pre id="log">—</pre>
+      </details>
+    </main>
+    <script src="status.js"></script>
+  </body>
+</html>

@@ -41,6 +41,8 @@ const copies = [
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
+  // Electron-owned status page (server starting / lost / restarting).
+  'apps/studio/desktop/static',
   'apps/studio/desktop/package.json',
   // Production extension served by the Extension Lab (package.json: ES module type).
   'apps/twitch-extension/extension',
@@ -64,6 +66,7 @@ const runtimeFiles = [
   'apps/twitch-extension/extension/assets/tts/Mikasa Blabla.webm',
   'apps/studio/server/bonk-overlay/overlay.html',
   'apps/studio/web/dist/index.html',
+  'apps/studio/desktop/static/status.html',
   'apps/twitch-extension/extension/panel.html',
   'supabase/migrations/20261003120000_sound_lab_custom_label.sql',
   'supabase/migrations/20261004120000_tts_lab.sql',

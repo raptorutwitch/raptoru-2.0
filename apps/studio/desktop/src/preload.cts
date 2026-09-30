@@ -21,4 +21,16 @@ const update = {
   },
 };
 
-contextBridge.exposeInMainWorld('raptoruStudio', { update });
+// Studio server supervised by Electron: state and recovery work even when the server is dead.
+const server = {
+  getState: () => ipcRenderer.invoke('studio:server:state'),
+  restart: () => ipcRenderer.invoke('studio:server:restart'),
+  relaunchApp: () => ipcRenderer.invoke('studio:app:relaunch'),
+  onState: (callback: (state: unknown) => void) => {
+    const listener = (_event: unknown, state: unknown) => callback(state);
+    ipcRenderer.on('studio:server:state', listener);
+    return () => ipcRenderer.removeListener('studio:server:state', listener);
+  },
+};
+
+contextBridge.exposeInMainWorld('raptoruStudio', { update, server });

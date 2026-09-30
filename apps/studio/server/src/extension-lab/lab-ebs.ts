@@ -638,13 +638,6 @@ export class LabEbs {
       ['/session', '/state'].includes(path.split('?')[0]!)
     )
       await this.refreshSoundCatalog();
-    if (
-      this.ttsWorker &&
-      ['/session', '/state', '/tts/state'].includes(path.split('?')[0]!)
-    )
-      await this.refreshTts(
-        caller.identityShared ? caller.identity.twitchUserId : null,
-      );
     if (this.bonkWorker && (path === '/session' || path.startsWith('/emotes')))
       // Never forced from the extension: Core caches the public catalogs 10 min.
       await this.refreshThirdParty();
@@ -681,6 +674,14 @@ export class LabEbs {
           },
         };
     }
+    // After the identity above (a linked Twitch viewer is its real account): its own TTS state.
+    if (
+      this.ttsWorker &&
+      ['/session', '/state', '/tts/state'].includes(path.split('?')[0]!)
+    )
+      await this.refreshTts(
+        caller.identityShared ? caller.identity.twitchUserId : null,
+      );
     // TTS V2 Lab: Core admission (idempotent; Core decides price, cast, cooldown and queue), read by
     // the Studio player. The fictitious Lab wallet is debited once and given back on a Core refund.
     if (

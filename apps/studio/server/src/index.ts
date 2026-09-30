@@ -27,8 +27,12 @@ import {
 import { createTestLab, type TestLab } from './test-lab/test-lab.js';
 import {
   createLocalRuntime,
+  portFree,
   type LocalRuntime,
 } from './runtime/local-runtime.js';
+
+/** Exit code when the Studio port is taken: the Electron supervisor does not retry in a loop. */
+const EXIT_PORT_IN_USE = 3;
 
 const port = Number(process.env.PORT ?? 4100);
 // Studio is local-only: bind to loopback, never to a public interface.
@@ -348,8 +352,34 @@ export function createStudioServer(
 }
 
 if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
+  // Checked before touching anything (runtime, PIDs, Core): a second server never disturbs the first.
+  if (!(await portFree(port))) {
+    console.error(
+      `[studio-server] port ${port} already in use: not starting (exit ${EXIT_PORT_IN_USE})`,
+    );
+    process.exit(EXIT_PORT_IN_USE);
+  }
   applyDataRootEnv();
   const lab = createTestLab();
+  // Every crash leaves a trace in the output captured by Electron (<userData>/logs/studio-server.log).
+  process.on('unhandledRejection', (reason) => {
+    const text =
+      reason instanceof Error
+        ? (reason.stack ?? reason.message)
+        : String(reason);
+    console.error(`[studio-server] unhandled rejection: ${text}`);
+    lab.logs.add(
+      'studio',
+      `Erreur non gérée : ${lab.deps.redact(String(reason))}`,
+      'error',
+    );
+  });
+  process.on('uncaughtException', (error) => {
+    console.error(
+      `[studio-server] uncaught exception: ${error.stack ?? error.message}`,
+    );
+    process.exit(1);
+  });
   // Standalone Studio: the local runtime (Postgres → base Lab → Core local) is started and watched
   // here; Bonk and Soundboard workers use its per-session secret. `npm run bonk:lab` (BONK_LAB_ONLY)
   // keeps its own launcher and environment.
@@ -419,16 +449,42 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     extLab.connectTts(tts.worker);
     tts.start();
   }
-  createStudioServer(lab, shutdown, extLab, bonk, sound, runtime, tts).listen(
-    port,
-    host,
-    () => {
-      console.log(
-        `[studio-server] Test Lab on http://${host}:${port} (data: ${DATA_ROOT})`,
-      );
-      void runtime?.start();
-    },
+  const httpServer = createStudioServer(
+    lab,
+    shutdown,
+    extLab,
+    bonk,
+    sound,
+    runtime,
+    tts,
   );
+  httpServer.once('error', (error: NodeJS.ErrnoException) => {
+    console.error(
+      `[studio-server] listen failed: ${error.code ?? error.message}`,
+    );
+    process.exit(error.code === 'EADDRINUSE' ? EXIT_PORT_IN_USE : 1);
+  });
+  httpServer.listen(port, host, () => {
+    console.log(
+      `[studio-server] Test Lab on http://${host}:${port} (data: ${DATA_ROOT})`,
+    );
+    void runtime?.start();
+  });
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  // Started by Electron: if Electron disappears (forced close, crash), stop cleanly (Core included)
+  // instead of staying behind as an orphan holding the ports.
+  const parentPid = Number(process.env.RAPTORU_PARENT_PID ?? 0);
+  if (parentPid > 0) {
+    const watch = setInterval(() => {
+      try {
+        process.kill(parentPid, 0);
+      } catch {
+        clearInterval(watch);
+        console.log('[studio-server] Electron parent gone: stopping');
+        shutdown();
+      }
+    }, 2000);
+    watch.unref();
+  }
 }

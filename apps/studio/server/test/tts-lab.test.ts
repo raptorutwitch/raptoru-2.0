@@ -333,6 +333,32 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
     ).toBe(403);
   });
 
+  it('a viewer linked to Twitch (Bonk Lab) gets the TTS state of its real account', async () => {
+    const f = await fixture();
+    await f.ready();
+    const twitchViewer = {
+      user_id: '41414141',
+      login: 'lecroupier_',
+      display_name: 'LeCroupier_',
+    };
+    f.lab.connectBonk(
+      { recent: async () => ({ interactions: [] }) } as never,
+      {
+        generation: 1,
+        viewers: async () => ({ viewers: [twitchViewer] }),
+        catalog: async () => ({ groups: [] }),
+      } as never,
+    );
+    const state = (await f.lab.handle('GET', '/tts/state', undefined, viewer))
+      .body.tts_v2 as Json;
+    expect(state.viewer).not.toBeNull();
+    expect((state.viewer as Json).player_offline).toBe(false);
+    const bought = await f.buy('k-linked', 'Depuis mon vrai compte');
+    expect((bought.body.interaction as TtsLabInteraction).viewer_id).toBe(
+      '41414141',
+    );
+  });
+
   it('queue full blocks before any payment (count cap from the Core rules)', async () => {
     const f = await fixture();
     await f.core.db.query(

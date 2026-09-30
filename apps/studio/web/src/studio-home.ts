@@ -47,6 +47,12 @@ type LogLine = {
 };
 
 const HEADERS = { 'x-raptoru-studio': '1' };
+/** Electron bridge (preload): restarts the Studio server even when its HTTP API is dead. */
+const electronServer = (
+  window as unknown as {
+    raptoruStudio?: { server?: { restart(): Promise<unknown> } };
+  }
+).raptoruStudio?.server;
 const esc = (t: unknown) =>
   String(t ?? '').replace(
     /[&<>"]/g,
@@ -79,7 +85,7 @@ export function mountStudioHome(root: HTMLElement) {
       <article class="card">
         <h2>Runtime local</h2>
         <div data-slot="services"><p class="muted">Chargement…</p></div>
-        <div class="actions"><button type="button" data-act="restart">Réessayer / redémarrer le Core local</button></div>
+        <div class="actions"><button type="button" data-act="restart">Réessayer / redémarrer le Core local</button><button type="button" data-act="restart-server" hidden>Relancer le serveur Studio</button></div>
       </article>
       <article class="card">
         <h2>Connexions</h2>
@@ -136,6 +142,10 @@ export function mountStudioHome(root: HTMLElement) {
       void refresh();
     });
 
+  root
+    .querySelector('[data-act="restart-server"]')!
+    .addEventListener('click', () => void electronServer?.restart());
+
   async function loadPrototypes() {
     const p = await getJson<Prototypes>('/api/dev/prototypes');
     const box = slot('protos');
@@ -158,6 +168,12 @@ export function mountStudioHome(root: HTMLElement) {
       getJson<LogLine[]>(`/api/test-lab/logs?since=${logSeq}`),
     ]);
     const services = slot('services');
+    // Server unreachable: restarting the Core through it cannot work; Electron restarts the server.
+    root.querySelector<HTMLButtonElement>('[data-act="restart"]')!.disabled =
+      !rt;
+    root.querySelector<HTMLButtonElement>(
+      '[data-act="restart-server"]',
+    )!.hidden = Boolean(rt) || !electronServer;
     if (!rt)
       services.innerHTML = '<p class="bad">Serveur Studio injoignable.</p>';
     else if (!rt.enabled)
