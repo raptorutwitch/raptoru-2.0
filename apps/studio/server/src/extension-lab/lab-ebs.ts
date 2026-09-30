@@ -4,8 +4,11 @@ import {
   type BonkLabThirdPartyCatalog,
   type BonkLabViewer,
   type SoundLabSound,
+  type TtsLabInteraction,
+  type TtsLabViewerState,
 } from '@raptoru/schemas';
 import type { SoundWorker } from '../sound-lab/worker.js';
+import type { TtsWorker } from '../tts-lab/worker.js';
 
 const BONK_PROVIDERS: readonly BonkLabProvider[] = BonkLabProvider.options;
 import type { ViewerAuth } from '../bonk-lab/viewer-auth.js';
@@ -272,6 +275,92 @@ export class LabEbs {
   private soundCatalogAt = 0;
   private soundCatalogLoading: Promise<void> | null = null;
 
+  private ttsWorker: TtsWorker | null = null;
+  /** Core TTS config (module state + public rules), last good one kept when Core is unreachable. */
+  private ttsConfig: { module_state: string; rules: Json } | null = null;
+  private ttsViewers = new Map<string, TtsLabViewerState>();
+  private ttsConfigAt = 0;
+  /**
+   * Fictitious Lab payment of each TTS admitted by Core (by interaction): taken once on the first
+   * admission (never on a replay), given back once when Core reports the refund.
+   */
+  private ttsCharges = new Map<
+    string,
+    {
+      viewer: string;
+      key: string;
+      method: 'tokens' | 'credits';
+      amount: number;
+      redemption: Json | null;
+      refunded: boolean;
+    }
+  >();
+  private ttsReconcileAt = 0;
+
+  connectTts(worker: TtsWorker) {
+    this.ttsWorker = worker;
+  }
+
+  /** Core config at most once a second, and the viewer's TTS state (availability before payment). */
+  private async refreshTts(viewerId: string | null) {
+    if (!this.ttsWorker) return;
+    const tasks: Promise<unknown>[] = [this.reconcileTts()];
+    if (Date.now() - this.ttsConfigAt >= 1000) {
+      this.ttsConfigAt = Date.now();
+      tasks.push(
+        this.ttsWorker
+          .config()
+          .then((c) => {
+            this.ttsConfig = c as { module_state: string; rules: Json };
+          })
+          .catch(() => undefined),
+      );
+    }
+    if (viewerId)
+      tasks.push(
+        this.ttsWorker
+          .viewerState(viewerId)
+          .then((v) => {
+            this.ttsViewers.set(viewerId, v);
+            // The viewer's own latest TTS: its refund is given back at once (not at the next sweep).
+            if (v.current) this.applyTtsRefund(v.current.interaction);
+          })
+          .catch(() => {
+            this.ttsViewers.delete(viewerId);
+          }),
+      );
+    await Promise.all(tasks);
+  }
+
+  /** Gives back the fictitious payment of every TTS that Core has refunded (at most once each). */
+  private async reconcileTts() {
+    if (!this.ttsWorker || Date.now() - this.ttsReconcileAt < 1000) return;
+    if (![...this.ttsCharges.values()].some((c) => !c.refunded)) return;
+    this.ttsReconcileAt = Date.now();
+    try {
+      const { recent } = (await this.ttsWorker.queue()) as {
+        recent: TtsLabInteraction[];
+      };
+      for (const i of recent) this.applyTtsRefund(i);
+    } catch {
+      /* Core unavailable: retried on the next request. */
+    }
+  }
+
+  private applyTtsRefund(i: TtsLabInteraction) {
+    const charge = this.ttsCharges.get(i.interaction_id);
+    if (!charge || charge.refunded || i.refund_status !== 'refunded') return;
+    charge.refunded = true;
+    const user = this.user(charge.viewer);
+    if (charge.method === 'tokens') user.wallet += charge.amount;
+    else if (charge.redemption) {
+      user.pending.push(charge.redemption);
+      user.credits.tts += 1;
+    }
+    const receipt = user.receipts.find((r) => r.id === i.interaction_id);
+    if (receipt) receipt.status = 'refunded';
+  }
+
   connectSound(worker: SoundWorker) {
     this.soundWorker = worker;
     void this.refreshSoundCatalog();
@@ -463,6 +552,7 @@ export class LabEbs {
     switch (action) {
       case 'reset':
         this.users.clear();
+        this.ttsCharges.clear(); // fictitious TTS payments belong to the wiped wallets
         this.modules = {
           tts: true,
           soundboard: true,
@@ -548,6 +638,13 @@ export class LabEbs {
       ['/session', '/state'].includes(path.split('?')[0]!)
     )
       await this.refreshSoundCatalog();
+    if (
+      this.ttsWorker &&
+      ['/session', '/state', '/tts/state'].includes(path.split('?')[0]!)
+    )
+      await this.refreshTts(
+        caller.identityShared ? caller.identity.twitchUserId : null,
+      );
     if (this.bonkWorker && (path === '/session' || path.startsWith('/emotes')))
       // Never forced from the extension: Core caches the public catalogs 10 min.
       await this.refreshThirdParty();
@@ -583,6 +680,68 @@ export class LabEbs {
             displayName: linked.display_name,
           },
         };
+    }
+    // TTS V2 Lab: Core admission (idempotent; Core decides price, cast, cooldown and queue), read by
+    // the Studio player. The fictitious Lab wallet is debited once and given back on a Core refund.
+    if (
+      this.ttsWorker &&
+      method === 'GET' &&
+      path.split('?')[0] === '/tts/state'
+    ) {
+      const user = caller.identityShared
+        ? this.user(caller.identity.twitchUserId)
+        : null;
+      return this.ok({
+        tts_v2: this.ttsV2(user ? caller.identity.twitchUserId : null),
+        wallet: user
+          ? { points: user.wallet, reserved: 0, available: user.wallet }
+          : { unavailable: true },
+        pending_actions: user ? structuredClone(user.pending) : [],
+      });
+    }
+    if (
+      this.ttsWorker &&
+      method === 'POST' &&
+      body?.module_id === 'tts' &&
+      path.startsWith('/actions/')
+    )
+      return this.admitTts(path, body, caller, headers.idempotencyKey);
+    // Extension moderation pause / resume of the TTS module: Core's module state (V2).
+    if (
+      this.ttsWorker &&
+      method === 'POST' &&
+      (path === '/moderation/tts/pause' || path === '/moderation/tts/resume')
+    ) {
+      if (caller.identity.role === 'viewer') return this.fail(403, 'forbidden');
+      const action = path.endsWith('/pause') ? 'pause' : 'resume';
+      try {
+        await this.ttsWorker.moderate({
+          action,
+          actor: `extension:${caller.identity.login}`.slice(0, 64),
+        });
+        this.ttsConfigAt = 0;
+        await this.refreshTts(null);
+      } catch (e) {
+        return this.fail(
+          (e as { status?: number }).status ?? 503,
+          (e as Error).message,
+        );
+      }
+      this.emit(
+        caller.identity,
+        'moderation',
+        'lab',
+        0,
+        action === 'pause' ? 'TTS en pause' : 'TTS repris',
+        {},
+      );
+      return this.ok({
+        action,
+        command_id: String(body?.command_id ?? `lab-${this.seq}`),
+        status: 'executed',
+        final_status: 'executed',
+        settings: this.ttsModeration(true),
+      });
     }
     // Soundboard Lab: Core admission (idempotent, simulated payment), played by the Studio player.
     // Never the in-memory wallet/event path, whatever the payment method chosen in the extension.
@@ -762,7 +921,7 @@ export class LabEbs {
             'notifications',
             // The extension only re-reads /state after its first load: the Soundboard Lab catalog
             // (prices, cooldowns, enabled) must follow, or a Studio change never reaches it.
-            ...(this.soundWorker ? ['modules'] : []),
+            ...(this.soundWorker || this.ttsWorker ? ['modules'] : []),
           ].map((k) => [k, s[k]]),
         ),
       );
@@ -1152,21 +1311,33 @@ export class LabEbs {
                 running: s.running,
               })),
             }
-          : m.id === 'soundboard'
+          : m.id === 'tts' && this.ttsWorker
             ? {
                 ...m,
-                sounds: [
-                  ...this.sounds,
-                  {
-                    id: 'random',
-                    label: 'Aléatoire',
-                    emoji: '🎲',
-                    credit_cost: 1,
-                    token_cost: 600,
-                  },
-                ],
+                description: 'TTS Lab · coût simulé, aucun débit réel',
+                max_chars: Number(
+                  (this.ttsConfig?.rules as Json | undefined)?.max_chars ??
+                    m.max_chars,
+                ),
+                tts_v2: this.ttsV2(
+                  identityShared ? identity.twitchUserId : null,
+                ),
               }
-            : m,
+            : m.id === 'soundboard'
+              ? {
+                  ...m,
+                  sounds: [
+                    ...this.sounds,
+                    {
+                      id: 'random',
+                      label: 'Aléatoire',
+                      emoji: '🎲',
+                      credit_cost: 1,
+                      token_cost: 600,
+                    },
+                  ],
+                }
+              : m,
     );
     const baseRaffle = base.raffle as Json;
     const joined = this.raffle.participants.some(
@@ -1236,10 +1407,133 @@ export class LabEbs {
     };
   }
 
+  private async admitTts(
+    path: string,
+    body: Json,
+    caller: { identity: LabIdentity; identityShared: boolean },
+    key: string | undefined,
+  ): Promise<Reply> {
+    if (!caller.identityShared) return this.fail(403, 'identity_required');
+    if (!this.modules.tts) return this.fail(409, 'module_disabled');
+    if (!['/actions/tokens', '/actions/redemption'].includes(path))
+      return this.fail(400, 'unsupported_payment');
+    if (!key) return this.fail(400, 'idempotency_key_required');
+    const text = (body.payload as Json | undefined)?.text;
+    if (typeof text !== 'string') return this.fail(400, 'invalid_payload');
+    const viewer = caller.identity.twitchUserId;
+    const user = this.user(viewer);
+    const method = path === '/actions/redemption' ? 'credits' : 'tokens';
+    // Fictitious balance check before Core; a known replay (same key) is never refused here.
+    const known = [...this.ttsCharges.values()].some(
+      (c) => c.viewer === viewer && c.key === key,
+    );
+    const tiers =
+      ((this.ttsConfig?.rules as Json | undefined)?.tiers as
+        Json[] | undefined) ?? [];
+    const length = Array.from(text.replace(/\s+/gu, ' ').trim()).length;
+    const tier = tiers.find(
+      (t) =>
+        length >= Number(t.min) && (t.max === null || length <= Number(t.max)),
+    );
+    const redemptionIndex = user.pending.findIndex(
+      (p) =>
+        p.module_id === 'tts' &&
+        (body.redemption_id === undefined ||
+          p.redemption_id === body.redemption_id),
+    );
+    if (
+      !known &&
+      method === 'tokens' &&
+      tier &&
+      user.wallet < Number(tier.price)
+    )
+      return this.fail(409, 'insufficient_tokens');
+    if (!known && method === 'credits' && redemptionIndex === -1)
+      return this.fail(409, 'insufficient_credits');
+    try {
+      const result = await this.ttsWorker!.admit(
+        { id: viewer, display_name: caller.identity.displayName },
+        key,
+        text,
+        method,
+      );
+      const i = result.interaction;
+      if (!this.ttsCharges.has(i.interaction_id) && !result.replayed) {
+        // First admission: the only moment the fictitious payment is taken (Core's price).
+        let redemption: Json | null = null;
+        if (method === 'tokens') user.wallet -= i.simulated_cost;
+        else if (redemptionIndex !== -1) {
+          redemption = user.pending.splice(redemptionIndex, 1)[0] ?? null;
+          user.credits.tts = Math.max(0, user.credits.tts - 1);
+        }
+        this.ttsCharges.set(i.interaction_id, {
+          viewer,
+          key,
+          method,
+          amount: i.simulated_cost,
+          redemption,
+          refunded: false,
+        });
+        user.receipts.unshift({
+          id: i.interaction_id,
+          action: 'tts',
+          label: 'TTS',
+          detail: i.message,
+          currency: method === 'tokens' ? 'jetons' : 'channelpoints',
+          cost: i.simulated_cost,
+          status: 'queued',
+          created_at: i.created_at,
+        });
+        this.emit(
+          caller.identity,
+          'tts',
+          method === 'tokens' ? 'jetons' : 'channelpoints',
+          i.simulated_cost,
+          i.message,
+          { interaction_id: i.interaction_id, cast: i.cast },
+        );
+      }
+      this.applyTtsRefund(i);
+      return this.ok({
+        status: i.status,
+        module_id: 'tts',
+        reference_id: i.interaction_id,
+        interaction: i,
+        queue: result.queue,
+        replayed: result.replayed,
+        charged: false,
+        test_mode: true,
+        payment_mode: 'simulated',
+        cost: i.simulated_cost,
+      });
+    } catch (e) {
+      // Core refusals (before any payment) keep their details, e.g. retry_after_ms.
+      const err = e as { status?: number; body?: Json; message: string };
+      return {
+        status: err.status ?? 503,
+        body: { ...(err.body ?? {}), ok: false, error: err.message },
+      };
+    }
+  }
+
+  /** TTS V2 data for the extension: Core config + this viewer's state (null = Core unreachable). */
+  private ttsV2(viewerId: string | null): Json | null {
+    if (!this.ttsWorker || !this.ttsConfig) return null;
+    return {
+      module_state: this.ttsConfig.module_state,
+      rules: this.ttsConfig.rules,
+      viewer: viewerId ? (this.ttsViewers.get(viewerId) ?? null) : null,
+      test_mode: true,
+      payment_mode: 'simulated',
+    };
+  }
+
   private ttsModeration(canModerate: boolean): Json {
     return {
-      mode: this.tts.mode,
-      paused: this.tts.paused,
+      mode: this.ttsWorker ? 'instant' : this.tts.mode,
+      paused: this.ttsWorker
+        ? this.ttsConfig?.module_state === 'paused'
+        : this.tts.paused,
       blocked: false,
       can_moderate: canModerate,
       pending: canModerate ? structuredClone(this.tts.pending) : [],

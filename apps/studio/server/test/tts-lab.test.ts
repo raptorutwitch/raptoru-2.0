@@ -1,0 +1,355 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { TtsLabInteraction } from '@raptoru/schemas';
+import { createApp } from '../../../core-api/src/http/server.js';
+import { setup } from '../../../core-api/test/helpers.js';
+import { localTtsCoreClient, TtsWorker } from '../src/tts-lab/worker.js';
+import { LabEbs } from '../src/extension-lab/lab-ebs.js';
+import { EXTENSION_DIR } from '../src/index.js';
+
+const cleanups: (() => Promise<unknown>)[] = [];
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+});
+
+type Json = Record<string, unknown>;
+const token = (role: string) => ({
+  authorization: `Bearer lab.${Buffer.from(JSON.stringify({ role, identity_shared: true })).toString('base64url')}`,
+});
+const viewer = token('viewer');
+const tts = (text: string) => ({ module_id: 'tts', payload: { text } });
+
+async function fixture() {
+  const core = await setup();
+  core.clock.set(new Date());
+  const server = createApp({
+    ...core,
+    botSecret: 'bot-test-secret',
+    studioSecret: 'studio-test-secret',
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  cleanups.push(
+    () => new Promise<void>((resolve) => server.close(() => resolve())),
+  );
+  const dir = await mkdtemp(join(process.cwd(), '.runtime-tts-test-'));
+  cleanups.push(() => rm(dir, { recursive: true, force: true }));
+  const file = join(dir, 'journal.json');
+  const client = localTtsCoreClient(
+    `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    'studio-test-secret',
+  );
+  const worker = await TtsWorker.open(file, client);
+  const ready = async (w = worker, player = 'player-1') => {
+    await w.playerHeartbeat(player, 12);
+    await w.tick();
+  };
+  const lab = await LabEbs.create(EXTENSION_DIR);
+  lab.connectTts(worker);
+  const buy = (
+    key: string,
+    text: string,
+    headers = viewer,
+    path = '/actions/tokens',
+  ) => lab.handle('POST', path, tts(text), { ...headers, idempotencyKey: key });
+  const wallet = async (headers = viewer) =>
+    (
+      (await lab.handle('GET', '/session', undefined, headers)).body
+        .wallet as Json
+    ).available as number;
+  const coreRow = (id: string) =>
+    client<TtsLabInteraction>(`/v1/lab/tts/interactions/${id}`);
+  /** Plays the handed TTS on the fake player up to `until` (started / completed). */
+  const play = async (until: 'started' | 'completed', player = 'player-1') => {
+    await worker.tick();
+    const cmd = await worker.command(player);
+    if (!cmd || !('play' in cmd))
+      throw new Error(`nothing to play: ${JSON.stringify(cmd)}`);
+    const i = cmd.play;
+    await worker.playerAck(
+      i.interaction_id,
+      i.delivery.attempt_id!,
+      player,
+      'started',
+    );
+    await worker.tick();
+    if (until === 'completed') {
+      await worker.playerAck(
+        i.interaction_id,
+        i.delivery.attempt_id!,
+        player,
+        'completed',
+      );
+      await worker.tick();
+    }
+    return i;
+  };
+  return { core, worker, client, file, ready, lab, buy, wallet, coreRow, play };
+}
+
+describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', () => {
+  it('the session carries the Core rules and the viewer state; a purchase is admitted once, the Lab wallet debited once', async () => {
+    const f = await fixture();
+    await f.ready();
+    const session = (await f.lab.handle('GET', '/session', undefined, viewer))
+      .body;
+    const mod = (session.modules as Json[]).find((m) => m.id === 'tts')!;
+    const v2 = mod.tts_v2 as Json;
+    expect(v2.module_state).toBe('active');
+    expect(
+      ((v2.rules as Json).tiers as Json[]).map((t) => [
+        t.id,
+        t.price,
+        t.credit_cost,
+        t.cooldown_seconds,
+      ]),
+    ).toEqual([
+      ['1-80', 7500, 1, 60],
+      ['81-150', 11250, 1, 90],
+      ['151-300', 15000, 1, 120],
+      ['301-500', 22500, 1, 180],
+      ['501+', 37500, 1, 300],
+    ]);
+    expect((v2.viewer as Json).player_offline).toBe(false);
+    const before = await f.wallet();
+
+    const first = await f.buy('tts-key-1', 'Salut Raptoru !');
+    expect(first.status).toBe(200);
+    const i = first.body.interaction as TtsLabInteraction;
+    expect(i.simulated_cost).toBe(7500);
+    expect(i.cast.character_id).toBeTruthy();
+    // Double click / retry / refresh with the same key: the same TTS, never a second debit.
+    const again = await f.buy('tts-key-1', 'Salut Raptoru !');
+    expect(again.body.reference_id).toBe(i.interaction_id);
+    expect(again.body.replayed).toBe(true);
+    expect(await f.wallet()).toBe(before - 7500);
+    // A second message while the first is waiting (paid with a credit): refused by Core, nothing consumed.
+    const busy = await f.buy(
+      'tts-key-2',
+      'Encore moi',
+      viewer,
+      '/actions/redemption',
+    );
+    expect(busy.status).toBe(409);
+    expect(busy.body.error).toBe('viewer_busy');
+    expect(await f.wallet()).toBe(before - 7500);
+    // The client never decides the price, the cast or the cooldown: nothing of it is read from the body.
+    const forged = await f.lab.handle(
+      'POST',
+      '/actions/tokens',
+      {
+        module_id: 'tts',
+        payload: {
+          text: 'Hack',
+          price: 1,
+          cast: { character_id: 'golem' },
+          cooldown_seconds: 0,
+        },
+      },
+      { ...token('moderator'), idempotencyKey: 'tts-key-forged' },
+    );
+    const fi = forged.body.interaction as TtsLabInteraction;
+    expect(fi.simulated_cost).toBe(7500);
+    expect(fi.cooldown_seconds).toBe(60);
+  });
+
+  it('one TTS at a time, in order; the cooldown starts at the real start of the reading', async () => {
+    const f = await fixture();
+    await f.ready();
+    const a = (await f.buy('k-a', 'Premier message')).body
+      .interaction as TtsLabInteraction;
+    const b = (await f.buy('k-b', 'Deuxième message', token('moderator'))).body
+      .interaction as TtsLabInteraction;
+    await f.worker.tick();
+    const cmd = await f.worker.command('player-1');
+    expect(cmd && 'play' in cmd && cmd.play.interaction_id).toBe(
+      a.interaction_id,
+    );
+    // Not started yet: no cooldown for the viewer.
+    let state = (await f.lab.handle('GET', '/tts/state', undefined, viewer))
+      .body.tts_v2 as Json;
+    expect((state.viewer as Json).cooldown_remaining_ms).toBe(0);
+    // Strictly one at a time: the second one is not handed out while the first is in flight.
+    expect(await f.worker.command('player-1')).toBeNull();
+    const i = (cmd as { play: TtsLabInteraction }).play;
+    f.core.clock.advance(5_000);
+    await f.worker.playerAck(
+      i.interaction_id,
+      i.delivery.attempt_id!,
+      'player-1',
+      'started',
+    );
+    await f.worker.tick();
+    const started = await f.coreRow(a.interaction_id);
+    expect(started.status).toBe('playing');
+    state = (await f.lab.handle('GET', '/tts/state', undefined, viewer)).body
+      .tts_v2 as Json;
+    expect((state.viewer as Json).cooldown_remaining_ms).toBe(60_000);
+    await f.worker.playerAck(
+      i.interaction_id,
+      i.delivery.attempt_id!,
+      'player-1',
+      'completed',
+    );
+    await f.worker.tick();
+    expect((await f.coreRow(a.interaction_id)).status).toBe('completed');
+    await f.worker.tick();
+    const next = await f.worker.command('player-1');
+    expect(next && 'play' in next && next.play.interaction_id).toBe(
+      b.interaction_id,
+    );
+  });
+
+  it('nothing was heard (voice missing): failed, refunded once by Core, the Lab wallet given back once', async () => {
+    const f = await fixture();
+    await f.ready();
+    const before = await f.wallet();
+    const i = (await f.buy('k-fail', 'Message qui échoue')).body
+      .interaction as TtsLabInteraction;
+    expect(await f.wallet()).toBe(before - 7500);
+    await f.worker.tick();
+    const cmd = (await f.worker.command('player-1')) as {
+      play: TtsLabInteraction;
+    };
+    await f.worker.playerAck(
+      i.interaction_id,
+      cmd.play.delivery.attempt_id!,
+      'player-1',
+      'failed',
+      {
+        code: 'voice_unavailable',
+        message: 'voice missing',
+      },
+    );
+    await f.worker.tick();
+    const row = await f.coreRow(i.interaction_id);
+    expect(row.status).toBe('failed');
+    expect(row.refund_status).toBe('refunded');
+    expect(row.error?.code).toBe('voice_unavailable');
+    expect(await f.wallet()).toBe(before);
+    // Polled again: never given back twice.
+    await new Promise((r) => setTimeout(r, 1100));
+    expect(await f.wallet()).toBe(before);
+  });
+
+  it('credits: one pending TTS redemption consumed, given back on refund', async () => {
+    const f = await fixture();
+    await f.ready();
+    const credits = async () =>
+      (
+        (await f.lab.handle('GET', '/tts/state', undefined, viewer)).body
+          .pending_actions as Json[]
+      ).filter((p) => p.module_id === 'tts').length;
+    const start = await credits();
+    expect(start).toBeGreaterThan(0);
+    const res = await f.buy(
+      'k-credit',
+      'Avec un crédit',
+      viewer,
+      '/actions/redemption',
+    );
+    const i = res.body.interaction as TtsLabInteraction;
+    expect(i.payment_method).toBe('credits');
+    expect(i.simulated_cost).toBe(1);
+    expect(await credits()).toBe(start - 1);
+    await f.worker.moderate({
+      action: 'cancel',
+      actor: 'test',
+      interaction_id: i.interaction_id,
+      refund: true,
+    });
+    await new Promise((r) => setTimeout(r, 1100));
+    expect(await credits()).toBe(start);
+  });
+
+  it('a Studio restart never replays a TTS handed to the player: execution_unknown, not refunded', async () => {
+    const f = await fixture();
+    await f.ready();
+    const i = (await f.buy('k-restart', 'Coupure')).body
+      .interaction as TtsLabInteraction;
+    await f.play('started');
+    const reopened = await TtsWorker.open(f.file, f.client);
+    await reopened.playerHeartbeat('player-2', 12);
+    await reopened.tick();
+    const row = await f.coreRow(i.interaction_id);
+    expect(row.status).toBe('execution_unknown');
+    expect(row.refund_status).toBe('none');
+    expect(await reopened.command('player-2')).toBeNull();
+  });
+
+  it('moderation stop: the player is told to stop once, late ACKs are ignored, refund on request', async () => {
+    const f = await fixture();
+    await f.ready();
+    const before = await f.wallet();
+    await f.buy('k-stop', 'Arrête-moi');
+    const i = await f.play('started');
+    await f.worker.moderate({
+      action: 'stop_current',
+      actor: 'test',
+      refund: true,
+    });
+    await f.worker.tick();
+    expect(await f.worker.command('player-1')).toEqual({
+      stop: i.interaction_id,
+    });
+    expect(await f.worker.command('player-1')).toBeNull();
+    // The page finished anyway: ignored, no error, Core keeps the cancelled + refunded state.
+    await f.worker.playerAck(
+      i.interaction_id,
+      i.delivery.attempt_id!,
+      'player-1',
+      'completed',
+    );
+    await f.worker.tick();
+    const row = await f.coreRow(i.interaction_id);
+    expect(row.status).toBe('cancelled');
+    expect(row.refund_status).toBe('refunded');
+    await new Promise((r) => setTimeout(r, 1100));
+    await f.lab.handle('GET', '/tts/state', undefined, viewer);
+    expect(await f.wallet()).toBe(before);
+  });
+
+  it('fails closed without a live player (nothing debited); paused: refused before payment, nothing handed out', async () => {
+    const f = await fixture();
+    const before = await f.wallet();
+    const offline = await f.buy('k-offline', 'Personne pour lire');
+    expect(offline.status).toBe(503);
+    expect(await f.wallet()).toBe(before);
+    await f.ready();
+    await f.lab.handle('POST', '/moderation/tts/pause', {}, token('moderator'));
+    const paused = await f.buy('k-paused', 'En pause');
+    expect(paused.status).toBe(409);
+    expect(paused.body.error).toBe('tts_paused');
+    expect(await f.wallet()).toBe(before);
+    const moduleTts = (
+      (await f.lab.handle('GET', '/session', undefined, viewer)).body
+        .moderation as Json
+    ).tts as Json;
+    expect(moduleTts.paused).toBe(true);
+    // A viewer can never pause the TTS.
+    expect(
+      (await f.lab.handle('POST', '/moderation/tts/resume', {}, viewer)).status,
+    ).toBe(403);
+  });
+
+  it('queue full blocks before any payment (count cap from the Core rules)', async () => {
+    const f = await fixture();
+    await f.core.db.query(
+      `insert into tts_lab_settings (id, module_state, rules, updated_at) values (true, 'active', $1, now())
+       on conflict (id) do update set rules = excluded.rules`,
+      [JSON.stringify({ max_waiting_global: 1 })],
+    );
+    await f.ready();
+    await f.buy('k-q1', 'Un', viewer);
+    const before = await f.wallet(token('moderator'));
+    const full = await f.buy('k-q2', 'Deux', token('moderator'));
+    expect(full.status).toBe(409);
+    expect(full.body.error).toBe('queue_full');
+    expect(await f.wallet(token('moderator'))).toBe(before);
+    const state = (
+      await f.lab.handle('GET', '/tts/state', undefined, token('moderator'))
+    ).body.tts_v2 as Json;
+    expect((state.viewer as Json).queue_full).toBe(true);
+  });
+});

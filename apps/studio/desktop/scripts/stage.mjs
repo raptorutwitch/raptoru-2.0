@@ -36,6 +36,8 @@ const copies = [
   'apps/studio/server/bonk-overlay',
   // Soundboard V2 local player page (served by the Studio server, played in the Studio window).
   'apps/studio/server/sound-player',
+  // TTS V2 player page (OBS browser source / Studio preview).
+  'apps/studio/server/tts-player',
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
@@ -56,10 +58,15 @@ for (const path of copies) {
 const runtimeFiles = [
   'apps/core-api/dist/bonk-lab/local-server.js',
   'apps/studio/server/sound-player/player.html',
+  'apps/studio/server/tts-player/player.html',
+  'apps/studio/server/tts-player/stage.js',
+  'apps/twitch-extension/extension/shared/tts-characters.js',
+  'apps/twitch-extension/extension/assets/tts/Mikasa Blabla.webm',
   'apps/studio/server/bonk-overlay/overlay.html',
   'apps/studio/web/dist/index.html',
   'apps/twitch-extension/extension/panel.html',
   'supabase/migrations/20261003120000_sound_lab_custom_label.sql',
+  'supabase/migrations/20261004120000_tts_lab.sql',
 ];
 for (const path of runtimeFiles)
   if (!existsSync(join(app, path)))

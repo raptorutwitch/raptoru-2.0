@@ -32,6 +32,7 @@ export const LAB_MIGRATIONS = [
   '20261001120000_bonk_lab_third_party.sql',
   '20261002120000_sound_lab.sql',
   '20261003120000_sound_lab_custom_label.sql',
+  '20261004120000_tts_lab.sql',
 ];
 
 export type ServiceState =

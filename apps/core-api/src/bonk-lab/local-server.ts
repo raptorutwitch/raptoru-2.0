@@ -6,6 +6,8 @@ import { ThirdPartyEmotes } from './third-party-emotes.js';
 import { bonkLabRoutes } from '../http/bonk-lab-routes.js';
 import { soundLabRoutes } from '../http/sound-lab-routes.js';
 import { SoundLabService } from '../sound-lab/sound-lab-service.js';
+import { TtsLabService } from '../tts-lab/tts-lab-service.js';
+import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { HttpError } from '../http/server.js';
 import { systemClock } from '../clock.js';
 import { createPgDb } from '../db/db.js';
@@ -14,7 +16,8 @@ import { createPgDb } from '../db/db.js';
 const url = new URL(process.env.BONK_LAB_DATABASE_URL ?? '');
 if (
   !['localhost', '127.0.0.1'].includes(url.hostname) ||
-  url.pathname !== '/raptoru_bonk_lab'
+  // The Lab database, or a dedicated throw-away copy for end-to-end tests (raptoru_bonk_lab_<name>).
+  !/^\/raptoru_bonk_lab(_[a-z0-9]{1,32})?$/.test(url.pathname)
 )
   throw new Error('dedicated_local_bonk_database_required');
 const secret = process.env.BONK_LAB_SECRET ?? '';
@@ -39,6 +42,8 @@ const routes = [
   ),
   // Soundboard V2 Lab: same isolated Lab Core process and database.
   ...soundLabRoutes(new SoundLabService(db, systemClock)),
+  // TTS V2 Lab: same isolated Lab Core process and database.
+  ...ttsLabRoutes(new TtsLabService(db, systemClock)),
 ];
 const server = createServer(async (req, res) => {
   const send = (status: number, body: unknown) => {
@@ -76,8 +81,10 @@ const server = createServer(async (req, res) => {
     else send(500, { error: 'bonk_core_error' });
   }
 });
-server.listen(4301, '127.0.0.1', () =>
-  console.log('[bonk-lab-core] local port 4301, isolated database'),
+// 4301 by default (Studio runtime); another port only for isolated end-to-end tests.
+const port = Number(process.env.BONK_LAB_CORE_PORT ?? 4301);
+server.listen(port, '127.0.0.1', () =>
+  console.log(`[bonk-lab-core] local port ${port}, isolated database`),
 );
 const stop = () =>
   server.close(() => void db.close().then(() => process.exit(0)));

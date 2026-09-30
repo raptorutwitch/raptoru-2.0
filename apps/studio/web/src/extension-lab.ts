@@ -1,5 +1,6 @@
 import { mountBonkLab } from './bonk-lab.js';
 import { mountSoundLab } from './sound-lab.js';
+import { mountTtsLab } from './tts-lab.js';
 // Extension Lab: the production Twitch extension (served as is by the Studio server under /ext/)
 // in realistic Twitch frames, with a simulated Twitch context and a local Lab EBS. Accepted actions
 // are played on the local stage (sound, TTS voice, Bonk, raffle). Fictitious jetons only: the
@@ -197,6 +198,7 @@ export function mountExtensionLab(root: HTMLElement): {
     root.querySelector<HTMLElement>('.xlab-scene')!,
   );
   const bonkLab = mountBonkLab(root.querySelector<HTMLElement>('.xlab-scene')!);
+  const ttsLab = mountTtsLab(root.querySelector<HTMLElement>('.xlab-scene')!);
 
   const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
     root.querySelector<T>(`[data-id="${id}"]`)!;
@@ -566,6 +568,7 @@ export function mountExtensionLab(root: HTMLElement): {
     setVisible(v: boolean) {
       bonkLab.setVisible(v);
       soundLab.setVisible(v);
+      ttsLab.setVisible(v);
       if (v === visible) return;
       visible = v;
       if (v) {

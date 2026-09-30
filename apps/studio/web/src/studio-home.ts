@@ -23,6 +23,17 @@ type BonkStatus = {
   error?: string | null;
 };
 type SoundStatus = { enabled: boolean; ready?: boolean; error?: string | null };
+type TtsStatus = {
+  enabled: boolean;
+  ready?: boolean;
+  module_state?: string;
+  error?: string | null;
+  current?: {
+    viewer_display_name: string;
+    cast: { character_id: string };
+  } | null;
+  queue?: { waiting: unknown[]; wait_ms: number } | null;
+};
 type Prototypes = {
   available: boolean;
   items: { name: string; entry: string; updatedAt: string }[];
@@ -62,7 +73,7 @@ export function mountStudioHome(root: HTMLElement) {
   root.innerHTML = `
     <section class="hero"><div>
       <h1>Raptoru Studio</h1>
-      <p>Runtime local du stream : Studio démarre et surveille lui-même ce dont Hub, Bonk et Soundboard ont besoin. Aucun terminal, aucun <code>npm run bonk:lab</code>.</p>
+      <p>Runtime local du stream : Studio démarre et surveille lui-même ce dont Hub, Bonk, Soundboard et TTS ont besoin. Aucun terminal, aucun <code>npm run bonk:lab</code>.</p>
     </div></section>
     <div class="grid home-grid">
       <article class="card">
@@ -80,7 +91,7 @@ export function mountStudioHome(root: HTMLElement) {
           <a class="home-module" href="/?tab=extension-lab&amp;surface=video"><b>Hub</b><span>Extension Lab · Vidéo</span></a>
           <a class="home-module" href="/?tab=extension-lab&amp;surface=panel"><b>Bonk</b><span>Core local · providers · overlay OBS</span></a>
           <a class="home-module" href="/?tab=soundboard"><b>Soundboard</b><span>Banque, réglages, lecteur local</span></a>
-          <span class="home-module is-off"><b>TTS V2</b><span>Prototype validé (D3) · intégration à venir</span></span>
+          <a class="home-module" href="/?tab=extension-lab&amp;surface=panel"><b>TTS V2</b><span data-slot="tts-module">Core local · lecteur OBS · Lab</span></a>
           <span class="home-module is-off"><b>Tombola V2</b><span>Simulation du Lab · migration à venir</span></span>
           <span class="home-module is-off"><b>Modération V2</b><span>Conception D4 · non implémentée</span></span>
         </div>
@@ -139,10 +150,11 @@ export function mountStudioHome(root: HTMLElement) {
   }
 
   async function refresh() {
-    const [rt, bonk, sound, logs] = await Promise.all([
+    const [rt, bonk, sound, tts, logs] = await Promise.all([
       getJson<RuntimeStatus>('/api/runtime/status'),
       getJson<BonkStatus>('/api/bonk-lab/status'),
       getJson<SoundStatus>('/api/sound-lab/status'),
+      getJson<TtsStatus>('/api/tts-lab/status'),
       getJson<LogLine[]>(`/api/test-lab/logs?since=${logSeq}`),
     ]);
     const services = slot('services');
@@ -170,11 +182,28 @@ export function mountStudioHome(root: HTMLElement) {
         ? ['ok', 'Actif']
         : ['warn', 'En attente d’activation']
       : ['', 'Indisponible'];
+    const ttsPlayer = tts?.enabled
+      ? tts.ready
+        ? ['ok', 'Actif']
+        : ['warn', 'Absent (source OBS non chargée)']
+      : ['', 'Indisponible'];
+    const ttsState =
+      { active: 'Actif', paused: 'En pause', disabled: 'Désactivé' }[
+        tts?.module_state ?? ''
+      ] ?? '—';
+    const ttsQueue = tts?.queue
+      ? `${tts.queue.waiting.length} en attente · ≈ ${Math.round(tts.queue.wait_ms / 1000)} s`
+      : '—';
+    slot('tts-module').textContent = tts?.enabled
+      ? `${ttsState} · ${ttsQueue}${tts.current ? ` · en cours : ${tts.current.cast.character_id} (${tts.current.viewer_display_name})` : ''}`
+      : 'Indisponible';
     slot('links').innerHTML = `
       <div class="row home-row"><span>OBS WebSocket</span><span><span class="badge ${obs[0]}">${obs[1]}</span></span></div>
       <p class="home-detail">Connexion depuis la carte « Bonk OBS Lab » de l’Extension Lab (mot de passe jamais stocké).</p>
       <div class="row home-row"><span>Lecteur Soundboard</span><span><span class="badge ${player[0]}">${player[1]}</span></span></div>
       <p class="home-detail">Un clic d’activation par chargement (règle d’autoplay), dans l’onglet Soundboard config.</p>
+      <div class="row home-row"><span>Lecteur TTS (OBS)</span><span><span class="badge ${ttsPlayer[0]}">${ttsPlayer[1]}</span></span></div>
+      <p class="home-detail">Module ${esc(ttsState)} · file ${esc(ttsQueue)}. URL de la source OBS, file et modération : Extension Lab (carte « TTS V2 Lab »).</p>
       <div class="row home-row"><span>Données locales</span><span>${rt ? (rt.packaged ? 'Application installée' : 'Repo (dev)') : '—'}</span></div>
       <p class="home-detail">${esc(rt?.dataRoot ?? '—')} · .env et jetons lus ici, jamais embarqués.</p>
       <div class="row home-row"><span>Production</span><span>SAMMI + StreamElements</span></div>

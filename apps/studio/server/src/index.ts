@@ -1,5 +1,6 @@
 import { BonkRuntime } from './bonk-lab/runtime.js';
 import { SoundRuntime } from './sound-lab/runtime.js';
+import { TtsRuntime } from './tts-lab/runtime.js';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import {
   createServer,
@@ -242,6 +243,7 @@ export function createStudioServer(
   bonk: BonkRuntime | null = null,
   sound: SoundRuntime | null = null,
   runtime: LocalRuntime | null = null,
+  tts: TtsRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -252,6 +254,9 @@ export function createStudioServer(
       if (bonk && (await bonk.handle(req, res, url))) return;
       if (sound && (await sound.handle(req, res, url))) return;
       if (url.pathname === '/api/sound-lab/status' && !sound)
+        return send(res, 200, { enabled: false });
+      if (tts && (await tts.handle(req, res, url))) return;
+      if (url.pathname === '/api/tts-lab/status' && !tts)
         return send(res, 200, { enabled: false });
       if (url.pathname === '/api/bonk-lab/status' && !bonk)
         return send(res, 200, { enabled: false });
@@ -372,12 +377,17 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   const sound = process.env.BONK_LAB_CORE_URL
     ? await SoundRuntime.create(`http://${host}:${port}`)
     : null;
+  // TTS V2 Lab: same Lab Core (test only), local player page / OBS overlay.
+  const tts = process.env.BONK_LAB_CORE_URL
+    ? await TtsRuntime.create(`http://${host}:${port}`)
+    : null;
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
     bonk?.stop();
     sound?.stop();
+    tts?.stop();
     lab.logs.add(
       'studio',
       'Studio closing: stopping bot and Core (Postgres keeps running)',
@@ -405,7 +415,11 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     sound.onConfigChange = () => extLab.invalidateSoundCatalog();
     sound.start();
   }
-  createStudioServer(lab, shutdown, extLab, bonk, sound, runtime).listen(
+  if (tts && extLab) {
+    extLab.connectTts(tts.worker);
+    tts.start();
+  }
+  createStudioServer(lab, shutdown, extLab, bonk, sound, runtime, tts).listen(
     port,
     host,
     () => {

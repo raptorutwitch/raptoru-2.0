@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Raptoru TTS V2</title>
+    <link rel="stylesheet" href="stage.css" />
+    <style>
+      /* OBS browser source 1920×1080, transparent: only the character and its bubble are visible. */
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: transparent;
+      }
+      #hud {
+        position: fixed;
+        z-index: 20;
+        top: 12px;
+        left: 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: rgba(20, 17, 28, 0.9);
+        color: #efeff1;
+        font:
+          22px system-ui,
+          sans-serif;
+      }
+      #hud[hidden],
+      button[hidden] {
+        display: none;
+      }
+      button {
+        padding: 6px 14px;
+        border: 1px solid #a970ff;
+        border-radius: 8px;
+        background: #2a1f3d;
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+      /* Studio preview (?preview=1): same 1920×1080 stage, scaled down to the frame width. */
+      body.is-preview {
+        background: repeating-conic-gradient(#2b2638 0 25%, #211d2c 0 50%) 0 0 /
+          48px 48px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="hud" hidden>
+      <button id="enable" type="button" hidden>Activer la voix</button>
+      <span id="status">Connexion…</span>
+    </div>
+    <script type="module" src="player.js"></script>
+  </body>
+</html>

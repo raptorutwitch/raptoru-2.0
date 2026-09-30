@@ -27,6 +27,8 @@ import {
 import type { BonkLabService } from '../bonk-lab/bonk-lab-service.js';
 import { bonkLabRoutes } from './bonk-lab-routes.js';
 import { soundLabRoutes } from './sound-lab-routes.js';
+import { ttsLabRoutes } from './tts-lab-routes.js';
+import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import { loyaltyRoutes } from './loyalty-routes.js';
 import {
@@ -49,6 +51,8 @@ export interface AppDeps {
   bonkLab?: BonkLabService;
   /** Soundboard V2 Lab slice (test only). */
   soundLab?: SoundLabService;
+  /** TTS V2 Lab slice (test only). */
+  ttsLab?: TtsLabService;
   botSecret: string;
   studioSecret: string;
 }
@@ -110,12 +114,14 @@ function routes({
   loyalty,
   bonkLab,
   soundLab,
+  ttsLab,
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
     ...loyaltyRoutes(loyalty),
     ...(bonkLab ? bonkLabRoutes(bonkLab) : []),
     ...(soundLab ? soundLabRoutes(soundLab) : []),
+    ...(ttsLab ? ttsLabRoutes(ttsLab) : []),
     {
       method: 'GET',
       pattern: /^\/health$/,
