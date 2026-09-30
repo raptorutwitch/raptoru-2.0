@@ -450,6 +450,10 @@ export function createClient({
       body: { module_id: moduleId, payload },
       idempotencyKey: newIdempotencyKey(),
     }),
+    /** Moderation V2 (D4): Core read models (overview, whoami, search, viewer card, audit). */
+    modV2: (path) => call('GET', `/moderation/v2/${path}`),
+    /** Moderation V2 command, executed and audited by Core with the caller's permissions. */
+    modV2Act: (command) => call('POST', '/moderation/v2/actions', { body: { command }, idempotencyKey: newIdempotencyKey() }),
     /** TTS V2 (Lab): Core state for this viewer (availability, queue, current TTS). */
     ttsState: () => call('GET', '/tts/state'),
     /**

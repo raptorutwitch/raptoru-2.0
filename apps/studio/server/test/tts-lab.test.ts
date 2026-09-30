@@ -454,6 +454,133 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
     );
   });
 
+  it('Moderation V2 console of the extension: a projection of Core with the caller as actor', async () => {
+    const f = await fixture();
+    await f.ready();
+    const mod = token('moderator');
+    const boss = token('broadcaster');
+    const get = async (path: string, h = mod) =>
+      (await f.lab.handle('GET', `/moderation/v2/${path}`, undefined, h)).body;
+    const act = (command: Json, h = mod) =>
+      f.lab.handle('POST', '/moderation/v2/actions', { command }, h);
+    // Viewers never read it; a Twitch moderator gets its Core permissions (no refund).
+    expect(
+      (await f.lab.handle('GET', '/moderation/v2/overview', undefined, viewer))
+        .status,
+    ).toBe(403);
+    const first = (await get('overview')) as Json;
+    expect(first.me).toMatchObject({ role: 'moderator' });
+    expect((first.me as Json).permissions).not.toContain('refund');
+    // Same queue as Core: one playing, one waiting.
+    const before = await f.wallet();
+    await f.buy('v2-1', 'Premier message');
+    await f.play('started');
+    // Another viewer (one TTS at a time per viewer).
+    expect((await f.buy('v2-2', 'Deuxième message', mod)).status).toBe(200);
+    const ov = (await get('overview')) as { tts: Json };
+    expect((ov.tts.current as Json).message).toBe('Premier message');
+    expect((ov.tts.waiting as Json[]).map((i) => i.message)).toEqual([
+      'Deuxième message',
+    ]);
+    // Pause from the extension → Core state (what Studio reads).
+    expect(
+      (
+        await act({
+          action: 'module_state',
+          module: 'tts',
+          state: 'paused',
+          waiting: 'keep',
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      ((await get('overview', boss)) as { tts: Json }).tts.module_state,
+    ).toBe('paused');
+    // Stop + refund: refused for a moderator (Core permission), done by the broadcaster.
+    const refused = await act({
+      action: 'stop_current',
+      module: 'tts',
+      refund: true,
+    });
+    expect(refused.status).toBe(403);
+    expect(refused.body).toMatchObject({
+      error: 'forbidden',
+      permission: 'refund',
+    });
+    expect(
+      (await act({ action: 'stop_current', module: 'tts', refund: true }, boss))
+        .status,
+    ).toBe(200);
+    await act({
+      action: 'module_state',
+      module: 'tts',
+      state: 'active',
+      waiting: 'keep',
+    });
+    await act({ action: 'purge', module: 'tts', refund: false });
+    expect(await f.wallet()).toBe(before);
+    // Block from the extension → admission refused; lifted → admitted again.
+    const me = (await f.lab.handle('GET', '/session', undefined, viewer)).body
+      .twitch_user_id as string;
+    await act({
+      action: 'block_viewer',
+      viewer_id: me,
+      module: 'tts',
+      duration_s: 300,
+      reason: 'test extension',
+    });
+    expect((await f.buy('v2-3', 'Bloqué')).body.error).toBe('viewer_blocked');
+    await act({ action: 'unblock_viewer', viewer_id: me, module: 'tts' }, boss);
+    // The natural TTS cooldown (first TTS) is cleared from the console too.
+    expect((await f.buy('v2-4', 'Débloqué')).body.error).toBe(
+      'viewer_cooldown',
+    );
+    await act({
+      action: 'viewer_cooldown',
+      viewer_id: me,
+      module: 'tts',
+      mode: 'clear',
+      seconds: 0,
+    });
+    expect((await f.buy('v2-5', 'Débloqué')).status).toBe(200);
+    // Imposed cooldown, viewer card, search and shared audit.
+    await act({
+      action: 'viewer_cooldown',
+      viewer_id: me,
+      module: 'soundboard',
+      mode: 'replace',
+      seconds: 600,
+    });
+    const card = (await get(`viewers/${me}`)) as Json;
+    expect(card.restrictions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'cooldown', module: 'soundboard' }),
+      ]),
+    );
+    expect(
+      ((await get('search?q=')) as { viewers: Json[] }).viewers.map(
+        (v) => v.viewer_id,
+      ),
+    ).toContain(me);
+    const audit = ((await get('audit?limit=20')) as { audit: Json[] }).audit;
+    expect(audit.map((a) => a.action)).toEqual(
+      expect.arrayContaining([
+        'module_paused',
+        'module_active',
+        'stop',
+        'purge',
+        'block_viewer',
+        'unblock_viewer',
+        'cooldown_replace',
+        'cooldown_clear',
+      ]),
+    );
+    expect(audit.find((a) => a.action === 'block_viewer')).toMatchObject({
+      role: 'moderator',
+      reason: 'test extension',
+    });
+  });
+
   it('Studio Lab wallet controls write the Core test wallet (the extension shows it)', async () => {
     const f = await fixture();
     await f.ready();

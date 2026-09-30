@@ -374,6 +374,89 @@ export class LabEbs {
     await Promise.all(tasks);
   }
 
+  private labActor(caller: { identity: LabIdentity }) {
+    const role =
+      caller.identity.role === 'broadcaster'
+        ? 'broadcaster'
+        : caller.identity.role === 'moderator'
+          ? 'moderator'
+          : 'viewer';
+    return {
+      id: caller.identity.twitchUserId,
+      login: caller.identity.login,
+      role,
+      via: 'extension' as const,
+    };
+  }
+
+  /** Extension D4 console: Core read models and commands, relayed as is. */
+  private async moderationV2(
+    method: string,
+    rawPath: string,
+    body: Json | undefined,
+    caller: { identity: LabIdentity },
+  ): Promise<Reply> {
+    const [path = '', query = ''] = rawPath.split('?');
+    const qs = new URLSearchParams(query);
+    const C = LAB_CHANNEL.id;
+    const core = this.labCore!;
+    try {
+      let m: RegExpExecArray | null;
+      if (method === 'GET' && path === '/moderation/v2/whoami')
+        return this.ok({
+          ...(await core<Json>(
+            `/v1/lab/moderation/${C}/whoami`,
+            this.labActor(caller),
+          )),
+          actor: this.labActor(caller),
+        });
+      if (method === 'GET' && path === '/moderation/v2/overview') {
+        const [overview, me] = await Promise.all([
+          core<Json>(`/v1/lab/moderation/${C}/overview`),
+          core<Json>(`/v1/lab/moderation/${C}/whoami`, this.labActor(caller)),
+        ]);
+        return this.ok({ ...overview, me });
+      }
+      if (method === 'GET' && path === '/moderation/v2/search')
+        return this.ok(
+          await core<Json>(
+            `/v1/lab/moderation/${C}/search?q=${encodeURIComponent((qs.get('q') ?? '').slice(0, 40))}`,
+          ),
+        );
+      if (
+        method === 'GET' &&
+        (m = /^\/moderation\/v2\/viewers\/(\d{1,32})$/.exec(path))
+      )
+        return this.ok(
+          await core<Json>(`/v1/lab/moderation/${C}/viewers/${m[1]}`),
+        );
+      if (method === 'GET' && path === '/moderation/v2/audit') {
+        const out = new URLSearchParams();
+        for (const k of ['module', 'viewer', 'limit'])
+          if (qs.get(k)) out.set(k, qs.get(k)!);
+        return this.ok(
+          await core<Json>(`/v1/lab/moderation/${C}/audit?${out}`),
+        );
+      }
+      if (method === 'POST' && path === '/moderation/v2/actions') {
+        const out = await core<Json>(`/v1/lab/moderation/${C}/actions`, {
+          actor: this.labActor(caller),
+          command: body?.command,
+        });
+        this.invalidateLab();
+        this.ttsConfigAt = 0;
+        return this.ok(out);
+      }
+      return this.fail(404, 'not_found');
+    } catch (e) {
+      const err = e as { status?: number; body?: Json; message: string };
+      return {
+        status: err.status ?? 503,
+        body: { ...(err.body ?? {}), ok: false, error: err.message },
+      };
+    }
+  }
+
   /** Extension moderation (moderators, broadcaster) → the same Core commands and permissions as Studio. */
   private async moderateViaCore(
     caller: { identity: LabIdentity },
@@ -833,6 +916,10 @@ export class LabEbs {
     // Extension moderation → Moderation V2 in Core (same commands, permissions and audit as Studio).
     if (this.labCore && path.startsWith('/moderation/')) {
       if (caller.identity.role === 'viewer') return this.fail(403, 'forbidden');
+      // Moderation V2 (D4) console of the extension: a projection of the same Core (read models +
+      // commands), with the caller's identity as actor. No state and no rule here.
+      if (path.startsWith('/moderation/v2/'))
+        return this.moderationV2(method, path, body, caller);
       const tts = /^\/moderation\/tts\/(pause|resume|stop|purge)$/.exec(path);
       if (method === 'POST' && tts) {
         const action = tts[1]!;
@@ -1629,6 +1716,8 @@ export class LabEbs {
         : {}),
       test_mode: true,
       environment: 'lab',
+      // Moderation V2 (D4) console available: the extension reads / commands Core through /moderation/v2.
+      moderation_v2: Boolean(this.labCore),
       role: identity.role,
       channel_id: LAB_CHANNEL.id,
       channel_login: LAB_CHANNEL.login,

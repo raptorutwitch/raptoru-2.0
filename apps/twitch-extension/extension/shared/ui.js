@@ -32,6 +32,7 @@ import { createEmotePicker } from './emote-picker.js';
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
+import { createModerationV2View } from './moderation-v2.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -1148,6 +1149,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let ttsPaymentMethod = 'tokens';
   // TTS V2 (Lab, Core-backed): one persistent view per opening of the module.
   let ttsV2View = null;
+  // Moderation V2 (D4, Lab): persistent console reading / commanding Core while the module is open.
+  let moderationV2View = null;
   let paymentWalletSync = null;
   let soundboardVolumeOpen = false;
   let soundboardVolumeSync = null;
@@ -1521,6 +1524,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       ttsV2View.update((next?.modules ?? []).find((m) => m.id === 'tts'), next);
       return;
     }
+    // Moderation V2 open: the console polls Core itself; a host re-render would only reset it.
+    if (render && openModule === MODERATION_MODULE.id && moderationV2View && canModerate()) return;
     if (render && !unchanged) renderPreservingViewport();
   }
 
@@ -1617,6 +1622,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (moduleId !== 'tts') {
       ttsV2View?.destroy();
       ttsV2View = null;
+    }
+    if (moduleId !== MODERATION_MODULE.id) {
+      moderationV2View?.destroy();
+      moderationV2View = null;
     }
     if (moduleId !== 'soundboard') clearSoundboardFeedback({ render: false });
     if (moduleId !== 'raffle_join') {
@@ -6032,6 +6041,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       if (mod.id === ACTIONS_MODULE.id) {
         body.append(personalHistory());
+      } else if (mod.id === MODERATION_MODULE.id && state?.moderation_v2 === true && client?.modV2) {
+        // Moderation V2 (D4): same Core as Studio (read models + commands), no local state.
+        body.dataset.modV2 = '1';
+        if (!moderationV2View) {
+          moderationV2View = createModerationV2View({ document, client, onChange: () => { void onRefresh?.(); } });
+          moderationV2View.start();
+        }
+        body.append(moderationV2View.node);
+        queueMicrotask(() => moderationV2View?.attached());
       } else if (mod.id === MODERATION_MODULE.id) {
         const moderation = moderationForm();
         if (moderation) {
