@@ -6044,8 +6044,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       } else if (mod.id === MODERATION_MODULE.id && state?.moderation_v2 === true && client?.modV2) {
         // Moderation V2 (D4): same Core as Studio (read models + commands), no local state.
         body.dataset.modV2 = '1';
+        // The D4 console is the whole screen (its own header and way back to the Hub): no host header.
+        screen.classList.add('jdm-module-screen--modv2');
         if (!moderationV2View) {
-          moderationV2View = createModerationV2View({ document, client, onChange: () => { void onRefresh?.(); } });
+          moderationV2View = createModerationV2View({ document, client, onChange: () => { void onRefresh?.(); }, onBack: () => navigateTo(null) });
           moderationV2View.start();
         }
         body.append(moderationV2View.node);
