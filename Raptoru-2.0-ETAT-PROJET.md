@@ -1091,7 +1091,27 @@ Prototype UX D3 + prototype player transformés en vrai module Lab (commits `eb7
 - Tests : Core 170 (dont 12 TTS), Studio 57 (dont 9 TTS), extension 10, bot 69, desktop 17 ; E2E Electron (Panel / Vidéo / Mobile, lecteur OBS réel, file, pause, refresh, crash lecteur, non-régression Soundboard).
 - **Dette connue (documentée, non corrigée dans ce checkpoint)** :
   1. le lecteur peut commencer la lecture avant la fin de l’animation shuffle / reveal de l’extension : fonctionnement acceptable pour ce checkpoint, synchronisation UX stricte non garantie ;
-  2. pas encore de panneau Studio complet pour configurer les règles TTS (prix / paliers, coût en crédits, cooldowns, capacité / durée de file…) : les règles existent dans Core (`rules.ts`, surcharge possible en base), l’UI de configuration viendra plus tard.
+  2. ~~pas encore de panneau Studio pour configurer les règles TTS~~ → fait le 30/09/2026 (Studio → Modération → Configuration TTS, voir § « Modération V2 réelle + configuration TTS »), en attente de validation.
+
+## Modération V2 réelle + configuration TTS + wallet de test (Lab, 30/09/2026 — en attente de validation)
+Implémenté et testé (unitaires, intégration, E2E réels), **non validé manuellement, non publié, pas en prod**. Tout reste Lab / local ; SAMMI prod intact ; aucune migration prod (migration `20261005120000_lab_moderation.sql` appliquée uniquement par le runtime Lab).
+- **Core = source de vérité** (`apps/core-api/src/lab-moderation/`) : états de module, blocages, cooldowns imposés, rôles staff, wallet de test et audit en base Lab ; Studio et l’extension n’affichent et ne commandent que via l’API Core (routes `/v1/lab/moderation`, `/v1/lab/wallet`, `/v1/lab/tts/rules`, exposées **uniquement par le Core Lab**, jamais par le Core de production).
+- **Configuration TTS réelle** (Studio → Modération → Configuration TTS) : paliers (min / max / prix jetons / crédits / cooldown), longueur max, nombre max en attente, durée max en attente (facultative), délai entre deux TTS, TTS simultanés par viewer, état du module. Valeurs lues dans Core ; validation stricte côté Core (chevauchement, trou, bornes, dernier palier seul ouvert, longueur max ≤ dernier palier fermé) avec message clair ; stockage `tts_lab_settings.rules`, appliqué au prochain achat sans redémarrage ; « Restaurer les valeurs par défaut » (legacy) avec confirmation ; avant / après dans l’audit. Prix désormais absolus par palier (défauts legacy 7 500 / 11 250 / 15 000 / 22 500 / 37 500).
+- **Wallet de test (Lab)** : jetons, crédits TTS, crédits Soundboard par viewer, en base Lab (`lab_wallets` + journal `lab_wallet_ledger`), jamais l’économie réelle. Édition réservée à Studio (broadcaster) : Définir, +10 000 jetons, +1 crédit, Reset test. Le TTS débite ce wallet **dans la transaction d’admission** (solde insuffisant = refus avant tout enregistrement) ; un remboursement rend exactement le montant débité, au plus une fois (entrée de journal unique). Les sons (Soundboard) restent non débités dans le Lab : rien à rembourser. L’extension affiche les valeurs de ce wallet.
+- **Cooldown Lab** : visible et effaçable (« Effacer le cooldown TTS ») dans le wallet de test et la fiche viewer.
+- **Permissions** : Broadcaster (tout, Studio = broadcaster), Supermod (nommé par le broadcaster, table `lab_staff`), Moderator (Twitch), Viewer. Modérateur : pause / reprise, stop et retrait sans remboursement, vider la file, blocage, cooldown, lecture de l’audit. Supermod : en plus remboursements et désactivation de module. Broadcaster : configuration TTS, staff, wallet de test.
+- **Modules** : TTS / Soundboard / Bonk ont un état actif / en pause / désactivé (« dégradé » = lecteur absent ou Core injoignable, affiché). Pause = file gardée, nouveaux achats refusés avant paiement, ce qui est en cours finit (règle affichée dans l’UI).
+- **TTS** : Stop (coupe réellement la voix et l’animation, libère le lecteur, puis élément suivant) et Stop + rembourser ; Vider la file / Vider + rembourser (seulement l’attente, jamais le TTS en lecture) ; Retirer / Retirer + rembourser une entrée ; remboursement manuel d’une transaction terminée éligible (déjà remboursé / non remboursable affichés).
+- **Soundboard** : pause / reprise / désactivation, blocage, cooldown imposé, retrait des sons en attente. Pas d’arrêt d’un son déjà remis au lecteur (non implémenté), pas de remboursement (jamais débité).
+- **Bonk** : état du module, blocage, cooldown imposé, audit ; pas de stop / annulation / remboursement (sans objet).
+- **Sanctions viewer** : blocage de tout Raptoru ou d’un module (TTS / Soundboard / Bonk), temporaire ou jusqu’au déblocage, raison facultative ; cooldown par module (ajouter / remplacer / effacer).
+- **Audit unifié** (`lab_moderation_audit`) : horodatage, acteur, rôle, module, action, viewer, transaction, raison, avant, après — pause / reprise, stop, retraits, purge, remboursements (manuels et automatiques), blocages, cooldowns, config TTS, wallet de test, staff.
+- **Studio** : onglet « Modération » (D4 : colonne modules + recherche viewer + Historique, file au centre, fiche viewer à droite, dialogues pause / blocage / cooldown / vider), onglets Configuration TTS et Wallet de test (Lab).
+- **Extension** : la modération existante de l’extension (pause / reprise / stop / purge TTS, activation des modules, suspension / réactivation d’un viewer, blocage TTS, historique) passe par les mêmes commandes Core, mêmes permissions, mêmes états. L’interface D4 côté extension n’est pas construite (Studio = cockpit principal).
+- **Mots surveillés** : seulement le hook serveur existant (`TtsMessageFilter`), aucune liste ni UI.
+- **Twitch ban / timeout** : aucune synchro. Tout blocage est **interne Raptoru** ; le bot ne reçoit ni ban ni timeout Twitch (pas d’abonnement EventSub correspondant).
+- **Audit Soundboard (sons simultanés)** : modes réels `stack` / `queue` / `ignore_if_running` (pas de `replace`). `queue` et `ignore_if_running` ne s’appliquent qu’entre instances **du même son** ; deux sons différents sont toujours remis en parallèle (8 max). E2E réel : deux sons « stack » (`bowser-theme` + `boom`) joués simultanément par le lecteur (2 éléments audio actifs).
+- Tests : Core 179 (dont 9 modération / config / wallet), Studio 59, desktop 17, extension 10, bot 69 ; E2E réel 23/23 (critères de réussite, dont crash Core avec persistance) + synchro Studio ⇄ extension Panel / Vidéo / Mobile 3/3 ; package local (`release/win-unpacked`) démarré et fermé proprement.
 
 ## Wallet switch global — validé
 Composant `createCurrencySwitch` (extension, `shared/ui-primitives.js` + `currency-switch.css`), variante « Peek slide » validée le 28/09/2026 :
@@ -1133,13 +1153,13 @@ Conception UX/UI réalisée et validée au niveau prototype (aucune implémentat
 - D4 = base D2 (colonne gauche : recherche + modules + Historique ; zone droite : une seule intention — module, fiche viewer, historique ou détail), file TTS / Soundboard complète reprise de D3 ;
 - contenus validés : états module Actif / En pause / Désactivé via menu compact, pause avec « garder la file / annuler + rembourser », retrait / stop avec ou sans remboursement (poubelle + menu), fiche viewer compacte (restrictions avec ×, Bloquer / Cooldown / Plus, activité récente, Activité Jetons), blocage global ou par module (30 s / 1 min / 5 min / personnalisé, aucune sanction Twitch), cooldown personnel (délai imposé + durée), notes internes discrètes, historique léger + détails techniques au clic, **Activité Jetons** (mouvements automatiques masqués via un futur `visible_in_moderation_activity`), **mots surveillés TTS** (« À vérifier », jamais bloqué automatiquement ; mots bloqués = concept seulement), pause globale supermod (refuse les nouvelles interactions sans stopper / purger / rembourser), permissions Mod / Supermod / Broadcaster avec délégation individuelle, infobulles ;
 - surface de référence Video Component 600×432 ; **Moderator Window** = Panel Twitch ouvert en pop-out (pop-out documenté par Twitch pour les Panels et la Live Config, pas pour le Video Component ; option à vérifier dans la console Twitch ; non configuré) ; portail web `raptoru.fr/moderation` non nécessaire pour la V1, non créé.
-- **Non fait** : implémentation réelle (Core, permissions, blocages, cooldowns, états module, audit, API, branchement UI). La modération actuelle de l’extension reste l’ancienne.
+- **Implémentation réelle faite le 30/09/2026 (Lab, en attente de validation)** : voir § « Modération V2 réelle + configuration TTS + wallet de test ». Reste prévu seulement : interface D4 côté extension (pop-out), mots bloqués / surveillés, notes internes, pause globale supermod, Activité Jetons de l’économie réelle.
 
 ## Roadmap après Bonk
 Ordre recommandé à date (checkpoint 30/09/2026 : Studio autonome + Hub + Bonk V2 + Soundboard V2 + TTS V2 validés) :
 1. ~~Soundboard~~ (validé en Lab le 28/09/2026) ;
 2. ~~TTS~~ (runtime réel validé en Lab le 30/09/2026) ;
-3. **Modération V2 D4 réelle** (prochain chantier) ;
+3. **Modération V2 D4 réelle** (implémentée en Lab le 30/09/2026, validation en attente) ;
 4. **Tombola V2** (refonte, ensuite) ;
 5. Bonk Fidelity (polish, non bloquant) ;
 6. instrumentation stats/profil au fil des modules ;
@@ -1152,7 +1172,7 @@ Ordre recommandé à date (checkpoint 30/09/2026 : Studio autonome + Hub + Bonk 
 
 Cette roadmap reste modulable après audit réel de chaque feature.
 
-**Prochain chantier : Modération V2 D4 réelle, puis Tombola V2** (choisi le 30/09/2026).
+**Prochain chantier : validation manuelle de Modération V2 + configuration TTS, puis Tombola V2** (30/09/2026).
 
 # 17. Import des données historiques / cutover
 
@@ -1274,8 +1294,8 @@ VALIDÉ TECHNIQUEMENT, mais pas activé prod :
 - Studio autonome : runtime local + supervision Electron du serveur Studio (validé le 30/09/2026)
 - TTS V2 Lab runtime réel (validé le 30/09/2026 ; dette : synchro reveal / lecture, pas d’UI de config des règles)
 
-VALIDÉ EN CONCEPTION SEULEMENT (prototype local, rien d’implémenté) :
-- Modération V2 direction UX D4 (29/09/2026)
+IMPLÉMENTÉ EN LAB, VALIDATION EN ATTENTE :
+- Modération V2 réelle (Core) + configuration TTS dans Studio + wallet de test Lab (30/09/2026)
 
 Studio :
 - updater réel validé en 0.1.0 → 0.1.1
@@ -1305,7 +1325,7 @@ BONK V2 = VALIDÉ (Lab), PAS ACTIVÉ EN PROD :
 - zéro Wallet réel, zéro stats/progression réelle, zéro prod
 - reste (non bloquant) : Bonk Fidelity (impact FX, centre caméra, tailles, disparition)
 
-PROCHAIN CHANTIER : Modération V2 D4 réelle, puis Tombola V2 (refonte).
+PROCHAIN CHANTIER : validation Modération V2 + config TTS, puis Tombola V2 (refonte).
 Roadmap indicative ensuite : stats/profils → Jeu des mots 2.0 → achievements/cosmétiques → FX → modération sociale → Spotify/casino.
 
 Production réelle actuelle :
