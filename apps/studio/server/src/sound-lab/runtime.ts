@@ -152,10 +152,16 @@ export class SoundRuntime {
           await this.worker.playerHeartbeat(player, body.audio === true);
           reply(200, { ok: true, settings: this.worker.settings });
         } else if (url.pathname.endsWith('/next'))
-          reply(200, { interaction: await this.worker.command(player) });
+          reply(200, {
+            // Moderation stops first, then the next sound (never replayed).
+            stop: await this.worker.stopOrders(player),
+            interaction: await this.worker.command(player),
+          });
         else if (
           url.pathname.endsWith('/ack') &&
-          ['started', 'completed', 'failed'].includes(String(body.event))
+          ['started', 'completed', 'failed', 'stopped'].includes(
+            String(body.event),
+          )
         ) {
           const error =
             body.event === 'failed' &&
@@ -175,7 +181,7 @@ export class SoundRuntime {
             String(body.interaction_id),
             String(body.attempt_id),
             player,
-            body.event as 'started' | 'completed' | 'failed',
+            body.event as 'started' | 'completed' | 'failed' | 'stopped',
             error,
           );
           reply(200, { ok: true });

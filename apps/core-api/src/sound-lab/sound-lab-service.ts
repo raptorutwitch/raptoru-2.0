@@ -18,10 +18,18 @@ import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import {
   activeBlock,
+  actorName,
+  assertNotGloballyPaused,
   audit,
-  moderationCooldownMs,
+  countGlobalRefusal,
+  debit,
+  GlobalPauseError,
   moduleState,
+  personalCooldownMs,
+  refundDebit,
+  seeViewer,
   setModuleState,
+  SYSTEM,
   type Actor,
   type LabRole,
 } from '../lab-moderation/store.js';
@@ -29,7 +37,8 @@ import { SOUND_BANK, type SoundBankEntry } from './bank.js';
 
 // Soundboard V2, Lab slice. Same contract as the Bonk Lab: Core owns the catalog, validation, the
 // authoritative interaction, its durable order (channel_sequence) and its status; Studio only
-// plays and acknowledges. Test only: the payment is a simulated snapshot (real_debited = 0). This
+// plays and acknowledges. Test only: the Lab test wallet is debited at admission (real_debited = 0),
+// refunded at most once (moderation, or automatically when the sound can never be played). This
 // module imports nothing from Wallet, Loyalty or stats.
 
 export const SOUND_LAB_RULES = {
@@ -118,6 +127,8 @@ interface Row {
   payment_method: 'tokens' | 'credits';
   simulated_cost: number;
   simulated_currency: string;
+  refund_status: 'none' | 'refunded';
+  refunded_at: Date | null;
   status: SoundLabStatus;
   lab_session_id: string;
   expires_at: Date;
@@ -127,11 +138,14 @@ interface Row {
   lease_expires_at: Date | null;
   started_at: Date | null;
   completed_at: Date | null;
+  stopped_at: Date | null;
 }
 
-const SELECT = `select i.*, d.studio_instance_id, d.attempt_id, d.lease_expires_at, d.started_at, d.completed_at
+const SELECT = `select i.*, d.studio_instance_id, d.attempt_id, d.lease_expires_at, d.started_at, d.completed_at, d.stopped_at
   from sound_lab_interactions i left join sound_lab_deliveries d using (interaction_id)`;
 const TERMINAL: SoundLabStatus[] = ['completed', 'failed', 'execution_unknown'];
+/** Finished for moderation (a manual refund may apply). */
+const ENDED: SoundLabStatus[] = [...TERMINAL, 'cancelled'];
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 const BANK = new Map(SOUND_BANK.map((s) => [s.id, s]));
 /** Name shown to viewers: the Studio rename if any, else the bank's canonical name. */
@@ -162,6 +176,8 @@ function toInteraction(r: Row): SoundLabInteraction {
     simulated_cost: r.simulated_cost,
     simulated_currency: r.simulated_currency,
     real_debited: 0,
+    refund_status: r.refund_status,
+    refunded_at: iso(r.refunded_at),
     status: r.status,
     lab_session_id: r.lab_session_id,
     expires_at: iso(r.expires_at)!,
@@ -172,6 +188,7 @@ function toInteraction(r: Row): SoundLabInteraction {
       lease_expires_at: iso(r.lease_expires_at),
       started_at: iso(r.started_at),
       completed_at: iso(r.completed_at),
+      stopped_at: iso(r.stopped_at),
     },
   };
 }
@@ -377,6 +394,19 @@ export class SoundLabService {
   // --- admission ---------------------------------------------------------------------------------
 
   async admit(req: SoundLabAdmitRequest): Promise<SoundLabAdmitResponse> {
+    try {
+      return await this.admitTx(req);
+    } catch (e) {
+      // Pause globale (D4): refused before anything is stored or paid; the refusal is counted.
+      if (!(e instanceof GlobalPauseError)) throw e;
+      await countGlobalRefusal(this.db, req.channel_id, this.clock.now());
+      throw new SoundLabError409('global_pause', e.message);
+    }
+  }
+
+  private async admitTx(
+    req: SoundLabAdmitRequest,
+  ): Promise<SoundLabAdmitResponse> {
     // Hash of what the viewer asked for: a retry with the same key must ask for the same sound.
     const requestHash = createHash('sha256')
       .update(
@@ -425,6 +455,7 @@ export class SoundLabService {
       await this.sweep(q, req.channel_id);
       const now = this.clock.now();
       // Moderation V2 (Core): refused before admission, nothing recorded.
+      await assertNotGloballyPaused(q, req.channel_id);
       const state = await moduleState(q, 'soundboard');
       if (state === 'disabled')
         throw new SoundLabError409('module_disabled', 'Soundboard disabled');
@@ -440,7 +471,7 @@ export class SoundLabService {
           'viewer_blocked',
           'Soundboard unavailable for this viewer',
         );
-      const imposed = await moderationCooldownMs(
+      const imposed = await personalCooldownMs(
         q,
         req.channel_id,
         req.viewer.id,
@@ -568,6 +599,23 @@ export class SoundLabService {
           new Date(now.getTime() + SOUND_LAB_RULES.expiresAfterMs),
         ],
       );
+      await seeViewer(
+        q,
+        req.channel_id,
+        req.viewer.id,
+        req.viewer.display_name,
+        now,
+      );
+      // Lab test wallet: debited in the same transaction (refused → nothing admitted, nothing stored).
+      await debit(q, now, {
+        channelId: req.channel_id,
+        viewerId: req.viewer.id,
+        currency:
+          req.payment_method === 'credits' ? 'credits_soundboard' : 'tokens',
+        amount: cost,
+        module: 'soundboard',
+        interactionId: id,
+      });
       return { interaction: (await this.byId(q, id))!, replayed: false };
     });
   }
@@ -631,7 +679,7 @@ export class SoundLabService {
       );
       await this.sweep(q, channelId);
       const rows = (
-        await q.query<Row & { delivered: boolean }>(
+        await q.query<Row>(
           `${SELECT} where i.channel_id = $1 and i.status in ('queued', 'executing') order by i.channel_sequence`,
           [channelId],
         )
@@ -642,11 +690,15 @@ export class SoundLabService {
           [channelId],
         )
       ).map(toInteraction);
+      const view = (i: SoundLabInteraction) => ({
+        ...i,
+        refundable: ENDED.includes(i.status) && i.refund_status === 'none',
+      });
       return {
         module_state: await moduleState(q, 'soundboard'),
-        playing: rows.filter((r) => r.delivery.attempt_id !== null),
-        waiting: rows.filter((r) => r.delivery.attempt_id === null),
-        recent,
+        playing: rows.filter((r) => r.delivery.attempt_id !== null).map(view),
+        waiting: rows.filter((r) => r.delivery.attempt_id === null).map(view),
+        recent: recent.map(view),
       };
     });
   }
@@ -661,9 +713,53 @@ export class SoundLabService {
   }
 
   /**
-   * Soundboard commands. Payment is simulated and nothing is debited for sounds: there is nothing to
-   * refund (refund requests are refused explicitly). Sounds already handed to the player are not
-   * stoppable from Core yet: cancel / purge only apply to waiting sounds.
+   * At most once (conditional update + unique ledger entry): the sound becomes « refunded » and the
+   * Lab test wallet gets back exactly what was debited for it. Audited.
+   */
+  private async refund(
+    q: Queryable,
+    interactionId: string,
+    actor: Actor,
+    reason: string,
+    role?: LabRole,
+  ): Promise<boolean> {
+    const now = this.clock.now();
+    const done = await q.query<{ channel_id: string; viewer_id: string }>(
+      `update sound_lab_interactions set refund_status = 'refunded', refunded_at = $2, updated_at = $2
+       where interaction_id = $1 and refund_status = 'none' returning channel_id, viewer_id`,
+      [interactionId, now],
+    );
+    if (!done.length) return false;
+    const back = await refundDebit(
+      q,
+      now,
+      interactionId,
+      actorName(actor),
+      reason,
+    );
+    await audit(q, now, {
+      channelId: done[0]!.channel_id,
+      actor,
+      role,
+      module: 'soundboard',
+      action: 'refund',
+      viewerId: done[0]!.viewer_id,
+      interactionId,
+      reason,
+      before: { refund_status: 'none' },
+      after: {
+        refund_status: 'refunded',
+        amount: back.amount,
+        currency: back.currency,
+      },
+    });
+    return true;
+  }
+
+  /**
+   * Soundboard commands (D4). Waiting = not yet handed to the player; playing = handed out or being
+   * played: stopping one marks it cancelled in Core, the Studio worker then tells the player to stop
+   * it and reports a `stopped` ACK. Refunds give back the Lab test wallet debit, at most once.
    */
   async applyModeration(
     q: Queryable,
@@ -680,41 +776,60 @@ export class SoundLabService {
       'select 1 from sound_lab_channels where channel_id = $1 for update',
       [channelId],
     );
+    await this.sweep(q, channelId);
     const now = this.clock.now();
     const reason = 'reason' in cmd ? (cmd.reason ?? null) : null;
-    const waiting = await q.query<{
+    const open = await q.query<{
       interaction_id: string;
       viewer_id: string;
+      status: SoundLabStatus;
+      delivered: boolean;
     }>(
-      `select interaction_id, viewer_id from sound_lab_interactions i where channel_id = $1 and status = 'queued'
-         and not exists (select 1 from sound_lab_deliveries d where d.interaction_id = i.interaction_id) order by channel_sequence`,
+      `select interaction_id, viewer_id, status,
+         exists (select 1 from sound_lab_deliveries d where d.interaction_id = i.interaction_id) as delivered
+       from sound_lab_interactions i where channel_id = $1 and status in ('queued', 'executing') order by channel_sequence`,
       [channelId],
     );
+    const waiting = open.filter((r) => !r.delivered);
+    const playing = open.filter((r) => r.delivered);
     const cancel = async (
-      rows: { interaction_id: string; viewer_id: string }[],
+      rows: typeof open,
+      refund: boolean,
+      stop: boolean,
     ) => {
-      const out: string[] = [];
+      const out: { interaction_id: string; refunded: boolean }[] = [];
+      const code = stop ? 'stopped_by_moderator' : 'cancelled_by_moderator';
       for (const r of rows) {
         const done = await q.query(
-          `update sound_lab_interactions i set status = 'cancelled', updated_at = $2,
-             error = '{"code":"cancelled_by_moderator","message":"cancelled by moderation","retryable":false}'::jsonb
-           where interaction_id = $1 and status = 'queued'
-             and not exists (select 1 from sound_lab_deliveries d where d.interaction_id = i.interaction_id) returning 1`,
-          [r.interaction_id, now],
+          `update sound_lab_interactions set status = 'cancelled', updated_at = $2, error = $3
+           where interaction_id = $1 and status in ('queued', 'executing') returning 1`,
+          [
+            r.interaction_id,
+            now,
+            JSON.stringify(
+              err(
+                code,
+                stop ? 'stopped by moderation' : 'cancelled by moderation',
+              ),
+            ),
+          ],
         );
         if (!done.length) continue;
-        out.push(r.interaction_id);
+        const refunded = refund
+          ? await this.refund(q, r.interaction_id, actor, code, role)
+          : false;
+        out.push({ interaction_id: r.interaction_id, refunded });
         await audit(q, now, {
           channelId,
           actor,
           role,
           module: 'soundboard',
-          action: 'cancel',
+          action: stop ? 'stop' : 'cancel',
           viewerId: r.viewer_id,
           interactionId: r.interaction_id,
           reason,
-          before: { status: 'queued' },
-          after: { status: 'cancelled' },
+          before: { status: r.status },
+          after: { status: 'cancelled', refund },
         });
       }
       return out;
@@ -734,22 +849,41 @@ export class SoundLabService {
           after: { state: cmd.state, waiting: cmd.waiting ?? 'keep' },
         });
         const cancelled =
-          (cmd.waiting ?? 'keep') === 'keep' ? [] : await cancel(waiting);
+          (cmd.waiting ?? 'keep') === 'keep'
+            ? []
+            : await cancel(waiting, cmd.waiting === 'cancel_refund', false);
         return { ok: true, module_state: cmd.state, cancelled };
       }
       case 'cancel': {
-        const row = waiting.find(
-          (w) => w.interaction_id === cmd.interaction_id,
-        );
+        const row = open.find((w) => w.interaction_id === cmd.interaction_id);
         if (!row)
           throw new SoundLabError409(
-            'not_waiting',
-            'only a sound not yet handed to the player can be cancelled',
+            'not_open',
+            'this sound is no longer waiting or playing',
           );
-        return { ok: true, cancelled: await cancel([row]) };
+        return {
+          ok: true,
+          cancelled: await cancel([row], cmd.refund, row.delivered),
+        };
+      }
+      case 'stop_all': {
+        if (!playing.length)
+          throw new SoundLabError409('nothing_playing', 'no sound is playing');
+        const cancelled = await cancel(playing, cmd.refund, true);
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: 'soundboard',
+          action: 'stop_all',
+          reason,
+          before: { playing: playing.length },
+          after: { playing: 0, refund: cmd.refund, count: cancelled.length },
+        });
+        return { ok: true, cancelled };
       }
       case 'purge': {
-        const cancelled = await cancel(waiting);
+        const cancelled = await cancel(waiting, cmd.refund, false);
         await audit(q, now, {
           channelId,
           actor,
@@ -758,15 +892,28 @@ export class SoundLabService {
           action: 'purge',
           reason,
           before: { waiting: waiting.length },
-          after: { waiting: 0, count: cancelled.length },
+          after: { waiting: 0, refund: cmd.refund, count: cancelled.length },
         });
         return { ok: true, cancelled };
       }
-      case 'refund':
-        throw new SoundLabError409(
-          'not_refundable',
-          'Soundboard Lab sounds are never debited: nothing to refund',
-        );
+      case 'refund': {
+        const row = await this.byId(q, cmd.interaction_id);
+        if (!row || row.channel_id !== channelId)
+          throw new SoundLabNotFoundError(cmd.interaction_id);
+        if (!ENDED.includes(row.status))
+          throw new SoundLabError409('not_terminal', 'stop or remove it first');
+        if (
+          !(await this.refund(
+            q,
+            row.interaction_id,
+            actor,
+            reason ?? 'moderator_refund',
+            role,
+          ))
+        )
+          throw new SoundLabError409('already_refunded', 'already refunded');
+        return { ok: true, refunded: true };
+      }
       default:
         throw new SoundLabError409(
           'unsupported',
@@ -872,6 +1019,21 @@ export class SoundLabService {
           'this attempt does not own the interaction',
         );
       const now = this.clock.now();
+      // Stopped / removed by moderation meanwhile: the player's proof of the stop is recorded, its
+      // other late ACKs are accepted and ignored (Core already holds the final state).
+      if (cur.status === 'cancelled') {
+        if (a.event === 'stopped')
+          await q.query(
+            'update sound_lab_deliveries set stopped_at = coalesce(stopped_at, $2) where interaction_id = $1',
+            [interactionId, now],
+          );
+        return (await this.byId(q, interactionId))!;
+      }
+      if (a.event === 'stopped')
+        throw new SoundLabError409(
+          'invalid_transition',
+          'only a sound stopped by moderation can be reported stopped',
+        );
       const set = (status: SoundLabStatus, error: SoundLabError | null) =>
         q.query(
           'update sound_lab_interactions set status = $2, error = $3, updated_at = $4 where interaction_id = $1',
@@ -920,6 +1082,9 @@ export class SoundLabService {
               a.error?.message ?? 'the player reported a failure',
             ),
           );
+          // Never started (file missing, player error before audio): it can never be heard → refund.
+          if (cur.started_at === null)
+            await this.refund(q, interactionId, SYSTEM, 'failed_before_start');
           break;
         case 'execution_unknown':
           if (cur.status === 'execution_unknown') break;
@@ -947,13 +1112,17 @@ export class SoundLabService {
    */
   private async sweep(q: Queryable, channelId: string): Promise<void> {
     const now = this.clock.now();
-    await q.query(
+    const expired = await q.query<{ interaction_id: string }>(
       `update sound_lab_interactions i set status = 'failed', updated_at = $2,
          error = '{"code":"expired","message":"not started before expiry","retryable":false}'::jsonb
        where channel_id = $1 and status = 'queued' and expires_at < $2
-         and not exists (select 1 from sound_lab_deliveries d where d.interaction_id = i.interaction_id)`,
+         and not exists (select 1 from sound_lab_deliveries d where d.interaction_id = i.interaction_id)
+       returning interaction_id`,
       [channelId, now],
     );
+    // Never played: the Lab test wallet gets its debit back.
+    for (const e of expired)
+      await this.refund(q, e.interaction_id, SYSTEM, 'expired');
     await q.query(
       `update sound_lab_interactions i set status = 'execution_unknown', updated_at = $2,
          error = '{"code":"lease_expired","message":"no player proof before the lease ended","retryable":false}'::jsonb

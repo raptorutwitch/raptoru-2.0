@@ -1,10 +1,9 @@
-// Moderation V2 (D4) — extension console. Parity target: the validated prototype
-// `prototypes/moderation-v2-d4` (left column = context, right zone = one intention; compact stack on
-// Panel / Mobile), on the REAL Core: every list comes from Core read models (/moderation/v2/*), every
-// action is a Core command executed with the caller's permissions and audited by Core. No simulated
-// state, no business rule here, no localStorage. Studio stays the complete cockpit; same Core.
-// D4 elements without a real backend yet (Tombola V2, notes, global pause, watched words, fine
-// permissions, Soundboard stop) are SHOWN and marked « backend manquant » — never faked, never removed.
+// Moderation V2 (D4) — the console of the validated prototype `prototypes/moderation-v2-d4` (left
+// column = context, right zone = one intention; compact stack on Panel / Mobile), on the REAL Core:
+// every list comes from Core read models (/moderation/v2/*), every action is a Core command executed
+// with the caller's permissions (roles + D4 grants per moderator) and audited by Core. No simulated
+// state, no business rule here, no localStorage. The same module is Studio's « Modération » console
+// (Studio = broadcaster), so Studio and the extension show the same moderation.
 
 const P = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -46,96 +45,109 @@ const MODS = {
   bonk: { label: 'Bonk', c: 'var(--m-bonk)', unit: 'bonk', units: 'bonks' },
   raffle: { label: 'Tombola', c: 'var(--m-raffle)', unit: 'ticket', units: 'tickets' },
 };
-/** Modules branched on the real Core. Tombola is in D4 but still on the old system (not migrated). */
-const MOD_KEYS = ['tts', 'soundboard', 'bonk'];
-const SIDE_KEYS = [...MOD_KEYS, 'raffle'];
+const MOD_KEYS = ['tts', 'soundboard', 'bonk', 'raffle'];
 const SCOPE = { all: 'Tout Raptoru', ...Object.fromEntries(MOD_KEYS.map((m) => [m, MODS[m].label])) };
 const STATE = { active: 'Actif', paused: 'En pause', disabled: 'Désactivé' };
 const STATUS = {
   queued: 'en attente',
-  starting: 'remis au lecteur',
-  playing: 'en lecture',
+  accepted: 'en attente',
+  starting: 'en cours',
+  playing: 'en cours',
   executing: 'en cours',
   completed: 'terminé',
   failed: 'échec',
   execution_unknown: 'non confirmé',
   cancelled: 'retiré',
 };
-const ROLE = { broadcaster: 'Streamer', supermod: 'Supermod', moderator: 'Mod', viewer: 'Viewer' };
-const PERM_LABEL = {
-  'module.pause': 'Mettre en pause / reprendre un module',
-  'module.disable': 'Désactiver un module',
-  'queue.stop': 'Arrêter la lecture en cours',
-  'queue.cancel': 'Retirer une demande',
-  'queue.purge': 'Purger une file',
-  refund: 'Rembourser',
-  'viewer.block': 'Bloquer / débloquer un viewer',
-  'viewer.cooldown': 'Imposer un cooldown',
-  'audit.read': 'Lire l’historique',
-  'config.tts': 'Configurer le TTS (Studio)',
-  'staff.manage': 'Gérer l’équipe (Studio)',
-  'wallet.lab': 'Wallet de test (Studio)',
+/** The 6 permissions D4 grants per moderator (Core names them the same way). */
+const PERMS = {
+  wallet: ['Admin Wallet', 'Créditer ou débiter Jetons et crédits.'],
+  modules: ['Désactiver un module', 'Passer un module en « Désactivé ».'],
+  globalPause: ['Pause globale', 'Refuser toutes les nouvelles interactions.'],
+  perms: ['Gérer les permissions', 'Accorder ces permissions aux autres mods.'],
+  sensitive: ['Sanctions sensibles', 'Bloquer tout Raptoru, ou plus d’une heure.'],
+  words: ['Mots surveillés / bloqués', 'Modifier la liste de surveillance TTS.'],
 };
-const NEEDS = { refund: 'Supermod', 'module.disable': 'Supermod' };
-/** D4 permissions granted per mod: not in Core yet (fixed Mod / Supermod / Streamer rules). */
-const D4_PERMS = [
-  ['Admin Wallet', 'Créditer ou débiter Jetons et crédits.'],
-  ['Désactiver un module', 'Passer un module en « Désactivé ».'],
-  ['Pause globale', 'Refuser toutes les nouvelles interactions.'],
-  ['Gérer les permissions', 'Accorder ces permissions aux autres mods.'],
-  ['Sanctions sensibles', 'Bloquer tout Raptoru, ou plus d’une heure.'],
-  ['Mots surveillés / bloqués', 'Modifier la liste de surveillance TTS.'],
-];
+const ROLE_LABEL = { broadcaster: 'Streamer', supermod: 'Supermod', moderator: 'Mod', viewer: 'Viewer' };
 const ACTION = {
   module_paused: 'Mise en pause',
   module_active: 'Reprise',
   module_disabled: 'Désactivation',
-  stop: 'Lecture arrêtée',
-  cancel: 'Demande retirée',
+  stop: 'Arrêté',
+  stop_all: 'Stop tous les sons',
+  cancel: 'Retiré',
   purge: 'File purgée',
   refund: 'Remboursement',
+  allow: 'Laissé passer',
   block_viewer: 'Blocage',
   unblock_viewer: 'Déblocage',
-  cooldown_replace: 'Cooldown imposé',
-  cooldown_add: 'Cooldown prolongé',
-  cooldown_clear: 'Cooldown effacé',
+  cooldown_set: 'Cooldown personnel',
+  cooldown_clear: 'Cooldown retiré',
+  cooldown_running_clear: 'Cooldown TTS effacé',
+  global_pause: 'Pause globale',
+  global_resume: 'Pause globale levée',
+  set_permission: 'Permission',
+  set_staff: 'Rôle d’équipe',
+  note_add: 'Note',
+  word_add: 'Mot ajouté',
+  word_remove: 'Mot retiré',
+  wallet_adjust: 'Wallet admin',
+  raffle_open: 'Tombola ouverte',
+  raffle_close: 'Tombola fermée',
+  raffle_draw: 'Tirage Tombola',
   config_update: 'Configuration TTS',
   config_reset: 'Configuration TTS (défaut)',
   lab_wallet_set: 'Wallet de test défini',
   lab_wallet_adjust: 'Wallet de test ajusté',
   lab_wallet_reset: 'Wallet de test réinitialisé',
-  set_staff: 'Rôle d’équipe',
 };
 const ERRORS = {
-  forbidden: 'Permission insuffisante pour cette action.',
   already_refunded: 'Déjà remboursé.',
   not_terminal: 'Arrête ou retire d’abord cette demande.',
-  not_refundable: 'Rien à rembourser : cette interaction n’a pas été débitée.',
-  nothing_playing: 'Aucun TTS en lecture.',
+  nothing_playing: 'Rien en cours de lecture.',
   not_open: 'Cette demande n’est plus dans la file.',
-  not_waiting: 'Ce son est déjà remis au lecteur.',
+  not_pending: 'Cette demande n’attend plus de vérification.',
   unsupported: 'Action sans objet pour ce module.',
+  target_is_staff: 'Un membre de l’équipe ne peut pas être sanctionné.',
+  target_not_editable: 'Supermods et streamer ont déjà toutes les permissions.',
+  self_edit: 'Tu ne peux pas modifier tes propres permissions.',
+  not_in_team: 'Cette personne n’est pas dans l’équipe.',
+  word_exists: 'Ce mot est déjà dans la liste.',
+  word_not_found: 'Mot introuvable.',
+  nothing_to_debit: 'Solde déjà à 0.',
+  wallet_full: 'Solde au maximum.',
+  raffle_already_open: 'Une tombola est déjà ouverte.',
+  no_open_raffle: 'Aucune tombola ouverte.',
+  nothing_to_draw: 'Aucune tombola à tirer.',
   network_error: 'Connexion perdue : réessaie.',
 };
-// History filters of the prototype (status / period), applied to the data already loaded from Core.
+// History filters of the prototype (status / period): applied by Core.
 const STATUS_F = [['all', 'Tous'], ['done', 'terminé'], ['queued', 'en attente'], ['refunded', 'remboursé'], ['cancelled', 'retiré'], ['failed', 'échec']];
 const PERIOD_F = [['all', 'Ce stream'], ['60', 'Dernière heure'], ['15', '15 dernières min']];
 const statusKey = (i) =>
-  i.refund_status === 'refunded' ? 'refunded' : i.status === 'completed' ? 'done' : ['queued', 'starting', 'playing', 'executing'].includes(i.status) ? 'queued' : i.status === 'cancelled' ? 'cancelled' : 'failed';
+  i.status_key ?? (i.refund_status === 'refunded' ? 'refunded' : i.status === 'completed' ? 'done' : ['queued', 'accepted', 'starting', 'playing', 'executing'].includes(i.status) ? 'queued' : i.status === 'cancelled' ? 'cancelled' : 'failed');
+const statusText = (i) => (i.refund_status === 'refunded' ? 'remboursé' : STATUS[i.status] ?? esc(i.status));
 const actorName = (a) => (/^studio(:|$)/.test(String(a)) ? 'Studio' : String(a) === 'system' ? 'Automatique' : String(a ?? ''));
 const hhmm = (iso) => (iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '');
+const dday = (iso) => (iso ? new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : '');
 const mmss = (ms) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
   if (s >= 3600) return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
-const dur = (s) => (s < 60 ? `${s} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.floor(s / 3600)} h${Math.round((s % 3600) / 60) ? ` ${Math.round((s % 3600) / 60)}` : ''}`);
+const dur = (s) => {
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.round(s / 60)} min`;
+  const h = Math.floor(s / 3600);
+  const m = Math.round((s % 3600) / 60);
+  return m ? `${h} h ${m}` : `${h} h`;
+};
 const agoSecs = (iso) => Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
 const ago = (iso) => {
   const d = agoSecs(iso);
   return d < 60 ? `il y a ${d} s` : d < 3600 ? `il y a ${Math.floor(d / 60)} min` : `il y a ${Math.floor(d / 3600)} h`;
 };
-const money = (i) => `${fmt(i.simulated_cost ?? i.cost)} ${i.payment_method === 'credits' ? 'cr' : 'J'}`;
+const money = (i) => (Number(i.simulated_cost ?? i.cost) === 0 && i.module === 'raffle' ? 'gratuit' : `${fmt(i.simulated_cost ?? i.cost)} ${i.payment_method === 'credits' ? 'cr' : 'J'}`);
 const CUR = { tokens: 'J', credits_tts: 'cr TTS', credits_soundboard: 'cr Sons' };
 const signed = (e) => `${Number(e.amount) > 0 ? '+' : '−'} ${fmt(Math.abs(Number(e.amount)))} ${CUR[e.currency] ?? e.currency}`;
 const hue = (id) => [...String(id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -144,15 +156,32 @@ const av = (id, name, size) => {
   const initials = esc(String(name || id).replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase());
   return `<span class="avatar${size ? ` avatar--${size}` : ''}" style="--a1:hsl(${h} 70% 58%);--a2:hsl(${(h + 40) % 360} 70% 45%)" aria-hidden="true">${initials}</span>`;
 };
-const OPEN = ['queued', 'starting', 'playing', 'executing'];
-const MISSING = 'backend manquant';
+const OPEN = ['queued', 'accepted', 'starting', 'playing', 'executing'];
+const isLive = (i) => OPEN.includes(i.status);
+const isPlaying = (i) => ['starting', 'playing', 'executing'].includes(i.status) || (i.module === 'soundboard' && !!i.delivery?.attempt_id && isLive(i));
+/** Highlights the words Core matched (positions in the original message). */
+const marked = (text, hits) => {
+  const t = String(text ?? '');
+  if (!hits?.length) return esc(t);
+  let out = '';
+  let at = 0;
+  for (const h of [...hits].sort((a, b) => a.start - b.start)) {
+    if (h.start < at) continue;
+    out += `${esc(t.slice(at, h.start))}<mark>${esc(t.slice(h.start, h.end))}</mark>`;
+    at = h.end;
+  }
+  return out + esc(t.slice(at));
+};
+const pending = (i) => i.review_status === 'pending';
 
 /**
- * @param {{ document: Document, client: object, onChange?: () => void, onBack?: () => void }} options
+ * @param {{ document: Document, client: { modV2: (path: string) => Promise<any>, modV2Act: (command: object) => Promise<any> },
+ *   onChange?: () => void, onBack?: () => void, assetBase?: string }} options
  * onChange: after a successful command (the host may refresh its own session).
  * onBack: leave the console (back to the Hub); the console replaces the host header.
+ * assetBase: where the extension assets are served (emotes of the Bonk rows).
  */
-export function createModerationV2View({ document, client, onChange, onBack }) {
+export function createModerationV2View({ document, client, onChange, onBack, assetBase = '' }) {
   const win = document.defaultView;
   const node = document.createElement('div');
   node.className = 'modv2';
@@ -161,13 +190,21 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
 
   // Core data (read models). Nothing else is kept: no local truth.
   let overview = null;
-  let me = { role: 'viewer', permissions: [] };
+  let me = { role: 'viewer', grants: [], permissions: [] };
   const cards = new Map(); // viewer_id → Core viewer card
+  const details = new Map(); // interaction_id → Core interaction detail
+  const ledgerById = new Map(); // ledger id → movement (from any ledger read)
+  let team = null;
+  let words = null;
+  let hist = null; // { key, items, more } interactions or ledger of the current history view
   let audit = null;
   let destroyed = false;
   let pollTimer = null;
   let tick = null;
   const can = (p) => me.permissions.includes(p);
+  /** D4 `can(p)` on the 6 grants (supermods and the streamer have them all). */
+  const has = (g) => (me.grants ?? []).includes(g);
+  const myId = () => me.actor?.id ?? me.viewer_id ?? null;
 
   // ------------------------------------------------------------------ navigation (prototype D4)
   const mode = () => {
@@ -175,7 +212,7 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     return w >= 900 ? 'window' : w >= 560 ? 'video' : 'compact';
   };
   const freshFilters = () => ({ module: 'all', status: 'all', period: 'all', viewer: '' });
-  const nav = { stack: [], viewer: null, dir: '', hf: freshFilters(), htab: 'ix', vq: false };
+  const nav = { stack: [], viewer: null, dir: '', hf: freshFilters(), htab: 'ix', vq: false, auto: false, wtype: 'watch' };
   const reset = () => (nav.stack = mode() === 'compact' ? [{ v: 'home' }] : [{ v: 'module', m: 'tts' }]);
   reset();
   const top = () => nav.stack[nav.stack.length - 1];
@@ -191,7 +228,7 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       render();
     }
   };
-  const viewerInView = () => nav.viewer ?? (['viewer', 'jetons'].includes(top().v) ? top().id ?? top().vid : top().v === 'history' ? top().vid : null);
+  const viewerInView = () => nav.viewer ?? (top().v === 'viewer' ? top().id : ['jetons', 'history'].includes(top().v) ? top().vid : null);
   const open = {
     module(m) {
       closeDrawers();
@@ -216,36 +253,48 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       nav.htab = 'ix';
       nav.hf = { ...freshFilters(), module };
       nav.vq = false;
+      nav.auto = false;
+      hist = null;
       if (vid) void loadViewer(vid);
-      void loadAudit();
       push({ v: 'history', vid });
+      void loadHistory();
     },
     jetons(vid) {
       closeDrawers();
+      nav.auto = false;
+      hist = null;
       void loadViewer(vid);
       push({ v: 'jetons', vid });
+      void loadHistory();
     },
   };
 
   // ------------------------------------------------------------------ data from Core
+  const q = (o) => Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   const list = (m, key) => overview?.[m]?.[key] ?? [];
   const current = () => overview?.tts?.current ?? null;
   const waiting = (m) => list(m, 'waiting');
-  const playing = (m) => (m === 'tts' ? (current() ? [current()] : []) : list(m, 'playing'));
+  const playing = (m) => (m === 'tts' ? (current() ? [current()] : []) : m === 'soundboard' ? list(m, 'playing') : []);
   const stateOf = (m) => overview?.[m]?.module_state ?? 'active';
-  const allItems = () => MOD_KEYS.flatMap((m) => [...playing(m), ...waiting(m), ...list(m, 'recent')].map((i) => ({ ...i, module: m })));
-  /** An interaction of a viewer card, in the overview's shape. */
-  const fromActivity = (a, card) => ({ interaction_id: a.interaction_id, module: a.module, status: a.status, created_at: a.created_at, message: a.module === 'tts' ? a.detail : undefined, sound_label: a.module === 'soundboard' ? a.detail : undefined, simulated_cost: a.cost, payment_method: a.payment_method, refund_status: a.refund_status, refundable: a.refundable, viewer_id: card.viewer_id, viewer_display_name: card.display_name });
+  const liveItems = () => ['tts', 'soundboard'].flatMap((m) => [...playing(m), ...waiting(m)].map((i) => ({ ...i, module: m })));
+  const overviewItems = () => [
+    ...liveItems(),
+    ...['tts', 'soundboard', 'bonk'].flatMap((m) => list(m, 'recent').map((i) => ({ ...i, module: m }))),
+    ...(overview?.raffle?.recent_entries ?? []).map((i) => ({ ...i, module: 'raffle' })),
+  ];
   const findItem = (id) => {
-    const hit = allItems().find((i) => i.interaction_id === id);
-    if (hit) return hit;
+    const d = details.get(id);
+    const hit = overviewItems().find((i) => i.interaction_id === id);
+    if (hit) return d ? { ...d, ...hit, actions: d.actions, movements: d.movements } : hit;
+    if (d) return d;
     for (const card of cards.values()) {
       const a = card.activity?.find((x) => x.interaction_id === id);
-      if (a) return fromActivity(a, card);
+      if (a) return { ...a, message: a.module === 'tts' ? a.detail : undefined, sound_label: a.module === 'soundboard' ? a.detail : undefined };
     }
-    return null;
+    return hist?.items?.find((x) => x.interaction_id === id) ?? null;
   };
-  const nameOf = (id) => cards.get(id)?.display_name ?? allItems().find((i) => i.viewer_id === id)?.viewer_display_name ?? id;
+  const nameOf = (id) =>
+    cards.get(id)?.display_name ?? overviewItems().find((i) => i.viewer_id === id)?.viewer_display_name ?? team?.members?.find((m) => m.viewer_id === id)?.display_name ?? id;
 
   async function refresh() {
     try {
@@ -255,9 +304,7 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       me = o.me ?? me;
       render();
     } catch (e) {
-      if (!overview) {
-        L.innerHTML = `<div class="empty">${esc(errorText(e))}</div>`;
-      }
+      if (!overview) L.innerHTML = `<div class="empty">${esc(errorText(e))}</div>`;
     }
   }
   async function loadViewer(id) {
@@ -265,70 +312,128 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       const card = await client.modV2(`viewers/${id}`);
       if (destroyed) return;
       cards.set(id, card);
+      for (const e of card.wallet_ledger ?? []) ledgerById.set(String(e.id), e);
       render();
     } catch (e) {
       toast(errorText(e), false);
     }
   }
-  async function loadAudit() {
+  async function loadDetail(id) {
     try {
-      const out = await client.modV2('audit?limit=80');
+      const d = await client.modV2(`interactions/${id}`);
       if (destroyed) return;
-      audit = out.audit ?? [];
+      details.set(id, d);
+      render();
+    } catch {
+      /* shown from the data already loaded */
+    }
+  }
+  async function loadTeam() {
+    try {
+      team = await client.modV2('team');
+      if (!destroyed) render();
+    } catch (e) {
+      toast(errorText(e), false);
+    }
+  }
+  async function loadWords() {
+    try {
+      words = (await client.modV2('words')).words ?? [];
+      if (!destroyed) render();
+    } catch (e) {
+      toast(errorText(e), false);
+    }
+  }
+  /** The history view's rows, filtered and paginated by Core. */
+  async function loadHistory(more = false) {
+    const t = top();
+    if (t.v !== 'history' && t.v !== 'jetons') return;
+    const vid = t.vid;
+    const f = nav.hf;
+    const tab = t.v === 'jetons' ? 'j' : nav.htab;
+    const key = JSON.stringify([tab, vid, f, nav.auto]);
+    try {
+      let out;
+      if (tab === 'audit') {
+        out = { items: (await client.modV2(`audit?${q({ limit: 80, viewer: vid, module: f.module === 'all' ? null : f.module })}`)).audit ?? [] };
+      } else if (tab === 'j') {
+        const before = more ? hist?.items?.at(-1)?.id : null;
+        out = await client.modV2(`ledger?${q({ viewer: vid, limit: 60, before, auto: nav.auto ? 1 : null })}`);
+        for (const e of out.items ?? []) ledgerById.set(String(e.id), e);
+      } else {
+        const before = more ? hist?.items?.at(-1)?.created_at : null;
+        out = await client.modV2(
+          `interactions?${q({ module: f.module === 'all' ? null : f.module, status: f.status === 'all' ? null : f.status, period: f.period === 'all' ? 'stream' : f.period, viewer: vid, q: vid ? null : f.viewer.trim(), before, limit: 60 })}`,
+        );
+      }
+      if (destroyed) return;
+      hist = more && hist?.key === key ? { ...out, key, items: [...hist.items, ...(out.items ?? [])] } : { ...out, key };
       render();
     } catch (e) {
-      audit = [];
+      hist = { key, items: [], more: false };
       toast(errorText(e), false);
+      render();
     }
   }
   const errorText = (e) => {
     const code = e?.code ?? e?.details?.error;
-    if (code === 'forbidden' && e?.details?.permission)
-      return `${ic('lock')} ${PERM_LABEL[e.details.permission] ?? e.details.permission} : ${NEEDS[e.details.permission] ?? 'permission'} requis.`;
+    if (code === 'forbidden') {
+      const g = e?.details?.grant ?? String(e?.details?.permission ?? '').replace(/^grant\./, '');
+      if (PERMS[g]) return `${ic('lock')} Permission « ${PERMS[g][0]} » requise`;
+      return `${ic('lock')} Action réservée${e?.details?.needs === 'broadcaster' ? ' au streamer (Studio)' : ''}.`;
+    }
     return ERRORS[code] ?? e?.details?.message ?? code ?? 'Action impossible.';
   };
   /** One Core command; the console then shows Core's new state. */
   async function act(command, done) {
+    let ok = true;
     try {
       await client.modV2Act(command);
       if (done) toast(done, true);
       onChange?.();
     } catch (e) {
+      ok = false;
       toast(errorText(e), false);
     }
     await refresh();
     const vid = viewerInView();
     if (vid) await loadViewer(vid);
-    if (audit !== null) await loadAudit();
+    for (const id of [...details.keys()]) if (drawers.some((d) => d.key === `ix:${id}`)) await loadDetail(id);
+    if (drawers.some((d) => d.key === 'team')) await loadTeam();
+    if (drawers.some((d) => d.key === 'words')) await loadWords();
+    if (['history', 'jetons'].includes(top().v)) await loadHistory();
+    return ok;
   }
 
   // ------------------------------------------------------------------ left column
   const sdot = (st) => `<span class="sdot sdot--${st}"></span>`;
+  const raffleCur = () => overview?.raffle?.current ?? null;
   function summary(m) {
-    if (m === 'raffle') return { st: 'disabled', text: `<span class="sword sword--disabled">Non branché</span> · Tombola V2 à migrer` };
     const st = stateOf(m);
-    const q = waiting(m);
+    const q0 = waiting(m);
     const p = playing(m);
+    const hits = m === 'tts' ? [...p, ...q0].filter(pending).length : 0;
     let text = 'Calme';
-    if (m === 'tts') text = q.length ? `${q.length} en attente` : p.length ? 'Lecture en cours' : 'Calme';
-    if (m === 'soundboard') text = [p.length ? `${p.length} en cours` : '', q.length ? `${q.length} en attente` : ''].filter(Boolean).join(' · ') || 'Calme';
+    if (m === 'tts') text = q0.length ? `${q0.length} en attente` : p.length ? 'Lecture en cours' : 'Calme';
+    if (m === 'soundboard') text = [p.length ? `${p.length} en cours` : '', q0.length ? `${q0.length} en attente` : ''].filter(Boolean).join(' · ') || 'Calme';
     if (m === 'bonk') {
       const b = list('bonk', 'recent')[0];
       text = b ? `Dernier : <span data-ago="${esc(b.created_at)}">${ago(b.created_at)}</span>` : 'Calme';
     }
-    if (st !== 'active') text = `<span class="sword sword--${st}">${STATE[st]}</span>${q.length ? ` · ${q.length} en attente` : ''}`;
-    return { st, text };
+    if (m === 'raffle') text = raffleCur()?.status === 'open' ? `Ouverte · ${raffleCur().participants}` : 'Fermée';
+    if (st !== 'active') text = `<span class="sword sword--${st}">${STATE[st]}</span>${q0.length ? ` · ${q0.length} en attente` : ''}`;
+    return { st, text, hits };
   }
   function modLine(m, sel) {
     const s = summary(m);
     const cur = m === 'tts' ? current() : null;
-    return `<button class="mod${sel ? ' is-sel' : ''}${m === 'raffle' ? ' mod--offline' : ''}" data-act="go-module" data-m="${m}" style="--c:${MODS[m].c}" aria-current="${sel}">
-      <span class="mod__top"><span class="mod__ic">${ic(m)}</span><span class="mod__name">${MODS[m].label}</span><span class="grow"></span>${sdot(s.st)}</span>
+    return `<button class="mod${sel ? ' is-sel' : ''}" data-act="go-module" data-m="${m}" style="--c:${MODS[m].c}" aria-current="${sel}">
+      <span class="mod__top"><span class="mod__ic">${ic(m)}</span><span class="mod__name">${MODS[m].label}</span><span class="grow"></span>${s.hits ? `<span class="watchpill" data-tip="Demandes contenant un mot surveillé">${s.hits} à vérifier</span>` : ''}${sdot(s.st)}</span>
       <span class="mod__sum">${s.text}</span>${cur?.delivery?.started_at ? `<span class="thin"><i data-prog="${cur.interaction_id}"></i></span>` : ''}</button>`;
   }
-  // D4 foot: global state of Raptoru + team & permissions. Global pause has no backend yet.
+  const gPaused = () => !!overview?.global?.paused;
   const footHtml = () =>
-    `<button class="gpill" data-act="global-menu" data-tip="État global de Raptoru"><span class="live"></span>En direct</button>
+    `<button class="gpill${gPaused() ? ' gpill--paused' : ''}" data-act="global-menu" data-tip="État global de Raptoru">${gPaused() ? `${ic('pause')}Pause globale` : '<span class="live"></span>En direct'}</button>
      <button class="icon-btn icon-btn--sm" data-act="team" data-tip="Équipe et permissions" aria-label="Équipe et permissions">${ic('shield')}</button>`;
   function sideHtml() {
     const t = top();
@@ -336,7 +441,7 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     // The console replaces the host header: its only addition to D4 is the way back to the Hub.
     const hub = onBack ? `<button class="icon-btn icon-btn--sm" data-act="hub" data-tip="Retour au Hub" aria-label="Retour au Hub">${ic('hub')}</button>` : '';
     return `<div class="side__top">${hub}<label class="search"><span class="sr">Rechercher un viewer</span>${ic('search')}<input data-q placeholder="Viewer…" autocomplete="off"></label></div>
-      <nav class="mods" data-mods aria-label="Modules">${SIDE_KEYS.map((m) => modLine(m, selM === m)).join('')}</nav>
+      <nav class="mods" data-mods aria-label="Modules">${MOD_KEYS.map((m) => modLine(m, selM === m)).join('')}</nav>
       <button class="sidelink${t.v === 'history' && !t.vid ? ' is-sel' : ''}" data-act="history" data-histlink>${ic('history')}Historique</button>
       <div class="side__foot" data-foot>${footHtml()}</div>`;
   }
@@ -346,70 +451,60 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
   function ttsNow(i) {
     return `<div class="now" style="--c:${MODS.tts.c}">
       <div class="now__row">${av(i.viewer_id, i.viewer_display_name, 'xs')}${who(i.viewer_id, i.viewer_display_name)}
-        <button class="txt" data-act="toggle-text" data-tip="${esc(i.message)}" data-tip-wide="1">${esc(i.message)}</button>
+        <button class="txt" data-act="toggle-text" data-tip="${esc(i.message)}" data-tip-wide="1">${pending(i) ? marked(i.message, i.review_hits) : esc(i.message)}</button>
         <span class="meta tnum hide-narrow">${hhmm(i.created_at)}</span><span class="meta tnum" data-left="${i.interaction_id}"></span>
         <button class="btn btn--stop btn--sm" data-act="item-menu" data-id="${i.interaction_id}" data-tip="Arrêter la lecture">${ic('stop')}Stop</button></div>
       <span class="thin"><i data-prog="${i.interaction_id}"></i></span></div>`;
   }
   function queueRow(i, m, withModule) {
-    const body = m === 'tts' ? `<span class="txt" data-tip="${esc(i.message)}" data-tip-wide="1">${esc(i.message)}</span>` : `<span class="txt txt--snd">${esc(i.sound_label ?? i.message ?? '')}</span>`;
-    return `<div class="row" data-act="open-ix" data-id="${i.interaction_id}">
+    const hits = m === 'tts' && pending(i) ? i.review_hits ?? [] : [];
+    const body = m === 'tts' ? `<span class="txt" data-tip="${esc(i.message)}" data-tip-wide="1">${hits.length ? marked(i.message, hits) : esc(i.message)}</span>` : `<span class="txt txt--snd">${esc(i.sound_label ?? i.detail ?? '')}</span>`;
+    const words = [...new Set(hits.map((h) => h.word))];
+    return `<div class="row${hits.length ? ' row--watch' : ''}" data-act="open-ix" data-id="${i.interaction_id}">
       ${withModule ? `<span class="mini" style="--c:${MODS[m].c}">${ic(m)}</span>` : who(i.viewer_id, i.viewer_display_name)}${body}
-      <span class="meta tnum">${money(i)}</span><span class="meta tnum hide-narrow">${hhmm(i.created_at)}</span>
+      ${hits.length ? `<span class="watchtag" data-tip="Contient : ${esc(words.join(', '))}">À vérifier</span>` : `<span class="meta tnum">${money(i)}</span>`}
+      <span class="meta tnum hide-narrow">${hhmm(i.created_at)}</span>
       <button class="icon-btn icon-btn--xs trash" data-act="item-menu" data-id="${i.interaction_id}" data-tip="${m === 'soundboard' ? 'Retirer ce son' : 'Retirer la demande'}" aria-label="Retirer">${ic('trash')}</button></div>`;
   }
   function sndNow(i) {
     return `<div class="row row--now" style="--c:${MODS.soundboard.c}"><span class="txt txt--snd">${esc(i.sound_label)}</span>${who(i.viewer_id, i.viewer_display_name)}
       <span class="meta tnum" data-left="${i.interaction_id}"></span>
-      <button class="icon-btn icon-btn--xs stopic is-missing" data-act="missing" data-what="Arrêter un son déjà parti" data-tip="Arrêter ce son : ${MISSING}" aria-label="Arrêter ${esc(i.sound_label)} (indisponible)">${ic('stop')}</button>
+      <button class="icon-btn icon-btn--xs stopic" data-act="item-menu" data-id="${i.interaction_id}" data-tip="Arrêter ce son" aria-label="Arrêter ${esc(i.sound_label)}">${ic('stop')}</button>
       <span class="thin"><i data-prog="${i.interaction_id}"></i></span></div>`;
   }
-  function hLine(i, m, vid) {
-    return `<button class="h" data-act="open-ix" data-id="${i.interaction_id}"><span class="h__t tnum">${hhmm(i.created_at)}</span><span class="mini" style="--c:${MODS[m].c}">${ic(m)}</span>
-      <span class="h__what">${vid ? MODS[m].label : `<b>${esc(i.viewer_display_name)}</b> · ${MODS[m].short || MODS[m].label}`}</span>
-      <span class="h__st h__st--${esc(i.status)}">${i.refund_status === 'refunded' ? 'remboursé' : STATUS[i.status] ?? esc(i.status)}</span>${vid ? `<span class="meta tnum">${money(i)}</span>` : ''}</button>`;
+  const itemWhat = (i) => (i.module === 'soundboard' ? MODS.soundboard.short : MODS[i.module]?.short || MODS[i.module]?.label || i.module);
+  function hLine(i, vid) {
+    const m = i.module;
+    return `<button class="h" data-act="open-ix" data-id="${esc(i.interaction_id)}"><span class="h__t tnum">${hhmm(i.created_at)}</span><span class="mini" style="--c:${MODS[m].c}">${ic(m)}</span>
+      <span class="h__what">${vid ? MODS[m].label : `<b>${esc(i.viewer_display_name)}</b> · ${itemWhat(i)}`}</span>
+      <span class="h__st h__st--${esc(statusKey(i) === 'done' ? 'done' : i.status)}">${statusText(i)}</span>${vid ? `<span class="meta tnum">${money(i)}</span>` : ''}</button>`;
   }
   function aLine(a) {
     const m = MODS[a.module_id] ? a.module_id : null;
     return `<button class="h" data-act="open-audit" data-id="${esc(a.id)}"><span class="h__t tnum">${hhmm(a.created_at)}</span>${m ? `<span class="mini" style="--c:${MODS[m].c}">${ic(m)}</span>` : `<span class="mini">${ic('shield')}</span>`}
-      <span class="h__what"><b>${esc(ACTION[a.action] ?? a.action)}</b> · ${esc(actorName(a.actor))}${a.viewer_id ? ` → ${esc(nameOf(a.viewer_id))}` : ''}</span><span class="meta">${esc(ROLE[a.role] ?? a.role)}</span></button>`;
+      <span class="h__what"><b>${esc(ACTION[a.action] ?? a.action)}</b> · ${esc(actorName(a.actor))}${a.viewer_id ? ` → ${esc(nameOf(a.viewer_id))}` : ''}</span><span class="meta">${esc(ROLE_LABEL[a.role] ?? a.role)}</span></button>`;
   }
-  // Activité Jetons = the Lab test wallet ledger of the viewer card (Core). The real economy is not
-  // connected to the Lab yet (Daily, words, Tombola, presence… are absent).
-  const ledgerLabel = (e) =>
-    e.kind === 'debit' ? MODS[e.module_id]?.label ?? 'Débit' : e.kind === 'refund' ? `Remboursement ${MODS[e.module_id]?.label ?? ''}`.trim() : 'Ajustement admin (Lab)';
-  const refundOf = (e, card) => (e.kind === 'debit' && e.interaction_id ? (card?.wallet_ledger ?? []).find((x) => x.kind === 'refund' && x.interaction_id === e.interaction_id) : null);
-  function jLine(e, vid) {
-    const refunded = refundOf(e, cards.get(vid));
-    return `<button class="j${refunded ? ' j--refunded' : ''}" data-act="open-ledger" data-v="${esc(vid)}" data-id="${esc(e.id)}">
-      <b class="j__amt ${Number(e.amount) > 0 ? 'plus' : 'minus'} tnum">${signed(e)}</b><span class="j__src">${esc(ledgerLabel(e))}</span>
-      ${refunded ? '<span class="meta">remboursé</span>' : ''}<span class="meta tnum">${hhmm(e.created_at)}</span></button>`;
+  function jLine(e, withViewer) {
+    return `<button class="j${e.refunded_by ? ' j--refunded' : ''}" data-act="open-ledger" data-id="${esc(e.id)}" data-v="${esc(e.viewer_id)}">
+      <b class="j__amt ${Number(e.amount) > 0 ? 'plus' : 'minus'} tnum">${signed(e)}</b><span class="j__src">${esc(e.label)}${withViewer ? ` <span class="muted">· ${esc(e.viewer_display_name)}</span>` : ''}</span>
+      ${e.refunded_by ? '<span class="meta">remboursé</span>' : ''}${e.visible_in_moderation_activity === false ? '<span class="meta">auto</span>' : ''}<span class="meta tnum">${hhmm(e.created_at)}</span></button>`;
   }
   const sec = (t, end) => `<div class="sec"><span>${t}</span>${end || ''}</div>`;
   const statenote = (m) => {
     const st = stateOf(m);
     if (st === 'active') return '';
-    const q = waiting(m).length;
-    const locked = st === 'disabled' && !can('module.disable');
-    return `<div class="statenote statenote--${st}">${st === 'paused' ? `${ic('pause')}En pause${q ? ' · file conservée' : ''}` : 'Désactivé · masqué aux viewers'}
-      <button class="btn btn--sm" data-act="${locked ? 'locked' : 'set-state'}" data-perm="module.disable" data-m="${m}" data-s="active">Réactiver</button></div>`;
+    const locked = st === 'disabled' && !has('modules');
+    return `<div class="statenote statenote--${st}">${st === 'paused' ? `${ic('pause')}En pause${waiting(m).length ? ' · file conservée' : ''}` : 'Désactivé · masqué aux viewers'}
+      <button class="btn btn--sm" data-act="${locked ? 'locked' : 'set-state'}" data-perm="modules" data-m="${m}" data-s="active">Réactiver</button></div>`;
+  };
+  const emoteImg = (i) => {
+    const url = String(i.emote_url ?? '');
+    const src = /^https:\/\//.test(url) ? url : /^assets\//.test(url) ? `${assetBase}${url}` : '';
+    return src ? `<img class="emote__img" src="${esc(src)}" alt="${esc(i.emote_glyph ?? i.emote_id ?? '')}" width="18" height="18">` : esc(i.emote_glyph ?? i.emote_id ?? '—');
   };
 
-  // ------------------------------------------------------------------ views
-  function raffleView() {
-    // D4 Tombola, kept visible: its real backend (Tombola V2 in Core) does not exist yet.
-    const headEnd = `<span class="statebtn statebtn--disabled" aria-disabled="true" data-tip="Tombola V2 à migrer dans Core">${sdot('disabled')}Non branché</span>
-      <button class="icon-btn icon-btn--sm" data-act="module-menu" data-m="raffle" data-tip="Actions Tombola" aria-label="Actions Tombola">${ic('more')}</button>`;
-    const b = `<div class="statenote statenote--disabled">${ic('lock')}Non branché — Tombola V2 à migrer</div>
-      <div class="raffle is-offline"><div class="raffle__top"><b>—</b><span class="muted">état indisponible</span></div>
-        <div class="raffle__nums"><span><b>—</b> participants</span><span><b>—</b> tickets</span><span>jackpot <b>—</b></span></div></div>
-      ${sec('Dernier tirage')}<div class="empty">Indisponible · ${MISSING}</div>
-      ${sec('Derniers tickets')}<div class="empty">Indisponible · ${MISSING}</div>
-      <p class="fine">Ouverture, tirage et fermeture : Studio. La Tombola actuelle tourne encore sur l’ancien système (simulation du Lab) : aucune donnée Core à afficher ici.</p>`;
-    return { title: `<span class="ttl-ic" style="--c:${MODS.raffle.c}">${ic('raffle')}</span>Tombola`, headEnd, body: b };
-  }
+  // ------------------------------------------------------------------ views of the right zone
   function moduleView(m) {
-    if (m === 'raffle') return raffleView();
     const st = stateOf(m);
     const headEnd = `<button class="statebtn statebtn--${st}" data-act="state-menu" data-m="${m}" data-tip="Changer l’état du module">${sdot(st)}${STATE[st]}${ic('down')}</button>
       <button class="icon-btn icon-btn--sm" data-act="module-menu" data-m="${m}" data-tip="Actions ${MODS[m].label}" aria-label="Actions ${MODS[m].label}">${ic('more')}</button>`;
@@ -417,19 +512,35 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     if (!overview) b += '<div class="empty">Connexion au Core…</div>';
     else if (m === 'tts') {
       const p = playing('tts');
-      const q = waiting('tts');
+      const q0 = waiting('tts');
+      const hits = q0.filter(pending).length;
       b += sec('En cours') + (p.length ? p.map(ttsNow).join('') : '<div class="empty">Rien en lecture</div>');
-      b += sec(`En attente · ${q.length}`);
-      b += q.length ? `<div class="rows">${q.map((i) => queueRow(i, 'tts')).join('')}</div>` : '<div class="empty">File vide</div>';
+      b += sec(`En attente · ${q0.length}${hits ? ` <span class="watch">· ${hits} à vérifier</span>` : ''}`);
+      b += q0.length ? `<div class="rows">${q0.map((i) => queueRow(i, 'tts')).join('')}</div>` : '<div class="empty">File vide</div>';
     } else if (m === 'soundboard') {
       const p = playing(m);
-      const q = waiting(m);
+      const q0 = waiting(m);
       b += sec(`En cours · ${p.length}`) + (p.length ? `<div class="rows">${p.map(sndNow).join('')}</div>` : '<div class="empty">Aucun son</div>');
-      b += sec(`En attente · ${q.length}`) + (q.length ? `<div class="rows">${q.map((i) => queueRow(i, 'soundboard')).join('')}</div>` : '<div class="empty">File vide</div>');
-    } else {
+      b += sec(`En attente · ${q0.length}`) + (q0.length ? `<div class="rows">${q0.map((i) => queueRow(i, 'soundboard')).join('')}</div>` : '<div class="empty">File vide</div>');
+    } else if (m === 'bonk') {
       const r = list('bonk', 'recent').slice(0, 9);
       b += `<p class="explain">${ic('bonk')}<span><b>Instantané.</b> Chaque bonk part tout de suite sur le stream : pas de file.</span></p>`;
-      b += sec('Derniers bonks') + (r.length ? `<div class="rows">${r.map((i) => `<div class="row row--bonk">${av(i.viewer_id, i.viewer_display_name, 'xs')}${who(i.viewer_id, i.viewer_display_name)}<span class="emote">${esc(i.emote?.label ?? i.emote?.id ?? 'Bonk')}</span><span class="grow"></span><span class="meta" data-ago="${esc(i.created_at)}">${ago(i.created_at)}</span></div>`).join('')}</div>` : '<div class="empty">Aucun bonk</div>');
+      b += sec('Derniers bonks') + (r.length ? `<div class="rows">${r.map((i) => `<div class="row row--bonk">${av(i.viewer_id, i.viewer_display_name, 'xs')}${who(i.viewer_id, i.viewer_display_name)}<span class="emote">${emoteImg(i)}</span><span class="grow"></span><span class="meta" data-ago="${esc(i.created_at)}">${ago(i.created_at)}</span></div>`).join('')}</div>` : '<div class="empty">Aucun bonk</div>');
+    } else {
+      const r = overview.raffle ?? {};
+      const cur = r.current;
+      const isOpen = cur?.status === 'open';
+      const entries = r.recent_entries ?? [];
+      b += `<div class="raffle"><div class="raffle__top"><b>${isOpen ? 'Ouverte' : 'Fermée'}</b>${isOpen ? `<span class="muted">ferme dans <b class="tnum" data-until="${Date.parse(cur.ends_at)}">${mmss(Date.parse(cur.ends_at) - Date.now())}</b></span>` : cur?.status === 'closed' ? '<span class="muted">en attente du tirage</span>' : ''}</div>
+        <div class="raffle__nums"><span><b>${cur?.participants ?? 0}</b> participants</span><span><b>${cur?.participants ?? 0}</b> tickets</span><span>jackpot <b class="cost">${fmt(cur?.jackpot ?? 0)} J</b></span></div></div>`;
+      const d = r.last_draw;
+      b += sec('Dernier tirage') + (d
+        ? d.winners.length
+          ? d.winners.map((w) => `<button class="j" data-act="open-ledger" data-id="${esc(w.ledger_id)}" data-v="${esc(w.viewer_id)}"><b class="j__amt plus tnum">+ ${fmt(w.amount)} J</b><span class="j__src">${esc(w.display_name)} · gagnant</span><span class="paid">${ic('check')}payé</span><span class="meta tnum">${hhmm(d.drawn_at)}</span></button>`).join('')
+          : `<div class="empty">Aucun participant · ${hhmm(d.drawn_at)}</div>`
+        : '<div class="empty">Aucun tirage</div>');
+      b += sec('Derniers tickets') + (entries.length ? `<div class="rows">${entries.slice(0, 4).map((i) => `<button class="h" data-act="open-ix" data-id="${esc(i.interaction_id)}"><span class="h__t tnum">${hhmm(i.created_at)}</span>${av(i.viewer_id, i.viewer_display_name, 'xs')}<span class="h__what"><b>${esc(i.viewer_display_name)}</b> · ×${i.tickets ?? 1}</span><span class="meta tnum">${money({ ...i, module: 'raffle' })}</span></button>`).join('')}</div>` : '<div class="empty">Aucun ticket</div>');
+      b += '<p class="fine">Ouverture, tirage et fermeture : Studio.</p>';
     }
     return { title: `<span class="ttl-ic" style="--c:${MODS[m].c}">${ic(m)}</span>${MODS[m].label}`, headEnd, body: b };
   }
@@ -440,19 +551,18 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     const v = cards.get(id);
     const name = v?.display_name ?? nameOf(id);
     if (!v) return { title: `${av(id, name, 'sm')}<span class="ellipsis">${esc(name)}</span>`, body: '<div class="empty">Chargement de la fiche…</div>' };
-    const live = [...playing('tts'), ...waiting('tts')].filter((i) => i.viewer_id === id).map((i) => ({ i, m: 'tts' }))
-      .concat([...playing('soundboard'), ...waiting('soundboard')].filter((i) => i.viewer_id === id).map((i) => ({ i, m: 'soundboard' })));
-    const ctxM = live[0]?.m ?? 'tts';
+    const live = liveItems().filter((i) => i.viewer_id === id);
+    const ctxM = live[0]?.module ?? 'tts';
     const ls = v.restrictions ?? [];
-    // Staff known by Core (supermod named by the broadcaster): not sanctionable from here, like D4.
-    const staff = Boolean(v.staff_role);
+    const staff = Boolean(v.staff);
     let b = '';
+    if (v.notes?.length) b += `<button class="noteline-btn" data-act="notes" data-v="${esc(id)}" data-tip="Notes internes (équipe)">${ic('note')}<span class="muted">Notes · ${v.notes.length}</span><span class="ellipsis">${esc(v.notes[0].text)}</span></button>`;
     if (ls.length)
       b += `<div class="rows">${ls
         .map(
           (l) => `<div class="limit limit--${l.kind}">${ic(l.kind === 'block' ? 'ban' : 'clock')}
-        <span class="grow ellipsis">${l.kind === 'block' ? `Bloqué · ${SCOPE[l.module] ?? l.module}` : `Cooldown ${SCOPE[l.module] ?? l.module}`}${l.reason ? ` · ${esc(l.reason)}` : ''}</span>
-        ${l.until ? `<span class="timer tnum" data-until="${Date.parse(l.until)}">${mmss(Date.parse(l.until) - Date.now())}</span>` : '<span class="timer">illimité</span>'}
+        <span class="grow ellipsis">${l.kind === 'block' ? `Bloqué · ${SCOPE[l.module] ?? l.module}` : `Cooldown ${MODS[l.module]?.label ?? l.module} · ${dur(l.delay_s)}`}${l.reason ? ` · ${esc(l.reason)}` : ''}</span>
+        ${l.until ? `<span class="timer tnum" data-until="${Date.parse(l.until)}">${mmss(Date.parse(l.until) - Date.now())}</span>` : '<span class="timer">jusqu’au déblocage</span>'}
         <button class="icon-btn icon-btn--xs" data-act="lift" data-v="${esc(id)}" data-kind="${l.kind}" data-m="${esc(l.module)}" data-tip="Retirer la restriction" aria-label="Retirer la restriction">${ic('x')}</button></div>`,
         )
         .join('')}</div>`;
@@ -460,53 +570,32 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       <button class="btn btn--primary" data-act="block" data-v="${esc(id)}" data-m="${ctxM}" ${staff ? 'disabled data-tip="Membre de l’équipe"' : ''}>${ic('ban')}Bloquer</button>
       <button class="btn" data-act="cooldown" data-v="${esc(id)}" data-m="${ctxM}" ${staff ? 'disabled' : ''}>${ic('clock')}Cooldown</button>
       <button class="btn" data-act="viewer-more" data-v="${esc(id)}" data-tip="Historique, Jetons, notes, wallet">Plus${ic('down')}</button></div>`;
-    if (live.length) b += sec('En ce moment') + `<div class="rows">${live.map(({ i, m }) => queueRow(i, m, true)).join('')}</div>`;
-    const recent = (v.activity ?? []).filter((a) => !OPEN.includes(a.status)).slice(0, 4);
-    const led = (v.wallet_ledger ?? []).slice(0, 4);
+    if (live.length) b += sec('En ce moment') + `<div class="rows">${live.map((i) => queueRow(i, i.module, true)).join('')}</div>`;
+    const recent = (v.activity ?? []).filter((a) => !isLive(a)).slice(0, 4);
+    const led = (v.wallet_ledger ?? []).filter((e) => e.visible_in_moderation_activity !== false).slice(0, 4);
     b += `<div class="vblocks"><div>${sec('Activité récente', `<button class="linkish" data-act="history" data-v="${esc(id)}">Voir tout</button>`)}
-      ${recent.length ? `<div class="rows">${recent.map((a) => hLine(fromActivity(a, v), a.module, id)).join('')}</div>` : '<div class="empty">Rien récemment</div>'}</div>
+      ${recent.length ? `<div class="rows">${recent.map((a) => hLine(a, id)).join('')}</div>` : '<div class="empty">Rien aujourd’hui</div>'}</div>
       <div>${sec('Activité Jetons', `<button class="linkish" data-act="jetons" data-v="${esc(id)}">Voir tout</button>`)}
-      ${led.length ? `<div class="rows">${led.map((e) => jLine(e, id)).join('')}</div>` : '<div class="empty">Aucun mouvement</div>'}</div></div>`;
-    const kick = [v.staff_role ? 'Supermod' : 'Viewer', ls.length ? `<span class="kwarn">${ls.length} restriction${ls.length > 1 ? 's' : ''}</span>` : ''].filter(Boolean).join(' · ');
+      ${led.length ? `<div class="rows">${led.map((e) => jLine(e)).join('')}</div>` : '<div class="empty">Aucun mouvement</div>'}</div></div>`;
+    const kick = [ROLE_LABEL[v.role] ?? 'Viewer', ls.length ? `<span class="kwarn">${ls.length} restriction${ls.length > 1 ? 's' : ''}</span>` : ''].filter(Boolean).join(' · ');
     return { title: `${av(id, name, 'sm')}<span class="ellipsis">${esc(name)}</span>`, kicker: kick, headEnd: balance(v.wallet), body: b };
   }
 
   function jetonsBody(vid) {
-    if (!vid)
-      return `<div class="empty">Activité Jetons de toute la chaîne : ${MISSING}.</div><p class="fine">Ouvre un viewer (recherche) pour voir ses mouvements.</p>`;
-    const card = cards.get(vid);
-    if (!card) return '<div class="empty">Chargement…</div>';
-    const rows = card.wallet_ledger ?? [];
-    return `<div class="rows hist">${rows.length ? rows.map((e) => jLine(e, vid)).join('') : '<div class="empty">Aucun mouvement</div>'}</div>
-      <p class="fine">Wallet de test du Lab (Core) · ${rows.length} derniers mouvements. Mouvements automatiques (présence, watchtime, sub, follow, Bits) : économie réelle non branchée.</p>`;
+    if (!hist) return '<div class="empty">Chargement…</div>';
+    const rows = hist.items ?? [];
+    const hidden = Number(hist.hidden ?? 0);
+    return `<div class="rows hist">${rows.length ? rows.map((e) => jLine(e, !vid)).join('') : '<div class="empty">Aucun mouvement</div>'}</div>
+      ${hist.more ? '<button class="linkish autos" data-act="hmore">Plus ancien</button>' : ''}
+      ${hidden || nav.auto ? `<button class="linkish autos" data-act="toggle-auto">${nav.auto ? 'Masquer' : 'Afficher'} les mouvements automatiques${hidden ? ` (${hidden})` : ''}</button><p class="fine">Présence, watchtime, récompenses sub, follow et Bits sont masqués par défaut.</p>` : ''}`;
   }
   const jetonsView = (vid) => ({ kicker: 'Activité Jetons', title: esc(nameOf(vid)), body: jetonsBody(vid) });
 
-  /** Interactions loaded from Core: the viewer card (one viewer) or the overview (≤ 20 per module). */
-  function historyItems(vid) {
-    if (vid) {
-      const card = cards.get(vid);
-      const live = allItems().filter((i) => i.viewer_id === vid && OPEN.includes(i.status));
-      const past = (card?.activity ?? []).map((a) => fromActivity(a, card));
-      return [...live, ...past].filter((i, k, all) => all.findIndex((x) => x.interaction_id === i.interaction_id) === k);
-    }
-    return allItems().filter((i, k, all) => all.findIndex((x) => x.interaction_id === i.interaction_id) === k);
-  }
-  const within = (iso) => nav.hf.period === 'all' || agoSecs(iso) <= Number(nav.hf.period) * 60;
   function historyRows(vid) {
-    const f = nav.hf;
-    const vq = f.viewer.trim().toLowerCase();
-    if (nav.htab === 'audit') {
-      if (audit === null) return '<div class="empty">Chargement…</div>';
-      const a = audit.filter((x) => (!vid || x.viewer_id === vid) && (f.module === 'all' || x.module_id === f.module) && within(x.created_at) && (!vq || nameOf(x.viewer_id ?? '').toLowerCase().includes(vq) || actorName(x.actor).toLowerCase().includes(vq)));
-      return a.length ? a.map(aLine).join('') : '<div class="empty">Aucune action pour ces filtres</div>';
-    }
-    if (f.module === 'raffle') return `<div class="empty">Tombola non branchée · ${MISSING}</div>`;
-    const rows = historyItems(vid)
-      .filter((i) => (f.module === 'all' || i.module === f.module) && (f.status === 'all' || statusKey(i) === f.status) && within(i.created_at) && (!vq || String(i.viewer_display_name ?? '').toLowerCase().includes(vq)))
-      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
-      .slice(0, 60);
-    return rows.length ? rows.map((i) => hLine(i, i.module, vid)).join('') : '<div class="empty">Rien pour ces filtres</div>';
+    if (!hist) return '<div class="empty">Chargement…</div>';
+    const rows = hist.items ?? [];
+    if (nav.htab === 'audit') return rows.length ? rows.map(aLine).join('') : '<div class="empty">Aucune action pour ces filtres</div>';
+    return (rows.length ? rows.map((i) => hLine(i, vid)).join('') : '<div class="empty">Rien pour ces filtres</div>') + (hist.more ? '<button class="linkish autos" data-act="hmore">Plus ancien</button>' : '');
   }
   function historyView(vid) {
     const f = nav.hf;
@@ -517,14 +606,13 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     const chip = (k, l) => `<button class="chip${f.module === k ? ' is-on' : ''}" data-act="hfilter" data-k="module" data-val="${k}">${l}</button>`;
     const active = [
       nav.htab === 'ix' && f.status !== 'all' ? ['status', STATUS_F.find((x) => x[0] === f.status)[1]] : null,
-      f.period !== 'all' ? ['period', PERIOD_F.find((x) => x[0] === f.period)[1]] : null,
+      nav.htab === 'ix' && f.period !== 'all' ? ['period', PERIOD_F.find((x) => x[0] === f.period)[1]] : null,
     ].filter(Boolean);
-    const body = `${tabs}<div class="hbar"><div class="chips chips--scroll">${chip('all', 'Tout')}${SIDE_KEYS.map((m) => chip(m, MODS[m].short || MODS[m].label)).join('')}</div>
-        <button class="icon-btn icon-btn--sm${active.length || f.viewer ? ' is-on' : ''}" data-act="hfilters" data-tip="Statut, période, viewer" aria-label="Filtres">${ic('filter')}</button></div>
-      ${nav.vq && !vid ? `<label class="search search--sm">${ic('search')}<input data-hq placeholder="Filtrer par viewer" value="${esc(f.viewer)}"></label>` : ''}
+    const body = `${tabs}<div class="hbar"><div class="chips chips--scroll">${chip('all', 'Tout')}${MOD_KEYS.map((m) => chip(m, MODS[m].short || MODS[m].label)).join('')}</div>
+        ${nav.htab === 'ix' ? `<button class="icon-btn icon-btn--sm${active.length || f.viewer ? ' is-on' : ''}" data-act="hfilters" data-tip="Statut, période, viewer" aria-label="Filtres">${ic('filter')}</button>` : ''}</div>
+      ${nav.vq && !vid && nav.htab === 'ix' ? `<label class="search search--sm">${ic('search')}<input data-hq placeholder="Filtrer par viewer" value="${esc(f.viewer)}"></label>` : ''}
       ${active.length ? `<div class="chips">${active.map(([k, l]) => `<button class="chip is-on" data-act="hfilter" data-k="${k}" data-val="all" data-tip="Retirer ce filtre">${l} ${ic('x')}</button>`).join('')}</div>` : ''}
-      <div class="rows hist" data-hist>${historyRows(vid)}</div>
-      <p class="fine">${nav.htab === 'audit' ? '80 dernières actions (audit Core).' : vid ? 'Interactions récentes du viewer (Core).' : '20 dernières interactions par module (Core) · historique complet : ' + MISSING + '.'}</p>`;
+      <div class="rows hist" data-hist>${historyRows(vid)}</div>`;
     return { kicker: vid ? 'Historique' : '', title, body };
   }
 
@@ -538,6 +626,8 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
   }
   const viewFor = (s) =>
     s.v === 'module' ? moduleView(s.m) : s.v === 'viewer' ? viewerView(s.id) : s.v === 'history' ? historyView(s.vid) : s.v === 'jetons' ? jetonsView(s.vid) : { body: '' };
+  const banner = () =>
+    gPaused() ? `<div class="gbanner">${ic('pause')}<span class="grow">Pause globale · nouvelles interactions refusées${overview.global.refused ? ` (${overview.global.refused})` : ''}</span><button class="btn btn--sm" data-act="global-resume">Lever</button></div>` : '';
   let builtMode = null;
   function render() {
     if (destroyed) return;
@@ -549,6 +639,7 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
         nav.stack = nav.stack.filter((s) => s.v !== 'home');
         if (!nav.stack.length) nav.stack = [{ v: 'module', m: 'tts' }];
       }
+      closeDrawers(true);
       L.innerHTML =
         md === 'compact'
           ? '<main class="stage" data-stage><div class="stage__body" data-stage-body></div></main>'
@@ -566,7 +657,7 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
         side.innerHTML = sideHtml();
         bindSearch();
       } else {
-        side.querySelector('[data-mods]').innerHTML = SIDE_KEYS.map((m) => modLine(m, t.v === 'module' && t.m === m)).join('');
+        side.querySelector('[data-mods]').innerHTML = MOD_KEYS.map((m) => modLine(m, t.v === 'module' && t.m === m)).join('');
         side.querySelector('[data-histlink]').classList.toggle('is-sel', t.v === 'history' && !t.vid);
         side.querySelector('[data-foot]').innerHTML = footHtml();
       }
@@ -579,13 +670,13 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     } else if (md === 'compact' && t.v === 'home') {
       const focused = stage.querySelector('[data-q]') === document.activeElement;
       if (!focused) {
-        stage.innerHTML = `<section class="pane pane--main"><div class="scroll" data-scroll="main"><div class="side side--home">${sideHtml()}</div></div></section>`;
+        stage.innerHTML = `${banner()}<section class="pane pane--main"><div class="scroll" data-scroll="main"><div class="side side--home">${sideHtml()}</div></div></section>`;
         bindSearch();
       } else {
-        stage.querySelector('[data-mods]').innerHTML = SIDE_KEYS.map((m) => modLine(m, false)).join('');
+        stage.querySelector('[data-mods]').innerHTML = MOD_KEYS.map((m) => modLine(m, false)).join('');
         stage.querySelector('[data-foot]').innerHTML = footHtml();
       }
-    } else stage.innerHTML = pane('main', viewFor(t), nav.stack.length > 1);
+    } else stage.innerHTML = banner() + pane('main', viewFor(t), nav.stack.length > 1);
     const vcol = L.querySelector('[data-vcol]');
     if (vcol) {
       const show = md === 'window' && nav.viewer;
@@ -601,7 +692,7 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     });
     nav.dir = '';
     liveTick();
-    for (const d of drawers) paintDrawer(d);
+    for (const d of drawers.slice()) paintDrawer(d);
   }
   /** Items being played: TTS (estimated duration) and sounds (duration), with their real start. */
   const playingNow = () => [
@@ -627,13 +718,13 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
 
   // ------------------------------------------------------------------ search (Core)
   let searchSeq = 0;
-  async function showSearch(q) {
+  async function showSearch(qv) {
     const input = node.querySelector('[data-q]');
     if (!input) return;
     const seq = ++searchSeq;
     let viewers = [];
     try {
-      viewers = (await client.modV2(`search?q=${encodeURIComponent(q.trim())}`)).viewers ?? [];
+      viewers = (await client.modV2(`search?q=${encodeURIComponent(qv.trim())}`)).viewers ?? [];
     } catch {
       /* shown empty */
     }
@@ -647,38 +738,42 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     const r = input.getBoundingClientRect();
     const rr = node.getBoundingClientRect();
     Object.assign(d.style, { top: `${r.bottom - rr.top + 4}px`, left: `${r.left - rr.left}px` });
-    // D4 shows a restriction badge and the role per row: Core's search does not return them yet.
-    d.innerHTML = `<div class="sdrop__label">${q.trim() ? 'Résultats' : 'Actifs récemment'}</div>${
+    d.innerHTML = `<div class="sdrop__label">${qv.trim() ? 'Résultats' : 'Actifs récemment'}</div>${
       viewers.length
-        ? viewers.map((v) => `<button class="srow" data-act="open-viewer" data-id="${esc(v.viewer_id)}">${av(v.viewer_id, v.display_name, 'xs')}<b class="ellipsis">${esc(v.display_name)}</b><span class="grow"></span></button>`).join('')
-        : `<div class="empty">Personne pour « ${esc(q)} »</div>`
+        ? viewers
+            .slice(0, 6)
+            .map((v) => `<button class="srow" data-act="open-viewer" data-id="${esc(v.viewer_id)}">${av(v.viewer_id, v.display_name, 'xs')}<b class="ellipsis">${esc(v.display_name)}</b><span class="grow"></span>${v.restriction ? `<span class="badge badge--warn">${ic(v.restriction === 'block' ? 'ban' : 'clock')}</span>` : ''}${v.role && v.role !== 'viewer' ? `<span class="muted small">${ROLE_LABEL[v.role]}</span>` : ''}</button>`)
+            .join('')
+        : `<div class="empty">Personne pour « ${esc(qv)} »</div>`
     }`;
   }
   function closeSearch() {
     node.querySelector('.sdrop')?.remove();
-    const q = node.querySelector('[data-q]');
-    if (q) q.value = '';
+    const qi = node.querySelector('[data-q]');
+    if (qi) qi.value = '';
   }
   let searchTimer = null;
   function bindSearch() {
-    const q = node.querySelector('[data-q]');
-    if (!q) return;
-    q.addEventListener('focus', () => void showSearch(q.value));
-    q.addEventListener('input', () => {
+    const qi = node.querySelector('[data-q]');
+    if (!qi) return;
+    qi.addEventListener('focus', () => void showSearch(qi.value));
+    qi.addEventListener('input', () => {
       win.clearTimeout(searchTimer);
-      searchTimer = win.setTimeout(() => void showSearch(q.value), 180);
+      searchTimer = win.setTimeout(() => void showSearch(qi.value), 180);
     });
-    q.addEventListener('keydown', (e) => {
+    qi.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') node.querySelector('.sdrop [data-act="open-viewer"]')?.click();
       if (e.key === 'Escape') {
         e.stopPropagation();
         closeSearch();
-        q.blur();
+        qi.blur();
       }
     });
-    q.addEventListener('blur', () => win.setTimeout(() => {
-      if (document.activeElement !== q) node.querySelector('.sdrop')?.remove();
-    }, 180));
+    qi.addEventListener('blur', () =>
+      win.setTimeout(() => {
+        if (document.activeElement !== qi) node.querySelector('.sdrop')?.remove();
+      }, 180),
+    );
   }
 
   // ------------------------------------------------------------------ overlays (drawer, dialog, menu, toast, tooltip)
@@ -697,26 +792,31 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     drawers.push(entry);
     paintDrawer(entry);
     scrim.addEventListener('click', () => closeDrawer(entry));
-    win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
-      scrim.classList.add('is-in');
-      el.classList.add('is-in');
-    }));
+    win.requestAnimationFrame(() =>
+      win.requestAnimationFrame(() => {
+        scrim.classList.add('is-in');
+        el.classList.add('is-in');
+      }),
+    );
   }
   function paintDrawer(entry) {
     if (!drawers.includes(entry)) return;
     if (!entry.host.isConnected || !node.contains(entry.host)) return closeDrawer(entry, true);
     const r = entry.render();
     if (!r) return closeDrawer(entry);
+    const ae = document.activeElement;
+    if (ae && entry.el.contains(ae) && ae.matches('input,textarea')) return; // never repaint under the caret
     const body = entry.el.querySelector('.sheet__body');
     const top0 = body ? body.scrollTop : 0;
     const openD = [...entry.el.querySelectorAll('details[data-key]')].map((d) => [d.dataset.key, d.open]);
     entry.el.innerHTML = `<header class="sheet__head"><div class="bar__title">${r.kicker ? `<small>${r.kicker}</small>` : ''}<strong>${r.title}</strong></div>
-      <button class="icon-btn" data-act="drawer-close" aria-label="Fermer">${ic('x')}</button></header><div class="sheet__body">${r.body}</div>`;
+      ${r.headEnd || ''}<button class="icon-btn" data-act="drawer-close" data-tip="Fermer" aria-label="Fermer">${ic('x')}</button></header><div class="sheet__body">${r.body}</div>`;
     openD.forEach(([k, o]) => {
       const d = entry.el.querySelector(`details[data-key="${k}"]`);
       if (d) d.open = o;
     });
     entry.el.querySelector('.sheet__body').scrollTop = top0;
+    liveTick();
   }
   function closeDrawer(entry, now) {
     const k = drawers.indexOf(entry);
@@ -734,8 +834,9 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       entry.scrim.remove();
     }, 220);
   }
-  const closeDrawers = () => drawers.slice().reverse().forEach((d) => closeDrawer(d));
-  const hostOf = (b) => (mode() === 'compact' ? node : b?.closest?.('.stage,.vcol') || node);
+  const closeDrawers = (now) => drawers.slice().reverse().forEach((d) => closeDrawer(d, now));
+  // D4: a drawer opens in the panel it comes from (stage or viewer column); from the left column, in the stage.
+  const hostOf = (b) => (mode() === 'compact' ? node : b?.closest?.('.stage,.vcol') || node.querySelector('[data-stage]') || node);
 
   const dialogs = [];
   function dialog(spec) {
@@ -750,10 +851,12 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     dialogs.push(d);
     paintDialog(d);
     scrim.addEventListener('click', () => closeDialog(d));
-    win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
-      scrim.classList.add('is-in');
-      el.classList.add('is-in');
-    }));
+    win.requestAnimationFrame(() =>
+      win.requestAnimationFrame(() => {
+        scrim.classList.add('is-in');
+        el.classList.add('is-in');
+      }),
+    );
   }
   function paintDialog(d) {
     const r = d.render(d.state);
@@ -786,74 +889,71 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
   const chips = (k, cur, items) => `<div class="chips">${items.map(([v, label]) => `<button class="chip${String(cur) === String(v) ? ' is-on' : ''}" data-act="dlg-set" data-k="${k}" data-val="${v}">${label}</button>`).join('')}</div>`;
   const toSecs = (v, u) => Math.max(1, Math.round(Number(v) || 0)) * (u === 'h' ? 3600 : u === 'min' ? 60 : 1);
   const custom = (s, vk, uk, units) => `<div class="inline"><input class="input" type="number" min="1" data-dlg="${vk}" value="${esc(s[vk])}" aria-label="Valeur">${chips(uk, s[uk], units.map((u) => [u, u]))}</div>`;
-  const reasonField = (s) =>
-    s.why ? `<label class="field"><span>Raison</span><input class="input" data-dlg="reason" value="${esc(s.reason)}" maxlength="200" placeholder="Visible par l’équipe seulement"></label>` : '<button class="linkish" data-act="dlg-set" data-k="why" data-val="1">+ Raison (facultatif)</button>';
 
   function blockDialog(vid, m) {
     dialog({
-      state: { module: MODS[m] && m !== 'raffle' ? m : 'tts', d: 300, cv: 10, cu: 'min', reason: '', why: 0 },
+      state: { module: MODS[m] ? m : 'tts', d: 300, cv: 10, cu: 'min', reason: '', why: false },
       render(s) {
         const forever = s.d === 'forever';
         const secs = forever ? null : s.d === 'custom' ? toSecs(s.cv, s.cu) : Number(s.d);
+        // D4: everything, or more than one hour, is a sensitive sanction (Core decides too).
+        const locked = (s.module === 'all' || forever || secs > 3600) && !has('sensitive');
         return {
           kicker: 'Bloquer',
           title: esc(nameOf(vid)),
           lead: 'Empêche ce viewer d’utiliser une ou plusieurs interactions.',
-          body: `<div class="field"><span>Sur</span>${chips('module', s.module, [['all', 'Tout Raptoru'], ...MOD_KEYS.map((k) => [k, MODS[k].short || MODS[k].label])])}</div>
-            <div class="field"><span>Durée</span>${chips('d', s.d, [[30, '30 s'], [60, '1 min'], [300, '5 min'], [3600, '1 h'], ['forever', 'Jusqu’au déblocage'], ['custom', 'Autre…']])}${s.d === 'custom' ? custom(s, 'cv', 'cu', ['s', 'min', 'h']) : ''}</div>
-            ${reasonField(s)}
-            <div data-slot="p"><div class="viewer-sees"><small>Le viewer verra</small><span>${ic('lock')} ${s.module === 'all' ? 'Interactions indisponibles' : `${MODS[s.module].label} indisponible`}${forever ? '' : ` — ${mmss(secs * 1000)}`}</span></div></div>`,
-          foot: `<span class="fine grow">Aucune sanction Twitch.</span><button class="btn btn--ghost" data-act="dlg-close">Annuler</button><button class="btn btn--primary" data-act="dlg-ok">Bloquer${forever ? '' : ` ${dur(secs)}`}</button>`,
+          body: `<div class="field"><span>Sur</span>${chips('module', s.module, [['all', `${has('sensitive') ? '' : ic('lock')}Tout Raptoru`], ...MOD_KEYS.map((k) => [k, MODS[k].short || MODS[k].label])])}</div>
+            <div class="field"><span>Durée</span>${chips('d', s.d, [[30, '30 s'], [60, '1 min'], [300, '5 min'], ['forever', `${has('sensitive') ? '' : ic('lock')}Jusqu’au déblocage`], ['custom', 'Autre…']])}${s.d === 'custom' ? custom(s, 'cv', 'cu', ['s', 'min', 'h']) : ''}</div>
+            ${s.why ? `<label class="field"><span>Raison</span><input class="input" data-dlg="reason" value="${esc(s.reason)}" maxlength="200" placeholder="Visible par l’équipe seulement"></label>` : '<button class="linkish" data-act="dlg-set" data-k="why" data-val="1">+ Raison (facultatif)</button>'}
+            <div data-slot="p"><div class="viewer-sees"><small>Le viewer verra</small><span>${ic('lock')} ${s.module === 'all' ? 'Interactions indisponibles' : `${MODS[s.module].label} indisponible`}${forever ? '' : ` — ${mmss(secs * 1000)}`}</span></div>
+            ${locked ? `<p class="lock">${ic('lock')} ${s.module === 'all' ? 'Tout Raptoru' : forever ? 'Jusqu’au déblocage' : 'Plus d’une heure'} : permission « Sanctions sensibles ».</p>` : ''}</div>`,
+          foot: `<span class="fine grow">Aucune sanction Twitch.</span><button class="btn btn--ghost" data-act="dlg-close">Annuler</button><button class="btn btn--primary" data-act="dlg-ok" ${locked ? 'disabled' : ''}>Bloquer${forever ? '' : ` ${dur(secs)}`}</button>`,
         };
       },
       ok(s) {
         const forever = s.d === 'forever';
+        const secs = forever ? null : s.d === 'custom' ? toSecs(s.cv, s.cu) : Number(s.d);
         void act(
-          { action: 'block_viewer', viewer_id: vid, module: s.module, duration_s: forever ? null : s.d === 'custom' ? toSecs(s.cv, s.cu) : Number(s.d), reason: s.reason?.trim() || undefined },
-          `${esc(nameOf(vid))} · ${SCOPE[s.module]} bloqué`,
+          { action: 'block_viewer', viewer_id: vid, module: s.module, duration_s: secs, reason: String(s.reason ?? '').trim() || undefined },
+          `${esc(nameOf(vid))} · ${SCOPE[s.module]} bloqué${forever ? '' : ` ${dur(secs)}`}`,
         );
       },
     });
   }
   function cooldownDialog(vid, m) {
-    // Core model (validated): a timed lockout (replace / add). The D4 « delay between uses during X »
-    // model does not exist in Core yet.
     dialog({
-      state: { module: MODS[m] && m !== 'raffle' ? m : 'tts', cd: 600, cv: 20, cu: 'min', mode: 'replace', reason: '', why: 0 },
+      state: { module: ['tts', 'soundboard', 'bonk'].includes(m) ? m : 'tts', cd: 300, cv: 2, cu: 'min', span: 3600, sv: 3, su: 'h' },
       render(s) {
-        const secs = s.cd === 'custom' ? toSecs(s.cv, s.cu) : Number(s.cd);
+        const cd = s.cd === 'custom' ? toSecs(s.cv, s.cu) : Number(s.cd);
+        const span = s.span === 'custom' ? toSecs(s.sv, s.su) : s.span === 'stream' ? 'stream' : Number(s.span);
+        const unit = s.module === 'tts' ? 'deux TTS' : s.module === 'soundboard' ? 'deux sons' : 'deux bonks';
         return {
           kicker: 'Cooldown personnel',
           title: esc(nameOf(vid)),
-          lead: 'Ce viewer ne pourra plus utiliser ce module pendant la durée choisie (décidé par Core).',
-          body: `<div class="field"><span>Module</span>${chips('module', s.module, MOD_KEYS.map((k) => [k, MODS[k].short || MODS[k].label]))}</div>
-            <div class="field"><span>Durée</span>${chips('cd', s.cd, [[30, '30 s'], [60, '1 min'], [300, '5 min'], [600, '10 min'], ['custom', 'Autre…']])}${s.cd === 'custom' ? custom(s, 'cv', 'cu', ['s', 'min', 'h']) : ''}</div>
-            <div class="field"><span>Mode</span>${chips('mode', s.mode, [['replace', 'Remplacer'], ['add', 'Ajouter au cooldown actuel']])}</div>${reasonField(s)}
-            <div data-slot="sum"><p class="summary">${s.mode === 'add' ? 'Ajoute' : 'Impose'} <b>${dur(secs)}</b> de cooldown ${MODS[s.module].label}.</p></div>
-            <p class="fine">« Délai entre deux utilisations pendant X » (D4) : ${MISSING}.</p>`,
+          lead: 'Augmente temporairement le délai entre ses utilisations.',
+          body: `<div class="field"><span>Module</span>${chips('module', s.module, ['tts', 'soundboard', 'bonk'].map((k) => [k, MODS[k].short || MODS[k].label]))}</div>
+            <div class="field"><span>Délai imposé</span>${chips('cd', s.cd, [[30, '30 s'], [60, '1 min'], [180, '3 min'], [300, '5 min'], ['custom', 'Autre…']])}${s.cd === 'custom' ? custom(s, 'cv', 'cu', ['s', 'min', 'h']) : ''}</div>
+            <div class="field"><span>Pendant</span>${chips('span', s.span, [[900, '15 min'], [3600, '1 h'], [7200, '2 h'], ['stream', 'Ce stream'], ['custom', 'Autre…']])}${s.span === 'custom' ? custom(s, 'sv', 'su', ['min', 'h']) : ''}</div>
+            <div data-slot="sum"><p class="summary">Ce viewer devra attendre <b>${dur(cd)}</b> entre ${unit} <b>${span === 'stream' ? 'jusqu’à la fin du stream' : `pendant ${dur(span)}`}</b>.</p></div>`,
           foot: '<button class="btn btn--ghost" data-act="dlg-close">Annuler</button><button class="btn btn--primary" data-act="dlg-ok">Appliquer</button>',
         };
       },
       ok(s) {
-        const secs = s.cd === 'custom' ? toSecs(s.cv, s.cu) : Number(s.cd);
-        void act({ action: 'viewer_cooldown', viewer_id: vid, module: s.module, mode: s.mode, seconds: secs, reason: s.reason?.trim() || undefined }, `Cooldown ${MODS[s.module].label} ${dur(secs)} · ${esc(nameOf(vid))}`);
+        const cd = s.cd === 'custom' ? toSecs(s.cv, s.cu) : Number(s.cd);
+        const span = s.span === 'custom' ? Math.max(60, toSecs(s.sv, s.su)) : s.span === 'stream' ? 'stream' : Number(s.span);
+        void act({ action: 'set_cooldown', viewer_id: vid, module: s.module, delay_s: cd, span }, `${esc(nameOf(vid))} · cooldown ${MODS[s.module].label} ${dur(cd)}`);
       },
     });
   }
   function choiceDialog(o) {
-    const usable = (c) => !c.locked && !c.missing;
     dialog({
-      state: { pick: (o.choices.find(usable) ?? o.choices[0])?.v ?? '', ok: !o.confirm },
+      state: { pick: o.choices[0] ? o.choices[0].v : '', ok: !o.confirm },
       render(s) {
-        const choice = (c) => {
-          const actName = c.missing ? 'missing' : c.locked ? 'locked' : 'dlg-set';
-          return `<button class="choice${s.pick === c.v ? ' is-on' : ''}${usable(c) ? '' : ' is-locked'}" data-act="${actName}" data-perm="refund" data-what="${esc(c.missing ?? '')}" data-k="pick" data-val="${c.v}"><i></i><span><b>${c.label}</b>${c.sub ? `<small>${c.sub}</small>` : ''}</span></button>`;
-        };
         return {
           kicker: o.kicker || '',
           title: o.title,
           lead: o.lead,
-          body: `${o.choices.length ? `<div class="choices">${o.choices.map(choice).join('')}</div>` : ''}
+          body: `${o.choices.length ? `<div class="choices">${o.choices.map((c) => `<button class="choice${s.pick === c.v ? ' is-on' : ''}" data-act="dlg-set" data-k="pick" data-val="${c.v}"><i></i><span><b>${c.label}</b>${c.sub ? `<small>${c.sub}</small>` : ''}</span></button>`).join('')}</div>` : ''}
             ${o.note ? `<p class="fine">${o.note}</p>` : ''}${o.confirm ? `<label class="confirm"><input type="checkbox" data-dlg="ok" ${s.ok ? 'checked' : ''}> ${o.confirm}</label>` : ''}`,
           foot: `<button class="btn btn--ghost" data-act="dlg-close">Annuler</button><button class="btn ${o.danger ? 'btn--danger-solid' : 'btn--primary'}" data-act="dlg-ok" ${s.ok ? '' : 'disabled'}>${o.okLabel}</button>`,
         };
@@ -864,44 +964,27 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     });
   }
   const sumCost = (items) => {
-    const t = items.filter((i) => i.payment_method !== 'credits').reduce((a, i) => a + i.simulated_cost, 0);
-    const c = items.filter((i) => i.payment_method === 'credits').reduce((a, i) => a + i.simulated_cost, 0);
+    const t = items.filter((i) => i.payment_method !== 'credits').reduce((a, i) => a + Number(i.simulated_cost), 0);
+    const c = items.filter((i) => i.payment_method === 'credits').reduce((a, i) => a + Number(i.simulated_cost), 0);
     return [t ? `${fmt(t)} J` : '', c ? `${fmt(c)} cr` : ''].filter(Boolean).join(' + ') || '0 J';
   };
-  const refundLock = () => (can('refund') ? {} : { locked: true, sub: `${ic('lock')} Supermod requis` });
-  const sbRefund = { missing: 'Remboursement Soundboard', sub: `${ic('lock')} ${MISSING} (sons non débités dans le Lab)` };
   function stateChange(m, st) {
-    if (stateOf(m) === st) return;
-    if (st === 'active') return void act({ action: 'module_state', module: m, state: 'active', waiting: 'keep' }, `${MODS[m].label} · Actif`);
-    if (st === 'disabled' && !can('module.disable')) return toast(`${ic('lock')} Désactiver un module : Supermod requis.`, false);
-    const q = waiting(m);
-    const run = (pick) => void act({ action: 'module_state', module: m, state: st, waiting: pick || 'keep' }, `${MODS[m].label} · ${STATE[st]}`);
-    if (!q.length) return st === 'paused' ? run('keep') : choiceDialog({ kicker: MODS[m].label, title: 'Désactiver', lead: 'Le module disparaît pour les viewers.', choices: [], okLabel: 'Désactiver', danger: true, run });
+    const cur = stateOf(m);
+    if (cur === st) return;
+    if ((st === 'disabled' || cur === 'disabled') && !has('modules')) return acts.locked({ perm: 'modules' });
+    const run = (pick) => void act({ action: 'module_state', module: m, state: st, waiting: pick || 'keep' }, `${MODS[m].label} · ${STATE[st]}${pick === 'cancel_refund' ? ' · file remboursée' : ''}`);
+    if (st === 'active') return run('keep');
+    const q0 = waiting(m);
+    if (!q0.length && st === 'paused') return run('keep');
     choiceDialog({
       kicker: MODS[m].label,
       title: st === 'paused' ? 'Mettre en pause' : 'Désactiver',
-      lead: `${q.length} ${q.length > 1 ? MODS[m].units : MODS[m].unit} en attente.`,
-      choices: [
-        { v: 'keep', label: 'Garder la file' },
-        m === 'tts' ? { v: 'cancel_refund', label: 'Annuler + rembourser', sub: sumCost(q), ...refundLock() } : { v: 'cancel_refund', label: 'Annuler + rembourser', ...sbRefund },
-        { v: 'cancel', label: 'Annuler sans rembourser' },
-      ],
+      lead: q0.length ? `${q0.length} ${q0.length > 1 ? MODS[m].units : MODS[m].unit} en attente.` : 'Le module disparaît pour les viewers.',
+      // D4: keep / cancel + refund. « Annuler sans rembourser » is an explicit addition to D4.
+      choices: q0.length ? [{ v: 'keep', label: 'Garder la file' }, { v: 'cancel_refund', label: 'Annuler + rembourser', sub: sumCost(q0) }, { v: 'cancel', label: 'Annuler sans rembourser' }] : [],
       okLabel: st === 'paused' ? 'Mettre en pause' : 'Désactiver',
       danger: st === 'disabled',
       run,
-    });
-  }
-  function purgeDialog(m) {
-    const q = waiting(m);
-    choiceDialog({
-      kicker: MODS[m].label,
-      title: 'Purger toute la file',
-      lead: `<b>${q.length} ${q.length > 1 ? MODS[m].units : MODS[m].unit}</b> retiré${m === 'tts' ? 'e' : ''}${q.length > 1 ? 's' : ''} d’un coup · ${sumCost(q)}.`,
-      choices: [m === 'tts' ? { v: 'refund', label: 'Purger + rembourser', ...refundLock() } : { v: 'refund', label: 'Purger + rembourser', ...sbRefund }, { v: 'keep', label: 'Purger sans rembourser' }],
-      confirm: `Supprimer les ${q.length} ${MODS[m].units}`,
-      okLabel: 'Purger',
-      danger: true,
-      run: (pick) => void act({ action: 'purge', module: m, refund: m === 'tts' && pick === 'refund' }, `File ${MODS[m].label} purgée · ${q.length} ${q.length > 1 ? MODS[m].units : MODS[m].unit}`),
     });
   }
 
@@ -922,7 +1005,7 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
         if (it === '-') return '<hr>';
         if (it.header) return `<div class="menu__label">${it.label}</div>`;
         const attrs = Object.entries(it.data || {}).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ');
-        return `<button role="menuitem" class="${it.danger ? 'is-danger' : ''}${it.on ? ' is-on' : ''}${it.missing ? ' is-missing' : ''}" ${attrs} ${it.disabled ? 'disabled' : ''}>${it.dot ? `<span class="sdot sdot--${it.dot}"></span>` : ic(it.icon || 'chev')}<span class="grow">${it.label}</span>${it.hint ? `<span class="menu__hint">${it.hint}</span>` : ''}${it.on ? ic('check') : ''}</button>`;
+        return `<button role="menuitem" class="${it.danger ? 'is-danger' : ''}${it.on ? ' is-on' : ''}${it.good ? ' is-good' : ''}" ${attrs} ${it.disabled ? 'disabled' : ''}>${it.dot ? `<span class="sdot sdot--${it.dot}"></span>` : ic(it.icon || 'chev')}<span class="grow">${it.label}</span>${it.hint ? `<span class="menu__hint">${it.hint}</span>` : ''}${it.on ? ic('check') : ''}</button>`;
       })
       .join('');
     node.append(m);
@@ -936,35 +1019,32 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     if (topPx + mh > rr.height - 8) topPx = Math.max(8, ar.top - rr.top - mh - 4);
     Object.assign(m.style, { left: `${Math.max(8, left)}px`, top: `${topPx}px`, maxHeight: `${rr.height - 16}px` });
   }
-  /** A D4 entry without a backend yet: visible, inactive, explicit. */
-  const missingItem = (label, icon) => ({ label, icon: icon || 'lock', hint: 'à venir', missing: true, data: { act: 'missing', what: label } });
   function itemMenu(anchor, i) {
     if (!i) return;
-    const isPlaying = i.status === 'playing' || i.status === 'starting';
-    const verb = isPlaying ? 'Stop' : 'Retirer';
-    const lockR = can('refund') ? {} : { icon: 'lock', hint: 'supermod', data: { act: 'locked', perm: 'refund' } };
+    const p = isPlaying(i);
+    const verb = p ? 'Stop' : 'Retirer';
     menu(anchor, [
       { header: true, label: `${esc(i.viewer_display_name)} · ${money(i)}` },
-      i.module === 'tts' ? { label: `${verb} + rembourser`, icon: 'refund', data: { act: 'remove', id: i.interaction_id, refund: '1' }, ...lockR } : missingItem(`${verb} + rembourser`, 'refund'),
-      { label: `${verb} sans rembourser`, icon: isPlaying ? 'stop' : 'trash', danger: true, data: { act: 'remove', id: i.interaction_id, refund: '0' } },
+      pending(i) ? { label: 'Laisser passer', icon: 'check', good: true, data: { act: 'allow', id: i.interaction_id } } : null,
+      { label: `${verb} + rembourser`, icon: 'refund', data: { act: 'remove', id: i.interaction_id, refund: '1' } },
+      { label: `${verb} sans rembourser`, icon: p ? 'stop' : 'trash', danger: true, data: { act: 'remove', id: i.interaction_id, refund: '0' } },
       '-',
       { label: 'Ouvrir le viewer', icon: 'user', data: { act: 'open-viewer', id: i.viewer_id } },
-      isPlaying ? null : { label: 'Voir la demande', icon: 'info', data: { act: 'open-ix', id: i.interaction_id } },
+      p ? null : { label: 'Voir la demande', icon: 'info', data: { act: 'open-ix', id: i.interaction_id } },
     ]);
   }
   function stateMenu(anchor, m) {
     const cur = stateOf(m);
+    const locked = (s) => !has('modules') && (s === 'disabled' || cur === 'disabled') && s !== cur;
     menu(anchor, [
       { header: true, label: `État · ${MODS[m].label}` },
       ...['active', 'paused', 'disabled'].map((s) =>
-        s === 'disabled' && !can('module.disable') && cur !== 'disabled'
-          ? { label: STATE[s], icon: 'lock', hint: 'supermod', data: { act: 'locked', perm: 'module.disable' } }
-          : { label: STATE[s], dot: s, on: s === cur, data: { act: 'set-state', m, s } },
+        locked(s) ? { label: STATE[s], icon: 'lock', hint: 'permission', data: { act: 'locked', perm: 'modules' } } : { label: STATE[s], dot: s, on: s === cur, data: { act: 'set-state', m, s } },
       ),
     ]);
   }
   function quickBlockMenu(anchor, vid, m) {
-    const mod = MODS[m] && m !== 'raffle' ? m : 'tts';
+    const mod = MODS[m] ? m : 'tts';
     menu(anchor, [
       { header: true, label: `Bloquer ${esc(nameOf(vid))}` },
       { label: `${MODS[mod].label} · 5 min`, icon: 'ban', data: { act: 'apply-block', v: vid, m: mod, s: 300 } },
@@ -972,95 +1052,149 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       { label: 'Autre…', icon: 'more', data: { act: 'block', v: vid, m: mod } },
     ]);
   }
+
+  // ------------------------------------------------------------------ drawers (content)
+  const whatOf = (i) => (i.module === 'soundboard' ? `Son « ${esc(i.sound_label ?? i.detail ?? '')} »` : i.module === 'bonk' ? `Bonk ${esc(i.emote_glyph ?? '')}` : i.module === 'raffle' ? 'Ticket tombola ×1' : 'Message TTS');
   function ixDrawer(id) {
     const i = findItem(id);
-    if (!i) return null;
-    const live = OPEN.includes(i.status);
-    let b = `<button class="vrow" data-act="open-viewer" data-id="${esc(i.viewer_id)}">${av(i.viewer_id, i.viewer_display_name, 'xs')}<b class="grow">${esc(i.viewer_display_name)}</b>${cards.get(i.viewer_id)?.staff_role ? '<span class="badge badge--role">Supermod</span>' : ''}${ic('chev')}</button>`;
-    if (i.message) b += `<blockquote class="itext">${esc(i.message)}</blockquote>`;
-    if (i.error) b += `<div class="watchline watchline--err">${ic('info')}<span>${esc(i.error.code ?? i.error)} · ${i.refund_status === 'refunded' ? 'remboursé automatiquement' : 'non remboursé'}</span></div>`;
-    // Who ended it (audit Core), like D4's « Retiré par X, remboursé ».
-    const by = (audit ?? []).find((a) => a.interaction_id === i.interaction_id);
-    const note = by ? ` · <span class="muted">${esc(ACTION[by.action] ?? by.action)} par ${esc(actorName(by.actor))}</span>` : '';
-    b += `<p class="istatus"><b>${esc((i.refund_status === 'refunded' ? 'remboursé' : STATUS[i.status] ?? i.status).replace(/^./, (c) => c.toUpperCase()))}</b> · ${money(i)} · ${hhmm(i.created_at)}${note}</p>`;
-    // Core says whether it was debited (`refundable`); a refund only applies to a finished interaction.
-    const refundable = i.module === 'tts' && i.refundable !== false && i.refund_status !== 'refunded' && !live;
-    b += `<div class="vact">${live ? `<button class="btn" data-act="item-menu" data-id="${i.interaction_id}">${ic(i.status === 'playing' ? 'stop' : 'trash')}${i.status === 'playing' ? 'Stop' : 'Retirer'}${ic('down')}</button>` : ''}
-      ${refundable ? `<button class="btn" data-act="${can('refund') ? 'refund' : 'locked'}" data-perm="refund" data-id="${i.interaction_id}" data-m="${i.module}">${ic(can('refund') ? 'refund' : 'lock')}Rembourser</button>` : ''}
-      <button class="btn" data-act="quick-block" data-v="${esc(i.viewer_id)}" data-m="${i.module}">${ic('ban')}Bloquer${ic('down')}</button></div>
-      ${i.module === 'soundboard' && !live ? `<p class="fine">Sons du Lab non débités : remboursement ${MISSING}.</p>` : ''}`;
-    b += `<details class="acc" data-key="tech-${esc(id)}"><summary>Détails techniques</summary><div class="acc__body"><dl class="kv"><dt>module</dt><dd>${i.module}</dd><dt>status</dt><dd>${esc(i.status)}</dd>
-      <dt>cost</dt><dd>${esc(i.simulated_cost)}</dd><dt>currency</dt><dd>${esc(i.payment_method)}</dd><dt>refund</dt><dd>${esc(i.refund_status ?? 'none')}</dd><dt>created_at</dt><dd>${esc(i.created_at)}</dd>
-      <dt>completed_at</dt><dd>${esc(i.delivery?.completed_at ?? '—')}</dd><dt>error</dt><dd>${esc(i.error?.code ?? i.error ?? '—')}</dd><dt>interaction_id</dt><dd>${esc(i.interaction_id)}</dd><dt>viewer_id</dt><dd>${esc(i.viewer_id)}</dd></dl></div></details>`;
-    return { kicker: `${MODS[i.module].label} · ${ago(i.created_at)}`, title: i.module === 'soundboard' ? `Son « ${esc(i.sound_label ?? '')} »` : i.module === 'bonk' ? 'Bonk' : 'Message TTS', body: b };
+    if (!i) return { kicker: 'Demande', title: '…', body: '<div class="empty">Chargement…</div>' };
+    const live = isLive(i);
+    const hits = pending(i) ? i.review_hits ?? [] : [];
+    const words0 = [...new Set(hits.map((h) => h.word))];
+    const role = cards.get(i.viewer_id)?.role;
+    let b = `<button class="vrow" data-act="open-viewer" data-id="${esc(i.viewer_id)}">${av(i.viewer_id, i.viewer_display_name, 'xs')}<b class="grow">${esc(i.viewer_display_name)}</b>${role && role !== 'viewer' ? `<span class="badge badge--role">${ROLE_LABEL[role]}</span>` : ''}${ic('chev')}</button>`;
+    if (hits.length) b += `<div class="watchline">${ic('eye')}<span>À vérifier · contient <b>${esc(words0.join(', '))}</b></span></div>`;
+    if (i.review_status === 'allowed' && i.reviewed_by) b += `<p class="fine">Laissée passer par ${esc(actorName(i.reviewed_by))}.</p>`;
+    const text = i.message ?? (i.module === 'tts' ? i.detail : null);
+    if (text) b += `<blockquote class="itext">${hits.length ? marked(text, hits) : esc(text)}</blockquote>`;
+    const error = i.error?.code ?? null;
+    if (error && !['cancelled_by_moderator', 'stopped_by_moderator', 'purged_by_moderator'].includes(error))
+      b += `<div class="watchline watchline--err">${ic('info')}<span>${esc(i.error?.message ?? error)} · ${i.refund_status === 'refunded' ? 'remboursé automatiquement' : 'non remboursé'}</span></div>`;
+    // Who ended it (Core audit), like D4's « Retiré par X, remboursé ».
+    const end = (i.actions ?? []).filter((a) => ['cancel', 'stop', 'purge', 'refund'].includes(a.action));
+    const endBy = end.find((a) => a.action !== 'refund');
+    const note = endBy ? ` · <span class="muted">${esc(ACTION[endBy.action] ?? endBy.action)} par ${esc(actorName(endBy.actor))}, ${i.refund_status === 'refunded' ? 'remboursé' : 'sans remboursement'}</span>` : '';
+    b += `<p class="istatus"><b>${esc(statusText(i).replace(/^./, (c) => c.toUpperCase()))}</b> · ${money(i)} · ${hhmm(i.created_at)}${note}</p>`;
+    // Refund after the fact: an explicit addition to D4 (« Admin Wallet »), for a debited, finished item.
+    const debited = (i.movements ?? []).some((mv) => mv.kind === 'debit' && Number(mv.amount) !== 0);
+    const refundable = !live && i.module !== 'raffle' && i.refund_status !== 'refunded' && debited;
+    b += `<div class="vact">${hits.length ? `<button class="btn btn--ok" data-act="allow" data-id="${esc(i.interaction_id)}">${ic('check')}Laisser passer</button>` : ''}
+      ${live && i.module !== 'raffle' && i.module !== 'bonk' ? `<button class="btn" data-act="item-menu" data-id="${esc(i.interaction_id)}">${ic(isPlaying(i) ? 'stop' : 'trash')}${isPlaying(i) ? 'Stop' : 'Retirer'}${ic('down')}</button>` : ''}
+      ${refundable ? `<button class="btn" data-act="${has('wallet') ? 'refund' : 'locked'}" data-perm="wallet" data-id="${esc(i.interaction_id)}" data-m="${i.module}">${ic(has('wallet') ? 'refund' : 'lock')}Rembourser</button>` : ''}
+      <button class="btn" data-act="quick-block" data-v="${esc(i.viewer_id)}" data-m="${i.module}">${ic('ban')}Bloquer${ic('down')}</button></div>`;
+    b += `<details class="acc" data-key="tech-${esc(id)}"><summary>Détails techniques</summary><div class="acc__body"><dl class="kv"><dt>module</dt><dd>${esc(i.module)}</dd><dt>status</dt><dd>${esc(i.status)}</dd>
+      <dt>cost</dt><dd>${esc(i.simulated_cost ?? i.cost)}</dd><dt>currency</dt><dd>${esc(i.payment_method)}</dd><dt>created_at</dt><dd>${esc(i.created_at)}</dd>
+      <dt>completed_at</dt><dd>${esc(i.completed_at ?? i.delivery?.completed_at ?? '—')}</dd><dt>error</dt><dd>${esc(error ?? '—')}</dd>${i.stopped_at ? `<dt>stopped_at</dt><dd>${esc(i.stopped_at)}</dd>` : ''}<dt>reference_id</dt><dd>${esc(i.interaction_id)}</dd><dt>viewer_id</dt><dd>${esc(i.viewer_id)}</dd></dl></div></details>`;
+    return { kicker: `${MODS[i.module].label} · ${ago(i.created_at)}`, title: whatOf(i), body: b };
   }
-  function ledgerDrawer(vid, id) {
-    const card = cards.get(vid);
-    const e = card?.wallet_ledger?.find((x) => String(x.id) === String(id));
-    if (!e) return null;
-    const refund = refundOf(e, card);
-    const debit = e.kind === 'refund' && e.interaction_id ? card.wallet_ledger.find((x) => x.kind === 'debit' && x.interaction_id === e.interaction_id) : null;
-    const st = refund ? 'Débité puis remboursé' : Number(e.amount) > 0 ? 'Crédité' : 'Débité';
-    const ix = e.interaction_id ? findItem(e.interaction_id) : null;
+  function ledgerDrawer(id) {
+    const e = ledgerById.get(String(id));
+    if (!e) return { kicker: 'Activité Jetons', title: '…', body: '<div class="empty">Chargement…</div>' };
+    const i = e.interaction_id ? findItem(e.interaction_id) : null;
+    const refundE = e.refunded_by ? ledgerById.get(String(e.refunded_by)) : null;
+    const debitE = e.refund_of ? ledgerById.get(String(e.refund_of)) : null;
+    const st = e.refunded_by ? 'Débité puis remboursé' : Number(e.amount) > 0 ? 'Crédité' : 'Débité';
     let b = `<div class="bigamt ${Number(e.amount) > 0 ? 'plus' : 'minus'} tnum">${signed(e)}</div>
-      <dl class="facts"><dt>Source</dt><dd>${esc(ledgerLabel(e))}${e.reason ? ` · <span class="muted">${esc(e.reason)}</span>` : ''}</dd><dt>Statut</dt><dd>${st}</dd><dt>Heure</dt><dd>${hhmm(e.created_at)}</dd>
-      <dt>Viewer</dt><dd><button class="linkish" data-act="open-viewer" data-id="${esc(vid)}">${esc(card.display_name)}</button></dd>${e.actor ? `<dt>Par</dt><dd>${esc(actorName(e.actor))}</dd>` : ''}</dl>`;
-    if (ix) b += `<button class="vrow" data-act="open-ix" data-id="${esc(ix.interaction_id)}"><span class="mini" style="--c:${MODS[ix.module].c}">${ic(ix.module)}</span><span class="grow">Interaction liée · ${ix.module === 'soundboard' ? `Son « ${esc(ix.sound_label ?? '')} »` : MODS[ix.module].label}</span>${ic('chev')}</button>`;
-    else if (e.interaction_id) b += `<p class="fine">Interaction liée : ${esc(e.interaction_id)} (plus dans les données chargées).</p>`;
-    if (refund) b += `<button class="vrow" data-act="open-ledger" data-v="${esc(vid)}" data-id="${esc(refund.id)}">${ic('refund')}<span class="grow">Remboursé · ${signed(refund)} à ${hhmm(refund.created_at)}</span>${ic('chev')}</button>`;
-    if (debit) b += `<button class="vrow" data-act="open-ledger" data-v="${esc(vid)}" data-id="${esc(debit.id)}">${ic('coin')}<span class="grow">Débit d’origine · ${signed(debit)} à ${hhmm(debit.created_at)}</span>${ic('chev')}</button>`;
-    b += `<details class="acc" data-key="wtech-${esc(id)}"><summary>Détails techniques</summary><div class="acc__body"><dl class="kv"><dt>ledger_id</dt><dd>${esc(e.id)}</dd><dt>operation_type</dt><dd>${esc(e.kind)}</dd>
-      <dt>currency</dt><dd>${esc(e.currency)}</dd><dt>module</dt><dd>${esc(e.module_id ?? '—')}</dd><dt>created_at</dt><dd>${esc(e.created_at)}</dd>${e.interaction_id ? `<dt>interaction_id</dt><dd>${esc(e.interaction_id)}</dd>` : ''}
-      <dt>visible_in_moderation_activity</dt><dd>— (${MISSING})</dd></dl></div></details>`;
-    return { kicker: 'Activité Jetons', title: esc(ledgerLabel(e)), body: b };
+      <dl class="facts"><dt>Source</dt><dd>${esc(e.label)}${e.reason && e.kind !== 'refund' ? ` · <span class="muted">${esc(e.reason)}</span>` : ''}</dd><dt>Statut</dt><dd>${st}</dd><dt>Heure</dt><dd>${hhmm(e.created_at)}</dd>
+      <dt>Viewer</dt><dd><button class="linkish" data-act="open-viewer" data-id="${esc(e.viewer_id)}">${esc(e.viewer_display_name)}</button></dd>${e.actor && e.actor !== 'system' ? `<dt>Par</dt><dd>${esc(actorName(e.actor))}</dd>` : ''}</dl>`;
+    if (e.interaction_id)
+      b += `<button class="vrow" data-act="open-ix" data-id="${esc(e.interaction_id)}"><span class="mini" style="--c:${MODS[e.module_id]?.c ?? 'var(--accent)'}">${ic(MODS[e.module_id] ? e.module_id : 'info')}</span><span class="grow">Interaction liée · ${i ? whatOf(i) : esc(MODS[e.module_id]?.label ?? '')}</span>${ic('chev')}</button>`;
+    if (e.refunded_by) b += `<button class="vrow" data-act="open-ledger" data-id="${esc(e.refunded_by)}" data-v="${esc(e.viewer_id)}">${ic('refund')}<span class="grow">Remboursé${refundE ? ` · ${signed(refundE)} à ${hhmm(refundE.created_at)}` : ''}</span>${ic('chev')}</button>`;
+    if (e.refund_of) b += `<button class="vrow" data-act="open-ledger" data-id="${esc(e.refund_of)}" data-v="${esc(e.viewer_id)}">${ic('coin')}<span class="grow">Débit d’origine${debitE ? ` · ${signed(debitE)} à ${hhmm(debitE.created_at)}` : ''}</span>${ic('chev')}</button>`;
+    b += `<details class="acc" data-key="wtech-${esc(id)}"><summary>Détails techniques</summary><div class="acc__body"><dl class="kv"><dt>ledger_id</dt><dd>${esc(e.id)}</dd><dt>operation_type</dt><dd>${esc(e.operation_type)}</dd>
+      <dt>visible_in_moderation_activity</dt><dd>${esc(e.visible_in_moderation_activity)}</dd><dt>currency</dt><dd>${esc(e.currency)}</dd><dt>created_at</dt><dd>${esc(e.created_at)}</dd>${e.interaction_id ? `<dt>reference_id</dt><dd>${esc(e.interaction_id)}</dd>` : ''}${e.raffle_id ? `<dt>raffle_id</dt><dd>${esc(e.raffle_id)}</dd>` : ''}</dl></div></details>`;
+    return { kicker: 'Activité Jetons', title: esc(e.label), body: b };
   }
   function auditDrawer(id) {
-    const a = (audit ?? []).find((x) => String(x.id) === String(id));
+    const a = (hist?.items ?? audit ?? []).find((x) => String(x.id) === String(id));
     if (!a) return null;
     return {
       kicker: `Historique · ${hhmm(a.created_at)}`,
       title: esc(ACTION[a.action] ?? a.action),
-      body: `<dl class="facts"><dt>Par</dt><dd>${esc(actorName(a.actor))} (${esc(ROLE[a.role] ?? a.role)})</dd><dt>Module</dt><dd>${esc(SCOPE[a.module_id] ?? a.module_id ?? '—')}</dd>
+      body: `<dl class="facts"><dt>Par</dt><dd>${esc(actorName(a.actor))} (${esc(ROLE_LABEL[a.role] ?? a.role)})</dd><dt>Module</dt><dd>${esc(SCOPE[a.module_id] ?? a.module_id ?? '—')}</dd>
         ${a.viewer_id ? `<dt>Viewer</dt><dd><button class="linkish" data-act="open-viewer" data-id="${esc(a.viewer_id)}">${esc(nameOf(a.viewer_id))}</button></dd>` : ''}${a.reason ? `<dt>Raison</dt><dd>${esc(a.reason)}</dd>` : ''}</dl>
         <details class="acc" open><summary>Avant → après</summary><div class="acc__body"><dl class="kv"><dt>avant</dt><dd>${esc(JSON.stringify(a.before ?? {}))}</dd><dt>après</dt><dd>${esc(JSON.stringify(a.after ?? {}))}</dd>${a.interaction_id ? `<dt>interaction</dt><dd>${esc(a.interaction_id)}</dd>` : ''}</dl></div></details>`,
     };
   }
-  function teamDrawer() {
-    const mine = Object.keys(PERM_LABEL);
-    return {
-      kicker: 'Administration',
-      title: 'Équipe & permissions',
-      body: `<p class="fine">Tu es <b>${ROLE[me.role] ?? me.role}</b>${me.role === 'broadcaster' ? ' : toutes les permissions.' : me.role === 'supermod' ? ' : modération + remboursements + désactivation.' : ' : modération standard.'}</p>
-        ${sec('Équipe')}<div class="empty">Liste de l’équipe : ${MISSING}. Nommer un supermod : Studio → Modération → fiche viewer.</div>
-        ${sec('Tes permissions (Core)')}<div class="rows">${mine.map((p) => `<div class="perm"><div class="grow"><b>${esc(PERM_LABEL[p])}</b></div>${can(p) ? `<span class="badge badge--ok">${ic('check')}</span>` : `<span class="lock">${ic('lock')}${NEEDS[p] ?? 'Streamer'}</span>`}</div>`).join('')}</div>
-        ${sec('Permissions par mod (D4)')}<div class="rows">${D4_PERMS.map(([t, d]) => `<div class="perm"><div class="grow"><b>${t}</b><span>${d}</span></div><button class="sw" role="switch" aria-checked="false" aria-disabled="true" aria-label="${t} (à venir)" data-act="missing" data-what="Permissions accordées par mod"></button></div>`).join('')}</div>
-        <p class="lock">${ic('lock')} À venir · ${MISSING} : aujourd’hui, règles fixes du Core (Mod / Supermod / Streamer).</p>`,
-    };
-  }
-  function detailsDrawer(vid) {
+  function notesBody(vid) {
     const v = cards.get(vid);
-    if (!v) return null;
-    const last = v.activity?.[0]?.created_at;
-    return {
-      kicker: 'Détails',
-      title: esc(v.display_name),
-      body: `<dl class="kv"><dt>viewer_id</dt><dd>${esc(vid)}</dd><dt>Rôle équipe</dt><dd>${v.staff_role ? 'Supermod' : '—'}</dd><dt>Premier passage</dt><dd>— (${MISSING})</dd>
-        <dt>Interactions récentes</dt><dd>${(v.activity ?? []).length}</dd><dt>Dernière activité</dt><dd>${last ? `${hhmm(last)} · ${ago(last)}` : '—'}</dd></dl>`,
-    };
+    const notes = v?.notes ?? [];
+    return `${notes.length ? `<div class="rows">${notes.map((n) => `<div class="note"><span class="muted">${dday(n.created_at)} ${hhmm(n.created_at)} · ${esc(actorName(n.author))}</span> — ${esc(n.text)}</div>`).join('')}</div>` : '<div class="empty">Aucune note</div>'}
+      <div class="addline"><input class="input grow" data-note-input="${esc(vid)}" placeholder="Ex. spam TTS, averti" maxlength="140"><button class="btn btn--primary" data-act="note-add" data-v="${esc(vid)}">Ajouter</button></div>
+      <p class="fine">Visible par l’équipe uniquement.</p>`;
   }
-  function walletDrawer(vid) {
+  function walletBody(vid) {
     const v = cards.get(vid);
-    if (!v) return null;
-    const adm = (v.wallet_ledger ?? []).filter((e) => ['set', 'adjust', 'reset'].includes(e.kind));
-    return {
-      kicker: 'Wallet admin · Lab',
-      title: esc(v.display_name),
-      body: `<div class="wal wal--3"><div><small>Jetons</small><b class="cost tnum">${fmt(v.wallet?.tokens)} J</b></div><div><small>Crédits TTS</small><b class="cost cost--credit tnum">${fmt(v.wallet?.credits_tts)} cr</b></div><div><small>Crédits Sons</small><b class="cost cost--credit tnum">${fmt(v.wallet?.credits_soundboard)} cr</b></div></div>
-        <div class="vact"><button class="btn" disabled>+ Créditer</button><button class="btn" disabled>− Débiter</button></div>
-        <p class="lock">${ic('lock')} Modifier le wallet de test : Studio uniquement (Studio → Modération → Wallet de test). Le Core refuse depuis l’extension.</p>
-        ${adm.length ? sec('Ajustements') + `<div class="rows">${adm.map((e) => jLine(e, vid)).join('')}</div>` : ''}
-        <p class="fine">Wallet de test du Lab · jamais l’économie réelle.</p>`,
-    };
+    if (!v) return '<div class="empty">Chargement…</div>';
+    const adm = (v.wallet_ledger ?? []).filter((e) => ['admin', 'lab_tools'].includes(e.operation_type));
+    return `<div class="wal wal--3"><div><small>Jetons</small><b class="cost tnum">${fmt(v.wallet?.tokens)} J</b></div><div><small>Crédits TTS</small><b class="cost cost--credit tnum">${fmt(v.wallet?.credits_tts)} cr</b></div><div><small>Crédits Sons</small><b class="cost cost--credit tnum">${fmt(v.wallet?.credits_soundboard)} cr</b></div></div>
+      ${has('wallet') ? `<div class="vact"><button class="btn" data-act="wallet-dialog" data-v="${esc(vid)}" data-sign="1">+ Créditer</button><button class="btn" data-act="wallet-dialog" data-v="${esc(vid)}" data-sign="-1">− Débiter</button></div>` : `<p class="lock">${ic('lock')} Réservé à la permission « Admin Wallet ».</p>`}
+      ${adm.length ? sec('Ajustements') + `<div class="rows">${adm.map((e) => jLine(e)).join('')}</div>` : ''}<p class="fine">Wallet de test du Lab · jamais l’économie réelle.</p>`;
+  }
+  function walletDialog(vid, sign) {
+    dialog({
+      state: { amount: 500, cur: 'tokens', reason: '' },
+      render(s) {
+        const v = cards.get(vid);
+        const bal = Number(v?.wallet?.[s.cur] ?? 0);
+        const next = Math.max(0, bal + sign * (Math.abs(Math.round(Number(s.amount) || 0))));
+        return {
+          kicker: sign > 0 ? 'Créditer' : 'Débiter',
+          title: esc(nameOf(vid)),
+          body: `<div class="field"><span>Monnaie</span>${chips('cur', s.cur, [['tokens', 'Jetons'], ['credits_tts', 'Crédits TTS'], ['credits_soundboard', 'Crédits Sons']])}</div>
+            <label class="field"><span>Montant</span><input class="input" type="number" min="1" data-dlg="amount" value="${esc(s.amount)}"></label>
+            <label class="field"><span>Raison</span><input class="input" data-dlg="reason" value="${esc(s.reason)}" maxlength="200" placeholder="Ex. bug Soundboard"></label>
+            <div data-slot="res"><p class="summary">Nouveau solde : <b>${fmt(next)} ${CUR[s.cur]}</b></p></div>`,
+          foot: `<button class="btn btn--ghost" data-act="dlg-close">Annuler</button><button class="btn btn--primary" data-act="dlg-ok">${sign > 0 ? 'Créditer' : 'Débiter'}</button>`,
+        };
+      },
+      ok(s) {
+        const amount = Math.abs(Math.round(Number(s.amount) || 0));
+        if (!amount) return;
+        void act(
+          { action: 'wallet_adjust', viewer_id: vid, currency: s.cur, delta: sign * amount, reason: String(s.reason ?? '').trim() || undefined },
+          `${sign > 0 ? '+' : '−'} ${fmt(amount)} ${CUR[s.cur]} · ${esc(nameOf(vid))}`,
+        );
+      },
+    });
+  }
+  function detailsBody(vid) {
+    const v = cards.get(vid);
+    if (!v) return '<div class="empty">Chargement…</div>';
+    return `<dl class="kv"><dt>viewer_id</dt><dd>${esc(vid)}</dd><dt>Premier passage</dt><dd>${v.first_seen ? new Date(v.first_seen).toLocaleDateString('fr-FR') : '—'}</dd><dt>Aujourd’hui</dt><dd>${fmt(v.today_count)} interaction${v.today_count > 1 ? 's' : ''}</dd></dl>`;
+  }
+  function wordsBody() {
+    const edit = has('words');
+    if (!words) return '<div class="empty">Chargement…</div>';
+    return `<p class="fine"><b>Surveillé</b> : la demande est retenue, marquée « À vérifier », jusqu’à « Laisser passer ».<br><b>Bloqué</b> : la demande est refusée avant la file (rien n’est débité).</p>
+      <div class="rows">${words.map((w) => `<div class="row row--word"><span class="grow">${esc(w.word)}</span><span class="wtype wtype--${w.kind}">${w.kind === 'watch' ? 'Surveillé' : 'Bloqué'}</span>
+        ${edit ? `<button class="icon-btn icon-btn--xs" data-act="word-del" data-id="${esc(w.id)}" data-tip="Supprimer ce mot" aria-label="Supprimer">${ic('trash')}</button>` : ''}</div>`).join('') || '<div class="empty">Aucun mot</div>'}</div>
+      ${edit ? `<div class="addline"><input class="input grow" data-word-input placeholder="Mot ou expression" maxlength="40"><div class="seg"><button class="${nav.wtype !== 'block' ? 'is-on' : ''}" data-act="word-type" data-val="watch">Surveillé</button><button class="${nav.wtype === 'block' ? 'is-on' : ''}" data-act="word-type" data-val="block">Bloqué</button></div><button class="btn btn--primary" data-act="word-add">Ajouter</button></div>` : `<p class="lock">${ic('lock')} Modifier demande « Mots surveillés / bloqués ».</p>`}`;
+  }
+  function teamBody() {
+    if (!team) return '<div class="empty">Chargement…</div>';
+    const mine = has('perms');
+    const meId = myId();
+    let h = `<p class="fine">Tu es <b>${ROLE_LABEL[me.role] ?? me.role}</b>${me.role === 'moderator' ? ' : modération standard + permissions accordées.' : ' : toutes les permissions.'}</p>`;
+    for (const t of team.members ?? []) {
+      if (t.role !== 'moderator') {
+        h += `<div class="vrow vrow--static">${av(t.viewer_id, t.display_name, 'xs')}<b class="grow">${esc(t.display_name)}</b><span class="badge badge--role">${ROLE_LABEL[t.role]}</span></div>`;
+        continue;
+      }
+      const on = (t.grants ?? []).length;
+      const self = t.viewer_id === meId;
+      h += `<details class="acc" data-key="perm-${esc(t.viewer_id)}"><summary><span class="inline">${av(t.viewer_id, t.display_name, 'xs')}${esc(t.display_name)}${self ? ' <span class="muted small">(toi)</span>' : ''}<span class="muted small">${on ? `${on} accordée${on > 1 ? 's' : ''}` : 'standard'}</span></span></summary><div class="acc__body">${Object.keys(PERMS)
+        .map((p) => {
+          const g = (t.grants ?? []).includes(p);
+          // Core rules: never one's own, a moderator grants only what they hold.
+          const editable = mine && !self && (me.role !== 'moderator' || has(p));
+          return `<div class="perm"><div class="grow"><b>${PERMS[p][0]}</b><span>${PERMS[p][1]}</span></div>
+            <button class="sw${g ? ' is-on' : ''}" role="switch" aria-checked="${g}" aria-label="${PERMS[p][0]}" data-act="${editable ? 'toggle-perm' : 'locked'}" data-perm="${self ? 'self' : mine ? p : 'perms'}" data-v="${esc(t.viewer_id)}" data-p="${p}" data-on="${g ? 1 : 0}" ${editable ? '' : 'aria-disabled="true"'}></button></div>`;
+        })
+        .join('')}</div></details>`;
+    }
+    if (!mine) h += `<p class="lock">${ic('lock')} Modifier demande « Gérer les permissions ».</p>`;
+    return h;
   }
 
   let tipEl = null;
@@ -1109,23 +1243,59 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
   }
 
   // ------------------------------------------------------------------ actions
+  const drawerOf = (key, fn, b, kicker, title) => drawer(() => ({ kicker, title: title(), body: fn() }), key, hostOf(b));
   const acts = {
     'go-module': (d) => open.module(d.m),
     'open-viewer': (d) => open.viewer(d.id),
     'open-ix': (d, b) => {
-      if (audit === null) void loadAudit();
+      void loadDetail(d.id);
       drawer(() => ixDrawer(d.id), `ix:${d.id}`, hostOf(b));
     },
     'open-audit': (d, b) => drawer(() => auditDrawer(d.id), `a:${d.id}`, hostOf(b)),
-    'open-ledger': (d, b) => drawer(() => ledgerDrawer(d.v, d.id), `w:${d.v}:${d.id}`, hostOf(b)),
-    team: (d, b) => drawer(teamDrawer, 'team', hostOf(b)),
+    'open-ledger': (d, b) => {
+      if (!ledgerById.has(String(d.id)) && d.v) void loadViewer(d.v);
+      drawer(() => ledgerDrawer(d.id), `w:${d.id}`, hostOf(b));
+    },
+    team: (d, b) => {
+      void loadTeam();
+      drawerOf('team', teamBody, b, 'Administration', () => 'Équipe & permissions');
+    },
+    words: (d, b) => {
+      void loadWords();
+      drawerOf('words', wordsBody, b, 'TTS', () => 'Surveillance');
+    },
+    notes: (d, b) => {
+      void loadViewer(d.v);
+      drawerOf(`notes:${d.v}`, () => notesBody(d.v), b, 'Notes internes', () => esc(nameOf(d.v)));
+    },
+    wallet: (d, b) => {
+      void loadViewer(d.v);
+      drawerOf(`wallet:${d.v}`, () => walletBody(d.v), b, 'Wallet admin', () => esc(nameOf(d.v)));
+    },
+    details: (d, b) => drawerOf(`details:${d.v}`, () => detailsBody(d.v), b, 'Détails', () => esc(nameOf(d.v))),
     hub: () => onBack?.(),
     'global-menu': (d, b) =>
       menu(b, [
-        { header: true, label: 'Raptoru accepte les interactions' },
-        missingItem('Pause globale…', 'pause'),
+        { header: true, label: gPaused() ? 'Pause globale active' : 'Raptoru accepte les interactions' },
+        gPaused()
+          ? { label: 'Lever la pause globale', icon: has('globalPause') ? 'play' : 'lock', data: { act: 'global-resume' } }
+          : { label: 'Pause globale…', icon: has('globalPause') ? 'pause' : 'lock', hint: has('globalPause') ? '' : 'supermod', data: { act: 'global-pause' } },
       ]),
-    missing: (d) => toast(`${ic('lock')} ${esc(d.what || 'Fonction')} : ${MISSING} (à venir).`, false),
+    'global-pause': () =>
+      has('globalPause')
+        ? choiceDialog({
+            kicker: 'Action sensible',
+            title: 'Pause globale',
+            lead: 'Raptoru refuse les <b>nouvelles</b> interactions (TTS, sons, bonks, tombola).',
+            choices: [],
+            note: 'Ne coupe pas les sons en cours, ne stoppe pas le TTS, ne purge aucune file, ne rembourse rien.',
+            confirm: 'Je confirme pour toute la chaîne',
+            okLabel: 'Activer',
+            danger: true,
+            run: () => void act({ action: 'global_pause', paused: true }, 'Pause globale : nouvelles interactions refusées'),
+          })
+        : acts.locked({ perm: 'globalPause' }),
+    'global-resume': () => (has('globalPause') ? void act({ action: 'global_pause', paused: false }, 'Pause globale levée') : acts.locked({ perm: 'globalPause' })),
     'nav-back': () => pop(),
     'close-viewer': () => {
       closeDrawers();
@@ -1136,17 +1306,27 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     jetons: (d) => open.jetons(d.v),
     htab: (d) => {
       nav.htab = d.val;
-      if (d.val === 'audit') void loadAudit();
+      hist = null;
       render();
+      void loadHistory();
     },
     hfilter: (d) => {
       nav.hf[d.k] = d.val;
+      hist = null;
       render();
+      void loadHistory();
+    },
+    hmore: () => void loadHistory(true),
+    'toggle-auto': () => {
+      nav.auto = !nav.auto;
+      hist = null;
+      render();
+      void loadHistory();
     },
     hfilters: (d, b) =>
       menu(b, [
-        nav.htab === 'ix' ? { header: true, label: 'Statut' } : null,
-        ...(nav.htab === 'ix' ? STATUS_F.map(([k, l]) => ({ label: l, on: nav.hf.status === k, icon: 'none', data: { act: 'hfilter', k: 'status', val: k } })) : []),
+        { header: true, label: 'Statut' },
+        ...STATUS_F.map(([k, l]) => ({ label: l, on: nav.hf.status === k, icon: 'none', data: { act: 'hfilter', k: 'status', val: k } })),
         { header: true, label: 'Période' },
         ...PERIOD_F.map(([k, l]) => ({ label: l, on: nav.hf.period === k, icon: 'clock', data: { act: 'hfilter', k: 'period', val: k } })),
         top().vid ? null : '-',
@@ -1162,13 +1342,11 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       menu(b, [
         { label: 'Historique complet', icon: 'history', data: { act: 'history', v: d.v } },
         { label: 'Activité Jetons', icon: 'coin', data: { act: 'jetons', v: d.v } },
-        missingItem('Notes', 'note'),
-        { label: 'Wallet admin', icon: 'wallet', hint: v && can('wallet.lab') ? 'Studio' : 'lecture', data: { act: 'wallet', v: d.v } },
+        { label: `Notes · ${v?.notes?.length ?? 0}`, icon: 'note', data: { act: 'notes', v: d.v } },
+        { label: 'Wallet admin', icon: has('wallet') ? 'wallet' : 'lock', hint: has('wallet') ? '' : 'permission', data: { act: 'wallet', v: d.v } },
         { label: 'Détails', icon: 'info', data: { act: 'details', v: d.v } },
       ]);
     },
-    wallet: (d, b) => drawer(() => walletDrawer(d.v), `wallet:${d.v}`, hostOf(b)),
-    details: (d, b) => drawer(() => detailsDrawer(d.v), `details:${d.v}`, hostOf(b)),
     'toggle-text': (d, b) => b.classList.toggle('is-open'),
     'drawer-close': (d, b) => {
       const e = drawers.find((x) => x.el.contains(b));
@@ -1179,11 +1357,15 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       const i = findItem(d.id);
       if (!i) return;
       const refund = d.refund === '1';
-      const isPlaying = i.status === 'playing' || i.status === 'starting';
+      const p = isPlaying(i);
       void act(
-        isPlaying && i.module === 'tts' ? { action: 'stop_current', module: 'tts', refund } : { action: 'cancel', module: i.module, interaction_id: i.interaction_id, refund },
-        `${isPlaying ? 'Arrêté' : 'Retiré'}${refund ? ' + remboursé' : ' sans remboursement'} · ${esc(i.viewer_display_name)}`,
+        p && i.module === 'tts' ? { action: 'stop_current', module: 'tts', refund } : { action: 'cancel', module: i.module, interaction_id: i.interaction_id, refund },
+        `${p ? 'Arrêté' : 'Retiré'}${refund ? ' + remboursé' : ' sans remboursement'} · ${esc(i.viewer_display_name)}`,
       );
+    },
+    allow: (d) => {
+      const i = findItem(d.id);
+      void act({ action: 'allow', module: 'tts', interaction_id: d.id }, `Demande de ${esc(i?.viewer_display_name ?? '')} laissée passer`);
     },
     refund: (d) => void act({ action: 'refund', module: d.m, interaction_id: d.id }, 'Remboursé'),
     'state-menu': (d, b) => stateMenu(b, d.m),
@@ -1191,24 +1373,92 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     'module-menu': (d, b) =>
       menu(b, [
         { header: true, label: MODS[d.m].label },
-        d.m === 'tts' ? missingItem('Surveillance (mots)', 'eye') : null,
-        d.m === 'soundboard' ? missingItem('Stop tous les sons…', 'stop') : null,
-        d.m === 'raffle' ? missingItem('Historique Tombola', 'history') : { label: `Historique ${MODS[d.m].label}`, icon: 'history', data: { act: 'hist-module', m: d.m } },
+        d.m === 'tts' ? { label: 'Surveillance (mots)', icon: 'eye', data: { act: 'words' } } : null,
+        d.m === 'soundboard' ? { label: 'Stop tous les sons…', icon: 'stop', disabled: playing('soundboard').length < 2, data: { act: 'stop-all', m: 'soundboard' } } : null,
+        { label: `Historique ${MODS[d.m].label}`, icon: 'history', data: { act: 'hist-module', m: d.m } },
         d.m === 'tts' || d.m === 'soundboard' ? '-' : null,
         d.m === 'tts' || d.m === 'soundboard' ? { label: 'Purger toute la file…', icon: 'trash', danger: true, disabled: !waiting(d.m).length, data: { act: 'purge', m: d.m } } : null,
       ]),
     'hist-module': (d) => open.history(undefined, d.m),
-    purge: (d) => purgeDialog(d.m),
+    purge: (d) => {
+      const q0 = waiting(d.m);
+      choiceDialog({
+        kicker: MODS[d.m].label,
+        title: 'Purger toute la file',
+        lead: `<b>${q0.length} ${q0.length > 1 ? MODS[d.m].units : MODS[d.m].unit}</b> retiré${d.m === 'tts' ? 'e' : ''}${q0.length > 1 ? 's' : ''} d’un coup · ${sumCost(q0)}.`,
+        choices: [{ v: 'refund', label: 'Purger + rembourser' }, { v: 'keep', label: 'Purger sans rembourser' }],
+        confirm: `Supprimer les ${q0.length} ${MODS[d.m].units}`,
+        okLabel: 'Purger',
+        danger: true,
+        run: (pick) => void act({ action: 'purge', module: d.m, refund: pick === 'refund' }, `File ${MODS[d.m].label} purgée · ${q0.length} ${q0.length > 1 ? MODS[d.m].units : MODS[d.m].unit}${pick === 'refund' ? ' · remboursement effectué' : ''}`),
+      });
+    },
+    'stop-all': (d) => {
+      const p = playing(d.m);
+      choiceDialog({
+        kicker: MODS[d.m].label,
+        title: 'Stop tous les sons',
+        lead: `${p.length} sons en cours. La file n’est pas touchée.`,
+        choices: [{ v: 'refund', label: 'Stop + rembourser', sub: sumCost(p) }, { v: 'keep', label: 'Stop sans rembourser' }],
+        okLabel: 'Stop tout',
+        danger: true,
+        run: (pick) => void act({ action: 'stop_all', module: 'soundboard', refund: pick === 'refund' }, `${p.length} son${p.length > 1 ? 's' : ''} arrêté${p.length > 1 ? 's' : ''}`),
+      });
+    },
     block: (d) => blockDialog(d.v, d.m),
     'quick-block': (d, b) => quickBlockMenu(b, d.v, d.m),
     'apply-block': (d) => void act({ action: 'block_viewer', viewer_id: d.v, module: d.m, duration_s: Number(d.s) }, `${esc(nameOf(d.v))} · ${MODS[d.m].label} bloqué ${dur(Number(d.s))}`),
     cooldown: (d) => cooldownDialog(d.v, d.m),
+    'wallet-dialog': (d) => (has('wallet') ? walletDialog(d.v, Number(d.sign)) : acts.locked({ perm: 'wallet' })),
     lift: (d) =>
       void act(
-        d.kind === 'block' ? { action: 'unblock_viewer', viewer_id: d.v, module: d.m } : { action: 'viewer_cooldown', viewer_id: d.v, module: d.m, mode: 'clear', seconds: 0 },
+        d.kind === 'block' ? { action: 'unblock_viewer', viewer_id: d.v, module: d.m } : { action: 'clear_cooldown', viewer_id: d.v, module: d.m },
         `Restriction retirée · ${esc(nameOf(d.v))}`,
       ),
-    locked: (d) => toast(`${ic('lock')} ${PERM_LABEL[d.perm] ?? 'Action'} : ${NEEDS[d.perm] ?? 'permission'} requis.`, false),
+    'toggle-perm': (d) => {
+      const on = d.on === '1';
+      void act({ action: 'set_permission', viewer_id: d.v, permission: d.p, granted: !on }, `${PERMS[d.p][0]} ${on ? 'retirée à' : 'accordée à'} ${esc(nameOf(d.v))}`);
+    },
+    'note-add': (d) => {
+      const inp = node.querySelector(`[data-note-input="${d.v}"]`);
+      const t = inp && inp.value.trim();
+      if (!t) {
+        inp?.focus();
+        return;
+      }
+      inp.value = '';
+      inp.blur();
+      void act({ action: 'add_note', viewer_id: d.v, text: t }, 'Note ajoutée');
+    },
+    'word-type': (d) => {
+      nav.wtype = d.val;
+      const e = drawers.find((x) => x.key === 'words');
+      if (e) {
+        const inp = e.el.querySelector('[data-word-input]');
+        const v = inp ? inp.value : '';
+        paintDrawer(e);
+        const i2 = e.el.querySelector('[data-word-input]');
+        if (i2) i2.value = v;
+      }
+    },
+    'word-add': () => {
+      const inp = node.querySelector('[data-word-input]');
+      const w = inp && inp.value.trim();
+      if (!w) {
+        inp?.focus();
+        return;
+      }
+      inp.value = '';
+      inp.blur();
+      const kind = nav.wtype === 'block' ? 'block' : 'watch';
+      void act({ action: 'add_word', word: w, kind }, `« ${esc(w)} » ajouté (${kind === 'watch' ? 'surveillé' : 'bloqué'})`);
+    },
+    'word-del': (d) => {
+      const w = words?.find((x) => String(x.id) === String(d.id));
+      void act({ action: 'remove_word', word_id: Number(d.id) }, `« ${esc(w?.word ?? '')} » retiré`);
+    },
+    locked: (d) =>
+      toast(d.perm === 'self' ? `${ic('lock')} Tu ne peux pas modifier tes propres permissions.` : `${ic('lock')} Permission « ${PERMS[d.perm]?.[0] ?? 'Gérer les permissions'} » requise`, false),
     'dlg-close': () => closeDialog(),
     'dlg-set': (d) => {
       const dl = dialogs[dialogs.length - 1];
@@ -1235,11 +1485,13 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
       fn(b.dataset, b, e);
     }
   });
+  let hqTimer = null;
   node.addEventListener('input', (e) => {
     const t = e.target;
     if (t.matches?.('[data-hq]')) {
       nav.hf.viewer = t.value;
-      render();
+      win.clearTimeout(hqTimer);
+      hqTimer = win.setTimeout(() => void loadHistory(), 200);
       return;
     }
     if (!t.matches?.('[data-dlg]')) return;
@@ -1249,6 +1501,11 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     refreshDialog(dl);
   });
   node.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (e.target.matches?.('[data-note-input]')) acts['note-add']({ v: e.target.dataset.noteInput });
+      if (e.target.matches?.('[data-word-input]')) acts['word-add']();
+      return;
+    }
     if (e.key !== 'Escape') return;
     hideTip();
     if (menuEl) return closeMenu();
@@ -1267,11 +1524,15 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
   ro?.observe(node);
 
   // ------------------------------------------------------------------ polling (Core is the truth)
+  let suspended = false;
   async function poll() {
-    await refresh();
-    const vid = viewerInView();
-    if (vid) await loadViewer(vid);
-    if (top().v === 'history' && nav.htab === 'audit') await loadAudit();
+    if (!suspended) {
+      await refresh();
+      const vid = viewerInView();
+      if (vid) await loadViewer(vid);
+      if (drawers.some((d) => d.key === 'team')) await loadTeam();
+      for (const d of drawers) if (d.key?.startsWith('ix:')) await loadDetail(d.key.slice(3));
+    }
     if (!destroyed) pollTimer = win.setTimeout(poll, 2000);
   }
 
@@ -1287,6 +1548,14 @@ export function createModerationV2View({ document, client, onChange, onBack }) {
     /** The host re-appended the node (layout measurable again). */
     attached() {
       if (mode() !== builtMode) render();
+    },
+    /** Host hidden (Studio tab): stop reading Core until resumed. */
+    suspend() {
+      suspended = true;
+    },
+    resume() {
+      suspended = false;
+      void refresh();
     },
     destroy() {
       destroyed = true;

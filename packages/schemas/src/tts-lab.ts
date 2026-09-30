@@ -101,6 +101,14 @@ export const TtsLabInteraction = z.object({
   real_debited: z.literal(0),
   refund_status: TtsLabRefundStatus,
   refunded_at: z.string().nullable(),
+  /** Watched words (D4): `pending` = held, never handed to the player until « Laisser passer ». */
+  review_status: z.enum(['none', 'pending', 'allowed']),
+  /** Watched / blocked words found in the message, with their position (highlight). */
+  review_hits: z.array(
+    z.object({ word: z.string(), start: z.number(), end: z.number() }),
+  ),
+  reviewed_by: z.string().nullable(),
+  reviewed_at: z.string().nullable(),
   status: TtsLabStatus,
   lab_session_id: z.string(),
   expires_at: z.string(),
@@ -158,6 +166,8 @@ export const TtsLabViewerState = z.object({
   player_offline: z.boolean(),
   queue_full: z.boolean(),
   blocked: z.boolean(),
+  /** Moderation « Pause globale »: every new interaction is refused. */
+  global_paused: z.boolean(),
   /** A TTS of this viewer is waiting or playing (legacy: one at a time). */
   viewer_busy: z.boolean(),
   cooldown_remaining_ms: z.number().int(),

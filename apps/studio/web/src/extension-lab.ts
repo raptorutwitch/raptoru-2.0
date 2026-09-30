@@ -7,7 +7,8 @@ import { mountTtsLab } from './tts-lab.js';
 // extension frames can only reach this Studio (CSP), never the production EBS.
 
 type Role = 'viewer' | 'moderator' | 'broadcaster';
-type SurfaceId = 'panel' | 'mobile' | 'video' | 'config' | 'live_config';
+type SurfaceId =
+  'panel' | 'window' | 'mobile' | 'video' | 'config' | 'live_config';
 type VideoLayout = 'normal' | 'theatre' | 'fullscreen';
 
 interface LabEvent {
@@ -25,7 +26,14 @@ interface LabEvent {
 interface LabState {
   wallets: Record<Role, number>;
   modules: Record<string, boolean>;
-  raffle: { open: boolean; endsInSeconds: number; participants: number };
+  raffle: {
+    open: boolean;
+    endsInSeconds: number;
+    participants: number;
+    /** Tombola V2 in Core: closed, waiting for its draw. */
+    waitingDraw?: boolean;
+    core?: boolean;
+  };
   tts: { mode: string; paused: boolean; pending: number };
   lastSeq: number;
   events: LabEvent[];
@@ -55,6 +63,17 @@ const SURFACES: Record<
     hint: 'Sous le player, largeur 318 px, hauteur 496 px',
     page: 'panel.html',
     params: { anchor: 'panel', mode: 'viewer', platform: 'web' },
+  },
+  window: {
+    label: 'Moderator Window',
+    hint: 'Panel Twitch → Pop-out (fenêtre 1100 × 720) : console de modération D4',
+    page: 'panel.html',
+    params: {
+      anchor: 'panel',
+      mode: 'viewer',
+      platform: 'web',
+      popout: 'true',
+    },
   },
   mobile: {
     label: 'Mobile viewer',
@@ -254,6 +273,7 @@ export function mountExtensionLab(root: HTMLElement): {
       language: 'fr',
       locale: 'fr-FR',
       popout: 'false',
+      ...(surface.params.popout ? { popout: surface.params.popout } : {}),
       labRole: ui.role,
       labIdentity: ui.identity ? '1' : '0',
       labLayout: ui.layout,
@@ -280,6 +300,9 @@ export function mountExtensionLab(root: HTMLElement): {
           <div class="tw-panel-ext">${iframe(TWITCH.panelWidth, TWITCH.panelHeight)}</div>
           <div class="tw-panel tw-panel--ghost">Réseaux</div>
         </div></div>`;
+    } else if (ui.surface === 'window') {
+      dims = '1100 × 720 px';
+      stage.innerHTML = `<div class="tw-window"><div class="tw-window-bar">Raptoru Live · pop-out (Moderator Window)</div>${iframe(1100, 720)}</div>`;
     } else if (ui.surface === 'mobile') {
       const phone = PHONES[ui.phone];
       const playerH = Math.round((phone.width * 9) / 16);
@@ -342,10 +365,11 @@ export function mountExtensionLab(root: HTMLElement): {
         )
         .join('')}</div>
       <div class="xlab-raffle">
-        <span>Tombola : <strong>${s.raffle.open ? `ouverte (${s.raffle.endsInSeconds} s, ${s.raffle.participants} inscrit·s)` : 'fermée'}</strong></span>
+        <span>Tombola${s.raffle.core ? ' (Core)' : ''} : <strong>${s.raffle.open ? `ouverte (${s.raffle.endsInSeconds} s, ${s.raffle.participants} inscrit·s)` : s.raffle.waitingDraw ? 'fermée · à tirer' : 'fermée'}</strong></span>
         <div class="xlab-row-btns">
-          <button type="button" data-control="raffle-open">Ouvrir 60 s</button>
-          <button type="button" data-control="raffle-draw" ${s.raffle.participants ? '' : 'disabled'}>Tirer</button>
+          ${s.raffle.core ? '<label class="xlab-muted">Cagnotte <input type="number" data-id="raffle-jackpot" value="5000" min="0" step="500" style="width:6em"></label>' : ''}
+          <button type="button" data-control="raffle-open" ${s.raffle.open ? 'disabled' : ''}>Ouvrir 60 s</button>
+          <button type="button" data-control="raffle-draw" ${s.raffle.participants || s.raffle.waitingDraw ? '' : 'disabled'}>Tirer</button>
           <button type="button" data-control="raffle-close" ${s.raffle.open ? '' : 'disabled'}>Fermer</button>
         </div>
       </div>
@@ -501,7 +525,16 @@ export function mountExtensionLab(root: HTMLElement): {
     } else if (d.control) {
       await api(
         `/api/ext-lab/control/${d.control}`,
-        d.control === 'raffle-open' ? { seconds: 60 } : {},
+        d.control === 'raffle-open'
+          ? {
+              seconds: 60,
+              jackpot: Number(
+                root.querySelector<HTMLInputElement>(
+                  '[data-id="raffle-jackpot"]',
+                )?.value ?? 5000,
+              ),
+            }
+          : {},
       );
       refreshFrames();
       void poll();

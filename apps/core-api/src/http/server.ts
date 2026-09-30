@@ -30,6 +30,7 @@ import { soundLabRoutes } from './sound-lab-routes.js';
 import { ttsLabRoutes } from './tts-lab-routes.js';
 import { labModerationRoutes } from './lab-moderation-routes.js';
 import type { LabModerationService } from '../lab-moderation/service.js';
+import type { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
 import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import { loyaltyRoutes } from './loyalty-routes.js';
@@ -60,6 +61,8 @@ export interface AppDeps {
    * Lab Core process and tests expose these routes).
    */
   labModeration?: LabModerationService;
+  /** Tombola V2 Lab slice (with labModeration only). */
+  raffleLab?: RaffleLabService;
   botSecret: string;
   studioSecret: string;
 }
@@ -123,6 +126,7 @@ function routes({
   soundLab,
   ttsLab,
   labModeration,
+  raffleLab,
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
@@ -130,8 +134,8 @@ function routes({
     ...(bonkLab ? bonkLabRoutes(bonkLab) : []),
     ...(soundLab ? soundLabRoutes(soundLab) : []),
     ...(ttsLab ? ttsLabRoutes(ttsLab) : []),
-    ...(ttsLab && labModeration
-      ? labModerationRoutes(labModeration, ttsLab)
+    ...(ttsLab && labModeration && raffleLab
+      ? labModerationRoutes(labModeration, ttsLab, raffleLab)
       : []),
     {
       method: 'GET',

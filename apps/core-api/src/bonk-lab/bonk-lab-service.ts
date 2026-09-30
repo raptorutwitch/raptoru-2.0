@@ -13,10 +13,18 @@ import type { Db, Queryable } from '../db/db.js';
 import type { LabModerationCommand } from '@raptoru/schemas';
 import {
   activeBlock,
+  actorName,
+  assertNotGloballyPaused,
   audit,
-  moderationCooldownMs,
+  countGlobalRefusal,
+  debit,
+  GlobalPauseError,
   moduleState,
+  personalCooldownMs,
+  refundDebit,
+  seeViewer,
   setModuleState,
+  SYSTEM,
   type Actor,
   type LabRole,
 } from '../lab-moderation/store.js';
@@ -116,6 +124,8 @@ interface Row {
   channel_sequence: number | string;
   simulated_cost: number;
   simulated_currency: string;
+  refund_status: 'none' | 'refunded';
+  refunded_at: Date | null;
   status: BonkLabStatus;
   lab_session_id: string;
   expires_at: Date;
@@ -155,6 +165,8 @@ function toInteraction(r: Row): BonkLabInteraction {
     simulated_cost: r.simulated_cost,
     simulated_currency: r.simulated_currency,
     real_debited: 0,
+    refund_status: r.refund_status,
+    refunded_at: iso(r.refunded_at),
     status: r.status,
     lab_session_id: r.lab_session_id,
     expires_at: iso(r.expires_at)!,
@@ -321,6 +333,19 @@ export class BonkLabService {
   // --- admission ---------------------------------------------------------------------------------
 
   async admit(req: BonkLabAdmitRequest): Promise<BonkLabAdmitResponse> {
+    try {
+      return await this.admitTx(req);
+    } catch (e) {
+      // Pause globale (D4): refused before anything is stored or paid; the refusal is counted.
+      if (!(e instanceof GlobalPauseError)) throw e;
+      await countGlobalRefusal(this.db, req.channel_id, this.clock.now());
+      throw new BonkLabError409('global_pause', e.message);
+    }
+  }
+
+  private async admitTx(
+    req: BonkLabAdmitRequest,
+  ): Promise<BonkLabAdmitResponse> {
     // Hash of what the viewer asked for: a retry with the same key must ask for the same Bonk.
     const requestHash = createHash('sha256')
       .update(
@@ -384,6 +409,7 @@ export class BonkLabService {
 
       // Moderation V2 (Core): refused before admission, nothing recorded.
       const now0 = this.clock.now();
+      await assertNotGloballyPaused(q, req.channel_id);
       const state = await moduleState(q, 'bonk');
       if (state === 'disabled')
         throw new BonkLabError409('module_disabled', 'Bonk disabled');
@@ -394,7 +420,7 @@ export class BonkLabService {
           'viewer_blocked',
           'Bonk unavailable for this viewer',
         );
-      const imposed = await moderationCooldownMs(
+      const imposed = await personalCooldownMs(
         q,
         req.channel_id,
         req.viewer.id,
@@ -456,6 +482,22 @@ export class BonkLabService {
           req.emote.provider,
         ],
       );
+      await seeViewer(
+        q,
+        req.channel_id,
+        req.viewer.id,
+        req.viewer.display_name,
+        now,
+      );
+      // Lab test wallet: debited in the same transaction (refused → nothing admitted, nothing stored).
+      await debit(q, now, {
+        channelId: req.channel_id,
+        viewerId: req.viewer.id,
+        currency: 'tokens',
+        amount: BONK_LAB_RULES.simulatedCost,
+        module: 'bonk',
+        interactionId: id,
+      });
       return { interaction: (await this.byId(q, id))!, replayed: false };
     });
   }
@@ -494,8 +536,52 @@ export class BonkLabService {
    * claim has not started yet (start order), but allows overlap once it has started.
    */
   /**
-   * Bonk commands: module state only. A Bonk is a short visual impact, not a queue to curate and
-   * never debited in the Lab: no stop / cancel / refund (refused explicitly).
+   * At most once (conditional update + unique ledger entry): the Bonk becomes « refunded » and the
+   * Lab test wallet gets back exactly what was debited for it. Audited.
+   */
+  private async refund(
+    q: Queryable,
+    interactionId: string,
+    actor: Actor,
+    reason: string,
+    role?: LabRole,
+  ): Promise<boolean> {
+    const now = this.clock.now();
+    const done = await q.query<{ channel_id: string; viewer_id: string }>(
+      `update bonk_lab_interactions set refund_status = 'refunded', refunded_at = $2, updated_at = $2
+       where interaction_id = $1 and refund_status = 'none' returning channel_id, viewer_id`,
+      [interactionId, now],
+    );
+    if (!done.length) return false;
+    const back = await refundDebit(
+      q,
+      now,
+      interactionId,
+      actorName(actor),
+      reason,
+    );
+    await audit(q, now, {
+      channelId: done[0]!.channel_id,
+      actor,
+      role,
+      module: 'bonk',
+      action: 'refund',
+      viewerId: done[0]!.viewer_id,
+      interactionId,
+      reason,
+      before: { refund_status: 'none' },
+      after: {
+        refund_status: 'refunded',
+        amount: back.amount,
+        currency: back.currency,
+      },
+    });
+    return true;
+  }
+
+  /**
+   * Bonk commands: module state, and the refund of a finished Bonk (Admin Wallet). A Bonk is a short
+   * visual impact, not a queue to curate: no stop / cancel (refused explicitly).
    */
   async applyModeration(
     q: Queryable,
@@ -505,6 +591,24 @@ export class BonkLabService {
     role: LabRole,
   ) {
     const now = this.clock.now();
+    if (cmd.action === 'refund') {
+      const row = await this.byId(q, cmd.interaction_id);
+      if (!row || row.channel_id !== channelId)
+        throw new BonkLabNotFoundError(cmd.interaction_id);
+      if (!TERMINAL.includes(row.status))
+        throw new BonkLabError409('not_terminal', 'this Bonk is not finished');
+      if (
+        !(await this.refund(
+          q,
+          row.interaction_id,
+          actor,
+          cmd.reason ?? 'moderator_refund',
+          role,
+        ))
+      )
+        throw new BonkLabError409('already_refunded', 'already refunded');
+      return { ok: true, refunded: true };
+    }
     if (cmd.action !== 'module_state')
       throw new BonkLabError409(
         'unsupported',
@@ -679,6 +783,9 @@ export class BonkLabService {
               a.error?.message ?? 'renderer reported a failure',
             ),
           );
+          // Never shown (renderer error before the start): the Lab test wallet gets its debit back.
+          if (!started)
+            await this.refund(q, interactionId, SYSTEM, 'failed_before_start');
           break;
         case 'execution_unknown':
           if (cur.status === 'execution_unknown') break;
@@ -722,13 +829,16 @@ export class BonkLabService {
    */
   private async sweep(q: Queryable, channelId: string): Promise<void> {
     const now = this.clock.now();
-    await q.query(
+    const expired = await q.query<{ interaction_id: string }>(
       `update bonk_lab_interactions i set status = 'failed', updated_at = $2,
          error = '{"code":"expired","message":"not started before expiry","retryable":false}'::jsonb
        where channel_id = $1 and status = 'queued' and expires_at < $2
-         and not exists (select 1 from bonk_lab_deliveries d where d.interaction_id = i.interaction_id)`,
+         and not exists (select 1 from bonk_lab_deliveries d where d.interaction_id = i.interaction_id)
+       returning interaction_id`,
       [channelId, now],
     );
+    for (const e of expired)
+      await this.refund(q, e.interaction_id, SYSTEM, 'expired');
     await q.query(
       `update bonk_lab_interactions i set status = 'execution_unknown', updated_at = $2,
          error = '{"code":"lease_expired","message":"no renderer proof before the lease ended","retryable":false}'::jsonb

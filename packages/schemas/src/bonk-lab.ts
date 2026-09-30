@@ -83,6 +83,9 @@ export const BonkLabInteraction = z.object({
   simulated_cost: z.number().int(),
   simulated_currency: z.string(),
   real_debited: z.literal(0),
+  /** The Lab test wallet was debited at admission; given back at most once. */
+  refund_status: z.enum(['none', 'refunded']),
+  refunded_at: z.string().nullable(),
   status: BonkLabStatus,
   lab_session_id: z.string(),
   expires_at: z.string(),

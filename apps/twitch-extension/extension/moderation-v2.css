@@ -14,20 +14,15 @@ body.mobile:has(.modv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 .jdm-module-screen--modv2 > .jdm-module__screen-head { display: none !important; }
 .jdm-module-screen--modv2 > .jdm-module { border-color: rgba(196, 164, 255, 0.13); background: linear-gradient(180deg, #150e25, #0f0a1c) !important; }
 .modv2 { background: linear-gradient(180deg, #150e25, #0f0a1c); }
-/* Additions to D4 — the Hub exit next to the search, the Soundboard credits, and D4 entries without a
-   backend yet (visible, inactive, marked « à venir »). */
+/* Additions to D4 — the Hub exit next to the search, the two kinds of credits of the Lab wallet
+   (TTS / Sons), Bonk emotes as images, locked permission switches. */
 .modv2 .side__top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .modv2 .side__top .search { min-width: 0; flex: 1; margin-bottom: 0; }
 .modv2 .vh__cr { color: var(--faint); font-size: 10.5px; white-space: nowrap; }
 .modv2 .vh__cr .cost { font-size: 11px; }
 .modv2 .wal--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .modv2 .wal--3 b { font-size: 14px; }
-.modv2 .mod--offline .mod__name, .modv2 .mod--offline .mod__ic { opacity: 0.6; }
-.modv2 .raffle.is-offline { opacity: 0.55; }
-.modv2 .menu button.is-missing { color: var(--faint); }
-.modv2 .menu button.is-missing svg { color: var(--faint); }
-.modv2 .choice.is-locked { opacity: 0.55; }
-.modv2 .stopic.is-missing { color: var(--faint); opacity: 0.6; cursor: not-allowed; }
+.modv2 .emote__img { width: 18px; height: 18px; object-fit: contain; vertical-align: middle; }
 .modv2 .sw[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
 
 /* --- base.css --- */

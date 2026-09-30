@@ -1,8 +1,8 @@
 import type { Queryable } from '../db/db.js';
 
-// Moderation V2 + Lab test wallet: primitives shared by the TTS / Soundboard / Bonk Lab services,
-// always called inside their own transaction (so an admission, its debit, a cancellation and its
-// refund are atomic). Lab database only.
+// Moderation V2 + Lab test wallet: primitives shared by the TTS / Soundboard / Bonk / Tombola Lab
+// services, always called inside their own transaction (so an admission, its debit, a cancellation
+// and its refund are atomic). Lab database only.
 
 export type LabModule = 'tts' | 'soundboard' | 'bonk' | 'raffle';
 export type ModuleState = 'active' | 'paused' | 'disabled';
@@ -13,6 +13,7 @@ export type WalletCurrency = 'tokens' | 'credits_tts' | 'credits_soundboard';
 export interface Actor {
   id: string;
   login?: string;
+  display_name?: string;
   /** Role claimed by the caller (Lab JWT role); Core computes the effective role. */
   role: LabRole;
   via: 'studio' | 'extension' | 'system';
@@ -30,29 +31,50 @@ export const actorName = (a: Actor) =>
       ? `studio:${a.id}`
       : `${a.login ?? a.id}`;
 
-// --- permissions --------------------------------------------------------------------------------------
+// --- permissions (D4) ------------------------------------------------------------------------------------
+
+/** The 6 permissions D4 grants per moderator. Supermods and the broadcaster have all of them. */
+export const GRANTS = [
+  'wallet',
+  'modules',
+  'globalPause',
+  'perms',
+  'sensitive',
+  'words',
+] as const;
+export type Grant = (typeof GRANTS)[number];
 
 /**
- * Permission per action. A Twitch moderator is not trusted with money: refunds and disabling a
- * module need a supermod (granted by the broadcaster); configuration and the Lab wallet are the
- * broadcaster's.
+ * Who may do what. `moderator` = every moderator (standard D4 moderation, refunds included);
+ * a Grant = moderators it was granted to (+ supermods and the broadcaster); `broadcaster` = the
+ * broadcaster only (Studio: TTS configuration, supermods, Lab wallet tools, Tombola controls).
  */
-export const PERMISSIONS: Record<string, LabRole> = {
-  'module.pause': 'moderator',
-  'module.resume': 'moderator',
-  'module.disable': 'supermod',
-  'queue.stop': 'moderator',
-  'queue.cancel': 'moderator',
-  'queue.purge': 'moderator',
-  refund: 'supermod',
-  'viewer.block': 'moderator',
-  'viewer.cooldown': 'moderator',
-  'viewer.read': 'moderator',
-  'audit.read': 'moderator',
-  'config.tts': 'broadcaster',
-  'staff.manage': 'broadcaster',
-  'wallet.lab': 'broadcaster',
-};
+export const PERMISSIONS: Record<string, 'moderator' | 'broadcaster' | Grant> =
+  {
+    'module.pause': 'moderator',
+    'module.resume': 'moderator',
+    'module.disable': 'modules',
+    'queue.stop': 'moderator',
+    'queue.cancel': 'moderator',
+    'queue.purge': 'moderator',
+    refund: 'moderator',
+    'refund.manual': 'wallet',
+    'review.allow': 'moderator',
+    'viewer.block': 'moderator',
+    'viewer.cooldown': 'moderator',
+    'viewer.read': 'moderator',
+    'audit.read': 'moderator',
+    'notes.write': 'moderator',
+    'sanction.sensitive': 'sensitive',
+    'global.pause': 'globalPause',
+    'perms.manage': 'perms',
+    'words.manage': 'words',
+    'wallet.admin': 'wallet',
+    'config.tts': 'broadcaster',
+    'staff.manage': 'broadcaster',
+    'wallet.lab': 'broadcaster',
+    'raffle.manage': 'broadcaster',
+  };
 const RANK: Record<LabRole, number> = {
   viewer: 0,
   moderator: 1,
@@ -60,50 +82,149 @@ const RANK: Record<LabRole, number> = {
   broadcaster: 3,
 };
 
+export interface Access {
+  role: LabRole;
+  /** Effective D4 grants (all of them for supermods and the broadcaster). */
+  grants: Grant[];
+}
+
 export class LabForbiddenError extends Error {
   constructor(
     readonly permission: string,
     readonly role: LabRole,
   ) {
-    super(
-      `forbidden: ${permission} needs ${PERMISSIONS[permission]} (role ${role})`,
-    );
+    super(`forbidden: ${permission} (role ${role})`);
+  }
+  /** The D4 permission that would allow it, if any (« Permission « X » requise »). */
+  get grant(): Grant | null {
+    const need = PERMISSIONS[this.permission];
+    return need && (GRANTS as readonly string[]).includes(need)
+      ? (need as Grant)
+      : null;
+  }
+  get needs(): string {
+    return PERMISSIONS[this.permission] ?? 'broadcaster';
   }
 }
 
-/** Effective role: Studio = broadcaster; a moderator listed as staff is a supermod. */
-export async function effectiveRole(
+/** Effective role and grants. Studio = broadcaster; a moderator named by the broadcaster = supermod. */
+export async function access(
   q: Queryable,
   channelId: string,
   a: Actor,
-): Promise<LabRole> {
-  if (a.via === 'studio' || a.via === 'system') return 'broadcaster';
+): Promise<Access> {
+  if (a.via === 'studio' || a.via === 'system' || a.role === 'broadcaster')
+    return { role: 'broadcaster', grants: [...GRANTS] };
   if (a.role === 'moderator') {
-    const staff = await q.query<{ role: string }>(
-      'select role from lab_staff where channel_id = $1 and viewer_id = $2',
-      [channelId, a.id],
-    );
-    if (staff[0]?.role === 'supermod') return 'supermod';
+    const staff = (
+      await q.query<{ role: string; grants: string[] }>(
+        'select role, grants from lab_staff where channel_id = $1 and viewer_id = $2',
+        [channelId, a.id],
+      )
+    )[0];
+    if (staff?.role === 'supermod')
+      return { role: 'supermod', grants: [...GRANTS] };
+    return {
+      role: 'moderator',
+      grants: (staff?.grants ?? []).filter((g): g is Grant =>
+        (GRANTS as readonly string[]).includes(g),
+      ),
+    };
   }
-  return a.role;
+  return { role: 'viewer', grants: [] };
 }
 
+export function allowed(acc: Access, permission: string): boolean {
+  const need = PERMISSIONS[permission] ?? 'broadcaster';
+  if (need === 'broadcaster') return acc.role === 'broadcaster';
+  if (need === 'moderator') return RANK[acc.role] >= RANK.moderator;
+  return (
+    RANK[acc.role] >= RANK.supermod ||
+    (acc.role === 'moderator' && acc.grants.includes(need))
+  );
+}
+
+export function assertAccess(acc: Access, permission: string) {
+  if (!allowed(acc, permission))
+    throw new LabForbiddenError(permission, acc.role);
+}
+
+/** Checks one permission; returns the effective role (audit). */
 export async function assertAllowed(
   q: Queryable,
   channelId: string,
   a: Actor,
   permission: string,
 ): Promise<LabRole> {
-  const role = await effectiveRole(q, channelId, a);
-  const needed = PERMISSIONS[permission] ?? 'broadcaster';
-  if (RANK[role] < RANK[needed]) throw new LabForbiddenError(permission, role);
-  return role;
+  const acc = await access(q, channelId, a);
+  assertAccess(acc, permission);
+  return acc.role;
 }
 
-export function permissionsFor(role: LabRole): string[] {
-  return Object.entries(PERMISSIONS)
-    .filter(([, needed]) => RANK[role] >= RANK[needed])
-    .map(([p]) => p);
+export function permissionsFor(acc: Access): string[] {
+  return Object.keys(PERMISSIONS).filter((p) => allowed(acc, p));
+}
+
+/** Staff seen through the extension (Twitch JWT role) joins the team; its name is kept up to date. */
+export async function touchStaff(
+  q: Queryable,
+  channelId: string,
+  a: Actor,
+  now: Date,
+) {
+  if (a.via !== 'extension') return;
+  if (a.role !== 'moderator' && a.role !== 'broadcaster') return;
+  const name = a.display_name ?? a.login ?? a.id;
+  await q.query(
+    `insert into lab_staff (channel_id, viewer_id, role, granted_by, created_at, login, display_name, last_seen)
+     values ($1, $2, $3, 'twitch', $4, $5, $6, $4)
+     on conflict (channel_id, viewer_id) do update set login = coalesce(excluded.login, lab_staff.login),
+       display_name = excluded.display_name, last_seen = excluded.last_seen`,
+    [
+      channelId,
+      a.id,
+      a.role === 'broadcaster' ? 'broadcaster' : 'moderator',
+      now,
+      a.login ?? null,
+      name,
+    ],
+  );
+  await seeViewer(q, channelId, a.id, name, now);
+}
+
+/** A team member (or the channel owner) cannot be sanctioned from moderation (D4). */
+export async function isStaff(
+  q: Queryable,
+  channelId: string,
+  viewerId: string,
+) {
+  if (viewerId === channelId) return true;
+  return (
+    (
+      await q.query(
+        'select 1 from lab_staff where channel_id = $1 and viewer_id = $2',
+        [channelId, viewerId],
+      )
+    ).length > 0
+  );
+}
+
+// --- viewer directory -----------------------------------------------------------------------------------------
+
+/** Every viewer seen by a Lab module: search, « Premier passage », names in histories. */
+export async function seeViewer(
+  q: Queryable,
+  channelId: string,
+  viewerId: string,
+  displayName: string,
+  now: Date,
+) {
+  await q.query(
+    `insert into lab_viewers (channel_id, viewer_id, display_name, first_seen, last_seen) values ($1, $2, $3, $4, $4)
+     on conflict (channel_id, viewer_id) do update set display_name = excluded.display_name,
+       last_seen = greatest(lab_viewers.last_seen, excluded.last_seen)`,
+    [channelId, viewerId, displayName, now],
+  );
 }
 
 // --- audit -----------------------------------------------------------------------------------------------
@@ -156,6 +277,21 @@ export async function moduleState(
   return row?.state ?? 'active';
 }
 
+/** State of any module, TTS included (tts_lab_settings). */
+export async function anyModuleState(
+  q: Queryable,
+  module: LabModule,
+): Promise<ModuleState> {
+  if (module !== 'tts') return moduleState(q, module);
+  return (
+    (
+      await q.query<{ module_state: ModuleState }>(
+        'select module_state from tts_lab_settings where id',
+      )
+    )[0]?.module_state ?? 'active'
+  );
+}
+
 export async function setModuleState(
   q: Queryable,
   module: Exclude<LabModule, 'tts'>,
@@ -170,6 +306,52 @@ export async function setModuleState(
   );
 }
 
+// --- global pause (D4) ------------------------------------------------------------------------------------------
+
+/** Thrown inside an admission transaction; the service counts the refusal outside of it. */
+export class GlobalPauseError extends Error {
+  readonly code = 'global_pause';
+  constructor() {
+    super('Raptoru is paused: new interactions are refused');
+  }
+}
+
+export async function globalState(q: Queryable, channelId: string) {
+  const row = (
+    await q.query<{
+      paused: boolean;
+      paused_at: Date | null;
+      paused_by: string | null;
+      refused_count: number;
+    }>(
+      'select paused, paused_at, paused_by, refused_count from lab_global_state where channel_id = $1',
+      [channelId],
+    )
+  )[0];
+  return {
+    paused: row?.paused ?? false,
+    paused_at: row?.paused_at ? new Date(row.paused_at).toISOString() : null,
+    paused_by: row?.paused_by ?? null,
+    refused: row?.refused_count ?? 0,
+  };
+}
+
+export async function assertNotGloballyPaused(q: Queryable, channelId: string) {
+  if ((await globalState(q, channelId)).paused) throw new GlobalPauseError();
+}
+
+/** One more interaction refused by the global pause (shown in the D4 banner). */
+export async function countGlobalRefusal(
+  q: Queryable,
+  channelId: string,
+  now: Date,
+) {
+  await q.query(
+    'update lab_global_state set refused_count = refused_count + 1, updated_at = $2 where channel_id = $1 and paused',
+    [channelId, now],
+  );
+}
+
 // --- viewer restrictions ----------------------------------------------------------------------------------------
 
 export interface Restriction {
@@ -179,6 +361,9 @@ export interface Restriction {
   reason: string | null;
   actor: string;
   created_at: string;
+  /** Cooldown only: imposed delay between two uses, and « Ce stream ». */
+  delay_s?: number;
+  stream?: boolean;
 }
 
 /** Active block of this viewer on this module (or on everything), if any. */
@@ -200,22 +385,44 @@ export async function activeBlock(
   );
 }
 
-/** Moderation cooldown of this viewer on Soundboard / Bonk (ms remaining, 0 if none). */
-export async function moderationCooldownMs(
+const USE_TABLE = {
+  tts: 'tts_lab_interactions',
+  soundboard: 'sound_lab_interactions',
+  bonk: 'bonk_lab_interactions',
+} as const;
+
+/**
+ * D4 personal cooldown: during its span, this viewer must wait `delay_s` between two uses of the
+ * module. Returns the ms left before the next use (0 = allowed). A use = an admitted interaction
+ * that was not a failure (a removal by moderation still counts).
+ */
+export async function personalCooldownMs(
   q: Queryable,
   channelId: string,
   viewerId: string,
   module: LabModule,
   now: Date,
 ) {
-  if (module === 'tts') return 0; // TTS: per-viewer cooldown in tts_lab_viewers
-  const row = (
-    await q.query<{ until: Date }>(
-      'select until from lab_viewer_cooldowns where channel_id = $1 and viewer_id = $2 and module_id = $3',
-      [channelId, viewerId, module],
+  if (module === 'raffle') return 0;
+  const cd = (
+    await q.query<{ delay_s: number; until: Date }>(
+      'select delay_s, until from lab_viewer_cooldowns where channel_id = $1 and viewer_id = $2 and module_id = $3 and until > $4',
+      [channelId, viewerId, module, now],
     )
   )[0];
-  return row ? Math.max(0, row.until.getTime() - now.getTime()) : 0;
+  if (!cd) return 0;
+  const last = (
+    await q.query<{ at: Date | null }>(
+      `select max(created_at) as at from ${USE_TABLE[module]} where channel_id = $1 and viewer_id = $2 and status <> 'failed'`,
+      [channelId, viewerId],
+    )
+  )[0]?.at;
+  if (!last) return 0;
+  const next = Math.min(
+    new Date(last).getTime() + cd.delay_s * 1000,
+    new Date(cd.until).getTime(),
+  );
+  return Math.max(0, next - now.getTime());
 }
 
 export async function restrictions(
@@ -237,46 +444,35 @@ export async function restrictions(
   );
   const cds = await q.query<{
     module_id: string;
+    delay_s: number;
     until: Date;
+    stream: boolean;
     reason: string | null;
     actor: string;
     created_at: Date;
   }>(
-    `select module_id, until, reason, actor, created_at from lab_viewer_cooldowns
+    `select module_id, delay_s, until, stream, reason, actor, created_at from lab_viewer_cooldowns
      where channel_id = $1 and viewer_id = $2 and until > $3 order by created_at`,
     [channelId, viewerId, now],
   );
-  const tts = (
-    await q.query<{ cooldown_until: Date | null }>(
-      'select cooldown_until from tts_lab_viewers where channel_id = $1 and viewer_id = $2',
-      [channelId, viewerId],
-    )
-  )[0];
   const out: Restriction[] = blocks.map((b) => ({
     kind: 'block',
     module: b.module_id,
-    until: b.until?.toISOString() ?? null,
+    until: b.until ? new Date(b.until).toISOString() : null,
     reason: b.reason,
     actor: b.actor,
-    created_at: b.created_at.toISOString(),
+    created_at: new Date(b.created_at).toISOString(),
   }));
   for (const c of cds)
     out.push({
       kind: 'cooldown',
       module: c.module_id,
-      until: c.until.toISOString(),
+      until: new Date(c.until).toISOString(),
+      delay_s: c.delay_s,
+      stream: c.stream,
       reason: c.reason,
       actor: c.actor,
-      created_at: c.created_at.toISOString(),
-    });
-  if (tts?.cooldown_until && tts.cooldown_until > now)
-    out.push({
-      kind: 'cooldown',
-      module: 'tts',
-      until: tts.cooldown_until.toISOString(),
-      reason: null,
-      actor: '',
-      created_at: '',
+      created_at: new Date(c.created_at).toISOString(),
     });
   return out;
 }
@@ -335,6 +531,12 @@ export const DEFAULT_LAB_WALLET = {
   credits_tts: 1,
   credits_soundboard: 3,
 } as const;
+/** Column bounds of lab_wallets. */
+export const LAB_WALLET_MAX: Record<WalletCurrency, number> = {
+  tokens: 1_000_000_000,
+  credits_tts: 100_000,
+  credits_soundboard: 100_000,
+};
 
 export interface LabWallet {
   tokens: number;
@@ -507,12 +709,15 @@ export async function refundDebit(
   );
   if (!inserted.length) return { amount: 0, currency: d.currency };
   const w = await lockWallet(q, d.channel_id, d.viewer_id, now);
-  w[d.currency] += -Number(d.amount);
+  w[d.currency] = Math.min(
+    LAB_WALLET_MAX[d.currency],
+    w[d.currency] - Number(d.amount),
+  );
   await writeWallet(q, d.channel_id, d.viewer_id, w, now);
   return { amount: -Number(d.amount), currency: d.currency };
 }
 
-/** Lab-only wallet edits (Studio « Wallet de test »): set values, add / remove, reset to defaults. */
+/** Lab-only wallet tools (Studio « Wallet de test »): set values, add / remove, reset to defaults. */
 export async function editWallet(
   q: Queryable,
   now: Date,
@@ -528,7 +733,9 @@ export async function editWallet(
     if (kind === 'reset') after[c] = DEFAULT_LAB_WALLET[c];
     else if (values[c] !== undefined)
       after[c] =
-        kind === 'set' ? values[c]! : Math.max(0, before[c] + values[c]!);
+        kind === 'set'
+          ? values[c]!
+          : Math.min(LAB_WALLET_MAX[c], Math.max(0, before[c] + values[c]!));
   }
   await writeWallet(q, channelId, viewerId, after, now);
   for (const c of ['tokens', 'credits_tts', 'credits_soundboard'] as const)
@@ -539,4 +746,65 @@ export async function editWallet(
         [channelId, viewerId, kind, c, after[c] - before[c], actor, now],
       );
   return { before, after };
+}
+
+/**
+ * D4 « Wallet admin » (Créditer / Débiter): a debit never goes below 0 (as in D4), the applied
+ * amount is recorded as an `admin` movement with its actor and reason.
+ */
+export async function adminAdjust(
+  q: Queryable,
+  now: Date,
+  p: {
+    channelId: string;
+    viewerId: string;
+    currency: WalletCurrency;
+    delta: number;
+    actor: string;
+    reason: string | null;
+  },
+) {
+  const before = await lockWallet(q, p.channelId, p.viewerId, now);
+  const after = { ...before };
+  after[p.currency] = Math.min(
+    LAB_WALLET_MAX[p.currency],
+    Math.max(0, before[p.currency] + p.delta),
+  );
+  const applied = after[p.currency] - before[p.currency];
+  if (applied === 0) return { before, after, applied, ledgerId: null };
+  await writeWallet(q, p.channelId, p.viewerId, after, now);
+  const id = (
+    await q.query<{ id: string }>(
+      `insert into lab_wallet_ledger (channel_id, viewer_id, kind, currency, amount, module_id, interaction_id, actor, reason, created_at)
+       values ($1, $2, 'admin', $3, $4, null, null, $5, $6, $7) returning id`,
+      [p.channelId, p.viewerId, p.currency, applied, p.actor, p.reason, now],
+    )
+  )[0]!.id;
+  return { before, after, applied, ledgerId: Number(id) };
+}
+
+/** Tombola winnings paid on the Lab test wallet (jetons). Returns the ledger id. */
+export async function creditRaffleWin(
+  q: Queryable,
+  now: Date,
+  p: {
+    channelId: string;
+    viewerId: string;
+    amount: number;
+    raffleId: string;
+    actor: string;
+  },
+) {
+  const w = await lockWallet(q, p.channelId, p.viewerId, now);
+  w.tokens = Math.min(LAB_WALLET_MAX.tokens, w.tokens + p.amount);
+  await writeWallet(q, p.channelId, p.viewerId, w, now);
+  return Number(
+    (
+      await q.query<{ id: string }>(
+        `insert into lab_wallet_ledger (channel_id, viewer_id, kind, currency, amount, module_id, interaction_id, actor, reason, created_at, raffle_id)
+         values ($1, $2, 'raffle_win', 'tokens', $3, 'raffle', null, $4, null, $5, $6) returning id`,
+        [p.channelId, p.viewerId, p.amount, p.actor, now, p.raffleId],
+      )
+    )[0]!.id,
+  );
 }

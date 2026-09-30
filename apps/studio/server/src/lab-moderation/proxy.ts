@@ -15,6 +15,7 @@ const PREFIXES = [
   '/v1/lab/moderation/',
   '/v1/lab/wallet/',
   '/v1/lab/tts/rules',
+  '/v1/lab/raffle/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules routes only. */
@@ -106,12 +107,38 @@ export function labProxy(d: LabProxyDeps) {
       const get = req.method === 'GET';
       let m: RegExpExecArray | null;
       if (get && p === '/overview') {
-        const [overview, players] = await Promise.all([
+        const [overview, players, me] = await Promise.all([
           d.core(`/v1/lab/moderation/${C}/overview`),
           d.players().catch(() => ({})),
+          d.core(`/v1/lab/moderation/${C}/whoami`, STUDIO_ACTOR),
         ]);
-        reply(200, { ...(overview as object), players });
-      } else if (get && p === '/search')
+        reply(200, { ...(overview as object), players, me });
+      } else if (get && ['/team', '/words'].includes(p))
+        reply(200, await d.core(`/v1/lab/moderation/${C}${p}`));
+      else if (get && (p === '/interactions' || p === '/ledger')) {
+        const qs = new URLSearchParams();
+        for (const k of [
+          'module',
+          'status',
+          'viewer',
+          'q',
+          'period',
+          'before',
+          'limit',
+          'auto',
+        ]) {
+          const v = url.searchParams.get(k);
+          if (v) qs.set(k, v.slice(0, 64));
+        }
+        reply(200, await d.core(`/v1/lab/moderation/${C}${p}?${qs}`));
+      } else if (get && (m = /^\/interactions\/([0-9a-f-]{36})$/.exec(p)))
+        reply(
+          200,
+          await d.core(`/v1/lab/moderation/${C}/interactions/${m[1]}`),
+        );
+      else if (get && p === '/raffle')
+        reply(200, await d.core(`/v1/lab/raffle/${C}/state`));
+      else if (get && p === '/search')
         reply(
           200,
           await d.core(

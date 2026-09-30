@@ -1,4 +1,5 @@
 import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
+import { RaffleLabService } from './raffle-lab/raffle-lab-service.js';
 import { SoundLabService } from './sound-lab/sound-lab-service.js';
 import { TtsLabService } from './tts-lab/tts-lab-service.js';
 import type { Clock } from './clock.js';
@@ -24,6 +25,7 @@ export interface Core {
   bonkLab: BonkLabService;
   soundLab: SoundLabService;
   ttsLab: TtsLabService;
+  raffleLab: RaffleLabService;
 }
 
 export function createCore(
@@ -45,5 +47,6 @@ export function createCore(
     bonkLab: new BonkLabService(db, clock),
     soundLab: new SoundLabService(db, clock),
     ttsLab: new TtsLabService(db, clock),
+    raffleLab: new RaffleLabService(db, clock),
   };
 }

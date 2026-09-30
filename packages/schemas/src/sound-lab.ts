@@ -46,7 +46,7 @@ export const SoundLabStatus = z.enum([
   'completed',
   'failed',
   'execution_unknown',
-  /** Waiting sound cancelled by moderation (never handed to the player). */
+  /** Removed (waiting) or stopped (playing) by moderation. */
   'cancelled',
 ]);
 export type SoundLabStatus = z.infer<typeof SoundLabStatus>;
@@ -64,6 +64,8 @@ export const SoundLabDelivery = z.object({
   lease_expires_at: z.string().nullable(),
   started_at: z.string().nullable(),
   completed_at: z.string().nullable(),
+  /** The player confirmed it stopped the sound after a moderation stop. */
+  stopped_at: z.string().nullable(),
 });
 export type SoundLabDelivery = z.infer<typeof SoundLabDelivery>;
 
@@ -92,6 +94,9 @@ export const SoundLabInteraction = z.object({
   simulated_cost: z.number().int(),
   simulated_currency: z.string(),
   real_debited: z.literal(0),
+  /** The Lab test wallet was debited at admission; given back at most once. */
+  refund_status: z.enum(['none', 'refunded']),
+  refunded_at: z.string().nullable(),
   status: SoundLabStatus,
   lab_session_id: z.string(),
   expires_at: z.string(),
@@ -122,7 +127,14 @@ export type SoundLabClaimRequest = z.infer<typeof SoundLabClaimRequest>;
 export const SoundLabAckRequest = z.strictObject({
   studio_instance_id: z.string().min(1).max(64),
   attempt_id: z.string().min(1).max(64),
-  event: z.enum(['started', 'completed', 'failed', 'execution_unknown']),
+  /** `stopped`: the player stopped a sound cancelled by moderation (proof, no status change). */
+  event: z.enum([
+    'started',
+    'completed',
+    'failed',
+    'execution_unknown',
+    'stopped',
+  ]),
   error: z
     .strictObject({
       code: z.string().min(1).max(64),

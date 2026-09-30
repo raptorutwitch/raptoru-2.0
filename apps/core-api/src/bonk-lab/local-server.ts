@@ -10,6 +10,7 @@ import { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { labModerationRoutes } from '../http/lab-moderation-routes.js';
 import { LabModerationService } from '../lab-moderation/service.js';
+import { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
 import { HttpError } from '../http/server.js';
 import { systemClock } from '../clock.js';
 import { createPgDb } from '../db/db.js';
@@ -40,6 +41,7 @@ const thirdParty = /^\d+$/.test(channelTwitchId)
 const bonk = new BonkLabService(db, systemClock, viewers, thirdParty);
 const sound = new SoundLabService(db, systemClock);
 const tts = new TtsLabService(db, systemClock);
+const raffle = new RaffleLabService(db, systemClock);
 const routes = [
   ...bonkLabRoutes(bonk, viewers),
   // Soundboard V2 Lab: same isolated Lab Core process and database.
@@ -47,9 +49,11 @@ const routes = [
   // TTS V2 Lab: same isolated Lab Core process and database.
   ...ttsLabRoutes(tts),
   // Moderation V2 + Lab test wallet + TTS configuration: Lab Core only (never the production Core).
+  // Tombola V2 (minimal, needed by the D4 console) lives in the same Lab Core.
   ...labModerationRoutes(
-    new LabModerationService(db, systemClock, tts, sound, bonk),
+    new LabModerationService(db, systemClock, tts, sound, bonk, raffle),
     tts,
+    raffle,
   ),
 ];
 const server = createServer(async (req, res) => {

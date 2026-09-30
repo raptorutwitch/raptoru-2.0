@@ -13,6 +13,7 @@ const status = document.getElementById('status');
 const enable = document.getElementById('enable');
 const seen = new Set();
 const active = new Set(); // { audio, base } currently playing
+const stoppers = new Map(); // interaction_id → stop() of a sound handed to this page
 let audioEnabled = false;
 let protection = 'light';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -154,6 +155,8 @@ async function play(i) {
             },
       }),
     );
+    // Moderation stop (Core already cancelled it): silence now, prove it with a `stopped` ACK.
+    stoppers.set(i.interaction_id, () => resolve({ event: 'stopped' }));
     // Never started (blocked, stalled): nothing was heard, so this is a clean failure.
     setTimeout(() => {
       if (!started)
@@ -172,6 +175,7 @@ async function play(i) {
     }
   });
   const result = await outcome;
+  stoppers.delete(i.interaction_id);
   // Release the element: no audio player kept alive after a spam burst.
   audio.pause();
   audio.removeAttribute('src');
@@ -179,7 +183,11 @@ async function play(i) {
   active.delete(entry);
   applyMix();
   idle();
-  if (result.event === 'completed') {
+  if (result.event === 'stopped') {
+    if (startedAck) await startedAck;
+    await ack(i, 'stopped');
+    status.textContent = `Arrêté par la modération : ${i.sound_label}`;
+  } else if (result.event === 'completed') {
     // `ended` implies the sound started; keep the started → completed order for Core.
     await (startedAck ?? ack(i, 'started'));
     await ack(i, 'completed');
@@ -194,7 +202,20 @@ setInterval(() => void heartbeat().catch(() => {}), 1500);
 await heartbeat().catch(() => {});
 while (true) {
   try {
-    const { interaction } = await call('next', {});
+    const { interaction, stop } = await call('next', {});
+    for (const s of stop ?? []) {
+      const halt = stoppers.get(s.interaction_id);
+      // Already over on this page: still prove that nothing of it is playing any more.
+      if (halt) halt();
+      else
+        void ack(
+          {
+            interaction_id: s.interaction_id,
+            delivery: { attempt_id: s.attempt_id },
+          },
+          'stopped',
+        );
+    }
     // Not awaited: sounds overlap when Core allows it; the next one is fetched right away.
     if (interaction) void play(interaction);
   } catch {

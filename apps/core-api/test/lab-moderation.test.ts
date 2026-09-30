@@ -53,6 +53,7 @@ async function lab() {
     tts,
     core.soundLab,
     core.bonkLab,
+    core.raffleLab,
   );
   await tts.heartbeat({ studio_instance_id: STUDIO, player_ready: true });
   await core.soundLab.heartbeat({
@@ -265,7 +266,7 @@ describe('Lab test wallet', () => {
 });
 
 describe('Moderation V2 (Core)', () => {
-  it('permissions: a moderator pauses and cancels, never refunds or disables; a supermod refunds', async () => {
+  it('permissions: a moderator pauses, cancels and refunds (D4), never disables without the grant; a supermod does', async () => {
     const { act, buy, code, m } = await lab();
     expect(
       await code(
@@ -291,6 +292,7 @@ describe('Moderation V2 (Core)', () => {
       ),
     ).toBe('forbidden');
     const a = (await buy()).interaction;
+    // D4: « Retirer + rembourser » belongs to every moderator.
     expect(
       await code(
         act(
@@ -303,21 +305,13 @@ describe('Moderation V2 (Core)', () => {
           mod,
         ),
       ),
-    ).toBe('forbidden');
+    ).toBe('ok');
     expect((await m.whoami(CHANNEL, mod)).role).toBe('moderator');
     await act({ action: 'set_staff', viewer_id: '900102', role: 'supermod' });
     expect((await m.whoami(CHANNEL, mod)).role).toBe('supermod');
     expect(
       await code(
-        act(
-          {
-            action: 'cancel',
-            module: 'tts',
-            interaction_id: a.interaction_id,
-            refund: true,
-          },
-          mod,
-        ),
+        act({ action: 'module_state', module: 'tts', state: 'disabled' }, mod),
       ),
     ).toBe('ok');
   });
@@ -416,7 +410,7 @@ describe('Moderation V2 (Core)', () => {
     expect(d.interaction_id).toBeTruthy();
   });
 
-  it('blocks per module or everywhere (temporary or not); unblock; cooldown add / replace / clear', async () => {
+  it('blocks per module or everywhere (temporary or not); unblock', async () => {
     const { act, buy, code, core, tts } = await lab();
     await act({
       action: 'block_viewer',
@@ -446,38 +440,9 @@ describe('Moderation V2 (Core)', () => {
     expect(await code(buy('900104'))).toBe('viewer_blocked');
     await act({ action: 'unblock_viewer', viewer_id: '900104', module: 'tts' });
     expect(await code(buy('900104'))).toBe('ok');
-    // Cooldown override (TTS)
-    await act({
-      action: 'viewer_cooldown',
-      viewer_id: '900105',
-      module: 'tts',
-      mode: 'replace',
-      seconds: 600,
-    });
-    expect(
-      (await tts.viewerState(CHANNEL, '900105')).cooldown_remaining_ms,
-    ).toBe(600_000);
-    await act({
-      action: 'viewer_cooldown',
-      viewer_id: '900105',
-      module: 'tts',
-      mode: 'add',
-      seconds: 60,
-    });
-    expect(
-      (await tts.viewerState(CHANNEL, '900105')).cooldown_remaining_ms,
-    ).toBe(660_000);
-    expect(await code(buy('900105'))).toBe('viewer_cooldown');
-    await act({
-      action: 'viewer_cooldown',
-      viewer_id: '900105',
-      module: 'tts',
-      mode: 'clear',
-    });
-    expect(await code(buy('900105'))).toBe('ok');
   });
 
-  it('Soundboard: pause refuses before admission and keeps the queue; viewer cooldown and block; no refund', async () => {
+  it('Soundboard: pause refuses before admission and keeps the queue; D4 cooldown and block; refunds', async () => {
     const { act, code, core, m } = await lab();
     const sound = (viewer = '900101', key = `s-${++seq}`) =>
       core.soundLab.admit({
@@ -504,12 +469,13 @@ describe('Moderation V2 (Core)', () => {
     expect((await core.soundLab.claim(STUDIO, CHANNEL))?.interaction_id).toBe(
       first.interaction_id,
     );
+    await sound('900104');
     await act({
-      action: 'viewer_cooldown',
+      action: 'set_cooldown',
       viewer_id: '900104',
       module: 'soundboard',
-      mode: 'replace',
-      seconds: 30,
+      delay_s: 30,
+      span: 900,
     });
     expect(await code(sound('900104'))).toBe('viewer_cooldown');
     await act({
@@ -519,7 +485,7 @@ describe('Moderation V2 (Core)', () => {
       duration_s: null,
     });
     expect(await code(sound('900105'))).toBe('viewer_blocked');
-    // A waiting sound can be cancelled (none of them debited: nothing to refund).
+    // A waiting sound can be cancelled; it was debited, so a later refund gives it back (once).
     const waiting = (await sound('900106')).interaction;
     const q = await m.overview(CHANNEL);
     expect(q.soundboard.waiting.map((w) => w.interaction_id)).toContain(
@@ -534,6 +500,7 @@ describe('Moderation V2 (Core)', () => {
     expect((await core.soundLab.get(waiting.interaction_id)).status).toBe(
       'cancelled',
     );
+    expect((await m.wallet(CHANNEL, '900106')).tokens).toBe(12_000 - 500);
     expect(
       await code(
         act({
@@ -542,7 +509,17 @@ describe('Moderation V2 (Core)', () => {
           interaction_id: waiting.interaction_id,
         }),
       ),
-    ).toBe('not_refundable');
+    ).toBe('ok');
+    expect((await m.wallet(CHANNEL, '900106')).tokens).toBe(12_000);
+    expect(
+      await code(
+        act({
+          action: 'refund',
+          module: 'soundboard',
+          interaction_id: waiting.interaction_id,
+        }),
+      ),
+    ).toBe('already_refunded');
   });
 
   it('viewer card: wallet, restrictions, activity, wallet movements, moderation history', async () => {
@@ -571,11 +548,11 @@ describe('Moderation V2 (Core)', () => {
     expect(card.activity[0]).toMatchObject({
       module: 'tts',
       interaction_id: i.interaction_id,
-      cost: 7500,
+      simulated_cost: 7500,
     });
-    expect(
-      (card.wallet_ledger as { kind: string }[]).map((l) => l.kind),
-    ).toEqual(['debit', 'set']);
+    expect(card.wallet_ledger.map((l) => l.kind)).toEqual(['debit', 'set']);
+    expect(card.first_seen).toBeTruthy();
+    expect(card.today_count).toBe(1);
     expect((card.history as { action: string }[])[0]!.action).toBe(
       'block_viewer',
     );

@@ -395,16 +395,10 @@ describe('TTS V2 execution, cooldown and refunds', () => {
       };
       const clear = () =>
         l.core.db.tx((q) =>
-          l.tts.applyModeration(
+          l.tts.clearRunningCooldown(
             q,
             CHANNEL,
-            {
-              action: 'viewer_cooldown',
-              viewer_id: viewer.id,
-              module: 'tts',
-              mode: 'clear',
-              seconds: 0,
-            },
+            viewer.id,
             studio,
             'broadcaster',
           ),

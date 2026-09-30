@@ -93,6 +93,25 @@ interface Reply {
   body: Json;
 }
 
+/** Tombola V2 state read from Core (/v1/lab/raffle/:channel/state). */
+interface CoreRaffle {
+  module_state: string;
+  current: {
+    raffle_id: string;
+    status: 'open' | 'closed' | 'drawn';
+    jackpot: number;
+    ends_at: string;
+    closed_at: string | null;
+  } | null;
+  joined: boolean;
+  participants: { viewer_id: string; display_name: string }[];
+  history: {
+    drawn_at: string;
+    jackpot: number;
+    winners: { display_name: string; amount: number }[];
+  }[];
+}
+
 const MODULES: ModuleId[] = ['tts', 'soundboard', 'bonk', 'raffle_join'];
 const DEFAULT_WALLET = 12_000;
 const MAX_EVENTS = 200;
@@ -289,9 +308,13 @@ export class LabEbs {
    * This façade only mirrors them into the session the extension expects.
    */
   private labCore: LabCoreCall | null = null;
-  private coreModules: Record<'tts' | 'soundboard' | 'bonk', string> | null =
-    null;
+  private coreModules: Record<
+    'tts' | 'soundboard' | 'bonk' | 'raffle',
+    string
+  > | null = null;
   private coreModulesAt = 0;
+  /** Tombola V2 state from Core (the in-memory raffle is only used without the Lab Core). */
+  private coreRaffle: CoreRaffle | null = null;
 
   connectLab(core: LabCoreCall) {
     this.labCore = core;
@@ -356,6 +379,7 @@ export class LabEbs {
           tts: { module_state: string };
           soundboard: { module_state: string };
           bonk: { module_state: string };
+          raffle?: { module_state: string };
         }>(`/v1/lab/moderation/${LAB_CHANNEL.id}/overview`, undefined, {
           timeoutMs: 1500,
         })
@@ -364,14 +388,109 @@ export class LabEbs {
               tts: o.tts.module_state,
               soundboard: o.soundboard.module_state,
               bonk: o.bonk.module_state,
+              raffle: o.raffle?.module_state ?? 'active',
             };
             for (const id of ['tts', 'soundboard', 'bonk'] as const)
               this.modules[id] = this.coreModules[id] !== 'disabled';
+            this.modules.raffle_join = this.coreModules.raffle !== 'disabled';
           })
           .catch(() => undefined),
       );
     }
+    tasks.push(this.refreshRaffle(viewerId));
     await Promise.all(tasks);
+  }
+
+  /** Tombola V2 state from Core for this viewer (joined or not). */
+  private async refreshRaffle(viewerId: string | null) {
+    if (!this.labCore) return;
+    await this.labCore<CoreRaffle>(
+      `/v1/lab/raffle/${LAB_CHANNEL.id}/state${viewerId ? `?viewer=${viewerId}` : ''}`,
+      undefined,
+      { timeoutMs: 1500 },
+    )
+      .then((r) => {
+        this.coreRaffle = r;
+      })
+      .catch(() => undefined);
+  }
+
+  /** Free Tombola entry, decided by Core (open round, module state, block, global pause). */
+  private async joinRaffleCore(
+    caller: { identity: LabIdentity; identityShared: boolean },
+    key: string | undefined,
+  ): Promise<Reply> {
+    if (!caller.identityShared) return this.fail(403, 'identity_required');
+    try {
+      const out = await this.labCore!<{
+        raffle_id: string;
+        replayed: boolean;
+      }>('/v1/lab/raffle/entries', {
+        channel_id: LAB_CHANNEL.id,
+        viewer: {
+          id: caller.identity.twitchUserId,
+          display_name: caller.identity.displayName,
+        },
+        idempotency_key:
+          key ?? `lab-raffle-${caller.identity.twitchUserId}-${Date.now()}`,
+      });
+      if (!out.replayed)
+        this.emit(caller.identity, 'raffle_join', 'free', 0, 'Tombola', {});
+      await this.refreshRaffle(caller.identity.twitchUserId);
+      return this.ok({
+        joined: true,
+        duplicate: out.replayed,
+        already_joined: out.replayed,
+        window_id: out.raffle_id,
+        raffle_token: out.raffle_id,
+        source: 'extension',
+      });
+    } catch (e) {
+      const err = e as { status?: number; body?: Json; message: string };
+      return this.fail(err.status ?? 503, err.message);
+    }
+  }
+
+  /** Tombola session in the shape the extension expects, from Core's state. */
+  private raffleSession(identity: LabIdentity, base: Json): Json {
+    const r = this.coreRaffle!;
+    const cur = r.current;
+    const open = cur?.status === 'open';
+    return {
+      ...base,
+      open,
+      joined: open && r.joined,
+      window_id: cur?.raffle_id ?? 'none',
+      token: cur?.raffle_id ?? 'none',
+      ends_in_s: open
+        ? Math.max(
+            0,
+            Math.round((Date.parse(cur!.ends_at) - Date.now()) / 1000),
+          )
+        : 0,
+      ends_at: open ? cur!.ends_at : undefined,
+      closed_at: open ? undefined : (cur?.closed_at ?? undefined),
+      viewer_login: identity.displayName,
+      total: cur?.jackpot ?? 0,
+      currency: 'jetons',
+      participant_count: open ? r.participants.length : 0,
+      participants: open
+        ? r.participants.map((p) => ({
+            login: p.display_name,
+            display_name: p.display_name,
+            source: 'extension',
+          }))
+        : [],
+      history: r.history.map((h) => ({
+        created_at: h.drawn_at,
+        pot: h.jackpot,
+        currency: 'jetons',
+        winners: h.winners.map((w) => ({
+          login: w.display_name,
+          amount: w.amount,
+        })),
+      })),
+    };
   }
 
   private labActor(caller: { identity: LabIdentity }) {
@@ -384,6 +503,7 @@ export class LabEbs {
     return {
       id: caller.identity.twitchUserId,
       login: caller.identity.login,
+      display_name: caller.identity.displayName,
       role,
       via: 'extension' as const,
     };
@@ -400,8 +520,41 @@ export class LabEbs {
     const qs = new URLSearchParams(query);
     const C = LAB_CHANNEL.id;
     const core = this.labCore!;
+    const actor = this.labActor(caller);
+    // Core refuses its read models to a viewer: the reader is named on every read.
+    const as = `as=${actor.id}&as_role=${actor.role}`;
+    const pass = (keys: string[]) => {
+      const out = new URLSearchParams();
+      for (const k of keys) if (qs.get(k)) out.set(k, qs.get(k)!.slice(0, 64));
+      return out.toString();
+    };
     try {
       let m: RegExpExecArray | null;
+      if (method === 'GET' && path === '/moderation/v2/team')
+        return this.ok(await core<Json>(`/v1/lab/moderation/${C}/team?${as}`));
+      if (method === 'GET' && path === '/moderation/v2/words')
+        return this.ok(await core<Json>(`/v1/lab/moderation/${C}/words?${as}`));
+      if (method === 'GET' && path === '/moderation/v2/interactions')
+        return this.ok(
+          await core<Json>(
+            `/v1/lab/moderation/${C}/interactions?${as}&${pass(['module', 'status', 'viewer', 'q', 'period', 'before', 'limit'])}`,
+          ),
+        );
+      if (
+        method === 'GET' &&
+        (m = /^\/moderation\/v2\/interactions\/([0-9a-f-]{36})$/.exec(path))
+      )
+        return this.ok(
+          await core<Json>(
+            `/v1/lab/moderation/${C}/interactions/${m[1]}?${as}`,
+          ),
+        );
+      if (method === 'GET' && path === '/moderation/v2/ledger')
+        return this.ok(
+          await core<Json>(
+            `/v1/lab/moderation/${C}/ledger?${as}&${pass(['viewer', 'before', 'limit', 'auto'])}`,
+          ),
+        );
       if (method === 'GET' && path === '/moderation/v2/whoami')
         return this.ok({
           ...(await core<Json>(
@@ -411,16 +564,16 @@ export class LabEbs {
           actor: this.labActor(caller),
         });
       if (method === 'GET' && path === '/moderation/v2/overview') {
-        const [overview, me] = await Promise.all([
-          core<Json>(`/v1/lab/moderation/${C}/overview`),
-          core<Json>(`/v1/lab/moderation/${C}/whoami`, this.labActor(caller)),
-        ]);
-        return this.ok({ ...overview, me });
+        const me = await core<Json>(`/v1/lab/moderation/${C}/whoami`, actor);
+        const overview = await core<Json>(
+          `/v1/lab/moderation/${C}/overview?${as}`,
+        );
+        return this.ok({ ...overview, me: { ...me, actor } });
       }
       if (method === 'GET' && path === '/moderation/v2/search')
         return this.ok(
           await core<Json>(
-            `/v1/lab/moderation/${C}/search?q=${encodeURIComponent((qs.get('q') ?? '').slice(0, 40))}`,
+            `/v1/lab/moderation/${C}/search?${as}&q=${encodeURIComponent((qs.get('q') ?? '').slice(0, 40))}`,
           ),
         );
       if (
@@ -428,19 +581,17 @@ export class LabEbs {
         (m = /^\/moderation\/v2\/viewers\/(\d{1,32})$/.exec(path))
       )
         return this.ok(
-          await core<Json>(`/v1/lab/moderation/${C}/viewers/${m[1]}`),
+          await core<Json>(`/v1/lab/moderation/${C}/viewers/${m[1]}?${as}`),
         );
-      if (method === 'GET' && path === '/moderation/v2/audit') {
-        const out = new URLSearchParams();
-        for (const k of ['module', 'viewer', 'limit'])
-          if (qs.get(k)) out.set(k, qs.get(k)!);
+      if (method === 'GET' && path === '/moderation/v2/audit')
         return this.ok(
-          await core<Json>(`/v1/lab/moderation/${C}/audit?${out}`),
+          await core<Json>(
+            `/v1/lab/moderation/${C}/audit?${as}&${pass(['module', 'viewer', 'limit'])}`,
+          ),
         );
-      }
       if (method === 'POST' && path === '/moderation/v2/actions') {
         const out = await core<Json>(`/v1/lab/moderation/${C}/actions`, {
-          actor: this.labActor(caller),
+          actor,
           command: body?.command,
         });
         this.invalidateLab();
@@ -693,11 +844,32 @@ export class LabEbs {
         ]),
       ),
       modules: { ...this.modules },
-      raffle: {
-        open: this.raffle.open,
-        endsInSeconds: this.raffleEndsIn(),
-        participants: this.raffle.participants.length,
-      },
+      raffle: this.coreRaffle
+        ? {
+            open: this.coreRaffle.current?.status === 'open',
+            endsInSeconds:
+              this.coreRaffle.current?.status === 'open'
+                ? Math.max(
+                    0,
+                    Math.round(
+                      (Date.parse(this.coreRaffle.current.ends_at) -
+                        Date.now()) /
+                        1000,
+                    ),
+                  )
+                : 0,
+            participants:
+              this.coreRaffle.current?.status === 'open'
+                ? this.coreRaffle.participants.length
+                : 0,
+            waitingDraw: this.coreRaffle.current?.status === 'closed',
+            core: true,
+          }
+        : {
+            open: this.raffle.open,
+            endsInSeconds: this.raffleEndsIn(),
+            participants: this.raffle.participants.length,
+          },
       tts: {
         mode: this.tts.mode,
         paused: this.tts.paused,
@@ -710,6 +882,8 @@ export class LabEbs {
 
   /** Studio controls (local only). With the Lab Core, wallets live there (test wallet). */
   async control(action: string, args: Json = {}): Promise<Json> {
+    if (this.labCore && action.startsWith('raffle-'))
+      return this.raffleControl(action, args);
     if (this.labCore && (action === 'wallet' || action === 'reset')) {
       const actor = { id: 'studio', role: 'broadcaster', via: 'studio' };
       const roles =
@@ -913,6 +1087,9 @@ export class LabEbs {
       path.startsWith('/actions/')
     )
       return this.admitTts(path, body, caller, headers.idempotencyKey);
+    // Tombola V2 (Core): free entry decided by Core, never the in-memory raffle.
+    if (this.labCore && method === 'POST' && path === '/actions/raffle')
+      return this.joinRaffleCore(caller, headers.idempotencyKey);
     // Extension moderation → Moderation V2 in Core (same commands, permissions and audit as Studio).
     if (this.labCore && path.startsWith('/moderation/')) {
       if (caller.identity.role === 'viewer') return this.fail(403, 'forbidden');
@@ -1745,24 +1922,56 @@ export class LabEbs {
             ),
           }
         : { ...(base.moderation as Json), tts: this.ttsModeration(false) },
-      raffle: {
-        ...baseRaffle,
-        open: this.raffle.open,
-        joined,
-        window_id: this.raffle.windowId,
-        token: this.raffle.windowId,
-        ends_in_s: this.raffleEndsIn(),
-        ends_at: this.raffle.open
-          ? new Date(this.raffle.endsAt).toISOString()
-          : undefined,
-        viewer_login: identity.displayName,
-        total: 5000,
-        currency: 'jetons',
-        participant_count: this.raffle.participants.length,
-        participants: [...this.raffle.participants],
-        history: this.raffle.history,
-      },
+      raffle: this.coreRaffle
+        ? this.raffleSession(identity, baseRaffle)
+        : {
+            ...baseRaffle,
+            open: this.raffle.open,
+            joined,
+            window_id: this.raffle.windowId,
+            token: this.raffle.windowId,
+            ends_in_s: this.raffleEndsIn(),
+            ends_at: this.raffle.open
+              ? new Date(this.raffle.endsAt).toISOString()
+              : undefined,
+            viewer_login: identity.displayName,
+            total: 5000,
+            currency: 'jetons',
+            participant_count: this.raffle.participants.length,
+            participants: [...this.raffle.participants],
+            history: this.raffle.history,
+          },
     };
+  }
+
+  /** Studio Tombola controls → Core (« Ouverture, tirage et fermeture : Studio »). */
+  private async raffleControl(action: string, args: Json): Promise<Json> {
+    const command =
+      action === 'raffle-open'
+        ? {
+            action: 'raffle_open',
+            duration_s: Math.min(
+              3600,
+              Math.max(10, Number(args.seconds) || 60),
+            ),
+            jackpot: Math.min(
+              10_000_000,
+              Math.max(0, Math.round(Number(args.jackpot ?? 5000) || 0)),
+            ),
+            winners: Math.min(
+              10,
+              Math.max(1, Math.round(Number(args.winners ?? 1) || 1)),
+            ),
+          }
+        : {
+            action: action === 'raffle-close' ? 'raffle_close' : 'raffle_draw',
+          };
+    const out = await this.labCore!<Json>(
+      `/v1/lab/moderation/${LAB_CHANNEL.id}/actions`,
+      { actor: { id: 'studio', role: 'broadcaster', via: 'studio' }, command },
+    );
+    await this.refreshRaffle(null);
+    return { ok: true, ...out };
   }
 
   private async admitTts(
@@ -1835,10 +2044,14 @@ export class LabEbs {
   /** TTS V2 data for the extension: Core config + this viewer's state (null = Core unreachable). */
   private ttsV2(viewerId: string | null): Json | null {
     if (!this.ttsWorker || !this.ttsConfig) return null;
+    const viewer = viewerId ? (this.ttsViewers.get(viewerId) ?? null) : null;
     return {
-      module_state: this.ttsConfig.module_state,
+      // Pause globale (Core): the TTS shows « en pause » before any payment.
+      module_state: viewer?.global_paused
+        ? 'paused'
+        : this.ttsConfig.module_state,
       rules: this.ttsConfig.rules,
-      viewer: viewerId ? (this.ttsViewers.get(viewerId) ?? null) : null,
+      viewer,
       test_mode: true,
       payment_mode: 'simulated',
     };

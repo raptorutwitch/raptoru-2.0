@@ -49,6 +49,8 @@ const TTS_ERRORS = {
   message_unreadable: 'Rien à lire dans ce message',
   viewer_blocked: 'TTS indisponible pour ton compte',
   viewer_cooldown: 'Cooldown en cours · rien n’a été débité',
+  global_pause: 'Raptoru en pause · rien n’a été débité',
+  message_blocked: 'Mot interdit dans le message · rien n’a été débité',
   viewer_busy: 'Ton TTS précédent n’est pas encore terminé',
   queue_full: 'File pleine · réessaie bientôt',
   studio_offline: 'TTS indisponible pour le moment',

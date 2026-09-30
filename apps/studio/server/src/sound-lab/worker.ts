@@ -12,7 +12,8 @@ import type {
 
 // Soundboard V2 Lab worker: same durability rules as the Bonk Lab worker (separate code, Bonk is
 // untouched). Core decides; this worker hands one sound at a time to the local player page and
-// reports its ACKs. A sound that may have been sent is never replayed.
+// reports its ACKs. A sound that may have been sent is never replayed. A sound stopped by
+// moderation (cancelled in Core) is stopped on the player, which proves it with a `stopped` ACK.
 
 type Event = SoundLabAckRequest['event'];
 type PlayerError = { code: string; message: string };
@@ -23,6 +24,10 @@ type Entry = {
   reported: Event[];
   player: string | null;
   error: PlayerError | null;
+  /** Cancelled in Core (moderation stop / removal). */
+  cancelled?: boolean;
+  /** The stop order was handed to the player. */
+  stopSent?: boolean;
 };
 type Journal = {
   studio: string;
@@ -36,7 +41,7 @@ export type SoundCoreCall = <T>(
   options?: { timeoutMs?: number },
 ) => Promise<T>;
 export const SOUND_CHANNEL = '900100';
-const FINAL: Event[] = ['completed', 'failed', 'execution_unknown'];
+const FINAL: Event[] = ['completed', 'failed', 'execution_unknown', 'stopped'];
 const settled = (e: Entry) => e.events.some((v) => FINAL.includes(v));
 
 /** Local Lab Core only, Soundboard routes only. */
@@ -209,11 +214,37 @@ export class SoundWorker {
     );
   }
 
+  /** Sounds to stop on this player: cancelled in Core by moderation, stop handed out once. */
+  async stopOrders(
+    player: string,
+  ): Promise<{ interaction_id: string; attempt_id: string | null }[]> {
+    return this.exclusive(async () => {
+      if (!this.ready || this.player?.id !== player) return [];
+      const stop = this.state.entries.filter(
+        (e) =>
+          e.cancelled &&
+          e.sent &&
+          e.player === player &&
+          !e.stopSent &&
+          !settled(e),
+      );
+      if (!stop.length) return [];
+      for (const e of stop) e.stopSent = true;
+      await this.save();
+      return stop.map((x) => ({
+        interaction_id: x.interaction.interaction_id,
+        attempt_id: x.interaction.delivery.attempt_id,
+      }));
+    });
+  }
+
   /** Next sound for this player. Persisted as sent before the HTTP answer: never replayed. */
   async command(player: string) {
     return this.exclusive(async () => {
       if (!this.ready || this.player?.id !== player) return null;
-      const e = this.state.entries.find((e) => !e.sent && !e.events.length);
+      const e = this.state.entries.find(
+        (e) => !e.sent && !e.events.length && !e.cancelled,
+      );
       if (!e) return null;
       e.sent = true;
       e.player = player;
@@ -226,7 +257,7 @@ export class SoundWorker {
     id: string,
     attempt: string,
     player: string,
-    event: 'started' | 'completed' | 'failed',
+    event: 'started' | 'completed' | 'failed' | 'stopped',
     error: PlayerError | null = null,
   ) {
     return this.exclusive(async () => {
@@ -244,13 +275,23 @@ export class SoundWorker {
           current.delivery.attempt_id === attempt &&
           current.delivery.studio_instance_id === this.state.studio &&
           ((event === 'started' && current.delivery.started_at !== null) ||
-            current.status === event)
+            current.status === event ||
+            current.status === 'cancelled')
         )
           return;
         throw new Error('attempt_mismatch');
       }
       if (!e.sent || e.player !== player) throw new Error('attempt_mismatch');
       if (e.events.includes(event)) return;
+      // Stopped by moderation: only the proof of the stop matters (Core holds the final state).
+      if (e.cancelled) {
+        if (event === 'stopped' && !settled(e)) {
+          e.events.push('stopped');
+          await this.save();
+        }
+        return;
+      }
+      if (event === 'stopped') throw new Error('not_stopped');
       if (settled(e)) throw new Error('terminal_result');
       if (event === 'completed' && !e.events.includes('started'))
         throw new Error('start_required');
@@ -280,6 +321,20 @@ export class SoundWorker {
             Date.now() > Date.parse(e.interaction.delivery.lease_expires_at!)
           )
             e.events.push(e.sent ? 'execution_unknown' : 'failed');
+          // Moderation: a sound cancelled in Core is stopped on the player (never handed out: dropped).
+          if (!settled(e) && !e.cancelled) {
+            const current = await this.core<SoundLabInteraction>(
+              `/v1/lab/sound/interactions/${e.interaction.interaction_id}`,
+            );
+            if (current.status === 'cancelled') {
+              e.cancelled = true;
+              e.interaction = current;
+              if (!e.sent) e.events.push('failed');
+              else if (!this.ready || this.player?.id !== e.player)
+                e.events.push('execution_unknown'); // no page left to stop it: not provable
+              await this.save();
+            }
+          }
           for (const event of e.events.filter((v) => !e.reported.includes(v))) {
             try {
               e.interaction = await this.core<SoundLabInteraction>(

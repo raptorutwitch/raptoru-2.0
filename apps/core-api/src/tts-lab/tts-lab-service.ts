@@ -18,15 +18,27 @@ import {
   activeBlock,
   actorName,
   assertAllowed,
+  assertNotGloballyPaused,
   audit,
   clearBlock,
+  countGlobalRefusal,
   debit,
+  globalState,
+  GlobalPauseError,
+  personalCooldownMs,
+  seeViewer,
   setBlock,
   refundDebit,
   SYSTEM,
   type Actor,
   type LabRole,
 } from '../lab-moderation/store.js';
+import {
+  findWordHits,
+  wordRules,
+  type WordHit,
+  type WordRule,
+} from '../lab-moderation/words.js';
 import type { Db, Queryable } from '../db/db.js';
 import { pickCast, VOICE_RATES } from './cast.js';
 import {
@@ -107,6 +119,10 @@ interface Row {
   simulated_currency: string;
   refund_status: 'none' | 'refunded';
   refunded_at: Date | null;
+  review_status: 'none' | 'pending' | 'allowed';
+  review_hits: WordHit[] | null;
+  reviewed_by: string | null;
+  reviewed_at: Date | null;
   status: TtsLabStatus;
   lab_session_id: string;
   expires_at: Date;
@@ -157,6 +173,14 @@ function toInteraction(r: Row): TtsLabInteraction {
     real_debited: 0,
     refund_status: r.refund_status,
     refunded_at: iso(r.refunded_at),
+    review_status: r.review_status,
+    review_hits: (r.review_hits ?? []).map((h) => ({
+      word: h.word,
+      start: h.start,
+      end: h.end,
+    })),
+    reviewed_by: r.reviewed_by,
+    reviewed_at: iso(r.reviewed_at),
     status: r.status,
     lab_session_id: r.lab_session_id,
     expires_at: iso(r.expires_at)!,
@@ -242,6 +266,17 @@ export class TtsLabService {
   // --- admission ---------------------------------------------------------------------------------------
 
   async admit(req: TtsLabAdmitRequest): Promise<TtsLabAdmitResponse> {
+    try {
+      return await this.admitTx(req);
+    } catch (e) {
+      // Pause globale (D4): refused before anything is stored or paid; the refusal is counted.
+      if (!(e instanceof GlobalPauseError)) throw e;
+      await countGlobalRefusal(this.db, req.channel_id, this.clock.now());
+      throw new TtsLabError409('global_pause', e.message);
+    }
+  }
+
+  private async admitTx(req: TtsLabAdmitRequest): Promise<TtsLabAdmitResponse> {
     const { text, length } = normalizeMessage(req.text);
     const requestHash = createHash('sha256')
       .update(
@@ -282,6 +317,7 @@ export class TtsLabService {
       }
       const { moduleState, rules } = await this.settingsRow(q);
       // Everything below refuses BEFORE any payment is recorded (nothing is stored on refusal).
+      await assertNotGloballyPaused(q, req.channel_id);
       if (moduleState === 'disabled')
         throw new TtsLabError409('tts_disabled', 'TTS disabled');
       if (moduleState === 'paused')
@@ -296,6 +332,14 @@ export class TtsLabService {
       const filtered = this.filter(text);
       if (filtered.verdict === 'reject')
         throw new TtsLabError409(filtered.code, filtered.message);
+      // Surveillance (D4): a blocked word refuses before the queue (nothing paid); a watched word
+      // admits the TTS but holds it for review (« À vérifier ») until a moderator lets it pass.
+      const hits = findWordHits(text, await wordRules(q, req.channel_id));
+      if (hits.some((h) => h.kind === 'block'))
+        throw new TtsLabError409(
+          'message_blocked',
+          'this message contains a blocked word',
+        );
 
       await this.sweep(q, req.channel_id);
       const now = this.clock.now();
@@ -322,6 +366,19 @@ export class TtsLabService {
         throw new TtsLabError409('viewer_cooldown', 'cooldown active', {
           retry_after_ms: viewer.cooldown_until.getTime() - now.getTime(),
         });
+      const personal = await personalCooldownMs(
+        q,
+        req.channel_id,
+        req.viewer.id,
+        'tts',
+        now,
+      );
+      if (personal > 0)
+        throw new TtsLabError409(
+          'viewer_cooldown',
+          'cooldown imposed by moderation',
+          { retry_after_ms: personal },
+        );
       const mine = (
         await q.query<{ n: string }>(
           `select count(*) as n from tts_lab_interactions where channel_id = $1 and viewer_id = $2 and status = any($3)`,
@@ -379,9 +436,9 @@ export class TtsLabService {
            viewer_display_name, type, message, length, tier_id, character_id, voice_profile_id, voice_category,
            estimated_duration_ms, estimated_weight, cooldown_seconds, created_at, channel_sequence, test_mode, payment_mode,
            payment_method, simulated_cost, simulated_currency, real_debited, refund_status, status, lab_session_id,
-           expires_at, error, updated_at)
+           expires_at, error, updated_at, review_status, review_hits)
          values ($1, $2, $3, 'extension_lab', $4, $5, $6, 'tts', $7, $8, $9, $10, $11, $12, $13, $13, $14, $15, $16,
-           true, 'simulated', $17, $18, $19, 0, 'none', 'queued', $20, $21, null, $15)`,
+           true, 'simulated', $17, $18, $19, 0, 'none', 'queued', $20, $21, null, $15, $22, $23)`,
         [
           id,
           req.idempotency_key,
@@ -404,7 +461,16 @@ export class TtsLabService {
           SIMULATED_CURRENCY[req.payment_method],
           req.lab_session_id,
           new Date(now.getTime() + rules.expires_after_ms),
+          hits.length ? 'pending' : 'none',
+          JSON.stringify(hits),
         ],
+      );
+      await seeViewer(
+        q,
+        req.channel_id,
+        req.viewer.id,
+        req.viewer.display_name,
+        now,
       );
       // Lab test wallet: debited in the same transaction (refused → nothing admitted, nothing stored).
       await debit(q, now, {
@@ -447,6 +513,7 @@ export class TtsLabService {
     let ahead = 0;
     for (const r of open) {
       if (r.interaction_id === row.interaction_id) break;
+      if (r.review_status === 'pending') continue; // held for review: does not delay the others
       ahead += 1;
       const elapsed =
         r.status === 'playing' && r.started_at
@@ -516,13 +583,17 @@ export class TtsLabService {
           (!!viewer?.blocked &&
             (!viewer.blocked_until || viewer.blocked_until > now)) ||
           !!(await activeBlock(q, channelId, viewerId, 'tts', now)),
+        global_paused: (await globalState(q, channelId)).paused,
         // Busy = as many open TTS as the configured limit per viewer (legacy: 1).
         viewer_busy:
           open.filter((r) => r.viewer_id === viewerId).length >=
           rules.max_per_viewer,
-        cooldown_remaining_ms: viewer?.cooldown_until
-          ? Math.max(0, viewer.cooldown_until.getTime() - now.getTime())
-          : 0,
+        cooldown_remaining_ms: Math.max(
+          viewer?.cooldown_until
+            ? Math.max(0, viewer.cooldown_until.getTime() - now.getTime())
+            : 0,
+          await personalCooldownMs(q, channelId, viewerId, 'tts', now),
+        ),
         queue_length: open.length,
         queue_wait_ms: wait,
         current: latest
@@ -590,7 +661,10 @@ export class TtsLabService {
       const open = await this.openRows(q, channelId);
       if (open.some((r) => r.status === 'starting' || r.status === 'playing'))
         return null;
-      const next = open.find((r) => r.status === 'queued');
+      // A TTS held for review (watched word) is never handed out before « Laisser passer ».
+      const next = open.find(
+        (r) => r.status === 'queued' && r.review_status !== 'pending',
+      );
       if (!next) return null;
       const now = this.clock.now();
       await q.query(
@@ -787,7 +861,7 @@ export class TtsLabService {
   /** Legacy entry (Studio TTS card / extension pause): same code path as Moderation V2. */
   async moderate(channelId: string, m: TtsLabModerationRequest) {
     const actor: Actor = { id: m.actor, role: 'broadcaster', via: 'studio' };
-    const cmd: LabModerationCommand =
+    const cmd: LabModerationCommand | null =
       m.action === 'pause' || m.action === 'resume' || m.action === 'disable'
         ? {
             action: 'module_state',
@@ -839,31 +913,113 @@ export class TtsLabService {
                         viewer_id: m.viewer_id,
                         module: 'tts',
                       }
-                    : m.until
-                      ? {
-                          action: 'viewer_cooldown',
-                          viewer_id: m.viewer_id,
-                          module: 'tts',
-                          mode: 'replace',
-                          seconds: Math.max(
-                            0,
-                            Math.round(
-                              (Date.parse(m.until) -
-                                this.clock.now().getTime()) /
-                                1000,
-                            ),
-                          ),
-                        }
-                      : {
-                          action: 'viewer_cooldown',
-                          viewer_id: m.viewer_id,
-                          module: 'tts',
-                          mode: 'clear',
-                          seconds: 0,
-                        };
+                    : null;
+    if (m.action === 'set_viewer_cooldown')
+      // Legacy primitive: sets (or clears) the running cooldown of the viewer's last TTS.
+      return this.db.tx(async (q) => {
+        const until = m.until ? new Date(m.until) : null;
+        if (until) {
+          const now = this.clock.now();
+          await q.query(
+            `insert into tts_lab_viewers (channel_id, viewer_id, cooldown_until, updated_at) values ($1, $2, $3, $4)
+             on conflict (channel_id, viewer_id) do update set cooldown_until = excluded.cooldown_until, updated_at = excluded.updated_at`,
+            [channelId, m.viewer_id, until, now],
+          );
+          await audit(q, now, {
+            channelId,
+            actor,
+            role: 'broadcaster',
+            module: 'tts',
+            action: 'cooldown_running_set',
+            viewerId: m.viewer_id,
+            after: { until: until.toISOString() },
+          });
+        } else
+          await this.clearRunningCooldown(
+            q,
+            channelId,
+            m.viewer_id,
+            actor,
+            'broadcaster',
+          );
+        return { ok: true, until: until?.toISOString() ?? null };
+      });
     return this.db.tx((q) =>
-      this.applyModeration(q, channelId, cmd, actor, 'broadcaster'),
+      this.applyModeration(q, channelId, cmd!, actor, 'broadcaster'),
     );
+  }
+
+  /**
+   * Clears the running cooldown of the viewer's last TTS (armed at its real start). A clear also
+   * covers the TTS already bought: their start no longer re-arms the cooldown.
+   */
+  async clearRunningCooldown(
+    q: Queryable,
+    channelId: string,
+    viewerId: string,
+    actor: Actor,
+    role: LabRole,
+  ) {
+    const now = this.clock.now();
+    const cur = (
+      await q.query<{ cooldown_until: Date | null }>(
+        'select cooldown_until from tts_lab_viewers where channel_id = $1 and viewer_id = $2',
+        [channelId, viewerId],
+      )
+    )[0]?.cooldown_until;
+    await q.query(
+      `insert into tts_lab_viewers (channel_id, viewer_id, cooldown_until, cooldown_cleared_at, updated_at) values ($1, $2, null, $3, $3)
+       on conflict (channel_id, viewer_id) do update set cooldown_until = null, cooldown_cleared_at = excluded.cooldown_cleared_at,
+         updated_at = excluded.updated_at`,
+      [channelId, viewerId, now],
+    );
+    if (cur && cur > now)
+      await audit(q, now, {
+        channelId,
+        actor,
+        role,
+        module: 'tts',
+        action: 'cooldown_running_clear',
+        viewerId,
+        before: { until: cur.toISOString() },
+        after: { until: null },
+      });
+  }
+
+  /** Remaining running cooldown of the viewer's last TTS (Studio « Effacer le cooldown TTS »). */
+  async runningCooldownUntil(channelId: string, viewerId: string) {
+    const cur = (
+      await this.db.query<{ cooldown_until: Date | null }>(
+        'select cooldown_until from tts_lab_viewers where channel_id = $1 and viewer_id = $2',
+        [channelId, viewerId],
+      )
+    )[0]?.cooldown_until;
+    return cur && cur > this.clock.now() ? new Date(cur).toISOString() : null;
+  }
+
+  /**
+   * The watched / blocked words changed: re-evaluate the TTS still waiting (never started, not
+   * already let through). A match holds it for review; no match any more releases it.
+   */
+  async rescanReview(q: Queryable, channelId: string, rules: WordRule[]) {
+    const rows = await q.query<{
+      interaction_id: string;
+      message: string;
+      review_status: string;
+    }>(
+      `select interaction_id, message, review_status from tts_lab_interactions
+       where channel_id = $1 and status = 'queued' and review_status <> 'allowed'`,
+      [channelId],
+    );
+    for (const r of rows) {
+      const hits = findWordHits(r.message, rules);
+      const next = hits.length ? 'pending' : 'none';
+      await q.query(
+        `update tts_lab_interactions set review_status = $2, review_hits = $3, updated_at = $4 where interaction_id = $1
+           and status = 'queued' and review_status <> 'allowed'`,
+        [r.interaction_id, next, JSON.stringify(hits), this.clock.now()],
+      );
+    }
   }
 
   /**
@@ -1008,41 +1164,31 @@ export class TtsLabService {
           throw new TtsLabError409('already_refunded', 'already refunded');
         return { ok: true, refunded: true };
       }
-      case 'viewer_cooldown': {
-        const cur = (
-          await q.query<{ cooldown_until: Date | null }>(
-            'select cooldown_until from tts_lab_viewers where channel_id = $1 and viewer_id = $2',
-            [channelId, cmd.viewer_id],
-          )
-        )[0]?.cooldown_until;
-        const base =
-          cmd.mode === 'add' && cur && cur > now
-            ? cur.getTime()
-            : now.getTime();
-        const until =
-          cmd.mode === 'clear'
-            ? null
-            : new Date(base + (cmd.seconds ?? 0) * 1000);
-        // A clear also covers the TTS already bought: their start no longer re-arms the cooldown.
-        const cleared = cmd.mode === 'clear' ? now : null;
-        await q.query(
-          `insert into tts_lab_viewers (channel_id, viewer_id, cooldown_until, cooldown_cleared_at, updated_at) values ($1, $2, $3, $4, $5)
-           on conflict (channel_id, viewer_id) do update set cooldown_until = excluded.cooldown_until,
-             cooldown_cleared_at = coalesce(excluded.cooldown_cleared_at, tts_lab_viewers.cooldown_cleared_at), updated_at = excluded.updated_at`,
-          [channelId, cmd.viewer_id, until, cleared, now],
+      case 'allow': {
+        // « Laisser passer » (D4): the held TTS takes its place in the queue again.
+        const done = await q.query<{ viewer_id: string }>(
+          `update tts_lab_interactions set review_status = 'allowed', reviewed_by = $2, reviewed_at = $3, updated_at = $3
+           where interaction_id = $1 and channel_id = $4 and status = 'queued' and review_status = 'pending' returning viewer_id`,
+          [cmd.interaction_id, actorName(actor), now, channelId],
         );
+        if (!done.length)
+          throw new TtsLabError409(
+            'not_pending',
+            'this TTS is not waiting for a review',
+          );
         await audit(q, now, {
           channelId,
           actor,
           role,
           module: 'tts',
-          action: `cooldown_${cmd.mode}`,
-          viewerId: cmd.viewer_id,
+          action: 'allow',
+          viewerId: done[0]!.viewer_id,
+          interactionId: cmd.interaction_id,
           reason,
-          before: { until: cur && cur > now ? cur.toISOString() : null },
-          after: { until: until?.toISOString() ?? null },
+          before: { review_status: 'pending' },
+          after: { review_status: 'allowed' },
         });
-        return { ok: true, until: until?.toISOString() ?? null };
+        return { ok: true };
       }
       case 'block_viewer':
       case 'unblock_viewer': {

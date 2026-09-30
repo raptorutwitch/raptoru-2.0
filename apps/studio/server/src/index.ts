@@ -137,7 +137,8 @@ async function serveStatic(pathname: string, res: ServerResponse) {
     res.writeHead(200, {
       'content-type': MIME[extname(rel)] ?? 'application/octet-stream',
       'content-security-policy':
-        "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'",
+        // Moderation console: Bonk emotes of the Twitch / 7TV / BTTV / FFZ CDNs (images only).
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com",
       'x-frame-options': 'DENY',
     });
     res.end(body);

@@ -34,6 +34,7 @@ async function fixture() {
       core.ttsLab,
       core.soundLab,
       core.bonkLab,
+      core.raffleLab,
     ),
     botSecret: 'bot-test-secret',
     studioSecret: 'studio-test-secret',
@@ -463,14 +464,15 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
       (await f.lab.handle('GET', `/moderation/v2/${path}`, undefined, h)).body;
     const act = (command: Json, h = mod) =>
       f.lab.handle('POST', '/moderation/v2/actions', { command }, h);
-    // Viewers never read it; a Twitch moderator gets its Core permissions (no refund).
+    // Viewers never read it; a Twitch moderator gets its Core permissions (D4: refunds, no grant).
     expect(
       (await f.lab.handle('GET', '/moderation/v2/overview', undefined, viewer))
         .status,
     ).toBe(403);
     const first = (await get('overview')) as Json;
-    expect(first.me).toMatchObject({ role: 'moderator' });
-    expect((first.me as Json).permissions).not.toContain('refund');
+    expect(first.me).toMatchObject({ role: 'moderator', grants: [] });
+    expect((first.me as Json).permissions).toContain('refund');
+    expect((first.me as Json).permissions).not.toContain('wallet.admin');
     // Same queue as Core: one playing, one waiting.
     const before = await f.wallet();
     await f.buy('v2-1', 'Premier message');
@@ -496,19 +498,17 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
     expect(
       ((await get('overview', boss)) as { tts: Json }).tts.module_state,
     ).toBe('paused');
-    // Stop + refund: refused for a moderator (Core permission), done by the broadcaster.
-    const refused = await act({
-      action: 'stop_current',
-      module: 'tts',
-      refund: true,
-    });
+    // A gated D4 action (global pause) is refused for a moderator without the grant (Core
+    // permission, named in the answer); stop + refund belongs to every moderator (D4).
+    const refused = await act({ action: 'global_pause', paused: true });
     expect(refused.status).toBe(403);
     expect(refused.body).toMatchObject({
       error: 'forbidden',
-      permission: 'refund',
+      permission: 'global.pause',
+      grant: 'globalPause',
     });
     expect(
-      (await act({ action: 'stop_current', module: 'tts', refund: true }, boss))
+      (await act({ action: 'stop_current', module: 'tts', refund: true }))
         .status,
     ).toBe(200);
     await act({
@@ -535,26 +535,24 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
     expect((await f.buy('v2-4', 'Débloqué')).body.error).toBe(
       'viewer_cooldown',
     );
-    await act({
-      action: 'viewer_cooldown',
-      viewer_id: me,
-      module: 'tts',
-      mode: 'clear',
-      seconds: 0,
-    });
+    await act({ action: 'clear_cooldown', viewer_id: me, module: 'tts' });
     expect((await f.buy('v2-5', 'Débloqué')).status).toBe(200);
-    // Imposed cooldown, viewer card, search and shared audit.
+    // D4 personal cooldown, viewer card, search and shared audit.
     await act({
-      action: 'viewer_cooldown',
+      action: 'set_cooldown',
       viewer_id: me,
       module: 'soundboard',
-      mode: 'replace',
-      seconds: 600,
+      delay_s: 300,
+      span: 3600,
     });
     const card = (await get(`viewers/${me}`)) as Json;
     expect(card.restrictions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kind: 'cooldown', module: 'soundboard' }),
+        expect.objectContaining({
+          kind: 'cooldown',
+          module: 'soundboard',
+          delay_s: 300,
+        }),
       ]),
     );
     expect(
@@ -571,7 +569,7 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
         'purge',
         'block_viewer',
         'unblock_viewer',
-        'cooldown_replace',
+        'cooldown_set',
         'cooldown_clear',
       ]),
     );
