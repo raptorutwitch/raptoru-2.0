@@ -1,6 +1,6 @@
 # Raptoru 2.0 — État du projet / fichier de reprise
 
-**Dernière mise à jour : 28 septembre 2026 — Soundboard V2 (noms des sons default_label + custom_label validés), Studio 0.1.4 publié, wallet switch global et Hub Pop Premium fermés**
+**Dernière mise à jour : 30 septembre 2026 — audit de clôture : Studio 0.1.5 publié et validé ; Modération V2 (Core + Studio + console D4 de l’extension Lab) implémentée et testée, en attente de validation manuelle, non releasée**
 
 ## But de ce fichier
 Ce fichier est la source de continuité du projet. Il doit permettre de reprendre Raptoru 2.0 dans une nouvelle conversation sans perdre :
@@ -11,6 +11,22 @@ Ce fichier est la source de continuité du projet. Il doit permettre de reprendr
 - ce qui reste à migrer/repenser ;
 - les règles de cutover ;
 - la direction produit autour de l’extension, du site, des stats et des cosmétiques.
+
+## État courant pour la reprise (audit du 30/09/2026)
+Vérifié par audit Git et relance des tests sur le HEAD, sans modification de feature.
+- **Git** : branche `main`, HEAD fonctionnel `12ffdd0 — feat(extension): Moderation V2 D4 console on the real Core (Lab)` (suivi uniquement du commit de documentation de cet audit). Working tree propre. Aucun remote Git configuré sur le repo source (rien n’est poussé), aucun tag dans le repo source. `prototypes/` présent sur disque, exclu via `.git/info/exclude`, jamais versionné (0 fichier suivi), jamais embarqué.
+- **Tests relancés sur le HEAD lors de l’audit** : Core 179 (7 skipped), Studio server 60, desktop 17, extension 10, bot 69 ; lint, format, typecheck OK. Les E2E réels (Electron + environnement isolé 4111 / 4311, base `raptoru_bonk_lab_ttse2e`) ont été exécutés pendant la session de développement ; leurs scripts sont restés dans le scratchpad de session et ne sont **pas** dans le repo.
+
+| Élément | Statut |
+|---|---|
+| Studio 0.1.5 (Studio autonome + supervision Electron du serveur Studio, Hub, Bonk V2, Soundboard V2, TTS V2 réel) | **VALIDÉ MANUELLEMENT**, publié (dernière release du feed `raptorutwitch/raptoru-studio-releases` : v0.1.5, 30/09/2026), installé |
+| Modération V2 Core + cockpit Studio « Modération » + configuration TTS + wallet de test Lab (`435f78d`, `706f8c7`, `0da412d`) | **IMPLÉMENTÉ + TEST AUTOMATISÉ** (E2E réel 23/23 + synchro 3/3), **NON RELEASE**, validation manuelle à faire |
+| Console Modération V2 D4 dans l’extension Lab (`12ffdd0`) | **IMPLÉMENTÉ + TEST AUTOMATISÉ** (E2E réel 21/21, rejoué sur les fichiers du package), **PACKAGE LOCAL À VALIDER** (`apps/studio/desktop/release/win-unpacked`, non publié), **NON RELEASE** — l’utilisateur doit encore la valider visuellement et fonctionnellement |
+| Lecture TTS pouvant démarrer avant la fin du shuffle / reveal de l’extension | **DETTE CONNUE** |
+| Soundboard : pas d’arrêt d’un son déjà remis au lecteur, pas de remboursement Soundboard Lab | **DETTE CONNUE** |
+| Mots surveillés / bannis (seulement le hook `TtsMessageFilter`), notes internes, pause globale supermod, synchro ban / timeout Twitch, pop-out de l’extension | **PAS ENCORE IMPLÉMENTÉ** |
+| Tombola V2 (la Tombola tourne encore sur l’ancien système / simulation locale du Lab EBS, pas sur le modèle de module Core) | **PAS ENCORE IMPLÉMENTÉ** — prochain gros chantier après validation finale de la Modération |
+| Production | SAMMI + StreamElements (+ ancienne extension publiée) ; aucun cutover, aucune migration prod |
 
 Il ne faut pas utiliser le mot **« terminé »** de façon ambiguë. Distinguer systématiquement :
 1. **Core / moteur techniquement validé** ;
@@ -154,7 +170,19 @@ Historique principal :
 - `4454c8f — docs: update Raptoru 2.0 project state`
 - `5538111 — feat: refine Hub carousel navigation and launcher` (29/09/2026 : dots, grille + lanceur dense, molette verticale, glow adouci ; pas de release Studio, extension non publiée)
 - `6b75309 — docs: update Raptoru 2.0 project state` (29/09/2026)
-- commit `docs: sync Raptoru 2.0 project state` (29/09/2026, synchronisation de ce fichier) : SHA à lire dans `git log -n 10`.
+- `986ae84 — docs: sync Raptoru 2.0 project state` (29/09/2026)
+- `76c94c4 — feat: make Raptoru Studio start its local runtime`
+- `eb798b9 — feat: run TTS V2 through Core, the Studio worker and an OBS player`
+- `bcfc7ee — feat: integrate the TTS V2 D3 flow in the extension`
+- `ef4025d — fix: let Electron supervise and recover the Studio server`
+- `ced73d4 — docs: record the Studio + TTS V2 checkpoint`
+- `030576e — chore: keep local prototypes out of lint and format checks`
+- `f81955d — chore: release Raptoru Studio 0.1.5` (release validée, pipeline `studio:release`, tag `v0.1.5` sur le repo de releases uniquement)
+- `435f78d — feat: add Moderation V2, TTS configuration and a Lab test wallet to Core` (non releasé)
+- `706f8c7 — feat: add the Studio moderation cockpit and route the extension to Core` (non releasé)
+- `0da412d — docs: record Moderation V2 and TTS configuration (Lab)`
+- `12ffdd0 — feat(extension): Moderation V2 D4 console on the real Core (Lab)` (non releasé ; HEAD fonctionnel au 30/09/2026)
+- commit `docs: record the closing audit of Moderation V2 (Lab)` (ce fichier, audit du 30/09/2026) : SHA à lire dans `git log -n 5`.
 
 Règles Git inchangées :
 - branche `main` ;
@@ -1094,6 +1122,7 @@ Prototype UX D3 + prototype player transformés en vrai module Lab (commits `eb7
   2. ~~pas encore de panneau Studio pour configurer les règles TTS~~ → fait le 30/09/2026 (Studio → Modération → Configuration TTS, voir § « Modération V2 réelle + configuration TTS »), en attente de validation.
 
 ## Modération V2 réelle + configuration TTS + wallet de test (Lab, 30/09/2026 — en attente de validation)
+Statut : **IMPLÉMENTÉ + TEST AUTOMATISÉ · PACKAGE LOCAL À VALIDER · NON RELEASE** (Studio publié = 0.1.5, qui ne contient pas cette modération).
 Implémenté et testé (unitaires, intégration, E2E réels), **non validé manuellement, non publié, pas en prod**. Tout reste Lab / local ; SAMMI prod intact ; aucune migration prod (migration `20261005120000_lab_moderation.sql` appliquée uniquement par le runtime Lab).
 - **Core = source de vérité** (`apps/core-api/src/lab-moderation/`) : états de module, blocages, cooldowns imposés, rôles staff, wallet de test et audit en base Lab ; Studio et l’extension n’affichent et ne commandent que via l’API Core (routes `/v1/lab/moderation`, `/v1/lab/wallet`, `/v1/lab/tts/rules`, exposées **uniquement par le Core Lab**, jamais par le Core de production).
 - **Configuration TTS réelle** (Studio → Modération → Configuration TTS) : paliers (min / max / prix jetons / crédits / cooldown), longueur max, nombre max en attente, durée max en attente (facultative), délai entre deux TTS, TTS simultanés par viewer, état du module. Valeurs lues dans Core ; validation stricte côté Core (chevauchement, trou, bornes, dernier palier seul ouvert, longueur max ≤ dernier palier fermé) avec message clair ; stockage `tts_lab_settings.rules`, appliqué au prochain achat sans redémarrage ; « Restaurer les valeurs par défaut » (legacy) avec confirmation ; avant / après dans l’audit. Prix désormais absolus par palier (défauts legacy 7 500 / 11 250 / 15 000 / 22 500 / 37 500).
@@ -1108,7 +1137,7 @@ Implémenté et testé (unitaires, intégration, E2E réels), **non validé manu
 - **Audit unifié** (`lab_moderation_audit`) : horodatage, acteur, rôle, module, action, viewer, transaction, raison, avant, après — pause / reprise, stop, retraits, purge, remboursements (manuels et automatiques), blocages, cooldowns, config TTS, wallet de test, staff.
 - **Studio** : onglet « Modération » (D4 : colonne modules + recherche viewer + Historique, file au centre, fiche viewer à droite, dialogues pause / blocage / cooldown / vider), onglets Configuration TTS et Wallet de test (Lab).
 - **Extension** : la modération existante de l’extension (pause / reprise / stop / purge TTS, activation des modules, suspension / réactivation d’un viewer, blocage TTS, historique) passe par les mêmes commandes Core, mêmes permissions, mêmes états.
-- **Extension — console D4 (30/09/2026, en attente de validation)** : dans le Lab (session `moderation_v2`), le module « Modération » de l’extension n’affiche plus l’ancien écran mais la console D4 (`shared/moderation-v2.js` + `moderation-v2.css`, portée du prototype validé). Projection du même Core via le relais `/moderation/v2/*` du Lab EBS (overview, recherche, fiche viewer, audit, commandes avec l’identité de l’appelant comme acteur) : aucune règle métier ni état local, relecture Core toutes les 2 s. Modules TTS / Soundboard / Bonk (état, pause / reprise / désactivation selon permissions), file TTS réelle (Stop, Stop + rembourser, retirer ± rembourser, vider ± rembourser), retrait de sons en attente, recherche viewer, fiche viewer (restrictions levables, blocage global ou par module, cooldown remplacer / ajouter, activité, remboursement manuel, mouvements du wallet de test), historique (audit Core + interactions). Actions réservées affichées verrouillées (remboursement / désactivation = Supermod). Modes selon la largeur : compact (Panel, Mobile : pile de navigation), vidéo, fenêtre. En production (EBS sans Core Lab), l’ancien écran reste affiché.
+- **Extension — console D4 (30/09/2026, `12ffdd0` ; IMPLÉMENTÉ + TEST AUTOMATISÉ, PACKAGE LOCAL À VALIDER, NON RELEASE — validation visuelle et fonctionnelle par l’utilisateur à faire)** : Core non refondu dans cette passe (relais `/moderation/v2/*` ajouté au Lab EBS de Studio, primitives Core existantes réutilisées). Rôle Moderator sans remboursement (options verrouillées + refus Core 403 `forbidden`/`refund`), Broadcaster autorisé ; identité de l’acteur de l’extension conservée dans l’audit (acteur + rôle). Panel et Mobile = navigation compacte, Vidéo = deux colonnes ; aucun débordement horizontal ni vertical mesuré sur ces trois surfaces. dans le Lab (session `moderation_v2`), le module « Modération » de l’extension n’affiche plus l’ancien écran mais la console D4 (`shared/moderation-v2.js` + `moderation-v2.css`, portée du prototype validé). Projection du même Core via le relais `/moderation/v2/*` du Lab EBS (overview, recherche, fiche viewer, audit, commandes avec l’identité de l’appelant comme acteur) : aucune règle métier ni état local, relecture Core toutes les 2 s. Modules TTS / Soundboard / Bonk (état, pause / reprise / désactivation selon permissions), file TTS réelle (Stop, Stop + rembourser, retirer ± rembourser, vider ± rembourser), retrait de sons en attente, recherche viewer, fiche viewer (restrictions levables, blocage global ou par module, cooldown remplacer / ajouter, activité, remboursement manuel, mouvements du wallet de test), historique (audit Core + interactions). Actions réservées affichées verrouillées (remboursement / désactivation = Supermod). Modes selon la largeur : compact (Panel, Mobile : pile de navigation), vidéo, fenêtre. En production (EBS sans Core Lab), l’ancien écran reste affiché.
 - **Mots surveillés** : seulement le hook serveur existant (`TtsMessageFilter`), aucune liste ni UI.
 - **Twitch ban / timeout** : aucune synchro. Tout blocage est **interne Raptoru** ; le bot ne reçoit ni ban ni timeout Twitch (pas d’abonnement EventSub correspondant).
 - **Audit Soundboard (sons simultanés)** : modes réels `stack` / `queue` / `ignore_if_running` (pas de `replace`). `queue` et `ignore_if_running` ne s’appliquent qu’entre instances **du même son** ; deux sons différents sont toujours remis en parallèle (8 max). E2E réel : deux sons « stack » (`bowser-theme` + `boom`) joués simultanément par le lecteur (2 éléments audio actifs).
@@ -1261,11 +1290,13 @@ Rapport :
 Le rapport est un audit statique. Aucun test OBS/SAMMI/prod n’a été exécuté pendant cet audit.
 
 ### État Git à revérifier
-Au 29/09/2026 :
-- branche `main` ;
-- dernier commit fonctionnel `5538111` (navigation Hub), puis `6b75309` (docs) et le commit `docs: sync Raptoru 2.0 project state` ;
-- dernière release Studio : 0.1.4 (`31dfd7a`) ;
-- tree propre attendu, hors `prototypes/` (local, non versionné) et runtime/.env ignorés.
+Au 30/09/2026 (audit de clôture) :
+- branche `main`, aucun remote, aucun tag dans le repo source ;
+- dernier commit fonctionnel `12ffdd0` (console Modération V2 D4 de l’extension Lab), suivi du commit docs de l’audit ;
+- dernière release Studio : 0.1.5 (`f81955d`, tag `v0.1.5` sur `raptorutwitch/raptoru-studio-releases`) ; `435f78d`, `706f8c7`, `12ffdd0` **non releasés** ;
+- tree propre attendu, hors `prototypes/` (local, exclu, non versionné) et runtime/.env ignorés.
+- Pour tester la dernière passe : fermer le Studio installé (verrou partagé ; il sert une copie figée de l’extension), lancer `apps/studio/desktop/release/win-unpacked/Raptoru Studio.exe` (package local) ou le Studio source, Extension Lab → rôle Modérateur / Broadcaster → Modération.
+- Release uniquement après validation explicite (« c’est bon », « validé », « go ») via `npm run studio:release` (voir `CLAUDE.md`).
 
 Toujours vérifier l’état actuel avant toute modification.
 
@@ -1293,16 +1324,20 @@ VALIDÉ TECHNIQUEMENT, mais pas activé prod :
 - Hub Pop Premium (validé / fermé le 28/09/2026)
 - navigation Hub : dots + grille / lanceur dense + molette verticale (validée le 29/09/2026, `5538111`)
 - Studio autonome : runtime local + supervision Electron du serveur Studio (validé le 30/09/2026)
-- TTS V2 Lab runtime réel (validé le 30/09/2026 ; dette : synchro reveal / lecture, pas d’UI de config des règles)
+- TTS V2 Lab runtime réel (validé le 30/09/2026 ; dette : synchro reveal / lecture)
 
-IMPLÉMENTÉ EN LAB, VALIDATION EN ATTENTE :
-- Modération V2 réelle (Core) + configuration TTS dans Studio + wallet de test Lab (30/09/2026)
+IMPLÉMENTÉ + TEST AUTOMATISÉ, VALIDATION MANUELLE EN ATTENTE, NON RELEASE :
+- Modération V2 réelle (Core) + cockpit Studio + configuration TTS dans Studio + wallet de test Lab (30/09/2026)
+- console Modération V2 D4 dans l’extension Lab (`12ffdd0`, E2E 21/21 ; package local à valider ; hors Lab l’ancien écran reste)
+
+PAS ENCORE IMPLÉMENTÉ :
+- Tombola V2 (encore ancien système / simulation), mots surveillés / bannis (hook seulement), notes internes, pause globale supermod, synchro ban / timeout Twitch
 
 Studio :
 - updater réel validé en 0.1.0 → 0.1.1
 - v0.1.2 publiée via le pipeline one-command
 - Studio 0.1.1 détecte bien v0.1.2
-- v0.1.5 = checkpoint Studio autonome + Hub + Bonk V2 + Soundboard V2 + TTS V2
+- v0.1.5 = checkpoint Studio autonome + Hub + Bonk V2 + Soundboard V2 + TTS V2 (dernière release, validée ; ne contient pas la Modération V2)
 - feed public = raptorutwitch/raptoru-studio-releases
 - repo source local non poussé
 
