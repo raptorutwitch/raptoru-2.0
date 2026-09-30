@@ -49,7 +49,7 @@ const TTS_ERRORS = {
   message_unreadable: 'Rien à lire dans ce message',
   viewer_blocked: 'TTS indisponible pour ton compte',
   viewer_cooldown: 'Cooldown en cours · rien n’a été débité',
-  viewer_busy: 'Ton TTS précédent est encore dans la file',
+  viewer_busy: 'Ton TTS précédent n’est pas encore terminé',
   queue_full: 'File pleine · réessaie bientôt',
   studio_offline: 'TTS indisponible pour le moment',
   player_offline: 'TTS indisponible pour le moment',
@@ -97,6 +97,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
   let storeKey = null;
   let tx = null; // { key, text, currency, interaction, queue, animAt }
   let hint = '';
+  let hintFrom = ''; // kind of `hint` when it comes from a Core refusal (busy / cooldown)
   let ghost = null; // visual preselection only: never sent, never stored, no effect on the draw
   let startVisual = null;
   let pollTimer = null;
@@ -139,7 +140,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     if (viewer.blocked) return { kind: 'pause', text: 'TTS indisponible pour ton compte' };
     if (viewer.player_offline) return { kind: 'pause', text: 'TTS indisponible pour le moment' };
     if (cooldownLeft() > 0) return { kind: 'cooldown', text: `Prochain TTS dans ${mmss(cooldownLeft())}` };
-    if (viewer.viewer_busy) return { kind: 'busy', text: 'Ton TTS précédent est encore dans la file' };
+    if (viewer.viewer_busy) return { kind: 'busy', text: 'Ton TTS précédent n’est pas encore terminé' };
     if (viewer.queue_full) return { kind: 'full', text: 'File pleine · réessaie bientôt' };
     if (sending || readStore().pending) return { kind: 'busy', text: 'Vérification de ton envoi…' };
     if (!qt.length) return { kind: 'empty', text: '' };
@@ -153,6 +154,12 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
       if (wallet.tokens < need) return { kind: 'tokens', text: `Il te manque ${fmt(need - wallet.tokens)} J` };
     }
     return null;
+  }
+  /** Kind of the shown hint (busy ≠ cooldown, told apart visually). */
+  function hintKind() {
+    if (hint) return hintFrom;
+    const b = blocker();
+    return !b || b.kind === 'empty' ? '' : b.kind;
   }
   function hintText() {
     if (hint) return hint;
@@ -190,7 +197,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     const qt = quote();
     return `<div class="pay" data-cur="${S.currency}"><div class="pay__row">${curToggle()}
       <button class="cta" type="button" data-act="confirm" data-slot="pay" ${blocker() ? 'disabled' : ''}>Confirmer · <span class="cta__price">${priceText(S.currency, priceOf(qt))}</span></button></div>
-      <p class="pay-hint" data-slot="pay-hint" role="status">${esc(hintText())}</p></div>`;
+      <p class="pay-hint" data-slot="pay-hint" data-kind="${hintKind()}" role="status">${esc(hintText())}</p></div>`;
   }
   const ghostCard = () => `<div class="ghost${ghost ? ' has-char' : ''}" data-ghost ${ghost ? `style="--c:${byId[ghost].accent}"` : ''} aria-hidden="true"></div>`;
   const winCard = (final) => {
@@ -305,7 +312,9 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
       pay.closest('.pay').dataset.cur = S.currency;
       pay.querySelector('.cta__price').textContent = priceText(S.currency, priceOf(quote()));
       pay.disabled = Boolean(blocker());
-      node.querySelector('[data-slot="pay-hint"]').textContent = hintText();
+      const hintEl = node.querySelector('[data-slot="pay-hint"]');
+      hintEl.textContent = hintText();
+      hintEl.dataset.kind = hintKind();
       node.querySelectorAll('[data-act="cur-set"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cur === S.currency)));
     }
     syncPayment();
@@ -530,9 +539,11 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
       if (destroyed) return false;
       if (UNCERTAIN.has(error?.code)) {
         // The purchase may have been recorded: keep the key, the next attempt replays it (never a 2nd debit).
+        hintFrom = '';
         hint = 'Connexion perdue · ton envoi sera vérifié';
       } else {
         writeStore({ pending: null });
+        hintFrom = error?.code === 'viewer_cooldown' ? 'cooldown' : error?.code === 'viewer_busy' ? 'busy' : '';
         hint = error?.code === 'viewer_cooldown' && error.details?.retry_after_ms
           ? `Prochain TTS dans ${mmss(error.details.retry_after_ms)}`
           : ttsError(error?.code);

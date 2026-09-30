@@ -671,15 +671,19 @@ export class TtsLabService {
             ],
           );
           await set('playing', null);
-          // Cooldown starts at the real audio start (legacy onstart), not at the purchase.
+          // Cooldown starts at the real audio start (legacy onstart), not at the purchase — unless
+          // the cooldown was cleared manually after this TTS was admitted (the clear stays effective).
           await q.query(
             `insert into tts_lab_viewers (channel_id, viewer_id, cooldown_until, updated_at) values ($1, $2, $3, $4)
-             on conflict (channel_id, viewer_id) do update set cooldown_until = excluded.cooldown_until, updated_at = excluded.updated_at`,
+             on conflict (channel_id, viewer_id) do update set
+               cooldown_until = case when tts_lab_viewers.cooldown_cleared_at >= $5 then tts_lab_viewers.cooldown_until else excluded.cooldown_until end,
+               updated_at = excluded.updated_at`,
             [
               cur.channel_id,
               cur.viewer_id,
               new Date(now.getTime() + cur.cooldown_seconds * 1000),
               now,
+              cur.created_at,
             ],
           );
           break;
@@ -1019,10 +1023,13 @@ export class TtsLabService {
           cmd.mode === 'clear'
             ? null
             : new Date(base + (cmd.seconds ?? 0) * 1000);
+        // A clear also covers the TTS already bought: their start no longer re-arms the cooldown.
+        const cleared = cmd.mode === 'clear' ? now : null;
         await q.query(
-          `insert into tts_lab_viewers (channel_id, viewer_id, cooldown_until, updated_at) values ($1, $2, $3, $4)
-           on conflict (channel_id, viewer_id) do update set cooldown_until = excluded.cooldown_until, updated_at = excluded.updated_at`,
-          [channelId, cmd.viewer_id, until, now],
+          `insert into tts_lab_viewers (channel_id, viewer_id, cooldown_until, cooldown_cleared_at, updated_at) values ($1, $2, $3, $4, $5)
+           on conflict (channel_id, viewer_id) do update set cooldown_until = excluded.cooldown_until,
+             cooldown_cleared_at = coalesce(excluded.cooldown_cleared_at, tts_lab_viewers.cooldown_cleared_at), updated_at = excluded.updated_at`,
+          [channelId, cmd.viewer_id, until, cleared, now],
         );
         await audit(q, now, {
           channelId,

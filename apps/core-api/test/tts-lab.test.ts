@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { CAST_CATALOG, pickCast, VOICE_RATES } from '../src/tts-lab/cast.js';
 import {
   DEFAULT_TTS_RULES,
+  editableRules,
   normalizeMessage,
   quote,
 } from '../src/tts-lab/rules.js';
@@ -364,6 +365,127 @@ describe('TTS V2 execution, cooldown and refunds', () => {
     expect(await tts.get(b.interaction.interaction_id)).toMatchObject({
       status: 'execution_unknown',
       refund_status: 'none',
+    });
+  });
+
+  describe('manual « clear cooldown » stays effective (Lab tests)', () => {
+    const studio = {
+      id: 'antoni',
+      role: 'broadcaster',
+      via: 'studio',
+    } as const;
+    const setup3 = async () => {
+      const l = await lab();
+      const viewer = { id: '900101', display_name: 'Viewer Lab' };
+      await editWallet(
+        l.core.db,
+        l.core.clock.now(),
+        CHANNEL,
+        viewer.id,
+        'set',
+        { tokens: 1_000_000 },
+        'test',
+      );
+      const buy = async () => {
+        await l.tts.heartbeat({
+          studio_instance_id: STUDIO,
+          player_ready: true,
+        });
+        return l.tts.admit(req({ viewer }));
+      };
+      const clear = () =>
+        l.core.db.tx((q) =>
+          l.tts.applyModeration(
+            q,
+            CHANNEL,
+            {
+              action: 'viewer_cooldown',
+              viewer_id: viewer.id,
+              module: 'tts',
+              mode: 'clear',
+              seconds: 0,
+            },
+            studio,
+            'broadcaster',
+          ),
+        );
+      const cooldown = async () =>
+        (await l.tts.viewerState(CHANNEL, viewer.id)).cooldown_remaining_ms;
+      /** Claims the next TTS, starts it and (optionally) completes it. */
+      const start = async () => {
+        await l.tts.heartbeat({
+          studio_instance_id: STUDIO,
+          player_ready: true,
+        });
+        const c = (await l.tts.claim(STUDIO, CHANNEL))!;
+        await ack(l.tts, c, 'started');
+        return c;
+      };
+      return { ...l, viewer, buy, clear, cooldown, start };
+    };
+
+    it('clear before `started`: the start does not re-arm it; a new TTS is admitted right after the end', async () => {
+      const { tts, core, buy, clear, cooldown, start } = await setup3();
+      await buy(); // 1. purchase
+      core.clock.advance(1_000);
+      await clear(); // 2. clear before started
+      core.clock.advance(1_000);
+      const c = await start(); // 3. started
+      expect(await cooldown()).toBe(0); // 4. still 0
+      await ack(tts, c, 'completed');
+      expect(await code(buy())).toBe('ok'); // 5. admitted at once
+    });
+
+    it('clear during playback and after playback', async () => {
+      const { tts, core, buy, clear, cooldown, start } = await setup3();
+      await buy();
+      const c = await start();
+      expect(await cooldown()).toBe(60_000);
+      await clear(); // during playback
+      expect(await cooldown()).toBe(0);
+      expect(await code(buy())).toBe('viewer_busy'); // one TTS per viewer: rule kept
+      await ack(tts, c, 'completed');
+      expect(await cooldown()).toBe(0);
+      core.clock.advance(1_000);
+      const d = (await buy()).interaction;
+      const e = await start();
+      expect(e.interaction_id).toBe(d.interaction_id);
+      await ack(tts, e, 'completed');
+      expect(await cooldown()).toBe(60_000);
+      await clear(); // after playback
+      expect(await code(buy())).toBe('ok');
+    });
+
+    it('several TTS of the viewer in the queue: only those bought before the clear are exempted', async () => {
+      const { tts, core, buy, clear, cooldown, start } = await setup3();
+      const r = editableRules(DEFAULT_TTS_RULES);
+      await tts.updateRules({ ...r, max_per_viewer: 3 }, studio, null);
+      await buy();
+      core.clock.advance(1_000);
+      await buy();
+      core.clock.advance(1_000);
+      await clear();
+      core.clock.advance(1_000);
+      await buy(); // bought after the clear: normal cooldown
+      for (const expected of [0, 0, 60_000]) {
+        const c = await start();
+        expect(await cooldown()).toBe(expected);
+        await ack(tts, c, 'completed');
+        core.clock.advance(1_000);
+      }
+    });
+
+    it('no manual clear: legacy behaviour unchanged (cooldown armed at the real start)', async () => {
+      const { tts, core, buy, cooldown, start } = await setup3();
+      await buy();
+      core.clock.advance(20_000);
+      expect(await cooldown()).toBe(0);
+      const c = await start();
+      expect(await cooldown()).toBe(60_000);
+      await ack(tts, c, 'completed');
+      expect(await code(buy())).toBe('viewer_cooldown');
+      core.clock.advance(60_000);
+      expect(await code(buy())).toBe('ok');
     });
   });
 

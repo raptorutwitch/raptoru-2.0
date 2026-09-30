@@ -34,6 +34,7 @@ export const LAB_MIGRATIONS = [
   '20261003120000_sound_lab_custom_label.sql',
   '20261004120000_tts_lab.sql',
   '20261005120000_lab_moderation.sql',
+  '20261006120000_tts_lab_cooldown_clear.sql',
 ];
 
 export type ServiceState =

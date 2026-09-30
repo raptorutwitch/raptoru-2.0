@@ -138,6 +138,10 @@ body.mobile:has(.ttsv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 .ttsv2 .pay[data-cur='credits'] .cta:not(:disabled) .cta__price { color: #d8efff; }
 .ttsv2 .pay-hint { min-height: 0; margin: 0; padding: 0 4px; color: #ffc27a; font-size: 11.5px; font-weight: 700; }
 .ttsv2 .pay-hint:empty { display: none; }
+/* Cooldown (timer) ≠ previous TTS not finished yet (one TTS per viewer): told apart at a glance. */
+.ttsv2 .pay-hint[data-kind='cooldown']::before { content: '⏱ '; }
+.ttsv2 .pay-hint[data-kind='busy'] { color: #a9c8ff; }
+.ttsv2 .pay-hint[data-kind='busy']::before { content: '⏳ '; }
 .ttsv2 .tx { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 13px; background: rgba(8, 5, 18, 0.45); color: #e8ddfa; font-size: 13px; font-weight: 800; }
 .ttsv2 .tx__icon { display: grid; width: 26px; height: 26px; flex: none; place-items: center; border-radius: 50%; background: rgba(168, 85, 247, 0.18); color: #e9d5ff; }
 .ttsv2 .tx__icon svg { width: 15px; height: 15px; }
