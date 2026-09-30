@@ -565,6 +565,17 @@ Après une feature qui impacte Studio :
 
 Pas de publication automatique à chaque commit.
 
+## Studio autonome — runtime local + supervision (validé le 30/09/2026)
+Commits `76c94c4` (runtime local) et `ef4025d` (supervision Electron). Validé manuellement : Studio source lancé seul, Hub + Bonk V2 + Soundboard V2 + TTS V2 dans une seule application, sans terminal ni `npm run bonk:lab`.
+- Chaîne de supervision : **Electron main → serveur Studio → Local Runtime Manager → Core local / workers / lecteurs**.
+- Runtime local (serveur Studio) : Postgres Docker → base `raptoru_bonk_lab` + migrations Lab → Core Lab 127.0.0.1:4301 ; politique de crash du Core, collision de port, Core orphelin retrouvé et arrêté (PID) ; onglet « Studio » (état des services, connexions, modules, Dev/Lab, journal).
+- Supervision du serveur Studio par Electron : états stopped / starting / ready / degraded / crashed / restarting / fatal ; attente de `/health` ; surveillance process + santé ; relance automatique avec backoff (3 max en 3 min, puis fatal) ; nettoyage de l’ancien process et vérification du port avant relance ; sortie du serveur conservée dans `%APPDATA%\Raptoru Studio\logs\studio-server.log` (+ `.1` pour le lancement précédent).
+- Page d’état propre à Electron (démarrage serveur → Core local → prêt ; serveur perdu / relance / action requise) avec « Relancer le serveur Studio » et « Redémarrer Raptoru Studio » par IPC : fonctionnent avec 127.0.0.1:4100 totalement mort.
+- Une seule instance, que Studio soit lancé depuis le repo (`npm run studio`) ou installé (même profil, même verrou) : une seconde ouverture met la première au premier plan, sans second serveur.
+- Serveur : port 4100 occupé → arrêt immédiat (code 3, message explicite, pas de boucle) ; traces de crash sur stderr ; arrêt propre (Core compris) si Electron disparaît (fermeture forcée) ; fenêtre non ralentie en arrière-plan (lecteurs actifs).
+- Tests réels validés : crash serveur → relance auto ; fatal → relance manuelle depuis l’UI ; crash Core seul ; port 4100 occupé ; double instance ; fermeture normale et forcée sans process ni port restant.
+- Cause de la panne observée le 30/09 : deux fenêtres Studio (dev + installé, verrous différents) partageaient un serveur ; la fermeture de l’une arrêtait le serveur de l’autre. Corrigé.
+
 ## Limites non bloquantes
 - installateur non signé → SmartScreen possible en téléchargement manuel ;
 - UI Studio encore technique, grosse refonte UX finale repoussée ;
@@ -627,7 +638,7 @@ Le Lab actuel permet de tester visuellement :
 
 **Tombola : le Lab reste une simulation locale d’exécution** (wallet fictif en mémoire, journal local, rendu dans Studio).
 
-**TTS V2 : exécution réelle en mode Lab** depuis le 30/09/2026 (même Core Lab que Bonk / Soundboard) : extension → façade LabEbs → Core local/test → worker Studio → lecteur OBS (Web Speech + personnage) → ACK. Voir § 16 « TTS V2 — intégration Lab ». L’ancien formulaire TTS reste affiché quand le module n’a pas de données `tts_v2` (démo, prod).
+**TTS V2 : exécution réelle en mode Lab** depuis le 30/09/2026 (même Core Lab que Bonk / Soundboard) : extension → façade LabEbs → Core local/test → worker Studio → lecteur OBS (Web Speech + personnage) → ACK. Voir § 16 « TTS V2 — runtime réel validé ». L’ancien formulaire TTS reste affiché quand le module n’a pas de données `tts_v2` (démo, prod).
 
 **Soundboard : exécution réelle en mode Lab** depuis le 28/09/2026 (même Core Lab que Bonk) : extension → façade LabEbs → Core local/test → worker Studio → page lecteur audio locale (à activer d’un clic) → ACK. Voir § 16 « Soundboard V2 — état validé ».
 
@@ -941,7 +952,10 @@ Le socle nécessaire au développement des features est maintenant suffisamment 
 - Extension Lab local ;
 - auto-update Studio réel ;
 - pipeline `studio:release` one-command ;
-- Bonk V2 Lab (Extension Lab → Core → Studio → OBS, picker V2 + providers).
+- Bonk V2 Lab (Extension Lab → Core → Studio → OBS, picker V2 + providers) ;
+- Studio autonome (runtime local + supervision Electron du serveur Studio) ;
+- Soundboard V2 Lab ;
+- TTS V2 Lab (runtime réel).
 
 Tous ces éléments restent distincts d’un cutover production global.
 
@@ -1060,8 +1074,8 @@ Validé fonctionnellement, visuellement et à l’écoute le 28/09/2026 (Lab uni
 - Migration `20261003120000_sound_lab_custom_label.sql` déterministe : une valeur égale à l’ancien nom par défaut de son `sound_id` → null ; les 19 renommages existants du Lab ont été préservés à l’identique (prix, cooldowns, modes, volumes et historique inchangés).
 - Tests : Core 158/158, Studio 40/40, extension 10/10.
 
-## TTS V2 — intégration Lab (30/09/2026, en attente de validation)
-Prototype UX D3 + prototype player transformés en vrai module Lab. **Non validé par l’utilisateur, non commité en release, pas en prod** (SAMMI + StreamElements restent la prod TTS).
+## TTS V2 — runtime réel validé (30/09/2026, Lab)
+Prototype UX D3 + prototype player transformés en vrai module Lab (commits `eb798b9`, `bcfc7ee`, correctif viewer lié à Twitch dans `ef4025d`). **Validé manuellement par l’utilisateur le 30/09/2026 : le TTS joue réellement.** Publié avec le checkpoint Studio 0.1.5. **Pas en prod** (SAMMI + StreamElements restent la prod TTS).
 - **Règles Core** (`apps/core-api/src/tts-lab/rules.ts`), reprises du legacy `tts-rules.js` (« tts-anti-abuse-v1 ») : base 7 500 jetons ; paliers 1–80 ×1 / 60 s, 81–150 ×1,5 / 90 s, 151–300 ×2 / 120 s, 301–500 ×3 / 180 s, 501+ ×5 / 300 s ; 1 crédit TTS par message (legacy : 1 récompense PDC = 1 TTS) ; 1 TTS par viewer en attente ou en lecture ; 5 en attente max (celui en lecture non compté) ; plafond de durée totale en attente configurable (désactivé par défaut) ; limite technique 2 000 points de code (legacy 800, les paliers au-delà de 500 ne changent pas). Probabilités de voix legacy : japonais 20 %, variante « bourré » 25 % (Golem 50 %), réduites sur les longs messages (×1 / 0,8 / 0,5 / 0,25 / 0,1) ; jamais deux fois le même personnage d’affilée.
 - **Cast décidé une seule fois par Core à l’admission** `{ character_id, voice_profile_id }` (+ catégorie), idempotent (clé + empreinte de la requête), jamais retiré au sort ailleurs ; le client n’impose ni prix, ni cast, ni cooldown, ni position, ni remboursement.
 - **File** : ordre par `channel_sequence`, lecture strictement une à une, pause entre deux TTS 1,5 s ; file pleine / pause / désactivé / viewer bloqué / cooldown / lecteur absent refusés **avant tout paiement**.
@@ -1074,7 +1088,10 @@ Prototype UX D3 + prototype player transformés en vrai module Lab. **Non valid�
 - **Lecteur** : séquence legacy (narration « <pseudo> a dit », entrée du personnage, texte en morceaux de 180 caractères, bouche à chaque mot, bulle + sous-titres 68 caractères, sortie), voix Web Speech du profil tiré (repli legacy : mot-clé → langue → préfixe → français ; voix stricte absente = échec avant lecture, remboursé), débit / hauteur avec la variation du profil. Scène portée du prototype player ; 10 médias legacy copiés à l’identique (`extension/assets/tts/`, SHA-256 vérifiés).
 - **Extension** : UX D3 intégrée telle quelle (Panel / Vidéo / Mobile) dans le vrai écran module ; source unique personnages / voix / calibration `shared/tts-characters.js` (calibration finale du 30/09) ; clé d’idempotence enregistrée avant l’envoi et réutilisée (double clic, retry, refresh : un seul paiement) ; reprise de la transaction en cours après refresh ; le tirage n’anime que le cast déjà décidé par Core ; `calibrate.html` reste utilisable en Dev/Lab (réglage local prévisualisé dans l’extension Lab seulement).
 - test_mode=true, payment_mode=simulated, real_debited=0 ; wallet Lab fictif débité une fois, rendu une fois au remboursement.
-- Tests : Core 170 (dont 12 TTS), Studio 56 (dont 8 TTS), extension 10, bot 69, desktop 7 ; E2E Electron (Panel / Vidéo / Mobile, lecteur OBS réel, file, pause, refresh, crash lecteur, non-régression Soundboard).
+- Tests : Core 170 (dont 12 TTS), Studio 57 (dont 9 TTS), extension 10, bot 69, desktop 17 ; E2E Electron (Panel / Vidéo / Mobile, lecteur OBS réel, file, pause, refresh, crash lecteur, non-régression Soundboard).
+- **Dette connue (documentée, non corrigée dans ce checkpoint)** :
+  1. le lecteur peut commencer la lecture avant la fin de l’animation shuffle / reveal de l’extension : fonctionnement acceptable pour ce checkpoint, synchronisation UX stricte non garantie ;
+  2. pas encore de panneau Studio complet pour configurer les règles TTS (prix / paliers, coût en crédits, cooldowns, capacité / durée de file…) : les règles existent dans Core (`rules.ts`, surcharge possible en base), l’UI de configuration viendra plus tard.
 
 ## Wallet switch global — validé
 Composant `createCurrencySwitch` (extension, `shared/ui-primitives.js` + `currency-switch.css`), variante « Peek slide » validée le 28/09/2026 :
@@ -1119,22 +1136,23 @@ Conception UX/UI réalisée et validée au niveau prototype (aucune implémentat
 - **Non fait** : implémentation réelle (Core, permissions, blocages, cooldowns, états module, audit, API, branchement UI). La modération actuelle de l’extension reste l’ancienne.
 
 ## Roadmap après Bonk
-Ordre recommandé à date (Bonk V2 et Soundboard V2 validés, Hub fermé) :
+Ordre recommandé à date (checkpoint 30/09/2026 : Studio autonome + Hub + Bonk V2 + Soundboard V2 + TTS V2 validés) :
 1. ~~Soundboard~~ (validé en Lab le 28/09/2026) ;
-2. TTS (intégré en Lab le 30/09/2026, validation utilisateur en attente) ;
-3. Tombola ;
-4. Bonk Fidelity (polish, non bloquant) ;
-5. instrumentation stats/profil au fil des modules ;
-6. Jeu des mots 2.0 ;
-7. achievements/cosmétiques ;
-8. FX/Creepy/BRB/NTM ;
-9. Votekick/Caution/Random Ban ;
-10. Spotify ;
-11. duel/roulette/slots/oracle et satellites.
+2. ~~TTS~~ (runtime réel validé en Lab le 30/09/2026) ;
+3. **Modération V2 D4 réelle** (prochain chantier) ;
+4. **Tombola V2** (refonte, ensuite) ;
+5. Bonk Fidelity (polish, non bloquant) ;
+6. instrumentation stats/profil au fil des modules ;
+7. Jeu des mots 2.0 ;
+8. achievements/cosmétiques ;
+9. FX/Creepy/BRB/NTM ;
+10. Votekick/Caution/Random Ban ;
+11. Spotify ;
+12. duel/roulette/slots/oracle et satellites.
 
 Cette roadmap reste modulable après audit réel de chaque feature.
 
-**Prochain chantier : à définir** (aucun chantier suivant choisi explicitement au 29/09/2026). La liste ci-dessus reste un ordre indicatif.
+**Prochain chantier : Modération V2 D4 réelle, puis Tombola V2** (choisi le 30/09/2026).
 
 # 17. Import des données historiques / cutover
 
@@ -1253,6 +1271,8 @@ VALIDÉ TECHNIQUEMENT, mais pas activé prod :
 - wallet switch global de l’extension (validé le 28/09/2026)
 - Hub Pop Premium (validé / fermé le 28/09/2026)
 - navigation Hub : dots + grille / lanceur dense + molette verticale (validée le 29/09/2026, `5538111`)
+- Studio autonome : runtime local + supervision Electron du serveur Studio (validé le 30/09/2026)
+- TTS V2 Lab runtime réel (validé le 30/09/2026 ; dette : synchro reveal / lecture, pas d’UI de config des règles)
 
 VALIDÉ EN CONCEPTION SEULEMENT (prototype local, rien d’implémenté) :
 - Modération V2 direction UX D4 (29/09/2026)
@@ -1261,13 +1281,14 @@ Studio :
 - updater réel validé en 0.1.0 → 0.1.1
 - v0.1.2 publiée via le pipeline one-command
 - Studio 0.1.1 détecte bien v0.1.2
+- v0.1.5 = checkpoint Studio autonome + Hub + Bonk V2 + Soundboard V2 + TTS V2
 - feed public = raptorutwitch/raptoru-studio-releases
 - repo source local non poussé
 
 Extension :
 - vraie extension prod importée
 - Lab local permet Tombola avec économie fictive (simulation locale)
-- TTS V2 exécuté réellement en Lab (Core Lab → Studio → lecteur OBS), en attente de validation
+- TTS V2 exécuté réellement en Lab (Core Lab → Studio → lecteur OBS), validé
 - Soundboard V2 exécuté réellement en Lab (Core Lab → Studio → lecteur audio local)
 - Hub Pop Premium + wallet switch global (anciens wallets migrés)
 - nouvelle extension (picker V2, Soundboard V2, Hub) NON publiée sur Twitch
@@ -1284,8 +1305,8 @@ BONK V2 = VALIDÉ (Lab), PAS ACTIVÉ EN PROD :
 - zéro Wallet réel, zéro stats/progression réelle, zéro prod
 - reste (non bloquant) : Bonk Fidelity (impact FX, centre caméra, tailles, disparition)
 
-PROCHAIN CHANTIER : à définir.
-Roadmap indicative : TTS → Tombola → stats/profils → Jeu des mots 2.0 → achievements/cosmétiques → FX → modération sociale → Spotify/casino.
+PROCHAIN CHANTIER : Modération V2 D4 réelle, puis Tombola V2 (refonte).
+Roadmap indicative ensuite : stats/profils → Jeu des mots 2.0 → achievements/cosmétiques → FX → modération sociale → Spotify/casino.
 
 Production réelle actuelle :
 SAMMI + StreamElements.
