@@ -8,6 +8,8 @@ import { soundLabRoutes } from '../http/sound-lab-routes.js';
 import { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import { ttsLabRoutes } from '../http/tts-lab-routes.js';
+import { labModerationRoutes } from '../http/lab-moderation-routes.js';
+import { LabModerationService } from '../lab-moderation/service.js';
 import { HttpError } from '../http/server.js';
 import { systemClock } from '../clock.js';
 import { createPgDb } from '../db/db.js';
@@ -35,15 +37,20 @@ const channelTwitchId = process.env.BONK_LAB_CHANNEL_TWITCH_ID ?? '';
 const thirdParty = /^\d+$/.test(channelTwitchId)
   ? new ThirdPartyEmotes(channelTwitchId, systemClock)
   : null;
+const bonk = new BonkLabService(db, systemClock, viewers, thirdParty);
+const sound = new SoundLabService(db, systemClock);
+const tts = new TtsLabService(db, systemClock);
 const routes = [
-  ...bonkLabRoutes(
-    new BonkLabService(db, systemClock, viewers, thirdParty),
-    viewers,
-  ),
+  ...bonkLabRoutes(bonk, viewers),
   // Soundboard V2 Lab: same isolated Lab Core process and database.
-  ...soundLabRoutes(new SoundLabService(db, systemClock)),
+  ...soundLabRoutes(sound),
   // TTS V2 Lab: same isolated Lab Core process and database.
-  ...ttsLabRoutes(new TtsLabService(db, systemClock)),
+  ...ttsLabRoutes(tts),
+  // Moderation V2 + Lab test wallet + TTS configuration: Lab Core only (never the production Core).
+  ...labModerationRoutes(
+    new LabModerationService(db, systemClock, tts, sound, bonk),
+    tts,
+  ),
 ];
 const server = createServer(async (req, res) => {
   const send = (status: number, body: unknown) => {

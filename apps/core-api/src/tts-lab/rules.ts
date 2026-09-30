@@ -8,7 +8,8 @@ export interface TtsTier {
   min: number;
   /** null = open-ended last tier. */
   max: number | null;
-  price_multiplier: number;
+  /** Price in jetons (absolute; legacy defaults = base 7 500 × the legacy multiplier). */
+  price: number;
   /** Cost when paying with TTS credits (legacy: one channel-points redemption = one TTS). */
   credit_cost: number;
   cooldown_seconds: number;
@@ -67,7 +68,7 @@ export const DEFAULT_TTS_RULES: TtsRules = {
       id: '1-80',
       min: 1,
       max: 80,
-      price_multiplier: 1,
+      price: 7_500, // legacy ×1
       credit_cost: 1,
       cooldown_seconds: 60,
       painful_voice_weight_multiplier: 1,
@@ -76,7 +77,7 @@ export const DEFAULT_TTS_RULES: TtsRules = {
       id: '81-150',
       min: 81,
       max: 150,
-      price_multiplier: 1.5,
+      price: 11_250, // legacy ×1.5
       credit_cost: 1,
       cooldown_seconds: 90,
       painful_voice_weight_multiplier: 0.8,
@@ -85,7 +86,7 @@ export const DEFAULT_TTS_RULES: TtsRules = {
       id: '151-300',
       min: 151,
       max: 300,
-      price_multiplier: 2,
+      price: 15_000, // legacy ×2
       credit_cost: 1,
       cooldown_seconds: 120,
       painful_voice_weight_multiplier: 0.5,
@@ -94,7 +95,7 @@ export const DEFAULT_TTS_RULES: TtsRules = {
       id: '301-500',
       min: 301,
       max: 500,
-      price_multiplier: 3,
+      price: 22_500, // legacy ×3
       credit_cost: 1,
       cooldown_seconds: 180,
       painful_voice_weight_multiplier: 0.25,
@@ -103,7 +104,7 @@ export const DEFAULT_TTS_RULES: TtsRules = {
       id: '501+',
       min: 501,
       max: null,
-      price_multiplier: 5,
+      price: 37_500, // legacy ×5
       credit_cost: 1,
       cooldown_seconds: 300,
       painful_voice_weight_multiplier: 0.1,
@@ -127,35 +128,189 @@ export const DEFAULT_TTS_RULES: TtsRules = {
   heartbeat_fresh_ms: 10_000,
 };
 
-/** Validates a partial override (stored in tts_lab_settings.rules) against the defaults. */
+/** What Studio can edit (TTS → Configuration). Everything else stays a Core constant. */
+export interface EditableTtsRules {
+  tiers: {
+    min: number;
+    max: number | null;
+    price: number;
+    credit_cost: number;
+    cooldown_seconds: number;
+  }[];
+  max_chars: number;
+  max_waiting_global: number;
+  max_waiting_weight_ms: number | null;
+  transition_gap_ms: number;
+  max_per_viewer: number;
+}
+
+/** Bounds of every editable value (Core refuses anything outside). */
+export const TTS_RULE_LIMITS = {
+  tiers: [1, 12],
+  length: [1, 10_000],
+  price: [0, 10_000_000],
+  credit_cost: [0, 100],
+  cooldown_seconds: [0, 3_600],
+  max_chars: [1, 10_000],
+  max_waiting_global: [1, 100],
+  max_waiting_weight_ms: [5_000, 2 * 3_600_000],
+  transition_gap_ms: [0, 30_000],
+  max_per_viewer: [1, 10],
+} as const;
+
+export const editableRules = (r: TtsRules): EditableTtsRules => ({
+  tiers: r.tiers.map(({ min, max, price, credit_cost, cooldown_seconds }) => ({
+    min,
+    max,
+    price,
+    credit_cost,
+    cooldown_seconds,
+  })),
+  max_chars: r.max_chars,
+  max_waiting_global: r.max_waiting_global,
+  max_waiting_weight_ms: r.max_waiting_weight_ms,
+  transition_gap_ms: r.transition_gap_ms,
+  max_per_viewer: r.max_per_viewer,
+});
+
+const isInt = (v: unknown, [lo, hi]: readonly [number, number]) =>
+  typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi;
+
+/**
+ * Strict validation of an edited configuration. Returns French messages (shown as is in Studio);
+ * an empty list means valid. Tiers must start at 1, be contiguous (no overlap, no gap), each with
+ * max ≥ min; only the last one may be open (max null). A closed last tier caps the message length.
+ */
+export function validateEditableRules(e: EditableTtsRules): string[] {
+  const errors: string[] = [];
+  const L = TTS_RULE_LIMITS;
+  if (
+    !Array.isArray(e?.tiers) ||
+    e.tiers.length < L.tiers[0] ||
+    e.tiers.length > L.tiers[1]
+  )
+    return [`Il faut entre ${L.tiers[0]} et ${L.tiers[1]} paliers.`];
+  let expected = 1;
+  e.tiers.forEach((t, i) => {
+    const n = i + 1;
+    if (!isInt(t.min, L.length))
+      errors.push(`Palier ${n} : longueur min invalide.`);
+    else if (t.min !== expected)
+      errors.push(
+        t.min > expected
+          ? `Palier ${n} : trou entre ${expected - 1} et ${t.min} (le palier doit commencer à ${expected}).`
+          : `Palier ${n} : chevauche le palier précédent (doit commencer à ${expected}).`,
+      );
+    if (t.max === null) {
+      if (i !== e.tiers.length - 1)
+        errors.push(
+          `Palier ${n} : seul le dernier palier peut être ouvert (sans max).`,
+        );
+    } else if (!isInt(t.max, L.length) || t.max < t.min)
+      errors.push(`Palier ${n} : longueur max invalide (≥ min).`);
+    if (!isInt(t.price, L.price))
+      errors.push(
+        `Palier ${n} : prix jetons invalide (entier 0 – ${L.price[1]}).`,
+      );
+    if (!isInt(t.credit_cost, L.credit_cost))
+      errors.push(
+        `Palier ${n} : coût en crédits invalide (entier 0 – ${L.credit_cost[1]}).`,
+      );
+    if (!isInt(t.cooldown_seconds, L.cooldown_seconds))
+      errors.push(
+        `Palier ${n} : cooldown invalide (0 – ${L.cooldown_seconds[1]} s).`,
+      );
+    expected = typeof t.max === 'number' ? t.max + 1 : Infinity;
+  });
+  if (!isInt(e.max_chars, L.max_chars))
+    errors.push(`Longueur max du message invalide (1 – ${L.max_chars[1]}).`);
+  const last = e.tiers.at(-1);
+  if (
+    last &&
+    typeof last.max === 'number' &&
+    isInt(e.max_chars, L.max_chars) &&
+    e.max_chars > last.max
+  )
+    errors.push(
+      `Longueur max du message (${e.max_chars}) au-delà du dernier palier (${last.max}) : ouvre le dernier palier ou baisse la longueur max.`,
+    );
+  if (!isInt(e.max_waiting_global, L.max_waiting_global))
+    errors.push(
+      `File : nombre max en attente invalide (1 – ${L.max_waiting_global[1]}).`,
+    );
+  if (
+    e.max_waiting_weight_ms !== null &&
+    !isInt(e.max_waiting_weight_ms, L.max_waiting_weight_ms)
+  )
+    errors.push('File : durée max en attente invalide (5 s – 2 h, ou aucune).');
+  if (!isInt(e.transition_gap_ms, L.transition_gap_ms))
+    errors.push('File : délai entre deux TTS invalide (0 – 30 s).');
+  if (!isInt(e.max_per_viewer, L.max_per_viewer))
+    errors.push(
+      `Viewer : TTS simultanés par viewer invalide (1 – ${L.max_per_viewer[1]}).`,
+    );
+  return errors;
+}
+
+const tierId = (min: number, max: number | null) =>
+  max === null ? `${min}+` : `${min}-${max}`;
+
+/** Stored override (tts_lab_settings.rules) for a validated edit. Voice weights follow the tier rank. */
+export function overrideFromEditable(e: EditableTtsRules): Partial<TtsRules> {
+  const painful = DEFAULT_TTS_RULES.tiers.map(
+    (t) => t.painful_voice_weight_multiplier,
+  );
+  return {
+    tiers: e.tiers.map((t, i) => ({
+      id: tierId(t.min, t.max),
+      min: t.min,
+      max: t.max,
+      price: t.price,
+      credit_cost: t.credit_cost,
+      cooldown_seconds: t.cooldown_seconds,
+      painful_voice_weight_multiplier:
+        painful[Math.min(i, painful.length - 1)]!,
+    })),
+    max_chars: e.max_chars,
+    max_waiting_global: e.max_waiting_global,
+    max_waiting_weight_ms: e.max_waiting_weight_ms,
+    transition_gap_ms: e.transition_gap_ms,
+    max_per_viewer: e.max_per_viewer,
+  };
+}
+
+/** Rules in force: defaults merged with the stored override (re-validated; invalid → defaults kept). */
 export function resolveTtsRules(override: unknown): TtsRules {
   if (!override || typeof override !== 'object') return DEFAULT_TTS_RULES;
-  const merged = { ...DEFAULT_TTS_RULES, ...(override as Partial<TtsRules>) };
-  const tiers = merged.tiers;
-  if (!Array.isArray(tiers) || !tiers.length)
-    throw new Error('invalid_tts_rules:tiers');
-  let expected = 1;
-  tiers.forEach((t, i) => {
-    if (t.min !== expected || (t.max !== null && t.max < t.min))
-      throw new Error('invalid_tts_rules:tier_range');
-    if (t.max === null && i !== tiers.length - 1)
-      throw new Error('invalid_tts_rules:open_tier');
-    if (
-      !(t.price_multiplier > 0) ||
-      !(t.credit_cost >= 0) ||
-      !(t.cooldown_seconds >= 0)
-    )
-      throw new Error('invalid_tts_rules:tier_values');
-    expected = t.max === null ? Infinity : t.max + 1;
-  });
-  if (tiers.at(-1)!.max !== null)
-    throw new Error('invalid_tts_rules:last_tier');
-  if (
-    !(merged.max_chars > 0) ||
-    !(merged.max_waiting_global > 0) ||
-    !(merged.max_per_viewer > 0)
-  )
-    throw new Error('invalid_tts_rules:limits');
+  const o = override as Partial<TtsRules> & {
+    tiers?: (TtsTier & { price_multiplier?: number })[];
+  };
+  const merged: TtsRules = {
+    ...DEFAULT_TTS_RULES,
+    ...o,
+    // An override stored before absolute prices (multiplier only) keeps its price.
+    tiers: (
+      (o.tiers ?? DEFAULT_TTS_RULES.tiers) as (TtsTier & {
+        price_multiplier?: number;
+      })[]
+    ).map((t, i) => ({
+      ...t,
+      price:
+        typeof t.price === 'number'
+          ? t.price
+          : Math.round(
+              DEFAULT_TTS_RULES.base_price * (t.price_multiplier ?? 1),
+            ),
+      painful_voice_weight_multiplier:
+        t.painful_voice_weight_multiplier ??
+        DEFAULT_TTS_RULES.tiers[
+          Math.min(i, DEFAULT_TTS_RULES.tiers.length - 1)
+        ]!.painful_voice_weight_multiplier,
+    })),
+  };
+  const errors = validateEditableRules(editableRules(merged));
+  // Stored overrides are validated before saving; a hand-edited invalid row never bricks the module.
+  if (errors.length) return DEFAULT_TTS_RULES;
   return merged;
 }
 
@@ -181,7 +336,7 @@ export function quote(length: number, rules: TtsRules): TtsQuote {
   return {
     length,
     tier_id: tier.id,
-    price: Math.round(rules.base_price * tier.price_multiplier),
+    price: tier.price,
     credit_cost: tier.credit_cost,
     cooldown_seconds: tier.cooldown_seconds,
   };
@@ -204,11 +359,11 @@ export function publicRules(rules: TtsRules) {
     base_price: rules.base_price,
     max_chars: rules.max_chars,
     tiers: rules.tiers.map(
-      ({ id, min, max, price_multiplier, credit_cost, cooldown_seconds }) => ({
+      ({ id, min, max, price, credit_cost, cooldown_seconds }) => ({
         id,
         min,
         max,
-        price: Math.round(rules.base_price * price_multiplier),
+        price,
         credit_cost,
         cooldown_seconds,
       }),

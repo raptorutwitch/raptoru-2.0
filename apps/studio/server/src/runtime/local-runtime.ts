@@ -33,6 +33,7 @@ export const LAB_MIGRATIONS = [
   '20261002120000_sound_lab.sql',
   '20261003120000_sound_lab_custom_label.sql',
   '20261004120000_tts_lab.sql',
+  '20261005120000_lab_moderation.sql',
 ];
 
 export type ServiceState =

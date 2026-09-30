@@ -70,6 +70,7 @@ const runtimeFiles = [
   'apps/twitch-extension/extension/panel.html',
   'supabase/migrations/20261003120000_sound_lab_custom_label.sql',
   'supabase/migrations/20261004120000_tts_lab.sql',
+  'supabase/migrations/20261005120000_lab_moderation.sql',
 ];
 for (const path of runtimeFiles)
   if (!existsSync(join(app, path)))

@@ -13,8 +13,18 @@ import type {
   SoundLabSoundUpdate,
   SoundLabStatus,
 } from '@raptoru/schemas';
+import type { LabModerationCommand } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import {
+  activeBlock,
+  audit,
+  moderationCooldownMs,
+  moduleState,
+  setModuleState,
+  type Actor,
+  type LabRole,
+} from '../lab-moderation/store.js';
 import { SOUND_BANK, type SoundBankEntry } from './bank.js';
 
 // Soundboard V2, Lab slice. Same contract as the Bonk Lab: Core owns the catalog, validation, the
@@ -413,8 +423,37 @@ export class SoundLabService {
         throw new SoundLabError409('sound_disabled', 'this sound is disabled');
 
       await this.sweep(q, req.channel_id);
-      await this.assertReady(q);
       const now = this.clock.now();
+      // Moderation V2 (Core): refused before admission, nothing recorded.
+      const state = await moduleState(q, 'soundboard');
+      if (state === 'disabled')
+        throw new SoundLabError409('module_disabled', 'Soundboard disabled');
+      if (state === 'paused')
+        throw new SoundLabError409(
+          'soundboard_paused',
+          'Soundboard paused by moderation',
+        );
+      if (
+        await activeBlock(q, req.channel_id, req.viewer.id, 'soundboard', now)
+      )
+        throw new SoundLabError409(
+          'viewer_blocked',
+          'Soundboard unavailable for this viewer',
+        );
+      const imposed = await moderationCooldownMs(
+        q,
+        req.channel_id,
+        req.viewer.id,
+        'soundboard',
+        now,
+      );
+      if (imposed > 0)
+        throw new SoundLabError409(
+          'viewer_cooldown',
+          'cooldown imposed by moderation',
+          { retry_after_ms: imposed },
+        );
+      await this.assertReady(q);
       const remaining = await this.cooldownRemaining(
         q,
         req.channel_id,
@@ -577,6 +616,165 @@ export class SoundLabService {
     });
   }
 
+  // --- moderation V2 (called inside the moderation transaction, after the permission check) --------
+
+  /** Waiting (not yet handed to the player) and in-flight sounds of the channel. */
+  async moderationQueue(channelId: string) {
+    return this.db.tx(async (q) => {
+      await q.query(
+        'insert into sound_lab_channels (channel_id) values ($1) on conflict (channel_id) do nothing',
+        [channelId],
+      );
+      await q.query(
+        'select 1 from sound_lab_channels where channel_id = $1 for update',
+        [channelId],
+      );
+      await this.sweep(q, channelId);
+      const rows = (
+        await q.query<Row & { delivered: boolean }>(
+          `${SELECT} where i.channel_id = $1 and i.status in ('queued', 'executing') order by i.channel_sequence`,
+          [channelId],
+        )
+      ).map(toInteraction);
+      const recent = (
+        await q.query<Row>(
+          `${SELECT} where i.channel_id = $1 order by i.channel_sequence desc limit 20`,
+          [channelId],
+        )
+      ).map(toInteraction);
+      return {
+        module_state: await moduleState(q, 'soundboard'),
+        playing: rows.filter((r) => r.delivery.attempt_id !== null),
+        waiting: rows.filter((r) => r.delivery.attempt_id === null),
+        recent,
+      };
+    });
+  }
+
+  async viewerInteractions(channelId: string, viewerId: string, limit = 10) {
+    return (
+      await this.db.query<Row>(
+        `${SELECT} where i.channel_id = $1 and i.viewer_id = $2 order by i.channel_sequence desc limit $3`,
+        [channelId, viewerId, limit],
+      )
+    ).map(toInteraction);
+  }
+
+  /**
+   * Soundboard commands. Payment is simulated and nothing is debited for sounds: there is nothing to
+   * refund (refund requests are refused explicitly). Sounds already handed to the player are not
+   * stoppable from Core yet: cancel / purge only apply to waiting sounds.
+   */
+  async applyModeration(
+    q: Queryable,
+    channelId: string,
+    cmd: LabModerationCommand,
+    actor: Actor,
+    role: LabRole,
+  ) {
+    await q.query(
+      'insert into sound_lab_channels (channel_id) values ($1) on conflict (channel_id) do nothing',
+      [channelId],
+    );
+    await q.query(
+      'select 1 from sound_lab_channels where channel_id = $1 for update',
+      [channelId],
+    );
+    const now = this.clock.now();
+    const reason = 'reason' in cmd ? (cmd.reason ?? null) : null;
+    const waiting = await q.query<{
+      interaction_id: string;
+      viewer_id: string;
+    }>(
+      `select interaction_id, viewer_id from sound_lab_interactions i where channel_id = $1 and status = 'queued'
+         and not exists (select 1 from sound_lab_deliveries d where d.interaction_id = i.interaction_id) order by channel_sequence`,
+      [channelId],
+    );
+    const cancel = async (
+      rows: { interaction_id: string; viewer_id: string }[],
+    ) => {
+      const out: string[] = [];
+      for (const r of rows) {
+        const done = await q.query(
+          `update sound_lab_interactions i set status = 'cancelled', updated_at = $2,
+             error = '{"code":"cancelled_by_moderator","message":"cancelled by moderation","retryable":false}'::jsonb
+           where interaction_id = $1 and status = 'queued'
+             and not exists (select 1 from sound_lab_deliveries d where d.interaction_id = i.interaction_id) returning 1`,
+          [r.interaction_id, now],
+        );
+        if (!done.length) continue;
+        out.push(r.interaction_id);
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: 'soundboard',
+          action: 'cancel',
+          viewerId: r.viewer_id,
+          interactionId: r.interaction_id,
+          reason,
+          before: { status: 'queued' },
+          after: { status: 'cancelled' },
+        });
+      }
+      return out;
+    };
+    switch (cmd.action) {
+      case 'module_state': {
+        const before = await moduleState(q, 'soundboard');
+        await setModuleState(q, 'soundboard', cmd.state, now, actor.id);
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: 'soundboard',
+          action: `module_${cmd.state}`,
+          reason,
+          before: { state: before },
+          after: { state: cmd.state, waiting: cmd.waiting ?? 'keep' },
+        });
+        const cancelled =
+          (cmd.waiting ?? 'keep') === 'keep' ? [] : await cancel(waiting);
+        return { ok: true, module_state: cmd.state, cancelled };
+      }
+      case 'cancel': {
+        const row = waiting.find(
+          (w) => w.interaction_id === cmd.interaction_id,
+        );
+        if (!row)
+          throw new SoundLabError409(
+            'not_waiting',
+            'only a sound not yet handed to the player can be cancelled',
+          );
+        return { ok: true, cancelled: await cancel([row]) };
+      }
+      case 'purge': {
+        const cancelled = await cancel(waiting);
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: 'soundboard',
+          action: 'purge',
+          reason,
+          before: { waiting: waiting.length },
+          after: { waiting: 0, count: cancelled.length },
+        });
+        return { ok: true, cancelled };
+      }
+      case 'refund':
+        throw new SoundLabError409(
+          'not_refundable',
+          'Soundboard Lab sounds are never debited: nothing to refund',
+        );
+      default:
+        throw new SoundLabError409(
+          'unsupported',
+          `${cmd.action} is not a Soundboard command`,
+        );
+    }
+  }
+
   // --- execution (Studio worker) --------------------------------------------------------------------
 
   /**
@@ -599,6 +797,8 @@ export class SoundLabService {
       );
       await this.sweep(q, channelId);
       await this.assertReady(q, studioInstanceId);
+      // Paused: the waiting sounds stay queued, nothing new is handed to the player.
+      if ((await moduleState(q, 'soundboard')) !== 'active') return null;
       const inFlight = await q.query<{ sound_id: string }>(
         `select i.sound_id from sound_lab_interactions i join sound_lab_deliveries d using (interaction_id)
          where i.channel_id = $1 and i.status in ('queued', 'executing')`,

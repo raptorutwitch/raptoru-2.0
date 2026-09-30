@@ -12,10 +12,30 @@ import type {
   TtsLabStatus,
   TtsLabViewerState,
 } from '@raptoru/schemas';
+import type { LabModerationCommand } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
+import {
+  activeBlock,
+  actorName,
+  assertAllowed,
+  audit,
+  clearBlock,
+  debit,
+  setBlock,
+  refundDebit,
+  SYSTEM,
+  type Actor,
+  type LabRole,
+} from '../lab-moderation/store.js';
 import type { Db, Queryable } from '../db/db.js';
 import { pickCast, VOICE_RATES } from './cast.js';
 import {
+  DEFAULT_TTS_RULES,
+  editableRules,
+  overrideFromEditable,
+  TTS_RULE_LIMITS,
+  validateEditableRules,
+  type EditableTtsRules,
   estimateDurationMs,
   normalizeMessage,
   publicRules,
@@ -290,8 +310,9 @@ export class TtsLabService {
         )
       )[0];
       if (
-        viewer?.blocked &&
-        (!viewer.blocked_until || viewer.blocked_until > now)
+        (viewer?.blocked &&
+          (!viewer.blocked_until || viewer.blocked_until > now)) ||
+        (await activeBlock(q, req.channel_id, req.viewer.id, 'tts', now))
       )
         throw new TtsLabError409(
           'viewer_blocked',
@@ -385,6 +406,15 @@ export class TtsLabService {
           new Date(now.getTime() + rules.expires_after_ms),
         ],
       );
+      // Lab test wallet: debited in the same transaction (refused → nothing admitted, nothing stored).
+      await debit(q, now, {
+        channelId: req.channel_id,
+        viewerId: req.viewer.id,
+        currency: req.payment_method === 'credits' ? 'credits_tts' : 'tokens',
+        amount: req.payment_method === 'credits' ? q0.credit_cost : q0.price,
+        module: 'tts',
+        interactionId: id,
+      });
       const row = (await this.row(q, id))!;
       return {
         interaction: toInteraction(row),
@@ -483,9 +513,13 @@ export class TtsLabService {
           (rules.max_waiting_weight_ms !== null &&
             waitingWeight >= rules.max_waiting_weight_ms),
         blocked:
-          !!viewer?.blocked &&
-          (!viewer.blocked_until || viewer.blocked_until > now),
-        viewer_busy: open.some((r) => r.viewer_id === viewerId),
+          (!!viewer?.blocked &&
+            (!viewer.blocked_until || viewer.blocked_until > now)) ||
+          !!(await activeBlock(q, channelId, viewerId, 'tts', now)),
+        // Busy = as many open TTS as the configured limit per viewer (legacy: 1).
+        viewer_busy:
+          open.filter((r) => r.viewer_id === viewerId).length >=
+          rules.max_per_viewer,
         cooldown_remaining_ms: viewer?.cooldown_until
           ? Math.max(0, viewer.cooldown_until.getTime() - now.getTime())
           : 0,
@@ -669,12 +703,7 @@ export class TtsLabService {
           );
           // Never started (voice missing, player error before audio): it can never be read → refund.
           if (cur.started_at === null)
-            await this.refund(
-              q,
-              interactionId,
-              'system',
-              'failed_before_start',
-            );
+            await this.refund(q, interactionId, SYSTEM, 'failed_before_start');
           break;
         case 'execution_unknown':
           if (TERMINAL.includes(cur.status)) break;
@@ -693,219 +722,443 @@ export class TtsLabService {
 
   // --- refunds & moderation --------------------------------------------------------------------------------
 
-  /** At most once (conditional update + DB check). Returns whether this call refunded. */
+  /**
+   * At most once (conditional update + unique ledger entry): the interaction becomes « refunded »
+   * and the Lab test wallet gets back exactly what was debited for it. Audited.
+   */
   private async refund(
     q: Queryable,
     interactionId: string,
-    actor: string,
+    actor: Actor,
     reason: string,
+    role?: LabRole,
   ): Promise<boolean> {
     const now = this.clock.now();
     const done = await q.query<{
       channel_id: string;
       viewer_id: string;
       simulated_cost: number;
+      payment_method: string;
     }>(
       `update tts_lab_interactions set refund_status = 'refunded', refunded_at = $2, updated_at = $2
-       where interaction_id = $1 and refund_status = 'none' returning channel_id, viewer_id, simulated_cost`,
+       where interaction_id = $1 and refund_status = 'none' returning channel_id, viewer_id, simulated_cost, payment_method`,
       [interactionId, now],
     );
     if (!done.length) return false;
-    await this.audit(
+    const back = await refundDebit(
       q,
-      done[0]!.channel_id,
-      actor,
-      'refund',
+      now,
       interactionId,
-      done[0]!.viewer_id,
-      {
-        reason,
-        simulated_cost: done[0]!.simulated_cost,
-      },
+      actorName(actor),
+      reason,
     );
+    await audit(q, now, {
+      channelId: done[0]!.channel_id,
+      actor,
+      role,
+      module: 'tts',
+      action: 'refund',
+      viewerId: done[0]!.viewer_id,
+      interactionId,
+      reason,
+      before: { refund_status: 'none' },
+      after: {
+        refund_status: 'refunded',
+        amount: back.amount,
+        currency: back.currency,
+      },
+    });
     return true;
   }
 
-  private audit(
-    q: Queryable,
-    channelId: string,
-    actor: string,
-    action: string,
-    interactionId: string | null,
-    viewerId: string | null,
-    detail: Record<string, unknown> = {},
-  ) {
-    return q.query(
-      `insert into tts_lab_audit (channel_id, actor, action, interaction_id, viewer_id, detail, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        channelId,
-        actor,
-        action,
-        interactionId,
-        viewerId,
-        JSON.stringify(detail),
-        this.clock.now(),
-      ],
-    );
-  }
-
+  /** Unified audit trail (every module), most recent first. */
   async auditTrail(channelId: string, limit = 50) {
     return this.db.query(
-      'select id, actor, action, interaction_id, viewer_id, detail, created_at from tts_lab_audit where channel_id = $1 order by id desc limit $2',
+      `select id, created_at, actor, role, module_id, action, viewer_id, interaction_id, reason, before, after
+       from lab_moderation_audit where channel_id = $1 order by id desc limit $2`,
       [channelId, limit],
     );
   }
 
-  /** Moderation primitives (API only for now). Nothing is refunded unless asked (legacy). */
+  /** Legacy entry (Studio TTS card / extension pause): same code path as Moderation V2. */
   async moderate(channelId: string, m: TtsLabModerationRequest) {
-    return this.db.tx(async (q) => {
-      await q.query(
-        'insert into tts_lab_channels (channel_id) values ($1) on conflict (channel_id) do nothing',
-        [channelId],
-      );
-      await q.query(
-        'select 1 from tts_lab_channels where channel_id = $1 for update',
-        [channelId],
-      );
-      await this.settingsRow(q);
-      const now = this.clock.now();
-      const cancel = async (ids: string[], refund: boolean, code: string) => {
-        const out: string[] = [];
-        for (const id of ids) {
-          await q.query(
-            `update tts_lab_interactions set status = 'cancelled', error = $2, updated_at = $3 where interaction_id = $1 and status = any($4)`,
-            [
-              id,
-              JSON.stringify(err(code, 'cancelled by moderation')),
-              now,
-              OPEN,
-            ],
-          );
-          if (refund) await this.refund(q, id, m.actor, code);
-          out.push(id);
-        }
-        return out;
-      };
-      const open = await this.openRows(q, channelId);
-      switch (m.action) {
-        case 'pause':
-        case 'resume':
-        case 'disable': {
-          const state: TtsLabModuleState =
-            m.action === 'pause'
-              ? 'paused'
-              : m.action === 'disable'
-                ? 'disabled'
-                : 'active';
-          await q.query(
-            'update tts_lab_settings set module_state = $1, updated_at = $2 where id',
-            [state, now],
-          );
-          await this.audit(q, channelId, m.actor, m.action, null, null, {
-            module_state: state,
-          });
-          return { ok: true, module_state: state };
-        }
-        case 'stop_current': {
-          const cur = open
-            .filter((r) => r.status === 'starting' || r.status === 'playing')
-            .map((r) => r.interaction_id);
-          const ids = await cancel(cur, m.refund, 'stopped_by_moderator');
-          await this.audit(
-            q,
-            channelId,
-            m.actor,
-            'stop_current',
-            ids[0] ?? null,
-            null,
-            { refund: m.refund },
-          );
-          return { ok: true, cancelled: ids };
-        }
-        case 'purge': {
-          const ids = await cancel(
-            open.map((r) => r.interaction_id),
-            m.refund,
-            'purged_by_moderator',
-          );
-          await this.audit(q, channelId, m.actor, 'purge', null, null, {
-            refund: m.refund,
-            count: ids.length,
-          });
-          return { ok: true, cancelled: ids };
-        }
-        case 'cancel': {
-          const row = open.find((r) => r.interaction_id === m.interaction_id);
-          if (!row)
-            throw new TtsLabError409(
-              'not_open',
-              'only a waiting or playing TTS can be cancelled',
-            );
-          const ids = await cancel(
-            [row.interaction_id],
-            m.refund,
-            'cancelled_by_moderator',
-          );
-          await this.audit(
-            q,
-            channelId,
-            m.actor,
-            'cancel',
-            row.interaction_id,
-            row.viewer_id,
-            { refund: m.refund },
-          );
-          return { ok: true, cancelled: ids };
-        }
-        case 'refund': {
-          const row = await this.row(q, m.interaction_id);
-          if (!row || row.channel_id !== channelId)
-            throw new TtsLabNotFoundError(m.interaction_id);
-          if (!TERMINAL.includes(row.status))
-            throw new TtsLabError409('not_terminal', 'cancel it first');
-          const refunded = await this.refund(
-            q,
-            row.interaction_id,
-            m.actor,
-            'moderator_refund',
-          );
-          if (!refunded)
-            throw new TtsLabError409('already_refunded', 'already refunded');
-          return { ok: true, refunded: true };
-        }
-        case 'block_viewer':
-        case 'unblock_viewer':
-        case 'set_viewer_cooldown': {
-          const blocked = m.action === 'block_viewer';
-          if (m.action === 'set_viewer_cooldown')
-            await q.query(
-              `insert into tts_lab_viewers (channel_id, viewer_id, cooldown_until, updated_at) values ($1, $2, $3, $4)
-               on conflict (channel_id, viewer_id) do update set cooldown_until = excluded.cooldown_until, updated_at = excluded.updated_at`,
-              [channelId, m.viewer_id, m.until ? new Date(m.until) : null, now],
-            );
-          else {
-            const until =
-              m.action === 'block_viewer' && m.until ? new Date(m.until) : null;
-            await q.query(
-              `insert into tts_lab_viewers (channel_id, viewer_id, blocked, blocked_until, updated_at) values ($1, $2, $3, $4, $5)
-               on conflict (channel_id, viewer_id) do update set blocked = excluded.blocked, blocked_until = excluded.blocked_until, updated_at = excluded.updated_at`,
-              [channelId, m.viewer_id, blocked, until, now],
-            );
+    const actor: Actor = { id: m.actor, role: 'broadcaster', via: 'studio' };
+    const cmd: LabModerationCommand =
+      m.action === 'pause' || m.action === 'resume' || m.action === 'disable'
+        ? {
+            action: 'module_state',
+            module: 'tts',
+            state:
+              m.action === 'pause'
+                ? 'paused'
+                : m.action === 'disable'
+                  ? 'disabled'
+                  : 'active',
+            waiting: 'keep',
           }
-          await this.audit(
-            q,
-            channelId,
-            m.actor,
-            m.action,
-            null,
-            m.viewer_id,
-            'until' in m ? { until: m.until } : {},
-          );
-          return { ok: true };
-        }
+        : m.action === 'stop_current'
+          ? { action: 'stop_current', module: 'tts', refund: m.refund }
+          : m.action === 'purge'
+            ? { action: 'purge', module: 'tts', refund: m.refund }
+            : m.action === 'cancel'
+              ? {
+                  action: 'cancel',
+                  module: 'tts',
+                  interaction_id: m.interaction_id,
+                  refund: m.refund,
+                }
+              : m.action === 'refund'
+                ? {
+                    action: 'refund',
+                    module: 'tts',
+                    interaction_id: m.interaction_id,
+                  }
+                : m.action === 'block_viewer'
+                  ? {
+                      action: 'block_viewer',
+                      viewer_id: m.viewer_id,
+                      module: 'tts',
+                      duration_s: m.until
+                        ? Math.max(
+                            1,
+                            Math.round(
+                              (Date.parse(m.until) -
+                                this.clock.now().getTime()) /
+                                1000,
+                            ),
+                          )
+                        : null,
+                    }
+                  : m.action === 'unblock_viewer'
+                    ? {
+                        action: 'unblock_viewer',
+                        viewer_id: m.viewer_id,
+                        module: 'tts',
+                      }
+                    : m.until
+                      ? {
+                          action: 'viewer_cooldown',
+                          viewer_id: m.viewer_id,
+                          module: 'tts',
+                          mode: 'replace',
+                          seconds: Math.max(
+                            0,
+                            Math.round(
+                              (Date.parse(m.until) -
+                                this.clock.now().getTime()) /
+                                1000,
+                            ),
+                          ),
+                        }
+                      : {
+                          action: 'viewer_cooldown',
+                          viewer_id: m.viewer_id,
+                          module: 'tts',
+                          mode: 'clear',
+                          seconds: 0,
+                        };
+    return this.db.tx((q) =>
+      this.applyModeration(q, channelId, cmd, actor, 'broadcaster'),
+    );
+  }
+
+  /**
+   * Moderation V2 commands that belong to the TTS (called inside the moderation transaction, after
+   * the permission check). Current (starting / playing) and waiting (queued) are distinct: a purge
+   * never touches the TTS being read. Nothing is refunded unless asked (legacy).
+   */
+  async applyModeration(
+    q: Queryable,
+    channelId: string,
+    cmd: LabModerationCommand,
+    actor: Actor,
+    role: LabRole,
+  ) {
+    await q.query(
+      'insert into tts_lab_channels (channel_id) values ($1) on conflict (channel_id) do nothing',
+      [channelId],
+    );
+    await q.query(
+      'select 1 from tts_lab_channels where channel_id = $1 for update',
+      [channelId],
+    );
+    const { moduleState } = await this.settingsRow(q);
+    const now = this.clock.now();
+    const reason = 'reason' in cmd ? (cmd.reason ?? null) : null;
+    const open = await this.openRows(q, channelId);
+    const current = open.filter(
+      (r) => r.status === 'starting' || r.status === 'playing',
+    );
+    const waiting = open.filter((r) => r.status === 'queued');
+    const cancel = async (rows: Row[], refund: boolean, code: string) => {
+      const out: { interaction_id: string; refunded: boolean }[] = [];
+      for (const r of rows) {
+        const updated = await q.query(
+          `update tts_lab_interactions set status = 'cancelled', error = $2, updated_at = $3 where interaction_id = $1 and status = any($4) returning 1`,
+          [
+            r.interaction_id,
+            JSON.stringify(err(code, 'cancelled by moderation')),
+            now,
+            OPEN,
+          ],
+        );
+        if (!updated.length) continue;
+        const refunded = refund
+          ? await this.refund(q, r.interaction_id, actor, code, role)
+          : false;
+        out.push({ interaction_id: r.interaction_id, refunded });
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: 'tts',
+          action: code === 'stopped_by_moderator' ? 'stop' : 'cancel',
+          viewerId: r.viewer_id,
+          interactionId: r.interaction_id,
+          reason,
+          before: { status: r.status },
+          after: { status: 'cancelled', refund },
+        });
       }
+      return out;
+    };
+    switch (cmd.action) {
+      case 'module_state': {
+        await q.query(
+          'update tts_lab_settings set module_state = $1, updated_at = $2 where id',
+          [cmd.state, now],
+        );
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: 'tts',
+          action: `module_${cmd.state}`,
+          reason,
+          before: { state: moduleState },
+          after: { state: cmd.state, waiting: cmd.waiting ?? 'keep' },
+        });
+        const cancelled =
+          (cmd.waiting ?? 'keep') === 'keep'
+            ? []
+            : await cancel(
+                waiting,
+                cmd.waiting === 'cancel_refund',
+                'purged_by_moderator',
+              );
+        return { ok: true, module_state: cmd.state, cancelled };
+      }
+      case 'stop_current':
+        if (!current.length)
+          throw new TtsLabError409('nothing_playing', 'no TTS is being read');
+        return {
+          ok: true,
+          cancelled: await cancel(current, cmd.refund, 'stopped_by_moderator'),
+        };
+      case 'purge': {
+        const cancelled = await cancel(
+          waiting,
+          cmd.refund,
+          'purged_by_moderator',
+        );
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: 'tts',
+          action: 'purge',
+          reason,
+          before: { waiting: waiting.length },
+          after: { waiting: 0, refund: cmd.refund, count: cancelled.length },
+        });
+        return { ok: true, cancelled };
+      }
+      case 'cancel': {
+        const row = open.find((r) => r.interaction_id === cmd.interaction_id);
+        if (!row)
+          throw new TtsLabError409(
+            'not_open',
+            'only a waiting or playing TTS can be cancelled',
+          );
+        const code =
+          row.status === 'queued'
+            ? 'cancelled_by_moderator'
+            : 'stopped_by_moderator';
+        return { ok: true, cancelled: await cancel([row], cmd.refund, code) };
+      }
+      case 'refund': {
+        const row = await this.row(q, cmd.interaction_id);
+        if (!row || row.channel_id !== channelId)
+          throw new TtsLabNotFoundError(cmd.interaction_id);
+        if (!TERMINAL.includes(row.status))
+          throw new TtsLabError409('not_terminal', 'cancel it first');
+        if (
+          !(await this.refund(
+            q,
+            row.interaction_id,
+            actor,
+            reason ?? 'moderator_refund',
+            role,
+          ))
+        )
+          throw new TtsLabError409('already_refunded', 'already refunded');
+        return { ok: true, refunded: true };
+      }
+      case 'viewer_cooldown': {
+        const cur = (
+          await q.query<{ cooldown_until: Date | null }>(
+            'select cooldown_until from tts_lab_viewers where channel_id = $1 and viewer_id = $2',
+            [channelId, cmd.viewer_id],
+          )
+        )[0]?.cooldown_until;
+        const base =
+          cmd.mode === 'add' && cur && cur > now
+            ? cur.getTime()
+            : now.getTime();
+        const until =
+          cmd.mode === 'clear'
+            ? null
+            : new Date(base + (cmd.seconds ?? 0) * 1000);
+        await q.query(
+          `insert into tts_lab_viewers (channel_id, viewer_id, cooldown_until, updated_at) values ($1, $2, $3, $4)
+           on conflict (channel_id, viewer_id) do update set cooldown_until = excluded.cooldown_until, updated_at = excluded.updated_at`,
+          [channelId, cmd.viewer_id, until, now],
+        );
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: 'tts',
+          action: `cooldown_${cmd.mode}`,
+          viewerId: cmd.viewer_id,
+          reason,
+          before: { until: cur && cur > now ? cur.toISOString() : null },
+          after: { until: until?.toISOString() ?? null },
+        });
+        return { ok: true, until: until?.toISOString() ?? null };
+      }
+      case 'block_viewer':
+      case 'unblock_viewer': {
+        // Legacy entry only (Moderation V2 handles blocks for every module itself).
+        const until =
+          cmd.action === 'block_viewer' && cmd.duration_s
+            ? new Date(now.getTime() + cmd.duration_s * 1000)
+            : null;
+        const before =
+          cmd.action === 'block_viewer'
+            ? await setBlock(q, now, {
+                channelId,
+                viewerId: cmd.viewer_id,
+                module: cmd.module,
+                until,
+                reason,
+                actor: actorName(actor),
+              })
+            : await clearBlock(q, channelId, cmd.viewer_id, cmd.module);
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: cmd.module,
+          action: cmd.action,
+          viewerId: cmd.viewer_id,
+          reason,
+          before: { blocked: Boolean(before) },
+          after: {
+            blocked: cmd.action === 'block_viewer',
+            until: until?.toISOString() ?? null,
+          },
+        });
+        return { ok: true };
+      }
+      default:
+        throw new TtsLabError409(
+          'unsupported',
+          `${cmd.action} is not a TTS command`,
+        );
+    }
+  }
+
+  // --- configuration (Studio: TTS → Configuration) -----------------------------------------------------------
+
+  async rulesView() {
+    const { moduleState, rules } = await this.settingsRow(this.db);
+    const stored =
+      (
+        await this.db.query<{ rules: unknown }>(
+          'select rules from tts_lab_settings where id',
+        )
+      )[0]?.rules ?? null;
+    return {
+      module_state: moduleState,
+      rules: editableRules(rules),
+      defaults: editableRules(DEFAULT_TTS_RULES),
+      customized: stored !== null,
+      limits: TTS_RULE_LIMITS,
+    };
+  }
+
+  /** Validated, stored, audited; the next quote / admission uses it at once (no restart). */
+  async updateRules(
+    edited: EditableTtsRules,
+    actor: Actor,
+    reason: string | null,
+    reset = false,
+  ) {
+    const errors = reset ? [] : validateEditableRules(edited);
+    if (errors.length)
+      throw new TtsLabError409('invalid_rules', errors[0]!, { errors });
+    return this.db.tx(async (q) => {
+      const role = await assertAllowed(q, '900100', actor, 'config.tts');
+      const { rules: before } = await this.settingsRow(q);
+      const override = reset ? null : overrideFromEditable(edited);
+      await q.query(
+        'update tts_lab_settings set rules = $1, updated_at = $2 where id',
+        [override === null ? null : JSON.stringify(override), this.clock.now()],
+      );
+      const { rules: after } = await this.settingsRow(q);
+      await audit(q, this.clock.now(), {
+        channelId: '900100',
+        actor,
+        role,
+        module: 'tts',
+        action: reset ? 'config_reset' : 'config_update',
+        reason,
+        before: editableRules(before),
+        after: editableRules(after),
+      });
+      return { ok: true, rules: editableRules(after) };
     });
+  }
+
+  /** TTS rows for the moderation cockpit: current, waiting (with position / wait) and recent. */
+  async moderationQueue(channelId: string) {
+    const q0 = await this.queue(channelId);
+    const debits = await this.db.query<{ interaction_id: string }>(
+      `select interaction_id from lab_wallet_ledger where channel_id = $1 and kind = 'debit' and module_id = 'tts' and created_at > now() - interval '2 days'`,
+      [channelId],
+    );
+    const paid = new Set(debits.map((d) => d.interaction_id));
+    const view = (i: TtsLabInteraction) => ({
+      ...i,
+      paid: paid.has(i.interaction_id),
+      refundable: TERMINAL.includes(i.status) && i.refund_status === 'none',
+    });
+    return {
+      ...q0,
+      current: q0.current ? view(q0.current) : null,
+      waiting: q0.waiting.map(view),
+      recent: q0.recent.map(view),
+    };
+  }
+
+  async viewerInteractions(channelId: string, viewerId: string, limit = 10) {
+    return (
+      await this.db.query<Row>(
+        `${SELECT} where i.channel_id = $1 and i.viewer_id = $2 order by i.created_at desc limit $3`,
+        [channelId, viewerId, limit],
+      )
+    ).map(toInteraction);
   }
 
   // --- helpers ----------------------------------------------------------------------------------------------
@@ -926,7 +1179,7 @@ export class TtsLabService {
       [channelId, now],
     );
     for (const e of expired)
-      await this.refund(q, e.interaction_id, 'system', 'expired');
+      await this.refund(q, e.interaction_id, SYSTEM, 'expired');
     await q.query(
       `update tts_lab_interactions i set status = 'execution_unknown', updated_at = $2,
          error = '{"code":"lease_expired","message":"no player proof before the lease ended","retryable":false}'::jsonb

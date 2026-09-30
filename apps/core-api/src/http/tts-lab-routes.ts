@@ -13,6 +13,7 @@ import {
   type TtsLabService,
 } from '../tts-lab/tts-lab-service.js';
 import { HttpError, limitParam, parse, type Route } from './server.js';
+import { LabWalletError } from '../lab-moderation/store.js';
 
 // TTS V2 Lab routes. Studio only (STUDIO_SECRET / Lab Core secret): the Studio server is the Lab
 // façade of the extension, the TTS worker of the local player and (later) the moderation panel.
@@ -25,6 +26,8 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (error) {
+    if (error instanceof LabWalletError)
+      throw new HttpError(409, { error: error.code, ...error.details });
     if (error instanceof TtsLabUnavailableError)
       throw new HttpError(503, { error: error.code });
     if (error instanceof TtsLabError409)

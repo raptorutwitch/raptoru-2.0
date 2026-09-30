@@ -46,6 +46,8 @@ export const SoundLabStatus = z.enum([
   'completed',
   'failed',
   'execution_unknown',
+  /** Waiting sound cancelled by moderation (never handed to the player). */
+  'cancelled',
 ]);
 export type SoundLabStatus = z.infer<typeof SoundLabStatus>;
 

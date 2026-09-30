@@ -28,6 +28,8 @@ import type { BonkLabService } from '../bonk-lab/bonk-lab-service.js';
 import { bonkLabRoutes } from './bonk-lab-routes.js';
 import { soundLabRoutes } from './sound-lab-routes.js';
 import { ttsLabRoutes } from './tts-lab-routes.js';
+import { labModerationRoutes } from './lab-moderation-routes.js';
+import type { LabModerationService } from '../lab-moderation/service.js';
 import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import { loyaltyRoutes } from './loyalty-routes.js';
@@ -53,6 +55,11 @@ export interface AppDeps {
   soundLab?: SoundLabService;
   /** TTS V2 Lab slice (test only). */
   ttsLab?: TtsLabService;
+  /**
+   * Moderation V2 + Lab test wallet + TTS configuration: never set by the production Core (only the
+   * Lab Core process and tests expose these routes).
+   */
+  labModeration?: LabModerationService;
   botSecret: string;
   studioSecret: string;
 }
@@ -115,6 +122,7 @@ function routes({
   bonkLab,
   soundLab,
   ttsLab,
+  labModeration,
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
@@ -122,6 +130,9 @@ function routes({
     ...(bonkLab ? bonkLabRoutes(bonkLab) : []),
     ...(soundLab ? soundLabRoutes(soundLab) : []),
     ...(ttsLab ? ttsLabRoutes(ttsLab) : []),
+    ...(ttsLab && labModeration
+      ? labModerationRoutes(labModeration, ttsLab)
+      : []),
     {
       method: 'GET',
       pattern: /^\/health$/,

@@ -10,6 +10,16 @@ import type {
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import type { LabModerationCommand } from '@raptoru/schemas';
+import {
+  activeBlock,
+  audit,
+  moderationCooldownMs,
+  moduleState,
+  setModuleState,
+  type Actor,
+  type LabRole,
+} from '../lab-moderation/store.js';
 import {
   CATALOG_MAX_AGE_MS,
   TwitchViewerError,
@@ -372,6 +382,31 @@ export class BonkLabService {
         return { interaction: toInteraction(prior), replayed: true };
       }
 
+      // Moderation V2 (Core): refused before admission, nothing recorded.
+      const now0 = this.clock.now();
+      const state = await moduleState(q, 'bonk');
+      if (state === 'disabled')
+        throw new BonkLabError409('module_disabled', 'Bonk disabled');
+      if (state === 'paused')
+        throw new BonkLabError409('bonk_paused', 'Bonk paused by moderation');
+      if (await activeBlock(q, req.channel_id, req.viewer.id, 'bonk', now0))
+        throw new BonkLabError409(
+          'viewer_blocked',
+          'Bonk unavailable for this viewer',
+        );
+      const imposed = await moderationCooldownMs(
+        q,
+        req.channel_id,
+        req.viewer.id,
+        'bonk',
+        now0,
+      );
+      if (imposed > 0)
+        throw new BonkLabError409(
+          'viewer_cooldown',
+          `cooldown imposed by moderation (${Math.ceil(imposed / 1000)} s)`,
+        );
+
       const emote = await this.resolveEmote(q, req, twitchError, thirdParty);
 
       await this.sweep(q, req.channel_id);
@@ -458,6 +493,49 @@ export class BonkLabService {
    * Next Bonk to start, in channel_sequence order. Refuses to hand out a new one while an earlier
    * claim has not started yet (start order), but allows overlap once it has started.
    */
+  /**
+   * Bonk commands: module state only. A Bonk is a short visual impact, not a queue to curate and
+   * never debited in the Lab: no stop / cancel / refund (refused explicitly).
+   */
+  async applyModeration(
+    q: Queryable,
+    channelId: string,
+    cmd: LabModerationCommand,
+    actor: Actor,
+    role: LabRole,
+  ) {
+    const now = this.clock.now();
+    if (cmd.action !== 'module_state')
+      throw new BonkLabError409(
+        'unsupported',
+        `${cmd.action} does not apply to Bonk`,
+      );
+    const before = await moduleState(q, 'bonk');
+    await setModuleState(q, 'bonk', cmd.state, now, actor.id);
+    await audit(q, now, {
+      channelId,
+      actor,
+      role,
+      module: 'bonk',
+      action: `module_${cmd.state}`,
+      reason: cmd.reason ?? null,
+      before: { state: before },
+      after: { state: cmd.state },
+    });
+    return { ok: true, module_state: cmd.state };
+  }
+
+  async moderationQueue(channelId: string) {
+    const rows = await this.db.query<Row>(
+      `${SELECT} where i.channel_id = $1 order by i.channel_sequence desc limit 20`,
+      [channelId],
+    );
+    return {
+      module_state: await moduleState(this.db, 'bonk'),
+      recent: rows.map(toInteraction),
+    };
+  }
+
   async claim(
     studioInstanceId: string,
     channelId: string,
@@ -473,6 +551,8 @@ export class BonkLabService {
       );
       await this.sweep(q, channelId);
       await this.assertReady(q, studioInstanceId);
+      // Paused: waiting Bonks stay queued, nothing new is sent to OBS.
+      if ((await moduleState(q, 'bonk')) !== 'active') return null;
       const pendingStart = (
         await q.query<{ n: number | string }>(
           `select count(*) as n from bonk_lab_interactions i join bonk_lab_deliveries d using (interaction_id)

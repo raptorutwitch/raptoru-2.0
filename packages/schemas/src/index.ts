@@ -6,3 +6,4 @@ export * from './loyalty.js';
 export * from './bonk-lab.js';
 export * from './sound-lab.js';
 export * from './tts-lab.js';
+export * from './lab-moderation.js';

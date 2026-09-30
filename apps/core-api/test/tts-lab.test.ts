@@ -1,3 +1,4 @@
+import { editWallet } from '../src/lab-moderation/store.js';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { TtsLabAdmitRequest, TtsLabInteraction } from '@raptoru/schemas';
@@ -178,8 +179,23 @@ describe('TTS V2 admission', () => {
   });
 
   it('prices credits per tier (legacy: 1 credit) and tokens by tier', async () => {
-    const { tts } = await lab();
-    const long = await tts.admit(req({ text: 'a'.repeat(320) }));
+    const { core, tts } = await lab();
+    // Lab test wallet big enough for the expensive tiers (default: 12 000 jetons).
+    await editWallet(
+      core.db,
+      core.clock.now(),
+      CHANNEL,
+      '900990',
+      'set',
+      { tokens: 1_000_000 },
+      'test',
+    );
+    const long = await tts.admit(
+      req({
+        viewer: { id: '900990', display_name: 'Rich' },
+        text: 'a'.repeat(320),
+      }),
+    );
     expect(long.interaction).toMatchObject({
       tier_id: '301-500',
       simulated_cost: 22500,
@@ -308,7 +324,7 @@ describe('TTS V2 execution, cooldown and refunds', () => {
     expect(
       (
         await core.db.query<{ n: number }>(
-          "select count(*)::int as n from tts_lab_audit where action = 'refund'",
+          "select count(*)::int as n from lab_moderation_audit where action = 'refund'",
         )
       )[0]!.n,
     ).toBe(1);
@@ -392,7 +408,7 @@ describe('TTS V2 execution, cooldown and refunds', () => {
     });
     const audit = (await tts.auditTrail(CHANNEL)) as { action: string }[];
     expect(audit.map((x) => x.action)).toEqual(
-      expect.arrayContaining(['stop_current', 'cancel', 'purge', 'refund']),
+      expect.arrayContaining(['stop', 'cancel', 'purge', 'refund']),
     );
     const q = await tts.queue(CHANNEL);
     expect(q.current).toBeNull();
