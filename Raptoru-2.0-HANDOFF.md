@@ -84,7 +84,7 @@ Pièges connus :
 
 - `5b66579 — feat: complete Moderation V2 with full D4 parity (Lab)` (dernier commit fonctionnel), suivi uniquement de commits de documentation.
 - Toujours revérifier : `git status` · `git log --oneline -12`.
-- Commits non releasés depuis 0.1.5 : `435f78d`, `706f8c7`, `12ffdd0`, `890e71d`, `a5b5d5e`, **`5b66579`** (+ docs `0da412d`, `5d48cee`, `3add3dd` et le commit de docs de cette passe).
+- Commits non releasés depuis 0.1.5 : `435f78d`, `706f8c7`, `12ffdd0`, `890e71d`, `a5b5d5e`, **`5b66579`** (+ docs `0da412d`, `5d48cee`, `3add3dd`, `e535b26`).
 
 ## 5. Architecture canonique
 
