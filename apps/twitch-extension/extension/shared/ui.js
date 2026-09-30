@@ -31,6 +31,7 @@ import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
 import { createEmotePicker } from './emote-picker.js';
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
+import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -1145,6 +1146,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   // sélecteur unique, tandis que la dépensabilité reste évaluée par le CTA.
   let selectedPaymentMethod = 'tokens';
   let ttsPaymentMethod = 'tokens';
+  // TTS V2 (Lab, Core-backed): one persistent view per opening of the module.
+  let ttsV2View = null;
   let paymentWalletSync = null;
   let soundboardVolumeOpen = false;
   let soundboardVolumeSync = null;
@@ -1480,6 +1483,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     // Soundboard ouvert et poll identique : rien à redessiner (grille, scroll et aperçu intacts).
     const unchanged = render && (openModule === 'soundboard' || !openModule) && !loadError
       && JSON.stringify(state) === JSON.stringify(next);
+    // TTS V2 open: queue / status updates go to the persistent view (no replayed animation).
+    const ttsV2Only = render && openModule === 'tts' && ttsV2View && !loadError
+      && JSON.stringify(withoutTtsV2(state)) === JSON.stringify(withoutTtsV2(next));
     const previousKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
     const nextKey = emoteCatalogStateKey(next?.emotes, next?.twitch_user_id);
     const nextRaffle = next?.raffle;
@@ -1511,7 +1517,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     actionError = null;
     ttsActionError = null;
     syncViewerPreferenceIdentity(next);
+    if (ttsV2Only) {
+      ttsV2View.update((next?.modules ?? []).find((m) => m.id === 'tts'), next);
+      return;
+    }
     if (render && !unchanged) renderPreservingViewport();
+  }
+
+  function withoutTtsV2(value) {
+    if (!value || !Array.isArray(value.modules)) return value;
+    return { ...value, modules: value.modules.map((m) => (m.id === 'tts' ? { ...m, tts_v2: null } : m)) };
   }
 
   function closeEmoteAuthorizationPopup() {
@@ -1599,6 +1614,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       viewerPreferencesOpen = false;
     }
     if (moduleId !== 'soundboard') stopSoundPreview();
+    if (moduleId !== 'tts') {
+      ttsV2View?.destroy();
+      ttsV2View = null;
+    }
     if (moduleId !== 'soundboard') clearSoundboardFeedback({ render: false });
     if (moduleId !== 'raffle_join') {
       stopRaffleTimer();
@@ -1984,7 +2003,37 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
   // --- formulaires par module ----------------------------------------------
 
+  // TTS V2 (D3): Core decides price, cast, cooldown and queue; the view only shows and pays.
+  function ttsV2Form(mod, body) {
+    body.querySelector('.jdm-module__intro')?.remove();
+    body.dataset.ttsV2 = '1';
+    const { displayMethods } = walletPaymentMethods(mod, state);
+    if (!ttsV2View) {
+      ttsV2View = createTtsV2View({
+        document,
+        client,
+        surface: ttsV2Surface(document),
+        assetBase: './',
+        lab: state?.environment === 'lab',
+        onPaymentMethod: (method, locked) => {
+          ttsPaymentMethod = method;
+          paymentWalletSync?.(locked ? [method] : displayMethods, (next) => {
+            ttsPaymentMethod = next;
+            ttsV2View?.setCurrency(next);
+          });
+        },
+        onPurchased: () => { void onRefresh?.(); },
+        onBack: () => navigateTo(null),
+      });
+      ttsV2View.setCurrency(ttsPaymentMethod);
+    }
+    ttsV2View.update(mod, state);
+    body.append(ttsV2View.node);
+    queueMicrotask(() => ttsV2View?.attached());
+  }
+
   function ttsForm(mod, body) {
+    if (mod.tts_v2 && typeof client?.ttsBuy === 'function') return ttsV2Form(mod, body);
     const pending = pendingFor('tts');
     const interactionsAvailable = state?.interactions?.available !== false;
     const moderation = state?.moderation?.tts ?? {};

@@ -625,7 +625,9 @@ Le Lab actuel permet de tester visuellement :
 - Tombola ;
 - modération/états UI.
 
-**TTS / Tombola : le Lab reste une simulation locale d’exécution** (wallet fictif en mémoire, journal local, rendu dans Studio).
+**Tombola : le Lab reste une simulation locale d’exécution** (wallet fictif en mémoire, journal local, rendu dans Studio).
+
+**TTS V2 : exécution réelle en mode Lab** depuis le 30/09/2026 (même Core Lab que Bonk / Soundboard) : extension → façade LabEbs → Core local/test → worker Studio → lecteur OBS (Web Speech + personnage) → ACK. Voir § 16 « TTS V2 — intégration Lab ». L’ancien formulaire TTS reste affiché quand le module n’a pas de données `tts_v2` (démo, prod).
 
 **Soundboard : exécution réelle en mode Lab** depuis le 28/09/2026 (même Core Lab que Bonk) : extension → façade LabEbs → Core local/test → worker Studio → page lecteur audio locale (à activer d’un clic) → ACK. Voir § 16 « Soundboard V2 — état validé ».
 
@@ -1058,6 +1060,22 @@ Validé fonctionnellement, visuellement et à l’écoute le 28/09/2026 (Lab uni
 - Migration `20261003120000_sound_lab_custom_label.sql` déterministe : une valeur égale à l’ancien nom par défaut de son `sound_id` → null ; les 19 renommages existants du Lab ont été préservés à l’identique (prix, cooldowns, modes, volumes et historique inchangés).
 - Tests : Core 158/158, Studio 40/40, extension 10/10.
 
+## TTS V2 — intégration Lab (30/09/2026, en attente de validation)
+Prototype UX D3 + prototype player transformés en vrai module Lab. **Non validé par l’utilisateur, non commité en release, pas en prod** (SAMMI + StreamElements restent la prod TTS).
+- **Règles Core** (`apps/core-api/src/tts-lab/rules.ts`), reprises du legacy `tts-rules.js` (« tts-anti-abuse-v1 ») : base 7 500 jetons ; paliers 1–80 ×1 / 60 s, 81–150 ×1,5 / 90 s, 151–300 ×2 / 120 s, 301–500 ×3 / 180 s, 501+ ×5 / 300 s ; 1 crédit TTS par message (legacy : 1 récompense PDC = 1 TTS) ; 1 TTS par viewer en attente ou en lecture ; 5 en attente max (celui en lecture non compté) ; plafond de durée totale en attente configurable (désactivé par défaut) ; limite technique 2 000 points de code (legacy 800, les paliers au-delà de 500 ne changent pas). Probabilités de voix legacy : japonais 20 %, variante « bourré » 25 % (Golem 50 %), réduites sur les longs messages (×1 / 0,8 / 0,5 / 0,25 / 0,1) ; jamais deux fois le même personnage d’affilée.
+- **Cast décidé une seule fois par Core à l’admission** `{ character_id, voice_profile_id }` (+ catégorie), idempotent (clé + empreinte de la requête), jamais retiré au sort ailleurs ; le client n’impose ni prix, ni cast, ni cooldown, ni position, ni remboursement.
+- **File** : ordre par `channel_sequence`, lecture strictement une à une, pause entre deux TTS 1,5 s ; file pleine / pause / désactivé / viewer bloqué / cooldown / lecteur absent refusés **avant tout paiement**.
+- **Cooldown** démarré au vrai début de lecture (1er `onstart` audible = narration « <pseudo> a dit », comme le legacy).
+- **Remboursement** unique et tracé (audit) si le message n’a jamais été lu (échec avant lecture, expiration 30 min, annulation / stop / purge avec remboursement) ; `execution_unknown` (lecteur coupé pendant la lecture, redémarrage Studio) n’est pas remboursé automatiquement et n’est jamais rejoué.
+- **États module** actif / en pause (la file est gardée, le TTS en cours finit) / désactivé ; « dégradé » = lecteur absent ou Core injoignable (affiché, refus avant paiement).
+- **Modération (API Core, Studio seulement)** : pause, reprise, désactivation, stop du TTS en cours, purge, annulation d’un message, remboursement, blocage / déblocage d’un viewer (avec ou sans échéance), cooldown imposé ou levé, inspection de la file, journal d’audit. Hook lexical côté Core (filtre de message branchable, aucun mot bloqué par défaut). UI de modération V2 (D4) non branchée ; Studio expose pause / reprise / stop / purge.
+- **Twitch ban / timeout** : le bot n’a pas d’abonnement EventSub ban / timeout ; aucun effet automatique. Seul le blocage manuel par viewer (Core) existe.
+- **Studio** : worker TTS (journal durable, jamais de rejeu d’un TTS remis au lecteur), page lecteur `/tts-lab/player.html` = source navigateur OBS 1920×1080 transparente (un seul lecteur à la fois : OBS ou l’aperçu Studio), carte « TTS V2 Lab » dans l’Extension Lab (état, lecteur, file + durée, en cours, historique, URL OBS, pause / reprise / stop / purge), entrées dans l’onglet Studio. Migration `20261004120000_tts_lab.sql` appliquée par le runtime local.
+- **Lecteur** : séquence legacy (narration « <pseudo> a dit », entrée du personnage, texte en morceaux de 180 caractères, bouche à chaque mot, bulle + sous-titres 68 caractères, sortie), voix Web Speech du profil tiré (repli legacy : mot-clé → langue → préfixe → français ; voix stricte absente = échec avant lecture, remboursé), débit / hauteur avec la variation du profil. Scène portée du prototype player ; 10 médias legacy copiés à l’identique (`extension/assets/tts/`, SHA-256 vérifiés).
+- **Extension** : UX D3 intégrée telle quelle (Panel / Vidéo / Mobile) dans le vrai écran module ; source unique personnages / voix / calibration `shared/tts-characters.js` (calibration finale du 30/09) ; clé d’idempotence enregistrée avant l’envoi et réutilisée (double clic, retry, refresh : un seul paiement) ; reprise de la transaction en cours après refresh ; le tirage n’anime que le cast déjà décidé par Core ; `calibrate.html` reste utilisable en Dev/Lab (réglage local prévisualisé dans l’extension Lab seulement).
+- test_mode=true, payment_mode=simulated, real_debited=0 ; wallet Lab fictif débité une fois, rendu une fois au remboursement.
+- Tests : Core 170 (dont 12 TTS), Studio 56 (dont 8 TTS), extension 10, bot 69, desktop 7 ; E2E Electron (Panel / Vidéo / Mobile, lecteur OBS réel, file, pause, refresh, crash lecteur, non-régression Soundboard).
+
 ## Wallet switch global — validé
 Composant `createCurrencySwitch` (extension, `shared/ui-primitives.js` + `currency-switch.css`), variante « Peek slide » validée le 28/09/2026 :
 - largeur fixe, montant immobile dans sa case, abréviation 1,2K / 12K / 985K / 1,2M ;
@@ -1103,7 +1121,7 @@ Conception UX/UI réalisée et validée au niveau prototype (aucune implémentat
 ## Roadmap après Bonk
 Ordre recommandé à date (Bonk V2 et Soundboard V2 validés, Hub fermé) :
 1. ~~Soundboard~~ (validé en Lab le 28/09/2026) ;
-2. TTS ;
+2. TTS (intégré en Lab le 30/09/2026, validation utilisateur en attente) ;
 3. Tombola ;
 4. Bonk Fidelity (polish, non bloquant) ;
 5. instrumentation stats/profil au fil des modules ;
@@ -1248,7 +1266,8 @@ Studio :
 
 Extension :
 - vraie extension prod importée
-- Lab local permet TTS/Tombola avec économie fictive (simulation locale)
+- Lab local permet Tombola avec économie fictive (simulation locale)
+- TTS V2 exécuté réellement en Lab (Core Lab → Studio → lecteur OBS), en attente de validation
 - Soundboard V2 exécuté réellement en Lab (Core Lab → Studio → lecteur audio local)
 - Hub Pop Premium + wallet switch global (anciens wallets migrés)
 - nouvelle extension (picker V2, Soundboard V2, Hub) NON publiée sur Twitch

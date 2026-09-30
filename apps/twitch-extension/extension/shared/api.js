@@ -200,7 +200,12 @@ export function createClient({
         error: String(responsePayload.error || 'http_error'),
         ...(body?.module_id ? { module_id: String(body.module_id) } : {}),
       });
-      throw Object.assign(new Error(responsePayload.error || 'http_error'), { code: responsePayload.error });
+      throw Object.assign(new Error(responsePayload.error || 'http_error'), {
+        code: responsePayload.error,
+        status: Number(response?.status || 0),
+        // Refusal details kept for the caller (e.g. TTS retry_after_ms, max_chars).
+        details: responsePayload,
+      });
     }
     if (sessionRoute(path) === '/session') rememberSession(responsePayload);
     testLog('response', {
@@ -444,6 +449,16 @@ export function createClient({
     spendTokens: (moduleId, payload) => call('POST', '/actions/tokens', {
       body: { module_id: moduleId, payload },
       idempotencyKey: newIdempotencyKey(),
+    }),
+    /** TTS V2 (Lab): Core state for this viewer (availability, queue, current TTS). */
+    ttsState: () => call('GET', '/tts/state'),
+    /**
+     * TTS V2 purchase. The key is chosen and persisted by the caller, once per confirmed message,
+     * and reused on every retry / refresh: a message is never paid twice.
+     */
+    ttsBuy: (idempotencyKey, method, text) => call('POST', method === 'credits' ? '/actions/redemption' : '/actions/tokens', {
+      body: { module_id: 'tts', payload: { text } },
+      idempotencyKey,
     }),
     runLab: (moduleId, payload) => call('POST', '/actions/lab', {
       body: { module_id: moduleId, payload },
