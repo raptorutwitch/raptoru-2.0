@@ -1,6 +1,6 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-**État au 01/10/2026 · HEAD fonctionnel `5b66579` (Modération V2 — parité D4 complète) · dernière release publique Studio 0.1.5.**
+**État au 01/10/2026 · HEAD fonctionnel `5b66579` (Modération V2 — parité D4 complète, **validée manuellement le 01/10**) · dernière release publique Studio 0.1.5.**
 Ce fichier est la **source de contexte prioritaire** pour un nouvel agent. Le détail historique complet (Presence, Wallet, Loyalty, Daily, Twitch, Studio, inventaire du stream, roadmap longue) reste dans `Raptoru-2.0-ETAT-PROJET.md`. La matrice de parité D4 (initiale et finale) est dans `docs/moderation-v2-d4-parity.md`. En cas de contradiction, **vérifier Git et le code**, puis corriger le document fautif.
 
 ---
@@ -49,9 +49,10 @@ Ce fichier est la **source de contexte prioritaire** pour un nouvel agent. Le d�
 ## 1. TL;DR état actuel
 
 - **Public / installé** : Raptoru Studio **0.1.5** (validé manuellement) = Studio autonome + supervision Electron + Hub + Bonk V2 + Soundboard V2 + TTS V2 réel. Il **ne contient pas** la Modération V2.
-- **Local, non releasé, NON validé manuellement** : **Modération V2 complète, parité D4** (`5b66579`) — chaque élément du prototype D4 est réel dans le Core Lab (permissions fines, sanctions sensibles, mots surveillés / bloqués, notes, pause globale, cooldown D4, wallet admin, stop / remboursements Soundboard, débit Bonk, Tombola V2 minimale, historiques Core) ; **une seule console** partagée par l’extension et l’onglet Studio « Modération ».
-- **Tous les tests automatiques sont verts** ; **E2E réel 95/95** ; **package local construit** mais **pas encore testé par Antoni**.
-- **Prochaine action** : Antoni valide manuellement le package `release/moderation-d4` (§ 11).
+- **Local, non releasé, VALIDÉ MANUELLEMENT par Antoni le 01/10/2026** (sauf Tombola) : **Modération V2 complète, parité D4** (`5b66579`) — chaque élément du prototype D4 est réel dans le Core Lab (permissions fines, sanctions sensibles, mots surveillés / bloqués, notes, pause globale, cooldown D4, wallet admin, stop / remboursements Soundboard, débit Bonk, Tombola V2 minimale, historiques Core) ; **une seule console** partagée par l’extension et l’onglet Studio « Modération ».
+- **Tous les tests automatiques sont verts** ; **E2E réel 95/95** ; package local `release/moderation-d4` **testé par Antoni** : permissions, mots surveillés / bloqués, pause globale, remboursements, cooldown D4, notes, arrêt Soundboard et surfaces Extension OK.
+- **Tombola V2 minimale** (incluse dans `5b66579`) : **NON validée produit** — reprise dans son chantier dédié.
+- **Prochaine action** : release Studio (§ 11), à confirmer par Antoni puisque le code Tombola minimal est inclus.
 
 ## 2. Workspace / commandes / chemins
 
@@ -104,8 +105,8 @@ Pièges connus :
 | **Bonk V2**       | Implémentation validée + audit Bonk V2 (pas de prototype dans `prototypes/`)       | Réel en Lab, dans 0.1.5 ; **depuis `5b66579` débité sur le wallet Lab** (200 J, remboursé si jamais affiché) | **Validé** (27/09, avant le débit) ; reste Bonk Fidelity (polish)              |
 | **Soundboard V2** | Implémentation validée (pas de prototype)                                          | Réel en Lab, dans 0.1.5 ; **depuis `5b66579` débité sur le wallet Lab**, stop réel d’un son, remboursements  | **Validé** (28/09, avant débit / stop)                                         |
 | **TTS V2**        | `prototypes/tts-v2-extension-ux/` (D3) + `prototypes/tts-v2-player/`               | Réel en Lab, dans 0.1.5 ; **depuis `5b66579` : mots surveillés / bloqués, cooldown D4, pause globale**       | **Validé** (30/09) — dette : lecture possible avant la fin du shuffle / reveal |
-| **Modération V2** | **`prototypes/moderation-v2-d4/`** (spécification)                                 | **Parité D4 complète** (`5b66579`) — non releasé                                                             | **Non validé**                                                                 |
-| **Tombola**       | Pas de prototype viewer V2 ; section Tombola de la D4                              | **Tombola V2 minimale dans Core** (modèle réel : inscription gratuite) ; écran viewer inchangé, branché Core | **Non validé**                                                                 |
+| **Modération V2** | **`prototypes/moderation-v2-d4/`** (spécification)                                 | **Parité D4 complète** (`5b66579`) — non releasé                                                             | **Validé** (01/10)                                                             |
+| **Tombola**       | Pas de prototype viewer V2 ; section Tombola de la D4                              | **Tombola V2 minimale dans Core** (modèle réel : inscription gratuite) ; écran viewer inchangé, branché Core | **Non validé produit** (chantier dédié)                                        |
 
 ### Modération V2 — détail exact (`5b66579`)
 
@@ -123,14 +124,14 @@ Décisions d’Antoni (30/09) appliquées : Tombola = modèle réel (inscription
 
 ## 7. Validation matrix
 
-| Élément                                                              | Code | Tests auto | E2E               | Validé Antoni | Package local                     | Release   |
-| -------------------------------------------------------------------- | ---- | ---------- | ----------------- | ------------- | --------------------------------- | --------- |
-| Studio autonome + supervision                                        | oui  | oui        | oui               | **oui**       | —                                 | **0.1.5** |
-| Hub / Bonk V2 / Soundboard V2 / TTS V2                               | oui  | oui        | oui               | **oui**       | —                                 | **0.1.5** |
-| Modération V2 parité D4 complète (Core + console extension + Studio) | oui  | oui        | **95/95**         | **non**       | **oui** (`release/moderation-d4`) | non       |
-| Tombola V2 minimale (Core, Studio, extension)                        | oui  | oui        | oui (dans les 95) | **non**       | oui                               | non       |
-| Débit Lab Soundboard / Bonk, stop de son                             | oui  | oui        | oui (dans les 95) | **non**       | oui                               | non       |
-| Correctif cooldown TTS (`890e71d`), non-régression sur le modèle D4  | oui  | oui        | oui               | **non**       | oui                               | non       |
+| Élément                                                              | Code | Tests auto | E2E               | Validé Antoni                     | Package local                     | Release   |
+| -------------------------------------------------------------------- | ---- | ---------- | ----------------- | --------------------------------- | --------------------------------- | --------- |
+| Studio autonome + supervision                                        | oui  | oui        | oui               | **oui**                           | —                                 | **0.1.5** |
+| Hub / Bonk V2 / Soundboard V2 / TTS V2                               | oui  | oui        | oui               | **oui**                           | —                                 | **0.1.5** |
+| Modération V2 parité D4 complète (Core + console extension + Studio) | oui  | oui        | **95/95**         | **oui** (01/10)                   | **oui** (`release/moderation-d4`) | non       |
+| Tombola V2 minimale (Core, Studio, extension)                        | oui  | oui        | oui (dans les 95) | **non** (produit, chantier dédié) | oui                               | non       |
+| Débit Lab Soundboard / Bonk, stop de son                             | oui  | oui        | oui (dans les 95) | **oui** (01/10)                   | oui                               | non       |
+| Correctif cooldown TTS (`890e71d`), non-régression sur le modèle D4  | oui  | oui        | oui               | **oui** (01/10, cooldown D4)      | oui                               | non       |
 
 Tests sur le HEAD : **Core 208** (7 skipped) · **Studio server 64** · **desktop 17** · **extension 10** · **bot 69** · lint / format / typecheck verts.
 
@@ -145,7 +146,7 @@ Tests sur le HEAD : **Core 208** (7 skipped) · **Studio server 64** · **deskto
 
 ## 9. Decisions pending (à trancher par Antoni)
 
-Aucune décision de modération en attente (tranchées le 30/09, voir § 6). Après la validation manuelle : release Studio (nouvelle version) via `npm run studio:release`.
+Aucune décision de modération en attente (tranchées le 30/09, voir § 6). À confirmer : publier la release Studio alors qu’elle embarque la Tombola V2 minimale (Lab uniquement, non validée produit).
 
 ## 10. What NOT to do
 
@@ -159,13 +160,9 @@ Aucune décision de modération en attente (tranchées le 30/09, voir § 6). Apr
 
 ## 11. Next exact step
 
-1. **Antoni teste manuellement le package** : fermer tout Studio ouvert (installé, source, anciens packages), lancer `apps/studio/desktop/release/moderation-d4/win-unpacked/Raptoru Studio.exe`, puis :
-   - Studio → Modération : console D4, outils Tombola / Supermods / Configuration TTS / Wallet de test ;
-   - Extension Lab → rôle Modérateur **et** Broadcaster → Modération, sur Panel / Vidéo / Mobile / **Moderator Window** ;
-   - en particulier : Équipe & permissions (accorder / retirer, verrous), mots surveillés (TTS retenu, Laisser passer) et bloqués, pause globale, Stop d’un son / Stop tous les sons (le son se coupe dans le lecteur), remboursements, cooldown D4, notes, wallet admin, Tombola (ouvrir dans Studio, s’inscrire comme viewer, tirer), historiques et filtres, « Effacer le cooldown TTS ».
-2. Corriger **uniquement** les écarts qu’il constate.
-3. Seulement après validation explicite : `npm run studio:release`.
-4. Ensuite : audits de parité stricts des autres modules disposant d’un prototype validé ; Tombola V2 complète (écran viewer, lancement automatique) quand un prototype existera.
+1. Modération V2 D4 **validée manuellement par Antoni le 01/10/2026** (permissions, mots surveillés / bloqués, pause globale, remboursements, cooldown D4, notes, arrêt Soundboard, surfaces Extension).
+2. **Release Studio** via `npm run studio:release` — à lancer sur confirmation d’Antoni, car la release embarque aussi la Tombola V2 minimale (Lab, non validée produit).
+3. Ensuite : **chantier Tombola V2** dédié (validation produit, écran viewer, lancement automatique) ; audits de parité stricts des autres modules disposant d’un prototype validé.
 
 ## 12. Key commits
 
