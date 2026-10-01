@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 // service. PIDs are persisted so a Studio that crashed can find (and stop) what it started, and
 // nothing else: a PID is only adopted if it is still a node process.
 
-export type ServiceName = 'core' | 'bot' | 'labcore';
+export type ServiceName = 'core' | 'bot' | 'labcore' | 'labchat';
 
 export class PidStore {
   constructor(private readonly dir: string) {}

@@ -5,7 +5,8 @@ import {
   LabRole,
   LabWalletRequest,
   RaffleActionRequest,
-  RaffleChatMessage,
+  LabChatMessage,
+  LabStreamEvent,
   TtsRulesReset,
   TtsRulesUpdate,
 } from '@raptoru/schemas';
@@ -15,6 +16,7 @@ import {
   LabModerationError,
   type LabModerationService,
 } from '../lab-moderation/service.js';
+import { LabChatRouter } from '../lab-chat/router.js';
 import { LabForbiddenError, LabWalletError } from '../lab-moderation/store.js';
 import {
   RaffleLabError409,
@@ -83,6 +85,14 @@ export function labModerationRoutes(
   raffle: RaffleLabService,
 ): Route[] {
   const channel = (params: string[]) => parse(Digits, params[0]);
+  // Single Lab chat ingress: every module that handles chat commands is listed here.
+  const labChat = new LabChatRouter([
+    {
+      name: 'raffle',
+      chat: (m) => raffle.chat(m),
+      stream: (e) => raffle.streamEvent(e),
+    },
+  ]);
   /**
    * Read models are for the team. The extension façade names the reader (`as`, `as_role`): Core
    * refuses a viewer. Studio (no reader named) is the broadcaster.
@@ -286,13 +296,22 @@ export function labModerationRoutes(
           raffle.act(channel(params), parse(RaffleActionRequest, body)),
         ),
     },
+    // --- Lab chat ingress (generic, every module) ----------------------------------------------------
     {
-      // Chat ingress: Twitch adapter (switch OFF by default) or the Studio chat simulator.
+      // One chat message from the single Lab Twitch adapter or the Studio chat simulator.
       method: 'POST',
-      pattern: /^\/v1\/lab\/raffle\/chat$/,
+      pattern: /^\/v1\/lab\/chat$/,
       auth: 'studio',
       handle: ({ body }) =>
-        mappedModeration(() => raffle.chat(parse(RaffleChatMessage, body))),
+        mappedModeration(() => labChat.message(parse(LabChatMessage, body))),
+    },
+    {
+      // Stream state from the same adapter (offline → live / live → offline).
+      method: 'POST',
+      pattern: /^\/v1\/lab\/stream$/,
+      auth: 'studio',
+      handle: ({ body }) =>
+        mappedModeration(() => labChat.stream(parse(LabStreamEvent, body))),
     },
     // --- Lab test wallet -------------------------------------------------------------------------------
     {

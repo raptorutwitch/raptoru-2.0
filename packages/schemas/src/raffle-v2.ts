@@ -35,6 +35,8 @@ export const RaffleDisplay = z.strictObject({
   result_full_s: z.number().int().min(5).max(120),
   result_giveaway_s: z.number().int().min(5).max(120),
   cancelled_s: z.number().int().min(2).max(30),
+  /** « Aucun participant cette fois ! » (round over with no entry: no draw, no winner). */
+  empty_s: z.number().int().min(2).max(30),
   /** Stream delay margin: the extension shows the result this long after the overlay reveal ends. */
   stream_margin_s: z.number().int().min(0).max(60),
   /** Extension: result (or cancellation) shown this long before going back to « Aucune Tombola ». */
@@ -120,10 +122,13 @@ export const RaffleConfig = z.strictObject({
     jackpot: z.number().int().min(1).max(10_000_000),
     currency_id: CurrencyId,
   }),
-  /** Entry commands: « !join » and « !enter » always, plus Studio aliases. */
-  join_aliases: z.array(Command).max(10),
-  /** Moderator-only cancel command and its aliases. */
-  cancel_commands: z.array(Command).min(1).max(5),
+  /**
+   * Entry commands, all editable: the first is the main command (shown to viewers), the others are
+   * its aliases. Default « !join » + « !enter ».
+   */
+  join_commands: z.array(Command).min(1).max(12),
+  /** Moderator-only cancel command (first = main) and its aliases. */
+  cancel_commands: z.array(Command).min(1).max(12),
   extension_button: z.boolean(),
   /** Overlay instruction text: display only, never changes the real commands. */
   overlay_hint: z.strictObject({
@@ -208,10 +213,11 @@ export const RaffleExtensionJoin = z.strictObject({
 });
 
 /**
- * One chat message, from the Twitch chat adapter or the Studio chat simulator. Core decides whether
- * it is an entry command, a cancel command (moderator or above) or nothing.
+ * One chat message of the Lab, from the single Twitch chat adapter (ingestion switch) or the Studio
+ * chat simulator. Not a Tombola feature: Core routes it to every Lab module that handles chat
+ * commands (Tombola today; TTS, global commands, moderation… later), each deciding for itself.
  */
-export const RaffleChatMessage = z.strictObject({
+export const LabChatMessage = z.strictObject({
   channel_id: Id,
   message_id: z.string().min(1).max(128),
   text: z.string().max(500),
@@ -224,4 +230,23 @@ export const RaffleChatMessage = z.strictObject({
   }),
   source: z.enum(['twitch', 'simulator']),
 });
-export type RaffleChatMessage = z.infer<typeof RaffleChatMessage>;
+export type LabChatMessage = z.infer<typeof LabChatMessage>;
+/** The Tombola receives the Lab chat messages unchanged. */
+export const RaffleChatMessage = LabChatMessage;
+export type RaffleChatMessage = LabChatMessage;
+
+/**
+ * Twitch stream state from the Lab chat adapter (ingestion switch ON): `online` opens a Twitch stream
+ * session (the Tombola scheduler starts with it), `offline` ends it. Core stays the source of truth.
+ */
+export const LabStreamEvent = z.strictObject({
+  channel_id: Id,
+  event: z.enum(['online', 'offline']),
+  twitch_stream_id: z
+    .string()
+    .regex(/^\d{1,32}$/)
+    .optional(),
+});
+export type LabStreamEvent = z.infer<typeof LabStreamEvent>;
+export const RaffleStreamEvent = LabStreamEvent;
+export type RaffleStreamEvent = LabStreamEvent;

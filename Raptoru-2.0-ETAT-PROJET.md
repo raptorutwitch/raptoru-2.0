@@ -770,6 +770,13 @@ Le Creepy est une feature signature à préserver/améliorer.
 - mods : `!songskip` ;
 - skip viewer existe mais doit être limité/cooldown pour éviter abus.
 
+## Onglet Studio « Commandes » (roadmap — demandé par Antoni le 01/10/2026, pas encore construit)
+
+Un onglet global de Studio pour voir et modifier toutes les commandes chat, organisé par catégorie / module
+(Tombola, TTS, Soundboard, Bonk, modération, commandes globales…), avec recherche et sections repliables. Pas de
+liste plate illisible. Il s'appuiera sur l'ingestion chat unique du Lab (`/v1/lab/chat`, routée par Core vers chaque
+module) ; en attendant, chaque module garde son éditeur (ex. Tombola : commande principale + alias).
+
 ## Commandes viewer personnalisées
 Certains viewers ont leur propre commande pouvant déclencher :
 - un son ;

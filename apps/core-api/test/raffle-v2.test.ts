@@ -24,6 +24,7 @@ import {
   revealMs,
   split,
 } from '../src/raffle-lab/rules.js';
+import { LabChatRouter } from '../src/lab-chat/router.js';
 import { createPgliteDb, setup } from './helpers.js';
 
 // Tombola V2 (Lab) — Core is the single source of truth: admissions (extension, chat, aliases,
@@ -210,7 +211,7 @@ describe('Tombola V2 rules', () => {
 describe('Tombola V2 admissions', () => {
   it('extension and chat (!join, !enter, alias) land on one idempotent entry per viewer, first source kept', async () => {
     const { config, act, joinExt, chat, raffle, code } = await lab();
-    await config({ join_aliases: ['!octobre'] });
+    await config({ join_commands: ['!join', '!enter', '!octobre'] });
     await act({ action: 'launch' });
     expect((await joinExt('900201')).replayed).toBe(false);
     expect(await chat('900201', '!join')).toEqual({
@@ -240,7 +241,10 @@ describe('Tombola V2 admissions', () => {
       counts: { chat: 4, extension: 1 },
     });
     // The extension button can be switched off by Studio: the chat still works.
-    await config({ join_aliases: ['!octobre'], extension_button: false });
+    await config({
+      join_commands: ['!join', '!enter', '!octobre'],
+      extension_button: false,
+    });
     expect(await code(joinExt('900207'))).toBe('extension_join_disabled');
     expect(await chat('900207', '!join')).toEqual({ outcome: 'joined' });
   });
@@ -456,6 +460,54 @@ describe('Tombola V2 phases and draw', () => {
         (await core.db.query('select 1 from lab_wallet_ledger')).length,
       ).toBe(h.winners.length);
     }
+  });
+});
+
+describe('Tombola V2 zero participants', () => {
+  it('no error, no draw, no winner, no payment; « no_participants » distinct from a cancellation; short display; giveaway too', async () => {
+    for (const mode of ['fixed', 'giveaway'] as const) {
+      const { config, act, after, raffle, core } = await lab();
+      await config(
+        mode === 'giveaway' ? { amount_mode: 'giveaway', prize: 'Lot' } : {},
+      );
+      await act({ action: 'launch' });
+      await after(62_000);
+      // Before the result: nobody knows yet (no spoiler either way).
+      expect((await raffle.snapshot(CH)).round!.outcome).toBeNull();
+      await after(3_000 + 1_500);
+      const s = (await raffle.snapshot(CH)).round!;
+      expect(s).toMatchObject({ outcome: 'no_participants', participants: 0 });
+      expect(s.reveal?.winners ?? []).toEqual([]);
+      const h = (await raffle.history(CH))[0]!;
+      expect(h).toMatchObject({
+        status: 'revealed',
+        outcome: 'no_participants',
+        winners: [],
+      });
+      expect(
+        (await core.db.query('select 1 from lab_wallet_ledger')).length,
+      ).toBe(0);
+      expect(
+        await core.db.query(
+          "select 1 from lab_moderation_audit where action = 'raffle_no_participants'",
+        ),
+      ).toHaveLength(1);
+      // « Aucun participant cette fois ! » stays `display.empty_s` (5 s), then the round is over.
+      await after(5_000);
+      expect((await raffle.snapshot(CH)).round).toBeNull();
+      expect((await raffle.history(CH))[0]).toMatchObject({
+        status: 'finished',
+        outcome: 'no_participants',
+      });
+    }
+    // A cancellation keeps its own outcome.
+    const { act, raffle } = await lab();
+    await act({ action: 'launch' });
+    await act({ action: 'cancel' });
+    expect((await raffle.history(CH))[0]).toMatchObject({
+      status: 'cancelled',
+      outcome: 'cancelled',
+    });
   });
 });
 
@@ -820,6 +872,7 @@ describe('Tombola V2 read models', () => {
   it('viewer history = the current stream session only (cancelled marked); a new session starts empty', async () => {
     const { config, act, joinExt, after, seen, code } = await lab();
     await config();
+    await act({ action: 'stream_start' });
     await act({ action: 'launch' });
     await joinExt('900341');
     await after(62_000 + 3_000 + 14_000);
@@ -884,7 +937,11 @@ describe('Tombola V2 read models', () => {
 
   it('configuration is validated by Core (bands, commands, currency)', async () => {
     const { config, code } = await lab();
-    const bad = (patch: Partial<RaffleConfig>) => code(config(patch));
+    // Core's coherence checks answer `invalid_config`; malformed commands never pass the schema.
+    const bad = (patch: Partial<RaffleConfig>) =>
+      code((async () => config(patch))()).catch((e: Error) =>
+        e.name === 'ZodError' ? 'zod' : Promise.reject(e),
+      );
     expect(
       await bad({
         random: { step: 500, bands: [{ from: 5000, to: 20000, pct: 70 }] },
@@ -901,17 +958,34 @@ describe('Tombola V2 read models', () => {
         },
       }),
     ).toBe('invalid_config');
-    expect(await bad({ join_aliases: ['!join'] })).toBe('invalid_config');
-    expect(
-      await bad({ cancel_commands: ['!octobre'], join_aliases: ['!octobre'] }),
-    ).toBe('invalid_config');
-    expect(await bad({ currency_id: 'nope' })).toBe('invalid_config');
-    expect(await bad({ overlay_hint: { mode: 'custom', text: '' } })).toBe(
+    expect(await bad({ join_commands: ['!join', '!join'] })).toBe(
       'invalid_config',
     );
-    expect(await code(config({ join_aliases: ['!octobre', '!cadeau'] }))).toBe(
+    expect(await bad({ cancel_commands: ['!stop', '!stop'] })).toBe(
+      'invalid_config',
+    );
+    expect(
+      await bad({
+        cancel_commands: ['!octobre'],
+        join_commands: ['!join', '!octobre'],
+      }),
+    ).toBe('invalid_config');
+    expect(await bad({ join_commands: [] })).toBe('zod');
+    expect(await bad({ join_commands: ['join sans point'] })).toBe('zod');
+    expect(await bad({ currency_id: 'nope' })).toBe('invalid_config');
+    // A custom overlay text may be empty while it is typed (the overlay then shows nothing).
+    expect(await bad({ overlay_hint: { mode: 'custom', text: '' } })).toBe(
       'ok',
     );
+    // Every command is editable: the main one replaced, aliases added / removed.
+    expect(
+      await code(
+        config({
+          join_commands: ['!participer', '!octobre', '!cadeau'],
+          cancel_commands: ['!stoptombola', '!annuletombola'],
+        }),
+      ),
+    ).toBe('ok');
   });
 });
 
@@ -1217,5 +1291,241 @@ describe('Tombola V2 launch sound', () => {
     );
     expect(await bad({ ...sound('a'), volume: 150 })).toBe('invalid');
     expect(await bad(sound('a'))).toBe('ok');
+  });
+});
+
+describe('Tombola V2 Twitch stream state (chat adapter)', () => {
+  it('offline → live opens a Twitch session and starts the scheduler; repeated events change nothing; live → offline ends both', async () => {
+    const { config, raffle, core } = await lab();
+    await config({
+      scheduler: { ...DEFAULT_RAFFLE_CONFIG.scheduler, enabled: true },
+    });
+    const on = await raffle.streamEvent({
+      channel_id: CH,
+      event: 'online',
+      twitch_stream_id: '317823244002',
+    });
+    expect(on.changed).toBe(true);
+    expect(
+      await raffle.streamEvent({ channel_id: CH, event: 'online' }),
+    ).toMatchObject({ changed: false, session_id: on.session_id });
+    const sessions = await core.db.query<{ source: string }>(
+      'select source from lab_stream_sessions',
+    );
+    expect(sessions).toEqual([{ source: 'twitch' }]);
+    expect((await raffle.settings(CH)).scheduler).toMatchObject({
+      state: 'running',
+      session_id: on.session_id,
+      remaining_ms: 15 * 60_000, // preset « Normal »
+    });
+    expect(
+      await raffle.streamEvent({ channel_id: CH, event: 'offline' }),
+    ).toMatchObject({ changed: true });
+    expect(
+      await raffle.streamEvent({ channel_id: CH, event: 'offline' }),
+    ).toMatchObject({ changed: false });
+    expect((await raffle.settings(CH)).scheduler.state).toBe('stopped');
+    expect((await raffle.settings(CH)).stream).toBeNull();
+  });
+});
+
+describe('Tombola V2 scheduler re-planning', () => {
+  it('a new frequency while it runs re-plans the next launch (first delay, then interval), audited', async () => {
+    const { config, act, raffle, core } = await lab();
+    const sched = (preset: RaffleConfig['scheduler']['preset']) => ({
+      scheduler: { ...DEFAULT_RAFFLE_CONFIG.scheduler, enabled: true, preset },
+    });
+    await config(sched('normal'));
+    await act({ action: 'stream_start' });
+    expect((await raffle.settings(CH)).scheduler.remaining_ms).toBe(
+      15 * 60_000,
+    );
+    await config(sched('frequent'));
+    expect((await raffle.settings(CH)).scheduler.remaining_ms).toBe(
+      10 * 60_000,
+    );
+    await config({ ...sched('frequent'), extension_button: false }); // unrelated change: no re-plan
+    expect((await raffle.settings(CH)).scheduler.remaining_ms).toBe(
+      10 * 60_000,
+    );
+    const trail = await core.db.query<{ action: string }>(
+      "select action from lab_moderation_audit where action = 'scheduler_replan'",
+    );
+    expect(trail).toHaveLength(1);
+  });
+});
+
+describe('Tombola V2 scheduler state for Studio', () => {
+  it('disabled · waiting for a stream (no pause offered) · running · paused (resume offered) · waiting for the round', async () => {
+    const { config, act, raffle, after, code } = await lab();
+    const sched = async () => (await raffle.settings(CH)).scheduler;
+    expect(await sched()).toMatchObject({
+      phase: 'disabled',
+      can_pause: false,
+      can_resume: false,
+    });
+    await config({
+      scheduler: {
+        ...DEFAULT_RAFFLE_CONFIG.scheduler,
+        enabled: true,
+        preset: 'very_frequent',
+      },
+    });
+    expect(await sched()).toMatchObject({
+      phase: 'waiting_stream',
+      can_pause: false,
+      can_resume: false,
+    });
+    expect(await code(act({ action: 'scheduler_pause' }))).not.toBe('ok');
+    await act({ action: 'stream_start' });
+    expect(await sched()).toMatchObject({
+      phase: 'running',
+      can_pause: true,
+      can_resume: false,
+    });
+    await act({ action: 'scheduler_pause' });
+    expect(await sched()).toMatchObject({
+      phase: 'paused',
+      can_pause: false,
+      can_resume: true,
+    });
+    await act({ action: 'scheduler_resume' });
+    expect((await sched()).phase).toBe('running');
+    await after(5 * 60_000);
+    expect(await sched()).toMatchObject({
+      phase: 'waiting_round',
+      can_pause: true,
+    });
+    await act({ action: 'stream_end' });
+    expect((await sched()).phase).toBe('waiting_stream');
+  });
+});
+
+describe('Tombola V2 editable commands', () => {
+  it('a configuration saved before the editable commands keeps working (« !join / !enter + aliases »), new keys take their default', async () => {
+    const { raffle, core } = await lab();
+    const legacy: Record<string, unknown> = {
+      ...DEFAULT_RAFFLE_CONFIG,
+      join_aliases: ['!ticket'],
+      display: { ...DEFAULT_RAFFLE_CONFIG.display },
+    };
+    delete legacy.join_commands;
+    delete (legacy.display as Record<string, unknown>).empty_s;
+    await core.db.query(
+      'insert into lab_raffle_settings (channel_id, config, updated_at, updated_by) values ($1, $2, $3, $4)',
+      [CH, JSON.stringify(legacy), T0, 'antoni'],
+    );
+    const c = (await raffle.settings(CH)).config;
+    expect(c.join_commands).toEqual(['!join', '!enter', '!ticket']);
+    expect(c.display.empty_s).toBe(5);
+    expect('join_aliases' in c).toBe(false);
+  });
+
+  it('the main command is the first one; any alias joins; a removed command no longer does', async () => {
+    const { config, act, chat, raffle } = await lab();
+    await config({ join_commands: ['!ticket', '!join'] });
+    await act({ action: 'launch' });
+    expect((await raffle.snapshot(CH)).join_command).toBe('!ticket');
+    expect((await raffle.viewerState(CH, null)).join_command).toBe('!ticket');
+    expect(await chat('900271', '!ticket')).toMatchObject({
+      outcome: 'joined',
+    });
+    expect(await chat('900272', '!join')).toMatchObject({ outcome: 'joined' });
+    expect(await chat('900273', '!enter')).toMatchObject({
+      outcome: 'ignored',
+    });
+  });
+});
+
+describe('Lab chat ingress (Core router, every module)', () => {
+  it('routes each chat message to every Lab module; reports only the ones that handled it; stream state too', async () => {
+    const { config, act, raffle } = await lab();
+    await config();
+    const other: string[] = [];
+    const router = new LabChatRouter([
+      {
+        name: 'raffle',
+        chat: (m) => raffle.chat(m),
+        stream: (e) => raffle.streamEvent(e),
+      },
+      {
+        name: 'tts',
+        chat: async (m) => {
+          other.push(m.text);
+          return {
+            outcome: m.text === '!canceltts' ? 'cancelled' : 'ignored',
+          };
+        },
+      },
+    ]);
+    const msg = (text: string, id: string) => ({
+      channel_id: CH,
+      message_id: id,
+      text,
+      chatter: {
+        id: '900281',
+        login: 'v',
+        display_name: 'V',
+        role: 'viewer' as const,
+      },
+      source: 'simulator' as const,
+    });
+    const live = await router.stream({ channel_id: CH, event: 'online' });
+    expect(live.modules.raffle).toMatchObject({ changed: true });
+    await act({ action: 'launch' });
+    expect(await router.message(msg('!join', 'r-1'))).toEqual({
+      handled: [{ module: 'raffle', outcome: 'joined' }],
+    });
+    expect(await router.message(msg('!canceltts', 'r-2'))).toEqual({
+      handled: [{ module: 'tts', outcome: 'cancelled' }],
+    });
+    expect(await router.message(msg('bonjour', 'r-3'))).toEqual({
+      handled: [],
+    });
+    expect(other).toEqual(['!join', '!canceltts', 'bonjour']);
+  });
+});
+
+describe('Tombola V2 manual round outside a stream', () => {
+  it('allowed for tests, but opens no stream session, never starts the scheduler, leaves the stream state untouched', async () => {
+    const { config, act, raffle, after, core, joinExt, seen } = await lab();
+    await config({
+      scheduler: { ...DEFAULT_RAFFLE_CONFIG.scheduler, enabled: true },
+    });
+    await act({ action: 'launch' });
+    const s = await raffle.settings(CH);
+    expect(s.stream).toBeNull();
+    expect(s.scheduler).toMatchObject({
+      phase: 'waiting_stream',
+      state: 'stopped',
+      next_at: null,
+    });
+    expect(
+      await core.db.query('select 1 from lab_stream_sessions'),
+    ).toHaveLength(0);
+    expect(
+      await core.db.query(
+        "select 1 from lab_moderation_audit where action = 'stream_start'",
+      ),
+    ).toHaveLength(0);
+    // The round itself runs normally (entries, draw, payment) and is shown to viewers off-stream.
+    await joinExt('900291');
+    await after(62_000 + 3_000 + 14_000);
+    const h = (await raffle.history(CH))[0]!;
+    expect(h).toMatchObject({ status: 'finished', session_id: null });
+    expect(h.winners).toHaveLength(1);
+    expect((await seen('900291')).history).toHaveLength(1);
+    // Ending the round does not plan an automatic one either.
+    expect((await raffle.settings(CH)).scheduler).toMatchObject({
+      phase: 'waiting_stream',
+      next_at: null,
+    });
+    // Only the explicit action opens a (simulated) session; its history starts empty.
+    await act({ action: 'stream_start' });
+    expect((await raffle.settings(CH)).stream).toMatchObject({
+      source: 'simulated',
+    });
+    expect((await raffle.settings(CH)).scheduler.phase).toBe('running');
+    expect((await seen('900291')).history).toEqual([]);
   });
 });

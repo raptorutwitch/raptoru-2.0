@@ -16,9 +16,11 @@ const PREFIXES = [
   '/v1/lab/wallet/',
   '/v1/lab/tts/rules',
   '/v1/lab/raffle/',
+  // Single Lab chat ingress (simulator), routed by Core to every module.
+  '/v1/lab/chat',
 ];
 
-/** Local Lab Core only, moderation / wallet / TTS rules routes only. */
+/** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */
 export function localLabCoreClient(base: string, secret: string): LabCoreCall {
   const url = new URL(base);
   if (

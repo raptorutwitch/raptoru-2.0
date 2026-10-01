@@ -1,7 +1,15 @@
 import { BonkRuntime } from './bonk-lab/runtime.js';
 import { SoundRuntime } from './sound-lab/runtime.js';
 import { TtsRuntime } from './tts-lab/runtime.js';
-import { labProxy, localLabCoreClient } from './lab-moderation/proxy.js';
+import {
+  LAB_CHANNEL_ID,
+  labProxy,
+  localLabCoreClient,
+} from './lab-moderation/proxy.js';
+import { RaffleRuntime } from './raffle-lab/runtime.js';
+import { LabChatIngress } from './lab-chat/ingress.js';
+import { ManagedProcess, PidStore } from './test-lab/managed-process.js';
+import { existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import {
   createServer,
@@ -23,6 +31,8 @@ import {
 import {
   applyDataRootEnv,
   DATA_ROOT,
+  paths,
+  readTokenSummary,
   REPO_ROOT,
 } from './test-lab/local-env.js';
 import { createTestLab, type TestLab } from './test-lab/test-lab.js';
@@ -251,6 +261,8 @@ export function createStudioServer(
   runtime: LocalRuntime | null = null,
   tts: TtsRuntime | null = null,
   labApi: ReturnType<typeof labProxy> | null = null,
+  raffle: RaffleRuntime | null = null,
+  labChat: LabChatIngress | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -263,6 +275,24 @@ export function createStudioServer(
       if (url.pathname === '/api/sound-lab/status' && !sound)
         return send(res, 200, { enabled: false });
       if (tts && (await tts.handle(req, res, url))) return;
+      // Tombola V2: Studio UI relay, launch sounds, single OBS source.
+      if (raffle && (await raffle.handle(req, res, url))) return;
+      // Single Lab chat ingress (Twitch switch + simulator), routed by Core to every module.
+      if (labChat && (await labChat.handle(req, res, url))) return;
+      if (url.pathname === '/api/lab-chat/status' && !labChat)
+        return send(res, 200, {
+          enabled: false,
+          running: false,
+          blocked: {
+            code: 'unavailable',
+            message: 'Ingestion indisponible : Core Lab non démarré.',
+          },
+          token_login: null,
+          last_exit: null,
+          lines: [],
+        });
+      if (url.pathname === '/api/raffle/status' && !raffle)
+        return send(res, 200, { enabled: false });
       // Moderation V2 cockpit / TTS configuration / Lab test wallet (relayed to the local Lab Core).
       if (url.pathname.startsWith('/api/lab/')) {
         if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
@@ -420,6 +450,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   const tts = process.env.BONK_LAB_CORE_URL
     ? await TtsRuntime.create(`http://${host}:${port}`)
     : null;
+  // Lab chat ingress, created below (the shutdown may run before it exists).
+  let labChatRef: LabChatIngress | null = null;
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
@@ -427,6 +459,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     bonk?.stop();
     sound?.stop();
     tts?.stop();
+    void labChatRef?.stop();
     lab.logs.add(
       'studio',
       'Studio closing: stopping bot and Core (Postgres keeps running)',
@@ -486,6 +519,67 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         onChange: () => extLab?.invalidateLab(),
       })
     : null;
+  // Tombola V2: Core decides; Studio relays, stores the launch sounds and serves the OBS source.
+  const raffle = labCore
+    ? await RaffleRuntime.create({
+        core: labCore,
+        origin: `http://${host}:${port}`,
+        dir: join(paths.runtimeDir, 'raffle-lab'),
+        overlayDir: join(
+          REPO_ROOT,
+          'apps',
+          'studio',
+          'server',
+          'raffle-overlay',
+        ),
+      })
+    : null;
+  // Single Lab chat ingress: ONE Twitch chat connection (bot adapter, switch OFF by default) for every
+  // Lab module, plus the chat simulator. Never started automatically unless left ON and unblocked.
+  const ingressLines: string[] = [];
+  const labChat = labCore
+    ? await LabChatIngress.create({
+        core: labCore,
+        origin: `http://${host}:${port}`,
+        dir: join(paths.runtimeDir, 'lab-chat'),
+        identities: () => extLab?.labIdentities() ?? [],
+        process: new ManagedProcess({
+          name: 'labchat',
+          cwd: paths.botDir,
+          args: [
+            `--env-file-if-exists=${paths.botEnv}`,
+            'dist/lab-chat-main.js',
+          ],
+          pids: new PidStore(paths.runtimeDir),
+          onLine: (line) => {
+            ingressLines.push(lab.deps.redact(line));
+            if (ingressLines.length > 50) ingressLines.shift();
+          },
+        }),
+        env: () => ({
+          LAB_CHAT_CORE_URL: process.env.BONK_LAB_CORE_URL ?? '',
+          LAB_CHAT_SECRET: process.env.BONK_LAB_SECRET ?? '',
+          LAB_CHAT_CHANNEL_ID: LAB_CHANNEL_ID,
+          // Never the production chat features: this process only reads for the Lab modules.
+          DAILY_CHAT_COMMANDS: 'false',
+          LOYALTY_CHAT_COMMANDS: 'false',
+          LOYALTY_TWITCH_EVENTS: 'false',
+          PRESENCE_SHADOW: 'false',
+        }),
+        token: () =>
+          readTokenSummary(process.env.TWITCH_TOKEN_FILE ?? paths.tokenFile),
+        prerequisite: () =>
+          !existsSync(paths.botEnv)
+            ? 'bot_env_missing'
+            : !existsSync(join(paths.botDir, 'dist', 'lab-chat-main.js'))
+              ? 'bot_not_built'
+              : null,
+        botRunning: () => lab.deps.bot.running,
+        lines: () => ingressLines,
+      })
+    : null;
+  labChatRef = labChat;
+  labChat?.start();
   const httpServer = createStudioServer(
     lab,
     shutdown,
@@ -495,6 +589,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     runtime,
     tts,
     labApi,
+    raffle,
+    labChat,
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(

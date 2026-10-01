@@ -3,8 +3,8 @@ import type { RaffleConfig, RaffleScheduler } from '@raptoru/schemas';
 // Tombola V2 — pure rules (decided by Core only, never by a client): defaults, random jackpot,
 // winners count, exact split and the length of the overlay reveal.
 
-/** Always accepted, whatever the Studio aliases. */
-export const BASE_JOIN_COMMANDS = ['!join', '!enter'] as const;
+/** Default entry commands (all editable in Studio: main command + aliases). */
+export const DEFAULT_JOIN_COMMANDS = ['!join', '!enter'];
 
 /**
  * Default configuration. Random jackpot (decision D3): ~78 % of the rounds under 20 000, ~18 %
@@ -34,7 +34,7 @@ export const DEFAULT_RAFFLE_CONFIG: RaffleConfig = {
     jackpot: 200_000,
     currency_id: 'tokens',
   },
-  join_aliases: [],
+  join_commands: [...DEFAULT_JOIN_COMMANDS],
   cancel_commands: ['!annuletombola'],
   extension_button: true,
   overlay_hint: { mode: 'join', text: '' },
@@ -47,6 +47,7 @@ export const DEFAULT_RAFFLE_CONFIG: RaffleConfig = {
     result_full_s: 16,
     result_giveaway_s: 14,
     cancelled_s: 4,
+    empty_s: 5,
     stream_margin_s: 8,
     extension_idle_return_s: 12,
   },
@@ -124,17 +125,21 @@ export function validateConfig(c: RaffleConfig) {
     );
   if (b[0]!.from < c.random.step)
     throw new RaffleConfigError('the minimum must be at least one step');
-  const commands = [...BASE_JOIN_COMMANDS, ...c.join_aliases];
-  if (new Set(commands).size !== commands.length)
+  // Commands: no duplicate inside a list, and never the same command to join and to cancel.
+  if (new Set(c.join_commands).size !== c.join_commands.length)
     throw new RaffleConfigError('duplicate entry command');
-  if (c.cancel_commands.some((x) => commands.includes(x)))
-    throw new RaffleConfigError('a cancel command cannot be an entry command');
+  if (new Set(c.cancel_commands).size !== c.cancel_commands.length)
+    throw new RaffleConfigError('duplicate cancel command');
+  const clash = c.cancel_commands.find((x) => c.join_commands.includes(x));
+  if (clash)
+    throw new RaffleConfigError(
+      `${clash} cannot be both an entry and a cancel command`,
+    );
   if (c.scheduler.interval_min_s > c.scheduler.interval_max_s)
     throw new RaffleConfigError(
       'scheduler: the minimum interval is above the maximum',
     );
-  if (c.overlay_hint.mode === 'custom' && !c.overlay_hint.text)
-    throw new RaffleConfigError('the custom overlay text is empty');
+  // An empty custom overlay text is allowed: the overlay then shows no instruction until it is typed.
 }
 
 /**

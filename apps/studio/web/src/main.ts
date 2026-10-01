@@ -3,15 +3,22 @@ import './extension-lab.css';
 import './sound-config.css';
 import './studio-home.css';
 import './moderation.css';
+import './tombola.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
 import { mountSoundConfig } from './sound-config.js';
 import { mountUpdateWidget } from './update.js';
 import { mountStudioHome } from './studio-home.js';
 import { mountModeration } from './moderation.js';
+import { mountTombola } from './tombola.js';
 
 type TabId =
-  'studio' | 'moderation' | 'test-lab' | 'extension-lab' | 'soundboard';
+  | 'studio'
+  | 'moderation'
+  | 'tombola'
+  | 'test-lab'
+  | 'extension-lab'
+  | 'soundboard';
 const TAB_KEY = 'raptoru-studio-tab';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -23,6 +30,7 @@ if (app) {
       <nav class="tabs">
         <button class="tab" type="button" data-tab="studio">Studio <em>runtime</em></button>
         <button class="tab" type="button" data-tab="moderation">Modération <em>Core</em></button>
+        <button class="tab" type="button" data-tab="tombola">Tombola <em>Core</em></button>
         <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
         <button class="tab" type="button" data-tab="soundboard">Soundboard <em>config</em></button>
@@ -32,6 +40,7 @@ if (app) {
     </header>
     <main id="tab-studio"></main>
     <main id="tab-moderation" hidden></main>
+    <main id="tab-tombola" class="tab-flush" hidden></main>
     <main id="tab-test-lab" hidden></main>
     <main id="tab-extension-lab" class="tab-full" hidden></main>
     <main id="tab-soundboard" hidden></main>`;
@@ -40,6 +49,7 @@ if (app) {
   const moderation = mountModeration(
     app.querySelector<HTMLElement>('#tab-moderation')!,
   );
+  const tombola = mountTombola(app.querySelector<HTMLElement>('#tab-tombola')!);
   const extensionLab = mountExtensionLab(
     app.querySelector<HTMLElement>('#tab-extension-lab')!,
   );
@@ -56,6 +66,8 @@ if (app) {
     app.querySelector<HTMLElement>('#tab-moderation')!.hidden =
       tab !== 'moderation';
     moderation.setVisible(tab === 'moderation');
+    app.querySelector<HTMLElement>('#tab-tombola')!.hidden = tab !== 'tombola';
+    tombola.setVisible(tab === 'tombola');
     app.querySelector<HTMLElement>('#tab-test-lab')!.hidden =
       tab !== 'test-lab';
     app.querySelector<HTMLElement>('#tab-extension-lab')!.hidden =
@@ -88,6 +100,7 @@ if (app) {
     if (
       remembered === 'extension-lab' ||
       remembered === 'moderation' ||
+      remembered === 'tombola' ||
       remembered === 'soundboard' ||
       remembered === 'test-lab'
     )
@@ -99,6 +112,7 @@ if (app) {
   if (
     asked === 'studio' ||
     asked === 'moderation' ||
+    asked === 'tombola' ||
     asked === 'test-lab' ||
     asked === 'extension-lab' ||
     asked === 'soundboard'

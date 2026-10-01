@@ -6,6 +6,7 @@ import {
   type RaffleChatMessage,
   type RaffleCommand,
   type RaffleSound,
+  type RaffleStreamEvent,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
@@ -36,7 +37,6 @@ import {
 } from './currencies.js';
 import {
   autoWinners,
-  BASE_JOIN_COMMANDS,
   DEFAULT_RAFFLE_CONFIG,
   nextIntervalMs,
   randomJackpot,
@@ -206,15 +206,37 @@ export class RaffleLabService {
       )
     )[0];
     if (!row) return structuredClone(DEFAULT_RAFFLE_CONFIG);
-    // A configuration saved by an older Core keeps working: missing keys take their default.
-    return RaffleConfig.parse({
+    // A configuration saved by an older Core keeps working: missing keys (top level and inside the
+    // grouped settings) take their default; the former « !join / !enter + aliases » becomes the
+    // editable command list.
+    const saved = { ...(row.config as Record<string, unknown>) };
+    if (!saved.join_commands && Array.isArray(saved.join_aliases))
+      saved.join_commands = [
+        ...new Set(['!join', '!enter', ...(saved.join_aliases as string[])]),
+      ];
+    delete saved.join_aliases;
+    const merged: Record<string, unknown> = {
       ...DEFAULT_RAFFLE_CONFIG,
-      ...(row.config as object),
-    });
+      ...saved,
+    };
+    for (const k of [
+      'random',
+      'full',
+      'super',
+      'overlay_hint',
+      'display',
+      'scheduler',
+      'launch_sounds',
+    ] as const)
+      merged[k] = {
+        ...(DEFAULT_RAFFLE_CONFIG[k] as object),
+        ...((saved[k] as object | undefined) ?? {}),
+      };
+    return RaffleConfig.parse(merged);
   }
 
   private joinCommands(c: RaffleConfig) {
-    return [...BASE_JOIN_COMMANDS, ...c.join_aliases];
+    return c.join_commands;
   }
 
   // --- stream session (simulated in the Lab) ------------------------------------------------------------
@@ -254,11 +276,12 @@ export class RaffleLabService {
     role: LabRole,
     now: Date,
     reason: string | null,
+    source: 'simulated' | 'twitch' = 'simulated',
   ) {
     const id = randomUUID();
     await q.query(
-      `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by) values ($1, $2, $3, 'simulated', $4)`,
-      [id, channelId, now, actorName(actor)],
+      `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by) values ($1, $2, $3, $4, $5)`,
+      [id, channelId, now, source, actorName(actor)],
     );
     await audit(q, now, {
       channelId,
@@ -267,7 +290,7 @@ export class RaffleLabService {
       module: 'raffle',
       action: 'stream_start',
       reason,
-      after: { session_id: id, source: 'simulated' },
+      after: { session_id: id, source },
     });
     // The automatic scheduler starts with the stream (when enabled).
     if ((await this.config(q, channelId)).scheduler.enabled)
@@ -472,7 +495,26 @@ export class RaffleLabService {
     )[0];
     const now = this.clock.now().getTime();
     const state = s?.state ?? 'stopped';
+    const live = await this.liveSession(q, channelId);
+    const bound = !!live && live.session_id === s?.session_id;
+    /**
+     * What Studio shows: disabled · waiting_stream (enabled, no stream session: « En attente du
+     * prochain stream ») · running (next launch planned) · waiting_round (a round is on screen) ·
+     * paused. Pause is only offered while running / waiting_round.
+     */
+    const phase = !cfg.scheduler.enabled
+      ? 'disabled'
+      : state === 'paused' && bound
+        ? 'paused'
+        : state === 'running' && bound
+          ? s?.next_at
+            ? 'running'
+            : 'waiting_round'
+          : 'waiting_stream';
     return {
+      phase,
+      can_pause: phase === 'running' || phase === 'waiting_round',
+      can_resume: phase === 'paused',
       enabled: cfg.scheduler.enabled,
       preset: cfg.scheduler.preset,
       timing: schedulerTiming(cfg.scheduler),
@@ -565,6 +607,58 @@ export class RaffleLabService {
   }
 
   /**
+   * Twitch stream state (chat adapter, ingestion switch ON): offline → live opens a Twitch session
+   * (and the scheduler), live → offline ends it. Idempotent: a repeated event changes nothing.
+   */
+  async streamEvent(ev: RaffleStreamEvent) {
+    await this.settle(ev.channel_id);
+    return this.db.tx(async (q) => {
+      const now = this.clock.now();
+      const live = await this.liveSession(q, ev.channel_id);
+      const reason = ev.twitch_stream_id
+        ? `Twitch stream ${ev.twitch_stream_id}`
+        : 'Twitch';
+      if (ev.event === 'online') {
+        if (live)
+          return { ok: true, session_id: live.session_id, changed: false };
+        const id = await this.startSession(
+          q,
+          ev.channel_id,
+          SYSTEM,
+          'broadcaster',
+          now,
+          reason,
+          'twitch',
+        );
+        return { ok: true, session_id: id, changed: true };
+      }
+      if (!live) return { ok: true, session_id: null, changed: false };
+      await q.query(
+        'update lab_stream_sessions set ended_at = $2, ended_by = $3 where session_id = $1',
+        [live.session_id, now, 'twitch'],
+      );
+      await audit(q, now, {
+        channelId: ev.channel_id,
+        actor: SYSTEM,
+        role: 'broadcaster',
+        module: 'raffle',
+        action: 'stream_end',
+        reason,
+        after: { session_id: live.session_id, source: 'twitch' },
+      });
+      await this.stopScheduler(
+        q,
+        ev.channel_id,
+        now,
+        SYSTEM,
+        'broadcaster',
+        'stream_ended',
+      );
+      return { ok: true, session_id: live.session_id, changed: true };
+    });
+  }
+
+  /**
    * Lab Core tick: advances every running round (the draw happens at closes_at, even unread), then
    * runs the automatic scheduler of the channel.
    */
@@ -649,17 +743,30 @@ export class RaffleLabService {
     const viewerResult = at(revealEnd, d.stream_margin_s * 1000);
     const overlayEnd = at(
       revealAt,
-      Math.max(
-        (full
-          ? d.result_full_s
-          : r.kind === 'super'
-            ? d.result_super_s
-            : r.kind === 'giveaway'
-              ? d.result_giveaway_s
-              : d.result_normal_s) * 1000,
-        reveal + 3000,
-      ),
+      picked.length === 0
+        ? d.empty_s * 1000
+        : Math.max(
+            (full
+              ? d.result_full_s
+              : r.kind === 'super'
+                ? d.result_super_s
+                : r.kind === 'giveaway'
+                  ? d.result_giveaway_s
+                  : d.result_normal_s) * 1000,
+            reveal + 3000,
+          ),
     );
+    if (n === 0)
+      await audit(q, when, {
+        channelId: r.channel_id,
+        actor,
+        role,
+        module: 'raffle',
+        action: 'raffle_no_participants',
+        interactionId: r.raffle_id,
+        reason,
+        after: { raffle_id: r.raffle_id, outcome: 'no_participants' },
+      });
     await this.setStatus(q, r, 'drawing', when, {
       is_full: full,
       winners_count: picked.length,
@@ -1275,6 +1382,35 @@ export class RaffleLabService {
           );
         if (!cmd.config.scheduler.enabled)
           await this.stopScheduler(q, channelId, now, actor, role, 'disabled');
+        // A new frequency while it runs: the planned launch is re-planned with the new timing
+        // (first delay before the first automatic round of the stream, the interval after).
+        const before_t = schedulerTiming(before.scheduler);
+        const after_t = schedulerTiming(cmd.config.scheduler);
+        if (
+          cmd.config.scheduler.enabled &&
+          sched?.state === 'running' &&
+          sched.next_at &&
+          JSON.stringify(before_t) !== JSON.stringify(after_t)
+        ) {
+          const autoInSession = (
+            await q.query(
+              `select 1 from lab_raffles where session_id = $1 and origin = 'automatic' limit 1`,
+              [sched.session_id],
+            )
+          ).length;
+          const next = at(
+            now,
+            autoInSession
+              ? nextIntervalMs(cmd.config.scheduler, this.random)
+              : after_t.first_delay_s * 1000,
+          );
+          await this.saveScheduler(q, channelId, now, { next_at: next });
+          await log('scheduler_replan', {
+            interactionId: null,
+            before: { next_at: iso(sched.next_at), timing: before_t },
+            after: { next_at: next.toISOString(), timing: after_t },
+          });
+        }
         return { ok: true, config: cmd.config };
       }
       case 'scheduler_pause': {
@@ -1394,16 +1530,10 @@ export class RaffleLabService {
     if ((await moduleState(q, 'raffle')) === 'disabled')
       throw new RaffleLabError409('module_disabled', 'Tombola disabled');
     const c = await this.config(q, channelId);
-    const session =
-      (await this.liveSession(q, channelId))?.session_id ??
-      (await this.startSession(
-        q,
-        channelId,
-        actor,
-        role,
-        now,
-        'session ouverte avec la Tombola',
-      ));
+    // Outside a stream a manual round is allowed (tests) but stays off-stream: no session is opened,
+    // the scheduler is not started, the stream state is untouched. Only « Simuler début de stream »
+    // (or Twitch online) opens a session.
+    const session = (await this.liveSession(q, channelId))?.session_id ?? null;
     let kind: 'normal' | 'super' | 'giveaway';
     if (opts.fixed) kind = 'normal';
     else if (opts.kind === 'super') kind = 'super';
@@ -1637,6 +1767,18 @@ export class RaffleLabService {
       paused: r.status === 'paused',
       cancelled_at: iso(r.cancelled_at),
       origin: r.origin,
+      /**
+       * `no_participants`: over with no entry (no draw, no winner, no payment) — distinct from a
+       * cancellation; `winners`: drawn; null: not drawn yet.
+       */
+      outcome:
+        r.status === 'cancelled'
+          ? ('cancelled' as const)
+          : r.drawn_at
+            ? r.winners_count === 0
+              ? ('no_participants' as const)
+              : ('winners' as const)
+            : null,
     };
   }
 
@@ -1692,6 +1834,8 @@ export class RaffleLabService {
         server_time: now.toISOString(),
         module_state: await moduleState(q, 'raffle'),
         overlay_hint: cfg.overlay_hint,
+        /** Main entry command (overlay instruction « !join » mode shows this one). */
+        join_command: cfg.join_commands[0]!,
         join_feedback_ms: cfg.display.join_feedback_ms,
       };
       if (!r) return { ...base, round: null };
@@ -1710,6 +1854,15 @@ export class RaffleLabService {
         ...base,
         round: {
           ...this.roundBase(r, currencies, now.getTime()),
+          // The overlay learns the outcome with the reveal (never during « Tirage en cours »).
+          outcome:
+            r.status === 'cancelled'
+              ? ('cancelled' as const)
+              : revealed
+                ? r.winners_count === 0
+                  ? ('no_participants' as const)
+                  : ('winners' as const)
+                : null,
           participants: entries.length,
           recent: views.slice(-5).reverse(),
           entries_tail: views.slice(-20),
@@ -1773,7 +1926,7 @@ export class RaffleLabService {
         server_time: now.toISOString(),
         module_state: await moduleState(q, 'raffle'),
         extension_button: cfg.extension_button,
-        join_command: '!join',
+        join_command: cfg.join_commands[0]!,
         history: await this.viewerHistory(
           q,
           channelId,
@@ -1824,7 +1977,12 @@ export class RaffleLabService {
         return {
           ...common,
           phase,
-          round: { ...round, result_at: iso(last.viewer_result_at) },
+          // No spoiler: the outcome (winners or nobody) is only known with the result.
+          round: {
+            ...round,
+            outcome: phase === 'cancelled' ? ('cancelled' as const) : null,
+            result_at: iso(last.viewer_result_at),
+          },
         };
       const winners = await this.winnerRows(q, [last.raffle_id]);
       const avatars = await avatarUrls(
@@ -1855,7 +2013,10 @@ export class RaffleLabService {
     });
   }
 
-  /** Viewer history: the Tombolas of the current stream session whose result viewers may see. */
+  /**
+   * Viewer history: the Tombolas viewers may see the result of — during a stream, those of its session;
+   * outside a stream, the off-stream rounds (no session) opened since the last stream ended.
+   */
   private async viewerHistory(
     q: Queryable,
     channelId: string,
@@ -1864,11 +2025,16 @@ export class RaffleLabService {
     t: number,
   ) {
     const session = await this.currentSession(q, channelId);
-    if (!session) return [];
     const rows = await q.query<RaffleRow>(
-      `select * from lab_raffles where session_id = $1 and status in ('drawing', 'revealing', 'revealed', 'finished', 'cancelled')
-       order by opened_at desc limit 30`,
-      [session.session_id],
+      session && !session.ended_at
+        ? `select * from lab_raffles where session_id = $1 and status in ('drawing', 'revealing', 'revealed', 'finished', 'cancelled')
+           order by opened_at desc limit 30`
+        : `select * from lab_raffles where session_id is null and channel_id = $1 and opened_at >= $2
+             and status in ('drawing', 'revealing', 'revealed', 'finished', 'cancelled')
+           order by opened_at desc limit 30`,
+      session && !session.ended_at
+        ? [session.session_id]
+        : [channelId, session?.ended_at ?? new Date(0)],
     );
     const visible = rows.filter(
       (r) => r.status === 'cancelled' || t >= ms(r.viewer_result_at),
@@ -2087,7 +2253,12 @@ export class RaffleLabService {
             }
           : null,
       ),
-      base_join_commands: [...BASE_JOIN_COMMANDS],
+      /** Automatic winners as Core computes them (Studio table « Gagnants auto »). */
+      winners_table: [3, 5, 15, 30, 60, 120].map((n) => ({
+        participants: n,
+        min: autoWinners(n, () => 0),
+        max: autoWinners(n, () => 0.999),
+      })),
     }));
   }
 
