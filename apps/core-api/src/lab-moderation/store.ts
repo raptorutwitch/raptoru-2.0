@@ -33,7 +33,10 @@ export const actorName = (a: Actor) =>
 
 // --- permissions (D4) ------------------------------------------------------------------------------------
 
-/** The 6 permissions D4 grants per moderator. Supermods and the broadcaster have all of them. */
+/**
+ * Permissions granted per moderator: the 6 of D4 + « Gérer la Tombola » (Tombola V2, decision D7).
+ * Supermods and the broadcaster have all of them.
+ */
 export const GRANTS = [
   'wallet',
   'modules',
@@ -41,6 +44,7 @@ export const GRANTS = [
   'perms',
   'sensitive',
   'words',
+  'raffle',
 ] as const;
 export type Grant = (typeof GRANTS)[number];
 
@@ -49,32 +53,39 @@ export type Grant = (typeof GRANTS)[number];
  * a Grant = moderators it was granted to (+ supermods and the broadcaster); `broadcaster` = the
  * broadcaster only (Studio: TTS configuration, supermods, Lab wallet tools, Tombola controls).
  */
-export const PERMISSIONS: Record<string, 'moderator' | 'broadcaster' | Grant> =
-  {
-    'module.pause': 'moderator',
-    'module.resume': 'moderator',
-    'module.disable': 'modules',
-    'queue.stop': 'moderator',
-    'queue.cancel': 'moderator',
-    'queue.purge': 'moderator',
-    refund: 'moderator',
-    'refund.manual': 'wallet',
-    'review.allow': 'moderator',
-    'viewer.block': 'moderator',
-    'viewer.cooldown': 'moderator',
-    'viewer.read': 'moderator',
-    'audit.read': 'moderator',
-    'notes.write': 'moderator',
-    'sanction.sensitive': 'sensitive',
-    'global.pause': 'globalPause',
-    'perms.manage': 'perms',
-    'words.manage': 'words',
-    'wallet.admin': 'wallet',
-    'config.tts': 'broadcaster',
-    'staff.manage': 'broadcaster',
-    'wallet.lab': 'broadcaster',
-    'raffle.manage': 'broadcaster',
-  };
+export const PERMISSIONS: Record<
+  string,
+  'moderator' | 'supermod' | 'broadcaster' | Grant
+> = {
+  'module.pause': 'moderator',
+  'module.resume': 'moderator',
+  'module.disable': 'modules',
+  'queue.stop': 'moderator',
+  'queue.cancel': 'moderator',
+  'queue.purge': 'moderator',
+  refund: 'moderator',
+  'refund.manual': 'wallet',
+  'review.allow': 'moderator',
+  'viewer.block': 'moderator',
+  'viewer.cooldown': 'moderator',
+  'viewer.read': 'moderator',
+  'audit.read': 'moderator',
+  'notes.write': 'moderator',
+  'sanction.sensitive': 'sensitive',
+  'global.pause': 'globalPause',
+  'perms.manage': 'perms',
+  'words.manage': 'words',
+  'wallet.admin': 'wallet',
+  'config.tts': 'broadcaster',
+  'staff.manage': 'broadcaster',
+  'wallet.lab': 'broadcaster',
+  // Tombola V2 (D7): safe actions for every moderator; more time, pause, immediate draw, manual
+  // entry, payout retry and opening need « Gérer la Tombola »; configuration and stream sessions:
+  // supermods and the broadcaster (« Supermod = accès complet Tombola »).
+  'raffle.moderate': 'moderator',
+  'raffle.manage': 'raffle',
+  'raffle.config': 'supermod',
+};
 const RANK: Record<LabRole, number> = {
   viewer: 0,
   moderator: 1,
@@ -138,6 +149,7 @@ export function allowed(acc: Access, permission: string): boolean {
   const need = PERMISSIONS[permission] ?? 'broadcaster';
   if (need === 'broadcaster') return acc.role === 'broadcaster';
   if (need === 'moderator') return RANK[acc.role] >= RANK.moderator;
+  if (need === 'supermod') return RANK[acc.role] >= RANK.supermod;
   return (
     RANK[acc.role] >= RANK.supermod ||
     (acc.role === 'moderator' && acc.grants.includes(need))
@@ -781,30 +793,4 @@ export async function adminAdjust(
     )
   )[0]!.id;
   return { before, after, applied, ledgerId: Number(id) };
-}
-
-/** Tombola winnings paid on the Lab test wallet (jetons). Returns the ledger id. */
-export async function creditRaffleWin(
-  q: Queryable,
-  now: Date,
-  p: {
-    channelId: string;
-    viewerId: string;
-    amount: number;
-    raffleId: string;
-    actor: string;
-  },
-) {
-  const w = await lockWallet(q, p.channelId, p.viewerId, now);
-  w.tokens = Math.min(LAB_WALLET_MAX.tokens, w.tokens + p.amount);
-  await writeWallet(q, p.channelId, p.viewerId, w, now);
-  return Number(
-    (
-      await q.query<{ id: string }>(
-        `insert into lab_wallet_ledger (channel_id, viewer_id, kind, currency, amount, module_id, interaction_id, actor, reason, created_at, raffle_id)
-         values ($1, $2, 'raffle_win', 'tokens', $3, 'raffle', null, $4, null, $5, $6) returning id`,
-        [p.channelId, p.viewerId, p.amount, p.actor, now, p.raffleId],
-      )
-    )[0]!.id,
-  );
 }

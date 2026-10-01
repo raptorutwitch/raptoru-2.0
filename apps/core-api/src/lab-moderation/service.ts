@@ -211,6 +211,8 @@ export class LabModerationService {
   async act(channelId: string, req: LabModerationRequest) {
     const actor: Actor = req.actor;
     const cmd = req.command;
+    // Tombola: due transitions (draw at closes_at…) are committed first, whatever this command does.
+    await this.raffle.settle(channelId);
     return this.db.tx(async (q) => {
       const now = this.clock.now();
       await touchStaff(q, channelId, actor, now);

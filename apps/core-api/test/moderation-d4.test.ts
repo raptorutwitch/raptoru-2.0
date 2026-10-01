@@ -249,7 +249,7 @@ describe('D4 team & fine permissions (Core-enforced)', () => {
     const { act, code, m } = await lab();
     const s = await m.whoami(CHANNEL, superMod);
     expect(s.role).toBe('supermod');
-    expect(s.grants).toHaveLength(6);
+    expect(s.grants).toHaveLength(7); // 6 D4 + « Gérer la Tombola »
     expect((await m.whoami(CHANNEL, owner)).role).toBe('broadcaster');
     expect(
       await code(act({ action: 'global_pause', paused: true }, superMod)),
@@ -333,7 +333,7 @@ describe('D4 team & fine permissions (Core-enforced)', () => {
     ]);
     expect(
       members.find((x) => x.viewer_id === superMod.id)!.grants,
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     // Demoted supermod → moderator with the standard moderation (no grant).
     await act({ action: 'set_staff', viewer_id: superMod.id, role: null });
     expect((await m.whoami(CHANNEL, superMod)).role).toBe('moderator');
@@ -1039,8 +1039,8 @@ describe('Bonk debit and refunds', () => {
   });
 });
 
-describe('Minimal Tombola V2 (real model: free entry)', () => {
-  it('Studio opens / closes / draws; one free entry per viewer; blocked / paused refused; winner paid on the Lab wallet', async () => {
+describe('Tombola from the D4 console (V2 model: free entry, Core draws at closes_at)', () => {
+  it('console opens; one free entry per viewer; blocked / paused refused; Core draws by itself and pays on the Lab wallet', async () => {
     const { act, join, code, raffle, wallet, core, m } = await lab(() => 0.99);
     expect(await code(join('900240'))).toBe('raffle_closed');
     expect(
@@ -1081,15 +1081,9 @@ describe('Minimal Tombola V2 (real model: free entry)', () => {
       jackpot: 8000,
     });
     expect(st.joined).toBe(true);
-    core.clock.advance(61_000); // closes by itself
+    core.clock.advance(63_000); // 2 s announcement + 60 s: Core closes and draws by itself
     expect(await code(join('900244'))).toBe('raffle_closed');
-    expect((await raffle.state(CHANNEL)).current!.status).toBe('closed');
-    const drawn = (await act({ action: 'raffle_draw' })) as {
-      winners: { viewer_id: string; amount: number; ledger_id: number }[];
-    };
-    expect(drawn.winners).toEqual([
-      expect.objectContaining({ viewer_id: '900241', amount: 8000 }),
-    ]);
+    expect(await code(act({ action: 'raffle_draw' }))).toBe('nothing_to_draw');
     expect((await wallet('900241')).tokens).toBe(20_000);
     const after = await raffle.state(CHANNEL);
     expect(after.last_draw).toMatchObject({
@@ -1107,6 +1101,26 @@ describe('Minimal Tombola V2 (real model: free entry)', () => {
       '900240',
       '900241',
     ]);
+  });
+
+  it('« Tirer » from the console draws immediately', async () => {
+    const { act, join, raffle, wallet } = await lab(() => 0.01);
+    await act({
+      action: 'raffle_open',
+      jackpot: 9001,
+      duration_s: 600,
+      winners: 2,
+    });
+    await join('900245');
+    await join('900246');
+    const drawn = (await act({ action: 'raffle_close' })) as {
+      winners: { viewer_id: string; amount: number }[];
+    };
+    expect(drawn.winners.map((w) => w.amount).sort()).toEqual([4500, 4501]);
+    expect((await raffle.state(CHANNEL)).current!.status).toBe('drawn');
+    expect(
+      (await wallet('900245')).tokens + (await wallet('900246')).tokens,
+    ).toBe(24_000 + 9001);
   });
 });
 

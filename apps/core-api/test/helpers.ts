@@ -70,6 +70,12 @@ export async function createTestDb(): Promise<Db> {
   await db.query(
     "insert into currencies (id, singular, plural, is_primary) values ('main', 'Jeton', 'Jetons', true)",
   );
+  await db.query(
+    `insert into lab_currencies (currency_id, label, short_label, icon, wallet_column, sort, max_balance) values
+      ('tokens', 'Jetons', 'J', 'coin', 'tokens', 0, 1000000000),
+      ('credits_tts', 'Crédits TTS', 'cr TTS', 'tts', 'credits_tts', 1, 100000),
+      ('credits_soundboard', 'Crédits Soundboard', 'cr Sons', 'sound', 'credits_soundboard', 2, 100000)`,
+  );
   return db;
 }
 

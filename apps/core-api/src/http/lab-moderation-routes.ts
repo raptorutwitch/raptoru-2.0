@@ -4,6 +4,8 @@ import {
   LabRaffleJoinRequest,
   LabRole,
   LabWalletRequest,
+  RaffleActionRequest,
+  RaffleChatMessage,
   TtsRulesReset,
   TtsRulesUpdate,
 } from '@raptoru/schemas';
@@ -231,6 +233,66 @@ export function labModerationRoutes(
       auth: 'studio',
       handle: ({ body }) =>
         mappedModeration(() => raffle.join(parse(LabRaffleJoinRequest, body))),
+    },
+    // --- Tombola V2 -----------------------------------------------------------------------------------
+    {
+      // OBS overlay / Studio preview snapshot (single source, reload-safe).
+      method: 'GET',
+      pattern: /^\/v1\/lab\/raffle\/([^/]+)\/snapshot$/,
+      auth: 'studio',
+      handle: ({ params }) =>
+        mappedModeration(() => raffle.snapshot(channel(params))),
+    },
+    {
+      // What one viewer may see (no spoiler before the viewer result phase).
+      method: 'GET',
+      pattern: /^\/v1\/lab\/raffle\/([^/]+)\/viewer$/,
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mappedModeration(() =>
+          raffle.viewerState(
+            channel(params),
+            url.searchParams.get('viewer')
+              ? parse(Digits, url.searchParams.get('viewer'))
+              : null,
+          ),
+        ),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/v1\/lab\/raffle\/([^/]+)\/settings$/,
+      auth: 'studio',
+      handle: read((c) => raffle.settings(c)),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/v1\/lab\/raffle\/([^/]+)\/history$/,
+      auth: 'studio',
+      handle: read((c, url) => raffle.history(c, limitParam(url, 30, 100))),
+    },
+    {
+      // Round card (team only): entries, winners and their payout, audit trail.
+      method: 'GET',
+      pattern: /^\/v1\/lab\/raffle\/([^/]+)\/rounds\/([0-9a-f-]{36})$/,
+      auth: 'studio',
+      handle: read((c, _url, params) => raffle.round(c, params[1]!)),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/v1\/lab\/raffle\/([^/]+)\/actions$/,
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mappedModeration(() =>
+          raffle.act(channel(params), parse(RaffleActionRequest, body)),
+        ),
+    },
+    {
+      // Chat ingress: Twitch adapter (switch OFF by default) or the Studio chat simulator.
+      method: 'POST',
+      pattern: /^\/v1\/lab\/raffle\/chat$/,
+      auth: 'studio',
+      handle: ({ body }) =>
+        mappedModeration(() => raffle.chat(parse(RaffleChatMessage, body))),
     },
     // --- Lab test wallet -------------------------------------------------------------------------------
     {

@@ -62,6 +62,7 @@ try {
     '20261005120000_lab_moderation.sql',
     '20261006120000_tts_lab_cooldown_clear.sql',
     '20261007120000_moderation_d4.sql',
+    '20261008120000_raffle_v2.sql',
   ]) {
     if (
       (

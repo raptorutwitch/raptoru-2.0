@@ -307,14 +307,14 @@ describe('Studio ↔ Extension: one moderation (same Core)', () => {
       (await f.extAct({ action: 'raffle_open', jackpot: 1, duration_s: 60 }))
         .status,
     ).toBe(403);
-    expect(
-      (
-        await f.extAct(
-          { action: 'raffle_open', jackpot: 1, duration_s: 60 },
-          boss,
-        )
-      ).status,
-    ).toBe(200);
+    // The broadcaster passes the permission check; Core refuses a new round while the previous
+    // result is still on screen (Tombola V2 phases: drawing → revealing → revealed → finished).
+    const again = await f.extAct(
+      { action: 'raffle_open', jackpot: 1, duration_s: 60 },
+      boss,
+    );
+    expect(again.status).toBe(409);
+    expect((again.body as Json).error).toBe('raffle_already_open');
   });
 });
 

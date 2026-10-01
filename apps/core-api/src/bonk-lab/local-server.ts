@@ -11,6 +11,7 @@ import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { labModerationRoutes } from '../http/lab-moderation-routes.js';
 import { LabModerationService } from '../lab-moderation/service.js';
 import { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
+import { AvatarCache, twitchAppUserLookup } from '../raffle-lab/avatars.js';
 import { HttpError } from '../http/server.js';
 import { systemClock } from '../clock.js';
 import { createPgDb } from '../db/db.js';
@@ -97,7 +98,34 @@ const port = Number(process.env.BONK_LAB_CORE_PORT ?? 4301);
 server.listen(port, '127.0.0.1', () =>
   console.log(`[bonk-lab-core] local port ${port}, isolated database`),
 );
-const stop = () =>
+// Tombola V2: Core takes its own time-driven transitions (end of the announcement, draw at
+// closes_at, reveal, end of the result) even when nobody reads, and refreshes the Twitch profile
+// pictures of the participants in the background (initials fallback when absent).
+const avatars = new AvatarCache(
+  db,
+  systemClock,
+  clientId && clientSecret
+    ? twitchAppUserLookup({ clientId, clientSecret })
+    : null,
+);
+let ticking = false;
+const raffleTick = setInterval(() => {
+  if (ticking) return;
+  ticking = true;
+  raffle
+    .tick()
+    .catch((e) => console.error('[bonk-lab-core] tombola tick failed', e))
+    .finally(() => (ticking = false));
+}, 250);
+const avatarTick = setInterval(() => {
+  avatars
+    .refresh()
+    .catch((e) => console.error('[bonk-lab-core] avatars failed', e));
+}, 5000);
+const stop = () => {
+  clearInterval(raffleTick);
+  clearInterval(avatarTick);
   server.close(() => void db.close().then(() => process.exit(0)));
+};
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);

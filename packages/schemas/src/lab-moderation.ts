@@ -20,7 +20,10 @@ export const LabRole = z.enum([
 export type LabRole = z.infer<typeof LabRole>;
 export const LabModuleState = z.enum(['active', 'paused', 'disabled']);
 
-/** The 6 permissions D4 grants per moderator (supermods and the broadcaster have all of them). */
+/**
+ * Permissions granted per moderator (supermods and the broadcaster have all of them): the 6 of D4,
+ * plus « Gérer la Tombola » (Tombola V2: more time, pause, immediate draw, manual entry, payouts).
+ */
 export const LabGrant = z.enum([
   'wallet',
   'modules',
@@ -28,6 +31,7 @@ export const LabGrant = z.enum([
   'perms',
   'sensitive',
   'words',
+  'raffle',
 ]);
 export type LabGrant = z.infer<typeof LabGrant>;
 
