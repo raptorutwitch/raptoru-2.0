@@ -74,6 +74,7 @@ const runtimeFiles = [
   'supabase/migrations/20261006120000_tts_lab_cooldown_clear.sql',
   'supabase/migrations/20261007120000_moderation_d4.sql',
   'supabase/migrations/20261008120000_raffle_v2.sql',
+  'supabase/migrations/20261009120000_raffle_scheduler.sql',
 ];
 for (const path of runtimeFiles)
   if (!existsSync(join(app, path)))

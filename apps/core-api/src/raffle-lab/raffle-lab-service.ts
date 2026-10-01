@@ -5,6 +5,7 @@ import {
   type LabRaffleJoinRequest,
   type RaffleChatMessage,
   type RaffleCommand,
+  type RaffleSound,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
@@ -37,9 +38,11 @@ import {
   autoWinners,
   BASE_JOIN_COMMANDS,
   DEFAULT_RAFFLE_CONFIG,
+  nextIntervalMs,
   randomJackpot,
   RaffleConfigError,
   revealMs,
+  schedulerTiming,
   split,
   validateConfig,
 } from './rules.js';
@@ -135,6 +138,17 @@ interface RaffleRow {
   session_id: string | null;
   display: RoundSettings | null;
   phase_changed_at: Date;
+  origin: 'manual' | 'automatic';
+  launch_sound: RaffleSound | null;
+}
+interface SchedulerRow {
+  channel_id: string;
+  session_id: string | null;
+  state: 'stopped' | 'running' | 'paused';
+  next_at: Date | null;
+  paused_remaining_ms: number | null;
+  last_auto_raffle_id: string | null;
+  last_skip_reason: string | null;
 }
 interface EntryRow {
   entry_id: string;
@@ -255,7 +269,229 @@ export class RaffleLabService {
       reason,
       after: { session_id: id, source: 'simulated' },
     });
+    // The automatic scheduler starts with the stream (when enabled).
+    if ((await this.config(q, channelId)).scheduler.enabled)
+      await this.startScheduler(q, channelId, id, now, actor, role);
     return id;
+  }
+
+  // --- automatic scheduler -------------------------------------------------------------------------------
+  // Bound to the live stream session; one round at a time (the unique running round of the channel);
+  // `next_at` is stored, so a Core / Studio restart neither skips nor doubles a launch. After any round
+  // (manual or automatic) the next launch is counted from the end of its display.
+
+  private async schedulerRow(q: Queryable, channelId: string) {
+    return (
+      (
+        await q.query<SchedulerRow>(
+          'select * from lab_raffle_scheduler where channel_id = $1 for update',
+          [channelId],
+        )
+      )[0] ?? null
+    );
+  }
+
+  private async saveScheduler(
+    q: Queryable,
+    channelId: string,
+    now: Date,
+    v: Partial<SchedulerRow>,
+  ) {
+    await q.query(
+      `insert into lab_raffle_scheduler (channel_id, state, updated_at) values ($1, 'stopped', $2) on conflict do nothing`,
+      [channelId, now],
+    );
+    const cols = Object.keys(v);
+    await q.query(
+      `update lab_raffle_scheduler set updated_at = $2${cols.map((c, i) => `, ${c} = $${i + 3}`).join('')} where channel_id = $1`,
+      [channelId, now, ...cols.map((c) => (v as Record<string, unknown>)[c])],
+    );
+  }
+
+  private async startScheduler(
+    q: Queryable,
+    channelId: string,
+    sessionId: string,
+    now: Date,
+    actor: Actor,
+    role: LabRole,
+  ) {
+    const first = schedulerTiming(
+      (await this.config(q, channelId)).scheduler,
+    ).first_delay_s;
+    const next = at(now, first * 1000);
+    await this.saveScheduler(q, channelId, now, {
+      state: 'running',
+      session_id: sessionId,
+      next_at: next,
+      paused_remaining_ms: null,
+      last_skip_reason: null,
+    });
+    await audit(q, now, {
+      channelId,
+      actor,
+      role,
+      module: 'raffle',
+      action: 'scheduler_start',
+      after: { session_id: sessionId, next_at: next.toISOString() },
+    });
+  }
+
+  private async stopScheduler(
+    q: Queryable,
+    channelId: string,
+    now: Date,
+    actor: Actor,
+    role: LabRole,
+    why: string,
+  ) {
+    const s = await this.schedulerRow(q, channelId);
+    if (!s || s.state === 'stopped') return;
+    await this.saveScheduler(q, channelId, now, {
+      state: 'stopped',
+      next_at: null,
+      paused_remaining_ms: null,
+    });
+    await audit(q, now, {
+      channelId,
+      actor,
+      role,
+      module: 'raffle',
+      action: 'scheduler_stop',
+      reason: why,
+      before: { state: s.state, next_at: iso(s.next_at) },
+    });
+  }
+
+  /** When the last round left the screen (finished, or cancelled + its display), if any. */
+  private async lastDisplayEnd(q: Queryable, channelId: string) {
+    const last = (
+      await q.query<RaffleRow>(
+        'select * from lab_raffles where channel_id = $1 order by opened_at desc limit 1',
+        [channelId],
+      )
+    )[0];
+    if (!last) return null;
+    if (last.status === 'cancelled')
+      return at(
+        new Date(last.cancelled_at!),
+        settingsOf(last).display.cancelled_s * 1000,
+      );
+    return last.finished_at ? new Date(last.finished_at) : null;
+  }
+
+  /**
+   * Scheduler step (Lab Core tick, round already advanced): waits while a round is on screen, then
+   * plans the next launch from its end, and launches an automatic round when it is due. A launch
+   * Core refuses (global pause, module disabled…) is skipped, audited, and the next one is planned.
+   */
+  private async schedule(q: Queryable, channelId: string) {
+    const s = await this.schedulerRow(q, channelId);
+    if (!s || s.state !== 'running') return;
+    const now = this.clock.now();
+    const live = await this.liveSession(q, channelId);
+    const cfg = await this.config(q, channelId);
+    if (!live || live.session_id !== s.session_id)
+      return this.stopScheduler(
+        q,
+        channelId,
+        now,
+        SYSTEM,
+        'broadcaster',
+        'stream_ended',
+      );
+    if (!cfg.scheduler.enabled)
+      return this.stopScheduler(
+        q,
+        channelId,
+        now,
+        SYSTEM,
+        'broadcaster',
+        'disabled',
+      );
+    if (await this.running(q, channelId)) return;
+    const shownUntil = await this.lastDisplayEnd(q, channelId);
+    if (shownUntil && now < shownUntil) return; // a cancelled round is still on screen
+    if (!s.next_at) {
+      await this.saveScheduler(q, channelId, now, {
+        next_at: at(
+          shownUntil ?? now,
+          nextIntervalMs(cfg.scheduler, this.random),
+        ),
+      });
+      return;
+    }
+    if (now < new Date(s.next_at)) return;
+    await q.query('savepoint raffle_auto_launch');
+    try {
+      const out = await this.launch(
+        q,
+        channelId,
+        SYSTEM,
+        'broadcaster',
+        now,
+        { kind: 'auto', origin: 'automatic' },
+        null,
+      );
+      await q.query('release savepoint raffle_auto_launch');
+      await this.saveScheduler(q, channelId, now, {
+        last_auto_raffle_id: out.raffle_id,
+        last_skip_reason: null,
+      });
+    } catch (e) {
+      if (!(e instanceof RaffleLabError409)) throw e;
+      await q.query('rollback to savepoint raffle_auto_launch');
+      const next = at(now, nextIntervalMs(cfg.scheduler, this.random));
+      await this.saveScheduler(q, channelId, now, {
+        next_at: next,
+        last_skip_reason: e.code,
+      });
+      await audit(q, now, {
+        channelId,
+        actor: SYSTEM,
+        role: 'broadcaster',
+        module: 'raffle',
+        action: 'scheduler_skip',
+        reason: e.code,
+        after: { next_at: next.toISOString() },
+      });
+    }
+  }
+
+  /** Scheduler as Studio shows it (remaining time before the next automatic round). */
+  private async schedulerView(
+    q: Queryable,
+    channelId: string,
+    cfg: RaffleConfig,
+  ) {
+    const s = (
+      await q.query<SchedulerRow>(
+        'select * from lab_raffle_scheduler where channel_id = $1',
+        [channelId],
+      )
+    )[0];
+    const now = this.clock.now().getTime();
+    const state = s?.state ?? 'stopped';
+    return {
+      enabled: cfg.scheduler.enabled,
+      preset: cfg.scheduler.preset,
+      timing: schedulerTiming(cfg.scheduler),
+      state,
+      session_id: s?.session_id ?? null,
+      next_at: state === 'running' ? iso(s?.next_at) : null,
+      remaining_ms:
+        state === 'running'
+          ? s?.next_at
+            ? Math.max(0, ms(s.next_at) - now)
+            : null
+          : state === 'paused'
+            ? (s?.paused_remaining_ms ?? null)
+            : null,
+      /** Running without a next launch yet: a round is on screen, the next one is planned after it. */
+      waiting_for_round: state === 'running' && !s?.next_at,
+      last_auto_raffle_id: s?.last_auto_raffle_id ?? null,
+      last_skip_reason: s?.last_skip_reason ?? null,
+    };
   }
 
   // --- state machine ---------------------------------------------------------------------------------------
@@ -328,15 +564,25 @@ export class RaffleLabService {
     await this.db.tx((q) => this.advance(q, channelId));
   }
 
-  /** Lab Core tick: advances every running round (the draw happens at closes_at, even unread). */
+  /**
+   * Lab Core tick: advances every running round (the draw happens at closes_at, even unread), then
+   * runs the automatic scheduler of the channel.
+   */
   async tick(): Promise<number> {
     const channels = (
       await this.db.query<{ channel_id: string }>(
-        `select distinct channel_id from lab_raffles where status = any($1::text[])`,
+        `select channel_id from lab_raffles where status = any($1::text[])
+         union select channel_id from lab_raffle_scheduler where state = 'running'`,
         [RUNNING],
       )
     ).map((c) => c.channel_id);
-    for (const c of channels) await this.db.tx((q) => this.advance(q, c));
+    for (const c of channels) {
+      await this.db.tx((q) => this.advance(q, c));
+      await this.db.tx(async (q) => {
+        await this.advance(q, c);
+        await this.schedule(q, c);
+      });
+    }
     return channels.length;
   }
 
@@ -1012,7 +1258,67 @@ export class RaffleLabService {
           before,
           after: cmd.config,
         });
+        const live = await this.liveSession(q, channelId);
+        const sched = await this.schedulerRow(q, channelId);
+        if (
+          cmd.config.scheduler.enabled &&
+          live &&
+          (!sched || sched.state === 'stopped')
+        )
+          await this.startScheduler(
+            q,
+            channelId,
+            live.session_id,
+            now,
+            actor,
+            role,
+          );
+        if (!cmd.config.scheduler.enabled)
+          await this.stopScheduler(q, channelId, now, actor, role, 'disabled');
         return { ok: true, config: cmd.config };
+      }
+      case 'scheduler_pause': {
+        const sched = await this.schedulerRow(q, channelId);
+        if (sched?.state !== 'running')
+          throw new RaffleLabError409(
+            'scheduler_not_running',
+            'the automatic Tombola is not running',
+          );
+        const remaining = sched.next_at
+          ? Math.max(0, ms(sched.next_at) - now.getTime())
+          : null;
+        await this.saveScheduler(q, channelId, now, {
+          state: 'paused',
+          next_at: null,
+          paused_remaining_ms: remaining,
+        });
+        await log('scheduler_pause', {
+          interactionId: null,
+          after: { remaining_ms: remaining },
+        });
+        return { ok: true, remaining_ms: remaining };
+      }
+      case 'scheduler_resume': {
+        const sched = await this.schedulerRow(q, channelId);
+        if (sched?.state !== 'paused')
+          throw new RaffleLabError409(
+            'scheduler_not_paused',
+            'the automatic Tombola is not paused',
+          );
+        const next =
+          sched.paused_remaining_ms === null
+            ? null
+            : at(now, sched.paused_remaining_ms);
+        await this.saveScheduler(q, channelId, now, {
+          state: 'running',
+          next_at: next,
+          paused_remaining_ms: null,
+        });
+        await log('scheduler_resume', {
+          interactionId: null,
+          after: { next_at: iso(next) },
+        });
+        return { ok: true, next_at: iso(next) };
       }
       case 'stream_start': {
         if (await this.liveSession(q, channelId))
@@ -1047,6 +1353,14 @@ export class RaffleLabService {
           interactionId: null,
           after: { session_id: live.session_id },
         });
+        await this.stopScheduler(
+          q,
+          channelId,
+          now,
+          actor,
+          role,
+          'stream_ended',
+        );
         return { ok: true, session_id: live.session_id };
       }
     }
@@ -1064,6 +1378,7 @@ export class RaffleLabService {
     now: Date,
     opts: {
       kind: 'auto' | 'super';
+      origin?: 'manual' | 'automatic';
       fixed?: { jackpot: number; duration_s: number; winners: number };
     },
     reason: string | null,
@@ -1135,10 +1450,18 @@ export class RaffleLabService {
       winners_custom: winnersCustom,
     };
     const status: RaffleStatus = c.display.intro_s > 0 ? 'opening' : 'open';
+    const origin = opts.origin ?? 'manual';
+    // Opening sound of the announced type (never FULL OSEILLE: decided at the draw only).
+    const sound =
+      kind === 'super'
+        ? (c.launch_sounds.super ?? c.launch_sounds.normal)
+        : kind === 'giveaway'
+          ? (c.launch_sounds.giveaway ?? c.launch_sounds.normal)
+          : c.launch_sounds.normal;
     await q.query(
       `insert into lab_raffles (raffle_id, channel_id, status, jackpot, winners_count, opened_at, ends_at, opened_by, kind, currency_id, prize,
-         winners_mode, duration_s, open_at, session_id, display, phase_changed_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $6)`,
+         winners_mode, duration_s, open_at, session_id, display, phase_changed_at, origin, launch_sound)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $6, $17, $18)`,
       [
         id,
         channelId,
@@ -1156,7 +1479,14 @@ export class RaffleLabService {
         openAt,
         session,
         JSON.stringify(settings),
+        origin,
+        sound ? JSON.stringify(sound) : null,
       ],
+    );
+    // Any launch (manual or automatic): the scheduler counts its next one from the end of this round.
+    await q.query(
+      `update lab_raffle_scheduler set next_at = null, updated_at = $2 where channel_id = $1 and state = 'running'`,
+      [channelId, now],
     );
     await audit(q, now, {
       channelId,
@@ -1175,6 +1505,8 @@ export class RaffleLabService {
         duration_s: duration,
         winners: winnersMode === 'custom' ? winnersCustom : 'auto',
         closes_at: at(openAt, duration * 1000).toISOString(),
+        origin,
+        launch_sound: sound?.asset_id ?? null,
       },
     });
     return { ok: true, raffle_id: id, kind, jackpot, currency_id: currencyId };
@@ -1304,6 +1636,7 @@ export class RaffleLabService {
       remaining_ms: remaining,
       paused: r.status === 'paused',
       cancelled_at: iso(r.cancelled_at),
+      origin: r.origin,
     };
   }
 
@@ -1380,6 +1713,16 @@ export class RaffleLabService {
           participants: entries.length,
           recent: views.slice(-5).reverse(),
           entries_tail: views.slice(-20),
+          // Opening sound: played once by the overlay, only right after the opening (a reloaded
+          // source never replays it). Never a FULL OSEILLE sound (decided at the draw).
+          launch_sound: r.launch_sound
+            ? {
+                asset_id: r.launch_sound.asset_id,
+                format: r.launch_sound.format,
+                volume: r.launch_sound.volume,
+                play_until: new Date(ms(r.opened_at) + 4000).toISOString(),
+              }
+            : null,
           cancel_until:
             r.status === 'cancelled'
               ? new Date(
@@ -1726,6 +2069,11 @@ export class RaffleLabService {
   async settings(channelId: string) {
     return this.db.tx(async (q) => ({
       config: await this.config(q, channelId),
+      scheduler: await this.schedulerView(
+        q,
+        channelId,
+        await this.config(q, channelId),
+      ),
       currencies: (await listCurrencies(q)).map((c) => ({
         ...this.currencyView(c)!,
         available: c.available,

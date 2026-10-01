@@ -969,3 +969,253 @@ describe('Tombola V2 migration (forward-only, on top of the minimal Tombola)', (
     }
   });
 });
+
+describe('Tombola V2 automatic scheduler', () => {
+  const SCHED = (
+    patch: Partial<RaffleConfig['scheduler']> = {},
+  ): Partial<RaffleConfig> => ({
+    scheduler: {
+      ...DEFAULT_RAFFLE_CONFIG.scheduler,
+      enabled: true,
+      preset: 'custom',
+      first_delay_s: 600,
+      mode: 'fixed',
+      interval_s: 1200,
+      ...patch,
+    },
+  });
+  const settings = (raffle: RaffleLabService) => raffle.settings(CH);
+
+  it('starts with the stream, launches automatic rounds, plans the next one from the end of the display, stops with the stream', async () => {
+    const { config, act, raffle, after, core } = await lab();
+    await config(SCHED());
+    expect((await settings(raffle)).scheduler.state).toBe('stopped');
+    await act({ action: 'stream_start' });
+    let s = (await settings(raffle)).scheduler;
+    expect(s).toMatchObject({
+      state: 'running',
+      remaining_ms: 600_000,
+      timing: { first_delay_s: 600, min_s: 1200, max_s: 1200 },
+    });
+    await after(599_000);
+    expect((await raffle.snapshot(CH)).round).toBeNull();
+    await after(1_000);
+    const r1 = (await raffle.snapshot(CH)).round!;
+    expect(r1).toMatchObject({ status: 'opening', origin: 'automatic' });
+    s = (await settings(raffle)).scheduler;
+    expect(s).toMatchObject({
+      waiting_for_round: true,
+      last_auto_raffle_id: r1.raffle_id,
+    });
+    // No participant: the round ends (draw + display), then the next launch is 20 min after it.
+    await after(2_000 + 60_000 + 3_000 + 14_000);
+    expect((await raffle.snapshot(CH)).round).toBeNull();
+    const finished = (
+      await core.db.query<{ finished_at: Date }>(
+        'select finished_at from lab_raffles',
+      )
+    )[0]!.finished_at;
+    s = (await settings(raffle)).scheduler;
+    expect(s.next_at).toBe(
+      new Date(new Date(finished).getTime() + 1_200_000).toISOString(),
+    );
+    expect((await raffle.history(CH))[0]).toMatchObject({
+      origin: 'automatic',
+    });
+    await act({ action: 'stream_end' });
+    expect((await settings(raffle)).scheduler).toMatchObject({
+      state: 'stopped',
+      next_at: null,
+    });
+    await after(3_600_000);
+    expect(await raffle.history(CH)).toHaveLength(1);
+  });
+
+  it('a manual round re-plans the next automatic one; never two rounds at once; restart-safe', async () => {
+    const { config, act, raffle, after, core } = await lab();
+    await config(
+      SCHED({ mode: 'random', interval_min_s: 600, interval_max_s: 1800 }),
+    );
+    await act({ action: 'stream_start' });
+    await after(300_000);
+    await act({ action: 'launch' }); // manual, before the automatic one is due
+    expect((await settings(raffle)).scheduler.waiting_for_round).toBe(true);
+    await after(400_000); // the first automatic time passes while the manual round is shown
+    const rounds = await core.db.query<{ origin: string }>(
+      'select origin from lab_raffles order by opened_at',
+    );
+    expect(rounds.map((r) => r.origin)).toEqual(['manual']);
+    const s = (await settings(raffle)).scheduler;
+    const finished = new Date(
+      (
+        await core.db.query<{ finished_at: Date }>(
+          'select finished_at from lab_raffles',
+        )
+      )[0]!.finished_at,
+    ).getTime();
+    // random 0.42 between 10 and 30 min, counted from the end of the manual round's display
+    expect(Date.parse(s.next_at!)).toBe(
+      finished + Math.round((600 + 1200 * 0.42) * 1000),
+    );
+    // Due time: concurrent ticks and a restarted Core launch one round only.
+    core.clock.set(new Date(Date.parse(s.next_at!)));
+    const restarted = new RaffleLabService(core.db, core.clock);
+    await Promise.all([raffle.tick(), restarted.tick(), raffle.tick()]);
+    const auto = await core.db.query(
+      "select 1 from lab_raffles where origin = 'automatic'",
+    );
+    expect(auto).toHaveLength(1);
+  });
+
+  it('pause keeps the remaining time; a refused automatic launch is skipped, audited, re-planned; disabling stops it', async () => {
+    const { config, act, mod, raffle, after, core, code } = await lab();
+    await config(SCHED());
+    await act({ action: 'stream_start' });
+    await after(100_000);
+    expect(await code(act({ action: 'scheduler_pause' }, modA))).toBe(
+      'forbidden',
+    );
+    await act({ action: 'scheduler_pause' }, modG);
+    expect((await settings(raffle)).scheduler).toMatchObject({
+      state: 'paused',
+      remaining_ms: 500_000,
+    });
+    await after(3_600_000);
+    expect(await raffle.history(CH)).toHaveLength(0);
+    await act({ action: 'scheduler_resume' }, modG);
+    expect((await settings(raffle)).scheduler).toMatchObject({
+      state: 'running',
+      remaining_ms: 500_000,
+    });
+    await mod({ action: 'global_pause', paused: true }, superMod);
+    await after(500_000);
+    expect(await raffle.history(CH)).toHaveLength(0);
+    expect((await settings(raffle)).scheduler).toMatchObject({
+      last_skip_reason: 'global_pause',
+      remaining_ms: 1_200_000,
+    });
+    const trail = await core.db.query<{ action: string }>(
+      "select action from lab_moderation_audit where module_id = 'raffle' order by id",
+    );
+    expect(trail.map((t) => t.action)).toEqual(
+      expect.arrayContaining([
+        'stream_start',
+        'scheduler_start',
+        'scheduler_pause',
+        'scheduler_resume',
+        'scheduler_skip',
+      ]),
+    );
+    await config(SCHED({ enabled: false }));
+    expect((await settings(raffle)).scheduler.state).toBe('stopped');
+    await config(SCHED()); // enabled again during the live stream: starts with its first delay
+    expect((await settings(raffle)).scheduler).toMatchObject({
+      state: 'running',
+      remaining_ms: 600_000,
+    });
+  });
+
+  it('presets bring their own timing', async () => {
+    const { config, act, raffle } = await lab();
+    await config(SCHED({ preset: 'rare' }));
+    await act({ action: 'stream_start' });
+    expect((await settings(raffle)).scheduler).toMatchObject({
+      timing: { first_delay_s: 1800, min_s: 2700, max_s: 4500 },
+      remaining_ms: 1_800_000,
+    });
+  });
+});
+
+describe('Tombola V2 launch sound', () => {
+  const sound = (c: string, volume = 80) => ({
+    asset_id: c.repeat(64),
+    format: 'mp3' as const,
+    name: `son ${c}`,
+    size_bytes: 12_345,
+    volume,
+  });
+
+  it('normal / SUPER / giveaway sounds (fallback to the normal one), copied at the opening, played once right after it, never a FULL sound', async () => {
+    const { config, act, snap, after, joinExt, queue } = await lab();
+    await config({
+      launch_sounds: {
+        normal: sound('a'),
+        super: sound('b', 60),
+        giveaway: null,
+      },
+      full: { enabled: true, chance_pct: 100 },
+    });
+    await act({ action: 'launch' });
+    expect((await snap()).round!.launch_sound).toEqual({
+      asset_id: 'a'.repeat(64),
+      format: 'mp3',
+      volume: 80,
+      play_until: new Date(T0.getTime() + 4000).toISOString(),
+    });
+    // A later change of the configuration never alters the running round.
+    await config({
+      launch_sounds: { normal: sound('c'), super: null, giveaway: null },
+      full: { enabled: true, chance_pct: 100 },
+    });
+    expect((await snap()).round!.launch_sound!.asset_id).toBe('a'.repeat(64));
+    await joinExt('900401');
+    queue.push(0); // FULL roll
+    await after(62_000 + 3_000);
+    expect((await snap()).round).toMatchObject({
+      reveal: { is_full: true },
+      launch_sound: { asset_id: 'a'.repeat(64) },
+    }); // FULL keeps the normal opening sound: nothing announced it
+    await after(30_000);
+    await config({
+      launch_sounds: {
+        normal: sound('a'),
+        super: sound('b', 60),
+        giveaway: null,
+      },
+    });
+    await act({ action: 'launch', kind: 'super' });
+    expect((await snap()).round!.launch_sound).toMatchObject({
+      asset_id: 'b'.repeat(64),
+      volume: 60,
+    });
+    await act({ action: 'cancel' });
+    await after(5_000);
+    await config({
+      amount_mode: 'giveaway',
+      prize: 'Lot',
+      launch_sounds: { normal: sound('a'), super: null, giveaway: null },
+    });
+    await act({ action: 'launch' });
+    expect((await snap()).round!.launch_sound!.asset_id).toBe('a'.repeat(64));
+    await act({ action: 'cancel' });
+    await after(5_000);
+    await config({
+      launch_sounds: { normal: null, super: null, giveaway: null },
+    });
+    await act({ action: 'launch' });
+    expect((await snap()).round!.launch_sound).toBeNull();
+  });
+
+  it('only a managed Studio asset can be configured (content id, format, size, volume)', async () => {
+    const { config } = await lab();
+    const bad = async (s: Record<string, unknown>) => {
+      try {
+        await config({
+          launch_sounds: { normal: s as never, super: null, giveaway: null },
+        });
+        return 'ok';
+      } catch (e) {
+        return (e as Error).name === 'ZodError' ? 'invalid' : String(e);
+      }
+    };
+    expect(
+      await bad({ ...sound('a'), asset_id: 'C:/Users/Antoni/son.mp3' }),
+    ).toBe('invalid');
+    expect(await bad({ ...sound('a'), format: 'flac' })).toBe('invalid');
+    expect(await bad({ ...sound('a'), size_bytes: 6 * 1024 * 1024 })).toBe(
+      'invalid',
+    );
+    expect(await bad({ ...sound('a'), volume: 150 })).toBe('invalid');
+    expect(await bad(sound('a'))).toBe('ok');
+  });
+});

@@ -42,6 +42,59 @@ export const RaffleDisplay = z.strictObject({
 });
 export type RaffleDisplay = z.infer<typeof RaffleDisplay>;
 
+/** Automatic launches during a stream (presets, or « Personnalisé » with its own values). */
+export const RaffleScheduler = z.strictObject({
+  enabled: z.boolean(),
+  preset: z.enum([
+    'rare',
+    'occasional',
+    'normal',
+    'frequent',
+    'very_frequent',
+    'custom',
+  ]),
+  /** Custom only (a preset brings its own values). Delay before the first automatic round. */
+  first_delay_s: z
+    .number()
+    .int()
+    .min(0)
+    .max(4 * 3600),
+  mode: z.enum(['fixed', 'random']),
+  interval_s: z
+    .number()
+    .int()
+    .min(60)
+    .max(6 * 3600),
+  interval_min_s: z
+    .number()
+    .int()
+    .min(60)
+    .max(6 * 3600),
+  interval_max_s: z
+    .number()
+    .int()
+    .min(60)
+    .max(6 * 3600),
+});
+export type RaffleScheduler = z.infer<typeof RaffleScheduler>;
+
+/**
+ * A launch sound imported by Studio into its own managed storage (never a path of the user's
+ * disk): content-addressed asset (SHA-256), format, display name, dedicated volume.
+ */
+export const RaffleSound = z.strictObject({
+  asset_id: z.string().regex(/^[0-9a-f]{64}$/),
+  format: z.enum(['mp3', 'wav', 'ogg']),
+  name: z.string().trim().min(1).max(80),
+  size_bytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(5 * 1024 * 1024),
+  volume: z.number().int().min(0).max(100),
+});
+export type RaffleSound = z.infer<typeof RaffleSound>;
+
 export const RaffleConfig = z.strictObject({
   /** Registered Lab currency of a normal round (random or fixed amount). */
   currency_id: CurrencyId,
@@ -78,6 +131,16 @@ export const RaffleConfig = z.strictObject({
     text: z.string().trim().max(60),
   }),
   display: RaffleDisplay,
+  scheduler: RaffleScheduler,
+  /**
+   * Opening sound per announced type (SUPER / Giveaway fall back to the normal one when unset).
+   * Never a FULL OSEILLE sound: FULL is decided at the draw and must stay a surprise.
+   */
+  launch_sounds: z.strictObject({
+    normal: RaffleSound.nullable(),
+    super: RaffleSound.nullable(),
+    giveaway: RaffleSound.nullable(),
+  }),
 });
 export type RaffleConfig = z.infer<typeof RaffleConfig>;
 
@@ -122,6 +185,9 @@ export const RaffleCommand = z.discriminatedUnion('action', [
     reason: Reason,
   }),
   z.strictObject({ action: z.literal('config'), config: RaffleConfig }),
+  /** Automatic scheduler: pause / resume (the remaining time is kept). */
+  z.strictObject({ action: z.literal('scheduler_pause'), reason: Reason }),
+  z.strictObject({ action: z.literal('scheduler_resume'), reason: Reason }),
   /** Stream session (simulated in the Lab): the viewer history shows the current stream only. */
   z.strictObject({ action: z.literal('stream_start'), reason: Reason }),
   z.strictObject({ action: z.literal('stream_end'), reason: Reason }),

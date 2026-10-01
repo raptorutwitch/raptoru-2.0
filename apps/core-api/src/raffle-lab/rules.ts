@@ -1,4 +1,4 @@
-import type { RaffleConfig } from '@raptoru/schemas';
+import type { RaffleConfig, RaffleScheduler } from '@raptoru/schemas';
 
 // Tombola V2 — pure rules (decided by Core only, never by a client): defaults, random jackpot,
 // winners count, exact split and the length of the overlay reveal.
@@ -50,7 +50,55 @@ export const DEFAULT_RAFFLE_CONFIG: RaffleConfig = {
     stream_margin_s: 8,
     extension_idle_return_s: 12,
   },
+  // Off by default: the automatic launches start only once Studio enables them.
+  scheduler: {
+    enabled: false,
+    preset: 'normal',
+    first_delay_s: 15 * 60,
+    mode: 'random',
+    interval_s: 25 * 60,
+    interval_min_s: 20 * 60,
+    interval_max_s: 30 * 60,
+  },
+  launch_sounds: { normal: null, super: null, giveaway: null },
 };
+
+/**
+ * Scheduler presets (proposal, to be confirmed): delay before the first automatic round, then a
+ * random interval between two rounds, counted from the end of the previous display.
+ */
+export const SCHEDULER_PRESETS: Record<
+  Exclude<RaffleScheduler['preset'], 'custom'>,
+  { first_delay_s: number; min_s: number; max_s: number }
+> = {
+  rare: { first_delay_s: 30 * 60, min_s: 45 * 60, max_s: 75 * 60 },
+  occasional: { first_delay_s: 20 * 60, min_s: 30 * 60, max_s: 45 * 60 },
+  normal: { first_delay_s: 15 * 60, min_s: 20 * 60, max_s: 30 * 60 },
+  frequent: { first_delay_s: 10 * 60, min_s: 12 * 60, max_s: 20 * 60 },
+  very_frequent: { first_delay_s: 5 * 60, min_s: 6 * 60, max_s: 10 * 60 },
+};
+
+/** Effective timing of the scheduler (preset values, or the custom ones). */
+export function schedulerTiming(s: RaffleScheduler) {
+  if (s.preset !== 'custom') return SCHEDULER_PRESETS[s.preset];
+  return s.mode === 'fixed'
+    ? {
+        first_delay_s: s.first_delay_s,
+        min_s: s.interval_s,
+        max_s: s.interval_s,
+      }
+    : {
+        first_delay_s: s.first_delay_s,
+        min_s: s.interval_min_s,
+        max_s: s.interval_max_s,
+      };
+}
+
+/** Next interval (ms), drawn once and stored by Core. */
+export function nextIntervalMs(s: RaffleScheduler, random: () => number) {
+  const t = schedulerTiming(s);
+  return Math.round((t.min_s + (t.max_s - t.min_s) * random()) * 1000);
+}
 
 export class RaffleConfigError extends Error {
   readonly code = 'invalid_config';
@@ -81,6 +129,10 @@ export function validateConfig(c: RaffleConfig) {
     throw new RaffleConfigError('duplicate entry command');
   if (c.cancel_commands.some((x) => commands.includes(x)))
     throw new RaffleConfigError('a cancel command cannot be an entry command');
+  if (c.scheduler.interval_min_s > c.scheduler.interval_max_s)
+    throw new RaffleConfigError(
+      'scheduler: the minimum interval is above the maximum',
+    );
   if (c.overlay_hint.mode === 'custom' && !c.overlay_hint.text)
     throw new RaffleConfigError('the custom overlay text is empty');
 }
