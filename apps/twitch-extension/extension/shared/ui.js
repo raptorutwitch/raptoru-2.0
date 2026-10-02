@@ -1488,7 +1488,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function updateState(next, { render = true } = {}) {
     // Soundboard ouvert et poll identique : rien à redessiner (grille, scroll et aperçu intacts).
     const unchanged = render && (openModule === 'soundboard' || !openModule) && !loadError
-      && JSON.stringify(state) === JSON.stringify(next);
+      && JSON.stringify(stableState(state)) === JSON.stringify(stableState(next));
     // TTS V2 open: queue / status updates go to the persistent view (no replayed animation).
     const ttsV2Only = render && openModule === 'tts' && ttsV2View && !loadError
       && JSON.stringify(withoutTtsV2(state)) === JSON.stringify(withoutTtsV2(next));
@@ -1536,6 +1536,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       return;
     }
     if (render && !unchanged) renderPreservingViewport();
+  }
+
+  /**
+   * Tombola V2: the screen reads Core itself, the host only shows « Ouverte » on the Hub card. The
+   * seconds left change on every read and would rebuild the whole Hub (flicker): not compared.
+   */
+  function stableState(value) {
+    if (!value?.raffle || !(value.modules ?? []).some((m) => m.id === 'raffle_join' && m.raffle_v2)) return value;
+    return { ...value, raffle: { ...value.raffle, ends_in_s: null } };
   }
 
   function withoutTtsV2(value) {
@@ -5897,7 +5906,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           const chip = off
             ? { text: 'En pause', tone: 'neutral' }
             : mod.id === 'raffle_join' && raffleOpen
-              ? { text: 'Ouverte', tone: 'live' }
+              ? { text: mod.open_label || 'Ouverte', tone: 'live' }
               : mod.id === 'tts' && state?.moderation?.tts?.paused
                 ? { text: 'En pause', tone: 'neutral' }
                 : mod.id === MODERATION_MODULE.id

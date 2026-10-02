@@ -11,12 +11,15 @@
 // tirage → résultat…); between two reads only the small values move (seconds, ring, counters, rows,
 // join zone), so the scroll, a click in progress and the animations are never reset by polling.
 import { errorLabel } from './api.js';
+import { fitMoney, moneyHtml, unitHtml } from './currency.js';
 
 const POLL_ACTIVE_MS = 1000;
 const POLL_IDLE_MS = 3000;
 const R = 58;
 const CIRC = 2 * Math.PI * R;
 const LEAVE_MS = 270;
+/** « Résultat dans 0 s » stays this long on screen before the result (the 0 is really seen). */
+const ZERO_HOLD_MS = 450;
 
 const P = {
   ticket: '<path d="M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 7v10" stroke-dasharray="2 2.5"/>',
@@ -33,10 +36,12 @@ const P = {
   chevL: '<path d="m15 18-6-6 6-6"/>',
   star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  pause: '<path d="M9 5v14M15 5v14"/>',
 };
 const ic = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const fmt = (n) => Number(n).toLocaleString('fr-FR').replace(/ /g, ' ');
+// Thousands separator: a no-break space (never « 7 » / « 000 » on two lines), present in every font.
+const fmt = (n) => Number(n).toLocaleString('fr-FR').replace(/[   ]/g, ' ');
 const hhmm = (iso) => (iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '');
 const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 /** Same stable hue as the prototype avatars. */
@@ -97,6 +102,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   let destroyed = false;
   let inFlight = false;
   let dueRead = 0; // closes_at / result_at reached locally: one immediate read
+  let resultAt = null; // { id, at } local time of Core's result_at (set once per round, no jitter)
   const slotHtml = new WeakMap();
 
   const round = () => data?.round ?? null;
@@ -121,12 +127,26 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     // Core's remaining time includes the opening announcement: never more than the round length.
     return Math.max(0, Math.min(r.duration_ms, left));
   }
+  /**
+   * Local deadline of the result, from Core's result_at: fixed for the round (only moved if Core moves
+   * it by more than a second), so the countdown never jumps and really reaches 0.
+   */
+  function syncResultAt() {
+    const r = round();
+    if (phase() !== 'drawing' || !r?.result_at) return;
+    const at = receivedAt + (Date.parse(r.result_at) - Date.parse(data.server_time));
+    if (resultAt?.id !== r.raffle_id || Math.abs(resultAt.at - at) > 1000) resultAt = { id: r.raffle_id, at };
+  }
   function resultInMs() {
     const r = round();
-    if (!r?.result_at) return 0;
-    const serverNow = Date.parse(data.server_time) + (now() - receivedAt);
-    return Math.max(0, Date.parse(r.result_at) - serverNow);
+    if (!r || resultAt?.id !== r.raffle_id) return 0;
+    return Math.max(0, resultAt.at - now());
   }
+  /** Core already allows the result, but the countdown seen here has not shown its 0 yet: wait for it. */
+  const holdingResult = () => {
+    const r = round();
+    return phase() === 'result' && !!r && resultAt?.id === r.raffle_id && now() < resultAt.at + ZERO_HOLD_MS;
+  };
 
   // --- screens -----------------------------------------------------------------------------------------
   function screenKey() {
@@ -136,7 +156,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     const p = phase();
     if (view === 'participants' && (p === 'open' || p === 'paused')) return `participants:${r.raffle_id}`;
     if (p === 'open' || p === 'paused') return `open:${r.raffle_id}`;
-    if (p === 'drawing') return `drawing:${r.raffle_id}`;
+    if (p === 'drawing' || holdingResult()) return `drawing:${r.raffle_id}`;
     if (p === 'result') return `result:${r.raffle_id}`;
     if (p === 'cancelled') return `cancelled:${r.raffle_id}`;
     return 'none';
@@ -144,14 +164,14 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   function label(r) {
     // Core's titles (the same as the overlay's, from Studio's labels).
     const t = (s) => esc(titles(r)[s].join(' ').trim());
-    if (r.paused) return `${ic('clock')} ${t('paused')}`;
+    if (r.paused) return `${ic('pause')} ${t('paused')}`;
     if (r.kind === 'super') return `<span class="t-super">${ic('star')} ${esc(titles(r).name)}</span>`;
     if (r.kind === 'giveaway') return `${ic('gift')} ${t('running')}`;
     return `${ic('ticket')} ${t('running')}`;
   }
   function amountHtml(r, cls = 'amt') {
-    if (r.kind === 'giveaway') return `<span class="t-amount ${cls}" style="font-family:var(--t-font);font-size:24px">${esc(r.prize)}</span>`;
-    return `<span class="t-amount ${cls} ${r.kind === 'super' ? 'is-gold' : ''}">${fmt(r.amount)}<small>${esc(r.currency?.label ?? '')}</small></span>`;
+    if (r.kind === 'giveaway') return `<span class="t-amount is-prize ${cls}" style="font-family:var(--t-font);font-size:24px">${esc(r.prize)}</span>`;
+    return `<span class="t-amount ${cls} ${r.kind === 'super' ? 'is-gold' : ''}">${fmt(r.amount)}${unitHtml(r.currency)}</span>`;
   }
   function counts(r) {
     const c = r.counts ?? { chat: 0, extension: 0, manual: 0 };
@@ -174,7 +194,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     return `<div class="hero ${r.kind === 'super' ? 'is-super' : ''} ${r.paused ? 'is-paused' : left <= 10_000 ? 'is-hot' : ''}">
       <span class="lbl" data-slot="lbl">${label(r)}</span>
       <div class="ringbig"><svg class="t-ring" viewBox="0 0 132 132"><circle class="bg" cx="66" cy="66" r="${R}"/><circle class="fg" cx="66" cy="66" r="${R}" style="stroke-dasharray:${CIRC};stroke-dashoffset:${CIRC * (1 - left / Math.max(1, r.duration_ms))}"/></svg>
-        <span class="in"><b data-id="secs">${Math.ceil(left / 1000)}</b><span>secondes</span></span></div>
+        <span class="in"><b data-id="secs">${Math.ceil(left / 1000)}</b><span>secondes</span></span><span class="pz" aria-hidden="true"><i></i><i></i></span></div>
       ${amountHtml(r)}
       <div class="join-zone" data-slot="join" style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%">${joinZone(r)}</div>
       <div class="meta-row"><span class="who" data-slot="count">${ic('users')}<b>${r.participants}</b> participants</span><span class="split" data-slot="split">${counts(r)}</span></div>
@@ -216,22 +236,21 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   }
   function revealProgress() {
     const r = round();
-    if (!r?.result_at || !drawingSince) return 0;
-    const total = Math.max(1, Date.parse(r.result_at) - drawingSince.at);
+    if (!r || resultAt?.id !== r.raffle_id || !drawingSince) return 0;
+    const total = Math.max(1, resultAt.at - drawingSince.at);
     return Math.min(1, Math.max(0, 1 - resultInMs() / total));
   }
   function fullResultView(r) {
     const w = r.winners[0];
     const n = r.participants;
-    const cur = esc(r.currency?.short_label ?? '');
     if (r.won)
       return `<div class="stage gold win"><span class="t-full">${ic('crown')} Full oseille</span>
         <span class="orb glow">${pp(w.display_name, r.my_source, w.avatar_url)}</span>
         <span class="kick">Tu rafles tout</span><span class="who">${esc(w.display_name)}</span>
-        <span class="t-amount gainbig">+ ${fmt(r.my_gain)}<small>${esc(r.currency?.label ?? '')}</small></span><p>Crédité sur ton wallet.</p></div>`;
+        <span class="t-amount gainbig">+ ${fmt(r.my_gain)}${unitHtml(r.currency)}</span><p>Crédité sur ton wallet.</p></div>`;
     return `<div class="stage gold"><span class="t-full">${ic('crown')} Full oseille</span>
         <span class="orb">${pp(w.display_name, null, w.avatar_url)}</span>
-        <span class="who">${esc(w.display_name)}</span><span class="kick">rafle ${fmt(w.amount)} ${cur}</span>
+        <span class="who">${esc(w.display_name)}</span><span class="kick">rafle ${moneyHtml(w.amount, r.currency)}</span>
         <span class="rule"></span>${r.joined ? '<h3>Pas cette fois</h3>' : ''}<p>Un seul gagnant sur ${n}. Prochaine occasion à tout moment.</p></div>`;
   }
   function noParticipantView() {
@@ -249,15 +268,14 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     const n = r.participants;
     const gold = r.kind === 'super';
     const giveaway = r.kind === 'giveaway';
-    const cur = esc(r.currency?.short_label ?? '');
     const badge = r.kind === 'super'
       ? `<span class="t-super">${ic('star')} ${esc(titles(r).name)}</span>`
       : giveaway
         ? `<span class="t-pill">${ic('gift')}${esc(titles(r).name)}</span>`
         : `<span class="t-caps" style="color:var(--t-teal);font-size:11px">Résultat · ${esc(titles(r).name)}</span>`;
-    const each = giveaway ? `Lot : ${esc(r.prize)}` : `${fmt(r.winners[0].amount)} ${cur} chacun`;
+    const each = giveaway ? `Lot : ${esc(r.prize)}` : `${moneyHtml(r.winners[0].amount, r.currency)} chacun`;
     const top = r.won
-      ? `<div class="result win ${gold ? 'gold' : ''}">${badge}<h3>Tu as gagné !</h3>${giveaway ? `<span class="prize">${esc(r.prize)}</span><p>Le streamer te remettra ton lot.</p>` : `<span class="t-amount big won-gain">+ ${fmt(r.my_gain)}<small>${esc(r.currency?.label ?? '')}</small></span><p>Crédité sur ton wallet.</p>`}</div>`
+      ? `<div class="result win ${gold ? 'gold' : ''}">${badge}<h3>Tu as gagné !</h3>${giveaway ? `<span class="prize">${esc(r.prize)}</span><p>Le streamer te remettra ton lot.</p>` : `<span class="t-amount big won-gain">+ ${fmt(r.my_gain)}${unitHtml(r.currency)}</span><p>Crédité sur ton wallet.</p>`}</div>`
       : `<div class="result">${badge}${r.joined ? '<h3>Pas cette fois</h3>' : `<h3>${plural(k, 'gagnant')}</h3>`}<p>${plural(k, 'gagnant')} sur ${n} participants · ${each}</p></div>`;
     return `<div class="grid2"><div>${top}</div><div><div class="sec">Gagnants</div><div class="rows">${r.winners
       .map((w) => {
@@ -267,7 +285,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       .join('')}</div></div></div>`;
   }
   function what(h) {
-    return h.kind === 'giveaway' ? esc(h.prize) : `${fmt(h.amount)} ${esc(h.currency?.short_label ?? '')}`;
+    return h.kind === 'giveaway' ? esc(h.prize) : moneyHtml(h.amount, h.currency);
   }
   function lastBlock() {
     const h = data?.history?.[0];
@@ -333,20 +351,40 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     const el = body.querySelector(`[data-slot="${name}"]`) ?? node.querySelector(`[data-slot="${name}"]`);
     if (!el || slotHtml.get(el) === html) return;
     slotHtml.set(el, html);
+    // The pictures already on screen are moved into the new rows (never reloaded: no blink).
+    const kept = new Map([...el.querySelectorAll('img[data-pp]')].map((i) => [i.getAttribute('src'), i]));
     el.innerHTML = html;
+    for (const i of el.querySelectorAll('img[data-pp]')) {
+      const old = kept.get(i.getAttribute('src'));
+      if (old) {
+        kept.delete(old.getAttribute('src'));
+        i.replaceWith(old);
+      }
+    }
     wireImages(el);
+  }
+  /** A long amount gets smaller until it fits on one line (never cut). */
+  function fitAmounts() {
+    fitMoney(body, '.t-amount:not(.is-prize)');
   }
   function build(key, mode) {
     body.classList.remove('is-new', 'soft', 'leaving');
     body.innerHTML = bodyHtml(key);
     body.scrollTop = 0;
-    // The entrance animation plays only for a new screen, never on a read.
+    // The entrance animation plays only for a new screen, never on a read — nor again when the host
+    // puts the screen back in place (the class is removed once it has played).
     void body.offsetWidth;
-    if (mode) body.classList.add(mode);
+    if (mode) {
+      body.classList.add(mode);
+      win.clearTimeout(modeTimer);
+      modeTimer = win.setTimeout(() => body.classList.remove(mode), 700);
+    }
     shownKey = key;
     wireImages(body);
+    fitAmounts();
     if (key.startsWith('drawing:') && drawingSince?.id !== round()?.raffle_id) drawingSince = { id: round().raffle_id, at: now() };
   }
+  let modeTimer = 0;
   function render() {
     if (destroyed) return;
     setSlot('hname', data ? esc(round() ? titles(round()).name : (data.idle_name ?? 'Tombola')) : '');
@@ -408,12 +446,14 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       if (fg) fg.style.strokeDashoffset = `${CIRC * (1 - left / Math.max(1, r.duration_ms))}`;
       body.querySelector('.hero')?.classList.toggle('is-hot', !r.paused && left <= 10_000);
       if (!r.paused && left <= 0) readSoon();
-    } else if (p === 'drawing') {
+    } else if (shownKey?.startsWith('drawing:')) {
       const rv = body.querySelector('[data-id="rv"]');
       if (rv) rv.textContent = String(Math.ceil(resultInMs() / 1000));
       const bar = body.querySelector('[data-id="rvbar"]');
       if (bar) bar.style.width = `${revealProgress() * 100}%`;
-      if (resultInMs() <= 0) readSoon();
+      if (p === 'drawing' && resultInMs() <= 0) readSoon();
+      // The 0 has been seen: the result Core already sent comes in now.
+      if (p === 'result' && !holdingResult()) render();
     }
   }
   /** Core's deadline reached locally: read once now instead of waiting for the next poll. */
@@ -437,6 +477,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       data = out?.raffle_v2 ?? null;
       me = out?.me ?? null;
       receivedAt = now();
+      syncResultAt();
       if (out?.wallet) setWallet(out.wallet);
       if (view === 'participants' && !(phase() === 'open' || phase() === 'paused')) view = 'main';
       render();
@@ -506,6 +547,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     },
     attached() {
       tick();
+      fitAmounts();
     },
     destroy() {
       destroyed = true;

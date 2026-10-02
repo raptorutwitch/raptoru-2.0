@@ -143,6 +143,8 @@ interface RaffleRow {
   phase_changed_at: Date;
   origin: 'manual' | 'automatic';
   launch_sound: RaffleSound | null;
+  /** Labels copied when the round opened (its name never changes afterwards); null = automatic. */
+  title_labels: Partial<RaffleConfig['labels']> | null;
 }
 interface SchedulerRow {
   channel_id: string;
@@ -190,6 +192,19 @@ const settingsOf = (r: RaffleRow): RoundSettings =>
     full: DEFAULT_RAFFLE_CONFIG.full,
     winners_custom: r.winners_count,
   };
+
+/**
+ * Labels a round was created with (copied at its opening): renaming the event later never renames
+ * past rounds. A round opened before this copy existed keeps the automatic names of its kind.
+ */
+function roundLabels(r: RaffleRow): RaffleConfig['labels'] {
+  return {
+    ...DEFAULT_RAFFLE_CONFIG.labels,
+    event_name: null,
+    empty_title: null,
+    ...(r.title_labels ?? {}),
+  };
+}
 
 export class RaffleLabService {
   constructor(
@@ -1128,6 +1143,9 @@ export class RaffleLabService {
       await touchStaff(q, channelId, req.actor, now);
       const acc = await access(q, channelId, req.actor);
       assertAccess(acc, RaffleLabService.needs(req.command));
+      // Over an explicit Tombola block, a manual entry also needs « Sanctions sensibles ».
+      if (req.command.action === 'add_participant' && req.command.force)
+        assertAccess(acc, 'raffle.force');
       return this.apply(q, channelId, req.command, req.actor, acc.role);
     });
   }
@@ -1629,8 +1647,8 @@ export class RaffleLabService {
           : c.launch_sounds.normal;
     await q.query(
       `insert into lab_raffles (raffle_id, channel_id, status, jackpot, winners_count, opened_at, ends_at, opened_by, kind, currency_id, prize,
-         winners_mode, duration_s, open_at, session_id, display, phase_changed_at, origin, launch_sound)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $6, $17, $18)`,
+         winners_mode, duration_s, open_at, session_id, display, phase_changed_at, origin, launch_sound, title_labels)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $6, $17, $18, $19)`,
       [
         id,
         channelId,
@@ -1650,6 +1668,11 @@ export class RaffleLabService {
         JSON.stringify(settings),
         origin,
         sound ? JSON.stringify(sound) : null,
+        JSON.stringify({
+          event_name: c.labels.event_name,
+          event_gender: c.labels.event_gender,
+          empty_title: c.labels.empty_title,
+        }),
       ],
     );
     // Any launch (manual or automatic): the scheduler counts its next one from the end of this round.
@@ -1896,7 +1919,7 @@ export class RaffleLabService {
         round: {
           ...this.roundBase(r, currencies, now.getTime()),
           /** Titles of this round's kind (overlay): name + state, from Studio's labels. */
-          titles: eventTitles(cfg.labels, r.kind),
+          titles: eventTitles(roundLabels(r), r.kind),
           // The overlay learns the outcome with the reveal (never during « Tirage en cours »).
           outcome:
             r.status === 'cancelled'
@@ -1986,7 +2009,6 @@ export class RaffleLabService {
           viewerId,
           currencies,
           t,
-          cfg.labels,
         ),
       };
       if (!last) return { ...common, phase: 'idle' as const, round: null };
@@ -1996,7 +2018,7 @@ export class RaffleLabService {
         : undefined;
       const round = {
         ...this.roundBase(last, currencies, t),
-        titles: eventTitles(cfg.labels, last.kind),
+        titles: eventTitles(roundLabels(last), last.kind),
         participants: entries.length,
         counts: {
           chat: entries.filter((e) => e.source === 'chat').length,
@@ -2085,7 +2107,6 @@ export class RaffleLabService {
     viewerId: string | null,
     currencies: LabCurrency[],
     t: number,
-    labels: RaffleConfig['labels'],
   ) {
     const session = await this.currentSession(q, channelId);
     const rows = await q.query<RaffleRow>(
@@ -2114,7 +2135,7 @@ export class RaffleLabService {
       const w = wins.filter((x) => x.raffle_id === r.raffle_id);
       return {
         raffle_id: r.raffle_id,
-        name: eventTitles(labels, r.kind).name,
+        name: eventTitles(roundLabels(r), r.kind).name,
         at: iso(r.drawn_at ?? r.cancelled_at)!,
         status: r.status === 'cancelled' ? 'cancelled' : 'done',
         kind: r.kind,
@@ -2334,6 +2355,99 @@ export class RaffleLabService {
         max: autoWinners(n, () => 0.999),
       })),
     }));
+  }
+
+  /**
+   * Tombola section of the moderation console (D4, team only): the running round (state, timer,
+   * participants with their source) and the last finished one. Same data as Studio's live view.
+   */
+  async moderationView(channelId: string) {
+    return this.db.tx(async (q) => {
+      const now = this.clock.now();
+      const currencies = await listCurrencies(q);
+      const r = await this.shownRound(q, channelId);
+      const winners = async (row: RaffleRow) =>
+        (await this.winnerRows(q, [row.raffle_id])).map((w) => ({
+          viewer_id: w.viewer_id,
+          display_name: w.viewer_display_name,
+          amount: Number(w.amount),
+          payout_status: w.payout_status,
+          ledger_id: w.ledger_id === null ? null : Number(w.ledger_id),
+          paid_at: iso(w.paid_at),
+        }));
+      const view = async (row: RaffleRow) => {
+        const entries = await this.activeEntries(q, row.raffle_id);
+        return {
+          ...this.roundBase(row, currencies, now.getTime()),
+          titles: eventTitles(roundLabels(row), row.kind),
+          participants: entries.length,
+          entries: (await this.entryViews(q, entries)).reverse(),
+          // Team view: the winners and their payout as soon as Core drew them (D4 « Dernier tirage »).
+          winners: row.drawn_at ? await winners(row) : [],
+        };
+      };
+      const last = (
+        await q.query<RaffleRow>(
+          `select * from lab_raffles where channel_id = $1 and status in ('finished', 'cancelled')
+           order by opened_at desc limit 1`,
+          [channelId],
+        )
+      )[0];
+      const live = r && r.status !== 'finished' ? r : null;
+      const cfg = await this.config(q, channelId);
+      const liveTitles = live
+        ? eventTitles(
+            roundLabels(live),
+            live.kind === 'super' ? 'normal' : live.kind,
+          )
+        : eventTitles(
+            cfg.labels,
+            cfg.amount_mode === 'giveaway' ? 'giveaway' : 'normal',
+          );
+      return {
+        module_state: await moduleState(q, 'raffle'),
+        /** Name of the module shown live (Extension card): the running round's frozen one, else Studio's. */
+        live_name: liveTitles.name,
+        /** Its agreement (« ouverte » / « ouvert »). */
+        live_open: liveTitles.cancelled[1].endsWith('ée')
+          ? 'Ouverte'
+          : 'Ouvert',
+        round: live ? await view(live) : null,
+        last: last
+          ? {
+              ...this.roundBase(last, currencies, now.getTime()),
+              titles: eventTitles(roundLabels(last), last.kind),
+              participants:
+                (await this.participantCounts(q, [last.raffle_id])).get(
+                  last.raffle_id,
+                ) ?? 0,
+              winners: await winners(last),
+            }
+          : null,
+      };
+    });
+  }
+
+  /** Viewer card (D4): does this viewer take part in the running round (before the draw)? */
+  async participation(channelId: string, viewerId: string) {
+    return this.db.tx(async (q) => {
+      const r = await this.advance(q, channelId);
+      if (!r || !BEFORE_DRAW.includes(r.status)) return null;
+      const e = (
+        await q.query<{ source: string; removed_at: Date | null }>(
+          'select source, removed_at from lab_raffle_entries where raffle_id = $1 and viewer_id = $2',
+          [r.raffle_id, viewerId],
+        )
+      )[0];
+      return {
+        raffle_id: r.raffle_id,
+        status: r.status,
+        titles: eventTitles(roundLabels(r), r.kind),
+        joined: !!e && !e.removed_at,
+        source: e && !e.removed_at ? e.source : null,
+        removed: !!e?.removed_at,
+      };
+    });
   }
 
   /**

@@ -247,6 +247,42 @@ export const RaffleCommand = z.discriminatedUnion('action', [
 ]);
 export type RaffleCommand = z.infer<typeof RaffleCommand>;
 
+/**
+ * Tombola actions of the moderation console (D4): the same Core commands as Studio, limited to the
+ * running round (time, pause, draw, cancel, participants). Core checks every permission.
+ */
+export const RaffleModerationCommand = z.discriminatedUnion('action', [
+  z.strictObject({
+    action: z.literal('extend'),
+    seconds: z.number().int().min(5).max(600),
+    reason: Reason,
+  }),
+  z.strictObject({ action: z.literal('draw_now'), reason: Reason }),
+  z.strictObject({ action: z.literal('pause'), reason: Reason }),
+  z.strictObject({ action: z.literal('resume'), reason: Reason }),
+  z.strictObject({ action: z.literal('cancel'), reason: Reason }),
+  z.strictObject({
+    action: z.literal('add_participant'),
+    viewer_id: Id,
+    display_name: z.string().trim().min(1).max(64),
+    force: z.boolean().default(false),
+    reason: Reason,
+  }),
+  z.strictObject({
+    action: z.literal('remove_participant'),
+    viewer_id: Id,
+    reason: Reason,
+  }),
+]);
+/** Moderation channel: `{ action: 'raffle', command }` carried by the D4 actions endpoint. */
+export const RaffleModerationRequest = z.strictObject({
+  actor: LabActor,
+  command: z.strictObject({
+    action: z.literal('raffle'),
+    command: RaffleModerationCommand,
+  }),
+});
+
 export const RaffleActionRequest = z.strictObject({
   actor: LabActor,
   command: RaffleCommand,

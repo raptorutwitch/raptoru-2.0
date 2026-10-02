@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import {
   LabModerationCommand,
   RaffleCommand,
+  RaffleModerationRequest,
   type LabActor,
   type RaffleConfig,
 } from '@raptoru/schemas';
@@ -732,15 +733,15 @@ describe('Tombola V2 moderation actions and permissions (D7)', () => {
         ),
       ),
     ).toBe('viewer_blocked');
-    await act(
-      {
-        action: 'add_participant',
-        viewer_id: '900296',
-        display_name: 'Bloqué',
-        force: true,
-      },
-      modG,
-    );
+    // Forcing over a block is a sensitive action: « Gérer la Tombola » alone is not enough.
+    const force = {
+      action: 'add_participant',
+      viewer_id: '900296',
+      display_name: 'Bloqué',
+      force: true,
+    };
+    expect(await code(act(force, modG))).toBe('forbidden');
+    await act(force, superMod);
     const card = await raffle.round(CH, (await snap()).round!.raffle_id);
     expect(card.entries.map((e) => e.viewer_id)).toEqual(['900295', '900296']);
     expect(
@@ -1770,5 +1771,304 @@ describe('Tombola V2 event titles (one source for the overlay, Studio and the ex
       'Tirage',
       'annulé',
     ]);
+  });
+});
+
+describe('Tombola V2 moderation (phase G, D4 console)', () => {
+  it('the console channel only carries the round actions (never configuration, launch or streams)', () => {
+    const ok = (command: Record<string, unknown>) =>
+      RaffleModerationRequest.safeParse({
+        actor: modA,
+        command: { action: 'raffle', command },
+      }).success;
+    for (const c of [
+      { action: 'extend', seconds: 30 },
+      { action: 'pause' },
+      { action: 'resume' },
+      { action: 'draw_now' },
+      { action: 'cancel' },
+      { action: 'add_participant', viewer_id: '900701', display_name: 'V' },
+      { action: 'remove_participant', viewer_id: '900701' },
+    ])
+      expect(ok(c)).toBe(true);
+    for (const c of [
+      { action: 'launch' },
+      { action: 'config', config: {} },
+      { action: 'stream_start' },
+      { action: 'scheduler_pause' },
+    ])
+      expect(ok(c)).toBe(false);
+  });
+
+  it('permissions: viewer nothing, every mod the safe actions, « Gérer la Tombola » the rest, forcing = sensitive', async () => {
+    const { config, act, code, mod } = await lab();
+    await config();
+    await act({ action: 'launch' });
+    const as = (a: LabActor, c: Record<string, unknown>) => code(act(c, a));
+    await mod(
+      {
+        action: 'block_viewer',
+        viewer_id: '900709',
+        module: 'raffle',
+        duration_s: 300,
+      },
+      modA,
+    );
+    // viewer
+    expect(await as(viewer, { action: 'pause' })).toBe('forbidden');
+    expect(await as(viewer, { action: 'cancel' })).toBe('forbidden');
+    // standard moderator: remove / cancel only
+    expect(await as(modA, { action: 'extend', seconds: 30 })).toBe('forbidden');
+    expect(await as(modA, { action: 'pause' })).toBe('forbidden');
+    expect(await as(modA, { action: 'draw_now' })).toBe('forbidden');
+    expect(
+      await as(modA, {
+        action: 'add_participant',
+        viewer_id: '900701',
+        display_name: 'V701',
+      }),
+    ).toBe('forbidden');
+    // « Gérer la Tombola »
+    expect(
+      await as(modG, {
+        action: 'add_participant',
+        viewer_id: '900701',
+        display_name: 'V701',
+      }),
+    ).toBe('ok');
+    expect(
+      await as(modG, {
+        action: 'add_participant',
+        viewer_id: '900701',
+        display_name: 'V701',
+      }),
+    ).toBe('already_joined');
+    expect(
+      await as(modA, { action: 'remove_participant', viewer_id: '900701' }),
+    ).toBe('ok');
+    expect(
+      await as(modA, { action: 'remove_participant', viewer_id: '900701' }),
+    ).toBe('not_a_participant');
+    expect(await as(modG, { action: 'extend', seconds: 30 })).toBe('ok');
+    expect(await as(modG, { action: 'pause' })).toBe('ok');
+    expect(await as(modG, { action: 'resume' })).toBe('ok');
+    // blocked viewer: refused, forcing needs « Sanctions sensibles » (supermod / broadcaster)
+    expect(
+      await as(modG, {
+        action: 'add_participant',
+        viewer_id: '900709',
+        display_name: 'B',
+      }),
+    ).toBe('viewer_blocked');
+    expect(
+      await as(modG, {
+        action: 'add_participant',
+        viewer_id: '900709',
+        display_name: 'B',
+        force: true,
+      }),
+    ).toBe('forbidden');
+    expect(
+      await as(superMod, {
+        action: 'add_participant',
+        viewer_id: '900709',
+        display_name: 'B',
+        force: true,
+      }),
+    ).toBe('ok');
+    expect(await as(modA, { action: 'cancel' })).toBe('ok');
+  });
+
+  it('console view = Core state (timer, participants with source), in sync with the extension and the overlay; audit', async () => {
+    const { config, act, joinExt, chat, m, core, after, seen, snap } =
+      await lab();
+    await config();
+    await act({ action: 'launch' });
+    await joinExt('900711');
+    await chat('900712', '!join');
+    await act(
+      {
+        action: 'add_participant',
+        viewer_id: '900713',
+        display_name: 'Manuel',
+      },
+      modG,
+    );
+    let ov = (await m.overview(CH)).raffle_v2;
+    expect(ov.module_state).toBe('active');
+    expect(ov.round).toMatchObject({
+      status: 'opening',
+      participants: 3,
+      paused: false,
+      titles: { name: 'Tombola' },
+    });
+    expect(ov.round!.entries.map((e) => [e.viewer_id, e.source])).toEqual([
+      ['900713', 'manual'],
+      ['900712', 'chat'],
+      ['900711', 'extension'],
+    ]);
+    await act({ action: 'pause' }, modG);
+    ov = (await m.overview(CH)).raffle_v2;
+    expect(ov.round).toMatchObject({ status: 'paused', paused: true });
+    await act({ action: 'resume' }, modG);
+    // A removal is what every surface reads next.
+    await act(
+      { action: 'remove_participant', viewer_id: '900712', reason: 'spam' },
+      modA,
+    );
+    expect((await m.overview(CH)).raffle_v2.round!.participants).toBe(2);
+    expect((await snap()).round!.participants).toBe(2);
+    expect((await seen('900712')).round).toMatchObject({
+      joined: false,
+      refusal: 'entry_removed',
+    });
+    // Viewer card: part of the round or not.
+    expect((await m.viewer(CH, '900711')).raffle).toMatchObject({
+      joined: true,
+      source: 'extension',
+    });
+    expect((await m.viewer(CH, '900712')).raffle).toMatchObject({
+      joined: false,
+      removed: true,
+    });
+    // Audit (D4 infrastructure): action, author, target, round, module.
+    const rid = (await snap()).round!.raffle_id;
+    const trail = await core.db.query<{
+      action: string;
+      actor: string;
+      viewer_id: string | null;
+      interaction_id: string;
+      module_id: string;
+      reason: string | null;
+    }>(
+      `select action, actor, viewer_id, interaction_id, module_id, reason from lab_moderation_audit where module_id = 'raffle' and action in ('raffle_add_participant', 'raffle_remove_participant', 'raffle_pause', 'raffle_resume') order by id`,
+    );
+    expect(trail).toEqual([
+      expect.objectContaining({
+        action: 'raffle_add_participant',
+        actor: modG.login,
+        viewer_id: '900713',
+        interaction_id: rid,
+        module_id: 'raffle',
+      }),
+      expect.objectContaining({
+        action: 'raffle_pause',
+        actor: modG.login,
+        interaction_id: rid,
+      }),
+      expect.objectContaining({
+        action: 'raffle_resume',
+        actor: modG.login,
+        interaction_id: rid,
+      }),
+      expect.objectContaining({
+        action: 'raffle_remove_participant',
+        actor: modA.login,
+        viewer_id: '900712',
+        interaction_id: rid,
+        reason: 'spam',
+      }),
+    ]);
+    await act({ action: 'draw_now' }, modG);
+    await after(60_000);
+    ov = (await m.overview(CH)).raffle_v2;
+    expect(ov.round).toBeNull();
+    expect(ov.last).toMatchObject({
+      status: 'finished',
+      outcome: 'winners',
+      participants: 2,
+    });
+  });
+
+  it('module paused / global pause: a manual entry still goes through, the extension is refused; no participant', async () => {
+    const { config, act, mod, m, seen, after } = await lab();
+    await config();
+    await act({ action: 'launch' });
+    await mod(
+      { action: 'module_state', module: 'raffle', state: 'paused' },
+      modA,
+    );
+    expect((await m.overview(CH)).raffle_v2.module_state).toBe('paused');
+    expect(((await seen('900721')).round as { refusal: string }).refusal).toBe(
+      'raffle_paused',
+    );
+    await act(
+      { action: 'add_participant', viewer_id: '900721', display_name: 'V' },
+      modG,
+    );
+    await mod(
+      { action: 'module_state', module: 'raffle', state: 'active' },
+      modA,
+    );
+    await mod({ action: 'global_pause', paused: true }, superMod);
+    expect(((await seen('900722')).round as { refusal: string }).refusal).toBe(
+      'global_pause',
+    );
+    await act(
+      { action: 'add_participant', viewer_id: '900722', display_name: 'W' },
+      modG,
+    );
+    await mod({ action: 'global_pause', paused: false }, superMod);
+    expect((await m.overview(CH)).raffle_v2.round!.participants).toBe(2);
+    await act({ action: 'cancel' }, modA);
+    await after(10_000);
+    // A round with nobody: « no participant » in the console's last round.
+    await act({ action: 'launch' });
+    await act({ action: 'draw_now' }, modG);
+    await after(60_000);
+    expect((await m.overview(CH)).raffle_v2.last).toMatchObject({
+      outcome: 'no_participants',
+      participants: 0,
+      winners: [],
+    });
+  });
+
+  it('the name of a round is frozen when it opens: renaming later only changes the next rounds', async () => {
+    const { config, act, raffle, joinExt, seen, after, m } = await lab();
+    // 1-3: a Giveaway A, played to the end
+    await config({ amount_mode: 'giveaway', prize: 'Lot A' });
+    await act({ action: 'launch' });
+    await joinExt('900731');
+    await after(62_000 + 3_000 + 30_000);
+    // 4-6: renamed « Tirage », round B
+    await config({
+      amount_mode: 'giveaway',
+      prize: 'Lot B',
+      labels: {
+        ...DEFAULT_RAFFLE_CONFIG.labels,
+        event_name: 'Tirage',
+        event_gender: 'm',
+      },
+    });
+    // Live name of the module (Extension card): Studio's at rest…
+    expect((await m.overview(CH)).raffle_v2).toMatchObject({
+      live_name: 'Tirage',
+      live_open: 'Ouvert',
+    });
+    await act({ action: 'launch' });
+    expect((await raffle.snapshot(CH)).round!.titles.open).toEqual([
+      'Tirage',
+      'ouvert',
+    ]);
+    // …then the running round's own, even if Studio renames it meanwhile.
+    await config({
+      labels: {
+        ...DEFAULT_RAFFLE_CONFIG.labels,
+        event_name: 'Concours',
+        event_gender: 'm',
+      },
+    });
+    expect((await m.overview(CH)).raffle_v2.live_name).toBe('Tirage');
+    await joinExt('900731');
+    await after(62_000 + 3_000 + 30_000);
+    // 7: history — A stays « Giveaway », B is « Tirage » (extension), the same in the console
+    const h = (await seen('900731')).history.map((x) => [x.prize, x.name]);
+    expect(h).toEqual([
+      ['Lot B', 'Tirage'],
+      ['Lot A', 'Giveaway'],
+    ]);
+    expect((await m.overview(CH)).raffle_v2.last!.titles.name).toBe('Tirage');
+    // Studio history: the same frozen names on each round's titles
+    expect((await raffle.history(CH)).length).toBe(2);
   });
 });

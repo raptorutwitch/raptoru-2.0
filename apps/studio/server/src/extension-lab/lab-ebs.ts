@@ -313,6 +313,9 @@ export class LabEbs {
     string
   > | null = null;
   private coreModulesAt = 0;
+  /** Live name of the Tombola V2 module (Core: running round's frozen name, else Studio's label). */
+  private raffleName: string | null = null;
+  private raffleOpenWord: string | null = null;
   /** Tombola V2 state from Core (the in-memory raffle is only used without the Lab Core). */
   private coreRaffle: CoreRaffle | null = null;
 
@@ -380,6 +383,7 @@ export class LabEbs {
           soundboard: { module_state: string };
           bonk: { module_state: string };
           raffle?: { module_state: string };
+          raffle_v2?: { live_name?: string; live_open?: string };
         }>(`/v1/lab/moderation/${LAB_CHANNEL.id}/overview`, undefined, {
           timeoutMs: 1500,
         })
@@ -393,6 +397,8 @@ export class LabEbs {
             for (const id of ['tts', 'soundboard', 'bonk'] as const)
               this.modules[id] = this.coreModules[id] !== 'disabled';
             this.modules.raffle_join = this.coreModules.raffle !== 'disabled';
+            this.raffleName = o.raffle_v2?.live_name ?? null;
+            this.raffleOpenWord = o.raffle_v2?.live_open ?? null;
           })
           .catch(() => undefined),
       );
@@ -1901,7 +1907,12 @@ export class LabEbs {
     );
     // Tombola V2: the extension reads Core's viewer state itself (GET /raffle/state).
     if (this.labCore)
-      for (const m of modules) if (m.id === 'raffle_join') m.raffle_v2 = true;
+      for (const m of modules)
+        if (m.id === 'raffle_join') {
+          m.raffle_v2 = true;
+          if (this.raffleName) m.label = this.raffleName;
+          if (this.raffleOpenWord) m.open_label = this.raffleOpenWord;
+        }
     const baseRaffle = base.raffle as Json;
     const joined = this.raffle.participants.some(
       (p) => p.login === identity.login,

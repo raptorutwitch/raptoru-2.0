@@ -70,6 +70,8 @@ interface Round {
   origin: 'manual' | 'automatic';
   reveal: { is_full: boolean } | null;
   outcome: Outcome;
+  /** Core's titles of this round (its frozen name). */
+  titles?: Titles;
 }
 interface Card {
   raffle_id: string;
@@ -806,22 +808,28 @@ export function mountTombola(root: HTMLElement) {
   }
 
   // --- En direct -----------------------------------------------------------------------------------
+  /** « Giveaway ouvert », « Tombola en pause »…: the round's own name and agreement (Core). */
+  const roundTitle = (r: Round, s: TitleState) =>
+    (r.titles?.[s] ?? []).join(' ').trim();
   const phaseText = (r: Round, left: number) =>
     r.status === 'opening' || r.status === 'open'
       ? left <= 10_000
         ? 'Dernières secondes'
-        : 'Ouverte'
+        : roundTitle(r, 'open') || 'Ouverte'
       : r.status === 'paused'
-        ? 'En pause'
+        ? roundTitle(r, 'paused') || 'En pause'
         : r.status === 'drawing'
           ? 'Tirage en cours'
           : r.status === 'revealing'
             ? 'Révélation sur le stream'
             : r.status === 'cancelled'
-              ? 'Annulée · personne n’est payé'
-              : r.outcome === 'no_participants'
-                ? 'Terminée · Aucun participant'
-                : 'Terminée';
+              ? `${roundTitle(r, 'cancelled') || 'Annulée'} · personne n’est payé`
+              : `${doneText(r)}${r.outcome === 'no_participants' ? ' · Aucun participant' : ''}`;
+  /** « Giveaway terminé » / « Tombola terminée » (« ended » may be the custom « no participant » text). */
+  const doneText = (r: Round) =>
+    r.titles
+      ? `${r.titles.name} ${r.titles.cancelled[1].endsWith('ée') ? 'terminée' : 'terminé'}`
+      : 'Terminée';
   let headSig = '';
   let bodySig = '';
   /** Remaining time of the round, from Core's value at the last read. */
@@ -966,7 +974,7 @@ export function mountTombola(root: HTMLElement) {
         )
         .join('')}</div></div>`;
     } else if (round.outcome === 'no_participants')
-      res.innerHTML = `<div class="card"><h3>${ic('users')}Aucun participant cette fois !<span class="r">pas de tirage · aucun gagnant · aucun paiement</span></h3><p class="fine" style="margin:0">La Tombola s’est terminée sans inscription. Ce n’est pas une annulation : la Tombola automatique planifie la suivante normalement.</p></div>`;
+      res.innerHTML = `<div class="card"><h3>${ic('users')}Aucun participant cette fois !<span class="r">pas de tirage · aucun gagnant · aucun paiement</span></h3><p class="fine" style="margin:0">${esc(round.titles?.name ?? 'Tombola')} sans inscription. Ce n’est pas une annulation : la Tombola automatique planifie la suivante normalement.</p></div>`;
     else res.innerHTML = '';
   }
 

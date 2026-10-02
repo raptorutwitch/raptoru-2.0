@@ -154,7 +154,8 @@ function paintTimer() {
     phase === 'empty' ||
     phase === 'cancel';
   const sec = $('sec');
-  if (sec) {
+  // Paused: the digits stay exactly as they were (covered by the Ⅱ), never rewritten.
+  if (sec && !(phase === 'paused' && sec.textContent)) {
     const txt = quiet ? '' : timeupOn ? '0' : String(secs);
     if (sec.textContent !== txt) sec.textContent = txt;
   }

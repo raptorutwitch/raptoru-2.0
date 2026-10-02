@@ -64,6 +64,7 @@ try {
     '20261007120000_moderation_d4.sql',
     '20261008120000_raffle_v2.sql',
     '20261009120000_raffle_scheduler.sql',
+    '20261010120000_raffle_round_labels.sql',
   ]) {
     if (
       (

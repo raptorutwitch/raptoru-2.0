@@ -137,7 +137,20 @@ Légende : **C** Core · **S** Studio · **E** Extension · **O** Overlay · **B
   reconstruit sans rejouer ouverture / son / feedbacks, reveal repris en cours. Studio : aperçu fidèle du texte d'instruction,
   comparaison overlay / Extension. Anti-spoil mesuré en E2E : résultat Extension ≈ fin du reveal overlay + décalage (3,2 s
   pour 3 s) ; calibrage final sur le vrai stream.
-- **Phase G — Modération** : section Tombola D4 (fiche manche, preuve de paiement, actions, permissions).
+- **Phase G — Modération** (validée manuellement par Antoni le 02/10/2026, polish final compris) : la Tombola est un
+  module natif de la console Moderation V2 (D4), Extension et Studio. Lecture : `raffle_v2` de l'aperçu D4 (état,
+  timer, participants avec leur source, gagnants et preuve de paiement « Dernier tirage »). Actions : les mêmes
+  commandes Core que Studio, par le canal d'actions D4 (`{ action: 'raffle', command }`) — +temps, pause / reprise,
+  tirer, annuler, ajout manuel (passe une pause, refuse un viewer bloqué, « forcer » réservé à « Sanctions
+  sensibles »), retrait (immédiat, sans remboursement). Permissions des rôles existants : modo = retrait / annulation,
+  « Gérer la Tombola » = le reste, `raffle.force` = sensible. Audit D4 (action, auteur, cible, manche, module). Fiche
+  viewer : participation à la manche en cours. **Nom figé par manche** (migration additive
+  `20261010120000_raffle_round_labels.sql`, `lab_raffles.title_labels`) : historique, résultats et manche en cours
+  gardent le nom du lancement ; la carte Hub de l'Extension suit le nom actif (`live_name` / `live_open`).
+  Polish : pause = Ⅱ ambre posé sur le temps figé (overlay + Extension), Hub non reconstruit pendant une manche,
+  montants jamais coupés, anti-spoil qui atteint réellement 0, libellés selon le nom et l'accord réels, monnaies
+  compactes communes (`shared/currency.js` : « 17 000 Cr », « 7 000 Je », couleur de la monnaie, une ligne, taille
+  adaptative).
 - **Phase H — E2E** · **Phase I — package local** `apps/studio/desktop/release/current-test/` (pas de release).
 
 ## Ingestion chat du Lab (générique, pas propre à la Tombola)

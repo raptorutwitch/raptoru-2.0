@@ -85,6 +85,8 @@ export const PERMISSIONS: Record<
   'raffle.moderate': 'moderator',
   'raffle.manage': 'raffle',
   'raffle.config': 'supermod',
+  // Manual entry over an explicit Tombola block: « Sanctions sensibles » (audited).
+  'raffle.force': 'sensitive',
 };
 const RANK: Record<LabRole, number> = {
   viewer: 0,

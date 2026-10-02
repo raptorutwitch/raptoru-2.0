@@ -625,14 +625,22 @@ export class LabModerationService {
 
   /** Console overview: module states and queues, Tombola, global pause. */
   async overview(channelId: string) {
-    const [tts, sound, bonk, raffle, global] = await Promise.all([
+    const [tts, sound, bonk, raffle, raffleV2, global] = await Promise.all([
       this.tts.moderationQueue(channelId),
       this.sound.moderationQueue(channelId),
       this.bonk.moderationQueue(channelId),
       this.raffle.state(channelId),
+      this.raffle.moderationView(channelId),
       globalState(this.db, channelId),
     ]);
-    return { tts, soundboard: sound, bonk, raffle, global };
+    return {
+      tts,
+      soundboard: sound,
+      bonk,
+      raffle,
+      raffle_v2: raffleV2,
+      global,
+    };
   }
 
   /** « Viewer… » search: every viewer seen (and the team), with role and restriction badges. */
@@ -754,6 +762,8 @@ export class LabModerationService {
       })),
       wallet_ledger: ledger.items,
       history,
+      /** Tombola V2: part of the running round (before the draw) or not; null = no such round. */
+      raffle: await this.raffle.participation(channelId, viewerId),
     };
   }
 

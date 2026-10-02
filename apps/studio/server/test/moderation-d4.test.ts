@@ -318,6 +318,89 @@ describe('Studio ↔ Extension: one moderation (same Core)', () => {
   });
 });
 
+describe('Tombola V2 moderation (phase G): the console, Studio and the extension act on the same Core', () => {
+  it('extension mod / Studio broadcaster send the Studio commands through the D4 channel; Core checks the caller and audits', async () => {
+    const f = await fixture();
+    const viewerId = await f.me(viewer);
+    const raffle = (command: Json) => ({ action: 'raffle', command });
+    await f.lab.control('raffle-open', { seconds: 60, jackpot: 6000 });
+    // The console reads the running round in the overview (Studio and extension alike).
+    let ov = (await f.ext('overview')) as {
+      raffle_v2: { round: Json & { participants: number } };
+    };
+    expect(ov.raffle_v2.round).toMatchObject({
+      participants: 0,
+      titles: { name: 'Tombola' },
+    });
+    expect((await f.studioApi('/overview')).body).toHaveProperty(
+      'raffle_v2.round.participants',
+      0,
+    );
+    // A standard moderator: no « Gérer la Tombola » → a manual entry is refused, the reason named.
+    const refused = await f.extAct(
+      raffle({
+        action: 'add_participant',
+        viewer_id: viewerId,
+        display_name: 'Viewer',
+      }),
+    );
+    expect(refused.status).toBe(403);
+    expect((refused.body as Json).grant).toBe('raffle');
+    // Studio (broadcaster): manual entry, then the moderator removes it (safe action).
+    const added = await f.studioApi('/actions', {
+      command: raffle({
+        action: 'add_participant',
+        viewer_id: viewerId,
+        display_name: 'Viewer',
+      }),
+    });
+    expect(added.status).toBe(200);
+    ov = (await f.ext('overview')) as typeof ov;
+    expect(ov.raffle_v2.round.participants).toBe(1);
+    // The viewer card shows it, the extension viewer too.
+    expect((await f.ext(`viewers/${viewerId}`)) as Json).toMatchObject({
+      raffle: { joined: true, source: 'manual' },
+    });
+    expect(
+      (
+        (await f.lab.handle('GET', '/raffle/state', undefined, viewer)).body
+          .raffle_v2 as { round: Json }
+      ).round,
+    ).toMatchObject({ joined: true, my_source: 'manual' });
+    expect(
+      (
+        await f.extAct(
+          raffle({ action: 'remove_participant', viewer_id: viewerId }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        (await f.lab.handle('GET', '/raffle/state', undefined, viewer)).body
+          .raffle_v2 as { round: Json }
+      ).round,
+    ).toMatchObject({ joined: false, refusal: 'entry_removed' });
+    // The console channel never carries configuration or launches.
+    expect((await f.extAct(raffle({ action: 'launch' }), boss)).status).toBe(
+      400,
+    );
+    // Audited with the extension moderator as author.
+    const audit = (await f.ext('audit?module=raffle')) as {
+      audit: { action: string; viewer_id: string | null }[];
+    };
+    expect(audit.audit.map((a) => a.action)).toEqual(
+      expect.arrayContaining([
+        'raffle_add_participant',
+        'raffle_remove_participant',
+      ]),
+    );
+    // Cancel by the moderator (safe action).
+    expect(
+      (await f.extAct(raffle({ action: 'cancel', reason: 'test' }))).status,
+    ).toBe(200);
+  });
+});
+
 describe('Tombola V2 extension screen (Lab EBS → Core viewer state)', () => {
   it('flags the module, reads Core for this viewer (phase, refusal, entries, result), nothing decided here', async () => {
     const f = await fixture();

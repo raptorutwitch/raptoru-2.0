@@ -493,3 +493,27 @@ body.mobile:has(.modv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 .modv2[data-mode='window'] .stage .pane__body { max-width: 760px; }
 .modv2[data-mode='window'] .pane__head { padding: 8px 12px 4px 16px; }
 .modv2[data-mode='compact'] .pane__body { padding: 0 10px 14px; }
+
+/* --- Tombola V2 (phase G): the running round, compact (Panel 318 px and Studio) --------------------- */
+.modv2 .tmbm { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 6px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--m-raffle) 40%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--m-raffle) 9%, transparent); }
+.modv2 .tmbm__top { display: flex; align-items: center; gap: 8px; }
+.modv2 .tmbm__st { font-size: 13px; font-weight: 800; }
+.modv2 .tmbm__nums { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; color: var(--muted); font-size: 12px; }
+.modv2 .tmbm__nums b { color: var(--ink); font-size: 15px; }
+.modv2 .tmbm--paused { border-color: rgba(255, 191, 110, 0.45); background: rgba(255, 191, 110, 0.08); }
+.modv2 .tmbm--paused .tmbm__st { color: #ffe2bb; }
+.modv2 .tmbm--cancelled { border-color: rgba(255, 122, 138, 0.4); background: rgba(255, 122, 138, 0.07); }
+.modv2 .tmbm--idle { border-style: dashed; background: none; }
+.modv2 .tmbm__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 4px; }
+.modv2 .srcpill { flex: none; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 800; }
+.modv2 .srcpill--chat { background: rgba(47, 216, 196, 0.14); color: #b9f5ec; }
+.modv2 .srcpill--extension { background: rgba(244, 126, 152, 0.14); color: #ffd0da; }
+.modv2 .srcpill--manual { background: rgba(255, 255, 255, 0.07); color: var(--muted); }
+.modv2 .tmbv { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; font-weight: 700; }
+.modv2 .tmbv.is-in { border-color: color-mix(in srgb, var(--m-raffle) 45%, transparent); }
+.modv2 button.row { width: 100%; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+
+
+/* Currencies (shared/currency.js): « 17 000 Cr », one line, unit in the currency's colour. */
+.modv2 .cur-amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.modv2 .cur-u { font-weight: 700; }

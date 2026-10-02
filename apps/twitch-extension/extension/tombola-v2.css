@@ -904,3 +904,80 @@ body.mobile:has(.tmbx) .m-body { height: 100vh; max-height: 100vh; overflow: hid
 .tmbx .hero.is-paused .ringbig .in b { color: var(--t-muted); }
 .tmbx .h .cx { color: var(--t-faint); font: 700 11px var(--t-num); letter-spacing: 0.1em; text-transform: uppercase; }
 .tmbx .result .prize { font: 700 20px/1.2 var(--t-font); }
+
+/* --- Final polish: amounts never cut, pause over the frozen time ------------------------------- */
+.tmbx .t-amount:not(.is-prize),
+.tmbx .nowrap,
+.tmbx .gain {
+  white-space: nowrap;
+}
+.tmbx .t-amount:not(.is-prize) {
+  max-width: 100%;
+}
+/* Pause (same signal as the overlay): the time stays where it is, veiled under a big amber Ⅱ. */
+.tmbx .ringbig .pz {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+.tmbx .ringbig .pz i {
+  width: 10px;
+  height: 34px;
+  border-radius: 3px;
+  background: var(--t-hot);
+  box-shadow: 0 0 12px rgba(255, 179, 92, 0.4);
+}
+.tmbx .hero.is-paused .ringbig .pz {
+  display: flex;
+}
+.tmbx .hero.is-paused .ringbig .in {
+  opacity: 0.14;
+  filter: blur(1.5px);
+}
+.tmbx .hero.is-paused .t-ring .fg {
+  stroke: rgba(255, 179, 92, 0.55);
+}
+.tmbx .hero.is-paused .lbl {
+  color: var(--t-hot);
+}
+
+/* --- Currencies (shared/currency.js): amount first, short unit in the currency's colour, one line --- */
+.tmbx .cur-amt {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tmbx .cur-u {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.tmbx .t-amount .cur-u {
+  font-family: var(--t-num);
+  font-size: 0.52em;
+}
+/* Inside rows whose spans are blocks (history, « Dernière »): the amount group stays one inline line. */
+.tmbx .h .w .cur-amt,
+.tmbx .stage .last .cur-amt {
+  display: inline-flex;
+  overflow: visible;
+  color: inherit;
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  text-overflow: clip;
+}
+.tmbx .h .w .cur-amt .cur-u,
+.tmbx .stage .last .cur-amt .cur-u {
+  display: inline;
+  overflow: visible;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: normal;
+  text-transform: none;
+}

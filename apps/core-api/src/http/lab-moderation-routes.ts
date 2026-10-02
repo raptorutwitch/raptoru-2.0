@@ -5,6 +5,7 @@ import {
   LabRole,
   LabWalletRequest,
   RaffleActionRequest,
+  RaffleModerationRequest,
   LabChatMessage,
   LabStreamEvent,
   TtsRulesReset,
@@ -218,9 +219,21 @@ export function labModerationRoutes(
       pattern: /^\/v1\/lab\/moderation\/([^/]+)\/actions$/,
       auth: 'studio',
       handle: ({ params, body }) =>
-        mappedModeration(() =>
-          mod.act(channel(params), parse(LabModerationRequest, body)),
-        ),
+        mappedModeration(() => {
+          // Tombola actions of the console: the same Core command as Studio (raffle.act checks the
+          // caller's permissions and audits), carried by the D4 actions channel.
+          if (
+            (body as { command?: { action?: string } } | null)?.command
+              ?.action === 'raffle'
+          ) {
+            const req = parse(RaffleModerationRequest, body);
+            return raffle.act(channel(params), {
+              actor: req.actor,
+              command: req.command.command,
+            });
+          }
+          return mod.act(channel(params), parse(LabModerationRequest, body));
+        }),
     },
     // --- Tombola (extension session / entry) --------------------------------------------------------------
     {

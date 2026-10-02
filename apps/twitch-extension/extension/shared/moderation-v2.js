@@ -4,6 +4,7 @@
 // with the caller's permissions (roles + D4 grants per moderator) and audited by Core. No simulated
 // state, no business rule here, no localStorage. The same module is Studio's « Modération » console
 // (Studio = broadcaster), so Studio and the extension show the same moderation.
+import { moneyHtml } from './currency.js';
 
 const P = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -67,6 +68,7 @@ const PERMS = {
   perms: ['Gérer les permissions', 'Accorder ces permissions aux autres mods.'],
   sensitive: ['Sanctions sensibles', 'Bloquer tout Raptoru, ou plus d’une heure.'],
   words: ['Mots surveillés / bloqués', 'Modifier la liste de surveillance TTS.'],
+  raffle: ['Gérer la Tombola', '+ temps, pause, tirage immédiat, ajout manuel.'],
 };
 const ROLE_LABEL = { broadcaster: 'Streamer', supermod: 'Supermod', moderator: 'Mod', viewer: 'Viewer' };
 const ACTION = {
@@ -95,6 +97,14 @@ const ACTION = {
   raffle_open: 'Tombola ouverte',
   raffle_close: 'Tombola fermée',
   raffle_draw: 'Tirage Tombola',
+  raffle_extend: 'Tombola · + temps',
+  raffle_pause: 'Tombola · pause',
+  raffle_resume: 'Tombola · reprise',
+  raffle_cancel: 'Tombola · annulation',
+  raffle_add_participant: 'Tombola · ajout manuel',
+  raffle_remove_participant: 'Tombola · retrait',
+  raffle_no_participants: 'Tombola · aucun participant',
+  raffle_config: 'Configuration Tombola',
   config_update: 'Configuration TTS',
   config_reset: 'Configuration TTS (défaut)',
   lab_wallet_set: 'Wallet de test défini',
@@ -119,6 +129,10 @@ const ERRORS = {
   raffle_already_open: 'Une tombola est déjà ouverte.',
   no_open_raffle: 'Aucune tombola ouverte.',
   nothing_to_draw: 'Aucune tombola à tirer.',
+  viewer_blocked: 'Viewer bloqué de la Tombola.',
+  already_joined: 'Déjà inscrit à cette manche.',
+  not_a_participant: 'Ne participe pas à cette manche.',
+  invalid_phase: 'Impossible à ce stade de la manche.',
   network_error: 'Connexion perdue : réessaie.',
 };
 // History filters of the prototype (status / period): applied by Core.
@@ -407,7 +421,134 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
 
   // ------------------------------------------------------------------ left column
   const sdot = (st) => `<span class="sdot sdot--${st}"></span>`;
-  const raffleCur = () => overview?.raffle?.current ?? null;
+  // ------------------------------------------------------------------ Tombola V2 (phase G)
+  // The running round as Core shows it (same data as Studio's live view), the same Core commands as
+  // Studio carried by the D4 actions channel; Core checks every permission and audits.
+  const rv2 = () => overview?.raffle_v2 ?? null;
+  const rRound = () => rv2()?.round ?? null;
+  const BEFORE_DRAW = ['opening', 'open', 'paused'];
+  const SRC = { chat: 'Chat', extension: 'Extension', manual: 'Manuel' };
+  const capital = (t) => (t ? t[0].toUpperCase() + t.slice(1) : '');
+  const titleOf = (r, k) => (r?.titles?.[k] ?? []).join(' ').trim();
+  function raffleSummary() {
+    const r = rRound();
+    if (!r) return 'Calme';
+    if (r.status === 'paused') return `En pause · ${r.participants}`;
+    if (BEFORE_DRAW.includes(r.status)) return `${capital(r.titles?.open?.[1]) || esc(r.titles?.name ?? '')} · ${r.participants}`;
+    if (r.status === 'cancelled') return esc(capital(r.titles?.cancelled?.[1]));
+    return r.outcome === 'no_participants' ? 'Aucun participant' : 'Tirage';
+  }
+  function raffleBody() {
+    const v = rv2();
+    if (!v) return '<div class="empty">Connexion au Core…</div>';
+    const r = v.round;
+    let b = '';
+    if (r) {
+      const before = BEFORE_DRAW.includes(r.status);
+      const st = r.status === 'paused' ? titleOf(r, 'paused') : before ? titleOf(r, 'open') : r.status === 'cancelled' ? titleOf(r, 'cancelled') : r.status === 'drawing' ? 'Tirage en cours' : r.outcome === 'no_participants' ? titleOf(r, 'ended') : 'Résultat à l’écran';
+      const left = Math.max(0, Math.min(r.duration_ms, r.remaining_ms));
+      const timer = r.status === 'paused' ? `<span class="timer tnum">${mmss(left)}</span><span class="muted">figé</span>` : before ? `<span class="timer tnum" data-until="${Date.now() + left}">${mmss(left)}</span>` : '';
+      const what = r.kind === 'giveaway' ? esc(r.prize ?? '') : moneyHtml(r.amount, r.currency);
+      b += `<div class="tmbm tmbm--${esc(r.status)}"><div class="tmbm__top"><b class="tmbm__st">${esc(st)}</b><span class="grow"></span>${timer}</div>
+        <div class="tmbm__nums"><span><b class="tnum">${r.participants}</b> participant${r.participants > 1 ? 's' : ''}</span><span class="cost">${what}</span>${r.origin === 'automatic' ? '<span class="muted">auto</span>' : ''}</div></div>`;
+      if (before) {
+        const M = can('raffle.manage');
+        const btn = (a, label, icon) => (M ? `<button class="btn btn--sm" data-act="${a}">${ic(icon)}${label}</button>` : `<button class="btn btn--sm" data-act="locked" data-perm="raffle">${ic('lock')}${label}</button>`);
+        b += `<div class="tmbm__acts">${btn('raffle-extend', '+30 s', 'clock')}${r.status === 'paused' ? btn('raffle-resume', 'Reprendre', 'play') : btn('raffle-pause', 'Pause', 'pause')}${btn('raffle-draw', 'Tirer', 'raffle')}<span class="grow"></span>
+          ${can('raffle.moderate') ? `<button class="btn btn--sm btn--danger" data-act="raffle-cancel">${ic('x')}Annuler</button>` : ''}</div>`;
+      }
+      b += sec(`Participants · ${r.participants}`, before ? (can('raffle.manage') ? '<button class="linkish" data-act="raffle-add">+ Ajouter</button>' : `<button class="linkish" data-act="locked" data-perm="raffle">${ic('lock')}Ajouter</button>`) : '');
+      b += r.entries.length
+        ? `<div class="rows">${r.entries
+            .map(
+              (e) => `<div class="row">${av(e.viewer_id, e.display_name, 'xs')}${who(e.viewer_id, e.display_name)}<span class="srcpill srcpill--${esc(e.source)}">${SRC[e.source] ?? esc(e.source)}</span><span class="grow"></span><span class="meta tnum hide-narrow">${hhmm(e.created_at)}</span>
+              ${before && can('raffle.moderate') ? `<button class="icon-btn icon-btn--xs trash" data-act="raffle-remove" data-v="${esc(e.viewer_id)}" data-name="${esc(e.display_name)}" data-tip="Retirer de la manche" aria-label="Retirer ${esc(e.display_name)}">${ic('x')}</button>` : ''}</div>`,
+            )
+            .join('')}</div>`
+        : '<div class="empty">Aucun participant pour l’instant</div>';
+    } else b += '<div class="tmbm tmbm--idle"><b>Aucune manche en cours</b><span class="muted">Lancement depuis Studio (manuel ou automatique).</span></div>';
+    // D4 « Dernier tirage »: the winners, their payout and their Jetons movement (drawer).
+    const drawn = r?.winners?.length ? r : v.last && (!r || v.last.raffle_id !== r.raffle_id) ? v.last : null;
+    if (drawn) {
+      const give = drawn.kind === 'giveaway';
+      const res = drawn.status === 'cancelled' ? esc(titleOf(drawn, 'cancelled')) : drawn.outcome === 'no_participants' ? `Aucun participant · ${hhmm(drawn.opened_at)}` : '';
+      b += sec(drawn === r ? 'Gagnants' : `Dernier tirage · ${esc(drawn.titles?.name ?? '')}`) +
+        (res
+          ? `<div class="empty">${res}</div>`
+          : `<div class="rows">${drawn.winners
+              .map((w) =>
+                w.ledger_id
+                  ? `<button class="j" data-act="open-ledger" data-id="${esc(w.ledger_id)}" data-v="${esc(w.viewer_id)}"><b class="j__amt plus tnum">${moneyHtml(w.amount, drawn.currency, { sign: '+ ' })}</b><span class="j__src">${esc(w.display_name)} · gagnant</span>${w.payout_status === 'paid' ? `<span class="paid">${ic('check')}payé</span>` : `<span class="muted">${w.payout_status === 'failed' ? 'échec' : 'en cours'}</span>`}<span class="meta tnum">${hhmm(w.paid_at)}</span></button>`
+                  : `<div class="row">${av(w.viewer_id, w.display_name, 'xs')}${who(w.viewer_id, w.display_name)}<span class="grow"></span><span class="muted">${give ? 'gagne le lot' : esc(w.payout_status)}</span></div>`,
+              )
+              .join('')}</div>`);
+    }
+    return b + '<p class="fine">Lancement et réglages : Studio. Ici : la manche en cours.</p>';
+  }
+  /** Manual entry (Core: through a pause, never over a block unless forced with « Sanctions sensibles »). */
+  async function raffleAdd(v, name, force = false) {
+    try {
+      await client.modV2Act({ action: 'raffle', command: { action: 'add_participant', viewer_id: v, display_name: name, force, ...(force ? { reason: 'ajout forcé malgré le blocage' } : {}) } });
+      toast(`${esc(name)} ajouté à la manche`, true);
+      onChange?.();
+    } catch (e) {
+      if ((e?.code ?? e?.details?.error) === 'viewer_blocked' && can('raffle.force'))
+        return choiceDialog({
+          kicker: 'Action sensible',
+          title: 'Viewer bloqué de la Tombola',
+          lead: `<b>${esc(name)}</b> est bloqué. Forcer son inscription ? L’action est tracée.`,
+          choices: [],
+          confirm: 'Je force l’inscription malgré le blocage',
+          okLabel: 'Forcer',
+          danger: true,
+          run: () => void raffleAdd(v, name, true),
+        });
+      toast((e?.code ?? e?.details?.error) === 'viewer_blocked' ? `${ic('lock')} Viewer bloqué : forcer demande « Sanctions sensibles »` : errorText(e), false);
+    }
+    await refresh();
+    const vid = viewerInView();
+    if (vid) await loadViewer(vid);
+  }
+  let rqTimer = null;
+  function raffleAddDialog() {
+    dialog({
+      state: { q: '', results: [], asked: null },
+      render(s) {
+        if (s.q !== s.asked) {
+          s.asked = s.q;
+          win.clearTimeout(rqTimer);
+          rqTimer = win.setTimeout(async () => {
+            try {
+              s.results = (await client.modV2(`search?q=${encodeURIComponent(s.q.trim().slice(0, 40))}`)).viewers ?? [];
+            } catch {
+              s.results = [];
+            }
+            const dl = dialogs.find((x) => x.state === s);
+            if (dl) refreshDialog(dl);
+          }, 180);
+        }
+        const joined = new Set((rRound()?.entries ?? []).map((e) => e.viewer_id));
+        return {
+          kicker: rRound()?.titles?.name ?? 'Tombola',
+          title: 'Ajouter un participant',
+          lead: 'Inscription manuelle, tracée. Passe une pause ; un viewer bloqué est refusé (forcer : « Sanctions sensibles »).',
+          body: `<label class="search">${ic('search')}<input data-dlg="q" placeholder="Pseudo…" value="${esc(s.q)}" autocomplete="off"></label>
+            <div class="rows" data-slot="res">${
+              s.results
+                .map((x) =>
+                  joined.has(x.viewer_id)
+                    ? `<div class="row">${av(x.viewer_id, x.display_name, 'xs')}<b class="ellipsis">${esc(x.display_name)}</b><span class="grow"></span><span class="muted">déjà inscrit</span></div>`
+                    : `<button class="row" data-act="raffle-add-pick" data-v="${esc(x.viewer_id)}" data-name="${esc(x.display_name)}">${av(x.viewer_id, x.display_name, 'xs')}<b class="ellipsis">${esc(x.display_name)}</b><span class="grow"></span>${x.restriction === 'block' ? '<span class="kwarn">bloqué</span>' : ''}<span class="linkish">Ajouter</span></button>`,
+                )
+                .join('') || '<div class="empty">Aucun viewer</div>'
+            }</div>`,
+          foot: '<button class="btn btn--ghost" data-act="dlg-close">Fermer</button>',
+        };
+      },
+      ok() {},
+    });
+    win.setTimeout(() => node.querySelector('.dialog [data-dlg="q"]')?.focus(), 60);
+  }
   function summary(m) {
     const st = stateOf(m);
     const q0 = waiting(m);
@@ -420,7 +561,7 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
       const b = list('bonk', 'recent')[0];
       text = b ? `Dernier : <span data-ago="${esc(b.created_at)}">${ago(b.created_at)}</span>` : 'Calme';
     }
-    if (m === 'raffle') text = raffleCur()?.status === 'open' ? `Ouverte · ${raffleCur().participants}` : 'Fermée';
+    if (m === 'raffle') text = raffleSummary();
     if (st !== 'active') text = `<span class="sword sword--${st}">${STATE[st]}</span>${q0.length ? ` · ${q0.length} en attente` : ''}`;
     return { st, text, hits };
   }
@@ -527,20 +668,7 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
       b += `<p class="explain">${ic('bonk')}<span><b>Instantané.</b> Chaque bonk part tout de suite sur le stream : pas de file.</span></p>`;
       b += sec('Derniers bonks') + (r.length ? `<div class="rows">${r.map((i) => `<div class="row row--bonk">${av(i.viewer_id, i.viewer_display_name, 'xs')}${who(i.viewer_id, i.viewer_display_name)}<span class="emote">${emoteImg(i)}</span><span class="grow"></span><span class="meta" data-ago="${esc(i.created_at)}">${ago(i.created_at)}</span></div>`).join('')}</div>` : '<div class="empty">Aucun bonk</div>');
     } else {
-      const r = overview.raffle ?? {};
-      const cur = r.current;
-      const isOpen = cur?.status === 'open';
-      const entries = r.recent_entries ?? [];
-      b += `<div class="raffle"><div class="raffle__top"><b>${isOpen ? 'Ouverte' : 'Fermée'}</b>${isOpen ? `<span class="muted">ferme dans <b class="tnum" data-until="${Date.parse(cur.ends_at)}">${mmss(Date.parse(cur.ends_at) - Date.now())}</b></span>` : cur?.status === 'closed' ? '<span class="muted">en attente du tirage</span>' : ''}</div>
-        <div class="raffle__nums"><span><b>${cur?.participants ?? 0}</b> participants</span><span><b>${cur?.participants ?? 0}</b> tickets</span><span>jackpot <b class="cost">${fmt(cur?.jackpot ?? 0)} J</b></span></div></div>`;
-      const d = r.last_draw;
-      b += sec('Dernier tirage') + (d
-        ? d.winners.length
-          ? d.winners.map((w) => `<button class="j" data-act="open-ledger" data-id="${esc(w.ledger_id)}" data-v="${esc(w.viewer_id)}"><b class="j__amt plus tnum">+ ${fmt(w.amount)} J</b><span class="j__src">${esc(w.display_name)} · gagnant</span><span class="paid">${ic('check')}payé</span><span class="meta tnum">${hhmm(d.drawn_at)}</span></button>`).join('')
-          : `<div class="empty">Aucun participant · ${hhmm(d.drawn_at)}</div>`
-        : '<div class="empty">Aucun tirage</div>');
-      b += sec('Derniers tickets') + (entries.length ? `<div class="rows">${entries.slice(0, 4).map((i) => `<button class="h" data-act="open-ix" data-id="${esc(i.interaction_id)}"><span class="h__t tnum">${hhmm(i.created_at)}</span>${av(i.viewer_id, i.viewer_display_name, 'xs')}<span class="h__what"><b>${esc(i.viewer_display_name)}</b> · ×${i.tickets ?? 1}</span><span class="meta tnum">${money({ ...i, module: 'raffle' })}</span></button>`).join('')}</div>` : '<div class="empty">Aucun ticket</div>');
-      b += '<p class="fine">Ouverture, tirage et fermeture : Studio.</p>';
+      b += raffleBody();
     }
     return { title: `<span class="ttl-ic" style="--c:${MODS[m].c}">${ic(m)}</span>${MODS[m].label}`, headEnd, body: b };
   }
@@ -566,6 +694,14 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
         <button class="icon-btn icon-btn--xs" data-act="lift" data-v="${esc(id)}" data-kind="${l.kind}" data-m="${esc(l.module)}" data-tip="Retirer la restriction" aria-label="Retirer la restriction">${ic('x')}</button></div>`,
         )
         .join('')}</div>`;
+    const rp = v.raffle;
+    if (rp) {
+      const label = rp.joined ? `Participe à la manche · ${SRC[rp.source] ?? ''}` : rp.removed ? 'Retiré de la manche en cours' : 'Ne participe pas à la manche en cours';
+      const btn = rp.joined
+        ? can('raffle.moderate') ? `<button class="btn btn--sm" data-act="raffle-remove" data-v="${esc(id)}" data-name="${esc(name)}">${ic('x')}Retirer</button>` : ''
+        : can('raffle.manage') ? `<button class="btn btn--sm" data-act="raffle-add" data-v="${esc(id)}" data-name="${esc(name)}">Ajouter</button>` : `<button class="btn btn--sm" data-act="locked" data-perm="raffle">${ic('lock')}Ajouter</button>`;
+      b += `<div class="tmbv${rp.joined ? ' is-in' : ''}"><span class="mini" style="--c:${MODS.raffle.c}">${ic('raffle')}</span><span class="grow">${label}</span>${btn}</div>`;
+    }
     b += `<div class="vact">
       <button class="btn btn--primary" data-act="block" data-v="${esc(id)}" data-m="${ctxM}" ${staff ? 'disabled data-tip="Membre de l’équipe"' : ''}>${ic('ban')}Bloquer</button>
       <button class="btn" data-act="cooldown" data-v="${esc(id)}" data-m="${ctxM}" ${staff ? 'disabled' : ''}>${ic('clock')}Cooldown</button>
@@ -1296,6 +1432,35 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
           })
         : acts.locked({ perm: 'globalPause' }),
     'global-resume': () => (has('globalPause') ? void act({ action: 'global_pause', paused: false }, 'Pause globale levée') : acts.locked({ perm: 'globalPause' })),
+    'raffle-extend': () => void act({ action: 'raffle', command: { action: 'extend', seconds: 30 } }, '+30 s'),
+    'raffle-pause': () => void act({ action: 'raffle', command: { action: 'pause', reason: 'pause depuis la modération' } }, 'Manche en pause'),
+    'raffle-resume': () => void act({ action: 'raffle', command: { action: 'resume' } }, 'Manche reprise'),
+    'raffle-draw': () =>
+      choiceDialog({
+        kicker: rRound()?.titles?.name ?? 'Tombola',
+        title: 'Tirer maintenant ?',
+        lead: 'Les inscriptions ferment et le tirage démarre tout de suite.',
+        choices: [],
+        okLabel: 'Tirer maintenant',
+        run: () => void act({ action: 'raffle', command: { action: 'draw_now', reason: 'tirage depuis la modération' } }, 'Tirage lancé'),
+      }),
+    'raffle-cancel': () =>
+      choiceDialog({
+        kicker: 'Action définitive',
+        title: 'Annuler la manche ?',
+        lead: 'Personne n’est payé. L’annulation s’affiche sur le stream et dans l’Extension.',
+        choices: [],
+        confirm: 'Je confirme l’annulation',
+        okLabel: 'Annuler la manche',
+        danger: true,
+        run: () => void act({ action: 'raffle', command: { action: 'cancel', reason: 'annulée depuis la modération' } }, 'Manche annulée'),
+      }),
+    'raffle-remove': (d) => void act({ action: 'raffle', command: { action: 'remove_participant', viewer_id: d.v, reason: 'retiré par la modération' } }, `${esc(d.name)} retiré de la manche`),
+    'raffle-add': (d) => (d.v ? void raffleAdd(d.v, d.name) : raffleAddDialog()),
+    'raffle-add-pick': (d) => {
+      closeDialog();
+      void raffleAdd(d.v, d.name);
+    },
     'nav-back': () => pop(),
     'close-viewer': () => {
       closeDrawers();

@@ -24,7 +24,7 @@ export const esc = (s) =>
 export const fmt = (n) =>
   Number(n)
     .toLocaleString('fr-FR')
-    .replaceAll(String.fromCharCode(0x202f), ' ');
+    .replaceAll(String.fromCharCode(0x202f), String.fromCharCode(0xa0));
 export const hueOf = (n) =>
   [...String(n)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 9);
 

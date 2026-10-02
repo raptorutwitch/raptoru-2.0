@@ -2327,3 +2327,45 @@ body {
     stroke-dasharray: 77.4 351.86;
   }
 }
+
+/* --- Pause, final: the Ⅱ lies over the frozen time --------------------------------------------- */
+/* The digits keep their exact place and size (nothing moves or shrinks), veiled under a big amber Ⅱ
+   centred in the ring; steady (no pulse). Ring, title and dot share the same amber signal. */
+.tb.paused .op-c4 .hero-ring .num > * {
+  grid-area: 1 / 1;
+}
+.tb.paused .op-c4 .hero-ring .sec {
+  position: relative;
+  top: 0.04em;
+  left: auto;
+  right: auto;
+  min-width: 1.2em;
+  height: 1em;
+  color: var(--t-ink);
+  font-size: 62px;
+  opacity: 0.13;
+  filter: blur(2px);
+  animation: none;
+}
+.tb.paused .op-c4 .hero-ring .u {
+  display: none;
+}
+.tb.paused .op-c4 .hero-ring .pz {
+  z-index: 1;
+  display: flex;
+  align-self: center;
+  justify-self: center;
+  gap: 12px;
+  margin: 0;
+  animation: none;
+}
+.tb.paused .op-c4 .hero-ring .pz i {
+  width: 13px;
+  height: 46px;
+  border-radius: 3px;
+  background: var(--t-hot);
+  box-shadow: 0 0 14px rgba(255, 179, 92, 0.45);
+}
+.tb.paused .t-ring .fg {
+  stroke: rgba(255, 179, 92, 0.55);
+}
