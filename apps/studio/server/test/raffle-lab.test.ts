@@ -26,7 +26,7 @@ afterEach(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
 });
 
-async function setup() {
+async function setup(overlayDir?: string) {
   dir = await mkdtemp(join(tmpdir(), 'raffle-lab-'));
   const calls: { path: string; body?: unknown }[] = [];
   server = createServer();
@@ -42,7 +42,7 @@ async function setup() {
       }) as never,
       origin,
       dir: join(dir, 'raffle-lab'),
-      overlayDir: join(dir, 'overlay'),
+      overlayDir: overlayDir ?? join(dir, 'overlay'),
     });
   let rt = await make();
   server.on('request', (req, res) => {
@@ -186,6 +186,27 @@ describe('Tombola single OBS source', () => {
     expect(
       await (await fetch(`${f.origin}/raffle-lab/overlay.html`)).text(),
     ).toBe('<p>vrai overlay</p>');
+  });
+
+  it('serves the real overlay (page, module scripts, generated stylesheet) from raffle-overlay/', async () => {
+    const f = await setup(join(import.meta.dirname, '..', 'raffle-overlay'));
+    const page = await fetch(`${f.origin}/raffle-lab/overlay.html`);
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain('<script type="module" src="overlay.js">');
+    expect(html).not.toContain('phase F');
+    for (const [file, type] of [
+      ['overlay.js', 'text/javascript'],
+      ['model.js', 'text/javascript'],
+      ['kit.js', 'text/javascript'],
+      ['overlay.css', 'text/css'],
+    ])
+      expect(
+        (await fetch(`${f.origin}/raffle-lab/${file}`)).headers.get(
+          'content-type',
+        ),
+      ).toContain(type);
+    expect((await fetch(`${f.origin}/raffle-lab/other.js`)).status).toBe(404);
   });
 
   it('refuses another origin and the API without the Studio header', async () => {

@@ -1358,3 +1358,195 @@ main.tab-flush {
   padding-top: 12px;
   border-top: 1px solid var(--t-line);
 }
+/* Phase F: overlay + Extension side by side (anti-spoil calibration), instruction text preview. */
+.tmb .cmp-btn {
+  height: 30px;
+  margin-left: 12px;
+  font-size: 12.5px;
+}
+.tmb .cmp-btn.on {
+  border-color: var(--t-ext);
+  color: #ffd0da;
+}
+.tmb .cmp-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.tmb .cmp-row .preview {
+  flex: 1;
+  min-width: 0;
+}
+.tmb .cmp-ext {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+}
+.tmb .cmp-ext[hidden] {
+  display: none;
+}
+.tmb .cmp-ext iframe {
+  width: 318px;
+  height: 496px;
+  border: 1px solid var(--t-line);
+  border-radius: 12px;
+  background: #0a0d13;
+}
+/* Same values as the overlay's C4 block (overlay.css: .op-c4, .people, .pc, .cmd, .op .hint). */
+.tmb .hintpv-wrap {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 14px;
+  background: repeating-conic-gradient(#171b22 0 25%, #1d222b 0 50%) 0 0 / 24px
+    24px;
+}
+.tmb .hintpv-wrap > .fine {
+  max-width: 420px;
+}
+.tmb .pv-c4 {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  width: 216px;
+  padding: 13px 14px 12px;
+  border: 1px solid var(--t-line-2);
+  border-radius: 20px;
+  background: linear-gradient(
+    180deg,
+    rgba(16, 22, 31, 0.9),
+    rgba(10, 14, 20, 0.9)
+  );
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+}
+.tmb .pv-people {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+}
+.tmb .pv-stack {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+}
+.tmb .pv-stack .pp {
+  --s: 27px;
+  --pp-ring-w: 1.5px;
+  margin-left: -8px;
+}
+.tmb .pv-stack .pp:first-child {
+  margin-left: 0;
+}
+.tmb .pv-pc {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  color: #b9f5ec;
+  font: 800 23px/1 var(--t-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tmb .pv-pc svg {
+  width: 21px;
+  height: 21px;
+  color: var(--t-teal);
+  stroke-width: 2.4;
+}
+.tmb .pv-cmd {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--t-teal);
+  color: #032420;
+  font: 700 13px/1 var(--t-num);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.tmb .pv-hint {
+  max-width: 200px;
+  color: var(--t-muted);
+  font: 600 13px/1.3 var(--t-font);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.tmb .pv-hint .hl {
+  padding: 1px 6px;
+  border-radius: 6px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* Custom message style bar (a few choices, not a full editor). */
+.tmb .hs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 12px;
+}
+.tmb .hs-grp {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.tmb .hs-lbl {
+  margin-right: 4px;
+  color: var(--t-muted);
+  font: 600 11px/1 var(--t-num);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.tmb .hs-sw {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--t-line-2);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.tmb .hs-sw.on {
+  box-shadow:
+    0 0 0 2px #0c0f14,
+    0 0 0 4px var(--t-teal);
+}
+.tmb .hs-pick {
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--t-line-2);
+  border-radius: 7px;
+  background: none;
+  cursor: pointer;
+}
+.tmb .hs-tg,
+.tmb .hs-emo {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  border: 1px solid var(--t-line);
+  border-radius: 8px;
+  background: none;
+  color: var(--t-muted);
+  font-size: 15px;
+  cursor: pointer;
+}
+.tmb .hs-tg.on {
+  border-color: var(--t-teal);
+  background: var(--t-teal-soft);
+  color: #fff;
+}
+.tmb .hs-emo:hover,
+.tmb .hs-tg:hover {
+  border-color: var(--t-line-2);
+}

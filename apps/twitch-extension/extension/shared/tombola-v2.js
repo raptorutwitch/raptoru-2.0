@@ -64,11 +64,11 @@ const REFUSAL = {
   identity_required: 'Partage ton identité Twitch pour participer depuis l’Extension',
   extension_join_disabled: 'Inscription depuis le chat uniquement',
   global_pause: 'Raptoru est en pause · inscriptions suspendues',
-  module_disabled: 'Tombola désactivée',
-  raffle_paused: 'Tombola en pause par la modération',
-  round_paused: 'Tombola en pause · elle reprend bientôt',
-  viewer_blocked: 'Tombola indisponible pour ton compte',
-  entry_removed: 'Retiré de cette Tombola par la modération',
+  module_disabled: 'Inscriptions désactivées',
+  raffle_paused: 'Inscriptions en pause par la modération',
+  round_paused: 'En pause · reprise bientôt',
+  viewer_blocked: 'Inscription indisponible pour ton compte',
+  entry_removed: 'Retiré par la modération',
   raffle_closed: 'Inscriptions fermées',
 };
 /** Refusals after which the chat command still works (the others refuse the chat too). */
@@ -78,7 +78,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   const win = document.defaultView;
   const node = document.createElement('div');
   node.className = 'tmbx';
-  node.innerHTML = `<div class="head"><button class="ib" type="button" data-act="back" title="Retour au Hub" aria-label="Retour au Hub">${ic('chevL')}</button><span class="ttl">${ic('ticket')}Tombola</span><span class="grow"></span>
+  node.innerHTML = `<div class="head"><button class="ib" type="button" data-act="back" title="Retour au Hub" aria-label="Retour au Hub">${ic('chevL')}</button><span class="ttl">${ic('ticket')}<span data-slot="hname"></span></span><span class="grow"></span>
       <button class="ib" type="button" data-act="history" title="Historique du stream" aria-label="Historique du stream">${ic('history')}</button>
       <span class="wallet" data-slot="wallet">${ic('coin')}<span>—</span></span></div><div class="body"></div>`;
   const body = node.querySelector('.body');
@@ -100,6 +100,16 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   const slotHtml = new WeakMap();
 
   const round = () => data?.round ?? null;
+  /** Core's titles of a round (fallback only while an older Core answers). */
+  const titles = (r) =>
+    r?.titles ?? {
+      name: 'Tombola',
+      open: ['Tombola', 'ouverte'],
+      running: ['Tombola', 'en cours'],
+      paused: ['Tombola', 'en pause'],
+      ended: ['Tombola', 'terminée'],
+      cancelled: ['Tombola', 'annulée'],
+    };
   const phase = () => data?.phase ?? null;
   const now = () => Date.now();
 
@@ -132,10 +142,12 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     return 'none';
   }
   function label(r) {
-    if (r.paused) return `${ic('clock')} Tombola en pause`;
-    if (r.kind === 'super') return `<span class="t-super">${ic('star')} Super Tombola</span>`;
-    if (r.kind === 'giveaway') return `${ic('gift')} Giveaway en cours`;
-    return `${ic('ticket')} Tombola en cours`;
+    // Core's titles (the same as the overlay's, from Studio's labels).
+    const t = (s) => esc(titles(r)[s].join(' ').trim());
+    if (r.paused) return `${ic('clock')} ${t('paused')}`;
+    if (r.kind === 'super') return `<span class="t-super">${ic('star')} ${esc(titles(r).name)}</span>`;
+    if (r.kind === 'giveaway') return `${ic('gift')} ${t('running')}`;
+    return `${ic('ticket')} ${t('running')}`;
   }
   function amountHtml(r, cls = 'amt') {
     if (r.kind === 'giveaway') return `<span class="t-amount ${cls}" style="font-family:var(--t-font);font-size:24px">${esc(r.prize)}</span>`;
@@ -220,15 +232,15 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     return `<div class="stage gold"><span class="t-full">${ic('crown')} Full oseille</span>
         <span class="orb">${pp(w.display_name, null, w.avatar_url)}</span>
         <span class="who">${esc(w.display_name)}</span><span class="kick">rafle ${fmt(w.amount)} ${cur}</span>
-        <span class="rule"></span>${r.joined ? '<h3>Pas cette fois</h3>' : ''}<p>Un seul gagnant sur ${n}. La prochaine peut tomber à tout moment.</p></div>`;
+        <span class="rule"></span>${r.joined ? '<h3>Pas cette fois</h3>' : ''}<p>Un seul gagnant sur ${n}. Prochaine occasion à tout moment.</p></div>`;
   }
   function noParticipantView() {
-    return `<div class="stage"><span class="orb quiet">${ic('users')}</span><h3>Aucun participant cette fois !</h3>
-      <p>Personne ne s’est inscrit : pas de tirage, aucun gagnant.<br>La prochaine peut tomber à tout moment.</p></div>`;
+    return `<div class="stage"><span class="orb quiet">${ic('users')}</span><h3>${esc(data?.empty_message ?? 'Aucun participant cette fois !')}</h3>
+      <p>Personne ne s’est inscrit : pas de tirage, aucun gagnant.<br>Prochaine occasion à tout moment.</p></div>`;
   }
   function cancelledView() {
     return `<div class="stage"><span class="orb cancel"><svg viewBox="0 0 40 40"><path d="M12 12 L28 28"/><path d="M28 12 L12 28"/></svg></span>
-      <h3>Tombola annulée</h3><p>Annulée par l’équipe de modération.<br>Rien n’a été débité.</p></div>`;
+      <h3>${esc(titles(round()).cancelled.join(' ').trim())}</h3><p>Annulation par l’équipe de modération.<br>Rien n’a été débité.</p></div>`;
   }
   function resultView(r) {
     if (r.outcome === 'no_participants' || !r.winners?.length) return noParticipantView();
@@ -239,10 +251,10 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     const giveaway = r.kind === 'giveaway';
     const cur = esc(r.currency?.short_label ?? '');
     const badge = r.kind === 'super'
-      ? `<span class="t-super">${ic('star')} Super Tombola</span>`
+      ? `<span class="t-super">${ic('star')} ${esc(titles(r).name)}</span>`
       : giveaway
-        ? `<span class="t-pill">${ic('gift')}Giveaway</span>`
-        : '<span class="t-caps" style="color:var(--t-teal);font-size:11px">Résultat de la Tombola</span>';
+        ? `<span class="t-pill">${ic('gift')}${esc(titles(r).name)}</span>`
+        : `<span class="t-caps" style="color:var(--t-teal);font-size:11px">Résultat · ${esc(titles(r).name)}</span>`;
     const each = giveaway ? `Lot : ${esc(r.prize)}` : `${fmt(r.winners[0].amount)} ${cur} chacun`;
     const top = r.won
       ? `<div class="result win ${gold ? 'gold' : ''}">${badge}<h3>Tu as gagné !</h3>${giveaway ? `<span class="prize">${esc(r.prize)}</span><p>Le streamer te remettra ton lot.</p>` : `<span class="t-amount big won-gain">+ ${fmt(r.my_gain)}<small>${esc(r.currency?.label ?? '')}</small></span><p>Crédité sur ton wallet.</p>`}</div>`
@@ -260,28 +272,28 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   function lastBlock() {
     const h = data?.history?.[0];
     if (!h) return '';
-    const tag = h.status === 'cancelled' ? 'Annulée' : h.is_full ? 'Full oseille' : h.kind === 'super' ? 'Super' : h.kind === 'giveaway' ? 'Giveaway' : 'Tombola';
+    const tag = h.status === 'cancelled' ? `${esc(h.name)} · annulation` : h.is_full ? 'Full oseille' : esc(h.name ?? 'Tombola');
     const end = h.status === 'cancelled' ? '' : h.winners.length ? ` · ${plural(h.winners.length, 'gagnant')}` : ' · aucun participant';
     return `<div class="last"><span>Dernière · ${hhmm(h.at)}</span><b>${tag} · ${what(h)}${end}</b><a data-act="history">Historique du stream</a></div>`;
   }
   function noneView() {
-    return `<div class="stage"><span class="orb quiet">${ic('ticket')}</span><h3>Aucune Tombola en cours</h3>
-      <p>Elle peut tomber à tout moment pendant le stream.<br>Tu pourras t’inscrire ici ou avec <b style="color:#b9f5ec">${esc(data?.join_command ?? '!join')}</b>.</p>
+    return `<div class="stage"><span class="orb quiet">${ic('ticket')}</span><h3 data-slot="idletitle">${esc(data?.idle_title ?? 'Aucune Tombola en cours')}</h3>
+      <p>Ça peut tomber à tout moment pendant le stream.<br>Tu pourras t’inscrire ici ou avec <b style="color:#b9f5ec">${esc(data?.join_command ?? '!join')}</b>.</p>
       <div data-slot="last">${lastBlock()}</div></div>`;
   }
   function histRow(h) {
     const tag = h.status === 'cancelled'
-      ? '<span class="cx">Annulée</span>'
+      ? '<span class="cx">Annulation</span>'
       : h.is_full
         ? '<span class="t-full">Full</span>'
         : h.kind === 'super'
           ? '<span class="t-super">Super</span>'
           : h.kind === 'giveaway'
-            ? `<span class="t-pill">${ic('gift')}Giveaway</span>`
+            ? `<span class="t-pill">${ic('gift')}${esc(h.name ?? 'Giveaway')}</span>`
             : '';
     const names = h.winners.map((w) => w.display_name);
     const sub = h.status === 'cancelled'
-      ? 'Annulée par la modération · rien n’a été débité'
+      ? 'Annulation par la modération · rien n’a été débité'
       : names.length
         ? `${plural(names.length, 'gagnant')} · ${h.participants} participants · ${esc(names.slice(0, 3).join(', '))}${names.length > 3 ? '…' : ''}`
         : 'Aucun participant';
@@ -290,16 +302,16 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   }
   function historyRows() {
     const list = data?.history ?? [];
-    return list.length ? list.map(histRow).join('') : '<p class="fine">Aucune Tombola pour l’instant sur ce stream.</p>';
+    return list.length ? list.map(histRow).join('') : '<p class="fine">Rien pour l’instant sur ce stream.</p>';
   }
   function historyView() {
     const n = data?.history?.length ?? 0;
-    return `<div class="sec" style="margin-top:0" data-slot="hcount">Ce stream · ${plural(n, 'Tombola')}</div><div class="hist" data-slot="hist">${historyRows()}</div>
-      <p class="fine" style="margin-top:12px">Seules les Tombolas du stream en cours sont affichées.</p>`;
+    return `<div class="sec" style="margin-top:0" data-slot="hcount">Ce stream · ${n}</div><div class="hist" data-slot="hist">${historyRows()}</div>
+      <p class="fine" style="margin-top:12px">Seul le stream en cours est affiché.</p>`;
   }
   function bodyHtml(key) {
     const r = round();
-    if (key === 'loading') return '<p class="fine">Chargement de la Tombola…</p>';
+    if (key === 'loading') return '<p class="fine">Chargement…</p>';
     if (key === 'history') return historyView();
     if (key === 'none') return noneView();
     if (key.startsWith('participants:')) return participantsSec(r);
@@ -337,6 +349,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   }
   function render() {
     if (destroyed) return;
+    setSlot('hname', data ? esc(round() ? titles(round()).name : (data.idle_name ?? 'Tombola')) : '');
     node.querySelector('[data-act="history"]').classList.toggle('on', view === 'history');
     const key = screenKey();
     if (key !== shownKey) {
@@ -375,9 +388,10 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       setSlot('chips', chips());
       setSlot('rows', rows(r));
     } else if (key === 'history') {
-      setSlot('hcount', `Ce stream · ${plural(data?.history?.length ?? 0, 'Tombola')}`);
+      setSlot('hcount', `Ce stream · ${data?.history?.length ?? 0}`);
       setSlot('hist', historyRows());
     } else if (key === 'none') {
+      setSlot('idletitle', esc(data?.idle_title ?? 'Aucune Tombola en cours'));
       setSlot('last', lastBlock());
     }
   }

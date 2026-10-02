@@ -20,6 +20,8 @@ import {
 import {
   autoWinners,
   DEFAULT_RAFFLE_CONFIG,
+  eventTitles,
+  idleTitle,
   randomJackpot,
   revealMs,
   split,
@@ -830,7 +832,10 @@ describe('Tombola V2 read models', () => {
   it('overlay snapshot is reload-safe: same state at any time, the opening is not replayed', async () => {
     const { config, act, joinExt, after, raffle, core } = await lab();
     await config({
-      overlay_hint: { mode: 'custom', text: 'Tape !octobre pour participer' },
+      overlay_hint: {
+        mode: 'custom',
+        text: 'Tape !octobre pour participer',
+      } as RaffleConfig['overlay_hint'], // saved without a style (older config)
     });
     await act({ action: 'launch' });
     await after(2_000 + 37_000);
@@ -848,9 +853,24 @@ describe('Tombola V2 read models', () => {
       CH,
     );
     expect(reloaded).toEqual(await raffle.snapshot(CH));
+    // A configuration saved before the overlay texts gets the current ones.
+    expect(reloaded.labels).toEqual({
+      event_name: null,
+      event_gender: 'f',
+      empty_title: null,
+      empty_message: 'Aucun participant cette fois !',
+    });
     expect(reloaded.overlay_hint).toEqual({
       mode: 'custom',
       text: 'Tape !octobre pour participer',
+      // Saved without a style: the default one (the overlay keeps its usual look).
+      style: {
+        font: 'segoe',
+        color: null,
+        bold: false,
+        italic: false,
+        highlight: null,
+      },
     });
     expect(reloaded.round).toMatchObject({
       status: 'open',
@@ -973,10 +993,50 @@ describe('Tombola V2 read models', () => {
     expect(await bad({ join_commands: [] })).toBe('zod');
     expect(await bad({ join_commands: ['join sans point'] })).toBe('zod');
     expect(await bad({ currency_id: 'nope' })).toBe('invalid_config');
-    // A custom overlay text may be empty while it is typed (the overlay then shows nothing).
-    expect(await bad({ overlay_hint: { mode: 'custom', text: '' } })).toBe(
-      'ok',
+    // Overlay texts: short, a custom name always comes with an explicit agreement.
+    const labels = (l: Record<string, unknown>) => ({
+      labels: {
+        event_name: 'Tirage',
+        event_gender: 'm' as const,
+        empty_title: null,
+        empty_message: 'Personne cette fois, à la prochaine !',
+        ...l,
+      },
+    });
+    expect(await bad(labels({}))).toBe('ok');
+    expect(await bad(labels({ event_name: 'Un nom bien trop long ici' }))).toBe(
+      'zod',
     );
+    expect(await bad(labels({ event_gender: 'x' }))).toBe('zod');
+    expect(await bad(labels({ empty_message: '' }))).toBe('zod');
+    // Custom message style: a small set of fonts, colours as #RRGGBB(AA) only.
+    const style = (s: Record<string, unknown>) => ({
+      overlay_hint: {
+        mode: 'custom' as const,
+        text: '🎟️ Tape !join',
+        style: {
+          font: 'bahnschrift' as const,
+          color: '#e9c46a',
+          bold: true,
+          italic: true,
+          highlight: '#2fd8c433',
+          ...s,
+        },
+      },
+    });
+    expect(await bad(style({}))).toBe('ok');
+    expect(await bad(style({ font: 'comic' }))).toBe('zod');
+    expect(await bad(style({ color: 'red' }))).toBe('zod');
+    expect(await bad(style({ highlight: 'url(x)' }))).toBe('zod');
+    // A custom overlay text may be empty while it is typed (the overlay then shows nothing).
+    expect(
+      await bad({
+        overlay_hint: {
+          mode: 'custom',
+          text: '',
+        } as RaffleConfig['overlay_hint'],
+      }),
+    ).toBe('ok');
     // Every command is editable: the main one replaced, aliases added / removed.
     expect(
       await code(
@@ -1627,5 +1687,88 @@ describe('Tombola V2 extension result delay (« Décalage résultat Extension ap
       Date.parse((d.round as { result_at: string }).result_at) -
         Date.parse(d.server_time),
     ).toBe(3_000 + reveal + 30_000);
+  });
+});
+
+describe('Tombola V2 event titles (one source for the overlay, Studio and the extension)', () => {
+  const L = (l: Record<string, unknown> = {}) => ({
+    ...DEFAULT_RAFFLE_CONFIG.labels,
+    ...l,
+  });
+  const all = (l: ReturnType<typeof L>, k: 'normal' | 'super' | 'giveaway') => {
+    const x = eventTitles(l, k);
+    return [x.open, x.running, x.paused, x.ended, x.cancelled].map((p) =>
+      p.join(' ').trim(),
+    );
+  };
+  it('standard names keep their wording; a giveaway never says « Tombola »', () => {
+    expect(all(L(), 'normal')).toEqual([
+      'Tombola ouverte',
+      'Tombola en cours',
+      'Tombola en pause',
+      'Tombola terminée',
+      'Tombola annulée',
+    ]);
+    expect(all(L(), 'giveaway')).toEqual([
+      'Giveaway ouvert',
+      'Giveaway en cours',
+      'Giveaway en pause',
+      'Giveaway terminé',
+      'Giveaway annulé',
+    ]);
+    expect(eventTitles(L(), 'super').open.join(' ').trim()).toBe(
+      'Super Tombola',
+    );
+    expect(idleTitle(L(), 'normal')).toBe('Aucune Tombola en cours');
+    expect(idleTitle(L(), 'giveaway')).toBe('Aucun Giveaway en cours');
+  });
+  it('a custom name uses the agreement chosen in Studio; a custom title with no participant wins', () => {
+    const tirage = L({ event_name: 'Tirage', event_gender: 'm' });
+    expect(all(tirage, 'giveaway')).toEqual([
+      'Tirage ouvert',
+      'Tirage en cours',
+      'Tirage en pause',
+      'Tirage terminé',
+      'Tirage annulé',
+    ]);
+    expect(idleTitle(tirage, 'normal')).toBe('Aucun Tirage en cours');
+    expect(
+      eventTitles(L({ event_name: 'Loterie', event_gender: 'f' }), 'normal')
+        .cancelled,
+    ).toEqual(['Loterie', 'annulée']);
+    expect(
+      eventTitles(L({ empty_title: 'Fin du tirage' }), 'giveaway').ended,
+    ).toEqual(['Fin du tirage', '']);
+  });
+  it('the overlay snapshot, the viewer state, its history and Studio settings carry the same titles', async () => {
+    const { config, act, raffle, seen, joinExt, after } = await lab();
+    await config({
+      amount_mode: 'giveaway',
+      prize: 'Lot',
+      labels: {
+        ...DEFAULT_RAFFLE_CONFIG.labels,
+        event_name: 'Tirage',
+        event_gender: 'm',
+        empty_message: 'Personne !',
+      },
+    });
+    expect((await seen()).idle_title).toBe('Aucun Tirage en cours');
+    await act({ action: 'launch' });
+    expect((await raffle.snapshot(CH)).round!.titles.open).toEqual([
+      'Tirage',
+      'ouvert',
+    ]);
+    const v = await seen('900601');
+    expect((v.round as { titles: { paused: string[] } }).titles.paused).toEqual(
+      ['Tirage', 'en pause'],
+    );
+    expect(v.empty_message).toBe('Personne !');
+    await joinExt('900601');
+    await after(62_000 + 3_000 + 30_000);
+    expect((await seen('900601')).history[0]).toMatchObject({ name: 'Tirage' });
+    expect((await raffle.settings(CH)).titles.giveaway.cancelled).toEqual([
+      'Tirage',
+      'annulé',
+    ]);
   });
 });

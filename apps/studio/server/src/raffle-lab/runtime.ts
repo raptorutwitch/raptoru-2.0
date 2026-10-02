@@ -27,6 +27,7 @@ const OVERLAY_FILES: Record<string, string> = {
   'overlay.js': 'text/javascript; charset=utf-8',
   'overlay.css': 'text/css; charset=utf-8',
   'kit.js': 'text/javascript; charset=utf-8',
+  'model.js': 'text/javascript; charset=utf-8',
 };
 
 /** Real audio format from the first bytes (the file name / extension is never trusted). */

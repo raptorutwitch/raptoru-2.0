@@ -14,6 +14,8 @@ const panel = createModulePanel({
   root: document.getElementById('panel'),
   client,
   onRefresh: refresh,
+  // Same option as the video component (overlay.js): a module opened at start (Studio comparison view).
+  initialModule: new URLSearchParams(window.location.search).get('demoModule'),
 });
 
 function scheduleRefresh(delay = REFRESH_INTERVAL_MS) {

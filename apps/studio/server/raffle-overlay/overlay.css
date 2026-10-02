@@ -1,0 +1,2329 @@
+/* Tombola V2 — OBS overlay. Generated from the validated prototype prototypes/tombola-v2/overlay.html
+
+   (+ shared/tokens.css): same tokens, components, timings and anchoring (56 px top / 56 px right).
+
+   Retained variants only: opening C4, join FIFO, Reveal G, compact FULL roulette, cancellation. */
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--t-ink);
+  font-family: var(--t-font);
+}
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --t-bg: #0a0d13;
+  --t-bg-2: #0f141c;
+  --t-surface: rgba(18, 24, 33, 0.92);
+  --t-surface-2: rgba(26, 34, 46, 0.92);
+  --t-line: rgba(160, 220, 230, 0.12);
+  --t-line-2: rgba(160, 220, 230, 0.22);
+  --t-ink: #eef3f8;
+  --t-muted: #93a0b2;
+  --t-faint: #5f6b7c;
+  --t-teal: #2fd8c4;
+  --t-teal-2: #12b5a6;
+  --t-teal-soft: rgba(47, 216, 196, 0.14);
+  --t-teal-glow: rgba(47, 216, 196, 0.35);
+  --t-ext: #f47e98;
+  --t-ext-soft: rgba(244, 126, 152, 0.14);
+  --t-gold: #e9c46a;
+  --t-gold-2: #c99a3c;
+  --t-gold-soft: rgba(233, 196, 106, 0.14);
+  --t-gold-glow: rgba(233, 196, 106, 0.32);
+  --t-hot: #ffb35c;
+  --t-ok: #5ee6a0;
+  --t-r-s: 8px;
+  --t-r: 12px;
+  --t-r-l: 18px;
+  --t-pill: 999px;
+  --t-1: 4px;
+  --t-2: 8px;
+  --t-3: 12px;
+  --t-4: 16px;
+  --t-5: 24px;
+  --t-6: 32px;
+  --t-font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --t-num: 'Bahnschrift', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  --t-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --t-fast: 160ms;
+  --t-mid: 280ms;
+  --t-slow: 520ms;
+}
+
+.t-num {
+  font-family: var(--t-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.t-caps {
+  font-family: var(--t-num);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.t-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--t-line-2);
+  border-radius: var(--t-pill);
+  background: var(--t-surface-2);
+  color: var(--t-ink);
+  font: 600 13px/1 var(--t-font);
+  white-space: nowrap;
+}
+
+.t-pill svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.t-pill--chat {
+  border-color: rgba(47, 216, 196, 0.4);
+  background: var(--t-teal-soft);
+  color: #b9f5ec;
+}
+
+.t-pill--ext {
+  border-color: rgba(244, 126, 152, 0.42);
+  background: var(--t-ext-soft);
+  color: #ffd0da;
+}
+
+.t-pill--gold {
+  border-color: rgba(233, 196, 106, 0.55);
+  background: var(--t-gold-soft);
+  color: #f7e2ac;
+}
+
+.t-full svg,
+.t-super svg {
+  width: 1.1em;
+  height: 1.1em;
+  flex: none;
+}
+
+.t-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--t-teal);
+}
+
+.t-dot--ext {
+  background: var(--t-ext);
+}
+
+.t-full {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 3px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #f4d98a, #d9aa48);
+  color: #1d1406;
+  font: 700 13px/1 var(--t-num);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  box-shadow:
+    0 0 0 1px rgba(255, 236, 180, 0.5) inset,
+    0 6px 18px rgba(233, 196, 106, 0.28);
+}
+
+.t-super {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 3px;
+  border: 1px solid rgba(233, 196, 106, 0.7);
+  border-radius: 6px;
+  color: var(--t-gold);
+  font: 700 13px/1 var(--t-num);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  background: linear-gradient(
+    180deg,
+    rgba(233, 196, 106, 0.14),
+    rgba(233, 196, 106, 0.04)
+  );
+}
+
+.t-ring circle {
+  fill: none;
+  stroke-width: 6;
+}
+
+.t-ring .bg {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.t-ring .fg {
+  stroke: var(--t-teal);
+  stroke-linecap: round;
+  transition:
+    stroke-dashoffset 1s linear,
+    stroke 0.3s;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.is-hot .t-ring .fg {
+  stroke: var(--t-hot);
+}
+
+.is-super .t-ring .fg {
+  stroke: var(--t-gold);
+}
+
+.t-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--t-line-2);
+  border-radius: var(--t-r);
+  background: var(--t-surface-2);
+  color: var(--t-ink);
+  font: 600 14px/1 var(--t-font);
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast),
+    transform var(--t-fast);
+}
+
+.t-btn:hover {
+  border-color: var(--t-teal);
+}
+
+.t-btn:active {
+  transform: translateY(1px);
+}
+
+.t-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.t-btn--primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, #3fe3cf, #16b3a3);
+  color: #032420;
+  box-shadow: 0 6px 20px rgba(47, 216, 196, 0.25);
+}
+
+.t-btn--primary:hover {
+  border-color: transparent;
+  filter: brightness(1.06);
+}
+
+.t-btn--ext {
+  border-color: transparent;
+  background: linear-gradient(180deg, #f8909f, #e46a85);
+  color: #2a0710;
+  box-shadow: 0 6px 20px rgba(244, 126, 152, 0.22);
+}
+
+.t-btn--gold {
+  border-color: transparent;
+  background: linear-gradient(180deg, #f2d483, #cf9f43);
+  color: #231805;
+}
+
+.t-btn--ghost {
+  background: none;
+}
+
+.t-btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.t-amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--t-num);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.005em;
+}
+
+.t-amount small {
+  color: var(--t-muted);
+  font-weight: 600;
+  font-size: 0.48em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.t-amount.is-gold {
+  color: var(--t-gold);
+}
+
+@keyframes t-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes t-in-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes t-sweep {
+  from {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  to {
+    transform: translateX(220%) skewX(-18deg);
+  }
+}
+
+@keyframes t-tick {
+  0% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes t-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes t-breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+.pp {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--s, 40px);
+  height: var(--s, 40px);
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 32% 26%,
+    hsl(var(--h) 72% 74%),
+    hsl(var(--h) 52% 44%) 72%
+  );
+  box-shadow:
+    0 0 0 2px var(--pp-gap, #0b0f16),
+    0 0 0 calc(2px + var(--pp-ring-w, 2px))
+      var(--pp-ring, rgba(47, 216, 196, 0.9));
+  color: rgba(8, 10, 14, 0.8);
+  font: 800 calc(var(--s, 40px) * 0.36) / 1 var(--t-num);
+  letter-spacing: 0.02em;
+}
+
+.pp.ext {
+  --pp-ring: rgba(244, 126, 152, 0.95);
+}
+
+.pp i {
+  font-style: normal;
+}
+
+.tb {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --tick: 1s;
+  --from: 28px;
+  --anchor-top: 56px;
+  --anchor-side: 56px;
+}
+
+.tb.side-l {
+  --from: -28px;
+}
+
+.dock {
+  position: absolute;
+  top: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.side-r .dock {
+  right: 64px;
+  align-items: flex-end;
+}
+
+.side-l .dock {
+  left: 64px;
+  align-items: flex-start;
+}
+
+.open-c.side-r .dock {
+  right: 36px;
+}
+
+.open-c.side-l .dock {
+  left: 36px;
+}
+
+.op {
+  position: relative;
+  opacity: 0;
+  transform: translateX(var(--from));
+  transition:
+    opacity var(--t-mid) var(--t-ease),
+    transform var(--t-mid) var(--t-ease);
+}
+
+.tb.on .op {
+  opacity: 1;
+  transform: none;
+}
+
+.tb.result .op,
+.tb.exit .op {
+  opacity: 0;
+  transform: translateX(var(--from));
+}
+
+.lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--t-teal);
+  font: 700 11px/1 var(--t-num);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lbl svg {
+  width: 13px;
+  height: 13px;
+}
+
+.op .amt {
+  color: var(--t-ink);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.op .amt small {
+  font-size: 0.46em;
+}
+
+.prize {
+  font: 700 24px/1.1 var(--t-font);
+  white-space: nowrap;
+}
+
+.cmd {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: var(--t-teal);
+  color: #032420;
+  font: 700 15px/1 var(--t-num);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.sec {
+  font-variant-numeric: tabular-nums;
+}
+
+.tb.is-hot .sec {
+  color: var(--t-hot);
+}
+
+.tb.is-hot .sec.tick {
+  animation: t-tick 0.35s var(--t-ease);
+}
+
+.tb .t-ring .fg {
+  transition:
+    stroke-dashoffset var(--tick) linear,
+    stroke 0.3s;
+}
+
+.tb.drawing .cmd {
+  display: none;
+}
+
+.spin {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+.tb.drawing .spin {
+  display: block;
+  animation: t-spin 0.9s linear infinite;
+}
+
+.tb.drawing .t-ring .fg {
+  opacity: 0;
+}
+
+.sweep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.12),
+    transparent
+  );
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tb.announce .sweep {
+  opacity: 1;
+  animation: t-sweep 0.9s var(--t-ease) 0.2s 1 both;
+}
+
+.tb.is-super .op .amt {
+  background: linear-gradient(
+      100deg,
+      #e8b955 0%,
+      #f6dc94 38%,
+      #fff6d6 50%,
+      #f6dc94 62%,
+      #c99a3c 100%
+    )
+    0 0 / 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.tb.is-super .op .amt small {
+  -webkit-text-fill-color: rgba(233, 196, 106, 0.75);
+}
+
+.tb.is-super.announce .op .amt {
+  animation: gold-pass 1.6s var(--t-ease) 0.5s 1 both;
+}
+
+@keyframes gold-pass {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.tb.is-super .lbl {
+  color: var(--t-gold);
+}
+
+.tb.is-super .t-ring .fg {
+  stroke: var(--t-gold);
+}
+
+.tb.is-super .cmd {
+  background: linear-gradient(180deg, #f2d483, #cf9f43);
+  color: #231805;
+}
+
+@keyframes indet {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(194%);
+  }
+}
+
+@keyframes indet-r {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-194%);
+  }
+}
+
+@keyframes rail-run {
+  from {
+    bottom: 0;
+  }
+  to {
+    bottom: 78%;
+  }
+}
+
+.feed {
+  position: relative;
+  width: 1px;
+  height: 44px;
+}
+
+.join {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 18px 0 14px;
+  border-radius: 999px;
+  background: rgba(12, 17, 25, 0.94);
+  border: 1px solid rgba(47, 216, 196, 0.45);
+  color: var(--t-ink);
+  font: 600 20px/1 var(--t-font);
+  white-space: nowrap;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translate(-50%, -6px) scale(0.97);
+  transition:
+    opacity 180ms var(--t-ease),
+    transform 220ms var(--t-ease);
+}
+
+.join.in {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.join.out {
+  opacity: 0;
+  transform: translate(-50%, 6px);
+}
+
+.join .ok {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--t-teal);
+  color: #032420;
+}
+
+.join .ok svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 3;
+}
+
+.join.ext {
+  border-color: rgba(244, 126, 152, 0.55);
+}
+
+.join.ext .ok {
+  background: var(--t-ext);
+  color: #2a0710;
+}
+
+.join .src {
+  color: var(--t-muted);
+  font-size: 15px;
+}
+
+.feed .queue {
+  position: absolute;
+  top: 52px;
+  color: var(--t-faint);
+  font: 600 14px/24px var(--t-num);
+  opacity: 0;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.feed .queue.on {
+  opacity: 1;
+}
+
+.side-r .join {
+  left: auto;
+  right: 0;
+  transform: translate(0, -6px) scale(0.97);
+  transform-origin: right center;
+}
+
+.side-l .join {
+  left: 0;
+  transform: translate(0, -6px) scale(0.97);
+  transform-origin: left center;
+}
+
+.side-r .join.in,
+.side-l .join.in {
+  transform: none;
+}
+
+.side-r .join.out,
+.side-l .join.out {
+  transform: translate(0, 6px);
+}
+
+.side-r .feed .queue {
+  right: 8px;
+}
+
+.side-l .feed .queue {
+  left: 8px;
+}
+
+.rv {
+  position: absolute;
+  top: 210px;
+  opacity: 0;
+  transform: translateX(var(--from));
+  transition:
+    opacity var(--t-mid) var(--t-ease),
+    transform var(--t-slow) var(--t-ease);
+}
+
+.side-r .rv {
+  right: 64px;
+}
+
+.side-l .rv {
+  left: 64px;
+}
+
+.rv.in {
+  opacity: 1;
+  transform: none;
+}
+
+.rv.out {
+  opacity: 0;
+  transform: translateX(var(--from));
+}
+
+.rv:empty {
+  display: none;
+}
+
+.gname {
+  font: 600 19px/1.15 var(--t-font);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gain {
+  color: var(--t-teal);
+  font: 700 18px/1 var(--t-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--t-teal);
+}
+
+.dot.ext {
+  background: var(--t-ext);
+}
+
+.k-super .gain,
+.k-full .gain {
+  color: var(--t-gold);
+}
+
+.tot {
+  font: 700 30px/1 var(--t-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tot small {
+  color: var(--t-muted);
+  font-size: 0.5em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sub {
+  color: var(--t-muted);
+  font: 600 14px/1.3 var(--t-font);
+  white-space: nowrap;
+}
+
+.card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--t-line-2);
+  border-radius: 16px;
+  background: rgba(12, 17, 25, 0.94);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+}
+
+.k-super .card,
+.k-super.card {
+  border-color: rgba(233, 196, 106, 0.6);
+  box-shadow:
+    0 14px 40px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(233, 196, 106, 0.14);
+}
+
+.k-full .card,
+.k-full.card {
+  border-color: rgba(233, 196, 106, 0.75);
+}
+
+.ttl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ttl .t-super,
+.ttl .t-full {
+  font-size: 13px;
+}
+
+.gl {
+  display: block;
+  height: 2px;
+  margin: 12px 0 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, var(--t-gold), transparent);
+  transform: scaleX(0);
+  animation: gl-draw 520ms var(--t-ease) 150ms both;
+}
+
+@keyframes gl-draw {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.pop {
+  animation: t-in-up 320ms var(--t-ease) both;
+}
+
+.slam {
+  animation: slam 460ms var(--t-ease) both;
+}
+
+@keyframes slam {
+  0% {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes wc-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--from) * 1.6));
+  }
+}
+
+@keyframes roll {
+  from {
+    opacity: 0.2;
+    transform: translateY(55%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.st {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--t-teal);
+  font: 700 12px/1 var(--t-num);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 0.3s;
+}
+
+.st::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: t-breathe 1.6s ease-in-out infinite;
+}
+
+.tb.is-hot .st {
+  color: var(--t-hot);
+}
+
+.tb.drawing .st {
+  color: var(--t-ink);
+}
+
+.tb.is-super .st {
+  color: var(--t-gold);
+}
+
+.hero-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 136px;
+  height: 136px;
+  flex: none;
+}
+
+.hero-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-ring .t-ring circle,
+.hero-ring .spin circle {
+  stroke-width: 7;
+}
+
+.hero-ring .t-ring .bg {
+  stroke: rgba(255, 255, 255, 0.09);
+}
+
+.hero-ring .t-ring .fg {
+  filter: drop-shadow(0 0 6px var(--t-teal-glow));
+}
+
+.tb.is-hot .hero-ring .t-ring .fg {
+  filter: drop-shadow(0 0 6px rgba(255, 179, 92, 0.45));
+}
+
+.tb.is-super .hero-ring .t-ring .fg {
+  filter: drop-shadow(0 0 6px var(--t-gold-glow));
+}
+
+.hero-ring .num {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.hero-ring .sec {
+  font: 700 52px/1 var(--t-num);
+}
+
+.hero-ring .u {
+  color: var(--t-muted);
+  font: 600 11px/1 var(--t-num);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.tb.drawing .hero-ring .u {
+  color: var(--t-ink);
+}
+
+.hero-ring .ticks line {
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 2;
+  stroke-linecap: round;
+  transition: stroke 0.3s;
+}
+
+.hero-ring .ticks line.on {
+  stroke: rgba(47, 216, 196, 0.75);
+}
+
+.tb.is-hot .hero-ring .ticks line.on {
+  stroke: rgba(255, 179, 92, 0.85);
+}
+
+.tb.is-super .hero-ring .ticks line.on {
+  stroke: rgba(233, 196, 106, 0.85);
+}
+
+.people {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+}
+
+.stack {
+  display: flex;
+  align-items: center;
+  min-width: 30px;
+}
+
+.stack .pp {
+  --s: 30px;
+  --pp-ring-w: 1.5px;
+  margin-left: -7px;
+  animation: pp-in 380ms var(--t-ease) both;
+}
+
+.stack .pp:first-child {
+  margin-left: 0;
+}
+
+.stack .pp.still {
+  animation: none;
+}
+
+@keyframes pp-in {
+  from {
+    opacity: 0;
+    transform: scale(0.55) translateY(4px);
+  }
+}
+
+.people .cnt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.people .cnt b {
+  font: 700 22px/1 var(--t-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.people .cnt b.bump {
+  animation: t-tick 0.35s var(--t-ease);
+}
+
+.people .cnt span {
+  color: var(--t-muted);
+  font: 600 11.5px/1 var(--t-font);
+}
+
+@keyframes wcard-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--from) * 1.4));
+  }
+}
+
+@keyframes wcard-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes frame-glow {
+  35% {
+    box-shadow:
+      0 0 48px rgba(233, 196, 106, 0.55),
+      inset 0 0 26px rgba(233, 196, 106, 0.25);
+  }
+}
+
+.feed .queue {
+  display: none !important;
+}
+
+.open-c4 .dock {
+  top: var(--anchor-top);
+}
+
+.side-r.open-c4 .dock {
+  right: var(--anchor-side);
+}
+
+.side-l.open-c4 .dock {
+  left: var(--anchor-side);
+}
+
+.op-c4 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 216px;
+  padding: 14px 14px 13px;
+  border: 1px solid var(--t-line-2);
+  border-radius: 20px;
+  background: linear-gradient(
+    180deg,
+    rgba(16, 22, 31, 0.9),
+    rgba(10, 14, 20, 0.9)
+  );
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  transition:
+    opacity var(--t-mid) var(--t-ease),
+    transform var(--t-mid) var(--t-ease),
+    border-color 0.3s,
+    box-shadow 0.3s;
+}
+
+.op-c4 .ttl4 {
+  color: var(--t-teal);
+  font: 700 16px/1 var(--t-num);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 0.3s;
+}
+
+.op-c4 .money {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.op-c4 .money .amt {
+  font-size: 44px;
+}
+
+.op-c4 .money .cur {
+  color: var(--t-muted);
+  font: 600 12px/1 var(--t-num);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.op-c4 .prize {
+  font-size: 20px;
+  white-space: normal;
+  text-align: center;
+}
+
+.op-c4 .hero-ring {
+  width: 128px;
+  height: 128px;
+}
+
+.op-c4 .hero-ring .sec {
+  font-size: 48px;
+}
+
+.op-c4 .people {
+  gap: 10px;
+  min-height: 32px;
+}
+
+.op-c4 .stack .pp {
+  --s: 28px;
+}
+
+.pc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--t-ink);
+  font: 700 18px/1 var(--t-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pc svg {
+  width: 17px;
+  height: 17px;
+  color: var(--t-muted);
+}
+
+.pc b.bump {
+  animation: t-tick 0.35s var(--t-ease);
+}
+
+.op-c4 .cmd {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.op .hint {
+  max-width: 200px;
+  color: var(--t-muted);
+  font: 600 13px/1.3 var(--t-font);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.tb.is-super .op .hint {
+  color: rgba(233, 196, 106, 0.8);
+}
+
+.tb.drawing .hint {
+  display: none;
+}
+
+.tb.is-hot .op-c4 {
+  border-color: rgba(255, 179, 92, 0.45);
+}
+
+.tb.is-hot .op-c4 .ttl4 {
+  color: var(--t-hot);
+}
+
+.tb.is-super .op-c4 {
+  border-color: rgba(233, 196, 106, 0.6);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.42),
+    0 0 36px rgba(233, 196, 106, 0.15);
+}
+
+.tb.is-super .op-c4 .ttl4 {
+  color: var(--t-gold);
+}
+
+.tb.drawing .op-c4 .ttl4 {
+  color: var(--t-ink);
+}
+
+.tb.is-super .op-c4 .money .cur {
+  color: rgba(233, 196, 106, 0.75);
+}
+
+.xmark {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.xmark svg {
+  position: static !important;
+  width: 44%;
+  height: 44%;
+}
+
+.xmark path {
+  fill: none;
+  stroke: #ff6b6b;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+}
+
+.tb.cancel .xmark {
+  opacity: 1;
+}
+
+.tb.cancel .xmark path {
+  animation: x-draw 360ms var(--t-ease) 180ms both;
+}
+
+.tb.cancel .xmark path + path {
+  animation-delay: 320ms;
+}
+
+@keyframes x-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.tb.cancel .t-ring .fg {
+  stroke: #ff6b6b !important;
+  filter: drop-shadow(0 0 6px rgba(255, 107, 107, 0.45)) !important;
+  transition:
+    stroke 0.25s,
+    stroke-dashoffset 0.5s var(--t-ease);
+}
+
+.tb.cancel .sec,
+.tb.cancel .hero-ring .u {
+  opacity: 0;
+}
+
+.tb.cancel .op-c4 {
+  border-color: rgba(255, 107, 107, 0.55);
+}
+
+.tb.cancel .ttl4,
+.tb.cancel .st,
+.tb.cancel .lbl {
+  color: #ff8a8a;
+}
+
+.tb.cancel .op {
+  animation: cancel-nudge 420ms var(--t-ease) 1;
+}
+
+.tb.cancel .people,
+.tb.cancel .cmd {
+  opacity: 0.35;
+  transition: opacity 0.3s;
+}
+
+@keyframes cancel-nudge {
+  20% {
+    transform: translateX(-5px);
+  }
+  45% {
+    transform: translateX(4px);
+  }
+  70% {
+    transform: translateX(-2px);
+  }
+}
+
+.rv-g {
+  top: var(--anchor-top);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 380px;
+}
+
+.gc .gv {
+  flex: none;
+  justify-content: flex-end;
+}
+
+.rv-g .gc:not(.solo) .gn {
+  line-height: 1.3;
+}
+
+.gc.solo .gn {
+  max-width: 100%;
+  min-height: 29px;
+}
+
+.side-r .rv-g {
+  right: var(--anchor-side);
+}
+
+.side-l .rv-g {
+  left: var(--anchor-side);
+}
+
+.gh {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 18px 14px;
+  text-align: center;
+}
+
+.gh .ttl4 {
+  color: var(--t-teal);
+  font: 700 16px/1 var(--t-num);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.gh .gamt {
+  margin-top: 4px;
+  font: 700 46px/1 var(--t-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.gh .gcur {
+  color: var(--t-muted);
+  font: 600 12px/1 var(--t-num);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.gh .gprize {
+  margin-top: 4px;
+  font: 700 24px/1.15 var(--t-font);
+}
+
+.gh .gcount {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--t-line-2);
+  border-radius: 999px;
+  color: var(--t-ink);
+  font: 700 14px/1 var(--t-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.gh .gcount svg {
+  width: 15px;
+  height: 15px;
+  color: var(--t-teal);
+}
+
+.gh .gcount b.bump {
+  animation: t-tick 0.35s var(--t-ease);
+}
+
+.gh .gl {
+  width: 70%;
+  margin: 8px auto 0;
+}
+
+.gc {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 66px;
+  padding: 0 18px 0 12px;
+  border: 1px solid rgba(47, 216, 196, 0.42);
+  border-radius: 14px;
+  background: rgba(12, 17, 25, 0.95);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.4),
+    0 0 18px rgba(47, 216, 196, 0.12);
+  animation:
+    gc-in 520ms var(--t-ease) both,
+    gc-halo 1.4s var(--t-ease) both;
+}
+
+.gc .pp {
+  --s: 46px;
+}
+
+.gc .gn {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: 700 21px/1.1 var(--t-font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc .gv {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--t-teal);
+  font: 700 26px/1 var(--t-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.gc .gv.on {
+  opacity: 1;
+}
+
+.gc .gv small {
+  color: var(--t-muted);
+  font-size: 0.5em;
+  letter-spacing: 0.06em;
+}
+
+@keyframes gc-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+}
+
+@keyframes gc-halo {
+  0%,
+  30% {
+    box-shadow:
+      0 10px 28px rgba(0, 0, 0, 0.4),
+      0 0 38px rgba(47, 216, 196, 0.5);
+  }
+}
+
+.gcs.compact .gc {
+  height: 54px;
+}
+
+.gcs.compact .gc .pp {
+  --s: 36px;
+}
+
+.gcs.compact .gc .gn {
+  font-size: 18px;
+}
+
+.gcs.compact .gc .gv {
+  font-size: 22px;
+}
+
+.gcs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gc.solo {
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  height: auto;
+  padding: 20px 18px 18px;
+  text-align: center;
+}
+
+.gc.solo .pp {
+  --s: 76px;
+  --pp-ring-w: 3px;
+}
+
+.gc.solo .gn {
+  flex: none;
+  font-size: 26px;
+}
+
+.gc.solo .gv {
+  font-size: 30px;
+}
+
+.gc.solo .glot {
+  color: var(--t-ink);
+  font: 700 17px/1.2 var(--t-font);
+}
+
+.gc.solo .gsub {
+  color: var(--t-teal);
+  font: 700 12px/1 var(--t-num);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.k-super .gh {
+  border-color: rgba(233, 196, 106, 0.6);
+  box-shadow:
+    0 14px 40px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(233, 196, 106, 0.14);
+}
+
+.k-super .gh .ttl4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--t-gold);
+  font-size: 18px;
+  letter-spacing: 0.12em;
+}
+
+.k-super .gh .ttl4 svg {
+  width: 18px;
+  height: 18px;
+}
+
+.k-super .gh .gamt {
+  background: linear-gradient(
+      100deg,
+      #e8b955,
+      #f6dc94 45%,
+      #fff6d6 52%,
+      #f6dc94 60%,
+      #c99a3c
+    )
+    0 0 / 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 54px;
+  animation: gold-pass 1.8s var(--t-ease) 0.3s 1 both;
+}
+
+.k-super .gh .gcur {
+  color: rgba(233, 196, 106, 0.75);
+}
+
+.k-super .gh .gcount svg {
+  color: var(--t-gold);
+}
+
+.k-super .gc {
+  border-color: rgba(233, 196, 106, 0.5);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.4),
+    0 0 18px rgba(233, 196, 106, 0.12);
+  animation:
+    gc-in 520ms var(--t-ease) both,
+    gc-halo-gold 1.4s var(--t-ease) both;
+}
+
+.k-super .gc .gv {
+  color: var(--t-gold);
+}
+
+.k-super .gc .pp {
+  --pp-ring: var(--t-gold);
+}
+
+@keyframes gc-halo-gold {
+  0%,
+  30% {
+    box-shadow:
+      0 10px 28px rgba(0, 0, 0, 0.4),
+      0 0 40px rgba(233, 196, 106, 0.5);
+  }
+}
+
+.rv-full2 {
+  top: var(--anchor-top);
+  width: 264px;
+}
+
+.side-r .rv-full2 {
+  right: var(--anchor-side);
+}
+
+.side-l .rv-full2 {
+  left: var(--anchor-side);
+}
+
+.f2 {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 16px 16px;
+  border: 1px solid rgba(233, 196, 106, 0.55);
+  border-radius: 18px;
+  text-align: center;
+  background:
+    radial-gradient(
+      300px 130px at 50% 0%,
+      rgba(233, 196, 106, 0.11),
+      transparent 70%
+    ),
+    rgba(12, 17, 25, 0.95);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.48);
+  transition:
+    box-shadow 0.6s,
+    border-color 0.6s;
+}
+
+.f2.won {
+  border-color: rgba(233, 196, 106, 0.85);
+  box-shadow:
+    0 14px 40px rgba(0, 0, 0, 0.48),
+    0 0 46px rgba(233, 196, 106, 0.28);
+}
+
+.f2 .t-full {
+  font-size: 13px;
+}
+
+.f2 .famt2 {
+  margin-top: 12px;
+  background: linear-gradient(
+      100deg,
+      #e8b955,
+      #f6dc94 45%,
+      #fff6d6 52%,
+      #f6dc94 60%,
+      #c99a3c
+    )
+    0 0 / 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font: 700 46px/1 var(--t-num);
+  font-variant-numeric: tabular-nums;
+  animation: gold-pass 1.8s var(--t-ease) 0.3s 1 both;
+}
+
+.f2 .fcur {
+  margin-top: 5px;
+  color: rgba(233, 196, 106, 0.75);
+  font: 600 12px/1 var(--t-num);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.reel2 {
+  position: relative;
+  width: 212px;
+  height: 84px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 8%,
+    #000 92%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 8%,
+    #000 92%,
+    transparent
+  );
+}
+
+.reel2 .trk {
+  position: absolute;
+  top: 14px;
+  left: 0;
+  display: flex;
+  gap: 12px;
+  will-change: transform;
+}
+
+.reel2 .pp {
+  --s: 56px;
+  --pp-gap: #10151e;
+  transition:
+    opacity 0.45s,
+    filter 0.45s,
+    transform 0.55s var(--t-ease);
+}
+
+.reel2 .frame {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 50%;
+  width: 72px;
+  margin-left: -36px;
+  border: 2px solid rgba(233, 196, 106, 0.85);
+  border-radius: 18px;
+  box-shadow: 0 0 18px rgba(233, 196, 106, 0.2);
+  pointer-events: none;
+}
+
+.reel2.done .pp {
+  opacity: 0.14;
+  filter: grayscale(0.7);
+}
+
+.reel2.done .pp.won {
+  opacity: 1;
+  filter: none;
+  transform: scale(1.12);
+  --pp-ring: var(--t-gold);
+  --pp-ring-w: 3px;
+  box-shadow:
+    0 0 0 2px #10151e,
+    0 0 0 5px var(--t-gold),
+    0 0 26px rgba(233, 196, 106, 0.55);
+}
+
+.reel2.done .frame {
+  animation: frame-glow 1s var(--t-ease) both;
+}
+
+.fw2 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.fw2:empty {
+  display: none;
+}
+
+.fw2 .rafle {
+  color: var(--t-gold);
+  font: 700 12px/1 var(--t-num);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.fw2 {
+  width: 100%;
+}
+
+.fw2 .who {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+  color: #fff3d0;
+  font: 700 28px/1.1 var(--t-font);
+  text-shadow: 0 0 18px rgba(233, 196, 106, 0.45);
+  white-space: nowrap;
+}
+
+.fw2 .who .nm {
+  min-width: 0;
+}
+
+.fw2 .who {
+  min-height: 31px;
+}
+
+.fw2 .who .nm.clip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fw2 .who svg {
+  flex: none;
+}
+
+.fw2 .who svg {
+  width: 22px;
+  height: 22px;
+  color: var(--t-gold);
+}
+
+/* --- Additions for the real Core states (same language, no new art direction) --------------- */
+/* Join feedback: PP + Pseudo ✓ (colour = source; no « Chat » / « Extension » text on stream). */
+.join {
+  padding: 0 12px 0 7px;
+}
+.join .pp {
+  --s: 30px;
+  --pp-ring-w: 1.5px;
+  --pp-gap: #0c1119;
+}
+.join .ok {
+  width: 22px;
+  height: 22px;
+}
+.pp img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+/* The instruction (hidden / command / custom text) is a direct item of the C4 block, as in the
+   prototype: its slot never takes part in the layout (centred text, same wrapping). */
+#hint {
+  display: contents;
+}
+/* Reload during a reveal: cards already shown appear without replaying their entrance. */
+.gc.still {
+  animation: none;
+}
+/* Round paused by moderation (minimal visual, D8): the time is frozen, the title says it. */
+.tb.paused .op-c4 .ttl4 {
+  color: var(--t-muted);
+}
+.tb.paused .t-ring .fg {
+  stroke: var(--t-muted);
+  filter: none;
+}
+/* « Aucun participant » (no draw, no winner): the same block, calm, neither red nor shaken. */
+.emptyic,
+.emptymsg {
+  display: none;
+}
+.tb.empty .emptyic {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--t-muted);
+}
+.tb.empty .emptyic svg {
+  position: static;
+  width: 40%;
+  height: 40%;
+}
+.tb.empty .num,
+.tb.empty .people,
+.tb.empty #hint {
+  display: none;
+}
+.tb.empty .t-ring .fg {
+  opacity: 0;
+}
+.tb.empty .op-c4 .ttl4 {
+  color: var(--t-ink);
+}
+.tb.empty .emptymsg {
+  display: block;
+  max-width: 188px;
+  color: var(--t-ink);
+  font: 600 15px/1.3 var(--t-font);
+  text-align: center;
+  text-wrap: balance;
+  animation: t-in-up 320ms var(--t-ease) both;
+}
+
+/* --- Design pass (polish, same behaviour): less text, less empty space, compact blocks ------------ */
+/* Timer: digits only, bigger, perfectly centred in the ring (the word « secondes » is gone; the
+   ring alone says it is a countdown). « Tirage » stays during the draw. */
+.op-c4 .hero-ring .num {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  gap: 0;
+}
+.op-c4 .hero-ring .sec {
+  /* Fixed box, tabular digits: only the glyph changes, never its position (10 → 9 included). The
+     optical offset is a position, not a transform: the « tick » zoom animates transform only. */
+  position: relative;
+  top: 0.04em;
+  display: block;
+  min-width: 1.2em;
+  height: 1em;
+  font-size: 62px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+.op-c4 .hero-ring .u {
+  display: none;
+}
+.tb.drawing .op-c4 .hero-ring .u {
+  display: block;
+  font-size: 12px;
+}
+/* Title: small, alive — a soft pulsing dot guides the eye (no flashy effect). */
+.op-c4 .ttl4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+}
+.op-c4 .ttl4::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--t-ok);
+  box-shadow: 0 0 8px var(--t-ok);
+  animation: live-dot 1.8s ease-in-out infinite;
+}
+@keyframes live-dot {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+.tb.is-hot .op-c4 .ttl4::before,
+.tb.is-super .op-c4 .ttl4::before {
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+.tb.drawing .op-c4 .ttl4::before,
+.tb.paused .op-c4 .ttl4::before,
+.tb.empty .op-c4 .ttl4::before,
+.tb.cancel .op-c4 .ttl4::before {
+  display: none;
+}
+/* Block: a little tighter around the content. */
+.op-c4 {
+  gap: 9px;
+  padding: 13px 14px 12px;
+}
+/* Participants: the 5 last pictures centred, the count fixed on the right, bigger and bold. */
+.op-c4 .people {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  gap: 8px;
+}
+.op-c4 .people .stack {
+  flex: 1;
+  justify-content: center;
+}
+.op-c4 .stack .pp {
+  --s: 27px;
+  margin-left: -8px;
+}
+.op-c4 .stack .pp:first-child {
+  margin-left: 0;
+}
+.op-c4 .pc {
+  flex: none;
+  gap: 5px;
+  color: #b9f5ec;
+  font: 800 23px/1 var(--t-num);
+}
+.op-c4 .pc svg {
+  width: 21px;
+  height: 21px;
+  color: var(--t-teal);
+  stroke-width: 2.4;
+}
+.tb.is-super .op-c4 .pc {
+  color: #f7e2ac;
+}
+.tb.is-super .op-c4 .pc svg {
+  color: var(--t-gold);
+}
+.tb.is-hot .op-c4 .pc svg {
+  color: var(--t-hot);
+}
+/* Custom message: optional highlight behind the text (style chosen in Studio). */
+.op .hint .hl {
+  padding: 1px 6px;
+  border-radius: 6px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* Reveal G — compact summary: title + winners on one line, amount + currency on the next. */
+.rv-g {
+  gap: 7px;
+}
+.gh {
+  align-items: stretch;
+  gap: 5px;
+  padding: 10px 14px 11px;
+  text-align: left;
+}
+.gh .ghtop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.gh .ttl4 {
+  font-size: 13px;
+}
+.gh .ghmoney {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.gh .gamt {
+  margin: 0;
+  font-size: 34px;
+}
+.gh .gcur {
+  font-size: 11px;
+}
+.gh .gprize {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.2;
+}
+.gh .gcount {
+  margin: 0;
+  padding: 3px 9px;
+  font-size: 13px;
+}
+.gh .gcount svg {
+  width: 14px;
+  height: 14px;
+}
+.gh .gl {
+  width: 100%;
+  margin: 4px 0 0;
+}
+.k-super .gh .ttl4 {
+  font-size: 14px;
+}
+.k-super .gh .ttl4 svg {
+  width: 15px;
+  height: 15px;
+}
+.k-super .gh .gamt {
+  font-size: 38px;
+}
+/* Winner cards: smaller, PP fixed, the pseudo is the only part that shrinks, gain on the right. */
+.gcs {
+  gap: 6px;
+}
+.gc {
+  height: 50px;
+  gap: 11px;
+  padding: 0 14px 0 8px;
+  border-radius: 12px;
+}
+.gc .pp {
+  --s: 35px;
+}
+.gc .gn {
+  font-size: 18px;
+}
+.gc .gv {
+  font-size: 21px;
+}
+.gc .glot1 {
+  color: var(--t-muted);
+  font: 600 14px/1 var(--t-font);
+}
+.gcs.compact .gc {
+  height: 42px;
+}
+.gcs.compact .gc .pp {
+  --s: 29px;
+}
+.gcs.compact .gc .gn {
+  font-size: 16px;
+}
+.gcs.compact .gc .gv {
+  font-size: 18px;
+}
+/* One winner: PP + (pseudo above, gain / prize below), compact and balanced. */
+.gc.solo {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  height: auto;
+  padding: 10px 16px 10px 10px;
+  text-align: left;
+}
+.gc.solo .pp {
+  --s: 48px;
+  --pp-ring-w: 2.5px;
+}
+.gc.solo .gcol {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.gc.solo .gn {
+  display: block;
+  flex: none;
+  max-width: 100%;
+  min-height: 0;
+  font-size: 22px;
+  line-height: 1.15;
+}
+.gc.solo .gv {
+  justify-content: flex-start;
+  font-size: 22px;
+}
+.gc.solo .glot {
+  overflow: hidden;
+  color: var(--t-ink);
+  font: 600 15px/1.2 var(--t-font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Timer pass: tick, pause, end of the countdown, drawing ------------------------------------- */
+/* Ring: on each second a fast move, then a soft deceleration (no constant slide). */
+.tb .t-ring .fg {
+  transition:
+    stroke-dashoffset 520ms cubic-bezier(0.16, 1, 0.3, 1),
+    stroke 0.3s;
+}
+/* Pause: a clear Ⅱ under the digits (slow, faint pulse), the rest of the block veiled. */
+.op-c4 .hero-ring .pz {
+  display: none;
+  gap: 4px;
+  margin-top: 3px;
+}
+.op-c4 .hero-ring .pz i {
+  width: 5px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--t-ink);
+}
+.tb.paused .op-c4 .hero-ring .sec {
+  top: 0;
+}
+.tb.paused .op-c4 .hero-ring .pz {
+  display: flex;
+  animation: pz-pulse 2.8s ease-in-out infinite;
+}
+@keyframes pz-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+.op-c4 .money,
+.op-c4 .people,
+.op-c4 .hint,
+.op-c4 .cmd {
+  transition:
+    filter 0.35s var(--t-ease),
+    opacity 0.35s var(--t-ease);
+}
+.tb.paused .op-c4 .money,
+.tb.paused .op-c4 .people,
+.tb.paused .op-c4 .hint,
+.tb.paused .op-c4 .cmd {
+  filter: blur(1.6px);
+  opacity: 0.45;
+}
+/* End of the countdown: 0 stays, the ring and the digits turn red, a small double shake. */
+.tb.timeup .op-c4 .ttl4::before {
+  display: none;
+}
+.tb.timeup-red .op-c4 {
+  border-color: rgba(255, 107, 107, 0.6);
+  animation: tmb-timeup 480ms var(--t-ease) 1;
+}
+.tb.timeup-red .op-c4 .ttl4,
+.tb.timeup-red .op-c4 .hero-ring .sec {
+  color: #ff8a8a;
+}
+.tb.timeup-red .t-ring .bg {
+  stroke: rgba(255, 107, 107, 0.8);
+  filter: drop-shadow(0 0 7px rgba(255, 107, 107, 0.45));
+  transition: stroke 0.1s;
+}
+/* The red moment is a « tick »: it turns red at once (the way back to the drawing stays smooth). */
+.tb.timeup-red .op-c4,
+.tb.timeup-red .op-c4 .ttl4 {
+  transition-duration: 0.12s;
+}
+/* At 0 the empty arc would leave a dot (round cap): hidden. */
+.tb.timeup .t-ring .fg {
+  opacity: 0;
+}
+@keyframes tmb-timeup {
+  14% {
+    transform: translateX(-3px);
+  }
+  28% {
+    transform: translateX(3px);
+  }
+  46% {
+    transform: translateX(-2px);
+  }
+  64% {
+    transform: translateX(2px);
+  }
+  82% {
+    transform: translateX(-1px);
+  }
+}
+/* Drawing: a calmer, continuous rotation. */
+.tb.drawing .spin {
+  animation-duration: 1.9s;
+}
+
+/* --- Names & winners pass ------------------------------------------------------------------------- */
+/* Title = event name + state: one line when it fits, otherwise the state goes under the name (no
+   word is ever cut). */
+.op-c4 .ttl4 {
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 3px;
+  max-width: 100%;
+  text-align: center;
+  white-space: normal;
+}
+.op-c4 .ttl4 .tn,
+.op-c4 .ttl4 .ts {
+  white-space: nowrap;
+}
+/* Winner cards: natural width (no artificial empty space), left aligned, same height and style. */
+.gcs {
+  align-items: flex-start;
+}
+.gc {
+  width: max-content;
+  min-width: 190px;
+  max-width: 100%;
+}
+.gc .gn {
+  flex: 0 1 auto;
+}
+.gc.solo .gcol {
+  flex: 0 1 auto;
+}
+
+/* --- Final pass: pause and drawing ------------------------------------------------------------------ */
+/* Pause: a big Ⅱ is the main sign, exactly centred in the ring; the time stays, small, under it.
+   Title and dot turn amber (never blurred); the rest of the block is veiled. */
+.tb.paused .op-c4 .hero-ring .pz {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  animation: pz-pulse 2.8s ease-in-out infinite;
+}
+.tb.paused .op-c4 .hero-ring .pz i {
+  width: 11px;
+  height: 40px;
+  border-radius: 3px;
+  background: var(--t-hot);
+  box-shadow: 0 0 12px rgba(255, 179, 92, 0.35);
+}
+.tb.paused .op-c4 .hero-ring .sec {
+  position: absolute;
+  top: calc(50% + 27px);
+  left: 0;
+  right: 0;
+  min-width: 0;
+  height: auto;
+  color: var(--t-muted);
+  font-size: 17px;
+}
+.tb.paused .op-c4 .ttl4 {
+  color: var(--t-hot);
+}
+.tb.paused .op-c4 .ttl4::before {
+  display: block;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: live-dot 1.8s ease-in-out infinite;
+}
+/* Drawing: no text in the ring; the ring retracts into one small segment turning slowly. */
+.tb.drawing .op-c4 .hero-ring .u {
+  display: none;
+}
+.tb .t-ring .bg {
+  transition:
+    opacity 0.45s var(--t-ease),
+    stroke 0.2s;
+}
+.tb.drawing .t-ring .bg {
+  opacity: 0;
+}
+.tb.drawing .spin {
+  animation-duration: 2.2s;
+}
+.tb.drawing .spin circle {
+  animation: spin-retract 600ms var(--t-ease) both;
+}
+@keyframes spin-retract {
+  from {
+    stroke-dasharray: 351.86 351.86;
+  }
+  to {
+    stroke-dasharray: 77.4 351.86;
+  }
+}

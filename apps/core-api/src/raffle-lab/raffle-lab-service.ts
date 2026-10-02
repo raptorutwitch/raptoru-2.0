@@ -39,6 +39,8 @@ import {
 import {
   autoWinners,
   DEFAULT_RAFFLE_CONFIG,
+  eventTitles,
+  idleTitle,
   nextIntervalMs,
   randomJackpot,
   RaffleConfigError,
@@ -228,6 +230,7 @@ export class RaffleLabService {
       'display',
       'scheduler',
       'launch_sounds',
+      'labels',
     ] as const)
       merged[k] = {
         ...(DEFAULT_RAFFLE_CONFIG[k] as object),
@@ -1870,6 +1873,8 @@ export class RaffleLabService {
         server_time: now.toISOString(),
         module_state: await moduleState(q, 'raffle'),
         overlay_hint: cfg.overlay_hint,
+        /** Event name and the texts with no participant (display only). */
+        labels: cfg.labels,
         /** Main entry command (overlay instruction « !join » mode shows this one). */
         join_command: cfg.join_commands[0]!,
         join_feedback_ms: cfg.display.join_feedback_ms,
@@ -1890,6 +1895,8 @@ export class RaffleLabService {
         ...base,
         round: {
           ...this.roundBase(r, currencies, now.getTime()),
+          /** Titles of this round's kind (overlay): name + state, from Studio's labels. */
+          titles: eventTitles(cfg.labels, r.kind),
           // The overlay learns the outcome with the reveal (never during « Tirage en cours »).
           outcome:
             r.status === 'cancelled'
@@ -1963,12 +1970,23 @@ export class RaffleLabService {
         module_state: await moduleState(q, 'raffle'),
         extension_button: cfg.extension_button,
         join_command: cfg.join_commands[0]!,
+        /** Texts of the screen, the same as the overlay's (Studio labels). */
+        idle_title: idleTitle(
+          cfg.labels,
+          cfg.amount_mode === 'giveaway' ? 'giveaway' : 'normal',
+        ),
+        idle_name: eventTitles(
+          cfg.labels,
+          cfg.amount_mode === 'giveaway' ? 'giveaway' : 'normal',
+        ).name,
+        empty_message: cfg.labels.empty_message,
         history: await this.viewerHistory(
           q,
           channelId,
           viewerId,
           currencies,
           t,
+          cfg.labels,
         ),
       };
       if (!last) return { ...common, phase: 'idle' as const, round: null };
@@ -1978,6 +1996,7 @@ export class RaffleLabService {
         : undefined;
       const round = {
         ...this.roundBase(last, currencies, t),
+        titles: eventTitles(cfg.labels, last.kind),
         participants: entries.length,
         counts: {
           chat: entries.filter((e) => e.source === 'chat').length,
@@ -2066,6 +2085,7 @@ export class RaffleLabService {
     viewerId: string | null,
     currencies: LabCurrency[],
     t: number,
+    labels: RaffleConfig['labels'],
   ) {
     const session = await this.currentSession(q, channelId);
     const rows = await q.query<RaffleRow>(
@@ -2094,6 +2114,7 @@ export class RaffleLabService {
       const w = wins.filter((x) => x.raffle_id === r.raffle_id);
       return {
         raffle_id: r.raffle_id,
+        name: eventTitles(labels, r.kind).name,
         at: iso(r.drawn_at ?? r.cancelled_at)!,
         status: r.status === 'cancelled' ? 'cancelled' : 'done',
         kind: r.kind,
@@ -2278,6 +2299,16 @@ export class RaffleLabService {
   async settings(channelId: string) {
     return this.db.tx(async (q) => ({
       config: await this.config(q, channelId),
+      /** Titles as the overlay and the extension show them (Studio preview of the labels). */
+      titles: await this.config(q, channelId).then((c) => ({
+        normal: eventTitles(c.labels, 'normal'),
+        super: eventTitles(c.labels, 'super'),
+        giveaway: eventTitles(c.labels, 'giveaway'),
+        idle: idleTitle(
+          c.labels,
+          c.amount_mode === 'giveaway' ? 'giveaway' : 'normal',
+        ),
+      })),
       scheduler: await this.schedulerView(
         q,
         channelId,

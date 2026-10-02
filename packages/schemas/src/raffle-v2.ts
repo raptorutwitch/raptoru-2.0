@@ -100,6 +100,47 @@ export const RaffleSound = z.strictObject({
 });
 export type RaffleSound = z.infer<typeof RaffleSound>;
 
+/** #RRGGBB or #RRGGBBAA (highlight with transparency). */
+const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/);
+/**
+ * Style of the custom overlay message (display only): a small set of clean fonts, a colour (null =
+ * the overlay's muted grey), bold, italic, an optional highlight behind the text.
+ */
+export const RaffleHintStyle = z.strictObject({
+  font: z.enum(['segoe', 'bahnschrift', 'trebuchet', 'georgia']),
+  color: HexColor.nullable(),
+  bold: z.boolean(),
+  italic: z.boolean(),
+  highlight: HexColor.nullable(),
+});
+export type RaffleHintStyle = z.infer<typeof RaffleHintStyle>;
+export const DEFAULT_HINT_STYLE: RaffleHintStyle = {
+  font: 'segoe',
+  color: null,
+  bold: false,
+  italic: false,
+  highlight: null,
+};
+
+/**
+ * Overlay texts (display only). `event_name` null = automatic (« Tombola », « Giveaway » for a
+ * giveaway); a custom name comes with its grammatical agreement, chosen in Studio (never guessed
+ * from the text). `empty_title` null = automatic (« <nom> terminé(e) »).
+ */
+export const RaffleLabels = z.strictObject({
+  event_name: z.string().trim().min(1).max(16).nullable(),
+  event_gender: z.enum(['f', 'm']),
+  empty_title: z.string().trim().min(1).max(28).nullable(),
+  empty_message: z.string().trim().min(1).max(40),
+});
+export type RaffleLabels = z.infer<typeof RaffleLabels>;
+export const DEFAULT_RAFFLE_LABELS: RaffleLabels = {
+  event_name: null,
+  event_gender: 'f',
+  empty_title: null,
+  empty_message: 'Aucun participant cette fois !',
+};
+
 export const RaffleConfig = z.strictObject({
   /** Registered Lab currency of a normal round (random or fixed amount). */
   currency_id: CurrencyId,
@@ -137,8 +178,12 @@ export const RaffleConfig = z.strictObject({
   overlay_hint: z.strictObject({
     mode: z.enum(['none', 'join', 'custom']),
     text: z.string().trim().max(60),
+    /** Custom message style; a configuration saved before it gets the default (unchanged look). */
+    style: RaffleHintStyle.default(DEFAULT_HINT_STYLE),
   }),
   display: RaffleDisplay,
+  /** Overlay texts: event name, title and message with no participant (default = current texts). */
+  labels: RaffleLabels.default(DEFAULT_RAFFLE_LABELS),
   scheduler: RaffleScheduler,
   /**
    * Opening sound per announced type (SUPER / Giveaway fall back to the normal one when unset).

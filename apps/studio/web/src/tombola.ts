@@ -33,12 +33,16 @@ interface Scheduler {
   waiting_for_round: boolean;
   last_skip_reason: string | null;
 }
+type TitleState = 'open' | 'running' | 'paused' | 'ended' | 'cancelled';
+type Titles = Record<TitleState, [string, string]> & { name: string };
 interface Status {
   config: RaffleConfig;
   scheduler: Scheduler;
   currencies: Currency[];
   stream: { session_id: string; started_at: string; source: string } | null;
   winners_table: { participants: number; min: number; max: number }[];
+  /** Titles composed by Core from the labels (overlay + extension). */
+  titles?: { normal: Titles; super: Titles; giveaway: Titles; idle: string };
   overlay_url: string;
   preview_url: string;
 }
@@ -114,6 +118,29 @@ interface Card {
   }[];
 }
 
+/** Fonts of the custom overlay message (same as raffle-overlay/kit.js HINT_FONTS). */
+const HINT_FONTS = {
+  segoe: "'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif",
+  bahnschrift: "'Bahnschrift', 'Segoe UI', sans-serif",
+  trebuchet: "'Trebuchet MS', 'Segoe UI', sans-serif",
+  georgia: "Georgia, 'Times New Roman', serif",
+} as const;
+const HINT_COLORS: [string | null, string][] = [
+  [null, 'Gris (défaut)'],
+  ['#eef3f8', 'Blanc'],
+  ['#2fd8c4', 'Turquoise'],
+  ['#f47e98', 'Rose'],
+  ['#e9c46a', 'Or'],
+  ['#ffb35c', 'Ambre'],
+];
+const HINT_HIGHLIGHTS: [string | null, string][] = [
+  [null, 'Aucun'],
+  ['#05070bcc', 'Sombre'],
+  ['#2fd8c433', 'Turquoise'],
+  ['#f47e9838', 'Rose'],
+  ['#e9c46a38', 'Or'],
+];
+const HINT_EMOJIS = ['🎟️', '🎁', '💰', '🔥', '⭐', '🎉', '🍀', '👀'];
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 const RUNNING = [
   'opening',
@@ -258,9 +285,11 @@ export function mountTombola(root: HTMLElement) {
           <div data-id="liveMain"></div>
           <div class="grid" data-id="liveGrid">
             <div class="card c5" data-id="liveFeed"></div>
-            <div class="card c7"><h3>${ic('eye')}Aperçu overlay OBS<span class="r">la vraie page overlay, pilotée par Core</span></h3>
-              <div class="preview" data-id="pv"><iframe data-id="pvf" title="Aperçu overlay"></iframe></div>
-              <p class="fine" style="margin:8px 0 0">Source OBS (navigateur, 1920×1080) : <code data-id="obsUrl"></code></p></div>
+            <div class="card c7" data-id="pvCard"><h3>${ic('eye')}Aperçu overlay OBS<span class="r">la vraie page overlay, pilotée par Core · son coupé ici</span><button class="t-btn t-btn--ghost cmp-btn" type="button" data-act="compare">${ic('ext')}Comparer avec l’Extension</button></h3>
+              <div class="cmp-row"><div class="preview" data-id="pv"><iframe data-id="pvf" title="Aperçu overlay"></iframe></div>
+                <div class="cmp-ext" data-id="cmpExt" hidden><iframe data-id="extf" title="Extension Lab · viewer"></iframe><span class="fine">Extension Lab · viewer · Panel 318×496</span></div></div>
+              <p class="fine" style="margin:8px 0 0">Source OBS (navigateur, 1920×1080) : <code data-id="obsUrl"></code></p>
+              <p class="fine" data-id="cmpNote" hidden style="margin:6px 0 0">Anti-spoil : l’Extension affiche le résultat après la fin de l’animation sur l’overlay + « Décalage résultat Extension après le stream » (<b data-id="cmpDelay"></b> s, réglable dans Préparer & lancer). Ici l’overlay n’a pas le retard du stream Twitch : le calibrage final se fait en regardant le vrai stream.</p></div>
             <div class="c12" data-id="liveRes"></div>
           </div>
           <div data-id="liveHist"></div>
@@ -471,6 +500,101 @@ export function mountTombola(root: HTMLElement) {
       return `<span>État stream : <b style="color:var(--t-ok)">En direct (Twitch)</b> depuis ${hhmm(st.started_at)}</span><span class="fine">fin détectée par l’ingestion Twitch</span>`;
     return `<span>État stream : <b style="color:var(--t-ok)">En direct (simulation)</b> depuis ${hhmm(st.started_at)}</span><button class="t-btn t-btn--ghost" type="button" data-stream="end">Simuler fin de stream</button>`;
   }
+  /** Bottom of the overlay C4 block (participants row + instruction), with the overlay's own values. */
+  function hintPreview(c: RaffleConfig, text = c.overlay_hint.text) {
+    const h = c.overlay_hint;
+    const st = h.style;
+    // Same style as the overlay (raffle-overlay/kit.js hintMessage).
+    const css = [
+      `font-family:${HINT_FONTS[st.font]}`,
+      st.color ? `color:${st.color}` : '',
+      st.bold ? 'font-weight:800' : '',
+      st.italic ? 'font-style:italic' : '',
+    ]
+      .filter(Boolean)
+      .join(';');
+    const body = st.highlight
+      ? `<span class="hl" style="background:${st.highlight}">${esc(text.trim())}</span>`
+      : esc(text.trim());
+    const hint =
+      h.mode === 'none'
+        ? ''
+        : h.mode === 'join'
+          ? `<span class="pv-cmd">${esc(c.join_commands[0])}</span>`
+          : text.trim()
+            ? `<span class="pv-hint" data-id="pvHint" style="${css}">${body}</span>`
+            : '';
+    const pp = (n: string, hue: number) =>
+      `<span class="pp" style="--h:${hue}"><i>${n}</i></span>`;
+    return `<span class="pv-people"><span class="pv-stack">${pp('PI', 205)}${pp('LU', 120)}${pp('KE', 330)}${pp('MA', 40)}${pp('NO', 280)}</span><span class="pv-pc">${ic('users')}<b>12</b></span></span>${hint}`;
+  }
+  /** Titles as Core composes them for the overlay and the extension (never recomputed here). */
+  const titleOf = (kind: 'normal' | 'giveaway', state: TitleState) =>
+    (status?.titles?.[kind]?.[state] ?? []).join(' ').trim();
+  function labelsCard(c: RaffleConfig) {
+    const l = c.labels;
+    const kind = c.amount_mode === 'giveaway' ? 'giveaway' : 'normal';
+    const name = status?.titles?.[kind]?.name ?? 'Tombola';
+    const quick: [string | null, string, 'f' | 'm'][] = [
+      [null, 'Automatique', 'f'],
+      ['Tombola', 'Tombola', 'f'],
+      ['Giveaway', 'Giveaway', 'm'],
+      ['Tirage', 'Tirage', 'm'],
+      ['Concours', 'Concours', 'm'],
+    ];
+    return `<div class="card c12"><h3>${ic('eye')}Overlay · nom et textes<span class="r">affichage sur le stream uniquement</span></h3>
+      <div class="inline" style="gap:14px;flex-wrap:wrap;align-items:flex-end">
+        <label class="field" style="margin:0"><span>Nom affiché</span><input class="input" data-label="event_name" maxlength="16" style="width:190px;font-family:var(--t-font)" placeholder="Automatique (${kind === 'giveaway' ? 'Giveaway' : 'Tombola'})" value="${esc(l.event_name ?? '')}"></label>
+        <span class="chips">${quick.map(([v, t, g]) => `<button type="button" class="chip ${(l.event_name ?? null) === v ? 'on' : ''}" data-lname="${v ?? ''}" data-lgender-set="${g}">${t}</button>`).join('')}</span>
+        ${l.event_name ? `<label class="field" style="margin:0"><span>Accord</span><span class="seg"><button type="button" class="${l.event_gender === 'm' ? 'on' : ''}" data-lgender="m">Masculin · terminé</button><button type="button" class="${l.event_gender === 'f' ? 'on' : ''}" data-lgender="f">Féminin · terminée</button></span></label>` : ''}
+      </div>
+      <p class="fine" style="margin:8px 0 0" data-id="labelsPv">Sur l’overlay : <b>${esc(titleOf(kind, 'open'))}</b> · <b>${esc(titleOf(kind, 'paused'))}</b> · <b>${esc(titleOf(kind, 'ended'))}</b> · <b>${esc(titleOf(kind, 'cancelled'))}</b> · Extension au repos : <b>${esc(status?.titles?.idle ?? '')}</b>.</p>
+      <div class="inline" style="gap:14px;flex-wrap:wrap;margin-top:12px">
+        <label class="field" style="margin:0"><span>Titre si aucun participant</span><input class="input" data-label="empty_title" maxlength="28" style="width:240px;font-family:var(--t-font)" placeholder="${esc(l.empty_title ? `${name} …` : titleOf(kind, 'ended'))}" value="${esc(l.empty_title ?? '')}"></label>
+        <label class="field" style="margin:0"><span>Message si aucun participant</span><input class="input" data-label="empty_message" maxlength="40" style="width:320px;font-family:var(--t-font)" value="${esc(l.empty_message)}"></label>
+      </div>
+      <p class="fine" style="margin:8px 0 0">Vide = texte automatique. Le même pour tous les viewers.</p></div>`;
+  }
+  /** Style of the custom message: a few clean choices (font, colour, bold, italic, highlight, emoji). */
+  function hintStyleBar(c: RaffleConfig) {
+    const st = c.overlay_hint.style;
+    const sw = (
+      k: 'color' | 'highlight',
+      v: string | null,
+      label: string,
+      look: string,
+    ) =>
+      `<button type="button" class="hs-sw ${st[k] === v ? 'on' : ''}" data-hstyle="${k}:${v ?? ''}" title="${label}" style="${look}"></button>`;
+    return `<div class="hs-bar">
+      <span class="hs-grp"><span class="hs-lbl">Police</span><span class="seg">${(
+        [
+          ['segoe', 'Standard'],
+          ['bahnschrift', 'Condensée'],
+          ['trebuchet', 'Arrondie'],
+          ['georgia', 'Serif'],
+        ] as const
+      )
+        .map(
+          ([k, l]) =>
+            `<button type="button" class="${st.font === k ? 'on' : ''}" data-hstyle="font:${k}" style="font-family:${HINT_FONTS[k]}">${l}</button>`,
+        )
+        .join('')}</span></span>
+      <span class="hs-grp"><span class="hs-lbl">Texte</span>${HINT_COLORS.map(([v, l]) => sw('color', v, l, `background:${v ?? '#93a0b2'}`)).join('')}<input type="color" class="hs-pick" data-hcolor value="${st.color ?? '#93a0b2'}" title="Autre couleur">
+        <button type="button" class="hs-tg ${st.bold ? 'on' : ''}" data-hstyle="bold" title="Gras"><b>G</b></button><button type="button" class="hs-tg ${st.italic ? 'on' : ''}" data-hstyle="italic" title="Italique"><i>I</i></button></span>
+      <span class="hs-grp"><span class="hs-lbl">Surlignage</span>${HINT_HIGHLIGHTS.map(([v, l]) => sw('highlight', v, l, v ? `background:${v}` : 'background:none;border-style:dashed')).join('')}</span>
+      <span class="hs-grp"><span class="hs-lbl">Emoji</span>${HINT_EMOJIS.map((e) => `<button type="button" class="hs-emo" data-emoji="${e}">${e}</button>`).join('')}</span>
+    </div>`;
+  }
+  /** Number of lines the custom text takes on the overlay (13 px × 1.3 line height). */
+  function paintHintLines() {
+    const el = root.querySelector<HTMLElement>('[data-id="hintLines"]');
+    if (!el) return;
+    const hint = root.querySelector<HTMLElement>('[data-id="pvHint"]');
+    const n = hint
+      ? Math.round(hint.getBoundingClientRect().height / (13 * 1.3))
+      : 0;
+    el.textContent = n ? `${n} ligne${n > 1 ? 's' : ''} sur l’overlay.` : '';
+  }
   function schedulerCard(c: RaffleConfig) {
     const s = status!.scheduler;
     const custom = c.scheduler.preset === 'custom';
@@ -604,6 +728,7 @@ export function mountTombola(root: HTMLElement) {
                   `<option value="${esc(k.id)}" ${k.id === c.super.currency_id ? 'selected' : ''}>${esc(k.label)}</option>`,
               )
               .join('')}</select></label></div></div>
+        ${labelsCard(c)}
         <div class="card c12"><h3>${ic('eye')}Overlay · texte d’instruction<span class="r">affichage sur le stream uniquement · ne change pas les commandes d’inscription</span></h3>
           <div class="inline" style="gap:14px;flex-wrap:wrap"><div class="seg">${[
             ['none', 'Masqué'],
@@ -616,12 +741,15 @@ export function mountTombola(root: HTMLElement) {
             )
             .join('')}</div>
             ${c.overlay_hint.mode === 'custom' ? `<span class="hint-in"><input class="input" data-cfg="overlay_hint.text" data-id="hintIn" maxlength="60" style="flex:1;min-width:260px;font-family:var(--t-font)" placeholder="Texte affiché sur l’overlay" value="${esc(c.overlay_hint.text)}"><span class="fine t-num" data-id="hintCount">${c.overlay_hint.text.length}/60</span></span>` : ''}</div>
-          <p class="fine" style="margin:8px 0 0">${c.overlay_hint.mode === 'custom' ? 'Message personnalisé, 60 caractères max (vide = aucune instruction affichée).' : c.overlay_hint.mode === 'join' ? `Affiche la commande principale « ${esc(c.join_commands[0])} ».` : 'Aucune instruction sur l’overlay.'} Visible sous le bloc Tombola de l’overlay (et dans l’aperçu « En direct »).</p></div>
+          ${c.overlay_hint.mode === 'custom' ? hintStyleBar(c) : ''}
+          <p class="fine" style="margin:8px 0 0">${c.overlay_hint.mode === 'custom' ? 'Message personnalisé, 60 caractères max (vide = aucune instruction affichée).' : c.overlay_hint.mode === 'join' ? `Affiche la commande principale « ${esc(c.join_commands[0])} ».` : 'Aucune instruction sur l’overlay.'} Visible sous le bloc Tombola de l’overlay (et dans l’aperçu « En direct »).</p>
+          <div class="hintpv-wrap"><div class="pv-c4" data-id="hintPv">${hintPreview(c)}</div>
+            <div class="fine">Aperçu fidèle de la zone d’instruction du bloc C4 de l’overlay : même police, même taille, même largeur (taille réelle, 1:1 sur un stream 1080p), même retour à la ligne. <b data-id="hintLines"></b></div></div></div>
         ${schedulerCard(c)}
         <div class="card c12"><h3>${ic('sound')}Sons d’ouverture<span class="r">joués par la source OBS Tombola · copiés dans le stockage Raptoru Studio</span></h3>
           ${soundRow('normal', 'Tombola', 'Aucun son')}${soundRow('super', 'Super Tombola', 'Aucun son (son de la Tombola)')}${soundRow('giveaway', 'Giveaway', 'Aucun son (son de la Tombola)')}
           <p class="fine" style="margin:10px 0 0">MP3, WAV ou OGG · 5 Mo max. FULL OSEILLE n’a jamais de son d’ouverture : elle reste une surprise jusqu’au tirage.</p>
-          <p class="note-f">${ic('sound')}<span>Au lancement, le son est joué par la source OBS Tombola (page overlay), pas par Studio. Cette page est portée en phase F : d’ici là, aucun son n’est entendu au lancement — c’est normal. « Écouter » n’est qu’un aperçu local.</span></p></div>
+          <p class="note-f">${ic('sound')}<span>Au lancement, le son est joué une seule fois par la source OBS Tombola (jamais rejoué après un rechargement), pas par Studio : l’aperçu « En direct » est muet. « Écouter » n’est qu’un aperçu local.</span></p></div>
         ${displayCard(c)}
         <div class="card c6"><h3>${ic('x')}Commande d’annulation<span class="r">modérateur et plus</span></h3>
           ${cmdEditor(c, 'cancel_commands')}
@@ -639,6 +767,7 @@ export function mountTombola(root: HTMLElement) {
         ?.focus();
     schedSig = streamSig = ingressSig = '';
     renderStatusParts();
+    paintHintLines();
   }
   /** Parts driven by Core's live state (scheduler, stream, chat ingress): refreshed on every read. */
   let schedSig = '';
@@ -967,6 +1096,25 @@ export function mountTombola(root: HTMLElement) {
       busy = false;
     }
   }
+  /** Overlay preview and the real Extension (Lab viewer, Tombola screen) side by side. */
+  let comparing = false;
+  function toggleCompare() {
+    comparing = !comparing;
+    const card = $('pvCard');
+    card.classList.toggle('c7', !comparing);
+    card.classList.toggle('c12', comparing);
+    $('cmpExt').hidden = !comparing;
+    $('cmpNote').hidden = !comparing;
+    $('cmpDelay').textContent = String(cfg?.display.stream_margin_s ?? '');
+    const f = $<HTMLIFrameElement>('extf');
+    f.src = comparing
+      ? '/ext/panel.html?anchor=panel&mode=viewer&platform=web&state=released&language=fr&locale=fr-FR&labRole=viewer&labIdentity=1&demoModule=raffle_join'
+      : 'about:blank';
+    root
+      .querySelector('[data-act="compare"]')!
+      .classList.toggle('on', comparing);
+    window.setTimeout(scalePreview, 30);
+  }
   const scalePreview = () => {
     const pv = $('pv');
     $<HTMLIFrameElement>('pvf').style.transform =
@@ -1017,6 +1165,7 @@ export function mountTombola(root: HTMLElement) {
       if (a === 'resume') void act({ action: 'resume' });
       if (a === 'draw') void act({ action: 'draw_now' });
       if (a === 'cancel') $('confirm').hidden = false;
+      if (a === 'compare') toggleCompare();
       if (a === 'cancel-no') $('confirm').hidden = true;
       if (a === 'cancel-yes') {
         $('confirm').hidden = true;
@@ -1187,6 +1336,44 @@ export function mountTombola(root: HTMLElement) {
       return patch(
         (c) => (c.winners_mode = b!.dataset.win as 'auto' | 'custom'),
       );
+    if ((b = g('[data-lname]'))) {
+      const v = b.dataset.lname || null;
+      const gender = b.dataset.lgenderSet as 'f' | 'm';
+      return patch((c) => {
+        c.labels.event_name = v;
+        if (v) c.labels.event_gender = gender;
+      });
+    }
+    if ((b = g('[data-lgender]')))
+      return patch(
+        (c) => (c.labels.event_gender = b!.dataset.lgender as 'f' | 'm'),
+      );
+    if ((b = g('[data-hstyle]'))) {
+      const [k, v] = b.dataset.hstyle!.split(':') as [
+        string,
+        string | undefined,
+      ];
+      return patch((c) => {
+        const st = c.overlay_hint.style;
+        if (k === 'bold' || k === 'italic') st[k] = !st[k];
+        else if (k === 'font') st.font = v as typeof st.font;
+        else if (k === 'color' || k === 'highlight') st[k] = v || null;
+      });
+    }
+    if ((b = g('[data-emoji]'))) {
+      // Inserted at the cursor of the custom message (60 characters max), saved like a typed text.
+      const input = root.querySelector<HTMLInputElement>('[data-id="hintIn"]');
+      if (input) {
+        const at = input.selectionStart ?? input.value.length;
+        const next = `${input.value.slice(0, at)}${b.dataset.emoji}${input.value.slice(input.selectionEnd ?? at)}`;
+        if (next.length <= 60) {
+          input.value = next;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+      return;
+    }
     if ((b = g('[data-hint]')))
       return patch(
         (c) =>
@@ -1309,6 +1496,21 @@ export function mountTombola(root: HTMLElement) {
     const t = ev.target as HTMLInputElement;
     // Command inputs are saved by their own buttons / Enter (never on blur).
     if (t.dataset.cmdEditIn || t.dataset.cmdAddIn) return;
+    if (t.dataset.label) {
+      const k = t.dataset.label as
+        'event_name' | 'empty_title' | 'empty_message';
+      const v = t.value.trim();
+      patch((c) => {
+        if (k === 'empty_message')
+          c.labels.empty_message = v || 'Aucun participant cette fois !';
+        else c.labels[k] = v || null;
+      });
+      return;
+    }
+    if (t.dataset.hcolor !== undefined) {
+      patch((c) => (c.overlay_hint.style.color = t.value));
+      return;
+    }
     if (t.dataset.cfg) {
       const path = t.dataset.cfg;
       const raw = t.value.trim();
@@ -1374,8 +1576,14 @@ export function mountTombola(root: HTMLElement) {
     const t = ev.target as HTMLInputElement;
     if (t.dataset.soundVol)
       (t.nextElementSibling as HTMLElement).textContent = t.value;
-    if (t.dataset.id === 'hintIn')
+    if (t.dataset.id === 'hintIn') {
       $('hintCount').textContent = `${t.value.length}/60`;
+      // Live preview while typing (saved to Core on change).
+      if (cfg) {
+        $('hintPv').innerHTML = hintPreview(cfg, t.value);
+        paintHintLines();
+      }
+    }
     if (t.dataset.cmdAddIn || t.dataset.cmdEditIn) {
       const list = (t.dataset.cmdAddIn ??
         t.dataset.cmdEditIn!.split(':')[0]) as CmdList;

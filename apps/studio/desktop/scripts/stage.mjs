@@ -38,6 +38,8 @@ const copies = [
   'apps/studio/server/sound-player',
   // TTS V2 player page (OBS browser source / Studio preview).
   'apps/studio/server/tts-player',
+  // Tombola V2 OBS overlay (single browser source served by the Studio server).
+  'apps/studio/server/raffle-overlay',
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
@@ -65,6 +67,7 @@ const runtimeFiles = [
   'apps/twitch-extension/extension/shared/tts-characters.js',
   'apps/twitch-extension/extension/assets/tts/Mikasa Blabla.webm',
   'apps/studio/server/bonk-overlay/overlay.html',
+  'apps/studio/server/raffle-overlay/overlay.html',
   'apps/studio/web/dist/index.html',
   'apps/studio/desktop/static/status.html',
   'apps/twitch-extension/extension/panel.html',

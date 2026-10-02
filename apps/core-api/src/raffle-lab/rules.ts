@@ -1,4 +1,10 @@
-import type { RaffleConfig, RaffleScheduler } from '@raptoru/schemas';
+import {
+  DEFAULT_HINT_STYLE,
+  DEFAULT_RAFFLE_LABELS,
+  type RaffleConfig,
+  type RaffleLabels,
+  type RaffleScheduler,
+} from '@raptoru/schemas';
 
 // Tombola V2 — pure rules (decided by Core only, never by a client): defaults, random jackpot,
 // winners count, exact split and the length of the overlay reveal.
@@ -37,7 +43,7 @@ export const DEFAULT_RAFFLE_CONFIG: RaffleConfig = {
   join_commands: [...DEFAULT_JOIN_COMMANDS],
   cancel_commands: ['!annuletombola'],
   extension_button: true,
-  overlay_hint: { mode: 'join', text: '' },
+  overlay_hint: { mode: 'join', text: '', style: { ...DEFAULT_HINT_STYLE } },
   display: {
     intro_s: 2,
     drawing_s: 3,
@@ -63,6 +69,7 @@ export const DEFAULT_RAFFLE_CONFIG: RaffleConfig = {
     interval_max_s: 30 * 60,
   },
   launch_sounds: { normal: null, super: null, giveaway: null },
+  labels: { ...DEFAULT_RAFFLE_LABELS },
 };
 
 /**
@@ -79,6 +86,37 @@ export const SCHEDULER_PRESETS: Record<
   frequent: { first_delay_s: 10 * 60, min_s: 12 * 60, max_s: 20 * 60 },
   very_frequent: { first_delay_s: 5 * 60, min_s: 6 * 60, max_s: 10 * 60 },
 };
+
+type EventKind = 'normal' | 'super' | 'giveaway';
+/**
+ * Titles of an event, computed once here for every surface (overlay, Studio, extension): the name
+ * comes from Studio (`labels.event_name`) or the type (« Tombola », « Giveaway »); the agreement of a
+ * custom name is the one chosen in Studio (never guessed). Each title is [name, state] so a surface
+ * can put the state under the name when it does not fit on one line.
+ */
+export function eventTitles(labels: RaffleLabels, kind: EventKind) {
+  const custom = labels.event_name?.trim();
+  const base = custom || (kind === 'giveaway' ? 'Giveaway' : 'Tombola');
+  const fem = custom ? labels.event_gender === 'f' : kind !== 'giveaway';
+  const name = kind === 'super' ? `Super ${base}` : base;
+  const t = (state: string): [string, string] => [name, state];
+  return {
+    name,
+    open: kind === 'super' ? t('') : t(fem ? 'ouverte' : 'ouvert'),
+    running: t('en cours'),
+    paused: t('en pause'),
+    ended: labels.empty_title?.trim()
+      ? ([labels.empty_title.trim(), ''] as [string, string])
+      : t(fem ? 'terminée' : 'terminé'),
+    cancelled: t(fem ? 'annulée' : 'annulé'),
+  };
+}
+/** « Aucune Tombola en cours » / « Aucun Giveaway en cours » / custom name with its agreement. */
+export function idleTitle(labels: RaffleLabels, kind: EventKind) {
+  const custom = labels.event_name?.trim();
+  const fem = custom ? labels.event_gender === 'f' : kind !== 'giveaway';
+  return `${fem ? 'Aucune' : 'Aucun'} ${eventTitles(labels, kind).name} en cours`;
+}
 
 /** Effective timing of the scheduler (preset values, or the custom ones). */
 export function schedulerTiming(s: RaffleScheduler) {
