@@ -18,6 +18,7 @@ const baseConfig: BotConfig = {
   LOYALTY_TWITCH_EVENTS: 'false',
   LOYALTY_CHAT_COMMANDS: 'false',
   PRESENCE_SHADOW: 'true',
+  LAB_CHAT_INGEST: 'false',
 };
 
 let messageSeq = 0;

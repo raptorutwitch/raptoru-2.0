@@ -29,7 +29,7 @@ const tokenFile = broadcasterMode
   : config.TWITCH_TOKEN_FILE;
 if (scopes.length === 0) {
   throw new Error(
-    'no feature enabled: set PRESENCE_SHADOW=true (or DAILY_CHAT_COMMANDS=true) first',
+    'no feature enabled: set PRESENCE_SHADOW=true, LAB_CHAT_INGEST=true (or DAILY_CHAT_COMMANDS=true) first',
   );
 }
 const redirectUri = process.env.TWITCH_REDIRECT_URI ?? DEFAULT_REDIRECT_URI;

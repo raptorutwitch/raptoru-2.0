@@ -1087,6 +1087,33 @@ export class LabEbs {
       path.startsWith('/actions/')
     )
       return this.admitTts(path, body, caller, headers.idempotencyKey);
+    // Tombola V2 (Core): what this viewer may see (phases, timer, entries, result, history of the
+    // stream, why a join would be refused). A projection of Core, nothing decided here.
+    if (this.labCore && method === 'GET' && path === '/raffle/state') {
+      const viewerId = caller.identityShared
+        ? caller.identity.twitchUserId
+        : null;
+      try {
+        const raffle = await this.labCore<Json>(
+          `/v1/lab/raffle/${LAB_CHANNEL.id}/viewer${viewerId ? `?viewer=${viewerId}` : ''}`,
+          undefined,
+          { timeoutMs: 1500 },
+        );
+        const user = viewerId ? this.user(viewerId) : null;
+        return this.ok({
+          raffle_v2: raffle,
+          me: viewerId
+            ? { viewer_id: viewerId, display_name: caller.identity.displayName }
+            : null,
+          wallet: user
+            ? { points: user.wallet, reserved: 0, available: user.wallet }
+            : { unavailable: true },
+        });
+      } catch (e) {
+        const err = e as { status?: number; message: string };
+        return this.fail(err.status ?? 503, err.message);
+      }
+    }
     // Tombola V2 (Core): free entry decided by Core, never the in-memory raffle.
     if (this.labCore && method === 'POST' && path === '/actions/raffle')
       return this.joinRaffleCore(caller, headers.idempotencyKey);
@@ -1872,6 +1899,9 @@ export class LabEbs {
                 }
               : m,
     );
+    // Tombola V2: the extension reads Core's viewer state itself (GET /raffle/state).
+    if (this.labCore)
+      for (const m of modules) if (m.id === 'raffle_join') m.raffle_v2 = true;
     const baseRaffle = base.raffle as Json;
     const joined = this.raffle.participants.some(
       (p) => p.login === identity.login,

@@ -33,6 +33,7 @@ import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
 import { createModerationV2View } from './moderation-v2.js';
+import { createTombolaV2View } from './tombola-v2.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -1151,6 +1152,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let ttsV2View = null;
   // Moderation V2 (D4, Lab): persistent console reading / commanding Core while the module is open.
   let moderationV2View = null;
+  /** Tombola V2 (Lab): persistent screen reading Core itself (never rebuilt by the host's polling). */
+  let tombolaV2View = null;
   let paymentWalletSync = null;
   let soundboardVolumeOpen = false;
   let soundboardVolumeSync = null;
@@ -1526,6 +1529,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
     // Moderation V2 open: the console polls Core itself; a host re-render would only reset it.
     if (render && openModule === MODERATION_MODULE.id && moderationV2View && canModerate()) return;
+    // Tombola V2 open: the screen reads Core itself; the host only hands it the balance.
+    if (render && openModule === 'raffle_join' && tombolaV2View
+      && (next?.modules ?? []).some((m) => m.id === 'raffle_join' && m.raffle_v2)) {
+      tombolaV2View.update(next);
+      return;
+    }
     if (render && !unchanged) renderPreservingViewport();
   }
 
@@ -1626,6 +1635,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (moduleId !== MODERATION_MODULE.id) {
       moderationV2View?.destroy();
       moderationV2View = null;
+    }
+    if (moduleId !== 'raffle_join') {
+      tombolaV2View?.destroy();
+      tombolaV2View = null;
     }
     if (moduleId !== 'soundboard') clearSoundboardFeedback({ render: false });
     if (moduleId !== 'raffle_join') {
@@ -5978,6 +5991,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const isBonk = mod.id === 'bonk';
       const isRaffle = mod.id === 'raffle_join';
       const isModeration = mod.id === MODERATION_MODULE.id;
+      const isTombolaV2 = isRaffle && mod.raffle_v2 === true && typeof client?.raffleState === 'function';
       const head = el('header', `jdm-ui-header jdm-module__screen-head${isSoundboard ? ' jdm-module__screen-head--soundboard' : ''}${isBonk ? ' jdm-module__screen-head--bonk' : ''}${isRaffle ? ' jdm-module__screen-head--raffle' : ''}${isModeration ? ' jdm-module__screen-head--moderation' : ''}`);
       head.setAttribute('aria-label', visibleModuleLabel(mod));
       const headLeft = el('div', 'jdm-module__screen-side jdm-module__screen-side--left');
@@ -6031,7 +6045,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       item.classList.add('is-open');
       const body = el('div', 'jdm-module__body');
       if (!isModeration) body.dataset.scrollKey = `module-${mod.id}`;
-      if (!isSoundboard && !isModeration) {
+      if (!isSoundboard && !isModeration && !isTombolaV2) {
         const intro = el('div', 'jdm-module__intro');
         intro.append(
           el('strong', 'jdm-module__intro-title', mod.label),
@@ -6052,6 +6066,23 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         }
         body.append(moderationV2View.node);
         queueMicrotask(() => moderationV2View?.attached());
+      } else if (isTombolaV2) {
+        // Tombola V2 (validated prototype): its own header and way back to the Hub, Core's state only.
+        body.dataset.tmbV2 = '1';
+        screen.classList.add('jdm-module-screen--tmbv2');
+        stopRaffleTimer();
+        if (!tombolaV2View) {
+          tombolaV2View = createTombolaV2View({
+            document,
+            client,
+            onBack: () => navigateTo(null),
+            onJoined: () => { void onRefresh?.(); },
+          });
+          tombolaV2View.start();
+        }
+        tombolaV2View.update(state);
+        body.append(tombolaV2View.node);
+        queueMicrotask(() => tombolaV2View?.attached());
       } else if (mod.id === MODERATION_MODULE.id) {
         const moderation = moderationForm();
         if (moderation) {

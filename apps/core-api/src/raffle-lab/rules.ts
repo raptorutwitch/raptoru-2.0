@@ -48,7 +48,8 @@ export const DEFAULT_RAFFLE_CONFIG: RaffleConfig = {
     result_giveaway_s: 14,
     cancelled_s: 4,
     empty_s: 5,
-    stream_margin_s: 8,
+    // « Décalage résultat Extension après le stream » (anti-spoil, one value for every viewer).
+    stream_margin_s: 5,
     extension_idle_return_s: 12,
   },
   // Off by default: the automatic launches start only once Studio enables them.

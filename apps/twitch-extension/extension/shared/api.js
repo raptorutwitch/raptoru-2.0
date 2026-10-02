@@ -468,6 +468,8 @@ export function createClient({
       body: { module_id: moduleId, payload },
       idempotencyKey: newIdempotencyKey(),
     }),
+    /** Tombola V2 (Lab): Core's viewer state (phase, timer, entries, refusal, result, history). */
+    raffleState: () => call('GET', '/raffle/state'),
     joinRaffle: () => call('POST', '/actions/raffle', {
       body: {},
       idempotencyKey: newIdempotencyKey(),

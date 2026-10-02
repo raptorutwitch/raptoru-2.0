@@ -48,6 +48,9 @@ const TwitchApp = z.object({
   LOYALTY_OUTBOX_FILE: z.string().min(1).default(DEFAULT_LOYALTY_OUTBOX_FILE),
   // Shadow presence tracker (Get Chatters, read-only). Needs scope moderator:read:chatters.
   PRESENCE_SHADOW: Flag,
+  // Lab chat ingestion (Studio « Ingestion chat Twitch » switch: reads the chat for the Lab modules,
+  // writes nothing). Only makes `twitch:auth` ask for user:read:chat; the switch stays OFF.
+  LAB_CHAT_INGEST: Flag,
 });
 
 const Env = TwitchApp.extend({
@@ -86,13 +89,20 @@ export function loadTwitchAppConfig(
 export function requiredScopes(
   config: Pick<
     TwitchAppConfig,
-    'DAILY_CHAT_COMMANDS' | 'LOYALTY_CHAT_COMMANDS' | 'PRESENCE_SHADOW'
+    | 'DAILY_CHAT_COMMANDS'
+    | 'LOYALTY_CHAT_COMMANDS'
+    | 'PRESENCE_SHADOW'
+    | 'LAB_CHAT_INGEST'
   >,
 ): string[] {
+  const chatCommands =
+    config.DAILY_CHAT_COMMANDS === 'true' ||
+    config.LOYALTY_CHAT_COMMANDS === 'true';
   return [
-    ...(config.DAILY_CHAT_COMMANDS === 'true' ||
-    config.LOYALTY_CHAT_COMMANDS === 'true'
-      ? ['user:read:chat', 'user:write:chat']
+    ...(chatCommands ? ['user:read:chat', 'user:write:chat'] : []),
+    // Reading only: the Lab ingestion never writes to the chat.
+    ...(!chatCommands && config.LAB_CHAT_INGEST === 'true'
+      ? ['user:read:chat']
       : []),
     ...(config.PRESENCE_SHADOW === 'true' ? ['moderator:read:chatters'] : []),
   ];

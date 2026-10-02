@@ -19,6 +19,7 @@ import {
   audit,
   countGlobalRefusal,
   GlobalPauseError,
+  globalState,
   moduleState,
   seeViewer,
   setModuleState,
@@ -867,6 +868,41 @@ export class RaffleLabService {
   }
 
   // --- entries (extension, chat, manual) ----------------------------------------------------------------
+
+  /**
+   * Why this viewer could not join from the extension right now (same checks and order as `admit`),
+   * or null. Read by the extension so it never guesses: global pause, module disabled / paused, viewer
+   * blocked, round paused, extension button off, removed by moderation. `viewerId` null = identity not
+   * shared (only the channel-wide reasons apply).
+   */
+  private async extensionRefusal(
+    q: Queryable,
+    channelId: string,
+    viewerId: string | null,
+    r: RaffleRow,
+    cfg: RaffleConfig,
+  ): Promise<string | null> {
+    const now = this.clock.now();
+    if ((await globalState(q, channelId)).paused) return 'global_pause';
+    const state = await moduleState(q, 'raffle');
+    if (state === 'disabled') return 'module_disabled';
+    if (state === 'paused') return 'raffle_paused';
+    if (viewerId && (await activeBlock(q, channelId, viewerId, 'raffle', now)))
+      return 'viewer_blocked';
+    if (!BEFORE_DRAW.includes(r.status)) return 'raffle_closed';
+    if (r.status === 'paused') return 'round_paused';
+    if (!cfg.extension_button) return 'extension_join_disabled';
+    if (viewerId) {
+      const removed = (
+        await q.query<{ removed_at: Date | null }>(
+          'select removed_at from lab_raffle_entries where raffle_id = $1 and viewer_id = $2',
+          [r.raffle_id, viewerId],
+        )
+      )[0]?.removed_at;
+      if (removed) return 'entry_removed';
+    }
+    return null;
+  }
 
   private async admit(
     q: Queryable,
@@ -1971,7 +2007,14 @@ export class RaffleLabService {
         return {
           ...common,
           phase,
-          round: { ...round, list: await this.entryViews(q, entries) },
+          round: {
+            ...round,
+            list: await this.entryViews(q, entries),
+            /** Core's answer to « can this viewer join from the extension now? » (null = yes). */
+            refusal: mine
+              ? null
+              : await this.extensionRefusal(q, channelId, viewerId, last, cfg),
+          },
         };
       if (phase === 'cancelled' || phase === 'drawing')
         return {

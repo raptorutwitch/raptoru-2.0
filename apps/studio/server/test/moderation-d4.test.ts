@@ -318,6 +318,68 @@ describe('Studio ↔ Extension: one moderation (same Core)', () => {
   });
 });
 
+describe('Tombola V2 extension screen (Lab EBS → Core viewer state)', () => {
+  it('flags the module, reads Core for this viewer (phase, refusal, entries, result), nothing decided here', async () => {
+    const f = await fixture();
+    const viewerId = await f.me(viewer);
+    const session = (await f.lab.handle('GET', '/session', undefined, viewer))
+      .body;
+    expect(
+      (session.modules as Json[]).find((m) => m.id === 'raffle_join'),
+    ).toMatchObject({ raffle_v2: true });
+    const state = async (h: { authorization: string } = viewer) =>
+      (await f.lab.handle('GET', '/raffle/state', undefined, h)).body as {
+        raffle_v2: Json & { phase: string; round: Json | null };
+        me: Json | null;
+        wallet: Json;
+      };
+    let s = await state();
+    expect(s.raffle_v2).toMatchObject({ phase: 'idle', round: null });
+    expect(s.me).toEqual({
+      viewer_id: viewerId,
+      display_name: expect.any(String),
+    });
+    expect(s.wallet).toMatchObject({ available: 12_000 });
+    await f.lab.control('raffle-open', { seconds: 60, jackpot: 6000 });
+    s = await state();
+    expect(s.raffle_v2.phase).toBe('open');
+    expect(s.raffle_v2.round).toMatchObject({
+      joined: false,
+      refusal: null,
+      participants: 0,
+    });
+    await f.lab.handle(
+      'POST',
+      '/actions/raffle',
+      {},
+      { ...viewer, idempotencyKey: 'r-v2-aaaaaaaa' },
+    );
+    s = await state();
+    expect(s.raffle_v2.round).toMatchObject({
+      joined: true,
+      my_source: 'extension',
+      participants: 1,
+      counts: { chat: 0, extension: 1, manual: 0 },
+      list: [
+        expect.objectContaining({ viewer_id: viewerId, source: 'extension' }),
+      ],
+    });
+    // Identity not shared: no viewer, Core's channel-wide answer only.
+    const anon = {
+      authorization: `Bearer lab.${Buffer.from(JSON.stringify({ role: 'viewer', identity_shared: false })).toString('base64url')}`,
+    };
+    const a = await state(anon);
+    expect(a.me).toBeNull();
+    expect(a.raffle_v2.round).toMatchObject({ joined: false, refusal: null });
+    // Drawn: no spoiler before Core's viewer result time.
+    await f.lab.control('raffle-draw');
+    s = await state();
+    expect(s.raffle_v2.phase).toBe('drawing');
+    expect(s.raffle_v2.round).toMatchObject({ outcome: null });
+    expect(s.raffle_v2.round).not.toHaveProperty('winners');
+  });
+});
+
 describe('Soundboard stop: Core → Studio worker → player → ACK → Core', () => {
   it('a playing sound stopped by moderation is stopped on the player, proven by a `stopped` ACK, refunded', async () => {
     const f = await fixture();

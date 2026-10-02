@@ -59,7 +59,7 @@ const BLOCKED_FR: Record<BlockedCode, string> = {
     'Adaptateur du bot non compilé : lance « npm run build -w apps/twitch-bot ».',
   no_token:
     'Aucun jeton Twitch pour le bot : lance « npm run twitch:auth -w apps/twitch-bot ».',
-  missing_scope: `Le jeton Twitch du bot n'a pas le droit de lire le chat (scope ${CHAT_READ_SCOPE} manquant). Relance « npm run twitch:auth -w apps/twitch-bot » et accepte la lecture du chat.`,
+  missing_scope: `Le jeton Twitch du bot n'a pas le droit de lire le chat (scope ${CHAT_READ_SCOPE} manquant). Ajoute LAB_CHAT_INGEST=true dans apps/twitch-bot/.env, puis relance « npm run twitch:auth -w apps/twitch-bot » (il doit afficher « Scopes requested: user:read:chat … »).`,
   bot_running:
     'Le bot du Labo de test est déjà connecté à Twitch avec ce jeton : arrête-le avant d’activer l’ingestion.',
 };

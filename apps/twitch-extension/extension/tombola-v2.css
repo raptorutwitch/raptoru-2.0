@@ -1,0 +1,906 @@
+/* Tombola V2 — extension viewer screen. Generated from the validated prototype
+
+   prototypes/tombola-v2/extension.html (+ shared/tokens.css): same tokens, components and layout,
+
+   scoped under .tmbx (the prototype .app); keyframes prefixed tmbx-. Data comes from Core only. */
+
+
+
+/* Host: the module body gives its whole height to the screen (it has its own header and a way back
+
+   to the Hub, like the prototype), no host header, no intro, no padding. */
+
+.jdm-module-screen--tmbv2 > .jdm-module__screen-head { display: none !important; }
+
+.jdm-module-screen--tmbv2 > .jdm-module { border-color: rgba(160, 220, 230, 0.12); background: #090c12 !important; }
+
+.jdm-module__body[data-tmb-v2] { display: flex !important; flex-direction: column; min-height: 0; gap: 0 !important; padding: 0 !important; overflow: hidden !important; }
+
+.jdm-module__body[data-tmb-v2] > .tmbx { flex: 1 1 auto; min-height: 0; }
+
+body.mobile:has(.tmbx) .m-body { height: 100vh; max-height: 100vh; overflow: hidden; }
+
+.jdm-module-screen:has(.tmbx), .jdm-module-screen:has(.tmbx) > .jdm-module, .jdm-module-screen:has(.tmbx) > .jdm-module > .jdm-module__body { min-height: 0; }
+
+.tmbx {
+  --t-bg: #0a0d13;
+  --t-bg-2: #0f141c;
+  --t-surface: rgba(18, 24, 33, 0.92);
+  --t-surface-2: rgba(26, 34, 46, 0.92);
+  --t-line: rgba(160, 220, 230, 0.12);
+  --t-line-2: rgba(160, 220, 230, 0.22);
+  --t-ink: #eef3f8;
+  --t-muted: #93a0b2;
+  --t-faint: #5f6b7c;
+  --t-teal: #2fd8c4;
+  --t-teal-2: #12b5a6;
+  --t-teal-soft: rgba(47, 216, 196, 0.14);
+  --t-teal-glow: rgba(47, 216, 196, 0.35);
+  --t-ext: #f47e98;
+  --t-ext-soft: rgba(244, 126, 152, 0.14);
+  --t-gold: #e9c46a;
+  --t-gold-2: #c99a3c;
+  --t-gold-soft: rgba(233, 196, 106, 0.14);
+  --t-gold-glow: rgba(233, 196, 106, 0.32);
+  --t-hot: #ffb35c;
+  --t-ok: #5ee6a0;
+  --t-r-s: 8px;
+  --t-r: 12px;
+  --t-r-l: 18px;
+  --t-pill: 999px;
+  --t-1: 4px;
+  --t-2: 8px;
+  --t-3: 12px;
+  --t-4: 16px;
+  --t-5: 24px;
+  --t-6: 32px;
+  --t-font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --t-num: 'Bahnschrift', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  --t-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --t-fast: 160ms;
+  --t-mid: 280ms;
+  --t-slow: 520ms;
+}
+
+.tmbx .t-num {
+  font-family: var(--t-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.tmbx .t-caps {
+  font-family: var(--t-num);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tmbx .t-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--t-line-2);
+  border-radius: var(--t-pill);
+  background: var(--t-surface-2);
+  color: var(--t-ink);
+  font: 600 13px/1 var(--t-font);
+  white-space: nowrap;
+}
+
+.tmbx .t-pill svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.tmbx .t-pill--chat {
+  border-color: rgba(47, 216, 196, 0.4);
+  background: var(--t-teal-soft);
+  color: #b9f5ec;
+}
+
+.tmbx .t-pill--ext {
+  border-color: rgba(244, 126, 152, 0.42);
+  background: var(--t-ext-soft);
+  color: #ffd0da;
+}
+
+.tmbx .t-pill--gold {
+  border-color: rgba(233, 196, 106, 0.55);
+  background: var(--t-gold-soft);
+  color: #f7e2ac;
+}
+
+.tmbx .t-full svg,
+.tmbx .t-super svg {
+  width: 1.1em;
+  height: 1.1em;
+  flex: none;
+}
+
+.tmbx .t-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--t-teal);
+}
+
+.tmbx .t-dot--ext {
+  background: var(--t-ext);
+}
+
+.tmbx .t-full {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 3px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #f4d98a, #d9aa48);
+  color: #1d1406;
+  font: 700 13px/1 var(--t-num);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  box-shadow: 0 0 0 1px rgba(255, 236, 180, 0.5) inset, 0 6px 18px rgba(233, 196, 106, 0.28);
+}
+
+.tmbx .t-super {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 3px;
+  border: 1px solid rgba(233, 196, 106, 0.7);
+  border-radius: 6px;
+  color: var(--t-gold);
+  font: 700 13px/1 var(--t-num);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, rgba(233, 196, 106, 0.14), rgba(233, 196, 106, 0.04));
+}
+
+.tmbx .t-ring circle {
+  fill: none;
+  stroke-width: 6;
+}
+
+.tmbx .t-ring .bg {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.tmbx .t-ring .fg {
+  stroke: var(--t-teal);
+  stroke-linecap: round;
+  transition:
+  stroke-dashoffset 1s linear,
+  stroke 0.3s;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.tmbx .is-hot .t-ring .fg {
+  stroke: var(--t-hot);
+}
+
+.tmbx .is-super .t-ring .fg {
+  stroke: var(--t-gold);
+}
+
+.tmbx .t-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--t-line-2);
+  border-radius: var(--t-r);
+  background: var(--t-surface-2);
+  color: var(--t-ink);
+  font: 600 14px/1 var(--t-font);
+  cursor: pointer;
+  transition:
+  background var(--t-fast),
+  border-color var(--t-fast),
+  transform var(--t-fast);
+}
+
+.tmbx .t-btn:hover {
+  border-color: var(--t-teal);
+}
+
+.tmbx .t-btn:active {
+  transform: translateY(1px);
+}
+
+.tmbx .t-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tmbx .t-btn--primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, #3fe3cf, #16b3a3);
+  color: #032420;
+  box-shadow: 0 6px 20px rgba(47, 216, 196, 0.25);
+}
+
+.tmbx .t-btn--primary:hover {
+  border-color: transparent;
+  filter: brightness(1.06);
+}
+
+.tmbx .t-btn--ext {
+  border-color: transparent;
+  background: linear-gradient(180deg, #f8909f, #e46a85);
+  color: #2a0710;
+  box-shadow: 0 6px 20px rgba(244, 126, 152, 0.22);
+}
+
+.tmbx .t-btn--gold {
+  border-color: transparent;
+  background: linear-gradient(180deg, #f2d483, #cf9f43);
+  color: #231805;
+}
+
+.tmbx .t-btn--ghost {
+  background: none;
+}
+
+.tmbx .t-btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tmbx .t-amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--t-num);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.005em;
+}
+
+.tmbx .t-amount small {
+  color: var(--t-muted);
+  font-weight: 600;
+  font-size: 0.48em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tmbx .t-amount.is-gold {
+  color: var(--t-gold);
+}
+
+@keyframes tmbx-t-in-up {
+  from {
+  opacity: 0;
+  transform: translateY(8px);
+  }
+}
+
+@keyframes tmbx-t-in-scale {
+  from {
+  opacity: 0;
+  transform: scale(0.96);
+  }
+}
+
+@keyframes tmbx-t-sweep {
+  from {
+  transform: translateX(-120%) skewX(-18deg);
+  }
+  to {
+  transform: translateX(220%) skewX(-18deg);
+  }
+}
+
+@keyframes tmbx-t-tick {
+  0% {
+  transform: scale(1.12);
+  }
+  100% {
+  transform: scale(1);
+  }
+}
+
+@keyframes tmbx-t-spin {
+  to {
+  transform: rotate(360deg);
+  }
+}
+
+@keyframes tmbx-t-breathe {
+  50% {
+  opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tmbx * { animation-duration: 1ms !important;
+  transition-duration: 1ms !important; }
+}
+
+.tmbx .pp {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--s, 40px);
+  height: var(--s, 40px);
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 26%, hsl(var(--h) 72% 74%), hsl(var(--h) 52% 44%) 72%);
+  box-shadow:
+  0 0 0 2px var(--pp-gap, #0b0f16),
+  0 0 0 calc(2px + var(--pp-ring-w, 2px)) var(--pp-ring, rgba(47, 216, 196, 0.9));
+  color: rgba(8, 10, 14, 0.8);
+  font: 800 calc(var(--s, 40px) * 0.36) / 1 var(--t-num);
+  letter-spacing: 0.02em;
+}
+
+.tmbx .pp.ext {
+  --pp-ring: rgba(244, 126, 152, 0.95);
+}
+
+.tmbx .pp i {
+  font-style: normal;
+}
+
+.tmbx * {
+  box-sizing: border-box;
+}
+
+.tmbx button {
+  font: inherit; color: inherit;
+}
+
+.tmbx {
+  position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden; background: radial-gradient(420px 260px at 50% -40px, rgba(47,216,196,0.10), transparent 70%), linear-gradient(180deg, #0d121a, #090c12);
+}
+
+.tmbx .head {
+  display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 10px; border-bottom: 1px solid var(--t-line); flex: none;
+}
+
+.tmbx .ib {
+  display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--t-line); border-radius: 10px; background: rgba(255,255,255,0.03); cursor: pointer;
+}
+
+.tmbx .ib svg {
+  width: 16px; height: 16px;
+}
+
+.tmbx .ib.on {
+  border-color: var(--t-teal); color: var(--t-teal);
+}
+
+.tmbx .head .ttl {
+  display: flex; align-items: center; gap: 7px; font: 700 15px/1 var(--t-font);
+}
+
+.tmbx .head .ttl svg {
+  width: 17px; height: 17px; color: var(--t-teal);
+}
+
+.tmbx .head .grow {
+  flex: 1;
+}
+
+.tmbx .wallet {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--t-line); border-radius: 999px; font: 700 13px/1 var(--t-num);
+}
+
+.tmbx .wallet svg {
+  width: 14px; height: 14px; color: var(--t-gold);
+}
+
+.tmbx .body {
+  flex: 1; min-height: 0; overflow: auto; padding: 14px; scrollbar-width: thin;
+}
+
+.tmbx .body.is-new > * {
+  animation: tmbx-t-in-up var(--t-mid) var(--t-ease) both;
+}
+
+.tmbx .sec {
+  margin: 16px 0 8px; color: var(--t-muted); font: 600 11px/1 var(--t-num); letter-spacing: 0.16em; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;
+}
+
+.tmbx .sec a {
+  color: var(--t-teal); font: 600 12px var(--t-font); letter-spacing: 0; text-transform: none; cursor: pointer;
+}
+
+.tmbx .muted {
+  color: var(--t-muted);
+}
+
+.tmbx .fine {
+  color: var(--t-faint); font-size: 12px;
+}
+
+.tmbx .hero {
+  display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 18px 14px 16px; border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); text-align: center;
+}
+
+.tmbx .hero.is-super {
+  border-color: rgba(233,196,106,0.45); box-shadow: 0 0 30px rgba(233,196,106,0.10) inset;
+}
+
+.tmbx .ringbig {
+  position: relative; width: 132px; height: 132px;
+}
+
+.tmbx .ringbig svg {
+  width: 132px; height: 132px;
+}
+
+.tmbx .ringbig .t-ring circle {
+  stroke-width: 7;
+}
+
+.tmbx .ringbig .in {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+
+.tmbx .ringbig .in b {
+  font: 700 34px/1 var(--t-num); font-variant-numeric: tabular-nums;
+}
+
+.tmbx .ringbig .in span {
+  color: var(--t-muted); font: 600 10px/1 var(--t-num); letter-spacing: 0.16em; text-transform: uppercase;
+}
+
+.tmbx .hero .amt {
+  font-size: 32px;
+}
+
+.tmbx .hero .amt small {
+  font-size: 13px;
+}
+
+.tmbx .hero .lbl {
+  display: flex; align-items: center; gap: 8px; color: var(--t-teal); font: 600 12px/1 var(--t-num); letter-spacing: 0.18em; text-transform: uppercase;
+}
+
+.tmbx .hero .join {
+  width: 100%; height: 44px; font-size: 15px;
+}
+
+.tmbx .hero .alt {
+  display: flex; align-items: center; gap: 6px; color: var(--t-muted); font-size: 12.5px;
+}
+
+.tmbx .hero .alt code {
+  padding: 2px 7px; border-radius: 6px; background: var(--t-teal-soft); color: #b9f5ec; font: 700 12.5px var(--t-num);
+}
+
+.tmbx .joined {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 44px; border: 1px solid rgba(94,230,160,0.4); border-radius: var(--t-r); background: rgba(94,230,160,0.08); color: var(--t-ok); font-weight: 700;
+}
+
+.tmbx .joined svg {
+  width: 17px; height: 17px; stroke-width: 3;
+}
+
+.tmbx .meta-row {
+  display: flex; align-items: center; justify-content: space-between; width: 100%; padding-top: 10px; border-top: 1px solid var(--t-line); font-size: 12.5px;
+}
+
+.tmbx .meta-row .who {
+  display: flex; align-items: center; gap: 6px; color: var(--t-muted);
+}
+
+.tmbx .meta-row .who b {
+  color: var(--t-ink); font-family: var(--t-num);
+}
+
+.tmbx .split {
+  display: flex; gap: 6px;
+}
+
+.tmbx .split .t-pill {
+  height: 22px; padding: 0 8px; font-size: 11.5px;
+}
+
+.tmbx .ticket {
+  position: relative; display: grid; grid-template-columns: 1fr auto; border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); overflow: hidden;
+}
+
+.tmbx .ticket.is-super {
+  border-color: rgba(233,196,106,0.45);
+}
+
+.tmbx .ticket .l {
+  display: flex; flex-direction: column; gap: 8px; padding: 14px 16px;
+}
+
+.tmbx .ticket .r {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 96px; border-left: 2px dashed var(--t-line-2); background: rgba(47,216,196,0.05);
+}
+
+.tmbx .ticket .r b {
+  font: 700 30px/1 var(--t-num);
+}
+
+.tmbx .ticket .r span {
+  color: var(--t-muted); font: 600 10px/1 var(--t-num); letter-spacing: 0.14em; text-transform: uppercase;
+}
+
+.tmbx .ticket::before,
+.tmbx .ticket::after {
+  content: ''; position: absolute; right: 89px; width: 14px; height: 14px; border-radius: 50%; background: var(--t-bg); border: 1px solid var(--t-line);
+}
+
+.tmbx .ticket::before {
+  top: -8px;
+}
+
+.tmbx .ticket::after {
+  bottom: -8px;
+}
+
+.tmbx .ticket .amt {
+  font-size: 30px;
+}
+
+.tmbx .ticket .bar {
+  position: relative; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.07); overflow: hidden;
+}
+
+.tmbx .ticket .bar i {
+  position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--t-teal);
+}
+
+.tmbx .below {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 10px;
+}
+
+.tmbx .is-hot .t-ring .fg {
+  stroke: var(--t-hot);
+}
+
+.tmbx .is-hot .ringbig .in b,
+.tmbx .is-hot .ticket .r b {
+  color: var(--t-hot);
+}
+
+.tmbx .rows {
+  display: flex; flex-direction: column; gap: 4px;
+}
+
+.tmbx .row {
+  display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 6px 10px; border: 1px solid transparent; border-radius: 10px; background: rgba(255,255,255,0.025);
+}
+
+.tmbx .row.me {
+  border-color: rgba(47,216,196,0.35); background: var(--t-teal-soft);
+}
+
+.tmbx .row .name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;
+}
+
+.tmbx .row .t-pill {
+  height: 22px; padding: 0 8px; font-size: 11.5px;
+}
+
+.tmbx .av {
+  display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 50%; background: var(--c, #2a3446); color: #0b0f16; font: 800 11px/1 var(--t-num);
+}
+
+.tmbx .chips {
+  display: flex; gap: 6px; margin-bottom: 8px;
+}
+
+.tmbx .chip {
+  height: 28px; padding: 0 11px; border: 1px solid var(--t-line); border-radius: 999px; background: none; color: var(--t-muted); font: 600 12.5px var(--t-font); cursor: pointer;
+}
+
+.tmbx .chip.on {
+  border-color: var(--t-teal); color: var(--t-ink); background: var(--t-teal-soft);
+}
+
+.tmbx .drawing {
+  display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 26px 16px; border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); text-align: center;
+}
+
+.tmbx .drawing .spin {
+  width: 64px; height: 64px; animation: tmbx-t-spin 1.1s linear infinite;
+}
+
+.tmbx .drawing h3 {
+  margin: 0; font: 700 18px/1.2 var(--t-font);
+}
+
+.tmbx .drawing p {
+  margin: 0; color: var(--t-muted); font-size: 13px;
+}
+
+.tmbx .reveal {
+  display: flex; align-items: center; gap: 8px; color: var(--t-muted); font: 600 12px var(--t-num); letter-spacing: 0.06em;
+}
+
+.tmbx .reveal .barw {
+  width: 120px; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden;
+}
+
+.tmbx .reveal .barw i {
+  display: block; height: 100%; background: var(--t-teal); transition: width 1s linear;
+}
+
+.tmbx .result {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 16px; border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); text-align: center;
+}
+
+.tmbx .result.win {
+  border-color: rgba(47,216,196,0.5); background: linear-gradient(180deg, rgba(47,216,196,0.12), var(--t-surface) 70%);
+}
+
+.tmbx .result.win.gold {
+  border-color: rgba(233,196,106,0.55); background: linear-gradient(180deg, rgba(233,196,106,0.14), var(--t-surface) 70%);
+}
+
+.tmbx .result .big {
+  font-size: 36px;
+}
+
+.tmbx .result h3 {
+  margin: 0; font: 700 17px/1.2 var(--t-font);
+}
+
+.tmbx .result p {
+  margin: 0; color: var(--t-muted); font-size: 13px;
+}
+
+.tmbx .won-gain {
+  color: var(--t-teal);
+}
+
+.tmbx .gold .won-gain {
+  color: var(--t-gold);
+}
+
+.tmbx .row .gain {
+  color: var(--t-teal); font: 700 13px var(--t-num);
+}
+
+.tmbx .row .gain.gold {
+  color: var(--t-gold);
+}
+
+.tmbx .empty {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 26px 16px; border: 1px dashed var(--t-line-2); border-radius: var(--t-r-l); text-align: center;
+}
+
+.tmbx .empty .ic {
+  display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; background: var(--t-teal-soft); color: var(--t-teal);
+}
+
+.tmbx .empty .ic svg {
+  width: 24px; height: 24px;
+}
+
+.tmbx .empty h3 {
+  margin: 0; font: 700 16px/1.2 var(--t-font);
+}
+
+.tmbx .empty p {
+  margin: 0; color: var(--t-muted); font-size: 13px;
+}
+
+.tmbx .hist {
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.tmbx .h {
+  display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--t-line); border-radius: 12px; background: rgba(255,255,255,0.02);
+}
+
+.tmbx .h .t {
+  color: var(--t-faint); font: 600 12px var(--t-num);
+}
+
+.tmbx .h .w {
+  min-width: 0;
+}
+
+.tmbx .h .w b {
+  display: block; font: 700 14px/1.2 var(--t-num);
+}
+
+.tmbx .h .w span {
+  display: block; overflow: hidden; color: var(--t-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.tmbx .h .me {
+  color: var(--t-ok); font: 700 11px var(--t-num); letter-spacing: 0.1em; text-transform: uppercase;
+}
+
+.tmbx .h .t-full,
+.tmbx .h .t-super {
+  font-size: 10px; padding: 3px 7px 2px;
+}
+
+.tmbx .lbl svg {
+  width: 15px; height: 15px; flex: none;
+}
+
+.tmbx .ticket .amt {
+  white-space: nowrap; font-size: 27px;
+}
+
+.tmbx .ticket .l {
+  min-width: 0;
+}
+
+@media (max-height: 520px) {
+  .tmbx .hero { gap: 9px; padding: 14px 12px 12px; }
+  .tmbx .ringbig,
+.tmbx .ringbig svg { width: 104px; height: 104px; }
+  .tmbx .ringbig .in b { font-size: 28px; }
+  .tmbx .hero .amt { font-size: 28px; }
+  .tmbx .hero .join,
+.tmbx .joined { height: 40px; }
+  .tmbx .body { padding: 12px; }
+}
+
+.tmbx .stage {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; max-width: 360px; margin: 0 auto; padding: 22px 18px 20px; border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); text-align: center;
+}
+
+.tmbx .stage .orb {
+  position: relative; display: grid; place-items: center; width: 92px; height: 92px; margin: 4px 0 2px; border-radius: 50%;
+}
+
+.tmbx .stage .orb.quiet {
+  border: 2px dashed var(--t-line-2); background: radial-gradient(circle, rgba(47,216,196,0.10), transparent 70%); color: var(--t-teal);
+}
+
+.tmbx .stage .orb.quiet svg {
+  width: 34px; height: 34px;
+}
+
+.tmbx .stage .orb .pp {
+  --s: 92px; --pp-ring: var(--t-gold); --pp-ring-w: 3px; --pp-gap: #121821; font-size: 32px;
+}
+
+.tmbx .stage .orb.glow::before {
+  content: ''; position: absolute; inset: -14px; border-radius: 50%; background: radial-gradient(circle, rgba(233,196,106,0.38), transparent 68%); animation: tmbx-orb-glow 2.4s ease-in-out infinite;
+}
+
+.tmbx .stage .orb.glow .pp {
+  animation: tmbx-orb-in 620ms var(--t-ease) both;
+}
+
+@keyframes tmbx-orb-glow {
+  50% { opacity: 0.45; transform: scale(0.94); }
+}
+
+@keyframes tmbx-orb-in {
+  from { opacity: 0; transform: scale(0.7); }
+}
+
+.tmbx .stage .orb.cancel {
+  border: 3px solid #ff6b6b; background: rgba(255,107,107,0.08); box-shadow: 0 0 22px rgba(255,107,107,0.18);
+}
+
+.tmbx .stage .orb.cancel svg {
+  width: 36px; height: 36px;
+}
+
+.tmbx .stage .orb.cancel path {
+  fill: none; stroke: #ff6b6b; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 30; stroke-dashoffset: 30; animation: tmbx-x-draw 340ms var(--t-ease) 200ms both;
+}
+
+.tmbx .stage .orb.cancel path + path {
+  animation-delay: 340ms;
+}
+
+@keyframes tmbx-x-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+.tmbx .stage h3 {
+  margin: 0; font: 700 18px/1.2 var(--t-font);
+}
+
+.tmbx .stage .who {
+  font: 700 22px/1.15 var(--t-font);
+}
+
+.tmbx .stage p {
+  margin: 0; color: var(--t-muted); font-size: 13px;
+}
+
+.tmbx .stage .kick {
+  color: var(--t-gold); font: 700 11.5px/1 var(--t-num); letter-spacing: 0.2em; text-transform: uppercase;
+}
+
+.tmbx .stage .gainbig {
+  color: var(--t-gold); font-size: 32px;
+}
+
+.tmbx .stage .gainbig small {
+  color: rgba(233,196,106,0.75);
+}
+
+.tmbx .stage .rule {
+  width: 60%; height: 1px; margin: 4px 0; background: var(--t-line);
+}
+
+.tmbx .stage.gold {
+  border-color: rgba(233,196,106,0.5); background: radial-gradient(300px 150px at 50% 0%, rgba(233,196,106,0.13), transparent 70%), var(--t-surface);
+}
+
+.tmbx .stage.gold.win {
+  border-color: rgba(233,196,106,0.75); box-shadow: 0 0 34px rgba(233,196,106,0.14);
+}
+
+.tmbx .stage .last {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--t-line);
+}
+
+.tmbx .stage .last span {
+  color: var(--t-faint); font: 600 11px/1 var(--t-num); letter-spacing: 0.14em; text-transform: uppercase;
+}
+
+.tmbx .stage .last b {
+  font: 700 13.5px/1.3 var(--t-font);
+}
+
+.tmbx .stage .last a {
+  color: var(--t-teal); font: 600 12.5px var(--t-font); cursor: pointer;
+}
+
+.tmbx .body.soft > * {
+  animation: tmbx-soft-in 420ms var(--t-ease) both;
+}
+
+@keyframes tmbx-soft-in {
+  from { opacity: 0; }
+}
+
+.tmbx .body {
+  transition: opacity 260ms var(--t-ease);
+}
+
+.tmbx .body.leaving {
+  opacity: 0;
+}
+
+@media (max-height: 520px) {
+  .tmbx .stage { gap: 8px; padding: 16px 14px; }
+  .tmbx .stage .orb,
+.tmbx .stage .orb .pp { width: 80px; height: 80px; --s: 80px; }
+}
+
+@media (min-width: 560px) {
+  .tmbx .grid2 { display: grid; grid-template-columns: 250px 1fr; gap: 14px; align-items: start; }
+  .tmbx .grid2 .sec:first-child { margin-top: 0; }
+}
+
+/* Root of the screen (the prototype's html / body; its background is the .app one above). */
+.tmbx {
+  color: var(--t-ink);
+  font: 14px/1.4 var(--t-font);
+}
+.tmbx *, .tmbx *::before, .tmbx *::after { box-sizing: border-box; }
+.tmbx button { font: inherit; color: inherit; }
+
+/* Additions for the real Core states the prototype implies (no new art direction): why a join is
+   refused, the paused round, real Twitch pictures, the screen with no participant. */
+.tmbx .refusal { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px 12px; border: 1px dashed var(--t-line-2); border-radius: var(--t-r); color: var(--t-muted); font-size: 13px; font-weight: 600; text-align: center; }
+.tmbx .refusal svg { width: 15px; height: 15px; flex: none; }
+.tmbx .join-err { color: #ffb3b3; font-size: 12.5px; }
+.tmbx .t-btn.join[aria-busy='true'] { opacity: 0.7; cursor: progress; }
+.tmbx .av { overflow: hidden; }
+.tmbx .av img, .tmbx .pp img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.tmbx .av { position: relative; }
+.tmbx .hero.is-paused .t-ring .fg { stroke: var(--t-muted); }
+.tmbx .hero.is-paused .ringbig .in b { color: var(--t-muted); }
+.tmbx .h .cx { color: var(--t-faint); font: 700 11px var(--t-num); letter-spacing: 0.1em; text-transform: uppercase; }
+.tmbx .result .prize { font: 700 20px/1.2 var(--t-font); }

@@ -353,8 +353,8 @@ describe('Tombola V2 phases and draw', () => {
     expect(
       Date.parse((d.round as { result_at: string }).result_at) -
         Date.parse(d.server_time),
-    ).toBe(3_000 + reveal + 8_000);
-    await after(3_000 + reveal + 7_999);
+    ).toBe(3_000 + reveal + 5_000);
+    await after(3_000 + reveal + 4_999);
     expect((await seen('900231')).phase).toBe('drawing');
     await after(1);
     const r = await seen('900231');
@@ -1527,5 +1527,105 @@ describe('Tombola V2 manual round outside a stream', () => {
     });
     expect((await raffle.settings(CH)).scheduler.phase).toBe('running');
     expect((await seen('900291')).history).toEqual([]);
+  });
+});
+
+describe('Tombola V2 extension refusals (read model)', () => {
+  it('the viewer state says why the extension cannot join — always the code the join itself answers', async () => {
+    const { config, act, joinExt, code, mod, seen, raffle } = await lab();
+    await config();
+    await act({ action: 'launch' });
+    /** Core's read model and Core's real answer to a join, side by side. */
+    const both = async (v: string) => {
+      const r = (await seen(v)).round as { refusal: string | null } | null;
+      return [r?.refusal ?? null, await code(joinExt(v))];
+    };
+    expect((await seen('900401')).round).toMatchObject({ refusal: null });
+    expect(await both('900401')).toEqual([null, 'ok']);
+    expect((await seen('900401')).round).toMatchObject({
+      joined: true,
+      my_source: 'extension',
+      refusal: null,
+    });
+    await mod(
+      {
+        action: 'block_viewer',
+        viewer_id: '900402',
+        module: 'raffle',
+        duration_s: 300,
+      },
+      modA,
+    );
+    expect(await both('900402')).toEqual(['viewer_blocked', 'viewer_blocked']);
+    await mod(
+      { action: 'module_state', module: 'raffle', state: 'paused' },
+      modA,
+    );
+    expect(await both('900403')).toEqual(['raffle_paused', 'raffle_paused']);
+    await mod(
+      { action: 'module_state', module: 'raffle', state: 'active' },
+      modA,
+    );
+    await mod({ action: 'global_pause', paused: true }, superMod);
+    expect(await both('900403')).toEqual(['global_pause', 'global_pause']);
+    await mod({ action: 'global_pause', paused: false }, superMod);
+    await act({ action: 'pause' }, modG);
+    expect((await seen('900403')).phase).toBe('paused');
+    expect(await both('900403')).toEqual(['round_paused', 'round_paused']);
+    await act({ action: 'resume' }, modG);
+    await joinExt('900404');
+    await act({ action: 'remove_participant', viewer_id: '900404' }, modG);
+    expect(await both('900404')).toEqual(['entry_removed', 'entry_removed']);
+    await config({ extension_button: false });
+    expect(await both('900405')).toEqual([
+      'extension_join_disabled',
+      'extension_join_disabled',
+    ]);
+    // Identity not shared: only the channel-wide reasons apply.
+    expect(
+      ((await raffle.viewerState(CH, null)).round as { refusal: string | null })
+        .refusal,
+    ).toBe('extension_join_disabled');
+  });
+});
+
+describe('Tombola V2 extension result delay (« Décalage résultat Extension après le stream »)', () => {
+  it('one value in Core for every viewer: the result shows that long after the overlay reveal ends; applies to the next rounds', async () => {
+    const { config, act, joinExt, seen, after, raffle } = await lab();
+    expect(DEFAULT_RAFFLE_CONFIG.display.stream_margin_s).toBe(5);
+    await config({
+      display: { ...DEFAULT_RAFFLE_CONFIG.display, stream_margin_s: 2 },
+    });
+    expect((await raffle.settings(CH)).config.display.stream_margin_s).toBe(2);
+    await act({ action: 'launch' });
+    for (const v of ['900501', '900502']) await joinExt(v);
+    // Changed during the round: the round keeps the value it was launched with.
+    await config({
+      display: { ...DEFAULT_RAFFLE_CONFIG.display, stream_margin_s: 30 },
+    });
+    await after(62_000);
+    const reveal = revealMs('normal', false, 1);
+    for (const v of ['900501', '900502', null]) {
+      const d = await seen(v);
+      expect(
+        Date.parse((d.round as { result_at: string }).result_at) -
+          Date.parse(d.server_time),
+      ).toBe(3_000 + reveal + 2_000);
+    }
+    await after(3_000 + reveal + 1_999);
+    expect((await seen('900501')).phase).toBe('drawing');
+    await after(1);
+    expect((await seen('900501')).phase).toBe('result');
+    expect((await seen(null)).phase).toBe('result');
+    // The next round uses the new value (30 s).
+    await after(60_000);
+    await act({ action: 'launch' });
+    await joinExt('900501');
+    await after(62_000);
+    const d = await seen('900501');
+    expect(
+      Date.parse((d.round as { result_at: string }).result_at) -
+        Date.parse(d.server_time),
+    ).toBe(3_000 + reveal + 30_000);
   });
 });

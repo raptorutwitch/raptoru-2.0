@@ -37,7 +37,10 @@ export const RaffleDisplay = z.strictObject({
   cancelled_s: z.number().int().min(2).max(30),
   /** « Aucun participant cette fois ! » (round over with no entry: no draw, no winner). */
   empty_s: z.number().int().min(2).max(30),
-  /** Stream delay margin: the extension shows the result this long after the overlay reveal ends. */
+  /**
+   * « Décalage résultat Extension après le stream » (Studio): the extension shows the result this long
+   * after the overlay reveal ends (anti-spoil). One value for every viewer, applied to the next rounds.
+   */
   stream_margin_s: z.number().int().min(0).max(60),
   /** Extension: result (or cancellation) shown this long before going back to « Aucune Tombola ». */
   extension_idle_return_s: z.number().int().min(3).max(300),
