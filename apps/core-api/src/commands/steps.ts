@@ -217,8 +217,19 @@ export async function insertSteps(
   return seq;
 }
 
+/** The executor polls every second while idle: silent for longer than this = absent. */
+export const EXECUTOR_ABSENT_AFTER_MS = 5_000;
+
 export class CommandSteps {
   readonly rules: StepRules;
+  /**
+   * Last step request per channel (any answer, output OFF included). Visibility only, never used by
+   * the queue. ponytail: in memory — a Core restart shows « absent » until the next poll (≤ 1 s).
+   */
+  private readonly lastClaim = new Map<
+    string,
+    { at: Date; executor_id: string }
+  >();
 
   constructor(
     private readonly db: Db,
@@ -241,10 +252,23 @@ export class CommandSteps {
         [channelId],
       )
     )[0];
+    const enabled = row?.chat_output ?? false;
+    const last = this.lastClaim.get(channelId) ?? null;
+    const present =
+      !!last &&
+      this.clock.now().getTime() - last.at.getTime() <=
+        EXECUTOR_ABSENT_AFTER_MS;
     return {
-      enabled: row?.chat_output ?? false,
+      enabled,
       updated_at: iso(row?.chat_output_updated_at ?? null),
       updated_by: row?.chat_output_updated_by ?? null,
+      executor: {
+        present,
+        last_claim_at: iso(last?.at ?? null),
+        executor_id: last?.executor_id ?? null,
+      },
+      /** Output ON but nobody asks for steps: they wait, then expire unsent. */
+      executor_absent: enabled && !present,
     };
   }
 
@@ -268,6 +292,10 @@ export class CommandSteps {
 
   /** Next step of the channel, or why there is none. Never hands out anything while the output is OFF. */
   async claim(channelId: string, executorId: string) {
+    this.lastClaim.set(channelId, {
+      at: this.clock.now(),
+      executor_id: executorId,
+    });
     return this.db.tx(async (q) => {
       const channel = await this.lock(q, channelId);
       if (!channel) return { step: null, reason: 'no_channel' as const };

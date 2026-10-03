@@ -225,13 +225,22 @@ export class LabChatIngress {
           error: 'missing_write_scope',
           message: OUTPUT_SCOPE_MISSING,
         });
-      return reply(
-        200,
-        await this.d.core(`${commands}/output`, {
-          actor: STUDIO_ACTOR,
-          enabled,
-        }),
+      const before = await this.d.core<{ enabled?: boolean }>(
+        `${commands}/output`,
       );
+      const out = await this.d.core<Record<string, unknown>>(
+        `${commands}/output`,
+        { actor: STUDIO_ACTOR, enabled },
+      );
+      // OFF → ON while the adapter runs: restart it so it reloads the token (its scopes are read at
+      // start — a re-authorization made while it ran would leave it without executor).
+      let restarted = false;
+      if (enabled && before.enabled !== true && this.d.process?.running) {
+        await this.d.process.stop();
+        this.start();
+        restarted = this.d.process.running;
+      }
+      return reply(200, { ...out, adapter_restarted: restarted });
     }
     if (p === '/simulate') {
       // Lab chat simulator: same Core entry as the real chat, routed to every Lab module.

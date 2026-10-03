@@ -38,7 +38,10 @@ async function setup(opts: Opts = {}) {
   dir = await mkdtemp(join(tmpdir(), 'lab-chat-'));
   const calls: { path: string; body?: unknown }[] = [];
   const started: Record<string, string>[] = [];
+  const events: string[] = [];
   let running = false;
+  // Core's « Sortie chat réelle » state (the fake Core keeps it like the real one).
+  let output = false;
   const proc: IngressProcess = {
     get running() {
       return running;
@@ -46,9 +49,11 @@ async function setup(opts: Opts = {}) {
     lastExit: null,
     start: (env) => {
       started.push(env);
+      events.push('start');
       running = true;
     },
     stop: () => {
+      events.push('stop');
       running = false;
     },
   };
@@ -59,6 +64,10 @@ async function setup(opts: Opts = {}) {
     LabChatIngress.create({
       core: (async (path: string, body?: unknown) => {
         calls.push({ path, body });
+        if (path.endsWith('/output')) {
+          if (body) output = (body as { enabled: boolean }).enabled;
+          return { enabled: output, executor_absent: output };
+        }
         return { handled: [{ module: 'raffle', outcome: 'joined' }] };
       }) as never,
       origin,
@@ -101,6 +110,7 @@ async function setup(opts: Opts = {}) {
     origin,
     calls,
     started,
+    events,
     studio,
     reload: async () => {
       ing = await make();
@@ -194,6 +204,7 @@ describe('Lab chat ingress (Studio)', () => {
       (await f.studio('/api/lab-chat/output', { enabled: false })).status,
     ).toBe(200);
     expect(f.calls).toEqual([
+      { path: '/v1/lab/commands/900100/output', body: undefined },
       {
         path: '/v1/lab/commands/900100/output',
         body: {
@@ -202,6 +213,40 @@ describe('Lab chat ingress (Studio)', () => {
         },
       },
     ]);
+  });
+
+  it('OFF → ON while the Lab bot runs: the bot is restarted (reloads its token scopes); not otherwise', async () => {
+    const f = await setup({ scopes: ['user:read:chat', 'user:write:chat'] });
+    // Not running: nothing to restart.
+    expect(
+      (await f.studio('/api/lab-chat/output', { enabled: true })).json,
+    ).toMatchObject({ enabled: true, adapter_restarted: false });
+    expect(f.events).toEqual([]);
+    await f.studio('/api/lab-chat/output', { enabled: false });
+    // Ingestion ON: the bot runs.
+    await f.studio('/api/lab-chat/ingress', { enabled: true });
+    expect(f.events).toEqual(['start']);
+    expect(
+      (await f.studio('/api/lab-chat/output', { enabled: true })).json,
+    ).toMatchObject({ enabled: true, adapter_restarted: true });
+    expect(f.events).toEqual(['start', 'stop', 'start']);
+    expect(f.started.at(-1)).toEqual({
+      LAB_CHAT_CORE_URL: 'http://127.0.0.1:4301',
+    });
+    // Already ON (ON → ON) or turned OFF: no restart.
+    await f.studio('/api/lab-chat/output', { enabled: true });
+    await f.studio('/api/lab-chat/output', { enabled: false });
+    expect(f.events).toEqual(['start', 'stop', 'start']);
+  });
+
+  it('executor absent is shown as Core reports it (output ON, no step request for > 5 s)', async () => {
+    const f = await setup({ scopes: ['user:read:chat', 'user:write:chat'] });
+    await f.studio('/api/lab-chat/output', { enabled: true });
+    expect((await f.studio('/api/lab-chat/output')).json).toMatchObject({
+      enabled: true,
+      executor_absent: true,
+      ingress_running: false,
+    });
   });
 
   it('« Sortie chat réelle »: ON goes to Core (the switch lives there) with a writing token; steps readable', async () => {

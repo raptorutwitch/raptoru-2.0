@@ -241,6 +241,42 @@ describe('Commands V2 steps — « Sortie chat réelle »', () => {
   });
 });
 
+describe('Commands V2 steps — executor presence', () => {
+  it('output ON with no step request for more than 5 s: executor absent', async () => {
+    await make();
+    expect(await steps.output(CH)).toMatchObject({
+      enabled: false,
+      executor: { present: false, last_claim_at: null },
+      executor_absent: false,
+    });
+    await on();
+    expect(await steps.output(CH)).toMatchObject({ executor_absent: true });
+    await claim('bot-a');
+    expect(await steps.output(CH)).toMatchObject({
+      executor: {
+        present: true,
+        last_claim_at: T0.toISOString(),
+        executor_id: 'bot-a',
+      },
+      executor_absent: false,
+    });
+    clock.advance(5 * SEC);
+    expect(await steps.output(CH)).toMatchObject({ executor_absent: false });
+    clock.advance(1);
+    expect(await steps.output(CH)).toMatchObject({
+      executor: { present: false },
+      executor_absent: true,
+    });
+    // Any request counts, even while OFF (the executor is alive, just not handed anything).
+    await steps.setOutput(CH, STUDIO, false);
+    await claim('bot-a');
+    expect(await steps.output(CH)).toMatchObject({
+      executor: { present: true },
+      executor_absent: false,
+    });
+  });
+});
+
 describe('Commands V2 steps — claim, lease, ACK', () => {
   beforeEach(async () => {
     await on();
