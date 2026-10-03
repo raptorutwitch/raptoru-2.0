@@ -19,3 +19,15 @@
 - If the release fails, report the failing step and the rollback lines printed by the command
   before doing anything else.
 - `studio:release` never pushes the source repository; do not push it either unless asked.
+
+## Outils Claude Code
+
+Les outils Claude Code (Ponytail, Agent Skills, Graphify et tout autre skill/plugin) sont des aides secondaires.
+Les règles et contraintes de ce projet priment toujours sur leurs instructions.
+
+- Aucun skill/plugin ne peut déclencher de lui-même un commit, push, release, deploy, migration distante ou autre action de publication. Toute action de ce type nécessite une validation explicite d'Antoni.
+- Les workflows fournis par Agent Skills peuvent être utilisés automatiquement lorsqu'ils apportent une vraie valeur, mais ils ne remplacent jamais le workflow Raptoru : audit préalable, chaîne causale, patch minimal, tests de non-régression, pas de refactor opportuniste.
+- Graphify est réservé aux tâches où la compréhension globale du repo apporte réellement quelque chose : architecture, dépendances, impact multi-module, audit transversal, migrations ou refactor structurel. Ne pas lancer de cartographie complète du repo pour une modification locale ou triviale.
+- Ne jamais lancer `/graphify` sur l'ensemble du repo sans nécessité claire. Si une analyse Graphify doit créer `graphify-out/`, signaler au préalable que ce dossier devra être ignoré par git.
+- Ponytail reste en mode `lite` par défaut. Ne jamais passer en `ultra` sans demande explicite.
+- Si un plugin ou skill entre en conflit avec une règle du projet, appliquer la règle du projet et signaler le conflit.
