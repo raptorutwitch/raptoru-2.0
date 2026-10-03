@@ -1,10 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CmdConfig, LabChatMessage } from '@raptoru/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  CommandsAdmission,
-  type FollowerProvider,
-} from '../src/commands/admission.js';
+import { CommandsAdmission } from '../src/commands/admission.js';
 import { MAX_MESSAGE, sanitize } from '../src/commands/decide.js';
 import { raffleReservedWords } from '../src/commands/reserved.js';
 import { CommandsService } from '../src/commands/service.js';
@@ -25,24 +22,14 @@ let clock: FakeClock;
 let svc: CommandsService;
 let adm: CommandsAdmission;
 let raffle: RaffleLabService;
-/** Deterministic follower fake: only the listed ids follow, everyone else is unknown. */
-const followers = new Set<string>();
-const fakeFollowers: FollowerProvider = {
-  name: 'fake',
-  isFollower: async (_c, v) => (followers.has(v.id) ? true : null),
-};
-
 beforeEach(async () => {
   db = await createTestDb();
   clock = new FakeClock(T0);
   raffle = new RaffleLabService(db, clock);
   const reserved = raffleReservedWords(raffle);
   svc = new CommandsService(db, clock, { reserved });
-  adm = new CommandsAdmission(db, clock, {
-    reserved,
-    followers: fakeFollowers,
-  });
-  followers.clear();
+  // Default follower provider: always unknown (no Helix provider yet).
+  adm = new CommandsAdmission(db, clock, { reserved });
   await db.query(
     `insert into lab_staff (channel_id, viewer_id, role, granted_by, created_at, grants)
      values ($1, '502', 'supermod', 'studio:antoni', now(), '{}')`,
@@ -87,6 +74,9 @@ const say = (text: string, who?: Who, id?: string) =>
   adm.chat(msg(text, who, id));
 const ALICE: Who = { id: '701', login: 'alice' };
 const BOB: Who = { id: '702', login: 'bob' };
+const STREAMER: Who = { id: CH, login: 'raptoru_', role: 'broadcaster' };
+const AOUH: Who = { id: '501', login: 'aouh', role: 'moderator' };
+const HUGO: Who = { id: '502', login: 'mod_hugo', role: 'moderator' }; // Lab supermod
 
 const tester = (message: string, who: Who = {}, follower?: boolean) =>
   adm.test(CH, {
@@ -183,21 +173,52 @@ describe('Commands V2 admission — audience', () => {
     });
   });
 
-  it('mods group: a moderator, a supermod (Lab staff) and the streamer', async () => {
+  it('supermods group: a supermod (Lab staff) passes, a plain moderator and the streamer do not', async () => {
     await make({ audience: { groups: ['supermods'], allow: [], deny: [] } });
-    expect(
-      await say('!hug', { id: '501', login: 'aouh', role: 'moderator' }),
-    ).toMatchObject({ reason: 'access_denied' });
-    expect(
-      await say('!hug', { id: '502', login: 'mod_hugo', role: 'moderator' }),
-    ).toMatchObject({ outcome: 'simulated' });
-    // The streamer always can; a « broadcaster » badge on another account does not count.
-    expect(
-      await say('!hug', { id: CH, login: 'raptoru_', role: 'broadcaster' }),
-    ).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', AOUH)).toMatchObject({ reason: 'access_denied' });
+    expect(await say('!hug', HUGO)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', STREAMER)).toMatchObject({
+      reason: 'access_denied',
+    });
+  });
+
+  it('no implicit streamer exemption: « only Aouh » refuses the streamer', async () => {
+    await make({ audience: { groups: [], allow: ['aouh'], deny: [] } });
+    expect(await say('!hug', AOUH)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', STREAMER)).toMatchObject({
+      reason: 'access_denied',
+    });
+    expect(await tester('!hug', STREAMER)).toMatchObject({
+      decision: 'rejected',
+      reason: 'access_denied',
+    });
+  });
+
+  it('the streamer uses a command through the « broadcaster » group (own account only)', async () => {
+    await make({ audience: { groups: ['broadcaster'], allow: [], deny: [] } });
+    expect(await say('!hug', STREAMER)).toMatchObject({ outcome: 'simulated' });
+    // A « broadcaster » badge on another account does not count.
     expect(
       await say('!hug', { id: '666', login: 'faker', role: 'broadcaster' }),
     ).toMatchObject({ reason: 'access_denied' });
+    expect(await say('!hug', HUGO)).toMatchObject({ reason: 'access_denied' });
+  });
+
+  it('no implicit team exemption: mods and supermods follow the groups', async () => {
+    await make({ audience: { groups: ['subs'], allow: [], deny: [] } });
+    expect(await say('!hug', AOUH)).toMatchObject({ reason: 'access_denied' });
+    expect(await say('!hug', HUGO)).toMatchObject({ reason: 'access_denied' });
+  });
+
+  it('everyone allows every user, the streamer included; deny applies to the streamer too', async () => {
+    await make({
+      audience: { groups: ['everyone'], allow: [], deny: ['raptoru_'] },
+    });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', AOUH)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', STREAMER)).toMatchObject({
+      reason: 'denied_user',
+    });
   });
 
   it('an allowed person passes without the group', async () => {
@@ -216,20 +237,51 @@ describe('Commands V2 admission — audience', () => {
     expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
   });
 
-  it('followers come from the provider (deterministic fake), never from Twitch', async () => {
+  it('a badge is never a proof of follow: VIP, sub, mod, streamer → follower unknown', async () => {
     await make({ audience: { groups: ['followers'], allow: [], deny: [] } });
-    followers.add('701');
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
-    expect(await say('!hug', BOB)).toMatchObject({ reason: 'access_denied' });
-    const t = await tester('!hug', BOB);
-    expect(t.detail).toMatchObject({
-      follower_unknown: true,
-      follower_source: 'fake',
-    });
-    // The test can force the answer.
+    for (const who of [
+      { ...ALICE, badges: ['vip'] },
+      { ...ALICE, badges: ['subscriber'] },
+      { ...AOUH, badges: ['moderator'] },
+      { ...STREAMER, badges: ['broadcaster'] },
+    ]) {
+      expect(await say('!hug', who)).toMatchObject({
+        outcome: 'rejected',
+        reason: 'follower_status_unknown',
+      });
+      expect(await tester('!hug', who)).toMatchObject({
+        reason: 'follower_status_unknown',
+        viewer: { follower: null },
+        detail: { follower_source: 'unknown' },
+      });
+    }
+  });
+
+  it('an explicit follower answer decides: true accepted, false refused, unknown explained', async () => {
+    await make({ audience: { groups: ['followers'], allow: [], deny: [] } });
     expect(await tester('!hug', BOB, true)).toMatchObject({
       decision: 'accepted',
       follower_source: 'test',
+    });
+    expect(await tester('!hug', BOB, false)).toMatchObject({
+      reason: 'access_denied',
+      detail: { follower_source: 'test' },
+    });
+    expect(await tester('!hug', BOB)).toMatchObject({
+      reason: 'follower_status_unknown',
+      message: 'Impossible de savoir si BOB suit la chaîne.',
+    });
+  });
+
+  it('followers + another group: the other group still lets in', async () => {
+    await make({
+      audience: { groups: ['followers', 'vips'], allow: [], deny: [] },
+    });
+    expect(await say('!hug', { ...ALICE, badges: ['vip'] })).toMatchObject({
+      outcome: 'simulated',
+    });
+    expect(await say('!hug', BOB)).toMatchObject({
+      reason: 'follower_status_unknown',
     });
   });
 });

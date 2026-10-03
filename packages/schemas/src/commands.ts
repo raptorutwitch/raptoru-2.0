@@ -15,7 +15,10 @@ export const CmdLogin = z
   .string()
   .regex(/^[a-z0-9_]{1,25}$/, 'Twitch login (a-z, 0-9, _)');
 
-/** Who can use a command. « everyone » is exclusive; the others add up. The streamer always can. */
+/**
+ * Who can use a command. « everyone » is exclusive; the others add up. No implicit exemption: the
+ * streamer uses a command only through « broadcaster », « everyone » or `allow` (configuring is separate).
+ */
 export const CmdGroup = z.enum([
   'everyone',
   'followers',

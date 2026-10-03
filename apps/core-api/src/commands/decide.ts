@@ -8,7 +8,9 @@ import { checkConfig, CommandsError, VARIABLES } from './model.js';
 // Stable order of the checks: reserved word → command found → enabled → valid configuration →
 // availability (live / offline) → audience (denied person, then allowed person, then groups) →
 // arguments → variables → cooldown → quota. The first failing check is the reason.
-// Audience priority (phase A invariant « the streamer can always »): streamer > deny > allow > groups.
+// Audience (use, not configuration): deny > explicit allow > groups, with no implicit exemption for the
+// streamer or the team — the streamer uses a command through the « broadcaster » group like anyone.
+// « followers » with an unknown follower state is refused explicitly (follower_status_unknown).
 
 export type Reason =
   | 'reserved'
@@ -18,6 +20,7 @@ export type Reason =
   | 'unavailable'
   | 'denied_user'
   | 'access_denied'
+  | 'follower_status_unknown'
   | 'invalid_arguments'
   | 'cooldown'
   | 'quota'
@@ -224,28 +227,27 @@ export function decide(input: DecideInput): Decision {
 
   const v = input.viewer;
   const login = v.login.toLowerCase();
-  if (v.role !== 'broadcaster') {
-    if (cfg.audience.deny.includes(login))
-      return reject(
-        'denied_user',
-        `${v.display_name} est exclu de cette commande.`,
-        { login },
-      );
-    if (!cfg.audience.allow.includes(login)) {
-      const hit = cfg.audience.groups.find((g) => v.groups.includes(g));
-      if (!hit) {
-        const followerUnknown =
-          cfg.audience.groups.includes('followers') && v.follower === null;
+  if (cfg.audience.deny.includes(login))
+    return reject(
+      'denied_user',
+      `${v.display_name} est exclu de cette commande.`,
+      { login },
+    );
+  if (!cfg.audience.allow.includes(login)) {
+    const hit = cfg.audience.groups.find((g) => v.groups.includes(g));
+    if (!hit) {
+      const detail = { groups: cfg.audience.groups, viewer_groups: v.groups };
+      if (cfg.audience.groups.includes('followers') && v.follower === null)
         return reject(
-          'access_denied',
-          `${v.display_name} n’a pas accès à cette commande.`,
-          {
-            groups: cfg.audience.groups,
-            viewer_groups: v.groups,
-            ...(followerUnknown ? { follower_unknown: true } : {}),
-          },
+          'follower_status_unknown',
+          `Impossible de savoir si ${v.display_name} suit la chaîne.`,
+          detail,
         );
-      }
+      return reject(
+        'access_denied',
+        `${v.display_name} n’a pas accès à cette commande.`,
+        detail,
+      );
     }
   }
   pass('audience');

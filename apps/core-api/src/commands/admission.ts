@@ -32,26 +32,18 @@ import type { ReservedWords } from './service.js';
 
 /** Whether a viewer follows the channel. null = unknown. Never a real Helix call in the Lab. */
 export interface FollowerProvider {
-  /** Name shown in the decision details (« lab_badges », « test »…). */
+  /** Name shown in the decision details (« unknown », « test »…). */
   name: string;
-  isFollower(
-    channelId: string,
-    viewer: { id: string; badges: string[] },
-  ): Promise<boolean | null>;
+  isFollower(channelId: string, viewerId: string): Promise<boolean | null>;
 }
 
 /**
- * Lab stand-in (deterministic, no Twitch call): a subscriber, VIP, moderator or the streamer counts as
- * a follower; anyone else is unknown (the « followers » group then refuses, with `follower_unknown`).
+ * Until the real Helix provider exists: always unknown. A badge (sub, VIP, mod, streamer) is never a
+ * proof of follow; only an explicit answer (the test's `follower`) gives true / false.
  */
-export const labBadgeFollowers: FollowerProvider = {
-  name: 'lab_badges',
-  isFollower: async (_c, v) =>
-    v.badges.some((b) =>
-      ['subscriber', 'founder', 'vip', 'moderator', 'broadcaster'].includes(b),
-    )
-      ? true
-      : null,
+export const unknownFollowers: FollowerProvider = {
+  name: 'unknown',
+  isFollower: async () => null,
 };
 
 export interface AdmissionDeps {
@@ -112,7 +104,7 @@ export class CommandsAdmission {
     private readonly clock: Clock,
     private readonly deps: AdmissionDeps = {},
   ) {
-    this.followers = deps.followers ?? labBadgeFollowers;
+    this.followers = deps.followers ?? unknownFollowers;
   }
 
   /** Lab chat module: a message that names no command (or a module's word) is `ignored`. */
@@ -325,7 +317,10 @@ export class CommandsAdmission {
       usage,
       messageId,
     });
-    if (viewer.followerSource && decision.reason === 'access_denied')
+    if (
+      decision.reason === 'access_denied' ||
+      decision.reason === 'follower_status_unknown'
+    )
       decision.detail.follower_source = viewer.followerSource;
     return {
       decision,
@@ -349,10 +344,7 @@ export class CommandsAdmission {
       follower = c.follower;
       followerSource = 'test';
     } else {
-      follower = await this.followers.isFollower(channelId, {
-        id: c.id,
-        badges: c.badges,
-      });
+      follower = await this.followers.isFollower(channelId, c.id);
       followerSource = this.followers.name;
     }
     const groups: CmdGroup[] = ['everyone'];
