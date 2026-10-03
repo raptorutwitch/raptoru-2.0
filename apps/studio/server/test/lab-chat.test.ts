@@ -183,6 +183,48 @@ describe('Lab chat ingress (Studio)', () => {
     ).toEqual([{ id: '900101', label: 'lab_viewer' }]);
   });
 
+  it('« Sortie chat réelle »: ON refused without user:write:chat (nothing sent to Core); OFF always allowed', async () => {
+    const f = await setup();
+    const on = await f.studio('/api/lab-chat/output', { enabled: true });
+    expect(on.status).toBe(409);
+    expect(on.json).toMatchObject({ error: 'missing_write_scope' });
+    expect(String(on.json.message)).toContain('LAB_CHAT_OUTPUT=true');
+    expect(f.calls).toEqual([]);
+    expect(
+      (await f.studio('/api/lab-chat/output', { enabled: false })).status,
+    ).toBe(200);
+    expect(f.calls).toEqual([
+      {
+        path: '/v1/lab/commands/900100/output',
+        body: {
+          actor: { id: 'studio', role: 'broadcaster', via: 'studio' },
+          enabled: false,
+        },
+      },
+    ]);
+  });
+
+  it('« Sortie chat réelle »: ON goes to Core (the switch lives there) with a writing token; steps readable', async () => {
+    const f = await setup({ scopes: ['user:read:chat', 'user:write:chat'] });
+    expect(
+      (await f.studio('/api/lab-chat/output', { enabled: true })).status,
+    ).toBe(200);
+    expect(f.calls.at(-1)).toMatchObject({
+      path: '/v1/lab/commands/900100/output',
+      body: { enabled: true },
+    });
+    const out = await f.studio('/api/lab-chat/output');
+    expect(out.json).toMatchObject({
+      write_scope: true,
+      ingress_running: false,
+    });
+    await f.studio('/api/lab-chat/steps?status=unknown');
+    expect(f.calls.at(-1)).toEqual({
+      path: '/v1/lab/commands/900100/steps?status=unknown',
+      body: undefined,
+    });
+  });
+
   it('refuses another origin and a call without the Studio header', async () => {
     const f = await setup();
     expect((await fetch(`${f.origin}/api/lab-chat/status`)).status).toBe(403);

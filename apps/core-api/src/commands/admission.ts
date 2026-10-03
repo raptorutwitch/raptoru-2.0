@@ -15,14 +15,22 @@ import {
   type Decision,
   type DecideUsage,
   type DecideViewer,
+  refusalMessage,
   syntax,
 } from './decide.js';
+import {
+  draftSteps,
+  insertSteps,
+  STEP_RULES,
+  type StepDraft,
+} from './steps.js';
 import { CommandsError } from './model.js';
 import type { ReservedWords } from './service.js';
 
 // Commands V2 (Lab) — admission (phase B). A chat message that names a command (name or alias) is
 // decided by `decide()` and recorded in cmd_invocations, accepted or refused. Nothing is executed and
-// nothing is sent to Twitch: an accepted invocation stays `simulated` (the durable queue is phase C).
+// nothing is sent from here: an accepted invocation is `dispatched` into durable steps (steps.ts), sent
+// by the Lab Twitch adapter only while « Sortie chat réelle » is ON.
 // « Tester la commande » runs the exact same evaluation, without writing anything.
 //
 // Atomicity: the command row is locked (`for update`) while the counters are read and the invocation
@@ -49,7 +57,12 @@ export const unknownFollowers: FollowerProvider = {
 export interface AdmissionDeps {
   reserved?: ReservedWords;
   followers?: FollowerProvider;
+  /** Expiry of the chat steps (default STEP_RULES.ttlMs). */
+  stepTtlMs?: number;
 }
+
+/** ponytail: fixed gap between two refusal answers to the same viewer; make it a setting if asked. */
+const REFUSAL_ANSWER_GAP_MS = 60_000;
 
 interface ChatterIn {
   id: string;
@@ -86,7 +99,7 @@ export interface InvocationView {
   reason: string | null;
   reason_detail: Record<string, unknown> | null;
   rendered: unknown;
-  status: 'simulated' | 'rejected';
+  status: 'simulated' | 'dispatched' | 'rejected';
   created_at: string;
 }
 
@@ -112,6 +125,12 @@ export class CommandsAdmission {
     const cmd = splitCommand(msg.text);
     if (!cmd) return { outcome: 'ignored' };
     return this.db.tx(async (q) => {
+      // Channel lock first (same order as the configuration and the step queue): admissions of a
+      // channel are serialized, so its steps are written in arrival order.
+      await q.query(
+        'select 1 from cmd_channels where channel_id = $1 for update',
+        [msg.channel_id],
+      );
       if (await this.reservedBy(q, msg.channel_id, cmd.word))
         return { outcome: 'ignored' };
       const command = (
@@ -147,7 +166,8 @@ export class CommandsAdmission {
         cmd.word,
         cmd.rest,
         { ...msg.chatter, badges: msg.chatter.badges ?? [] },
-        msg.message_id,
+        // Twitch reply: only a real Twitch message has a parent id (the simulator's has none).
+        msg.source === 'twitch' ? msg.message_id : null,
         command,
       );
       const d = ev.decision;
@@ -179,15 +199,45 @@ export class CommandsAdmission {
           d.reason,
           d.reason ? JSON.stringify({ message: d.message, ...d.detail }) : null,
           d.rendered ? JSON.stringify(d.rendered) : null,
-          d.decision === 'accepted' ? 'simulated' : 'rejected',
+          d.decision === 'accepted' ? 'dispatched' : 'rejected',
           ev.now,
         ],
       );
+      // Phase C: the answer becomes durable steps (executed only while « Sortie chat réelle » is ON).
+      const refusal = d.rendered
+        ? null
+        : refusalMessage(command.config, d, ev.viewer.display_name);
+      const drafts: StepDraft[] = d.rendered
+        ? draftSteps(d.rendered)
+        : refusal &&
+            !(await this.recentRefusal(
+              q,
+              command.command_id,
+              ev.viewer.id,
+              ev.now,
+            ))
+          ? [
+              {
+                kind: 'refusal',
+                type: 'chat',
+                params: { mode: 'normal', text: refusal, reply_to: null },
+                on_error: 'stop',
+              },
+            ]
+          : [];
+      const steps = await insertSteps(q, {
+        invocationId: id,
+        channelId: msg.channel_id,
+        now: ev.now,
+        ttlMs: this.deps.stepTtlMs ?? STEP_RULES.ttlMs,
+        drafts,
+      });
       return {
-        outcome: d.decision === 'accepted' ? 'simulated' : 'rejected',
+        outcome: d.decision,
         reason: d.reason,
         message: d.message,
         invocation_id: id,
+        steps,
       };
     });
   }
@@ -414,6 +464,24 @@ export class CommandsAdmission {
       windowGlobal: Number(r.window_global),
       total: Number(r.total),
     };
+  }
+
+  /**
+   * One refusal answer per command and viewer per minute: a viewer hammering a command on cooldown
+   * never makes the bot spam the chat (the refusals are still all recorded).
+   */
+  private async recentRefusal(
+    q: Queryable,
+    commandId: string,
+    viewerId: string,
+    now: Date,
+  ) {
+    const r = await q.query(
+      `select 1 from cmd_steps s join cmd_invocations i using (invocation_id)
+       where s.kind = 'refusal' and i.command_id = $1 and i.viewer_id = $2 and s.created_at > $3 limit 1`,
+      [commandId, viewerId, new Date(now.getTime() - REFUSAL_ANSWER_GAP_MS)],
+    );
+    return r.length > 0;
   }
 
   private async reservedBy(q: Queryable, channelId: string, word: string) {

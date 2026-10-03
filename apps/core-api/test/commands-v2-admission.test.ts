@@ -5,6 +5,7 @@ import { CommandsAdmission } from '../src/commands/admission.js';
 import { MAX_MESSAGE, sanitize } from '../src/commands/decide.js';
 import { raffleReservedWords } from '../src/commands/reserved.js';
 import { CommandsService } from '../src/commands/service.js';
+import { CommandSteps } from '../src/commands/steps.js';
 import type { Db } from '../src/db/db.js';
 import { commandsRoutes } from '../src/http/commands-routes.js';
 import { HttpError } from '../src/http/server.js';
@@ -134,7 +135,7 @@ describe('Commands V2 admission — identification', () => {
        values ($1, $2, $3, 'simulated', 'test')`,
       [randomUUID(), CH, T0],
     );
-    expect(await say('!hug')).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
   });
 
   it('refuses a stored configuration that became invalid (unknown variable) — invalid_config', async () => {
@@ -157,16 +158,16 @@ describe('Commands V2 admission — audience', () => {
     });
     expect(
       await say('!hug', { ...ALICE, badges: ['subscriber'] }),
-    ).toMatchObject({ outcome: 'simulated' });
+    ).toMatchObject({ outcome: 'accepted' });
   });
 
   it('several groups add up (VIP or sub)', async () => {
     await make({ audience: { groups: ['subs', 'vips'], allow: [], deny: [] } });
     expect(await say('!hug', { ...BOB, badges: ['vip'] })).toMatchObject({
-      outcome: 'simulated',
+      outcome: 'accepted',
     });
     expect(await say('!hug', { ...ALICE, badges: ['founder'] })).toMatchObject({
-      outcome: 'simulated',
+      outcome: 'accepted',
     });
     expect(await say('!hug', { id: '703', login: 'carl' })).toMatchObject({
       reason: 'access_denied',
@@ -176,7 +177,7 @@ describe('Commands V2 admission — audience', () => {
   it('supermods group: a supermod (Lab staff) passes, a plain moderator and the streamer do not', async () => {
     await make({ audience: { groups: ['supermods'], allow: [], deny: [] } });
     expect(await say('!hug', AOUH)).toMatchObject({ reason: 'access_denied' });
-    expect(await say('!hug', HUGO)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', HUGO)).toMatchObject({ outcome: 'accepted' });
     expect(await say('!hug', STREAMER)).toMatchObject({
       reason: 'access_denied',
     });
@@ -184,7 +185,7 @@ describe('Commands V2 admission — audience', () => {
 
   it('no implicit streamer exemption: « only Aouh » refuses the streamer', async () => {
     await make({ audience: { groups: [], allow: ['aouh'], deny: [] } });
-    expect(await say('!hug', AOUH)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', AOUH)).toMatchObject({ outcome: 'accepted' });
     expect(await say('!hug', STREAMER)).toMatchObject({
       reason: 'access_denied',
     });
@@ -196,7 +197,7 @@ describe('Commands V2 admission — audience', () => {
 
   it('the streamer uses a command through the « broadcaster » group (own account only)', async () => {
     await make({ audience: { groups: ['broadcaster'], allow: [], deny: [] } });
-    expect(await say('!hug', STREAMER)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', STREAMER)).toMatchObject({ outcome: 'accepted' });
     // A « broadcaster » badge on another account does not count.
     expect(
       await say('!hug', { id: '666', login: 'faker', role: 'broadcaster' }),
@@ -214,8 +215,8 @@ describe('Commands V2 admission — audience', () => {
     await make({
       audience: { groups: ['everyone'], allow: [], deny: ['raptoru_'] },
     });
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
-    expect(await say('!hug', AOUH)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
+    expect(await say('!hug', AOUH)).toMatchObject({ outcome: 'accepted' });
     expect(await say('!hug', STREAMER)).toMatchObject({
       reason: 'denied_user',
     });
@@ -223,7 +224,7 @@ describe('Commands V2 admission — audience', () => {
 
   it('an allowed person passes without the group', async () => {
     await make({ audience: { groups: ['mods'], allow: ['alice'], deny: [] } });
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
     expect(await say('!hug', BOB)).toMatchObject({ reason: 'access_denied' });
   });
 
@@ -234,7 +235,7 @@ describe('Commands V2 admission — audience', () => {
     expect(
       await say('!hug', { ...BOB, badges: ['subscriber', 'vip'] }),
     ).toMatchObject({ reason: 'denied_user' });
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
   });
 
   it('a badge is never a proof of follow: VIP, sub, mod, streamer → follower unknown', async () => {
@@ -278,7 +279,7 @@ describe('Commands V2 admission — audience', () => {
       audience: { groups: ['followers', 'vips'], allow: [], deny: [] },
     });
     expect(await say('!hug', { ...ALICE, badges: ['vip'] })).toMatchObject({
-      outcome: 'simulated',
+      outcome: 'accepted',
     });
     expect(await say('!hug', BOB)).toMatchObject({
       reason: 'follower_status_unknown',
@@ -311,9 +312,9 @@ describe('Commands V2 admission — arguments and variables', () => {
 
   it('renders the variables with a valid target, frozen in the invocation', async () => {
     await hug();
-    expect(await say('!hug @Bob')).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug @Bob')).toMatchObject({ outcome: 'accepted' });
     expect(await say('!hug @Alice', ALICE)).toMatchObject({
-      outcome: 'simulated',
+      outcome: 'accepted',
     });
     const r = await rows();
     expect(r.map((x) => x.rendered?.reply?.text)).toEqual([
@@ -399,55 +400,55 @@ describe('Commands V2 admission — cooldown and quota', () => {
 
   it('viewer cooldown: per person', async () => {
     await cd('viewer');
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
     clock.advance(10_000);
     expect(await say('!hug', ALICE)).toMatchObject({ reason: 'cooldown' });
     expect(await tester('!hug', ALICE)).toMatchObject({
       detail: { remaining_s: 20, scope: 'viewer' },
     });
-    expect(await say('!hug', BOB)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', BOB)).toMatchObject({ outcome: 'accepted' });
     clock.advance(20_000);
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
   });
 
   it('global cooldown: everybody waits; a refused use does not restart it', async () => {
     await cd('global');
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
     clock.advance(20_000);
     expect(await say('!hug', BOB)).toMatchObject({ reason: 'cooldown' });
     clock.advance(10_000);
-    expect(await say('!hug', BOB)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', BOB)).toMatchObject({ outcome: 'accepted' });
   });
 
   it('viewer quota (total): per person', async () => {
     await quota('total', 'viewer', 2);
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
     expect(await say('!hug', ALICE)).toMatchObject({
       reason: 'quota',
       message: 'Maximum atteint : 2 sur 2 au total pour toi.',
     });
-    expect(await say('!hug', BOB)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', BOB)).toMatchObject({ outcome: 'accepted' });
     clock.advance(400 * 24 * 60 * MINUTE);
     expect(await say('!hug', ALICE)).toMatchObject({ reason: 'quota' });
   });
 
   it('global quota, hour window: the last 60 minutes', async () => {
     await quota('hour', 'global');
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
     clock.advance(59 * MINUTE);
     expect(await say('!hug', BOB)).toMatchObject({ reason: 'quota' });
     clock.advance(2 * MINUTE);
-    expect(await say('!hug', BOB)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', BOB)).toMatchObject({ outcome: 'accepted' });
   });
 
   it('day window: the stream day (reset 16:00 Paris)', async () => {
     await quota('day', 'global');
-    expect(await say('!hug')).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
     clock.set(new Date('2026-10-05T13:59:00Z')); // 15:59 Paris: same stream day
     expect(await say('!hug')).toMatchObject({ reason: 'quota' });
     clock.set(new Date('2026-10-05T14:00:00Z')); // 16:00 Paris: new day
-    expect(await say('!hug')).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
   });
 
   it('live window: since the start of the current live', async () => {
@@ -459,7 +460,7 @@ describe('Commands V2 admission — cooldown and quota', () => {
       [s1, CH, T0],
     );
     clock.advance(MINUTE);
-    expect(await say('!hug')).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
     expect(await say('!hug')).toMatchObject({ reason: 'quota' });
     clock.advance(MINUTE);
     await db.query(
@@ -472,7 +473,7 @@ describe('Commands V2 admission — cooldown and quota', () => {
        values ($1, $2, $3, 'simulated', 'test')`,
       [randomUUID(), CH, clock.now()],
     );
-    expect(await say('!hug')).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
   });
 
   it('cooldown and quota together: the cooldown is checked first', async () => {
@@ -483,7 +484,7 @@ describe('Commands V2 admission — cooldown and quota', () => {
     await say('!hug');
     expect(await say('!hug')).toMatchObject({ reason: 'cooldown' });
     clock.advance(MINUTE);
-    expect(await say('!hug')).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
     clock.advance(MINUTE);
     expect(await say('!hug')).toMatchObject({ reason: 'quota' });
   });
@@ -493,7 +494,7 @@ describe('Commands V2 admission — cooldown and quota', () => {
       aliases: ['calin'],
       cooldown: { enabled: true, seconds: 30, unit: 's', scope: 'global' },
     });
-    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug', ALICE)).toMatchObject({ outcome: 'accepted' });
     expect(await say('!CALIN', BOB)).toMatchObject({ reason: 'cooldown' });
     expect((await rows()).map((r) => r.trigger)).toEqual(['hug', 'calin']);
   });
@@ -505,7 +506,7 @@ describe('Commands V2 admission — cooldown and quota', () => {
         say('!hug', { id: String(800 + i), login: `v${i}` }),
       ),
     );
-    expect(out.filter((o) => o.outcome === 'simulated')).toHaveLength(3);
+    expect(out.filter((o) => o.outcome === 'accepted')).toHaveLength(3);
     expect(out.filter((o) => o.reason === 'quota')).toHaveLength(9);
   });
 });
@@ -543,7 +544,7 @@ describe('Commands V2 admission — records, test, isolation', () => {
         i.status,
       ]),
     ).toEqual([
-      ['bob', 'accepted', null, 'simulated'],
+      ['bob', 'accepted', null, 'dispatched'],
       ['alice', 'rejected', 'access_denied', 'rejected'],
     ]);
     expect(h.invocations[1]!.reason_detail).toMatchObject({
@@ -580,7 +581,7 @@ describe('Commands V2 admission — records, test, isolation', () => {
       expect(await count(db, 'cmd_invocations')).toBe(before);
       const real = await say(text, who);
       expect([
-        real.outcome === 'simulated' ? null : real.reason,
+        real.outcome === 'accepted' ? null : real.reason,
         real.message,
       ]).toEqual([t.reason, t.message]);
     }
@@ -593,12 +594,12 @@ describe('Commands V2 admission — records, test, isolation', () => {
     ]);
   });
 
-  it('executes nothing and sends nothing to Twitch', async () => {
+  it('Core never calls Twitch itself: the answer is dispatched as durable steps', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     await make();
-    expect(await say('!hug')).toMatchObject({ outcome: 'simulated' });
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
     expect(fetch).not.toHaveBeenCalled();
-    expect((await rows())[0]!.status).toBe('simulated');
+    expect((await rows())[0]!.status).toBe('dispatched');
   });
 
   it('Tombola keeps its words: !join goes to Tombola only, !hug to Commands only', async () => {
@@ -614,7 +615,7 @@ describe('Commands V2 admission — records, test, isolation', () => {
     expect(join.handled.map((h) => h.module)).toEqual(['raffle']);
     const hug = await router.message(msg('!hug'));
     expect(hug.handled).toEqual([
-      expect.objectContaining({ module: 'commands', outcome: 'simulated' }),
+      expect.objectContaining({ module: 'commands', outcome: 'accepted' }),
     ]);
     expect(await tester('!join')).toMatchObject({
       reason: 'reserved',
@@ -626,7 +627,7 @@ describe('Commands V2 admission — records, test, isolation', () => {
 describe('Commands V2 admission — routes and public list', () => {
   const call = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
     const url = new URL(path, 'http://lab');
-    const route = commandsRoutes(svc, adm).find(
+    const route = commandsRoutes(svc, adm, new CommandSteps(db, clock)).find(
       (r) => r.method === method && r.pattern.test(url.pathname),
     );
     if (!route) throw new Error(`no route ${method} ${path}`);

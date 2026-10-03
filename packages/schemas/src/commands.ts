@@ -295,3 +295,36 @@ export const CmdTestRequest = z.strictObject({
   message: z.string().min(1).max(500),
   viewer: CmdTestViewer,
 });
+
+// --- phase C: durable steps executed by the Lab Twitch adapter ------------------------------------------
+
+const ExecutorId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+
+/** The executor asks for the next step of the channel (one in flight per channel, FIFO). */
+export const CmdStepClaimRequest = z.strictObject({ executor_id: ExecutorId });
+
+/** Outcome of the current attempt; an ACK of another attempt never changes the step. */
+export const CmdStepAckRequest = z.strictObject({
+  executor_id: ExecutorId,
+  attempt_id: z.uuid(),
+  /** running = about to call Twitch (sent only after Core confirmed it). */
+  event: z.enum(['running', 'succeeded', 'failed', 'unknown']),
+  /** Send Chat Message `message_id` (proof of the send), when Twitch gave one. */
+  twitch_message_id: z.string().min(1).max(128).optional(),
+  error: z
+    .strictObject({
+      code: z.string().regex(/^[a-z0-9_]{1,64}$/),
+      message: z.string().max(300),
+      /** Certainly not sent: Core may queue it again (bounded attempts, backoff, before expiry). */
+      retryable: z.boolean(),
+      retry_after_ms: z.number().int().min(0).max(600_000).optional(),
+    })
+    .optional(),
+});
+export type CmdStepAckRequest = z.infer<typeof CmdStepAckRequest>;
+
+/** « Sortie chat réelle » (streamer only). OFF by default. */
+export const CmdOutputRequest = z.strictObject({
+  actor: LabActor,
+  enabled: z.boolean(),
+});

@@ -36,4 +36,31 @@ describe('requiredScopes', () => {
       }),
     ).toEqual(['user:read:chat', 'user:write:chat']);
   });
+
+  it('Lab chat output → user:write:chat + moderator:manage:announcements (asked only when enabled)', () => {
+    expect(
+      requiredScopes({
+        ...off,
+        PRESENCE_SHADOW: 'true',
+        LAB_CHAT_INGEST: 'true',
+        LAB_CHAT_OUTPUT: 'true',
+      }),
+    ).toEqual([
+      'user:read:chat',
+      'moderator:read:chatters',
+      'user:write:chat',
+      'moderator:manage:announcements',
+    ]);
+    expect(
+      requiredScopes({
+        ...off,
+        DAILY_CHAT_COMMANDS: 'true',
+        LAB_CHAT_OUTPUT: 'true',
+      }),
+    ).toEqual([
+      'user:read:chat',
+      'user:write:chat',
+      'moderator:manage:announcements',
+    ]);
+  });
 });

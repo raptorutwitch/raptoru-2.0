@@ -51,6 +51,12 @@ const TwitchApp = z.object({
   // Lab chat ingestion (Studio « Ingestion chat Twitch » switch: reads the chat for the Lab modules,
   // writes nothing). Only makes `twitch:auth` ask for user:read:chat; the switch stays OFF.
   LAB_CHAT_INGEST: Flag,
+  // Commands V2 Lab chat output (LeCroupier_ sends the command answers while Studio's « Sortie chat
+  // réelle » is ON — OFF by default in Core). Only makes `twitch:auth` ask for user:write:chat
+  // (Send Chat Message) and moderator:manage:announcements (announce mode).
+  LAB_CHAT_OUTPUT: Flag,
+  // Bot journal of the Lab chat sends (about_to_send → outcome), git-ignored runtime data.
+  LAB_CHAT_JOURNAL_FILE: z.string().min(1).default('.lab-chat-journal.json'),
 });
 
 const Env = TwitchApp.extend({
@@ -93,17 +99,21 @@ export function requiredScopes(
     | 'LOYALTY_CHAT_COMMANDS'
     | 'PRESENCE_SHADOW'
     | 'LAB_CHAT_INGEST'
-  >,
+  > &
+    Partial<Pick<TwitchAppConfig, 'LAB_CHAT_OUTPUT'>>,
 ): string[] {
   const chatCommands =
     config.DAILY_CHAT_COMMANDS === 'true' ||
     config.LOYALTY_CHAT_COMMANDS === 'true';
-  return [
+  const labOutput = config.LAB_CHAT_OUTPUT === 'true';
+  const scopes = [
     ...(chatCommands ? ['user:read:chat', 'user:write:chat'] : []),
     // Reading only: the Lab ingestion never writes to the chat.
     ...(!chatCommands && config.LAB_CHAT_INGEST === 'true'
       ? ['user:read:chat']
       : []),
     ...(config.PRESENCE_SHADOW === 'true' ? ['moderator:read:chatters'] : []),
+    ...(labOutput ? ['user:write:chat', 'moderator:manage:announcements'] : []),
   ];
+  return [...new Set(scopes)];
 }

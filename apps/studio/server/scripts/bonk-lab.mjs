@@ -68,6 +68,7 @@ try {
     '20261010120000_raffle_round_labels.sql',
     '20261011120000_commands_v2.sql',
     '20261012120000_commands_v2_invocations.sql',
+    '20261013120000_commands_v2_steps.sql',
   ]) {
     if (
       (

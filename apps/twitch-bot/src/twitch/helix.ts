@@ -190,6 +190,63 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       });
     },
 
+    /**
+     * Send Chat Message with its outcome (scope user:write:chat): `is_sent` false + `drop_reason` when
+     * Twitch dropped it; `reply_parent_message_id` makes it a Twitch reply. No /me here: Helix does not
+     * support chat commands (IRC only).
+     */
+    async sendChat(
+      broadcasterId: string,
+      senderId: string,
+      message: string,
+      replyParentMessageId: string | null = null,
+    ): Promise<{
+      message_id: string | null;
+      is_sent: boolean;
+      drop_reason: { code: string; message: string } | null;
+    }> {
+      const res = await request('POST', '/chat/messages', {
+        broadcaster_id: broadcasterId,
+        sender_id: senderId,
+        message,
+        ...(replyParentMessageId
+          ? { reply_parent_message_id: replyParentMessageId }
+          : {}),
+      });
+      const row = (res.data ?? [])[0] as
+        | {
+            message_id?: string;
+            is_sent?: boolean;
+            drop_reason?: { code?: string; message?: string } | null;
+          }
+        | undefined;
+      if (!row || typeof row.is_sent !== 'boolean')
+        throw new Error('send chat message: unexpected answer');
+      return {
+        message_id: row.message_id || null,
+        is_sent: row.is_sent,
+        drop_reason: row.drop_reason
+          ? {
+              code: String(row.drop_reason.code ?? 'dropped'),
+              message: String(row.drop_reason.message ?? ''),
+            }
+          : null,
+      };
+    },
+
+    /** Send Chat Announcement (scope moderator:manage:announcements; token user = a moderator). 204. */
+    async sendAnnouncement(
+      broadcasterId: string,
+      moderatorId: string,
+      message: string,
+    ): Promise<void> {
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        moderator_id: moderatorId,
+      });
+      await request('POST', `/chat/announcements?${qs}`, { message });
+    },
+
     /** Enabled EventSub subscriptions of this token (all pages): used to detect another consumer. */
     async listEnabledSubscriptions(): Promise<
       { type: string; sessionId: string | null; createdAt: string }[]

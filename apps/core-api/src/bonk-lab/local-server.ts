@@ -17,6 +17,7 @@ import { commandsRoutes } from '../http/commands-routes.js';
 import { CommandsService } from '../commands/service.js';
 import { raffleReservedWords } from '../commands/reserved.js';
 import { CommandsAdmission } from '../commands/admission.js';
+import { CommandSteps } from '../commands/steps.js';
 import { systemClock } from '../clock.js';
 import { createPgDb } from '../db/db.js';
 
@@ -48,10 +49,12 @@ const sound = new SoundLabService(db, systemClock);
 const tts = new TtsLabService(db, systemClock);
 const raffle = new RaffleLabService(db, systemClock);
 // Commands V2 (Lab): Tombola's chat words stay Tombola's (reserved, read through its own configuration
-// reader). Admission (phase B) records and simulates; it never sends anything to Twitch.
+// reader). Admission (phase B) records; accepted answers become durable steps (phase C), handed to the
+// Lab Twitch adapter only while « Sortie chat réelle » is ON (OFF by default).
 const reserved = raffleReservedWords(raffle);
 const commands = new CommandsService(db, systemClock, { reserved });
 const admission = new CommandsAdmission(db, systemClock, { reserved });
+const steps = new CommandSteps(db, systemClock);
 const routes = [
   ...bonkLabRoutes(bonk, viewers),
   // Soundboard V2 Lab: same isolated Lab Core process and database.
@@ -67,7 +70,7 @@ const routes = [
     [{ name: 'commands', chat: (m) => admission.chat(m) }],
   ),
   // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
-  ...commandsRoutes(commands, admission),
+  ...commandsRoutes(commands, admission, steps),
 ];
 const server = createServer(async (req, res) => {
   const send = (status: number, body: unknown) => {

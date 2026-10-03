@@ -18,6 +18,8 @@ const PREFIXES = [
   '/v1/lab/raffle/',
   // Single Lab chat ingress (simulator), routed by Core to every module.
   '/v1/lab/chat',
+  // Commands V2: « Sortie chat réelle » and the step debug view.
+  '/v1/lab/commands/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

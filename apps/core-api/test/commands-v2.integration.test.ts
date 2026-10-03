@@ -5,6 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CommandsAdmission } from '../src/commands/admission.js';
 import { CommandsService } from '../src/commands/service.js';
+import { CommandSteps } from '../src/commands/steps.js';
 import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
 import { FakeClock } from './helpers.js';
@@ -66,6 +67,58 @@ describe.skipIf(!isLocal)('Commands V2 admission on a real Postgres', () => {
       { decision: 'accepted', n: 5 },
       { decision: 'rejected', n: 15 },
     ]);
-    expect(out.filter((o) => o.outcome === 'simulated')).toHaveLength(5);
+    expect(out.filter((o) => o.outcome === 'accepted')).toHaveLength(5);
+  });
+
+  it('concurrent executors over several connections: each step handed out once, in order', async () => {
+    const clock = new FakeClock(new Date('2026-10-04T18:00:00Z'));
+    const studio = {
+      id: 'antoni',
+      role: 'broadcaster' as const,
+      via: 'studio' as const,
+    };
+    await new CommandSteps(a, clock).setOutput('900100', studio, true);
+    const before = await a.query<{ n: number }>(
+      'select count(*)::int as n from cmd_steps',
+    );
+    expect(before[0]!.n).toBe(5);
+    const workers = [a, b].flatMap((db, i) =>
+      [0, 1, 2].map((j) => ({
+        steps: new CommandSteps(db, clock),
+        id: `w${i}${j}`,
+      })),
+    );
+    const order: number[] = [];
+    for (let round = 0; round < 5; round++) {
+      const got = (
+        await Promise.all(
+          workers.map((w) =>
+            w.steps.claim('900100', w.id).then((r) => ({ w, r })),
+          ),
+        )
+      ).filter((x) => x.r.step);
+      expect(got).toHaveLength(1);
+      const { w, r } = got[0]!;
+      const s = r.step!;
+      order.push(
+        (
+          await a.query<{ seq_global: number }>(
+            'select seq_global from cmd_steps where step_id = $1',
+            [s.step_id],
+          )
+        )[0]!.seq_global,
+      );
+      await w.steps.ack('900100', s.step_id, {
+        executor_id: w.id,
+        attempt_id: s.attempt_id!,
+        event: 'running',
+      });
+      await w.steps.ack('900100', s.step_id, {
+        executor_id: w.id,
+        attempt_id: s.attempt_id!,
+        event: 'succeeded',
+      });
+    }
+    expect(order).toEqual([...order].sort((x, y) => x - y));
   });
 });

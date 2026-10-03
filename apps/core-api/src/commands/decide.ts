@@ -73,10 +73,10 @@ export interface RenderedMessage {
 }
 export interface Rendered {
   reply: RenderedMessage | null;
-  actions: (
+  actions: ((
     | ({ id: string; type: 'chat' } & RenderedMessage)
     | { id: string; type: 'module'; module: string; operation: string }
-  )[];
+  ) & { on_error: 'stop' | 'continue' })[];
   reply_first: boolean;
 }
 
@@ -315,13 +315,19 @@ export function decide(input: DecideInput): Decision {
         type: 'module',
         module: a.module,
         operation: a.operation,
+        on_error: a.on_error,
       });
       continue;
     }
     const m = message(a);
     absent ??= missing(m);
     if (m && !missing(m))
-      actions.push({ id: a.id, type: 'chat', ...(m as RenderedMessage) });
+      actions.push({
+        id: a.id,
+        type: 'chat',
+        ...(m as RenderedMessage),
+        on_error: a.on_error,
+      });
   }
   if (absent)
     return reject(
@@ -400,4 +406,37 @@ export function syntax(c: CmdConfig) {
       return ` ${a.required ? w : `[${w}]`}`;
     })
     .join('')}`;
+}
+
+/** Refusals worth an answer to the viewer (never a module word, an unknown, disabled or broken command). */
+const ANSWERED_REFUSALS: readonly (Reason | null)[] = [
+  'unavailable',
+  'denied_user',
+  'access_denied',
+  'follower_status_unknown',
+  'invalid_arguments',
+  'cooldown',
+  'quota',
+];
+
+/**
+ * The refusal answer configured on the command (`refuse`): silent → none; explain → the decision's
+ * message; custom → the streamer's text. Addressed to the viewer, sanitized like any chat message.
+ */
+export function refusalMessage(
+  config: unknown,
+  d: Decision,
+  displayName: string,
+): string | null {
+  if (d.decision !== 'rejected' || !ANSWERED_REFUSALS.includes(d.reason))
+    return null;
+  let cfg: CmdConfig;
+  try {
+    cfg = checkConfig(config);
+  } catch {
+    return null;
+  }
+  if (cfg.refuse.mode === 'silent') return null;
+  const text = cfg.refuse.mode === 'custom' ? cfg.refuse.text : d.message;
+  return text.trim() ? sanitize(`@${displayName} ${text}`) : null;
 }

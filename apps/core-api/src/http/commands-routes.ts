@@ -1,5 +1,8 @@
 import {
   CmdCreateRequest,
+  CmdOutputRequest,
+  CmdStepAckRequest,
+  CmdStepClaimRequest,
   CmdRightsRequest,
   CmdTestRequest,
   CmdUpdateRequest,
@@ -10,6 +13,7 @@ import { z } from 'zod';
 import type { CommandsAdmission } from '../commands/admission.js';
 import { CommandsError } from '../commands/model.js';
 import type { CommandsService } from '../commands/service.js';
+import type { CommandSteps, StepStatus } from '../commands/steps.js';
 import type { Actor } from '../lab-moderation/store.js';
 import { HttpError, limitParam, parse, type Route } from './server.js';
 
@@ -20,6 +24,19 @@ import { HttpError, limitParam, parse, type Route } from './server.js';
 
 const Digits = z.string().regex(/^\d{1,32}$/);
 const Uuid = z.string().regex(/^[0-9a-f-]{36}$/);
+const StepStatusParam = z
+  .enum([
+    'queued',
+    'claimed',
+    'running',
+    'succeeded',
+    'failed',
+    'unknown',
+    'expired',
+    'cancelled',
+    'skipped',
+  ] satisfies StepStatus[])
+  .optional();
 const BASE = String.raw`^\/v1\/lab\/commands\/([^/]+)`;
 
 async function mapped<T>(fn: () => Promise<T>): Promise<T> {
@@ -49,10 +66,69 @@ function reader(url: URL): Actor {
 export function commandsRoutes(
   commands: CommandsService,
   admission: CommandsAdmission,
+  steps: CommandSteps,
 ): Route[] {
   const channel = (params: string[]) => parse(Digits, params[0]);
   const id = (params: string[]) => parse(Uuid, params[1]);
   return [
+    // Phase C — durable steps: « Sortie chat réelle » (OFF by default), executor claim / ACK, debug list.
+    {
+      method: 'GET',
+      pattern: new RegExp(`${BASE}/output$`),
+      auth: 'studio',
+      handle: ({ params }) => steps.output(channel(params)),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/output$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() => {
+          const req = parse(CmdOutputRequest, body);
+          return steps.setOutput(channel(params), req.actor, req.enabled);
+        }),
+    },
+    {
+      method: 'GET',
+      pattern: new RegExp(`${BASE}/steps$`),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() => {
+          const inv = url.searchParams.get('invocation_id');
+          return steps.list(channel(params), reader(url), {
+            status:
+              parse(
+                StepStatusParam,
+                url.searchParams.get('status') ?? undefined,
+              ) ?? null,
+            invocationId: inv ? parse(Uuid, inv) : null,
+            limit: limitParam(url, 50, 200),
+          });
+        }),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/steps/claim$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        steps.claim(
+          channel(params),
+          parse(CmdStepClaimRequest, body).executor_id,
+        ),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/steps/([0-9a-f-]{36})/ack$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() =>
+          steps.ack(
+            channel(params),
+            id(params),
+            parse(CmdStepAckRequest, body),
+          ),
+        ),
+    },
     // Phase B — admission: public list (viewer fields), diagnostic of the invocations, « Tester ».
     {
       method: 'GET',

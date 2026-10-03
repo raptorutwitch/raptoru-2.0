@@ -19,6 +19,8 @@ const baseConfig: BotConfig = {
   LOYALTY_CHAT_COMMANDS: 'false',
   PRESENCE_SHADOW: 'true',
   LAB_CHAT_INGEST: 'false',
+  LAB_CHAT_OUTPUT: 'false',
+  LAB_CHAT_JOURNAL_FILE: '.lab-chat-journal.json',
 };
 
 let messageSeq = 0;

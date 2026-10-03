@@ -2,7 +2,11 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import { LAB_CHANNEL_ID, type LabCoreCall } from '../lab-moderation/proxy.js';
+import {
+  LAB_CHANNEL_ID,
+  type LabCoreCall,
+  STUDIO_ACTOR,
+} from '../lab-moderation/proxy.js';
 
 // Lab chat ingress in Studio — ONE Twitch chat connection for the whole Lab, not a Tombola feature.
 // Its switch (OFF by default, never turned on automatically) starts the bot's Lab chat adapter, which
@@ -13,6 +17,9 @@ import { LAB_CHANNEL_ID, type LabCoreCall } from '../lab-moderation/proxy.js';
 
 /** Scope the adapter needs to read the chat (EventSub channel.chat.message). */
 export const CHAT_READ_SCOPE = 'user:read:chat';
+/** Scope LeCroupier_ needs to send the Commands V2 answers (Send Chat Message). */
+export const CHAT_WRITE_SCOPE = 'user:write:chat';
+const OUTPUT_SCOPE_MISSING = `Le jeton Twitch du bot n'a pas le droit d'écrire dans le chat (scope ${CHAT_WRITE_SCOPE} manquant). Ajoute LAB_CHAT_OUTPUT=true dans apps/twitch-bot/.env, puis relance « npm run twitch:auth -w apps/twitch-bot » (il doit afficher « … user:write:chat moderator:manage:announcements »).`;
 
 /** The bot's Lab chat adapter, as a managed child process (injectable for tests). */
 export interface IngressProcess {
@@ -94,6 +101,10 @@ export class LabChatIngress {
       return 'missing_scope';
     if (this.d.botRunning?.()) return 'bot_running';
     return null;
+  }
+
+  private writeScope() {
+    return this.d.token?.().scopes.includes(CHAT_WRITE_SCOPE) ?? false;
   }
 
   /** Restarts the adapter if the switch was left ON (Studio restart) and nothing blocks it. */
@@ -184,12 +195,44 @@ export class LabChatIngress {
     if (get && p === '/status') return reply(200, this.status());
     if (get && p === '/identities')
       return reply(200, { identities: this.d.identities() });
+    // Commands V2 « Sortie chat réelle » (OFF by default; Core holds it) and the step debug view.
+    const commands = `/v1/lab/commands/${LAB_CHANNEL_ID}`;
+    if (get && p === '/output')
+      return reply(200, {
+        ...(await this.d.core<Record<string, unknown>>(`${commands}/output`)),
+        write_scope: this.writeScope(),
+        ingress_running: this.d.process?.running ?? false,
+      });
+    if (get && p === '/steps') {
+      const status = url.searchParams.get('status');
+      return reply(
+        200,
+        await this.d.core(
+          `${commands}/steps${status && /^[a-z]{1,16}$/.test(status) ? `?status=${status}` : ''}`,
+        ),
+      );
+    }
     if (get) return reply(404, { error: 'not_found' });
     const json = JSON.parse(
       (await readBody(req, 16 * 1024)).toString('utf8') || '{}',
     ) as Record<string, unknown>;
     if (p === '/ingress')
       return reply(200, await this.setEnabled(json.enabled === true));
+    if (p === '/output') {
+      const enabled = json.enabled === true;
+      if (enabled && !this.writeScope())
+        return reply(409, {
+          error: 'missing_write_scope',
+          message: OUTPUT_SCOPE_MISSING,
+        });
+      return reply(
+        200,
+        await this.d.core(`${commands}/output`, {
+          actor: STUDIO_ACTOR,
+          enabled,
+        }),
+      );
+    }
     if (p === '/simulate') {
       // Lab chat simulator: same Core entry as the real chat, routed to every Lab module.
       const viewer = String(json.viewer_id ?? '');
