@@ -56,7 +56,7 @@ export async function createTestDb(): Promise<Db> {
       parsers: { 1082: (v: string) => v, 20: (v: string) => Number(v) },
     });
     const db = createPgliteDb(pg);
-    await migrate(db);
+    await migrate(db, 'all');
     return db;
   })();
   const db = await shared;

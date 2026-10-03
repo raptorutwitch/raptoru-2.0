@@ -186,7 +186,7 @@ describe('Soundboard Lab catalog and configuration (Core)', () => {
     ))
       await copyFile(join(DEFAULT_MIGRATIONS_DIR, file), join(dir, file));
     const db = createPgliteDb(new PGlite());
-    await migrate(db, dir);
+    await migrate(db, 'all', dir);
     const rows: [string, string, number][] = [
       ['boop', 'Boop', 500], // previous default → default name
       ['sigma-a-genoux', 'Sigma - A genoux', 700], // previous default (now fixed) → default name
@@ -201,7 +201,7 @@ describe('Soundboard Lab catalog and configuration (Core)', () => {
          values ($1, $2, true, $3, 2, 7000, 'queue', 80, now())`,
         [id, label, tokens],
       );
-    await migrate(db);
+    await migrate(db, 'all');
     const after = new Map(
       (
         await db.query<{

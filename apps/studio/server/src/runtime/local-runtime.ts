@@ -25,7 +25,10 @@ import { ManagedProcess, PidStore } from '../test-lab/managed-process.js';
 
 export const LAB_CORE_PORT = 4301;
 export const LAB_DATABASE = 'raptoru_bonk_lab';
-/** Only the Lab migrations, in order: never the Wallet / Loyalty / Daily schema. */
+/**
+ * Only the Lab migrations, in order: never the Wallet / Loyalty / Daily schema. Must equal
+ * LAB_MIGRATIONS of apps/core-api/src/db/migration-scopes.ts (checked by the core-api tests).
+ */
 export const LAB_MIGRATIONS = [
   '20260929120000_bonk_lab.sql',
   '20260930120000_bonk_lab_twitch.sql',

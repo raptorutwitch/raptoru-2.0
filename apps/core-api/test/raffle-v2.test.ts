@@ -1058,7 +1058,7 @@ describe('Tombola V2 migration (forward-only, on top of the minimal Tombola)', (
         if (f.endsWith('.sql') && f < '20261008120000')
           await cp(join(DEFAULT_MIGRATIONS_DIR, f), join(dir, f));
       const db = createPgliteDb(new PGlite());
-      await migrate(db, dir);
+      await migrate(db, 'all', dir);
       await db.query(
         `insert into lab_raffles (raffle_id, channel_id, status, jackpot, winners_count, opened_at, ends_at, closed_at, drawn_at, opened_by) values
          ('00000000-0000-4000-8000-000000000001', '1', 'drawn', 8000, 1, '2026-09-30T20:00:00Z', '2026-09-30T20:01:00Z', '2026-09-30T20:01:00Z', '2026-09-30T20:02:00Z', 'studio:a'),
@@ -1075,7 +1075,9 @@ describe('Tombola V2 migration (forward-only, on top of the minimal Tombola)', (
         join(DEFAULT_MIGRATIONS_DIR, '20261008120000_raffle_v2.sql'),
         join(dir, '20261008120000_raffle_v2.sql'),
       );
-      expect(await migrate(db, dir)).toEqual(['20261008120000_raffle_v2.sql']);
+      expect(await migrate(db, 'all', dir)).toEqual([
+        '20261008120000_raffle_v2.sql',
+      ]);
       const rows = await db.query<{
         status: string;
         currency_id: string;

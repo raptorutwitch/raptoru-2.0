@@ -50,7 +50,8 @@ try {
   await db.query(
     'create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now())',
   );
-  // Only the Bonk Lab migrations, in order: never the Wallet/Loyalty/Daily schema.
+  // Only the Lab migrations, in order: never the Wallet/Loyalty/Daily schema. Must equal
+  // LAB_MIGRATIONS of apps/core-api/src/db/migration-scopes.ts (checked by the core-api tests).
   for (const migration of [
     '20260929120000_bonk_lab.sql',
     '20260930120000_bonk_lab_twitch.sql',

@@ -26,7 +26,7 @@ describe.skipIf(!isLocal)('Core on a real Postgres', () => {
   beforeAll(async () => {
     db = createPgDb(url!);
     await db.query('drop schema public cascade; create schema public;');
-    await migrate(db);
+    await migrate(db, 'all');
   });
   afterAll(() => db?.close());
 
