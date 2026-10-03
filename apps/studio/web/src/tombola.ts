@@ -93,6 +93,8 @@ interface Card {
     display_name: string;
     source: 'chat' | 'extension' | 'manual';
     command: string | null;
+    /** Twitch picture from Core's avatar cache (null = initials). */
+    avatar_url?: string | null;
     created_at: string;
     added_by: string | null;
     removed_at: string | null;
@@ -160,6 +162,16 @@ const esc = (t: unknown) =>
         c
       ]!,
   );
+/** Viewer picture (`.pp`): stable hue + initials, the Twitch picture over it when Core has one. */
+const hueOf = (n: string) =>
+  [...n].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 9);
+const pp = (name: string, url?: string | null, ext = false) =>
+  `<span class="pp fr-pp ${ext ? 'ext' : ''}" style="--h:${hueOf(name)}"><i>${esc(
+    name
+      .replace(/[^a-z0-9]/gi, '')
+      .slice(0, 2)
+      .toUpperCase(),
+  )}</i>${typeof url === 'string' && url.startsWith('https://static-cdn.jtvnw.net/') ? `<img src="${esc(url)}" alt="" loading="lazy" data-pp>` : ''}</span>`;
 const fmt = (n: number) => Number(n).toLocaleString('fr-FR').replace(/ /g, ' ');
 const hhmm = (iso: string | null) =>
   iso
@@ -708,6 +720,15 @@ export function mountTombola(root: HTMLElement) {
       : `<section class="tsec tsec--fixed" data-sec="${key}"><div class="tsec__head">${head}</div><div class="grid">${body}</div></section>`;
   }
   root.addEventListener(
+    'error',
+    (ev) => {
+      const t = ev.target as HTMLElement;
+      if (t instanceof HTMLImageElement && t.dataset.pp !== undefined)
+        t.remove();
+    },
+    true,
+  );
+  root.addEventListener(
     'toggle',
     (ev) => {
       const d = ev.target as HTMLElement;
@@ -1024,7 +1045,7 @@ export function mountTombola(root: HTMLElement) {
           .reverse()
           .map(
             (e) =>
-              `<div class="fr"><span class="t">${hhmmss(e.created_at)}</span><span class="n">${esc(e.display_name)}</span>${pill(e)}${before ? `<button class="mini" type="button" title="Retirer de la Tombola" data-remove="${esc(e.viewer_id)}">${ic('x')}</button>` : ''}</div>`,
+              `<div class="fr"><span class="t">${hhmmss(e.created_at)}</span>${pp(e.display_name, e.avatar_url, e.source === 'extension')}<span class="n">${esc(e.display_name)}</span>${pill(e)}${before ? `<button class="mini" type="button" title="Retirer de la Tombola" data-remove="${esc(e.viewer_id)}">${ic('x')}</button>` : ''}</div>`,
           )
           .join('') ||
         '<p class="fine">En attente des premières inscriptions…</p>'
@@ -1051,7 +1072,7 @@ export function mountTombola(root: HTMLElement) {
         .map(
           (
             w,
-          ) => `<div class="fr"><span class="n">${esc(w.display_name)}</span>${round!.kind === 'giveaway' ? '<span class="muted">gagne le lot</span>' : `<b class="t-num" style="color:${round!.kind === 'super' || card!.is_full ? 'var(--t-gold)' : 'var(--t-teal)'}">+ ${fmt(w.expected)} ${esc(w.currency?.short_label ?? '')}</b>`}
+          ) => `<div class="fr">${pp(w.display_name, picOf(card!, w.viewer_id))}<span class="n">${esc(w.display_name)}</span>${round!.kind === 'giveaway' ? '<span class="muted">gagne le lot</span>' : `<b class="t-num" style="color:${round!.kind === 'super' || card!.is_full ? 'var(--t-gold)' : 'var(--t-teal)'}">+ ${fmt(w.expected)} ${esc(w.currency?.short_label ?? '')}</b>`}
             ${w.payout_status === 'paid' ? '<span style="color:var(--t-ok);font-weight:600">✓ Payé</span>' : w.payout_status === 'failed' ? `<span style="color:#ff8a8a;font-weight:600">✗ Échec</span><button class="t-btn t-btn--ghost" type="button" data-retry="${esc(w.viewer_id)}">Relancer le paiement</button>` : w.payout_status === 'none' ? '<span class="muted">à remettre</span>' : '<span class="muted">en cours…</span>'}</div>`,
         )
         .join('')}</div></div>`;
@@ -1118,6 +1139,9 @@ export function mountTombola(root: HTMLElement) {
     super: 'SUPER',
     giveaway: 'Giveaway',
   };
+  /** A winner's picture: the one of their entry (Core sends it with the entries). */
+  const picOf = (c: Card, viewerId: string) =>
+    c.entries.find((e) => e.viewer_id === viewerId)?.avatar_url ?? null;
   function roundCard(c: Card) {
     const t = c.timeline;
     return `<div class="card round-card"><h3>${ic('ticket')}Fiche de la Tombola<span class="r">${esc(c.raffle_id)}</span><button class="mini" type="button" data-close-round title="Fermer">${ic('x')}</button></h3>
@@ -1126,14 +1150,14 @@ export function mountTombola(root: HTMLElement) {
       <div class="grid"><div class="c6"><h4>Participants (${c.entries.filter((e) => !e.removed_at).length})</h4><div class="feed">${c.entries
         .map(
           (e) =>
-            `<div class="fr"><span class="t">${hhmm(e.created_at)}</span><span class="n" style="${e.removed_at ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(e.display_name)}</span><span class="fine">${e.source === 'chat' ? esc(e.command ?? 'chat') : e.source === 'manual' ? `ajout ${esc(e.added_by ?? '')}` : 'Extension'}${e.removed_at ? ` · retiré par ${esc(e.removed_by ?? '')}` : ''}</span></div>`,
+            `<div class="fr"><span class="t">${hhmm(e.created_at)}</span>${pp(e.display_name, e.avatar_url, e.source === 'extension')}<span class="n" style="${e.removed_at ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(e.display_name)}</span><span class="fine">${e.source === 'chat' ? esc(e.command ?? 'chat') : e.source === 'manual' ? `ajout ${esc(e.added_by ?? '')}` : 'Extension'}${e.removed_at ? ` · retiré par ${esc(e.removed_by ?? '')}` : ''}</span></div>`,
         )
         .join('')}</div></div>
       <div class="c6"><h4>Gagnants & paiements</h4><div class="feed">${
         c.winners
           .map(
             (w) =>
-              `<div class="fr"><span class="n">${w.position}. ${esc(w.display_name)}</span><span class="t-num">${c.kind === 'giveaway' ? 'lot' : `${fmt(w.expected)} ${esc(w.currency?.short_label ?? '')}`}</span><span class="fine">${w.payout_status === 'paid' ? `✓ payé ${hhmm(w.paid_at)} · mouvement #${w.ledger_id} · ${fmt(w.credited)} crédités` : w.payout_status === 'failed' ? `✗ échec (${esc(w.failure)}) · ${w.attempts} tentative${w.attempts > 1 ? 's' : ''}` : w.payout_status === 'none' ? 'à remettre' : 'en cours'}</span></div>`,
+              `<div class="fr">${pp(w.display_name, picOf(c, w.viewer_id))}<span class="n">${w.position}. ${esc(w.display_name)}</span><span class="t-num">${c.kind === 'giveaway' ? 'lot' : `${fmt(w.expected)} ${esc(w.currency?.short_label ?? '')}`}</span><span class="fine">${w.payout_status === 'paid' ? `✓ payé ${hhmm(w.paid_at)} · mouvement #${w.ledger_id} · ${fmt(w.credited)} crédités` : w.payout_status === 'failed' ? `✗ échec (${esc(w.failure)}) · ${w.attempts} tentative${w.attempts > 1 ? 's' : ''}` : w.payout_status === 'none' ? 'à remettre' : 'en cours'}</span></div>`,
           )
           .join('') || '<p class="fine">Aucun gagnant.</p>'
       }</div></div></div>

@@ -1643,3 +1643,18 @@ main.tab-flush {
 .tmb .tsec > .grid {
   align-items: start;
 }
+
+/* Viewer pictures in the Studio rows (feed, result, round card): the `.pp` of the prototype, small. */
+.tmb .fr .fr-pp {
+  --s: 20px;
+  --pp-ring-w: 1.5px;
+  --pp-gap: #121821;
+}
+.tmb .pp img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
