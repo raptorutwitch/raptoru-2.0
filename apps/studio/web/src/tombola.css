@@ -1550,3 +1550,96 @@ main.tab-flush {
 .tmb .hs-tg:hover {
   border-color: var(--t-line-2);
 }
+
+/* --- Préparer & lancer: sections (main ones open, advanced ones folded) -------------------------- */
+.tmb .tsec {
+  margin-top: 14px;
+  border: 1px solid var(--t-line);
+  border-radius: var(--t-r-l);
+  background: rgba(255, 255, 255, 0.012);
+}
+.tmb .tsec > summary,
+.tmb .tsec__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 10px 16px;
+  list-style: none;
+}
+.tmb .tsec > summary {
+  cursor: pointer;
+  user-select: none;
+}
+.tmb .tsec > summary::-webkit-details-marker {
+  display: none;
+}
+.tmb .tsec > summary:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+.tmb .tsec__t {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  color: var(--t-ink);
+  font: 700 13px/1 var(--t-num);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.tmb .tsec__t svg {
+  width: 16px;
+  height: 16px;
+  color: var(--t-teal);
+}
+.tmb .tsec__h {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--t-faint);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tmb .tsec__sum {
+  flex: none;
+  max-width: 48%;
+  overflow: hidden;
+  padding: 3px 10px;
+  border: 1px solid var(--t-line);
+  border-radius: 999px;
+  color: var(--t-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tmb .tsec__chev {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--t-faint);
+  transition: transform 0.15s;
+}
+.tmb .tsec__chev svg {
+  width: 16px;
+  height: 16px;
+}
+.tmb .tsec[open] .tsec__chev {
+  transform: rotate(90deg);
+}
+.tmb .tsec > .grid {
+  padding: 0 14px 14px;
+}
+/* A section with a single card: its title is the section's (no repeated heading). */
+.tmb .tsec > .grid > .card:only-child > h3 {
+  display: none;
+}
+.tmb .tsec > .grid > .card:only-child {
+  border: 0;
+  padding: 4px 4px 0;
+  background: none;
+}
+/* Cards of a section keep their own height (no tall empty card next to a long one). */
+.tmb .tsec > .grid {
+  align-items: start;
+}

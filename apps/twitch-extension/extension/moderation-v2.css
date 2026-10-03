@@ -517,3 +517,24 @@ body.mobile:has(.modv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 /* Currencies (shared/currency.js): « 17 000 Cr », one line, unit in the currency's colour. */
 .modv2 .cur-amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .modv2 .cur-u { font-weight: 700; }
+
+/* Module header: every action as an icon left of the state button (no « … » menu). */
+.modv2 .hacts { display: inline-flex; flex: none; align-items: center; gap: 4px; }
+.modv2 .hact { color: #e6ddf5; }
+.modv2 .hact.is-off { opacity: 0.4; cursor: default; }
+.modv2 .hact.is-locked { color: var(--faint); }
+.modv2 .hact--danger:not(.is-off) { border-color: rgba(255, 107, 107, 0.4); color: #ff8a8a; }
+.modv2 .hact--danger:not(.is-off):hover { border-color: rgba(255, 107, 107, 0.7); background: rgba(255, 107, 107, 0.12); color: #ffb3b3; }
+.modv2 .hact__lock { position: absolute; right: -3px; bottom: -3px; display: grid; width: 13px; height: 13px; place-items: center; border-radius: 50%; background: #1b1430; color: var(--faint); }
+.modv2 .hact__lock svg { width: 9px; height: 9px; }
+.modv2 .pane__head { flex-wrap: nowrap; }
+/* Compact (Panel / Mobile): a small icon bar; the state button keeps its dot (+ tooltip), the title
+   gives way first (ellipsis), nothing wraps. */
+.modv2[data-mode='compact'] .hacts { gap: 2px; }
+.modv2[data-mode='compact'] .hact { width: 26px; height: 26px; border-radius: 8px; }
+.modv2[data-mode='compact'] .hact svg { width: 14px; height: 14px; }
+.modv2[data-mode='compact'] .pane__head:has(.hacts) { gap: 4px; padding-right: 8px; }
+.modv2[data-mode='compact'] .pane__head:has(.hacts) .statebtn { gap: 3px; height: 28px; padding: 0 5px 0 8px; font-size: 0; }
+.modv2 .linkish svg { width: 12px; height: 12px; vertical-align: -1px; }
+/* Compact with a full live bar (4+ icons): the module name stays whole, its coloured badge gives way. */
+.modv2[data-mode='compact'] .pane__head:has(.hacts .hact:nth-child(4)) .pane__title .ttl-ic { display: none; }

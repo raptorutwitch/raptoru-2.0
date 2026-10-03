@@ -272,3 +272,20 @@ Aucune ligne « backend manquant », placeholder, fake, non branché ni supprim�
 - **Pop-out Twitch réel** : la console gère la Moderator Window (mode ≥ 900 px, surface « Moderator
   Window » de l'Extension Lab) ; l'activer sur Twitch demande une publication de l'extension (interdite
   pour l'instant).
+
+## 4. Passe UX post-Tombola (validée manuellement par Antoni le 03/10/2026)
+
+Placement uniquement : aucune logique Core, permission ni action modifiée.
+
+- **Plus de menu « … »** dans les en-têtes de modules : toutes ses actions sont des icônes (tooltip sur
+  chacune) à gauche du bouton d'état.
+  - TTS : Surveillance des mots · Historique TTS · Purger toute la file.
+  - Soundboard : Stop tous les sons (inactif sous 2 sons) · Historique Soundboard · Purger toute la file.
+  - Bonk : Historique Bonk.
+  - Tombola : Historique ; en manche, aussi Pause / Reprendre · Ajouter 30 secondes · Tirer maintenant ·
+    Annuler la manche (la rangée de boutons du corps est retirée).
+- Purger et Annuler en rouge, confirmations inchangées ; une action sans permission reste visible avec un
+  cadenas et le tooltip nomme la permission manquante.
+- Compact (Panel / Mobile) : icônes de 26 px, bouton d'état réduit à sa pastille (tooltip « État : … »),
+  une seule ligne, aucun débordement (mesuré en E2E sur Panel 318×496, Moderator Window et Studio).
+- Lignes 20, 24, 25 et 38 ci-dessus : mêmes actions et dialogues, désormais depuis les icônes d'en-tête.

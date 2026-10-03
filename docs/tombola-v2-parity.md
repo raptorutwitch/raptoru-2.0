@@ -151,7 +151,15 @@ Légende : **C** Core · **S** Studio · **E** Extension · **O** Overlay · **B
   montants jamais coupés, anti-spoil qui atteint réellement 0, libellés selon le nom et l'accord réels, monnaies
   compactes communes (`shared/currency.js` : « 17 000 Cr », « 7 000 Je », couleur de la monnaie, une ligne, taille
   adaptative).
-- **Phase H — E2E** · **Phase I — package local** `apps/studio/desktop/release/current-test/` (pas de release).
+- **Phase H — validation de bout en bout** (02/10/2026) : scénarios A–L automatisés sur la pile Lab réelle (Studio, Core,
+  entrée chat, Extension Panel / Mobile / Vidéo + Hub, overlay OBS, console Modération, historique, wallet), tous verts
+  sans correctif de code ; tests manuels d'Antoni OK.
+- **Passe UX post-Tombola** (validée manuellement par Antoni le 03/10/2026, placement uniquement) : onglet Studio
+  « Préparer & lancer » en sections (Lancement toujours visible ; Participation et Automatisation ouvertes ; Affichage,
+  SUPER & FULL OSEILLE, Sons d'ouverture, Chat & Twitch repliées avec un résumé de leur état ; état mémorisé
+  localement) — aucun réglage retiré, aucune valeur par défaut changée. Console Modération : plus de menu « … »,
+  actions en icônes d'en-tête (voir `docs/moderation-v2-d4-parity.md`, section 4).
+- **Phase I — package local** `apps/studio/desktop/release/current-test/` (pas de release).
 
 ## Ingestion chat du Lab (générique, pas propre à la Tombola)
 

@@ -21,6 +21,8 @@ const P = {
   wallet: '<path d="M3 7a2 2 0 0 1 2-2h13v4"/><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="16.5" cy="13.5" r="1.2"/>',
   note: '<path d="M5 3h10l4 4v14H5z"/><path d="M9 11h6M9 15h4"/>',
   pause: '<path d="M9 5v14M15 5v14"/>',
+  timeplus: '<circle cx="11" cy="13" r="7"/><path d="M11 9.5V13l2.2 1.6M18.5 2.5v5M16 5h5"/>',
+  crown: '<path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>',
   play: '<path d="m7 4 13 8-13 8z"/>',
   tts: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
   soundboard: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
@@ -451,12 +453,6 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
       const what = r.kind === 'giveaway' ? esc(r.prize ?? '') : moneyHtml(r.amount, r.currency);
       b += `<div class="tmbm tmbm--${esc(r.status)}"><div class="tmbm__top"><b class="tmbm__st">${esc(st)}</b><span class="grow"></span>${timer}</div>
         <div class="tmbm__nums"><span><b class="tnum">${r.participants}</b> participant${r.participants > 1 ? 's' : ''}</span><span class="cost">${what}</span>${r.origin === 'automatic' ? '<span class="muted">auto</span>' : ''}</div></div>`;
-      if (before) {
-        const M = can('raffle.manage');
-        const btn = (a, label, icon) => (M ? `<button class="btn btn--sm" data-act="${a}">${ic(icon)}${label}</button>` : `<button class="btn btn--sm" data-act="locked" data-perm="raffle">${ic('lock')}${label}</button>`);
-        b += `<div class="tmbm__acts">${btn('raffle-extend', '+30 s', 'clock')}${r.status === 'paused' ? btn('raffle-resume', 'Reprendre', 'play') : btn('raffle-pause', 'Pause', 'pause')}${btn('raffle-draw', 'Tirer', 'raffle')}<span class="grow"></span>
-          ${can('raffle.moderate') ? `<button class="btn btn--sm btn--danger" data-act="raffle-cancel">${ic('x')}Annuler</button>` : ''}</div>`;
-      }
       b += sec(`Participants · ${r.participants}`, before ? (can('raffle.manage') ? '<button class="linkish" data-act="raffle-add">+ Ajouter</button>' : `<button class="linkish" data-act="locked" data-perm="raffle">${ic('lock')}Ajouter</button>`) : '');
       b += r.entries.length
         ? `<div class="rows">${r.entries
@@ -645,10 +641,45 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
   };
 
   // ------------------------------------------------------------------ views of the right zone
+  /**
+   * Live actions worth one click, as compact header icons (tooltip on each). Rare or dangerous ones stay
+   * in « … ». Without the permission the icon stays, locked, and names the permission (as before).
+   */
+  /**
+   * Every module action as an icon of the header, left of the state button (no « … » menu): tooltip on
+   * each; same permissions as before (a locked icon names the missing permission); dangerous ones keep
+   * their confirmation.
+   */
+  function headActs(m) {
+    const hb = (act, icon, tip, { ok = true, perm = '', disabled = false, danger = false } = {}) =>
+      ok
+        ? `<button class="icon-btn icon-btn--sm hact${danger ? ' hact--danger' : ''}${disabled ? ' is-off' : ''}" data-act="${disabled ? '' : act}" data-m="${m}" data-tip="${tip}" aria-label="${tip}" ${disabled ? 'aria-disabled="true"' : ''}>${ic(icon)}</button>`
+        : `<button class="icon-btn icon-btn--sm hact is-locked" data-act="locked" data-perm="${perm}" data-tip="${tip} · permission « ${PERMS[perm][0]} »" aria-label="${tip} (verrouillé)">${ic(icon)}<i class="hact__lock">${ic('lock')}</i></button>`;
+    const hist = hb('hist-module', 'history', `Historique ${MODS[m].label}`);
+    const purge = () => {
+      const n = waiting(m).length;
+      return hb('purge', 'trash', n ? `Purger toute la file (${n})` : 'Purger toute la file · file vide', { disabled: !n, danger: true });
+    };
+    let out = '';
+    if (m === 'tts') out = hb('words', 'eye', 'Surveillance des mots') + hist + purge();
+    else if (m === 'soundboard') {
+      const n = playing('soundboard').length;
+      out = hb('stop-all', 'stop', n > 1 ? `Stop tous les sons (${n} en cours)` : 'Stop tous les sons · au moins 2 sons en cours', { disabled: n < 2 }) + hist + purge();
+    } else if (m === 'raffle') {
+      const r = rRound();
+      if (r && BEFORE_DRAW.includes(r.status)) {
+        const M = { ok: can('raffle.manage'), perm: 'raffle' };
+        out += r.status === 'paused' ? hb('raffle-resume', 'play', 'Reprendre la manche', M) : hb('raffle-pause', 'pause', 'Mettre la manche en pause', M);
+        out += hb('raffle-extend', 'timeplus', 'Ajouter 30 secondes', M) + hb('raffle-draw', 'crown', 'Tirer maintenant', M);
+        if (can('raffle.moderate')) out += hb('raffle-cancel', 'x', 'Annuler la manche', { danger: true });
+      }
+      out += hist;
+    } else out = hist;
+    return `<span class="hacts">${out}</span>`;
+  }
   function moduleView(m) {
     const st = stateOf(m);
-    const headEnd = `<button class="statebtn statebtn--${st}" data-act="state-menu" data-m="${m}" data-tip="Changer l’état du module">${sdot(st)}${STATE[st]}${ic('down')}</button>
-      <button class="icon-btn icon-btn--sm" data-act="module-menu" data-m="${m}" data-tip="Actions ${MODS[m].label}" aria-label="Actions ${MODS[m].label}">${ic('more')}</button>`;
+    const headEnd = `${headActs(m)}<button class="statebtn statebtn--${st}" data-act="state-menu" data-m="${m}" data-tip="État : ${STATE[st]} · changer l’état du module" aria-label="État : ${STATE[st]}">${sdot(st)}${STATE[st]}${ic('down')}</button>`;
     let b = statenote(m);
     if (!overview) b += '<div class="empty">Connexion au Core…</div>';
     else if (m === 'tts') {
@@ -1535,15 +1566,6 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
     refund: (d) => void act({ action: 'refund', module: d.m, interaction_id: d.id }, 'Remboursé'),
     'state-menu': (d, b) => stateMenu(b, d.m),
     'set-state': (d) => stateChange(d.m, d.s),
-    'module-menu': (d, b) =>
-      menu(b, [
-        { header: true, label: MODS[d.m].label },
-        d.m === 'tts' ? { label: 'Surveillance (mots)', icon: 'eye', data: { act: 'words' } } : null,
-        d.m === 'soundboard' ? { label: 'Stop tous les sons…', icon: 'stop', disabled: playing('soundboard').length < 2, data: { act: 'stop-all', m: 'soundboard' } } : null,
-        { label: `Historique ${MODS[d.m].label}`, icon: 'history', data: { act: 'hist-module', m: d.m } },
-        d.m === 'tts' || d.m === 'soundboard' ? '-' : null,
-        d.m === 'tts' || d.m === 'soundboard' ? { label: 'Purger toute la file…', icon: 'trash', danger: true, disabled: !waiting(d.m).length, data: { act: 'purge', m: d.m } } : null,
-      ]),
     'hist-module': (d) => open.history(undefined, d.m),
     purge: (d) => {
       const q0 = waiting(d.m);
@@ -1639,6 +1661,8 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
     },
   };
   node.addEventListener('click', (e) => {
+    // A click changes the view: a tooltip never outlives its button.
+    hideTip();
     if (menuEl && !e.target.closest?.('.menu')) closeMenu();
     const b = e.target.closest?.('[data-act]');
     if (!b || b.disabled || !node.contains(b)) return;

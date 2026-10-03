@@ -680,6 +680,48 @@ export function mountTombola(root: HTMLElement) {
       ${items.length < 12 ? `<div class="inline" style="margin-top:10px"><input class="input" data-cmd-add-in="${list}" placeholder="${list === 'join_commands' ? '!alias' : '!commande'}" maxlength="25" style="width:130px"><button class="t-btn t-btn--ghost" type="button" data-cmd-add="${list}" style="height:36px">${ic('plus')}Ajouter</button></div>` : '<p class="fine">12 commandes maximum.</p>'}
       <p class="cmd-err" data-id="cmdErr-${list}" ${cmdErr[list] ? '' : 'hidden'}>${esc(cmdErr[list])}</p>`;
   }
+  /** Folded sections: the main ones open, the advanced ones closed (remembered on this computer). */
+  const SEC_KEY = 'raptoru.studio.tombola.sections';
+  const secOpen = new Set<string>(['join', 'auto']);
+  try {
+    const saved = JSON.parse(localStorage.getItem(SEC_KEY) ?? 'null') as
+      string[] | null;
+    if (Array.isArray(saved)) {
+      secOpen.clear();
+      saved.forEach((k) => secOpen.add(k));
+    }
+  } catch {
+    /* defaults */
+  }
+  function section(
+    key: string,
+    icon: string,
+    title: string,
+    hint: string,
+    sum: string,
+    body: string,
+    fold = true,
+  ) {
+    const head = `<span class="tsec__t">${ic(icon)}${title}</span><span class="tsec__h">${hint}</span>${sum ? `<span class="tsec__sum">${sum}</span>` : ''}`;
+    return fold
+      ? `<details class="tsec" data-sec="${key}" ${secOpen.has(key) ? 'open' : ''}><summary>${head}<span class="tsec__chev">${ic('chevR')}</span></summary><div class="grid">${body}</div></details>`
+      : `<section class="tsec tsec--fixed" data-sec="${key}"><div class="tsec__head">${head}</div><div class="grid">${body}</div></section>`;
+  }
+  root.addEventListener(
+    'toggle',
+    (ev) => {
+      const d = ev.target as HTMLElement;
+      if (!(d instanceof HTMLDetailsElement) || !d.dataset.sec) return;
+      if (d.open) secOpen.add(d.dataset.sec);
+      else secOpen.delete(d.dataset.sec);
+      try {
+        localStorage.setItem(SEC_KEY, JSON.stringify([...secOpen]));
+      } catch {
+        /* in memory only */
+      }
+    },
+    true,
+  );
   function renderSetup() {
     const el = $('v-setup');
     if (!status || !cfg) {
@@ -689,10 +731,20 @@ export function mountTombola(root: HTMLElement) {
     }
     const c = cfg;
     const focus = (document.activeElement as HTMLElement | null)?.dataset;
+    const soundsN = (['normal', 'super', 'giveaway'] as const).filter(
+      (k) => c.launch_sounds[k],
+    ).length;
+    const kindNow = c.amount_mode === 'giveaway' ? 'giveaway' : 'normal';
     el.innerHTML = `<div class="quick"><div style="flex:1"><h2>Lancement rapide</h2><div class="sum">${summary(c)}</div></div>
         <button class="t-btn t-btn--gold" type="button" data-launch="super">${ic('star')}Super Tombola</button>
         <button class="t-btn t-btn--primary" type="button" data-launch="auto">${ic('play')}Lancer la Tombola</button></div>
-      <div class="grid">
+      ${section(
+        'launch',
+        'play',
+        'Lancement',
+        'récompense, durée, gagnants',
+        '',
+        `
         <div class="card c12"><h3>${ic('coin')}Récompense<span class="r">toute monnaie enregistrée dans Raptoru</span></h3>
           <div class="seg">${[
             ['random', 'dice', 'Aléatoire'],
@@ -706,31 +758,29 @@ export function mountTombola(root: HTMLElement) {
             .join('')}</div>
           ${c.amount_mode === 'giveaway' ? '' : `<div class="field"><span>Monnaie</span>${curCarousel(c)}</div>`}
           ${modeBody(c)}</div>
-        <div class="card c4"><h3>${ic('clock')}Durée</h3><div class="chips">${[30, 45, 60, 90, 120].map((v) => `<button type="button" class="chip ${c.duration_s === v ? 'on' : ''}" data-dur="${v}">${v} s</button>`).join('')}
+        <div class="card c6"><h3>${ic('clock')}Durée</h3><div class="chips">${[30, 45, 60, 90, 120].map((v) => `<button type="button" class="chip ${c.duration_s === v ? 'on' : ''}" data-dur="${v}">${v} s</button>`).join('')}
           <span class="inline"><input class="input" style="width:70px" data-cfg="duration_s" value="${[30, 45, 60, 90, 120].includes(c.duration_s) ? '' : c.duration_s}" placeholder="Autre…"><span class="muted">s</span></span></div>
           <p class="fine" style="margin:10px 0 0">Par défaut 60 s. Fermeture puis tirage automatiques à 0.</p></div>
-        <div class="card c4"><h3>${ic('users')}Gagnants</h3><div class="seg"><button type="button" class="${c.winners_mode === 'auto' ? 'on' : ''}" data-win="auto">Auto</button><button type="button" class="${c.winners_mode === 'custom' ? 'on' : ''}" data-win="custom">Nombre fixe</button></div>
+        <div class="card c6"><h3>${ic('users')}Gagnants</h3><div class="seg"><button type="button" class="${c.winners_mode === 'auto' ? 'on' : ''}" data-win="auto">Auto</button><button type="button" class="${c.winners_mode === 'custom' ? 'on' : ''}" data-win="custom">Nombre fixe</button></div>
           ${c.winners_mode === 'auto' ? `<table class="wtable">${status.winners_table.map((r) => `<tr><td>${r.participants} participants</td><td>${r.min === r.max ? r.min : `${r.min}–${r.max}`} gagnant${r.max > 1 ? 's' : ''}</td></tr>`).join('')}</table>` : `<div class="field"><span>Nombre de gagnants</span><input class="input" style="width:90px" data-cfg="winners_custom" value="${c.winners_custom}"></div>`}
           <p class="fine" style="margin:8px 0 0">Gains partagés aussi équitablement que possible (au jeton près).</p></div>
-        <div class="card c4"><h3>${ic('chat')}Inscription</h3>
+      `,
+        false,
+      )}
+      ${section(
+        'join',
+        'chat',
+        'Participation',
+        'commandes chat, Extension, instruction sur l’overlay',
+        `${esc(c.join_commands.join(' '))} · Extension ${c.extension_button ? 'oui' : 'non'} · annulation ${esc(c.cancel_commands[0] ?? '')}`,
+        `
+        <div class="card c6"><h3>${ic('chat')}Inscription</h3>
           ${cmdEditor(c, 'join_commands')}
           <div class="tog" style="margin-top:14px"><div class="txt"><b>Bouton Extension</b><span class="fine">Inscription en un clic depuis l’extension</span></div><button type="button" class="sw ${c.extension_button ? 'on' : ''}" data-tog="extension_button"></button></div>
           <p class="fine" style="margin:10px 0 0">Une seule inscription par viewer, quelle que soit la source.</p></div>
-        <div class="card c6"><h3>${ic('crown')}Full oseille</h3>
-          <div class="tog"><div class="txt"><b><span class="t-full">Full oseille</span></b><span class="fine" style="display:block;margin-top:6px">Un seul gagnant rafle toute la cagnotte. Jamais annoncée à l’ouverture.</span></div><button type="button" class="sw gold ${c.full.enabled ? 'on' : ''}" data-tog="full.enabled"></button></div>
-          <div class="field"><span>Chance à chaque Tombola</span><div class="inline"><input class="input" style="width:80px" data-cfg="full.chance_pct" value="${c.full.chance_pct}"><span class="muted">%</span></div></div></div>
-        <div class="card c6" style="border-color:rgba(233,196,106,0.35)"><h3 style="color:var(--t-gold)">${ic('star')}Super Tombola</h3>
-          <div class="tog"><div class="txt"><b><span class="t-super">Super</span></b><span class="fine" style="display:block;margin-top:6px">Très rare, jackpot dédié, mise en scène or.</span></div><button type="button" class="sw gold ${c.super.enabled ? 'on' : ''}" data-tog="super.enabled"></button></div>
-          <div class="inline" style="margin-top:12px;gap:14px"><label class="field" style="margin:0"><span>Jackpot</span><input class="input" style="width:130px;color:var(--t-gold)" data-cfg="super.jackpot" value="${c.super.jackpot}"></label>
-            <label class="field" style="margin:0"><span>Chance</span><span class="inline"><span class="muted">1 sur</span><input class="input" style="width:80px" data-cfg="super.one_in" value="${c.super.one_in}"></span></label>
-            <label class="field" style="margin:0"><span>Monnaie</span><select class="input" data-cfg="super.currency_id" style="font-family:var(--t-font)">${status.currencies
-              .filter((k) => k.available)
-              .map(
-                (k) =>
-                  `<option value="${esc(k.id)}" ${k.id === c.super.currency_id ? 'selected' : ''}>${esc(k.label)}</option>`,
-              )
-              .join('')}</select></label></div></div>
-        ${labelsCard(c)}
+        <div class="card c6"><h3>${ic('x')}Commande d’annulation<span class="r">modérateur et plus</span></h3>
+          ${cmdEditor(c, 'cancel_commands')}
+          <p class="fine" style="margin:10px 0 0">Core vérifie le rôle : un viewer ne peut jamais annuler.</p></div>
         <div class="card c12"><h3>${ic('eye')}Overlay · texte d’instruction<span class="r">affichage sur le stream uniquement · ne change pas les commandes d’inscription</span></h3>
           <div class="inline" style="gap:14px;flex-wrap:wrap"><div class="seg">${[
             ['none', 'Masqué'],
@@ -747,17 +797,49 @@ export function mountTombola(root: HTMLElement) {
           <p class="fine" style="margin:8px 0 0">${c.overlay_hint.mode === 'custom' ? 'Message personnalisé, 60 caractères max (vide = aucune instruction affichée).' : c.overlay_hint.mode === 'join' ? `Affiche la commande principale « ${esc(c.join_commands[0])} ».` : 'Aucune instruction sur l’overlay.'} Visible sous le bloc Tombola de l’overlay (et dans l’aperçu « En direct »).</p>
           <div class="hintpv-wrap"><div class="pv-c4" data-id="hintPv">${hintPreview(c)}</div>
             <div class="fine">Aperçu fidèle de la zone d’instruction du bloc C4 de l’overlay : même police, même taille, même largeur (taille réelle, 1:1 sur un stream 1080p), même retour à la ligne. <b data-id="hintLines"></b></div></div></div>
-        ${schedulerCard(c)}
+      `,
+      )}
+      ${section('auto', 'bolt', 'Automatisation', 'liée au stream · une seule Tombola à la fois', c.scheduler.enabled ? `Activée · ${esc(PRESETS.find((p) => p[0] === c.scheduler.preset)?.[1] ?? '')}` : 'Désactivée', schedulerCard(c))}
+      ${section('display', 'eye', 'Affichage', 'nom, textes, durées, résultat Extension', `Nom : ${esc(status.titles?.[kindNow]?.name ?? 'Tombola')} · décalage Extension ${c.display.stream_margin_s} s`, `${labelsCard(c)}${displayCard(c)}`)}
+      ${section(
+        'effects',
+        'star',
+        'SUPER & FULL OSEILLE',
+        'probabilités et jackpots',
+        `SUPER ${c.super.enabled ? `1 sur ${fmt(c.super.one_in)}` : 'désactivée'} · FULL ${c.full.enabled ? `${c.full.chance_pct} %` : 'désactivée'}`,
+        `
+        <div class="card c6"><h3>${ic('crown')}Full oseille</h3>
+          <div class="tog"><div class="txt"><b><span class="t-full">Full oseille</span></b><span class="fine" style="display:block;margin-top:6px">Un seul gagnant rafle toute la cagnotte. Jamais annoncée à l’ouverture.</span></div><button type="button" class="sw gold ${c.full.enabled ? 'on' : ''}" data-tog="full.enabled"></button></div>
+          <div class="field"><span>Chance à chaque Tombola</span><div class="inline"><input class="input" style="width:80px" data-cfg="full.chance_pct" value="${c.full.chance_pct}"><span class="muted">%</span></div></div></div>
+        <div class="card c6" style="border-color:rgba(233,196,106,0.35)"><h3 style="color:var(--t-gold)">${ic('star')}Super Tombola</h3>
+          <div class="tog"><div class="txt"><b><span class="t-super">Super</span></b><span class="fine" style="display:block;margin-top:6px">Très rare, jackpot dédié, mise en scène or.</span></div><button type="button" class="sw gold ${c.super.enabled ? 'on' : ''}" data-tog="super.enabled"></button></div>
+          <div class="inline" style="margin-top:12px;gap:14px"><label class="field" style="margin:0"><span>Jackpot</span><input class="input" style="width:130px;color:var(--t-gold)" data-cfg="super.jackpot" value="${c.super.jackpot}"></label>
+            <label class="field" style="margin:0"><span>Chance</span><span class="inline"><span class="muted">1 sur</span><input class="input" style="width:80px" data-cfg="super.one_in" value="${c.super.one_in}"></span></label>
+            <label class="field" style="margin:0"><span>Monnaie</span><select class="input" data-cfg="super.currency_id" style="font-family:var(--t-font)">${status.currencies
+              .filter((k) => k.available)
+              .map(
+                (k) =>
+                  `<option value="${esc(k.id)}" ${k.id === c.super.currency_id ? 'selected' : ''}>${esc(k.label)}</option>`,
+              )
+              .join('')}</select></label></div></div>
+      `,
+      )}
+      ${section(
+        'sounds',
+        'sound',
+        'Sons d’ouverture',
+        'joués par la source OBS Tombola · stockés dans Studio',
+        soundsN
+          ? `${soundsN} son${soundsN > 1 ? 's' : ''} importé${soundsN > 1 ? 's' : ''}`
+          : 'Aucun son',
+        `
         <div class="card c12"><h3>${ic('sound')}Sons d’ouverture<span class="r">joués par la source OBS Tombola · copiés dans le stockage Raptoru Studio</span></h3>
           ${soundRow('normal', 'Tombola', 'Aucun son')}${soundRow('super', 'Super Tombola', 'Aucun son (son de la Tombola)')}${soundRow('giveaway', 'Giveaway', 'Aucun son (son de la Tombola)')}
           <p class="fine" style="margin:10px 0 0">MP3, WAV ou OGG · 5 Mo max. FULL OSEILLE n’a jamais de son d’ouverture : elle reste une surprise jusqu’au tirage.</p>
           <p class="note-f">${ic('sound')}<span>Au lancement, le son est joué une seule fois par la source OBS Tombola (jamais rejoué après un rechargement), pas par Studio : l’aperçu « En direct » est muet. « Écouter » n’est qu’un aperçu local.</span></p></div>
-        ${displayCard(c)}
-        <div class="card c6"><h3>${ic('x')}Commande d’annulation<span class="r">modérateur et plus</span></h3>
-          ${cmdEditor(c, 'cancel_commands')}
-          <p class="fine" style="margin:10px 0 0">Core vérifie le rôle : un viewer ne peut jamais annuler.</p></div>
-        <div class="c6">${chatCard()}</div>
-      </div>`;
+      `,
+      )}
+      ${section('chat', 'chat', 'Chat & Twitch (Lab)', 'ingestion réelle et simulateur · commun à tous les modules', '', chatCard())}`;
     $('cancelCmd').textContent = c.cancel_commands[0] ?? '!annuletombola';
     if (focus?.cfg)
       root.querySelector<HTMLElement>(`[data-cfg="${focus.cfg}"]`)?.focus();
