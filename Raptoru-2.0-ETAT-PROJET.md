@@ -1,6 +1,6 @@
 # Raptoru 2.0 — État du projet / fichier de reprise
 
-**Dernière mise à jour : 1er octobre 2026 — Studio 0.1.5 = dernière release publique (validée) ; HEAD fonctionnel `5b66579` (Modération V2 — parité D4 complète, Core Lab + console unique extension / Studio) implémenté, testé automatiquement et en E2E (95/95), package local `release/moderation-d4` **validé manuellement par Antoni le 01/10/2026** (hors Tombola V2 minimale, non validée produit), NON releasé.**
+**Dernière mise à jour : 3 octobre 2026 — Studio 0.1.5 = dernière release publique (validée) ; HEAD fonctionnel `ed781f6`. **Tombola V2 — TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ** (Lab, validée manuellement par Antoni les 02–03/10/2026, commits de référence `ecc0275` + `ed781f6`) ; Modération V2 parité D4 validée le 01/10/2026 ; passe UX post-Tombola validée le 03/10/2026. Rien n’est releasé ni packagé depuis 0.1.5.**
 
 > **Nouvel agent : lire d’abord [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md)** (état courant, règles de reprise, matrice de validation, prochaine action). Ce fichier-ci garde l’historique et le détail par domaine.
 
@@ -15,19 +15,21 @@ Ce fichier est la source de continuité du projet. Il doit permettre de reprendr
 - la direction produit autour de l’extension, du site, des stats et des cosmétiques.
 
 ## État courant (résumé — détail et matrice complète dans `Raptoru-2.0-HANDOFF.md`)
-Vérifié le 01/10/2026 par `git status` / `git log` et relance des tests sur le HEAD.
-- **Git** : branche `main`, HEAD fonctionnel `5b66579 — feat: complete Moderation V2 with full D4 parity (Lab)`, suivi uniquement de commits de documentation. Aucun remote Git sur le repo source (rien n’est poussé), aucun tag dans le repo source. `prototypes/` présent sur disque, exclu via `.git/info/exclude`, jamais versionné ni embarqué.
-- **Tests sur le HEAD** : Core 208 (7 skipped), Studio server 64, desktop 17, extension 10, bot 69 ; lint, format, typecheck verts. **E2E réel 95/95** (Electron, environnement isolé Studio 4111 / Core Lab 4311, base dédiée `raptoru_bonk_lab_modd4e2e` supprimée après usage, vrais lecteurs, vrais achats Lab EBS, clics dans la console sur Panel / Vidéo / Mobile / Moderator Window / Studio). Les scripts E2E sont restés dans le scratchpad de session : **ils ne sont pas dans le repo**.
+Vérifié le 03/10/2026 par `git status` / `git log` et relance des tests sur le HEAD.
+- **Git** : branche `main`, HEAD fonctionnel `ed781f6 — feat: post-Tombola UX pass — Studio Tombola sections and Moderation header actions (Lab)`, suivi du commit docs de checkpoint Tombola. Aucun remote Git sur le repo source (rien n’est poussé), aucun tag dans le repo source. `prototypes/` présent sur disque, exclu via `.git/info/exclude`, jamais versionné ni embarqué.
+- **Tests sur le HEAD** : Core 257 (7 skipped), Studio server 92, Desktop 17, Extension 12, Bot 77 ; lint, format, typecheck verts. **E2E** (Electron, environnement isolé Studio 4111 / Core Lab 4311, bases dédiées supprimées après usage) : D4 95/95 · UX 34/34 · console G 23/23 · Studio 46/46 · Extension 49/49 · Phase H Tombola A–L 57/57. Les scripts E2E restent dans le scratchpad de session : **ils ne sont pas dans le repo**.
 
 | Élément | Statut |
 |---|---|
 | Studio 0.1.5 (Studio autonome + supervision Electron, Hub, Bonk V2, Soundboard V2, TTS V2 réel) | **VALIDÉ MANUELLEMENT** par Antoni, **RELEASE PUBLIQUE** (`v0.1.5`, feed `raptorutwitch/raptoru-studio-releases`), installé |
-| **Modération V2 — parité D4 complète** (`5b66579`) : permissions fines par mod, sanctions sensibles, mots surveillés / bloqués, notes internes, pause globale, cooldown D4, wallet admin, stop / remboursements Soundboard, débit Bonk, Tombola V2 minimale, historiques Core ; console unique extension + Studio | **IMPLÉMENTÉ + TEST AUTOMATISÉ + E2E 95/95**, package `release/moderation-d4`, **VALIDÉE MANUELLEMENT par Antoni le 01/10/2026** (permissions, mots surveillés / bloqués, pause globale, remboursements, cooldown D4, notes, arrêt Soundboard, surfaces Extension), **NON RELEASE** ; Tombola V2 minimale **non validée produit** (chantier dédié) |
+| **Modération V2 — parité D4 complète** (`5b66579`) : permissions fines par mod, sanctions sensibles, mots surveillés / bloqués, notes internes, pause globale, cooldown D4, wallet admin, stop / remboursements Soundboard, débit Bonk, historiques Core ; console unique extension + Studio | **IMPLÉMENTÉ + TEST AUTOMATISÉ + E2E 95/95**, package `release/moderation-d4`, **VALIDÉE MANUELLEMENT par Antoni le 01/10/2026** (permissions, mots surveillés / bloqués, pause globale, remboursements, cooldown D4, notes, arrêt Soundboard, surfaces Extension), **NON RELEASE** |
+| **Tombola V2** (`023cb64` → `ed781f6`) : Core, planificateur, Studio, Extension Panel / Mobile / Vidéo, overlay OBS, modération D4, noms figés, monnaies Je / Cr | **TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ** (Lab) — validée manuellement par Antoni les 02–03/10/2026 ; Phase H A–L 57/57 ; **NON RELEASE, NON PACKAGÉE** ; ne plus modifier sauf bug réel en usage ou nouvelle feature décidée (§ 16 « Tombola V2 ») |
+| Passe UX post-Tombola (`ed781f6`) : onglet Studio Tombola en sections repliables ; Modération V2 sans menu « … », actions en icônes d’en-tête | **VALIDÉE MANUELLEMENT** le 03/10/2026, **NON RELEASE** |
 | Correctif « Effacer le cooldown TTS » + message `viewer_busy` (`890e71d`), conservé sur le modèle cooldown D4 | **IMPLÉMENTÉ + TEST AUTOMATISÉ + E2E**, validé avec le cooldown D4 le 01/10/2026, **NON RELEASE** |
 | Consoles précédentes (`12ffdd0` simplifiée, `a5b5d5e` mini-passe) et packages `release/mini-d4`, `release/win-unpacked` | **REMPLACÉES / OBSOLÈTES** — ne pas tester |
 | Lecture TTS pouvant démarrer avant la fin du shuffle / reveal de l’extension | **DETTE CONNUE** |
 | Badges VIP / Sub, mouvements automatiques du Wallet réel, synchro ban / timeout Twitch, pop-out Twitch réel | **DÉPENDANCES EXTÉRIEURES** (API Twitch broadcaster non autorisée, cutover économie non décidé, publication extension interdite) |
-| Tombola | **Tombola V2 minimale dans Core** (modèle réel : inscription gratuite, cagnotte, tirage Studio) ; écran viewer inchangé ; lancement automatique / Big Tombola legacy non migrés |
+| Tombola (inventaire legacy § 13) | **Migrée en Tombola V2** : lancement automatique (planificateur lié au stream), montant aléatoire, `!join` + alias + Extension, anti-spoil, overlay, SUPER (ex-Big Tombola), FULL OSEILLE, Giveaway, paiement automatique — validée en Lab, pas en production |
 | Décisions de modération | **Tranchées le 30/09** (voir § « Modération V2 — parité D4 complète ») |
 | Production | SAMMI + StreamElements (+ ancienne extension publiée) ; aucun cutover, aucune migration prod |
 
@@ -195,8 +197,12 @@ Historique principal :
 - `890e71d — fix: keep a manual TTS cooldown clear effective` (non releasé)
 - `a5b5d5e — feat(extension): bring the moderation console closer to D4` (non releasé ; remplacé par `5b66579`)
 - `3add3dd — docs: add the Raptoru 2.0 handoff and clean the project state`
-- `5b66579 — feat: complete Moderation V2 with full D4 parity (Lab)` (non releasé ; **dernier commit fonctionnel**)
+- `5b66579 — feat: complete Moderation V2 with full D4 parity (Lab)` (non releasé)
 - `e535b26 — docs: record Moderation V2 full D4 parity (Lab, awaiting validation)`
+- `3bef3ba`, `c353bee` — docs (état pré-D4 nettoyé ; validation manuelle de la Modération V2 D4, Tombola exclue)
+- Tombola V2 (Lab, non releasé) : `023cb64 — feat: Tombola V2 Core model in the Lab (phase C)` · `3cc5fab — feat: Tombola V2 automatic scheduler and launch sound in Core (Lab)` · `fef50df` (phase D, Studio + ingestion chat Lab unique) · `0e90f13` (phase E, Extension) · `72269b1` (phase F, overlay OBS)
+- **`ecc0275 — feat: Tombola V2 moderation in the D4 console, frozen round names and final polish (phase G, Lab)`** — checkpoint Tombola (fonctionnel)
+- **`ed781f6 — feat: post-Tombola UX pass — Studio Tombola sections and Moderation header actions (Lab)`** — checkpoint Tombola (UX final) ; **dernier commit fonctionnel**
 
 Règles Git inchangées :
 - branche `main` ;
@@ -679,7 +685,7 @@ Le Lab actuel permet de tester visuellement :
 - Tombola ;
 - modération/états UI.
 
-**Tombola : Tombola V2 minimale dans le Core Lab** depuis `5b66579` (inscription gratuite, tirage depuis Studio, gains sur le wallet Lab) ; l’ancienne simulation en mémoire de la façade LabEbs ne sert plus qu’hors Core Lab.
+**Tombola : Tombola V2 complète dans le Core Lab** (checkpoint figé `ecc0275` + `ed781f6`) : écran V2 Panel / Mobile / Vidéo lu depuis Core (`GET /raffle/state`), carte Hub au nom actif, anti-spoil, historique du stream ; l’ancienne simulation en mémoire de la façade LabEbs ne sert plus qu’hors Core Lab. Voir § 16 « Tombola V2 ».
 
 **TTS V2 : exécution réelle en mode Lab** depuis le 30/09/2026 (même Core Lab que Bonk / Soundboard) : extension → façade LabEbs → Core local/test → worker Studio → lecteur OBS (Web Speech + personnage) → ACK. Voir § 16 « TTS V2 — runtime réel validé ». L’ancien formulaire TTS reste affiché quand le module n’a pas de données `tts_v2` (démo, prod).
 
@@ -798,6 +804,8 @@ Feature très populaire.
 - jackpot normal environ 5 000–50 000 ;
 - chance ~1/100 de Big Tombola or à ~200 000 ;
 - distribution automatique des gains.
+
+→ **Migrée en Lab : Tombola V2** (validée le 02–03/10/2026, checkpoint figé ; Big Tombola = SUPER, FULL OSEILLE ajoutée). Voir § 16 « Tombola V2 ».
 
 ## Cash-in PDC → Jetons
 Ancien système :
@@ -1145,8 +1153,8 @@ Prototype UX D3 + prototype player transformés en vrai module Lab (commits `eb7
   1. le lecteur peut commencer la lecture avant la fin de l’animation shuffle / reveal de l’extension : fonctionnement acceptable pour ce checkpoint, synchronisation UX stricte non garantie ;
   2. ~~pas encore de panneau Studio pour configurer les règles TTS~~ → fait le 30/09/2026 (Studio → Modération → Configuration TTS, voir § « Modération V2 réelle + configuration TTS »), en attente de validation.
 
-## Modération V2 — parité D4 complète (Lab, 01/10/2026 — état actuel, en attente de validation)
-Statut : **IMPLÉMENTÉ + TEST AUTOMATISÉ + E2E 95/95 · VALIDÉE MANUELLEMENT par Antoni le 01/10/2026 (package `release/moderation-d4`) · NON RELEASE** ; Tombola V2 minimale incluse mais **non validée produit** (reprise dans son chantier dédié). Commit `5b66579`. Référence : `prototypes/moderation-v2-d4/` ; matrices initiale et finale : `docs/moderation-v2-d4-parity.md` (75 lignes, aucune « backend manquant », placeholder, fake ou suppression silencieuse).
+## Modération V2 — parité D4 complète (Lab, 01/10/2026 — validée manuellement le 01/10/2026)
+Statut : **IMPLÉMENTÉ + TEST AUTOMATISÉ + E2E 95/95 · VALIDÉE MANUELLEMENT par Antoni le 01/10/2026 (package `release/moderation-d4`) · NON RELEASE** ; la Tombola V2 minimale qu’elle incluait a été remplacée par la Tombola V2 complète (§ « Tombola V2 »). Passe UX du 03/10/2026 (`ed781f6`) : plus de menu « … » dans les en-têtes de modules, actions en icônes (voir `docs/moderation-v2-d4-parity.md` § 4). Commit `5b66579`. Référence : `prototypes/moderation-v2-d4/` ; matrices initiale et finale : `docs/moderation-v2-d4-parity.md` (75 lignes, aucune « backend manquant », placeholder, fake ou suppression silencieuse).
 
 **Décisions d’Antoni (30/09/2026)** : Tombola = modèle réel (inscription gratuite, une par viewer, cagnotte offerte par la chaîne) ; mot surveillé = TTS **retenu** jusqu’à « Laisser passer » (la file continue sans lui ; expiration = remboursement) ; un mod avec « Gérer les permissions » ne modifie que les droits d’un autre mod, parmi ceux qu’il possède, jamais les siens ni ceux d’un supermod / du broadcaster ; « Rembourser » une interaction terminée (ajout hors D4) = « Admin Wallet ». Remboursements D4 = tout mod. Cooldown = modèle D4.
 
@@ -1156,7 +1164,7 @@ Statut : **IMPLÉMENTÉ + TEST AUTOMATISÉ + E2E 95/95 · VALIDÉE MANUELLEMENT 
 - **Read models** : `overview` (+ Tombola, pause globale), `search` (rôle + badge de restriction), `viewers/:id` (rôle, premier passage, aujourd’hui, notes, restrictions, ledger typé), `interactions` (tous modules, filtres module / statut / viewer / période « Ce stream » = depuis 16:00 Paris, pagination), `interactions/:id` (actions liées, mouvements), `ledger` (viewer ou chaîne, types + `visible_in_moderation_activity`, liens remboursement / débit), `team`, `words`, `audit`. Un viewer ne les lit jamais (façade `as` / `as_role`, refus Core).
 - **Admissions** : pause globale (TTS, sons, bonks, tombola ; compteur), mots bloqués / surveillés (TTS), cooldown personnel D4 (TTS / Soundboard / Bonk), débit du wallet Lab pour Soundboard et Bonk (remboursement automatique si jamais joué / affiché), annuaire des viewers.
 - **Soundboard stop** : Core annule → le worker Studio l’apprend (lecture Core) → ordre `stop` au lecteur → le lecteur coupe le son et envoie l’ACK `stopped` → Core enregistre `stopped_at` ; les ACK tardifs sont ignorés.
-- **Tombola V2 minimale** (`raffle-lab/raffle-lab-service.ts`) : une manche ouverte à la fois, fermeture automatique à l’échéance, inscription gratuite idempotente, contrôles module / blocage / pause globale, tirage (gagnants au hasard, cagnotte partagée) payé sur le wallet Lab. La façade LabEbs lit l’état Core pour la session de l’extension ; les contrôles « Tombola » de l’Extension Lab et de Studio passent par Core.
+- **Tombola V2 minimale** (historique `5b66579`, **remplacée depuis par la Tombola V2 complète** — § « Tombola V2 ») (`raffle-lab/raffle-lab-service.ts`) : une manche ouverte à la fois, fermeture automatique à l’échéance, inscription gratuite idempotente, contrôles module / blocage / pause globale, tirage (gagnants au hasard, cagnotte partagée) payé sur le wallet Lab. La façade LabEbs lit l’état Core pour la session de l’extension ; les contrôles « Tombola » de l’Extension Lab et de Studio passent par Core.
 - **Console unique** (`apps/twitch-extension/extension/shared/moderation-v2.js`) : parité D4 écran par écran (modules, file, À vérifier, Laisser passer, Stop / Stop tous les sons, fiche viewer, Plus, Notes, Wallet admin, Détails, Bloquer avec verrou sensible, Cooldown D4, Surveillance, Équipe & permissions, pause globale + bandeau, Tombola, Historique Interactions / Jetons / Modération avec filtres Core). Montée par l’extension (acteur = identité Twitch) **et** par l’onglet Studio « Modération » (acteur = broadcaster), avec les outils Studio : Tombola, Supermods, Configuration TTS, Wallet de test (dont « Effacer le cooldown TTS »). Extension Lab : surface « Moderator Window » 1100×720.
 - **Extension viewer** : messages `global_pause`, `message_blocked`, `raffle_paused`, `module_disabled` ; le TTS affiche « en pause » pendant une pause globale.
 - **Tests** : Core 208 (+25 D4 : permissions, anti-escalade, sanctions sensibles, mots, notes, pause globale, cooldown D4, non-régression clear, wallet admin, stop / stop all / remboursements Soundboard, débit Bonk, Tombola, read models), Studio server 64 (+4 : synchro Studio ⇄ extension dans les deux sens, lecteur viewer refusé, Tombola via façade, chaîne stop Core → worker → lecteur → ACK). **E2E réel 95/95**. **Aucune de ces vérifications ne remplace la validation manuelle d’Antoni.**
@@ -1215,12 +1223,23 @@ Issue des prototypes locaux `prototypes/hub-nav-dots/` et `prototypes/hub-nav-do
 - surface de référence Video Component 600×432 ; **Moderator Window** = Panel Twitch ouvert en pop-out (pop-out documenté par Twitch pour les Panels et la Live Config, pas pour le Video Component ; option à vérifier dans la console Twitch ; non configuré) ; portail web `raptoru.fr/moderation` non nécessaire pour la V1, non créé.
 - **Implémentation (01/10/2026, locale, validée manuellement le 01/10/2026, non releasée)** : **parité D4 complète** (`5b66579`), voir § « Modération V2 — parité D4 complète » et `docs/moderation-v2-d4-parity.md`. Dépendances extérieures restantes : badges VIP / Sub, mouvements automatiques du Wallet réel, pop-out Twitch réel.
 
+## Tombola V2 — TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ (Lab, 03/10/2026)
+
+**Ne plus modifier Tombola V2 sauf bug réel découvert en usage ou nouvelle feature explicitement décidée par Antoni. Les petites préférences UX futures ne rouvrent pas le chantier métier.**
+
+- **Spécification** : `prototypes/tombola-v2/` ; matrice de parité et plan C → H : `docs/tombola-v2-parity.md`.
+- **Périmètre validé manuellement par Antoni (02–03/10/2026)** : phases E (Extension Panel / Mobile / Vidéo), F (overlay OBS unique, son de lancement joué une fois), G (modération D4 : permissions existantes, ajout / retrait, forcer = « Sanctions sensibles », audit) et H (validation de bout en bout) ; planificateur lié au stream ; paiements / wallet Lab exacts ; noms figés par manche (+ nom actif sur la carte Hub) ; anti-spoil (compte jusqu’à 0, marge configurée) ; SUPER / FULL OSEILLE / Giveaway / aucun participant / annulation ; monnaies compactes Je / Cr ; passe UX Studio Tombola ; Modération V2 sans menu « … ».
+- **Commits de référence** : `ecc0275` (fonctionnel / modération / noms figés / monnaies) · `ed781f6` (UX final).
+- **Migrations figées** — appliquées, **ne jamais les réécrire** ; toute évolution future passe par une **migration additive** : `20261008120000_raffle_v2.sql` · `20261009120000_raffle_scheduler.sql` · `20261010120000_raffle_round_labels.sql` ; dépendance Modération D4 : `20261007120000_moderation_d4.sql`.
+- **Tests de référence (verts sur `ed781f6`)** : Core 257 · Studio server 92 · Bot 77 · Extension 12 · Desktop 17 · lint / format / typecheck OK · E2E UX 34/34 · E2E D4 95/95 · E2E console G 23/23 · E2E Studio 46/46 · E2E Extension 49/49 · Phase H A–L 57/57.
+- **Pas fait volontairement** : package local, release, publication de l’extension, activation production (SAMMI + StreamElements restent la production). L’ingestion chat Twitch réelle du Lab reste un interrupteur OFF par défaut, jamais activé automatiquement.
+
 ## Roadmap après Bonk
 Ordre recommandé à date (checkpoint 30/09/2026 : Studio autonome + Hub + Bonk V2 + Soundboard V2 + TTS V2 validés) :
 1. ~~Soundboard~~ (validé en Lab le 28/09/2026) ;
 2. ~~TTS~~ (runtime réel validé en Lab le 30/09/2026) ;
-3. **Modération V2** (parité D4 complète en Lab le 01/10/2026, `5b66579` ; validation manuelle d’Antoni en attente) ;
-4. **Tombola V2** (minimale dans Core depuis `5b66579` ; refonte complète — écran viewer, lancement automatique — quand un prototype existera) ;
+3. ~~Modération V2~~ (parité D4 complète, validée en Lab le 01/10/2026, `5b66579` ; en-têtes sans « … » le 03/10/2026) ;
+4. ~~Tombola V2~~ (**TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ** en Lab le 03/10/2026, `ecc0275` + `ed781f6`) ;
 5. Bonk Fidelity (polish, non bloquant) ;
 6. instrumentation stats/profil au fil des modules ;
 7. Jeu des mots 2.0 ;
@@ -1232,7 +1251,9 @@ Ordre recommandé à date (checkpoint 30/09/2026 : Studio autonome + Hub + Bonk 
 
 Cette roadmap reste modulable après audit réel de chaque feature.
 
-**Prochaines actions (ordre) : 1. release Studio (sur confirmation d’Antoni : elle embarque la Tombola V2 minimale non validée produit) ; 2. chantier Tombola V2 dédié ; 3. audits de parité des autres modules à prototype validé** (voir HANDOFF § 11).
+**Modules terminés / validés en Lab (non activés en production)** : Hub, Bonk V2, Soundboard V2, TTS V2, Modération V2 (D4), **Tombola V2**. **Restent à migrer** : tout le reste de l’inventaire § 13 (alertes, Jeu des mots, Votekick / Caution / Random Ban, Spotify, Cash-in PDC, commandes personnalisées, onglet Studio « Commandes », stats / profils, achievements / cosmétiques…) puis le cutover — **Raptoru 2.0 n’est pas terminé.**
+
+**Prochaines actions : à décider par Antoni** — package local puis release Studio (embarquant Modération V2 + Tombola V2, validées en Lab ; uniquement sur feu vert explicite) ; audits de parité des autres modules à prototype validé (voir HANDOFF § 11). Aucun chantier ouvert au 03/10/2026.
 
 # 17. Import des données historiques / cutover
 
@@ -1356,11 +1377,17 @@ VALIDÉ TECHNIQUEMENT, mais pas activé prod :
 - Studio autonome : runtime local + supervision Electron du serveur Studio (validé le 30/09/2026)
 - TTS V2 Lab runtime réel (validé le 30/09/2026 ; dette : synchro reveal / lecture)
 
-IMPLÉMENTÉ + TESTS AUTO + E2E 95/95, VALIDÉ PAR ANTONI LE 01/10/2026 (sauf Tombola), NON RELEASE :
-- Modération V2 — parité D4 complète (5b66579) : permissions fines par mod (Core), sanctions sensibles,
+IMPLÉMENTÉ + TESTS AUTO + E2E, VALIDÉ PAR ANTONI, NON RELEASE :
+- Modération V2 — parité D4 complète (5b66579, validée le 01/10/2026) : permissions fines par mod (Core), sanctions sensibles,
   mots surveillés (TTS retenu) / bloqués, notes, pause globale, cooldown D4, wallet admin,
-  stop / remboursements Soundboard (Core → worker → lecteur → ACK), débit Bonk, Tombola V2 minimale (NON validée produit),
-  historiques Core ; une seule console pour l'extension et l'onglet Studio « Modération »
+  stop / remboursements Soundboard (Core → worker → lecteur → ACK), débit Bonk,
+  historiques Core ; une seule console pour l'extension et l'onglet Studio « Modération » ;
+  en-têtes sans menu « … » (actions en icônes, ed781f6, validé le 03/10/2026)
+- TOMBOLA V2 — TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ (Lab, 02–03/10/2026 ; ecc0275 + ed781f6) :
+  Core + planificateur, Studio, Extension Panel / Mobile / Vidéo, overlay OBS, modération D4, noms figés,
+  anti-spoil, SUPER / FULL OSEILLE / Giveaway, monnaies Je / Cr ; Phase H A–L 57/57.
+  Migrations figées (jamais réécrites) : 20261008120000_raffle_v2, 20261009120000_raffle_scheduler,
+  20261010120000_raffle_round_labels (+ 20261007120000_moderation_d4). Ne plus modifier sauf bug réel / feature décidée.
 - correctif « Effacer le cooldown TTS » (890e71d), non régressé
 
 DÉPENDANCES EXTÉRIEURES : badges VIP / Sub (API Twitch broadcaster), mouvements automatiques (Wallet réel),
@@ -1376,7 +1403,7 @@ Studio :
 
 Extension :
 - vraie extension prod importée
-- Tombola du Lab = Tombola V2 minimale dans le Core Lab (inscription gratuite, tirage Studio, gains sur le wallet Lab)
+- Tombola du Lab = Tombola V2 complète dans le Core Lab (checkpoint figé)
 - TTS V2 exécuté réellement en Lab (Core Lab → Studio → lecteur OBS), validé
 - Soundboard V2 exécuté réellement en Lab (Core Lab → Studio → lecteur audio local)
 - Hub Pop Premium + wallet switch global (anciens wallets migrés)
@@ -1394,7 +1421,8 @@ BONK V2 = VALIDÉ (Lab), PAS ACTIVÉ EN PROD :
 - zéro Wallet réel, zéro stats/progression réelle, zéro prod
 - reste (non bloquant) : Bonk Fidelity (impact FX, centre caméra, tailles, disparition)
 
-PROCHAINE ACTION : release Studio (sur confirmation, Tombola minimale incluse) → chantier Tombola V2.
+PROCHAINE ACTION : à décider par Antoni (package local / release Studio sur feu vert, ou prochain module). Aucun chantier ouvert.
+RESTE À MIGRER : le reste de l'inventaire § 13 puis le cutover — Raptoru 2.0 n'est pas terminé.
 RÈGLE : prototype validé = spécification ; rien n’est supprimé ou simplifié silencieusement.
 Roadmap indicative ensuite : stats/profils → Jeu des mots 2.0 → achievements/cosmétiques → FX → modération sociale → Spotify/casino.
 

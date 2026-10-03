@@ -202,7 +202,7 @@ réels, clics dans la console). « — » = sans objet (pur affichage, pas d'éc
 | 27    | Derniers bonks (viewer, emote, il y a…)                                    | ✅  | ✅                                                | lecture équipe                                                          | ✅                               | —                        | C             |
 | 28    | Coût du bonk (historique, Activité Jetons)                                 | ✅  | ✅ débit wallet Lab (remboursé si jamais affiché) | —                                                                       | ✅                               | ✅                       | C             |
 | 29    | Historique / état Bonk                                                     | ✅  | ✅                                                | idem #13                                                                | ✅                               | ✅                       | C             |
-| 30    | Carte Tombola (ouverte / fermée, ferme dans, participants, jackpot)        | ✅  | ✅ `raffle.state`                                 | lecture équipe                                                          | ✅                               | —                        | C, S, E13     |
+| 30    | Carte Tombola (ouverte / fermée, ferme dans, participants, jackpot)        | ✅  | ✅ `raffle_v2` (Tombola V2, phase G)              | lecture équipe                                                          | ✅                               | —                        | C, S, E13     |
 | 31    | Dernier tirage (+ montant, gagnant, payé) → mouvement                      | ✅  | ✅ `raffle_draw` + ledger `raffle_win`            | Studio (broadcaster)                                                    | ✅ `lab_raffle_winners`          | ✅ `raffle_draw`         | C, S, E13     |
 | 32    | Derniers tickets → demande                                                 | ✅  | ✅ inscriptions (×1, gratuites)                   | —                                                                       | ✅ `lab_raffle_entries`          | —                        | C, S, E13     |
 | 33    | « Ouverture, tirage et fermeture : Studio. »                               | ✅  | ✅ `raffle_open/close/draw`                       | broadcaster (refus Mod testé)                                           | ✅                               | ✅                       | C, S, E13     |
@@ -274,6 +274,9 @@ Aucune ligne « backend manquant », placeholder, fake, non branché ni supprim�
   pour l'instant).
 
 ## 4. Passe UX post-Tombola (validée manuellement par Antoni le 03/10/2026)
+
+La section Tombola de la console est, depuis `ecc0275`, le module Tombola V2 complet (état, timer, participants avec
+source, actions de manche, fiche viewer, « Dernier tirage ») : voir `docs/tombola-v2-parity.md` (checkpoint figé).
 
 Placement uniquement : aucune logique Core, permission ni action modifiée.
 
