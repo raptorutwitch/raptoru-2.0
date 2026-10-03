@@ -13,6 +13,9 @@ import { LabModerationService } from '../lab-moderation/service.js';
 import { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
 import { AvatarCache, twitchAppUserLookup } from '../raffle-lab/avatars.js';
 import { HttpError } from '../http/server.js';
+import { commandsRoutes } from '../http/commands-routes.js';
+import { CommandsService } from '../commands/service.js';
+import { raffleReservedWords } from '../commands/reserved.js';
 import { systemClock } from '../clock.js';
 import { createPgDb } from '../db/db.js';
 
@@ -55,6 +58,13 @@ const routes = [
     new LabModerationService(db, systemClock, tts, sound, bonk, raffle),
     tts,
     raffle,
+  ),
+  // Commands V2 (configuration, phase A): same Lab Core and database. Tombola's chat words stay
+  // Tombola's (reserved, read through its own configuration reader).
+  ...commandsRoutes(
+    new CommandsService(db, systemClock, {
+      reserved: raffleReservedWords(raffle),
+    }),
   ),
 ];
 const server = createServer(async (req, res) => {
