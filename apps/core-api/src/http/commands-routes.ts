@@ -1,11 +1,13 @@
 import {
   CmdCreateRequest,
   CmdRightsRequest,
+  CmdTestRequest,
   CmdUpdateRequest,
   CmdVersionedRequest,
   LabRole,
 } from '@raptoru/schemas';
 import { z } from 'zod';
+import type { CommandsAdmission } from '../commands/admission.js';
 import { CommandsError } from '../commands/model.js';
 import type { CommandsService } from '../commands/service.js';
 import type { Actor } from '../lab-moderation/store.js';
@@ -44,10 +46,44 @@ function reader(url: URL): Actor {
   };
 }
 
-export function commandsRoutes(commands: CommandsService): Route[] {
+export function commandsRoutes(
+  commands: CommandsService,
+  admission: CommandsAdmission,
+): Route[] {
   const channel = (params: string[]) => parse(Digits, params[0]);
   const id = (params: string[]) => parse(Uuid, params[1]);
   return [
+    // Phase B — admission: public list (viewer fields), diagnostic of the invocations, « Tester ».
+    {
+      method: 'GET',
+      pattern: new RegExp(`${BASE}/public$`),
+      auth: 'studio',
+      handle: ({ params }) => admission.publicList(channel(params)),
+    },
+    {
+      method: 'GET',
+      pattern: new RegExp(`${BASE}/invocations$`),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() => {
+          const cmd = url.searchParams.get('command_id');
+          return admission.invocations(
+            channel(params),
+            reader(url),
+            cmd ? parse(Uuid, cmd) : null,
+            limitParam(url, 50, 200),
+          );
+        }),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/test$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() =>
+          admission.test(channel(params), parse(CmdTestRequest, body)),
+        ),
+    },
     {
       method: 'GET',
       pattern: new RegExp(`${BASE}$`),

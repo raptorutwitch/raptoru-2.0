@@ -86,13 +86,17 @@ describe('Lab chat ingestion (Twitch → Lab Core, every module)', () => {
             login: 'viewer',
             display_name: 'Viewer',
             role: 'viewer',
+            badges: [],
           },
           source: 'twitch',
         },
       },
       expect.objectContaining({
         body: expect.objectContaining({
-          chatter: expect.objectContaining({ role: 'moderator' }),
+          chatter: expect.objectContaining({
+            role: 'moderator',
+            badges: ['moderator'],
+          }),
         }),
       }),
     ]);

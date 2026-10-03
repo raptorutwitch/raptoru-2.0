@@ -311,6 +311,14 @@ export const LabChatMessage = z.strictObject({
     display_name: z.string().min(1).max(64),
     /** From the Twitch badges (broadcaster / moderator); Core computes the effective role. */
     role: z.enum(['broadcaster', 'moderator', 'viewer']),
+    /**
+     * Twitch badge set ids (subscriber, founder, vip, moderator…), for the modules that need more than
+     * the role (Commands V2 audience). Optional: the simulator and older adapters omit it.
+     */
+    badges: z
+      .array(z.string().regex(/^[a-z0-9_-]{1,32}$/))
+      .max(20)
+      .optional(),
   }),
   source: z.enum(['twitch', 'simulator']),
 });

@@ -41,6 +41,7 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261010120000_raffle_round_labels.sql',
   // Commands V2 (after the boundary: Lab only, never in the production selection).
   '20261011120000_commands_v2.sql',
+  '20261012120000_commands_v2_invocations.sql',
 ]);
 
 /**

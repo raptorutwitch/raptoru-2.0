@@ -269,3 +269,26 @@ export const CmdRightsRequest = z.strictObject({
   expected_version: z.number().int().min(0),
   rights: CmdTeamRights,
 });
+
+/** The viewer a test / diagnostic is run for (as the chat would present them). */
+export const CmdTestViewer = z.strictObject({
+  id: z.string().regex(/^\d{1,32}$/),
+  login: CmdLogin,
+  display_name: z.string().min(1).max(64),
+  role: z.enum(['broadcaster', 'moderator', 'viewer']),
+  badges: z
+    .array(z.string().regex(/^[a-z0-9_-]{1,32}$/))
+    .max(20)
+    .default([]),
+  /** Follower answer to use (otherwise the follower provider decides). */
+  follower: z.boolean().optional(),
+});
+export type CmdTestViewer = z.infer<typeof CmdTestViewer>;
+
+/** « Tester la commande »: the same decision as a real message, nothing written, nothing sent. */
+export const CmdTestRequest = z.strictObject({
+  actor: LabActor,
+  /** The full chat message, e.g. « !hug @PixelMamie ». */
+  message: z.string().min(1).max(500),
+  viewer: CmdTestViewer,
+});

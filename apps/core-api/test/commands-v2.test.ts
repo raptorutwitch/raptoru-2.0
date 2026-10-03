@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CmdConfig } from '@raptoru/schemas';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { CommandsAdmission } from '../src/commands/admission.js';
 import { CommandsError } from '../src/commands/model.js';
 import { raffleReservedWords } from '../src/commands/reserved.js';
 import {
@@ -781,7 +782,7 @@ describe('Commands V2 — system commands', () => {
 describe('Commands V2 — HTTP routes', () => {
   const call = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
     const url = new URL(path, 'http://lab');
-    const route = commandsRoutes(svc).find(
+    const route = commandsRoutes(svc, new CommandsAdmission(db, clock)).find(
       (r) => r.method === method && r.pattern.test(url.pathname),
     );
     if (!route) throw new Error(`no route ${method} ${path}`);

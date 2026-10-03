@@ -16,6 +16,7 @@ import { HttpError } from '../http/server.js';
 import { commandsRoutes } from '../http/commands-routes.js';
 import { CommandsService } from '../commands/service.js';
 import { raffleReservedWords } from '../commands/reserved.js';
+import { CommandsAdmission } from '../commands/admission.js';
 import { systemClock } from '../clock.js';
 import { createPgDb } from '../db/db.js';
 
@@ -46,6 +47,11 @@ const bonk = new BonkLabService(db, systemClock, viewers, thirdParty);
 const sound = new SoundLabService(db, systemClock);
 const tts = new TtsLabService(db, systemClock);
 const raffle = new RaffleLabService(db, systemClock);
+// Commands V2 (Lab): Tombola's chat words stay Tombola's (reserved, read through its own configuration
+// reader). Admission (phase B) records and simulates; it never sends anything to Twitch.
+const reserved = raffleReservedWords(raffle);
+const commands = new CommandsService(db, systemClock, { reserved });
+const admission = new CommandsAdmission(db, systemClock, { reserved });
 const routes = [
   ...bonkLabRoutes(bonk, viewers),
   // Soundboard V2 Lab: same isolated Lab Core process and database.
@@ -58,14 +64,10 @@ const routes = [
     new LabModerationService(db, systemClock, tts, sound, bonk, raffle),
     tts,
     raffle,
+    [{ name: 'commands', chat: (m) => admission.chat(m) }],
   ),
-  // Commands V2 (configuration, phase A): same Lab Core and database. Tombola's chat words stay
-  // Tombola's (reserved, read through its own configuration reader).
-  ...commandsRoutes(
-    new CommandsService(db, systemClock, {
-      reserved: raffleReservedWords(raffle),
-    }),
-  ),
+  // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
+  ...commandsRoutes(commands, admission),
 ];
 const server = createServer(async (req, res) => {
   const send = (status: number, body: unknown) => {

@@ -17,7 +17,7 @@ import {
   LabModerationError,
   type LabModerationService,
 } from '../lab-moderation/service.js';
-import { LabChatRouter } from '../lab-chat/router.js';
+import { LabChatRouter, type LabChatModule } from '../lab-chat/router.js';
 import { LabForbiddenError, LabWalletError } from '../lab-moderation/store.js';
 import {
   RaffleLabError409,
@@ -84,6 +84,8 @@ export function labModerationRoutes(
   mod: LabModerationService,
   tts: TtsLabService,
   raffle: RaffleLabService,
+  /** Other Lab chat modules (Commands V2…), after the Tombola. */
+  chatModules: LabChatModule[] = [],
 ): Route[] {
   const channel = (params: string[]) => parse(Digits, params[0]);
   // Single Lab chat ingress: every module that handles chat commands is listed here.
@@ -93,6 +95,7 @@ export function labModerationRoutes(
       chat: (m) => raffle.chat(m),
       stream: (e) => raffle.streamEvent(e),
     },
+    ...chatModules,
   ]);
   /**
    * Read models are for the team. The extension façade names the reader (`as`, `as_role`): Core

@@ -28,13 +28,22 @@ export interface LabChatIngestDeps {
   log?: (...args: unknown[]) => void;
 }
 
+/** Twitch badge set ids (subscriber, vip…), as Core accepts them (Commands V2 audience). */
+export function badgeSets(badges: unknown): string[] {
+  return (
+    Array.isArray(badges)
+      ? badges.map((b) => String((b as { set_id?: unknown }).set_id ?? ''))
+      : []
+  )
+    .filter((s) => /^[a-z0-9_-]{1,32}$/.test(s))
+    .slice(0, 20);
+}
+
 /** Twitch badges → the role Core will check (Core decides the effective role). */
 export function chatRole(
   badges: unknown,
 ): 'broadcaster' | 'moderator' | 'viewer' {
-  const sets = Array.isArray(badges)
-    ? badges.map((b) => String((b as { set_id?: unknown }).set_id ?? ''))
-    : [];
+  const sets = badgeSets(badges);
   if (sets.includes('broadcaster')) return 'broadcaster';
   if (sets.includes('moderator')) return 'moderator';
   return 'viewer';
@@ -84,6 +93,7 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
                 event.chatter_user_name || event.chatter_user_login,
               ),
               role: chatRole(event.badges),
+              badges: badgeSets(event.badges),
             },
             source: 'twitch',
           });
