@@ -22,6 +22,16 @@ const enable = document.getElementById('enable');
 const synth = window.speechSynthesis;
 const CHUNK_CHARS = 180; // legacy TTS_SPEECH_CHUNK_CHARS
 const START_TIMEOUT_MS = 8000;
+/**
+ * End guard (ASTRA-P2-028), mirroring Core's playing lease (rules playing_lease_factor = 2,
+ * playing_lease_margin_ms = 30 s by default): a reading that started but never reports its end
+ * releases the player — no ACK: it may have been heard, so Core's lease turns it into
+ * execution_unknown (never replayed, no certain refund) — and the next TTS can play.
+ */
+const END_FACTOR = 2;
+const END_MARGIN_MS = 30_000;
+/** Resolvers of the utterances in flight: an abandoned reading stops waiting for them. */
+const inFlight = new Set();
 const VARIANT_MOUTH_HOLD_MS = 330; // legacy VARIANTE_BOURRE.pauseSeuil
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
@@ -214,11 +224,17 @@ function utter(text, { voice, lang, rate, pitch }) {
 /** Speaks one utterance; resolves 'end' or rejects with the speech error. */
 function speak(u, { onstart, onboundary, sid }) {
   return new Promise((resolve, reject) => {
+    const settle = (fn) => (v) => {
+      inFlight.delete(abandon);
+      fn(v);
+    };
+    const abandon = settle(resolve);
+    inFlight.add(abandon);
     u.onstart = () => sid === session && onstart && onstart();
     u.onboundary = () => sid === session && onboundary && onboundary();
-    u.onend = () => resolve('end');
+    u.onend = () => settle(resolve)('end');
     u.onerror = (e) =>
-      reject(
+      settle(reject)(
         Object.assign(new Error((e && e.error) || 'speech_error'), {
           speech: true,
         }),
@@ -235,6 +251,7 @@ async function play(i) {
   let started = false;
   let startedAck = null;
   let continuousTimer = null;
+  let endGuard = null;
   let lastBoundary = 0;
   const alive = () => sid === session;
   current = { id: i.interaction_id };
@@ -298,6 +315,20 @@ async function play(i) {
       started = true;
       clearTimeout(startTimer);
       startedAck = ack(i, 'started');
+      endGuard = setTimeout(
+        () => {
+          if (!alive()) return;
+          // Started, no end ever reported: silence, drop late callbacks, free the player, no ACK.
+          session += 1;
+          clearInterval(continuousTimer);
+          if (synth) synth.cancel();
+          void stage.stop();
+          for (const release of [...inFlight]) release('abandoned');
+          say('TTS interrompu : fin non signalée (résultat inconnu).');
+        },
+        Math.max(0, Number(i.estimated_duration_ms) || 0) * END_FACTOR +
+          END_MARGIN_MS,
+      );
     };
 
     synth.cancel();
@@ -365,6 +396,7 @@ async function play(i) {
       await fail('player_error', String((e && e.message) || e).slice(0, 200));
   } finally {
     clearInterval(continuousTimer);
+    clearTimeout(endGuard);
     if (current && current.id === i.interaction_id) current = null;
     delete document.body.dataset.playing;
   }

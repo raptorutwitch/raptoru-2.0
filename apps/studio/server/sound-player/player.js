@@ -1,4 +1,4 @@
-/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, setInterval, clearInterval, AbortSignal */
+/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, clearTimeout, setInterval, clearInterval, AbortSignal */
 
 // Local Soundboard player (Lab). Each sound handed by Studio plays at once in its own audio
 // element (Core decides what may overlap: stack / queue / ignore_if_running) and reports
@@ -107,6 +107,13 @@ enable.addEventListener('click', async () => {
   void heartbeat().catch(() => {});
 });
 
+/**
+ * End guard (ASTRA-P2-028): a sound that started but never reports its end is released after its
+ * duration plus Core's margin (SOUND_LAB_RULES.executingMarginMs) — without any ACK: it may have been
+ * heard, so Core's lease turns it into execution_unknown (never replayed, no certain refund).
+ */
+const END_MARGIN_MS = 15_000;
+
 // Only the file path shape resolved by Core (a local extension asset).
 const LOCAL_SOUND = /^assets\/sounds\/[a-z0-9][a-z0-9._-]*\.mp3$/;
 
@@ -133,6 +140,7 @@ async function play(i) {
   audio.volume = entry.base * mixGain(protection, active.size + 1);
   let started = false;
   let startedAck = null;
+  let endGuard = null;
   const outcome = new Promise((resolve) => {
     audio.addEventListener('playing', () => {
       if (started) return;
@@ -141,6 +149,10 @@ async function play(i) {
       applyMix();
       idle();
       startedAck = ack(i, 'started');
+      endGuard = setTimeout(
+        () => resolve({ event: 'unknown' }),
+        Math.max(0, Number(i.duration_ms) || 0) + END_MARGIN_MS,
+      );
     });
     audio.addEventListener('ended', () => resolve({ event: 'completed' }));
     audio.addEventListener('error', () =>
@@ -175,6 +187,7 @@ async function play(i) {
     }
   });
   const result = await outcome;
+  clearTimeout(endGuard);
   stoppers.delete(i.interaction_id);
   // Release the element: no audio player kept alive after a spam burst.
   audio.pause();
@@ -183,7 +196,10 @@ async function play(i) {
   active.delete(entry);
   applyMix();
   idle();
-  if (result.event === 'stopped') {
+  if (result.event === 'unknown') {
+    // Started, no end ever reported: the element is released, the outcome stays Core's (lease).
+    status.textContent = `Fin non signalée : ${i.sound_label} (résultat inconnu)`;
+  } else if (result.event === 'stopped') {
     if (startedAck) await startedAck;
     await ack(i, 'stopped');
     status.textContent = `Arrêté par la modération : ${i.sound_label}`;
