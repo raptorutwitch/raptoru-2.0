@@ -139,7 +139,12 @@ export class LocalRuntime {
   status() {
     return {
       services: [...this.services.values()],
-      ports: { studio: 4100, labCore: LAB_CORE_PORT, oauthCallback: 3789 },
+      // The Studio port actually used (PORT, as the server reads it), not an assumed 4100.
+      ports: {
+        studio: Number(process.env.PORT ?? 4100),
+        labCore: LAB_CORE_PORT,
+        oauthCallback: 3789,
+      },
       restartsInWindow: this.recentRestarts().length,
     };
   }

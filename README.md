@@ -143,7 +143,10 @@ user ("c'est bon", "validé", "go"), run `npm run studio:release` right away —
 permission is needed to bump, package and publish Studio. Never publish a change that has not
 been validated.
 
-Default ports: core-api `3000`, studio/server `4100`, studio/web `5173`, viewer-web `5174`, twitch-extension `5175`.
+Default ports: core-api `3000` (`PORT`), studio/server `4100` (`PORT`; Electron expects 4100), studio/web dev `5173`,
+viewer-web dev `5174`, Lab Core `4301` (`BONK_LAB_CORE_PORT`), Twitch OAuth callback `3789` (registered redirect,
+fixed), OBS WebSocket `4455` (Studio default, editable), browser E2E stack `4399` (`E2E_PORT`). The extension has
+no dev server: Studio serves it (`/ext/`).
 
 ## Extension Lab (Studio → "Extension Lab" tab)
 

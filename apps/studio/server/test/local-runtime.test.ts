@@ -235,6 +235,21 @@ describe('LocalRuntime', () => {
     expect(core.starts).toHaveLength(0);
   });
 
+  it('ASTRA-P3-003: the ports shown are the ones in use (Studio PORT), not assumed', () => {
+    const saved = process.env.PORT;
+    process.env.PORT = '4399';
+    try {
+      expect(setup().rt.status().ports).toEqual({
+        studio: 4399,
+        labCore: 4301,
+        oauthCallback: 3789,
+      });
+    } finally {
+      if (saved === undefined) delete process.env.PORT;
+      else process.env.PORT = saved;
+    }
+  });
+
   it('reports partial providers when the Twitch app is missing (Twemoji still works)', async () => {
     const { rt, state } = setup({ readBotEnv: () => ({}) });
     await rt.start();
