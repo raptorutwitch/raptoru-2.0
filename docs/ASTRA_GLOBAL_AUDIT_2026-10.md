@@ -234,6 +234,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **BLOQUÉ — décision requise**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : les interactions Lab (modération, Tombola, TTS, Bonk/Soundboard via le store) débitent/créditent `lab_wallets`/`lab_wallet_ledger` ; aucun module Lab n'utilise `WalletService`. Constat toujours exact, mais il ne s'agit pas d'un défaut du Lab (wallet de test volontairement isolé) : c'est la frontière économique du futur raccordement. **Options :** (A) adaptateur « économie » unique côté Core, implémenté par le wallet Lab aujourd'hui et par `WalletService` au cutover, débit + admission dans la même transaction — L ; (B) protocole réservation/compensation entre l'admission Lab et le Wallet central — L/XL, plus de cas d'échec ; (C) migrer chaque module isolément au cutover — coût répété et risque de dissociation débit/admission. **Recommandation :** A, décidée avec le modèle de monnaies (jetons/crédits) et le point de coupure ; à faire avant d'ajouter un nouveau module payant. Aucune modification sans décision (modèle de monnaies = décision produit).
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -288,6 +292,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **BLOQUÉ — décision requise**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : `notification()` (lab-chat-ingest.ts) attrape l'échec de `POST /v1/lab/chat`, le journalise et abandonne la commande ; le routeur EventSub marque l'identifiant vu avant le traitement. Fait établi pendant la revalidation : Core est déjà idempotent par `message_id` (Commands : `cmd_invocations.source_message_id` ; Tombola : `lab_raffle_chat`) — une reprise côté bot ne peut donc jamais produire un double effet, et Core décide à réception (une inscription arrivée après la clôture est refusée). Reste une décision métier : jusqu'à quel retard une commande chat peut-elle encore être prise en compte ? **Options :** (A) reprise en mémoire bornée par TTL (ex. 15 s, essais 1/2/4/8 s) puis abandon journalisé — S, aucune persistance, couvre les redémarrages courts de Core ; (B) outbox durable avec TTL comme Loyalty — M, survit aussi au redémarrage du bot, plus de code pour des commandes de jeu éphémères ; (C) statu quo + compteur visible des messages abandonnés — XS, n'élimine pas la perte. **Recommandation :** A avec TTL 15 s (une commande plus ancienne n'a plus de sens en live), même règle pour tous les modules, abandon visible dans le journal de l'ingestion. À trancher par Antoni : la valeur du TTL et l'éventuelle exclusion de certaines commandes.
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -339,6 +347,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** État de stream Lab sans réconciliation périodique
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `47b71bd`
+
+**Résolution (passe P1, 2026-10-04) :** Confirmé sur `a32a389` : l'adaptateur Lab ne synchronisait l'état du stream qu'à la (re)connexion EventSub ; un `stream.offline/online` dont le relais échouait (Core arrêté) était journalisé puis perdu. Correction : l'ingestion mémorise le dernier état effectivement reçu par Core et, toutes les `STREAM_SYNC_INTERVAL_MS` (60 s, même réglage que le bot principal, minuteries chaînées sans chevauchement), relaie l'état Helix uniquement s'il diffère. Choix délibéré : un état stable n'envoie rien — une session simulée ouverte dans Studio (Lab) n'est donc jamais fermée par la réparation (renvoyer `offline` à chaque cycle l'aurait fermée toutes les 60 s, changement de comportement refusé). Helix injoignable : rien n'est confirmé (erreur journalisée). Non fait : affichage de l'âge de la dernière confirmation (observabilité, [ASTRA-P2-015](#astra-p2-015)).
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -505,6 +517,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **BLOQUÉ — décision requise**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : le bootstrap du Core principal (`apps/core-api/src/index.ts`) n'expose que Bonk/Soundboard/TTS Lab, pas Modération V2, Tombola ni Commands ; l'Extension connectée vise toujours `https://raptoru.fr/api` (`runtime-config.js`) ; les surfaces V2 passent par la façade Lab locale (jeton Lab non signé, Lab uniquement). Les invariants côté Core sont en place et testés (acteur dérivé du jeton, refus de forgerie de rôle — ex. `commands-studio.test.ts` « evil » —, droits réévalués par Core à chaque action, projection publique Commands sans donnée interne), mais la chaîne publique JWT Twitch → EBS → Core V2 n'existe pas. **Options :** (A) EBS public dans le Core (vérification JWT Extension, canal, `opaque_user_id`/identité partagée) réutilisant les façades actuelles comme contrat — L ; (B) EBS séparé devant le Core — L, un service de plus à exploiter ; (C) porter module par module sur l'API Live existante — coût répété. **Recommandation :** A, en raccordant d'abord un parcours isolé (ex. Commandes publiques, lecture seule) avant les mutations. Aucune publication autorisée par ce finding.
+
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -562,6 +578,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **BLOQUÉ — décision requise**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : `stream_sessions` (Daily/Presence/Loyalty, `stream-sessions.ts`) et `lab_stream_sessions` (Tombola, et désormais Commands V2 pour la fenêtre « pendant le live » et les quotas, `admission.ts`) restent deux autorités distinctes ; la session Lab a une origine `simulated`/`twitch`. Le correctif P1-003 garde volontairement cette séparation (les sessions simulées restent explicites). **Options :** (A) session canonique unique (identifiant Twitch, débuts/fins, réconciliation) consommée par tous les modules, les simulations Lab en marquant l'origine — M/L ; (B) garder deux modèles et une table de correspondance au cutover — M, divergences possibles ; (C) aligner seulement les règles de fin — S, laisse deux sources. **Recommandation :** A, après décision métier sur « stream », « stream-day » et activités hors stream ; migration additive uniquement.
+
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -617,6 +637,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Responsabilités frontend et façade trop concentrées
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **BLOQUÉ — décision requise**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` (mesures actuelles) : `ui.js` 6 206 lignes (6 173 au HEAD audité), `base.css` 16 477, `lab-ebs.ts` 2 255 (2 242), `studio/web/src/commands.ts` 2 066. Constat confirmé : c'est un coût de modification, pas un comportement fautif ; le corriger est une extraction progressive (L) qui touche des surfaces validées manuellement et du legacy encore connecté à la production — exactement le cas « refonte majeure / UX validée » qui exige une décision. **Options :** (A) règle d'hygiène : tout nouveau module dans son propre fichier (déjà le cas de Commands V2 : `commands-v2*.js`, `commands-public.js`) et extraction d'un écran existant seulement quand il est modifié, avec mount/update/destroy et timers possédés — coût réparti ; (B) chantier d'extraction dédié de `ui.js`/`lab-ebs.ts` avant le prochain module — L, risque de régression UI sans E2E navigateur (P1-018) ; (C) statu quo. **Recommandation :** A, avec B ciblé sur `lab-ebs.ts` (séparer simulation historique et projections Core) une fois le harnais E2E décidé.
 
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
@@ -733,6 +757,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Cycle réel Channel Points non raccordé aux interactions V2
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **BLOQUÉ — décision requise**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : les lecteurs Soundboard et TTS refusent toute interaction qui n'est pas `test_mode: true` / `payment_mode: 'simulated'` (sound-player/player.js:119, tts-player/player.js:255) ; aucun flux de redemption Channel Points n'existe dans le bot (aucun abonnement `channel.channel_points_custom_reward_redemption.*`). Les garanties disponibles côté Core (idempotence d'admission, exécution ambiguë jamais rejouée/remboursée d'office, stop prouvé — P1-017) seront réutilisées, mais le cycle externe reste à concevoir. **Options :** (A) redemption Twitch = moyen de paiement d'une interaction Core (référence stable `redemption_id`, transitions reçue → admise → exécutée → fulfil/cancel, reprise après crash) — L ; (B) redemptions converties en crédits du wallet canonique, l'interaction restant payée en crédits — M/L, découple Twitch de l'exécution ; (C) garder StreamElements/SAMMI pour les redemptions — pas de travail, pas de cutover. **Recommandation :** B (un seul chemin de paiement dans Core, décision fulfil/cancel limitée à la conversion), à valider avec le modèle produit des crédits. Aucun accès ni changement Twitch/production autorisé par ce finding.
 
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
@@ -1175,6 +1203,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **BLOQUÉ — décision requise**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : aucun harnais navigateur/Electron versionné (les captures et parcours E2E des sessions précédentes vivent hors dépôt), `@raptoru/studio-web` sans script de test, Extension testée sur ses modèles (4 fichiers). En revanche, les garanties de chaîne listées par le finding sont désormais couvertes par des tests versionnés exécutés par `npm test` (Extension EBS → Core HTTP réel PGlite → worker → ACK) : réponse économique perdue (P1-009, `moderation-d4` Studio), stop perdu (P1-017, `tts-lab`/`moderation-d4`), crash/reprise (TTS jamais rejoué après redémarrage, Core Lab figé P1-011), offline rattrapé (P1-003), permissions (`extension-commands`, `commands-studio`). Ce qui manque est le niveau navigateur (pages lecteurs réelles, Extension Video/Mobile, Electron packagé), qui demande un nouvel outillage. **Options :** (A) Playwright (nouvelle devDependency) avec 2–3 parcours : achat→lecture→ACK, stop modération, liste Commandes publique — M ; (B) étendre les harnais Electron existants (hors dépôt) et les versionner sous `apps/studio/desktop/e2e` — M, sans nouvelle dépendance mais moins portable ; (C) rester au niveau chaîne HTTP (tests actuels) + recette manuelle documentée — XS. **Recommandation :** A pour les lecteurs et l'Extension, déclenché manuellement (pas en CI bloquante au début). Nouvelle dépendance et base dédiée = décision d'Antoni.
+
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -1229,6 +1261,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Clients et lecteurs V2 spécialisés pour le Core local Lab
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **BLOQUÉ — décision requise**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : `localLabCoreClient()` (proxy.ts) n'accepte que `http://127.0.0.1|localhost` et les préfixes `/v1/lab/*` ; `LAB_CHAT_CORE_URL` est limité au loopback (lab-chat-main.ts) ; les lecteurs exigent `simulated` (cf. P1-010). Ces gardes sont des protections Lab voulues : les lever reviendrait à exposer le Lab. **Options :** (A) client « production » distinct (HTTPS, authentification Studio par instance, timeouts, compatibilité de versions) à côté des clients Lab inchangés — L ; (B) tunnel/VPN vers le Core distant en réutilisant les clients loopback — M, sécurité et diagnostics déportés hors de l'app ; (C) Core local dans Studio en production aussi — supprime le besoin de transport mais change l'architecture cible (Infrastructure Spec : Core VPS). **Recommandation :** A, validé sur un parcours distant isolé (reconnexion, ACK perdu, mauvaise instance refusée) avant tout cutover ; ne jamais assouplir les gardes Lab.
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -3989,16 +4025,16 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 
 | ID | Sévérité | Domaine | Statut | Commit | Tests | Validation manuelle | Notes |
 | -- | -------- | ------- | ------ | ------ | ----- | ------------------- | ----- |
-| [ASTRA-P1-001](#astra-p1-001) | P1 | Architecture | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
-| [ASTRA-P1-002](#astra-p1-002) | P1 | Bot | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
-| [ASTRA-P1-003](#astra-p1-003) | P1 | Bot | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
+| [ASTRA-P1-001](#astra-p1-001) | P1 | Architecture | BLOQUÉ — décision requise | — | — | — | Décision : modèle de monnaies, point de coupure, protocole d'import |
+| [ASTRA-P1-002](#astra-p1-002) | P1 | Bot | BLOQUÉ — décision requise | — | — | — | Décision : TTL et commandes admissibles à la reprise (recommandation : option A, 15 s) |
+| [ASTRA-P1-003](#astra-p1-003) | P1 | Bot | FERMÉ — corrigé | `47b71bd` | lab-chat-ingest « ASTRA-P1-003 » (offline perdu → réparé ; état stable → rien ; Helix en panne → rien) ; bot 92/92 | Optionnel : ingestion ON, couper Core pendant la fin du live → session Lab fermée ≤ 60 s après son retour | Âge de la dernière confirmation : P2-015 |
 | [ASTRA-P1-004](#astra-p1-004) | P1 | Core | FERMÉ — corrigé | `ccc8e5d` | db-limits.test.ts : serveur muet → échec < 3 s (toujours) ; sur PostgreSQL réel local (opt-in `TEST_DATABASE_URL`, lecture seule : pg_sleep + verrou consultatif) requête 57014, verrou 55P03, client réutilisable — exécuté sur raptoru2-pg | — | Réglages PostgreSQL de production à revoir au cutover |
 | [ASTRA-P1-005](#astra-p1-005) | P1 | Core | FERMÉ — corrigé | `ccc8e5d` | readiness.test.ts (prêt ; base en échec ou figée → /health 200, /ready 503 borné) ; local-runtime « ASTRA-P1-005 » | Optionnel : arrêter le conteneur PG pendant que Studio tourne → Core local « dégradé » (base injoignable), puis « prêt » au redémarrage | — |
-| [ASTRA-P1-006](#astra-p1-006) | P1 | EBS | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
-| [ASTRA-P1-007](#astra-p1-007) | P1 | État | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
-| [ASTRA-P1-008](#astra-p1-008) | P1 | Extension | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
+| [ASTRA-P1-006](#astra-p1-006) | P1 | EBS | BLOQUÉ — décision requise | — | — | — | Décision : authentification, publication, périmètre du premier cutover |
+| [ASTRA-P1-007](#astra-p1-007) | P1 | État | BLOQUÉ — décision requise | — | — | — | Décision : définition métier de stream / stream-day / hors stream |
+| [ASTRA-P1-008](#astra-p1-008) | P1 | Extension | BLOQUÉ — décision requise | — | — | — | Décision : stratégie d'extraction (recommandation : A) |
 | [ASTRA-P1-009](#astra-p1-009) | P1 | Idempotence | FERMÉ — corrigé | `6caa2e6` | Core moderation-d4 « idempotent action » ; Studio moderation-d4 « ASTRA-P1-009 » (échoue sans le relais EBS) ; Core 365 / Studio server 138 | Extension Lab : crédit wallet de test, coupure réseau simulée → un seul crédit | Studio packagé : migration appliquée au prochain démarrage du runtime |
-| [ASTRA-P1-010](#astra-p1-010) | P1 | Paiements | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
+| [ASTRA-P1-010](#astra-p1-010) | P1 | Paiements | BLOQUÉ — décision requise | — | — | — | Décision : modèle produit crédits/redemptions et cutover |
 | [ASTRA-P1-011](#astra-p1-011) | P1 | Studio | FERMÉ — corrigé | `ccc8e5d` | local-runtime « ASTRA-P1-011 » (figé → arrêt → relance bornée) + test crash existant ; Studio server 140/140 | — | — |
 | [ASTRA-P1-012](#astra-p1-012) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | test-lab.test.ts (garde Postgres) | — | — |
 | [ASTRA-P1-013](#astra-p1-013) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | lab-chat.test.ts (orphelin) | Optionnel : tuer le serveur Studio (pas l'arbre) ingestion ON, relancer → un seul labchat | Identité de processus : ASTRA-P2-026 |
@@ -4006,8 +4042,8 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-015](#astra-p1-015) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | lab-chat.test.ts supervision (2) ; bot 91/91 | Ingestion ON, tuer le processus labchat → reconnexion en ≤ 5 s | — |
 | [ASTRA-P1-016](#astra-p1-016) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | local-env.test.ts (3) ; suite Studio server 137/137 | Studio packagé : vérifier `<données>/apps/twitch-bot/.lab-chat-journal.json` après un envoi Commands V2 | Dossier données sans `apps/twitch-bot` : l'exécuteur échoue comme avant (jetons au même endroit) |
 | [ASTRA-P1-017](#astra-p1-017) | P1 | Studio | FERMÉ — corrigé | `2aba120` | tts-lab « moderation stop: proposed again… » ; moderation-d4 Soundboard stop (réponse perdue → reproposé → prouvé) ; Studio server 138/138 | Requis : arrêt modération d'un TTS en cours (OBS/aperçu) puis d'un son Soundboard — silence immédiat, plus d'ordre ensuite | Lecteur TTS d'une ancienne page ouverte : ordre reproposé sans effet jusqu'au rechargement |
-| [ASTRA-P1-018](#astra-p1-018) | P1 | Tests | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
-| [ASTRA-P1-019](#astra-p1-019) | P1 | Transport | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
+| [ASTRA-P1-018](#astra-p1-018) | P1 | Tests | BLOQUÉ — décision requise | — | Chaîne HTTP versionnée : moderation-d4, tts-lab, extension-commands, lab-chat-ingest, local-runtime | — | Décision : outillage E2E navigateur (recommandation : Playwright) |
+| [ASTRA-P1-019](#astra-p1-019) | P1 | Transport | BLOQUÉ — décision requise | — | — | — | Décision : transport de production, autorisation Studio, compatibilité/cutover |
 | [ASTRA-P2-001](#astra-p2-001) | P2 | Build | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-002](#astra-p2-002) | P2 | Config | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
 | [ASTRA-P2-003](#astra-p2-003) | P2 | Contrats | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
