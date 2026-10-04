@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -360,7 +361,11 @@ describe('managed child processes (real node children)', () => {
     expect(() => proc.start()).toThrow(/already running/);
     expect(
       JSON.parse(await readFile(join(dir, 'processes.json'), 'utf8')).core,
-    ).toBe(proc.pid);
+    ).toMatchObject({
+      pid: proc.pid,
+      entry: "console.log('ready'); setInterval(() => {}, 1000)",
+      started_at: expect.any(Number),
+    });
 
     await proc.stop();
     expect(proc.running).toBe(false);
@@ -396,6 +401,79 @@ describe('managed child processes (real node children)', () => {
     pids.set('bot', 999_999);
     expect(await next.adoptPrevious()).toBe(false);
     expect(pids.read().bot).toBeUndefined();
+  });
+});
+
+describe('process adoption by identity (ASTRA-P2-026)', () => {
+  it('a real node process that is not ours (other entry) is refused and never killed', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'studio-pm-'));
+    const pids = new PidStore(dir);
+    // Another node program alive under the stored PID (a reused PID).
+    const foreign = spawn(
+      process.execPath,
+      ['-e', 'setInterval(() => {}, 1000)'],
+      {
+        stdio: 'ignore',
+        windowsHide: true,
+      },
+    );
+    try {
+      pids.set('labcore', {
+        pid: foreign.pid!,
+        entry: 'dist/bonk-lab/local-server.js',
+        started_at: Date.now(),
+      });
+      const next = new ManagedProcess({
+        name: 'labcore',
+        cwd: dir,
+        args: [],
+        pids,
+        onLine: () => {},
+      });
+      expect(await next.adoptPrevious()).toBe(false);
+      expect(pids.read().labcore).toBeUndefined();
+      expect(foreign.exitCode).toBeNull(); // still alive: not ours, untouched
+    } finally {
+      foreign.kill();
+    }
+  });
+
+  it('same entry but created at another time (PID reused) is refused; the right one is adopted; old records keep their rule', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'studio-pm-'));
+    const pids = new PidStore(dir);
+    const t = Date.now() - 60_000;
+    let created = t;
+    const make = () =>
+      new ManagedProcess({
+        name: 'core',
+        cwd: dir,
+        args: [],
+        pids,
+        onLine: () => {},
+        probe: async () => ({
+          commandLine: 'node.exe --env-file-if-exists=x dist/index.js',
+          startedAt: created,
+        }),
+      });
+    pids.set('core', {
+      pid: process.pid,
+      entry: 'dist/index.js',
+      started_at: t,
+    });
+    created = t + 3_600_000; // the PID now belongs to a process born an hour later
+    expect(await make().adoptPrevious()).toBe(false);
+    pids.set('core', {
+      pid: process.pid,
+      entry: 'dist/index.js',
+      started_at: t,
+    });
+    created = t + 800; // the very process this Studio started
+    const owned = make();
+    expect(await owned.adoptPrevious()).toBe(true);
+    expect(owned.pid).toBe(process.pid);
+    // Record written by an older Studio (bare PID): previous rule (a live node process).
+    pids.set('core', process.pid);
+    expect(await make().adoptPrevious()).toBe(true);
   });
 });
 
