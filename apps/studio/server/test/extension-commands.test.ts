@@ -438,3 +438,118 @@ describe('Extension « Modération › Commandes » — list, conflicts, concurr
     ).toMatchObject({ status: 403 });
   });
 });
+
+describe('Extension « Modération › Commandes » — rename (the name = canonical trigger)', () => {
+  const rename = (
+    h: { authorization: string },
+    id: string,
+    version: number,
+    name: string,
+  ) =>
+    call(h, 'POST', `commands/${id}/update`, {
+      expected_version: version,
+      changes: { name },
+    });
+
+  it('the streamer renames: list updated, aliases unchanged, history name old → new, old word freed', async () => {
+    const c = await make({ name: 'testcmd', aliases: ['tc'] });
+    expect(await rename(BOSS, c.command_id, 1, 'test')).toMatchObject({
+      status: 200,
+      body: { version: 2, config: { name: 'test', aliases: ['tc'] } },
+    });
+    const list = (await call(MOD, 'GET', 'list')).body.commands as Cmd[];
+    expect(list.map((x) => [x.config.name, x.config.aliases])).toEqual([
+      ['test', ['tc']],
+    ]);
+    expect(
+      (await svc.history(CH, c.command_id, STUDIO)).entries[0],
+    ).toMatchObject({
+      action: 'update',
+      actor_id: '900100',
+      changes: [{ field: 'name', before: 'testcmd', after: 'test' }],
+    });
+    // The triggers follow: the old word is free again, the new one is taken.
+    expect((await make({ name: 'testcmd' })).config.name).toBe('testcmd');
+    expect(
+      await svc
+        .create(CH, STUDIO, {
+          name: 'test',
+          reply: { mode: 'normal', text: 'x', to: 'none' },
+        })
+        .catch((e: { code: string }) => e.code),
+    ).toBe('word_taken');
+  });
+
+  it('the team cannot rename (name is not delegated in the Phase A rights model)', async () => {
+    const c = await make({ name: 'testcmd' });
+    expect(await rename(MOD, c.command_id, 1, 'test')).toMatchObject({
+      status: 403,
+      body: {
+        error: 'field_not_delegated',
+        field: 'name',
+        right: 'streamer_only',
+      },
+    });
+    await supermod();
+    expect(await rename(MOD, c.command_id, 1, 'test')).toMatchObject({
+      status: 403,
+      body: { error: 'field_not_delegated', field: 'name' },
+    });
+  });
+
+  it('refused by Core: empty / invalid, another command, another command’s alias, its own alias, a reserved word', async () => {
+    await make({ name: 'discord', aliases: ['dc'] });
+    const c = await make({ name: 'testcmd', aliases: ['tc'] });
+    expect(await rename(BOSS, c.command_id, 1, '')).toMatchObject({
+      status: 400,
+      body: { error: 'invalid_request' },
+    });
+    expect(await rename(BOSS, c.command_id, 1, 'Pas Bon')).toMatchObject({
+      status: 400,
+    });
+    expect(await rename(BOSS, c.command_id, 1, 'discord')).toMatchObject({
+      status: 409,
+      body: { error: 'word_taken', word: 'discord', command: 'discord' },
+    });
+    expect(await rename(BOSS, c.command_id, 1, 'dc')).toMatchObject({
+      status: 409,
+      body: { error: 'word_taken', word: 'dc' },
+    });
+    expect(await rename(BOSS, c.command_id, 1, 'tc')).toMatchObject({
+      status: 422,
+      body: { error: 'invalid_config', issues: ['an alias repeats the name'] },
+    });
+    expect(await rename(BOSS, c.command_id, 1, 'join')).toMatchObject({
+      status: 409,
+      body: { error: 'word_reserved', module: 'raffle' },
+    });
+    expect((await svc.get(CH, c.command_id, STUDIO)).version).toBe(1);
+  });
+
+  it('a module command whose name is locked cannot be renamed, even by the streamer', async () => {
+    await svc.syncSystem(CH);
+    const sys = ((await call(BOSS, 'GET', 'list')).body.commands as Cmd[])[0]!;
+    expect(await rename(BOSS, sys.command_id, 1, 'billet')).toMatchObject({
+      status: 422,
+      body: { error: 'field_locked', field: 'name' },
+    });
+  });
+
+  it('409: a rename from a stale version never overwrites a change made meanwhile', async () => {
+    const c = await make({ name: 'testcmd' });
+    await svc.update(CH, c.command_id, STUDIO, 1, {
+      description: 'Changée dans Studio',
+    });
+    expect(await rename(BOSS, c.command_id, 1, 'test')).toMatchObject({
+      status: 409,
+      body: {
+        error: 'version_conflict',
+        current: { version: 2, config: { name: 'testcmd' } },
+      },
+    });
+    expect((await svc.get(CH, c.command_id, STUDIO)).config).toMatchObject({
+      name: 'testcmd',
+      description: 'Changée dans Studio',
+    });
+  });
+});

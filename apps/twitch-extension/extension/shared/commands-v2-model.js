@@ -108,6 +108,13 @@ export const SAVE_ERROR = {
   unknown_category: 'Cette catégorie n’existe plus',
   system_command: 'Une commande de module ne se supprime pas',
   team_only: 'Réservé à l’équipe',
+  invalid_request: 'Valeur invalide (nom : lettres, chiffres et _ uniquement)',
+};
+/** Core's configuration issues, in words (the others are shown as Core wrote them). */
+export const ISSUE = {
+  'an alias repeats the name': 'le nom est déjà un alias de cette commande',
+  'duplicate alias': 'alias en double',
+  'name: required': 'le nom est obligatoire',
 };
 
 export const dur = (s) => {
@@ -229,6 +236,8 @@ export function canEdit(me, c, field) {
   if (me.role === 'broadcaster') return { ok: true, why: '' };
   if (c?.config.team_lock) return { ok: false, why: 'Commande verrouillée par le streamer' };
   const right = RIGHT_OF[field];
+  // Phase A model: the name (canonical trigger) has no team right — the streamer renames.
+  if (field === 'name') return { ok: false, why: 'Seul le streamer peut renommer une commande' };
   if (!right) return { ok: false, why: 'Réglable dans Studio par le streamer' };
   const v = me.rights?.[right];
   const ok = typeof v === 'object' ? v?.allowed === true : v === true;

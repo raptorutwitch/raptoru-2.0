@@ -29,6 +29,7 @@ import {
   quotaText,
   reapply,
   REASON,
+  ISSUE,
   SAVE_ERROR,
   stateOf,
   STEP,
@@ -95,7 +96,16 @@ export function createCommandsV2View({ document, client, onBack }) {
   const errText = (e) => {
     const d = e?.details ?? {};
     const code = String(d.error ?? e?.code ?? e?.message ?? 'erreur');
-    const extra = code === 'cooldown_below_minimum' && d.min_seconds ? ` (minimum ${d.min_seconds} s)` : code === 'field_not_delegated' && d.field ? ` (${FIELD[d.field] ?? d.field})` : d.word ? ` (!${d.word})` : '';
+    const extra =
+      code === 'cooldown_below_minimum' && d.min_seconds
+        ? ` (minimum ${d.min_seconds} s)`
+        : code === 'field_not_delegated' && d.field
+          ? ` (${FIELD[d.field] ?? d.field})`
+          : d.word
+            ? ` (!${d.word}${d.command ? ` → !${d.command}` : d.module ? ` → ${d.module === 'raffle' ? 'Tombola' : d.module}` : ''})`
+            : Array.isArray(d.issues) && d.issues.length
+              ? ` : ${d.issues.map((i) => ISSUE[i] ?? i).join(' · ')}`
+              : '';
     return `${SAVE_ERROR[code] ?? code}${extra}`;
   };
 
@@ -243,10 +253,18 @@ export function createCommandsV2View({ document, client, onBack }) {
   const WHEN = { always: 'Tout le temps', live: 'Pendant le live', offline: 'Hors live' };
 
   // ------------------------------------------------------------------ command page
+  /** The name = the canonical trigger. Core checks the word (free, not reserved, not an alias) on save. */
+  function nameHtml(d) {
+    const m = may('name');
+    if (!m.ok) return ro(m.why, `!${d.name}`);
+    const renamed = ui.base && d.name !== ui.base.config.name;
+    return `<div class="namebox"><input class="inp" data-name value="${esc(d.name)}" maxlength="25" autocomplete="off" spellcheck="false" aria-label="Nom de la commande"></div>
+      <p class="hint">${renamed ? `!${esc(ui.base.config.name)} → !${esc(d.name || '…')} à l’enregistrement. Les alias ne changent pas.` : 'Le mot principal qui lance la commande. Les alias ne changent pas.'}</p>`;
+  }
   function rightsLine(c) {
-    if (ui.me.role === 'broadcaster') return 'Tu peux tout modifier ici. Catégorie, disponibilité, arguments et autres messages : dans Studio.';
+    if (ui.me.role === 'broadcaster') return 'Tu peux tout modifier ici, nom compris. Catégorie, disponibilité, arguments et autres messages : dans Studio.';
     if (c.config.team_lock) return `${ic('lock')} Le streamer a verrouillé cette commande : tu peux la consulter.`;
-    const fields = ['enabled', 'reply', 'aliases', 'audience.groups', 'audience.deny', 'cooldown', 'quota', 'listed'].filter((f) => canEdit(ui.me, c, f).ok).map((f) => ({ enabled: 'activer', reply: 'réponse', aliases: 'alias', 'audience.groups': 'qui peut l’utiliser', 'audience.deny': 'exclusions', cooldown: `cooldown${cooldownMin(ui.me) ? ` (≥ ${cooldownMin(ui.me)} s)` : ''}`, quota: 'utilisations', listed: 'liste publique' })[f]);
+    const fields = ['name', 'enabled', 'reply', 'aliases', 'audience.groups', 'audience.deny', 'cooldown', 'quota', 'listed'].filter((f) => canEdit(ui.me, c, f).ok).map((f) => ({ name: 'nom', enabled: 'activer', reply: 'réponse', aliases: 'alias', 'audience.groups': 'qui peut l’utiliser', 'audience.deny': 'exclusions', cooldown: `cooldown${cooldownMin(ui.me) ? ` (≥ ${cooldownMin(ui.me)} s)` : ''}`, quota: 'utilisations', listed: 'liste publique' })[f]);
     return fields.length ? `Ton rôle (${esc(ROLE[ui.me.role])}) peut modifier : ${fields.join(', ')}.` : `Ton rôle (${esc(ROLE[ui.me.role])}) peut consulter cette commande.`;
   }
   function banners(c) {
@@ -274,6 +292,7 @@ export function createCommandsV2View({ document, client, onBack }) {
         <p class="desc">${esc(d.description || 'Sans description')}</p>
         <p class="xright">${rightsLine(c)}</p>
         ${banners(c)}
+        ${F('Commande', nameHtml(d))}
         ${F('Réponse', replyHtml(d))}
         ${F('Alias', al.ok ? `${chips(d.aliases.map((a) => `!${a}`), 'alias', '+ alias')}${ui.aliasErr ? `<p class="err">${ic('warn')}${esc(ui.aliasErr)}</p>` : ''}` : ro(al.why, d.aliases.map((a) => `!${a}`).join(', ') || 'Aucun'))}
         ${F('Qui peut l’utiliser', whoHtml(d))}

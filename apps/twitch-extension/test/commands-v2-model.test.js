@@ -68,6 +68,14 @@ describe('commands — editable fields per role (display of Core rights)', () =>
     expect(cooldownMin(MOD)).toBe(10);
     expect([canCreate(MOD), canRemove(MOD, c).ok]).toEqual([false, false]);
   });
+  it('name (canonical trigger): the streamer only — shown locked with a reason to the team', () => {
+    const c = cmd('testcmd');
+    expect(canEdit(BOSS, c, 'name').ok).toBe(true);
+    expect(canEdit(SUPER, c, 'name')).toEqual({ ok: false, why: 'Seul le streamer peut renommer une commande' });
+    expect(canEdit(MOD, c, 'name').ok).toBe(false);
+    const sys = cmd('ticket', {}, { kind: 'system', owner_module: 'raffle', locked_fields: ['name'] });
+    expect(canEdit(BOSS, sys, 'name')).toEqual({ ok: false, why: 'Verrouillé par le module Tombola' });
+  });
   it('supermod: audience, exclusions, quota, listed, create, delete', () => {
     const c = cmd('hug');
     expect(['aliases', 'audience.groups', 'audience.deny', 'quota', 'listed'].every((f) => canEdit(SUPER, c, f).ok)).toBe(true);
