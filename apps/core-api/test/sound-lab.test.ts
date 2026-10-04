@@ -404,6 +404,28 @@ describe('Soundboard Lab admission and playback (Core)', () => {
     expect(sarah.sound_url).toBe('assets/sounds/sarah-1.mp3');
   });
 
+  it('random skips sounds in cooldown, exactly as each sound does on its own (ASTRA-P2-020)', async () => {
+    const core = await setup();
+    const lab = new SoundLabService(core.db, core.clock, () => 0);
+    await ready(core, true, lab);
+    const [first, second] = SOUND_BANK.filter((e) => e.id !== 'random');
+    for (const entry of SOUND_BANK)
+      if (entry.id !== 'random')
+        await lab.updateSound(entry.id, { cooldown_ms: 60_000 });
+    // The first sound was just played: in cooldown, random skips it and takes the next one.
+    await lab.admit(admitReq({ sound_id: first!.id }));
+    core.clock.advance(1_000);
+    const pick = (await lab.admit(admitReq({ sound_id: 'random' })))
+      .interaction;
+    expect(pick.sound_id).toBe(second!.id);
+    // Cooldown over: the first one is playable again.
+    core.clock.advance(60_000);
+    await ready(core, true, lab); // Studio's heartbeat, as the worker sends it every 2 s
+    const later = (await lab.admit(admitReq({ sound_id: 'random' })))
+      .interaction;
+    expect(later.sound_id).toBe(first!.id);
+  });
+
   it('never turns abandoned work into a success: expired → failed, lost lease → execution_unknown', async () => {
     const core = await setup();
     await ready(core);

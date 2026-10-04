@@ -516,6 +516,15 @@ export class SoundLabService {
       // `random` plays any playable sound (enabled, not in cooldown, not blocked while running).
       let played = entry;
       if (entry.id === 'random') {
+        // Last request of every sound under a cooldown, in ONE query (ASTRA-P2-020) — same rule as
+        // cooldownRemaining(), without one query per candidate inside the admission transaction.
+        const lastRequested = await this.lastRequested(
+          q,
+          req.channel_id,
+          SOUND_BANK.filter((c) => rows.get(c.id)!.cooldown_ms > 0).map(
+            (c) => c.id,
+          ),
+        );
         const candidates: SoundBankEntry[] = [];
         for (const candidate of SOUND_BANK) {
           const c = rows.get(candidate.id)!;
@@ -525,13 +534,11 @@ export class SoundLabService {
             running.has(candidate.id)
           )
             continue;
+          const last = lastRequested.get(candidate.id);
           if (
-            (await this.cooldownRemaining(
-              q,
-              req.channel_id,
-              candidate.id,
-              c.cooldown_ms,
-            )) > 0
+            c.cooldown_ms > 0 &&
+            last &&
+            last.getTime() + c.cooldown_ms > this.clock.now().getTime()
           )
             continue;
           candidates.push(candidate);
@@ -621,6 +628,22 @@ export class SoundLabService {
   }
 
   /** Cooldown of a requested sound: from its last admitted (non-failed) purchase. */
+  /** Last non-failed request of each sound (the cooldown reference), for several sounds at once. */
+  private async lastRequested(
+    q: Queryable,
+    channelId: string,
+    soundIds: string[],
+  ): Promise<Map<string, Date>> {
+    if (!soundIds.length) return new Map();
+    const rows = await q.query<{ requested_sound_id: string; at: Date }>(
+      `select requested_sound_id, max(created_at) as at from sound_lab_interactions
+       where channel_id = $1 and requested_sound_id = any($2::text[]) and status <> 'failed'
+       group by requested_sound_id`,
+      [channelId, soundIds],
+    );
+    return new Map(rows.map((r) => [r.requested_sound_id, new Date(r.at)]));
+  }
+
   private async cooldownRemaining(
     q: Queryable,
     channelId: string,
