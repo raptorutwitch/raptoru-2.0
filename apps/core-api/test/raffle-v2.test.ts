@@ -13,7 +13,11 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_MIGRATIONS_DIR, migrate } from '../src/db/migrate.js';
 import { LabModerationService } from '../src/lab-moderation/service.js';
 import { LabForbiddenError } from '../src/lab-moderation/store.js';
-import { AvatarCache } from '../src/raffle-lab/avatars.js';
+import {
+  AvatarCache,
+  TWITCH_CALL_TIMEOUT_MS,
+  twitchAppUserLookup,
+} from '../src/raffle-lab/avatars.js';
 import {
   RaffleLabError409,
   RaffleLabService,
@@ -974,6 +978,42 @@ describe('Tombola V2 read models', () => {
       '900352': null,
       '900353': null,
     });
+  });
+
+  it('Twitch pictures (ASTRA-P2-005): one refresh at a time; a stuck Twitch call ends at its budget', async () => {
+    const { config, act, joinExt, core } = await lab();
+    await config();
+    await act({ action: 'launch' });
+    await joinExt('900361');
+    let release!: (v: { id: string; profile_image_url: string }[]) => void;
+    let lookups = 0;
+    const cache = new AvatarCache(core.db, core.clock, () => {
+      lookups += 1;
+      return new Promise((r) => (release = r));
+    });
+    const first = cache.refresh();
+    const second = cache.refresh(); // next tick while the first one still waits for Twitch
+    await new Promise((r) => setTimeout(r, 50));
+    expect(lookups).toBe(1);
+    release([]);
+    expect(await first).toBe(1);
+    expect(await second).toBe(1); // joined the same batch
+    // A Twitch endpoint that never answers: the call aborts at its budget (body included).
+    const stuck = (async (_url: unknown, init: RequestInit) =>
+      new Promise((_, reject) =>
+        init.signal!.addEventListener('abort', () =>
+          reject(init.signal!.reason),
+        ),
+      )) as unknown as typeof fetch;
+    const lookup = twitchAppUserLookup(
+      { clientId: 'c', clientSecret: 's' },
+      stuck,
+      50, // TWITCH_CALL_TIMEOUT_MS in production
+    );
+    const t0 = Date.now();
+    const error = await lookup(['1']).catch((e: Error) => e);
+    expect(error).toMatchObject({ name: 'TimeoutError' });
+    expect(Date.now() - t0).toBeLessThan(TWITCH_CALL_TIMEOUT_MS);
   });
 
   it('configuration is validated by Core (bands, commands, currency)', async () => {

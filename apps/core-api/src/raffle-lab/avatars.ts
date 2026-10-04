@@ -12,6 +12,8 @@ export type TwitchUserLookup = (
 
 const OK_TTL_MS = 24 * 3600_000;
 const RETRY_MS = 3600_000;
+/** Budget of each Twitch call (token, Get Users), body included (ASTRA-P2-005). */
+export const TWITCH_CALL_TIMEOUT_MS = 10_000;
 const AVATAR_URL = /^https:\/\/static-cdn\.jtvnw\.net\/[^\s"'<>]+$/;
 
 export async function avatarUrls(
@@ -33,11 +35,21 @@ export class AvatarCache {
     private readonly lookup: TwitchUserLookup | null,
   ) {}
 
+  private running: Promise<number> | null = null;
+
   /**
    * Fetches the missing / stale pictures of the viewers of the running and recent rounds (one batch
-   * of at most 100 per call). Returns how many viewers were looked up.
+   * of at most 100 per call). Returns how many viewers were looked up. One refresh at a time: a tick
+   * arriving while one runs joins it instead of starting a second batch (ASTRA-P2-005).
    */
-  async refresh(): Promise<number> {
+  refresh(): Promise<number> {
+    this.running ??= this.refreshOnce().finally(() => {
+      this.running = null;
+    });
+    return this.running;
+  }
+
+  private async refreshOnce(): Promise<number> {
     if (!this.lookup) return 0;
     const now = this.clock.now();
     const due = (
@@ -96,6 +108,7 @@ export class AvatarCache {
 export function twitchAppUserLookup(
   app: { clientId: string; clientSecret: string },
   fetchImpl: typeof fetch = fetch,
+  timeoutMs = TWITCH_CALL_TIMEOUT_MS,
 ): TwitchUserLookup {
   let token: { value: string; until: number } | null = null;
   const appToken = async () => {
@@ -108,6 +121,7 @@ export function twitchAppUserLookup(
         client_secret: app.clientSecret,
         grant_type: 'client_credentials',
       }),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) throw new Error(`twitch_app_token_${res.status}`);
     const body = (await res.json()) as {
@@ -128,6 +142,7 @@ export function twitchAppUserLookup(
         authorization: `Bearer ${await appToken()}`,
         'client-id': app.clientId,
       },
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) throw new Error(`twitch_users_${res.status}`);
     return (
