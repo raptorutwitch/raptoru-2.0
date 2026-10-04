@@ -9,8 +9,15 @@ import {
 import { writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  type IpcMainInvokeEvent,
+} from 'electron';
+import { isTrustedPage, windowOpenDecision } from './ipc-guard.js';
 import { setupUpdater } from './updater.js';
 import {
   ServerSupervisor,
@@ -261,13 +268,30 @@ supervisor.onChange((s: ServerStatus) => {
     void showStatusPage();
 });
 
-ipcMain.handle('studio:server:state', () => supervisor.status);
-ipcMain.handle('studio:server:restart', async () => {
+// Trust boundary (ASTRA-P2-027, ipc-guard.ts): privileged IPC only from the Studio window showing
+// the Studio page or the status page; refused (and logged) from anything else.
+const trustPolicy = {
+  studioOrigin: new URL(studioUrl).origin,
+  statusPageUrl: pathToFileURL(statusPage).href,
+};
+function handleTrusted(channel: string, fn: () => unknown) {
+  ipcMain.handle(channel, (event: IpcMainInvokeEvent) => {
+    const url = event.senderFrame?.url ?? '';
+    if (event.sender !== win?.webContents || !isTrustedPage(url, trustPolicy)) {
+      serverLog(`[ipc] refused ${channel} from ${url || 'unknown frame'}`);
+      throw new Error('untrusted_sender');
+    }
+    return fn();
+  });
+}
+
+handleTrusted('studio:server:state', () => supervisor.status);
+handleTrusted('studio:server:restart', async () => {
   if (externalUrl) return supervisor.status;
   void supervisor.restart();
   return supervisor.status;
 });
-ipcMain.handle('studio:app:relaunch', () => {
+handleTrusted('studio:app:relaunch', () => {
   app.relaunch();
   app.quit();
 });
@@ -292,8 +316,21 @@ void app.whenReady().then(async () => {
   win.on('closed', () => {
     win = null;
   });
+  // The window only shows Studio or its status page; web links open in the system browser.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isTrustedPage(url, trustPolicy)) return;
+    event.preventDefault();
+    if (windowOpenDecision(url, trustPolicy) === 'external')
+      void shell.openExternal(url);
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    const decision = windowOpenDecision(url, trustPolicy);
+    if (decision === 'external') void shell.openExternal(url);
+    return { action: decision === 'allow' ? 'allow' : 'deny' };
+  });
   const updater = setupUpdater({
     getWindow: () => win,
+    handle: handleTrusted,
     stopServer: () => supervisor.stop(),
     log: (...args) => console.log(...args),
   });

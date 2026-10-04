@@ -1,4 +1,4 @@
-import { app, ipcMain, type BrowserWindow } from 'electron';
+import { app, type BrowserWindow } from 'electron';
 // electron-updater is a CommonJS module without named ESM exports: destructure the default import.
 import electronUpdaterPkg from 'electron-updater';
 import {
@@ -23,6 +23,8 @@ export interface Updater {
 
 export function setupUpdater(deps: {
   getWindow: () => BrowserWindow | null;
+  /** ipcMain.handle restricted to the trusted Studio page (main.ts, ASTRA-P2-027). */
+  handle: (channel: string, fn: () => unknown) => void;
   /** Graceful shutdown of the local server (bot/Core) before the installer replaces the app. */
   stopServer: () => Promise<void>;
   log: (...args: unknown[]) => void;
@@ -75,16 +77,16 @@ export function setupUpdater(deps: {
     }
   };
 
-  ipcMain.handle(STATE_CHANNEL, () => state);
-  ipcMain.handle('studio:update:check', check);
-  ipcMain.handle('studio:update:download', async () => {
+  deps.handle(STATE_CHANNEL, () => state);
+  deps.handle('studio:update:check', check);
+  deps.handle('studio:update:download', async () => {
     try {
       await autoUpdater.downloadUpdate();
     } catch (error) {
       apply({ type: 'error', message: (error as Error).message });
     }
   });
-  ipcMain.handle('studio:update:install', async () => {
+  deps.handle('studio:update:install', async () => {
     await deps.stopServer();
     // Silent + forced run: with the assisted NSIS installer (oneClick: false) the app is relaunched
     // only in this combination (installSection.nsh); otherwise the wizard shows and waits.
