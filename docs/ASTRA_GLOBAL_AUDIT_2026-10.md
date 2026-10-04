@@ -3048,6 +3048,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **OUVERT — dépriorisé (dette de nommage acceptée)**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `5556cd3` : toujours vrai, pas caduc. Le vocabulaire « BonkLab » désigne encore le runtime Lab transversal : variables `BONK_LAB_*` (URL, secret, port, app Twitch, chaîne — lues par le serveur Studio, le runtime, le Core Lab, `bonk-lab.mjs`, les tests), dossier `apps/core-api/src/bonk-lab/` qui héberge le Core Lab de tous les modules (`local-server.ts`, et `lab-core.ts` ajouté en P1-018 au même endroit pour ne pas déplacer l'existant), base `raptoru_bonk_lab`, script `npm run bonk:lab`. Les libellés visibles parlent du module Bonk là où il s'agit de Bonk (« Raptoru Bonk Lab » = source OBS du Bonk) ; la documentation courante (README, HANDOFF) parle de « Lab » / « Core Lab ». Aucun défaut fonctionnel. Renommer toucherait des variables d'environnement, un nom de base et des chemins de modules utilisés par les installations existantes — hors d'une passe P3. Choix : conserver, et appliquer le vocabulaire « Lab » aux nouveaux éléments ; un renommage éventuel se ferait avec compatibilité des anciennes variables, au moment d'un changement de ces zones ou du cutover.
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -4204,7 +4208,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-028](#astra-p2-028) | P2 | Studio | FERMÉ — corrigé | `dcec32a` | e2e/players.e2e.ts (pages lecteurs réelles dans Chromium, Studio simulé, Web Speech/Audio factices, horloge Playwright) : TTS démarré sans fin → libéré à la borne sans ACK, TTS suivant joué, fin tardive ignorée ; lecture longue légitime terminée normalement ; stop modération → started+stopped ; Soundboard bloqué → libéré sans ACK, autres sons joués ; stop → started+stopped. Les 2 cas « sans fin » échouent sur l'ancien code, les 3 autres passent avant et après (non-régression P1-017). npm run e2e 6/6 | Validé par Antoni (2026-10-05) : TTS normal, STOP TTS puis TTS suivant, Soundboard normal et STOP | Garde TTS aux règles Core par défaut |
 | [ASTRA-P2-029](#astra-p2-029) | P2 | Tests | FERMÉ — corrigé | `cc3994d` | Base jetable : les deux suites ensemble 3/3 vertes (contre 3/3 en échec avant) ; chacune seule verte ; npm test avec TEST_DATABASE_URL 383/383 ; npm test sans URL 373 + 10 ignorés (inchangé) | — | — |
 | [ASTRA-P3-001](#astra-p3-001) | P3 | Build | OUVERT — décision (diffusion large) | — | Revue : electron-builder.json, updater.ts, release.mjs, scripts/test-update-feed.mjs | — | Signature de code : à décider avant une diffusion large |
-| [ASTRA-P3-002](#astra-p3-002) | P3 | Config | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
+| [ASTRA-P3-002](#astra-p3-002) | P3 | Config | OUVERT — dépriorisé (dette de nommage acceptée) | — | — | — | Renommage seulement avec compatibilité, au fil des changements |
 | [ASTRA-P3-003](#astra-p3-003) | P3 | Config | FERMÉ — corrigé | `b02bd6c` | local-runtime « ASTRA-P3-003 » (PORT=4399 → ports affichés 4399/4301/3789) ; Studio server local-runtime 11/11 | — | — |
 | [ASTRA-P3-004](#astra-p3-004) | P3 | État | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P3-005](#astra-p3-005) | P3 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
