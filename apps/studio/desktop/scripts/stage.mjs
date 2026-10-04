@@ -118,6 +118,16 @@ run(['pack', '--pack-destination', '..'], schemasCopy); // relative: the repo pa
 const version = (name) =>
   readJson(join(repo, 'node_modules', name, 'package.json')).version;
 const desktop = readJson(join(desktopDir, 'package.json'));
+// The packed Schemas copy carries no dependencies: the app manifest below provides them. Every
+// runtime dependency Schemas declares must be there (ASTRA-P2-001), never left to chance.
+const APP_DEPENDENCIES = ['pg', 'zod', 'electron-updater'];
+for (const dep of Object.keys(
+  readJson(join(repo, 'packages/schemas/package.json')).dependencies ?? {},
+))
+  if (!APP_DEPENDENCIES.includes(dep))
+    throw new Error(
+      `@raptoru/schemas needs ${dep}: add it to the app dependencies`,
+    );
 writeFileSync(
   join(app, 'package.json'),
   JSON.stringify(
@@ -130,9 +140,7 @@ writeFileSync(
       type: 'module',
       main: 'apps/studio/desktop/dist/main.js',
       dependencies: {
-        pg: version('pg'),
-        zod: version('zod'),
-        'electron-updater': version('electron-updater'),
+        ...Object.fromEntries(APP_DEPENDENCIES.map((d) => [d, version(d)])),
         '@raptoru/schemas': 'file:../raptoru-schemas-0.0.0.tgz',
       },
     },
