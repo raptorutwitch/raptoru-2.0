@@ -37,15 +37,18 @@ Toute évolution passe par une nouvelle migration additive, classée `lab` dans 
 - Follower jamais déduit des badges : inconnu tant qu'il n'y a pas de provider Helix réel.
 - `/me` n'est pas envoyé (Helix Send Chat Message ne le supporte pas) : affiché « non supporté ».
 - Un envoi Twitch ambigu devient `unknown` et n'est jamais renvoyé.
+- Règle unique partagée par tous les modules du chat Lab (Commands V2, annulation Tombola) : `apps/core-api/src/lab-chat/broadcaster.ts` (`75c9ea0`).
 - Le **nom** (trigger principal) se renomme avec le droit d'équipe `rename` (vrai par défaut pour modos et supermodos, désactivable par rôle par le streamer ; les droits enregistrés avant son ajout le lisent à vrai). Le streamer peut toujours ; un verrou de module sur `name` gagne sur tout.
 - Toute requête Extension passe par la façade `/commands/v2/*` avec l'identité du token ; jamais `STUDIO_ACTOR`.
 - Aucun push / release / deploy sans demande explicite d'Antoni.
 
 ## Dette connue (ne pas corriger sans décision)
 
-- **Tombola** : l'annulation par chat utilise un test du type `chatter.id === channel_id` pour reconnaître le streamer — même défaut que celui corrigé pour Commands (`1a71099`). Hors périmètre Commands.
 - Catégories : pas de version (dernier écrit gagne) et pas d'entrée dans l'historique.
 - `apps/studio/web/src/commands.css` et `apps/twitch-extension/extension/commands-v2.css` ont été générés une fois depuis le prototype `prototypes/commands-v6/` (non versionné) : ce sont désormais les sources.
+- EBS Lab : `moderateViaCore` construit l'acteur sans `display_name` (contrairement à `labActor`) ; unifier changerait l'affichage de l'audit, donc laissé tel quel.
+- Extension : `cmdV2Post` est réessayé sur 5xx sans clé d'idempotence. Sans risque pour les données (`expected_version` sur update/delete, nom unique à la création), mais une création dont la réponse s'est perdue peut afficher une erreur alors que la commande existe.
+- Libellés du modèle de vue dupliqués entre `apps/studio/web/src/commands-model.ts` et `apps/twitch-extension/extension/shared/commands-v2-model.js` (pas de partage de code entre TS Studio et JS Extension).
 - Studio et Extension n'ont pas de rafraîchissement automatique pendant l'édition (rechargement à l'ouverture et après chaque action).
 
 ## Repères dans le code
