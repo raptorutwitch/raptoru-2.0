@@ -1323,6 +1323,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `28d7052`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `ea06d48` : corrigé par `28d7052` (passe de consolidation) — `packages/schemas/package.json` déclare `zod ^4.6.5` et le lockfile l'enregistre (`packages/schemas` → `dependencies.zod`) : une installation propre résout Zod depuis le manifeste du paquet, sans dépendre du hoisting de core-api/twitch-bot. Packaging : `stage.mjs` recrée la copie de Schemas avec `dependencies: {}` et le manifeste de l'app packagée fournit Zod explicitement (résolution Node vers le haut, pas un hoisting accidentel). Seul complément (`a9f4ff7`) : la liste des dépendances de l'app est unique (`APP_DEPENDENCIES`) et le staging échoue si Schemas déclare une dépendance d'exécution que cette liste ne livre pas. Preuve : staging local exécuté (rien publié) — manifeste identique (pg, zod, electron-updater, schemas), `node_modules/zod` présent, `@raptoru/schemas` se charge depuis l'app stagée.
+
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -4092,7 +4096,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-017](#astra-p1-017) | P1 | Studio | FERMÉ — corrigé | `2aba120` | tts-lab « moderation stop: proposed again… » ; moderation-d4 Soundboard stop (réponse perdue → reproposé → prouvé) ; Studio server 138/138 | Validé par Antoni (2026-10-04) : STOP TTS et STOP Soundboard | Lecteur TTS d'une ancienne page ouverte : ordre reproposé sans effet jusqu'au rechargement |
 | [ASTRA-P1-018](#astra-p1-018) | P1 | Tests | FERMÉ — corrigé | `fd365dd` | e2e/commands-public.e2e.ts (navigateur, pile isolée) ; Core 368 / Studio server 140 inchangés | Une fois par machine : `npx playwright install chromium` | Commits 93f07db (assemblage partagé), fd365dd (harnais + parcours), a120335 (build schemas) |
 | [ASTRA-P1-019](#astra-p1-019) | P1 | Transport | BLOQUÉ — décision de cutover | — | — | — | Décision : transport de production, autorisation Studio, compatibilité/cutover |
-| [ASTRA-P2-001](#astra-p2-001) | P2 | Build | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
+| [ASTRA-P2-001](#astra-p2-001) | P2 | Build | FERMÉ — corrigé | `28d7052` | Staging local exécuté : manifeste inchangé, Zod installé, Schemas chargé depuis le paquet ; desktop 19/19 | — | Garde de staging : a9f4ff7 |
 | [ASTRA-P2-002](#astra-p2-002) | P2 | Config | FERMÉ — corrigé | `0e4c040` | test-lab.test.ts « loyalty credits guard » (refus Daily + démarrage forcé) | — | Core externe non géré : hors garde (inchangé) |
 | [ASTRA-P2-003](#astra-p2-003) | P2 | Contrats | FERMÉ — corrigé | `52591d0` | Extension test/api.test.js : JSON invalide / vide / non-objet → invalid_response sans retry ; 204 → {} ; refus 403/400 conservés (échoue sur l'ancien code : {} accepté) | — | Validation de forme des réponses internes : relève de P2-004 |
 | [ASTRA-P2-004](#astra-p2-004) | P2 | Contrats | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
