@@ -242,6 +242,20 @@ export class CommandsService {
     });
   }
 
+  /**
+   * The reader's effective role and its rights (the extension shows as editable only what Core would
+   * accept; Core still checks every change). The streamer: every right (`rights` null).
+   */
+  async me(channelId: string, reader: Actor) {
+    return this.db.tx(async (q) => {
+      const role = await this.teamRole(q, channelId, reader);
+      if (role === 'broadcaster')
+        return { role, rights: null, rights_version: null };
+      const r = await this.rightsOf(q, channelId, role);
+      return { role, rights: r.rights, rights_version: r.version };
+    });
+  }
+
   async rights(channelId: string, reader: Actor) {
     return this.db.tx(async (q) => {
       await this.teamRole(q, channelId, reader);

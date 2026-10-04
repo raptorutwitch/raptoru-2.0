@@ -197,7 +197,7 @@ const pending = (i) => i.review_status === 'pending';
  * onBack: leave the console (back to the Hub); the console replaces the host header.
  * assetBase: where the extension assets are served (emotes of the Bonk rows).
  */
-export function createModerationV2View({ document, client, onChange, onBack, assetBase = '' }) {
+export function createModerationV2View({ document, client, onChange, onBack, onCommands, assetBase = '' }) {
   const win = document.defaultView;
   const node = document.createElement('div');
   node.className = 'modv2';
@@ -580,6 +580,7 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
     return `<div class="side__top">${hub}<label class="search"><span class="sr">Rechercher un viewer</span>${ic('search')}<input data-q placeholder="Viewer…" autocomplete="off"></label></div>
       <nav class="mods" data-mods aria-label="Modules">${MOD_KEYS.map((m) => modLine(m, selM === m)).join('')}</nav>
       <button class="sidelink${t.v === 'history' && !t.vid ? ' is-sel' : ''}" data-act="history" data-histlink>${ic('history')}Historique</button>
+      ${onCommands ? `<button class="sidelink" data-act="commands">${ic('note')}Commandes</button>` : ''}
       <div class="side__foot" data-foot>${footHtml()}</div>`;
   }
 
@@ -1441,6 +1442,8 @@ export function createModerationV2View({ document, client, onChange, onBack, ass
     },
     details: (d, b) => drawerOf(`details:${d.v}`, () => detailsBody(d.v), b, 'Détails', () => esc(nameOf(d.v))),
     hub: () => onBack?.(),
+    // Commands V2 « Modération › Commandes » (phase E): its own view, Core decides the rights.
+    commands: () => onCommands?.(),
     'global-menu': (d, b) =>
       menu(b, [
         { header: true, label: gPaused() ? 'Pause globale active' : 'Raptoru accepte les interactions' },

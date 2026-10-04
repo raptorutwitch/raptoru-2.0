@@ -213,7 +213,13 @@ export function assertTeamMayChange(
   creating = false,
 ) {
   for (const ch of changes) {
-    if (creating && (ch.field === 'name' || ch.field === 'description'))
+    // Name, description and the (existing) category of a new simple command belong to the creation right.
+    if (
+      creating &&
+      (ch.field === 'name' ||
+        ch.field === 'description' ||
+        ch.field === 'category')
+    )
       continue;
     const right = rightOf(ch.field);
     const granted =

@@ -33,6 +33,7 @@ import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
 import { createModerationV2View } from './moderation-v2.js';
+import { createCommandsV2View } from './commands-v2.js';
 import { createTombolaV2View } from './tombola-v2.js';
 
 const el = (tag, className, text) => {
@@ -1152,6 +1153,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let ttsV2View = null;
   // Moderation V2 (D4, Lab): persistent console reading / commanding Core while the module is open.
   let moderationV2View = null;
+  /** « Modération › Commandes » (Commands V2) and whether it currently replaces the console. */
+  let commandsV2View = null;
+  let commandsV2Shown = false;
   /** Tombola V2 (Lab): persistent screen reading Core itself (never rebuilt by the host's polling). */
   let tombolaV2View = null;
   let paymentWalletSync = null;
@@ -1644,6 +1648,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (moduleId !== MODERATION_MODULE.id) {
       moderationV2View?.destroy();
       moderationV2View = null;
+      commandsV2View = null;
+      commandsV2Shown = false;
     }
     if (moduleId !== 'raffle_join') {
       tombolaV2View?.destroy();
@@ -6070,11 +6076,37 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         // The D4 console is the whole screen (its own header and way back to the Hub): no host header.
         screen.classList.add('jdm-module-screen--modv2');
         if (!moderationV2View) {
-          moderationV2View = createModerationV2View({ document, client, onChange: () => { void onRefresh?.(); }, onBack: () => navigateTo(null) });
+          moderationV2View = createModerationV2View({
+            document,
+            client,
+            onChange: () => { void onRefresh?.(); },
+            onBack: () => navigateTo(null),
+            // « Modération › Commandes »: the commands view takes the console's place, and gives it back.
+            // Video and Mobile only (not the Panel).
+            onCommands: client.cmdV2 && !document.body.classList.contains('panel-view') ? () => {
+              if (!commandsV2View) {
+                commandsV2View = createCommandsV2View({
+                  document,
+                  client,
+                  onBack: () => {
+                    commandsV2Shown = false;
+                    commandsV2View.node.replaceWith(moderationV2View.node);
+                    queueMicrotask(() => moderationV2View?.attached());
+                  },
+                });
+                commandsV2View.start();
+              }
+              commandsV2Shown = true;
+              moderationV2View.node.replaceWith(commandsV2View.node);
+              queueMicrotask(() => commandsV2View?.attached());
+            } : null,
+          });
           moderationV2View.start();
         }
-        body.append(moderationV2View.node);
-        queueMicrotask(() => moderationV2View?.attached());
+        // The commands view stays in place across the host's refreshes while it is open.
+        const shownView = commandsV2Shown && commandsV2View ? commandsV2View : moderationV2View;
+        body.append(shownView.node);
+        queueMicrotask(() => shownView?.attached());
       } else if (isTombolaV2) {
         // Tombola V2 (validated prototype): its own header and way back to the Hub, Core's state only.
         body.dataset.tmbV2 = '1';

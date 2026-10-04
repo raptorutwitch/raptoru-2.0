@@ -77,6 +77,14 @@ export function commandsRoutes(
   const catId = (params: string[]) =>
     parse(z.string().regex(/^[a-z][a-z0-9_-]{0,23}$/), params[1]);
   return [
+    // Phase E — the reader's role and rights (extension « Modération › Commandes »).
+    {
+      method: 'GET',
+      pattern: new RegExp(`${BASE}/me$`),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() => commands.me(channel(params), reader(url))),
+    },
     // Phase D — the streamer's categories (Studio); the team reads them.
     {
       method: 'GET',

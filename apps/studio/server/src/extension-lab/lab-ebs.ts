@@ -9,6 +9,7 @@ import {
 import type { SoundWorker } from '../sound-lab/worker.js';
 import type { TtsWorker } from '../tts-lab/worker.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
+import { commandsFacade } from './commands-facade.js';
 
 const BONK_PROVIDERS: readonly BonkLabProvider[] = BonkLabProvider.options;
 import type { ViewerAuth } from '../bonk-lab/viewer-auth.js';
@@ -500,7 +501,7 @@ export class LabEbs {
   }
 
   private labActor(caller: { identity: LabIdentity }) {
-    const role =
+    const role: LabRole =
       caller.identity.role === 'broadcaster'
         ? 'broadcaster'
         : caller.identity.role === 'moderator'
@@ -1123,6 +1124,16 @@ export class LabEbs {
     // Tombola V2 (Core): free entry decided by Core, never the in-memory raffle.
     if (this.labCore && method === 'POST' && path === '/actions/raffle')
       return this.joinRaffleCore(caller, headers.idempotencyKey);
+    // Commands V2 « Modération › Commandes » (phase E): the caller's verified identity, Core decides.
+    if (this.labCore && path.startsWith('/commands/v2/')) {
+      const out = await commandsFacade(this.labCore)(
+        method,
+        path,
+        body,
+        this.labActor(caller),
+      );
+      return { status: out.status, body: out.body as Json };
+    }
     // Extension moderation → Moderation V2 in Core (same commands, permissions and audit as Studio).
     if (this.labCore && path.startsWith('/moderation/')) {
       if (caller.identity.role === 'viewer') return this.fail(403, 'forbidden');

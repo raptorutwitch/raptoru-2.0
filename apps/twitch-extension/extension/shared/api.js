@@ -454,6 +454,10 @@ export function createClient({
     modV2: (path) => call('GET', `/moderation/v2/${path}`),
     /** Moderation V2 command, executed and audited by Core with the caller's permissions. */
     modV2Act: (command) => call('POST', '/moderation/v2/actions', { body: { command }, idempotencyKey: newIdempotencyKey() }),
+    /** Commands V2 « Modération › Commandes »: Core read models with the caller's verified identity. */
+    cmdV2: (path) => call('GET', `/commands/v2/${path}`),
+    /** Commands V2 change (update / create / delete): Core checks the caller's rights and the version. */
+    cmdV2Post: (path, body) => call('POST', `/commands/v2/${path}`, { body }),
     /** TTS V2 (Lab): Core state for this viewer (availability, queue, current TTS). */
     ttsState: () => call('GET', '/tts/state'),
     /**
