@@ -620,24 +620,11 @@ export class LabEbs {
     caller: { identity: LabIdentity },
     command: Json,
   ): Promise<Reply> {
-    const role =
-      caller.identity.role === 'broadcaster'
-        ? 'broadcaster'
-        : caller.identity.role === 'moderator'
-          ? 'moderator'
-          : 'viewer';
     try {
       const out = await this.labCore!<Json>(
         `/v1/lab/moderation/${LAB_CHANNEL.id}/actions`,
-        {
-          actor: {
-            id: caller.identity.twitchUserId,
-            login: caller.identity.login,
-            role,
-            via: 'extension',
-          },
-          command,
-        },
+        // Same actor as the D4 console (display_name included): Core keeps the team member's name.
+        { actor: this.labActor(caller), command },
       );
       this.invalidateLab();
       this.ttsConfigAt = 0;

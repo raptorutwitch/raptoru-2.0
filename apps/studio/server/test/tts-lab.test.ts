@@ -393,6 +393,12 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
       status: 'executed',
       final_status: 'executed',
     });
+    // Same actor as the D4 console: Core keeps the moderator's display name, not its login.
+    expect(
+      await f.core.db.query(
+        "select login, display_name from lab_staff where viewer_id = '900102'",
+      ),
+    ).toEqual([{ login: 'lab_modo', display_name: 'Modo Lab' }]);
     expect((await f.buy('k-p', 'Pendant la pause')).body.error).toBe(
       'tts_paused',
     );
