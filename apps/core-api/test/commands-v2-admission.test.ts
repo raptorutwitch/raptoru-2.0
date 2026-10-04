@@ -287,6 +287,122 @@ describe('Commands V2 admission — audience', () => {
   });
 });
 
+describe('Commands V2 admission — the real broadcaster of the channel (Lab channel ≠ Twitch id)', () => {
+  // The Lab channel is 900100; its real Twitch broadcaster is another id (the Lab Core's configuration).
+  const REAL = '83603689';
+  const RAPTORU: Who = {
+    id: REAL,
+    login: 'raptoru_',
+    role: 'broadcaster',
+    badges: ['broadcaster', 'subscriber'],
+  };
+  const CROUPIER: Who = {
+    id: '1239040922',
+    login: 'lecroupier_',
+    role: 'moderator',
+    badges: ['moderator'],
+  };
+  const AOUH_MOD: Who = {
+    id: '501',
+    login: 'aouh',
+    role: 'moderator',
+    badges: ['moderator'],
+  };
+  const FAKE: Who = {
+    id: '666',
+    login: 'faker',
+    role: 'broadcaster',
+    badges: ['broadcaster'],
+  };
+  const VIEW: Who = { id: '700', login: 'pixelmamie' };
+  let real: CommandsAdmission;
+  beforeEach(() => {
+    real = new CommandsAdmission(db, clock, {
+      reserved: raffleReservedWords(raffle),
+      broadcasterOf: () => REAL,
+    });
+  });
+  const sayAs = (who: Who) => real.chat(msg('!hug', who));
+  const testAs = (who: Who) =>
+    real.test(CH, {
+      actor: { id: 'antoni', role: 'broadcaster', via: 'studio' },
+      message: '!hug',
+      viewer: {
+        id: who.id!,
+        login: who.login!,
+        display_name: who.login!.toUpperCase(),
+        role: who.role ?? 'viewer',
+        badges: who.badges ?? [],
+      },
+    });
+
+  it('« Streamer » group: only the real broadcaster passes (by user id), never a role or a badge', async () => {
+    await make({ audience: { groups: ['broadcaster'], allow: [], deny: [] } });
+    expect(await sayAs(RAPTORU)).toMatchObject({ outcome: 'accepted' });
+    expect((await testAs(RAPTORU)).viewer).toMatchObject({
+      role: 'broadcaster',
+      groups: expect.arrayContaining(['broadcaster']),
+    });
+    for (const who of [VIEW, AOUH_MOD, CROUPIER, FAKE])
+      expect(await sayAs(who), who.login).toMatchObject({
+        outcome: 'rejected',
+        reason: 'access_denied',
+      });
+    // Even without the badge / role in the message, the identity decides.
+    expect(
+      await sayAs({ ...RAPTORU, role: 'viewer', badges: [] }),
+    ).toMatchObject({ outcome: 'accepted' });
+    // Without the configuration, the real broadcaster is not recognised (the bug this guards).
+    expect(await adm.chat(msg('!hug', RAPTORU))).toMatchObject({
+      outcome: 'rejected',
+      reason: 'access_denied',
+    });
+  });
+
+  it('allow still works, deny still wins, « Tout le monde » unchanged, no implicit streamer bypass', async () => {
+    await make({
+      name: 'aouhonly',
+      audience: { groups: [], allow: ['aouh'], deny: [] },
+    });
+    await make({
+      name: 'nostreamer',
+      audience: { groups: ['everyone'], allow: [], deny: ['raptoru_'] },
+    });
+    await make({
+      name: 'mods',
+      audience: { groups: ['mods'], allow: [], deny: [] },
+    });
+    const as = (text: string, who: Who) => real.chat(msg(text, who));
+    expect(await as('!aouhonly', AOUH_MOD)).toMatchObject({
+      outcome: 'accepted',
+    });
+    expect(await as('!aouhonly', RAPTORU)).toMatchObject({
+      reason: 'access_denied',
+    });
+    expect(await as('!nostreamer', RAPTORU)).toMatchObject({
+      reason: 'denied_user',
+    });
+    expect(await as('!nostreamer', VIEW)).toMatchObject({
+      outcome: 'accepted',
+    });
+    expect(await as('!mods', RAPTORU)).toMatchObject({
+      reason: 'access_denied',
+    });
+  });
+
+  it('« Tester » (Studio simulator) and the real admission take the same decision', async () => {
+    await make({ audience: { groups: ['broadcaster'], allow: [], deny: [] } });
+    for (const who of [RAPTORU, VIEW, AOUH_MOD, CROUPIER, FAKE]) {
+      const t = await testAs(who);
+      const r = await sayAs(who);
+      expect(
+        [r.outcome === 'accepted' ? null : r.reason, r.message],
+        who.login,
+      ).toEqual([t.reason, t.message]);
+    }
+  });
+});
+
 describe('Commands V2 admission — arguments and variables', () => {
   const hug = () =>
     make({

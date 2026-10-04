@@ -53,7 +53,11 @@ const raffle = new RaffleLabService(db, systemClock);
 // Lab Twitch adapter only while « Sortie chat réelle » is ON (OFF by default).
 const reserved = raffleReservedWords(raffle);
 const commands = new CommandsService(db, systemClock, { reserved });
-const admission = new CommandsAdmission(db, systemClock, { reserved });
+const admission = new CommandsAdmission(db, systemClock, {
+  reserved,
+  // The Lab Core serves the launcher's channel: its real broadcaster is the streamer of every command.
+  broadcasterOf: () => (/^\d+$/.test(channelTwitchId) ? channelTwitchId : null),
+});
 const steps = new CommandSteps(db, systemClock);
 const routes = [
   ...bonkLabRoutes(bonk, viewers),

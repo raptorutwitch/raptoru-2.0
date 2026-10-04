@@ -59,6 +59,12 @@ export interface AdmissionDeps {
   followers?: FollowerProvider;
   /** Expiry of the chat steps (default STEP_RULES.ttlMs). */
   stepTtlMs?: number;
+  /**
+   * The real Twitch user id of the channel's broadcaster (canonical: the Lab Core's configuration,
+   * BONK_LAB_CHANNEL_TWITCH_ID = the bot's TWITCH_BROADCASTER_ID). A Lab channel id (900100) is not a
+   * Twitch id: without this, the real streamer would never be recognised.
+   */
+  broadcasterOf?: (channelId: string) => string | null;
 }
 
 /** ponytail: fixed gap between two refusal answers to the same viewer; make it a setting if asked. */
@@ -410,10 +416,19 @@ export class CommandsAdmission {
     };
   }
 
-  /** Effective role and groups: a « broadcaster » badge counts only for the channel's own account. */
+  /**
+   * Effective role and groups. « Streamer » is decided by identity only: the viewer's user id is the
+   * channel's own id or its real Twitch broadcaster id. A claimed role or badge never makes a streamer.
+   */
   private async viewer(q: Queryable, channelId: string, c: ChatterIn) {
-    const claimed =
-      c.role === 'broadcaster' && c.id !== channelId ? 'viewer' : c.role;
+    const owner =
+      c.id === channelId ||
+      c.id === (this.deps.broadcasterOf?.(channelId) ?? null);
+    const claimed = owner
+      ? 'broadcaster'
+      : c.role === 'broadcaster'
+        ? 'viewer'
+        : c.role;
     const role = (
       await access(q, channelId, { id: c.id, role: claimed, via: 'extension' })
     ).role as DecideViewer['role'];
