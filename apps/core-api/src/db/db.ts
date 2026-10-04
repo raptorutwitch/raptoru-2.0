@@ -30,8 +30,60 @@ function run(target: pg.Pool | pg.PoolClient, sql: string, params: unknown[]) {
   return params.length ? target.query(sql, params) : target.query(sql);
 }
 
-export function createPgDb(connectionString: string): Db {
-  const pool = new pg.Pool({ connectionString, types: pgTypes });
+/**
+ * Time budgets of a server process (ASTRA-P1-004). PostgreSQL's own defaults are « no limit »
+ * (statement_timeout / lock_timeout / idle_in_transaction_session_timeout = 0) and so is node-pg's
+ * connection wait: a stuck query or lock would hold a connection (and its locks) for ever. With
+ * these budgets it fails, rolls back and frees the client. Scripts (migrations, imports, reports)
+ * pass no limits: their long statements are legitimate.
+ */
+export interface DbLimits {
+  connectMs: number;
+  statementMs: number;
+  lockMs: number;
+  idleInTxMs: number;
+}
+export const SERVER_DB_LIMITS: DbLimits = {
+  connectMs: 5_000,
+  statementMs: 30_000,
+  lockMs: 10_000,
+  idleInTxMs: 60_000,
+};
+
+/**
+ * Readiness (ASTRA-P1-005): the database answers a trivial query within `ms`. Liveness (`/health`)
+ * only says the HTTP process is up; this says Core can actually serve.
+ */
+export async function dbReady(
+  db: Pick<Db, 'query'>,
+  ms = 1_500,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      db.query('select 1').then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), ms);
+      }),
+    ]);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function createPgDb(connectionString: string, limits?: DbLimits): Db {
+  const pool = new pg.Pool({
+    connectionString,
+    types: pgTypes,
+    ...(limits && {
+      connectionTimeoutMillis: limits.connectMs,
+      statement_timeout: limits.statementMs,
+      lock_timeout: limits.lockMs,
+      idle_in_transaction_session_timeout: limits.idleInTxMs,
+    }),
+  });
 
   return {
     async query<R>(sql: string, params: unknown[] = []) {

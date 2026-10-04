@@ -79,6 +79,8 @@ const LOCAL_HOSTS = ['127.0.0.1', 'localhost'];
 /** Crash policy: at most 3 automatic restarts in 5 minutes, then manual retry only (no crash loop). */
 const RESTART_DELAYS = [2000, 5000, 10000];
 const RESTART_WINDOW_MS = 5 * 60_000;
+/** A live process whose /health stays silent this long is frozen: stopped, then the crash policy. */
+const FROZEN_MS = 20_000;
 
 export function labDatabaseUrl(coreDatabaseUrl: string | undefined): URL {
   if (!coreDatabaseUrl)
@@ -96,6 +98,8 @@ export class LocalRuntime {
   private running: Promise<void> | null = null;
   private restarts: number[] = [];
   private watchTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Since when the live Lab Core's /health has been silent (null: it answers). */
+  private silentSince: number | null = null;
   readonly secret = randomBytes(32).toString('hex');
   readonly coreUrl = `http://127.0.0.1:${LAB_CORE_PORT}`;
 
@@ -249,6 +253,18 @@ export class LocalRuntime {
     }
   }
 
+  /** Readiness (/ready): the Lab Core answers AND its database does. */
+  private async labCoreReady(): Promise<boolean> {
+    try {
+      const res = await this.deps.fetch(`${this.coreUrl}/ready`, {
+        signal: AbortSignal.timeout(2500),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
   private async ensureLabCore(): Promise<void> {
     const core = this.deps.labCore;
     // A Lab Core left by a crashed Studio session cannot know this session's secret: replace it.
@@ -354,9 +370,15 @@ export class LocalRuntime {
     this.retryLater(delay);
   }
 
-  /** Health watch: detects a crashed or frozen Lab Core. */
+  /**
+   * Health watch: a crashed Lab Core restarts (bounded); a live one whose /health stays silent for
+   * FROZEN_MS is frozen: stopped, then the same bounded policy (ASTRA-P1-011). A live Core whose
+   * database does not answer (/ready) is shown degraded with that reason and never restarted: an
+   * outside outage, it recovers by itself (ASTRA-P1-005).
+   */
   private watch() {
     clearTimeout(this.watchTimer);
+    this.silentSince = null;
     const loop = async () => {
       if (this.stopping) return;
       const alive = this.deps.labCore.running;
@@ -372,13 +394,36 @@ export class LocalRuntime {
         return this.onCrash();
       }
       if (!health.ok) {
+        const now = this.deps.now();
+        this.silentSince ??= now;
+        if (now - this.silentSince >= FROZEN_MS) {
+          this.set(
+            'labcore',
+            'error',
+            `/health muet depuis ${FROZEN_MS / 1000} s alors que le processus vit (figé) — arrêt`,
+          );
+          await this.deps.labCore.stop();
+          if (this.stopping) return;
+          this.set('providers', 'stopped', 'Core local arrêté');
+          return this.onCrash();
+        }
         this.set('labcore', 'degraded', '/health ne répond pas');
-      } else if (this.services.get('labcore')?.state !== 'ready') {
-        this.set(
-          'labcore',
-          'ready',
-          `127.0.0.1:${LAB_CORE_PORT} (pid ${this.deps.labCore.pid})`,
-        );
+      } else {
+        this.silentSince = null;
+        const ready = await this.labCoreReady();
+        if (this.stopping) return;
+        if (!ready)
+          this.set(
+            'labcore',
+            'degraded',
+            'Core local vivant, base de données injoignable — reprise automatique dès son retour',
+          );
+        else if (this.services.get('labcore')?.state !== 'ready')
+          this.set(
+            'labcore',
+            'ready',
+            `127.0.0.1:${LAB_CORE_PORT} (pid ${this.deps.labCore.pid})`,
+          );
       }
       this.watchTimer = setTimeout(() => void loop(), 3000);
     };

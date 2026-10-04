@@ -19,7 +19,7 @@ import { raffleReservedWords } from '../commands/reserved.js';
 import { CommandsAdmission } from '../commands/admission.js';
 import { CommandSteps } from '../commands/steps.js';
 import { systemClock } from '../clock.js';
-import { createPgDb } from '../db/db.js';
+import { createPgDb, dbReady, SERVER_DB_LIMITS } from '../db/db.js';
 
 // Separate Lab entrypoint: no Wallet/Loyalty process, timers, bot, or public routes.
 const url = new URL(process.env.BONK_LAB_DATABASE_URL ?? '');
@@ -31,7 +31,7 @@ if (
   throw new Error('dedicated_local_bonk_database_required');
 const secret = process.env.BONK_LAB_SECRET ?? '';
 if (secret.length < 32) throw new Error('bonk_secret_required');
-const db = createPgDb(url.href);
+const db = createPgDb(url.href, SERVER_DB_LIMITS);
 // Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
 const clientId = process.env.BONK_LAB_TWITCH_CLIENT_ID ?? '';
 const clientSecret = process.env.BONK_LAB_TWITCH_CLIENT_SECRET ?? '';
@@ -92,6 +92,11 @@ const server = createServer(async (req, res) => {
   const requestUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
   if (req.method === 'GET' && requestUrl.pathname === '/health')
     return send(200, { service: 'bonk-lab-core', test_mode: true });
+  // Readiness, distinct from liveness above: 503 while the Lab database does not answer.
+  if (req.method === 'GET' && requestUrl.pathname === '/ready')
+    return (await dbReady(db))
+      ? send(200, { service: 'bonk-lab-core', status: 'ready' })
+      : send(503, { service: 'bonk-lab-core', status: 'db_unavailable' });
   const actual = Buffer.from(req.headers.authorization ?? '');
   const expected = Buffer.from(`Bearer ${secret}`);
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected))

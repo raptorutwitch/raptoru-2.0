@@ -16,6 +16,7 @@ import {
   type StreamStateResponse,
 } from '@raptoru/schemas';
 import { z } from 'zod';
+import { dbReady, type Db } from '../db/db.js';
 import type { DailyService } from '../daily/daily-service.js';
 import type { PresenceService } from '../presence/presence-service.js';
 import { BoostConflictError } from '../wallet/loyalty.js';
@@ -65,6 +66,8 @@ export interface AppDeps {
   raffleLab?: RaffleLabService;
   botSecret: string;
   studioSecret: string;
+  /** Readiness probe (GET /ready): the database answers. */
+  db?: Pick<Db, 'query'>;
 }
 
 type Auth = 'public' | 'bot' | 'studio';
@@ -127,6 +130,7 @@ function routes({
   ttsLab,
   labModeration,
   raffleLab,
+  db,
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
@@ -142,6 +146,20 @@ function routes({
       pattern: /^\/health$/,
       auth: 'public',
       handle: async () => ({ service: 'core-api', status: 'ok' }),
+    },
+    // Readiness, distinct from liveness above: 503 while the database does not answer.
+    {
+      method: 'GET',
+      pattern: /^\/ready$/,
+      auth: 'public',
+      handle: async () => {
+        if (!db || !(await dbReady(db)))
+          throw new HttpError(503, {
+            service: 'core-api',
+            status: 'db_unavailable',
+          });
+        return { service: 'core-api', status: 'ready' };
+      },
     },
 
     // --- twitch-bot ---

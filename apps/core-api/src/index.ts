@@ -6,11 +6,11 @@ import {
   type CreditProvider,
   WalletCreditProvider,
 } from './daily/credits.js';
-import { createPgDb } from './db/db.js';
+import { createPgDb, SERVER_DB_LIMITS } from './db/db.js';
 import { createApp } from './http/server.js';
 
 const config = loadConfig();
-const db = createPgDb(config.DATABASE_URL);
+const db = createPgDb(config.DATABASE_URL, SERVER_DB_LIMITS);
 // Daily credits: Core Wallet only with the explicit flag; otherwise no Wallet write at all.
 const dailyProvider: CreditProvider =
   config.DAILY_WALLET_CREDITS === 'true'
@@ -56,6 +56,7 @@ createApp({
   ttsLab: core.ttsLab,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
+  db,
 }).listen(config.PORT, () => {
   console.log(
     `[core-api] listening on :${config.PORT} (daily credits: ${dailyProvider.name}, loyalty preview ${config.LOYALTY_PREVIEW}, passive credits ${config.LOYALTY_PASSIVE_CREDITS}, event credits ${config.LOYALTY_EVENT_CREDITS})`,

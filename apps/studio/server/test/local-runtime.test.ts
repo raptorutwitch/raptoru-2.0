@@ -38,6 +38,7 @@ class FakeLabCore {
 function setup(over: Partial<RuntimeDeps> = {}) {
   const core = new FakeLabCore();
   let healthy = true;
+  let dbUp = true;
   const deps: RuntimeDeps = {
     docker: {
       containerState: async () => ({ state: 'running', detail: 'running' }),
@@ -45,10 +46,10 @@ function setup(over: Partial<RuntimeDeps> = {}) {
       stopContainer: async () => {},
       postgresReady: async () => true,
     },
-    fetch: (async () =>
+    fetch: (async (url: string) =>
       healthy && core.running
         ? new Response(JSON.stringify({ service: 'bonk-lab-core' }), {
-            status: 200,
+            status: String(url).endsWith('/ready') && !dbUp ? 503 : 200,
           })
         : Promise.reject(new Error('down'))) as unknown as typeof fetch,
     sleep: async () => {},
@@ -70,7 +71,14 @@ function setup(over: Partial<RuntimeDeps> = {}) {
   };
   const rt = new LocalRuntime(deps);
   const state = (id: string) => rt.status().services.find((s) => s.id === id)!;
-  return { rt, core, deps, state, setHealthy: (v: boolean) => (healthy = v) };
+  return {
+    rt,
+    core,
+    deps,
+    state,
+    setHealthy: (v: boolean) => (healthy = v),
+    setDbUp: (v: boolean) => (dbUp = v),
+  };
 }
 
 afterEach(() => {
@@ -178,6 +186,41 @@ describe('LocalRuntime', () => {
     await rt.restart();
     expect(state('labcore').state).toBe('ready');
     expect(core.starts).toHaveLength(5);
+    await rt.stop();
+  });
+
+  it('ASTRA-P1-011: a live but frozen Lab Core (/health silent 20 s) is stopped and restarted (bounded)', async () => {
+    vi.useFakeTimers();
+    const { rt, core, state, setHealthy } = setup();
+    await rt.start();
+    setHealthy(false); // the process lives, its HTTP loop no longer answers
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(state('labcore').state).toBe('degraded');
+    expect(core.stops).toBe(0);
+    await vi.advanceTimersByTimeAsync(21_000);
+    expect(core.stops).toBe(1);
+    expect(state('labcore').state).toBe('starting'); // crash policy: restart in 2 s
+    setHealthy(true);
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.waitFor(() => expect(state('labcore').state).toBe('ready'));
+    expect(core.starts).toHaveLength(2);
+    await rt.stop();
+  });
+
+  it('ASTRA-P1-005: Lab Core alive but database down → degraded with the reason, never restarted; back → ready', async () => {
+    vi.useFakeTimers();
+    const { rt, core, state, setDbUp } = setup();
+    await rt.start();
+    setDbUp(false);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(state('labcore').state).toBe('degraded');
+    expect(state('labcore').detail).toMatch(/base de données/);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(core.starts).toHaveLength(1); // an outside outage: no restart loop
+    expect(core.stops).toBe(0);
+    setDbUp(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(state('labcore').state).toBe('ready');
     await rt.stop();
   });
 
