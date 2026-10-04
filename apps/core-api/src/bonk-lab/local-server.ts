@@ -47,7 +47,16 @@ const thirdParty = /^\d+$/.test(channelTwitchId)
 const bonk = new BonkLabService(db, systemClock, viewers, thirdParty);
 const sound = new SoundLabService(db, systemClock);
 const tts = new TtsLabService(db, systemClock);
-const raffle = new RaffleLabService(db, systemClock);
+// The Lab channel's real Twitch broadcaster (the launcher's channel): the streamer of every Lab chat
+// module (Commands V2, Tombola) — lab-chat/broadcaster.ts.
+const broadcasterOf = () =>
+  /^\d+$/.test(channelTwitchId) ? channelTwitchId : null;
+const raffle = new RaffleLabService(
+  db,
+  systemClock,
+  Math.random,
+  broadcasterOf,
+);
 // Commands V2 (Lab): Tombola's chat words stay Tombola's (reserved, read through its own configuration
 // reader). Admission (phase B) records; accepted answers become durable steps (phase C), handed to the
 // Lab Twitch adapter only while « Sortie chat réelle » is ON (OFF by default).
@@ -55,8 +64,7 @@ const reserved = raffleReservedWords(raffle);
 const commands = new CommandsService(db, systemClock, { reserved });
 const admission = new CommandsAdmission(db, systemClock, {
   reserved,
-  // The Lab Core serves the launcher's channel: its real broadcaster is the streamer of every command.
-  broadcasterOf: () => (/^\d+$/.test(channelTwitchId) ? channelTwitchId : null),
+  broadcasterOf,
 });
 const steps = new CommandSteps(db, systemClock);
 const routes = [

@@ -1,3 +1,4 @@
+import { type BroadcasterOf, chatRole } from '../lab-chat/broadcaster.js';
 import { randomUUID } from 'node:crypto';
 import {
   RaffleConfig,
@@ -212,6 +213,8 @@ export class RaffleLabService {
     private readonly clock: Clock,
     /** Injectable for tests (jackpot, SUPER / FULL rolls, winners). */
     private readonly random: () => number = Math.random,
+    /** The channel's real Twitch broadcaster (chat cancel by the streamer): see lab-chat/broadcaster.ts. */
+    private readonly broadcasterOf?: BroadcasterOf,
   ) {}
 
   // --- configuration -----------------------------------------------------------------------------------
@@ -1093,12 +1096,8 @@ export class RaffleLabService {
             id: msg.chatter.id,
             login: msg.chatter.login,
             display_name: msg.chatter.display_name,
-            // A « broadcaster » badge counts only for the channel's own account.
-            role:
-              msg.chatter.role === 'broadcaster' &&
-              msg.chatter.id !== msg.channel_id
-                ? 'viewer'
-                : msg.chatter.role,
+            // The streamer by identity only (same rule as Commands V2): a badge never makes one.
+            role: chatRole(msg.channel_id, msg.chatter, this.broadcasterOf),
             via: 'extension',
           },
           command: { action: 'cancel', reason: `commande chat ${word}` },

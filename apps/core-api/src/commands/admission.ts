@@ -8,6 +8,7 @@ import type {
 import type { z } from 'zod';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import { type BroadcasterOf, chatRole } from '../lab-chat/broadcaster.js';
 import { access, type Actor } from '../lab-moderation/store.js';
 import { nominalStreamDay, streamDayWindow } from '../stream/stream-day.js';
 import {
@@ -64,7 +65,7 @@ export interface AdmissionDeps {
    * BONK_LAB_CHANNEL_TWITCH_ID = the bot's TWITCH_BROADCASTER_ID). A Lab channel id (900100) is not a
    * Twitch id: without this, the real streamer would never be recognised.
    */
-  broadcasterOf?: (channelId: string) => string | null;
+  broadcasterOf?: BroadcasterOf;
 }
 
 /** ponytail: fixed gap between two refusal answers to the same viewer; make it a setting if asked. */
@@ -457,14 +458,7 @@ export class CommandsAdmission {
    * channel's own id or its real Twitch broadcaster id. A claimed role or badge never makes a streamer.
    */
   private async viewer(q: Queryable, channelId: string, c: ChatterIn) {
-    const owner =
-      c.id === channelId ||
-      c.id === (this.deps.broadcasterOf?.(channelId) ?? null);
-    const claimed = owner
-      ? 'broadcaster'
-      : c.role === 'broadcaster'
-        ? 'viewer'
-        : c.role;
+    const claimed = chatRole(channelId, c, this.deps.broadcasterOf);
     const role = (
       await access(q, channelId, { id: c.id, role: claimed, via: 'extension' })
     ).role as DecideViewer['role'];

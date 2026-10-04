@@ -65,12 +65,17 @@ const QUIET: Partial<RaffleConfig> = {
   super: { ...DEFAULT_RAFFLE_CONFIG.super, enabled: false },
 };
 
-async function lab() {
+async function lab(broadcasterOf?: (channelId: string) => string | null) {
   const core = await setup();
   core.clock.set(T0);
   const queue: number[] = [];
   const random = () => (queue.length ? queue.shift()! : 0.42);
-  const raffle = new RaffleLabService(core.db, core.clock, random);
+  const raffle = new RaffleLabService(
+    core.db,
+    core.clock,
+    random,
+    broadcasterOf,
+  );
   const m = new LabModerationService(
     core.db,
     core.clock,
@@ -814,6 +819,19 @@ describe('Tombola V2 moderation actions and permissions (D7)', () => {
       actor: 'u900102',
       reason: 'commande chat !stoptombola',
     });
+  });
+
+  it('chat cancel by the streamer: identity is the real Twitch broadcaster id, never a badge (same rule as Commands V2)', async () => {
+    const { config, act, chat, snap } = await lab(() => '83603689');
+    await config({ cancel_commands: ['!annuletombola'] });
+    await act({ action: 'launch' });
+    expect(
+      (await chat('900312', '!annuletombola', 'broadcaster')).outcome,
+    ).toBe('forbidden'); // badge of another account
+    expect((await chat('83603689', '!annuletombola')).outcome).toBe(
+      'cancelled',
+    ); // the real streamer, whatever role the message claims
+    expect((await snap()).round!.status).toBe('cancelled');
   });
 
   it('cancel before the draw only; invalid transitions are refused', async () => {
