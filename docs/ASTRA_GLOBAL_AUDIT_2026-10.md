@@ -667,6 +667,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `6caa2e6`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `2c41b89` (après `b54ad46`, qui ne touchait que l'acteur) : `modV2Act()` envoie une Idempotency-Key réutilisée par le retry de `call()` (erreur réseau ou 408/425/429/5xx), mais `LabEbs.moderationV2()` ne transmettait que `actor`/`command`, `LabModerationRequest` n'avait pas de clé et `LabModerationService.act()` appliquait chaque appel ; le cache `replies` de l'EBS ne couvre pas les routes relayées au Core (retour anticipé) et ne survit pas à un redémarrage. Commandes additives concernées : `wallet_adjust`, `add_note`, `raffle_open` (conflit après succès). Correction : `idempotency_key` optionnel dans `LabModerationRequest` ; l'EBS transmet la clé de l'en-tête ; `act()` passe par `txOnce()` qui réserve la clé puis enregistre le résultat dans la MÊME transaction que l'effet (rejeu = même réponse ; même clé + autre payload = 409 `idempotency_conflict` ; action refusée = rien d'enregistré ; doublon concurrent = attend la ligne puis relit le résultat ; purge 24 h). Migration additive Lab `20261015120000_lab_moderation_idempotency.sql` (scope `lab`, listes runtime/bonk-lab/packaging). Sans clé (console Studio) : comportement inchangé. Hors périmètre volontaire : les anciennes routes de modération de l'Extension n'envoient que des commandes d'état (pause/reprise, stop/purge, `module_state`, blocage/déblocage) et les actions Tombola de la console sont des transitions d'état — un rejeu donne un conflit ou le même état, jamais un double effet.
+
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -3977,7 +3981,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-006](#astra-p1-006) | P1 | EBS | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 | [ASTRA-P1-007](#astra-p1-007) | P1 | État | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 | [ASTRA-P1-008](#astra-p1-008) | P1 | Extension | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
-| [ASTRA-P1-009](#astra-p1-009) | P1 | Idempotence | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
+| [ASTRA-P1-009](#astra-p1-009) | P1 | Idempotence | FERMÉ — corrigé | `6caa2e6` | Core moderation-d4 « idempotent action » ; Studio moderation-d4 « ASTRA-P1-009 » (échoue sans le relais EBS) ; Core 365 / Studio server 138 | Extension Lab : crédit wallet de test, coupure réseau simulée → un seul crédit | Studio packagé : migration appliquée au prochain démarrage du runtime |
 | [ASTRA-P1-010](#astra-p1-010) | P1 | Paiements | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 | [ASTRA-P1-011](#astra-p1-011) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
 | [ASTRA-P1-012](#astra-p1-012) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | test-lab.test.ts (garde Postgres) | — | — |
