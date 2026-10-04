@@ -14,6 +14,7 @@ import { progressiveReward } from '../src/loyalty/calc.js';
 import { DEFAULT_LOYALTY_CONFIG } from '../src/loyalty/config.js';
 import { LoyaltyIdempotencyError } from '../src/loyalty/engine.js';
 import { FakeClock, paris, viewer } from './helpers.js';
+import { LOCK_WAIT_MS, lockDestructiveSuite } from './pg-exclusive.js';
 
 const url = process.env.TEST_DATABASE_URL;
 // Local URL AND a database name containing "test": never the shadow-run database (raptoru).
@@ -22,13 +23,18 @@ const isLocal =
 
 describe.skipIf(!isLocal)('Core on a real Postgres', () => {
   let db: Db;
+  let unlock: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
+    unlock = await lockDestructiveSuite(url!); // never two schema wipes at once
     db = createPgDb(url!);
     await db.query('drop schema public cascade; create schema public;');
     await migrate(db, 'all');
+  }, LOCK_WAIT_MS);
+  afterAll(async () => {
+    await db?.close();
+    await unlock?.();
   });
-  afterAll(() => db?.close());
 
   it('parallel claims over several connections pay exactly once per viewer', async () => {
     const clock = new FakeClock(paris('2026-09-24', 20));

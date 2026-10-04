@@ -9,6 +9,7 @@ import { CommandSteps } from '../src/commands/steps.js';
 import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
 import { FakeClock } from './helpers.js';
+import { LOCK_WAIT_MS, lockDestructiveSuite } from './pg-exclusive.js';
 
 const url = process.env.TEST_DATABASE_URL;
 const isLocal =
@@ -17,16 +18,19 @@ const isLocal =
 describe.skipIf(!isLocal)('Commands V2 admission on a real Postgres', () => {
   let a: Db;
   let b: Db;
+  let unlock: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
+    unlock = await lockDestructiveSuite(url!); // never two schema wipes at once
     a = createPgDb(url!);
     await a.query('drop schema public cascade; create schema public;');
     await migrate(a, 'all');
     b = createPgDb(url!);
-  });
+  }, LOCK_WAIT_MS);
   afterAll(async () => {
     await a?.close();
     await b?.close();
+    await unlock?.();
   });
 
   it('parallel messages over several connections never exceed the quota (aliases included)', async () => {
