@@ -2043,6 +2043,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `22f6310`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `c41fe37` : confirmé. Dans `apps/studio/server/src/index.ts`, les handlers `unhandledRejection` et `uncaughtException` écrivaient la pile brute sur stderr — conservée par Electron dans `<userData>/logs/studio-server.log` via `serverLog()` — seule la copie `Lab.logs` était nettoyée ; la ligne « stop failed » de la barrière d'arrêt (P1-014) imprimait aussi un message brut. Correction : `crashLine()` passe pile et message par la même redaction que `Lab.logs` (secrets des .env, mot de passe d'URL DB, jetons OAuth, motif Bearer/OAuth) avant stderr ; même chose pour « stop failed ». Le diagnostic est conservé (type, message, frames de pile) ; pas de nouveau framework. Autres chemins revérifiés : les sorties des processus enfants (Core, bot, labchat, Core Lab) passent par `onLine` → `LogBuffer` redacté et n'atteignent pas stderr ; les autres `console.*` du serveur ne portent aucune donnée sensible (port, code d'écoute, chemin de données). Les deux puits de l'unhandled rejection (stderr et Lab.logs) sont redactés, sans incohérence.
+
 **Marquages :** **À VÉRIFIER**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -2467,6 +2471,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Redactor relisant plusieurs fichiers synchroniquement par ligne
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `22f6310`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `c41fe37` : confirmé. Le redacteur du Test Lab (`redact(text, collectSecrets())`) relisait et reparsait synchroniquement à chaque ligne deux `.env` et deux fichiers de jetons. Correction : `currentSecrets()` (`local-env.ts`) garde la liste en mémoire et ne la recollecte que si l'un des quatre fichiers change (taille/mtime via `stat`) — invalidation explicite et automatique : un jeton Twitch rafraîchi ou un .env modifié est masqué dès la ligne suivante ; mêmes secrets masqués qu'avant. Mesure locale (Windows, vrais fichiers, 2 000 lignes) : 2,55 ms → 0,79 ms de travail synchrone par ligne (≈ ×3). Dette acceptée : 4 `stat` synchrones par ligne restent ; un cache temporel supprimerait aussi ces appels mais retarderait le masquage d'un jeton rafraîchi — refusé.
 
 **Marquages :** **À VÉRIFIER**
 
@@ -4109,7 +4117,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-011](#astra-p2-011) | P2 | Extension | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
 | [ASTRA-P2-012](#astra-p2-012) | P2 | Identité | FERMÉ — corrigé | `c8284c6` | commands-v2-admission et raffle-v2 « ASTRA-P2-012 » (900100 via Twitch → refusé ; via simulateur → streamer ; échouent sur l'ancienne règle) ; tests existants vrai broadcaster / badge forgé / modérateur ; Core 371, Studio server 140 | Optionnel : simulateur de chat Studio en tant que « Raptoru_ (lab) » → !annuletombola annule toujours | — |
 | [ASTRA-P2-013](#astra-p2-013) | P2 | Observabilité | FERMÉ — corrigé | `87465b7` | lab-core.test.ts : panne inattendue → 500 inchangé + ligne de log avec route et cause, sans secret, mot de passe ni query ; erreur attendue (400) → contrat inchangé, rien journalisé | — | — |
-| [ASTRA-P2-014](#astra-p2-014) | P2 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
+| [ASTRA-P2-014](#astra-p2-014) | P2 | Observabilité | FERMÉ — corrigé | `22f6310` | test-lab.test.ts « crash traces » : secret et Bearer dans le message/la pile → masqués, pile conservée ; Studio server 144/144 | — | — |
 | [ASTRA-P2-015](#astra-p2-015) | P2 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-016](#astra-p2-016) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-017](#astra-p2-017) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
@@ -4117,7 +4125,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-019](#astra-p2-019) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-020](#astra-p2-020) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-021](#astra-p2-021) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
-| [ASTRA-P2-022](#astra-p2-022) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
+| [ASTRA-P2-022](#astra-p2-022) | P2 | Performance | FERMÉ — corrigé | `22f6310` | local-env.test.ts : mêmes valeurs masquées ; fichiers inchangés → même liste (aucune relecture) ; jeton rafraîchi → masqué immédiatement ; mesure avant/après | — | 4 stat synchrones par ligne conservés volontairement |
 | [ASTRA-P2-023](#astra-p2-023) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-024](#astra-p2-024) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
 | [ASTRA-P2-025](#astra-p2-025) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL ; Décision préalable |
