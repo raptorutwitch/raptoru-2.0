@@ -1546,6 +1546,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `28e9fd3`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `3699063` : dans `apps/core-api/src/raffle-lab/avatars.ts`, `twitchAppUserLookup()` appelait OAuth (`id.twitch.tv/oauth2/token`) et Helix (`helix/users`) sans délai, et la minuterie de 5 s de `local-server.ts` relançait `AvatarCache.refresh()` sans garde : un appel bloqué pouvait empiler des lots concurrents. Correction : budget de 10 s par appel Twitch (`AbortSignal.timeout`, corps compris, `TWITCH_CALL_TIMEOUT_MS`) ; `refresh()` à exécution unique (un tick pendant un lot en cours rejoint ce lot). Inchangés et déjà testés : les lectures n'appellent jamais Twitch (Tombola jamais bloquée), un échec pose `status = 'error'` et retombe sur les initiales, nouvel essai après 1 h, puis récupération normale.
+
 **Marquages :** **À VÉRIFIER** ; **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -4060,7 +4064,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-002](#astra-p2-002) | P2 | Config | FERMÉ — corrigé | `0e4c040` | test-lab.test.ts « loyalty credits guard » (refus Daily + démarrage forcé) | — | Core externe non géré : hors garde (inchangé) |
 | [ASTRA-P2-003](#astra-p2-003) | P2 | Contrats | FERMÉ — corrigé | `52591d0` | Extension test/api.test.js : JSON invalide / vide / non-objet → invalid_response sans retry ; 204 → {} ; refus 403/400 conservés (échoue sur l'ancien code : {} accepté) | — | Validation de forme des réponses internes : relève de P2-004 |
 | [ASTRA-P2-004](#astra-p2-004) | P2 | Contrats | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
-| [ASTRA-P2-005](#astra-p2-005) | P2 | Core | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
+| [ASTRA-P2-005](#astra-p2-005) | P2 | Core | FERMÉ — corrigé | `28e9fd3` | raffle-v2 « Twitch pictures (ASTRA-P2-005) » : 2 ticks concurrents → 1 seul appel Twitch ; appel Twitch figé → TimeoutError au budget ; test existant : panne → initiales → retry 1 h → récupération | — | — |
 | [ASTRA-P2-006](#astra-p2-006) | P2 | Core | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P2-007](#astra-p2-007) | P2 | Database | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
 | [ASTRA-P2-008](#astra-p2-008) | P2 | Database | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
