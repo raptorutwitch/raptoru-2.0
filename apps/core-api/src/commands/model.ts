@@ -45,6 +45,7 @@ export const DEFAULT_TEAM_RIGHTS: Record<CmdTeamRole, CmdTeamRights> = {
   moderator: {
     toggle: true,
     reply: true,
+    rename: true,
     aliases: false,
     audience: false,
     exclusions: false,
@@ -58,6 +59,7 @@ export const DEFAULT_TEAM_RIGHTS: Record<CmdTeamRole, CmdTeamRights> = {
   supermod: {
     toggle: true,
     reply: true,
+    rename: true,
     aliases: true,
     audience: true,
     exclusions: true,
@@ -183,6 +185,8 @@ export function rightOf(field: CmdField): keyof CmdTeamRights | null {
       return 'toggle';
     case 'reply':
       return 'reply';
+    case 'name':
+      return 'rename';
     case 'aliases':
       return 'aliases';
     case 'audience.groups':

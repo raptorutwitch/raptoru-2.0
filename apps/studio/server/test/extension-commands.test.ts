@@ -480,20 +480,57 @@ describe('Extension « Modération › Commandes » — rename (the name = canon
     ).toBe('word_taken');
   });
 
-  it('the team cannot rename (name is not delegated in the Phase A rights model)', async () => {
-    const c = await make({ name: 'testcmd' });
-    expect(await rename(MOD, c.command_id, 1, 'test')).toMatchObject({
-      status: 403,
-      body: {
-        error: 'field_not_delegated',
-        field: 'name',
-        right: 'streamer_only',
-      },
+  it('rename right: moderator and supermod by default; off for moderators → read-only and Core 403; on again → allowed', async () => {
+    const c = await make({ name: 'testcmd', aliases: ['tc'] });
+    expect((await call(MOD, 'GET', 'me')).body).toMatchObject({
+      role: 'moderator',
+      rights: { rename: true },
     });
-    await supermod();
     expect(await rename(MOD, c.command_id, 1, 'test')).toMatchObject({
+      status: 200,
+      body: { config: { name: 'test', aliases: ['tc'] } },
+    });
+    const r = await svc.rights(CH, STUDIO);
+    await svc.setRights(CH, STUDIO, 'moderator', r.moderator.version, {
+      ...r.moderator.rights,
+      rename: false,
+    });
+    expect((await call(MOD, 'GET', 'me')).body).toMatchObject({
+      rights: { rename: false },
+    });
+    // A direct request without the right: refused by Core.
+    expect(await rename(MOD, c.command_id, 2, 'essai')).toMatchObject({
       status: 403,
-      body: { error: 'field_not_delegated', field: 'name' },
+      body: { error: 'field_not_delegated', field: 'name', right: 'rename' },
+    });
+    // The supermod keeps its own right.
+    await supermod();
+    expect((await call(MOD, 'GET', 'me')).body).toMatchObject({
+      role: 'supermod',
+      rights: { rename: true },
+    });
+    expect(await rename(MOD, c.command_id, 2, 'essai')).toMatchObject({
+      status: 200,
+    });
+    await db.query(`delete from lab_staff where viewer_id = '900102'`);
+    const r2 = await svc.rights(CH, STUDIO);
+    await svc.setRights(CH, STUDIO, 'moderator', r2.moderator.version, {
+      ...r2.moderator.rights,
+      rename: true,
+    });
+    expect(await rename(MOD, c.command_id, 3, 'testcmd')).toMatchObject({
+      status: 200,
+      body: { config: { name: 'testcmd' } },
+    });
+  });
+
+  it('the rename right never unlocks a module-locked name', async () => {
+    await supermod();
+    await svc.syncSystem(CH);
+    const sys = ((await call(MOD, 'GET', 'list')).body.commands as Cmd[])[0]!;
+    expect(await rename(MOD, sys.command_id, 1, 'billet')).toMatchObject({
+      status: 422,
+      body: { error: 'field_locked', field: 'name' },
     });
   });
 

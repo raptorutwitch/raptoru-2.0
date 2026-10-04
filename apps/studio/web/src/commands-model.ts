@@ -557,6 +557,11 @@ export const SAVE_ERROR: Record<string, string> = {
 export const RIGHTS: [keyof CmdTeamRights, string, string?][] = [
   ['toggle', 'Activer ou désactiver une commande'],
   ['reply', 'Modifier la réponse', 'texte, façon de répondre, mention'],
+  [
+    'rename',
+    'Renommer les commandes',
+    'le mot principal ; les alias ont leur propre réglage',
+  ],
   ['aliases', 'Modifier les alias'],
   [
     'audience',

@@ -26,6 +26,7 @@ import {
   previewText,
   quotaShort,
   reapply,
+  RIGHTS,
   stateOf,
   variableMissing,
   VARIABLES,
@@ -592,6 +593,14 @@ describe('Commands tab view model', () => {
     expect(g.map(([k, l]) => [k!.name, l.length])).toEqual([
       ['Fun', 2],
       [NO_CATEGORY.name, 2],
+    ]);
+  });
+
+  it('team rights table: « Renommer les commandes » is its own row (right `rename`)', () => {
+    expect(RIGHTS.find((r) => r[0] === 'rename')).toEqual([
+      'rename',
+      'Renommer les commandes',
+      'le mot principal ; les alias ont leur propre réglage',
     ]);
   });
 

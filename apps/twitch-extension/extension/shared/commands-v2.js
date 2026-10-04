@@ -262,7 +262,7 @@ export function createCommandsV2View({ document, client, onBack }) {
       <p class="hint">${renamed ? `!${esc(ui.base.config.name)} → !${esc(d.name || '…')} à l’enregistrement. Les alias ne changent pas.` : 'Le mot principal qui lance la commande. Les alias ne changent pas.'}</p>`;
   }
   function rightsLine(c) {
-    if (ui.me.role === 'broadcaster') return 'Tu peux tout modifier ici, nom compris. Catégorie, disponibilité, arguments et autres messages : dans Studio.';
+    if (ui.me.role === 'broadcaster') return 'Tu peux tout modifier ici. Catégorie, disponibilité, arguments et autres messages : dans Studio.';
     if (c.config.team_lock) return `${ic('lock')} Le streamer a verrouillé cette commande : tu peux la consulter.`;
     const fields = ['name', 'enabled', 'reply', 'aliases', 'audience.groups', 'audience.deny', 'cooldown', 'quota', 'listed'].filter((f) => canEdit(ui.me, c, f).ok).map((f) => ({ name: 'nom', enabled: 'activer', reply: 'réponse', aliases: 'alias', 'audience.groups': 'qui peut l’utiliser', 'audience.deny': 'exclusions', cooldown: `cooldown${cooldownMin(ui.me) ? ` (≥ ${cooldownMin(ui.me)} s)` : ''}`, quota: 'utilisations', listed: 'liste publique' })[f]);
     return fields.length ? `Ton rôle (${esc(ROLE[ui.me.role])}) peut modifier : ${fields.join(', ')}.` : `Ton rôle (${esc(ROLE[ui.me.role])}) peut consulter cette commande.`;

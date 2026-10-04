@@ -4,19 +4,20 @@ Mis à jour le 2026-10-04. Vérifier `git status` / `git log` avant de se fier a
 
 ## Où on en est
 
-| Phase | Contenu                                                                                                                                              | Statut                                | Commits                                                                  |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------ |
-| A0    | Frontière migrations Lab / prod (`migrate(db, scope)`, classement fail-closed)                                                                       | ✅ validée                            | `6c9bc58`                                                                |
-| A     | Modèle de configuration + API Core (versions, droits équipe, historique, mots réservés Tombola)                                                      | ✅ validée                            | `5663870`                                                                |
-| B     | Admission : `decide()` unique, audience, arguments/variables, cooldown, quota, dédoublonnage, `cmd_invocations`                                      | ✅ validée                            | `679f8f2`, correctif audience/follower `a7bb5a0`                         |
-| C     | File durable `cmd_steps`, claim/bail/ACK, retry/unknown, journal bot, rate limit, « Sortie chat réelle » (OFF par défaut) — envoi Twitch réel validé | ✅ validée                            | `cc930bb`, `bbec48d` (redémarrage bot à l'activation, `executor_absent`) |
-| D     | Onglet Studio « Commandes » (liste V6.3, fiche, création, Tester, historique, droits, catégories, état runtime)                                      | ✅ validée                            | `e2bb54f`                                                                |
-| fix   | Groupe Streamer = identité broadcaster réelle                                                                                                        | ✅ validé                             | `1a71099`                                                                |
-| E     | Extension « Modération › Commandes » (Video + Mobile, pas Panel), façade EBS Lab                                                                     | ✅ validée                            | `3975535`                                                                |
-| fix   | Renommer une commande depuis l'Extension                                                                                                             | ✅ validé                             | `36ae298`                                                                |
-| **F** | **Liste publique viewer dans l'Extension**                                                                                                           | **⏳ prochaine étape, NON commencée** | —                                                                        |
+| Phase       | Contenu                                                                                                                                              | Statut                                | Commits                                                                  |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------ |
+| A0          | Frontière migrations Lab / prod (`migrate(db, scope)`, classement fail-closed)                                                                       | ✅ validée                            | `6c9bc58`                                                                |
+| A           | Modèle de configuration + API Core (versions, droits équipe, historique, mots réservés Tombola)                                                      | ✅ validée                            | `5663870`                                                                |
+| B           | Admission : `decide()` unique, audience, arguments/variables, cooldown, quota, dédoublonnage, `cmd_invocations`                                      | ✅ validée                            | `679f8f2`, correctif audience/follower `a7bb5a0`                         |
+| C           | File durable `cmd_steps`, claim/bail/ACK, retry/unknown, journal bot, rate limit, « Sortie chat réelle » (OFF par défaut) — envoi Twitch réel validé | ✅ validée                            | `cc930bb`, `bbec48d` (redémarrage bot à l'activation, `executor_absent`) |
+| D           | Onglet Studio « Commandes » (liste V6.3, fiche, création, Tester, historique, droits, catégories, état runtime)                                      | ✅ validée                            | `e2bb54f`                                                                |
+| fix         | Groupe Streamer = identité broadcaster réelle                                                                                                        | ✅ validé                             | `1a71099`                                                                |
+| E           | Extension « Modération › Commandes » (Video + Mobile, pas Panel), façade EBS Lab                                                                     | ✅ validée                            | `3975535`                                                                |
+| fix         | Renommer une commande depuis l'Extension                                                                                                             | ✅ validé                             | `36ae298`                                                                |
+| Permissions | Droit d'équipe `rename` (renommer = modifier `config.name`), réglable par rôle dans Studio → Droits de l'équipe                                      | ✅ fait (à valider manuellement)      | voir `git log`                                                           |
+| **F**       | **Liste publique viewer dans l'Extension**                                                                                                           | **⏳ prochaine étape, NON commencée** | —                                                                        |
 
-Ensuite, après F : une passe **Permissions** (décider notamment d'un droit `rename_command`).
+Ensuite, après F : d'autres réglages de permissions si besoin (le droit de renommer est fait).
 
 ## Migrations Commands (Lab uniquement, déjà appliquées — ne jamais les réécrire)
 
@@ -36,7 +37,7 @@ Toute évolution passe par une nouvelle migration additive, classée `lab` dans 
 - Follower jamais déduit des badges : inconnu tant qu'il n'y a pas de provider Helix réel.
 - `/me` n'est pas envoyé (Helix Send Chat Message ne le supporte pas) : affiché « non supporté ».
 - Un envoi Twitch ambigu devient `unknown` et n'est jamais renvoyé.
-- Le **nom** (trigger principal) n'est renommable que par le streamer : aucun droit équipe dédié n'existe encore.
+- Le **nom** (trigger principal) se renomme avec le droit d'équipe `rename` (vrai par défaut pour modos et supermodos, désactivable par rôle par le streamer ; les droits enregistrés avant son ajout le lisent à vrai). Le streamer peut toujours ; un verrou de module sur `name` gagne sur tout.
 - Toute requête Extension passe par la façade `/commands/v2/*` avec l'identité du token ; jamais `STUDIO_ACTOR`.
 - Aucun push / release / deploy sans demande explicite d'Antoni.
 

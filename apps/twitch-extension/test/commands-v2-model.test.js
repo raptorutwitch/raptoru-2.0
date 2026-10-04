@@ -20,11 +20,11 @@ import {
 
 const MOD = {
   role: 'moderator',
-  rights: { toggle: true, reply: true, aliases: false, audience: false, exclusions: false, cooldown: { allowed: true, min_seconds: 10 }, quota: false, listed: false, volume: { allowed: true, min: 20, max: 90 }, create: false, remove: false },
+  rights: { toggle: true, reply: true, rename: true, aliases: false, audience: false, exclusions: false, cooldown: { allowed: true, min_seconds: 10 }, quota: false, listed: false, volume: { allowed: true, min: 20, max: 90 }, create: false, remove: false },
 };
 const SUPER = {
   role: 'supermod',
-  rights: { toggle: true, reply: true, aliases: true, audience: true, exclusions: true, cooldown: { allowed: true, min_seconds: 0 }, quota: true, listed: true, volume: { allowed: true, min: 0, max: 100 }, create: true, remove: true },
+  rights: { toggle: true, reply: true, rename: true, aliases: true, audience: true, exclusions: true, cooldown: { allowed: true, min_seconds: 0 }, quota: true, listed: true, volume: { allowed: true, min: 0, max: 100 }, create: true, remove: true },
 };
 const BOSS = { role: 'broadcaster', rights: null };
 const cmd = (name, o = {}, extra = {}) => ({
@@ -68,13 +68,14 @@ describe('commands — editable fields per role (display of Core rights)', () =>
     expect(cooldownMin(MOD)).toBe(10);
     expect([canCreate(MOD), canRemove(MOD, c).ok]).toEqual([false, false]);
   });
-  it('name (canonical trigger): the streamer only — shown locked with a reason to the team', () => {
+  it('name (canonical trigger) follows the rename right from Core; a module lock wins over it', () => {
     const c = cmd('testcmd');
-    expect(canEdit(BOSS, c, 'name').ok).toBe(true);
-    expect(canEdit(SUPER, c, 'name')).toEqual({ ok: false, why: 'Seul le streamer peut renommer une commande' });
-    expect(canEdit(MOD, c, 'name').ok).toBe(false);
+    expect([canEdit(BOSS, c, 'name').ok, canEdit(SUPER, c, 'name').ok]).toEqual([true, true]);
+    expect(canEdit({ ...MOD, rights: { ...MOD.rights, rename: true } }, c, 'name').ok).toBe(true);
+    expect(canEdit({ ...MOD, rights: { ...MOD.rights, rename: false } }, c, 'name')).toEqual({ ok: false, why: 'Non délégué aux modérateurs' });
     const sys = cmd('ticket', {}, { kind: 'system', owner_module: 'raffle', locked_fields: ['name'] });
     expect(canEdit(BOSS, sys, 'name')).toEqual({ ok: false, why: 'Verrouillé par le module Tombola' });
+    expect(canEdit(SUPER, sys, 'name').ok).toBe(false);
   });
   it('supermod: audience, exclusions, quota, listed, create, delete', () => {
     const c = cmd('hug');

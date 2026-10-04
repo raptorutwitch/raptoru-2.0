@@ -536,7 +536,6 @@ describe('Commands V2 — team rights (enforced by Core)', () => {
       { quota: { enabled: true, max: 2, window: 'live', scope: 'viewer' } },
       { audience: { groups: ['subs'], allow: [], deny: [] } },
       { audience: { groups: ['everyone'], allow: [], deny: ['trollman'] } },
-      { name: 'disco' },
       { when: 'live' },
     ] as Partial<CmdConfig>[]) {
       const e = await fails(
@@ -581,7 +580,6 @@ describe('Commands V2 — team rights (enforced by Core)', () => {
       })
     ).version;
     for (const changes of [
-      { name: 'disco' },
       { args: [{ name: 'x', type: 'text', required: false }] },
       { when: 'live' },
       { team_lock: true },
@@ -858,5 +856,58 @@ describe('Commands V2 — HTTP routes', () => {
         })
       ).status,
     ).toBe(200);
+  });
+});
+
+describe('Commands V2 — rename right (name = canonical trigger)', () => {
+  it('by default moderators and supermods may rename; the streamer turns it off per role, Core refuses', async () => {
+    const c = await svc.create(CH, STUDIO, discord());
+    const after = await svc.update(CH, c.command_id, MOD, 1, { name: 'disco' });
+    expect(after.config.name).toBe('disco');
+    const r = await svc.rights(CH, STUDIO);
+    expect([r.moderator.rights.rename, r.supermod.rights.rename]).toEqual([
+      true,
+      true,
+    ]);
+    await svc.setRights(CH, STUDIO, 'moderator', r.moderator.version, {
+      ...r.moderator.rights,
+      rename: false,
+    });
+    const e = await fails(
+      svc.update(CH, c.command_id, MOD, 2, { name: 'liens' }),
+      403,
+      'field_not_delegated',
+    );
+    expect(e.details).toMatchObject({ field: 'name', right: 'rename' });
+    expect(
+      (await svc.update(CH, c.command_id, SUPER, 2, { name: 'liens' })).config
+        .name,
+    ).toBe('liens');
+    const r2 = await svc.rights(CH, STUDIO);
+    await svc.setRights(CH, STUDIO, 'moderator', r2.moderator.version, {
+      ...r2.moderator.rights,
+      rename: true,
+    });
+    expect(
+      (await svc.update(CH, c.command_id, MOD, 3, { name: 'discord' })).config
+        .name,
+    ).toBe('discord');
+  });
+
+  it('rights saved before the rename right existed read it as allowed, their other settings unchanged', async () => {
+    // A row saved without the `rename` key (as before the right existed).
+    const old: Record<string, unknown> = {
+      ...(await svc.rights(CH, STUDIO)).moderator.rights,
+      aliases: true,
+    };
+    delete old.rename;
+    await db.query(
+      `insert into cmd_team_rights (channel_id, role, rights, version, updated_at, updated_by) values ($1, 'moderator', $2, 1, now(), 'studio:old')`,
+      [CH, JSON.stringify(old)],
+    );
+    expect((await svc.rights(CH, STUDIO)).moderator).toMatchObject({
+      version: 1,
+      rights: { rename: true, aliases: true },
+    });
   });
 });

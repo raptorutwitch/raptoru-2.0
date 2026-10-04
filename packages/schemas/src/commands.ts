@@ -227,6 +227,11 @@ export type CmdField = z.infer<typeof CmdField>;
 export const CmdTeamRights = z.strictObject({
   toggle: z.boolean(),
   reply: z.boolean(),
+  /**
+   * Rename a command (its name = canonical trigger; the aliases have their own right). Added after
+   * phase E: rights saved before it read as true (the default), their other settings unchanged.
+   */
+  rename: z.boolean().default(true),
   aliases: z.boolean(),
   audience: z.boolean(),
   exclusions: z.boolean(),
