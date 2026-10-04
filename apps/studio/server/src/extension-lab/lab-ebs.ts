@@ -522,6 +522,7 @@ export class LabEbs {
     rawPath: string,
     body: Json | undefined,
     caller: { identity: LabIdentity },
+    idempotencyKey?: string,
   ): Promise<Reply> {
     const [path = '', query = ''] = rawPath.split('?');
     const qs = new URLSearchParams(query);
@@ -597,9 +598,11 @@ export class LabEbs {
           ),
         );
       if (method === 'POST' && path === '/moderation/v2/actions') {
+        // The client's Idempotency-Key goes to Core: a retried action is answered, never applied twice.
         const out = await core<Json>(`/v1/lab/moderation/${C}/actions`, {
           actor,
           command: body?.command,
+          ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
         });
         this.invalidateLab();
         this.ttsConfigAt = 0;
@@ -1142,7 +1145,13 @@ export class LabEbs {
       // Moderation V2 (D4) console of the extension: a projection of the same Core (read models +
       // commands), with the caller's identity as actor. No state and no rule here.
       if (path.startsWith('/moderation/v2/'))
-        return this.moderationV2(method, path, body, caller);
+        return this.moderationV2(
+          method,
+          path,
+          body,
+          caller,
+          headers.idempotencyKey,
+        );
       const tts = /^\/moderation\/tts\/(pause|resume|stop|purge)$/.exec(path);
       if (method === 'POST' && tts) {
         const action = tts[1]!;

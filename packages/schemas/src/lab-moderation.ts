@@ -202,6 +202,8 @@ export type LabModerationCommand = z.infer<typeof LabModerationCommand>;
 export const LabModerationRequest = z.strictObject({
   actor: LabActor,
   command: LabModerationCommand,
+  /** The client's Idempotency-Key, carried to Core: a retried action is never applied twice. */
+  idempotency_key: z.string().min(8).max(128).optional(),
 });
 export type LabModerationRequest = z.infer<typeof LabModerationRequest>;
 

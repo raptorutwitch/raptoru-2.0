@@ -83,6 +83,7 @@ const runtimeFiles = [
   'supabase/migrations/20261012120000_commands_v2_invocations.sql',
   'supabase/migrations/20261013120000_commands_v2_steps.sql',
   'supabase/migrations/20261014120000_commands_v2_categories.sql',
+  'supabase/migrations/20261015120000_lab_moderation_idempotency.sql',
 ];
 for (const path of runtimeFiles)
   if (!existsSync(join(app, path)))

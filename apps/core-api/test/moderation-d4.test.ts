@@ -820,6 +820,52 @@ describe('D4 personal cooldown (delay between two uses, during a span)', () => {
 });
 
 describe('D4 wallet admin', () => {
+  it('idempotent action (ASTRA-P1-009): a retried credit is answered, never applied twice', async () => {
+    const { m, wallet, core } = await lab();
+    const credit = (
+      delta: number,
+      idempotency_key?: string,
+      actor: LabActor = studio,
+    ) =>
+      m.act(CHANNEL, {
+        actor,
+        command: LabModerationCommand.parse({
+          action: 'wallet_adjust',
+          viewer_id: '900211',
+          currency: 'tokens',
+          delta,
+        }),
+        idempotency_key,
+      });
+    const before = (await wallet('900211')).tokens;
+    const first = await credit(100, 'ext-retry-0001');
+    // Response lost, the client retries with the same key: same answer, one effect, one ledger line.
+    expect(await credit(100, 'ext-retry-0001')).toEqual(
+      JSON.parse(JSON.stringify(first)),
+    );
+    expect((await wallet('900211')).tokens).toBe(before + 100);
+    const lines = await core.db.query(
+      "select 1 from lab_wallet_ledger where viewer_id = '900211' and amount = 100",
+    );
+    expect(lines).toHaveLength(1);
+    // Same key, another action: refused, nothing applied.
+    await expect(credit(200, 'ext-retry-0001')).rejects.toMatchObject({
+      code: 'idempotency_conflict',
+    });
+    expect((await wallet('900211')).tokens).toBe(before + 100);
+    // A failed action records nothing: its retry is evaluated again.
+    await expect(credit(5, 'ext-retry-0002', viewer)).rejects.toThrow();
+    expect(
+      await core.db.query(
+        "select 1 from lab_moderation_requests where idempotency_key = 'ext-retry-0002'",
+      ),
+    ).toHaveLength(0);
+    // Without a key: unchanged behaviour (two distinct actions).
+    await credit(1);
+    await credit(1);
+    expect((await wallet('900211')).tokens).toBe(before + 102);
+  });
+
   it('credit / debit with « Admin Wallet », never below 0, exact ledger (actor, reason); refused without', async () => {
     const { act, code, wallet, m } = await lab();
     const adj = (delta: number, currency = 'tokens', actor: LabActor = modA) =>

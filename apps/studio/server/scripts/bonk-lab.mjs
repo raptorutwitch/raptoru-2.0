@@ -70,6 +70,7 @@ try {
     '20261012120000_commands_v2_invocations.sql',
     '20261013120000_commands_v2_steps.sql',
     '20261014120000_commands_v2_categories.sql',
+    '20261015120000_lab_moderation_idempotency.sql',
   ]) {
     if (
       (

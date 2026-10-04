@@ -97,6 +97,37 @@ async function fixture() {
 }
 
 describe('Studio ↔ Extension: one moderation (same Core)', () => {
+  it('ASTRA-P1-009: the Idempotency-Key reaches Core — a retried credit is applied once', async () => {
+    const f = await fixture();
+    const target = await f.me(viewer);
+    const credit = () =>
+      f.lab.handle(
+        'POST',
+        '/moderation/v2/actions',
+        {
+          command: {
+            action: 'wallet_adjust',
+            viewer_id: target,
+            currency: 'tokens',
+            delta: 100,
+          },
+        },
+        { ...boss, idempotencyKey: 'ext-1759600000000-abcdef' },
+      );
+    const first = await credit();
+    expect(first.status).toBe(200);
+    // The response was lost: the extension retries with the same key.
+    const again = await credit();
+    expect(again.status).toBe(200);
+    expect(again.body).toEqual(first.body);
+    expect(
+      await f.core.db.query(
+        'select 1 from lab_wallet_ledger where viewer_id = $1 and amount = 100',
+        [target],
+      ),
+    ).toHaveLength(1);
+  });
+
   it('an extension action appears in Studio; a Studio action appears in the extension', async () => {
     const f = await fixture();
     // The moderator opens the console once (Twitch role → team).

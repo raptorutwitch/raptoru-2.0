@@ -3,6 +3,7 @@ import type {
   LabModerationRequest,
   LabWalletRequest,
 } from '@raptoru/schemas';
+import { createHash } from 'node:crypto';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import type { BonkLabService } from '../bonk-lab/bonk-lab-service.js';
@@ -213,7 +214,7 @@ export class LabModerationService {
     const cmd = req.command;
     // Tombola: due transitions (draw at closes_at…) are committed first, whatever this command does.
     await this.raffle.settle(channelId);
-    return this.db.tx(async (q) => {
+    return this.txOnce(channelId, req, async (q) => {
       const now = this.clock.now();
       await touchStaff(q, channelId, actor, now);
       const acc = await access(q, channelId, actor);
@@ -560,6 +561,55 @@ export class LabModerationService {
           return this.bonk.applyModeration(q, channelId, cmd, actor, role);
         }
       }
+    });
+  }
+
+  /**
+   * Idempotent action (ASTRA-P1-009): with an idempotency key, the action is recorded with its
+   * result in the SAME transaction as its effect. A retry after a lost response gets that result
+   * again instead of applying the action twice; the same key with another payload is refused.
+   * A failed action records nothing (its retry is evaluated again). Kept 24 h.
+   */
+  private txOnce<T>(
+    channelId: string,
+    req: LabModerationRequest,
+    apply: (q: Queryable) => Promise<T>,
+  ): Promise<T> {
+    const key = req.idempotency_key;
+    if (!key) return this.db.tx(apply);
+    return this.db.tx(async (q) => {
+      const now = this.clock.now();
+      const hash = createHash('sha256')
+        .update(JSON.stringify([req.actor.id, req.command]))
+        .digest('hex');
+      // Claimed first: a concurrent duplicate waits on this row, then reads the committed result.
+      const claimed = await q.query(
+        `insert into lab_moderation_requests (channel_id, idempotency_key, request_hash, result, created_at)
+         values ($1, $2, $3, 'null'::jsonb, $4) on conflict do nothing returning 1`,
+        [channelId, key, hash, now],
+      );
+      if (!claimed.length) {
+        const [prior] = await q.query<{ request_hash: string; result: T }>(
+          'select request_hash, result from lab_moderation_requests where channel_id = $1 and idempotency_key = $2',
+          [channelId, key],
+        );
+        if (prior!.request_hash !== hash)
+          throw new LabModerationError(
+            'idempotency_conflict',
+            'this idempotency key was already used for another action',
+          );
+        return prior!.result;
+      }
+      const out = await apply(q);
+      await q.query(
+        'update lab_moderation_requests set result = $3 where channel_id = $1 and idempotency_key = $2',
+        [channelId, key, JSON.stringify(out ?? null)],
+      );
+      await q.query(
+        'delete from lab_moderation_requests where channel_id = $1 and created_at < $2',
+        [channelId, new Date(now.getTime() - 24 * 3_600_000)],
+      );
+      return out;
     });
   }
 
