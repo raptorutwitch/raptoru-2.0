@@ -359,6 +359,20 @@ describe('Commands V2 admission — the real broadcaster of the channel (Lab cha
     });
   });
 
+  it('ASTRA-P2-012: the Lab channel id (900100) is no Twitch identity once the real one is known; the simulator keeps it', async () => {
+    await make({ audience: { groups: ['broadcaster'], allow: [], deny: [] } });
+    const LABCH: Who = { id: CH, login: 'raptoru_lab', role: 'broadcaster' };
+    // A real Twitch message whose author id equals the fictitious Lab channel id: not the streamer.
+    expect(await sayAs(LABCH)).toMatchObject({
+      outcome: 'rejected',
+      reason: 'access_denied',
+    });
+    // The chat simulator speaks as the Lab channel's own identity: still the streamer.
+    expect(
+      await real.chat({ ...msg('!hug', LABCH), source: 'simulator' }),
+    ).toMatchObject({ outcome: 'accepted' });
+  });
+
   it('allow still works, deny still wins, « Tout le monde » unchanged, no implicit streamer bypass', async () => {
     await make({
       name: 'aouhonly',

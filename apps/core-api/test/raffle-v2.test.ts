@@ -840,6 +840,30 @@ describe('Tombola V2 moderation actions and permissions (D7)', () => {
     expect((await snap()).round!.status).toBe('cancelled');
   });
 
+  it('ASTRA-P2-012: with the real streamer known, a Twitch message from the Lab channel id cancels nothing; the simulator still does', async () => {
+    const { config, act, snap, raffle } = await lab(() => '83603689');
+    await config({ cancel_commands: ['!annuletombola'] });
+    await act({ action: 'launch' });
+    const from = (source: 'twitch' | 'simulator', id: string) =>
+      raffle.chat({
+        channel_id: CH,
+        message_id: `${source}-${id}-${++seq}`,
+        text: '!annuletombola',
+        chatter: {
+          id,
+          login: 'raptoru_lab',
+          display_name: 'Raptoru_ (lab)',
+          role: 'broadcaster',
+        },
+        source,
+      });
+    // A real Twitch message whose author id equals the fictitious Lab channel id: not the streamer.
+    expect((await from('twitch', CH)).outcome).toBe('forbidden');
+    expect((await snap()).round!.status).not.toBe('cancelled');
+    // The chat simulator speaks as the Lab channel's own identity: still the streamer.
+    expect((await from('simulator', CH)).outcome).toBe('cancelled');
+  });
+
   it('cancel before the draw only; invalid transitions are refused', async () => {
     const { config, act, code, after, joinExt } = await lab();
     await config();

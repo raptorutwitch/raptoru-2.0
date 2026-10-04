@@ -411,7 +411,13 @@ export class CommandsAdmission {
   ) {
     const now = this.clock.now();
     const reserved = await this.reservedBy(q, channelId, word);
-    const viewer = await this.viewer(q, channelId, chatter);
+    // Only a real Twitch message carries its message id here (see chat()): its source.
+    const viewer = await this.viewer(
+      q,
+      channelId,
+      chatter,
+      messageId === null ? 'simulator' : 'twitch',
+    );
     const session = (
       await q.query<{ started_at: Date; ended_at: Date | null }>(
         'select started_at, ended_at from lab_stream_sessions where channel_id = $1 order by started_at desc limit 1',
@@ -457,8 +463,13 @@ export class CommandsAdmission {
    * Effective role and groups. « Streamer » is decided by identity only: the viewer's user id is the
    * channel's own id or its real Twitch broadcaster id. A claimed role or badge never makes a streamer.
    */
-  private async viewer(q: Queryable, channelId: string, c: ChatterIn) {
-    const claimed = chatRole(channelId, c, this.deps.broadcasterOf);
+  private async viewer(
+    q: Queryable,
+    channelId: string,
+    c: ChatterIn,
+    source: 'twitch' | 'simulator',
+  ) {
+    const claimed = chatRole(channelId, c, this.deps.broadcasterOf, source);
     const role = (
       await access(q, channelId, { id: c.id, role: claimed, via: 'extension' })
     ).role as DecideViewer['role'];

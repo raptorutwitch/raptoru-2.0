@@ -1097,7 +1097,12 @@ export class RaffleLabService {
             login: msg.chatter.login,
             display_name: msg.chatter.display_name,
             // The streamer by identity only (same rule as Commands V2): a badge never makes one.
-            role: chatRole(msg.channel_id, msg.chatter, this.broadcasterOf),
+            role: chatRole(
+              msg.channel_id,
+              msg.chatter,
+              this.broadcasterOf,
+              msg.source,
+            ),
             via: 'extension',
           },
           command: { action: 'cancel', reason: `commande chat ${word}` },
