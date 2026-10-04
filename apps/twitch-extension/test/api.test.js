@@ -1,3 +1,4 @@
+/* global Response, ReadableStream */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from '../extension/shared/api.js';
 
