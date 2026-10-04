@@ -22,6 +22,7 @@ import {
   groups,
   GROUPS,
   insertAt,
+  historyCategoryName,
   MODES,
   NO_CATEGORY,
   previewText,
@@ -352,7 +353,7 @@ export function createCommandsV2View({ document, client, onBack }) {
       if (Array.isArray(v)) return v.length ? v.join(', ') : 'personne';
       if (field === 'enabled') return v ? 'activée' : 'désactivée';
       if (field === 'listed') return v ? 'visible' : 'cachée';
-      if (field === 'category') return catName(v);
+      if (field === 'category') return historyCategoryName(v, cats());
       if (field === 'when') return WHEN[v] ?? v;
       return typeof v === 'object' ? 'modifié' : String(v);
     };

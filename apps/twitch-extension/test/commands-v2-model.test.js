@@ -17,6 +17,7 @@ import {
   visible,
   whoSentence,
   whoShort,
+  historyCategoryName,
 } from '../extension/shared/commands-v2-model.js';
 
 // « Modération › Commandes » (phase E): what the extension shows editable comes from Core's /me
@@ -363,5 +364,14 @@ describe('commands — public list (phase F)', () => {
     expect(publicQuota({ max: 4, window: 'hour', scope: 'viewer' })).toBe(
       'max 4 / heure par personne',
     );
+  });
+});
+
+describe('history of a category change (ASTRA-P3-005)', () => {
+  const cats = [{ category_id: 'cat-fun', name: 'Fun' }];
+  it('names the category; a deleted one is shown as deleted, never as « Sans catégorie »', () => {
+    expect(historyCategoryName('cat-fun', cats)).toBe('Fun');
+    expect(historyCategoryName('cat-gone', cats)).toBe('Catégorie supprimée');
+    expect(historyCategoryName(null, cats)).toBe('Sans catégorie');
   });
 });

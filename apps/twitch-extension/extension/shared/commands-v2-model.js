@@ -185,6 +185,12 @@ export const needsCheck = (c) => (c.issues?.length ?? 0) > 0;
 
 export const NO_CATEGORY = { category_id: '', name: 'Sans catégorie', icon: 'folder', color: '#94a3b8', position: Number.MAX_SAFE_INTEGER };
 export const categoryOf = (c, cats) => cats.find((k) => k.category_id === c.config.category) ?? NO_CATEGORY;
+/**
+ * Category named in a past change (history): « Sans catégorie » only for a real null; a category deleted
+ * since is shown as such, never as « Sans catégorie » (ASTRA-P3-005: the history must not lie).
+ */
+export const historyCategoryName = (id, cats) =>
+  id ? (cats.find((k) => k.category_id === id)?.name ?? 'Catégorie supprimée') : NO_CATEGORY.name;
 const inState = (k, c) => k === 'all' || (k === 'check' ? needsCheck(c) : k === 'off' ? !c.config.enabled : !c.config.listed);
 const inCat = (ui, c, cats) => ui.cat === 'all' || (ui.cat === 'none' ? categoryOf(c, cats) === NO_CATEGORY : c.config.category === ui.cat);
 export const matches = (c, q) => {
