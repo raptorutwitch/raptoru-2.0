@@ -33,6 +33,11 @@ export interface TestLabDeps {
   /** Removes every known secret from a text before it is stored or sent to the UI. */
   redact: (text: string) => string;
   logs: LogBuffer;
+  /**
+   * Other local processes started outside the Test Lab that use the same Postgres (the Studio
+   * runtime's Lab Core), by name while running: Postgres is not stopped under them.
+   */
+  postgresUsers?: () => string[];
 }
 
 export function createTestLab(): TestLab {
@@ -400,6 +405,9 @@ export class TestLab {
     return this.exclusive('stop postgres', async () => {
       if (this.deps.core.running || this.deps.bot.running)
         throw new Error('stop the bot and Core first');
+      const others = this.deps.postgresUsers?.() ?? [];
+      if (others.length)
+        throw new Error(`Postgres still used by ${others.join(', ')}`);
       this.log('postgres', 'stopping container raptoru2-pg (volume kept)');
       await this.deps.docker.stopContainer();
       return { step: 'Postgres', ok: true, detail: 'stopped (data kept)' };

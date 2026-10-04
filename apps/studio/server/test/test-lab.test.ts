@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { createStudioServer } from '../src/index.js';
+import { createStudioServer, stopAll } from '../src/index.js';
 import { redact } from '../src/test-lab/local-env.js';
 import { LogBuffer } from '../src/test-lab/log-buffer.js';
 import { ManagedProcess, PidStore } from '../src/test-lab/managed-process.js';
@@ -274,6 +274,18 @@ describe('Start All / Stop All', () => {
     await lab.startCore();
     await expect(lab.stopPostgres()).rejects.toThrow(/first/);
   });
+
+  it('refuses to stop Postgres under the Studio runtime Lab Core; allowed once nothing uses it', async () => {
+    const { lab, deps, calls } = fakeLab();
+    let labCore = true;
+    deps.postgresUsers = () =>
+      labCore ? ['the Lab Core (Studio runtime)'] : [];
+    await expect(lab.stopPostgres()).rejects.toThrow(/Lab Core/);
+    expect(calls).not.toContain('docker stop');
+    labCore = false;
+    await expect(lab.stopPostgres()).resolves.toMatchObject({ ok: true });
+    expect(calls).toContain('docker stop');
+  });
 });
 
 describe('secrets never reach logs or the UI', () => {
@@ -410,5 +422,30 @@ describe('loyalty credits guard', () => {
       LOYALTY_PASSIVE_CREDITS: 'false',
       LOYALTY_EVENT_CREDITS: 'false',
     });
+  });
+});
+
+describe('shutdown barrier', () => {
+  it('waits for every stop (Lab chat ingress included) and reports a failure without blocking the others', async () => {
+    let release!: () => void;
+    const labchat = new Promise<void>((r) => (release = r));
+    const failed: string[] = [];
+    let done = false;
+    const all = stopAll(
+      {
+        labchat: () => labchat,
+        testlab: async () => {
+          throw new Error('boom');
+        },
+        runtime: undefined,
+      },
+      (name) => failed.push(name),
+    ).then(() => (done = true));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(done).toBe(false); // the ingress has not stopped yet: no exit
+    expect(failed).toEqual(['testlab']);
+    release();
+    await all;
+    expect(done).toBe(true);
   });
 });

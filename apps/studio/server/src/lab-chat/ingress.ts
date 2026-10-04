@@ -27,6 +27,8 @@ export interface IngressProcess {
   readonly lastExit: { code: number | null; at: string } | null;
   start(env: Record<string, string>): void;
   stop(): Promise<void> | void;
+  /** Takes back an adapter left running by a previous Studio session (stored PID, node only). */
+  adoptPrevious?(): Promise<boolean>;
 }
 
 export interface LabChatIngressDeps {
@@ -48,6 +50,22 @@ export interface LabChatIngressDeps {
   /** Last log lines of the adapter process (redacted). */
   lines?: () => string[];
 }
+
+/** Exit code of the bot's Lab chat adapter when its Twitch token is unusable (needs the user). */
+export const EXIT_AUTH = 78;
+/** Supervision: an adapter that exits on its own is restarted at most this often, then left down. */
+const RESTART_BUDGET = 3;
+const RESTART_WINDOW_MS = 10 * 60_000;
+const SUPERVISE_MS = 5_000;
+
+/** Why an adapter switched ON is down and no longer restarted (shown as is in Studio). */
+type DownCode = 'auth_failed' | 'crash_loop';
+const DOWN_FR: Record<DownCode, string> = {
+  auth_failed:
+    'L’ingestion s’est arrêtée : le jeton Twitch du bot est refusé. Relance « npm run twitch:auth -w apps/twitch-bot », puis désactive et réactive l’ingestion.',
+  crash_loop:
+    'L’ingestion s’arrête en boucle (3 redémarrages en 10 min) : voir le journal ci-dessous, puis désactive et réactive l’ingestion.',
+};
 
 export type BlockedCode =
   | 'unavailable'
@@ -87,7 +105,40 @@ export class LabChatIngress {
     } catch {
       /* OFF by default */
     }
-    return new LabChatIngress(d, enabled);
+    // An adapter orphaned by a Studio that died (children survive on Windows) still reads Twitch with
+    // the previous session's secret: stopped before anything starts, so only ONE ingestion ever runs.
+    if (await d.process?.adoptPrevious?.()) await d.process!.stop();
+    const ingress = new LabChatIngress(d, enabled);
+    ingress.watch = setInterval(() => ingress.supervise(), SUPERVISE_MS);
+    ingress.watch.unref();
+    return ingress;
+  }
+
+  private watch: ReturnType<typeof setInterval> | undefined;
+  private closed = false;
+  private restarts: number[] = [];
+  private down: DownCode | null = null;
+
+  /**
+   * The switch ON means the adapter runs: one that exited on its own is restarted (bounded budget).
+   * A refused token, or a crash loop, leaves it down with the reason shown until the user acts. The
+   * user's OFF and the Studio shutdown never restart it.
+   */
+  supervise(now = Date.now()) {
+    const p = this.d.process;
+    if (this.closed || !this.enabled || this.down || !p || p.running) return;
+    if (!p.lastExit || this.blocked()) return;
+    if (p.lastExit.code === EXIT_AUTH) {
+      this.down = 'auth_failed';
+      return;
+    }
+    this.restarts = this.restarts.filter((t) => now - t < RESTART_WINDOW_MS);
+    if (this.restarts.length >= RESTART_BUDGET) {
+      this.down = 'crash_loop';
+      return;
+    }
+    this.restarts.push(now);
+    p.start(this.d.env!());
   }
 
   /** First reason preventing the adapter from running, or null. */
@@ -113,16 +164,23 @@ export class LabChatIngress {
       this.d.process!.start(this.d.env!());
   }
   async stop() {
+    this.closed = true;
+    clearInterval(this.watch);
     await this.d.process?.stop();
   }
 
   status() {
     const code = this.blocked();
+    const down = this.enabled && !code ? this.down : null;
     const token = this.d.token?.();
     return {
       enabled: this.enabled,
       running: this.d.process?.running ?? false,
-      blocked: code ? { code, message: BLOCKED_FR[code] } : null,
+      blocked: code
+        ? { code, message: BLOCKED_FR[code] }
+        : down
+          ? { code: down, message: DOWN_FR[down] }
+          : null,
       token_login: token?.login ?? null,
       last_exit: this.d.process?.lastExit ?? null,
       lines: this.d.lines?.().slice(-12) ?? [],
@@ -138,6 +196,9 @@ export class LabChatIngress {
         body: { error: code, message: BLOCKED_FR[code] },
       });
     this.enabled = enabled;
+    // A user OFF / ON is the action a down adapter was waiting for: supervision starts afresh.
+    this.down = null;
+    this.restarts = [];
     await writeFile(
       join(this.d.dir, 'ingress.json'),
       JSON.stringify({ enabled }),

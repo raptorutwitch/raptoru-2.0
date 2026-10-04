@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,6 +28,12 @@ export const paths = {
     '.twitch-tokens.broadcaster.json',
   ),
   loyaltyOutbox: join(DATA_ROOT, 'apps', 'twitch-bot', '.loyalty-outbox.json'),
+  labChatJournal: join(
+    DATA_ROOT,
+    'apps',
+    'twitch-bot',
+    '.lab-chat-journal.json',
+  ),
   runtimeDir: join(DATA_ROOT, 'apps', 'studio', 'server', '.runtime'),
 };
 
@@ -45,6 +51,15 @@ export function applyDataRootEnv(): void {
   // Unsent loyalty events must survive a reinstall too: kept in the data folder.
   process.env.LOYALTY_OUTBOX_FILE ??=
     botEnv.LOYALTY_OUTBOX_FILE ?? paths.loyaltyOutbox;
+  // Commands V2 chat sends journal: same rule (it may hold sends whose outcome Core does not know).
+  // A journal left next to the code by an older version is carried over once, never overwritten.
+  if (!process.env.LAB_CHAT_JOURNAL_FILE && !botEnv.LAB_CHAT_JOURNAL_FILE) {
+    const old = join(paths.botDir, '.lab-chat-journal.json');
+    if (existsSync(old) && !existsSync(paths.labChatJournal))
+      copyFileSync(old, paths.labChatJournal);
+  }
+  process.env.LAB_CHAT_JOURNAL_FILE ??=
+    botEnv.LAB_CHAT_JOURNAL_FILE ?? paths.labChatJournal;
 }
 
 export type EnvFile = Record<string, string>;

@@ -253,6 +253,25 @@ const actions: Record<string, Action> = {
   'logs/clear': async (lab) => lab.logs.clear(),
 };
 
+/**
+ * Shutdown barrier: every managed stop runs, and only once ALL have settled (each forces its child
+ * after its own timeout) may the server exit. A failing stop is reported, never blocks the others.
+ */
+export async function stopAll(
+  stops: Record<string, (() => Promise<unknown>) | undefined>,
+  report: (name: string, error: unknown) => void,
+): Promise<void> {
+  await Promise.all(
+    Object.entries(stops).map(async ([name, stop]) => {
+      try {
+        await stop?.();
+      } catch (error) {
+        report(name, error);
+      }
+    }),
+  );
+}
+
 export function createStudioServer(
   lab: TestLab,
   onShutdown: () => void,
@@ -440,6 +459,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   if (runtime) {
     process.env.BONK_LAB_CORE_URL = runtime.coreUrl;
     process.env.BONK_LAB_SECRET = runtime.secret;
+    // The Lab Core uses the same Postgres: the Test Lab never stops it under a running Lab Core.
+    lab.deps.postgresUsers = () =>
+      runtime.deps.labCore.running ? ['the Lab Core (Studio runtime)'] : [];
   }
   for (const service of process.env.BONK_LAB_ONLY === '1'
     ? []
@@ -470,16 +492,24 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     bonk?.stop();
     sound?.stop();
     tts?.stop();
-    void labChatRef?.stop();
     lab.logs.add(
       'studio',
       'Studio closing: stopping bot and Core (Postgres keeps running)',
     );
-    if (process.env.BONK_LAB_ONLY === '1') process.exit(0);
-    else
-      void Promise.allSettled([lab.shutdown(), runtime?.stop()]).finally(() =>
-        process.exit(0),
-      );
+    const ingress = labChatRef;
+    const full = process.env.BONK_LAB_ONLY !== '1';
+    void stopAll(
+      {
+        // The Lab chat ingress (bot child process) is awaited like the others before exiting.
+        labchat: ingress ? () => ingress.stop() : undefined,
+        testlab: full ? () => lab.shutdown() : undefined,
+        runtime: full && runtime ? () => runtime.stop() : undefined,
+      },
+      (name, error) =>
+        console.error(
+          `[studio-server] ${name} stop failed: ${(error as Error)?.message ?? error}`,
+        ),
+    ).finally(() => process.exit(0));
   };
   const extLab = await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
     lab.logs.add(

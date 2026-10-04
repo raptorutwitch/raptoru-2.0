@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  EXIT_AUTH,
   LabChatIngress,
   type IngressProcess,
 } from '../src/lab-chat/ingress.js';
@@ -22,6 +23,8 @@ afterEach(async () => {
 });
 
 interface Opts {
+  /** A previous Studio session left its adapter running (stored PID still a node process). */
+  orphan?: boolean;
   botRunning?: boolean;
   scopes?: string[];
   tokenPresent?: boolean;
@@ -40,13 +43,16 @@ async function setup(opts: Opts = {}) {
   const started: Record<string, string>[] = [];
   const events: string[] = [];
   let running = false;
+  let lastExit: IngressProcess['lastExit'] = null;
   // Core's « Sortie chat réelle » state (the fake Core keeps it like the real one).
   let output = false;
   const proc: IngressProcess = {
     get running() {
       return running;
     },
-    lastExit: null,
+    get lastExit() {
+      return lastExit;
+    },
     start: (env) => {
       started.push(env);
       events.push('start');
@@ -55,6 +61,12 @@ async function setup(opts: Opts = {}) {
     stop: () => {
       events.push('stop');
       running = false;
+    },
+    adoptPrevious: async () => {
+      if (!opts.orphan) return false;
+      events.push('adopt');
+      running = true;
+      return true;
     },
   };
   server = createServer();
@@ -112,6 +124,12 @@ async function setup(opts: Opts = {}) {
     started,
     events,
     studio,
+    ingress: () => ing,
+    /** The adapter exits on its own (crash, refused token…). */
+    exit: (code: number) => {
+      running = false;
+      lastExit = { code, at: new Date().toISOString() };
+    },
     reload: async () => {
       ing = await make();
       return ing;
@@ -139,6 +157,59 @@ describe('Lab chat ingress (Studio)', () => {
     expect(f.started).toHaveLength(1); // still running: never started twice
     const off = await f.studio('/api/lab-chat/ingress', { enabled: false });
     expect(off.json).toMatchObject({ enabled: false, running: false });
+  });
+
+  it('an adapter orphaned by a previous Studio session is stopped before anything starts: one ingestion only', async () => {
+    const f = await setup({ orphan: true });
+    expect(f.events).toEqual(['adopt', 'stop']);
+    const on = await f.studio('/api/lab-chat/ingress', { enabled: true });
+    expect(on.json).toMatchObject({ enabled: true, running: true });
+    expect(f.events).toEqual(['adopt', 'stop', 'start']);
+    expect(f.started).toHaveLength(1); // the new session's adapter, with the new secret
+  });
+
+  it('supervision: an adapter that exits on its own is restarted, within a budget, then shown down', async () => {
+    const f = await setup();
+    await f.studio('/api/lab-chat/ingress', { enabled: true });
+    const t0 = Date.now();
+    for (let i = 1; i <= 3; i++) {
+      f.exit(1);
+      f.ingress().supervise(t0 + i * 1000);
+      expect(f.started).toHaveLength(1 + i); // restarted
+    }
+    f.exit(1);
+    f.ingress().supervise(t0 + 4000); // 4th exit within 10 min: left down, reason shown
+    expect(f.started).toHaveLength(4);
+    const st = await f.studio('/api/lab-chat/status');
+    expect(st.json).toMatchObject({
+      enabled: true,
+      running: false,
+      blocked: { code: 'crash_loop' },
+    });
+    // The user's OFF / ON is the action it waited for: running again, reason gone.
+    await f.studio('/api/lab-chat/ingress', { enabled: false });
+    const on = await f.studio('/api/lab-chat/ingress', { enabled: true });
+    expect(on.json).toMatchObject({ running: true, blocked: null });
+  });
+
+  it('supervision: a refused token is not restarted (reason shown); OFF and shutdown never restart', async () => {
+    const f = await setup();
+    await f.studio('/api/lab-chat/ingress', { enabled: true });
+    f.exit(EXIT_AUTH);
+    f.ingress().supervise();
+    expect(f.started).toHaveLength(1);
+    expect((await f.studio('/api/lab-chat/status')).json.blocked).toMatchObject(
+      { code: 'auth_failed' },
+    );
+    await f.studio('/api/lab-chat/ingress', { enabled: false });
+    f.ingress().supervise();
+    expect(f.started).toHaveLength(1); // OFF: stays off
+    await f.studio('/api/lab-chat/ingress', { enabled: true });
+    expect(f.started).toHaveLength(2);
+    await f.ingress().stop(); // Studio closing
+    f.exit(1);
+    f.ingress().supervise();
+    expect(f.started).toHaveLength(2);
   });
 
   it('a token without user:read:chat blocks the switch with the reason shown; nothing starts or is saved', async () => {

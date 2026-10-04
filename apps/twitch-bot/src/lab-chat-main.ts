@@ -31,6 +31,9 @@ const Env = z.object({
   LAB_CHAT_OUTPUT_RATE: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+/** Unusable Twitch token: Studio's supervision shows it and does not restart (EXIT_AUTH in ingress.ts). */
+const EXIT_AUTH = 78;
+
 const env = Env.parse(process.env);
 const app = loadTwitchAppConfig();
 const auth = new TwitchAuth({
@@ -43,7 +46,8 @@ try {
   await auth.init();
 } catch (error) {
   console.error(`[lab-chat] Twitch auth unusable: ${(error as Error).message}`);
-  process.exit(1);
+  // Twitch unreachable is not final (Studio restarts the adapter); a refused token is.
+  process.exit(auth.status().state === 'failed' ? EXIT_AUTH : 1);
 }
 const status = auth.status();
 const helix = createHelix({
@@ -144,7 +148,7 @@ setInterval(
       console.error(
         `[lab-chat] token validation failed${error instanceof AuthError ? ` (${error.code})` : ''}`,
       );
-      if (auth.status().state === 'failed') process.exit(1);
+      if (auth.status().state === 'failed') process.exit(EXIT_AUTH);
     });
   },
   60 * 60 * 1000,
