@@ -1,3 +1,4 @@
+/* global URL */
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 import { describe, expect, it } from 'vitest';
