@@ -649,7 +649,7 @@ export function mountTombola(root: HTMLElement) {
       : ing.enabled
         ? '<b style="color:#ffbf6e">Activée, pas connectée.</b>'
         : 'Désactivée.';
-    return `<div class="tog"><div class="txt"><b>Ingestion chat Twitch réelle</b><span class="fine" style="display:block;margin-top:4px">Une seule connexion Twitch pour tout le Lab : Core route chaque commande vers le module concerné (Tombola aujourd’hui ; TTS, commandes globales… ensuite) et suit l’état du stream (hors ligne → en direct). Rien n’est écrit dans le chat. Jamais activée automatiquement. ${state}${ing.token_login ? ` Compte : ${esc(ing.token_login)}.` : ''}</span></div>
+    return `<div class="tog"><div class="txt"><b>Ingestion chat Twitch réelle</b><span class="fine" style="display:block;margin-top:4px">Une seule connexion Twitch pour tout le Lab : Core route chaque commande vers le module concerné (Tombola aujourd’hui ; TTS, commandes globales… ensuite) et suit l’état du stream (hors ligne → en direct). L’ingestion seule n’écrit rien dans le chat (la « Sortie chat réelle » des Commandes est un interrupteur distinct). OFF par défaut ; un ON choisi est restauré au redémarrage de Studio. ${state}${ing.token_login ? ` Compte : ${esc(ing.token_login)}.` : ''}</span></div>
         <button type="button" class="sw ${ing.enabled ? 'on' : ''}" data-ingest="${ing.enabled ? 'off' : 'on'}" ${locked ? 'disabled title="Activation impossible : voir la raison ci-dessous"' : ''}></button></div>
       ${ing.blocked ? `<p class="blocked">${ic('lock')}<span>${esc(ing.blocked.message)}</span></p>` : ''}
       ${ing.lines.length ? `<pre class="log">${esc(ing.lines.slice(-4).join('\n'))}</pre>` : ''}`;
