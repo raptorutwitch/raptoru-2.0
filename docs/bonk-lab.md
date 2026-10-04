@@ -1,5 +1,8 @@
 # Bonk V2 — local vertical slice awaiting OBS validation
 
+> **Historique** : ce document décrit la tranche locale avant sa validation. Bonk V2 a depuis été validé
+> manuellement (27/09/2026, Studio 0.1.3). État courant : `Raptoru-2.0-HANDOFF.md`.
+
 The Core/contract checkpoint already existed on disk as `3665773`. Review corrections were
 committed separately as `760cd5e`: claimant-specific readiness, expiration before queue capacity
 checks, session/glyph idempotency conflicts, and shared channel locking for ACK/expiry transitions.

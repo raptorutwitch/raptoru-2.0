@@ -4,7 +4,10 @@ Self-owned streaming platform for one streamer. Source of truth: `Raptoru Studio
 
 > **Core thinks, Studio controls/displays and talks to OBS, Bot talks to Twitch, Extension/Web talk to viewers.**
 
-Implemented so far: **Daily** (core-api + twitch-bot). Other apps are still placeholders.
+Implemented: Daily, Presence, Wallet / Loyalty (Core, dev/test), the Raptoru Studio desktop app and, in the
+**Lab** (local, test only), Bonk, Soundboard, TTS, Tombola, Moderation and Commands V2 with their Extension
+surfaces. `apps/viewer-web` is still a placeholder. Production stays SAMMI + StreamElements until an explicit
+cutover. Current state: `Raptoru-2.0-HANDOFF.md`; audit register: `docs/ASTRA_GLOBAL_AUDIT_2026-10.md`.
 
 ## Apps
 
@@ -17,7 +20,7 @@ Implemented so far: **Daily** (core-api + twitch-bot). Other apps are still plac
 | `apps/studio/server`    | Local Studio server (`127.0.0.1`): holds Studio secrets, talks to Core, only bridge to OBS.                   |
 | `apps/studio/web`       | Streamer-facing control/configuration UI.                                                                     |
 | `apps/studio/desktop`   | Electron Windows shell around the Studio web UI.                                                              |
-| `packages/schemas`      | Zod contracts shared by the apps (stream lifecycle, Daily). No business logic.                                |
+| `packages/schemas`      | Zod contracts shared by the apps (Core requests / responses). No business logic.                              |
 | `supabase/migrations`   | Versioned SQL migrations, applied with `npm run db:migrate -w @raptoru/core-api`.                             |
 
 ## Commands
@@ -155,8 +158,8 @@ Local test bench for the Twitch extension, without a stream: the production exte
   (`anchor`, `mode`, `platform`…).
 - **Local Lab EBS** (Studio server, `/ext-lab/api`): same contract as the production EBS for
   session, jetons, channel-points credits, Soundboard, Bonk, TTS (instant or approval), Tombola and
-  moderation. Fictitious jetons in memory: no StreamElements, no SAMMI, no Twitch write, no Core
-  Wallet. The lab pages' CSP only allows the Studio origin.
+  moderation. Fictitious jetons in the Lab Core's test wallet (Lab database): no StreamElements, no
+  SAMMI, never the Core Wallet. The lab pages' CSP only allows the Studio origin.
 - **Local stage**: accepted actions are played in the Studio (sound file, TTS voice, Bonk
   animation, raffle) with a journal; wallets, modules and raffle are controllable.
 

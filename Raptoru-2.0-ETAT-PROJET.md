@@ -2,6 +2,10 @@
 
 **Dernière mise à jour : 3 octobre 2026 — Studio 0.1.5 = dernière release publique (validée) ; HEAD fonctionnel `ed781f6`. **Tombola V2 — TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ** (Lab, validée manuellement par Antoni les 02–03/10/2026, commits de référence `ecc0275` + `ed781f6`) ; Modération V2 parité D4 validée le 01/10/2026 ; passe UX post-Tombola validée le 03/10/2026. Rien n’est releasé ni packagé depuis 0.1.5.**
 
+> **Historique arrêté au 03/10/2026.** État courant (Commands V2 A0 → F, passes de l'audit Astra) : en tête de
+> [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md), [`docs/COMMANDS_V2_STATUS.md`](docs/COMMANDS_V2_STATUS.md) et
+> [`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](docs/ASTRA_GLOBAL_AUDIT_2026-10.md).
+
 > **Nouvel agent : lire d’abord [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md)** (état courant, règles de reprise, matrice de validation, prochaine action). Ce fichier-ci garde l’historique et le détail par domaine.
 
 ## But de ce fichier

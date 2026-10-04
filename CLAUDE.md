@@ -8,7 +8,8 @@
 - A validated prototype in `prototypes/` is a specification, not an inspiration: never drop,
   simplify or replace one of its elements silently; show a missing backend as such.
 - "Validated" means tested manually by Antoni — never call automated tests or E2E a validation.
-- Commands V2: current state, rules and next step (Phase F) are in `docs/COMMANDS_V2_STATUS.md`.
+- Commands V2 (A0 → F done, validated): current state and rules are in `docs/COMMANDS_V2_STATUS.md`.
+- Audit consolidation: `docs/ASTRA_GLOBAL_AUDIT_2026-10.md` is the register (status, proof and commit of every finding).
 
 ## Central files (ASTRA-P1-008, decided 2026-10-04)
 

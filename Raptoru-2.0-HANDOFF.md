@@ -1,5 +1,15 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
+> **État courant au 05/10/2026 (vérifier `git log` : HEAD ≥ `5f40a2c`).** Depuis le checkpoint du 03/10 ci-dessous :
+> **Commands V2 A0 → F** implémenté et validé manuellement par Antoni (état, règles et commits :
+> [`docs/COMMANDS_V2_STATUS.md`](docs/COMMANDS_V2_STATUS.md)) ; **passes de consolidation de l'audit Astra**
+> (registre canonique, statut de chaque finding, preuves et commits :
+> [`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](docs/ASTRA_GLOBAL_AUDIT_2026-10.md)) — P1 : 14 fermés, 5 **bloqués pour le
+> cutover** (001 économie, 006 EBS public, 007 session de stream, 010 Channel Points, 019 transport de production) ;
+> P2 : tous fermés sauf 015, 021, 025 (dettes volontairement différées). E2E navigateur versionnés : `npm run e2e`.
+> **Aucune release Studio depuis 0.1.5**, aucun cutover : SAMMI + StreamElements restent la production. Le reste de ce
+> fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le contexte).
+
 **État au 03/10/2026 · HEAD `ed781f6` (passe UX post-Tombola) · Tombola V2 TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ (Lab) · Modération V2 parité D4 validée · dernière release publique Studio 0.1.5.**
 Ce fichier est la **source de contexte prioritaire** pour un nouvel agent. Le détail historique complet (Presence, Wallet, Loyalty, Daily, Twitch, Studio, inventaire du stream, roadmap longue) reste dans `Raptoru-2.0-ETAT-PROJET.md`. La matrice de parité D4 (initiale et finale) est dans `docs/moderation-v2-d4-parity.md` ; celle de la Tombola V2 dans `docs/tombola-v2-parity.md`. En cas de contradiction, **vérifier Git et le code**, puis corriger le document fautif.
 
@@ -20,7 +30,7 @@ Ce fichier est la **source de contexte prioritaire** pour un nouvel agent. Le d�
 
 1. code présent ;
 2. tests unitaires / intégration ;
-3. E2E (scripts de session, **pas dans le repo**) ;
+3. E2E (navigateur : `npm run e2e`, versionnés depuis le 04/10/2026 ; les anciens scripts de session restent hors dépôt) ;
 4. **validation manuelle par Antoni** ;
 5. package local ;
 6. release publique.

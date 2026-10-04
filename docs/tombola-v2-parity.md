@@ -179,7 +179,8 @@ Une seule connexion Twitch pour tout le Lab (EventSub `channel.chat.message`, `s
   commandes globales, commandes de modération / test = ajouter un module à la liste dans
   `http/lab-moderation-routes.ts`. Jamais une deuxième connexion EventSub, un deuxième jeton ou un deuxième processus.
 - **Studio** `apps/studio/server/src/lab-chat/ingress.ts` : un seul interrupteur (`.runtime/lab-chat/ingress.json`,
-  OFF par défaut, jamais activé automatiquement), processus `labchat`, raison du blocage affichée telle quelle, et le
+  OFF par défaut ; un ON choisi par le streamer est restauré au redémarrage de Studio et l'adaptateur est relancé s'il
+  s'arrête — jamais activé sans ce choix), processus `labchat`, raison du blocage affichée telle quelle, et le
   simulateur de chat (`/api/lab-chat/simulate`) qui passe par la même entrée Core.
 - **Pourquoi l'interrupteur ne s'activait pas (retour phase D)** : le clic était bien enregistré, mais la vue ne se
   redessinait pas (interrupteur affiché décoché) ; et le processus aurait de toute façon quitté aussitôt, le jeton du

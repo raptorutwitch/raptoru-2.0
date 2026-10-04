@@ -257,7 +257,8 @@ Aucune ligne « backend manquant », placeholder, fake, non branché ni supprim�
 - **Deux crédits** (TTS / Sons) au lieu d'un : réalité du wallet Lab (soldes, dialogue Wallet).
 - **Emote des bonks** : image de l'emote (Core ne stocke pas de nom d'emote).
 - **« Ce stream »** : historique = depuis 16:00 Paris (fenêtre stream-day du Core) ; cooldown = 3 h, comme
-  la règle de la D4 (le Lab n'a pas de signal de fin de stream).
+  la règle de la D4 (choix conservé : le Lab suit désormais online/offline via l'ingestion chat, mais l'historique
+  « Ce stream » reste sur la fenêtre stream-day).
 - **Mots** : casse **et accents** ignorés, espaces souples (règle D4 étendue aux accents).
 
 ### Dépendances extérieures (hors du périmètre Modération lui-même)
