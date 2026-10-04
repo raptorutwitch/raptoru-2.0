@@ -693,12 +693,13 @@ describe('Commands V2 admission — routes and public list', () => {
     ).toMatchObject({ status: 403 });
     const pub = await call('GET', `/v1/lab/commands/${CH}/public`);
     expect(pub.body).toEqual({
+      categories: [],
       commands: [
         {
           name: 'hug',
           aliases: ['calin'],
           description: 'Un câlin',
-          category: 'general',
+          category_id: null,
           appearance: { icon: 'chat', color: '#8b5cf6' },
           syntax: '!hug',
           when: 'always',

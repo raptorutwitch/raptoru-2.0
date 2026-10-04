@@ -101,6 +101,15 @@ export interface InvocationView {
   rendered: unknown;
   status: 'simulated' | 'dispatched' | 'rejected';
   created_at: string;
+  /** Its durable steps (what was sent, failed, expired…), in order. */
+  steps: {
+    seq: number;
+    kind: string;
+    status: string;
+    error: string | null;
+    twitch_message_id: string | null;
+    finished_at: string | null;
+  }[];
 }
 
 /** « !hug @x » → { word: 'hug', rest: '@x' }; anything else is not a command. */
@@ -292,8 +301,11 @@ export class CommandsAdmission {
       const rows = await q.query<InvocationView & { created_at: Date }>(
         `select invocation_id, command_id, command_version, source, source_message_id, trigger, viewer_id,
            viewer_login, viewer_display_name, viewer_role, viewer_groups, follower, raw_args, args, live,
-           decision, reason, reason_detail, rendered, status, created_at
-         from cmd_invocations where channel_id = $1 and ($2::uuid is null or command_id = $2)
+           decision, reason, reason_detail, rendered, status, created_at,
+           coalesce((select json_agg(json_build_object('seq', s.seq, 'kind', s.kind, 'status', s.status,
+               'error', s.error->>'code', 'twitch_message_id', s.twitch_message_id, 'finished_at', s.finished_at)
+               order by s.seq) from cmd_steps s where s.invocation_id = i.invocation_id), '[]'::json) as steps
+         from cmd_invocations i where channel_id = $1 and ($2::uuid is null or command_id = $2)
          order by seq desc limit $3`,
         [channelId, commandId, limit],
       );
@@ -313,12 +325,29 @@ export class CommandsAdmission {
        order by name`,
       [channelId],
     );
+    // The streamer's categories, in their order (a command without one is « Sans catégorie »).
+    const categories = await this.db.query<{
+      category_id: string;
+      name: string;
+      icon: string;
+      color: string;
+    }>(
+      'select category_id, name, icon, color from cmd_categories where channel_id = $1 order by position, name',
+      [channelId],
+    );
+    const cat = new Map(categories.map((c) => [c.category_id, c]));
     return {
+      categories: categories.map(({ category_id, name, icon, color }) => ({
+        category_id,
+        name,
+        icon,
+        color,
+      })),
       commands: rows.map(({ config: c }) => ({
         name: c.name,
         aliases: c.aliases,
         description: c.description,
-        category: c.category,
+        category_id: c.category && cat.has(c.category) ? c.category : null,
         appearance: c.appearance,
         syntax: syntax(c),
         when: c.when,

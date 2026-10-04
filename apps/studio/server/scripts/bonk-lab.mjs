@@ -69,6 +69,7 @@ try {
     '20261011120000_commands_v2.sql',
     '20261012120000_commands_v2_invocations.sql',
     '20261013120000_commands_v2_steps.sql',
+    '20261014120000_commands_v2_categories.sql',
   ]) {
     if (
       (

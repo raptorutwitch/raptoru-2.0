@@ -163,8 +163,11 @@ export const CmdConfig = z.strictObject({
   name: CmdWord,
   aliases: z.array(CmdWord).max(10),
   description: z.string().trim().max(120),
-  /** Organisation. */
-  category: z.string().regex(/^[a-z][a-z0-9_-]{0,23}$/),
+  /** Organisation: a category of the channel (cmd_categories), or null = « Sans catégorie ». */
+  category: z
+    .string()
+    .regex(/^[a-z][a-z0-9_-]{0,23}$/)
+    .nullable(),
   /** Appearance (the favourite is a Studio preference, not part of the command). */
   appearance: z.strictObject({
     icon: z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/),
@@ -327,4 +330,29 @@ export type CmdStepAckRequest = z.infer<typeof CmdStepAckRequest>;
 export const CmdOutputRequest = z.strictObject({
   actor: LabActor,
   enabled: z.boolean(),
+});
+
+// --- phase D: categories (the streamer's, stored in Core) ----------------------------------------------
+
+export const CmdCategoryId = z.string().regex(/^[a-z][a-z0-9_-]{0,23}$/);
+const CategoryFields = {
+  name: z.string().trim().min(1).max(24),
+  icon: z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/),
+  color: z.string().regex(/^#[0-9a-f]{6}$/),
+};
+export const CmdCategoryCreateRequest = z.strictObject({
+  actor: LabActor,
+  ...CategoryFields,
+});
+export const CmdCategoryUpdateRequest = z.strictObject({
+  actor: LabActor,
+  name: CategoryFields.name.optional(),
+  icon: CategoryFields.icon.optional(),
+  color: CategoryFields.color.optional(),
+});
+export const CmdCategoryDeleteRequest = z.strictObject({ actor: LabActor });
+/** The complete new order (every category id once). */
+export const CmdCategoryOrderRequest = z.strictObject({
+  actor: LabActor,
+  order: z.array(CmdCategoryId).max(100),
 });

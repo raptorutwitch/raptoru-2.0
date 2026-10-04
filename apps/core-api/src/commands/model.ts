@@ -23,7 +23,7 @@ export function defaultConfig(name: string): CmdConfig {
     name,
     aliases: [],
     description: '',
-    category: 'general',
+    category: null,
     appearance: { icon: 'chat', color: '#8b5cf6' },
     enabled: true,
     listed: true,

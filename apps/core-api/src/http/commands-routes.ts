@@ -1,4 +1,8 @@
 import {
+  CmdCategoryCreateRequest,
+  CmdCategoryDeleteRequest,
+  CmdCategoryOrderRequest,
+  CmdCategoryUpdateRequest,
   CmdCreateRequest,
   CmdOutputRequest,
   CmdStepAckRequest,
@@ -70,7 +74,70 @@ export function commandsRoutes(
 ): Route[] {
   const channel = (params: string[]) => parse(Digits, params[0]);
   const id = (params: string[]) => parse(Uuid, params[1]);
+  const catId = (params: string[]) =>
+    parse(z.string().regex(/^[a-z][a-z0-9_-]{0,23}$/), params[1]);
   return [
+    // Phase D — the streamer's categories (Studio); the team reads them.
+    {
+      method: 'GET',
+      pattern: new RegExp(`${BASE}/categories$`),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() => commands.categories(channel(params), reader(url))),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/categories$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() => {
+          const req = parse(CmdCategoryCreateRequest, body);
+          return commands.createCategory(channel(params), req.actor, req);
+        }),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/categories/order$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() => {
+          const req = parse(CmdCategoryOrderRequest, body);
+          return commands.orderCategories(
+            channel(params),
+            req.actor,
+            req.order,
+          );
+        }),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/categories/([a-z][a-z0-9_-]{0,23})/update$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() => {
+          const req = parse(CmdCategoryUpdateRequest, body);
+          return commands.updateCategory(
+            channel(params),
+            req.actor,
+            catId(params),
+            req,
+          );
+        }),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/categories/([a-z][a-z0-9_-]{0,23})/delete$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() => {
+          const req = parse(CmdCategoryDeleteRequest, body);
+          return commands.deleteCategory(
+            channel(params),
+            req.actor,
+            catId(params),
+          );
+        }),
+    },
     // Phase C — durable steps: « Sortie chat réelle » (OFF by default), executor claim / ACK, debug list.
     {
       method: 'GET',

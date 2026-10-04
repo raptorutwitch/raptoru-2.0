@@ -8,6 +8,7 @@ import {
 } from './lab-moderation/proxy.js';
 import { RaffleRuntime } from './raffle-lab/runtime.js';
 import { LabChatIngress } from './lab-chat/ingress.js';
+import { commandsRelay } from './commands/relay.js';
 import { ManagedProcess, PidStore } from './test-lab/managed-process.js';
 import { existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -263,6 +264,7 @@ export function createStudioServer(
   labApi: ReturnType<typeof labProxy> | null = null,
   raffle: RaffleRuntime | null = null,
   labChat: LabChatIngress | null = null,
+  commands: ReturnType<typeof commandsRelay> | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -291,6 +293,15 @@ export function createStudioServer(
           last_exit: null,
           lines: [],
         });
+      // Commands V2: Core decides; Studio relays (configuration, categories, rights, test, history).
+      if (
+        url.pathname === '/api/commands' ||
+        url.pathname.startsWith('/api/commands/')
+      ) {
+        if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
+        if (!commands) return send(res, 503, { error: 'lab_core_unavailable' });
+        if (await commands(req, res, url)) return;
+      }
       if (url.pathname === '/api/raffle/status' && !raffle)
         return send(res, 200, { enabled: false });
       // Moderation V2 cockpit / TTS configuration / Lab test wallet (relayed to the local Lab Core).
@@ -591,6 +602,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     labApi,
     raffle,
     labChat,
+    labCore ? commandsRelay(labCore) : null,
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(

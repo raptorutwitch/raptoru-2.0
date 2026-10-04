@@ -4,6 +4,7 @@ import './sound-config.css';
 import './studio-home.css';
 import './moderation.css';
 import './tombola.css';
+import './commands.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
 import { mountSoundConfig } from './sound-config.js';
@@ -11,11 +12,13 @@ import { mountUpdateWidget } from './update.js';
 import { mountStudioHome } from './studio-home.js';
 import { mountModeration } from './moderation.js';
 import { mountTombola } from './tombola.js';
+import { mountCommands } from './commands.js';
 
 type TabId =
   | 'studio'
   | 'moderation'
   | 'tombola'
+  | 'commands'
   | 'test-lab'
   | 'extension-lab'
   | 'soundboard';
@@ -31,6 +34,7 @@ if (app) {
         <button class="tab" type="button" data-tab="studio">Studio <em>runtime</em></button>
         <button class="tab" type="button" data-tab="moderation">Modération <em>Core</em></button>
         <button class="tab" type="button" data-tab="tombola">Tombola <em>Core</em></button>
+        <button class="tab" type="button" data-tab="commands">Commandes <em>Core</em></button>
         <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
         <button class="tab" type="button" data-tab="soundboard">Soundboard <em>config</em></button>
@@ -41,6 +45,7 @@ if (app) {
     <main id="tab-studio"></main>
     <main id="tab-moderation" hidden></main>
     <main id="tab-tombola" class="tab-flush" hidden></main>
+    <main id="tab-commands" hidden></main>
     <main id="tab-test-lab" hidden></main>
     <main id="tab-extension-lab" class="tab-full" hidden></main>
     <main id="tab-soundboard" hidden></main>`;
@@ -50,6 +55,9 @@ if (app) {
     app.querySelector<HTMLElement>('#tab-moderation')!,
   );
   const tombola = mountTombola(app.querySelector<HTMLElement>('#tab-tombola')!);
+  const commands = mountCommands(
+    app.querySelector<HTMLElement>('#tab-commands')!,
+  );
   const extensionLab = mountExtensionLab(
     app.querySelector<HTMLElement>('#tab-extension-lab')!,
   );
@@ -68,6 +76,9 @@ if (app) {
     moderation.setVisible(tab === 'moderation');
     app.querySelector<HTMLElement>('#tab-tombola')!.hidden = tab !== 'tombola';
     tombola.setVisible(tab === 'tombola');
+    app.querySelector<HTMLElement>('#tab-commands')!.hidden =
+      tab !== 'commands';
+    commands.setVisible(tab === 'commands');
     app.querySelector<HTMLElement>('#tab-test-lab')!.hidden =
       tab !== 'test-lab';
     app.querySelector<HTMLElement>('#tab-extension-lab')!.hidden =
@@ -101,6 +112,7 @@ if (app) {
       remembered === 'extension-lab' ||
       remembered === 'moderation' ||
       remembered === 'tombola' ||
+      remembered === 'commands' ||
       remembered === 'soundboard' ||
       remembered === 'test-lab'
     )
@@ -113,6 +125,7 @@ if (app) {
     asked === 'studio' ||
     asked === 'moderation' ||
     asked === 'tombola' ||
+    asked === 'commands' ||
     asked === 'test-lab' ||
     asked === 'extension-lab' ||
     asked === 'soundboard'

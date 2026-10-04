@@ -143,15 +143,71 @@ export class CommandsService {
       // A module may claim a word after a command took it (e.g. a Tombola alias added later):
       // shown, never silently resolved.
       const reserved = await this.reserved(q, channelId);
+      const now = this.clock.now().getTime();
+      // Accepted uses over 30 days, and the outcome of the last chat step sent for each command.
+      const uses = new Map(
+        (
+          await q.query<{ command_id: string; n: number }>(
+            `select command_id, count(*)::int as n from cmd_invocations
+             where channel_id = $1 and decision = 'accepted' and created_at > $2 group by command_id`,
+            [channelId, new Date(now - 30 * 86_400_000)],
+          )
+        ).map((u) => [u.command_id, Number(u.n)]),
+      );
+      const last = new Map(
+        (
+          await q.query<{
+            command_id: string;
+            status: string;
+            code: string | null;
+            at: Date;
+          }>(
+            `select distinct on (i.command_id) i.command_id, s.status, s.error->>'code' as code, s.finished_at as at
+             from cmd_steps s join cmd_invocations i using (invocation_id)
+             where s.channel_id = $1 and s.type = 'chat' and s.status in ('succeeded', 'failed', 'unknown', 'expired')
+             order by i.command_id, s.seq_global desc`,
+            [channelId],
+          )
+        ).map((l) => [l.command_id, l]),
+      );
       return {
-        commands: rows.map((r) => ({
-          ...view(r),
-          shadowed_words: reserved.filter(
+        commands: rows.map((r) => {
+          const shadowed = reserved.filter(
             (w) =>
               w.word === r.config.name || r.config.aliases.includes(w.word),
-          ),
-        })),
+          );
+          const l = last.get(r.command_id);
+          const me =
+            r.config.reply.mode === 'me' ||
+            r.config.actions.some((a) => a.type === 'chat' && a.mode === 'me');
+          // What needs the streamer's attention, worst first (the UI only words it).
+          const issues = [
+            ...shadowed.map((w) => ({
+              code: 'word_reserved' as const,
+              word: w.word,
+              module: w.module,
+            })),
+            ...(l && l.status !== 'succeeded'
+              ? [
+                  {
+                    code: 'last_send_failed' as const,
+                    status: l.status,
+                    error: l.code,
+                    at: new Date(l.at).toISOString(),
+                  },
+                ]
+              : []),
+            ...(me ? [{ code: 'me_unsupported' as const }] : []),
+          ];
+          return {
+            ...view(r),
+            shadowed_words: shadowed,
+            uses_30d: uses.get(r.command_id) ?? 0,
+            issues,
+          };
+        }),
         reserved_words: reserved,
+        categories: await this.categoryRows(q, channelId),
       };
     });
   }
@@ -196,6 +252,138 @@ export class CommandsService {
     });
   }
 
+  // --- categories (the streamer's; the team reads them) ----------------------------------------------
+
+  async categories(channelId: string, reader: Actor) {
+    return this.db.tx(async (q) => {
+      await this.teamRole(q, channelId, reader);
+      return { categories: await this.categoryRows(q, channelId) };
+    });
+  }
+
+  async createCategory(
+    channelId: string,
+    actor: Actor,
+    c: { name: string; icon: string; color: string },
+  ) {
+    return this.db.tx(async (q) => {
+      await this.lockChannel(q, channelId);
+      await this.streamerOnly(q, channelId, actor, 'categories');
+      await this.assertCategoryName(q, channelId, c.name, null);
+      const now = this.clock.now();
+      const id = `cat-${randomUUID().slice(0, 8)}`;
+      await q.query(
+        `insert into cmd_categories (channel_id, category_id, name, icon, color, position, created_at, updated_at, updated_by)
+         values ($1, $2, $3, $4, $5,
+           (select coalesce(max(position) + 1, 0) from cmd_categories where channel_id = $1), $6, $6, $7)`,
+        [channelId, id, c.name.trim(), c.icon, c.color, now, label(actor)],
+      );
+      return {
+        category_id: id,
+        categories: await this.categoryRows(q, channelId),
+      };
+    });
+  }
+
+  async updateCategory(
+    channelId: string,
+    actor: Actor,
+    categoryId: string,
+    patch: { name?: string; icon?: string; color?: string },
+  ) {
+    return this.db.tx(async (q) => {
+      await this.lockChannel(q, channelId);
+      await this.streamerOnly(q, channelId, actor, 'categories');
+      const cur = (await this.categoryRows(q, channelId)).find(
+        (c) => c.category_id === categoryId,
+      );
+      if (!cur) throw new CommandsError(404, 'category_not_found');
+      if (patch.name !== undefined)
+        await this.assertCategoryName(q, channelId, patch.name, categoryId);
+      await q.query(
+        `update cmd_categories set name = $3, icon = $4, color = $5, updated_at = $6, updated_by = $7
+         where channel_id = $1 and category_id = $2`,
+        [
+          channelId,
+          categoryId,
+          patch.name?.trim() ?? cur.name,
+          patch.icon ?? cur.icon,
+          patch.color ?? cur.color,
+          this.clock.now(),
+          label(actor),
+        ],
+      );
+      return { categories: await this.categoryRows(q, channelId) };
+    });
+  }
+
+  /** Its commands are kept, « Sans catégorie » (each change logged like any update). */
+  async deleteCategory(channelId: string, actor: Actor, categoryId: string) {
+    return this.db.tx(async (q) => {
+      await this.lockChannel(q, channelId);
+      const role = await this.streamerOnly(q, channelId, actor, 'categories');
+      const gone = await q.query(
+        'delete from cmd_categories where channel_id = $1 and category_id = $2 returning category_id',
+        [channelId, categoryId],
+      );
+      if (!gone.length) throw new CommandsError(404, 'category_not_found');
+      const rows = await q.query<Row>(
+        `select ${COLS} from cmd_commands where channel_id = $1 and deleted_at is null and config->>'category' = $2
+         order by name for update`,
+        [channelId, categoryId],
+      );
+      for (const cur of rows) {
+        const after = { ...cur.config, category: null };
+        await this.write(
+          q,
+          channelId,
+          cur,
+          after,
+          actor,
+          role,
+          'update',
+          diffConfig(cur.config, after),
+        );
+      }
+      // Positions stay 0..n-1.
+      await q.query(
+        `update cmd_categories c set position = o.n - 1 from (
+           select category_id, row_number() over (order by position, name) as n from cmd_categories where channel_id = $1
+         ) o where c.channel_id = $1 and c.category_id = o.category_id`,
+        [channelId],
+      );
+      return {
+        moved: rows.length,
+        categories: await this.categoryRows(q, channelId),
+      };
+    });
+  }
+
+  async orderCategories(channelId: string, actor: Actor, order: string[]) {
+    return this.db.tx(async (q) => {
+      await this.lockChannel(q, channelId);
+      await this.streamerOnly(q, channelId, actor, 'categories');
+      const ids = (await this.categoryRows(q, channelId)).map(
+        (c) => c.category_id,
+      );
+      if (
+        order.length !== ids.length ||
+        new Set(order).size !== ids.length ||
+        order.some((id) => !ids.includes(id))
+      )
+        throw new CommandsError(422, 'invalid_order', {
+          message: 'the order must list every category once',
+          categories: ids,
+        });
+      for (const [i, id] of order.entries())
+        await q.query(
+          'update cmd_categories set position = $3 where channel_id = $1 and category_id = $2',
+          [channelId, id, i],
+        );
+      return { categories: await this.categoryRows(q, channelId) };
+    });
+  }
+
   // --- mutations -----------------------------------------------------------------------------------
 
   async create(channelId: string, actor: Actor, partial: Partial<CmdConfig>) {
@@ -223,6 +411,7 @@ export class CommandsService {
         assertTeamMayChange(role, rights.rights, changes, after, true);
       }
       await this.assertWordsFree(q, channelId, null, after);
+      await this.assertCategory(q, channelId, after.category);
       const id = randomUUID();
       const now = this.clock.now();
       await q.query(
@@ -284,6 +473,8 @@ export class CommandsService {
       }
       if (diff.some((c) => c.field === 'name' || c.field === 'aliases'))
         await this.assertWordsFree(q, channelId, commandId, after);
+      if (diff.some((c) => c.field === 'category'))
+        await this.assertCategory(q, channelId, after.category);
       return this.write(q, channelId, cur, after, actor, role, 'update', diff);
     });
   }
@@ -563,6 +754,73 @@ export class CommandsService {
     if (acc.role === 'viewer')
       throw new CommandsError(403, 'team_only', { role: 'viewer' });
     return acc.role as Exclude<LabRole, 'viewer'>;
+  }
+
+  private async streamerOnly(
+    q: Queryable,
+    channelId: string,
+    a: Actor,
+    action: string,
+  ) {
+    const role = await this.teamRole(q, channelId, a);
+    if (role !== 'broadcaster')
+      throw new CommandsError(403, 'streamer_only', { action, role });
+    return role;
+  }
+
+  private async categoryRows(q: Queryable, channelId: string) {
+    const rows = await q.query<{
+      category_id: string;
+      name: string;
+      icon: string;
+      color: string;
+      position: number;
+      updated_at: Date;
+      updated_by: string;
+    }>(
+      `select category_id, name, icon, color, position, updated_at, updated_by from cmd_categories
+       where channel_id = $1 order by position, name`,
+      [channelId],
+    );
+    return rows.map((r) => ({
+      ...r,
+      position: Number(r.position),
+      updated_at: new Date(r.updated_at).toISOString(),
+    }));
+  }
+
+  private async assertCategoryName(
+    q: Queryable,
+    channelId: string,
+    name: string,
+    self: string | null,
+  ) {
+    const taken = await q.query(
+      `select 1 from cmd_categories where channel_id = $1 and lower(name) = lower($2)
+         and ($3::text is null or category_id <> $3)`,
+      [channelId, name.trim(), self],
+    );
+    if (taken.length)
+      throw new CommandsError(409, 'category_name_taken', {
+        name: name.trim(),
+      });
+  }
+
+  /** A command's category must exist on the channel (null = « Sans catégorie »). */
+  private async assertCategory(
+    q: Queryable,
+    channelId: string,
+    categoryId: string | null,
+  ) {
+    if (categoryId === null) return;
+    const ok = await q.query(
+      'select 1 from cmd_categories where channel_id = $1 and category_id = $2',
+      [channelId, categoryId],
+    );
+    if (!ok.length)
+      throw new CommandsError(422, 'unknown_category', {
+        category: categoryId,
+      });
   }
 
   private async rightsOf(q: Queryable, channelId: string, role: CmdTeamRole) {
