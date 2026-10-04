@@ -22,3 +22,5 @@ dist/
 # Studio packaging output
 apps/studio/desktop/stage/
 apps/studio/desktop/release/
+# Browser E2E results (Playwright traces / screenshots of failures)
+.e2e-results/

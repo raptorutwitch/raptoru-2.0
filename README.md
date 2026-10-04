@@ -30,6 +30,18 @@ npm run check          # lint + format check + typecheck + tests + build
 npm run studio:package # build the Windows installer: apps/studio/desktop/release/Raptoru Studio Setup <version>.exe
 ```
 
+### Browser E2E (critical chains only)
+
+```sh
+npx playwright install chromium   # once per machine (browser download, outside the repo)
+npm run e2e                       # apps/studio/server/e2e/*.e2e.ts
+```
+
+Each run starts its own isolated stack (`apps/studio/server/e2e/lab-stack.ts`): the real Lab Core
+assembly on an in-memory PostgreSQL, the real Extension Lab EBS and Studio routes, on port 4399
+(`E2E_PORT`). No Twitch, no Docker, no real data; nothing is left behind. A failure keeps its
+screenshot and trace in `apps/studio/server/.e2e-results/` (git-ignored). Not part of `npm run check`.
+
 ## Studio for Windows (installer)
 
 The NSIS installer is the only official format. The portable build was dropped, because a second launch could break an instance already running. The `release/win-unpacked` folder is only for debug and tests.

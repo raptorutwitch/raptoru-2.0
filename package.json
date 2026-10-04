@@ -26,6 +26,7 @@
     "check": "npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build",
     "studio:desktop": "npm run start -w @raptoru/studio-desktop",
     "test": "turbo run test",
+    "e2e": "npm run test:e2e -w @raptoru/studio-server",
     "studio": "turbo run build && npm run start -w @raptoru/studio-desktop",
     "studio:package": "turbo run build && npm run package:win -w @raptoru/studio-desktop",
     "studio:release": "node apps/studio/desktop/scripts/release.mjs",
