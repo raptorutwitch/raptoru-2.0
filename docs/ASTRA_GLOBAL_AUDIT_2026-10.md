@@ -1663,6 +1663,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `0f98e10`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `654758b` : confirmé et reproduit. `migrate()` (`apps/core-api/src/db/migrate.ts`, migrateur de la production, du Test Lab et des tests) lisait l'ensemble appliqué une seule fois puis appliquait chaque fichier dans sa propre transaction, sans verrou : sur une base PostgreSQL jetable (`raptoru_p2007_test`, supprimée ensuite), trois migrateurs lancés ensemble échouent (`duplicate key value violates unique constraint pg_type_typname_nsp_index` à la création concurrente de `schema_migrations`) et pouvaient appliquer deux fois une migration non idempotente. Correction : chaque étape du migrateur (initialisation de la table, puis chaque migration) prend `pg_advisory_xact_lock` (verrou consultatif par base, au niveau transaction : libéré par commit, rollback ou perte de connexion) et revérifie « déjà appliquée ? » sous le verrou ; un migrateur concurrent attend puis saute ce que l'autre a fait. Aucun fichier de migration modifié. Dette résiduelle : les deux migrateurs Lab de Studio (`prepareDatabase()` du runtime et `scripts/bonk-lab.mjs`) restent distincts : ils s'exécutent en une seule transaction (un lancement concurrent échoue et annule tout, sans double application), mais sans verrou ni empreinte ; non modifiés faute de pouvoir les tester sans la base Lab réelle (nom de base fixe).
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -1710,6 +1714,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Historique des migrations identifié par nom seul
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `0f98e10`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `654758b` : confirmé. `schema_migrations` ne gardait que le nom ; un fichier appliqué modifié ensuite n'était pas détecté (le dépôt épingle déjà par test le contenu des migrations historiques, `migration-scopes.test.ts`, mais rien côté base). Correction : colonne `checksum` (nullable) ajoutée par le migrateur à sa propre table (`alter table … add column if not exists`, additif ; aucun fichier de migration modifié) ; chaque migration appliquée désormais enregistre le SHA-256 de son contenu, fins de ligne normalisées (un checkout CRLF ou LF donne la même empreinte) ; au lancement suivant, même nom + même empreinte → OK, même nom + contenu différent → `MigrationModifiedError` avant toute application (fail closed, message explicite). Transition des enregistrements historiques (appliqués avant cette colonne) : ils restent à `null` = « appliquée, non vérifiable », jamais recalculés ni remplis rétroactivement (ce serait certifier un contenu que personne n'a vérifié au moment de l'application — réserve de l'audit), jamais rejoués ; leur protection reste l'épinglage par test du dépôt. Effet : au prochain passage du migrateur sur une base (ex. base locale du Test Lab), la colonne est ajoutée, les lignes existantes inchangées.
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -4152,8 +4160,8 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-004](#astra-p2-004) | P2 | Contrats | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P2-005](#astra-p2-005) | P2 | Core | FERMÉ — corrigé | `28e9fd3` | raffle-v2 « Twitch pictures (ASTRA-P2-005) » : 2 ticks concurrents → 1 seul appel Twitch ; appel Twitch figé → TimeoutError au budget ; test existant : panne → initiales → retry 1 h → récupération | — | — |
 | [ASTRA-P2-006](#astra-p2-006) | P2 | Core | FERMÉ — corrigé | `5ff2519` | moderation-d4 « ASTRA-P2-006 » : wallet à plafond − 100, remboursement d'un TTS de 7 500 → solde = plafond, ligne refund = 100 (échoue sur l'ancien code : 7 500), variation du solde = somme des lignes du ledger, audit after.amount = 100, second remboursement sans ligne ni effet ; Core 374, Studio server 142 | Optionnel : Studio « Wallet de test » → solde proche du plafond, rembourser un TTS → historique wallet = montant crédité | — |
-| [ASTRA-P2-007](#astra-p2-007) | P2 | Database | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
-| [ASTRA-P2-008](#astra-p2-008) | P2 | Database | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
+| [ASTRA-P2-007](#astra-p2-007) | P2 | Database | FERMÉ — corrigé | `0f98e10` | PostgreSQL jetable (migrate.integration.test.ts, ajouté à test:integration) : 3 migrateurs simultanés sur des migrations non idempotentes → chacune appliquée une fois, compteur = 3, empreintes enregistrées (3/3 exécutions ; l'ancien migrateur échoue) ; migration en erreur → verrou libéré, la suivante passe ; Core 375 + 4 | — | Migrateurs Lab de Studio (une transaction) : sans verrou ni empreinte |
+| [ASTRA-P2-008](#astra-p2-008) | P2 | Database | FERMÉ — corrigé | `0f98e10` | migrate.test.ts (PGlite) : empreinte enregistrée ; relance inchangée → rien ; fichier appliqué modifié → refus, migration suivante non appliquée ; CRLF = LF ; ligne historique sans empreinte → conservée, non rejouée, non remplie ; PostgreSQL jetable : empreintes enregistrées sous concurrence | — | Lignes historiques : « non vérifiables » par choix explicite (pas de preuve rétroactive) |
 | [ASTRA-P2-009](#astra-p2-009) | P2 | Documentation | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-010](#astra-p2-010) | P2 | Extension | FERMÉ — corrigé | `52591d0` | Extension test/api.test.js : corps bloqué → erreur à 8 s (échoue sur l'ancien code : blocage) ; réponse normale ; retry 503 avec la même clé ; Extension 28/28 | — | — |
 | [ASTRA-P2-011](#astra-p2-011) | P2 | Extension | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
