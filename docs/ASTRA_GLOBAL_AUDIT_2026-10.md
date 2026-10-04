@@ -1105,6 +1105,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `2aba120`
+
+**Résolution (passe P1, 2026-10-04) :** Confirmé sur `8895ed7` : TTS — `TtsWorker.command()` marquait `reported: failed` en remettant `{stop}` puis l'entrée était retirée au tick suivant, et le lecteur ne confirmait pas ; Soundboard — `stopOrders()` posait `stopSent` avant la réponse HTTP (le lecteur envoyait bien `stopped`, mais une réponse perdue n'était jamais reproposée). Correction : les deux workers reproposent l'ordre d'arrêt (au plus une fois par seconde, `stopSentAt`) jusqu'à l'ACK `stopped` du bon lecteur/tentative ; le lecteur TTS confirme désormais `stopped` (l'ordre porte `attempt_id`) et son arrêt est idempotent (déjà silencieux : il ne fait que confirmer). Un `play` n'est toujours jamais remis deux fois ; un ACK tardif `completed` reste ignoré ; remboursement unique par Core inchangé. Le test historique « stop once » (tts-lab.test.ts) imposait la mauvaise garantie : remplacé par « reproposé jusqu'à preuve ». Hors périmètre : P2-028 (garde de fin des lecteurs).
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -3989,7 +3993,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-014](#astra-p1-014) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | test-lab.test.ts « shutdown barrier » | Fermer Studio avec l'ingestion ON : plus de processus labchat restant | — |
 | [ASTRA-P1-015](#astra-p1-015) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | lab-chat.test.ts supervision (2) ; bot 91/91 | Ingestion ON, tuer le processus labchat → reconnexion en ≤ 5 s | — |
 | [ASTRA-P1-016](#astra-p1-016) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | local-env.test.ts (3) ; suite Studio server 137/137 | Studio packagé : vérifier `<données>/apps/twitch-bot/.lab-chat-journal.json` après un envoi Commands V2 | Dossier données sans `apps/twitch-bot` : l'exécuteur échoue comme avant (jetons au même endroit) |
-| [ASTRA-P1-017](#astra-p1-017) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
+| [ASTRA-P1-017](#astra-p1-017) | P1 | Studio | FERMÉ — corrigé | `2aba120` | tts-lab « moderation stop: proposed again… » ; moderation-d4 Soundboard stop (réponse perdue → reproposé → prouvé) ; Studio server 138/138 | Requis : arrêt modération d'un TTS en cours (OBS/aperçu) puis d'un son Soundboard — silence immédiat, plus d'ordre ensuite | Lecteur TTS d'une ancienne page ouverte : ordre reproposé sans effet jusqu'au rechargement |
 | [ASTRA-P1-018](#astra-p1-018) | P1 | Tests | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P1-019](#astra-p1-019) | P1 | Transport | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P2-001](#astra-p2-001) | P2 | Build | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
