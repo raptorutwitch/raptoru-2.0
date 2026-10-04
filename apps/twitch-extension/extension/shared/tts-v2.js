@@ -28,6 +28,7 @@ const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const fmt = (n) => Number(n).toLocaleString('fr-FR');
 const codePoints = (t) => Array.from(String(t || '')).length;
 /** Legacy cleanup (same as Core): control characters → spaces, whitespace collapsed. */
+// eslint-disable-next-line no-control-regex -- control characters are stripped on purpose
 const normalize = (raw) => String(raw ?? '').replace(/[\u0000-\u001F\u007F-\u009F]/gu, ' ').replace(/\s+/gu, ' ').trim();
 const secs = (s) => (s >= 60 ? `${Math.floor(s / 60)} min${s % 60 ? ` ${String(s % 60).padStart(2, '0')}` : ''}` : `${s} s`);
 const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };

@@ -135,7 +135,7 @@ export function summarizeTimeoutContext(context) {
 function elementSnapshot(element) {
   if (!element) return { present: false };
   const rect = element.getBoundingClientRect();
-  let style = null;
+  let style;
   try {
     const computed = getComputedStyle(element);
     style = {
@@ -213,7 +213,7 @@ export function installTimeoutDebugLifecycle({ isComponentView = false, getOpen 
       source_path: (() => { try { return new URL(event.filename).pathname; } catch { return null; } })(),
       line: Number(event.lineno) || null,
       column: Number(event.colno) || null,
-      resource_error: !Boolean(event.message),
+      resource_error: !event.message,
     })],
     [window, 'unhandledrejection', (event) => traceTimeoutDebug('runtime.unhandledrejection', {
       reason_name: event.reason?.name ? String(event.reason.name) : null,

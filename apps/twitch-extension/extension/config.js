@@ -106,7 +106,7 @@ async function updateTts(patch, confirmation) {
 }
 
 pauseButton.addEventListener('click', () => {
-  const paused = !Boolean(currentSession?.moderation?.tts?.paused);
+  const paused = !currentSession?.moderation?.tts?.paused;
   updateTts(
     { paused },
     paused ? 'TTS suspendu. La lecture et la file sont conservées.' : 'TTS repris.',

@@ -41,7 +41,7 @@ const P = {
 const ic = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // Thousands separator: a no-break space (never « 7 » / « 000 » on two lines), present in every font.
-const fmt = (n) => Number(n).toLocaleString('fr-FR').replace(/[   ]/g, ' ');
+const fmt = (n) => Number(n).toLocaleString('fr-FR').replace(/[\u202F\u00A0 ]/g, '\u00A0');
 const hhmm = (iso) => (iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '');
 const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 /** Same stable hue as the prototype avatars. */

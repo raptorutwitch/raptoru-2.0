@@ -57,7 +57,6 @@ function dynamicSessionState(session) {
 }
 
 export const isDemo = () => {
-  const hostname = globalThis.location?.hostname;
   return RUNTIME.mode === 'demo';
 };
 
@@ -588,7 +587,6 @@ export const ERROR_LABELS = {
   test_user_not_allowed: 'Ce compte n’est pas autorisé.',
   test_channelpoints_disabled: 'Les points de chaîne sont désactivés.',
   test_mode_unavailable: 'Le service de test n’est pas disponible.',
-  module_disabled: 'Ce module est temporairement désactivé par la modération.',
   sound_not_found: 'Ce son n’existe pas (ou plus).',
   sound_disabled: 'Ce son est temporairement désactivé.',
   sound_cooldown: 'Ce son est en cooldown : réessaie dans quelques secondes.',

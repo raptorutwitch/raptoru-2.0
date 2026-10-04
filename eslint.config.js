@@ -9,8 +9,6 @@ export default defineConfig(
       '**/.turbo/**',
       'apps/studio/desktop/stage/**',
       'apps/studio/desktop/release/**',
-      // Production extension imported as is (see apps/twitch-extension/README.md).
-      'apps/twitch-extension/extension/**',
       'apps/studio/server/bonk-overlay/bonk-v3-core.js',
       // Local UX prototypes (untracked, never versioned).
       'prototypes/**',
@@ -18,4 +16,45 @@ export default defineConfig(
   },
   js.configs.recommended,
   tseslint.configs.recommended,
+  {
+    // Twitch extension (ASTRA-P2-011): plain browser ES modules, linted like the rest of the repo.
+    files: ['apps/twitch-extension/extension/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: Object.fromEntries(
+        [
+          'window',
+          'document',
+          'location',
+          'console',
+          'localStorage',
+          'performance',
+          'crypto',
+          'fetch',
+          'URL',
+          'URLSearchParams',
+          'AbortController',
+          'Audio',
+          'CSS',
+          'ResizeObserver',
+          'getComputedStyle',
+          'structuredClone',
+          'queueMicrotask',
+          'requestAnimationFrame',
+          'cancelAnimationFrame',
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval',
+        ].map((name) => [name, 'readonly']),
+      ),
+    },
+    rules: {
+      // `({ dropped, ...rest })` is how these modules omit a field.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { ignoreRestSiblings: true },
+      ],
+    },
+  },
 );

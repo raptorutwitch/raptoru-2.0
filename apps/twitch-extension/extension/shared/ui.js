@@ -501,6 +501,8 @@ const SOUNDBOARD_ALIASES_KEY = 'raptoru-live:soundboard-aliases';
 export const SOUNDBOARD_ALIAS_MAX_LENGTH = 32;
 const TUTORIAL_DISABLED_PREFIX = 'raptoru-live:tutorial-disabled:';
 const EMOTE_CATALOG_REFRESH_MS = 10 * 60 * 1000;
+// Soundboard help copy, kept for the tutorial (not wired yet).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const SOUNDBOARD_HELP_PAGES = Object.freeze([
   'Choisis un son dans la liste, puis appuie sur Envoyer pour le jouer sur le stream.',
   'Utilise 🔊 pour écouter gratuitement un son avant de l’envoyer.',
@@ -551,6 +553,7 @@ function visibleModuleLabel(mod) {
 
 function normalizeTtsDraft(value) {
   return String(value ?? '')
+    // eslint-disable-next-line no-control-regex -- control characters are stripped on purpose
     .replace(/[\u0000-\u001F\u007F-\u009F]/gu, ' ')
     .replace(/\s+/gu, ' ')
     .trim();
@@ -633,6 +636,7 @@ export function reorderSoundboardVisibleSubset(order, visibleIds, reorderedVisib
 export function normalizeSoundboardAlias(value, maxLength = SOUNDBOARD_ALIAS_MAX_LENGTH) {
   const limit = Math.max(1, Number(maxLength) || SOUNDBOARD_ALIAS_MAX_LENGTH);
   return Array.from(String(value ?? '')
+    // eslint-disable-next-line no-control-regex -- control characters are stripped on purpose
     .replace(/[\u0000-\u001F\u007F-\u009F]/gu, ' ')
     .replace(/\s+/gu, ' ')
     .trim())
@@ -938,7 +942,7 @@ export function createEmoteAuthorizationPoller({
       return;
     }
 
-    let closed = false;
+    let closed;
     try { closed = isPopupClosed() === true; } catch { closed = true; }
     if (closed && popupClosedAt === null) popupClosedAt = current;
 
@@ -1354,7 +1358,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       || data?.flow !== 'viewer-emotes'
       || data?.ok !== true
     ) return;
-    let oauthOrigin = '';
+    let oauthOrigin;
     try { oauthOrigin = new URL(RUNTIME.siteUrl).origin; } catch { return; }
     if (!oauthOrigin || event.origin !== oauthOrigin) return;
 
@@ -3235,7 +3239,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function bonkForm(mod, body) {
-    const pending = pendingFor('bonk');
     const interactionsAvailable = interactionsAvailableForState();
     const favoriteKey = 'raptoru-live:bonk-favorites';
     const recentKey = 'raptoru-live:bonk-recents';
@@ -4052,7 +4055,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       ));
     }
 
-    let participantSection = null;
+    let participantSection;
     if (active) {
       participantSection = el('section', 'jdm-raffle-participants');
       participantSection.setAttribute('aria-label', 'Participants à la Tombola');
