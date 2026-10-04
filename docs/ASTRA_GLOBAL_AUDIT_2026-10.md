@@ -2841,6 +2841,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `cc3994d`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `ca95a66` : confirmé et reproduit. `postgres.integration.test.ts` et `commands-v2.integration.test.ts` font tous deux `drop schema public cascade` sur `TEST_DATABASE_URL`, et Vitest exécute les fichiers en parallèle (`test:integration`, ou `npm test` avec la variable). Sur une base jetable locale (`raptoru_p2029_test`, créée puis supprimée), lancées ensemble : 3 échecs sur 3 de `commands-v2.integration` ; chacune seule : verte. Correction minimale sans réécrire le harnais : chaque suite destructive prend un verrou consultatif PostgreSQL (`test/pg-exclusive.ts`, propre à la base) sur sa propre connexion avant l'effacement et le garde jusqu'à sa fin ; la concurrence multi-connexions interne aux suites (la vraie preuve) est conservée ; des suites sur des bases différentes restent parallèles.
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -4100,7 +4104,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-026](#astra-p2-026) | P2 | Restart/replay | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-027](#astra-p2-027) | P2 | Sécurité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-028](#astra-p2-028) | P2 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
-| [ASTRA-P2-029](#astra-p2-029) | P2 | Tests | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
+| [ASTRA-P2-029](#astra-p2-029) | P2 | Tests | FERMÉ — corrigé | `cc3994d` | Base jetable : les deux suites ensemble 3/3 vertes (contre 3/3 en échec avant) ; chacune seule verte ; npm test avec TEST_DATABASE_URL 383/383 ; npm test sans URL 373 + 10 ignorés (inchangé) | — | — |
 | [ASTRA-P3-001](#astra-p3-001) | P3 | Build | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
 | [ASTRA-P3-002](#astra-p3-002) | P3 | Config | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P3-003](#astra-p3-003) | P3 | Config | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
