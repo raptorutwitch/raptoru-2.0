@@ -15,6 +15,21 @@ const TRANSIENT_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const REQUEST_TIMEOUT_MS = 8_000;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Body of a response within the request budget (ASTRA-P2-010): the headers alone do not end the
+ * request, a body that never completes is aborted with it.
+ */
+function readBody(response, signal) {
+  const body = response.text();
+  if (!signal) return body;
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(Object.assign(new Error('response_timeout'), { name: 'AbortError' }));
+    if (signal.aborted) return abort();
+    signal.addEventListener('abort', abort, { once: true });
+    body.then(resolve, reject);
+  });
+}
 const sessionRoute = (path) => String(path).split('?', 1)[0];
 const diagnosticRoute = (path) => sessionRoute(path)
   .split('/')
@@ -129,6 +144,8 @@ export function createClient({
     // serveur a exécuté l'action mais que la réponse s'est perdue, le second
     // envoi récupère la réponse mémorisée sans rejouer TTS/son/bonk.
     let response;
+    // Budget of the attempt whose response is read: it covers the body too (cleared after reading).
+    let pending = null;
     const route = diagnosticRoute(path);
     const requestStartedAt = globalThis.performance?.now?.() ?? Date.now();
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -160,7 +177,6 @@ export function createClient({
         await wait(180);
         continue;
       }
-      if (timeout) clearTimeout(timeout);
       const status = Number(response?.status || 0);
       traceTimeoutDebug('api.response', {
         method,
@@ -171,12 +187,33 @@ export function createClient({
         duration_ms: Math.max(0, Math.round((globalThis.performance?.now?.() ?? Date.now()) - requestStartedAt)),
       });
       if (attempt === 0 && TRANSIENT_HTTP_STATUSES.has(status)) {
+        if (timeout) clearTimeout(timeout);
         await wait(status === 429 ? 350 : 180);
         continue;
       }
+      pending = { timeout, signal: controller?.signal ?? null };
       break;
     }
-    const responsePayload = await response.json().catch((error) => {
+    let text;
+    try {
+      text = await readBody(response, pending?.signal);
+    } catch (error) {
+      traceTimeoutDebug('api.response.body_error', {
+        method,
+        route,
+        http_status: Number(response?.status || 0),
+        error_name: error?.name ? String(error.name) : null,
+        error_message: error?.message || error || '',
+      });
+      // Headers received, body not: the outcome is unknown, like a network failure (no retry here).
+      throw Object.assign(new Error('network_error'), { code: 'network_error', cause: error });
+    } finally {
+      if (pending?.timeout) clearTimeout(pending.timeout);
+    }
+    let responsePayload = null;
+    try {
+      responsePayload = text.trim() ? JSON.parse(text) : null;
+    } catch (error) {
       traceTimeoutDebug('api.response.json_error', {
         method,
         route,
@@ -184,8 +221,17 @@ export function createClient({
         error_name: error?.name ? String(error.name) : null,
         error_message: error?.message || error || '',
       });
-      return {};
-    });
+    }
+    if (!responsePayload || typeof responsePayload !== 'object') {
+      // A success must carry its JSON object (ASTRA-P2-003): never a silent {} (204 = no content).
+      if (response.ok && response.status !== 204) {
+        throw Object.assign(new Error('invalid_response'), {
+          code: 'invalid_response',
+          status: Number(response?.status || 0),
+        });
+      }
+      responsePayload = {};
+    }
     if (!response.ok || responsePayload?.ok === false) {
       traceTimeoutDebug('api.response.failure', {
         method,
