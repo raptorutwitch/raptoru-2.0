@@ -111,6 +111,12 @@ runEventSub({
       );
   },
 });
+// Stopping (Studio OFF / closing): chat retries in memory are dropped explicitly, never persisted.
+for (const signal of ['SIGINT', 'SIGTERM'] as const)
+  process.on(signal, () => {
+    ingest.close();
+    process.exit(0);
+  });
 // Lost stream transitions (Core down when the event came) are repaired from Helix, like the main bot's
 // loop: chained timers, never overlapping.
 const reconcileLoop = async () => {

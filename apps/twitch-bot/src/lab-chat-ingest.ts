@@ -26,6 +26,26 @@ export interface LabChatIngestDeps {
   ): Promise<void>;
   getStream(): Promise<HelixStream | null>;
   log?: (...args: unknown[]) => void;
+  /** Injectable clock (tests). */
+  now?: () => number;
+}
+
+/**
+ * Chat command whose forward to Core failed (ASTRA-P1-002, decided policy): retried in memory with the
+ * SAME Twitch message_id after 1 / 2 / 4 / 8 s, never started more than 15 s after reception, then
+ * dropped with a log line. Never persisted: an old game command is not worth replaying. Core stays
+ * the authority: it deduplicates by message_id (one effect, whatever the retries) and decides at
+ * reception (a join after the Tombola closed is refused normally).
+ */
+export const CHAT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
+export const CHAT_RETRY_TTL_MS = 15_000;
+
+/** Worth retrying: Core unreachable / timed out / 5xx / 408 / 429. A 4xx answer will not change. */
+function transient(error: unknown): boolean {
+  const m = /^lab_core_(\d{3})$/.exec((error as Error)?.message ?? '');
+  if (!m) return true;
+  const status = Number(m[1]);
+  return status >= 500 || status === 408 || status === 429;
 }
 
 /** Twitch badge set ids (subscriber, vip…), as Core accepts them (Commands V2 audience). */
@@ -51,6 +71,55 @@ export function chatRole(
 
 export function createLabChatIngest(d: LabChatIngestDeps) {
   const log = d.log ?? console.log;
+  const now = d.now ?? Date.now;
+  /** Chat retries waiting for their next attempt (in memory only). */
+  const retries = new Set<ReturnType<typeof setTimeout>>();
+
+  /** One chat command to Core; on a transient failure, background retries (never blocks EventSub). */
+  const forwardChat = async (body: {
+    message_id: string;
+    [k: string]: unknown;
+  }) => {
+    const receivedAt = now();
+    let attempt = 0;
+    const send = async (): Promise<void> => {
+      try {
+        await d.lab('/v1/lab/chat', body);
+        if (attempt > 0)
+          log(
+            `[lab-chat] chat ${body.message_id} delivered after ${attempt} retr${attempt > 1 ? 'ies' : 'y'}`,
+          );
+      } catch (error) {
+        const reason = (error as Error).message;
+        if (!transient(error)) {
+          log(`[lab-chat] chat ${body.message_id} refused by Core`, reason);
+          return;
+        }
+        const delay = CHAT_RETRY_DELAYS_MS[attempt];
+        if (
+          delay === undefined ||
+          now() + delay - receivedAt > CHAT_RETRY_TTL_MS
+        ) {
+          log(
+            `[lab-chat] chat ${body.message_id} dropped: Core unreachable for ${CHAT_RETRY_TTL_MS / 1000} s`,
+            reason,
+          );
+          return;
+        }
+        attempt += 1;
+        log(
+          `[lab-chat] chat ${body.message_id} forwarding failed, retry ${attempt} in ${delay / 1000} s`,
+          reason,
+        );
+        const timer = setTimeout(() => {
+          retries.delete(timer);
+          void send();
+        }, delay);
+        retries.add(timer);
+      }
+    };
+    await send();
+  };
   /** Last stream state Core actually received (a failed forward leaves it unchanged). */
   let delivered: 'online' | 'offline' | null = null;
   const stream = async (event: 'online' | 'offline', id?: string) => {
@@ -86,7 +155,7 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
           );
           // Only commands are worth a round trip; Core routes them to the Lab modules (Tombola, later TTS, global commands…).
           if (!text.trimStart().startsWith('!')) return;
-          await d.lab('/v1/lab/chat', {
+          await forwardChat({
             channel_id: d.labChannelId,
             message_id: String(event.message_id ?? messageId),
             text: text.slice(0, 500),
@@ -123,6 +192,17 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
      * is forwarded: a session the streamer simulates in Studio is never closed by a steady state.
      * Helix unreachable: throws, nothing is confirmed.
      */
+    /** Chat retries still waiting (in memory). */
+    pendingChatRetries: () => retries.size,
+    /** Adapter stopping: pending chat retries are dropped (never persisted), with a log line. */
+    close() {
+      if (retries.size)
+        log(
+          `[lab-chat] ${retries.size} chat retr(ies) dropped: adapter stopping`,
+        );
+      for (const t of retries) clearTimeout(t);
+      retries.clear();
+    },
     async reconcileStream() {
       const live = await d.getStream();
       const want = live ? 'online' : 'offline';

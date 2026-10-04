@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chatRole, createLabChatIngest } from '../src/lab-chat-ingest.js';
 
 // Lab chat ingestion: forwards, never decides (Core recognizes the commands and the roles).
@@ -171,6 +171,7 @@ describe('Lab chat ingestion (Twitch → Lab Core, every module)', () => {
     await expect(
       ingest.handlers.notification('channel.chat.message', chat(), 'e-1', 't'),
     ).resolves.toBeUndefined();
+    ingest.close(); // its background retry (ASTRA-P1-002) is not part of this test
   });
 
   it('badges → role', () => {
@@ -198,3 +199,101 @@ function createFailing() {
     }),
   };
 }
+
+// ASTRA-P1-002 (decided): chat commands whose forward failed are retried in memory, same message_id,
+// 1 / 2 / 4 / 8 s, never started later than 15 s after reception; Core deduplicates and decides.
+describe('chat retry when Core is briefly unreachable', () => {
+  afterEach(() => vi.useRealTimers());
+
+  /** Fake Lab Core: dedupes by message_id like the real one; `down` until `upAt` (ms). */
+  function retrySetup(
+    opts: { upAt?: number; status?: number; lostAnswer?: boolean } = {},
+  ) {
+    vi.useFakeTimers();
+    const t0 = Date.now();
+    const seen = new Set<string>();
+    const attempts: number[] = [];
+    let effects = 0;
+    const logs: string[] = [];
+    const ingest = createLabChatIngest({
+      lab: async (_path, body) => {
+        attempts.push(Date.now() - t0);
+        if (opts.status) throw new Error(`lab_core_${opts.status}`);
+        if (Date.now() - t0 < (opts.upAt ?? 0)) throw new Error('fetch failed');
+        const id = (body as { message_id: string }).message_id;
+        if (!seen.has(id)) {
+          seen.add(id);
+          effects += 1;
+          // First answer lost after Core committed (timeout on the bot side).
+          if (opts.lostAnswer && effects === 1) throw new Error('TimeoutError');
+          return { outcome: 'joined' };
+        }
+        return { outcome: 'already_joined', replayed: true };
+      },
+      labChannelId: '900100',
+      broadcasterId: '83603689',
+      tokenUserId: '111',
+      subscribe: async () => {},
+      getStream: async () => null,
+      log: (...a: unknown[]) => void logs.push(a.join(' ')),
+    });
+    const send = () =>
+      ingest.handlers.notification('channel.chat.message', chat(), 'e-1', 't');
+    return { ingest, attempts, logs, send, effects: () => effects };
+  }
+
+  it('Core down at the first send, back within 15 s: one admission, no retry after success', async () => {
+    const f = retrySetup({ upAt: 2_500 });
+    await f.send(); // never blocks the EventSub loop
+    expect(f.attempts).toEqual([0]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(f.attempts).toEqual([0, 1000, 3000]); // 3 s: Core answers, nothing after
+    expect(f.effects()).toBe(1);
+    expect(f.ingest.pendingChatRetries()).toBe(0);
+    expect(f.logs.at(-1)).toMatch(/delivered after 2 retries/);
+  });
+
+  it('first answer lost after Core committed: the retry is deduplicated, one effect', async () => {
+    const f = retrySetup({ lostAnswer: true });
+    await f.send();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(f.attempts).toEqual([0, 1000]);
+    expect(f.effects()).toBe(1);
+  });
+
+  it('the same message received several times: one effect', async () => {
+    const f = retrySetup();
+    await f.send();
+    await f.send();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(f.effects()).toBe(1);
+  });
+
+  it('Core down for more than 15 s: last attempt at 15 s, then an explicit drop, nothing later', async () => {
+    const f = retrySetup({ upAt: 60_000 });
+    await f.send();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(f.attempts).toEqual([0, 1000, 3000, 7000, 15000]);
+    expect(f.effects()).toBe(0);
+    expect(f.logs.at(-1)).toMatch(/dropped: Core unreachable for 15 s/);
+  });
+
+  it('a Core refusal (4xx) is final: no retry', async () => {
+    const f = retrySetup({ status: 400 });
+    await f.send();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(f.attempts).toEqual([0]);
+    expect(f.logs.at(-1)).toMatch(/refused by Core/);
+  });
+
+  it('adapter stopping during the retries: pending ones are dropped, nothing is sent later', async () => {
+    const f = retrySetup({ upAt: 2_500 });
+    await f.send();
+    expect(f.ingest.pendingChatRetries()).toBe(1);
+    f.ingest.close();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(f.attempts).toEqual([0]);
+    expect(f.effects()).toBe(0);
+    expect(f.logs.at(-1)).toMatch(/dropped: adapter stopping/);
+  });
+});

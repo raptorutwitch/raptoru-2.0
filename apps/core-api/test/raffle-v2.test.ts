@@ -295,6 +295,8 @@ describe('Tombola V2 admissions', () => {
     await act({ action: 'resume' }, modG);
     await after(62_000);
     expect(await code(joinExt('900215'))).toBe('raffle_closed'); // closes_at reached: Core drew
+    // A chat !join delivered late (bot retry, ASTRA-P1-002) is decided at reception: refused, not forced.
+    expect((await chat('900216', '!join')).outcome).toBe('raffle_closed');
     const { round } = await (await lab()).seen(); // another channel state is untouched
     expect(round).toBeNull();
   });
