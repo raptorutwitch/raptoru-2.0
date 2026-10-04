@@ -1433,6 +1433,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `52591d0`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `b7b5809` : seul chemin de remplacement silencieux restant, le client Extension (`api.js`) qui transformait un JSON invalide en `{}` sur une réponse 2xx (succès annoncé sans contenu). Correction : un 2xx sans objet JSON valide (corps vide, tronqué, non-objet) est une erreur explicite `invalid_response` (204 reste un succès vide) ; les refus HTTP gardent leur contrat (`code`, `details`). Côté Studio/Bot, `localLabCoreClient`, les clients des workers et le bot utilisent `res.json()` qui lève sur un corps invalide (erreur explicite, pas de cast silencieux) ; le lecteur TTS garde `.catch(() => ({}))` sans enjeu : un 200 signifie que Studio a déjà traité l'ACK ou la remise. Dette résiduelle assumée : les réponses du Core Lab sont typées par `as T` sans validation de forme ; Core Lab et Studio sont livrés dans le même paquet (même build), un écart de forme relève de la compatibilité de versions ([ASTRA-P2-004](#astra-p2-004), hors périmètre).
+
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -1807,6 +1811,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Timeout interrompu avant lecture du corps HTTP
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `52591d0`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `b7b5809` : `call()` (`apps/twitch-extension/extension/shared/api.js`) faisait `clearTimeout` dès les en-têtes reçus puis attendait `response.json()` sans limite ; les gardes `refreshInFlight` d'`overlay.js`/`mobile.js` (libérées en `finally`) restaient donc occupées tant que le corps ne finissait pas. Correction : le budget de 8 s de la tentative lue couvre désormais le corps (`readBody()` en course avec le signal d'abandon, minuterie effacée après lecture) ; corps bloqué → `network_error` (cause `response_timeout`), sans retry, car le résultat est inconnu ; les retries P1-009 (une seule reprise sur erreur réseau ou statut transitoire, même Idempotency-Key, avant lecture du corps) sont inchangés.
 
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
@@ -4050,14 +4058,14 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-019](#astra-p1-019) | P1 | Transport | BLOQUÉ — décision de cutover | — | — | — | Décision : transport de production, autorisation Studio, compatibilité/cutover |
 | [ASTRA-P2-001](#astra-p2-001) | P2 | Build | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-002](#astra-p2-002) | P2 | Config | FERMÉ — corrigé | `0e4c040` | test-lab.test.ts « loyalty credits guard » (refus Daily + démarrage forcé) | — | Core externe non géré : hors garde (inchangé) |
-| [ASTRA-P2-003](#astra-p2-003) | P2 | Contrats | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
+| [ASTRA-P2-003](#astra-p2-003) | P2 | Contrats | FERMÉ — corrigé | `52591d0` | Extension test/api.test.js : JSON invalide / vide / non-objet → invalid_response sans retry ; 204 → {} ; refus 403/400 conservés (échoue sur l'ancien code : {} accepté) | — | Validation de forme des réponses internes : relève de P2-004 |
 | [ASTRA-P2-004](#astra-p2-004) | P2 | Contrats | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P2-005](#astra-p2-005) | P2 | Core | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-006](#astra-p2-006) | P2 | Core | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P2-007](#astra-p2-007) | P2 | Database | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
 | [ASTRA-P2-008](#astra-p2-008) | P2 | Database | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P2-009](#astra-p2-009) | P2 | Documentation | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
-| [ASTRA-P2-010](#astra-p2-010) | P2 | Extension | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
+| [ASTRA-P2-010](#astra-p2-010) | P2 | Extension | FERMÉ — corrigé | `52591d0` | Extension test/api.test.js : corps bloqué → erreur à 8 s (échoue sur l'ancien code : blocage) ; réponse normale ; retry 503 avec la même clé ; Extension 28/28 | — | — |
 | [ASTRA-P2-011](#astra-p2-011) | P2 | Extension | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
 | [ASTRA-P2-012](#astra-p2-012) | P2 | Identité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-013](#astra-p2-013) | P2 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
