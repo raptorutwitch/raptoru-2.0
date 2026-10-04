@@ -1603,6 +1603,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **BLOQUÉ — décision requise**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `9075ed7` : confirmé. `refundDebit()` (`apps/core-api/src/lab-moderation/store.ts`) inscrit au ledger un remboursement du montant intégral (`-amount`) et retourne ce montant, puis plafonne le solde par `Math.min(LAB_WALLET_MAX, …)` : si le solde est proche du plafond (jetons 1 000 000 000, crédits 100 000 — contraintes `check` de `lab_wallets`), le solde reçoit moins que le ledger n'annonce. Faits vérifiés : aucun double remboursement possible (index unique `lab_wallet_ledger_once` sur `(interaction_id, kind)`) ; `adminAdjust()` inscrit déjà le montant réellement appliqué ; la situation n'est atteignable qu'en Lab via les outils « Wallet de test » (plafonds de test) ; aucun impact Wallet production. Plusieurs politiques métier sont possibles, donc aucune n'est choisie ici. **Options :** (A) inscrire au ledger le montant réellement crédité (comme `adminAdjust`) et retourner ce montant ; l'interaction reste « remboursée », la part non créditée est perdue mais visible (écart ledger débit/remboursement) — XS, aucune migration, ledger = effet ; (B) autoriser le remboursement à dépasser le plafond (le plafond ne borne que les crédits volontaires) — nécessite une migration additive assouplissant la contrainte `check` (ou un plafond de remboursement distinct), ledger intégral = solde ; (C) remboursement partiel explicite : statut `partially_refunded` + reste dû enregistré — M, nouveau statut à propager aux surfaces. **Recommandation :** A — cohérent avec `adminAdjust`, aucun changement de schéma, réconciliation solde/ledger exacte ; le cas n'existe qu'au plafond de test. À trancher par Antoni.
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -4065,7 +4069,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-003](#astra-p2-003) | P2 | Contrats | FERMÉ — corrigé | `52591d0` | Extension test/api.test.js : JSON invalide / vide / non-objet → invalid_response sans retry ; 204 → {} ; refus 403/400 conservés (échoue sur l'ancien code : {} accepté) | — | Validation de forme des réponses internes : relève de P2-004 |
 | [ASTRA-P2-004](#astra-p2-004) | P2 | Contrats | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P2-005](#astra-p2-005) | P2 | Core | FERMÉ — corrigé | `28e9fd3` | raffle-v2 « Twitch pictures (ASTRA-P2-005) » : 2 ticks concurrents → 1 seul appel Twitch ; appel Twitch figé → TimeoutError au budget ; test existant : panne → initiales → retry 1 h → récupération | — | — |
-| [ASTRA-P2-006](#astra-p2-006) | P2 | Core | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
+| [ASTRA-P2-006](#astra-p2-006) | P2 | Core | BLOQUÉ — décision requise | — | — | — | Décision : politique de remboursement au plafond (recommandation : A) |
 | [ASTRA-P2-007](#astra-p2-007) | P2 | Database | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
 | [ASTRA-P2-008](#astra-p2-008) | P2 | Database | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P2-009](#astra-p2-009) | P2 | Documentation | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
