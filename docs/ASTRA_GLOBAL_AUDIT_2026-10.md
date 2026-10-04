@@ -3273,6 +3273,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **OUVERT — backlog UX (décision produit)**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `6e01363`, sans aucun changement visuel. Depuis l'audit, les trois surfaces Commands (Studio « Commandes », Extension « Modération › Commandes », liste publique « Commandes ») partagent la même liste V6.3 issue du prototype validé (modèle de vue et icônes communs côté Extension, mêmes libellés côté Studio). Écarts restants : esthétiques, entre générations de modules (TTS, Soundboard, Bonk, Tombola, Hub) — feuilles de style volumineuses, composants de plusieurs époques ; aucune incohérence fonctionnelle (même action représentée de façon trompeuse) ni d'accessibilité bloquante n'a été établie, hormis le cas d'historique corrigé en [ASTRA-P3-005](#astra-p3-005). Conformément à la décision P1-008 (extraction progressive) et à la règle « prototype = spécification », toute harmonisation passe par une revue UX ciblée avec les prototypes et l'accord d'Antoni ; laissé au backlog UX.
+
 **Marquages :** **À VÉRIFIER** ; **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -4220,7 +4224,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P3-003](#astra-p3-003) | P3 | Config | FERMÉ — corrigé | `b02bd6c` | local-runtime « ASTRA-P3-003 » (PORT=4399 → ports affichés 4399/4301/3789) ; Studio server local-runtime 11/11 | — | — |
 | [ASTRA-P3-004](#astra-p3-004) | P3 | État | FERMÉ — accepté (A : dernier écrit gagnant, documenté) | — | — | — | À rouvrir si un second éditeur de catégories apparaît |
 | [ASTRA-P3-005](#astra-p3-005) | P3 | Observabilité | FERMÉ — corrigé (cas trompeur) ; historique propre accepté comme dette | `dd98a68` | Extension commands-v2-model « history of a category change » (catégorie existante, supprimée, absente) ; Extension 30/30 ; lint ; build Extension | Optionnel : Extension › Modération › Commandes, historique d'une commande rangée dans une catégorie ensuite supprimée → « Catégorie supprimée » | Historique propre des catégories : non ajouté (confort) |
-| [ASTRA-P3-006](#astra-p3-006) | P3 | UX | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL ; Décision préalable |
+| [ASTRA-P3-006](#astra-p3-006) | P3 | UX | OUVERT — backlog UX (décision produit) | — | — | — | Revue UX ciblée à décider par Antoni |
 
 ### Marquages du registre
 
