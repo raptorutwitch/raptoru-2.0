@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { WorkerLoop } from '../worker-loop.js';
 import { join, extname } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { BonkLabThirdPartyCatalog } from '@raptoru/schemas';
@@ -9,8 +10,7 @@ import { paths, REPO_ROOT } from '../test-lab/local-env.js';
 
 export class BonkRuntime {
   readonly obs = new LabObs();
-  private running = true;
-  private timer: ReturnType<typeof setTimeout> | undefined;
+  private loop: WorkerLoop | null = null;
   private lastObsCheck = 0;
   private sourceReady = false;
   private constructor(
@@ -51,21 +51,23 @@ export class BonkRuntime {
   }
 
   start() {
-    const loop = async () => {
-      if (!this.running) return;
-      if (Date.now() - this.lastObsCheck > 2000) {
-        this.sourceReady = await this.obs.sourceReady(this.overlayUrl);
-        this.lastObsCheck = Date.now();
-      }
-      this.worker.setObs(this.obs.connected, this.sourceReady);
-      await this.worker.tick();
-      if (this.running) this.timer = setTimeout(() => void loop(), 150);
-    };
-    void loop();
+    const loop = new WorkerLoop(
+      async () => {
+        if (Date.now() - this.lastObsCheck > 2000) {
+          this.sourceReady = await this.obs.sourceReady(this.overlayUrl);
+          this.lastObsCheck = Date.now();
+        }
+        this.worker.setObs(this.obs.connected, this.sourceReady);
+        await this.worker.tick();
+      },
+      () => this.worker.busy,
+    );
+    this.worker.onAdmitted = () => loop.wake();
+    this.loop = loop;
+    loop.start();
   }
   stop() {
-    this.running = false;
-    clearTimeout(this.timer);
+    this.loop?.stop();
     this.obs.disconnect();
     this.viewerAuth.stop();
   }

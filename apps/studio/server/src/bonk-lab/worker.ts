@@ -163,22 +163,31 @@ export class BonkWorker {
     });
   }
 
+  /** Local work in progress (entries to hand out, ACK or settle): keep the active cadence. */
+  get busy() {
+    return this.state.entries.length > 0;
+  }
+  /** Called after a successful admission (the loop claims it at once, ASTRA-P2-017). */
+  onAdmitted: (() => void) | null = null;
+
   async admit(
     viewer: BonkLabAdmitRequest['viewer'],
     key: string,
     emote: BonkLabAdmitRequest['emote'],
   ) {
     // No local wallet debit: Core records the simulated cost snapshot.
-    return this.core<{ interaction: BonkLabInteraction; replayed: boolean }>(
-      '/v1/lab/bonk/interactions',
-      {
-        channel_id: CHANNEL,
-        viewer,
-        idempotency_key: key,
-        lab_session_id: this.session,
-        emote,
-      },
-    );
+    const out = await this.core<{
+      interaction: BonkLabInteraction;
+      replayed: boolean;
+    }>('/v1/lab/bonk/interactions', {
+      channel_id: CHANNEL,
+      viewer,
+      idempotency_key: key,
+      lab_session_id: this.session,
+      emote,
+    });
+    this.onAdmitted?.();
+    return out;
   }
   recent(viewer?: string) {
     return this.core<{ interactions: BonkLabInteraction[] }>(

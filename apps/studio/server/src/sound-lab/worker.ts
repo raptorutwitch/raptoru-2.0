@@ -196,24 +196,33 @@ export class SoundWorker {
     return this.settings;
   }
 
-  admit(
+  /** Local work in progress (entries to hand out, ACK or settle): keep the active cadence. */
+  get busy() {
+    return this.state.entries.length > 0;
+  }
+  /** Called after a successful admission (the loop claims it at once, ASTRA-P2-017). */
+  onAdmitted: (() => void) | null = null;
+
+  async admit(
     viewer: SoundLabAdmitRequest['viewer'],
     key: string,
     soundId: string,
     paymentMethod: SoundLabAdmitRequest['payment_method'],
   ) {
     // No local wallet debit: Core records the simulated cost snapshot.
-    return this.core<{ interaction: SoundLabInteraction; replayed: boolean }>(
-      '/v1/lab/sound/interactions',
-      {
-        channel_id: SOUND_CHANNEL,
-        viewer,
-        idempotency_key: key,
-        lab_session_id: this.session,
-        sound_id: soundId,
-        payment_method: paymentMethod,
-      },
-    );
+    const out = await this.core<{
+      interaction: SoundLabInteraction;
+      replayed: boolean;
+    }>('/v1/lab/sound/interactions', {
+      channel_id: SOUND_CHANNEL,
+      viewer,
+      idempotency_key: key,
+      lab_session_id: this.session,
+      sound_id: soundId,
+      payment_method: paymentMethod,
+    });
+    this.onAdmitted?.();
+    return out;
   }
 
   recent() {

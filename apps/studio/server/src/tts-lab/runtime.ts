@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { WorkerLoop } from '../worker-loop.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { TtsLabModerationRequest } from '@raptoru/schemas';
 import { TtsWorker, localTtsCoreClient } from './worker.js';
@@ -14,8 +15,7 @@ const PLAYER_FILES: Record<string, string> = {
 
 /** TTS V2 Lab in Studio: worker loop + local player page (OBS overlay) + status and moderation. */
 export class TtsRuntime {
-  private running = true;
-  private timer: ReturnType<typeof setTimeout> | undefined;
+  private loop: WorkerLoop | null = null;
   private constructor(
     readonly worker: TtsWorker,
     readonly origin: string,
@@ -40,16 +40,16 @@ export class TtsRuntime {
     return new TtsRuntime(worker, origin);
   }
   start() {
-    const loop = async () => {
-      if (!this.running) return;
-      await this.worker.tick();
-      if (this.running) this.timer = setTimeout(() => void loop(), 150);
-    };
-    void loop();
+    const loop = new WorkerLoop(
+      () => this.worker.tick(),
+      () => this.worker.busy,
+    );
+    this.worker.onAdmitted = () => loop.wake();
+    this.loop = loop;
+    loop.start();
   }
   stop() {
-    this.running = false;
-    clearTimeout(this.timer);
+    this.loop?.stop();
   }
 
   async handle(

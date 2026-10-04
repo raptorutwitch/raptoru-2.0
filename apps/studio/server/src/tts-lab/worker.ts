@@ -205,20 +205,32 @@ export class TtsWorker {
       },
     );
   }
-  admit(
+  /** Local work in progress (entries to hand out, ACK or settle): keep the active cadence. */
+  get busy() {
+    return this.state.entries.length > 0;
+  }
+  /** Called after a successful admission (the loop claims it at once, ASTRA-P2-017). */
+  onAdmitted: (() => void) | null = null;
+
+  async admit(
     viewer: { id: string; display_name: string },
     key: string,
     text: string,
     paymentMethod: 'tokens' | 'credits',
   ) {
-    return this.core<TtsLabAdmitResponse>('/v1/lab/tts/interactions', {
-      channel_id: TTS_CHANNEL,
-      viewer,
-      idempotency_key: key,
-      lab_session_id: this.session,
-      text,
-      payment_method: paymentMethod,
-    });
+    const out = await this.core<TtsLabAdmitResponse>(
+      '/v1/lab/tts/interactions',
+      {
+        channel_id: TTS_CHANNEL,
+        viewer,
+        idempotency_key: key,
+        lab_session_id: this.session,
+        text,
+        payment_method: paymentMethod,
+      },
+    );
+    this.onAdmitted?.();
+    return out;
   }
   queue() {
     return this.core<Record<string, unknown>>(
