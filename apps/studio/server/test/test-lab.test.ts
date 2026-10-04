@@ -407,6 +407,9 @@ describe('loyalty credits guard', () => {
     expect(coreGuard({ LOYALTY_EVENT_CREDITS: 'true' })).toMatch(
       /LOYALTY_EVENT_CREDITS/,
     );
+    expect(coreGuard({ DAILY_WALLET_CREDITS: 'true' })).toMatch(
+      /DAILY_WALLET_CREDITS/,
+    ); // ASTRA-P2-002: Daily credits are a Core Wallet write too
     expect(coreGuard({ LOYALTY_PREVIEW: 'true' })).toBeNull();
 
     const { lab, core } = fakeLab();
@@ -414,6 +417,7 @@ describe('loyalty credits guard', () => {
     expect(core.start).toHaveBeenCalledWith({
       LOYALTY_PASSIVE_CREDITS: 'false',
       LOYALTY_EVENT_CREDITS: 'false',
+      DAILY_WALLET_CREDITS: 'false',
     });
     const status = await lab.status();
     expect(status.loyalty.flags).toEqual({

@@ -77,9 +77,19 @@ export function createTestLab(): TestLab {
   return lab;
 }
 
-/** Test Lab never starts a Core able to write Jetons from loyalty rewards. */
+/**
+ * Every automatic Core Wallet write the Test Lab forbids (ASTRA-P2-002): loyalty rewards and Daily
+ * credits. Refused in apps/core-api/.env, and forced off when the Test Lab starts its Core.
+ */
+const CREDIT_FLAGS = [
+  'LOYALTY_PASSIVE_CREDITS',
+  'LOYALTY_EVENT_CREDITS',
+  'DAILY_WALLET_CREDITS',
+] as const;
+
+/** Test Lab never starts a Core able to write Jetons (loyalty rewards, Daily credits). */
 export function coreGuard(env: EnvFile): string | null {
-  for (const flag of ['LOYALTY_PASSIVE_CREDITS', 'LOYALTY_EVENT_CREDITS']) {
+  for (const flag of CREDIT_FLAGS) {
     if ((env[flag] ?? 'false') !== 'false')
       return `refused: ${flag} must be false in apps/core-api/.env`;
   }
@@ -451,12 +461,14 @@ export class TestLab {
     if (!this.deps.core.running) {
       const refused = coreGuard(this.deps.readCoreEnv());
       if (refused) return { step: 'Core', ok: false, detail: refused };
-      this.log('studio', 'starting Core (loyalty credits forced off)');
+      this.log(
+        'studio',
+        'starting Core (loyalty and Daily credits forced off)',
+      );
       // Parent env wins over --env-file: credits stay off even if the file changes later.
-      this.deps.core.start({
-        LOYALTY_PASSIVE_CREDITS: 'false',
-        LOYALTY_EVENT_CREDITS: 'false',
-      });
+      this.deps.core.start(
+        Object.fromEntries(CREDIT_FLAGS.map((flag) => [flag, 'false'])),
+      );
     }
     for (let i = 0; i < 40; i++) {
       if (await this.checkHealth())
