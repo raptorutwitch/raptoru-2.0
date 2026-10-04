@@ -10,7 +10,7 @@
     "start": "node --env-file-if-exists=.env dist/index.js",
     "db:migrate": "tsx --env-file-if-exists=.env src/scripts/migrate.ts",
     "daily:import-legacy": "tsx --env-file-if-exists=.env src/scripts/import-legacy-daily.ts",
-    "test:integration": "vitest run test/postgres.integration.test.ts test/commands-v2.integration.test.ts",
+    "test:integration": "vitest run test/postgres.integration.test.ts test/commands-v2.integration.test.ts test/migrate.integration.test.ts",
     "presence:report": "tsx --env-file-if-exists=.env src/scripts/presence-report.ts",
     "loyalty:report": "tsx --env-file-if-exists=.env src/scripts/loyalty-report.ts"
   },
