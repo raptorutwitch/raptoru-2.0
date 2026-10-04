@@ -2611,6 +2611,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — infirmé**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `1269863` : `apps/twitch-bot/src/loyalty-outbox.ts` réécrit le JSON (atomique `tmp` + `rename`) uniquement sur changement — ajout d'un événement reçu, retrait après réponse de Core, refus — jamais sur une minuterie. `rejected` est borné à 1 000 entrées (≈ 400 Ko au maximum) ; `pending` ne croît que pendant une indisponibilité de Core et se vide à la reprise (renvoi idempotent par identifiant d'événement). Volume attendu : les événements Loyalty (abonnements, bits, raids) arrivent à quelques dizaines par live ; aucun fichier d'outbox n'existe sur ce poste (aucun backlog). Un journal en ajout seul ou une base locale serait une refonte de la persistance sans problème démontré, au risque des garanties de livraison. Décision : inchangé, finding infirmé comme problème de performance.
+
 **Marquages :** **À VÉRIFIER**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -2663,6 +2667,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Polling viewer pouvant multiplier les lectures à grande audience
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **OUVERT — décision de capacité (cutover)**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `1269863` : Hub `overlay.js`/`mobile.js` 15 s (5 s pendant une Tombola ouverte), suspendu quand la page est masquée (`visibilityState`) ; vues de module montées seulement à l'ouverture et arrêtées par `destroy()` : TTS 2 s, Tombola 1 s active / 3 s inactive, Commandes à l'ouverture puis au plus toutes les 30 s ; départs naturellement décalés (chaque viewer ouvre à un moment différent). Ordre de grandeur par viewer : ≈ 0,07 requête/s sur le Hub, jusqu'à 1 requête/s avec la Tombola ouverte en manche — soit ≈ 100 requêtes/s pour 100 viewers sur la Tombola pendant une manche. Aujourd'hui ces sondages V2 visent le Lab local ; la question concerne la capacité du futur EBS public ([ASTRA-P1-006](#astra-p1-006), cutover). Aucun passage à WebSocket/Realtime : le polling HTTP reste adapté au volume d'un streamer. À décider au cutover : audience cible, budget de requêtes de l'EBS, éventuel allongement de la cadence Tombola active ou jitter.
 
 **Marquages :** **À VÉRIFIER** ; **À REVALIDER SUR CODE ACTUEL**
 
@@ -4159,8 +4167,8 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-021](#astra-p2-021) | P2 | Performance | OUVERT — dépriorisé | — | Mesures PostgreSQL : 1,3 / 16 / 50 ms à 10⁴ / 10⁵ / 5·10⁵ lignes | — | À reprendre vers 10⁵ invocations acceptées d'une commande |
 | [ASTRA-P2-022](#astra-p2-022) | P2 | Performance | FERMÉ — corrigé | `22f6310` | local-env.test.ts : mêmes valeurs masquées ; fichiers inchangés → même liste (aucune relecture) ; jeton rafraîchi → masqué immédiatement ; mesure avant/après | — | 4 stat synchrones par ligne conservés volontairement |
 | [ASTRA-P2-023](#astra-p2-023) | P2 | Performance | FERMÉ — corrigé | `ebe3dca` | Desktop rotating-log.test.ts : session précédente → .1 ; dépassement de borne → fichier neuf, ancien → .1, dernière ligne conservée, jamais de troisième fichier ; Desktop 20/20 ; build OK | — | — |
-| [ASTRA-P2-024](#astra-p2-024) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
-| [ASTRA-P2-025](#astra-p2-025) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL ; Décision préalable |
+| [ASTRA-P2-024](#astra-p2-024) | P2 | Performance | FERMÉ — infirmé | — | — | — | À revoir seulement si une panne Core longue avec fort trafic d'événements est constatée |
+| [ASTRA-P2-025](#astra-p2-025) | P2 | Performance | OUVERT — décision de capacité (cutover) | — | — | — | Capacité EBS public à dimensionner au cutover (P1-006) |
 | [ASTRA-P2-026](#astra-p2-026) | P2 | Restart/replay | FERMÉ — corrigé | `0e235fb` | test-lab.test.ts : processus Node réel étranger sous le PID enregistré → refusé et laissé vivant (vraie sonde CIM) ; même entrée mais créé 1 h plus tard → refusé ; bon processus → adopté ; PID nu → ancienne règle ; tests existants : adoption réelle d'un orphelin et arrêt, PID mort nettoyé ; Studio server 142 | Optionnel : Studio packagé — tuer le serveur Studio (pas l'arbre) puis relancer → « Core local orphelin retrouvé » puis remplacé | Enregistrements « PID nu » : ancienne règle jusqu'au relancement du service |
 | [ASTRA-P2-027](#astra-p2-027) | P2 | Sécurité | FERMÉ — corrigé | `6df7cf6` | Desktop ipc-guard.test.ts : origine Studio / page d'état acceptées ; autre port, autre hôte, web, autre fichier, data:, URL invalide refusés ; décisions d'ouverture de fenêtre ; Desktop 19/19 ; build OK | Validé par Antoni (2026-10-05) : Réessayer/Redémarrer, pages seules. Mise à jour : à vérifier en app packagée. Overlay dédié : non applicable | — |
 | [ASTRA-P2-028](#astra-p2-028) | P2 | Studio | FERMÉ — corrigé | `dcec32a` | e2e/players.e2e.ts (pages lecteurs réelles dans Chromium, Studio simulé, Web Speech/Audio factices, horloge Playwright) : TTS démarré sans fin → libéré à la borne sans ACK, TTS suivant joué, fin tardive ignorée ; lecture longue légitime terminée normalement ; stop modération → started+stopped ; Soundboard bloqué → libéré sans ACK, autres sons joués ; stop → started+stopped. Les 2 cas « sans fin » échouent sur l'ancien code, les 3 autres passent avant et après (non-régression P1-017). npm run e2e 6/6 | Validé par Antoni (2026-10-05) : TTS normal, STOP TTS puis TTS suivant, Soundboard normal et STOP | Garde TTS aux règles Core par défaut |
