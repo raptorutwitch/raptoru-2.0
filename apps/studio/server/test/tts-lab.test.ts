@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -340,6 +340,22 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
     await new Promise((r) => setTimeout(r, 1100));
     await f.lab.handle('GET', '/tts/state', undefined, viewer);
     expect(await f.wallet()).toBe(before);
+  });
+
+  it('ASTRA-P2-016: an idle tick writes no journal; a real change does (format unchanged)', async () => {
+    const f = await fixture();
+    await f.ready();
+    await f.worker.tick();
+    // Marker in place of the journal: any write by the worker would replace it.
+    await writeFile(f.file, 'MARKER');
+    for (let i = 0; i < 5; i++) await f.worker.tick(); // nothing to do: nothing written
+    expect(await readFile(f.file, 'utf8')).toBe('MARKER');
+    await f.buy('k-journal', 'Change le journal');
+    await f.worker.tick(); // claimed: the journal holds it before anything is handed out
+    const journal = JSON.parse(await readFile(f.file, 'utf8')) as {
+      entries: unknown[];
+    };
+    expect(journal.entries).toHaveLength(1);
   });
 
   it('fails closed without a live player (nothing debited); paused: refused before payment, nothing handed out', async () => {

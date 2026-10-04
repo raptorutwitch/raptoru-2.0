@@ -147,12 +147,18 @@ export class TtsWorker {
     this.chain = result.catch(() => {});
     return result;
   }
+  /** Last journal content on disk: a tick that changed nothing writes nothing (ASTRA-P2-016). */
+  private saved = '';
+
   private async save() {
+    const text = JSON.stringify(this.state);
+    if (text === this.saved) return;
     await mkdir(dirname(this.file), { recursive: true });
-    await writeFile(this.file + '.tmp', JSON.stringify(this.state), {
+    await writeFile(this.file + '.tmp', text, {
       mode: 0o600,
     });
     await rename(this.file + '.tmp', this.file);
+    this.saved = text;
   }
 
   /** One player page at a time (OBS overlay or Studio preview): a second one is refused while fresh. */
