@@ -1375,6 +1375,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `0e4c040`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `ce3ebfc` : `coreGuard()` et le démarrage forcé du Core par le Test Lab (`test-lab.ts`) couvraient `LOYALTY_PASSIVE_CREDITS`/`LOYALTY_EVENT_CREDITS` mais pas `DAILY_WALLET_CREDITS` (Core : `WalletCreditProvider` si `true`, sinon aucun écrit Wallet). Daily n'écrit qu'à une réclamation (`POST /v1/bot/daily/claim`, seul chemin, venant du `!daily` du bot) : le `botGuard` existant refuse `DAILY_CHAT_COMMANDS=true`, donc aucun crédit Daily n'était démontrable, mais la garantie était indirecte. Politique fixée par Antoni (passe P2, 2026-10-04) : aucun crédit économique automatique quand le Test Lab tourne. Correction : `DAILY_WALLET_CREDITS` rejoint les drapeaux refusés (`CREDIT_FLAGS`) et est forcé à `false` au démarrage comme ceux de Loyalty ; la raison est affichée par le panneau Test Lab existant (`creditsGuard`). Règles Daily inchangées ; aucun effet externe (le Wallet Core est local, aucune écriture StreamElements). Dette : un Core lancé hors Studio (« not managed ») reste hors de cette garde, comme avant.
+
 **Marquages :** **À VÉRIFIER**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -4045,7 +4049,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-018](#astra-p1-018) | P1 | Tests | FERMÉ — corrigé | `fd365dd` | e2e/commands-public.e2e.ts (navigateur, pile isolée) ; Core 368 / Studio server 140 inchangés | Une fois par machine : `npx playwright install chromium` | Commits 93f07db (assemblage partagé), fd365dd (harnais + parcours), a120335 (build schemas) |
 | [ASTRA-P1-019](#astra-p1-019) | P1 | Transport | BLOQUÉ — décision de cutover | — | — | — | Décision : transport de production, autorisation Studio, compatibilité/cutover |
 | [ASTRA-P2-001](#astra-p2-001) | P2 | Build | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
-| [ASTRA-P2-002](#astra-p2-002) | P2 | Config | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
+| [ASTRA-P2-002](#astra-p2-002) | P2 | Config | FERMÉ — corrigé | `0e4c040` | test-lab.test.ts « loyalty credits guard » (refus Daily + démarrage forcé) | — | Core externe non géré : hors garde (inchangé) |
 | [ASTRA-P2-003](#astra-p2-003) | P2 | Contrats | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-004](#astra-p2-004) | P2 | Contrats | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P2-005](#astra-p2-005) | P2 | Core | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
