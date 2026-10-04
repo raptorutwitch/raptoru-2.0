@@ -2277,6 +2277,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — infirmé**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `a5031ce` : le lecteur Soundboard (`apps/studio/server/sound-player/player.js`) interroge toujours `/sound-lab/player/next` toutes les 120 ms (≈ 8 requêtes/s, page locale dans la fenêtre Studio). Mesure : côté serveur, une requête au repos ne lit que la mémoire du worker (`stopOrders` + `command`, aucun appel Core ni base) — ≈ 2 µs de travail (2 000 itérations), plus un aller-retour HTTP en boucle locale ; depuis P2-016, aucune écriture disque. Le coût est négligeable, alors qu'un ralentissement au repos ajouterait directement son délai au démarrage d'un son (réactivité Soundboard). Décision : comportement conservé, finding infirmé comme problème de performance.
+
 **Marquages :** **À VÉRIFIER**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -2326,6 +2330,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Planificateur Tombola inspectant l'état quatre fois par seconde
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — infirmé**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `a5031ce` : le tick Tombola du Core Lab (désormais `local-server.ts` → `RaffleLabService.tick()`) tourne toujours à 250 ms avec garde anti-superposition. Au repos, il ne fait qu'une petite requête (manches en cours ∪ planificateurs actifs) ; en manche active, deux transactions par canal, qui font le tirage à `closes_at` et la chronologie de révélation. Mesures : tick au repos ≈ 0,45 ms (PGlite, 400 ticks) ; sur la vraie base Lab (`EXPLAIN ANALYZE` en lecture seule, 73 manches) 0,1 ms d'exécution + 1,4 ms de planification, soit < 1 % d'un CPU à 4 ticks/s. Une cadence adaptative ajouterait de la complexité et un risque de dérive des tirages pour un gain nul. Décision : conservé, finding infirmé.
 
 **Marquages :** **À VÉRIFIER** ; **À REVALIDER SUR CODE ACTUEL**
 
@@ -2379,6 +2387,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Cooldowns Soundboard random lus séquentiellement
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `e576e2e`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `a5031ce` : confirmé. La sélection `random` (`sound-lab-service.ts`) appelait `cooldownRemaining()` séquentiellement pour chaque candidat avec cooldown non nul (jusqu'à 68 requêtes) dans la transaction d'admission. Correction : une seule requête groupée (`lastRequested()` : dernière demande non échouée de chaque son sous cooldown, index existant `sound_lab_interactions_cooldown_idx`) ; règle identique (`dernière demande + cooldown > maintenant` → exclu), ordre et tirage inchangés ; `cooldownRemaining()` reste utilisé pour un son précis. Mesure (pire cas : cooldown sur tous les sons, PGlite, 40 admissions) : 80,6 ms → 9,9 ms par admission `random`.
 
 **Marquages :** **À VÉRIFIER**
 
@@ -4133,9 +4145,9 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-015](#astra-p2-015) | P2 | Observabilité | OUVERT — dépriorisé | — | — | — | Vue agrégée « âge de la dernière preuve » et confirmation stream : non faites (confort) |
 | [ASTRA-P2-016](#astra-p2-016) | P2 | Performance | FERMÉ — corrigé | `d2e287b` | tts-lab « ASTRA-P2-016 » : journal remplacé par un marqueur → 5 ticks au repos n'y touchent pas (l'ancien code le réécrit), un achat le réécrit en JSON valide ; tests de reprise existants ; Studio server 145 | — | — |
 | [ASTRA-P2-017](#astra-p2-017) | P2 | Performance | FERMÉ — corrigé | `a71c5e7` | worker-loop.test.ts : repos 300/600/1000 ms ; busy → 150 ms ; réveil immédiat ; jamais deux ticks ; arrêt propre ; Studio server 148 | Optionnel : après quelques secondes d'inactivité, un TTS/son acheté part toujours sans délai perceptible | Reprise après pause / libération de revue : ≤ 1 s |
-| [ASTRA-P2-018](#astra-p2-018) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
-| [ASTRA-P2-019](#astra-p2-019) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
-| [ASTRA-P2-020](#astra-p2-020) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
+| [ASTRA-P2-018](#astra-p2-018) | P2 | Performance | FERMÉ — infirmé | — | Mesure : poll au repos ≈ 0,002 ms côté worker | — | Pas d'optimisation (réactivité audio prioritaire) |
+| [ASTRA-P2-019](#astra-p2-019) | P2 | Performance | FERMÉ — infirmé | — | Mesures : tick au repos 0,45 ms (PGlite) ; requête 0,1 ms + 1,4 ms (PostgreSQL Lab) | — | — |
+| [ASTRA-P2-020](#astra-p2-020) | P2 | Performance | FERMÉ — corrigé | `e576e2e` | sound-lab « random skips sounds in cooldown… (ASTRA-P2-020) » : son récent exclu, puis de nouveau jouable après le cooldown — passe sur l'ancien et le nouveau code (équivalence) ; Soundboard 12/12 | — | — |
 | [ASTRA-P2-021](#astra-p2-021) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-022](#astra-p2-022) | P2 | Performance | FERMÉ — corrigé | `22f6310` | local-env.test.ts : mêmes valeurs masquées ; fichiers inchangés → même liste (aucune relecture) ; jeton rafraîchi → masqué immédiatement ; mesure avant/après | — | 4 stat synchrones par ligne conservés volontairement |
 | [ASTRA-P2-023](#astra-p2-023) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
