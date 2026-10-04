@@ -8,6 +8,7 @@
 - A validated prototype in `prototypes/` is a specification, not an inspiration: never drop,
   simplify or replace one of its elements silently; show a missing backend as such.
 - "Validated" means tested manually by Antoni — never call automated tests or E2E a validation.
+- Commands V2: current state, rules and next step (Phase F) are in `docs/COMMANDS_V2_STATUS.md`.
 
 ## Raptoru Studio releases
 
