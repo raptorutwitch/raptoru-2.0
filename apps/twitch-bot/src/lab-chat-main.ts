@@ -29,6 +29,8 @@ const Env = z.object({
     .default('900100'),
   /** Messages per 30 s (Twitch: 20 regular account, 100 moderator). Default: the safe 20. */
   LAB_CHAT_OUTPUT_RATE: z.coerce.number().int().min(1).max(100).default(20),
+  /** Helix stream-state repair period (same setting and default as the main bot). */
+  STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
 });
 
 /** Unusable Twitch token: Studio's supervision shows it and does not restart (EXIT_AUTH in ingress.ts). */
@@ -109,6 +111,17 @@ runEventSub({
       );
   },
 });
+// Lost stream transitions (Core down when the event came) are repaired from Helix, like the main bot's
+// loop: chained timers, never overlapping.
+const reconcileLoop = async () => {
+  await ingest
+    .reconcileStream()
+    .catch((e) =>
+      console.error('[lab-chat] stream repair failed', (e as Error).message),
+    );
+  setTimeout(() => void reconcileLoop(), env.STREAM_SYNC_INTERVAL_MS);
+};
+setTimeout(() => void reconcileLoop(), env.STREAM_SYNC_INTERVAL_MS);
 // Commands V2 output executor: only with a token allowed to write (the switch itself lives in Core).
 if (status.scopes.includes('user:write:chat')) {
   const output = createLabChatOutput({

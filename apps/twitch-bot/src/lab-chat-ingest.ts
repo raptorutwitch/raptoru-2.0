@@ -51,12 +51,16 @@ export function chatRole(
 
 export function createLabChatIngest(d: LabChatIngestDeps) {
   const log = d.log ?? console.log;
-  const stream = (event: 'online' | 'offline', id?: string) =>
-    d.lab('/v1/lab/stream', {
+  /** Last stream state Core actually received (a failed forward leaves it unchanged). */
+  let delivered: 'online' | 'offline' | null = null;
+  const stream = async (event: 'online' | 'offline', id?: string) => {
+    await d.lab('/v1/lab/stream', {
       channel_id: d.labChannelId,
       event,
       ...(id && /^\d{1,32}$/.test(id) ? { twitch_stream_id: id } : {}),
     });
+    delivered = event;
+  };
 
   const handlers: EventSubHandlers = {
     async subscribe(sessionId) {
@@ -112,6 +116,19 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
       const live = await d.getStream();
       await stream(live ? 'online' : 'offline', live?.id);
       return Boolean(live);
+    },
+    /**
+     * Periodic repair (ASTRA-P1-003): a transition Core did not receive (forward failed during a Core
+     * outage) is sent again once Twitch still says so. Only a difference with what Core last received
+     * is forwarded: a session the streamer simulates in Studio is never closed by a steady state.
+     * Helix unreachable: throws, nothing is confirmed.
+     */
+    async reconcileStream() {
+      const live = await d.getStream();
+      const want = live ? 'online' : 'offline';
+      if (want === delivered) return false;
+      await stream(want, live?.id);
+      return true;
     },
   };
 }

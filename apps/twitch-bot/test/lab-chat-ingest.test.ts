@@ -126,6 +126,46 @@ describe('Lab chat ingestion (Twitch → Lab Core, every module)', () => {
     ]);
   });
 
+  it('ASTRA-P1-003: an offline lost during a Core outage is repaired from Helix; a steady state sends nothing', async () => {
+    let coreUp = true;
+    let live: { id: string; started_at: string } | null = {
+      id: '4242',
+      started_at: '2026-10-01T18:00:00Z',
+    };
+    const sent: unknown[] = [];
+    const ingest = createLabChatIngest({
+      lab: async (_path, body) => {
+        if (!coreUp) throw new Error('ECONNREFUSED');
+        sent.push(body);
+        return { ok: true };
+      },
+      labChannelId: '900100',
+      broadcasterId: '83603689',
+      tokenUserId: '111',
+      subscribe: async () => {},
+      getStream: async () => {
+        if (live === undefined) throw new Error('helix down');
+        return live;
+      },
+      log: () => {},
+    });
+    await ingest.syncStream(); // connection: online delivered
+    expect(await ingest.reconcileStream()).toBe(false); // steady: nothing sent
+    coreUp = false;
+    live = null;
+    await ingest.handlers.notification('stream.offline', {}, 'e-1', 't'); // lost
+    coreUp = true;
+    expect(await ingest.reconcileStream()).toBe(true); // repaired
+    expect(sent.at(-1)).toEqual({ channel_id: '900100', event: 'offline' });
+    // Offline steadily (a simulated session in Studio would stay open): nothing more.
+    expect(await ingest.reconcileStream()).toBe(false);
+    expect(sent).toHaveLength(2);
+    // Helix unreachable: no confirmation, nothing sent.
+    live = undefined as never;
+    await expect(ingest.reconcileStream()).rejects.toThrow('helix down');
+    expect(sent).toHaveLength(2);
+  });
+
   it('a Lab Core failure is logged, never thrown into the EventSub loop', async () => {
     const { ingest } = createFailing();
     await expect(
