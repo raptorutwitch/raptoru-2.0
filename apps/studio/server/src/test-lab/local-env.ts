@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -151,6 +151,33 @@ export function collectSecrets(): string[] {
     /* no broadcaster token */
   }
   return values.filter((v) => v.length >= 6);
+}
+
+/**
+ * The secrets for redaction, re-read only when one of their files changes (ASTRA-P2-022): a log line
+ * costs four stat calls instead of four synchronous reads and parses. A refreshed Twitch token or an
+ * edited .env changes size / mtime, so the new values are masked from the next line on.
+ */
+let secretsCache: { key: string; values: string[] } | null = null;
+export function currentSecrets(): string[] {
+  const key = [
+    paths.coreEnv,
+    paths.botEnv,
+    paths.tokenFile,
+    paths.broadcasterTokenFile,
+  ]
+    .map((p) => {
+      try {
+        const s = statSync(p);
+        return `${s.size}:${s.mtimeMs}`;
+      } catch {
+        return '-';
+      }
+    })
+    .join('|');
+  if (secretsCache?.key !== key)
+    secretsCache = { key, values: collectSecrets() };
+  return secretsCache.values;
 }
 
 export function redact(text: string, secrets: string[]): string {

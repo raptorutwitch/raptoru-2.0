@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { createStudioServer, stopAll } from '../src/index.js';
+import { crashLine, createStudioServer, stopAll } from '../src/index.js';
 import { redact } from '../src/test-lab/local-env.js';
 import { LogBuffer } from '../src/test-lab/log-buffer.js';
 import { ManagedProcess, PidStore } from '../src/test-lab/managed-process.js';
@@ -529,5 +529,27 @@ describe('shutdown barrier', () => {
     release();
     await all;
     expect(done).toBe(true);
+  });
+});
+
+describe('crash traces (ASTRA-P2-014)', () => {
+  it('a crash line keeps the stack for diagnosis and never a secret', () => {
+    const error = new Error(
+      `connect failed postgres://raptoru:${SECRET}@127.0.0.1/x (Bearer abcdefghijklmnop)`,
+    );
+    const line = crashLine('uncaught exception', error, (t) =>
+      redact(t, [SECRET]),
+    );
+    expect(line).toMatch(
+      /^\[studio-server\] uncaught exception: Error: connect failed/,
+    );
+    expect(line).toContain('at '); // stack frames kept
+    expect(line).not.toContain(SECRET);
+    expect(line).not.toContain('abcdefghijklmnop');
+    expect(
+      crashLine('unhandled rejection', `token ${SECRET}`, (t) =>
+        redact(t, [SECRET]),
+      ),
+    ).toBe('[studio-server] unhandled rejection: token ***');
   });
 });

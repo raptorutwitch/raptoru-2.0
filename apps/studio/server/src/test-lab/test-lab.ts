@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { dockerOps, type DockerOps } from './docker.js';
 import {
-  collectSecrets,
+  currentSecrets,
   paths,
   readEnvFile,
   readTokenSummary,
@@ -41,7 +41,7 @@ export interface TestLabDeps {
 }
 
 export function createTestLab(): TestLab {
-  const redactor = (text: string) => redact(text, collectSecrets());
+  const redactor = (text: string) => redact(text, currentSecrets());
   const logs = new LogBuffer(redactor);
   const pids = new PidStore(paths.runtimeDir);
   let lab: TestLab | null = null;

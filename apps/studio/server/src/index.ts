@@ -253,6 +253,17 @@ const actions: Record<string, Action> = {
   'logs/clear': async (lab) => lab.logs.clear(),
 };
 
+/** One stderr line for a crash: full stack (diagnosis) through the secret redaction. */
+export function crashLine(
+  kind: string,
+  reason: unknown,
+  redactText: (text: string) => string,
+): string {
+  const text =
+    reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
+  return `[studio-server] ${kind}: ${redactText(text)}`;
+}
+
 /**
  * Shutdown barrier: every managed stop runs, and only once ALL have settled (each forces its child
  * after its own timeout) may the server exit. A failing stop is reported, never blocks the others.
@@ -431,12 +442,10 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   applyDataRootEnv();
   const lab = createTestLab();
   // Every crash leaves a trace in the output captured by Electron (<userData>/logs/studio-server.log).
+  // Crash traces go through the same redaction as Lab.logs before stderr (kept by Electron in its
+  // log file): stack and message stay, secrets never (ASTRA-P2-014).
   process.on('unhandledRejection', (reason) => {
-    const text =
-      reason instanceof Error
-        ? (reason.stack ?? reason.message)
-        : String(reason);
-    console.error(`[studio-server] unhandled rejection: ${text}`);
+    console.error(crashLine('unhandled rejection', reason, lab.deps.redact));
     lab.logs.add(
       'studio',
       `Erreur non gérée : ${lab.deps.redact(String(reason))}`,
@@ -444,9 +453,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     );
   });
   process.on('uncaughtException', (error) => {
-    console.error(
-      `[studio-server] uncaught exception: ${error.stack ?? error.message}`,
-    );
+    console.error(crashLine('uncaught exception', error, lab.deps.redact));
     process.exit(1);
   });
   // Standalone Studio: the local runtime (Postgres → base Lab → Core local) is started and watched
@@ -507,7 +514,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       },
       (name, error) =>
         console.error(
-          `[studio-server] ${name} stop failed: ${(error as Error)?.message ?? error}`,
+          `[studio-server] ${name} stop failed: ${lab.deps.redact(String((error as Error)?.message ?? error))}`,
         ),
     ).finally(() => process.exit(0));
   };

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Packaged Studio: code (REPO_ROOT) and local data (DATA_ROOT) are apart. local-env reads both at
@@ -64,5 +64,27 @@ describe('Commands V2 chat journal lives with the local data, never next to the 
     r.env.applyDataRootEnv();
     expect(process.env.LAB_CHAT_JOURNAL_FILE).toBe('C:/custom/journal.json');
     expect(existsSync(r.data)).toBe(false);
+  });
+});
+
+describe('redaction secrets (ASTRA-P2-022): cached, re-read only when a source file changes', () => {
+  it('same values masked; unchanged files → no re-read; a refreshed token is masked at once', async () => {
+    const r = await roots();
+    const bot = join(dirname(r.data), '.env');
+    const tokens = join(dirname(r.data), '.twitch-tokens.json');
+    writeFileSync(bot, 'TWITCH_CLIENT_SECRET=client-secret-value-1\n');
+    writeFileSync(tokens, JSON.stringify({ accessToken: 'access-old-0001' }));
+    const first = r.env.currentSecrets();
+    expect(first).toEqual(
+      expect.arrayContaining(['client-secret-value-1', 'access-old-0001']),
+    );
+    expect(r.env.currentSecrets()).toBe(first); // nothing changed: the cached list, no file read
+    // The bot refreshes its token (another value, another size).
+    writeFileSync(tokens, JSON.stringify({ accessToken: 'access-new-000002' }));
+    const line = r.env.redact(
+      'token access-new-000002 / secret client-secret-value-1',
+      r.env.currentSecrets(),
+    );
+    expect(line).toBe('token *** / secret ***');
   });
 });
