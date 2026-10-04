@@ -392,6 +392,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `ccc8e5d`
+
+**Résolution (passe P1, 2026-10-04) :** Vérifié (réserve levée) : sur le conteneur local `raptoru2-pg`, `statement_timeout`, `lock_timeout` et `idle_in_transaction_session_timeout` valent 0 (illimité), `deadlock_timeout` 1 s, aucun réglage par base/rôle ; `createPgDb()` créait le pool sans `connectionTimeoutMillis` (attente infinie de node-pg). Correction : `createPgDb(url, limits?)` et `SERVER_DB_LIMITS` (connexion 5 s, requête 30 s, verrou 10 s, inactif en transaction 60 s) appliqués aux deux processus serveur (Core principal `index.ts`, Core Lab `local-server.ts`) ; les scripts (migrations, import, rapports) restent sans limite, leurs traitements longs étant légitimes. Un dépassement échoue (57014 / 55P03), la transaction est annulée et le client rendu au pool. Traduction HTTP : erreur 500 explicite existante (les clients retentent avec leur clé d'idempotence, cf. P1-009). Le budget de la base de production réelle (VPS) reste à vérifier au cutover.
+
 **Marquages :** **À VÉRIFIER**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -442,6 +446,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Health vert sans preuve de disponibilité métier
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `ccc8e5d`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `3a8c004` : `/health` du Core Lab (local-server.ts) et du Core principal (server.ts) répondent sans toucher la base ; `LocalRuntime` marquait le Core Lab « ready » sur ce seul signal. Correction : `GET /ready` (requête `select 1` bornée à 1,5 s, 503 `db_unavailable` sinon) sur les deux Cores, `/health` reste la liveness (supervision Electron et séquences inchangées) ; la surveillance du runtime lit `/ready` : Core vivant mais base injoignable → « dégradé » avec la raison, jamais redémarré, « prêt » au retour de la base. Le panneau Test Lab du Core principal reste étiqueté `/health` (liveness affichée comme telle, aucune modification UI).
 
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
@@ -782,6 +790,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Core Lab vivant mais figé sans récupération automatique
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `ccc8e5d`
+
+**Résolution (passe P1, 2026-10-04) :** Confirmé : `LocalRuntime.watch()` relançait sur sortie du processus mais laissait un Core vivant au `/health` muet en « degraded » indéfiniment. Correction : `/health` muet pendant 20 s alors que le processus vit → Core figé : arrêt (kill forcé après 5 s par `ManagedProcess.stop`) puis politique de relance existante (3 en 5 min, puis « Réessayer » manuel, identité/secret de session conservés). Panne DB extérieure distinguée (P1-005) : jamais de redémarrage pour elle. Un `/health` revenu avant le seuil remet le compteur à zéro ; « Redémarrer »/« Réessayer » ne multiplient pas les watches (`clearTimeout` existant).
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -3980,14 +3992,14 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-001](#astra-p1-001) | P1 | Architecture | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P1-002](#astra-p1-002) | P1 | Bot | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P1-003](#astra-p1-003) | P1 | Bot | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
-| [ASTRA-P1-004](#astra-p1-004) | P1 | Core | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
-| [ASTRA-P1-005](#astra-p1-005) | P1 | Core | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
+| [ASTRA-P1-004](#astra-p1-004) | P1 | Core | FERMÉ — corrigé | `ccc8e5d` | db-limits.test.ts : serveur muet → échec < 3 s (toujours) ; sur PostgreSQL réel local (opt-in `TEST_DATABASE_URL`, lecture seule : pg_sleep + verrou consultatif) requête 57014, verrou 55P03, client réutilisable — exécuté sur raptoru2-pg | — | Réglages PostgreSQL de production à revoir au cutover |
+| [ASTRA-P1-005](#astra-p1-005) | P1 | Core | FERMÉ — corrigé | `ccc8e5d` | readiness.test.ts (prêt ; base en échec ou figée → /health 200, /ready 503 borné) ; local-runtime « ASTRA-P1-005 » | Optionnel : arrêter le conteneur PG pendant que Studio tourne → Core local « dégradé » (base injoignable), puis « prêt » au redémarrage | — |
 | [ASTRA-P1-006](#astra-p1-006) | P1 | EBS | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 | [ASTRA-P1-007](#astra-p1-007) | P1 | État | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 | [ASTRA-P1-008](#astra-p1-008) | P1 | Extension | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 | [ASTRA-P1-009](#astra-p1-009) | P1 | Idempotence | FERMÉ — corrigé | `6caa2e6` | Core moderation-d4 « idempotent action » ; Studio moderation-d4 « ASTRA-P1-009 » (échoue sans le relais EBS) ; Core 365 / Studio server 138 | Extension Lab : crédit wallet de test, coupure réseau simulée → un seul crédit | Studio packagé : migration appliquée au prochain démarrage du runtime |
 | [ASTRA-P1-010](#astra-p1-010) | P1 | Paiements | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
-| [ASTRA-P1-011](#astra-p1-011) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
+| [ASTRA-P1-011](#astra-p1-011) | P1 | Studio | FERMÉ — corrigé | `ccc8e5d` | local-runtime « ASTRA-P1-011 » (figé → arrêt → relance bornée) + test crash existant ; Studio server 140/140 | — | — |
 | [ASTRA-P1-012](#astra-p1-012) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | test-lab.test.ts (garde Postgres) | — | — |
 | [ASTRA-P1-013](#astra-p1-013) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | lab-chat.test.ts (orphelin) | Optionnel : tuer le serveur Studio (pas l'arbre) ingestion ON, relancer → un seul labchat | Identité de processus : ASTRA-P2-026 |
 | [ASTRA-P1-014](#astra-p1-014) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | test-lab.test.ts « shutdown barrier » | Fermer Studio avec l'ingestion ON : plus de processus labchat restant | — |
