@@ -2679,6 +2679,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `0e235fb`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `bf30427` : `PidStore` (`apps/studio/server/src/test-lab/managed-process.ts`) ne gardait qu'un PID ; `adoptPrevious()` et l'arrêt d'un processus adopté se fondaient sur `isNodeProcess()` (processus vivant dont l'image est `node.exe` ou l'exécutable Studio) : un PID réutilisé par un autre programme Node aurait été adopté, puis tué. Correction minimale, sans nouveau superviseur : l'identité du processus est enregistrée au lancement (`{ pid, entry, started_at }`, `entry` = script lancé) ; adoption et arrêt d'un adopté exigent que le processus vivant porte cette entrée dans sa ligne de commande et ait été créé à ±10 s de l'heure enregistrée (Windows : `Get-CimInstance Win32_Process` ; ailleurs : `ps`), contrôle refait juste avant le kill ; doute → pas d'ownership, enregistrement effacé. Compatibilité : un enregistrement d'une version précédente (PID nu) garde l'ancienne règle, pour qu'une mise à jour de Studio n'abandonne pas ses enfants. Packaging Windows : les enfants tournent sous l'exécutable Studio (ELECTRON_RUN_AS_NODE) avec les mêmes arguments, l'entrée figure dans la ligne de commande. Dette : les enregistrements « PID nu » existants restent sous l'ancienne règle jusqu'au prochain lancement de chaque service (alors réécrits avec identité).
+
 **Marquages :** **À VÉRIFIER**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -4101,7 +4105,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-023](#astra-p2-023) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-024](#astra-p2-024) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
 | [ASTRA-P2-025](#astra-p2-025) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL ; Décision préalable |
-| [ASTRA-P2-026](#astra-p2-026) | P2 | Restart/replay | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
+| [ASTRA-P2-026](#astra-p2-026) | P2 | Restart/replay | FERMÉ — corrigé | `0e235fb` | test-lab.test.ts : processus Node réel étranger sous le PID enregistré → refusé et laissé vivant (vraie sonde CIM) ; même entrée mais créé 1 h plus tard → refusé ; bon processus → adopté ; PID nu → ancienne règle ; tests existants : adoption réelle d'un orphelin et arrêt, PID mort nettoyé ; Studio server 142 | Optionnel : Studio packagé — tuer le serveur Studio (pas l'arbre) puis relancer → « Core local orphelin retrouvé » puis remplacé | Enregistrements « PID nu » : ancienne règle jusqu'au relancement du service |
 | [ASTRA-P2-027](#astra-p2-027) | P2 | Sécurité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-028](#astra-p2-028) | P2 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-029](#astra-p2-029) | P2 | Tests | FERMÉ — corrigé | `cc3994d` | Base jetable : les deux suites ensemble 3/3 vertes (contre 3/3 en échec avant) ; chacune seule verte ; npm test avec TEST_DATABASE_URL 383/383 ; npm test sans URL 373 + 10 ignorés (inchangé) | — | — |
