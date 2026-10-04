@@ -2443,6 +2443,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **OUVERT — dépriorisé**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `3d3062b` et mesuré sur PostgreSQL réel (base jetable `raptoru_p2021_bench` créée puis supprimée, migrations Lab réelles, historique synthétique d'UNE commande, `EXPLAIN ANALYZE` de la requête exacte de `CommandsAdmission`) : 10 000 invocations acceptées → index-only scan, 1,3 ms (admission complète 11 ms) ; 100 000 → seq scan, 16 ms (admission 24 ms) ; 500 000 → seq scan, 50 ms (admission 53 ms). Cause : la requête agrège sur tout l'historique (`count(*)` total + `filter`), ce qui empêche l'usage des index existants (`cmd_invocations_command`, `cmd_invocations_viewer`) au-delà de ~10⁴ lignes ; elle s'exécute sous le verrou de la commande. Ordre de grandeur pour un streamer : quelques centaines d'usages d'une même commande par live → > 1 an avant 100 000 lignes. Aucun index ne manque. Correction possible le moment venu, sans agrégats matérialisés : requêtes séparées (dernier usage global / viewer par index top-1, comptes bornés à la fenêtre via `created_at >= since`, compte total seulement pour un quota « total », plafonné par `quota.max` ≤ 10 000). Laissée ouverte car elle modifie le chemin d'admission de Commands V2 validé, pour un gain non nécessaire aujourd'hui.
+
 **Marquages :** **À VÉRIFIER** ; **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -2551,6 +2555,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Fichier courant de logs Electron non borné pendant la session
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `ebe3dca`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `3d3062b` : confirmé. `serverLog()` (`apps/studio/desktop/src/main.ts`) renommait `studio-server.log` en `.1` au début de la session puis ajoutait sans limite. Volume réel constaté sur ce poste : 419 octets par session (le serveur Studio journalise surtout dans son `LogBuffer` en mémoire) — le risque ne concerne qu'une erreur répétée en boucle. Correction simple, sans dépendance : `rotating-log.ts` garde la même disposition (session courante, précédente en `.1`) et repart d'un fichier neuf au-delà de 5 Mo (le plein devient `.1`) : ≈ 10 Mo maximum sur disque, dernières lignes toujours conservées ; écritures synchrones (lignes rares) au lieu d'un flux, plus besoin de le fermer à la sortie.
 
 **Marquages :** **À VÉRIFIER**
 
@@ -4148,9 +4156,9 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-018](#astra-p2-018) | P2 | Performance | FERMÉ — infirmé | — | Mesure : poll au repos ≈ 0,002 ms côté worker | — | Pas d'optimisation (réactivité audio prioritaire) |
 | [ASTRA-P2-019](#astra-p2-019) | P2 | Performance | FERMÉ — infirmé | — | Mesures : tick au repos 0,45 ms (PGlite) ; requête 0,1 ms + 1,4 ms (PostgreSQL Lab) | — | — |
 | [ASTRA-P2-020](#astra-p2-020) | P2 | Performance | FERMÉ — corrigé | `e576e2e` | sound-lab « random skips sounds in cooldown… (ASTRA-P2-020) » : son récent exclu, puis de nouveau jouable après le cooldown — passe sur l'ancien et le nouveau code (équivalence) ; Soundboard 12/12 | — | — |
-| [ASTRA-P2-021](#astra-p2-021) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
+| [ASTRA-P2-021](#astra-p2-021) | P2 | Performance | OUVERT — dépriorisé | — | Mesures PostgreSQL : 1,3 / 16 / 50 ms à 10⁴ / 10⁵ / 5·10⁵ lignes | — | À reprendre vers 10⁵ invocations acceptées d'une commande |
 | [ASTRA-P2-022](#astra-p2-022) | P2 | Performance | FERMÉ — corrigé | `22f6310` | local-env.test.ts : mêmes valeurs masquées ; fichiers inchangés → même liste (aucune relecture) ; jeton rafraîchi → masqué immédiatement ; mesure avant/après | — | 4 stat synchrones par ligne conservés volontairement |
-| [ASTRA-P2-023](#astra-p2-023) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
+| [ASTRA-P2-023](#astra-p2-023) | P2 | Performance | FERMÉ — corrigé | `ebe3dca` | Desktop rotating-log.test.ts : session précédente → .1 ; dépassement de borne → fichier neuf, ancien → .1, dernière ligne conservée, jamais de troisième fichier ; Desktop 20/20 ; build OK | — | — |
 | [ASTRA-P2-024](#astra-p2-024) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
 | [ASTRA-P2-025](#astra-p2-025) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 | [ASTRA-P2-026](#astra-p2-026) | P2 | Restart/replay | FERMÉ — corrigé | `0e235fb` | test-lab.test.ts : processus Node réel étranger sous le PID enregistré → refusé et laissé vivant (vraie sonde CIM) ; même entrée mais créé 1 h plus tard → refusé ; bon processus → adopté ; PID nu → ancienne règle ; tests existants : adoption réelle d'un orphelin et arrêt, PID mort nettoyé ; Studio server 142 | Optionnel : Studio packagé — tuer le serveur Studio (pas l'arbre) puis relancer → « Core local orphelin retrouvé » puis remplacé | Enregistrements « PID nu » : ancienne règle jusqu'au relancement du service |
