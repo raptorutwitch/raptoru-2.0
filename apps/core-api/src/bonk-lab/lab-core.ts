@@ -24,6 +24,14 @@ import { dbReady, type Db } from '../db/db.js';
 // Core process (local-server.ts: env, port, timers) and the end-to-end harness (apps/studio/server/e2e,
 // in-memory database): what the E2E exercises is exactly what Studio runs.
 
+/** Masks the Bearer secret and any credentials of a connection URL in a diagnostic text. */
+export function redact(text: string, secret: string): string {
+  return text
+    .split(secret)
+    .join('***')
+    .replace(/(\/\/)[^/\s:@]+:[^@\s]+@/g, '$1***@');
+}
+
 export interface LabCoreOptions {
   db: Db;
   clock: Clock;
@@ -128,8 +136,15 @@ export function createLabCore({
         }),
       );
     } catch (e) {
-      if (e instanceof HttpError) send(e.status, e.body);
-      else send(500, { error: 'bonk_core_error' });
+      if (e instanceof HttpError) return send(e.status, e.body);
+      // Unexpected (ASTRA-P2-013): the client still gets a sober answer, the cause goes to the log —
+      // route only (no query, no body), the Bearer secret and database credentials masked.
+      const cause =
+        e instanceof Error ? (e.stack ?? `${e.name}: ${e.message}`) : String(e);
+      console.error(
+        `[bonk-lab-core] ${req.method} ${requestUrl.pathname} failed: ${redact(cause, secret)}`,
+      );
+      send(500, { error: 'bonk_core_error' });
     }
   });
   return { server, raffle };
