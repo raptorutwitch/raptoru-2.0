@@ -6,7 +6,7 @@ import {
 } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../core-api/src/http/server.js';
 import { LabModerationService } from '../../../core-api/src/lab-moderation/service.js';
 import { setup } from '../../../core-api/test/helpers.js';
@@ -542,7 +542,13 @@ describe('Soundboard stop: Core → Studio worker → player → ACK → Core', 
     expect(await worker.stopOrders('player-1')).toEqual([
       { interaction_id: id, attempt_id: handed.delivery.attempt_id },
     ]);
-    expect(await worker.stopOrders('player-1')).toEqual([]); // handed out once
+    expect(await worker.stopOrders('player-1')).toEqual([]); // within the resend delay
+    // The answer carrying the stop was lost (ASTRA-P1-017): proposed again until the player's proof.
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1500);
+    expect(await worker.stopOrders('player-1')).toEqual([
+      { interaction_id: id, attempt_id: handed.delivery.attempt_id },
+    ]);
+    clock.mockRestore();
     // The player stops it and proves it; its late `completed` is ignored.
     await worker.playerAck(
       id,
@@ -556,6 +562,9 @@ describe('Soundboard stop: Core → Studio worker → player → ACK → Core', 
       'player-1',
       'completed',
     );
+    const later = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 5000);
+    expect(await worker.stopOrders('player-1')).toEqual([]); // proven: no more stop orders
+    later.mockRestore();
     await worker.tick();
     const row = await client<Json>(`/v1/lab/sound/interactions/${id}`);
     expect(row).toMatchObject({

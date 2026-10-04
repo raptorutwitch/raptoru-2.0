@@ -26,9 +26,11 @@ type Entry = {
   error: PlayerError | null;
   /** Cancelled in Core (moderation stop / removal). */
   cancelled?: boolean;
-  /** The stop order was handed to the player. */
-  stopSent?: boolean;
+  /** Last time the stop order was handed to the player (proposed again until its `stopped` ACK). */
+  stopSentAt?: number;
 };
+/** A stop order whose answer may have been lost is proposed again after this delay. */
+const STOP_RESEND_MS = 1000;
 type Journal = {
   studio: string;
   session: string;
@@ -214,7 +216,11 @@ export class SoundWorker {
     );
   }
 
-  /** Sounds to stop on this player: cancelled in Core by moderation, stop handed out once. */
+  /**
+   * Sounds to stop on this player: cancelled in Core by moderation. The order is proposed again
+   * (at most every second) until the player proves the silence with its `stopped` ACK: a lost answer
+   * never leaves a sound playing. Stopping is idempotent on the player; a play is never replayed.
+   */
   async stopOrders(
     player: string,
   ): Promise<{ interaction_id: string; attempt_id: string | null }[]> {
@@ -225,11 +231,11 @@ export class SoundWorker {
           e.cancelled &&
           e.sent &&
           e.player === player &&
-          !e.stopSent &&
-          !settled(e),
+          !settled(e) &&
+          Date.now() - (e.stopSentAt ?? 0) >= STOP_RESEND_MS,
       );
       if (!stop.length) return [];
-      for (const e of stop) e.stopSent = true;
+      for (const e of stop) e.stopSentAt = Date.now();
       await this.save();
       return stop.map((x) => ({
         interaction_id: x.interaction.interaction_id,

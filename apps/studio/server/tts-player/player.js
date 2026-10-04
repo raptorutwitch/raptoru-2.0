@@ -370,9 +370,18 @@ async function play(i) {
   }
 }
 
-/** Moderation stop (Core already cancelled it): silence and exit now, no ACK. */
-async function stop(id) {
-  if (!current || current.id !== id) return;
+/**
+ * Moderation stop (Core already cancelled it): silence and exit now, then prove it with `stopped`
+ * (Studio proposes the order again until then). Idempotent: already silent, it only proves it.
+ */
+async function stop(id, attemptId) {
+  if (current && current.id === id) await silence();
+  void ack(
+    { interaction_id: id, delivery: { attempt_id: attemptId } },
+    'stopped',
+  );
+}
+async function silence() {
   session += 1;
   if (synth) synth.cancel();
   await stage.stop();
@@ -402,7 +411,8 @@ while (true) {
     // stop commands are still received during a reading.
     const accept = !current && performance.now() >= freeAt;
     const { command } = await call('next', { accept });
-    if (command && 'stop' in command) await stop(command.stop);
+    if (command && 'stop' in command)
+      await stop(command.stop, command.attempt_id);
     else if (command && 'play' in command)
       void play(command.play).finally(() => {
         freeAt = performance.now() + gapMs;

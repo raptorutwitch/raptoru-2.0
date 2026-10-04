@@ -162,7 +162,9 @@ export class TtsRuntime {
           });
         } else if (
           url.pathname.endsWith('/ack') &&
-          ['started', 'completed', 'failed'].includes(String(body.event))
+          ['started', 'completed', 'failed', 'stopped'].includes(
+            String(body.event),
+          )
         ) {
           const raw =
             body.error && typeof body.error === 'object'
@@ -179,7 +181,7 @@ export class TtsRuntime {
             String(body.interaction_id),
             String(body.attempt_id),
             player,
-            body.event as 'started' | 'completed' | 'failed',
+            body.event as 'started' | 'completed' | 'failed' | 'stopped',
             error,
           );
           reply(200, { ok: true });

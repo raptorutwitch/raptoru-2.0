@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TtsLabInteraction } from '@raptoru/schemas';
 import { createApp } from '../../../core-api/src/http/server.js';
 import { setup } from '../../../core-api/test/helpers.js';
@@ -295,7 +295,7 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
     expect(await reopened.command('player-2')).toBeNull();
   });
 
-  it('moderation stop: the player is told to stop once, late ACKs are ignored, refund on request', async () => {
+  it('moderation stop: proposed again until the player proves it (ASTRA-P1-017), late ACKs ignored, refund on request', async () => {
     const f = await fixture();
     await f.ready();
     const before = await f.wallet();
@@ -307,10 +307,25 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
       refund: true,
     });
     await f.worker.tick();
-    expect(await f.worker.command('player-1')).toEqual({
+    const order = {
       stop: i.interaction_id,
-    });
-    expect(await f.worker.command('player-1')).toBeNull();
+      attempt_id: i.delivery.attempt_id,
+    };
+    expect(await f.worker.command('player-1')).toEqual(order);
+    expect(await f.worker.command('player-1')).toBeNull(); // within the resend delay
+    // The answer carrying the stop was lost: proposed again, until the player proves the silence.
+    const t = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(t + 1500);
+    expect(await f.worker.command('player-1')).toEqual(order);
+    await f.worker.playerAck(
+      i.interaction_id,
+      i.delivery.attempt_id!,
+      'player-1',
+      'stopped',
+    );
+    clock.mockReturnValue(t + 5000);
+    expect(await f.worker.command('player-1')).toBeNull(); // proven: no more stop orders
+    clock.mockRestore();
     // The page finished anyway: ignored, no error, Core keeps the cancelled + refunded state.
     await f.worker.playerAck(
       i.interaction_id,

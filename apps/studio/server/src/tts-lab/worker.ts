@@ -25,7 +25,11 @@ type Entry = {
   error: PlayerError | null;
   /** Core says it was cancelled (stop / purge): the player must stop it. */
   cancelled: boolean;
+  /** Last time the stop order was handed to the player (proposed again until its `stopped` ACK). */
+  stopSentAt?: number;
 };
+/** A stop order whose answer may have been lost is proposed again after this delay. */
+const STOP_RESEND_MS = 1000;
 type Journal = {
   studio: string;
   session: string;
@@ -229,11 +233,19 @@ export class TtsWorker {
 
   // --- player ---------------------------------------------------------------------------------------
 
-  /** Next instruction for this player: stop a cancelled TTS, or the next TTS (persisted as sent first). */
+  /**
+   * Next instruction for this player: stop a cancelled TTS, or the next TTS (persisted as sent first).
+   * A stop is proposed again (at most every second) until the player proves it with `stopped`: a lost
+   * answer never leaves a TTS speaking. A play is never handed out twice.
+   */
   async command(
     player: string,
     accept = true,
-  ): Promise<{ stop: string } | { play: TtsLabInteraction } | null> {
+  ): Promise<
+    | { stop: string; attempt_id: string | null }
+    | { play: TtsLabInteraction }
+    | null
+  > {
     return this.exclusive(async () => {
       if (!this.ready || this.player?.id !== player) return null;
       const cancelled = this.state.entries.find(
@@ -241,12 +253,16 @@ export class TtsWorker {
           e.sent &&
           e.player === player &&
           e.cancelled &&
-          !e.reported.includes('failed'),
+          !e.reported.includes('failed') &&
+          Date.now() - (e.stopSentAt ?? 0) >= STOP_RESEND_MS,
       );
       if (cancelled) {
-        cancelled.reported.push('failed'); // stop sent once; Core already holds the final state
+        cancelled.stopSentAt = Date.now(); // Core already holds the final state
         await this.save();
-        return { stop: cancelled.interaction.interaction_id };
+        return {
+          stop: cancelled.interaction.interaction_id,
+          attempt_id: cancelled.interaction.delivery.attempt_id,
+        };
       }
       if (!accept || this.state.entries.some((e) => e.sent && !settled(e)))
         return null; // strictly one at a time
@@ -265,7 +281,7 @@ export class TtsWorker {
     id: string,
     attempt: string,
     player: string,
-    event: 'started' | 'completed' | 'failed',
+    event: 'started' | 'completed' | 'failed' | 'stopped',
     error: PlayerError | null = null,
   ) {
     return this.exclusive(async () => {
@@ -289,7 +305,16 @@ export class TtsWorker {
         throw new Error('attempt_mismatch');
       }
       if (!e.sent || e.player !== player) throw new Error('attempt_mismatch');
-      if (e.cancelled || e.events.includes(event)) return;
+      // Stopped by moderation: the player's proof ends the stop orders (Core holds the final state).
+      if (e.cancelled) {
+        if (event === 'stopped' && !e.reported.includes('failed')) {
+          e.reported.push('failed');
+          await this.save();
+        }
+        return;
+      }
+      if (event === 'stopped') throw new Error('not_stopped');
+      if (e.events.includes(event)) return;
       if (settled(e)) throw new Error('terminal_result');
       if (event === 'completed' && !e.events.includes('started'))
         throw new Error('start_required');
