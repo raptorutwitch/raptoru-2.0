@@ -3159,6 +3159,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — accepté (A : dernier écrit gagnant, documenté)**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `42afa9b` : toujours vrai — `createCategory/updateCategory/deleteCategory/orderCategories` (`apps/core-api/src/commands/service.ts`) n'ont pas de `expected_version`. Risque réel évalué : toutes les écritures de catégories sont réservées au streamer (`streamerOnly`), l'Extension n'expose aucune écriture de catégorie (seulement la lecture), et Studio est à instance unique — un seul éditeur dans l'usage actuel ; les écritures sont sérialisées par le verrou du canal, les noms sont uniques (conflit de renommage refusé), un réordonnancement doit lister toutes les catégories (refus sinon), une suppression reclasse ses commandes en « Sans catégorie » avec trace dans l'historique de chaque commande. Enjeu : surface d'organisation, rare, facilement réversible, sans effet financier. Options : A — garder « dernier écrit gagnant » et le documenter ; B — version simple / `expected_version` sur les catégories (contrat + UX de conflit à concevoir) ; C — rien d'autre ne s'impose dans le code actuel. Décision : A, conformément à la règle fixée pour cette passe (surface streamer seule, rare, réversible, sans enjeu financier : ne pas surconstruire). À rouvrir si un second éditeur de catégories apparaît (équipe, autre surface). Aucun changement de code.
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -3211,6 +3215,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Catégories Commands sans historique propre
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé (cas trompeur) ; historique propre accepté comme dette** — commit `dd98a68`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `42afa9b`. Ce qui est tracé aujourd'hui : chaque catégorie garde sa dernière modification (`updated_at`, `updated_by`) ; une suppression reclasse ses commandes en « Sans catégorie », et chacun de ces changements est écrit dans l'historique de la commande avec son auteur ; création, renommage, couleur/icône et ordre n'ont pas d'historique propre. Utilité : un modérateur ne peut pas toucher aux catégories (streamer seul) — l'historique propre n'aide donc ni à comprendre une action d'équipe ni à un audit de sécurité ; c'est du confort d'administration → modèle inchangé, pas d'historique ajouté (dette acceptée). Cas trompeur trouvé et corrigé : l'historique d'une commande dans l'Extension (« Modération › Commandes ») résolvait un changement de catégorie par les catégories actuelles — un ancien rangement dans une catégorie supprimée depuis s'affichait « Sans catégorie », ce qui est faux ; il s'affiche désormais « Catégorie supprimée » (« Sans catégorie » reste pour une vraie absence). L'historique Studio montre l'identifiant brut de la catégorie (peu lisible mais pas trompeur) — inchangé.
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -4210,8 +4218,8 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P3-001](#astra-p3-001) | P3 | Build | OUVERT — décision (diffusion large) | — | Revue : electron-builder.json, updater.ts, release.mjs, scripts/test-update-feed.mjs | — | Signature de code : à décider avant une diffusion large |
 | [ASTRA-P3-002](#astra-p3-002) | P3 | Config | OUVERT — dépriorisé (dette de nommage acceptée) | — | — | — | Renommage seulement avec compatibilité, au fil des changements |
 | [ASTRA-P3-003](#astra-p3-003) | P3 | Config | FERMÉ — corrigé | `b02bd6c` | local-runtime « ASTRA-P3-003 » (PORT=4399 → ports affichés 4399/4301/3789) ; Studio server local-runtime 11/11 | — | — |
-| [ASTRA-P3-004](#astra-p3-004) | P3 | État | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
-| [ASTRA-P3-005](#astra-p3-005) | P3 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
+| [ASTRA-P3-004](#astra-p3-004) | P3 | État | FERMÉ — accepté (A : dernier écrit gagnant, documenté) | — | — | — | À rouvrir si un second éditeur de catégories apparaît |
+| [ASTRA-P3-005](#astra-p3-005) | P3 | Observabilité | FERMÉ — corrigé (cas trompeur) ; historique propre accepté comme dette | `dd98a68` | Extension commands-v2-model « history of a category change » (catégorie existante, supprimée, absente) ; Extension 30/30 ; lint ; build Extension | Optionnel : Extension › Modération › Commandes, historique d'une commande rangée dans une catégorie ensuite supprimée → « Catégorie supprimée » | Historique propre des catégories : non ajouté (confort) |
 | [ASTRA-P3-006](#astra-p3-006) | P3 | UX | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 
 ### Marquages du registre
