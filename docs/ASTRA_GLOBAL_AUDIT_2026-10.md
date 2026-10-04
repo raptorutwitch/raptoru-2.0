@@ -2737,6 +2737,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `6df7cf6`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `f31bc42` : les handlers IPC privilégiés (`studio:server:restart`, `studio:app:relaunch`, `studio:update:check/download/install`, états) ne vérifiaient pas l'émetteur, et aucune politique ne retenait la fenêtre sur Studio : ni `will-navigate`, ni `setWindowOpenHandler` (une fenêtre ouverte par `window.open` hérite par défaut des `webPreferences` du parent, preload compris). Une page étrangère atteinte par navigation aurait donc disposé du pont `raptoruStudio`. Correction (`apps/studio/desktop/src/ipc-guard.ts` + câblage `main.ts`/`updater.ts`) : chaque handler privilégié exige que l'émetteur soit la fenêtre principale ET que son cadre affiche l'origine Studio ou la page d'état locale (`file://…/static/status.html`), sinon refus `untrusted_sender` journalisé ; la fenêtre ne peut plus naviguer ailleurs (lien web → navigateur système) ; `window.open`/`target=_blank` : origine Studio → fenêtre de l'app (fenêtres pop-out existantes conservées, sans droit IPC puisque non principales), web → navigateur système, autre schéma refusé. Inchangés : sandbox, contextIsolation, nodeIntegration off, surface du pont.
+
 **Marquages :** **À VÉRIFIER**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -4106,7 +4110,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-024](#astra-p2-024) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
 | [ASTRA-P2-025](#astra-p2-025) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 | [ASTRA-P2-026](#astra-p2-026) | P2 | Restart/replay | FERMÉ — corrigé | `0e235fb` | test-lab.test.ts : processus Node réel étranger sous le PID enregistré → refusé et laissé vivant (vraie sonde CIM) ; même entrée mais créé 1 h plus tard → refusé ; bon processus → adopté ; PID nu → ancienne règle ; tests existants : adoption réelle d'un orphelin et arrêt, PID mort nettoyé ; Studio server 142 | Optionnel : Studio packagé — tuer le serveur Studio (pas l'arbre) puis relancer → « Core local orphelin retrouvé » puis remplacé | Enregistrements « PID nu » : ancienne règle jusqu'au relancement du service |
-| [ASTRA-P2-027](#astra-p2-027) | P2 | Sécurité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
+| [ASTRA-P2-027](#astra-p2-027) | P2 | Sécurité | FERMÉ — corrigé | `6df7cf6` | Desktop ipc-guard.test.ts : origine Studio / page d'état acceptées ; autre port, autre hôte, web, autre fichier, data:, URL invalide refusés ; décisions d'ouverture de fenêtre ; Desktop 19/19 ; build OK | Requis : Studio (npm run studio) — page d'état (Réessayer/Redémarrer), bouton Mise à jour, liens « Ouvrir la page seule ↗ » et overlays de l'accueil s'ouvrent toujours | — |
 | [ASTRA-P2-028](#astra-p2-028) | P2 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-029](#astra-p2-029) | P2 | Tests | FERMÉ — corrigé | `cc3994d` | Base jetable : les deux suites ensemble 3/3 vertes (contre 3/3 en échec avant) ; chacune seule verte ; npm test avec TEST_DATABASE_URL 383/383 ; npm test sans URL 373 + 10 ignorés (inchangé) | — | — |
 | [ASTRA-P3-001](#astra-p3-001) | P3 | Build | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
