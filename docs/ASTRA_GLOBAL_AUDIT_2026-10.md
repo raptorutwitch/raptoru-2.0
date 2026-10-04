@@ -828,6 +828,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `2c617d1`
+
+**Résolution (passe P1, 2026-10-04) :** Confirmé : `TestLab.stopPostgres()` ne vérifiait que son Core et son bot ; `LocalRuntime.watch()` ne surveille que le processus et `/health` du Core Lab, donc PG arrêté laissait le Core Lab « prêt » sans base. Correction : dépendance optionnelle `postgresUsers` du Test Lab, renseignée par le serveur Studio avec le Core Lab du runtime ; arrêt refusé avec la raison tant qu'il tourne. Test : `test-lab.test.ts` (refus sous Core Lab, autorisé une fois arrêté). Course start/stop simultanés : le runtime relance de toute façon le conteneur à son prochain démarrage (`ensurePostgres`).
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -877,6 +881,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Ancienne ingestion labchat non reprise au démarrage
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `2c617d1`
+
+**Résolution (passe P1, 2026-10-04) :** Vérifié : le PID labchat est écrit dans `processes.json` mais jamais relu ; un crash du serveur Studio (`uncaughtException` → `process.exit(1)`, enfants conservés sous Windows) ou un lancement dev laisse l'adaptateur vivant (Electron tue l'arbre par `taskkill /T` seulement lors de son propre arrêt forcé). Correction : `LabChatIngress.create()` appelle `adoptPrevious()` puis `stop()` avant tout démarrage — même règle que le Core Lab (adopté puis remplacé), adoption limitée aux processus node du PID enregistré. Test : `lab-chat.test.ts` « an adapter orphaned by a previous Studio session is stopped before anything starts ». Limite connue partagée avec core/bot/labcore : identification par nom d'image ([ASTRA-P2-026](#astra-p2-026), non traité ici).
 
 **Marquages :** **À VÉRIFIER**
 
@@ -931,6 +939,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `2c617d1`
+
+**Résolution (passe P1, 2026-10-04) :** Confirmé : `shutdown()` faisait `void labChatRef?.stop()` puis `process.exit` après `lab.shutdown()`/`runtime.stop()` seulement (et sortie immédiate en mode `BONK_LAB_ONLY`). Correction : barrière `stopAll()` exportée par apps/studio/server/src/index.ts — tous les arrêts (ingestion labchat, Test Lab, runtime) sont attendus, un échec est journalisé sans bloquer les autres ; chaque `ManagedProcess.stop()` force déjà le kill après 5 s. Le mode `BONK_LAB_ONLY` garde son périmètre (pas de Test Lab/runtime) mais attend l'ingestion. Fermetures répétées : garde `stopping` existante. Test : `test-lab.test.ts` « shutdown barrier ».
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -979,6 +991,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Ingestion activée sans supervision continue du processus
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `2c617d1`
+
+**Résolution (passe P1, 2026-10-04) :** Confirmé : `LabChatIngress` ne lançait l'adaptateur qu'au démarrage et sur le switch ; une sortie (toutes en code 1 : jeton inutilisable, validation horaire échouée, crash) laissait `enabled: true, running: false` sans reprise. Correction : supervision dans l'ingress (contrôle toutes les 5 s) — sortie spontanée relancée, budget 3 relances / 10 min puis état « crash_loop » affiché ; le bot sort désormais en code 78 (`EXIT_AUTH`) quand TwitchAuth déclare le jeton en échec (Twitch injoignable reste en code 1, donc relancé), affiché « auth_failed » sans relance. OFF utilisateur et arrêt Studio ne relancent jamais ; OFF/ON réarme la supervision. La raison passe par le champ `blocked` déjà affiché par Studio (aucune modification UI ; le switch reste actionnable). Tests : `lab-chat.test.ts` (2 cas de supervision).
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -1029,6 +1045,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Journal chat écrit dans la racine de code packagée
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `2c617d1`
+
+**Résolution (passe P1, 2026-10-04) :** Confirmé sur `9098150` : `applyDataRootEnv()` (apps/studio/server/src/test-lab/local-env.ts) redirigeait jetons et outbox Loyalty vers DATA_ROOT, pas `LAB_CHAT_JOURNAL_FILE` (défaut relatif `.lab-chat-journal.json`, cwd `paths.botDir` sous REPO_ROOT). Correction : `paths.labChatJournal` dans DATA_ROOT et `LAB_CHAT_JOURNAL_FILE` posé comme l'outbox (un réglage explicite du `.env` bot reste prioritaire) ; un journal laissé à côté du code par une version antérieure est copié une fois, jamais écrasé. Packaging : `stage.mjs` ne copie que `dist` et `package.json` du bot, aucun journal ne peut être embarqué (pas de changement nécessaire). Tests : `apps/studio/server/test/local-env.test.ts` (REPO_ROOT ≠ DATA_ROOT → journal dans DATA_ROOT ; reprise unique ; réglage explicite prioritaire).
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -3960,11 +3980,11 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-009](#astra-p1-009) | P1 | Idempotence | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P1-010](#astra-p1-010) | P1 | Paiements | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL ; Décision préalable |
 | [ASTRA-P1-011](#astra-p1-011) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
-| [ASTRA-P1-012](#astra-p1-012) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
-| [ASTRA-P1-013](#astra-p1-013) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
-| [ASTRA-P1-014](#astra-p1-014) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
-| [ASTRA-P1-015](#astra-p1-015) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
-| [ASTRA-P1-016](#astra-p1-016) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
+| [ASTRA-P1-012](#astra-p1-012) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | test-lab.test.ts (garde Postgres) | — | — |
+| [ASTRA-P1-013](#astra-p1-013) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | lab-chat.test.ts (orphelin) | Optionnel : tuer le serveur Studio (pas l'arbre) ingestion ON, relancer → un seul labchat | Identité de processus : ASTRA-P2-026 |
+| [ASTRA-P1-014](#astra-p1-014) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | test-lab.test.ts « shutdown barrier » | Fermer Studio avec l'ingestion ON : plus de processus labchat restant | — |
+| [ASTRA-P1-015](#astra-p1-015) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | lab-chat.test.ts supervision (2) ; bot 91/91 | Ingestion ON, tuer le processus labchat → reconnexion en ≤ 5 s | — |
+| [ASTRA-P1-016](#astra-p1-016) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | local-env.test.ts (3) ; suite Studio server 137/137 | Studio packagé : vérifier `<données>/apps/twitch-bot/.lab-chat-journal.json` après un envoi Commands V2 | Dossier données sans `apps/twitch-bot` : l'exécuteur échoue comme avant (jetons au même endroit) |
 | [ASTRA-P1-017](#astra-p1-017) | P1 | Studio | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
 | [ASTRA-P1-018](#astra-p1-018) | P1 | Tests | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P1-019](#astra-p1-019) | P1 | Transport | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
