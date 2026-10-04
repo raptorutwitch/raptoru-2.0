@@ -324,14 +324,18 @@ export class CommandsAdmission {
     });
   }
 
-  /** Public list (extension, later): listed, enabled, not deleted — viewer-facing fields only. */
+  /**
+   * Public projection (extension « Commandes » for viewers, phase F): listed, enabled, not deleted
+   * commands, grouped by the streamer's categories in their order (« Sans catégorie » last), with only
+   * what a viewer needs — never an id, a person's login (allowed / excluded), a right, a lock, the
+   * history or an execution detail. `live` + `when` tell whether a command can be used right now.
+   */
   async publicList(channelId: string) {
     const rows = await this.db.query<{ config: CmdConfig }>(
       `select config from cmd_commands where channel_id = $1 and deleted_at is null and listed and enabled
        order by name`,
       [channelId],
     );
-    // The streamer's categories, in their order (a command without one is « Sans catégorie »).
     const categories = await this.db.query<{
       category_id: string;
       name: string;
@@ -341,23 +345,55 @@ export class CommandsAdmission {
       'select category_id, name, icon, color from cmd_categories where channel_id = $1 order by position, name',
       [channelId],
     );
-    const cat = new Map(categories.map((c) => [c.category_id, c]));
+    const session = (
+      await this.db.query<{ ended_at: Date | null }>(
+        'select ended_at from lab_stream_sessions where channel_id = $1 order by started_at desc limit 1',
+        [channelId],
+      )
+    )[0];
+    const live = Boolean(session && !session.ended_at);
+    // A word a module owns (e.g. Tombola's !join) never launches a command: not shown as an alias.
+    const reserved = new Set(
+      ((await this.deps.reserved?.(this.db, channelId)) ?? []).map(
+        (w) => w.word,
+      ),
+    );
+    const view = (c: CmdConfig) => ({
+      name: c.name,
+      aliases: c.aliases.filter((a) => !reserved.has(a)),
+      description: c.description,
+      appearance: c.appearance,
+      syntax: syntax(c),
+      /** Who: the groups, and whether some people are allowed on top (never who). */
+      audience: {
+        groups: c.audience.groups,
+        named_people: c.audience.allow.length > 0,
+      },
+      cooldown: c.cooldown.enabled
+        ? { seconds: c.cooldown.seconds, scope: c.cooldown.scope }
+        : null,
+      quota: c.quota.enabled
+        ? { max: c.quota.max, window: c.quota.window, scope: c.quota.scope }
+        : null,
+      when: c.when,
+      available_now: c.when === 'always' || (c.when === 'live') === live,
+    });
+    const known = new Set(categories.map((k) => k.category_id));
     return {
-      categories: categories.map(({ category_id, name, icon, color }) => ({
-        category_id,
-        name,
-        icon,
-        color,
-      })),
-      commands: rows.map(({ config: c }) => ({
-        name: c.name,
-        aliases: c.aliases,
-        description: c.description,
-        category_id: c.category && cat.has(c.category) ? c.category : null,
-        appearance: c.appearance,
-        syntax: syntax(c),
-        when: c.when,
-      })),
+      live,
+      categories: categories
+        .map((k) => ({
+          name: k.name,
+          icon: k.icon,
+          color: k.color,
+          commands: rows
+            .filter((r) => r.config.category === k.category_id)
+            .map((r) => view(r.config)),
+        }))
+        .filter((k) => k.commands.length),
+      uncategorized: rows
+        .filter((r) => !r.config.category || !known.has(r.config.category))
+        .map((r) => view(r.config)),
     };
   }
 

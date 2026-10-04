@@ -809,16 +809,20 @@ describe('Commands V2 admission — routes and public list', () => {
     ).toMatchObject({ status: 403 });
     const pub = await call('GET', `/v1/lab/commands/${CH}/public`);
     expect(pub.body).toEqual({
+      live: false,
       categories: [],
-      commands: [
+      uncategorized: [
         {
           name: 'hug',
           aliases: ['calin'],
           description: 'Un câlin',
-          category_id: null,
           appearance: { icon: 'chat', color: '#8b5cf6' },
           syntax: '!hug',
+          audience: { groups: ['everyone'], named_people: false },
+          cooldown: null,
+          quota: null,
           when: 'always',
+          available_now: true,
         },
       ],
     });

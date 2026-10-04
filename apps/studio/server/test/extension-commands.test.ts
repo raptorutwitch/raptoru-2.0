@@ -590,3 +590,64 @@ describe('Extension « Modération › Commandes » — rename (the name = canon
     });
   });
 });
+
+describe('Extension « Commandes » for viewers (phase F) — public route of the Lab EBS', () => {
+  it('a viewer reads the public projection: listed commands only, grouped, nothing internal; Modération stays team-only', async () => {
+    const cat = await svc.createCategory(CH, STUDIO, {
+      name: 'Fun',
+      icon: 'sparkles',
+      color: '#f2c65f',
+    });
+    await make({
+      name: 'hug',
+      aliases: ['calin'],
+      description: 'Un câlin',
+      category: cat.category_id,
+      audience: { groups: ['vips'], allow: ['aouh'], deny: ['trollman'] },
+    });
+    await make({ name: 'lurk' });
+    await make({ name: 'secret', listed: false });
+    const session = (await lab.handle('GET', '/session', undefined, VIEWER))
+      .body as Json;
+    expect(session.commands_public).toBe(true);
+    const r = await lab.handle('GET', '/commands/public', undefined, VIEWER);
+    expect(r.status).toBe(200);
+    const pub = r.body as Json & {
+      categories: { name: string; commands: Json[] }[];
+      uncategorized: Json[];
+    };
+    expect(
+      pub.categories.map((k) => [k.name, k.commands.map((c) => c.name)]),
+    ).toEqual([['Fun', ['hug']]]);
+    expect(pub.uncategorized.map((c) => c.name)).toEqual(['lurk']);
+    expect(pub.categories[0]!.commands[0]).toMatchObject({
+      aliases: ['calin'],
+      description: 'Un câlin',
+      audience: { groups: ['vips'], named_people: true },
+      cooldown: { seconds: 30, scope: 'viewer' },
+      quota: null,
+      available_now: true,
+    });
+    const text = JSON.stringify(pub);
+    for (const secret of [
+      'secret',
+      'command_id',
+      'category_id',
+      cat.category_id,
+      'aouh',
+      'trollman',
+      'rights',
+      'locked_fields',
+      'team_lock',
+      'version',
+      'updated_by',
+      'history',
+    ])
+      expect(text).not.toContain(secret);
+    // Same answer whatever the role; the moderation surface is unchanged (still refused to a viewer).
+    expect(
+      (await lab.handle('GET', '/commands/public', undefined, MOD)).body,
+    ).toEqual(pub);
+    expect(await call(VIEWER, 'GET', 'list')).toMatchObject({ status: 403 });
+  });
+});

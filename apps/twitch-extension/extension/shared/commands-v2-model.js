@@ -287,3 +287,27 @@ export const blank = (category) => ({
   reply: { mode: 'normal', text: '', to: 'none' },
   args: [],
 });
+
+// ------------------------------------------------------------------ public list (phase F, viewers)
+
+/** « VIP + Abonnés », « Tout le monde », « Certaines personnes » — never who exactly. */
+export function publicWho(a) {
+  if (a.groups.includes('everyone')) return 'Tout le monde';
+  const g = a.groups.map((k) => SHORT[k]);
+  if (a.named_people) g.push(g.length ? 'quelques personnes' : 'Certaines personnes');
+  return g.join(' + ') || 'Personne';
+}
+export const publicCooldown = (c) => (c ? `${dur(c.seconds)} ${c.scope === 'viewer' ? 'par personne' : 'pour tout le chat'}` : 'Aucun');
+export const publicQuota = (q) => (q ? `max ${quotaShort(q)}` : '');
+export const WHEN_LABEL = { live: 'Pendant le live', offline: 'Hors live' };
+/** Name, alias or description contains the search (with or without « ! »). */
+export function publicMatches(c, q) {
+  const w = String(q || '').trim().toLowerCase().replace(/^!+/, '');
+  return !w || c.name.includes(w) || c.aliases.some((a) => a.includes(w)) || c.description.toLowerCase().includes(w);
+}
+/** Core's groups (its order), « Sans catégorie » last, filtered by the search; empty groups dropped. */
+export function publicGroups(pub, q) {
+  const groups = [...pub.categories.map((k) => ({ ...k, commands: k.commands.filter((c) => publicMatches(c, q)) })), { ...NO_CATEGORY, commands: pub.uncategorized.filter((c) => publicMatches(c, q)) }];
+  return groups.filter((k) => k.commands.length);
+}
+

@@ -34,6 +34,7 @@ import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
 import { createModerationV2View } from './moderation-v2.js';
 import { createCommandsV2View } from './commands-v2.js';
+import { createCommandsPublicView } from './commands-public.js';
 import { createTombolaV2View } from './tombola-v2.js';
 
 const el = (tag, className, text) => {
@@ -523,8 +524,16 @@ const HUB_MODULE_STYLES = Object.freeze({
   bonk: { icon: 'bonk', color: '#f59e0b', color2: '#ef4444' },
   raffle_join: { icon: 'raffle_join', color: '#ec4899', color2: '#a855f7' },
   moderation: { icon: 'moderation', color: '#10b981', color2: '#0e7490' },
+  commands: { icon: 'commands', color: '#2fd8c4', color2: '#3b82f6' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
+/** Commands V2 « Commandes » (phase F): the channel's public command list, for every viewer. */
+const COMMANDS_PUBLIC_MODULE = Object.freeze({
+  id: 'commands',
+  label: 'Commandes',
+  icon: '!',
+  description: 'Les commandes à taper dans le chat.',
+});
 const MODERATION_MODULE = Object.freeze({
   id: 'moderation',
   label: 'Modération',
@@ -1158,6 +1167,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let commandsV2Shown = false;
   /** Tombola V2 (Lab): persistent screen reading Core itself (never rebuilt by the host's polling). */
   let tombolaV2View = null;
+  /** Commands V2 public list (phase F), kept while « Commandes » is open. */
+  let commandsPublicView = null;
   let paymentWalletSync = null;
   let soundboardVolumeOpen = false;
   let soundboardVolumeSync = null;
@@ -1379,7 +1390,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function moduleById(id) {
     if (id === ACTIONS_MODULE.id) return ACTIONS_MODULE;
     if (id === MODERATION_MODULE.id) return canModerate() ? MODERATION_MODULE : null;
+    if (id === COMMANDS_PUBLIC_MODULE.id) return commandsPublicAvailable() ? COMMANDS_PUBLIC_MODULE : null;
     return (state?.modules ?? []).find((m) => m.id === id) ?? null;
+  }
+
+  /** « Commandes » (public list, phase F): offered by the EBS, Video and Mobile only (not the Panel). */
+  function commandsPublicAvailable() {
+    return state?.commands_public === true && typeof client?.commandsPublic === 'function'
+      && !document.body.classList.contains('panel-view');
   }
 
   let runtimeNotificationSequence = 0;
@@ -1651,6 +1669,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       commandsV2View = null;
       commandsV2Shown = false;
     }
+    if (moduleId !== COMMANDS_PUBLIC_MODULE.id) commandsPublicView = null;
     if (moduleId !== 'raffle_join') {
       tombolaV2View?.destroy();
       tombolaV2View = null;
@@ -5840,6 +5859,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const modules = [...(state.modules ?? [])]
       .filter((mod) => mod.id !== MODERATION_MODULE.id);
     if (state.identity_shared && !modules.some((mod) => mod.id === ACTIONS_MODULE.id)) modules.push(ACTIONS_MODULE);
+    // « Commandes » (public, every viewer) when the EBS offers it — Video and Mobile, not the Panel.
+    if (commandsPublicAvailable() && !modules.some((mod) => mod.id === COMMANDS_PUBLIC_MODULE.id)) {
+      modules.push(COMMANDS_PUBLIC_MODULE);
+    }
     if (canModerate() && !modules.some((mod) => mod.id === MODERATION_MODULE.id)) {
       modules.push(MODERATION_MODULE);
     }
@@ -6060,7 +6083,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       item.classList.add('is-open');
       const body = el('div', 'jdm-module__body');
       if (!isModeration) body.dataset.scrollKey = `module-${mod.id}`;
-      if (!isSoundboard && !isModeration && !isTombolaV2) {
+      const isCommandsPublic = mod.id === COMMANDS_PUBLIC_MODULE.id;
+      if (!isSoundboard && !isModeration && !isTombolaV2 && !isCommandsPublic) {
         const intro = el('div', 'jdm-module__intro');
         intro.append(
           el('strong', 'jdm-module__intro-title', mod.label),
@@ -6107,6 +6131,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         const shownView = commandsV2Shown && commandsV2View ? commandsV2View : moderationV2View;
         body.append(shownView.node);
         queueMicrotask(() => shownView?.attached());
+      } else if (isCommandsPublic) {
+        // Commands V2 public list (read-only, Core's public projection), under the host header.
+        body.dataset.cmdPub = '1';
+        if (!commandsPublicView) {
+          commandsPublicView = createCommandsPublicView({ document, client });
+          commandsPublicView.start();
+        }
+        body.append(commandsPublicView.node);
+        queueMicrotask(() => commandsPublicView?.attached());
       } else if (isTombolaV2) {
         // Tombola V2 (validated prototype): its own header and way back to the Hub, Core's state only.
         body.dataset.tmbV2 = '1';

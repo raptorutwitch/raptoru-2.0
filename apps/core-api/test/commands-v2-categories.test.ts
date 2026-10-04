@@ -157,24 +157,109 @@ describe('Commands V2 — categories', () => {
     );
   });
 
-  it('the public list gives each command its category (name, icon, colour come from the list)', async () => {
+  it('public projection (phase F): listed commands only, grouped by category in order, « Sans catégorie » last, viewer fields only', async () => {
     const fun = await cat('Fun', 'sparkles', '#f2c65f');
-    await make({ category: fun.category_id });
-    await make({ name: 'other' });
-    expect(await adm.publicList(CH)).toMatchObject({
-      categories: [
-        {
-          category_id: fun.category_id,
-          name: 'Fun',
-          icon: 'sparkles',
-          color: '#f2c65f',
-        },
-      ],
-      commands: [
-        { name: 'hug', category_id: fun.category_id },
-        { name: 'other', category_id: null },
-      ],
+    const infos = await cat('Infos', 'help', '#a855f7');
+    await svc.orderCategories(CH, STUDIO, [infos.category_id, fun.category_id]);
+    await cat('Vide', 'chat', '#000000');
+    await make({
+      name: 'hug',
+      aliases: ['calin', 'calinou'],
+      description: 'Un câlin',
+      category: fun.category_id,
+      audience: {
+        groups: ['vips', 'subs'],
+        allow: ['aouh'],
+        deny: ['trollman'],
+      },
+      cooldown: { enabled: true, seconds: 60, unit: 'min', scope: 'viewer' },
+      quota: { enabled: true, max: 4, window: 'hour', scope: 'global' },
     });
+    await make({ name: 'discord', category: infos.category_id });
+    await make({ name: 'lurk', when: 'live' });
+    await make({ name: 'hidden', listed: false });
+    await make({ name: 'off', enabled: false });
+    const gone = await make({ name: 'gone' });
+    await svc.remove(CH, gone.command_id, STUDIO, gone.version);
+    const pub = await adm.publicList(CH);
+    expect(
+      pub.categories.map((k) => [k.name, k.commands.map((c) => c.name)]),
+    ).toEqual([
+      ['Infos', ['discord']],
+      ['Fun', ['hug']],
+    ]);
+    expect(pub.uncategorized.map((c) => c.name)).toEqual(['lurk']);
+    expect(pub.categories[1]!.commands[0]).toEqual({
+      name: 'hug',
+      aliases: ['calin', 'calinou'],
+      description: 'Un câlin',
+      appearance: { icon: 'chat', color: '#8b5cf6' },
+      syntax: '!hug',
+      audience: { groups: ['vips', 'subs'], named_people: true },
+      cooldown: { seconds: 60, scope: 'viewer' },
+      quota: { max: 4, window: 'hour', scope: 'global' },
+      when: 'always',
+      available_now: true,
+    });
+    expect(pub.uncategorized[0]).toMatchObject({
+      when: 'live',
+      available_now: false,
+    });
+    // Nothing internal: no ids, no logins, no rights / locks / history / version / author.
+    const text = JSON.stringify(pub);
+    for (const secret of [
+      'command_id',
+      'category_id',
+      'aouh',
+      'trollman',
+      'team_lock',
+      'locked_fields',
+      'version',
+      'updated_by',
+      'rights',
+      'actions',
+      'refuse',
+      fun.category_id,
+    ])
+      expect(text).not.toContain(secret);
+  });
+
+  it('public projection: an alias owned by a module (Tombola !join) is not shown — it never launches the command', async () => {
+    const plain = new CommandsService(
+      db,
+      new FakeClock(new Date('2026-10-04T18:00:00Z')),
+    );
+    await plain.create(CH, STUDIO, {
+      name: 'participer',
+      aliases: ['join', 'go'],
+      reply: { mode: 'normal', text: 'ok', to: 'none' },
+    });
+    const withReserved = new CommandsAdmission(
+      db,
+      new FakeClock(new Date('2026-10-04T18:00:00Z')),
+      {
+        reserved: async () => [{ word: 'join', module: 'raffle' }],
+      },
+    );
+    expect((await withReserved.publicList(CH)).uncategorized[0]).toMatchObject({
+      name: 'participer',
+      aliases: ['go'],
+    });
+  });
+
+  it('public projection: availability follows the live state', async () => {
+    await make({ name: 'lurk', when: 'live' });
+    await make({ name: 'offline', when: 'offline' });
+    await db.query(
+      `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by) values (gen_random_uuid(), $1, now(), 'simulated', 'test')`,
+      [CH],
+    );
+    const pub = await adm.publicList(CH);
+    expect(pub.live).toBe(true);
+    expect(pub.uncategorized.map((c) => [c.name, c.available_now])).toEqual([
+      ['lurk', true],
+      ['offline', false],
+    ]);
   });
 
   it('HTTP routes: list / create / update / order / delete', async () => {

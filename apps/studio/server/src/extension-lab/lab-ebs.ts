@@ -1124,6 +1124,21 @@ export class LabEbs {
     // Tombola V2 (Core): free entry decided by Core, never the in-memory raffle.
     if (this.labCore && method === 'POST' && path === '/actions/raffle')
       return this.joinRaffleCore(caller, headers.idempotencyKey);
+    // Commands V2 « Commandes » for every viewer (phase F): Core's public projection, read-only, no
+    // identity needed and nothing else than what a viewer may see.
+    if (
+      this.labCore &&
+      method === 'GET' &&
+      path.split('?')[0] === '/commands/public'
+    ) {
+      try {
+        return this.ok(
+          await this.labCore<Json>(`/v1/lab/commands/${LAB_CHANNEL.id}/public`),
+        );
+      } catch {
+        return this.fail(503, 'commands_unavailable');
+      }
+    }
     // Commands V2 « Modération › Commandes » (phase E): the caller's verified identity, Core decides.
     if (this.labCore && path.startsWith('/commands/v2/')) {
       const out = await commandsFacade(this.labCore)(
@@ -1947,6 +1962,8 @@ export class LabEbs {
       environment: 'lab',
       // Moderation V2 (D4) console available: the extension reads / commands Core through /moderation/v2.
       moderation_v2: Boolean(this.labCore),
+      // Commands V2 public list available (« Commandes » in the Hub, every viewer).
+      commands_public: Boolean(this.labCore),
       role: identity.role,
       channel_id: LAB_CHANNEL.id,
       channel_login: LAB_CHANNEL.login,

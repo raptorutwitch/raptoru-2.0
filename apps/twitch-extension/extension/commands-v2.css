@@ -874,3 +874,25 @@ body.mobile:has(.cmdx) .m-body { height: 100vh; max-height: 100vh; overflow: hid
 .cmdx .lmeta { overflow: hidden; color: var(--faint); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .cmdx .empty { padding: 28px 12px; color: var(--faint); text-align: center; }
 .cmdx .xsave--warn { border-top-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+
+/* ================================================================== commands-public — « Commandes » for viewers (phase F)
+   Inside the host module body (its header, its scroll): no own height, no own background, read-only rows. */
+.cmdx.cmdx--public { height: auto; min-height: 0; overflow: visible; background: none; }
+.cmdx--public .lst { flex: none; }
+.cmdx--public .lbody { padding: 0 2px 16px; }
+.cmdx--public .lhead { margin: 0 2px; }
+.cmdx--public .lr, .cmdx--public .lr:hover { cursor: default; background: none; }
+.cmdx--public .lr.off .lname .tile, .cmdx--public .lr.off .lname__t, .cmdx--public .lr.off .lcol { opacity: 0.6; }
+.cmdx--public .xs { padding: 0 2px 8px; }
+.cmdx--public .lpub-hint { margin: 0 4px 2px; color: var(--faint); font-size: 11.5px; }
+.cmdx--public .lpub-hint b { color: var(--ok); font-weight: 600; }
+.cmdx--public .largs { color: var(--muted); font: 600 12px var(--num); white-space: nowrap; }
+.cmdx--public .lalias { overflow: hidden; color: var(--faint); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.cmdx--public .lpill { flex: none; margin-left: auto; padding: 1px 8px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--muted); font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.cmdx--public .lpill--off { border-color: color-mix(in srgb, var(--warn) 45%, transparent); color: var(--warn); }
+.cmdx--public[data-mode='video'] .lst { --cols: minmax(0, 1fr) 128px 128px; }
+.cmdx--public[data-mode='video'] .lname .desc { white-space: nowrap; }
+.cmdx--public[data-mode='mobile'] .lst { --cols: minmax(0, 1fr); }
+.cmdx--public[data-mode='mobile'] .lname .desc { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* The host module body gives the list the full width (no intro, no extra padding inside the card). */
+.jdm-module__body[data-cmd-pub] { gap: 0 !important; }

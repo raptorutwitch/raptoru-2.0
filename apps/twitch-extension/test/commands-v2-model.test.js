@@ -8,6 +8,10 @@ import {
   counts,
   groups,
   NO_CATEGORY,
+  publicCooldown,
+  publicGroups,
+  publicQuota,
+  publicWho,
   reapply,
   stateOf,
   visible,
@@ -143,3 +147,34 @@ describe('commands — 409', () => {
     expect(r.both).toEqual(['description']);
   });
 });
+
+describe('commands — public list (phase F)', () => {
+  const c = (name, o = {}) => ({ name, aliases: [], description: '', appearance: { icon: 'chat', color: '#000000' }, syntax: `!${name}`, audience: { groups: ['everyone'], named_people: false }, cooldown: null, quota: null, when: 'always', available_now: true, ...o });
+  const pub = {
+    live: false,
+    categories: [
+      { name: 'Infos', icon: 'help', color: '#a855f7', commands: [c('discord', { aliases: ['dc'] }), c('reglement', { description: 'Le règlement' })] },
+      { name: 'Fun', icon: 'sparkles', color: '#f2c65f', commands: [c('hug')] },
+    ],
+    uncategorized: [c('lurk')],
+  };
+  it('Core’s category order, « Sans catégorie » last; the search filters by name, alias or description', () => {
+    expect(publicGroups(pub, '').map((k) => [k.name, k.commands.map((x) => x.name)])).toEqual([
+      ['Infos', ['discord', 'reglement']],
+      ['Fun', ['hug']],
+      [NO_CATEGORY.name, ['lurk']],
+    ]);
+    expect(publicGroups(pub, '!dc').map((k) => k.commands.map((x) => x.name))).toEqual([['discord']]);
+    expect(publicGroups(pub, 'règlement').map((k) => k.commands.map((x) => x.name))).toEqual([['reglement']]);
+    expect(publicGroups(pub, 'zzz')).toEqual([]);
+  });
+  it('access, cooldown and limit in words — never who exactly', () => {
+    expect(publicWho({ groups: ['everyone'], named_people: true })).toBe('Tout le monde');
+    expect(publicWho({ groups: ['vips', 'subs'], named_people: true })).toBe('VIP + Abonnés + quelques personnes');
+    expect(publicWho({ groups: [], named_people: true })).toBe('Certaines personnes');
+    expect(publicCooldown({ seconds: 300, scope: 'global' })).toBe('5 min pour tout le chat');
+    expect(publicCooldown(null)).toBe('Aucun');
+    expect(publicQuota({ max: 4, window: 'hour', scope: 'viewer' })).toBe('max 4 / heure par personne');
+  });
+});
+
