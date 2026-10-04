@@ -10,6 +10,18 @@
 - "Validated" means tested manually by Antoni — never call automated tests or E2E a validation.
 - Commands V2: current state, rules and next step (Phase F) are in `docs/COMMANDS_V2_STATUS.md`.
 
+## Central files (ASTRA-P1-008, decided 2026-10-04)
+
+Progressive extraction, no big refactor. Baseline at the decision: `apps/twitch-extension/extension/shared/ui.js`
+6 206 lines, `extension/base.css` 16 477, `apps/studio/server/src/extension-lab/lab-ebs.ts` 2 255,
+`apps/studio/web/src/commands.ts` 2 066.
+
+- A new module or significant screen gets its own file/component (as Commands V2 did:
+  `commands-v2*.js`, `commands-public.js`, `commands-facade.ts`); the central file only wires it.
+- Do not grow these files on purpose when a local extraction is reasonable.
+- Extract existing code only when it really has to be modified, keeping the validated UX strictly
+  identical. No framework migration, no "clean-up" split, no removal of legacy still in use.
+
 ## Raptoru Studio releases
 
 - When a slice that impacts Raptoru Studio (see README "Does a change need a Studio release?") is
