@@ -1,11 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import {
-  createWriteStream,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  type WriteStream,
-} from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
@@ -18,6 +12,7 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 import { isTrustedPage, windowOpenDecision } from './ipc-guard.js';
+import { rotatingLog } from './rotating-log.js';
 import { setupUpdater } from './updater.js';
 import {
   ServerSupervisor,
@@ -82,21 +77,13 @@ function dataRoot(): string | null {
   );
 }
 
-// --- server log file (current run + previous run) ----------------------------------------------------
-let logFile: WriteStream | null = null;
+// --- server log file (current run + previous run, size-capped: rotating-log.ts) -----------------------
+let logLine: ((line: string) => void) | null = null;
 function serverLog(line: string) {
-  if (!logFile) {
-    const dir = join(app.getPath('userData'), 'logs');
-    mkdirSync(dir, { recursive: true });
-    const file = join(dir, 'studio-server.log');
-    try {
-      renameSync(file, `${file}.1`);
-    } catch {
-      /* first run */
-    }
-    logFile = createWriteStream(file, { flags: 'a' });
-  }
-  logFile.write(`${new Date().toISOString()} ${line}\n`);
+  logLine ??= rotatingLog(
+    join(app.getPath('userData'), 'logs', 'studio-server.log'),
+  );
+  logLine(`${new Date().toISOString()} ${line}`);
 }
 
 // --- supervisor dependencies ---------------------------------------------------------------------------
@@ -374,7 +361,6 @@ app.on('before-quit', (event) => {
   event.preventDefault();
   quitting = true;
   void supervisor.stop().finally(() => {
-    logFile?.end();
     app.quit();
   });
 });
