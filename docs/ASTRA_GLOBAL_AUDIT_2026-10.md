@@ -1985,6 +1985,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `87465b7`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `b01ff3d` : le serveur HTTP du Core Lab (désormais `createLabCore()` dans `apps/core-api/src/bonk-lab/lab-core.ts`, extrait tel quel de `local-server.ts` en `93f07db`) transformait toute exception inattendue en `500 bonk_core_error` sans aucune trace (le Core principal journalise déjà `[core-api] request failed`). Correction minimale : une ligne `console.error` « `[bonk-lab-core] <MÉTHODE> <chemin> failed: <erreur + pile>` » — chemin sans query ni corps, secret Bearer et identifiants d'URL de connexion masqués (`redact()`) ; Studio la reçoit dans ses journaux via la sortie du processus (sa propre redaction s'applique en plus). Réponse client inchangée ; les `HttpError` (refus métier, validation 400/403/404/409) gardent leur contrat et ne sont pas journalisées comme pannes. Pas de refonte du logging.
+
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -4080,7 +4084,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-010](#astra-p2-010) | P2 | Extension | FERMÉ — corrigé | `52591d0` | Extension test/api.test.js : corps bloqué → erreur à 8 s (échoue sur l'ancien code : blocage) ; réponse normale ; retry 503 avec la même clé ; Extension 28/28 | — | — |
 | [ASTRA-P2-011](#astra-p2-011) | P2 | Extension | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
 | [ASTRA-P2-012](#astra-p2-012) | P2 | Identité | FERMÉ — corrigé | `c8284c6` | commands-v2-admission et raffle-v2 « ASTRA-P2-012 » (900100 via Twitch → refusé ; via simulateur → streamer ; échouent sur l'ancienne règle) ; tests existants vrai broadcaster / badge forgé / modérateur ; Core 371, Studio server 140 | Optionnel : simulateur de chat Studio en tant que « Raptoru_ (lab) » → !annuletombola annule toujours | — |
-| [ASTRA-P2-013](#astra-p2-013) | P2 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À REVALIDER SUR CODE ACTUEL |
+| [ASTRA-P2-013](#astra-p2-013) | P2 | Observabilité | FERMÉ — corrigé | `87465b7` | lab-core.test.ts : panne inattendue → 500 inchangé + ligne de log avec route et cause, sans secret, mot de passe ni query ; erreur attendue (400) → contrat inchangé, rien journalisé | — | — |
 | [ASTRA-P2-014](#astra-p2-014) | P2 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-015](#astra-p2-015) | P2 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-016](#astra-p2-016) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
