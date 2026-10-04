@@ -2098,6 +2098,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **OUVERT — dépriorisé**
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `804a621`. Sous-parties déjà couvertes par l'existant (corrections P1/P2 incluses) : dernière admission et résultat par interaction (historique Modération Studio/Extension : statut, remboursement, horodatage), chaîne d'exécution par interaction (détail : tentative, `started_at`, `completed_at`/`stopped_at`, erreur, audit), Commands (historique des invocations, `last_claim_at`, « exécuteur absent »), ingestion chat (en marche, dernière sortie, raison de blocage — P1-015), disponibilité Core (`/ready` — P1-005), cause des erreurs inattendues Core Lab (P2-013). Manque : une vue unique par canal « âge de la dernière preuve » (dernière admission / dernier claim / dernier ACK par module) et l'âge de la dernière confirmation de stream (renvoyé ici par P1-003). Les ajouter demanderait une nouvelle surface Studio (observabilité de confort, hors objectif « pas de plateforme d'observabilité ») ; laissé ouvert et dépriorisé, sans changement de code.
+
 **Marquages :** **À VÉRIFIER** ; **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -2157,6 +2161,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `d2e287b`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `804a621` : confirmé. Les workers TTS, Soundboard et Bonk (`apps/studio/server/src/*-lab/worker.ts`) terminaient chaque tick (boucle 150 ms) par une écriture atomique du journal (`tmp` + `rename`) même sans changement : ≈ 5–6 écritures/s par worker, 15–20/s au repos pour les trois. Correction : `save()` n'écrit pas un contenu identique au dernier écrit (comparaison du JSON sérialisé) ; tout changement réel reste écrit avant l'action qu'il protège, même format, reprise inchangée (`open()` écrit toujours l'état récupéré). Gain : 0 écriture au repos (contre 15–20/s).
+
 **Marquages :** **À VÉRIFIER**
 
 **Niveau de preuve :** Le périmètre exact de ce qui reste non démontré figure dans la réserve ci-dessous. Aucun comportement n'a été vérifié dynamiquement.
@@ -2211,6 +2219,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Titre court :** Claims des workers à cadence courte même sans travail
 
 **Statut initial :** **OUVERT**
+
+**Statut actuel :** **FERMÉ — corrigé** — commit `a71c5e7`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `d2e287b` : confirmé et mesuré. Les trois boucles (`runtime.ts`) demandaient un claim au Core toutes les 150 ms même files vides ; tick TTS au repos mesuré à ≈ 9 ms (HTTP + transaction Core sur PGlite, 100 ticks), soit ≈ 6 ticks/s par worker (≈ 17 % de la boucle d'évènements du serveur Studio pour les trois, plus la charge Core). Correction : `WorkerLoop` partagé (`src/worker-loop.ts`) — 150 ms tant que le worker a des entrées locales (remise, ACK, règlement, ordres d'arrêt), sinon délai doublé à chaque tick vide jusqu'à 1 s ; une admission réussie (toutes les admissions Lab passent par `worker.admit()`) réveille la boucle immédiatement ; jamais deux ticks simultanés. Latence : achat d'un viewer → claim immédiat (inchangée, voire meilleure qu'un tick de 150 ms) ; seuls les éléments devenus réclamables sans admission (TTS libéré d'une revue par un modérateur, reprise après pause) peuvent attendre jusqu'à 1 s. Requêtes au repos : ≈ 6,5/s → ≤ 1/s par worker.
 
 **Marquages :** **À VÉRIFIER**
 
@@ -4118,9 +4130,9 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-012](#astra-p2-012) | P2 | Identité | FERMÉ — corrigé | `c8284c6` | commands-v2-admission et raffle-v2 « ASTRA-P2-012 » (900100 via Twitch → refusé ; via simulateur → streamer ; échouent sur l'ancienne règle) ; tests existants vrai broadcaster / badge forgé / modérateur ; Core 371, Studio server 140 | Optionnel : simulateur de chat Studio en tant que « Raptoru_ (lab) » → !annuletombola annule toujours | — |
 | [ASTRA-P2-013](#astra-p2-013) | P2 | Observabilité | FERMÉ — corrigé | `87465b7` | lab-core.test.ts : panne inattendue → 500 inchangé + ligne de log avec route et cause, sans secret, mot de passe ni query ; erreur attendue (400) → contrat inchangé, rien journalisé | — | — |
 | [ASTRA-P2-014](#astra-p2-014) | P2 | Observabilité | FERMÉ — corrigé | `22f6310` | test-lab.test.ts « crash traces » : secret et Bearer dans le message/la pile → masqués, pile conservée ; Studio server 144/144 | — | — |
-| [ASTRA-P2-015](#astra-p2-015) | P2 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
-| [ASTRA-P2-016](#astra-p2-016) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
-| [ASTRA-P2-017](#astra-p2-017) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
+| [ASTRA-P2-015](#astra-p2-015) | P2 | Observabilité | OUVERT — dépriorisé | — | — | — | Vue agrégée « âge de la dernière preuve » et confirmation stream : non faites (confort) |
+| [ASTRA-P2-016](#astra-p2-016) | P2 | Performance | FERMÉ — corrigé | `d2e287b` | tts-lab « ASTRA-P2-016 » : journal remplacé par un marqueur → 5 ticks au repos n'y touchent pas (l'ancien code le réécrit), un achat le réécrit en JSON valide ; tests de reprise existants ; Studio server 145 | — | — |
+| [ASTRA-P2-017](#astra-p2-017) | P2 | Performance | FERMÉ — corrigé | `a71c5e7` | worker-loop.test.ts : repos 300/600/1000 ms ; busy → 150 ms ; réveil immédiat ; jamais deux ticks ; arrêt propre ; Studio server 148 | Optionnel : après quelques secondes d'inactivité, un TTS/son acheté part toujours sans délai perceptible | Reprise après pause / libération de revue : ≤ 1 s |
 | [ASTRA-P2-018](#astra-p2-018) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
 | [ASTRA-P2-019](#astra-p2-019) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL |
 | [ASTRA-P2-020](#astra-p2-020) | P2 | Performance | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER |
