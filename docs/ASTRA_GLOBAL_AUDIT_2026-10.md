@@ -3095,6 +3095,10 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
+**Statut actuel :** **FERMÉ — corrigé** — commit `b02bd6c`
+
+**Résolution (passe P1, 2026-10-04) :** Revalidé sur `5556cd3`. Ports et défauts : Studio 4100 (serveur : `PORT`, défaut 4100 ; Electron : constante 4100, sans passer d'env — cohérents), Core Lab 4301 (`BONK_LAB_CORE_PORT`, défaut 4301 dans `local-server.ts` = `LAB_CORE_PORT` du runtime, qui ne le surcharge pas — cohérents), callback OAuth 3789 (redirection enregistrée chez Twitch, volontairement fixe, même valeur dans Studio, Core Lab et script `twitch:auth`), OBS WebSocket 4455 (valeur initiale du champ Studio, modifiable), E2E 4399 (`E2E_PORT`), Core 3000 (`PORT`). Aucune contradiction dangereuse entre composants. Deux écarts réels corrigés : le diagnostic du runtime affichait `studio: 4100` en dur quel que soit `PORT` (il lit désormais le port effectif, comme le serveur) ; le README annonçait un port de dev 5175 pour l'Extension, qui n'a pas de serveur de dev (servie par Studio), et omettait les ports du Lab — ligne réécrite avec la variable qui règle chaque port. Aucun défaut modifié, pas de registre réseau.
+
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -4197,7 +4201,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P2-029](#astra-p2-029) | P2 | Tests | FERMÉ — corrigé | `cc3994d` | Base jetable : les deux suites ensemble 3/3 vertes (contre 3/3 en échec avant) ; chacune seule verte ; npm test avec TEST_DATABASE_URL 383/383 ; npm test sans URL 373 + 10 ignorés (inchangé) | — | — |
 | [ASTRA-P3-001](#astra-p3-001) | P3 | Build | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; Décision préalable |
 | [ASTRA-P3-002](#astra-p3-002) | P3 | Config | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
-| [ASTRA-P3-003](#astra-p3-003) | P3 | Config | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Preuve statique à revalider lors de la correction |
+| [ASTRA-P3-003](#astra-p3-003) | P3 | Config | FERMÉ — corrigé | `b02bd6c` | local-runtime « ASTRA-P3-003 » (PORT=4399 → ports affichés 4399/4301/3789) ; Studio server local-runtime 11/11 | — | — |
 | [ASTRA-P3-004](#astra-p3-004) | P3 | État | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P3-005](#astra-p3-005) | P3 | Observabilité | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | Décision préalable |
 | [ASTRA-P3-006](#astra-p3-006) | P3 | UX | OUVERT | — | À prévoir : voir entrée | À effectuer sur le périmètre corrigé | À VÉRIFIER ; À REVALIDER SUR CODE ACTUEL ; Décision préalable |
