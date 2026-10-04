@@ -820,6 +820,75 @@ describe('D4 personal cooldown (delay between two uses, during a span)', () => {
 });
 
 describe('D4 wallet admin', () => {
+  it('ASTRA-P2-006: a refund at the wallet cap records only what the balance gets back; once; balance and ledger reconcile', async () => {
+    const { m, buy, act, wallet, core, code } = await lab();
+    const v = '900230';
+    const MAX = 1_000_000_000;
+    const i = (await buy(v)).interaction;
+    const [debit] = await core.db.query<{ amount: number }>(
+      "select amount from lab_wallet_ledger where interaction_id = $1 and kind = 'debit'",
+      [i.interaction_id],
+    );
+    const cost = -Number(debit!.amount);
+    expect(cost).toBeGreaterThan(100);
+    // Wallet raised just under its cap (Lab « Wallet de test »): only 100 tokens of room left.
+    await m.editWallet(CHANNEL, {
+      actor: studio,
+      viewer_id: v,
+      op: 'set',
+      tokens: MAX - 100,
+    });
+    const before = (await wallet(v)).tokens;
+    const lastId = Number(
+      (
+        await core.db.query<{ id: string }>(
+          'select max(id) as id from lab_wallet_ledger where viewer_id = $1',
+          [v],
+        )
+      )[0]!.id,
+    );
+    await act({
+      action: 'cancel',
+      module: 'tts',
+      interaction_id: i.interaction_id,
+      refund: true,
+    });
+    const after = (await wallet(v)).tokens;
+    expect(after).toBe(MAX);
+    const refunds = await core.db.query<{ amount: number }>(
+      "select amount from lab_wallet_ledger where interaction_id = $1 and kind = 'refund'",
+      [i.interaction_id],
+    );
+    expect(refunds.map((r) => Number(r.amount))).toEqual([100]); // not the full cost
+    // Reconciliation: the balance moved by exactly the sum of the ledger lines written since.
+    const [moved] = await core.db.query<{ sum: string }>(
+      'select coalesce(sum(amount), 0) as sum from lab_wallet_ledger where viewer_id = $1 and id > $2',
+      [v, lastId],
+    );
+    expect(Number(moved!.sum)).toBe(after - before);
+    // The surfaces get the applied amount (audit of the refund).
+    const trail = (await m.auditTrail(CHANNEL, { limit: 50 })) as {
+      action: string;
+      after?: { amount?: number };
+    }[];
+    expect(trail.find((t) => t.action === 'refund')?.after?.amount).toBe(100);
+    // A second refund: refused / no-op, nothing written, balance unchanged.
+    await code(
+      act({
+        action: 'refund',
+        module: 'tts',
+        interaction_id: i.interaction_id,
+      }),
+    );
+    expect(
+      await core.db.query(
+        "select 1 from lab_wallet_ledger where interaction_id = $1 and kind = 'refund'",
+        [i.interaction_id],
+      ),
+    ).toHaveLength(1);
+    expect((await wallet(v)).tokens).toBe(MAX);
+  });
+
   it('idempotent action (ASTRA-P1-009): a retried credit is answered, never applied twice', async () => {
     const { m, wallet, core } = await lab();
     const credit = (

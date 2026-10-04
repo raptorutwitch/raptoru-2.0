@@ -706,6 +706,13 @@ export async function refundDebit(
     )
   )[0];
   if (!d) return { amount: 0, currency: null as WalletCurrency | null };
+  // ASTRA-P2-006 (option A, decided): the ledger records what the balance really gets back once the
+  // wallet cap applies — never more — so balance and ledger always reconcile. Still once per
+  // interaction (lab_wallet_ledger_once): a replay inserts nothing and changes nothing.
+  const w = await lockWallet(q, d.channel_id, d.viewer_id, now);
+  const before = w[d.currency];
+  const after = Math.min(LAB_WALLET_MAX[d.currency], before - Number(d.amount));
+  const applied = after - before;
   const inserted = await q.query(
     `insert into lab_wallet_ledger (channel_id, viewer_id, kind, currency, amount, module_id, interaction_id, actor, reason, created_at)
      values ($1, $2, 'refund', $3, $4, $5, $6, $7, $8, $9) on conflict do nothing returning id`,
@@ -713,7 +720,7 @@ export async function refundDebit(
       d.channel_id,
       d.viewer_id,
       d.currency,
-      -Number(d.amount),
+      applied,
       d.module_id,
       interactionId,
       actor,
@@ -722,13 +729,9 @@ export async function refundDebit(
     ],
   );
   if (!inserted.length) return { amount: 0, currency: d.currency };
-  const w = await lockWallet(q, d.channel_id, d.viewer_id, now);
-  w[d.currency] = Math.min(
-    LAB_WALLET_MAX[d.currency],
-    w[d.currency] - Number(d.amount),
-  );
+  w[d.currency] = after;
   await writeWallet(q, d.channel_id, d.viewer_id, w, now);
-  return { amount: -Number(d.amount), currency: d.currency };
+  return { amount: applied, currency: d.currency };
 }
 
 /** Lab-only wallet tools (Studio « Wallet de test »): set values, add / remove, reset to defaults. */
