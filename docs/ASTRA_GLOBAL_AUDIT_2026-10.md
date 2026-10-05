@@ -153,6 +153,30 @@ Viewer Web complet sans besoin immédiat, achievements/cosmétiques/statistiques
 Ledger et Wallet central, calculs Daily/Presence/Loyalty, moteur Tombola, historique des migrations, séparation Core/Bot/Studio, release/updater explicites et legacy encore nécessaire. Les cinq choix de meilleur rendement restent : garanties des effets, runtime fiable, E2E versionnés, premier parcours canonique isolé et découpage progressif des surfaces.
 
 
+## Validation globale de consolidation et préparation du cutover (2026-10-05)
+
+**Consolidation globale validée manuellement par Antoni le 05/10/2026** (HEAD `9ab0523`). Smoke test final :
+Hub / navigation OK ; TTS réel OK (player OBS / preview requis — sans lui, `player: null` → `ready: false` →
+« indisponible », comportement compris, pas un bug), TTS normal, STOP, second TTS ; Soundboard lecture et STOP ;
+Bonk Unicode / local, Bonk Twitch en rôle viewer lié (les rôles Lab broadcaster / modérateur sont des identités
+fictives : emotes Twitch rendues non sélectionnables et erreurs explicites par `9ab0523`, validé par Antoni) ;
+Tombola ; Modération ; Commands. L'ingestion Twitch réelle n'était pas un critère bloquant.
+
+Statut du registre recompté sur `9ab0523` :
+
+| Sévérité | Fermés / acceptés | Ouverts | Détail des ouverts |
+| -- | --: | --: | -- |
+| P0 | 0 | 0 | — |
+| P1 | 14 | 5 | 001, 006, 007, 010, 019 : **BLOQUÉ — décision de cutover** (revalidés le 05/10, voir chaque entrée) |
+| P2 | 26 | 3 | 015, 021 (dépriorisés), 025 (capacité, se dimensionne avec P1-006) |
+| P3 | 3 | 3 | 001 (signature avant diffusion large), 002 (nommage accepté), 006 (backlog UX) |
+
+Aucun P2 / P3 ouvert ne bloque la préparation du cutover. **La phase courante est la préparation du cutover**, dont
+la référence canonique est [`CUTOVER_PLAN_2026-10.md`](CUTOVER_PLAN_2026-10.md) : revalidation des cinq P1, dépendances, ordre recommandé (socle staging →
+P1-019 → P1-001 → P1-006 → parcours vertical → P1-007 → P1-010 → cutover économique unique), parcours future-prod
+isolé, critères, rollback, coexistence avec SAMMI / StreamElements et décisions D1–D6 attendues d'Antoni. Aucune
+release, aucun déploiement ni cutover n'est autorisé par cette section.
+
 ## Registre des findings
 
 Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renuméroter après fermeture. Les marquages portent sur la preuve ou l'actualité du constat, jamais sur le statut de suivi.
@@ -237,6 +261,8 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Statut actuel :** **BLOQUÉ — décision de cutover**
 
 **Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : les interactions Lab (modération, Tombola, TTS, Bonk/Soundboard via le store) débitent/créditent `lab_wallets`/`lab_wallet_ledger` ; aucun module Lab n'utilise `WalletService`. Constat toujours exact, mais il ne s'agit pas d'un défaut du Lab (wallet de test volontairement isolé) : c'est la frontière économique du futur raccordement. **Options :** (A) adaptateur « économie » unique côté Core, implémenté par le wallet Lab aujourd'hui et par `WalletService` au cutover, débit + admission dans la même transaction — L ; (B) protocole réservation/compensation entre l'admission Lab et le Wallet central — L/XL, plus de cas d'échec ; (C) migrer chaque module isolément au cutover — coût répété et risque de dissociation débit/admission. **Recommandation :** A, décidée avec le modèle de monnaies (jetons/crédits) et le point de coupure ; à faire avant d'ajouter un nouveau module payant. Aucune modification sans décision (modèle de monnaies = décision produit).
+
+**Revalidation cutover (2026-10-05, `9ab0523`) :** toujours exact. Canonique aujourd'hui : points StreamElements (Jetons de production, holds de l'EBS legacy) ; après cutover : Wallet Core. Delta précis : `WalletService.execute()` ouvre sa propre transaction (`db.tx`) et ne peut pas partager celle d'une admission — il faut une variante transactionnelle, un port économique unique (`LabEconomy` inchangé / `CoreWalletEconomy`), un schéma d'interactions de production (les tables Lab interdisent tout autre mode par contrainte SQL) et l'import SE (`opening_balance`) au point de coupure. Indépendant des autres P1 pour être développé ; requis par P1-010 et par toute action payante réelle. Décision D1 (import des soldes, jeux SE). Plan : `docs/CUTOVER_PLAN_2026-10.md` § 4.1.
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -521,6 +547,8 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : le bootstrap du Core principal (`apps/core-api/src/index.ts`) n'expose que Bonk/Soundboard/TTS Lab, pas Modération V2, Tombola ni Commands ; l'Extension connectée vise toujours `https://raptoru.fr/api` (`runtime-config.js`) ; les surfaces V2 passent par la façade Lab locale (jeton Lab non signé, Lab uniquement). Les invariants côté Core sont en place et testés (acteur dérivé du jeton, refus de forgerie de rôle — ex. `commands-studio.test.ts` « evil » —, droits réévalués par Core à chaque action, projection publique Commands sans donnée interne), mais la chaîne publique JWT Twitch → EBS → Core V2 n'existe pas. **Options :** (A) EBS public dans le Core (vérification JWT Extension, canal, `opaque_user_id`/identité partagée) réutilisant les façades actuelles comme contrat — L ; (B) EBS séparé devant le Core — L, un service de plus à exploiter ; (C) porter module par module sur l'API Live existante — coût répété. **Recommandation :** A, en raccordant d'abord un parcours isolé (ex. Commandes publiques, lecture seule) avant les mutations. Aucune publication autorisée par ce finding.
 
+**Revalidation cutover (2026-10-05, `9ab0523`) :** toujours exact. Aucun code de vérification de JWT Twitch dans Raptoru 2.0 (celui du legacy, `verifyExtensionJwt`, sert de référence) ; le Core n'a que les niveaux `public` / `bot` / `studio`, et les admissions viewer Lab sont des routes `studio` avec l'identité dans le corps — à ne jamais exposer publiquement ; aucun rate limiting ; `index.ts` monte encore les routes Lab Bonk / Soundboard / TTS. Déjà réutilisable : idempotence par `(channel, viewer, clé)` avec empreinte, droits réévalués par Core. Cible : préfixe public `/v1/ext/*` dans le Core (Coolify, HTTPS) reprenant le contrat LabEbs, acteur dérivé du seul JWT. Dépend du socle staging ; P1-001 seulement pour les actions payantes. Décision D4 (environnement Twitch de test). Plan : § 4.2.
+
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
 **Niveau de preuve :** Constat statique au HEAD audité ; scénario et impact déduits du code, sans reproduction dynamique.
@@ -581,6 +609,8 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Statut actuel :** **BLOQUÉ — décision de cutover**
 
 **Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : `stream_sessions` (Daily/Presence/Loyalty, `stream-sessions.ts`) et `lab_stream_sessions` (Tombola, et désormais Commands V2 pour la fenêtre « pendant le live » et les quotas, `admission.ts`) restent deux autorités distinctes ; la session Lab a une origine `simulated`/`twitch`. Le correctif P1-003 garde volontairement cette séparation (les sessions simulées restent explicites). **Options :** (A) session canonique unique (identifiant Twitch, débuts/fins, réconciliation) consommée par tous les modules, les simulations Lab en marquant l'origine — M/L ; (B) garder deux modèles et une table de correspondance au cutover — M, divergences possibles ; (C) aligner seulement les règles de fin — S, laisse deux sources. **Recommandation :** A, après décision métier sur « stream », « stream-day » et activités hors stream ; migration additive uniquement.
+
+**Revalidation cutover (2026-10-05, `9ab0523`) :** toujours exact, écart plus petit qu'estimé : `stream_sessions` est déjà un modèle canonique mûr (identité `stream_id` Twitch, online idempotent, réouverture après offline erroné, fin rattrapée datée de la dernière confirmation, `stream_day`, une seule session ouverte). Delta : Tombola et Commands lisent `lab_stream_sessions` (sans `stream_id` Twitch) ; deux consommateurs EventSub d'état de stream (bot principal, labchat) au lieu d'un. Modèle retenu : `stream_sessions` canonique, sessions simulées seulement dans le Lab. Indépendant des autres P1 ; requis avant les modules liés au live, pas par le parcours vertical Bonk. Décision D5 (« ce stream » = session ou `stream_day`). Plan : § 4.3.
 
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
@@ -761,6 +791,8 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Statut actuel :** **BLOQUÉ — décision de cutover**
 
 **Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : les lecteurs Soundboard et TTS refusent toute interaction qui n'est pas `test_mode: true` / `payment_mode: 'simulated'` (sound-player/player.js:119, tts-player/player.js:255) ; aucun flux de redemption Channel Points n'existe dans le bot (aucun abonnement `channel.channel_points_custom_reward_redemption.*`). Les garanties disponibles côté Core (idempotence d'admission, exécution ambiguë jamais rejouée/remboursée d'office, stop prouvé — P1-017) seront réutilisées, mais le cycle externe reste à concevoir. **Options :** (A) redemption Twitch = moyen de paiement d'une interaction Core (référence stable `redemption_id`, transitions reçue → admise → exécutée → fulfil/cancel, reprise après crash) — L ; (B) redemptions converties en crédits du wallet canonique, l'interaction restant payée en crédits — M/L, découple Twitch de l'exécution ; (C) garder StreamElements/SAMMI pour les redemptions — pas de travail, pas de cutover. **Recommandation :** B (un seul chemin de paiement dans Core, décision fulfil/cancel limitée à la conversion), à valider avec le modèle produit des crédits. Aucun accès ni changement Twitch/production autorisé par ce finding.
+
+**Revalidation cutover (2026-10-05, `9ab0523`) :** toujours exact (aucun abonnement redemption dans le bot ; crédits Lab = soldes `credits_tts` / `credits_soundboard`). Référence legacy relue (redemption `UNFULFILLED` → consommation atomique → `FULFILLED` après SAMMI, sinon `CANCELED`). Contrainte structurante à reconfirmer : seule l'application Twitch qui a créé une récompense peut changer le statut de ses redemptions — les récompenses legacy ne sont pas pilotables par l'app Raptoru 2.0 ; pendant la phase hybride, Raptoru 2.0 ne doit jamais agir sur une redemption réelle. Dépend de P1-001 et P1-006 (+ P1-019 si D2 = A) : dernier P1. Décision D2 (redemption = paiement ou conversion en crédits). Plan : § 4.4.
 
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
@@ -1265,6 +1297,8 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 **Statut actuel :** **BLOQUÉ — décision de cutover**
 
 **Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : `localLabCoreClient()` (proxy.ts) n'accepte que `http://127.0.0.1|localhost` et les préfixes `/v1/lab/*` ; `LAB_CHAT_CORE_URL` est limité au loopback (lab-chat-main.ts) ; les lecteurs exigent `simulated` (cf. P1-010). Ces gardes sont des protections Lab voulues : les lever reviendrait à exposer le Lab. **Options :** (A) client « production » distinct (HTTPS, authentification Studio par instance, timeouts, compatibilité de versions) à côté des clients Lab inchangés — L ; (B) tunnel/VPN vers le Core distant en réutilisant les clients loopback — M, sécurité et diagnostics déportés hors de l'app ; (C) Core local dans Studio en production aussi — supprime le besoin de transport mais change l'architecture cible (Infrastructure Spec : Core VPS). **Recommandation :** A, validé sur un parcours distant isolé (reconnexion, ACK perdu, mauvaise instance refusée) avant tout cutover ; ne jamais assouplir les gardes Lab.
+
+**Revalidation cutover (2026-10-05, `9ab0523`) :** toujours exact et voulu (clients loopback `/v1/lab/*`, lecteurs `simulated`, un seul `STUDIO_SECRET` couvrant cockpit, workers et admissions Lab). Déjà acquis et transposable sur HTTPS : journal écrit avant l'effet, `studio_instance_id` / `attempt_id` / bail / heartbeat, ACK dont `execution_unknown`, `expires_at`, STOP prouvé (P1-017), garde de fin (P2-028), `WorkerLoop`, `/ready`. Delta : identifiant Studio par installation (appairage, révocation), client HTTPS distinct des clients Lab, version de protocole, séparation cockpit / exécution, contrat lecteurs pour le mode production. Indépendant de P1-001 / P1-006 / P1-007 ; pivot de toute exécution réelle, premier P1 recommandé après le socle staging. Décision D6 (profil production dans la même app Studio). Plan : § 4.5.
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -4173,16 +4207,16 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 
 | ID | Sévérité | Domaine | Statut | Commit | Tests | Validation manuelle | Notes |
 | -- | -------- | ------- | ------ | ------ | ----- | ------------------- | ----- |
-| [ASTRA-P1-001](#astra-p1-001) | P1 | Architecture | BLOQUÉ — décision de cutover | — | — | — | Décision : modèle de monnaies, point de coupure, protocole d'import |
+| [ASTRA-P1-001](#astra-p1-001) | P1 | Architecture | BLOQUÉ — décision de cutover | — | — | — | Décision : modèle de monnaies, point de coupure, protocole d'import ; revalidé le 05/10 → plan de cutover |
 | [ASTRA-P1-002](#astra-p1-002) | P1 | Bot | FERMÉ — corrigé | `dcfdf3d` | Bot lab-chat-ingest : Core revenu < 15 s → une admission, aucun essai après succès ; réponse perdue après commit → dédupliqué ; même message reçu deux fois → un effet ; Core absent > 15 s → essais 0/1/3/7/15 s puis abandon ; 4xx → aucun essai ; arrêt pendant les reprises → plus rien envoyé. Core raffle-v2 : !join tardif après clôture → `raffle_closed`. Déduplication Core existante : commands-v2-admission « dedupes the same Twitch message », raffle-v2 « replayed chat message ». Bot 98/98 | Optionnel : ingestion ON, redémarrer le Core Lab pendant un !join → une seule inscription | — |
 | [ASTRA-P1-003](#astra-p1-003) | P1 | Bot | FERMÉ — corrigé | `47b71bd` | lab-chat-ingest « ASTRA-P1-003 » (offline perdu → réparé ; état stable → rien ; Helix en panne → rien) ; bot 92/92 | Optionnel : ingestion ON, couper Core pendant la fin du live → session Lab fermée ≤ 60 s après son retour | Âge de la dernière confirmation : P2-015 |
 | [ASTRA-P1-004](#astra-p1-004) | P1 | Core | FERMÉ — corrigé | `ccc8e5d` | db-limits.test.ts : serveur muet → échec < 3 s (toujours) ; sur PostgreSQL réel local (opt-in `TEST_DATABASE_URL`, lecture seule : pg_sleep + verrou consultatif) requête 57014, verrou 55P03, client réutilisable — exécuté sur raptoru2-pg | — | Réglages PostgreSQL de production à revoir au cutover |
 | [ASTRA-P1-005](#astra-p1-005) | P1 | Core | FERMÉ — corrigé | `ccc8e5d` | readiness.test.ts (prêt ; base en échec ou figée → /health 200, /ready 503 borné) ; local-runtime « ASTRA-P1-005 » | Optionnel : arrêter le conteneur PG pendant que Studio tourne → Core local « dégradé » (base injoignable), puis « prêt » au redémarrage | — |
-| [ASTRA-P1-006](#astra-p1-006) | P1 | EBS | BLOQUÉ — décision de cutover | — | — | — | Décision : authentification, publication, périmètre du premier cutover |
-| [ASTRA-P1-007](#astra-p1-007) | P1 | État | BLOQUÉ — décision de cutover | — | — | — | Décision : définition métier de stream / stream-day / hors stream |
+| [ASTRA-P1-006](#astra-p1-006) | P1 | EBS | BLOQUÉ — décision de cutover | — | — | — | Décision : authentification, publication, périmètre du premier cutover ; revalidé le 05/10 → plan de cutover |
+| [ASTRA-P1-007](#astra-p1-007) | P1 | État | BLOQUÉ — décision de cutover | — | — | — | Décision : définition métier de stream / stream-day / hors stream ; revalidé le 05/10 → plan de cutover |
 | [ASTRA-P1-008](#astra-p1-008) | P1 | Extension | FERMÉ — décision adoptée | `2c0020e` | — (décision documentée, aucun code modifié) | — | Dette résiduelle acceptée, résorption progressive ; ligne de base dans CLAUDE.md |
 | [ASTRA-P1-009](#astra-p1-009) | P1 | Idempotence | FERMÉ — corrigé | `6caa2e6` | Core moderation-d4 « idempotent action » ; Studio moderation-d4 « ASTRA-P1-009 » (échoue sans le relais EBS) ; Core 365 / Studio server 138 | Extension Lab : crédit wallet de test, coupure réseau simulée → un seul crédit | Studio packagé : migration appliquée au prochain démarrage du runtime |
-| [ASTRA-P1-010](#astra-p1-010) | P1 | Paiements | BLOQUÉ — décision de cutover | — | — | — | Décision : modèle produit crédits/redemptions et cutover |
+| [ASTRA-P1-010](#astra-p1-010) | P1 | Paiements | BLOQUÉ — décision de cutover | — | — | — | Décision : modèle produit crédits/redemptions et cutover ; revalidé le 05/10 → plan de cutover |
 | [ASTRA-P1-011](#astra-p1-011) | P1 | Studio | FERMÉ — corrigé | `ccc8e5d` | local-runtime « ASTRA-P1-011 » (figé → arrêt → relance bornée) + test crash existant ; Studio server 140/140 | — | — |
 | [ASTRA-P1-012](#astra-p1-012) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | test-lab.test.ts (garde Postgres) | — | — |
 | [ASTRA-P1-013](#astra-p1-013) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | lab-chat.test.ts (orphelin) | Optionnel : tuer le serveur Studio (pas l'arbre) ingestion ON, relancer → un seul labchat | Identité de processus : ASTRA-P2-026 |
@@ -4191,7 +4225,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-016](#astra-p1-016) | P1 | Studio | FERMÉ — corrigé | `2c617d1` | local-env.test.ts (3) ; suite Studio server 137/137 | Studio packagé : vérifier `<données>/apps/twitch-bot/.lab-chat-journal.json` après un envoi Commands V2 | Dossier données sans `apps/twitch-bot` : l'exécuteur échoue comme avant (jetons au même endroit) |
 | [ASTRA-P1-017](#astra-p1-017) | P1 | Studio | FERMÉ — corrigé | `2aba120` | tts-lab « moderation stop: proposed again… » ; moderation-d4 Soundboard stop (réponse perdue → reproposé → prouvé) ; Studio server 138/138 | Validé par Antoni (2026-10-04) : STOP TTS et STOP Soundboard | Lecteur TTS d'une ancienne page ouverte : ordre reproposé sans effet jusqu'au rechargement |
 | [ASTRA-P1-018](#astra-p1-018) | P1 | Tests | FERMÉ — corrigé | `fd365dd` | e2e/commands-public.e2e.ts (navigateur, pile isolée) ; Core 368 / Studio server 140 inchangés | Une fois par machine : `npx playwright install chromium` | Commits 93f07db (assemblage partagé), fd365dd (harnais + parcours), a120335 (build schemas) |
-| [ASTRA-P1-019](#astra-p1-019) | P1 | Transport | BLOQUÉ — décision de cutover | — | — | — | Décision : transport de production, autorisation Studio, compatibilité/cutover |
+| [ASTRA-P1-019](#astra-p1-019) | P1 | Transport | BLOQUÉ — décision de cutover | — | — | — | Décision : transport de production, autorisation Studio, compatibilité/cutover ; revalidé le 05/10 → plan de cutover |
 | [ASTRA-P2-001](#astra-p2-001) | P2 | Build | FERMÉ — corrigé | `28d7052` | Staging local exécuté : manifeste inchangé, Zod installé, Schemas chargé depuis le paquet ; desktop 19/19 | — | Garde de staging : a9f4ff7 |
 | [ASTRA-P2-002](#astra-p2-002) | P2 | Config | FERMÉ — corrigé | `0e4c040` | test-lab.test.ts « loyalty credits guard » (refus Daily + démarrage forcé) | — | Core externe non géré : hors garde (inchangé) |
 | [ASTRA-P2-003](#astra-p2-003) | P2 | Contrats | FERMÉ — corrigé | `52591d0` | Extension test/api.test.js : JSON invalide / vide / non-objet → invalid_response sans retry ; 204 → {} ; refus 403/400 conservés (échoue sur l'ancien code : {} accepté) | — | Validation de forme des réponses internes : relève de P2-004 |
