@@ -130,6 +130,8 @@ export interface ProfileApiDeps {
   startError?: string | null;
   /** Local work in a worker (claimed, executing or not yet acknowledged): no switch now. */
   busy: () => boolean;
+  /** Stops the worker loops once a switch is accepted: nothing is claimed before the restart. */
+  stopWorkers?: () => void;
   now?: () => number;
 }
 
@@ -139,11 +141,9 @@ const MAIN_HEADER = 'x-raptoru-main';
 function fromMain(req: IncomingMessage, env: ProfileApiDeps['env']) {
   const expected = env.RAPTORU_MAIN_TOKEN ?? '';
   const actual = String(req.headers[MAIN_HEADER] ?? '');
-  return (
-    expected.length >= 32 &&
-    actual.length === expected.length &&
-    timingSafeEqual(Buffer.from(actual), Buffer.from(expected))
-  );
+  const a = Buffer.from(actual);
+  const b = Buffer.from(expected);
+  return b.length >= 32 && a.length === b.length && timingSafeEqual(a, b);
 }
 
 /** What the Studio page may see: never the secret (the pairing code cannot authenticate). */
@@ -233,6 +233,7 @@ export async function handleProfileApi(
       }
     }
     await writeProfileChoice(files.profile, profile);
+    if (profile !== d.plan.effective) d.stopWorkers?.();
     reply(200, {
       ok: true,
       profile,

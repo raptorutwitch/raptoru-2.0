@@ -282,12 +282,16 @@ describe('profile API (pairing view, main-only switch)', () => {
     const dir = await tempDir(cleanups);
     const plan = await bootPlan(dir, validEnv);
     let busy = false;
+    let stopped = 0;
     const deps = {
       plan,
       runtimeDir: dir,
       env: { ...validEnv, RAPTORU_MAIN_TOKEN: MAIN },
       link: null,
       busy: () => busy,
+      stopWorkers: () => {
+        stopped++;
+      },
     };
     const call = await api(deps);
     for (const main of [null, 'x'.repeat(64)])
@@ -319,6 +323,7 @@ describe('profile API (pairing view, main-only switch)', () => {
     expect((await readProfileChoice(profileFiles(dir).profile)).choice).toBe(
       'production',
     );
+    expect(stopped).toBe(1); // workers stopped: nothing claimed before the restart
     // Without an Electron main (no token in the environment), nothing can switch.
     const bare = await api({ ...deps, env: validEnv });
     expect(

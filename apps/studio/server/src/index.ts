@@ -458,6 +458,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     );
     process.exit(EXIT_PORT_IN_USE);
   }
+  // Known only to Electron main and this process: never inherited by the Lab children (Core, bot…).
+  const mainToken = process.env.RAPTORU_MAIN_TOKEN;
+  delete process.env.RAPTORU_MAIN_TOKEN;
   applyDataRootEnv();
   const lab = createTestLab();
   // Studio profile, read once at startup (a change = explicit action + supervised restart). Lab by
@@ -704,10 +707,15 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     {
       plan,
       runtimeDir: paths.runtimeDir,
-      env: process.env,
+      env: { ...process.env, RAPTORU_MAIN_TOKEN: mainToken },
       link: production?.link ?? null,
       startError: productionError,
       busy: () => [bonk, sound, tts].some((r) => r?.worker.busy ?? false),
+      stopWorkers: () => {
+        bonk?.stop();
+        sound?.stop();
+        tts?.stop();
+      },
     },
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
