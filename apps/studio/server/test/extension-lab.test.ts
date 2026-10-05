@@ -367,6 +367,13 @@ describe('Extension Lab: HTTP routes', () => {
     expect(api.status).toBe(409);
     expect(JSON.parse(api.body).error).toBe('production_profile');
     expect((await get(port, TWITCH_EXT_MOCK_PATH)).status).toBe(409);
+    // The Production players still load their static assets (sounds, TTS characters, emotes).
+    for (const asset of [
+      '/ext/assets/sounds/punch-2.mp3',
+      '/ext/shared/tts-characters.js',
+    ])
+      expect((await get(port, asset)).status).toBe(200);
+    expect((await get(port, '/ext/')).status).toBe(409);
     await new Promise((r) => server.close(r));
     // Lab profile: the current extension is served as before.
     const labServer = createStudioServer({} as never, () => {}, await newLab());

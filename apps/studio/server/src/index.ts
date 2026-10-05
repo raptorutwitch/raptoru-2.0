@@ -202,13 +202,18 @@ async function extensionLabRoute(
 ): Promise<boolean> {
   // Production profile (ASTRA-P1-019 lot 2): no Lab façade at all. Without it, the extension would run
   // on the façade's in-memory simulation and look like an old version (legacy screens, no V2 data).
+  // Only the extension PAGES are refused: the Production players (Bonk overlay, Soundboard, TTS) load
+  // their static assets from /ext/ (sounds, emotes, TTS characters).
+  const extPage =
+    url.pathname.startsWith(EXT_PREFIX) &&
+    (url.pathname.endsWith('.html') || url.pathname.endsWith('/'));
   if (
     production &&
     (url.pathname === TWITCH_EXT_MOCK_PATH ||
-      url.pathname.startsWith(EXT_PREFIX) ||
+      extPage ||
       url.pathname.startsWith(`${LAB_API_PREFIX}/`))
   ) {
-    if (url.pathname.startsWith(EXT_PREFIX)) {
+    if (extPage) {
       res.writeHead(409, {
         'content-type': 'text/html; charset=utf-8',
         'cache-control': 'no-store',
