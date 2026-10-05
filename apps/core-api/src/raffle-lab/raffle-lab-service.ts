@@ -685,7 +685,14 @@ export class RaffleLabService {
       }
       if (live && (!id || live.twitch_stream_id === id))
         return unchanged(live.session_id);
-      if (live && live.source === 'twitch' && live.twitch_stream_id === null) {
+      // A session recorded without id takes the id — unless that id already names another session
+      // (then: the usual end / reopen below, never a unique-index conflict).
+      if (
+        live &&
+        live.source === 'twitch' &&
+        live.twitch_stream_id === null &&
+        !(await twitchChannelSession(q, channelId, id!))
+      ) {
         await q.query(
           'update lab_stream_sessions set twitch_stream_id = $2 where session_id = $1',
           [live.session_id, id],
@@ -1215,9 +1222,11 @@ export class RaffleLabService {
     await this.settle(channelId);
     return this.db.tx(async (q) => {
       // Session transitions (simulated start / end) take the session lock first, like Twitch events.
+      // The configuration may (re)bind the scheduler to the live session: same lock, same order.
       if (
         req.command.action === 'stream_start' ||
-        req.command.action === 'stream_end'
+        req.command.action === 'stream_end' ||
+        req.command.action === 'config'
       )
         await lockChannelSessions(q, channelId);
       const now = this.clock.now();

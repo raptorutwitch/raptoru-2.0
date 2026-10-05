@@ -168,6 +168,27 @@ describe('channel stream session = the Twitch live (ASTRA-P1-007)', () => {
     expect((await live(f.core))?.twitch_stream_id).toBe('1001');
   });
 
+  it('mixed adapters: an id already recorded is never adopted by an id-less session (no unique-index conflict)', async () => {
+    const f = await lab();
+    await f.online('1001');
+    await f.offline();
+    f.core.clock.advance(60_000);
+    const n = await f.online(); // older adapter, no id
+    expect(n.changed).toBe(true);
+    // The earlier live's id comes back: it is older than the open session, so it is ignored.
+    expect(await f.online('1001')).toMatchObject({
+      changed: false,
+      session_id: n.session_id,
+    });
+    expect((await live(f.core))?.twitch_stream_id).toBeNull();
+    // A genuinely new id takes over cleanly.
+    expect(await f.online('1002')).toMatchObject({
+      changed: false,
+      session_id: n.session_id,
+    });
+    expect((await live(f.core))?.twitch_stream_id).toBe('1002');
+  });
+
   it('simulations: never closed by a Twitch offline; replaced by a real live (scheduler moved to it)', async () => {
     const f = await lab();
     const sim = (await f.raffle.act(CH, {
