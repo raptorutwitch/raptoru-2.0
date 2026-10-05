@@ -1,7 +1,10 @@
 // « Studio » tab: single entry point. Local runtime state (Postgres, base Lab, Core local, providers,
 // OBS, players), module access and Dev/Lab tools. Talks only to the local Studio server; no secret.
 
+import { mountBonkLab } from './bonk-lab.js';
+import { mountSoundLab } from './sound-lab.js';
 import { mountStudioProfile } from './studio-profile.js';
+import { mountTtsLab } from './tts-lab.js';
 
 type Service = {
   id: string;
@@ -85,6 +88,11 @@ export function mountStudioHome(root: HTMLElement) {
     </div></section>
     <div class="grid home-grid">
       <article class="card" data-slot="profile"></article>
+      <article class="card wide" data-slot="players" hidden>
+        <h2>Lecteurs Production</h2>
+        <p class="muted">Profil Production : les lecteurs se règlent ici (l’Extension Lab n’existe qu’en profil Lab). Sans lecteur prêt, le module reste indisponible.</p>
+        <div class="xlab-scene" data-slot="players-body"></div>
+      </article>
       <article class="card">
         <h2>Runtime local</h2>
         <div data-slot="services"><p class="muted">Chargement…</p></div>
@@ -166,7 +174,30 @@ export function mountStudioHome(root: HTMLElement) {
       : '<p class="muted">Aucun prototype avec page d’entrée.</p>';
   }
 
+  // Production profile: the Bonk overlay, Soundboard player and TTS source are set up from this tab.
+  let players: { setVisible(v: boolean): void }[] | null = null;
+  let production = false;
+  let playersShown = false;
+  const showPlayers = (v: boolean) => {
+    if (v === playersShown) return; // each card polls on its own while shown
+    playersShown = v;
+    for (const p of players ?? []) p.setVisible(v);
+  };
   async function refresh() {
+    const profile = await getJson<{ effective?: string }>('/api/profile');
+    production = profile?.effective === 'production';
+    const card = slot('players');
+    card.hidden = !production;
+    if (production && !players) {
+      const body = slot('players-body');
+      // Each card prepends itself: mounted in reverse to read Bonk, Soundboard, TTS.
+      players = [
+        mountTtsLab(body, { production: true }),
+        mountSoundLab(body, { production: true }),
+        mountBonkLab(body, { production: true }),
+      ];
+    }
+    showPlayers(visible && production);
     const [rt, bonk, sound, tts, logs] = await Promise.all([
       getJson<RuntimeStatus>('/api/runtime/status'),
       getJson<BonkStatus>('/api/bonk-lab/status'),
@@ -222,11 +253,11 @@ export function mountStudioHome(root: HTMLElement) {
       : 'Indisponible';
     slot('links').innerHTML = `
       <div class="row home-row"><span>OBS WebSocket</span><span><span class="badge ${obs[0]}">${obs[1]}</span></span></div>
-      <p class="home-detail">Connexion depuis la carte « Bonk OBS Lab » de l’Extension Lab (mot de passe jamais stocké).</p>
+      <p class="home-detail">${production ? 'Connexion depuis la carte « Bonk — overlay OBS (Production) » ci-dessous' : 'Connexion depuis la carte « Bonk OBS Lab » de l’Extension Lab'} (mot de passe jamais stocké).</p>
       <div class="row home-row"><span>Lecteur Soundboard</span><span><span class="badge ${player[0]}">${player[1]}</span></span></div>
-      <p class="home-detail">Un clic d’activation par chargement (règle d’autoplay), dans l’onglet Soundboard config.</p>
+      <p class="home-detail">Un clic d’activation par chargement (règle d’autoplay), ${production ? 'dans la carte « Soundboard — lecteur (Production) » ci-dessous' : 'dans l’onglet Soundboard config'}.</p>
       <div class="row home-row"><span>Lecteur TTS (OBS)</span><span><span class="badge ${ttsPlayer[0]}">${ttsPlayer[1]}</span></span></div>
-      <p class="home-detail">Module ${esc(ttsState)} · file ${esc(ttsQueue)}. URL de la source OBS, file et modération : Extension Lab (carte « TTS V2 Lab »).</p>
+      <p class="home-detail">${production ? 'URL de la source OBS : carte « TTS — source OBS (Production) » ci-dessous.' : `Module ${esc(ttsState)} · file ${esc(ttsQueue)}. URL de la source OBS, file et modération : Extension Lab (carte « TTS V2 Lab »).`}</p>
       <div class="row home-row"><span>Données locales</span><span>${rt ? (rt.packaged ? 'Application installée' : 'Repo (dev)') : '—'}</span></div>
       <p class="home-detail">${esc(rt?.dataRoot ?? '—')} · .env et jetons lus ici, jamais embarqués.</p>
       <div class="row home-row"><span>Production</span><span>SAMMI + StreamElements</span></div>
@@ -259,6 +290,7 @@ export function mountStudioHome(root: HTMLElement) {
     setVisible(v: boolean) {
       visible = v;
       clearTimeout(timer);
+      showPlayers(v && production);
       if (v) void loop();
     },
   };

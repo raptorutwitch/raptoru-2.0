@@ -1,14 +1,22 @@
-export function mountBonkLab(root: HTMLElement) {
+/** `production`: the same card for the Production profile (Studio tab), without Lab wording. */
+export function mountBonkLab(
+  root: HTMLElement,
+  options: { production?: boolean } = {},
+) {
   const panel = document.createElement('section');
   panel.className = 'xlab-card';
-  panel.innerHTML = `<h3>Bonk OBS Lab</h3><p>Une Twemoji · coût simulé, aucun débit ni progression. Impact au point 960 × 400 dans une source 1920 × 1080.</p>
+  panel.innerHTML = `${
+    options.production
+      ? '<h3>Bonk — overlay OBS (Production)</h3><p>Overlay servi par Studio avec le jeton du profil Production (différent de celui du Lab). Paiement encore simulé.</p>'
+      : '<h3>Bonk OBS Lab</h3><p>Une Twemoji · coût simulé, aucun débit ni progression. Impact au point 960 × 400 dans une source 1920 × 1080.</p>'
+  }
     <p data-bonk="status">Lecture du statut…</p>
     <div data-bonk="controls" hidden><label>Port OBS <input data-bonk="port" type="number" value="4455"></label>
     <label>Mot de passe OBS <input data-bonk="password" type="password" autocomplete="off"></label>
     <button data-bonk="connect" type="button">Connecter OBS local</button><button data-bonk="disconnect" type="button">Déconnecter</button>
-    <p>Dans une scène de test OBS, ajoute une source navigateur nommée exactement <strong>Raptoru Bonk Lab</strong>, 1920 × 1080, avec cette URL :</p>
-    <input data-bonk="url" readonly aria-label="URL source OBS Lab" style="width:100%">
-    <p>La source doit rester active. Ne l’ajoute pas à la scène diffusée. Sélectionne 😀 dans Bonk à gauche.</p></div><ol data-bonk="history"></ol>`;
+    <p>Dans une scène de test OBS, ajoute (ou mets à jour) une source navigateur nommée exactement <strong>Raptoru Bonk Lab</strong>${options.production ? ' (nom historique, à garder tel quel)' : ''}, 1920 × 1080, avec cette URL :</p>
+    <p><input data-bonk="url" readonly aria-label="URL de la source OBS Bonk" style="width:100%"> <button type="button" data-bonk="copy">Copier</button></p>
+    <p>La source doit rester active. Ne l’ajoute pas à la scène diffusée.${options.production ? ' L’URL change avec le profil : remets celle-ci après un changement de profil.' : ' Sélectionne 😀 dans Bonk à gauche.'}</p></div><ol data-bonk="history"></ol>`;
   root.prepend(panel);
   const el = <T extends HTMLElement>(key: string) =>
     panel.querySelector<T>(`[data-bonk="${key}"]`)!;
@@ -33,6 +41,11 @@ export function mountBonkLab(root: HTMLElement) {
     });
   });
   el('disconnect').addEventListener('click', () => void call('disconnect', {}));
+  el('copy').addEventListener('click', () => {
+    void navigator.clipboard
+      ?.writeText(el<HTMLInputElement>('url').value)
+      .catch(() => {});
+  });
   const refresh = async () => {
     try {
       const s = await call('status');

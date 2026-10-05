@@ -49,22 +49,38 @@ const STATE: Record<string, string> = {
   disabled: 'Désactivé',
 };
 
-export function mountTtsLab(root: HTMLElement) {
+/**
+ * `production`: the same card for the Production profile (Studio tab), without Lab wording and without
+ * the Lab moderation controls (pause / stop / purge go through the Lab cockpit, not yet in Production).
+ */
+export function mountTtsLab(
+  root: HTMLElement,
+  options: { production?: boolean } = {},
+) {
   const panel = document.createElement('section');
   panel.className = 'xlab-card';
-  panel.innerHTML = `<h3>TTS V2 Lab</h3><p>Extension → Core → Studio → lecteur OBS. Coût simulé, remboursé si le message n’est jamais lu.</p>
+  panel.innerHTML = `${
+    options.production
+      ? '<h3>TTS — source OBS (Production)</h3><p>Core de production → Studio → lecteur OBS (jeton du profil Production). Paiement encore simulé.</p>'
+      : '<h3>TTS V2 Lab</h3><p>Extension → Core → Studio → lecteur OBS. Coût simulé, remboursé si le message n’est jamais lu.</p>'
+  }
     <p data-tts="status">Lecture du statut…</p>
     <div data-tts="box" hidden>
       <p><b>Source OBS</b> (navigateur, 1920×1080, fond transparent) :</p>
       <p><input data-tts="overlay" readonly style="width:100%" aria-label="URL de la source OBS TTS"> <button type="button" data-act="copy">Copier</button></p>
       <p class="muted">Un seul lecteur à la fois : la source OBS, ou l’aperçu ci-dessous.</p>
       <div class="actions">
-        <button type="button" data-act="pause">Pause</button>
+        ${
+          options.production
+            ? ''
+            : `<button type="button" data-act="pause">Pause</button>
         <button type="button" data-act="resume">Reprendre</button>
         <button type="button" data-act="stop">Stop (rembourser)</button>
-        <button type="button" data-act="purge">Vider la file (rembourser)</button>
+        <button type="button" data-act="purge">Vider la file (rembourser)</button>`
+        }
         <button type="button" data-act="preview">Aperçu ici</button>
       </div>
+      ${options.production ? '<p class="muted">Pause, stop et file : outils de modération, pas encore disponibles en profil Production.</p>' : ''}
       <div data-tts="preview-box" hidden style="position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px">
         <iframe data-tts="preview" title="Aperçu du lecteur TTS" style="position:absolute;left:0;top:0;width:1920px;height:1080px;border:0;transform-origin:0 0"></iframe>
       </div>

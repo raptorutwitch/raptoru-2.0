@@ -1,12 +1,20 @@
 // Soundboard V2 Lab panel: status, the local player (embedded, needs one click to enable audio)
 // and the Core history. The player keeps running while this page stays open.
-export function mountSoundLab(root: HTMLElement) {
+/** `production`: the same card for the Production profile (Studio tab), without Lab wording. */
+export function mountSoundLab(
+  root: HTMLElement,
+  options: { production?: boolean } = {},
+) {
   const panel = document.createElement('section');
   panel.className = 'xlab-card';
-  panel.innerHTML = `<h3>Soundboard Lab</h3><p>Extension → Core → Studio → lecteur local. Coût simulé, aucun débit ni progression.</p>
+  panel.innerHTML = `${
+    options.production
+      ? '<h3>Soundboard — lecteur (Production)</h3><p>Core de production → Studio → lecteur local (jeton du profil Production). Paiement encore simulé.</p>'
+      : '<h3>Soundboard Lab</h3><p>Extension → Core → Studio → lecteur local. Coût simulé, aucun débit ni progression.</p>'
+  }
     <p data-sound="status">Lecture du statut…</p>
     <div data-sound="player-box" hidden>
-      <iframe data-sound="player" title="Lecteur Soundboard Lab" style="width:100%;height:52px;border:0;border-radius:8px"></iframe>
+      <iframe data-sound="player" title="Lecteur Soundboard" style="width:100%;height:52px;border:0;border-radius:8px"></iframe>
       <p>Clique sur « Activer le son » dans le lecteur : les sons du Soundboard sont joués ici, sur la sortie audio par défaut du PC.</p>
     </div>
     <ol data-sound="history"></ol>`;

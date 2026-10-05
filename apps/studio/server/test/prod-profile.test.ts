@@ -1,7 +1,7 @@
 // ASTRA-P1-019 lot 2 — Studio profiles (D6: one app, Lab by default, Production explicit): boot plan,
 // persistence, safe fallback, pairing view without secret, main-process-only switch, isolation of
 // journals and players between the two profiles.
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, request, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -440,25 +440,51 @@ describe('isolation between Lab and Production', () => {
       );
       await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
       const port = (server.address() as AddressInfo).port;
-      const res = await fetch(
-        `http://127.0.0.1:${port}/bonk-lab/renderer/heartbeat`,
-        {
-          method: 'POST',
-          headers: {
-            host: '127.0.0.1:4100',
-            'x-bonk-token': token,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({ renderer: 'renderer-x' }),
+      // node:http, not fetch: fetch never sends a custom Host header (the runtime checks it).
+      const out = await new Promise<{ status: number; body: string }>(
+        (resolve, reject) => {
+          const req = request(
+            {
+              host: '127.0.0.1',
+              port,
+              path: '/bonk-lab/renderer/heartbeat',
+              method: 'POST',
+              headers: {
+                host: '127.0.0.1:4100',
+                'x-bonk-token': token,
+                'content-type': 'application/json',
+              },
+            },
+            (res) => {
+              let raw = '';
+              res.on('data', (c) => (raw += String(c)));
+              res.on('end', () =>
+                resolve({ status: res.statusCode!, body: raw }),
+              );
+            },
+          );
+          req.on('error', reject);
+          req.end(JSON.stringify({ renderer: 'renderer-x' }));
         },
       );
       await new Promise((r) => server.close(r));
-      return res.status;
+      return out;
     };
-    expect(await heartbeat(production.bonk, lab.worker.token)).toBe(403);
-    expect(await heartbeat(lab, production.bonk.worker.token)).toBe(403);
+    expect(await heartbeat(production.bonk, lab.worker.token)).toEqual({
+      status: 403,
+      body: '{"error":"forbidden"}',
+    });
+    expect(await heartbeat(lab, production.bonk.worker.token)).toEqual({
+      status: 403,
+      body: '{"error":"forbidden"}',
+    });
     production.bonk.worker.setObs(true, true);
-    expect(production.bonk.worker.ready).toBe(false);
+    expect(production.bonk.worker.ready).toBe(false); // the Lab overlay did not count
+    // Its own token is accepted (the 403 above is the token, not the request shape).
+    expect(
+      (await heartbeat(production.bonk, production.bonk.worker.token)).status,
+    ).toBe(200);
+    expect(production.bonk.worker.ready).toBe(true);
     for (const r of [production.bonk, production.sound, production.tts, lab])
       r.stop();
   });
