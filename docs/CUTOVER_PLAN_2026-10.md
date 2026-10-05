@@ -290,6 +290,47 @@ adaptateur unique, réversible tant que les modules ne sont pas activés.
 redémarrage → fin cohérente ; deux lives le même jour → même `stream_day` ; manche manuelle hors stream → aucune
 session réelle ouverte. Puis shadow du bot principal en lecture seule sur la vraie chaîne (déjà pratiqué).
 
+#### Lot 1 — une session par live Twitch pour Tombola et Commands (05/10/2026, `0385223`, `59d153d`) : FAIT, tests automatiques verts
+
+**Audit.** `stream_sessions` (base de production) est déjà le modèle canonique mûr (identité = id de stream Twitch,
+online idempotent, reconnexion, offline perdu rattrapé, `stream_day` dérivé à part) et alimente Daily / Presence /
+Loyalty. Tombola et Commands lisent `lab_stream_sessions` (base Lab), sans id Twitch, avec deux interprétations
+locales. Défauts constatés : un nouveau live réutilisait une session restée ouverte (offline perdu) ; une reconnexion
+créait une nouvelle session (quotas « pendant le live » remis à zéro) ; un offline Twitch fermait une simulation ;
+une simulation ouverte bloquait la vraie session ; Commands relisait la table à sa façon. Deux consommateurs EventSub
+d'état de stream (bot principal → `stream_sessions`, labchat → `lab_stream_sessions`), jamais sur la même base. Le
+`lab_session_id` des interactions Bonk / Soundboard / TTS est la session du worker Studio, pas une session de stream.
+
+**Fait.**
+
+- Migration additive Lab `20261016130000_lab_stream_session_twitch_id.sql` : `twitch_stream_id` (réservé aux sessions
+  Twitch) + index unique partiel `(channel_id, twitch_stream_id)`.
+- `apps/core-api/src/stream/channel-sessions.ts` : **un seul lecteur** (session ouverte d'abord, sinon la dernière)
+  pour Tombola **et** Commands, et **un seul verrou de session par chaîne** (verrou consultatif pris en premier par
+  tout écrivain : événements Twitch, simulation Studio, configuration Tombola).
+- Règles (mêmes que `stream_sessions`) : même id → même session (rouverte après un offline, planificateur relancé) ;
+  id nouveau → la session restée ouverte est fermée puis une nouvelle s'ouvre ; un live plus ancien livré en retard est
+  ignoré sans rien fermer ; une session enregistrée sans id adopte l'id (sauf s'il désigne déjà une autre session) ;
+  offline → ferme seulement la session Twitch (jamais une simulation) ; une simulation est remplacée proprement par un
+  vrai live ; manches hors live sans session. `stream_sessions` / `stream_day` (Daily, Presence, Loyalty) inchangés.
+
+**Preuves.** `channel-sessions` (12, PGlite : online / doublons / offline, reconnexion, offline perdu + live tardif,
+redémarrage + synchro de démarrage, démarrage alors que déjà live, session sans id, simulations, offline tardif,
+lecteur, adapters mixtes, `stream_sessions` intacte) ; Commands (fenêtre « pendant le live » sur reconnexion / nouveau
+live / simulation fermée). **PostgreSQL réel** (`channel-sessions.integration`, base jetable, 3 connexions) : 12
+« online » concurrents du même live → une session (échoue avec `lab_stream_sessions_one_live` si le verrou est retiré) ;
+lives concurrents + offline + simulation → jamais deux sessions ouvertes, jamais deux sessions pour un live, seulement
+des refus métier. Suites : Core 414 (`--maxWorkers=3`), intégration PostgreSQL 15, Studio server 199, Desktop 20,
+Bot 98, Extension 38 ; lint, typecheck, build.
+
+**Limite acceptée.** `stream.offline` ne porte pas d'id : un offline tardif d'un live précédent ferme le live courant ;
+la reconnexion / la réparation périodique (P1-003) le rouvre (testé).
+
+**Reste de P1-007 (non fermé).** Frontière Production : en production, Tombola et Commands devront lire la session
+canonique `stream_sessions` (une seule table de sessions par base) et le bot principal rester l'unique consommateur
+EventSub d'état de stream ; `lab_stream_sessions` reste la table du Lab (simulations comprises). Ce raccordement
+appartient au passage de ces modules en production / staging (P1-019 / P1-006).
+
 ### 4.4 P1-010 — Channel Points réels
 
 **Raison historique.** Les paiements « crédits » du Lab sont simulés ; aucun cycle de redemption V2.
@@ -599,7 +640,7 @@ flowchart LR
 3. **P1-006 EBS public** : JWT + acteur dérivé + rate limit, d'abord sur le seul périmètre Bonk. _Pourquoi : il
    ferme le parcours vertical § 7 et réutilise 1 et 2._
 4. **Parcours vertical § 7** de bout en bout sur staging.
-5. **P1-007 session canonique** (développable à tout moment avant) : avant de raccorder Tombola, Commands, Daily,
+5. **P1-007 session canonique** (lot 1 local fait le 05/10/2026, § 4.3) : avant de raccorder Tombola, Commands, Daily,
    Loyalty.
 6. **P1-010 Channel Points** : en dernier, sur mock d'abord, puis essai réel seulement sur décision.
 7. Raccordement module par module sur les frontières éprouvées, puis **cutover économique unique** (§ 10).

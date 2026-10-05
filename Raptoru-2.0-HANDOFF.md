@@ -55,7 +55,14 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   migration, aucun runtime branché sur le Wallet réel, aucune donnée StreamElements. **P1-001 non fermé** : D1 + import
   SE, D2 (crédits), schéma d'interactions de production, lecteurs pour paiement réel, branchement, cutover économique.
   Pas de surface manuelle à valider pour ce lot (rien d'observable en Studio).
-- Prochaine action : à décider par Antoni (D1 / D2, socle staging D3, ou P1-007 session canonique en local).
+- **P1-007 — lot 1 local terminé le 05/10/2026** (`0385223`, `59d153d`) : une session de stream = un vrai live Twitch
+  (identité = id de stream) pour Tombola et Commands ; un seul lecteur et un verrou de session par chaîne
+  (`stream/channel-sessions.ts`) ; migration additive Lab `lab_stream_sessions.twitch_stream_id` ; stream-day
+  (Daily / Loyalty) inchangé. Prouvé sur PGlite et PostgreSQL réel (concurrence). **P1-007 non fermé** : en
+  production, Tombola / Commands devront lire `stream_sessions` et le bot principal rester l'unique consommateur
+  EventSub (raccordement avec le passage en production / staging). Smoke Lab conseillé : Tombola (simuler début / fin
+  de stream, planificateur) et Commands (quota « pendant le live »).
+- Prochaine action : à décider par Antoni (D1 / D2, socle staging D3, ou P1-006 EBS public en local).
 
 Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
 contexte).

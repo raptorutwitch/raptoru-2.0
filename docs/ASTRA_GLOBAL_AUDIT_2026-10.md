@@ -167,7 +167,7 @@ Statut du registre recompté sur `9ab0523` :
 | Sévérité | Fermés / acceptés | Ouverts | Détail des ouverts |
 | -- | --: | --: | -- |
 | P0 | 0 | 0 | — |
-| P1 | 14 | 5 | 006, 007, 010 : **BLOQUÉ — décision de cutover** ; 019 : **EN COURS** (lots 1 et 2 validés) ; 001 : **EN COURS** (lot 1 local fait) |
+| P1 | 14 | 5 | 006, 010 : **BLOQUÉ — décision de cutover** ; 019 : **EN COURS** (lots 1 et 2 validés) ; 001 : **EN COURS** (lot 1 local fait) ; 007 : **EN COURS** (lot 1 local fait) |
 | P2 | 26 | 3 | 015, 021 (dépriorisés), 025 (capacité, se dimensionne avec P1-006) |
 | P3 | 3 | 3 | 001 (signature avant diffusion large), 002 (nommage accepté), 006 (backlog UX) |
 
@@ -608,11 +608,13 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
-**Statut actuel :** **BLOQUÉ — décision de cutover**
+**Statut actuel :** **EN COURS — lot 1 local terminé (une session par live Twitch pour Tombola / Commands) ; frontière Production restante**
 
 **Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : `stream_sessions` (Daily/Presence/Loyalty, `stream-sessions.ts`) et `lab_stream_sessions` (Tombola, et désormais Commands V2 pour la fenêtre « pendant le live » et les quotas, `admission.ts`) restent deux autorités distinctes ; la session Lab a une origine `simulated`/`twitch`. Le correctif P1-003 garde volontairement cette séparation (les sessions simulées restent explicites). **Options :** (A) session canonique unique (identifiant Twitch, débuts/fins, réconciliation) consommée par tous les modules, les simulations Lab en marquant l'origine — M/L ; (B) garder deux modèles et une table de correspondance au cutover — M, divergences possibles ; (C) aligner seulement les règles de fin — S, laisse deux sources. **Recommandation :** A, après décision métier sur « stream », « stream-day » et activités hors stream ; migration additive uniquement.
 
 **Revalidation cutover (2026-10-05, `9ab0523`) :** toujours exact, écart plus petit qu'estimé : `stream_sessions` est déjà un modèle canonique mûr (identité `stream_id` Twitch, online idempotent, réouverture après offline erroné, fin rattrapée datée de la dernière confirmation, `stream_day`, une seule session ouverte). Delta : Tombola et Commands lisent `lab_stream_sessions` (sans `stream_id` Twitch) ; deux consommateurs EventSub d'état de stream (bot principal, labchat) au lieu d'un. Modèle retenu : `stream_sessions` canonique, sessions simulées seulement dans le Lab. Indépendant des autres P1 ; requis avant les modules liés au live, pas par le parcours vertical Bonk. Décision D5 (« ce stream » = session ou `stream_day`). Plan : § 4.3.
+
+**Lot 1 (2026-10-05, `0385223`, `59d153d`) :** décision produit appliquée — une session de stream = un vrai live Twitch, le stream-day reste distinct et dérivé (Daily / Loyalty inchangés). Migration additive Lab (`lab_stream_sessions.twitch_stream_id`, index unique par chaîne) ; `stream/channel-sessions.ts` = un seul lecteur pour Tombola et Commands + un verrou de session par chaîne pris en premier par tout écrivain ; règles alignées sur `stream_sessions` (même id → même session, rouverte à la reconnexion ; nouvel id → session périmée fermée ; live tardif ignoré ; offline → session Twitch seulement, jamais une simulation). Preuves : `channel-sessions` (12, PGlite), Commands (fenêtre live), `channel-sessions.integration` (PostgreSQL réel, concurrence ; échoue sans le verrou). Revue finale corrigée (`59d153d` : adoption d'id sans conflit d'index, configuration Tombola sous le verrou). **Non fermé** : en production, Tombola / Commands doivent lire `stream_sessions` et le bot principal rester l'unique consommateur EventSub — raccordement lié au passage de ces modules en production / staging.
 
 **Marquages :** **À REVALIDER SUR CODE ACTUEL**
 
@@ -4223,7 +4225,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 | [ASTRA-P1-004](#astra-p1-004) | P1 | Core | FERMÉ — corrigé | `ccc8e5d` | db-limits.test.ts : serveur muet → échec < 3 s (toujours) ; sur PostgreSQL réel local (opt-in `TEST_DATABASE_URL`, lecture seule : pg_sleep + verrou consultatif) requête 57014, verrou 55P03, client réutilisable — exécuté sur raptoru2-pg | — | Réglages PostgreSQL de production à revoir au cutover |
 | [ASTRA-P1-005](#astra-p1-005) | P1 | Core | FERMÉ — corrigé | `ccc8e5d` | readiness.test.ts (prêt ; base en échec ou figée → /health 200, /ready 503 borné) ; local-runtime « ASTRA-P1-005 » | Optionnel : arrêter le conteneur PG pendant que Studio tourne → Core local « dégradé » (base injoignable), puis « prêt » au redémarrage | — |
 | [ASTRA-P1-006](#astra-p1-006) | P1 | EBS | BLOQUÉ — décision de cutover | — | — | — | Décision : authentification, publication, périmètre du premier cutover ; revalidé le 05/10 → plan de cutover |
-| [ASTRA-P1-007](#astra-p1-007) | P1 | État | BLOQUÉ — décision de cutover | — | — | — | Décision : définition métier de stream / stream-day / hors stream ; revalidé le 05/10 → plan de cutover |
+| [ASTRA-P1-007](#astra-p1-007) | P1 | État | EN COURS — lot 1 local terminé | `0385223` · `59d153d` (lot 1) | Core channel-sessions (12) + Commands (2) ; intégration PostgreSQL channel-sessions (2, 15 au total) ; Core 414 / Studio server 199 / Desktop 20 / Bot 98 / Extension 38 ; lint, typecheck, build | — (pas de surface manuelle nouvelle ; smoke Tombola / Commands Lab conseillé) | Décision : définition métier de stream / stream-day / hors stream ; revalidé le 05/10 → plan de cutover |
 | [ASTRA-P1-008](#astra-p1-008) | P1 | Extension | FERMÉ — décision adoptée | `2c0020e` | — (décision documentée, aucun code modifié) | — | Dette résiduelle acceptée, résorption progressive ; ligne de base dans CLAUDE.md |
 | [ASTRA-P1-009](#astra-p1-009) | P1 | Idempotence | FERMÉ — corrigé | `6caa2e6` | Core moderation-d4 « idempotent action » ; Studio moderation-d4 « ASTRA-P1-009 » (échoue sans le relais EBS) ; Core 365 / Studio server 138 | Extension Lab : crédit wallet de test, coupure réseau simulée → un seul crédit | Studio packagé : migration appliquée au prochain démarrage du runtime |
 | [ASTRA-P1-010](#astra-p1-010) | P1 | Paiements | BLOQUÉ — décision de cutover | — | — | — | Décision : modèle produit crédits/redemptions et cutover ; revalidé le 05/10 → plan de cutover |
