@@ -1,0 +1,478 @@
+# Plan de cutover Raptoru 2.0 — préparation (octobre 2026)
+
+**Statut :** référence canonique de la phase **préparation du cutover**, ouverte le 05/10/2026.
+**Point de départ vérifié :** `main@9ab0523`, arbre propre (vérifier `git log` avant de se fier à ce SHA).
+**Ce document n'autorise rien.** Aucun cutover, release, `studio:release`, déploiement, migration distante, écriture
+en base de production, changement Twitch réel (récompenses, extension, EventSub), changement SAMMI ou StreamElements
+sans validation explicite d'Antoni, étape par étape.
+
+Registre de l'audit : [`ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-10.md) · contexte courant :
+[`../Raptoru-2.0-HANDOFF.md`](../Raptoru-2.0-HANDOFF.md) · architecture cible :
+[`../Raptoru Studio — Infrastructure Spec.md`](<../Raptoru Studio — Infrastructure Spec.md>).
+
+---
+
+## 1. État de départ
+
+### Raptoru 2.0 (Lab consolidé)
+
+- **Consolidation globale validée manuellement par Antoni le 05/10/2026.** Smoke test final : Hub, TTS réel (normal,
+  STOP, second TTS ; un player OBS / preview est requis), Soundboard (lecture, STOP), Bonk (Unicode / local ; Twitch en
+  rôle viewer lié), Tombola, Modération, Commands. L'ingestion Twitch réelle n'était pas un critère bloquant.
+- Audit Astra : P0 = 0 ; P1 = 14 fermés + **5 bloqués pour le cutover** (001, 006, 007, 010, 019) ; P2 = 26 fermés + 3
+  différés (015, 021, 025) ; P3 = 3 fermés / acceptés (003, 004, 005) + 3 ouverts volontairement (001 signature
+  Windows, 002 nommage BonkLab, 006 backlog UX). Aucun des P2 / P3 ouverts ne bloque la préparation.
+- Rien de Raptoru 2.0 ne tourne en production (aucune trace de déploiement dans le dépôt ni les documents) : aucun Core déployé, aucune base de production Raptoru 2.0, les flags
+  économiques réels sont OFF (`DAILY_WALLET_CREDITS`, `LOYALTY_PASSIVE_CREDITS`, `LOYALTY_EVENT_CREDITS`,
+  `LOYALTY_CHAT_COMMANDS`, `DAILY_CHAT_COMMANDS`). Dernière release Studio : 0.1.5 (Lab).
+
+### Production actuelle (legacy, intacte)
+
+| Brique                       | Rôle actuel                                                                                                  | Où                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| **StreamElements**           | Jetons = points SE (solde canonique aujourd'hui), gains passifs, subs, bits, jeux `!duel` / roulette / slots | SaaS SE                                            |
+| **SAMMI** + bridge           | Exécution (Bonk, Soundboard, TTS, alertes, Tombola), Daily de production                                     | PC streamer                                        |
+| **EBS legacy** + leaderboard | `https://raptoru.fr/api` : JWT Extension, redemptions Channel Points, holds sur les points SE, file SAMMI    | App Coolify `leaderboard--jeu-des-mots` + Supabase |
+| **Extension publiée**        | Version `20260920-095259Z-consolidated-final`, `apiBase` = `https://raptoru.fr/api`                          | Twitch CDN                                         |
+| Wizebot                      | Emote-only, annonces                                                                                         | SaaS                                               |
+
+Vercel est **historique** et ne fait pas partie de la cible : cible = **VPS Coolify** (+ Supabase / Postgres sur le
+VPS quand c'est pertinent).
+
+---
+
+## 2. Objectifs
+
+1. Transformer le Lab consolidé en un **chemin future-prod testable et réversible**, en parallèle de la production.
+2. Lever les cinq P1 de cutover **dans un ordre dérivé des dépendances réelles du code**, chacun validé isolément.
+3. Construire d'abord **un seul parcours vertical représentatif** (§ 7) avant de raccorder les autres modules.
+4. Préparer un cutover **par étapes**, jamais big-bang, avec une procédure de retour arrière à chaque étape.
+
+## 3. Contraintes
+
+- SAMMI + StreamElements + EBS legacy restent la production jusqu'à un cutover explicitement décidé.
+- **Un seul écrivain par monnaie à tout instant** : tant que SE est canonique, aucun débit / crédit réel de Jetons
+  n'a lieu dans le Core ; au cutover, l'ancien chemin est coupé **avant** que le nouveau soit activé.
+- Les gardes du Lab ne sont **jamais assouplies** : Core Lab en loopback et base Lab au nom contrôlé
+  ([`local-server.ts`](../apps/core-api/src/bonk-lab/local-server.ts)), contraintes SQL `test_mode` /
+  `payment_mode = 'simulated'` / `real_debited = 0`, lecteurs qui refusent tout ce qui n'est pas simulé, jeton Lab non
+  signé accepté uniquement par la façade LabEbs. Le chemin production est **un chemin à côté**, pas un Lab débridé.
+- Migrations : additives uniquement, jamais de réécriture d'une migration appliquée ; toute nouvelle migration est
+  classée dans [`migration-scopes.ts`](../apps/core-api/src/db/migration-scopes.ts).
+- Pas de bus d'événements générique, pas de microservice supplémentaire, pas de moteur de workflow.
+- Les données historiques StreamElements sont importées **à la toute fin**, juste avant le cutover économique.
+
+---
+
+## 4. Les cinq P1 de cutover — revalidation sur `9ab0523`
+
+Méthode : relecture ciblée du code actuel (Core, Studio, Bot, Extension) et, en lecture seule, du code legacy
+(`…\Raptoru\CANONICAL_WORKSPACE`). Aucun graphe complet du monorepo (Graphify non lancé : les frontières utiles tiennent
+dans quelques fichiers, cités ci-dessous).
+
+### 4.1 P1-001 — Wallet canonique / économie
+
+**Raison historique.** Les modules V2 ont été construits sur un wallet de test Lab autonome (`lab_wallets`,
+`lab_wallet_ledger`), distinct du Wallet Core (`WalletService`).
+
+**Toujours vrai au HEAD.** Oui.
+
+- Bonk, Soundboard, TTS débitent `lab_wallets` **dans la transaction d'admission**
+  ([`store.ts` `debit()`](../apps/core-api/src/lab-moderation/store.ts), appelé par `bonk-lab-service.ts`,
+  `sound-lab-service.ts`, `tts-lab-service.ts`) ; remboursement au plus une fois (`lab_wallet_ledger_once`).
+- Tombola paie les gagnants dans `lab_wallet_ledger` (`raffle_win`) ; Commands V2 n'a pas de coût.
+- `WalletService` ([`wallet-service.ts`](../apps/core-api/src/wallet/wallet-service.ts)) : idempotence forte, ledger
+  immuable, verrous ciblés, multi-monnaie (`main` = Jetons), types `refund` et `opening_balance` prévus. **Mais
+  `execute()` ouvre sa propre transaction (`this.db.tx`)** : il ne peut pas aujourd'hui partager la transaction d'une
+  admission.
+- Daily (`WalletCreditProvider`) et Loyalty créditent déjà via `WalletService`, derrière des flags OFF. Presence ne
+  touche pas au Wallet (elle alimente Loyalty).
+
+**Sources de vérité.**
+
+| Question                | Réponse                                                                                                                                                                                                                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Canonique aujourd'hui   | **Points StreamElements** (Jetons de production) ; les holds de l'EBS legacy portent sur ces points. Le Wallet Core n'a aucune donnée réelle ; le wallet Lab est fictif.                                                                                                     |
+| Canonique après cutover | **Wallet Core** (`currencies` / `wallet_operations` / ledger), monnaie `main` = Jetons ; crédits de module selon la décision D2.                                                                                                                                             |
+| À migrer                | Soldes SE au point de coupure → une opération `opening_balance` par viewer (clé `se-import:<cutoff>:<twitch_user_id>`) ; historique Daily legacy (outil `daily:import-legacy` existant, dry-run par défaut, aucun crédit).                                                   |
+| À ne surtout pas migrer | Wallet / ledger / interactions Lab ; montants théoriques Presence / Loyalty (shadow, preview) ; historique transactionnel SE ligne à ligne (archivé à part, pas rejoué dans le ledger) ; holds / deliveries / redemptions en cours du legacy (vidés avant la coupure, § 10). |
+| Import ou départ à zéro | Recommandation : **importer** les soldes SE (décision D1). Mapping SE `username` → `twitch_user_id` à résoudre et contrôler (renommages).                                                                                                                                    |
+
+**Delta exact restant.**
+
+1. Une variante transactionnelle du Wallet (`WalletService` exécuté **dans** la transaction de l'appelant), sans
+   dupliquer ses règles — c'est le seul changement structurel du Wallet.
+2. Un port économique unique côté Core, choisi par environnement : `LabEconomy` (wallet Lab actuel, inchangé, pour
+   toujours dans le Lab) et `CoreWalletEconomy` (Wallet Core). Admission + débit **dans la même transaction**
+   PostgreSQL ; remboursement = `credit(kind:'refund')` clé par `interaction_id`, dans la transaction du changement
+   d'état de l'interaction.
+3. Un schéma d'interactions de production (les tables Lab interdisent tout autre mode par contrainte SQL) : migrations
+   additives en scope `prod` uniquement ; la base Lab garde ses contraintes.
+4. L'outil d'import SE (dry-run + rapport de contrôle), exécuté seulement au cutover économique.
+
+**Frontière atomique.** `BEGIN` → idempotence de l'admission (clé par viewer, empreinte de requête — déjà en place) →
+règles du module (modération, cooldown, pause) → **débit Wallet** → insertion de l'interaction → `COMMIT`. Jamais un
+`WalletService.spend()` séparé de l'admission : ce découplage est précisément le risque décrit par le finding.
+
+**Double débit / crédit en phase hybride.** Impossible par construction si la règle « un seul écrivain » est tenue :
+pendant la préparation, le Wallet Core de staging ne contient que des soldes de test (base distincte) ; aucun pont
+SE ↔ Core n'est construit ; les flags de crédit restent OFF en production.
+
+**Dépendances.** Aucune pour être développé (interne au Core, testable sur base jetable). Requis par P1-010 (crédits)
+et par toute interaction payante réelle (parcours § 7).
+
+**Données de production impliquées.** Soldes SE (lecture seule jusqu'au cutover), tables Wallet Core de la future base
+de production (vides aujourd'hui).
+
+**Rollback.** Avant le cutover économique : rien à défaire (base staging). Après : fenêtre de retour arrière définie
+(premier stream) avec export des soldes Core → SE (opération inverse de l'import, dry-run d'abord) ; au-delà, retour
+arrière non supporté.
+
+**Validation isolée.** Tests sur PostgreSQL jetable : échec d'admission après débit → solde intact ; retries et
+appels concurrents → un seul débit ; remboursement unique ; réconciliation solde / ledger ; import SE en dry-run sur
+un export réel anonymisé ou réduit.
+
+### 4.2 P1-006 — EBS public / identité Twitch
+
+**Raison historique.** Les surfaces V2 passent par la façade LabEbs locale, avec des identités simulées.
+
+**Toujours vrai au HEAD.** Oui.
+
+- [`lab-ebs.ts`](../apps/studio/server/src/extension-lab/lab-ebs.ts) accepte un jeton `lab.<base64>` **non signé**
+  ([`twitch-mock.ts`](../apps/studio/server/src/extension-lab/twitch-mock.ts)) ; rôles viewer / moderator /
+  broadcaster fictifs (900101 / 900102 / 900100) ; seul le rôle viewer devient le compte Twitch lié (règle confirmée et
+  rendue visible par `9ab0523`).
+- Le Core ne connaît que trois niveaux d'authentification ([`server.ts`](../apps/core-api/src/http/server.ts)) :
+  `public`, `bot` (`BOT_SECRET`), `studio` (`STUDIO_SECRET`). Les admissions viewer (ex.
+  `POST /v1/lab/bonk/interactions`) sont des routes `studio` où **l'identité du viewer est dans le corps** : acceptable
+  derrière LabEbs en loopback, **inacceptable** sur une frontière publique.
+- Aucun code de vérification de JWT Twitch dans Raptoru 2.0. Le legacy en a un, éprouvé
+  (`CANONICAL_WORKSPACE/extension/ebs/core/identity.js` `verifyExtensionJwt` : HS256 uniquement, clé = secret
+  d'extension décodé base64, `user_id` numérique seulement si l'identité est partagée, `opaque_user_id` jamais traité
+  comme une identité).
+- L'Extension vise toujours `https://raptoru.fr/api` (`runtime-config.js`) ; aucun rate limiting dans le Core.
+- Déjà en place et réutilisable : idempotence d'admission par `(channel, viewer, clé)` avec empreinte de requête ;
+  droits Modération V2 / Commands réévalués par Core à chaque action ; projection publique Commands sans donnée
+  interne.
+
+**Frontière publique minimale.** Le Core (app Coolify, HTTPS) expose un préfixe dédié aux viewers, par exemple
+`/v1/ext/*`, qui reprend **le contrat que l'Extension parle déjà à LabEbs** (`/session`, `/state`, `/emotes`,
+`/actions/tokens`, `/actions/redemption`, `/moderation/v2/*`, `/commands/v2/*`, `/raffle/state`) : l'Extension ne
+change que d'`apiBase`. Chaque requête :
+
+1. vérifie le JWT d'Extension (HS256, `exp`, `channel_id` = chaîne configurée, rôle connu) ;
+2. dérive l'acteur **uniquement du JWT** : `user_id` si l'identité est partagée, sinon lecture seule ; rôle Twitch du
+   JWT ; rôles internes (supermod, permissions D4) depuis les tables Core ;
+3. applique un rate limit par `user_id` (ou `opaque_user_id` en lecture) et par IP ;
+4. exige `Idempotency-Key` sur toute mutation (déjà envoyé par `api.js`) ;
+5. n'accepte jamais d'identité, de rôle, de prix ou de canal fourni par le client.
+
+Les routes `studio` et `bot` refusent tout JWT d'Extension ; les routes `/v1/ext/*` refusent tout secret
+Studio / Bot. Les routes `/v1/lab/*` ne sont jamais montées par le Core de production public (aujourd'hui
+`index.ts` monte encore Bonk / Soundboard / TTS Lab : à retirer du bootstrap public au moment du raccordement).
+
+**Secrets côté serveur uniquement.** Secret d'extension, client secret de l'app Twitch, tokens broadcaster / bot /
+viewer (OAuth emotes), URL de base, identifiants Studio et Bot. **Jamais dans l'Extension** : aucun secret, aucun
+solde, prix, rôle ou droit présenté comme vérité, aucune décision métier.
+
+**Compatibilité.** Les services Core actuels restent ; seule l'entrée change (JWT → acteur au lieu de « viewer dans le
+corps »). La façade LabEbs reste pour le Lab.
+
+**Dépendances.** Besoin d'un Core joignable en HTTPS (socle staging, § 6 étape 0) ; P1-001 pour toute action payante
+(une version lecture seule ou à paiement simulé peut précéder) ; partage le socle de déploiement avec P1-019.
+
+**Données de production impliquées.** Secret de l'extension publiée (le même pour toutes ses versions), identités
+viewers réelles.
+
+**Rollback.** L'Extension publiée n'est pas touchée pendant la préparation ; les tests passent par une version de
+test (décision D4). Au cutover : retour à la version publiée précédente (`apiBase` legacy) tant que l'EBS legacy
+tourne.
+
+**Validation isolée.** Tests Core : JWT invalide / expiré / mauvais canal / identité non partagée / rôle forgé / cible
+d'un autre viewer / droit retiré après ouverture → refusés. Puis parcours § 7 avec de vrais JWT d'une version de test.
+
+### 4.3 P1-007 — Session de stream canonique
+
+**Raison historique.** Deux modèles persistants : `stream_sessions` (Daily, Presence, Loyalty) et
+`lab_stream_sessions` (Tombola, Commands V2).
+
+**Toujours vrai au HEAD.** Oui, mais l'écart est plus petit que ne le laissait penser l'audit initial.
+
+- `stream_sessions` ([`stream-sessions.ts`](../apps/core-api/src/stream/stream-sessions.ts)) est **déjà un modèle
+  canonique mûr** : identité = `stream_id` Twitch ; `online` idempotent ; un `offline` erroné suivi du même `stream_id`
+  rouvre la session ; une session restée ouverte est fermée par un nouveau live ; une seule session ouverte (index
+  unique) ; fin rattrapée datée de la dernière confirmation (`reconciledEnd`, jamais « maintenant » après une longue
+  panne) ; `stream_day` (16:00 Europe/Paris) partagé par les lives du même jour. Alimentée par le bot principal
+  (`createStreamWatcher` : EventSub + Helix au démarrage et périodiquement, échec Helix jamais interprété comme
+  offline).
+- `lab_stream_sessions` : UUID, `source` `simulated` / `twitch`, **sans `stream_id` Twitch** ; alimentée par le
+  processus labchat (`/v1/lab/stream`, réparation périodique depuis `47b71bd`) ou simulée depuis Studio. Lue par Tombola
+  (`raffle-lab-service.ts` `liveSession` / `streamEvent`, planificateur lié à la session) et Commands V2
+  (`commands/admission.ts`, fenêtre « pendant le live » et quotas).
+- Deux processus EventSub distincts suivent l'état du stream (bot principal, labchat) : en production il n'en faut
+  qu'un.
+
+**Modèle minimal canonique.** **`stream_sessions` est la session canonique** ; aucun nouveau modèle.
+
+| Point                           | Règle                                                                                           |
+| ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Identité                        | `stream_id` Twitch                                                                              |
+| Début                           | `started_at` Twitch (EventSub `stream.online` ou Helix)                                         |
+| Fin                             | `stream.offline`, ou rattrapage Helix confirmé offline (fin = dernière confirmation si tardive) |
+| Reconnexion même `stream_id`    | même session (rouverte si fermée à tort)                                                        |
+| Reconnexion nouveau `stream_id` | nouvelle session, **même `stream_day`** si même journée                                         |
+| Redémarrage Core / Bot          | état relu depuis la base ; Helix au démarrage du bot                                            |
+| EventSub manqué                 | réparation Helix périodique                                                                     |
+| API Twitch indisponible         | état inchangé (jamais « offline » par défaut)                                                   |
+| Lab                             | les sessions simulées restent explicites (`source = simulated`), uniquement en base Lab         |
+
+**Delta restant.** En production, Tombola et Commands lisent la session canonique (référence `stream_id`, ou
+`stream_day` pour « ce stream » selon D5) au lieu de `lab_stream_sessions` ; un seul consommateur EventSub d'état de
+stream (le bot principal) ; migration additive (ex. référence à `stream_sessions` dans les tables de production des
+modules), jamais de réécriture.
+
+**Dépendances.** Indépendant des autres P1 pour être développé. Doit précéder la mise en production de tout module
+lié au live (Tombola automatique, Commands « pendant le live », Daily, Loyalty passif). **N'est pas requis** par le
+parcours vertical Bonk (§ 7).
+
+**Données de production impliquées.** Futur `stream_sessions` de production (alimenté en shadow par le bot principal
+avant le cutover si Antoni l'autorise ; Presence shadow l'a déjà fait en test réel le 25/09/2026).
+
+**Rollback.** Les modules gardent leur lecture actuelle dans le Lab ; en production, la lecture de la session est un
+adaptateur unique, réversible tant que les modules ne sont pas activés.
+
+**Validation isolée.** Tests Core : même stream reçu plusieurs fois → une session ; offline perdu / reconnexion /
+redémarrage → fin cohérente ; deux lives le même jour → même `stream_day` ; manche manuelle hors stream → aucune
+session réelle ouverte. Puis shadow du bot principal en lecture seule sur la vraie chaîne (déjà pratiqué).
+
+### 4.4 P1-010 — Channel Points réels
+
+**Raison historique.** Les paiements « crédits » du Lab sont simulés ; aucun cycle de redemption V2.
+
+**Toujours vrai au HEAD.** Oui.
+
+- Aucun abonnement `channel.channel_points_custom_reward_redemption.*` dans le bot ; les lecteurs Soundboard / TTS
+  refusent tout ce qui n'est pas `test_mode` + `payment_mode = 'simulated'`.
+- Le Lab modélise les crédits comme des soldes (`lab_wallets.credits_tts`, `credits_soundboard`) que LabEbs présente à
+  l'Extension sous forme de « redemptions en attente » (`/actions/redemption`).
+- Legacy en production (`CANONICAL_WORKSPACE/extension/ebs/core/redemptions.js`) : récompense native Twitch →
+  EventSub enregistre la redemption `UNFULFILLED` → l'Extension la liste → consommation atomique (appartenance, type,
+  non expirée, non utilisée) → SAMMI → `FULFILLED` après confirmation, sinon récupérable puis `CANCELED` (points
+  rendus) après `MAX_ATTEMPTS`.
+
+**Trois notions à ne jamais confondre.**
+
+| Notion                                | Propriétaire                                  | Remboursement                           |
+| ------------------------------------- | --------------------------------------------- | --------------------------------------- |
+| **Channel Points Twitch**             | Twitch (jamais détenus par Raptoru)           | uniquement `CANCELED` sur la redemption |
+| **Jetons Raptoru**                    | Wallet Core (après cutover ; SE avant)        | ledger `refund`                         |
+| **Crédits Raptoru** (TTS, Soundboard) | consommables de module issus d'une redemption | selon D2                                |
+
+**Ce qu'il faudra.** Abonnement redemption dans le bot principal (seul consommateur EventSub) ; token broadcaster
+`raptoru_` avec `channel:read:redemptions` / `channel:manage:redemptions` (non autorisé aujourd'hui) ; référence
+stable `redemption_id` ; idempotence à la réception (redelivery EventSub) ; transitions persistées (reçue →
+convertie ou admise → `FULFILLED` / `CANCELED`) ; reprise après crash ; mapping récompense → module en configuration
+Core ; `FULFILLED` / `CANCELED` retentables et idempotents.
+
+**Contrainte Twitch structurante (à reconfirmer à l'implémentation).** Seule l'application Twitch qui a **créé** une
+récompense peut changer le statut de ses redemptions. Les récompenses actuelles appartiennent à l'application legacy :
+l'application Raptoru 2.0 ne pourra pas les `FULFILLED` / `CANCELED`. Au cutover, il faut donc soit créer de
+nouvelles récompenses avec l'application Raptoru 2.0 (et désactiver les anciennes), soit utiliser l'application legacy
+(décision D2). Pendant la phase hybride, EventSub livre les redemptions à **tous** les abonnés : Raptoru 2.0 ne doit
+jamais agir (fulfill / cancel / crédit) sur une redemption réelle.
+
+**Dépendances.** P1-001 (les crédits sont une monnaie ou un paiement du Core), P1-006 (l'Extension liste et consomme
+avec une identité vérifiée), bot principal comme consommateur EventSub unique ; P1-019 seulement si D2 = A (statut
+décidé après l'ACK d'exécution). **Dernier P1 à raccorder.**
+
+**Données de production impliquées.** Récompenses Twitch réelles, redemptions en attente, points des viewers.
+
+**Rollback.** Récompenses Raptoru 2.0 en pause / désactivées → les récompenses legacy reprennent (tant qu'elles
+existent) ; aucune redemption Raptoru 2.0 laissée `UNFULFILLED` sans décision (vidage avant retour).
+
+**Validation isolée.** Mock EventSub + Helix (Twitch CLI ou faux serveur) : redelivery → un seul crédit ; crash entre
+réception, crédit et `FULFILLED` → reprise sans double effet ; refus Helix → retenté ; résultat ambigu → politique
+explicite, jamais un remboursement supposé certain. Un essai réel (récompense de test en pause hors live, coût
+minimal, rachetée par Antoni) seulement sur décision d'Antoni.
+
+### 4.5 P1-019 — Transport Studio ↔ Core de production
+
+**Raison historique.** Transport et contrats d'exécution conçus pour l'isolement Lab.
+
+**Toujours vrai au HEAD.** Oui, et c'est voulu.
+
+- Clients Studio loopback uniquement, préfixes `/v1/lab/*` (`localLabCoreClient`
+  [`proxy.ts`](../apps/studio/server/src/lab-moderation/proxy.ts), `localCoreClient`
+  [`bonk-lab/worker.ts`](../apps/studio/server/src/bonk-lab/worker.ts) et équivalents Sound / TTS) ;
+  `LAB_CHAT_CORE_URL` loopback ([`lab-chat-main.ts`](../apps/twitch-bot/src/lab-chat-main.ts)) ; lecteurs
+  `simulated` uniquement.
+- Un seul secret partagé `STUDIO_SECRET` couvre à la fois le cockpit (wallet admin, staff, modération), les workers
+  (claim / ACK) et, dans le Lab, les admissions viewer.
+
+**Déjà résolu indirectement par les passes P1 / P2 (et transposable tel quel sur HTTPS).** Le protocole d'exécution :
+journal local durable écrit **avant** l'envoi d'un effet (« Lost response => unknown, never replay ») ;
+`studio_instance_id` + `attempt_id` + bail (lease) + heartbeat ; ACK `started` / `completed` / `failed` /
+`execution_unknown` ; `expires_at` (pas d'effet périmé joué en retard) ; remboursement unique si jamais affiché ;
+STOP répété jusqu'à `stopped` (P1-017) ; garde de fin des lecteurs (P2-028) ; `WorkerLoop` (P2-017) ; `/ready`
+(P1-005) ; erreurs Core journalisées (P2-013) ; réponses validées (P2-003) ; timeouts bornés (P2-010).
+
+**Définition cible.**
+
+| Sujet          | Règle                                                                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Sens           | Studio → Core uniquement (sortant HTTPS) : rien n'est exposé sur le PC. Polling `claim` actuel conservé (`WorkerLoop` : 150 ms en activité, 1 s au repos, par worker) ; pas de Realtime requis.                                |
+| Auth Studio    | Identifiant **par installation**, émis par le Core lors d'un appairage confirmé par Antoni, révocable, stocké côté Node (jamais dans le renderer), lié au `studio_instance_id`. Remplace le secret partagé pour la production. |
+| Périmètre      | Routes `studio` séparées en cockpit (broadcaster) et exécution (claim / ACK / heartbeat) ; un JWT d'Extension ou un navigateur n'y a jamais accès (pas de CORS, pas de cookie, secret absent du front).                        |
+| Version        | En-tête de version de protocole à chaque appel ; Core refuse une version incompatible avec une erreur explicite → Studio affiche « mise à jour requise ».                                                                      |
+| Internet tombe | Studio ne réclame plus rien ; les interactions admises expirent (`expires_at`) et sont remboursées une fois si jamais affichées ; les ACK en attente restent dans le journal et partent au retour.                             |
+| Studio tombe   | Au redémarrage : effet possiblement envoyé → `execution_unknown`, jamais rejoué ; jamais envoyé → rendu au Core.                                                                                                               |
+| Core tombe     | Les admissions échouent tout de suite côté Extension (pas de file client) ; Studio réessaie avec backoff ; ACK idempotents par `attempt_id`.                                                                                   |
+| Rejeu          | Autorisé : ACK, heartbeat, claim (idempotents). Interdit : tout effet dont l'envoi a pu commencer.                                                                                                                             |
+| Lab            | Clients, préfixes et gardes Lab **inchangés** ; le chemin production est un client distinct (profil Studio, D6).                                                                                                               |
+
+**Dépendances.** Socle staging (Core joignable en HTTPS). Indépendant de P1-001 / P1-006 / P1-007 pour être
+développé (fonctionne avec un paiement simulé). Requis par toute exécution réelle.
+
+**Données de production impliquées.** Aucune donnée économique ; identifiants Studio et file d'interactions.
+
+**Rollback.** Profil Lab intact à tout moment ; le profil production se désactive sans toucher au Lab ; identifiant
+révocable côté Core.
+
+**Validation isolée.** Core local derrière TLS puis Core staging : déconnexion / retour réseau, ACK perdu, redémarrage
+Studio pendant un effet, mauvaise instance ou identifiant révoqué refusés, version incompatible refusée, aucun rejeu.
+
+---
+
+## 5. Dépendances entre les cinq P1
+
+```mermaid
+flowchart LR
+  S0[Socle staging Coolify<br/>Core + base dédiée] --> T19[P1-019 transport]
+  S0 --> E06[P1-006 EBS public / JWT]
+  W01[P1-001 port économique] --> E06pay[actions payantes réelles]
+  E06 --> E06pay
+  T19 --> E06pay
+  W01 --> C10[P1-010 Channel Points]
+  E06 --> C10
+  T19 -. si D2 = A .-> C10
+  S07[P1-007 session canonique] --> LIVE[modules liés au live<br/>Tombola, Commands, Daily, Loyalty]
+  E06pay --> V[Parcours vertical § 7]
+```
+
+- **Socle staging → P1-019 et P1-006** : les deux exigent un Core joignable en HTTPS sur Coolify ; ils partagent le
+  même déploiement.
+- **P1-019 et P1-001 sont indépendants** : le transport fonctionne avec un paiement simulé ; le port économique est
+  interne au Core et se teste sur base jetable. Ils peuvent avancer en parallèle.
+- **P1-001 doit précéder les actions payantes réelles** : sans frontière atomique, un débit Wallet séparé de
+  l'admission recrée le risque du finding.
+- **P1-006 dépend du socle, pas de P1-001** pour démarrer : une première version lecture seule ou à paiement simulé
+  valide le JWT et l'identité ; les mutations payantes attendent P1-001.
+- **P1-007 est indépendant des quatre autres** : `stream_sessions` est déjà mûr ; il conditionne seulement les modules
+  liés au live et peut être traité en parallèle, avant leur cutover.
+- **P1-010 dépend de P1-001 et P1-006** (crédits + identité) et du bot principal ; de P1-019 seulement si la décision
+  D2 lie le statut Twitch à l'ACK d'exécution. **Il vient en dernier.**
+
+## 6. Ordre recommandé
+
+0. **Socle staging** (prérequis, pas un P1) : app Core de staging sur Coolify, base dédiée distincte du legacy, aucune
+   exposition viewer, aucune donnée réelle. _Pourquoi d'abord : P1-019 et P1-006 ne se valident pas sans lui._
+1. **P1-019 transport** : identifiant Studio par installation, client HTTPS distinct, version de protocole ; validé
+   d'abord contre un Core local en TLS, puis contre le staging, avec paiement simulé. _Pourquoi : c'est le pivot de
+   toute exécution réelle, il ne dépend ni de l'argent ni de l'identité viewer, et il éprouve le déploiement._
+2. **P1-001 port économique** (en parallèle de 1 possible) : variante transactionnelle du Wallet + port
+   `LabEconomy` / `CoreWalletEconomy` + schéma d'interactions de production. _Pourquoi : prérequis de toute action
+   payante, sans risque de production (base jetable puis staging)._
+3. **P1-006 EBS public** : JWT + acteur dérivé + rate limit, d'abord sur le seul périmètre Bonk. _Pourquoi : il
+   ferme le parcours vertical § 7 et réutilise 1 et 2._
+4. **Parcours vertical § 7** de bout en bout sur staging.
+5. **P1-007 session canonique** (développable à tout moment avant) : avant de raccorder Tombola, Commands, Daily,
+   Loyalty.
+6. **P1-010 Channel Points** : en dernier, sur mock d'abord, puis essai réel seulement sur décision.
+7. Raccordement module par module sur les frontières éprouvées, puis **cutover économique unique** (§ 10).
+
+## 7. Future-prod isolée — premier parcours vertical
+
+**Parcours recommandé : Bonk Unicode payé en Jetons de test.** Bonk Unicode n'a besoin ni d'OAuth viewer (emotes
+Twitch), ni de session de stream, ni de Channel Points : il isole exactement les frontières à prouver.
+
+```text
+viewer Twitch vérifié (JWT réel d'une version de test de l'Extension, compte allowlisté)
+→ Core staging /v1/ext/actions/tokens (JWT vérifié, acteur dérivé, rate limit, Idempotency-Key)
+→ admission Bonk + débit Wallet Core de staging, même transaction
+→ Studio profil « production » → Core staging en HTTPS (identifiant d'installation)
+→ worker Bonk → overlay OBS (scène / source de test)
+→ ACK completed | coupure Studio en vol → execution_unknown, jamais rejoué
+→ recovery : non réclamé → expiré → remboursé une fois
+→ historique : interaction + lignes de ledger visibles dans la console Modération V2 (staging)
+```
+
+| Élément               | Choix                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Environnement         | Core staging Coolify + base dédiée ; Studio profil production sur le PC d'Antoni ; une chaîne Twitch de test (pas `raptoru_`) pour installer la version de test, D4                                                                                                                                                                                                                                                                                                                                                                  |
+| Données               | Fictives : soldes de test crédités par l'admin du Wallet de staging (raison tracée) ; aucun solde SE ; viewers = comptes allowlistés                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Gardes Lab conservées | Core Lab loopback, base Lab, contraintes `simulated`, lecteurs Lab, jeton Lab : inchangés ; le Lab continue de fonctionner pendant tout le parcours                                                                                                                                                                                                                                                                                                                                                                                  |
+| Critères de réussite  | JWT invalide / mauvais canal / identité non partagée refusés ; double clic ou retry → un seul débit ; solde insuffisant → rien admis ; Bonk affiché → ACK `completed` ; Studio tué pendant l'effet → `execution_unknown`, pas de rejeu, pas de remboursement d'office ; Internet coupé avant claim → expiré et remboursé une fois ; identifiant Studio révoqué → refusé ; version incompatible → refusée ; ledger = solde ; production legacy inchangée (aucun appel SE, aucune écriture Supabase legacy, Extension publiée intacte) |
+
+Validation manuelle par Antoni requise avant de considérer le parcours comme validé.
+
+## 8. Critères de validation par étape
+
+| Étape           | Tests automatiques                                                  | E2E / isolé                                           | Validation Antoni            |
+| --------------- | ------------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------- |
+| 0 Socle staging | `/health`, `/ready`, migrations scope `prod` sur base vide          | déploiement staging sans viewer                       | accès et isolation confirmés |
+| 1 P1-019        | client HTTPS, appairage / révocation, version, rejeu interdit       | Core TLS local puis staging, coupures réseau / Studio | Bonk simulé via staging      |
+| 2 P1-001        | atomicité, concurrence, remboursement unique, réconciliation        | PostgreSQL jetable                                    | —                            |
+| 3 P1-006        | JWT (invalide, expiré, canal, rôle, identité), forgerie, rate limit | version de test de l'Extension                        | lecture puis action          |
+| 4 Parcours § 7  | —                                                                   | parcours complet                                      | **oui**                      |
+| 5 P1-007        | reconnexion, offline perdu, redémarrage, stream_day                 | shadow du bot principal                               | lecture des sessions         |
+| 6 P1-010        | redelivery, crash, refus Helix                                      | mock EventSub / Helix                                 | essai réel sur décision      |
+| 7 Cutover       | import SE dry-run + contrôle                                        | répétition complète sur staging                       | **go explicite**             |
+
+## 9. Stratégie de rollback
+
+- **Préparation (étapes 0 à 6)** : rien ne touche la production ; rollback = arrêter / supprimer le staging. Le Lab
+  reste opérationnel.
+- **Extension** : la version publiée n'est remplacée qu'au cutover ; retour = republier la version précédente tant
+  que l'EBS legacy tourne.
+- **Économie** : coupure unique (§ 10) avec fenêtre de retour (premier stream) : export Core → SE en dry-run puis
+  réel ; au-delà de la fenêtre, pas de retour.
+- **Channel Points** : récompenses Raptoru 2.0 en pause, récompenses legacy réactivées, aucune redemption laissée en
+  attente sans décision.
+- **Session / modules liés au live** : adaptateurs réversibles tant que les modules ne sont pas activés en production.
+- Chaque étape possède son interrupteur (flag ou profil) ; aucune migration destructive.
+
+## 10. Coexistence legacy / Raptoru 2.0
+
+- Pendant toute la préparation, la production reste SAMMI + StreamElements + EBS legacy + Extension publiée ;
+  Raptoru 2.0 tourne à côté (Lab local, staging) avec des données fictives.
+- Aucun pont SE ↔ Core, aucune écriture dans les tables legacy (règle déjà en vigueur depuis le 25/09/2026).
+- EventSub : un seul consommateur Raptoru 2.0 (bot principal) en lecture / shadow ; jamais d'action sur une
+  redemption, un ban ou le chat de production sans décision.
+- **Cutover économique unique** (les Jetons ne peuvent pas avoir deux écrivains) : vider les holds / deliveries /
+  redemptions legacy → geler SE (gains passifs, jeux `!duel` / roulette / slots, Daily SAMMI) → snapshot → import
+  `opening_balance` + contrôle → activer les flags Core → publier l'Extension pointant vers le Core. Les modules
+  peuvent ensuite basculer un par un pour l'exécution (SAMMI garde les autres), mais **l'économie bascule d'un coup**.
+- Les jeux StreamElements encore utilisés doivent être reconstruits, désactivés ou acceptés comme perdus avant la
+  coupure économique (D1).
+
+## 11. Décisions requises d'Antoni
+
+| #   | Décision                        | Option A                                                                                                      | Option B                                                                                                         | Recommandation                                                                                                                                                 | Impact                                                                                                                              |
+| --- | ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Soldes Jetons au cutover        | Importer les soldes SE (`opening_balance`) au point de coupure                                                | Repartir à zéro / règle de conversion                                                                            | **A**, avec dry-run et rapport de contrôle ; jeux SE (`!duel`, roulette, slots) désactivés ou reconstruits avant la coupure                                    | Continuité pour les viewers ; mapping SE → `twitch_user_id` à contrôler                                                             |
+| D2  | Modèle Channel Points           | Redemption = paiement d'une interaction ; `FULFILLED` après ACK, `CANCELED` sinon (comme le legacy)           | Redemption convertie à la réception en crédits Raptoru (Wallet), `FULFILLED` aussitôt ; remboursement en crédits | **B** (un seul chemin de paiement, aucun appel Twitch dans l'exécution, déjà le modèle du Lab) ; nouvelles récompenses créées par l'app Raptoru 2.0 au cutover | B : les points ne sont plus rendus après exécution ratée (crédit rendu à la place) ; A garde l'UX legacy mais couple Twitch à l'ACK |
+| D3  | Base du staging puis de la prod | Postgres dédié dans Coolify                                                                                   | Base / schéma sur l'instance Supabase existante                                                                  | **A** (isolation totale du legacy ; Supabase Auth / Realtime non nécessaires aujourd'hui)                                                                      | Sauvegardes et accès à prévoir dans Coolify                                                                                         |
+| D4  | Environnement Twitch de test    | Version de test (Local Test) de l'extension existante, installée sur une chaîne de test, testeurs allowlistés | Hosted Test                                                                                                      | **A** (aucun upload, aucun impact sur `raptoru_` ; à confirmer dans la console Twitch)                                                                         | Action manuelle d'Antoni dans la console Twitch ; le secret d'extension va sur le staging                                           |
+| D5  | Définition de « ce stream »     | Session Twitch (`stream_id`)                                                                                  | `stream_day` (16:00 Paris)                                                                                       | **Session** pour « est-on en live », **`stream_day`** pour les quotas / historiques « ce stream » (robuste aux reconnexions, déjà utilisé par Daily)           | Commands, Tombola, cooldowns « ce stream »                                                                                          |
+| D6  | Studio en production            | Une seule app, deux profils exclusifs (Lab local / Production distante)                                       | Deux builds séparés                                                                                              | **A**, gardes Lab intactes, profil production désactivé par défaut                                                                                             | Une release Studio future (sur validation)                                                                                          |
+
+## 12. Hors scope explicite
+
+- Toute mise en production, release, `studio:release`, push, déploiement, migration distante, écriture en base de
+  production, modification Supabase legacy, changement SAMMI / StreamElements / Wizebot.
+- Toute création, modification ou suppression de récompense Channel Points réelle ; toute publication d'extension
+  (ZIP, Hosted Test, release) ; tout changement EventSub réel.
+- Viewer Web, statistiques / achievements, alertes, Spotify, jeux SE, Jeu des mots : hors de cette phase.
+- Bus d'événements, Realtime, microservices, moteur de workflow, refonte du framework frontend.
+- Renommage des tables / modules « Lab » (P3-002, dette acceptée), signature Windows (P3-001, avant diffusion
+  large), backlog UX (P3-006), P2-015 / P2-021 / P2-025 (différés ; P2-025 se dimensionne avec P1-006).
