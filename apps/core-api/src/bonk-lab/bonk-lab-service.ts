@@ -26,7 +26,11 @@ import {
   type Actor,
   type LabRole,
 } from '../lab-moderation/store.js';
-import { labEconomy, type EconomyPort } from '../economy/economy.js';
+import {
+  deferrableRefund,
+  labEconomy,
+  type EconomyPort,
+} from '../economy/economy.js';
 import {
   CATALOG_MAX_AGE_MS,
   TwitchViewerError,
@@ -789,7 +793,9 @@ export class BonkLabService {
           );
           // Never shown (renderer error before the start): the Lab test wallet gets its debit back.
           if (!started)
-            await this.refund(q, interactionId, SYSTEM, 'failed_before_start');
+            await deferrableRefund(q, () =>
+              this.refund(q, interactionId, SYSTEM, 'failed_before_start'),
+            );
           break;
         case 'execution_unknown':
           if (cur.status === 'execution_unknown') break;
@@ -842,7 +848,9 @@ export class BonkLabService {
       [channelId, now],
     );
     for (const e of expired)
-      await this.refund(q, e.interaction_id, SYSTEM, 'expired');
+      await deferrableRefund(q, () =>
+        this.refund(q, e.interaction_id, SYSTEM, 'expired'),
+      );
     await q.query(
       `update bonk_lab_interactions i set status = 'execution_unknown', updated_at = $2,
          error = '{"code":"lease_expired","message":"no renderer proof before the lease ended","retryable":false}'::jsonb

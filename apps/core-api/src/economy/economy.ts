@@ -127,3 +127,23 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
     },
   };
 }
+
+/**
+ * Automatic refunds (expired before being claimed, failed before being shown): an economic refusal
+ * (e.g. an inactive currency of the canonical Wallet) never blocks the queue of the channel. Undone
+ * alone (savepoint): the item keeps refund_status 'none' — refundable later by moderation — and
+ * the rest of the transaction goes on. Any other error still aborts it. The Lab wallet never refuses.
+ */
+export async function deferrableRefund(
+  q: Queryable,
+  refund: () => Promise<unknown>,
+): Promise<void> {
+  await q.query('savepoint economy_refund');
+  try {
+    await refund();
+    await q.query('release savepoint economy_refund');
+  } catch (error) {
+    await q.query('rollback to savepoint economy_refund');
+    if (!(error instanceof LabWalletError)) throw error;
+  }
+}

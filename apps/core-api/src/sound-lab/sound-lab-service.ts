@@ -31,7 +31,11 @@ import {
   type Actor,
   type LabRole,
 } from '../lab-moderation/store.js';
-import { labEconomy, type EconomyPort } from '../economy/economy.js';
+import {
+  deferrableRefund,
+  labEconomy,
+  type EconomyPort,
+} from '../economy/economy.js';
 import { SOUND_BANK, type SoundBankEntry } from './bank.js';
 
 // Soundboard V2, Lab slice. Same contract as the Bonk Lab: Core owns the catalog, validation, the
@@ -1111,7 +1115,9 @@ export class SoundLabService {
           );
           // Never started (file missing, player error before audio): it can never be heard → refund.
           if (cur.started_at === null)
-            await this.refund(q, interactionId, SYSTEM, 'failed_before_start');
+            await deferrableRefund(q, () =>
+              this.refund(q, interactionId, SYSTEM, 'failed_before_start'),
+            );
           break;
         case 'execution_unknown':
           if (cur.status === 'execution_unknown') break;
@@ -1149,7 +1155,9 @@ export class SoundLabService {
     );
     // Never played: the Lab test wallet gets its debit back.
     for (const e of expired)
-      await this.refund(q, e.interaction_id, SYSTEM, 'expired');
+      await deferrableRefund(q, () =>
+        this.refund(q, e.interaction_id, SYSTEM, 'expired'),
+      );
     await q.query(
       `update sound_lab_interactions i set status = 'execution_unknown', updated_at = $2,
          error = '{"code":"lease_expired","message":"no player proof before the lease ended","retryable":false}'::jsonb

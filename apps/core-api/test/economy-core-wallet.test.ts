@@ -1,7 +1,9 @@
 // ASTRA-P1-001 lot 1 — the debit of the canonical Core Wallet and the admission of an interaction
 // are ONE transaction (economy/economy.ts, WalletService.spendIn / creditIn). The services are wired
 // to the Core Wallet here only: no runtime uses it yet (the Lab keeps its test wallet).
+import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
+import { createApp } from '../src/http/server.js';
 import {
   BONK_LAB_RULES,
   BonkLabError409,
@@ -112,7 +114,7 @@ describe('Core Wallet debit + admission in one transaction (ASTRA-P1-001 lot 1)'
     expect(await f.balance()).toBe(0);
   });
 
-  it('debit applied, then a failure later in the same transaction: full rollback (balance, wallet rows, interaction, viewer)', async () => {
+  it('debit applied, then a failure later in the same transaction: full rollback (balance, wallet rows, interaction)', async () => {
     const f = await fixture((core) => {
       const real = coreWalletEconomy(core.wallet.wallet);
       return {
@@ -124,21 +126,31 @@ describe('Core Wallet debit + admission in one transaction (ASTRA-P1-001 lot 1)'
       };
     });
     const before = await f.rows();
-    const viewers = await count(f.core.db, 'viewers');
-    // A viewer the Wallet has never seen: its row is created inside the transaction too.
-    await f.core.wallet.wallet.credit({
-      key: 'other',
-      viewer: { twitchUserId: '900999', login: 'other', displayName: 'Other' },
-      amount: 1,
-      source: 'test',
-    });
     await f.fund(1000);
     const funded = await f.rows();
     expect(await failure(f.admit('k-boom'))).toBe('boom after debit');
     expect(await f.balance()).toBe(1000);
     expect(await f.rows()).toEqual(funded);
     expect(funded.interactions).toBe(before.interactions);
-    expect(await count(f.core.db, 'viewers')).toBe(viewers + 2);
+  });
+
+  it('a viewer row created by an in-transaction Wallet operation is rolled back with it', async () => {
+    const core = await setup();
+    const viewers = await count(core.db, 'viewers');
+    const operations = await count(core.db, 'wallet_operations');
+    await expect(
+      core.db.tx(async (q) => {
+        await core.wallet.wallet.creditIn(q, {
+          key: 'never-seen',
+          viewer: { twitchUserId: '900999', login: 'new', displayName: 'New' },
+          amount: 10,
+          source: 'test',
+        });
+        throw new Error('later failure');
+      }),
+    ).rejects.toThrow('later failure');
+    expect(await count(core.db, 'viewers')).toBe(viewers);
+    expect(await count(core.db, 'wallet_operations')).toBe(operations);
   });
 
   it('same request again (lost answer, double click): replayed, one debit; same key, other payload: refused, no debit', async () => {
@@ -290,6 +302,142 @@ describe('Core Wallet debit + admission in one transaction (ASTRA-P1-001 lot 1)'
     ).toBe('economy_unavailable');
     expect(await count(core.db, 'sound_lab_interactions')).toBe(before.sound);
     expect(await count(core.db, 'tts_lab_interactions')).toBe(before.tts);
+  });
+
+  it('moderation cancel with refund (Soundboard) goes through the Core Wallet: exact amount back, once', async () => {
+    const core = await setup();
+    const sound = new SoundLabService(
+      core.db,
+      core.clock,
+      Math.random,
+      coreWalletEconomy(core.wallet.wallet),
+    );
+    await sound.heartbeat({ studio_instance_id: STUDIO, player_ready: true });
+    await core.wallet.wallet.credit({
+      key: 'fund',
+      viewer: {
+        twitchUserId: VIEWER.id,
+        login: 'viewer_test',
+        displayName: VIEWER.display_name,
+      },
+      amount: 10_000,
+      source: 'test',
+    });
+    const { interaction } = await sound.admit({
+      channel_id: CHANNEL,
+      viewer: VIEWER,
+      lab_session_id: 'lab-1',
+      idempotency_key: 's-cancel',
+      sound_id: 'boop',
+      payment_method: 'tokens',
+    });
+    const balance = async () =>
+      (await core.wallet.wallet.getWallet(VIEWER.id))?.balance ?? 0;
+    expect(await balance()).toBe(10_000 - interaction.simulated_cost);
+    const cancel = () =>
+      core.db.tx((q) =>
+        sound.applyModeration(
+          q,
+          CHANNEL,
+          {
+            action: 'cancel',
+            module: 'soundboard',
+            interaction_id: interaction.interaction_id,
+            refund: true,
+          },
+          { id: 'mod', role: 'broadcaster', via: 'studio' },
+          'broadcaster',
+        ),
+      );
+    await cancel();
+    expect(await balance()).toBe(10_000);
+    await cancel().catch(() => undefined); // already cancelled: never a second refund
+    expect(await balance()).toBe(10_000);
+  });
+
+  it('a refund the Core Wallet refuses rolls back the decision (never « refunded » without the money); automatic refunds never block the queue', async () => {
+    const f = await fixture();
+    await f.fund(1000);
+    const { interaction } = await f.admit('k-inactive');
+    // The currency becomes unusable (admin): any credit in it is refused.
+    await f.core.db.query(
+      `update currencies set active = false where id = 'main'`,
+    );
+    // Expired before being claimed: the automatic refund is refused, deferred — the queue goes on.
+    f.core.clock.advance(BONK_LAB_RULES.expiresAfterMs + 1);
+    await f.bonk.heartbeat({
+      studio_instance_id: STUDIO,
+      obs: 'connected',
+      source_ready: true,
+      overlay_ready: true,
+    });
+    expect(await f.bonk.claim(STUDIO, CHANNEL)).toBeNull();
+    const expired = await f.bonk.get(interaction.interaction_id);
+    expect(expired.status).toBe('failed');
+    expect(expired.refund_status).toBe('none'); // refundable later, not lost
+    expect(await f.balance()).toBe(1000 - PRICE);
+    // An explicit refund decision while the currency is refused: nothing is recorded.
+    const refund = () =>
+      f.core.db.tx((q) =>
+        f.bonk.applyModeration(
+          q,
+          CHANNEL,
+          {
+            action: 'refund',
+            module: 'bonk',
+            interaction_id: interaction.interaction_id,
+          },
+          { id: 'mod', role: 'broadcaster', via: 'studio' },
+          'broadcaster',
+        ),
+      );
+    expect(await failure(refund())).toBe('economy_unavailable');
+    expect((await f.bonk.get(interaction.interaction_id)).refund_status).toBe(
+      'none',
+    );
+    // Currency back: the refund goes through, once.
+    await f.core.db.query(
+      `update currencies set active = true where id = 'main'`,
+    );
+    await refund();
+    expect(await f.balance()).toBe(1000);
+    expect((await f.bonk.get(interaction.interaction_id)).refund_status).toBe(
+      'refunded',
+    );
+  });
+
+  it('HTTP: an economic refusal on the Bonk route is a 409 with its code (not a 500)', async () => {
+    const f = await fixture();
+    const server = createApp({
+      ...f.core,
+      bonkLab: f.bonk,
+      botSecret: 'bot-test-secret',
+      studioSecret: 'studio-test-secret',
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as AddressInfo).port;
+    const res = await fetch(
+      `http://127.0.0.1:${port}/v1/lab/bonk/interactions`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer studio-test-secret',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          idempotency_key: 'k-http',
+          channel_id: CHANNEL,
+          viewer: VIEWER,
+          lab_session_id: 'lab-1',
+          emote: { provider: 'unicode', id: 'unicode:1f600', glyph: '😀' },
+        }),
+      },
+    );
+    await new Promise((r) => server.close(r));
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      'insufficient_tokens',
+    );
   });
 
   it('Lab untouched: the default economy is still the Lab test wallet, the Core Wallet never moves', async () => {

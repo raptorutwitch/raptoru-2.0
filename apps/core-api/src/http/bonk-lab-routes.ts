@@ -16,6 +16,7 @@ import {
   TwitchViewerError,
   type TwitchViewerCatalog,
 } from '../bonk-lab/twitch-viewer.js';
+import { LabWalletError } from '../lab-moderation/store.js';
 import { HttpError, limitParam, parse, type Route } from './server.js';
 
 // Bonk V2 Lab routes. Studio only (STUDIO_SECRET): the Studio server is both the Lab façade of the
@@ -28,6 +29,9 @@ export async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (error) {
+    // Economic refusal at admission (Lab wallet or Core Wallet): a 409, like the TTS routes.
+    if (error instanceof LabWalletError)
+      throw new HttpError(409, { error: error.code, ...error.details });
     if (error instanceof BonkLabUnavailableError)
       throw new HttpError(503, { error: error.code });
     if (error instanceof BonkLabError409)

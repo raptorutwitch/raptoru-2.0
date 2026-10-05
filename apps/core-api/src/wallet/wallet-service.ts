@@ -354,14 +354,36 @@ export class WalletService {
   /** In the caller's transaction (`q`) or in a transaction of its own (`null`). */
   private async run(
     q: Queryable | null,
-    ...op: Parameters<WalletService['apply']> extends [Queryable, ...infer R]
-      ? R
-      : never
+    key: string,
+    opKind: string,
+    payload: unknown,
+    currencyId: string | undefined,
+    participants: Viewer[],
+    meta: Meta,
+    plan: (ctx: PlanContext) => Plan,
   ): Promise<WalletOperationResult> {
-    if (!q) return this.execute(...op);
+    if (!q)
+      return this.execute(
+        key,
+        opKind,
+        payload,
+        currencyId,
+        participants,
+        meta,
+        plan,
+      );
     // Inside a caller's transaction: viewer rows only created, never rewritten (no identity here).
-    await ensureViewerRows(q, op[4]);
-    return this.apply(q, ...op);
+    await ensureViewerRows(q, participants);
+    return this.apply(
+      q,
+      key,
+      opKind,
+      payload,
+      currencyId,
+      participants,
+      meta,
+      plan,
+    );
   }
 
   private async execute(
