@@ -18,6 +18,11 @@ export class WorkerLoop {
     private readonly tick: () => Promise<void>,
     /** Local work in progress (entries): keep the active cadence. */
     private readonly busy: () => boolean,
+    /**
+     * Last tick failed (Core unreachable, refused…): back off like an idle loop even with local work,
+     * never hammer a remote Core (production transport, ASTRA-P1-019). Not set by the Lab runtimes.
+     */
+    private readonly failed: () => boolean = () => false,
   ) {}
 
   start() {
@@ -51,7 +56,7 @@ export class WorkerLoop {
       this.ticking = false;
     }
     if (!this.running) return;
-    const active = this.woken || this.busy();
+    const active = this.woken || (this.busy() && !this.failed());
     this.delay = active ? ACTIVE_MS : Math.min(IDLE_MAX_MS, this.delay * 2);
     const wait = this.woken ? 0 : this.delay;
     this.woken = false;

@@ -75,9 +75,19 @@ export class BonkWorker {
     private readonly file: string,
     private readonly core: CoreCall,
     private state: Journal,
+    private readonly base: string,
   ) {}
 
-  static async open(file: string, core: CoreCall) {
+  /**
+   * `base` / `studioId`: the future production transport (ASTRA-P1-019) uses the same journal and
+   * guarantees on `/v1/studio/bonk` with the authenticated installation as Studio instance. The Lab
+   * keeps the defaults (`/v1/lab/bonk`, random instance per journal).
+   */
+  static async open(
+    file: string,
+    core: CoreCall,
+    options: { base?: string; studioId?: string } = {},
+  ) {
     let state: Journal;
     try {
       state = JSON.parse(await readFile(file, 'utf8')) as Journal;
@@ -90,7 +100,12 @@ export class BonkWorker {
         entries: [],
       };
     }
-    const w = new BonkWorker(file, core, state);
+    if (options.studioId && state.studio !== options.studioId) {
+      // Work claimed under another identity cannot be acknowledged by this one.
+      if (state.entries.length) throw new Error('journal_studio_mismatch');
+      state.studio = options.studioId;
+    }
+    const w = new BonkWorker(file, core, state, options.base ?? '/v1/lab/bonk');
     // A process restart cannot prove that a sent effect finished. Keep already received results.
     for (const e of state.entries)
       if (
@@ -179,7 +194,7 @@ export class BonkWorker {
     const out = await this.core<{
       interaction: BonkLabInteraction;
       replayed: boolean;
-    }>('/v1/lab/bonk/interactions', {
+    }>(`${this.base}/interactions`, {
       channel_id: CHANNEL,
       viewer,
       idempotency_key: key,
@@ -191,7 +206,7 @@ export class BonkWorker {
   }
   recent(viewer?: string) {
     return this.core<{ interactions: BonkLabInteraction[] }>(
-      `/v1/lab/bonk/channels/${CHANNEL}/interactions?limit=50${viewer ? '&viewer_id=' + viewer : ''}`,
+      `${this.base}/channels/${CHANNEL}/interactions?limit=50${viewer ? '&viewer_id=' + viewer : ''}`,
     );
   }
 
@@ -222,7 +237,7 @@ export class BonkWorker {
       );
       if (!e) {
         const current = await this.core<BonkLabInteraction>(
-          `/v1/lab/bonk/interactions/${id}`,
+          `${this.base}/interactions/${id}`,
         );
         if (
           current.delivery.attempt_id === attempt &&
@@ -254,7 +269,7 @@ export class BonkWorker {
     return this.exclusive(async () => {
       try {
         if (Date.now() - this.lastHeartbeat > 2000) {
-          await this.core('/v1/lab/bonk/studio/heartbeat', {
+          await this.core(`${this.base}/studio/heartbeat`, {
             studio_instance_id: this.state.studio,
             obs: this.obs ? 'connected' : 'offline',
             source_ready: this.source,
@@ -273,7 +288,7 @@ export class BonkWorker {
           for (const event of e.events.filter((v) => !e.reported.includes(v))) {
             try {
               e.interaction = await this.core<BonkLabInteraction>(
-                `/v1/lab/bonk/interactions/${e.interaction.interaction_id}/ack`,
+                `${this.base}/interactions/${e.interaction.interaction_id}/ack`,
                 {
                   studio_instance_id: this.state.studio,
                   attempt_id: e.interaction.delivery.attempt_id,
@@ -283,7 +298,7 @@ export class BonkWorker {
             } catch (error) {
               if ((error as { status?: number }).status !== 409) throw error;
               const current = await this.core<BonkLabInteraction>(
-                `/v1/lab/bonk/interactions/${e.interaction.interaction_id}`,
+                `${this.base}/interactions/${e.interaction.interaction_id}`,
               );
               if (
                 !['completed', 'failed', 'execution_unknown'].includes(
@@ -310,7 +325,7 @@ export class BonkWorker {
         if (this.ready && this.state.entries.length < 12) {
           const { interaction } = await this.core<{
             interaction: BonkLabInteraction | null;
-          }>('/v1/lab/bonk/claim', {
+          }>(`${this.base}/claim`, {
             studio_instance_id: this.state.studio,
             channel_id: CHANNEL,
           });
