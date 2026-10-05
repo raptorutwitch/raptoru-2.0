@@ -343,6 +343,8 @@ Studio pendant un effet, mauvaise instance ou identifiant révoqué refusés, ve
 
 #### Lot 1 — transport future-prod local (05/10/2026, `fe7d524` → `5b6fc49`) : FAIT, tests automatiques verts
 
+**Lot 1 validé manuellement par Antoni le 05/10/2026** : smoke de non-régression dans `npm run studio`, OBS / player ouvert — Bonk Unicode OK, Bonk Twitch en rôle viewer lié OK, Soundboard OK, STOP Soundboard OK, TTS OK, STOP TTS OK, second TTS OK ; aucun comportement Lab dégradé observé.
+
 **Fait.**
 
 - **Identité d'installation** (`apps/studio/server/src/prod-transport/installation.ts`) : UUID + secret de 256 bits

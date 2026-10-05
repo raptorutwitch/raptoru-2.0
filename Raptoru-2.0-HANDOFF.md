@@ -33,10 +33,8 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   chargée, la suite Core montre des timeouts PGlite **préexistants** (40 échecs aussi sur `86d314f`) : lancer
   `npx vitest run --maxWorkers=3` dans `apps/core-api`. **P1-019 n'est pas fermé** : profil production non câblé dans
   Studio (D6), Soundboard / TTS, cockpit, staging, appairage distant, rate limiting (plan § 4.5 « Lot 1 »).
-- **Validation manuelle encore requise (Antoni)** : relancer les tests du lot 1 et refaire un smoke Lab Bonk /
-  Soundboard / TTS dans `npm run studio` (non-régression) — étapes exactes dans le rapport du lot 1 et plan § 4.5.
-- Prochaine action : à décider par Antoni (validation manuelle du lot 1, décision D6, puis lot 2 de P1-019 ou
-  P1-001).
+- **Lot 1 validé manuellement par Antoni le 05/10/2026** : smoke de non-régression dans `npm run studio`, OBS / player ouvert — Bonk Unicode OK, Bonk Twitch en rôle viewer lié OK, Soundboard OK, STOP Soundboard OK, TTS OK, STOP TTS OK, second TTS OK ; aucun comportement Lab dégradé observé.
+- Prochaine action : P1-019 lot 2 (profil Production dans Studio, D6 retenue : une app, deux profils).
 
 Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
 contexte).
