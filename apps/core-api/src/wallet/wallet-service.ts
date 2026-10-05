@@ -91,25 +91,71 @@ export async function ensureViewers(
   }
 }
 
+export interface CreditInput {
+  key: string;
+  viewer: Viewer;
+  amount: number;
+  kind?: 'reward' | 'refund' | 'opening_balance';
+  source: string;
+  reference?: string;
+  reason?: string;
+  currencyId?: string;
+}
+
+export interface SpendInput {
+  key: string;
+  viewer: Viewer;
+  amount: number;
+  source: string;
+  reference?: string;
+  currencyId?: string;
+}
+
+/**
+ * Inside a caller's transaction (no identity source there): the viewer row is created if missing,
+ * never rewritten — a real login / display name is kept, a placeholder is replaced by the next
+ * ensureViewers.
+ */
+async function ensureViewerRows(q: Queryable, viewers: Viewer[]) {
+  for (const v of [
+    ...new Map(viewers.map((x) => [x.twitchUserId, x])).values(),
+  ].sort((a, b) => a.twitchUserId.localeCompare(b.twitchUserId)))
+    await q.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3)
+       on conflict (twitch_user_id) do nothing`,
+      [v.twitchUserId, v.login, v.displayName],
+    );
+}
+
 export class WalletService {
   constructor(private readonly db: Db) {}
 
   // --- writes -----------------------------------------------------------------------------------
 
   /** Gains and compensations. Never refused for a negative balance: debt shrinks naturally. */
-  async credit(input: {
-    key: string;
-    viewer: Viewer;
-    amount: number;
-    kind?: 'reward' | 'refund' | 'opening_balance';
-    source: string;
-    reference?: string;
-    reason?: string;
-    currencyId?: string;
-  }): Promise<WalletOperationResult> {
+  async credit(input: CreditInput): Promise<WalletOperationResult> {
+    return this.creditWith(null, input);
+  }
+
+  /**
+   * The same credit inside the caller's transaction (ASTRA-P1-001: an interaction refund commits or
+   * rolls back with the state change that decided it). Opens no transaction of its own.
+   */
+  async creditIn(
+    q: Queryable,
+    input: CreditInput,
+  ): Promise<WalletOperationResult> {
+    return this.creditWith(q, input);
+  }
+
+  private async creditWith(
+    q: Queryable | null,
+    input: CreditInput,
+  ): Promise<WalletOperationResult> {
     const amount = positiveAmount(input.amount);
     const kind = input.kind ?? 'reward';
-    return this.execute(
+    return this.run(
+      q,
       input.key,
       `credit:${kind}`,
       {
@@ -133,17 +179,30 @@ export class WalletService {
   }
 
   /** Purchases: never below 0, refused while in debt. */
-  async spend(input: {
-    key: string;
-    viewer: Viewer;
-    amount: number;
-    source: string;
-    reference?: string;
-    currencyId?: string;
-  }): Promise<WalletOperationResult> {
+  async spend(input: SpendInput): Promise<WalletOperationResult> {
+    return this.spendWith(null, input);
+  }
+
+  /**
+   * The same purchase inside the caller's transaction (ASTRA-P1-001: admission + debit atomic — never
+   * a spend committed on its own next to the admission). Opens no transaction; a refusal comes back
+   * as status `rejected` and the caller must abort its transaction (nothing of it is then kept).
+   */
+  async spendIn(
+    q: Queryable,
+    input: SpendInput,
+  ): Promise<WalletOperationResult> {
+    return this.spendWith(q, input);
+  }
+
+  private async spendWith(
+    q: Queryable | null,
+    input: SpendInput,
+  ): Promise<WalletOperationResult> {
     const amount = positiveAmount(input.amount);
     const id = input.viewer.twitchUserId;
-    return this.execute(
+    return this.run(
+      q,
       input.key,
       'spend',
       {
@@ -292,6 +351,19 @@ export class WalletService {
     );
   }
 
+  /** In the caller's transaction (`q`) or in a transaction of its own (`null`). */
+  private async run(
+    q: Queryable | null,
+    ...op: Parameters<WalletService['apply']> extends [Queryable, ...infer R]
+      ? R
+      : never
+  ): Promise<WalletOperationResult> {
+    if (!q) return this.execute(...op);
+    // Inside a caller's transaction: viewer rows only created, never rewritten (no identity here).
+    await ensureViewerRows(q, op[4]);
+    return this.apply(q, ...op);
+  }
+
   private async execute(
     key: string,
     opKind: string,
@@ -305,9 +377,26 @@ export class WalletService {
       throw new WalletInputError('idempotency key required');
     // Viewer identity rows first, outside the money transaction (idempotent, short).
     await ensureViewers(this.db, participants);
-    const hash = requestHash(opKind, payload);
+    return this.db.tx((q) =>
+      this.apply(q, key, opKind, payload, currencyId, participants, meta, plan),
+    );
+  }
 
-    return this.db.tx(async (q) => {
+  /** One operation inside the given transaction (idempotency claim, locks, plan, ledger). */
+  private async apply(
+    q: Queryable,
+    key: string,
+    opKind: string,
+    payload: unknown,
+    currencyId: string | undefined,
+    participants: Viewer[],
+    meta: Meta,
+    plan: (ctx: PlanContext) => Plan,
+  ): Promise<WalletOperationResult> {
+    if (!key || key.length > 200)
+      throw new WalletInputError('idempotency key required');
+    const hash = requestHash(opKind, payload);
+    {
       // 1. Claim the idempotency key. A concurrent duplicate waits here until the first commits.
       const claimed = await q.query<{ id: number }>(
         `insert into wallet_operations (idempotency_key, kind, request_hash, status) values ($1, $2, $3, 'pending')
@@ -435,7 +524,7 @@ export class WalletService {
           kind: l.kind,
         })),
       });
-    });
+    }
   }
 
   // --- reads ------------------------------------------------------------------------------------

@@ -22,17 +22,16 @@ import {
   assertNotGloballyPaused,
   audit,
   countGlobalRefusal,
-  debit,
   GlobalPauseError,
   moduleState,
   personalCooldownMs,
-  refundDebit,
   seeViewer,
   setModuleState,
   SYSTEM,
   type Actor,
   type LabRole,
 } from '../lab-moderation/store.js';
+import { labEconomy, type EconomyPort } from '../economy/economy.js';
 import { SOUND_BANK, type SoundBankEntry } from './bank.js';
 
 // Soundboard V2, Lab slice. Same contract as the Bonk Lab: Core owns the catalog, validation, the
@@ -206,6 +205,11 @@ export class SoundLabService {
     private readonly clock: Clock,
     /** Injectable for tests (random sound, sarah variants). */
     private readonly random: () => number = Math.random,
+    /**
+     * Economic side of the admission (ASTRA-P1-001), applied inside the admission transaction: the Lab
+     * test wallet by default; the canonical Core Wallet only where explicitly wired (tests today).
+     */
+    private readonly economy: EconomyPort = labEconomy,
   ) {}
 
   // --- catalog & configuration ---------------------------------------------------------------------
@@ -614,9 +618,9 @@ export class SoundLabService {
         now,
       );
       // Lab test wallet: debited in the same transaction (refused → nothing admitted, nothing stored).
-      await debit(q, now, {
+      await this.economy.debit(q, now, {
         channelId: req.channel_id,
-        viewerId: req.viewer.id,
+        viewer: req.viewer,
         currency:
           req.payment_method === 'credits' ? 'credits_soundboard' : 'tokens',
         amount: cost,
@@ -753,7 +757,7 @@ export class SoundLabService {
       [interactionId, now],
     );
     if (!done.length) return false;
-    const back = await refundDebit(
+    const back = await this.economy.refund(
       q,
       now,
       interactionId,

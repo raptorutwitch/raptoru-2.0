@@ -560,7 +560,11 @@ export interface LabWallet {
 
 export class LabWalletError extends Error {
   constructor(
-    readonly code: 'insufficient_tokens' | 'insufficient_credits',
+    readonly code:
+      | 'insufficient_tokens'
+      | 'insufficient_credits'
+      // Canonical Core Wallet (economy/economy.ts): currency not supported / inactive, refund refused.
+      | 'economy_unavailable',
     readonly details: Record<string, unknown>,
   ) {
     super(code);

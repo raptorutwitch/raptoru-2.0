@@ -22,17 +22,16 @@ import {
   audit,
   clearBlock,
   countGlobalRefusal,
-  debit,
   globalState,
   GlobalPauseError,
   personalCooldownMs,
   seeViewer,
   setBlock,
-  refundDebit,
   SYSTEM,
   type Actor,
   type LabRole,
 } from '../lab-moderation/store.js';
+import { labEconomy, type EconomyPort } from '../economy/economy.js';
 import {
   findWordHits,
   wordRules,
@@ -202,6 +201,11 @@ export class TtsLabService {
     /** Injectable for tests (cast draw). */
     private readonly random: () => number = Math.random,
     private readonly filter: TtsMessageFilter = () => ({ verdict: 'ok' }),
+    /**
+     * Economic side of the admission (ASTRA-P1-001), applied inside the admission transaction: the Lab
+     * test wallet by default; the canonical Core Wallet only where explicitly wired (tests today).
+     */
+    private readonly economy: EconomyPort = labEconomy,
   ) {}
 
   // --- settings --------------------------------------------------------------------------------------
@@ -473,9 +477,9 @@ export class TtsLabService {
         now,
       );
       // Lab test wallet: debited in the same transaction (refused → nothing admitted, nothing stored).
-      await debit(q, now, {
+      await this.economy.debit(q, now, {
         channelId: req.channel_id,
-        viewerId: req.viewer.id,
+        viewer: req.viewer,
         currency: req.payment_method === 'credits' ? 'credits_tts' : 'tokens',
         amount: req.payment_method === 'credits' ? q0.credit_cost : q0.price,
         module: 'tts',
@@ -823,7 +827,7 @@ export class TtsLabService {
       [interactionId, now],
     );
     if (!done.length) return false;
-    const back = await refundDebit(
+    const back = await this.economy.refund(
       q,
       now,
       interactionId,
