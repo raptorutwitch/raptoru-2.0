@@ -38,7 +38,8 @@ export function studioTransportRoutes(bonk: BonkLabService): Route[] {
     },
     {
       method: 'POST',
-      pattern: /^\/v1\/studio\/bonk\/heartbeat$/,
+      // Same sub-paths as the Lab routes: the Studio worker only swaps its base.
+      pattern: /^\/v1\/studio\/bonk\/studio\/heartbeat$/,
       auth: 'studio_installation',
       handle: ({ body, installation }) =>
         mapped(() => {

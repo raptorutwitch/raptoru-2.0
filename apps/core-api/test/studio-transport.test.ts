@@ -75,7 +75,7 @@ async function queuedBonk(core: TestCore, key = 'k-1') {
 
 const heartbeat = (id: string) => ({
   studio_instance_id: id,
-  obs: 'connected',
+  obs: 'connected' as const,
   source_ready: true,
   overlay_ready: true,
 });
@@ -88,7 +88,7 @@ describe('Studio installation transport (ASTRA-P1-019 lot 1)', () => {
       protocol: 1,
     });
     expect(
-      (await call('/v1/studio/bonk/heartbeat', heartbeat(a.id))).status,
+      (await call('/v1/studio/bonk/studio/heartbeat', heartbeat(a.id))).status,
     ).toBe(200);
     const queued = await queuedBonk(core);
     const claim = await call('/v1/studio/bonk/claim', {
@@ -198,7 +198,7 @@ describe('Studio installation transport (ASTRA-P1-019 lot 1)', () => {
 
   it('revoked: the next call is refused; its unfinished delivery becomes execution_unknown, never replayed', async () => {
     const { core, a, call } = await fixture();
-    await call('/v1/studio/bonk/heartbeat', heartbeat(a.id));
+    await call('/v1/studio/bonk/studio/heartbeat', heartbeat(a.id));
     const queued = await queuedBonk(core);
     const claim = await call('/v1/studio/bonk/claim', {
       studio_instance_id: a.id,
