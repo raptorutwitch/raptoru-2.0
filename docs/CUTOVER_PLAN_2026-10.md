@@ -132,6 +132,51 @@ arrière non supporté.
 appels concurrents → un seul débit ; remboursement unique ; réconciliation solde / ledger ; import SE en dry-run sur
 un export réel anonymisé ou réduit.
 
+#### Lot 1 — débit économique et admission atomiques (05/10/2026, `1e86d96`, `ad2be7f`, `a69dd19`) : FAIT, tests automatiques verts
+
+**Audit.** `WalletService.execute()` ouvrait sa propre transaction (`this.db.tx`) et écrivait `viewers` hors
+transaction : impossible de composer un débit du Wallet canonique avec une admission. Les admissions Bonk /
+Soundboard / TTS (`admitTx`, une transaction chacune) débitaient déjà le wallet de test Lab dans leur transaction
+(`store.debit`) et remboursaient au plus une fois (`refundDebit`, garde `refund_status`). Tombola : gains dans le ledger
+Lab (hors admission). Commands : aucun coût.
+
+**Fait.**
+
+- `WalletService` : corps d'opération extrait en `apply(q, …)` ; `spend()` / `credit()` publics inchangés (leur propre
+  transaction) ; **`spendIn(q, …)` / `creditIn(q, …)`** appliquent la même opération (clé idempotente, verrous, plan,
+  ledger) **dans la transaction de l'appelant**, sans en ouvrir ; ligne `viewers` créée si absente, jamais réécrite.
+- **`EconomyPort`** (`apps/core-api/src/economy/economy.ts`) : `debit(q, …)` / `refund(q, …)` dans la transaction de
+  l'admission ou de la décision de remboursement.
+  - `labEconomy` : wallet de test Lab actuel — **défaut partout, Lab inchangé**.
+  - `coreWalletEconomy(wallet)` : Wallet canonique, Jetons (`main`) ; clé `interaction:<id>:debit`, source = module,
+    référence = interaction ; **tout résultat non appliqué lève une exception** (rien de l'admission n'est gardé, pas
+    même un refus commité) ; remboursement = exactement le débit, une fois (clé `interaction:<id>:refund`), rien si
+    aucun débit, un remboursement refusé annule la décision. Crédits TTS / sons : refusés (`economy_unavailable`)
+    tant que leur modèle n'est pas décidé (D2).
+- Services Bonk / Soundboard / TTS : paramètre `economy` optionnel (défaut `labEconomy`) ; plus d'appel direct au
+  wallet Lab. Aucune migration.
+
+**Revue finale (corrigée dans `a69dd19`).** Les remboursements automatiques (expiration, échec avant affichage)
+passent sous savepoint : un refus économique est différé (`refund_status` reste `none`, remboursable plus tard) au
+lieu de bloquer la file du canal ; les routes Bonk / Soundboard traduisent les refus économiques en 409 (500
+auparavant, préexistant) ; tests ajoutés (rollback exact d'une ligne viewer, annulation avec remboursement
+Soundboard, remboursement refusé puis accepté, remboursement automatique différé, 409 HTTP).
+
+**Preuves.** `economy-core-wallet` (12, PGlite) : solde suffisant → un débit + admis ; insuffisant → rien, aucun refus
+commité, nouvel essai après crédit accepté ; débit puis erreur dans la même transaction → rollback complet (solde,
+`wallet_operations`, `wallet_transactions`, interaction, viewer) ; rejeu / même clé autre contenu / doublon concurrent →
+un seul débit ; remboursement unique et exact, jamais débité → rien ; cycle ACK inchangé ; Soundboard / TTS Jetons
+atomiques, crédits refusés ; défaut Lab intact. `economy.integration` (PostgreSQL réel, base jetable, 2 connexions) :
+8 requêtes parallèles même clé → 1 interaction, 1 débit ; 10 requêtes parallèles sur un solde de 3 → exactement 3,
+solde jamais négatif. Suites : Core 400 (`--maxWorkers=3`), intégration PostgreSQL 13, Studio server 199 (crash Windows connu `0xC0000409` une fois sous charge, vert en relance) ; lint,
+typecheck, build.
+
+**Reste de P1-001 (non fermé).** Décision D1 (import des soldes SE / point de coupure) et outil d'import (dry-run,
+contrôle) ; modèle des crédits TTS / sons (D2) ; schéma d'interactions de production (les tables Lab imposent
+`payment_mode = 'simulated'`, `real_debited = 0`) et contrat des lecteurs pour un paiement réel ; branchement d'un
+runtime sur `coreWalletEconomy` (aucun aujourd'hui) ; cutover économique unique (§ 10). **Toujours simulé** : toutes les interactions (Lab et Production locale), le wallet de test Lab ; le
+Wallet canonique n'est utilisé que par les tests.
+
 ### 4.2 P1-006 — EBS public / identité Twitch
 
 **Raison historique.** Les surfaces V2 passent par la façade LabEbs locale, avec des identités simulées.
@@ -548,7 +593,7 @@ flowchart LR
 1. **P1-019 transport** (lots 1 et 2 locaux faits le 05/10/2026, § 4.5) : identifiant Studio par installation, client HTTPS distinct, version de protocole ; validé
    d'abord contre un Core local en TLS, puis contre le staging, avec paiement simulé. _Pourquoi : c'est le pivot de
    toute exécution réelle, il ne dépend ni de l'argent ni de l'identité viewer, et il éprouve le déploiement._
-2. **P1-001 port économique** (en parallèle de 1 possible) : variante transactionnelle du Wallet + port
+2. **P1-001 port économique** (lot 1 local fait le 05/10/2026, § 4.1) : variante transactionnelle du Wallet + port
    `LabEconomy` / `CoreWalletEconomy` + schéma d'interactions de production. _Pourquoi : prérequis de toute action
    payante, sans risque de production (base jetable puis staging)._
 3. **P1-006 EBS public** : JWT + acteur dérivé + rate limit, d'abord sur le seul périmètre Bonk. _Pourquoi : il

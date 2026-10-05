@@ -49,7 +49,13 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   ressources `/ext/` des lecteurs sont de nouveau servies (seules les pages de l'Extension sont refusées).
 - **Lot 2 validé manuellement par Antoni le 05/10/2026** (profil Production local contre le Core de test HTTPS) : appairage OK ; Bonk, Soundboard + STOP, TTS + STOP + second TTS en Production OK ; Extension Lab indisponible en Production OK ; retour au Lab avec la preview actuelle complète OK ; `revoke <installation_id>` → Studio « Révoqué » OK. Le `overlay_not_ready` Bonk observé venait de la source OBS absente / inactive dans la scène, pas du transport. Correctifs trouvés pendant la validation, validés aussi : `ea1f3f8` (pas de fausse Extension Lab en Production), `8d7416c` (ressources statiques des lecteurs Production servies), `afa99c1` (carte « Lecteurs Production » dans Studio).
 - **Reste de P1-019 (non fermé)** : staging Coolify ; appairage distant réel (opérateur sur le Core distant, révocation à distance) ; TLS public du reverse proxy ; rate limiting ; cockpit Production incomplet (wallet admin, staff, modération, configuration TTS / sons, Tombola, Commands encore sous `STUDIO_SECRET` / Lab) ; URL Production en constante de build ; seams des futurs paiements réels (lecteurs n'acceptant encore que `simulated`, lié à P1-001).
-- Prochaine action : P1-001 lot 1 (local) — débit économique et admission atomiques.
+- **P1-001 — lot 1 fait le 05/10/2026** (`1e86d96`, `ad2be7f`, `a69dd19`) : débit économique et admission dans **une seule transaction**
+  (`WalletService.spendIn` / `creditIn`, `EconomyPort` : `labEconomy` par défaut — Lab inchangé —, `coreWalletEconomy`
+  pour le Wallet canonique, utilisé par les tests seulement). Preuves PGlite + PostgreSQL réel (concurrence). Aucune
+  migration, aucun runtime branché sur le Wallet réel, aucune donnée StreamElements. **P1-001 non fermé** : D1 + import
+  SE, D2 (crédits), schéma d'interactions de production, lecteurs pour paiement réel, branchement, cutover économique.
+  Pas de surface manuelle à valider pour ce lot (rien d'observable en Studio).
+- Prochaine action : à décider par Antoni (D1 / D2, socle staging D3, ou P1-007 session canonique en local).
 
 Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
 contexte).

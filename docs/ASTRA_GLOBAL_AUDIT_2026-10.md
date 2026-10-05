@@ -167,7 +167,7 @@ Statut du registre recompté sur `9ab0523` :
 | Sévérité | Fermés / acceptés | Ouverts | Détail des ouverts |
 | -- | --: | --: | -- |
 | P0 | 0 | 0 | — |
-| P1 | 14 | 5 | 001, 006, 007, 010 : **BLOQUÉ — décision de cutover** ; 019 : **EN COURS** (lots 1 et 2 locaux faits le 05/10) |
+| P1 | 14 | 5 | 006, 007, 010 : **BLOQUÉ — décision de cutover** ; 019 : **EN COURS** (lots 1 et 2 validés) ; 001 : **EN COURS** (lot 1 local fait) |
 | P2 | 26 | 3 | 015, 021 (dépriorisés), 025 (capacité, se dimensionne avec P1-006) |
 | P3 | 3 | 3 | 001 (signature avant diffusion large), 002 (nommage accepté), 006 (backlog UX) |
 
@@ -258,11 +258,13 @@ Tri : sévérité, puis domaine, puis ID. Les IDs sont permanents ; ne pas renum
 
 **Statut initial :** **OUVERT**
 
-**Statut actuel :** **BLOQUÉ — décision de cutover**
+**Statut actuel :** **EN COURS — lot 1 fait (débit + admission atomiques, port économique, local) ; reste soumis aux décisions de cutover (D1, D2)**
 
 **Résolution (passe P1, 2026-10-04) :** Revalidé sur `47b71bd` : les interactions Lab (modération, Tombola, TTS, Bonk/Soundboard via le store) débitent/créditent `lab_wallets`/`lab_wallet_ledger` ; aucun module Lab n'utilise `WalletService`. Constat toujours exact, mais il ne s'agit pas d'un défaut du Lab (wallet de test volontairement isolé) : c'est la frontière économique du futur raccordement. **Options :** (A) adaptateur « économie » unique côté Core, implémenté par le wallet Lab aujourd'hui et par `WalletService` au cutover, débit + admission dans la même transaction — L ; (B) protocole réservation/compensation entre l'admission Lab et le Wallet central — L/XL, plus de cas d'échec ; (C) migrer chaque module isolément au cutover — coût répété et risque de dissociation débit/admission. **Recommandation :** A, décidée avec le modèle de monnaies (jetons/crédits) et le point de coupure ; à faire avant d'ajouter un nouveau module payant. Aucune modification sans décision (modèle de monnaies = décision produit).
 
 **Revalidation cutover (2026-10-05, `9ab0523`) :** toujours exact. Canonique aujourd'hui : points StreamElements (Jetons de production, holds de l'EBS legacy) ; après cutover : Wallet Core. Delta précis : `WalletService.execute()` ouvre sa propre transaction (`db.tx`) et ne peut pas partager celle d'une admission — il faut une variante transactionnelle, un port économique unique (`LabEconomy` inchangé / `CoreWalletEconomy`), un schéma d'interactions de production (les tables Lab interdisent tout autre mode par contrainte SQL) et l'import SE (`opening_balance`) au point de coupure. Indépendant des autres P1 pour être développé ; requis par P1-010 et par toute action payante réelle. Décision D1 (import des soldes, jeux SE). Plan : `docs/CUTOVER_PLAN_2026-10.md` § 4.1.
+
+**Lot 1 (2026-10-05, `1e86d96`, `ad2be7f`, `a69dd19`) :** `WalletService.spendIn` / `creditIn` (même opération dans la transaction de l'appelant ; API publique inchangée) ; `EconomyPort` (`economy/economy.ts`) avec `labEconomy` (défaut, Lab inchangé) et `coreWalletEconomy` (Jetons ; tout refus lève → rien de l'admission gardé ; remboursement exact, unique, annulé s'il est refusé) ; Bonk / Soundboard / TTS passent par le port. Preuves : `economy-core-wallet` (12, PGlite) et `economy.integration` (PostgreSQL réel, concurrence sur 2 connexions). **Non fermé** : D1 + import SE, D2 (crédits), schéma d'interactions de production et lecteurs pour paiement réel, branchement d'un runtime sur le Wallet canonique, cutover économique. Revue finale corrigée (`a69dd19` : remboursements automatiques différés sous savepoint, refus économiques en 409 sur Bonk / Soundboard).
 
 **Marquages :** Constat établi par inspection statique à la référence auditée.
 
@@ -4215,7 +4217,7 @@ Pour fermer une entrée : revalider sa preuve sur le HEAD concerné, réaliser l
 
 | ID | Sévérité | Domaine | Statut | Commit | Tests | Validation manuelle | Notes |
 | -- | -------- | ------- | ------ | ------ | ----- | ------------------- | ----- |
-| [ASTRA-P1-001](#astra-p1-001) | P1 | Architecture | BLOQUÉ — décision de cutover | — | — | — | Décision : modèle de monnaies, point de coupure, protocole d'import ; revalidé le 05/10 → plan de cutover |
+| [ASTRA-P1-001](#astra-p1-001) | P1 | Architecture | EN COURS — lot 1 fait (local) | `1e86d96` · `ad2be7f` · `a69dd19` (lot 1) | Core economy-core-wallet (12) ; intégration PostgreSQL economy (2, 13 au total) ; Core 400 / Studio server 199 ; lint, typecheck, build | — (lot sans surface manuelle : rien n'est branché sur le Wallet canonique) | Décision : modèle de monnaies, point de coupure, protocole d'import ; revalidé le 05/10 → plan de cutover |
 | [ASTRA-P1-002](#astra-p1-002) | P1 | Bot | FERMÉ — corrigé | `dcfdf3d` | Bot lab-chat-ingest : Core revenu < 15 s → une admission, aucun essai après succès ; réponse perdue après commit → dédupliqué ; même message reçu deux fois → un effet ; Core absent > 15 s → essais 0/1/3/7/15 s puis abandon ; 4xx → aucun essai ; arrêt pendant les reprises → plus rien envoyé. Core raffle-v2 : !join tardif après clôture → `raffle_closed`. Déduplication Core existante : commands-v2-admission « dedupes the same Twitch message », raffle-v2 « replayed chat message ». Bot 98/98 | Optionnel : ingestion ON, redémarrer le Core Lab pendant un !join → une seule inscription | — |
 | [ASTRA-P1-003](#astra-p1-003) | P1 | Bot | FERMÉ — corrigé | `47b71bd` | lab-chat-ingest « ASTRA-P1-003 » (offline perdu → réparé ; état stable → rien ; Helix en panne → rien) ; bot 92/92 | Optionnel : ingestion ON, couper Core pendant la fin du live → session Lab fermée ≤ 60 s après son retour | Âge de la dernière confirmation : P2-015 |
 | [ASTRA-P1-004](#astra-p1-004) | P1 | Core | FERMÉ — corrigé | `ccc8e5d` | db-limits.test.ts : serveur muet → échec < 3 s (toujours) ; sur PostgreSQL réel local (opt-in `TEST_DATABASE_URL`, lecture seule : pg_sleep + verrou consultatif) requête 57014, verrou 55P03, client réutilisable — exécuté sur raptoru2-pg | — | Réglages PostgreSQL de production à revoir au cutover |
