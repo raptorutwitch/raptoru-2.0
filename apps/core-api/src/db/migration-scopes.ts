@@ -23,6 +23,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20260926120000_wallet.sql',
   '20260927120000_loyalty_engine.sql',
   '20260928120000_daily_wallet.sql',
+  // Studio installations: per-installation credential of the production transport (ASTRA-P1-019).
+  '20261016120000_studio_installations.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */

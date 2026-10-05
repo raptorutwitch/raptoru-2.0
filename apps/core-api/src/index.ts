@@ -54,6 +54,7 @@ createApp({
   bonkLab: core.bonkLab,
   soundLab: core.soundLab,
   ttsLab: core.ttsLab,
+  studioInstallations: core.studioInstallations,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
   db,

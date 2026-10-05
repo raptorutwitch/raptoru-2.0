@@ -13,6 +13,7 @@ import {
 } from './loyalty/engine.js';
 import { PresenceService } from './presence/presence-service.js';
 import { StreamSessions } from './stream/stream-sessions.js';
+import { StudioInstallations } from './studio/installations.js';
 import { createWalletModule, type WalletModule } from './wallet/index.js';
 
 export interface Core {
@@ -26,6 +27,8 @@ export interface Core {
   soundLab: SoundLabService;
   ttsLab: TtsLabService;
   raffleLab: RaffleLabService;
+  /** Studio installation credentials of the future production transport (ASTRA-P1-019). */
+  studioInstallations: StudioInstallations;
 }
 
 export function createCore(
@@ -48,5 +51,6 @@ export function createCore(
     soundLab: new SoundLabService(db, clock),
     ttsLab: new TtsLabService(db, clock),
     raffleLab: new RaffleLabService(db, clock),
+    studioInstallations: new StudioInstallations(db, clock),
   };
 }

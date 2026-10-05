@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import {
   createServer,
   type IncomingMessage,
+  type RequestListener,
   type Server,
   type ServerResponse,
 } from 'node:http';
@@ -40,6 +41,13 @@ import {
   WalletInputError,
 } from '../wallet/wallet-service.js';
 import { walletRoutes } from './wallet-routes.js';
+import { studioTransportRoutes } from './studio-transport-routes.js';
+import {
+  STUDIO_PROTOCOL,
+  STUDIO_PROTOCOL_HEADER,
+  StudioAuthError,
+  type StudioInstallations,
+} from '../studio/installations.js';
 import type {
   ActiveSession,
   StreamSessions,
@@ -66,11 +74,16 @@ export interface AppDeps {
   raffleLab?: RaffleLabService;
   botSecret: string;
   studioSecret: string;
+  /**
+   * Future production transport (ASTRA-P1-019): per-installation Studio credentials. With bonkLab,
+   * mounts the /v1/studio/* execution routes. Never set by the Lab Core.
+   */
+  studioInstallations?: StudioInstallations;
   /** Readiness probe (GET /ready): the database answers. */
   db?: Pick<Db, 'query'>;
 }
 
-type Auth = 'public' | 'bot' | 'studio';
+type Auth = 'public' | 'bot' | 'studio' | 'studio_installation';
 
 export interface Route {
   method: 'GET' | 'POST';
@@ -78,6 +91,8 @@ export interface Route {
   auth: Auth;
   handle: (ctx: {
     params: string[];
+    /** Authenticated Studio installation (auth 'studio_installation' only). */
+    installation?: string;
     body: unknown;
     url: URL;
   }) => Promise<unknown>;
@@ -130,10 +145,12 @@ function routes({
   ttsLab,
   labModeration,
   raffleLab,
+  studioInstallations,
   db,
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
+    ...(bonkLab && studioInstallations ? studioTransportRoutes(bonkLab) : []),
     ...loyaltyRoutes(loyalty),
     ...(bonkLab ? bonkLabRoutes(bonkLab) : []),
     ...(soundLab ? soundLabRoutes(soundLab) : []),
@@ -304,9 +321,14 @@ function send(res: ServerResponse, status: number, body: unknown): void {
 }
 
 export function createApp(deps: AppDeps): Server {
+  return createServer(createHandler(deps));
+}
+
+/** The request handler alone: served over HTTP by createApp, or over HTTPS (local transport tests). */
+export function createHandler(deps: AppDeps): RequestListener {
   const table = routes(deps);
 
-  return createServer(async (req, res) => {
+  return async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', 'http://core');
       const candidates = table.filter((r) => r.pattern.test(url.pathname));
@@ -328,9 +350,30 @@ export function createApp(deps: AppDeps): Server {
       ) {
         throw new HttpError(401, { error: 'unauthorized' });
       }
+      let installation: string | undefined;
+      if (route.auth === 'studio_installation') {
+        // Version first (no work, no claim for an incompatible Studio), then the credential.
+        const version = Number(req.headers[STUDIO_PROTOCOL_HEADER]);
+        if (!STUDIO_PROTOCOL.supported.includes(version))
+          throw new HttpError(426, {
+            error: 'protocol_incompatible',
+            supported: STUDIO_PROTOCOL.supported,
+          });
+        if (!deps.studioInstallations)
+          throw new HttpError(404, { error: 'not_found' });
+        try {
+          installation = await deps.studioInstallations.authenticate(
+            req.headers.authorization,
+          );
+        } catch (error) {
+          if (error instanceof StudioAuthError)
+            throw new HttpError(401, { error: error.code });
+          throw error;
+        }
+      }
       const params = route.pattern.exec(url.pathname)!.slice(1);
       const body = req.method === 'POST' ? await readJson(req) : undefined;
-      send(res, 200, await route.handle({ params, body, url }));
+      send(res, 200, await route.handle({ params, body, url, installation }));
     } catch (error) {
       if (error instanceof WalletInputError) {
         send(res, 400, { error: 'invalid_amount', message: error.message });
@@ -351,5 +394,5 @@ export function createApp(deps: AppDeps): Server {
       console.error('[core-api] request failed', req.method, req.url, error);
       send(res, 500, { error: 'internal_error' });
     }
-  });
+  };
 }
