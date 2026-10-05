@@ -6,15 +6,11 @@
 //   openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes -keyout localhost-test-only.key \
 //     -out localhost-test-only.crt -subj "/CN=raptoru-transport-test-only" \
 //     -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -addext "basicConstraints=critical,CA:FALSE"
-import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { createServer as createHttpsServer, type Server } from 'node:https';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createServer as createTcpServer, type AddressInfo } from 'node:net';
 import { inspect } from 'node:util';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createHandler } from '../../../core-api/src/http/server.js';
-import { setup, type TestCore } from '../../../core-api/test/helpers.js';
 import { BonkWorker, type CoreCall } from '../src/bonk-lab/worker.js';
 import {
   prodCoreClient,
@@ -26,59 +22,27 @@ import {
   type StudioInstallation,
 } from '../src/prod-transport/installation.js';
 import { WorkerLoop } from '../src/worker-loop.js';
+import {
+  cert,
+  certSha256,
+  CHANNEL,
+  pairedStudio,
+  tempDir,
+  type Cleanups,
+} from './prod-fixture.js';
 
-const TLS = join(import.meta.dirname, 'fixtures', 'tls');
-const cert = readFileSync(join(TLS, 'localhost-test-only.crt'));
-const key = readFileSync(join(TLS, 'localhost-test-only.key'));
-const CHANNEL = '900100';
 const BASE = '/v1/studio/bonk';
 
-const cleanups: (() => Promise<unknown>)[] = [];
+const cleanups: Cleanups = [];
 afterEach(async () => {
   vi.useRealTimers();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-/** HTTPS Core on a fixed port that the test can take down and bring back (network cut). */
-async function httpsCore(core: TestCore) {
-  const handler = createHandler({
-    ...core,
-    botSecret: 'bot-test-secret',
-    studioSecret: 'studio-test-secret',
-  });
-  let server: Server | null = null;
-  let port = 0;
-  const up = async () => {
-    server = createHttpsServer({ key, cert }, handler);
-    await new Promise<void>((r) => server!.listen(port, '127.0.0.1', r));
-    port = (server!.address() as AddressInfo).port;
-  };
-  const down = async () => {
-    const s = server;
-    server = null;
-    if (!s) return;
-    s.closeAllConnections();
-    await new Promise<void>((r) => s.close(() => r()));
-  };
-  await up();
-  cleanups.push(down);
-  return { url: () => `https://127.0.0.1:${port}`, up, down };
-}
-
 async function fixture() {
-  const core = await setup();
-  core.clock.set(new Date());
-  const net = await httpsCore(core);
-  const dir = await mkdtemp(
-    join(process.cwd(), '.runtime-prod-transport-test-'),
-  );
-  cleanups.push(() => rm(dir, { recursive: true, force: true }));
-  const identityFile = join(dir, 'studio-installation.json');
+  const p = await pairedStudio(cleanups);
+  const { core, dir, installation, client } = p;
   const journal = join(dir, 'prod-bonk', 'journal.json');
-  const installation = await loadOrCreateInstallation(identityFile);
-  await core.studioInstallations.register(installation.pairingCode, 'PC test');
-  const client = (over: Partial<Parameters<typeof prodCoreClient>[0]> = {}) =>
-    prodCoreClient({ url: net.url(), installation, ca: cert, ...over });
   const open = (core_: CoreCall = client()) =>
     BonkWorker.open(journal, core_, {
       base: BASE,
@@ -109,19 +73,7 @@ async function fixture() {
         )
       )[0]!.n,
     );
-  return {
-    core,
-    net,
-    dir,
-    identityFile,
-    installation,
-    client,
-    open,
-    worker,
-    ready,
-    admit,
-    deliveries,
-  };
+  return { ...p, open, worker, ready, admit, deliveries };
 }
 
 const codeOf = async (p: Promise<unknown>) => {
@@ -171,9 +123,27 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
   it('TLS is really verified: without the trusted test certificate, or over http, nothing is called', async () => {
     const f = await fixture();
     await f.ready(f.worker);
+    // An identity bound to this Core with the system roots: the self-signed certificate is refused.
+    const systemRoots = await loadOrCreateInstallation(
+      join(f.dir, 'system-roots.json'),
+      { coreOrigin: f.net.origin(), caSha256: null },
+    );
     expect(
-      await codeOf(f.client({ ca: undefined })('/v1/studio/session')),
+      await codeOf(
+        prodCoreClient({ url: f.net.url(), installation: systemRoots })(
+          '/v1/studio/session',
+        ),
+      ),
     ).toBe('tls_rejected');
+    // The credential is never sent to another Core, nor with another trust anchor.
+    for (const over of [
+      { url: 'https://127.0.0.1:1' },
+      { ca: undefined },
+      { ca: Buffer.from('-----BEGIN CERTIFICATE-----\nother\n') },
+    ])
+      expect(() => f.client(over)).toThrow(
+        'Identité Studio liée à un autre Core',
+      );
     expect(() =>
       prodCoreClient({
         url: f.net.url().replace('https:', 'http:'),
@@ -188,7 +158,10 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
 
   it('bad credential: clean refusal, explicit message, no interaction handed out', async () => {
     const f = await fixture();
-    const stranger = await loadOrCreateInstallation(join(f.dir, 'other.json')); // never paired
+    const stranger = await loadOrCreateInstallation(
+      join(f.dir, 'other.json'),
+      f.binding,
+    ); // never paired
     const w = await BonkWorker.open(
       join(f.dir, 'stranger', 'journal.json'),
       prodCoreClient({ url: f.net.url(), installation: stranger, ca: cert }),
@@ -369,11 +342,7 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
   });
 
   it('Core unavailable: every call has a bounded total deadline (a Core that never answers)', async () => {
-    const dir = await mkdtemp(
-      join(process.cwd(), '.runtime-prod-transport-test-'),
-    );
-    cleanups.push(() => rm(dir, { recursive: true, force: true }));
-    const installation = await loadOrCreateInstallation(join(dir, 'id.json'));
+    const dir = await tempDir(cleanups);
     // Accepts the TCP connection, never answers (not even the TLS handshake).
     const sockets = new Set<import('node:net').Socket>();
     const silent = createTcpServer((socket) => {
@@ -384,6 +353,10 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
     cleanups.push(async () => {
       for (const socket of sockets) socket.destroy();
       await new Promise((r) => silent.close(r));
+    });
+    const installation = await loadOrCreateInstallation(join(dir, 'id.json'), {
+      coreOrigin: `https://127.0.0.1:${(silent.address() as AddressInfo).port}`,
+      caSha256: certSha256,
     });
     const hung = prodCoreClient({
       url: `https://127.0.0.1:${(silent.address() as AddressInfo).port}`,
@@ -416,7 +389,7 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
   it('Studio restarted: same installation and credential, clean reconnection and handshake', async () => {
     const f = await fixture();
     const before = await readFile(f.identityFile, 'utf8');
-    const reloaded = await loadOrCreateInstallation(f.identityFile);
+    const reloaded = await loadOrCreateInstallation(f.identityFile, f.binding);
     expect(reloaded.installationId).toBe(f.installation.installationId);
     expect(reloaded.pairingCode).toBe(f.installation.pairingCode);
     expect(await readFile(f.identityFile, 'utf8')).toBe(before); // never rewritten
@@ -450,12 +423,19 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
     expect(f.installation.pairingCode).not.toContain(secret);
     const errors: unknown[] = [];
     for (const p of [
-      f.client({ ca: undefined })('/v1/studio/session'),
+      prodCoreClient({
+        url: f.net.url(),
+        installation: await loadOrCreateInstallation(
+          join(f.dir, 'roots.json'),
+          { coreOrigin: f.net.origin(), caSha256: null },
+        ),
+      })('/v1/studio/session'),
       f.client({ protocolVersion: 9 })('/v1/studio/session'),
     ])
       errors.push(await p.catch((e) => e));
     const stranger: StudioInstallation = await loadOrCreateInstallation(
       join(f.dir, 'x.json'),
+      f.binding,
     );
     errors.push(
       await prodCoreClient({
@@ -467,9 +447,9 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
     for (const e of errors)
       expect(inspect(e) + JSON.stringify(e)).not.toContain(secret);
     await writeFile(f.identityFile, '{"version":1,"installation_id":"broken"}');
-    await expect(loadOrCreateInstallation(f.identityFile)).rejects.toThrow(
-      StudioInstallationError,
-    );
+    await expect(
+      loadOrCreateInstallation(f.identityFile, f.binding),
+    ).rejects.toThrow(StudioInstallationError);
     expect(await readFile(f.identityFile, 'utf8')).toBe(
       '{"version":1,"installation_id":"broken"}',
     );
