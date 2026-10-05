@@ -246,3 +246,98 @@ describe('Studio installation transport (ASTRA-P1-019 lot 1)', () => {
     ).rejects.toThrow(StudioPairingError);
   });
 });
+
+describe('Soundboard and TTS on the production transport (ASTRA-P1-019 lot 2)', () => {
+  it.each([
+    {
+      module: 'sound',
+      admit: (core: TestCore) =>
+        core.soundLab.admit({
+          idempotency_key: 'k-s',
+          channel_id: CHANNEL,
+          viewer: { id: '900101', display_name: 'Viewer Lab' },
+          lab_session_id: 'lab-1',
+          sound_id: 'boop',
+          payment_method: 'tokens',
+        }),
+      ready: (core: TestCore, id: string) =>
+        core.soundLab.heartbeat({ studio_instance_id: id, player_ready: true }),
+      get: (core: TestCore, id: string) => core.soundLab.get(id),
+    },
+    {
+      module: 'tts',
+      admit: (core: TestCore) =>
+        core.ttsLab.admit({
+          idempotency_key: 'k-t',
+          channel_id: CHANNEL,
+          viewer: { id: '900101', display_name: 'Viewer Lab' },
+          lab_session_id: 'lab-1',
+          text: 'Salut Raptoru, test du transport',
+          payment_method: 'tokens',
+        }),
+      ready: (core: TestCore, id: string) =>
+        core.ttsLab.heartbeat({ studio_instance_id: id, player_ready: true }),
+      get: (core: TestCore, id: string) => core.ttsLab.get(id),
+    },
+  ])(
+    '$module: installation credential only, delivery bound to it, revocation ends its lease (never replayed)',
+    async ({ module, admit, ready, get }) => {
+      const { core, a, call } = await fixture();
+      const base = `/v1/studio/${module}`;
+      expect(
+        (
+          await call(`${base}/studio/heartbeat`, {
+            studio_instance_id: a.id,
+            player_ready: true,
+          })
+        ).status,
+      ).toBe(200);
+      const { interaction } = await admit(core);
+      const claimBody = { studio_instance_id: a.id, channel_id: CHANNEL };
+      expect(
+        (
+          await call(`${base}/claim`, claimBody, {
+            auth: 'Bearer studio-test-secret',
+          })
+        ).status,
+      ).toBe(401);
+      expect(
+        (
+          await call(`${base}/claim`, {
+            ...claimBody,
+            studio_instance_id: 'other',
+          })
+        ).status,
+      ).toBe(403);
+      const claimed = (await call(`${base}/claim`, claimBody)).body.interaction;
+      expect(claimed.interaction_id).toBe(interaction.interaction_id);
+      expect(claimed.delivery.studio_instance_id).toBe(a.id);
+      await call(`${base}/interactions/${claimed.interaction_id}/ack`, {
+        studio_instance_id: a.id,
+        attempt_id: claimed.delivery.attempt_id,
+        event: 'started',
+      });
+      await core.studioInstallations.revoke(a.id);
+      expect((await call('/v1/studio/session')).body.error).toBe(
+        'studio_revoked',
+      );
+      // Another paired Studio: the revoked one's delivery is settled, never handed out again.
+      const b = newInstallation();
+      await core.studioInstallations.register(b.code, 'Remplaçant');
+      await ready(core, b.id);
+      core.clock.advance(1);
+      const next = await call(
+        `${base}/claim`,
+        {
+          studio_instance_id: b.id,
+          channel_id: CHANNEL,
+        },
+        { auth: `Bearer rsi_${b.id}.${b.secret}` },
+      );
+      expect(next.body.interaction).toBeNull();
+      expect((await get(core, interaction.interaction_id)).status).toBe(
+        'execution_unknown',
+      );
+    },
+  );
+});

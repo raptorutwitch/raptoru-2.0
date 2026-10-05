@@ -23,7 +23,7 @@ import { HttpError, limitParam, parse, type Route } from './server.js';
 const Uuid = z.uuid();
 const Digits = z.string().regex(/^\d+$/);
 
-async function mapped<T>(fn: () => Promise<T>): Promise<T> {
+export async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (error) {

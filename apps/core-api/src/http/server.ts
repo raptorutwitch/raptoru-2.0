@@ -150,7 +150,9 @@ function routes({
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
-    ...(bonkLab && studioInstallations ? studioTransportRoutes(bonkLab) : []),
+    ...(studioInstallations
+      ? studioTransportRoutes({ bonk: bonkLab, sound: soundLab, tts: ttsLab })
+      : []),
     ...loyaltyRoutes(loyalty),
     ...(bonkLab ? bonkLabRoutes(bonkLab) : []),
     ...(soundLab ? soundLabRoutes(soundLab) : []),

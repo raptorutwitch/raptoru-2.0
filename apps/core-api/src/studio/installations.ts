@@ -77,8 +77,9 @@ export class StudioInstallations {
   }
 
   /**
-   * Operator action. Idempotent. The installation's unfinished Bonk deliveries lose their lease now:
-   * the next sweep turns them into execution_unknown (never replayed, never refunded by default).
+   * Operator action. Idempotent. The installation's unfinished Bonk / Soundboard / TTS deliveries
+   * lose their lease now: the next sweep turns them into execution_unknown (never replayed, never
+   * refunded by default).
    */
   async revoke(installationId: string): Promise<boolean> {
     if (!ID.test(installationId)) return false;
@@ -90,11 +91,16 @@ export class StudioInstallations {
         [installationId, now],
       );
       if (!rows[0]) return false;
-      await q.query(
-        `update bonk_lab_deliveries set lease_expires_at = least(lease_expires_at, $2)
-         where studio_instance_id = $1 and completed_at is null`,
-        [installationId, now],
-      );
+      for (const table of [
+        'bonk_lab_deliveries',
+        'sound_lab_deliveries',
+        'tts_lab_deliveries',
+      ])
+        await q.query(
+          `update ${table} set lease_expires_at = least(lease_expires_at, $2)
+           where studio_instance_id = $1 and completed_at is null`,
+          [installationId, now],
+        );
       return true;
     });
   }
