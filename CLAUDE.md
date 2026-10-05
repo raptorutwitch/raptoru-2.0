@@ -10,6 +10,9 @@
 - "Validated" means tested manually by Antoni — never call automated tests or E2E a validation.
 - Commands V2 (A0 → F done, validated): current state and rules are in `docs/COMMANDS_V2_STATUS.md`.
 - Audit consolidation: `docs/ASTRA_GLOBAL_AUDIT_2026-10.md` is the register (status, proof and commit of every finding).
+- Current phase (since 2026-10-05): cutover preparation. Reference: `docs/CUTOVER_PLAN_2026-10.md`. No agent deploys,
+  releases, migrates a remote database, changes Twitch / SAMMI / StreamElements or cuts over without Antoni's explicit
+  validation of that step.
 
 ## Central files (ASTRA-P1-008, decided 2026-10-04)
 

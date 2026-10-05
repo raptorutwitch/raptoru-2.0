@@ -4,7 +4,8 @@
 
 > **Historique arrêté au 03/10/2026.** État courant (Commands V2 A0 → F, passes de l'audit Astra) : en tête de
 > [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md), [`docs/COMMANDS_V2_STATUS.md`](docs/COMMANDS_V2_STATUS.md) et
-> [`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](docs/ASTRA_GLOBAL_AUDIT_2026-10.md).
+> [`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](docs/ASTRA_GLOBAL_AUDIT_2026-10.md). Phase courante (depuis le 05/10/2026) :
+> préparation du cutover, [`docs/CUTOVER_PLAN_2026-10.md`](docs/CUTOVER_PLAN_2026-10.md).
 
 > **Nouvel agent : lire d’abord [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md)** (état courant, règles de reprise, matrice de validation, prochaine action). Ce fichier-ci garde l’historique et le détail par domaine.
 

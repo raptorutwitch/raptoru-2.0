@@ -1,14 +1,35 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-> **État courant au 05/10/2026 (vérifier `git log` : HEAD ≥ `5f40a2c`).** Depuis le checkpoint du 03/10 ci-dessous :
-> **Commands V2 A0 → F** implémenté et validé manuellement par Antoni (état, règles et commits :
-> [`docs/COMMANDS_V2_STATUS.md`](docs/COMMANDS_V2_STATUS.md)) ; **passes de consolidation de l'audit Astra**
-> (registre canonique, statut de chaque finding, preuves et commits :
-> [`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](docs/ASTRA_GLOBAL_AUDIT_2026-10.md)) — P1 : 14 fermés, 5 **bloqués pour le
-> cutover** (001 économie, 006 EBS public, 007 session de stream, 010 Channel Points, 019 transport de production) ;
-> P2 : tous fermés sauf 015, 021, 025 (dettes volontairement différées). E2E navigateur versionnés : `npm run e2e`.
-> **Aucune release Studio depuis 0.1.5**, aucun cutover : SAMMI + StreamElements restent la production. Le reste de ce
-> fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le contexte).
+## État courant — 05/10/2026 : PRÉPARATION DU CUTOVER (lire en premier)
+
+Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase).
+
+- **Consolidation globale VALIDÉE manuellement par Antoni le 05/10/2026.** Smoke test final OK : Hub / navigation ;
+  TTS réel (normal, STOP, second TTS — un player OBS / preview est requis : sans lui le TTS s'affiche « indisponible »,
+  comportement normal) ; Soundboard (lecture, STOP) ; Bonk Unicode / local et Bonk Twitch en **rôle viewer lié**
+  (broadcaster / modérateur Lab = identités fictives, emotes Twitch non sélectionnables depuis `9ab0523`) ; Tombola ;
+  Modération ; Commands. L'ingestion Twitch réelle n'était pas un critère bloquant.
+- **Commands V2 A0 → F** terminé et validé ([`docs/COMMANDS_V2_STATUS.md`](docs/COMMANDS_V2_STATUS.md)).
+- **Audit Astra** ([`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](docs/ASTRA_GLOBAL_AUDIT_2026-10.md), registre canonique) :
+  P0 = 0 · P1 = 14 fermés + **5 bloqués pour le cutover** (001 Wallet canonique, 006 EBS public / JWT Twitch, 007 session
+  de stream canonique, 010 Channel Points réels, 019 transport Studio ↔ Core prod) · P2 = 26 fermés + 3 différés (015,
+  021, 025) · P3 = 3 fermés / acceptés + 3 ouverts volontairement (001 signature Windows, 002 nommage BonkLab, 006 UX).
+- **Phase actuelle = préparation du cutover.** Référence canonique : [`docs/CUTOVER_PLAN_2026-10.md`](docs/CUTOVER_PLAN_2026-10.md)
+  (les 5 P1 revalidés sur `9ab0523`, dépendances, rollback, coexistence, décisions D1–D6).
+- **Ordre recommandé** : socle staging Coolify → P1-019 transport → P1-001 port économique (parallélisable) → P1-006 EBS
+  public → parcours vertical future-prod (Bonk Unicode payé en Jetons de test, plan § 7) → P1-007 session → P1-010
+  Channel Points → cutover économique unique.
+- **Rien n'est autorisé au-delà de la préparation** : aucune release (`studio:release`), aucun push, déploiement,
+  migration distante, écriture en base de production, changement Twitch réel, SAMMI ou StreamElements, aucun cutover
+  sans validation explicite d'Antoni. **SAMMI + StreamElements + EBS legacy (`raptoru.fr/api`, Coolify) + Extension
+  publiée restent la production.** Cible d'hébergement : VPS Coolify (Vercel est historique).
+- **Aucune release Studio depuis 0.1.5.** E2E navigateur versionnés : `npm run e2e`.
+- Prochaine action : à décider par Antoni (décisions D1–D6 du plan, puis une passe technique bornée).
+
+Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
+contexte).
+
+---
 
 **État au 03/10/2026 · HEAD `ed781f6` (passe UX post-Tombola) · Tombola V2 TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ (Lab) · Modération V2 parité D4 validée · dernière release publique Studio 0.1.5.**
 Ce fichier est la **source de contexte prioritaire** pour un nouvel agent. Le détail historique complet (Presence, Wallet, Loyalty, Daily, Twitch, Studio, inventaire du stream, roadmap longue) reste dans `Raptoru-2.0-ETAT-PROJET.md`. La matrice de parité D4 (initiale et finale) est dans `docs/moderation-v2-d4-parity.md` ; celle de la Tombola V2 dans `docs/tombola-v2-parity.md`. En cas de contradiction, **vérifier Git et le code**, puis corriger le document fautif.
