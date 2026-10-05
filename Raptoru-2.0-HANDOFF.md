@@ -44,6 +44,9 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   194, Core 388 (`--maxWorkers=3`), Desktop 20, Bot 98, Extension 38 ; lint, typecheck, build.
 - **Correctif `ea1f3f8`** (trouvé pendant la validation manuelle du lot 2) : en profil Production, plus d'Extension
   Lab (la façade non reliée servait une simulation périmée) — message explicite à la place ; Lab inchangé.
+- **Correctifs `8d7416c` + `afa99c1`** (validation du lot 2) : en Production, les lecteurs se règlent dans l'onglet
+  Studio (carte « Lecteurs Production » : overlay Bonk + connexion OBS, lecteur Soundboard, source OBS TTS) ; les
+  ressources `/ext/` des lecteurs sont de nouveau servies (seules les pages de l'Extension sont refusées).
 - **Validation manuelle du lot 2 à faire (Antoni)** : profil Lab inchangé (smoke), puis profil Production contre le
   Core de test local (appairage, Bonk / Soundboard / TTS + STOP, révocation, retour au Lab) — étapes exactes dans le
   rapport du lot 2 et le plan § 4.5 « Lot 2 ».

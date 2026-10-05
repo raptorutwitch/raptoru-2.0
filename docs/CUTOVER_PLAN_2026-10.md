@@ -476,6 +476,17 @@ Extension ». Désormais aucune façade en Production : `/ext/`, `/ext-lab/api` 
 qu'en profil Lab (même bundle, servi depuis `apps/twitch-extension/extension`). Les autres onglets Lab (Modération,
 Tombola, Commandes) restent sans Core en Production : delta « cockpit » de P1-019.
 
+**Correctifs pendant la validation manuelle (`8d7416c`, `afa99c1`).** (1) `ea1f3f8` refusait tout `/ext/` en
+Production, or les lecteurs Production y chargent leurs ressources (sons, emotes, personnages TTS) : seules les
+**pages** de l'Extension (`.html`), l'API Lab et le mock du helper sont désormais refusées. (2) En Production,
+la seule interface exposant l'overlay Bonk (URL + connexion OBS), le lecteur Soundboard (activation du son) et la
+source OBS TTS était l'onglet Extension Lab, désormais indisponible : les admissions restaient `obs_offline` /
+`player_offline`. L'onglet Studio affiche maintenant une carte **« Lecteurs Production »** (mêmes cartes, libellés
+Production, sans contrôles de modération Lab, boutons Copier) et la carte Connexions y renvoie. Les routes
+historiques `/bonk-lab/*`, `/sound-lab/*`, `/tts-lab/*` restent les lecteurs des deux profils (jetons distincts par
+profil ; la source OBS Bonk garde son nom historique « Raptoru Bonk Lab », seule son URL change). L'onglet
+Soundboard config dépend encore du cockpit Lab (delta cockpit). Tests : `prod-players` (4).
+
 **Rate limiting** : différé, risque accepté en local / staging — identifiant aléatoire de 256 bits (force brute
 impossible), analyse stricte avant SQL, comparaison à temps constant ; coût d'une requête non authentifiée = un
 SELECT indexé. À brancher au cutover : reverse proxy et / ou `createHandler` (par IP avant l'authentification, par
