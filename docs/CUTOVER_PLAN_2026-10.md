@@ -407,7 +407,9 @@ du client **remplace** les racines par défaut : à laisser vide derrière un ce
 6. Rate limiting à la frontière, journalisation d'accès sans en-têtes `Authorization`.
 7. Décision sur la porte `lab_session_id` quand les admissions viendront de l'EBS public (P1-006).
 
-#### Lot 2 — profil Production dans Studio (D6) + Soundboard / TTS (05/10/2026, `4b5c1cf`, `d2854ed`, `a75ba24`, `5551ef3`, `8c2ab6d` + revue) : FAIT, tests automatiques verts, **validation manuelle d'Antoni à faire**
+#### Lot 2 — profil Production dans Studio (D6) + Soundboard / TTS (05/10/2026, `4b5c1cf`, `d2854ed`, `a75ba24`, `5551ef3`, `8c2ab6d` + revue) : FAIT, tests automatiques verts, **VALIDÉ manuellement par Antoni (05/10/2026)**
+
+**Lot 2 validé manuellement par Antoni le 05/10/2026** (profil Production local contre le Core de test HTTPS) : appairage OK ; Bonk, Soundboard + STOP, TTS + STOP + second TTS en Production OK ; Extension Lab indisponible en Production OK ; retour au Lab avec la preview actuelle complète OK ; `revoke <installation_id>` → Studio « Révoqué » OK. Le `overlay_not_ready` Bonk observé venait de la source OBS absente / inactive dans la scène, pas du transport. Correctifs trouvés pendant la validation, validés aussi : `ea1f3f8` (pas de fausse Extension Lab en Production), `8d7416c` (ressources statiques des lecteurs Production servies), `afa99c1` (carte « Lecteurs Production » dans Studio).
 
 **D6 retenue** : une seule app Studio, deux profils exclusifs, **Lab par défaut**.
 
@@ -492,7 +494,7 @@ impossible), analyse stricte avant SQL, comparaison à temps constant ; coût d'
 SELECT indexé. À brancher au cutover : reverse proxy et / ou `createHandler` (par IP avant l'authentification, par
 installation pour le polling `claim`).
 
-**Reste de P1-019 (après lot 2).**
+**Reste de P1-019 (après lot 2 validé ; P1-019 non fermé).**
 
 1. Séparer le cockpit (routes `studio` : wallet admin, staff, modération, configuration TTS / sons, Tombola, Commands)
    de l'exécution : en Production ces écrans n'ont pas encore de Core (identifiant d'installation avec rôle,

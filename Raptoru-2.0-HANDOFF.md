@@ -47,12 +47,9 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
 - **Correctifs `8d7416c` + `afa99c1`** (validation du lot 2) : en Production, les lecteurs se règlent dans l'onglet
   Studio (carte « Lecteurs Production » : overlay Bonk + connexion OBS, lecteur Soundboard, source OBS TTS) ; les
   ressources `/ext/` des lecteurs sont de nouveau servies (seules les pages de l'Extension sont refusées).
-- **Validation manuelle du lot 2 à faire (Antoni)** : profil Lab inchangé (smoke), puis profil Production contre le
-  Core de test local (appairage, Bonk / Soundboard / TTS + STOP, révocation, retour au Lab) — étapes exactes dans le
-  rapport du lot 2 et le plan § 4.5 « Lot 2 ».
-- **Reste de P1-019** : cockpit (wallet admin, staff, modération…) encore sous `STUDIO_SECRET`, staging Coolify +
-  appairage distant, rate limiting, constante de build de l'URL, contrat lecteurs pour paiements réels (P1-001).
-- Prochaine action : validation manuelle du lot 2 par Antoni, puis lot 3 (staging) ou P1-001 selon sa décision.
+- **Lot 2 validé manuellement par Antoni le 05/10/2026** (profil Production local contre le Core de test HTTPS) : appairage OK ; Bonk, Soundboard + STOP, TTS + STOP + second TTS en Production OK ; Extension Lab indisponible en Production OK ; retour au Lab avec la preview actuelle complète OK ; `revoke <installation_id>` → Studio « Révoqué » OK. Le `overlay_not_ready` Bonk observé venait de la source OBS absente / inactive dans la scène, pas du transport. Correctifs trouvés pendant la validation, validés aussi : `ea1f3f8` (pas de fausse Extension Lab en Production), `8d7416c` (ressources statiques des lecteurs Production servies), `afa99c1` (carte « Lecteurs Production » dans Studio).
+- **Reste de P1-019 (non fermé)** : staging Coolify ; appairage distant réel (opérateur sur le Core distant, révocation à distance) ; TLS public du reverse proxy ; rate limiting ; cockpit Production incomplet (wallet admin, staff, modération, configuration TTS / sons, Tombola, Commands encore sous `STUDIO_SECRET` / Lab) ; URL Production en constante de build ; seams des futurs paiements réels (lecteurs n'acceptant encore que `simulated`, lié à P1-001).
+- Prochaine action : P1-001 lot 1 (local) — débit économique et admission atomiques.
 
 Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
 contexte).
