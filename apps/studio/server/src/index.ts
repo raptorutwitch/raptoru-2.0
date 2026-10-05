@@ -189,12 +189,44 @@ async function readJson(
 }
 
 /** Extension Lab routes that the extension frames call (no Studio header: they are the extension). */
+/** Shown instead of the Extension Lab in the Production profile (never a simulated, outdated view). */
+const PRODUCTION_NO_EXT_LAB =
+  'Extension Lab indisponible en profil Production : la preview n’existe qu’en profil Lab (Core Lab local). En production, l’Extension parlera à l’EBS public (pas encore construit).';
+
 async function extensionLabRoute(
   extLab: LabEbs | null,
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
+  production = false,
 ): Promise<boolean> {
+  // Production profile (ASTRA-P1-019 lot 2): no Lab façade at all. Without it, the extension would run
+  // on the façade's in-memory simulation and look like an old version (legacy screens, no V2 data).
+  if (
+    production &&
+    (url.pathname === TWITCH_EXT_MOCK_PATH ||
+      url.pathname.startsWith(EXT_PREFIX) ||
+      url.pathname.startsWith(`${LAB_API_PREFIX}/`))
+  ) {
+    if (url.pathname.startsWith(EXT_PREFIX)) {
+      res.writeHead(409, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'content-security-policy':
+          "default-src 'none'; style-src 'unsafe-inline'",
+        'x-frame-options': 'SAMEORIGIN',
+      });
+      res.end(
+        `<!doctype html><meta charset="utf-8"><body style="font:14px system-ui;color:#ddd;background:#111317;padding:24px">${PRODUCTION_NO_EXT_LAB}</body>`,
+      );
+    } else
+      send(res, 409, {
+        ok: false,
+        error: 'production_profile',
+        message: PRODUCTION_NO_EXT_LAB,
+      });
+    return true;
+  }
   if (req.method === 'GET' && url.pathname === TWITCH_EXT_MOCK_PATH) {
     res.writeHead(200, {
       'content-type': 'text/javascript; charset=utf-8',
@@ -352,7 +384,16 @@ export function createStudioServer(
         return send(res, 200, { enabled: false });
       if (url.pathname === '/api/bonk-lab/status' && !bonk)
         return send(res, 200, { enabled: false });
-      if (await extensionLabRoute(extLab, req, res, url)) return;
+      if (
+        await extensionLabRoute(
+          extLab,
+          req,
+          res,
+          url,
+          profile?.plan.effective === 'production',
+        )
+      )
+        return;
       if (req.method === 'GET' && url.pathname.startsWith(DEV_PREFIX)) {
         if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
         return await serveDev(url.pathname, res);
@@ -578,14 +619,17 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         ),
     ).finally(() => process.exit(0));
   };
-  const extLab = await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
-    lab.logs.add(
-      'studio',
-      `Extension Lab unavailable: ${error.message}`,
-      'error',
-    );
-    return null;
-  });
+  // Lab profile only: in Production the façade would only serve its outdated simulation.
+  const extLab = !labProfile
+    ? null
+    : await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
+        lab.logs.add(
+          'studio',
+          `Extension Lab unavailable: ${error.message}`,
+          'error',
+        );
+        return null;
+      });
   if (production) {
     // Admissions will come from the public EBS (P1-006): no Lab façade on the production workers.
     production.bonk.start();

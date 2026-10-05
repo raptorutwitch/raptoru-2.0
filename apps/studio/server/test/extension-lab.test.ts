@@ -337,4 +337,45 @@ describe('Extension Lab: HTTP routes', () => {
     expect(state.events).toHaveLength(1);
     await new Promise((r) => server.close(r));
   });
+  it('Production profile (ASTRA-P1-019 lot 2): no Extension Lab — an explicit message, never the simulated (outdated) extension', async () => {
+    const production = { plan: { effective: 'production' } } as never;
+    const server = createStudioServer(
+      {} as never,
+      () => {},
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      production,
+    );
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as AddressInfo).port;
+    const page = await get(port, '/ext/panel.html');
+    expect(page.status).toBe(409);
+    expect(page.body).toContain(
+      'Extension Lab indisponible en profil Production',
+    );
+    expect(page.body).not.toContain('<script');
+    const api = await get(port, '/ext-lab/api/session', {
+      authorization: token('viewer'),
+    });
+    expect(api.status).toBe(409);
+    expect(JSON.parse(api.body).error).toBe('production_profile');
+    expect((await get(port, TWITCH_EXT_MOCK_PATH)).status).toBe(409);
+    await new Promise((r) => server.close(r));
+    // Lab profile: the current extension is served as before.
+    const labServer = createStudioServer({} as never, () => {}, await newLab());
+    await new Promise<void>((r) => labServer.listen(0, '127.0.0.1', r));
+    const labPage = await get(
+      (labServer.address() as AddressInfo).port,
+      '/ext/panel.html',
+    );
+    expect(labPage.status).toBe(200);
+    await new Promise((r) => labServer.close(r));
+  });
 });

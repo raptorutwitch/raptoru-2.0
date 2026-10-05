@@ -597,8 +597,36 @@ export function mountExtensionLab(root: HTMLElement): {
   });
 
   renderChoices();
+  // Production profile (ASTRA-P1-019 lot 2): the Extension Lab preview does not exist there (no Lab
+  // façade); say so instead of showing an empty or outdated extension. Reversible (back to Lab).
+  const blocked = document.createElement('p');
+  blocked.className = 'card';
+  blocked.style.display = 'none';
+  blocked.textContent =
+    'Extension Lab indisponible en profil Production : la preview n’existe qu’en profil Lab (Core Lab local). En production, l’Extension parlera à l’EBS public (pas encore construit). Repasse en profil Lab depuis l’onglet Studio pour la preview.';
+  root.prepend(blocked);
+  async function checkProfile() {
+    try {
+      const res = await fetch('/api/profile', {
+        headers: { 'x-raptoru-studio': '1' },
+      });
+      const production =
+        res.ok &&
+        ((await res.json()) as { effective?: string }).effective ===
+          'production';
+      blocked.style.display = production ? '' : 'none';
+      // A CSS display rule would override `hidden` on the layout: set it inline.
+      root.querySelector<HTMLElement>('.xlab')!.style.display = production
+        ? 'none'
+        : '';
+    } catch {
+      /* server restarting: keep the current view */
+    }
+  }
+
   return {
     setVisible(v: boolean) {
+      if (v) void checkProfile();
       bonkLab.setVisible(v);
       soundLab.setVisible(v);
       ttsLab.setVisible(v);
