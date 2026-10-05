@@ -341,6 +341,70 @@ révocable côté Core.
 **Validation isolée.** Core local derrière TLS puis Core staging : déconnexion / retour réseau, ACK perdu, redémarrage
 Studio pendant un effet, mauvaise instance ou identifiant révoqué refusés, version incompatible refusée, aucun rejeu.
 
+#### Lot 1 — transport future-prod local (05/10/2026, `fe7d524` → `48d5fa6`) : FAIT, tests automatiques verts
+
+**Fait.**
+
+- **Identité d'installation** (`apps/studio/server/src/prod-transport/installation.ts`) : UUID + secret de 256 bits
+  générés une seule fois par installation (jamais dérivés de la machine, de l'utilisateur ou de Twitch), fichier JSON
+  côté serveur Node de Studio (écriture atomique, jamais réécrit ; fichier abîmé → arrêt, jamais de régénération
+  silencieuse), secret invisible en JSON / `inspect`. Code d'appairage = `installation_id.sha256(secret)` : il ne
+  permet pas de s'authentifier.
+- **Côté Core** (`apps/core-api/src/studio/installations.ts`, migration additive `20261016120000_studio_installations.sql`,
+  scope `prod`) : seule l'empreinte SHA-256 du secret est stockée ; authentification `Bearer rsi_<id>.<secret>`
+  (analyse stricte avant toute requête SQL, travail identique pour un id inconnu, `timingSafeEqual`) ; révocation
+  vérifiée à chaque appel (aucun cache) et qui termine le bail des livraisons Bonk en cours de l'installation (le
+  sweep les passe en `execution_unknown`, jamais rejouées) ; `last_seen_at` écrit au plus toutes les 30 s.
+  Outil opérateur local : `npm run studio:installation -w @raptoru/core-api -- pair <code> "<libellé>" | revoke <id> | list`.
+- **Protocole** : en-tête `x-raptoru-studio-protocol` (version 1) sur chaque appel ; Core refuse une version absente ou
+  non supportée **avant tout travail** : HTTP 426 `{ "error": "protocol_incompatible", "supported": [1] }`. Studio
+  affiche « Mise à jour requise : protocole Studio N incompatible (Core accepte 1) ».
+- **Routes d'exécution** `/v1/studio/session` (poignée de main), `/v1/studio/bonk/studio/heartbeat`, `/claim`,
+  `/interactions/:id` (lecture limitée aux interactions de l'installation, sinon 404), `/interactions/:id/ack` :
+  accessibles **uniquement** avec un identifiant d'installation (ni `STUDIO_SECRET`, ni JWT d'Extension) ; l'instance
+  Studio est l'installation authentifiée (un corps qui en nomme une autre → 403 `studio_instance_mismatch`). Mêmes
+  services claim / ACK que le Lab (paiement toujours simulé). `createHandler()` permet de servir le Core en HTTPS.
+- **Client Studio séparé** (`apps/studio/server/src/prod-transport/core-client.ts`) : HTTPS uniquement, vérification
+  TLS par défaut de Node, CA de confiance **propre à ce client** (aucun contournement global), routes `/v1/studio/`
+  seulement, redirections refusées, délai total borné, réponse bornée, erreurs typées (`protocol_incompatible`,
+  `studio_unauthorized`, `studio_revoked`, `tls_rejected`, `core_unreachable`), jamais d'en-tête ni de secret dans un
+  message.
+- **Worker** : le même `BonkWorker` (journal, `execution_unknown`, aucun rejeu) avec `{ base: '/v1/studio/bonk',
+studioId: <installation> }` ; les valeurs par défaut Lab sont inchangées. `WorkerLoop` accepte un signal `failed()`
+  optionnel : Core injoignable + travail local en attente → backoff jusqu'à 1 s au lieu de 150 ms (non passé par les
+  runtimes Lab : comportement Lab inchangé).
+- **Clients, routes, gardes et Core Lab inchangés** (le Core Lab a son propre serveur et ne monte pas ces routes).
+
+**Tests.** Core `test/studio-transport.test.ts` (7) ; Studio `test/prod-transport.test.ts` (13, Core réel PGlite servi
+en **HTTPS** avec un certificat de test auto-signé `test/fixtures/tls`, approuvé par le seul client) : normal, TLS
+réellement vérifié, mauvais identifiant, révocation, protocole incompatible, coupure avant claim, coupure après claim
+
+- redémarrage Studio, ACK perdu, ACK jamais arrivés, Core muet (délai total), backoff borné, redémarrage (identité
+  conservée), secret jamais exposé. Suites complètes : Core 386, Studio server 162, Bot 98, Extension 38, Desktop 20 ;
+  lint, typecheck, build verts.
+
+**Limites du lot 1.** Pas branché dans l'application Studio (profil production = décision D6) ; seul Bonk passe par
+ce transport ; paiement simulé ; la porte « `lab_session_id` = session du worker » du `BonkWorker` est propre au Lab
+(une interaction admise par l'EBS public n'aura pas cette session) ; aucun Core distant ni staging ; aucun rate
+limiting (à brancher dans `createHandler`, avant l'authentification, par IP puis par installation) ; un secret volé
+sur le PC reste utilisable jusqu'à révocation (pas de rotation automatique). Le Core de production monte désormais `/v1/studio/*` : la migration
+`studio_installations` doit être appliquée (migrateur scope `prod`) avant tout déploiement de ce code. L'option `ca`
+du client **remplace** les racines par défaut : à laisser vide derrière un certificat public.
+
+**Reste de P1-019 (après lot 1).**
+
+1. Câbler le profil production dans Studio (D6) : chemin du fichier d'identité dans les données Studio, affichage du
+   code d'appairage et des erreurs typées (« mise à jour requise », « Studio révoqué »), runtime production à côté du
+   runtime Lab, `failed()` branché.
+2. Soundboard et TTS sur le transport (claim / ACK / STOP prouvé, P1-017) et contrat des lecteurs en mode production.
+3. Séparer le cockpit (routes `studio` : wallet admin, staff, modération) de l'exécution : identifiant d'installation
+   avec rôle, `STUDIO_SECRET` réservé au Lab / à l'admin serveur.
+4. Appairage réel côté staging (opérateur sur le Core distant), révocation testée à distance.
+5. Socle staging Coolify (étape 0) puis validation du transport contre le Core distant (TLS publique du reverse
+   proxy, coupures réelles).
+6. Rate limiting à la frontière, journalisation d'accès sans en-têtes `Authorization`.
+7. Décision sur la porte `lab_session_id` quand les admissions viendront de l'EBS public (P1-006).
+
 ---
 
 ## 5. Dépendances entre les cinq P1
@@ -376,7 +440,7 @@ flowchart LR
 
 0. **Socle staging** (prérequis, pas un P1) : app Core de staging sur Coolify, base dédiée distincte du legacy, aucune
    exposition viewer, aucune donnée réelle. _Pourquoi d'abord : P1-019 et P1-006 ne se valident pas sans lui._
-1. **P1-019 transport** : identifiant Studio par installation, client HTTPS distinct, version de protocole ; validé
+1. **P1-019 transport** (lot 1 local fait le 05/10/2026, § 4.5) : identifiant Studio par installation, client HTTPS distinct, version de protocole ; validé
    d'abord contre un Core local en TLS, puis contre le staging, avec paiement simulé. _Pourquoi : c'est le pivot de
    toute exécution réelle, il ne dépend ni de l'argent ni de l'identité viewer, et il éprouve le déploiement._
 2. **P1-001 port économique** (en parallèle de 1 possible) : variante transactionnelle du Wallet + port
@@ -417,16 +481,16 @@ Validation manuelle par Antoni requise avant de considérer le parcours comme va
 
 ## 8. Critères de validation par étape
 
-| Étape           | Tests automatiques                                                  | E2E / isolé                                           | Validation Antoni            |
-| --------------- | ------------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------- |
-| 0 Socle staging | `/health`, `/ready`, migrations scope `prod` sur base vide          | déploiement staging sans viewer                       | accès et isolation confirmés |
-| 1 P1-019        | client HTTPS, appairage / révocation, version, rejeu interdit       | Core TLS local puis staging, coupures réseau / Studio | Bonk simulé via staging      |
-| 2 P1-001        | atomicité, concurrence, remboursement unique, réconciliation        | PostgreSQL jetable                                    | —                            |
-| 3 P1-006        | JWT (invalide, expiré, canal, rôle, identité), forgerie, rate limit | version de test de l'Extension                        | lecture puis action          |
-| 4 Parcours § 7  | —                                                                   | parcours complet                                      | **oui**                      |
-| 5 P1-007        | reconnexion, offline perdu, redémarrage, stream_day                 | shadow du bot principal                               | lecture des sessions         |
-| 6 P1-010        | redelivery, crash, refus Helix                                      | mock EventSub / Helix                                 | essai réel sur décision      |
-| 7 Cutover       | import SE dry-run + contrôle                                        | répétition complète sur staging                       | **go explicite**             |
+| Étape           | Tests automatiques                                                             | E2E / isolé                                                            | Validation Antoni            |
+| --------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------- |
+| 0 Socle staging | `/health`, `/ready`, migrations scope `prod` sur base vide                     | déploiement staging sans viewer                                        | accès et isolation confirmés |
+| 1 P1-019        | client HTTPS, appairage / révocation, version, rejeu interdit (**lot 1 vert**) | Core TLS local (**lot 1 fait**) puis staging, coupures réseau / Studio | Bonk simulé via staging      |
+| 2 P1-001        | atomicité, concurrence, remboursement unique, réconciliation                   | PostgreSQL jetable                                                     | —                            |
+| 3 P1-006        | JWT (invalide, expiré, canal, rôle, identité), forgerie, rate limit            | version de test de l'Extension                                         | lecture puis action          |
+| 4 Parcours § 7  | —                                                                              | parcours complet                                                       | **oui**                      |
+| 5 P1-007        | reconnexion, offline perdu, redémarrage, stream_day                            | shadow du bot principal                                                | lecture des sessions         |
+| 6 P1-010        | redelivery, crash, refus Helix                                                 | mock EventSub / Helix                                                  | essai réel sur décision      |
+| 7 Cutover       | import SE dry-run + contrôle                                                   | répétition complète sur staging                                        | **go explicite**             |
 
 ## 9. Stratégie de rollback
 

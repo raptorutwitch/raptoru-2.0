@@ -24,7 +24,19 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   sans validation explicite d'Antoni. **SAMMI + StreamElements + EBS legacy (`raptoru.fr/api`, Coolify) + Extension
   publiée restent la production.** Cible d'hébergement : VPS Coolify (Vercel est historique).
 - **Aucune release Studio depuis 0.1.5.** E2E navigateur versionnés : `npm run e2e`.
-- Prochaine action : à décider par Antoni (décisions D1–D6 du plan, puis une passe technique bornée).
+- **P1-019 — lot 1 terminé le 05/10/2026** (`fe7d524`, `b12bfec`, `9d8e305`, `48d5fa6` + docs ; HEAD ≥ ces commits) :
+  transport future-prod Studio → Core **local**, en HTTPS (certificat de test), identité d'installation Studio +
+  identifiant révocable, version de protocole (426 `protocol_incompatible`), routes `/v1/studio/*` liées à
+  l'installation, client Studio séparé des clients Lab, même journal / `execution_unknown` / aucun rejeu. **Lab
+  inchangé.** Tests automatiques verts (Core `studio-transport` 7, Studio `prod-transport` 13 ; suites Core 386 / Studio
+  server 162 / Bot 98 / Extension 38 / Desktop 20 ; lint, typecheck, build). En parallélisme complet sur cette machine
+  chargée, la suite Core montre des timeouts PGlite **préexistants** (40 échecs aussi sur `86d314f`) : lancer
+  `npx vitest run --maxWorkers=3` dans `apps/core-api`. **P1-019 n'est pas fermé** : profil production non câblé dans
+  Studio (D6), Soundboard / TTS, cockpit, staging, appairage distant, rate limiting (plan § 4.5 « Lot 1 »).
+- **Validation manuelle encore requise (Antoni)** : relancer les tests du lot 1 et refaire un smoke Lab Bonk /
+  Soundboard / TTS dans `npm run studio` (non-régression) — étapes exactes dans le rapport du lot 1 et plan § 4.5.
+- Prochaine action : à décider par Antoni (validation manuelle du lot 1, décision D6, puis lot 2 de P1-019 ou
+  P1-001).
 
 Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
 contexte).
