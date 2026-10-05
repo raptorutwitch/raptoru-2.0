@@ -341,7 +341,7 @@ révocable côté Core.
 **Validation isolée.** Core local derrière TLS puis Core staging : déconnexion / retour réseau, ACK perdu, redémarrage
 Studio pendant un effet, mauvaise instance ou identifiant révoqué refusés, version incompatible refusée, aucun rejeu.
 
-#### Lot 1 — transport future-prod local (05/10/2026, `fe7d524` → `48d5fa6`) : FAIT, tests automatiques verts
+#### Lot 1 — transport future-prod local (05/10/2026, `fe7d524` → `5b6fc49`) : FAIT, tests automatiques verts
 
 **Fait.**
 

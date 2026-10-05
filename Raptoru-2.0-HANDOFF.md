@@ -24,7 +24,7 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   sans validation explicite d'Antoni. **SAMMI + StreamElements + EBS legacy (`raptoru.fr/api`, Coolify) + Extension
   publiée restent la production.** Cible d'hébergement : VPS Coolify (Vercel est historique).
 - **Aucune release Studio depuis 0.1.5.** E2E navigateur versionnés : `npm run e2e`.
-- **P1-019 — lot 1 terminé le 05/10/2026** (`fe7d524`, `b12bfec`, `9d8e305`, `48d5fa6` + docs ; HEAD ≥ ces commits) :
+- **P1-019 — lot 1 terminé le 05/10/2026** (`fe7d524`, `b12bfec`, `9d8e305`, `48d5fa6`, `5b6fc49` + docs ; HEAD ≥ ces commits) :
   transport future-prod Studio → Core **local**, en HTTPS (certificat de test), identité d'installation Studio +
   identifiant révocable, version de protocole (426 `protocol_incompatible`), routes `/v1/studio/*` liées à
   l'installation, client Studio séparé des clients Lab, même journal / `execution_unknown` / aucun rejeu. **Lab
