@@ -645,6 +645,10 @@ export const ERROR_LABELS = {
   login_unavailable: 'Ton compte Twitch n’est pas encore reconnu — réessaie dans un instant.',
   api_not_configured: 'L’extension est momentanément indisponible.',
   rate_limited: 'Un peu trop de demandes à la fois — attends quelques secondes.',
+  // Bonk : emote Twitch refusée par Core (compte Twitch non lié / emote hors du catalogue du viewer).
+  viewer_not_linked: 'Emotes Twitch indisponibles : aucun compte Twitch lié à cette identité.',
+  emote_not_in_catalog: 'Cette emote ne fait pas partie de tes emotes Twitch.',
+  catalog_unavailable: 'Tes emotes Twitch ne sont pas encore chargées — réessaie dans un instant.',
 };
 
 export const errorLabel = (code) => ERROR_LABELS[code] ?? 'Une erreur est survenue.';

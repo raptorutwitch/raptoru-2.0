@@ -461,7 +461,15 @@ export function buildBonkVisibleGroups(realGroups, { favoriteIds = [], recentIds
   ];
 }
 
-export function isBonkEmoteSelectable(emote, { demoMode = false } = {}) {
+// Lab : seul le rôle viewer devient le compte Twitch connecté ; modérateur et broadcaster gardent
+// une identité fictive sans emotes Twitch personnelles (Core refuserait : viewer_not_linked).
+export const BONK_TWITCH_ROLE_HINT = 'Disponible en rôle viewer lié à Twitch';
+export function bonkTwitchLockedForRole(state) {
+  return state?.environment === 'lab' && ['moderator', 'broadcaster'].includes(state?.role);
+}
+
+export function isBonkEmoteSelectable(emote, { demoMode = false, twitchLocked = false } = {}) {
+  if (twitchLocked && emote?.source === 'twitch') return false;
   return !(emote?.previewOnly && !demoMode);
 }
 
@@ -3334,16 +3342,19 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     // Adaptateur vers le picker générique : grille statique (static_url), animation au survol
     // ou à la sélection via image_url. Twemoji reste la couche visuelle des emotes Unicode.
     const demoMode = state?.demo_mode === true;
+    const twitchLocked = bonkTwitchLockedForRole(state);
     const pickerItem = (emote) => {
       const twemoji = bonkTwemojiAssetPath(emote);
+      const roleLocked = twitchLocked && emote.source === 'twitch';
       return {
         id: emote.id,
         label: emote.label,
+        ...(roleLocked ? { hint: `${emote.label} · ${BONK_TWITCH_ROLE_HINT}` } : {}),
         // image_url est l'URL animée quand l'emote l'est : animée directement dans la grille.
         src: twemoji ?? emote.image_url ?? null,
         animated: emote.animated === true,
         glyph: emote.mark ?? emote.glyph,
-        disabled: !isBonkEmoteSelectable(emote, { demoMode }),
+        disabled: !isBonkEmoteSelectable(emote, { demoMode, twitchLocked }),
       };
     };
     // Familles (Récents, Favoris, Twitch, Bits, Extension, Emoji) : voir bonk-picker-groups.js.
@@ -3519,7 +3530,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     emotePicker.setHandlers({
       onSelect: (id) => {
         const emote = emoteById.get(id);
-        if (!emote || !isBonkEmoteSelectable(emote, { demoMode })) return;
+        if (!emote || !isBonkEmoteSelectable(emote, { demoMode, twitchLocked })) return;
         bonkAmmoMode = true;
         if (!bonkAmmunition.length) bonkAmmoIndex = 0;
         bonkAmmunition.push(emote);
@@ -3719,8 +3730,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         syncBonkFeedback(bonkFeedback);
         return null;
       }
-      if (!isBonkEmoteSelectable(emote, { demoMode: state?.demo_mode === true })) {
-        bonkFeedbackMessage = 'Connecte tes emotes Twitch pour utiliser celle-ci.';
+      const twitchLocked = bonkTwitchLockedForRole(state);
+      if (!isBonkEmoteSelectable(emote, { demoMode: state?.demo_mode === true, twitchLocked })) {
+        bonkFeedbackMessage = twitchLocked && emote.source === 'twitch'
+          ? `${BONK_TWITCH_ROLE_HINT}.`
+          : 'Connecte tes emotes Twitch pour utiliser celle-ci.';
         bonkFeedbackKind = 'error';
         syncBonkFeedback(bonkFeedback);
         return null;

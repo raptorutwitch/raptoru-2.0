@@ -8,7 +8,7 @@
 //             family?: { id, label, tone?, icon?, iconSrc?, iconNode? }, virtual?, reorderable?,
 //             parts?: [{ id, label, iconSrc?, keywords?, emotes }], emotes: [item] }]
 //   (parts : sous-groupes affichés avec un petit sous-titre dans la même section)
-//   item:   { id, label, src?, animated?, glyph?, disabled? }  (src animée si l'emote l'est)
+//   item:   { id, label, src?, animated?, glyph?, disabled?, hint? }  (hint : infobulle)  (src animée si l'emote l'est)
 // L'hôte reste propriétaire des favoris, de la sélection et de l'envoi.
 
 export const CHUNK_ROWS = 6;
@@ -143,7 +143,7 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
     const cell = make('button', 'rl-picker__cell');
     cell.type = 'button';
     cell.dataset.id = item.id;
-    cell.title = item.label;
+    cell.title = item.hint ?? item.label;
     cell.setAttribute('aria-label', item.label);
     if (item.animated) cell.dataset.animated = '';
     if (reorderable) cell.dataset.reorder = '';
