@@ -27,6 +27,7 @@ import {
 } from './steps.js';
 import { CommandsError } from './model.js';
 import type { ReservedWords } from './service.js';
+import { latestChannelSession } from '../stream/channel-sessions.js';
 
 // Commands V2 (Lab) — admission (phase B). A chat message that names a command (name or alias) is
 // decided by `decide()` and recorded in cmd_invocations, accepted or refused. Nothing is executed and
@@ -346,12 +347,8 @@ export class CommandsAdmission {
       'select category_id, name, icon, color from cmd_categories where channel_id = $1 order by position, name',
       [channelId],
     );
-    const session = (
-      await this.db.query<{ ended_at: Date | null }>(
-        'select ended_at from lab_stream_sessions where channel_id = $1 order by started_at desc limit 1',
-        [channelId],
-      )
-    )[0];
+    // The channel's stream session, as Tombola sees it (stream/channel-sessions.ts, ASTRA-P1-007).
+    const session = await latestChannelSession(this.db, channelId);
     const live = Boolean(session && !session.ended_at);
     // A word a module owns (e.g. Tombola's !join) never launches a command: not shown as an alias.
     const reserved = new Set(
@@ -418,12 +415,7 @@ export class CommandsAdmission {
       chatter,
       messageId === null ? 'simulator' : 'twitch',
     );
-    const session = (
-      await q.query<{ started_at: Date; ended_at: Date | null }>(
-        'select started_at, ended_at from lab_stream_sessions where channel_id = $1 order by started_at desc limit 1',
-        [channelId],
-      )
-    )[0];
+    const session = await latestChannelSession(q, channelId);
     const live = Boolean(session && !session.ended_at);
     const usage = command
       ? await this.usage(

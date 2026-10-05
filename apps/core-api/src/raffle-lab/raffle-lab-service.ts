@@ -10,6 +10,12 @@ import {
   type RaffleStreamEvent,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
+import {
+  latestChannelSession,
+  liveChannelSession,
+  lockChannelSessions,
+  twitchChannelSession,
+} from '../stream/channel-sessions.js';
 import type { Db, Queryable } from '../db/db.js';
 import {
   access,
@@ -261,34 +267,15 @@ export class RaffleLabService {
     return c.join_commands;
   }
 
-  // --- stream session (simulated in the Lab) ------------------------------------------------------------
+  // --- stream session (Twitch, or simulated in the Lab) — stream/channel-sessions.ts ----------------
 
-  private async liveSession(q: Queryable, channelId: string) {
-    return (
-      (
-        await q.query<{ session_id: string; started_at: Date; source: string }>(
-          'select session_id, started_at, source from lab_stream_sessions where channel_id = $1 and ended_at is null',
-          [channelId],
-        )
-      )[0] ?? null
-    );
+  private liveSession(q: Queryable, channelId: string) {
+    return liveChannelSession(q, channelId);
   }
 
   /** The session the viewer history shows: the live one, else the last one. */
-  private async currentSession(q: Queryable, channelId: string) {
-    return (
-      (
-        await q.query<{
-          session_id: string;
-          started_at: Date;
-          ended_at: Date | null;
-          source: string;
-        }>(
-          'select session_id, started_at, ended_at, source from lab_stream_sessions where channel_id = $1 order by (ended_at is null) desc, started_at desc limit 1',
-          [channelId],
-        )
-      )[0] ?? null
-    );
+  private currentSession(q: Queryable, channelId: string) {
+    return latestChannelSession(q, channelId);
   }
 
   private async startSession(
@@ -299,11 +286,13 @@ export class RaffleLabService {
     now: Date,
     reason: string | null,
     source: 'simulated' | 'twitch' = 'simulated',
+    twitchStreamId: string | null = null,
   ) {
     const id = randomUUID();
     await q.query(
-      `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by) values ($1, $2, $3, $4, $5)`,
-      [id, channelId, now, source, actorName(actor)],
+      `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by, twitch_stream_id)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [id, channelId, now, source, actorName(actor), twitchStreamId],
     );
     await audit(q, now, {
       channelId,
@@ -628,55 +617,137 @@ export class RaffleLabService {
     await this.db.tx((q) => this.advance(q, channelId));
   }
 
+  /** Ends a session (Twitch offline, replaced by a new live, Studio « fin de stream »): scheduler stopped. */
+  private async endSession(
+    q: Queryable,
+    channelId: string,
+    session: { session_id: string; source: string },
+    now: Date,
+    actor: Actor,
+    role: LabRole,
+    by: string,
+    reason: string | null,
+  ) {
+    await q.query(
+      'update lab_stream_sessions set ended_at = $2, ended_by = $3 where session_id = $1',
+      [session.session_id, now, by],
+    );
+    await audit(q, now, {
+      channelId,
+      actor,
+      role,
+      module: 'raffle',
+      action: 'stream_end',
+      reason,
+      after: { session_id: session.session_id, source: session.source },
+    });
+    await this.stopScheduler(q, channelId, now, actor, role, 'stream_ended');
+  }
+
   /**
-   * Twitch stream state (chat adapter, ingestion switch ON): offline → live opens a Twitch session
-   * (and the scheduler), live → offline ends it. Idempotent: a repeated event changes nothing.
+   * Twitch stream state (chat adapter, ingestion switch ON) — ASTRA-P1-007. One session per Twitch live
+   * (identified by its stream id), every transition under the channel's session lock:
+   * - online, same id as the open session → nothing; open Twitch session without id (recorded before
+   *   the ids) → it takes the id;
+   * - online, new id → the open session (a live whose offline was lost, or a simulation) ends, then:
+   *   the same live seen again (reconnection after an offline) and no later Twitch session → reopened;
+   *   otherwise a new session;
+   * - online without id (older adapter) → previous behaviour (a session if none is open);
+   * - offline → ends the open TWITCH session only (never a simulation).
    */
   async streamEvent(ev: RaffleStreamEvent) {
     await this.settle(ev.channel_id);
     return this.db.tx(async (q) => {
+      await lockChannelSessions(q, ev.channel_id);
       const now = this.clock.now();
-      const live = await this.liveSession(q, ev.channel_id);
-      const reason = ev.twitch_stream_id
-        ? `Twitch stream ${ev.twitch_stream_id}`
-        : 'Twitch';
-      if (ev.event === 'online') {
-        if (live)
-          return { ok: true, session_id: live.session_id, changed: false };
-        const id = await this.startSession(
+      const channelId = ev.channel_id;
+      const live = await this.liveSession(q, channelId);
+      const id = ev.twitch_stream_id ?? null;
+      const reason = id ? `Twitch stream ${id}` : 'Twitch';
+      const unchanged = (session_id: string | null) => ({
+        ok: true,
+        session_id,
+        changed: false,
+      });
+      if (ev.event === 'offline') {
+        if (!live || live.source !== 'twitch') return unchanged(null);
+        await this.endSession(
           q,
-          ev.channel_id,
+          channelId,
+          live,
+          now,
           SYSTEM,
           'broadcaster',
-          now,
-          reason,
           'twitch',
+          reason,
         );
-        return { ok: true, session_id: id, changed: true };
+        return { ok: true, session_id: live.session_id, changed: true };
       }
-      if (!live) return { ok: true, session_id: null, changed: false };
-      await q.query(
-        'update lab_stream_sessions set ended_at = $2, ended_by = $3 where session_id = $1',
-        [live.session_id, now, 'twitch'],
-      );
-      await audit(q, now, {
-        channelId: ev.channel_id,
-        actor: SYSTEM,
-        role: 'broadcaster',
-        module: 'raffle',
-        action: 'stream_end',
-        reason,
-        after: { session_id: live.session_id, source: 'twitch' },
-      });
-      await this.stopScheduler(
+      if (live && (!id || live.twitch_stream_id === id))
+        return unchanged(live.session_id);
+      if (live && live.source === 'twitch' && live.twitch_stream_id === null) {
+        await q.query(
+          'update lab_stream_sessions set twitch_stream_id = $2 where session_id = $1',
+          [live.session_id, id],
+        );
+        return unchanged(live.session_id);
+      }
+      // An older live delivered late (a later Twitch session exists): ignored, nothing closed.
+      const seen = id ? await twitchChannelSession(q, channelId, id) : null;
+      if (seen && seen.newer) return unchanged(live?.session_id ?? null);
+      // A different live is starting: the open session (lost offline, or a simulation) ends first.
+      if (live)
+        await this.endSession(
+          q,
+          channelId,
+          live,
+          now,
+          SYSTEM,
+          'broadcaster',
+          'twitch',
+          reason,
+        );
+      if (seen) {
+        // The same live again (reconnection after an offline): same session, scheduler back on.
+        await q.query(
+          'update lab_stream_sessions set ended_at = null, ended_by = null where session_id = $1',
+          [seen.session_id],
+        );
+        await audit(q, now, {
+          channelId,
+          actor: SYSTEM,
+          role: 'broadcaster',
+          module: 'raffle',
+          action: 'stream_start',
+          reason: `${reason} (reprise)`,
+          after: {
+            session_id: seen.session_id,
+            source: 'twitch',
+            reopened: true,
+          },
+        });
+        if ((await this.config(q, channelId)).scheduler.enabled)
+          await this.startScheduler(
+            q,
+            channelId,
+            seen.session_id,
+            now,
+            SYSTEM,
+            'broadcaster',
+          );
+        return { ok: true, session_id: seen.session_id, changed: true };
+      }
+      const created = await this.startSession(
         q,
-        ev.channel_id,
-        now,
+        channelId,
         SYSTEM,
         'broadcaster',
-        'stream_ended',
+        now,
+        reason,
+        'twitch',
+        id,
       );
-      return { ok: true, session_id: live.session_id, changed: true };
+      return { ok: true, session_id: created, changed: true };
     });
   }
 
@@ -1143,6 +1214,12 @@ export class RaffleLabService {
   async act(channelId: string, req: { actor: Actor; command: RaffleCommand }) {
     await this.settle(channelId);
     return this.db.tx(async (q) => {
+      // Session transitions (simulated start / end) take the session lock first, like Twitch events.
+      if (
+        req.command.action === 'stream_start' ||
+        req.command.action === 'stream_end'
+      )
+        await lockChannelSessions(q, channelId);
       const now = this.clock.now();
       await touchStaff(q, channelId, req.actor, now);
       const acc = await access(q, channelId, req.actor);
@@ -1542,21 +1619,15 @@ export class RaffleLabService {
             'no_live_stream',
             'no live stream session',
           );
-        await q.query(
-          'update lab_stream_sessions set ended_at = $2, ended_by = $3 where session_id = $1',
-          [live.session_id, now, actorName(actor)],
-        );
-        await log('stream_end', {
-          interactionId: null,
-          after: { session_id: live.session_id },
-        });
-        await this.stopScheduler(
+        await this.endSession(
           q,
           channelId,
+          live,
           now,
           actor,
           role,
-          'stream_ended',
+          actorName(actor),
+          reason,
         );
         return { ok: true, session_id: live.session_id };
       }

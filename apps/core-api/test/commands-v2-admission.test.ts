@@ -606,6 +606,52 @@ describe('Commands V2 admission — cooldown and quota', () => {
     expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
   });
 
+  it('live window follows the Twitch session (ASTRA-P1-007): a reconnection keeps the count, a new live resets it', async () => {
+    await quota('live', 'global');
+    const live = (id: string) =>
+      raffle.streamEvent({
+        channel_id: CH,
+        event: 'online',
+        twitch_stream_id: id,
+      });
+    await live('1001');
+    clock.advance(MINUTE);
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
+    await raffle.streamEvent({ channel_id: CH, event: 'offline' });
+    clock.advance(MINUTE);
+    await live('1001'); // same live, reconnected: same session, same window
+    expect(await say('!hug')).toMatchObject({ reason: 'quota' });
+    clock.advance(MINUTE);
+    await live('1002'); // a new live (its offline was lost): new session, new window
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
+  });
+
+  it('live: a simulated session left closed after a reconnection never hides the open Twitch session', async () => {
+    await quota('live', 'global');
+    await raffle.streamEvent({
+      channel_id: CH,
+      event: 'online',
+      twitch_stream_id: '2001',
+    });
+    clock.advance(MINUTE);
+    expect(await say('!hug')).toMatchObject({ outcome: 'accepted' });
+    await raffle.streamEvent({ channel_id: CH, event: 'offline' });
+    clock.advance(MINUTE);
+    await db.query(
+      `insert into lab_stream_sessions (session_id, channel_id, started_at, ended_at, source, started_by)
+       values ($1, $2, $3, $4, 'simulated', 'test')`,
+      [randomUUID(), CH, clock.now(), clock.now()],
+    );
+    clock.advance(MINUTE);
+    await raffle.streamEvent({
+      channel_id: CH,
+      event: 'online',
+      twitch_stream_id: '2001',
+    });
+    // Window = the reopened live (open first), not the more recent closed simulation: already used.
+    expect(await say('!hug')).toMatchObject({ reason: 'quota' });
+  });
+
   it('cooldown and quota together: the cooldown is checked first', async () => {
     await make({
       cooldown: { enabled: true, seconds: 60, unit: 's', scope: 'viewer' },

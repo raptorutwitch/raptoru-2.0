@@ -48,6 +48,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261014120000_commands_v2_categories.sql',
   // Moderation V2 idempotent actions (ASTRA-P1-009).
   '20261015120000_lab_moderation_idempotency.sql',
+  // Twitch stream id of a Lab stream session (ASTRA-P1-007).
+  '20261016130000_lab_stream_session_twitch_id.sql',
 ]);
 
 /**
