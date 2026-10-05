@@ -468,6 +468,14 @@ données jetable) : runtime Lab non démarré, Non appairé → Connecté après
 modules indisponibles sans lecteur, bascule refusée sans le jeton de main, secret absent de l'API et des journaux.
 E2E navigateur Lab 6/6.
 
+**Correctif pendant la validation manuelle (`ea1f3f8`).** En Production, la façade Extension Lab était encore créée
+(non reliée) : elle servait sa simulation en mémoire (pas de `tts_v2`, ancienne Tombola simulée, pas de Modération V2)
+et le bundle courant de l'Extension affichait ses écrans de repli historiques — l'impression d'une « vieille
+Extension ». Désormais aucune façade en Production : `/ext/`, `/ext-lab/api` et le mock du helper Twitch répondent
+409 avec un message explicite, et l'onglet Extension Lab l'affiche à la place de la preview. La preview n'existe
+qu'en profil Lab (même bundle, servi depuis `apps/twitch-extension/extension`). Les autres onglets Lab (Modération,
+Tombola, Commandes) restent sans Core en Production : delta « cockpit » de P1-019.
+
 **Rate limiting** : différé, risque accepté en local / staging — identifiant aléatoire de 256 bits (force brute
 impossible), analyse stricte avant SQL, comparaison à temps constant ; coût d'une requête non authentifiée = un
 SELECT indexé. À brancher au cutover : reverse proxy et / ou `createHandler` (par IP avant l'authentification, par

@@ -42,6 +42,8 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   `RAPTORU_PRODUCTION_CA_FILE`), identité liée à ce Core. Carte « Profil Studio » dans l'onglet Studio. Outil de test :
   `npm run test:local-https-core -w @raptoru/core-api` (Core en mémoire, jamais la prod). Tests verts : Studio server
   194, Core 388 (`--maxWorkers=3`), Desktop 20, Bot 98, Extension 38 ; lint, typecheck, build.
+- **Correctif `ea1f3f8`** (trouvé pendant la validation manuelle du lot 2) : en profil Production, plus d'Extension
+  Lab (la façade non reliée servait une simulation périmée) — message explicite à la place ; Lab inchangé.
 - **Validation manuelle du lot 2 à faire (Antoni)** : profil Lab inchangé (smoke), puis profil Production contre le
   Core de test local (appairage, Bonk / Soundboard / TTS + STOP, révocation, retour au Lab) — étapes exactes dans le
   rapport du lot 2 et le plan § 4.5 « Lot 2 ».
