@@ -1,6 +1,7 @@
 import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { bindJournal, type WorkerTransport } from '../worker-journal.js';
 import type {
   BonkLabAckRequest,
   BonkLabAdmitRequest,
@@ -17,6 +18,7 @@ type Entry = {
 };
 type Journal = {
   studio: string;
+  profile?: 'production';
   session: string;
   token: string;
   entries: Entry[];
@@ -86,7 +88,7 @@ export class BonkWorker {
   static async open(
     file: string,
     core: CoreCall,
-    options: { base?: string; studioId?: string } = {},
+    options: WorkerTransport = {},
   ) {
     let state: Journal;
     try {
@@ -100,11 +102,7 @@ export class BonkWorker {
         entries: [],
       };
     }
-    if (options.studioId && state.studio !== options.studioId) {
-      // Work claimed under another identity cannot be acknowledged by this one.
-      if (state.entries.length) throw new Error('journal_studio_mismatch');
-      state.studio = options.studioId;
-    }
+    bindJournal(state, options);
     const w = new BonkWorker(file, core, state, options.base ?? '/v1/lab/bonk');
     // A process restart cannot prove that a sent effect finished. Keep already received results.
     for (const e of state.entries)
@@ -124,6 +122,16 @@ export class BonkWorker {
   }
   get session() {
     return this.state.session;
+  }
+  /**
+   * Lab: an interaction admitted under another Studio session is never played here. Production: the
+   * admissions come from the public EBS, not from this Studio; stale work is bounded by Core
+   * (expires_at, leases, claim) — ASTRA-P1-019 lot 2.
+   */
+  private ownSession(i: { lab_session_id: string | null }) {
+    return (
+      this.state.profile === 'production' || i.lab_session_id === this.session
+    );
   }
   get ready() {
     return (
@@ -334,8 +342,7 @@ export class BonkWorker {
               interaction,
               sent: false,
               renderer: null,
-              events:
-                interaction.lab_session_id === this.session ? [] : ['failed'],
+              events: this.ownSession(interaction) ? [] : ['failed'],
               reported: [],
             });
             await this.save();

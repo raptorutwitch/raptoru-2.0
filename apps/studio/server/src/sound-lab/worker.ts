@@ -1,4 +1,5 @@
 import { randomUUID, randomBytes } from 'node:crypto';
+import { bindJournal, type WorkerTransport } from '../worker-journal.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type {
@@ -33,6 +34,7 @@ type Entry = {
 const STOP_RESEND_MS = 1000;
 type Journal = {
   studio: string;
+  profile?: 'production';
   session: string;
   token: string;
   entries: Entry[];
@@ -96,9 +98,19 @@ export class SoundWorker {
     private readonly file: string,
     private readonly core: SoundCoreCall,
     private state: Journal,
+    private readonly base: string,
   ) {}
 
-  static async open(file: string, core: SoundCoreCall) {
+  /**
+   * `options`: the future production transport (ASTRA-P1-019) uses the same journal and guarantees
+   * on `/v1/studio/sound` with the authenticated installation as Studio instance. The Lab keeps the
+   * defaults (`/v1/lab/sound`, random instance per journal).
+   */
+  static async open(
+    file: string,
+    core: SoundCoreCall,
+    options: WorkerTransport = {},
+  ) {
     let state: Journal;
     try {
       state = JSON.parse(await readFile(file, 'utf8')) as Journal;
@@ -111,7 +123,13 @@ export class SoundWorker {
         entries: [],
       };
     }
-    const w = new SoundWorker(file, core, state);
+    bindJournal(state, options);
+    const w = new SoundWorker(
+      file,
+      core,
+      state,
+      options.base ?? '/v1/lab/sound',
+    );
     // A restart cannot prove that a sound handed to the player finished. Keep known results.
     for (const e of state.entries)
       if (e.sent && !settled(e)) e.events.push('execution_unknown');
@@ -124,6 +142,12 @@ export class SoundWorker {
   }
   get session() {
     return this.state.session;
+  }
+  /** Lab: never another Studio session's sound. Production: admitted by the public EBS (see Bonk). */
+  private ownSession(i: { lab_session_id: string | null }) {
+    return (
+      this.state.profile === 'production' || i.lab_session_id === this.session
+    );
   }
   /** A live player page whose audio output has been enabled by a user gesture. */
   get ready() {
@@ -170,7 +194,7 @@ export class SoundWorker {
   /** Catalog for the extension, with live cooldown / running state (short timeout: local Core). */
   catalog() {
     return this.core<{ sounds: SoundLabSound[] }>(
-      `/v1/lab/sound/channels/${SOUND_CHANNEL}/catalog`,
+      `${this.base}/channels/${SOUND_CHANNEL}/catalog`,
       undefined,
       { timeoutMs: 1500 },
     );
@@ -180,17 +204,17 @@ export class SoundWorker {
     return this.core<{
       sounds: SoundLabSoundConfig[];
       settings: SoundLabSettings;
-    }>('/v1/lab/sound/config');
+    }>(`${this.base}/config`);
   }
   updateSound(id: string, update: Record<string, unknown>) {
     return this.core<SoundLabSoundConfig>(
-      `/v1/lab/sound/sounds/${encodeURIComponent(id)}`,
+      `${this.base}/sounds/${encodeURIComponent(id)}`,
       update,
     );
   }
   async updateSettings(settings: SoundLabSettings) {
     this.settings = await this.core<SoundLabSettings>(
-      '/v1/lab/sound/settings',
+      `${this.base}/settings`,
       settings,
     );
     return this.settings;
@@ -213,7 +237,7 @@ export class SoundWorker {
     const out = await this.core<{
       interaction: SoundLabInteraction;
       replayed: boolean;
-    }>('/v1/lab/sound/interactions', {
+    }>(`${this.base}/interactions`, {
       channel_id: SOUND_CHANNEL,
       viewer,
       idempotency_key: key,
@@ -227,7 +251,7 @@ export class SoundWorker {
 
   recent() {
     return this.core<{ interactions: SoundLabInteraction[] }>(
-      `/v1/lab/sound/channels/${SOUND_CHANNEL}/interactions?limit=30`,
+      `${this.base}/channels/${SOUND_CHANNEL}/interactions?limit=30`,
     );
   }
 
@@ -290,7 +314,7 @@ export class SoundWorker {
       if (!e) {
         // Already settled and reported: a replayed ACK from the player is accepted as is.
         const current = await this.core<SoundLabInteraction>(
-          `/v1/lab/sound/interactions/${id}`,
+          `${this.base}/interactions/${id}`,
         );
         if (
           current.delivery.attempt_id === attempt &&
@@ -327,7 +351,7 @@ export class SoundWorker {
       try {
         if (Date.now() - this.lastHeartbeat > 2000) {
           const { settings } = await this.core<{ settings: SoundLabSettings }>(
-            '/v1/lab/sound/studio/heartbeat',
+            `${this.base}/studio/heartbeat`,
             {
               studio_instance_id: this.state.studio,
               player_ready: this.ready,
@@ -345,7 +369,7 @@ export class SoundWorker {
           // Moderation: a sound cancelled in Core is stopped on the player (never handed out: dropped).
           if (!settled(e) && !e.cancelled) {
             const current = await this.core<SoundLabInteraction>(
-              `/v1/lab/sound/interactions/${e.interaction.interaction_id}`,
+              `${this.base}/interactions/${e.interaction.interaction_id}`,
             );
             if (current.status === 'cancelled') {
               e.cancelled = true;
@@ -359,7 +383,7 @@ export class SoundWorker {
           for (const event of e.events.filter((v) => !e.reported.includes(v))) {
             try {
               e.interaction = await this.core<SoundLabInteraction>(
-                `/v1/lab/sound/interactions/${e.interaction.interaction_id}/ack`,
+                `${this.base}/interactions/${e.interaction.interaction_id}/ack`,
                 {
                   studio_instance_id: this.state.studio,
                   attempt_id: e.interaction.delivery.attempt_id,
@@ -370,7 +394,7 @@ export class SoundWorker {
             } catch (error) {
               if ((error as { status?: number }).status !== 409) throw error;
               const current = await this.core<SoundLabInteraction>(
-                `/v1/lab/sound/interactions/${e.interaction.interaction_id}`,
+                `${this.base}/interactions/${e.interaction.interaction_id}`,
               );
               if (!FINAL.includes(current.status as Event)) throw error;
               e.interaction = current;
@@ -392,7 +416,7 @@ export class SoundWorker {
         ) {
           const { interaction } = await this.core<{
             interaction: SoundLabInteraction | null;
-          }>('/v1/lab/sound/claim', {
+          }>(`${this.base}/claim`, {
             studio_instance_id: this.state.studio,
             channel_id: SOUND_CHANNEL,
           });
@@ -403,16 +427,14 @@ export class SoundWorker {
               sent: false,
               player: null,
               // Claimed from another Studio session: never played here, reported as failed.
-              events:
-                interaction.lab_session_id === this.session ? [] : ['failed'],
+              events: this.ownSession(interaction) ? [] : ['failed'],
               reported: [],
-              error:
-                interaction.lab_session_id === this.session
-                  ? null
-                  : {
-                      code: 'foreign_session',
-                      message: 'admitted by another Studio session',
-                    },
+              error: this.ownSession(interaction)
+                ? null
+                : {
+                    code: 'foreign_session',
+                    message: 'admitted by another Studio session',
+                  },
             });
             await this.save();
           }

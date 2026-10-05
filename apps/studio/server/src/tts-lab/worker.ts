@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { bindJournal, type WorkerTransport } from '../worker-journal.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type {
@@ -32,6 +33,7 @@ type Entry = {
 const STOP_RESEND_MS = 1000;
 type Journal = {
   studio: string;
+  profile?: 'production';
   session: string;
   token: string;
   entries: Entry[];
@@ -94,9 +96,19 @@ export class TtsWorker {
     private readonly file: string,
     private readonly core: TtsCoreCall,
     private state: Journal,
+    private readonly base: string,
   ) {}
 
-  static async open(file: string, core: TtsCoreCall) {
+  /**
+   * `options`: the future production transport (ASTRA-P1-019) uses the same journal and guarantees
+   * on `/v1/studio/tts` with the authenticated installation as Studio instance. The Lab keeps the
+   * defaults (`/v1/lab/tts`, random instance per journal).
+   */
+  static async open(
+    file: string,
+    core: TtsCoreCall,
+    options: WorkerTransport = {},
+  ) {
     let state: Journal;
     try {
       state = JSON.parse(await readFile(file, 'utf8')) as Journal;
@@ -109,7 +121,8 @@ export class TtsWorker {
         entries: [],
       };
     }
-    const w = new TtsWorker(file, core, state);
+    bindJournal(state, options);
+    const w = new TtsWorker(file, core, state, options.base ?? '/v1/lab/tts');
     // A restart cannot prove that a TTS handed to the player finished: never replayed, reported unknown.
     for (const e of state.entries)
       if (e.sent && !settled(e)) e.events.push('execution_unknown');
@@ -122,6 +135,12 @@ export class TtsWorker {
   }
   get session() {
     return this.state.session;
+  }
+  /** Lab: never another Studio session's TTS. Production: admitted by the public EBS (see Bonk). */
+  private ownSession(i: { lab_session_id: string | null }) {
+    return (
+      this.state.profile === 'production' || i.lab_session_id === this.session
+    );
   }
   /** A live player page with Web Speech voices available. */
   get ready() {
@@ -191,14 +210,14 @@ export class TtsWorker {
 
   config() {
     return this.core<{ module_state: string; rules: unknown }>(
-      '/v1/lab/tts/config',
+      `${this.base}/config`,
       undefined,
       { timeoutMs: 1500 },
     );
   }
   viewerState(viewerId: string) {
     return this.core<TtsLabViewerState>(
-      `/v1/lab/tts/channels/${TTS_CHANNEL}/viewers/${viewerId}/state`,
+      `${this.base}/channels/${TTS_CHANNEL}/viewers/${viewerId}/state`,
       undefined,
       {
         timeoutMs: 1500,
@@ -219,7 +238,7 @@ export class TtsWorker {
     paymentMethod: 'tokens' | 'credits',
   ) {
     const out = await this.core<TtsLabAdmitResponse>(
-      '/v1/lab/tts/interactions',
+      `${this.base}/interactions`,
       {
         channel_id: TTS_CHANNEL,
         viewer,
@@ -234,17 +253,17 @@ export class TtsWorker {
   }
   queue() {
     return this.core<Record<string, unknown>>(
-      `/v1/lab/tts/channels/${TTS_CHANNEL}/queue`,
+      `${this.base}/channels/${TTS_CHANNEL}/queue`,
     );
   }
   audit() {
     return this.core<{ audit: unknown[] }>(
-      `/v1/lab/tts/channels/${TTS_CHANNEL}/audit?limit=30`,
+      `${this.base}/channels/${TTS_CHANNEL}/audit?limit=30`,
     );
   }
   moderate(m: TtsLabModerationRequest) {
     return this.core<Record<string, unknown>>(
-      `/v1/lab/tts/channels/${TTS_CHANNEL}/moderation`,
+      `${this.base}/channels/${TTS_CHANNEL}/moderation`,
       m,
     );
   }
@@ -310,7 +329,7 @@ export class TtsWorker {
       );
       if (!e) {
         const current = await this.core<TtsLabInteraction>(
-          `/v1/lab/tts/interactions/${id}`,
+          `${this.base}/interactions/${id}`,
         );
         if (
           current.delivery.attempt_id === attempt &&
@@ -349,7 +368,7 @@ export class TtsWorker {
           const hb = await this.core<{
             module_state: TtsWorker['moduleState'];
             rules: { transition_gap_ms: number };
-          }>('/v1/lab/tts/studio/heartbeat', {
+          }>(`${this.base}/studio/heartbeat`, {
             studio_instance_id: this.state.studio,
             player_ready: this.ready,
           });
@@ -367,7 +386,7 @@ export class TtsWorker {
           // Moderation: a TTS cancelled in Core must stop on the player (and is never ACKed again).
           if (!settled(e)) {
             const current = await this.core<TtsLabInteraction>(
-              `/v1/lab/tts/interactions/${e.interaction.interaction_id}`,
+              `${this.base}/interactions/${e.interaction.interaction_id}`,
             );
             if (current.status === 'cancelled') {
               e.cancelled = true;
@@ -382,7 +401,7 @@ export class TtsWorker {
           for (const event of e.events.filter((v) => !e.reported.includes(v))) {
             try {
               e.interaction = await this.core<TtsLabInteraction>(
-                `/v1/lab/tts/interactions/${e.interaction.interaction_id}/ack`,
+                `${this.base}/interactions/${e.interaction.interaction_id}/ack`,
                 {
                   studio_instance_id: this.state.studio,
                   attempt_id: e.interaction.delivery.attempt_id,
@@ -393,7 +412,7 @@ export class TtsWorker {
             } catch (error) {
               if ((error as { status?: number }).status !== 409) throw error;
               const current = await this.core<TtsLabInteraction>(
-                `/v1/lab/tts/interactions/${e.interaction.interaction_id}`,
+                `${this.base}/interactions/${e.interaction.interaction_id}`,
               );
               if (
                 ![
@@ -423,12 +442,12 @@ export class TtsWorker {
         if (this.ready && !this.state.entries.length) {
           const { interaction } = await this.core<{
             interaction: TtsLabInteraction | null;
-          }>('/v1/lab/tts/claim', {
+          }>(`${this.base}/claim`, {
             studio_instance_id: this.state.studio,
             channel_id: TTS_CHANNEL,
           });
           if (interaction) {
-            const foreign = interaction.lab_session_id !== this.session;
+            const foreign = !this.ownSession(interaction);
             this.state.entries.push({
               interaction,
               sent: false,

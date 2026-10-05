@@ -7,6 +7,7 @@ import { BonkWorker, localCoreClient, type CoreCall } from './worker.js';
 import { LabObs } from './obs.js';
 import { ViewerAuth } from './viewer-auth.js';
 import { paths, REPO_ROOT } from '../test-lab/local-env.js';
+import type { RuntimeWiring } from '../worker-journal.js';
 
 export class BonkRuntime {
   readonly obs = new LabObs();
@@ -18,6 +19,8 @@ export class BonkRuntime {
     readonly origin: string,
     readonly viewerAuth: ViewerAuth,
     private readonly core: CoreCall,
+    /** Production profile: remote Core over the future-prod transport (ASTRA-P1-019). */
+    readonly production = false,
   ) {}
   /** Public 7TV/BTTV/FFZ catalog of the channel, resolved by Lab Core (metadata + CDN URLs). */
   readonly thirdPartyCatalog = (refresh = false) =>
@@ -30,16 +33,26 @@ export class BonkRuntime {
     return `${this.origin}/bonk-lab/overlay.html#${this.worker.token}`;
   }
 
-  static async create(origin: string) {
-    const core = localCoreClient(
-      process.env.BONK_LAB_CORE_URL!,
-      process.env.BONK_LAB_SECRET!,
-    );
+  /** Lab by default (local Lab Core from the environment); `production`: never the Lab Core. */
+  static async create(origin: string, production?: RuntimeWiring) {
+    const core =
+      production?.core ??
+      localCoreClient(
+        process.env.BONK_LAB_CORE_URL!,
+        process.env.BONK_LAB_SECRET!,
+      );
     const worker = await BonkWorker.open(
-      join(paths.runtimeDir, 'bonk-lab', 'journal.json'),
+      production?.journal ?? join(paths.runtimeDir, 'bonk-lab', 'journal.json'),
       core,
+      production?.transport,
     );
-    return new BonkRuntime(worker, origin, new ViewerAuth(core), core);
+    return new BonkRuntime(
+      worker,
+      origin,
+      new ViewerAuth(core),
+      core,
+      !!production,
+    );
   }
   /** Live OBS / overlay state (moderation cockpit). */
   summary() {
@@ -61,6 +74,8 @@ export class BonkRuntime {
         await this.worker.tick();
       },
       () => this.worker.busy,
+      // Production: a remote Core that fails is retried with a backoff, never every 150 ms.
+      this.production ? () => this.worker.error !== null : undefined,
     );
     this.worker.onAdmitted = () => loop.wake();
     this.loop = loop;
@@ -145,7 +160,9 @@ export class BonkRuntime {
         let interactions: unknown[] = [];
         let coreError: string | null = null;
         try {
-          interactions = (await this.worker.recent()).interactions;
+          // Production: no Lab history route on the execution transport.
+          if (!this.production)
+            interactions = (await this.worker.recent()).interactions;
         } catch {
           coreError = 'core_unavailable';
         }

@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SoundWorker, localSoundCoreClient } from './worker.js';
 import { WorkerLoop } from '../worker-loop.js';
 import { paths, REPO_ROOT } from '../test-lab/local-env.js';
+import type { RuntimeWiring } from '../worker-journal.js';
 
 /** Soundboard V2 Lab in Studio: worker loop + local player page + status for the Lab UI. */
 export class SoundRuntime {
@@ -13,26 +14,35 @@ export class SoundRuntime {
   private constructor(
     readonly worker: SoundWorker,
     readonly origin: string,
+    /** Production profile: remote Core over the future-prod transport (ASTRA-P1-019). */
+    readonly production = false,
   ) {}
   get playerUrl() {
     return `${this.origin}/sound-lab/player.html#${this.worker.token}`;
   }
 
-  static async create(origin: string) {
-    const core = localSoundCoreClient(
-      process.env.BONK_LAB_CORE_URL!,
-      process.env.BONK_LAB_SECRET!,
-    );
+  /** Lab by default (local Lab Core from the environment); `production`: never the Lab Core. */
+  static async create(origin: string, production?: RuntimeWiring) {
+    const core =
+      production?.core ??
+      localSoundCoreClient(
+        process.env.BONK_LAB_CORE_URL!,
+        process.env.BONK_LAB_SECRET!,
+      );
     const worker = await SoundWorker.open(
-      join(paths.runtimeDir, 'sound-lab', 'journal.json'),
+      production?.journal ??
+        join(paths.runtimeDir, 'sound-lab', 'journal.json'),
       core,
+      production?.transport,
     );
-    return new SoundRuntime(worker, origin);
+    return new SoundRuntime(worker, origin, !!production);
   }
   start() {
     const loop = new WorkerLoop(
       () => this.worker.tick(),
       () => this.worker.busy,
+      // Production: a remote Core that fails is retried with a backoff, never every 150 ms.
+      this.production ? () => this.worker.error !== null : undefined,
     );
     this.worker.onAdmitted = () => loop.wake();
     this.loop = loop;
@@ -105,7 +115,9 @@ export class SoundRuntime {
         let interactions: unknown[] = [];
         let coreError: string | null = null;
         try {
-          interactions = (await this.worker.recent()).interactions;
+          // Production: no Lab history route on the execution transport.
+          if (!this.production)
+            interactions = (await this.worker.recent()).interactions;
         } catch {
           coreError = 'core_unavailable';
         }
