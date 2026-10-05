@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
@@ -7,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   shell,
   type IpcMainInvokeEvent,
@@ -35,6 +37,9 @@ const STUDIO_PORT = 4100;
 /** Set only to point the window at a server run by hand (development): not supervised then. */
 const externalUrl = process.env.STUDIO_URL ?? null;
 const studioUrl = externalUrl ?? `http://127.0.0.1:${STUDIO_PORT}`;
+// Known only to this process and the server it spawns (never to the page): the Studio profile and
+// the production identity change only through main, after a native confirmation (ASTRA-P1-019 lot 2).
+const mainToken = randomBytes(32).toString('hex');
 const here = dirname(fileURLToPath(import.meta.url));
 const serverEntry = fileURLToPath(
   new URL('../../server/dist/index.js', import.meta.url),
@@ -139,6 +144,7 @@ function spawnServer(): ChildHandle {
     ...process.env,
     // The server shuts itself down (and its Core) if this process disappears (forced close).
     RAPTORU_PARENT_PID: String(process.pid),
+    RAPTORU_MAIN_TOKEN: mainToken,
     ...(root ? { RAPTORU_DATA_ROOT: root } : {}),
   };
   // Packaged: the exe's own Node. Development: system Node (v24+). No console window either way.
@@ -261,14 +267,14 @@ const trustPolicy = {
   studioOrigin: new URL(studioUrl).origin,
   statusPageUrl: pathToFileURL(statusPage).href,
 };
-function handleTrusted(channel: string, fn: () => unknown) {
-  ipcMain.handle(channel, (event: IpcMainInvokeEvent) => {
+function handleTrusted(channel: string, fn: (...args: unknown[]) => unknown) {
+  ipcMain.handle(channel, (event: IpcMainInvokeEvent, ...args: unknown[]) => {
     const url = event.senderFrame?.url ?? '';
     if (event.sender !== win?.webContents || !isTrustedPage(url, trustPolicy)) {
       serverLog(`[ipc] refused ${channel} from ${url || 'unknown frame'}`);
       throw new Error('untrusted_sender');
     }
-    return fn();
+    return fn(...args);
   });
 }
 
@@ -277,6 +283,78 @@ handleTrusted('studio:server:restart', async () => {
   if (externalUrl) return supervisor.status;
   void supervisor.restart();
   return supervisor.status;
+});
+// --- Studio profile (Lab / Production, ASTRA-P1-019 lot 2) ---------------------------------------
+async function profileCall(path: string, body?: unknown) {
+  const res = await fetch(`${studioUrl}${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: {
+      'x-raptoru-studio': '1',
+      'x-raptoru-main': mainToken,
+      'content-type': 'application/json',
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(5000),
+  });
+  return (await res.json()) as Record<string, unknown> & {
+    ok?: boolean;
+    error?: string;
+  };
+}
+async function confirm(message: string, detail: string, action: string) {
+  const { response } = await dialog.showMessageBox(win!, {
+    type: 'warning',
+    buttons: ['Annuler', action],
+    defaultId: 0,
+    cancelId: 0,
+    title: 'Raptoru Studio',
+    message,
+    detail,
+  });
+  return response === 1;
+}
+handleTrusted('studio:profile:select', async (profile) => {
+  if (externalUrl || (profile !== 'lab' && profile !== 'production'))
+    return { ok: false, error: 'unavailable' };
+  const status = (await profileCall('/api/profile')) as {
+    production?: { core_origin?: string | null; config_error?: string | null };
+  };
+  if (profile === 'production' && !status.production?.core_origin)
+    return {
+      ok: false,
+      error: 'not_configured',
+      message: status.production?.config_error ?? 'Core non configuré',
+    };
+  // Native dialog: a page cannot fake it, and it names the only host the identity will be sent to.
+  const confirmed =
+    profile === 'production'
+      ? await confirm(
+          'Activer le profil Production ?',
+          `Studio n’utilisera plus le Core Lab local. Son identité d’installation sera envoyée uniquement à :
+${status.production!.core_origin}
+
+Le serveur Studio va redémarrer.`,
+          'Activer le profil Production',
+        )
+      : await confirm(
+          'Revenir au profil Lab ?',
+          'Le serveur Studio va redémarrer avec le Core Lab local.',
+          'Revenir au profil Lab',
+        );
+  if (!confirmed) return { ok: false, error: 'cancelled' };
+  const result = await profileCall('/api/profile/select', { profile });
+  if (result.ok && result.restart_required) void supervisor.restart();
+  return result;
+});
+handleTrusted('studio:profile:regenerate', async () => {
+  if (externalUrl) return { ok: false, error: 'unavailable' };
+  const confirmed = await confirm(
+    'Régénérer l’identité Studio de production ?',
+    'L’identité actuelle et ses journaux sont archivés (jamais supprimés). Le nouveau code d’appairage devra être enregistré dans le Core, et l’ancienne installation y être révoquée.',
+    'Régénérer l’identité',
+  );
+  if (!confirmed) return { ok: false, error: 'cancelled' };
+  return profileCall('/api/profile/regenerate', {});
 });
 handleTrusted('studio:app:relaunch', () => {
   app.relaunch();

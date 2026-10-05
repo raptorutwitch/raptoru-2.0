@@ -33,4 +33,11 @@ const server = {
   },
 };
 
-contextBridge.exposeInMainWorld('raptoruStudio', { update, server });
+// Studio profile (Lab / Production): main confirms with a native dialog, then restarts the server.
+const profile = {
+  select: (name: 'lab' | 'production') =>
+    ipcRenderer.invoke('studio:profile:select', name),
+  regenerate: () => ipcRenderer.invoke('studio:profile:regenerate'),
+};
+
+contextBridge.exposeInMainWorld('raptoruStudio', { update, server, profile });

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Agent, request } from 'node:https';
 import type { CoreCall } from '../bonk-lab/worker.js';
 import type { StudioInstallation } from './installation.js';
@@ -23,7 +24,8 @@ export type StudioTransportCode =
   | 'core_unreachable'
   | 'tls_rejected'
   | 'redirect_refused'
-  | 'invalid_response';
+  | 'invalid_response'
+  | 'identity_mismatch';
 
 export class StudioTransportError extends Error {
   constructor(
@@ -59,7 +61,18 @@ export function prodCoreClient(options: {
     base.search
   )
     throw new Error('https_core_url_required');
-  const agent = new Agent({ keepAlive: true, ca: options.ca });
+  // The credential only ever goes to the Core this identity was created for.
+  const { coreOrigin, caSha256 } = options.installation.binding;
+  const ca = options.ca === undefined ? null : Buffer.from(options.ca);
+  if (
+    base.origin !== coreOrigin ||
+    (ca ? createHash('sha256').update(ca).digest('hex') : null) !== caSha256
+  )
+    throw new StudioTransportError(
+      'identity_mismatch',
+      'Identité Studio liée à un autre Core : régénération requise',
+    );
+  const agent = new Agent({ keepAlive: true, ca: ca ?? undefined });
   const timeoutMs = options.timeoutMs ?? 5000;
   const version = String(options.protocolVersion ?? STUDIO_PROTOCOL_VERSION);
 

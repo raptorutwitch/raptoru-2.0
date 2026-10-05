@@ -69,3 +69,23 @@
   font-size: 12px;
   white-space: pre-wrap;
 }
+
+/* Studio profile card (Lab / Production, ASTRA-P1-019 lot 2). */
+.profile-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 8px 0;
+}
+.profile-dl dt {
+  color: var(--muted, #9aa0a6);
+}
+.profile-dl dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pairing-code {
+  font-size: 11px;
+  user-select: all;
+}

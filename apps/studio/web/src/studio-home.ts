@@ -1,6 +1,8 @@
 // « Studio » tab: single entry point. Local runtime state (Postgres, base Lab, Core local, providers,
 // OBS, players), module access and Dev/Lab tools. Talks only to the local Studio server; no secret.
 
+import { mountStudioProfile } from './studio-profile.js';
+
 type Service = {
   id: string;
   label: string;
@@ -82,6 +84,7 @@ export function mountStudioHome(root: HTMLElement) {
       <p>Runtime local du stream : Studio démarre et surveille lui-même ce dont Hub, Bonk, Soundboard et TTS ont besoin. Aucun terminal, aucun <code>npm run bonk:lab</code>.</p>
     </div></section>
     <div class="grid home-grid">
+      <article class="card" data-slot="profile"></article>
       <article class="card">
         <h2>Runtime local</h2>
         <div data-slot="services"><p class="muted">Chargement…</p></div>
@@ -122,6 +125,10 @@ export function mountStudioHome(root: HTMLElement) {
 
   const slot = (name: string) =>
     root.querySelector<HTMLElement>(`[data-slot="${name}"]`)!;
+  mountStudioProfile(
+    slot('profile'),
+    document.querySelector<HTMLElement>('.topbar-safety'),
+  );
   let visible = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let logSeq = 0;

@@ -1,4 +1,10 @@
 import { BonkRuntime } from './bonk-lab/runtime.js';
+import { bootPlan } from './prod-transport/profile.js';
+import {
+  createProductionRuntimes,
+  handleProfileApi,
+  type ProfileApiDeps,
+} from './prod-transport/production.js';
 import { SoundRuntime } from './sound-lab/runtime.js';
 import { TtsRuntime } from './tts-lab/runtime.js';
 import {
@@ -295,6 +301,8 @@ export function createStudioServer(
   raffle: RaffleRuntime | null = null,
   labChat: LabChatIngress | null = null,
   commands: ReturnType<typeof commandsRelay> | null = null,
+  /** Studio profile (Lab / Production) status and main-process-only switch (ASTRA-P1-019 lot 2). */
+  profile: ProfileApiDeps | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -358,6 +366,17 @@ export function createStudioServer(
       if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
       if (req.headers[STUDIO_HEADER] !== '1')
         return send(res, 403, { error: 'missing_studio_header' });
+      if (
+        profile &&
+        (await handleProfileApi(
+          req,
+          url,
+          () => readJson(req) as Promise<Record<string, unknown>>,
+          (status, body) => send(res, status, body),
+          profile,
+        ))
+      )
+        return;
 
       if (
         process.env.BONK_LAB_ONLY === '1' &&
@@ -441,6 +460,17 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   }
   applyDataRootEnv();
   const lab = createTestLab();
+  // Studio profile, read once at startup (a change = explicit action + supervised restart). Lab by
+  // default; Production never starts the Lab Core and never reads the Lab environment.
+  const plan = await bootPlan(paths.runtimeDir, process.env);
+  const labProfile = plan.effective === 'lab';
+  if (plan.notice) lab.logs.add('studio', plan.notice, 'error');
+  lab.logs.add(
+    'studio',
+    labProfile
+      ? 'Profil Lab'
+      : `Profil Production (Core ${plan.production!.config.origin})`,
+  );
   // Every crash leaves a trace in the output captured by Electron (<userData>/logs/studio-server.log).
   // Crash traces go through the same redaction as Lab.logs before stderr (kept by Electron in its
   // log file): stack and message stay, secrets never (ASTRA-P2-014).
@@ -460,7 +490,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // here; Bonk and Soundboard workers use its per-session secret. `npm run bonk:lab` (BONK_LAB_ONLY)
   // keeps its own launcher and environment.
   const runtime =
-    process.env.BONK_LAB_ONLY === '1'
+    process.env.BONK_LAB_ONLY === '1' || !plan.startLabCore
       ? null
       : createLocalRuntime(lab.logs, lab.deps.redact);
   if (runtime) {
@@ -479,17 +509,43 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         `found ${service.name} (pid ${service.pid}) left running by a previous Studio session`,
       );
   }
-  const bonk = process.env.BONK_LAB_CORE_URL
-    ? await BonkRuntime.create(`http://${host}:${port}`)
+  const labCoreUrl = labProfile ? process.env.BONK_LAB_CORE_URL : undefined;
+  // Production profile: the same Bonk / Soundboard / TTS runtimes over the future-prod transport
+  // (own journals and player tokens). Started inside a guard: a failure falls back to nothing
+  // running and an explicit error, never to a silent Lab Core.
+  let productionError: string | null = null;
+  const production = plan.production
+    ? await createProductionRuntimes(
+        `http://${host}:${port}`,
+        paths.runtimeDir,
+        plan.production,
+      ).catch((error: Error) => {
+        productionError = lab.deps.redact(error.message);
+        lab.logs.add(
+          'studio',
+          `Profil Production : démarrage impossible (${lab.deps.redact(error.message)})`,
+          'error',
+        );
+        return null;
+      })
     : null;
+  const bonk = production
+    ? production.bonk
+    : labCoreUrl
+      ? await BonkRuntime.create(`http://${host}:${port}`)
+      : null;
   // Soundboard V2 Lab: same Lab Core (test only), local player page.
-  const sound = process.env.BONK_LAB_CORE_URL
-    ? await SoundRuntime.create(`http://${host}:${port}`)
-    : null;
+  const sound = production
+    ? production.sound
+    : labCoreUrl
+      ? await SoundRuntime.create(`http://${host}:${port}`)
+      : null;
   // TTS V2 Lab: same Lab Core (test only), local player page / OBS overlay.
-  const tts = process.env.BONK_LAB_CORE_URL
-    ? await TtsRuntime.create(`http://${host}:${port}`)
-    : null;
+  const tts = production
+    ? production.tts
+    : labCoreUrl
+      ? await TtsRuntime.create(`http://${host}:${port}`)
+      : null;
   // Lab chat ingress, created below (the shutdown may run before it exists).
   let labChatRef: LabChatIngress | null = null;
   let stopping = false;
@@ -499,6 +555,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     bonk?.stop();
     sound?.stop();
     tts?.stop();
+    production?.link.stop();
     lab.logs.add(
       'studio',
       'Studio closing: stopping bot and Core (Postgres keeps running)',
@@ -526,25 +583,29 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     );
     return null;
   });
-  if (bonk && extLab) {
+  if (production) {
+    // Admissions will come from the public EBS (P1-006): no Lab façade on the production workers.
+    production.bonk.start();
+    production.sound.start();
+    production.tts.start();
+    production.link.start();
+  }
+  if (bonk && extLab && !production) {
     extLab.connectBonk(bonk.worker, bonk.viewerAuth, bonk.thirdPartyCatalog);
     bonk.start();
   }
-  if (sound && extLab) {
+  if (sound && extLab && !production) {
     extLab.connectSound(sound.worker);
     sound.onConfigChange = () => extLab.invalidateSoundCatalog();
     sound.start();
   }
-  if (tts && extLab) {
+  if (tts && extLab && !production) {
     extLab.connectTts(tts.worker);
     tts.start();
   }
   // Moderation V2 + TTS configuration + Lab test wallet: Core decides, Studio relays.
-  const labCore = process.env.BONK_LAB_CORE_URL
-    ? localLabCoreClient(
-        process.env.BONK_LAB_CORE_URL,
-        process.env.BONK_LAB_SECRET ?? '',
-      )
+  const labCore = labCoreUrl
+    ? localLabCoreClient(labCoreUrl, process.env.BONK_LAB_SECRET ?? '')
     : null;
   if (labCore && extLab) extLab.connectLab(labCore);
   const labApi = labCore
@@ -640,6 +701,14 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     raffle,
     labChat,
     labCore ? commandsRelay(labCore) : null,
+    {
+      plan,
+      runtimeDir: paths.runtimeDir,
+      env: process.env,
+      link: production?.link ?? null,
+      startError: productionError,
+      busy: () => [bonk, sound, tts].some((r) => r?.worker.busy ?? false),
+    },
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(
