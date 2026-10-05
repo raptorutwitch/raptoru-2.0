@@ -17,11 +17,16 @@ import { HttpError, parse, type Route } from './server.js';
 
 const Uuid = z.uuid();
 
-function sameInstance(installation: string, body: unknown) {
-  const claimed = (body as { studio_instance_id?: unknown } | null)
-    ?.studio_instance_id;
-  if (claimed !== installation)
+/** Validated body (400 if malformed) that must name the authenticated installation (403 if not). */
+function ownBody<T extends { studio_instance_id: string }>(
+  installation: string,
+  schema: z.ZodType<T>,
+  body: unknown,
+): T {
+  const req = parse(schema, body);
+  if (req.studio_instance_id !== installation)
     throw new HttpError(403, { error: 'studio_instance_mismatch' });
+  return req;
 }
 
 export function studioTransportRoutes(bonk: BonkLabService): Route[] {
@@ -43,8 +48,7 @@ export function studioTransportRoutes(bonk: BonkLabService): Route[] {
       auth: 'studio_installation',
       handle: ({ body, installation }) =>
         mapped(() => {
-          sameInstance(installation!, body);
-          return bonk.heartbeat(parse(BonkLabHeartbeat, body));
+          return bonk.heartbeat(ownBody(installation!, BonkLabHeartbeat, body));
         }),
     },
     {
@@ -53,8 +57,7 @@ export function studioTransportRoutes(bonk: BonkLabService): Route[] {
       auth: 'studio_installation',
       handle: ({ body, installation }) =>
         mapped(async () => {
-          sameInstance(installation!, body);
-          const req = parse(BonkLabClaimRequest, body);
+          const req = ownBody(installation!, BonkLabClaimRequest, body);
           return {
             interaction: await bonk.claim(installation!, req.channel_id),
           };
@@ -79,10 +82,9 @@ export function studioTransportRoutes(bonk: BonkLabService): Route[] {
       auth: 'studio_installation',
       handle: ({ params, body, installation }) =>
         mapped(() => {
-          sameInstance(installation!, body);
           return bonk.ack(
             parse(Uuid, params[0]),
-            parse(BonkLabAckRequest, body),
+            ownBody(installation!, BonkLabAckRequest, body),
           );
         }),
     },

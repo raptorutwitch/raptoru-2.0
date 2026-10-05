@@ -151,6 +151,8 @@ describe('Studio installation transport (ASTRA-P1-019 lot 1)', () => {
       status: 403,
       body: { error: 'studio_instance_mismatch' },
     });
+    // A malformed body is a 400, never an instance decision.
+    expect((await call('/v1/studio/bonk/claim', null)).status).toBe(400);
   });
 
   it("an installation cannot read another installation's interaction", async () => {

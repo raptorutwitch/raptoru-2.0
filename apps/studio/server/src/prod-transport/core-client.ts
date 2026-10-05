@@ -5,7 +5,8 @@ import type { StudioInstallation } from './installation.js';
 // ASTRA-P1-019 (lot 1): Studio → Core client of the future production transport. Separate from the
 // Lab clients (localCoreClient & co, loopback HTTP, shared Lab secret), which stay unchanged.
 // - HTTPS only, outbound only; certificate checked by Node's defaults. A test or private CA is
-//   trusted for THIS client only (`ca`), never globally (no NODE_TLS_REJECT_UNAUTHORIZED).
+//   trusted for THIS client only (`ca`, replacing the default roots), never globally (no
+//   NODE_TLS_REJECT_UNAUTHORIZED).
 // - Every call carries the installation credential and the protocol version.
 // - Redirects are refused (the credential is never re-sent elsewhere); bounded deadline and size.
 // - Errors are typed so the Studio can say « mise à jour requise » or « Studio révoqué » instead of
@@ -35,19 +36,16 @@ export class StudioTransportError extends Error {
   }
 }
 
-const TLS_CODES = new Set([
-  'DEPTH_ZERO_SELF_SIGNED_CERT',
-  'SELF_SIGNED_CERT_IN_CHAIN',
-  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
-  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
-  'CERT_HAS_EXPIRED',
-  'ERR_TLS_CERT_ALTNAME_INVALID',
-]);
+/** Certificate / TLS failures (Node `CERT_*`, `ERR_TLS_*`, `ERR_SSL_*`…): « tls_rejected », not « unreachable ». */
+const TLS_CODE = /CERT|SSL|TLS/;
 
 export function prodCoreClient(options: {
   url: string;
   installation: StudioInstallation;
-  /** Extra trust anchor for this client only (local test certificate, private CA). */
+  /**
+   * Trust anchors for this client only (local test certificate, private CA). Like Node's `ca`, it
+   * REPLACES the default roots: leave it unset for a Core behind a publicly trusted certificate.
+   */
   ca?: string | Buffer;
   timeoutMs?: number;
   protocolVersion?: number;
@@ -103,7 +101,7 @@ export function prodCoreClient(options: {
       req.on('error', (e: NodeJS.ErrnoException) => {
         clearTimeout(deadline);
         reject(
-          TLS_CODES.has(e.code ?? '')
+          TLS_CODE.test(e.code ?? '')
             ? new StudioTransportError(
                 'tls_rejected',
                 `Core certificate refused (${e.code})`,
