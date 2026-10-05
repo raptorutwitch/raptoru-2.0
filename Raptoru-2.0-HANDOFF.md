@@ -34,7 +34,20 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   `npx vitest run --maxWorkers=3` dans `apps/core-api`. **P1-019 n'est pas fermé** : profil production non câblé dans
   Studio (D6), Soundboard / TTS, cockpit, staging, appairage distant, rate limiting (plan § 4.5 « Lot 1 »).
 - **Lot 1 validé manuellement par Antoni le 05/10/2026** : smoke de non-régression dans `npm run studio`, OBS / player ouvert — Bonk Unicode OK, Bonk Twitch en rôle viewer lié OK, Soundboard OK, STOP Soundboard OK, TTS OK, STOP TTS OK, second TTS OK ; aucun comportement Lab dégradé observé.
-- Prochaine action : P1-019 lot 2 (profil Production dans Studio, D6 retenue : une app, deux profils).
+- **P1-019 — lot 2 implémenté le 05/10/2026** (`4b5c1cf`, `d2854ed`, `a75ba24`, `5551ef3`, `8c2ab6d` + revue / docs ; vérifier
+  `git log`) : **D6** — une app Studio, profils **Lab (défaut)** / **Production**, choix persistant lu au démarrage ;
+  changement et régénération d'identité uniquement via Electron main (dialogue natif, redémarrage supervisé). Production :
+  ni Core Lab ni outils Lab ; Bonk, Soundboard, TTS sur le transport HTTPS (journaux et jetons de lecteurs séparés).
+  URL du Core Production et CA de test **par l'environnement** (`RAPTORU_PRODUCTION_CORE_URL`,
+  `RAPTORU_PRODUCTION_CA_FILE`), identité liée à ce Core. Carte « Profil Studio » dans l'onglet Studio. Outil de test :
+  `npm run test:local-https-core -w @raptoru/core-api` (Core en mémoire, jamais la prod). Tests verts : Studio server
+  194, Core 388 (`--maxWorkers=3`), Desktop 20, Bot 98, Extension 38 ; lint, typecheck, build.
+- **Validation manuelle du lot 2 à faire (Antoni)** : profil Lab inchangé (smoke), puis profil Production contre le
+  Core de test local (appairage, Bonk / Soundboard / TTS + STOP, révocation, retour au Lab) — étapes exactes dans le
+  rapport du lot 2 et le plan § 4.5 « Lot 2 ».
+- **Reste de P1-019** : cockpit (wallet admin, staff, modération…) encore sous `STUDIO_SECRET`, staging Coolify +
+  appairage distant, rate limiting, constante de build de l'URL, contrat lecteurs pour paiements réels (P1-001).
+- Prochaine action : validation manuelle du lot 2 par Antoni, puis lot 3 (staging) ou P1-001 selon sa décision.
 
 Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
 contexte).

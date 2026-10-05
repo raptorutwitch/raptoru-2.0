@@ -407,6 +407,88 @@ du client **remplace** les racines par défaut : à laisser vide derrière un ce
 6. Rate limiting à la frontière, journalisation d'accès sans en-têtes `Authorization`.
 7. Décision sur la porte `lab_session_id` quand les admissions viendront de l'EBS public (P1-006).
 
+#### Lot 2 — profil Production dans Studio (D6) + Soundboard / TTS (05/10/2026, `4b5c1cf`, `d2854ed`, `a75ba24`, `5551ef3`, `8c2ab6d` + revue) : FAIT, tests automatiques verts, **validation manuelle d'Antoni à faire**
+
+**D6 retenue** : une seule app Studio, deux profils exclusifs, **Lab par défaut**.
+
+- **Profil persistant** (`<runtime>/profile.json`), lu **au démarrage seulement** : changer de profil = action explicite
+  puis redémarrage supervisé du serveur Studio (jamais de bascule à chaud). Au démarrage, Production n'est restauré que
+  si sa configuration passe les contrôles statiques (HTTPS, URL d'origine seule, certificat PEM lisible et non réseau,
+  identité saine liée à ce Core) ; sinon **Lab + raison affichée**. Une panne réseau / révocation garde Production et
+  affiche l'état.
+- **URL du Core Production et CA de test** : uniquement par l'environnement du processus Studio
+  (`RAPTORU_PRODUCTION_CORE_URL`, `RAPTORU_PRODUCTION_CA_FILE`), plus tard une constante de build ; **jamais saisies
+  dans la page** (revue sécurité : une page ne peut pas envoyer l'identifiant ailleurs).
+- **Identité liée au Core** : le fichier d'identité porte l'origine du Core et l'empreinte du CA ; le client refuse
+  toute autre origine / autre CA (« Identité liée à un autre Core » → régénération explicite).
+- **Changement de profil et régénération** : uniquement via Electron main (jeton par lancement transmis au serveur,
+  jamais à la page ; dialogue natif nommant l'hôte ; redémarrage supervisé). Refusé si une interaction est en cours.
+  La régénération (profil Lab seulement) **archive** `production/` en `production.replaced-<horodatage>` (jamais de
+  suppression).
+- **Production** : ni Core Lab, ni façade Extension Lab, ni cockpit / Tombola / Commands ; Bonk, Soundboard et TTS
+  sur le client HTTPS du lot 1, journaux `production/<module>/journal.json` marqués `production` (un worker Lab les
+  refuse ; Production refuse un journal Lab avec du travail), jetons de lecteurs distincts (URL OBS différentes par
+  profil), `WorkerLoop` avec backoff sur échec, poignée de main toutes les 5 s. Même contrat lecteur : **pas de
+  lecteur prêt = module indisponible** (heartbeats liés au runtime du profil actif).
+- **Contrôle de session Lab** : ne s'applique qu'au Lab ; en Production, les admissions viendront de l'EBS public, la
+  garde contre les effets périmés reste celle du Core (`expires_at`, baux, claim).
+- **Core** : routes `/v1/studio/sound/*` et `/v1/studio/tts/*` (mêmes règles que Bonk) ; la révocation termine aussi
+  les baux Soundboard / TTS.
+- **Studio** : carte « Profil Studio » (onglet Studio) — profil actif, Core configuré, état (Non configuré, Non
+  appairé, Connexion…, Connecté, Core inaccessible, Révoqué, Mise à jour requise, TLS invalide, Identité liée à un
+  autre Core, Démarrage impossible), installation, code d'appairage + Copier ; jamais le secret. Bandeau supérieur =
+  profil actif.
+- **Outil de validation manuelle** : `npm run test:local-https-core -w @raptoru/core-api` — Core de test en mémoire
+  (PGlite), HTTPS local avec le certificat de test, commandes `pair`, `revoke`, `bonk`, `sound`, `tts`, `stop-sound`,
+  `stop-tts`, `status`. Jamais la production.
+
+**Tests.** Studio `prod-profile` (18 : plan de démarrage, persistance, configurations invalides → Lab + raison,
+identité abîmée / liée à un autre Core, table des états, API profil sans secret, code d'appairage non utilisable
+comme identifiant, bascule réservée à Electron main, refus si occupé, régénération archivée, isolation journaux et
+lecteurs), `prod-modules` (14 : Soundboard et TTS — normal, session EBS publique, STOP après coupure avec réponses
+perdues, ACK perdu, redémarrage, révocation, protocole), `prod-transport` (13, lot 1 sur identité liée) ; Core
+`studio-transport` (9). Suites : Studio server 194, Core 388 (`--maxWorkers=3`), Desktop 20, Bot 98, Extension 38 ;
+lint, typecheck, build.
+
+**Revues sécurité (Agent Skill, avant code et sur le diff final).** Avant code : l'URL du Core et le CA ne
+viennent plus de la page (sinon l'identifiant pouvait partir vers un autre hôte), identité liée au Core, bascule et
+régénération par Electron main avec dialogue natif, démarrage Production sous garde. Diff final (aucun point grave,
+corrigés dans `8c2ab6d`) : jeton de main jamais hérité par les processus Lab enfants, workers arrêtés dès qu'une
+bascule est acceptée (rien n'est réclamé avant le redémarrage), comparaison du jeton en octets. **Limites
+acceptées** : (1) en Production, toute interaction réclamée est jouée, y compris une admission faite par les routes
+Lab d'un Core qui servirait aussi `/v1/lab/*` sur la même base (c'est le cas du Core de test local, jamais d'un Core
+de production — les routes Lab sortent du bootstrap public avec P1-006 ; fenêtre bornée par `expires_at`) ;
+(2) une configuration Production invalide au démarrage retombe sur le Lab (état sûr par défaut, raison affichée).
+**Bug préexistant constaté, non corrigé (hors lot)** : `applyDataRootEnv()` (`test-lab/local-env.ts`) plante sur
+un dossier de données neuf si un ancien `.lab-chat-journal.json` existe à côté du code (`copyFileSync` sans créer
+`apps/twitch-bot/`).
+
+**Vérification de bout en bout locale** (serveur Studio réel en profil Production + Core de test HTTPS, dossier de
+données jetable) : runtime Lab non démarré, Non appairé → Connecté après appairage → Révoqué après révocation,
+modules indisponibles sans lecteur, bascule refusée sans le jeton de main, secret absent de l'API et des journaux.
+E2E navigateur Lab 6/6.
+
+**Rate limiting** : différé, risque accepté en local / staging — identifiant aléatoire de 256 bits (force brute
+impossible), analyse stricte avant SQL, comparaison à temps constant ; coût d'une requête non authentifiée = un
+SELECT indexé. À brancher au cutover : reverse proxy et / ou `createHandler` (par IP avant l'authentification, par
+installation pour le polling `claim`).
+
+**Reste de P1-019 (après lot 2).**
+
+1. Séparer le cockpit (routes `studio` : wallet admin, staff, modération, configuration TTS / sons, Tombola, Commands)
+   de l'exécution : en Production ces écrans n'ont pas encore de Core (identifiant d'installation avec rôle,
+   `STUDIO_SECRET` réservé au Lab / à l'admin serveur).
+2. Socle staging Coolify (étape 0) + appairage réel par l'opérateur sur le Core distant, révocation à distance,
+   TLS public du reverse proxy (sans CA de test), coupures réseau réelles.
+3. Rate limiting à la frontière et journaux d'accès sans en-tête `Authorization`.
+4. Constante de build pour l'URL Production (l'environnement restant réservé aux tests locaux).
+5. Contrat lecteurs pour les paiements réels (les lecteurs n'acceptent encore que `simulated` : P1-001).
+
+**Critères pour le lot 3 / staging.** Socle staging décidé et déployé (D3) ; Core staging HTTPS derrière le reverse
+proxy avec migrations `prod` appliquées (dont `studio_installations`) ; appairage du Studio d'Antoni par l'opérateur ;
+Bonk / Soundboard / TTS + STOP validés depuis Studio Production contre le staging, coupure réseau réelle, révocation
+distante ; aucun secret dans les journaux du proxy ; Lab inchangé.
+
 ---
 
 ## 5. Dépendances entre les cinq P1
@@ -442,7 +524,7 @@ flowchart LR
 
 0. **Socle staging** (prérequis, pas un P1) : app Core de staging sur Coolify, base dédiée distincte du legacy, aucune
    exposition viewer, aucune donnée réelle. _Pourquoi d'abord : P1-019 et P1-006 ne se valident pas sans lui._
-1. **P1-019 transport** (lot 1 local fait le 05/10/2026, § 4.5) : identifiant Studio par installation, client HTTPS distinct, version de protocole ; validé
+1. **P1-019 transport** (lots 1 et 2 locaux faits le 05/10/2026, § 4.5) : identifiant Studio par installation, client HTTPS distinct, version de protocole ; validé
    d'abord contre un Core local en TLS, puis contre le staging, avec paiement simulé. _Pourquoi : c'est le pivot de
    toute exécution réelle, il ne dépend ni de l'argent ni de l'identité viewer, et il éprouve le déploiement._
 2. **P1-001 port économique** (en parallèle de 1 possible) : variante transactionnelle du Wallet + port
