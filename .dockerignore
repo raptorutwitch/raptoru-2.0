@@ -1,0 +1,23 @@
+# Docker build context = repository root (apps/core-api/Dockerfile). Nothing secret, runtime or
+# generated ever enters an image; the Dockerfile copies only what the Core needs.
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/.twitch-tokens*.json
+**/*.pem
+**/*.key
+**/.runtime*
+**/.lab-chat-journal*.json
+**/.loyalty-outbox*.json
+**/*.log
+.git
+.turbo
+**/.turbo
+prototypes
+graphify-out
+apps/studio/desktop/release
+apps/studio/desktop/stage
+apps/studio/server/test
+apps/core-api/test
