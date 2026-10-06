@@ -4,8 +4,11 @@
 //   except shared/runtime-config.js, generated here: apiBase = the staging Core's viewer frontier,
 //   environment 'staging' (a « STAGING · test » badge on every surface), build id = source commit;
 // - refuses to finish if any packaged file still names the legacy (raptoru.fr/api or the site);
-// - writes release/raptoru-live-STAGING-hosted-test-<sha>.zip (files at the root, as Twitch expects)
-//   and prints its SHA-256. Upload it ONLY as a Hosted Test version.
+// - packages like the archives Twitch accepted (production 2026-09-20, Hosted Test 2026-09-10): files
+//   at the root, STORED entries, file names in [A-Za-z0-9._/-] only (the staged copy renames the TTS
+//   assets whose names have spaces and rewrites their references), no documentation file;
+// - writes release/raptoru-live-STAGING-hosted-test-<sha>.zip and prints its SHA-256. Upload it ONLY
+//   as a Hosted Test version.
 import { Buffer } from 'node:buffer';
 import { execFileSync } from 'node:child_process';
 import console from 'node:console';
@@ -15,6 +18,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  renameSync,
   readFileSync,
   rmSync,
   statSync,
@@ -23,7 +27,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { crc32, deflateRawSync } from 'node:zlib';
+import { crc32 } from 'node:zlib';
 
 const STAGING_API = 'https://core-staging.raptoru.fr/v1/ext';
 
@@ -56,6 +60,45 @@ for (const file of files(src)) {
 }
 
 cpSync(src, out, { recursive: true });
+
+// Twitch upload: documentation files are not assets (e.g. assets/tts/PROVENANCE.md).
+for (const file of files(out)) if (/\.md$/i.test(file)) rmSync(file);
+
+// Twitch upload: file names limited to [A-Za-z0-9._/-] like every accepted package. A staged asset
+// with another character (spaces in the TTS assets) is renamed, and every staged text file that
+// names it is rewritten; the extension sources and the Studio players keep the original names.
+const SAFE_NAME = /^[A-Za-z0-9._-]+$/;
+const renames = new Map();
+for (const file of files(out)) {
+  const base = file.split(/[\\/]/).pop();
+  if (SAFE_NAME.test(base)) continue;
+  const safe = base.replace(/[^A-Za-z0-9._-]+/g, '-');
+  const target = join(dirname(file), safe);
+  if (renames.has(base) || files(dirname(file)).includes(target))
+    throw new Error(`cannot rename ${base}: ${safe} already exists`);
+  renameSync(file, target);
+  renames.set(base, safe);
+}
+const textFile = /\.(js|mjs|html|css|json|txt|svg)$/i;
+const mentions = new Map([...renames.keys()].map((b) => [b, 0]));
+for (const file of files(out)) {
+  if (!textFile.test(file) || !renames.size) continue;
+  let text = readFileSync(file, 'utf8');
+  let changed = false;
+  for (const [from, to] of renames) {
+    const parts = text.split(from);
+    if (parts.length === 1) continue;
+    mentions.set(from, mentions.get(from) + parts.length - 1);
+    text = parts.join(to);
+    changed = true;
+  }
+  if (changed) writeFileSync(file, text);
+}
+for (const [from, n] of mentions)
+  if (!n)
+    throw new Error(
+      `renamed asset ${from} is referenced nowhere: check the rename`,
+    );
 writeFileSync(
   join(out, 'shared', 'runtime-config.js'),
   `// Configuration publique du build STAGING (Hosted Test) — Core staging, paiement simulé. Aucun secret.
@@ -87,7 +130,8 @@ if (
 )
   throw new Error('staging runtime config missing');
 
-// Minimal ZIP writer (deflate, fixed timestamp): files at the archive root, forward slashes.
+// Minimal ZIP writer (STORED entries like the packages Twitch accepted, fixed timestamp): files at the
+// archive root, forward slashes, every name checked.
 const DOS_TIME = 0;
 const DOS_DATE = ((2026 - 1980) << 9) | (1 << 5) | 1;
 const locals = [];
@@ -96,9 +140,9 @@ let offset = 0;
 for (const file of packaged) {
   const name = Buffer.from(relative(out, file).split('\\').join('/'), 'utf8');
   const data = readFileSync(file);
-  const deflated = deflateRawSync(data, { level: 9 });
-  const stored = deflated.length >= data.length;
-  const body = stored ? data : deflated;
+  if (!/^[A-Za-z0-9._/-]+$/.test(name.toString('utf8')))
+    throw new Error(`unsafe name in the package: ${name}`);
+  const body = data;
   const crc = crc32(data);
   const head = (central) => {
     const b = Buffer.alloc(central ? 46 : 30);
@@ -109,7 +153,7 @@ for (const file of packaged) {
     if (central) u16(20); // made by
     u16(20); // version needed
     u16(0x0800); // UTF-8 names
-    u16(stored ? 0 : 8);
+    u16(0); // stored
     u16(DOS_TIME);
     u16(DOS_DATE);
     u32(crc);
