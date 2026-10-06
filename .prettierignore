@@ -11,3 +11,6 @@ Raptoru-2.0-ETAT-PROJET.md
 
 # Local UX prototypes (untracked, never versioned)
 prototypes/
+
+# Audit register imported as is (wide reference tables, maintained by hand: never reformatted)
+docs/ASTRA_GLOBAL_AUDIT_2026-10.md
