@@ -14,6 +14,22 @@ const Env = z.object({
   LOYALTY_PREVIEW: z.enum(['true', 'false']).default('false'),
   LOYALTY_PASSIVE_CREDITS: z.enum(['true', 'false']).default('false'),
   LOYALTY_EVENT_CREDITS: z.enum(['true', 'false']).default('false'),
+  // The channel this Core serves (Twitch broadcaster id / login): viewer frontier and Studio cockpit.
+  TWITCH_CHANNEL_ID: z
+    .string()
+    .regex(/^\d{1,32}$/)
+    .optional(),
+  TWITCH_CHANNEL_LOGIN: z.string().min(1).max(64).default('raptoru_'),
+  // Twitch Extension secret (base64, from the developer console): enables /v1/ext/*. Absent = off.
+  TWITCH_EXTENSION_SECRET: z
+    .string()
+    .regex(/^[A-Za-z0-9+/]{20,}={0,2}$/)
+    .optional(),
+  // Shown to the extension; payment stays simulated whatever this says (Lab test wallet).
+  CORE_ENVIRONMENT: z.enum(['staging']).default('staging'),
+  // Twitch app (client credentials, read-only Get Users): viewer names and Tombola avatars. Optional.
+  TWITCH_APP_CLIENT_ID: z.string().min(1).optional(),
+  TWITCH_APP_CLIENT_SECRET: z.string().min(1).optional(),
 });
 
 export type CoreConfig = z.infer<typeof Env>;

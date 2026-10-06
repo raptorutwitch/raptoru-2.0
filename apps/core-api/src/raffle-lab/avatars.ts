@@ -6,9 +6,15 @@ import type { Db, Queryable } from '../db/db.js';
 // of the prototype, so a reveal never waits for an avatar.
 
 /** Looks up Twitch users by id (Helix Get Users, at most 100 ids per call). */
-export type TwitchUserLookup = (
-  ids: string[],
-) => Promise<{ id: string; profile_image_url: string }[]>;
+export type TwitchUserLookup = (ids: string[]) => Promise<
+  {
+    id: string;
+    profile_image_url: string;
+    /** Returned by Helix too (public frontier: names of real viewers). */
+    login?: string;
+    display_name?: string;
+  }[]
+>;
 
 const OK_TTL_MS = 24 * 3600_000;
 const RETRY_MS = 3600_000;
@@ -147,7 +153,12 @@ export function twitchAppUserLookup(
     if (!res.ok) throw new Error(`twitch_users_${res.status}`);
     return (
       (await res.json()) as {
-        data: { id: string; profile_image_url: string }[];
+        data: {
+          id: string;
+          profile_image_url: string;
+          login?: string;
+          display_name?: string;
+        }[];
       }
     ).data;
   };

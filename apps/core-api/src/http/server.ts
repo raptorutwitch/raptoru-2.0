@@ -52,6 +52,17 @@ import type {
   ActiveSession,
   StreamSessions,
 } from '../stream/stream-sessions.js';
+import {
+  ExtAuthError,
+  verifyExtensionJwt,
+  type ExtCaller,
+} from '../ext/twitch-jwt.js';
+import type { ExtFacade } from '../ext/ext-facade.js';
+import { RateLimiter, type BucketRule } from '../ext/rate-limit.js';
+import { extRoutes } from './ext-routes.js';
+import type { LabCall } from '../ext/lab-internal.js';
+import { studioCockpitRoutes } from './studio-cockpit-routes.js';
+import { studioAdminRoutes } from './studio-admin-routes.js';
 
 export interface AppDeps {
   daily: DailyService;
@@ -81,9 +92,24 @@ export interface AppDeps {
   studioInstallations?: StudioInstallations;
   /** Readiness probe (GET /ready): the database answers. */
   db?: Pick<Db, 'query'>;
+  /**
+   * The /v1/lab/* routes (Studio secret, viewer named in the body). Default on for the Lab and the
+   * tests; the public Core bootstrap turns them off: nothing Lab is reachable from the Internet.
+   */
+  labRoutes?: boolean;
+  /** Public viewer frontier /v1/ext/* (ASTRA-P1-006 minimal): Twitch Extension JWT, one channel. */
+  ext?: {
+    facade: ExtFacade;
+    secret: Buffer;
+    channelId: string;
+    /** Rate limits (defaults below; tests use tiny ones). */
+    limits?: { ip: BucketRule; viewer: BucketRule };
+  };
+  /** Studio cockpit over the installation credential (ASTRA-P1-019): needs studioInstallations. */
+  cockpit?: { core: LabCall; channelId: string };
 }
 
-type Auth = 'public' | 'bot' | 'studio' | 'studio_installation';
+type Auth = 'public' | 'bot' | 'studio' | 'studio_installation' | 'extension';
 
 export interface Route {
   method: 'GET' | 'POST';
@@ -93,6 +119,10 @@ export interface Route {
     params: string[];
     /** Authenticated Studio installation (auth 'studio_installation' only). */
     installation?: string;
+    /** Verified Twitch Extension caller (auth 'extension' only). */
+    caller?: ExtCaller;
+    /** Client Idempotency-Key header (auth 'extension' only). */
+    idempotencyKey?: string;
     body: unknown;
     url: URL;
   }) => Promise<unknown>;
@@ -147,17 +177,25 @@ function routes({
   raffleLab,
   studioInstallations,
   db,
+  labRoutes = true,
+  ext,
+  cockpit,
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
     ...(studioInstallations
       ? studioTransportRoutes({ bonk: bonkLab, sound: soundLab, tts: ttsLab })
       : []),
+    ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
+    ...(studioInstallations && cockpit
+      ? studioCockpitRoutes(cockpit.core, cockpit.channelId)
+      : []),
+    ...(ext ? extRoutes(ext.facade) : []),
     ...loyaltyRoutes(loyalty),
-    ...(bonkLab ? bonkLabRoutes(bonkLab) : []),
-    ...(soundLab ? soundLabRoutes(soundLab) : []),
-    ...(ttsLab ? ttsLabRoutes(ttsLab) : []),
-    ...(ttsLab && labModeration && raffleLab
+    ...(labRoutes && bonkLab ? bonkLabRoutes(bonkLab) : []),
+    ...(labRoutes && soundLab ? soundLabRoutes(soundLab) : []),
+    ...(labRoutes && ttsLab ? ttsLabRoutes(ttsLab) : []),
+    ...(labRoutes && ttsLab && labModeration && raffleLab
       ? labModerationRoutes(labModeration, ttsLab, raffleLab)
       : []),
     {
@@ -317,9 +355,40 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-function send(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+function send(
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+): void {
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    ...headers,
+  });
   res.end(JSON.stringify(body));
+}
+
+/** Pages of a Twitch Extension are served from https://<client id>.ext-twitch.tv only. */
+const EXTENSION_ORIGIN = /^https:\/\/[a-z0-9]{1,64}\.ext-twitch\.tv$/;
+const EXT_PREFIX = '/v1/ext/';
+
+function extCors(origin: string | undefined): Record<string, string> {
+  return {
+    vary: 'Origin',
+    'cache-control': 'no-store',
+    ...(origin && EXTENSION_ORIGIN.test(origin)
+      ? { 'access-control-allow-origin': origin }
+      : {}),
+  };
+}
+
+/** The client as seen by our reverse proxy (it appends the real peer last), else the socket peer. */
+function clientIp(req: IncomingMessage): string {
+  const forwarded = String(req.headers['x-forwarded-for'] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return forwarded.at(-1) ?? req.socket.remoteAddress ?? 'unknown';
 }
 
 export function createApp(deps: AppDeps): Server {
@@ -329,10 +398,31 @@ export function createApp(deps: AppDeps): Server {
 /** The request handler alone: served over HTTP by createApp, or over HTTPS (local transport tests). */
 export function createHandler(deps: AppDeps): RequestListener {
   const table = routes(deps);
+  // Public frontier: per IP before any token check (bounds brute force), then per viewer.
+  const ipLimit = new RateLimiter(
+    deps.ext?.limits?.ip ?? { capacity: 240, refillPerS: 12 },
+  );
+  const viewerLimit = new RateLimiter(
+    deps.ext?.limits?.viewer ?? { capacity: 60, refillPerS: 4 },
+  );
 
   return async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://core');
+    const cors = url.pathname.startsWith(EXT_PREFIX)
+      ? extCors(req.headers.origin)
+      : {};
+    if (req.method === 'OPTIONS' && url.pathname.startsWith(EXT_PREFIX)) {
+      res.writeHead(204, {
+        ...cors,
+        'access-control-allow-methods': 'GET, POST',
+        'access-control-allow-headers':
+          'authorization, content-type, idempotency-key',
+        'access-control-max-age': '600',
+      });
+      res.end();
+      return;
+    }
     try {
-      const url = new URL(req.url ?? '/', 'http://core');
       const candidates = table.filter((r) => r.pattern.test(url.pathname));
       const route = candidates.find((r) => r.method === req.method);
       if (!route) {
@@ -373,12 +463,56 @@ export function createHandler(deps: AppDeps): RequestListener {
           throw error;
         }
       }
+      let caller: ExtCaller | undefined;
+      let idempotencyKey: string | undefined;
+      if (route.auth === 'extension') {
+        if (!deps.ext) throw new HttpError(404, { error: 'not_found' });
+        if (!ipLimit.take(clientIp(req)))
+          throw new HttpError(429, { ok: false, error: 'rate_limited' });
+        try {
+          caller = verifyExtensionJwt(req.headers.authorization, {
+            secret: deps.ext.secret,
+            channelId: deps.ext.channelId,
+          });
+        } catch (error) {
+          if (error instanceof ExtAuthError)
+            throw new HttpError(401, { ok: false, error: error.code });
+          throw error;
+        }
+        if (
+          !viewerLimit.take(
+            caller.userId ? `u:${caller.userId}` : `o:${caller.opaqueUserId}`,
+            req.method === 'POST' ? 3 : 1,
+          )
+        )
+          throw new HttpError(429, { ok: false, error: 'rate_limited' });
+        const key = req.headers['idempotency-key'];
+        idempotencyKey =
+          typeof key === 'string' && key.length <= 128 ? key : undefined;
+      }
       const params = route.pattern.exec(url.pathname)!.slice(1);
       const body = req.method === 'POST' ? await readJson(req) : undefined;
-      send(res, 200, await route.handle({ params, body, url, installation }));
+      send(
+        res,
+        200,
+        await route.handle({
+          params,
+          body,
+          url,
+          installation,
+          caller,
+          idempotencyKey,
+        }),
+        cors,
+      );
     } catch (error) {
       if (error instanceof WalletInputError) {
-        send(res, 400, { error: 'invalid_amount', message: error.message });
+        send(
+          res,
+          400,
+          { error: 'invalid_amount', message: error.message },
+          cors,
+        );
         return;
       }
       if (
@@ -386,15 +520,15 @@ export function createHandler(deps: AppDeps): RequestListener {
         error instanceof LoyaltyIdempotencyError ||
         error instanceof BoostConflictError
       ) {
-        send(res, 409, { error: 'conflict', message: error.message });
+        send(res, 409, { error: 'conflict', message: error.message }, cors);
         return;
       }
       if (error instanceof HttpError) {
-        send(res, error.status, error.body);
+        send(res, error.status, error.body, cors);
         return;
       }
       console.error('[core-api] request failed', req.method, req.url, error);
-      send(res, 500, { error: 'internal_error' });
+      send(res, 500, { error: 'internal_error' }, cors);
     }
   };
 }

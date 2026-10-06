@@ -7,6 +7,7 @@ import {
   WalletCreditProvider,
 } from './daily/credits.js';
 import { createPgDb, SERVER_DB_LIMITS } from './db/db.js';
+import { createPublicFrontier } from './ext/public-frontier.js';
 import { createApp } from './http/server.js';
 
 const config = loadConfig();
@@ -45,7 +46,15 @@ const retryCredits = async () => {
 };
 setTimeout(retryCredits, CREDIT_RETRY_MS);
 
+// Viewer frontier (/v1/ext/*, Twitch JWT) and Studio cockpit: only when the channel is configured.
+// Payment stays simulated (Lab test wallet): nothing here moves real Jetons or Channel Points.
+const frontier = createPublicFrontier(core, db, systemClock, config);
+frontier?.start();
+
 createApp({
+  // Public Core: the /v1/lab/* routes (Studio secret, viewer in the body) are never served.
+  labRoutes: false,
+  ...frontier?.deps,
   daily: core.daily,
   streams: core.streams,
   presence: core.presence,
@@ -61,5 +70,8 @@ createApp({
 }).listen(config.PORT, () => {
   console.log(
     `[core-api] listening on :${config.PORT} (daily credits: ${dailyProvider.name}, loyalty preview ${config.LOYALTY_PREVIEW}, passive credits ${config.LOYALTY_PASSIVE_CREDITS}, event credits ${config.LOYALTY_EVENT_CREDITS})`,
+  );
+  console.log(
+    `[core-api] channel ${config.TWITCH_CHANNEL_ID ?? 'none'} · viewer frontier /v1/ext ${frontier?.deps.ext ? 'ON' : 'OFF'} · Studio cockpit ${frontier ? 'ON' : 'OFF'} · Twitch names ${config.TWITCH_APP_CLIENT_ID ? 'ON' : 'OFF'} · payment simulated (${config.CORE_ENVIRONMENT})`,
   );
 });
