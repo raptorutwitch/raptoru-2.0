@@ -13,12 +13,14 @@ import { createHash } from 'node:crypto';
 import {
   cpSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateRawSync } from 'node:zlib';
@@ -27,7 +29,8 @@ const STAGING_API = 'https://core-staging.raptoru.fr/v1/ext';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const src = join(root, 'extension');
-const out = join(root, 'dist-staging');
+// Staged outside the repository (never linted, formatted or committed): only the ZIP stays.
+const out = mkdtempSync(join(tmpdir(), 'raptoru-ext-staging-'));
 const releaseDir = join(root, 'release');
 const git = (...args) =>
   execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
@@ -52,7 +55,6 @@ for (const file of files(src)) {
     throw new Error(`refusing to package ${rel}`);
 }
 
-rmSync(out, { recursive: true, force: true });
 cpSync(src, out, { recursive: true });
 writeFileSync(
   join(out, 'shared', 'runtime-config.js'),
@@ -141,6 +143,7 @@ const zip = Buffer.concat([...locals, central, end]);
 mkdirSync(releaseDir, { recursive: true });
 const zipName = `raptoru-live-STAGING-hosted-test-${sha}.zip`;
 writeFileSync(join(releaseDir, zipName), zip);
+rmSync(out, { recursive: true, force: true });
 const zipSha256 = createHash('sha256').update(zip).digest('hex');
 writeFileSync(
   join(releaseDir, `${zipName}.sha256`),

@@ -23,7 +23,6 @@ dist/
 apps/studio/desktop/stage/
 apps/studio/desktop/release/
 # Extension Hosted Test (staging) package output
-apps/twitch-extension/dist-staging/
 apps/twitch-extension/release/
 # Browser E2E results (Playwright traces / screenshots of failures)
 .e2e-results/
