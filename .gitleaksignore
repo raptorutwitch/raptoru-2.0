@@ -1,0 +1,3 @@
+# Known TEST fixture only (self-signed CN=raptoru-transport-test-only, localhost/127.0.0.1, used by the
+# transport tests and the local test Core; protects no real service). Exact finding, never a pattern.
+48d5fa66c128506413654338b9495f0726d0ecbf:apps/studio/server/test/fixtures/tls/localhost-test-only.key:private-key:1
