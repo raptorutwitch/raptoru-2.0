@@ -238,6 +238,25 @@ tourne.
 **Validation isolée.** Tests Core : JWT invalide / expiré / mauvais canal / identité non partagée / rôle forgé / cible
 d'un autre viewer / droit retiré après ouverture → refusés. Puis parcours § 7 avec de vrais JWT d'une version de test.
 
+**Lot 1 minimal — frontière viewer staging (06/10/2026, `482fc2e` + Extension `6660291` / `1e6236a`, déployé `44c895c`).**
+Livré et vérifié sur le staging réel, **non validé manuellement**, P1-006 **non fermé**. Procédure du premier test réel :
+[`TEST_REEL_STAGING_2026-10.md`](TEST_REEL_STAGING_2026-10.md).
+
+- `/v1/ext/*` sur le Core : JWT d'Extension vérifié par le Core (HS256, secret base64, `exp`, chaîne configurée
+  `TWITCH_CHANNEL_ID`), acteur dérivé du seul JWT, rate limit par IP puis par viewer, CORS `*.ext-twitch.tv`,
+  Idempotency-Key exigée. Même contrat que LabEbs (session, state, actions, TTS, Tombola, console D4), servi par les
+  services du Core via un appel interne : les routes `/v1/lab/*` ne sont plus servies par le bootstrap public.
+- Paiement **simulé** : Wallet de test Lab (12 000 Jetons fictifs par viewer), aucun mode Points de chaîne proposé
+  (`unsupported_payment`), aucun Wallet canonique, aucun StreamElements.
+- Build Extension **STAGING** (`npm run build:staging -w @raptoru/twitch-extension`) : `apiBase` =
+  `https://core-staging.raptoru.fr/v1/ext`, badge « STAGING · test », refus si une URL legacy subsiste, ZIP Hosted
+  Test déterministe + SHA-256. Décision D4 prise par Antoni le 06/10/2026 : **Hosted Test** (comptes testeurs), jamais
+  une release.
+- Noms des viewers : Helix (app Twitch Raptoru 2.0, lecture seule) ; sans app, libellé neutre.
+- **Reste** : vrai secret d'Extension (secret de test aujourd'hui), version Hosted Test dans la console, emotes Twitch
+  personnelles (OAuth viewer), Commands, Points de chaîne réels (P1-010), paiement réel (P1-001), deux migrations Lab
+  manquantes au staging pour Tombola et les actions de modération de l'Extension (décision d'Antoni).
+
 ### 4.3 P1-007 — Session de stream canonique
 
 **Raison historique.** Deux modèles persistants : `stream_sessions` (Daily, Presence, Loyalty) et
@@ -641,6 +660,17 @@ https://core-staging.raptoru.fr`, dossier de données jetable — le runtime ré
   local de test (`https://127.0.0.1:4443`) : passer sur Lab puis régénérer l'identité via Studio avant un appairage
   réel au staging.
 
+**Cockpit Production + constante de build (06/10/2026, `482fc2e`, `e158afa`).** URL du Core Production = constante
+de build (`https://core-staging.raptoru.fr`, chaîne `raptoru_` 83603689, libellé « Staging ») : plus aucune variable
+d'environnement à poser ; l'environnement ne sert plus qu'au Core de test local. Workers Production sur la chaîne du Core.
+Cockpit Studio (Modération V2, Tombola, Wallet de test, règles TTS) en Production via `/v1/studio/cockpit`
+(identifiant d'installation, chaîne du Core uniquement, acteur forcé au Studio broadcaster) — le STOP du streamer passe
+par l'onglet « Modération » de Studio. Routes opérateur `/v1/admin/studio/installations` (appairer / lister / révoquer
+avec le secret opérateur, sans shell dans le conteneur). Version + commit source visibles dans Studio (barre du haut et
+carte « Profil Studio »). Studio 0.1.6 construit (`studio:release --dry-run` vert, non publié). Vérifié sur le staging
+réel (Studio réel, données jetables, lecteurs headless) : appairage HTTPS, Connecté, Soundboard `completed`, TTS puis
+STOP `cancelled`, crédit de Jetons de test.
+
 ---
 
 ## 5. Dépendances entre les cinq P1
@@ -772,8 +802,9 @@ Validation manuelle par Antoni requise avant de considérer le parcours comme va
 
 - Toute mise en production, release, `studio:release`, push, déploiement, migration distante, écriture en base de
   production, modification Supabase legacy, changement SAMMI / StreamElements / Wizebot.
-- Toute création, modification ou suppression de récompense Channel Points réelle ; toute publication d'extension
-  (ZIP, Hosted Test, release) ; tout changement EventSub réel.
+- Toute création, modification ou suppression de récompense Channel Points réelle ; toute release d'extension ; tout
+  changement EventSub réel. Exception décidée par Antoni le 06/10/2026 : un ZIP **Hosted Test** STAGING pour le
+  premier test réel (comptes testeurs, Core staging, paiement simulé), téléversé par Antoni.
 - Viewer Web, statistiques / achievements, alertes, Spotify, jeux SE, Jeu des mots : hors de cette phase.
 - Bus d'événements, Realtime, microservices, moteur de workflow, refonte du framework frontend.
 - Renommage des tables / modules « Lab » (P3-002, dette acceptée), signature Windows (P3-001, avant diffusion

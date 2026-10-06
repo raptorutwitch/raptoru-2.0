@@ -63,7 +63,23 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   `list`, migrations) : Terminal Coolify de l'app. Le runtime Studio réel d'Antoni est encore en Production avec une
   identité liée à l'ancien Core local de test : Lab puis régénération via Studio avant un appairage réel. Détail :
   plan § 4.5 « Staging distant réel ».
-- **Reste de P1-019 (non fermé)** : exécution Bonk / Soundboard / TTS + STOP depuis le staging ; coupures réseau réelles côté Studio ; rate limiting ; cockpit Production incomplet (wallet admin, staff, modération, configuration TTS / sons, Tombola, Commands encore sous `STUDIO_SECRET` / Lab) ; URL Production en constante de build ; seams des futurs paiements réels (lecteurs n'acceptant encore que `simulated`, lié à P1-001).
+- **Premier test réel Hosted Test — préparé le 06/10/2026, non validé manuellement** (procédure, checklists, rollback :
+  [`docs/TEST_REEL_STAGING_2026-10.md`](docs/TEST_REEL_STAGING_2026-10.md)). **P1-006 lot 1 minimal** (`482fc2e`) :
+  `/v1/ext/*` sur le Core staging (JWT d'Extension vérifié par le Core, acteur du seul JWT, rate limit, CORS
+  `*.ext-twitch.tv`), paiement **simulé** (Wallet de test Lab, aucun Point de chaîne, aucun SE), plus aucune route
+  `/v1/lab/*` publique ; **Studio** (`e158afa`) : Core staging en **constante de build**, cockpit Production (Modération,
+  Tombola, Wallet de test — STOP via l'onglet Modération), version + SHA visibles, routes opérateur d'appairage sans
+  shell ; **Extension STAGING** (`6660291`, `1e6236a`) : ZIP Hosted Test `apps/twitch-extension/release/raptoru-live-STAGING-hosted-test-1e6236a7d735.zip`
+  (SHA-256 `d4b3a37f…311e5c`), badge « STAGING · test », 0 URL legacy. Core staging déployé `44c895c` (secret
+  d'Extension **de test** en attendant le vrai). **Studio 0.1.6** construit et vérifié (`studio:release --dry-run` vert,
+  **non publié**) : `apps/studio/desktop/release/Raptoru Studio Setup 0.1.6.exe` (SHA-256 `cf513de6…84aa4f`, source
+  `5de2444`). Vérifié sur le staging réel : appairage HTTPS, Connecté, Soundboard `completed`, TTS puis STOP, Bonk
+  refusé `obs_offline` sans OBS, crédit de Jetons de test, noms Twitch réels. **Bloquants restants** : vrai secret
+  d'Extension (fichier), Hosted Test dans la console (Antoni), installation de Studio 0.1.6 puis « Régénérer
+  l'identité » + « Activer Production » + appairage, décision sur deux migrations Lab au staging (Tombola, actions de
+  modération de l'Extension). Tests : `npm run test` = paquets un par un, workers bornés (`565cd86`, `249ab64`,
+  `5de2444`) — les suites PGlite échouaient par timeouts / crash `0xC0000409` en parallèle complet sur cette machine.
+- **Reste de P1-019 (non fermé)** : Bonk avec OBS depuis le staging ; coupures réseau réelles côté Studio ; rate limiting ; cockpit Production incomplet (wallet admin, staff, modération, configuration TTS / sons, Tombola, Commands encore sous `STUDIO_SECRET` / Lab) ; URL Production en constante de build ; seams des futurs paiements réels (lecteurs n'acceptant encore que `simulated`, lié à P1-001).
 - **P1-001 — lot 1 fait le 05/10/2026** (`1e86d96`, `ad2be7f`, `a69dd19`) : débit économique et admission dans **une seule transaction**
   (`WalletService.spendIn` / `creditIn`, `EconomyPort` : `labEconomy` par défaut — Lab inchangé —, `coreWalletEconomy`
   pour le Wallet canonique, utilisé par les tests seulement). Preuves PGlite + PostgreSQL réel (concurrence). Aucune
@@ -77,7 +93,7 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   production, Tombola / Commands devront lire `stream_sessions` et le bot principal rester l'unique consommateur
   EventSub (raccordement avec le passage en production / staging). Smoke Lab conseillé : Tombola (simuler début / fin
   de stream, planificateur) et Commands (quota « pendant le live »).
-- Prochaine action : à décider par Antoni (premier Bonk simulé depuis le staging, D1 / D2, ou P1-006 EBS public).
+- Prochaine action : actions manuelles du test réel (docs/TEST_REEL_STAGING_2026-10.md § 3–4), puis premier test réel Hosted Test.
 
 Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
 contexte).
