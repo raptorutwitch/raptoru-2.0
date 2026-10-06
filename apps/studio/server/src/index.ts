@@ -191,7 +191,7 @@ async function readJson(
 /** Extension Lab routes that the extension frames call (no Studio header: they are the extension). */
 /** Shown instead of the Extension Lab in the Production profile (never a simulated, outdated view). */
 const PRODUCTION_NO_EXT_LAB =
-  'Extension Lab indisponible en profil Production : la preview n’existe qu’en profil Lab (Core Lab local). En production, l’Extension parlera à l’EBS public (pas encore construit).';
+  'Extension Lab indisponible en profil Production : la preview n’existe qu’en profil Lab (Core Lab local). En Production, l’Extension Twitch (Hosted Test) parle directement au Core, jamais à Studio.';
 
 async function extensionLabRoute(
   extLab: LabEbs | null,
@@ -655,13 +655,18 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     extLab.connectTts(tts.worker);
     tts.start();
   }
-  // Moderation V2 + TTS configuration + Lab test wallet: Core decides, Studio relays.
-  const labCore = labCoreUrl
-    ? localLabCoreClient(labCoreUrl, process.env.BONK_LAB_SECRET ?? '')
-    : null;
+  // Moderation V2 + TTS configuration + Lab test wallet: Core decides, Studio relays. Production: the
+  // same cockpit on the Production Core (installation credential, the Core's own channel).
+  const labCore = production
+    ? production.cockpit
+    : labCoreUrl
+      ? localLabCoreClient(labCoreUrl, process.env.BONK_LAB_SECRET ?? '')
+      : null;
+  const cockpitChannel = plan.production?.config.channelId ?? LAB_CHANNEL_ID;
   if (labCore && extLab) extLab.connectLab(labCore);
   const labApi = labCore
     ? labProxy({
+        channelId: cockpitChannel,
         core: labCore,
         players: async () => ({
           tts: tts
@@ -683,6 +688,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Tombola V2: Core decides; Studio relays, stores the launch sounds and serves the OBS source.
   const raffle = labCore
     ? await RaffleRuntime.create({
+        channelId: cockpitChannel,
         core: labCore,
         origin: `http://${host}:${port}`,
         dir: join(paths.runtimeDir, 'raffle-lab'),
@@ -697,48 +703,50 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     : null;
   // Single Lab chat ingress: ONE Twitch chat connection (bot adapter, switch OFF by default) for every
   // Lab module, plus the chat simulator. Never started automatically unless left ON and unblocked.
+  // Lab profile only: in Production the chat / bot 2.0 stays off (no collision with SAMMI / legacy).
   const ingressLines: string[] = [];
-  const labChat = labCore
-    ? await LabChatIngress.create({
-        core: labCore,
-        origin: `http://${host}:${port}`,
-        dir: join(paths.runtimeDir, 'lab-chat'),
-        identities: () => extLab?.labIdentities() ?? [],
-        process: new ManagedProcess({
-          name: 'labchat',
-          cwd: paths.botDir,
-          args: [
-            `--env-file-if-exists=${paths.botEnv}`,
-            'dist/lab-chat-main.js',
-          ],
-          pids: new PidStore(paths.runtimeDir),
-          onLine: (line) => {
-            ingressLines.push(lab.deps.redact(line));
-            if (ingressLines.length > 50) ingressLines.shift();
-          },
-        }),
-        env: () => ({
-          LAB_CHAT_CORE_URL: process.env.BONK_LAB_CORE_URL ?? '',
-          LAB_CHAT_SECRET: process.env.BONK_LAB_SECRET ?? '',
-          LAB_CHAT_CHANNEL_ID: LAB_CHANNEL_ID,
-          // Never the production chat features: this process only reads for the Lab modules.
-          DAILY_CHAT_COMMANDS: 'false',
-          LOYALTY_CHAT_COMMANDS: 'false',
-          LOYALTY_TWITCH_EVENTS: 'false',
-          PRESENCE_SHADOW: 'false',
-        }),
-        token: () =>
-          readTokenSummary(process.env.TWITCH_TOKEN_FILE ?? paths.tokenFile),
-        prerequisite: () =>
-          !existsSync(paths.botEnv)
-            ? 'bot_env_missing'
-            : !existsSync(join(paths.botDir, 'dist', 'lab-chat-main.js'))
-              ? 'bot_not_built'
-              : null,
-        botRunning: () => lab.deps.bot.running,
-        lines: () => ingressLines,
-      })
-    : null;
+  const labChat =
+    labCore && labProfile
+      ? await LabChatIngress.create({
+          core: labCore,
+          origin: `http://${host}:${port}`,
+          dir: join(paths.runtimeDir, 'lab-chat'),
+          identities: () => extLab?.labIdentities() ?? [],
+          process: new ManagedProcess({
+            name: 'labchat',
+            cwd: paths.botDir,
+            args: [
+              `--env-file-if-exists=${paths.botEnv}`,
+              'dist/lab-chat-main.js',
+            ],
+            pids: new PidStore(paths.runtimeDir),
+            onLine: (line) => {
+              ingressLines.push(lab.deps.redact(line));
+              if (ingressLines.length > 50) ingressLines.shift();
+            },
+          }),
+          env: () => ({
+            LAB_CHAT_CORE_URL: process.env.BONK_LAB_CORE_URL ?? '',
+            LAB_CHAT_SECRET: process.env.BONK_LAB_SECRET ?? '',
+            LAB_CHAT_CHANNEL_ID: LAB_CHANNEL_ID,
+            // Never the production chat features: this process only reads for the Lab modules.
+            DAILY_CHAT_COMMANDS: 'false',
+            LOYALTY_CHAT_COMMANDS: 'false',
+            LOYALTY_TWITCH_EVENTS: 'false',
+            PRESENCE_SHADOW: 'false',
+          }),
+          token: () =>
+            readTokenSummary(process.env.TWITCH_TOKEN_FILE ?? paths.tokenFile),
+          prerequisite: () =>
+            !existsSync(paths.botEnv)
+              ? 'bot_env_missing'
+              : !existsSync(join(paths.botDir, 'dist', 'lab-chat-main.js'))
+                ? 'bot_not_built'
+                : null,
+          botRunning: () => lab.deps.bot.running,
+          lines: () => ingressLines,
+        })
+      : null;
   labChatRef = labChat;
   labChat?.start();
   const httpServer = createStudioServer(
@@ -752,7 +760,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     labApi,
     raffle,
     labChat,
-    labCore ? commandsRelay(labCore) : null,
+    // Commands V2: Lab only (no chat 2.0 in Production).
+    labCore && labProfile ? commandsRelay(labCore) : null,
     {
       plan,
       runtimeDir: paths.runtimeDir,

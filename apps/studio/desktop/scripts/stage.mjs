@@ -149,6 +149,22 @@ writeFileSync(
     2,
   ),
 );
+// Which build this is (Studio « À propos »): version + source commit, never anything secret.
+writeFileSync(
+  join(app, 'build-info.json'),
+  JSON.stringify(
+    {
+      version: desktop.version ?? '0.1.0',
+      sha: execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: repo,
+        encoding: 'utf8',
+      }).trim(),
+      built_at: new Date().toISOString(),
+    },
+    null,
+    2,
+  ),
+);
 run(
   [
     'install',

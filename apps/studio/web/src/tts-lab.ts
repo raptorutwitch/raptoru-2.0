@@ -51,7 +51,7 @@ const STATE: Record<string, string> = {
 
 /**
  * `production`: the same card for the Production profile (Studio tab), without Lab wording and without
- * the Lab moderation controls (pause / stop / purge go through the Lab cockpit, not yet in Production).
+ * the Lab moderation controls (pause / stop / purge: the « Modération » tab, on the same Core in Production).
  */
 export function mountTtsLab(
   root: HTMLElement,
@@ -80,7 +80,7 @@ export function mountTtsLab(
         }
         <button type="button" data-act="preview">Aperçu ici</button>
       </div>
-      ${options.production ? '<p class="muted">Pause, stop et file : outils de modération, pas encore disponibles en profil Production.</p>' : ''}
+      ${options.production ? '<p class="muted">Pause, stop et file : onglet « Modération » (même Core, profil Production).</p>' : ''}
       <div data-tts="preview-box" hidden style="position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px">
         <iframe data-tts="preview" title="Aperçu du lecteur TTS" style="position:absolute;left:0;top:0;width:1920px;height:1080px;border:0;transform-origin:0 0"></iframe>
       </div>

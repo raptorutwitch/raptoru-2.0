@@ -8,6 +8,8 @@ export interface WorkerTransport {
   base?: string;
   /** Production: the authenticated Studio installation is the Studio instance. */
   studioId?: string;
+  /** Production: the Core's Twitch channel; Lab default: the Lab channel (900100). */
+  channel?: string;
 }
 
 export function bindJournal(

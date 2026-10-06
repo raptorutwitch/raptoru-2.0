@@ -94,8 +94,43 @@ describe('Studio profile boot plan', () => {
     );
   });
 
+  it('without environment: the build constant — staging Core, real channel, public certificate', async () => {
+    const dir = await tempDir(cleanups);
+    await chooseProduction(dir);
+    const plan = await bootPlan(dir, {});
+    expect(plan).toMatchObject({
+      effective: 'production',
+      startLabCore: false,
+    });
+    expect(plan.production!.config).toMatchObject({
+      origin: 'https://core-staging.raptoru.fr',
+      channelId: '83603689',
+      label: 'Staging',
+      ca: undefined,
+    });
+    expect(plan.production!.installation.binding).toEqual({
+      coreOrigin: 'https://core-staging.raptoru.fr',
+      caSha256: null,
+    });
+  });
+
+  it('a local test Core (environment) serves the Lab channel by default', async () => {
+    const dir = await tempDir(cleanups);
+    await chooseProduction(dir);
+    expect((await bootPlan(dir, validEnv)).production!.config).toMatchObject({
+      channelId: '900100',
+      label: 'Test (environnement)',
+    });
+  });
+
   it.each([
-    ['not configured', {}, /non configuré/],
+    // Explicitly emptied (the build constant is the default): Production off.
+    ['not configured', { [PRODUCTION_ENV.url]: '' }, /non configuré/],
+    [
+      'invalid channel',
+      { ...validEnv, [PRODUCTION_ENV.channel]: 'raptoru' },
+      /Chaîne du Core invalide/,
+    ],
     [
       'http://',
       { [PRODUCTION_ENV.url]: 'http://127.0.0.1:4443' },

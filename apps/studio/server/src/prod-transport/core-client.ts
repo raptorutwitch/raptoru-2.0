@@ -33,6 +33,8 @@ export class StudioTransportError extends Error {
     message: string,
     /** HTTP status when Core answered (workers rely on 409 for idempotent ACK replays). */
     readonly status?: number,
+    /** Core's JSON refusal (cockpit screens show its details: permission, balance…). */
+    readonly body?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -205,6 +207,7 @@ export function prodCoreClient(options: {
               json.error ?? 'core_error',
               json.error ?? `core error ${status}`,
               status,
+              json,
             ),
           );
         });

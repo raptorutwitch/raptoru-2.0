@@ -51,6 +51,8 @@ export interface RaffleRuntimeDeps {
   dir: string;
   /** Overlay page files (phase F); a missing folder serves a clear placeholder. */
   overlayDir: string;
+  /** Channel of the Core (Production: the real channel); Lab default: the Lab channel. */
+  channelId?: string;
 }
 
 export class RaffleRuntime {
@@ -58,6 +60,10 @@ export class RaffleRuntime {
     private readonly d: RaffleRuntimeDeps,
     readonly token: string,
   ) {}
+
+  private get channel() {
+    return this.d.channelId ?? LAB_CHANNEL_ID;
+  }
 
   static async create(d: RaffleRuntimeDeps) {
     await mkdir(join(d.dir, 'sounds'), { recursive: true });
@@ -176,7 +182,7 @@ export class RaffleRuntime {
         return reply(403, { error: 'forbidden' });
       return reply(
         200,
-        await this.d.core(`/v1/lab/raffle/${LAB_CHANNEL_ID}/snapshot`),
+        await this.d.core(`/v1/lab/raffle/${this.channel}/snapshot`),
       );
     }
     const sound = /^sounds\/([a-f0-9]{64})\.(mp3|wav|ogg)$/.exec(name);
@@ -218,7 +224,7 @@ export class RaffleRuntime {
     url: URL,
     reply: (s: number, b: unknown) => void,
   ) {
-    const C = LAB_CHANNEL_ID;
+    const C = this.channel;
     const p = url.pathname.slice('/api/raffle'.length);
     const get = req.method === 'GET';
     let m: RegExpExecArray | null;

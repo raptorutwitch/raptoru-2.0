@@ -7,6 +7,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer as createHttpsServer, type Server } from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import type { CoreConfig } from '../../../core-api/src/config.js';
+import { createPublicFrontier } from '../../../core-api/src/ext/public-frontier.js';
 import { createHandler } from '../../../core-api/src/http/server.js';
 import { setup, type TestCore } from '../../../core-api/test/helpers.js';
 import { prodCoreClient } from '../src/prod-transport/core-client.js';
@@ -24,10 +26,17 @@ export const CHANNEL = '900100';
 export type Cleanups = (() => Promise<unknown>)[];
 
 export async function httpsCore(core: TestCore, cleanups: Cleanups) {
+  // The public Core's Studio cockpit (/v1/studio/cockpit) for the test channel, like the staging Core.
+  const frontier = createPublicFrontier(core, core.db, core.clock, {
+    TWITCH_CHANNEL_ID: CHANNEL,
+    TWITCH_CHANNEL_LOGIN: 'lab',
+    CORE_ENVIRONMENT: 'staging',
+  } as CoreConfig);
   const handler = createHandler({
     ...core,
     botSecret: 'bot-test-secret',
     studioSecret: 'studio-test-secret',
+    ...frontier?.deps,
   });
   let server: Server | null = null;
   let port = 0;

@@ -78,6 +78,8 @@ export class BonkWorker {
     private readonly core: CoreCall,
     private state: Journal,
     private readonly base: string,
+    /** Twitch channel of the Core (Production) or the Lab channel. */
+    private readonly channel: string,
   ) {}
 
   /**
@@ -103,7 +105,13 @@ export class BonkWorker {
       };
     }
     bindJournal(state, options);
-    const w = new BonkWorker(file, core, state, options.base ?? '/v1/lab/bonk');
+    const w = new BonkWorker(
+      file,
+      core,
+      state,
+      options.base ?? '/v1/lab/bonk',
+      options.channel ?? CHANNEL,
+    );
     // A process restart cannot prove that a sent effect finished. Keep already received results.
     for (const e of state.entries)
       if (
@@ -203,7 +211,7 @@ export class BonkWorker {
       interaction: BonkLabInteraction;
       replayed: boolean;
     }>(`${this.base}/interactions`, {
-      channel_id: CHANNEL,
+      channel_id: this.channel,
       viewer,
       idempotency_key: key,
       lab_session_id: this.session,
@@ -214,7 +222,7 @@ export class BonkWorker {
   }
   recent(viewer?: string) {
     return this.core<{ interactions: BonkLabInteraction[] }>(
-      `${this.base}/channels/${CHANNEL}/interactions?limit=50${viewer ? '&viewer_id=' + viewer : ''}`,
+      `${this.base}/channels/${this.channel}/interactions?limit=50${viewer ? '&viewer_id=' + viewer : ''}`,
     );
   }
 
@@ -335,7 +343,7 @@ export class BonkWorker {
             interaction: BonkLabInteraction | null;
           }>(`${this.base}/claim`, {
             studio_instance_id: this.state.studio,
-            channel_id: CHANNEL,
+            channel_id: this.channel,
           });
           if (interaction) {
             this.state.entries.push({

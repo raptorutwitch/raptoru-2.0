@@ -19,10 +19,19 @@ type ProfileStatus = {
   selected: 'lab' | 'production';
   effective: 'lab' | 'production';
   notice: string | null;
+  build?: {
+    version: string;
+    sha: string | null;
+    packaged: boolean;
+    built_at: string | null;
+  };
   production: {
     configured: boolean;
     config_error: string | null;
     core_origin: string | null;
+    /** « Staging » (build constant) or « Test (environnement) ». */
+    label?: string | null;
+    channel_id?: string | null;
     custom_ca: boolean;
     identity: 'none' | 'present' | 'corrupt';
     installation_id: string | null;
@@ -92,15 +101,21 @@ export function mountStudioProfile(
     const p = status.production;
     const [cls, label] = STATE[p.state];
     const prod = status.effective === 'production';
+    const b = status.build;
+    const build = b
+      ? `Studio ${b.version}${b.sha ? ` · ${b.sha}` : ''}${b.packaged ? '' : ' · dev'}`
+      : 'Studio';
+    const host = p.core_origin ? p.core_origin.replace(/^https:\/\//, '') : '';
     if (topbar)
       topbar.textContent = prod
-        ? 'Profil Production · Core distant (test local)'
-        : 'Profil Lab · local uniquement · aucun crédit réel';
+        ? `${build} · Production ${p.label ?? ''} (${host}) · ${label} · paiement simulé`
+        : `${build} · Profil Lab · local uniquement · aucun crédit réel`;
     card.innerHTML = `
-      <h2>Profil Studio <span class="badge ${prod ? 'warn' : 'ok'}">${prod ? 'Production' : 'Lab'}</span></h2>
+      <h2>Profil Studio <span class="badge ${prod ? 'warn' : 'ok'}">${prod ? `Production${p.label ? ` · ${esc(p.label)}` : ''}` : 'Lab'}</span></h2>
       ${status.notice ? `<p class="badge-line"><span class="badge ko">!</span> ${esc(status.notice)}</p>` : ''}
       <dl class="profile-dl">
-        <dt>Core de production</dt><dd>${p.core_origin ? `<code>${esc(p.core_origin)}</code>${p.custom_ca ? ' · certificat de test approuvé' : ''}` : esc(p.config_error ?? 'Non configuré')}</dd>
+        <dt>Version</dt><dd><code>${esc(b?.version ?? '?')}</code>${b?.sha ? ` · source <code>${esc(b.sha)}</code>` : ''}${b && !b.packaged ? ' · <span class="muted">build de développement (npm run studio)</span>' : ''}</dd>
+        <dt>Core de production</dt><dd>${p.core_origin ? `<code>${esc(p.core_origin)}</code>${p.label ? ` · ${esc(p.label)}` : ''}${p.channel_id ? ` · chaîne <code>${esc(p.channel_id)}</code>` : ''}${p.custom_ca ? ' · certificat de test approuvé' : ''}` : esc(p.config_error ?? 'Non configuré')}</dd>
         <dt>État</dt><dd><span class="badge ${cls}">${label}</span>${p.detail ? ` <span class="muted">${esc(p.detail)}</span>` : ''}</dd>
         <dt>Installation</dt><dd>${p.installation_id ? `<code>${esc(p.installation_id)}</code>` : p.identity === 'corrupt' ? 'Identité illisible (régénération explicite requise)' : '—'}</dd>
         <dt>Code d’appairage</dt><dd>${p.pairing_code ? `<code class="pairing-code">${esc(p.pairing_code)}</code> <button type="button" data-act="copy">Copier</button>` : '—'}</dd>

@@ -5,13 +5,15 @@ import {
   loadOrCreateInstallation,
   type StudioInstallation,
 } from './installation.js';
+import { BUILT_IN_PRODUCTION, ENV_CORE_DEFAULT_CHANNEL } from './built-in.js';
 
 // ASTRA-P1-019 lot 2 (D6): one Studio app, two profiles — Lab (default) and Production.
 // - The choice is persisted (`profile.json`) and read at startup only: changing it is an explicit
 //   action followed by a supervised restart of the Studio server, never a hot switch.
-// - The Production Core is NOT configurable from the Studio page: its URL (and, for a local test
-//   Core, a trusted CA) come from the Studio process environment (later a build constant). A page
-//   can therefore never send the installation credential to another host (lot 2 security review).
+// - The Production Core is NOT configurable from the Studio page: its URL is a build constant
+//   (built-in.ts, the staging Core until the cutover); the process environment overrides it only for
+//   a local test Core (and its trusted CA). A page can therefore never send the installation
+//   credential to another host (lot 2 security review).
 // - At startup, Production is restored only if its configuration passes the static checks (https,
 //   sane URL, readable PEM, healthy identity bound to that Core); otherwise Lab, with the reason
 //   shown. Runtime failures (Core unreachable, revoked…) keep Production and show the state.
@@ -21,6 +23,7 @@ export type Profile = 'lab' | 'production';
 export const PRODUCTION_ENV = {
   url: 'RAPTORU_PRODUCTION_CORE_URL',
   ca: 'RAPTORU_PRODUCTION_CA_FILE',
+  channel: 'RAPTORU_PRODUCTION_CHANNEL_ID',
 } as const;
 
 export interface ProductionConfig {
@@ -29,6 +32,10 @@ export interface ProductionConfig {
   /** Trust anchor replacing the default roots (local test Core, private CA); undefined = system roots. */
   ca: Buffer | undefined;
   caSha256: string | null;
+  /** Twitch channel served by this Core (workers, cockpit). */
+  channelId: string;
+  /** Shown in Studio: « Staging » (build constant) or « Test (environnement) ». */
+  label: string;
 }
 
 export type ConfigCheck =
@@ -37,11 +44,24 @@ export type ConfigCheck =
 
 const MAX_CA_BYTES = 64 * 1024;
 
-/** Static checks only (no network): https, sane URL, readable PEM certificate. */
+/**
+ * Static checks only (no network): https, sane URL, readable PEM certificate. Without an environment
+ * URL, the build constant (staging Core); an explicitly empty one disables Production.
+ */
 export async function productionConfig(
   env: Record<string, string | undefined>,
 ): Promise<ConfigCheck> {
-  const raw = env[PRODUCTION_ENV.url];
+  const fromEnv = env[PRODUCTION_ENV.url] !== undefined;
+  const raw = fromEnv ? env[PRODUCTION_ENV.url] : BUILT_IN_PRODUCTION.url;
+  const channelId =
+    env[PRODUCTION_ENV.channel] ??
+    (fromEnv ? ENV_CORE_DEFAULT_CHANNEL : BUILT_IN_PRODUCTION.channelId);
+  if (!/^\d{1,32}$/.test(channelId))
+    return {
+      ok: false,
+      code: 'invalid_channel',
+      message: `Chaîne du Core invalide (${PRODUCTION_ENV.channel})`,
+    };
   if (!raw)
     return {
       ok: false,
@@ -109,6 +129,8 @@ export async function productionConfig(
       origin: url.origin,
       ca,
       caSha256: ca ? createHash('sha256').update(ca).digest('hex') : null,
+      channelId,
+      label: fromEnv ? 'Test (environnement)' : BUILT_IN_PRODUCTION.label,
     },
   };
 }

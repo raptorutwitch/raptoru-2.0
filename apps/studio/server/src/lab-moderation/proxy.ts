@@ -75,10 +75,12 @@ export interface LabProxyDeps {
   identities: () => { id: string; label: string }[];
   /** Called after a change the extension façade caches (wallet, module states). */
   onChange?: () => void;
+  /** Channel of the Core (Production: the real channel); Lab default: the Lab channel. */
+  channelId?: string;
 }
 
 export function labProxy(d: LabProxyDeps) {
-  const C = LAB_CHANNEL_ID;
+  const C = d.channelId ?? LAB_CHANNEL_ID;
   return async function handle(
     req: IncomingMessage,
     res: ServerResponse,

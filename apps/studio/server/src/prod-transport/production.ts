@@ -4,6 +4,8 @@ import type { IncomingMessage } from 'node:http';
 import { basename } from 'node:path';
 import { BonkRuntime } from '../bonk-lab/runtime.js';
 import type { CoreCall } from '../bonk-lab/worker.js';
+import type { LabCoreCall } from '../lab-moderation/proxy.js';
+import { buildInfo } from '../build-info.js';
 import { SoundRuntime } from '../sound-lab/runtime.js';
 import { TtsRuntime } from '../tts-lab/runtime.js';
 import { prodCoreClient, StudioTransportError } from './core-client.js';
@@ -90,6 +92,29 @@ export interface ProductionRuntimes {
   bonk: BonkRuntime;
   sound: SoundRuntime;
   tts: TtsRuntime;
+  /**
+   * The streamer's cockpit (Moderation V2, Tombola, test wallet, TTS rules) on the same Core, over
+   * the installation credential: the Lab routes the cockpit speaks, relayed by Core under
+   * /v1/studio/cockpit. Never the Lab chat nor Commands V2 (off in Production).
+   */
+  cockpit: LabCoreCall;
+}
+
+/** `/v1/lab/<rest>` of the Studio cockpit → `/v1/studio/cockpit/<rest>` on the Production Core. */
+export function cockpitClient(core: CoreCall): LabCoreCall {
+  return <T>(
+    path: string,
+    body?: unknown,
+    options?: { timeoutMs?: number },
+  ): Promise<T> => {
+    if (!path.startsWith('/v1/lab/'))
+      return Promise.reject(new Error('lab_route_required'));
+    return core<T>(
+      `/v1/studio/cockpit/${path.slice('/v1/lab/'.length)}`,
+      body,
+      options,
+    );
+  };
 }
 
 /** Production runtimes (never the Lab Core, never the Lab journals or the Lab environment). */
@@ -110,6 +135,7 @@ export async function createProductionRuntimes(
     transport: {
       base: `/v1/studio/${module}`,
       studioId: production.installation.installationId,
+      channel: production.config.channelId,
     },
   });
   return {
@@ -117,6 +143,7 @@ export async function createProductionRuntimes(
     bonk: await BonkRuntime.create(origin, wiring('bonk')),
     sound: await SoundRuntime.create(origin, wiring('sound')),
     tts: await TtsRuntime.create(origin, wiring('tts')),
+    cockpit: cockpitClient(core),
   };
 }
 
@@ -154,14 +181,23 @@ export async function profileStatus(d: ProfileApiDeps) {
     () => 'corrupt' as const,
   );
   const production = d.plan.effective === 'production';
+  const build = buildInfo();
   return {
     selected: d.plan.selected,
     effective: d.plan.effective,
     notice: d.plan.notice,
+    build: {
+      version: build.version,
+      sha: build.sha,
+      packaged: build.packaged,
+      built_at: build.builtAt,
+    },
     production: {
       configured: check.ok,
       config_error: check.ok ? null : check.message,
       core_origin: check.ok ? check.config.origin : null,
+      label: check.ok ? check.config.label : null,
+      channel_id: check.ok ? check.config.channelId : null,
       custom_ca: check.ok ? check.config.ca !== undefined : false,
       identity:
         identity === 'corrupt' ? 'corrupt' : identity ? 'present' : 'none',

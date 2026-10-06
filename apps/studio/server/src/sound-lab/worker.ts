@@ -99,6 +99,8 @@ export class SoundWorker {
     private readonly core: SoundCoreCall,
     private state: Journal,
     private readonly base: string,
+    /** Twitch channel of the Core (Production) or the Lab channel. */
+    private readonly channel: string,
   ) {}
 
   /**
@@ -129,6 +131,7 @@ export class SoundWorker {
       core,
       state,
       options.base ?? '/v1/lab/sound',
+      options.channel ?? SOUND_CHANNEL,
     );
     // A restart cannot prove that a sound handed to the player finished. Keep known results.
     for (const e of state.entries)
@@ -194,7 +197,7 @@ export class SoundWorker {
   /** Catalog for the extension, with live cooldown / running state (short timeout: local Core). */
   catalog() {
     return this.core<{ sounds: SoundLabSound[] }>(
-      `${this.base}/channels/${SOUND_CHANNEL}/catalog`,
+      `${this.base}/channels/${this.channel}/catalog`,
       undefined,
       { timeoutMs: 1500 },
     );
@@ -238,7 +241,7 @@ export class SoundWorker {
       interaction: SoundLabInteraction;
       replayed: boolean;
     }>(`${this.base}/interactions`, {
-      channel_id: SOUND_CHANNEL,
+      channel_id: this.channel,
       viewer,
       idempotency_key: key,
       lab_session_id: this.session,
@@ -251,7 +254,7 @@ export class SoundWorker {
 
   recent() {
     return this.core<{ interactions: SoundLabInteraction[] }>(
-      `${this.base}/channels/${SOUND_CHANNEL}/interactions?limit=30`,
+      `${this.base}/channels/${this.channel}/interactions?limit=30`,
     );
   }
 
@@ -418,7 +421,7 @@ export class SoundWorker {
             interaction: SoundLabInteraction | null;
           }>(`${this.base}/claim`, {
             studio_instance_id: this.state.studio,
-            channel_id: SOUND_CHANNEL,
+            channel_id: this.channel,
           });
           if (!interaction) break;
           {

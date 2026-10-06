@@ -97,6 +97,8 @@ export class TtsWorker {
     private readonly core: TtsCoreCall,
     private state: Journal,
     private readonly base: string,
+    /** Twitch channel of the Core (Production) or the Lab channel. */
+    private readonly channel: string,
   ) {}
 
   /**
@@ -122,7 +124,13 @@ export class TtsWorker {
       };
     }
     bindJournal(state, options);
-    const w = new TtsWorker(file, core, state, options.base ?? '/v1/lab/tts');
+    const w = new TtsWorker(
+      file,
+      core,
+      state,
+      options.base ?? '/v1/lab/tts',
+      options.channel ?? TTS_CHANNEL,
+    );
     // A restart cannot prove that a TTS handed to the player finished: never replayed, reported unknown.
     for (const e of state.entries)
       if (e.sent && !settled(e)) e.events.push('execution_unknown');
@@ -217,7 +225,7 @@ export class TtsWorker {
   }
   viewerState(viewerId: string) {
     return this.core<TtsLabViewerState>(
-      `${this.base}/channels/${TTS_CHANNEL}/viewers/${viewerId}/state`,
+      `${this.base}/channels/${this.channel}/viewers/${viewerId}/state`,
       undefined,
       {
         timeoutMs: 1500,
@@ -240,7 +248,7 @@ export class TtsWorker {
     const out = await this.core<TtsLabAdmitResponse>(
       `${this.base}/interactions`,
       {
-        channel_id: TTS_CHANNEL,
+        channel_id: this.channel,
         viewer,
         idempotency_key: key,
         lab_session_id: this.session,
@@ -253,17 +261,17 @@ export class TtsWorker {
   }
   queue() {
     return this.core<Record<string, unknown>>(
-      `${this.base}/channels/${TTS_CHANNEL}/queue`,
+      `${this.base}/channels/${this.channel}/queue`,
     );
   }
   audit() {
     return this.core<{ audit: unknown[] }>(
-      `${this.base}/channels/${TTS_CHANNEL}/audit?limit=30`,
+      `${this.base}/channels/${this.channel}/audit?limit=30`,
     );
   }
   moderate(m: TtsLabModerationRequest) {
     return this.core<Record<string, unknown>>(
-      `${this.base}/channels/${TTS_CHANNEL}/moderation`,
+      `${this.base}/channels/${this.channel}/moderation`,
       m,
     );
   }
@@ -444,7 +452,7 @@ export class TtsWorker {
             interaction: TtsLabInteraction | null;
           }>(`${this.base}/claim`, {
             studio_instance_id: this.state.studio,
-            channel_id: TTS_CHANNEL,
+            channel_id: this.channel,
           });
           if (interaction) {
             const foreign = !this.ownSession(interaction);
