@@ -22,6 +22,8 @@ Registre de l'audit : [`ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-
 - Audit Astra : P0 = 0 ; P1 = 14 fermés + **5 bloqués pour le cutover** (001, 006, 007, 010, 019) ; P2 = 26 fermés + 3
   différés (015, 021, 025) ; P3 = 3 fermés / acceptés (003, 004, 005) + 3 ouverts volontairement (001 signature
   Windows, 002 nommage BonkLab, 006 backlog UX). Aucun des P2 / P3 ouverts ne bloque la préparation.
+- _Mise à jour 06/10/2026 : un **Core staging** distant tourne sur Coolify (`https://core-staging.raptoru.fr`, base
+  staging dédiée, aucune donnée réelle, aucun viewer) — ce n'est pas une production (§ 4.5)._
 - Rien de Raptoru 2.0 ne tourne en production (aucune trace de déploiement dans le dépôt ni les documents) : aucun Core déployé, aucune base de production Raptoru 2.0, les flags
   économiques réels sont OFF (`DAILY_WALLET_CREDITS`, `LOYALTY_PASSIVE_CREDITS`, `LOYALTY_EVENT_CREDITS`,
   `LOYALTY_CHAT_COMMANDS`, `DAILY_CHAT_COMMANDS`). Dernière release Studio : 0.1.5 (Lab).
@@ -585,8 +587,9 @@ installation pour le polling `claim`).
 1. Séparer le cockpit (routes `studio` : wallet admin, staff, modération, configuration TTS / sons, Tombola, Commands)
    de l'exécution : en Production ces écrans n'ont pas encore de Core (identifiant d'installation avec rôle,
    `STUDIO_SECRET` réservé au Lab / à l'admin serveur).
-2. Socle staging Coolify (étape 0) + appairage réel par l'opérateur sur le Core distant, révocation à distance,
-   TLS public du reverse proxy (sans CA de test), coupures réseau réelles.
+2. ~~Socle staging Coolify (étape 0) + appairage réel par l'opérateur sur le Core distant, révocation à distance,
+   TLS public du reverse proxy (sans CA de test)~~ — **fait et validé le 06/10/2026** (staging distant réel, voir
+   ci-dessous). Reste : coupures réseau réelles côté Studio, Bonk / Soundboard / TTS + STOP exécutés depuis le staging.
 3. Rate limiting à la frontière et journaux d'accès sans en-tête `Authorization`.
 4. Constante de build pour l'URL Production (l'environnement restant réservé aux tests locaux).
 5. Contrat lecteurs pour les paiements réels (les lecteurs n'acceptent encore que `simulated` : P1-001).
@@ -595,6 +598,48 @@ installation pour le polling `claim`).
 proxy avec migrations `prod` appliquées (dont `studio_installations`) ; appairage du Studio d'Antoni par l'opérateur ;
 Bonk / Soundboard / TTS + STOP validés depuis Studio Production contre le staging, coupure réseau réelle, révocation
 distante ; aucun secret dans les journaux du proxy ; Lab inchangé.
+
+**Staging distant réel — validé le 06/10/2026 (socle staging + transport P1-019 contre un Core distant).** Ce n'est
+**pas** une production validée : c'est un staging distant réel, sans viewer ni donnée réelle.
+
+- **Core staging distant déployé sur Coolify** (VPS 62.84.187.170, projet Coolify dédié « Raptoru 2.0 staging »,
+  distinct du projet legacy « Leaderboard »), image `apps/core-api/Dockerfile`, SHA déployé `1bbc329` ; déploiement
+  **manuel uniquement** (auto-deploy désactivé, aucun webhook) ; dépôt privé lu par une deploy key GitHub en lecture
+  seule.
+- **URL : `https://core-staging.raptoru.fr`** — **TLS public valide** (Let's Encrypt via le reverse proxy Coolify,
+  aucun CA de test, `RAPTORU_PRODUCTION_CA_FILE` non défini côté Studio).
+- **PostgreSQL 17 staging dédié** (`postgres:17-alpine`, réseau interne Coolify uniquement, non exposé) — aucune donnée
+  importée.
+- **18 migrations appliquées** (scope `prod` : les 6 migrations prod + les 12 `LEGACY_LAB_IN_PROD`, de
+  `20260924120000_daily` à `20261016120000_studio_installations`), sur cette base staging uniquement.
+- **`/health` et `/ready` validés** (200 / 200). Flags économiques tous OFF au démarrage (`daily credits: dev-fake`,
+  loyalty preview / passive / event = false).
+- **Résilience à une coupure PostgreSQL validée** : base staging arrêtée → `/ready` 503 `db_unavailable`, `/health`
+  200, le **process Core reste vivant** (même process, aucun redémarrage), connexion perdue journalisée ; base relancée →
+  retour à 200 seul (~30 s). **Nuance :** quand PostgreSQL reste indisponible assez longtemps (~40 s), le
+  `HEALTHCHECK` Docker (sur `/ready`) marque le conteneur _unhealthy_ et Coolify / Traefik le **retire du routage
+  public** (« no available server ») alors que le process Core est vivant ; il revient dans le routage seul quand la
+  base revient. Le health check propre à Coolify est désactivé (il exige `curl` / `wget`, absents de l'image) : c'est
+  le `HEALTHCHECK` du Dockerfile qui fait foi.
+- **Premier démarrage sur une base vierge :** le Core s'arrête au démarrage si les tables n'existent pas (reprise des
+  crédits interrompus au boot). Les migrations doivent donc **actuellement être appliquées avant le démarrage normal
+  du Core**. Pour ce premier déploiement : variable temporaire `NODE_OPTIONS=--import
+/app/apps/core-api/dist/scripts/migrate.js` (même migrateur, scope `prod`) pour un seul démarrage, puis retirée ; le
+  redémarrage suivant n'a lancé aucune migration. Les commandes opérateur (`studio-installation.js pair | revoke |
+list`, migrations ultérieures) se lancent depuis le Terminal Coolify de l'app.
+- **Studio Production → Core distant validé** (serveur Studio réel, profil Production, `RAPTORU_PRODUCTION_CORE_URL=
+https://core-staging.raptoru.fr`, dossier de données jetable — le runtime réel d'Antoni n'a pas été touché) :
+  Non appairé → **pairing par l'opérateur sur le Core distant → Connecté validé** ; **heartbeats Bonk / Soundboard /
+  TTS validés** (workers sans erreur, `last seen` enregistré par le Core) ; **revoke distant → Révoqué validé** (les
+  trois workers refusés) ; **retour Lab validé** (bascule par l'API main-process puis redémarrage → profil effectif
+  Lab). Aucun secret d'installation dans les journaux.
+- **Legacy non modifié** : `https://raptoru.fr/api/health` 200 avant / après, projet « Leaderboard » intact.
+- **Pas encore testé :** aucun paiement réel, aucun Channel Point, aucun Wallet production, aucun viewer réel ; pas
+  encore d'exécution Bonk / Soundboard / TTS + STOP depuis le staging (premier Bonk réel non lancé) ; pas de rate
+  limiting.
+- **À noter :** le runtime Studio réel d'Antoni est encore en profil Production avec une identité liée à l'ancien Core
+  local de test (`https://127.0.0.1:4443`) : passer sur Lab puis régénérer l'identité via Studio avant un appairage
+  réel au staging.
 
 ---
 
@@ -631,6 +676,8 @@ flowchart LR
 
 0. **Socle staging** (prérequis, pas un P1) : app Core de staging sur Coolify, base dédiée distincte du legacy, aucune
    exposition viewer, aucune donnée réelle. _Pourquoi d'abord : P1-019 et P1-006 ne se valident pas sans lui._
+   **Fait le 06/10/2026** : `https://core-staging.raptoru.fr` (Coolify, PostgreSQL 17 dédié, 18 migrations, TLS
+   public) — § 4.5 « Staging distant réel ».
 1. **P1-019 transport** (lots 1 et 2 locaux faits le 05/10/2026, § 4.5) : identifiant Studio par installation, client HTTPS distinct, version de protocole ; validé
    d'abord contre un Core local en TLS, puis contre le staging, avec paiement simulé. _Pourquoi : c'est le pivot de
    toute exécution réelle, il ne dépend ni de l'argent ni de l'identité viewer, et il éprouve le déploiement._

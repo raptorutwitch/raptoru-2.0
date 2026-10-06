@@ -1,6 +1,6 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 05/10/2026 : PRÉPARATION DU CUTOVER (lire en premier)
+## État courant — 06/10/2026 : PRÉPARATION DU CUTOVER (lire en premier)
 
 Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase).
 
@@ -48,7 +48,22 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   Studio (carte « Lecteurs Production » : overlay Bonk + connexion OBS, lecteur Soundboard, source OBS TTS) ; les
   ressources `/ext/` des lecteurs sont de nouveau servies (seules les pages de l'Extension sont refusées).
 - **Lot 2 validé manuellement par Antoni le 05/10/2026** (profil Production local contre le Core de test HTTPS) : appairage OK ; Bonk, Soundboard + STOP, TTS + STOP + second TTS en Production OK ; Extension Lab indisponible en Production OK ; retour au Lab avec la preview actuelle complète OK ; `revoke <installation_id>` → Studio « Révoqué » OK. Le `overlay_not_ready` Bonk observé venait de la source OBS absente / inactive dans la scène, pas du transport. Correctifs trouvés pendant la validation, validés aussi : `ea1f3f8` (pas de fausse Extension Lab en Production), `8d7416c` (ressources statiques des lecteurs Production servies), `afa99c1` (carte « Lecteurs Production » dans Studio).
-- **Reste de P1-019 (non fermé)** : staging Coolify ; appairage distant réel (opérateur sur le Core distant, révocation à distance) ; TLS public du reverse proxy ; rate limiting ; cockpit Production incomplet (wallet admin, staff, modération, configuration TTS / sons, Tombola, Commands encore sous `STUDIO_SECRET` / Lab) ; URL Production en constante de build ; seams des futurs paiements réels (lecteurs n'acceptant encore que `simulated`, lié à P1-001).
+- **Staging distant réel validé le 06/10/2026** (pas une production) : **Core staging déployé sur Coolify** à
+  **`https://core-staging.raptoru.fr`** (projet Coolify dédié « Raptoru 2.0 staging », distinct de « Leaderboard » ;
+  SHA déployé `1bbc329` ; déploiement **manuel uniquement**, auto-deploy off) ; **PostgreSQL 17 staging dédié**
+  (interne, aucune donnée réelle) ; **TLS public valide** (Let's Encrypt, sans CA de test) ; **18 migrations
+  appliquées** (scope `prod`) ; **`/health` et `/ready` validés** ; **résilience à une coupure PostgreSQL validée**
+  (`/ready` 503, process Core vivant, retour seul). Nuance : si PostgreSQL tombe assez longtemps (~40 s), le
+  `HEALTHCHECK` Docker rend le conteneur _unhealthy_ et Coolify le **retire du routage public** même si le process Core
+  reste vivant ; il récupère ensuite seul. **Premier démarrage d'une base vierge : les migrations doivent actuellement
+  être appliquées avant le démarrage normal du Core** (le boot s'arrête sans tables). **Studio Production → Core
+  distant validé** : pairing → **Connecté**, **heartbeats Bonk / Soundboard / TTS**, revoke → **Révoqué**, **retour Lab**
+  — tous validés. **Legacy non modifié** (`raptoru.fr/api/health` 200). **Aucun paiement réel, Channel Point, Wallet
+  production ni viewer réel encore testé** ; premier Bonk réel non lancé. Commandes opérateur (`pair` / `revoke` /
+  `list`, migrations) : Terminal Coolify de l'app. Le runtime Studio réel d'Antoni est encore en Production avec une
+  identité liée à l'ancien Core local de test : Lab puis régénération via Studio avant un appairage réel. Détail :
+  plan § 4.5 « Staging distant réel ».
+- **Reste de P1-019 (non fermé)** : exécution Bonk / Soundboard / TTS + STOP depuis le staging ; coupures réseau réelles côté Studio ; rate limiting ; cockpit Production incomplet (wallet admin, staff, modération, configuration TTS / sons, Tombola, Commands encore sous `STUDIO_SECRET` / Lab) ; URL Production en constante de build ; seams des futurs paiements réels (lecteurs n'acceptant encore que `simulated`, lié à P1-001).
 - **P1-001 — lot 1 fait le 05/10/2026** (`1e86d96`, `ad2be7f`, `a69dd19`) : débit économique et admission dans **une seule transaction**
   (`WalletService.spendIn` / `creditIn`, `EconomyPort` : `labEconomy` par défaut — Lab inchangé —, `coreWalletEconomy`
   pour le Wallet canonique, utilisé par les tests seulement). Preuves PGlite + PostgreSQL réel (concurrence). Aucune
@@ -62,7 +77,7 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   production, Tombola / Commands devront lire `stream_sessions` et le bot principal rester l'unique consommateur
   EventSub (raccordement avec le passage en production / staging). Smoke Lab conseillé : Tombola (simuler début / fin
   de stream, planificateur) et Commands (quota « pendant le live »).
-- Prochaine action : à décider par Antoni (D1 / D2, socle staging D3, ou P1-006 EBS public en local).
+- Prochaine action : à décider par Antoni (premier Bonk simulé depuis le staging, D1 / D2, ou P1-006 EBS public).
 
 Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
 contexte).
