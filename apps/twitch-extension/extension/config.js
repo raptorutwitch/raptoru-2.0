@@ -1,4 +1,7 @@
 import { createClient, errorLabel, isDemo } from './shared/api.js';
+import { mountEnvironmentBadge } from './shared/env-badge.js';
+
+mountEnvironmentBadge();
 
 const status = document.getElementById('status');
 const runtime = document.getElementById('config-runtime');

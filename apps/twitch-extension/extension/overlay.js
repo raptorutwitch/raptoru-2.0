@@ -10,6 +10,9 @@ import {
   traceTimeoutDebug,
 } from './shared/timeout-debug.js';
 import { createModulePanel } from './shared/ui.js';
+import { mountEnvironmentBadge } from './shared/env-badge.js';
+
+mountEnvironmentBadge();
 
 const toggle = document.getElementById('toggle');
 const drawer = document.getElementById('drawer');

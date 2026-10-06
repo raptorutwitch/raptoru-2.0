@@ -649,6 +649,16 @@ export const ERROR_LABELS = {
   viewer_not_linked: 'Emotes Twitch indisponibles : aucun compte Twitch lié à cette identité.',
   emote_not_in_catalog: 'Cette emote ne fait pas partie de tes emotes Twitch.',
   catalog_unavailable: 'Tes emotes Twitch ne sont pas encore chargées — réessaie dans un instant.',
+  // Refus du Core (Bonk / frontière viewer) : jamais un « Une erreur est survenue » muet.
+  obs_offline: 'Le Bonk est indisponible : OBS n’est pas connecté côté Studio. Aucun jeton consommé.',
+  overlay_not_ready: 'Le Bonk est indisponible : l’overlay du stream n’est pas prêt. Aucun jeton consommé.',
+  identity_required: 'Partage ton identité pour utiliser tes actions.',
+  token_expired: 'La session Twitch a expiré — ferme puis rouvre l’extension.',
+  unauthorized: 'La session Twitch n’est pas reconnue — ferme puis rouvre l’extension.',
+  wrong_channel: 'Cette extension n’est pas configurée pour cette chaîne.',
+  unsupported_payment: 'Ce mode de paiement n’est pas disponible ici : utilise tes jetons.',
+  twitch_emotes_unavailable: 'Les emotes Twitch personnelles ne sont pas disponibles dans ce test.',
+  not_available: 'Cette fonction n’est pas disponible dans ce test.',
 };
 
 export const errorLabel = (code) => ERROR_LABELS[code] ?? 'Une erreur est survenue.';

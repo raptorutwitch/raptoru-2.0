@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:staging": "node scripts/build-staging.mjs"
   }
 }

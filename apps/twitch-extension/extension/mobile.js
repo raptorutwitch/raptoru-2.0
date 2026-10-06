@@ -2,6 +2,9 @@
 
 import { createClient, errorLabel, isDemo, sessionFailureState } from './shared/api.js';
 import { createModulePanel } from './shared/ui.js';
+import { mountEnvironmentBadge } from './shared/env-badge.js';
+
+mountEnvironmentBadge();
 
 let token = null;
 let refreshTimer = null;
