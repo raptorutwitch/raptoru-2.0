@@ -18,5 +18,6 @@ describe('lint coverage of the extension', () => {
     expect(
       await eslint.isPathIgnored('apps/twitch-extension/dist/shared/ui.js'),
     ).toBe(true);
-  });
+    // Loading the ESLint config takes several seconds while turbo runs the other suites in parallel.
+  }, 30_000);
 });
