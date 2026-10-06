@@ -84,6 +84,12 @@ export function createPgDb(connectionString: string, limits?: DbLimits): Db {
       idle_in_transaction_session_timeout: limits.idleInTxMs,
     }),
   });
+  // A connection the server drops (database restart, failover, admin termination) emits 'error'.
+  // Unhandled, it would kill the Core: logged (message only, never the connection string), the pool
+  // opens a new connection on the next query and /ready reports the outage meanwhile.
+  const lost = (error: Error) =>
+    console.error('[core-api] database connection lost:', error.message);
+  pool.on('error', lost);
 
   return {
     async query<R>(sql: string, params: unknown[] = []) {
@@ -92,6 +98,9 @@ export function createPgDb(connectionString: string, limits?: DbLimits): Db {
     },
     async tx<T>(fn: (q: Queryable) => Promise<T>) {
       const client = await pool.connect();
+      // Checked-out connections emit their errors on the client, not the pool.
+      client.on('error', lost);
+      let broken: Error | undefined;
       try {
         await client.query('begin');
         const q: Queryable = {
@@ -104,10 +113,15 @@ export function createPgDb(connectionString: string, limits?: DbLimits): Db {
         await client.query('commit');
         return value;
       } catch (error) {
-        await client.query('rollback');
+        // A failed rollback (connection gone) never hides the original error; the connection is
+        // then discarded instead of going back to the pool.
+        await client.query('rollback').catch((e: Error) => {
+          broken = e;
+        });
         throw error;
       } finally {
-        client.release();
+        client.off('error', lost);
+        client.release(broken);
       }
     },
     close: () => pool.end(),
