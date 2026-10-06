@@ -1,0 +1,5 @@
+# Files read by Docker / Linux builds keep LF on every checkout (core.autocrlf=true on Windows
+# would otherwise turn them into CRLF and break RUN line continuations).
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+.dockerignore text eol=lf
