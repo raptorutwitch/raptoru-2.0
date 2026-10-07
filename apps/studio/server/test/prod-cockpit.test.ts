@@ -1,7 +1,9 @@
 // ASTRA-P1-019 (cockpit delta): in the Production profile, the Studio cockpit (Moderation V2, Tombola,
 // test wallet) reaches the Production Core over HTTPS with the installation credential — the same Lab
 // paths, relayed under /v1/studio/cockpit, for the Core's channel only. Never the Lab chat.
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { SoundWorker } from '../src/sound-lab/worker.js';
 import { StudioTransportError } from '../src/prod-transport/core-client.js';
 import { cockpitClient } from '../src/prod-transport/production.js';
 import { CHANNEL, pairedStudio, type Cleanups } from './prod-fixture.js';
@@ -65,5 +67,33 @@ describe('Studio cockpit in the Production profile', () => {
     await expect(cockpit('/v1/studio/session')).rejects.toThrow(
       'lab_route_required',
     );
+  });
+});
+
+describe('Soundboard config in the Production profile', () => {
+  it('reads and edits the bank through the cockpit (the execution transport stays separate)', async () => {
+    const { client, dir, installation } = await pairedStudio(cleanups);
+    const worker = await SoundWorker.open(join(dir, 'sound.json'), client(), {
+      base: '/v1/studio/sound',
+      studioId: installation.installationId,
+      channel: CHANNEL,
+      configBase: '/v1/studio/cockpit/sound',
+    });
+    const { sounds } = await worker.config();
+    expect(sounds.length).toBeGreaterThan(0);
+    const updated = await worker.updateSound(sounds[0]!.id, {
+      token_cost: 650,
+      playback_mode: 'ignore_if_running',
+    });
+    expect(updated).toMatchObject({
+      token_cost: 650,
+      playback_mode: 'ignore_if_running',
+    });
+    expect(
+      await worker.updateSettings({ volume_protection: 'medium' }),
+    ).toMatchObject({ volume_protection: 'medium' });
+    expect(
+      (await worker.config()).sounds.find((s) => s.id === sounds[0]!.id),
+    ).toMatchObject({ token_cost: 650 });
   });
 });

@@ -362,7 +362,11 @@ export function createStudioServer(
           running: false,
           blocked: {
             code: 'unavailable',
-            message: 'Ingestion indisponible : Core Lab non démarré.',
+            // Production: the chat / bot 2.0 stays off (no collision with SAMMI / the legacy).
+            message:
+              profile?.plan.effective === 'production'
+                ? 'Chat 2.0 coupé en profil Production : inscriptions par l’Extension uniquement.'
+                : 'Ingestion indisponible : Core Lab non démarré.',
           },
           token_login: null,
           last_exit: null,

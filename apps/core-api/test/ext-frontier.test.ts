@@ -394,6 +394,42 @@ describe('Studio cockpit over the installation credential', () => {
     });
   });
 
+  it('Soundboard config and TTS rules: read and edited by the Studio, seen by the viewers', async () => {
+    const { studio, ext } = await fixture();
+    const config = await studio('/v1/studio/cockpit/sound/config');
+    expect(config.status).toBe(200);
+    const sound = config.body.sounds[0];
+    const updated = await studio(
+      `/v1/studio/cockpit/sound/sounds/${sound.id}`,
+      { token_cost: 777, cooldown_ms: 5000, playback_mode: 'queue' },
+    );
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({
+      token_cost: 777,
+      playback_mode: 'queue',
+    });
+    const settings = await studio('/v1/studio/cockpit/sound/settings', {
+      volume_protection: 'off',
+    });
+    expect(settings.status).toBe(200);
+    // The extension's catalog follows the streamer's prices.
+    const s = await ext('/session', viewer());
+    expect(
+      s.body.modules
+        .find((m: { id: string }) => m.id === 'soundboard')
+        .sounds.find((x: { id: string }) => x.id === sound.id),
+    ).toMatchObject({
+      token_cost: 777,
+      cooldown_ms: 5000,
+      playback_mode: 'queue',
+    });
+    expect((await studio('/v1/studio/cockpit/tts/rules')).status).toBe(200);
+    // Never the Soundboard admission or history through the cockpit.
+    expect(
+      (await studio('/v1/studio/cockpit/sound/interactions', {})).status,
+    ).toBe(404);
+  });
+
   it('the Studio credits a tester (test wallet) whatever actor it claims', async () => {
     const { studio, ext } = await fixture();
     const r = await studio(`/v1/studio/cockpit/moderation/${CHANNEL}/actions`, {

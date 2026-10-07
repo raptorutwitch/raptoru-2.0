@@ -10,6 +10,8 @@ export interface WorkerTransport {
   studioId?: string;
   /** Production: the Core's Twitch channel; Lab default: the Lab channel (900100). */
   channel?: string;
+  /** Production: route base of the module's streamer configuration (Studio cockpit); Lab: `base`. */
+  configBase?: string;
 }
 
 export function bindJournal(

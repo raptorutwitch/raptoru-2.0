@@ -101,6 +101,8 @@ export class SoundWorker {
     private readonly base: string,
     /** Twitch channel of the Core (Production) or the Lab channel. */
     private readonly channel: string,
+    /** Streamer configuration (Soundboard config screen): the Studio cockpit in Production. */
+    private readonly configBase: string,
   ) {}
 
   /**
@@ -132,6 +134,7 @@ export class SoundWorker {
       state,
       options.base ?? '/v1/lab/sound',
       options.channel ?? SOUND_CHANNEL,
+      options.configBase ?? options.base ?? '/v1/lab/sound',
     );
     // A restart cannot prove that a sound handed to the player finished. Keep known results.
     for (const e of state.entries)
@@ -207,17 +210,17 @@ export class SoundWorker {
     return this.core<{
       sounds: SoundLabSoundConfig[];
       settings: SoundLabSettings;
-    }>(`${this.base}/config`);
+    }>(`${this.configBase}/config`);
   }
   updateSound(id: string, update: Record<string, unknown>) {
     return this.core<SoundLabSoundConfig>(
-      `${this.base}/sounds/${encodeURIComponent(id)}`,
+      `${this.configBase}/sounds/${encodeURIComponent(id)}`,
       update,
     );
   }
   async updateSettings(settings: SoundLabSettings) {
     this.settings = await this.core<SoundLabSettings>(
-      `${this.base}/settings`,
+      `${this.configBase}/settings`,
       settings,
     );
     return this.settings;

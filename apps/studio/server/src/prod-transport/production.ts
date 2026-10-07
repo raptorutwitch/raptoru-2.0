@@ -136,6 +136,7 @@ export async function createProductionRuntimes(
       base: `/v1/studio/${module}`,
       studioId: production.installation.installationId,
       channel: production.config.channelId,
+      configBase: `/v1/studio/cockpit/${module}`,
     },
   });
   return {

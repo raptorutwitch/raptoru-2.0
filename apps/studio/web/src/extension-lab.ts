@@ -603,7 +603,7 @@ export function mountExtensionLab(root: HTMLElement): {
   blocked.className = 'card';
   blocked.style.display = 'none';
   blocked.textContent =
-    'Extension Lab indisponible en profil Production : la preview n’existe qu’en profil Lab (Core Lab local). En production, l’Extension parlera à l’EBS public (pas encore construit). Repasse en profil Lab depuis l’onglet Studio pour la preview.';
+    'Extension Lab (preview simulée) : profil Lab uniquement. En Production · Staging, l’Extension Twitch (Hosted Test) parle directement au Core staging. Réglages en Production : onglet Studio (lecteurs OBS), Modération (états des modules, pause / STOP, règles TTS, Jetons de test), Soundboard config (prix, cooldowns, pile / file / ignorer) et Tombola.';
   root.prepend(blocked);
   async function checkProfile() {
     try {

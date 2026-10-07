@@ -14,7 +14,10 @@ const STUDIO_ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
 /** Allowed Lab sub-paths: `<prefix>/<channel>/…` (channel checked) or a channel-less route. */
 const CHANNEL_ROUTES =
   /^(moderation|raffle|wallet)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
-const PLAIN_ROUTES = /^tts\/rules(\/reset)?$/;
+// Channel-less: TTS rules; Soundboard bank configuration (prices, cooldowns, stack / queue / ignore,
+// enabled, volume protection) — the « Soundboard config » screen.
+const PLAIN_ROUTES =
+  /^(tts\/rules(\/reset)?|sound\/(config|settings|sounds\/[a-z0-9][a-z0-9_-]{0,47}))$/;
 
 export function studioCockpitRoutes(core: LabCall, channelId: string): Route[] {
   const target = (rest: string, search: string) => {
