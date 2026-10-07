@@ -14,7 +14,7 @@
 // extended): the production path behaves exactly as before for them. Any Lab migration added after
 // this boundary goes to LAB_MIGRATIONS only.
 
-export type MigrationScope = 'prod' | 'lab' | 'all';
+export type MigrationScope = 'prod' | 'lab' | 'all' | 'staging';
 
 /** Production schema (Daily, Presence, Wallet, Loyalty). */
 export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
@@ -71,16 +71,30 @@ export const LEGACY_LAB_IN_PROD: readonly string[] = Object.freeze([
   '20261010120000_raffle_round_labels.sql',
 ]);
 
+/**
+ * The staging Core (Coolify, test data only) serves the Lab modules to real Twitch testers through the
+ * viewer frontier and the Studio cockpit: on top of the production selection it needs exactly these
+ * post-boundary Lab files (Extension moderation idempotency, Tombola stream sessions). Explicit and
+ * closed: never Commands V2 or any other Lab file; never part of the production scope.
+ */
+export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([
+  '20261015120000_lab_moderation_idempotency.sql',
+  '20261016130000_lab_stream_session_twitch_id.sql',
+]);
+
 export interface MigrationScopes {
   prod: readonly string[];
   lab: readonly string[];
   legacyLabInProd: readonly string[];
+  /** Lab files added to the production selection for the staging Core only. */
+  stagingExtra?: readonly string[];
 }
 
 export const MIGRATION_SCOPES: MigrationScopes = Object.freeze({
   prod: PROD_MIGRATIONS,
   lab: LAB_MIGRATIONS,
   legacyLabInProd: LEGACY_LAB_IN_PROD,
+  stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
 });
 
 export class MigrationScopeError extends Error {
@@ -116,11 +130,19 @@ export function selectMigrations(
       );
   }
   const legacy = new Set(scopes.legacyLabInProd);
+  const stagingExtra = new Set(scopes.stagingExtra ?? []);
+  for (const f of stagingExtra)
+    if (!lab.has(f))
+      throw new MigrationScopeError(
+        `${f} is listed as a staging extra but not as a Lab migration`,
+      );
   const keep =
     scope === 'prod'
       ? (f: string) => prod.has(f) || legacy.has(f)
-      : scope === 'lab'
-        ? (f: string) => lab.has(f)
-        : () => true;
+      : scope === 'staging'
+        ? (f: string) => prod.has(f) || legacy.has(f) || stagingExtra.has(f)
+        : scope === 'lab'
+          ? (f: string) => lab.has(f)
+          : () => true;
   return sql.filter(keep).sort();
 }
