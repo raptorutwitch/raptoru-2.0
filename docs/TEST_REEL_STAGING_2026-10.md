@@ -1,8 +1,9 @@
 # Premier test réel Raptoru 2.0 — Hosted Test sur le Core staging (préparé le 06/10/2026)
 
-**Statut :** préparation technique terminée et vérifiée de bout en bout sur le staging réel (Studio réel en
-profil Production + lecteurs + viewer Twitch signé). **Pas encore validé manuellement par Antoni.** Ce n'est
-pas un cutover : le legacy (SAMMI, ancien bot, Extension publiée, `raptoru.fr/api`) reste la production.
+**Statut :** **premier test live réel validé manuellement par Antoni** (Extension Hosted Test → Core staging →
+Studio Production · Staging → OBS ; résultat dans [`../Raptoru-2.0-HANDOFF.md`](../Raptoru-2.0-HANDOFF.md)).
+Ce n'est pas un cutover : le legacy (SAMMI, ancien bot, Extension publiée, `raptoru.fr/api`) reste la
+production.
 
 Références : [`CUTOVER_PLAN_2026-10.md`](CUTOVER_PLAN_2026-10.md) (§ 4.2 P1-006, § 4.5 P1-019) ·
 [`../Raptoru-2.0-HANDOFF.md`](../Raptoru-2.0-HANDOFF.md).

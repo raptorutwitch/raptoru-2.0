@@ -1,6 +1,33 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 06/10/2026 : PRÉPARATION DU CUTOVER (lire en premier)
+## État courant — 14/10/2026 : premier test live réel validé · calibration géométrique Twitch (lire en premier)
+
+Vérifier `git status` / `git log` (HEAD = `ac52bea` au début de cette phase, `origin/main` identique).
+
+- **Premier test live réel VALIDÉ manuellement par Antoni** le **07/10/2026** (après `ac52bea`) : **Extension Hosted Test → Core staging (`core-staging.raptoru.fr`) → Studio Production · Staging →
+  OBS**. Testés en conditions réelles : **Soundboard, TTS, STOP / remboursement, Bonk, Modération, Tombola**.
+  Procédure : [`docs/TEST_REEL_STAGING_2026-10.md`](docs/TEST_REEL_STAGING_2026-10.md). Paiement toujours **simulé**
+  (Wallet de test), aucun Point de chaîne, aucun StreamElements.
+- **CSP Twitch corrigée côté console** (rien dans le dépôt) : `https://core-staging.raptoru.fr` ajouté à l'allowlist
+  de l'Extension de test.
+- **Migrations staging** : scope dédié `staging` dans le migrateur (`ac52bea`, `STAGING_EXTRA_LAB_MIGRATIONS` dans
+  `apps/core-api/src/db/migration-scopes.ts`) = sélection `prod` + exactement deux fichiers Lab, **jamais Commands V2**.
+  **Appliquées sur le staging** : `20261015120000_lab_moderation_idempotency.sql`,
+  `20261016130000_lab_stream_session_twitch_id.sql`. Décision « deux migrations Lab au staging » ci-dessous : close.
+- **SHA déployé sur le staging : non vérifié** (le Core n'expose pas son SHA — `/health` ne renvoie que
+  `{"service":"core-api","status":"ok"}` — et l'agent n'a pas d'accès Coolify). Le `44c895c` noté plus bas est
+  **périmé**. À relever dans Coolify › `raptoru-core-staging` › Deployments puis à reporter ici.
+- **Legacy intact** (SAMMI, StreamElements, EBS `raptoru.fr/api`, Extension publiée = production). **Bot et
+  Commands V2 hors cutover.** Aucune release Studio publiée (0.1.6 construit, non publié ; `package.json` = 0.1.5).
+- **Calibration géométrique du Video Component** (audit Astra Max) : le Lab n'est **pas WYSIWYG** — preset normal
+  fixe 1280 × 720, hauteur 60 %, largeur 3:2 − 48 px (viewport 600 × 432, plus 3:2), resize par
+  `transform: scale(...)`, iframe recréée à certains resizes, contexte Twitch mocké incohérent. **Décision : ne pas
+  toucher à 60 %, 3:2 ni à l'UI avant mesure réelle.** Détail : [`docs/TWITCH_GEOMETRY_CALIBRATION_2026-10.md`](docs/TWITCH_GEOMETRY_CALIBRATION_2026-10.md).
+- **Prochaine action** : Extension **placeholder isolée** sur **LeCroupier_** (Video Component seul, aucun appel
+  réseau) pour mesurer la géométrie réelle Twitch, puis calibration du Lab. La création / le Hosted Test de cette
+  extension sont des actions Twitch d'Antoni : rien sans sa validation.
+
+## État — 06/10/2026 : PRÉPARATION DU CUTOVER (historique, toujours valable sauf mention ci-dessus)
 
 Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase).
 
@@ -93,7 +120,7 @@ Vérifier `git status` / `git log` (HEAD ≥ `9ab0523` au début de cette phase)
   production, Tombola / Commands devront lire `stream_sessions` et le bot principal rester l'unique consommateur
   EventSub (raccordement avec le passage en production / staging). Smoke Lab conseillé : Tombola (simuler début / fin
   de stream, planificateur) et Commands (quota « pendant le live »).
-- Prochaine action : actions manuelles du test réel (docs/TEST_REEL_STAGING_2026-10.md § 3–4), puis premier test réel Hosted Test.
+- ~~Prochaine action : actions manuelles du test réel, puis premier test réel Hosted Test~~ — fait et validé (voir l'état du 14/10/2026 en tête).
 
 Le reste de ce fichier décrit le **checkpoint du 03/10/2026** (historique, toujours utile pour les règles et le
 contexte).
