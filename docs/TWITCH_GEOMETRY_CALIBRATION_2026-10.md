@@ -38,6 +38,29 @@ aucun nouveau breakpoint tant que les mesures ne sont pas relevées.
 4. **Calibration du Lab** à partir des mesures seulement (`PLAYERS`, `TWITCH`, resize par viewport logique au
    lieu de `transform`, iframe conservée), UX de l'Extension inchangée.
 
+## 3 bis. Build de calibration (instrument de mesure)
+
+Choix d'exécution (14/10/2026) : un ZIP **Hosted Test** du projet Raptoru Live, testé sur LeCroupier_ (au lieu
+d'une extension Twitch séparée). **Non validé manuellement, non publié.**
+
+- `npm run build:calibration -w @raptoru/twitch-extension` →
+  `apps/twitch-extension/release/raptoru-live-CALIBRATION-video-component-<sha>.zip` (+ `.sha256`).
+- **Vraie UI** : mêmes fichiers `extension/` (Hub, carrousel, header, wallet, navigation, vues Soundboard /
+  TTS / Bonk / Tombola / Modération, CSS, breakpoints) ; aucune retouche de l'UI.
+- **Données** : `calibration/fixtures.js` = réponses de la frontière viewer staging (`ext-facade.ts`) capturées
+  sur un Core en mémoire, anonymisées (Viewer_A…H, Mod_Test, sons « Son NN » de même longueur que les vrais
+  libellés). Vu en modérateur (5 modules). `calibration/adapter.js` les sert au vrai client
+  (`RUNTIME.fixtureCall`, défini seulement par ce build) ; la Tombola de 60 s boucle ; **toute action est
+  refusée** (`not_available`). Aucune URL d'API, aucun `onAuthorized` / `listen` Twitch.
+- **HUD** (`calibration/hud.js`, Video Component seulement, `position: fixed`, réductible) : inner / client /
+  scroll / root, dpr, visualViewport (+ scale), visibilité (document + `onVisibilityChanged`), compteurs de
+  resize (window, visualViewport, ResizeObserver) + horodatage, champs `onContext` utiles à la géométrie
+  (`n/a` si absents), instanceId + compteur de chargements. Bouton **Grille** : bords colorés, grille 20 px,
+  repères 100 px, centre, dimensions et ratio. Chaque état stabilisé est aussi loggé (`[CALIBRATION]`).
+- Panel / mobile / config : page statique « Calibration build — Video Component only ».
+- Le build échoue si un fichier du paquet contient `raptoru.fr`, `core-staging`, `/v1/ext`, `localhost` ou
+  `127.0.0.1`.
+
 ## 4. Mesures
 
 _Aucune pour l'instant._
