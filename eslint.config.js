@@ -18,7 +18,11 @@ export default defineConfig(
   tseslint.configs.recommended,
   {
     // Twitch extension (ASTRA-P2-011): plain browser ES modules, linted like the rest of the repo.
-    files: ['apps/twitch-extension/extension/**/*.js'],
+    // calibration/: browser modules of the calibration build (Video Component geometry).
+    files: [
+      'apps/twitch-extension/extension/**/*.js',
+      'apps/twitch-extension/calibration/**/*.js',
+    ],
     languageOptions: {
       sourceType: 'module',
       globals: Object.fromEntries(

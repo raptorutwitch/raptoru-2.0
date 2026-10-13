@@ -1,0 +1,224 @@
+/* Calibration HUD and grid (build-calibration only). Everything is position: fixed: nothing here
+   takes space in the page flow or changes the Raptoru UI underneath. */
+.calib-hud,
+.calib-pill {
+  position: fixed;
+  top: 24px;
+  left: 10px;
+  z-index: 2147483646;
+  /* The metrics let clicks through to the UI underneath; only the buttons take them (the overlay page
+     itself sets pointer-events: none on its body, overlay.css). */
+  pointer-events: none;
+  font:
+    10px/13px ui-monospace,
+    'Cascadia Mono',
+    Consolas,
+    monospace;
+  color: #e8f0ff;
+  background: rgba(8, 10, 16, 0.86);
+  border: 1px solid rgba(0, 229, 255, 0.55);
+  border-radius: 6px;
+}
+.calib-hud {
+  width: 236px;
+  padding: 4px 6px 5px;
+}
+.calib-hud[hidden],
+.calib-pill[hidden],
+.calib-grid[hidden] {
+  display: none;
+}
+.calib-hud__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 3px;
+}
+.calib-hud__title {
+  flex: 1;
+  color: #00e5ff;
+  letter-spacing: 0.08em;
+}
+.calib-hud__btn,
+.calib-pill {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.calib-hud__btn,
+.calib-pill {
+  pointer-events: auto;
+}
+.calib-hud__btn {
+  padding: 0 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+}
+.calib-hud__btn[aria-pressed='true'] {
+  background: #00e5ff;
+  color: #000;
+}
+.calib-hud__body {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 0 6px;
+  margin: 0;
+}
+.calib-hud__body dt {
+  color: #8aa0b8;
+}
+.calib-hud__body dd {
+  margin: 0;
+  word-break: break-all;
+}
+/* Minimised: bottom-left corner, clear of the modules' « Retour » button. */
+.calib-pill {
+  top: auto;
+  bottom: 2px;
+  left: 2px;
+  padding: 0 5px;
+  font:
+    10px/14px ui-monospace,
+    'Cascadia Mono',
+    Consolas,
+    monospace;
+  opacity: 0.85;
+}
+
+.calib-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483600;
+  overflow: hidden;
+  /* Covers the UI while shown (no click reaches the Hub underneath). */
+  pointer-events: auto;
+  background-color: #0b0d12;
+  background-image:
+    linear-gradient(to right, rgba(0, 229, 255, 0.45) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 229, 255, 0.45) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size:
+    100px 100px,
+    100px 100px,
+    20px 20px,
+    20px 20px;
+  font:
+    10px/12px ui-monospace,
+    'Cascadia Mono',
+    Consolas,
+    monospace;
+  color: #e8f0ff;
+}
+.calib-edge {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.calib-edge--top,
+.calib-edge--bottom {
+  left: 0;
+  right: 0;
+  height: 6px;
+}
+.calib-edge--left,
+.calib-edge--right {
+  top: 0;
+  bottom: 0;
+  width: 6px;
+}
+.calib-edge--top {
+  top: 0;
+  background: #ff3b3b;
+}
+.calib-edge--bottom {
+  bottom: 0;
+  background: #3b82ff;
+}
+.calib-edge--left {
+  left: 0;
+  background: #22c55e;
+}
+.calib-edge--right {
+  right: 0;
+  background: #facc15;
+}
+.calib-edge__label {
+  position: absolute;
+  padding: 0 4px;
+  background: inherit;
+  color: #000;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.calib-edge--top .calib-edge__label {
+  top: 6px;
+}
+.calib-edge--bottom .calib-edge__label {
+  bottom: 6px;
+}
+.calib-edge--left .calib-edge__label {
+  left: 6px;
+}
+.calib-edge--right .calib-edge__label {
+  right: 6px;
+}
+.calib-cross {
+  position: absolute;
+  background: #ff3bd4;
+}
+.calib-cross--h {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+}
+.calib-cross--v {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+}
+.calib-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 2px solid #ff3bd4;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.calib-dims {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, 18px);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.calib-dims strong {
+  font-size: 18px;
+  line-height: 22px;
+  color: #fff;
+}
+.calib-ruler {
+  position: absolute;
+  color: #00e5ff;
+}
+.calib-ruler--x {
+  top: 8px;
+  transform: translateX(-50%);
+}
+.calib-ruler--y {
+  left: 8px;
+  transform: translateY(-50%);
+}

@@ -72,6 +72,8 @@ export function createClient({
   demoMode = isDemo(),
   demoScenario = new URLSearchParams(globalThis.location?.search || '').get('demoScenario') || 'paid',
   fetchImpl = globalThis.fetch,
+  // Local fixtures in place of the simulator: only the calibration build's runtime-config defines it.
+  fixtureCall = RUNTIME.fixtureCall ?? null,
 }) {
   const demoQuery = new URLSearchParams(globalThis.location?.search || '');
   const studioCatalog = demoMode === true
@@ -108,7 +110,7 @@ export function createClient({
 
   async function call(method, path, { body, idempotencyKey } = {}) {
     if (demoMode) {
-      const responsePayload = await demoCall(method, path, body);
+      const responsePayload = await (fixtureCall ?? demoCall)(method, path, body);
       if (sessionRoute(path) === '/session') rememberSession(responsePayload);
       return responsePayload;
     }

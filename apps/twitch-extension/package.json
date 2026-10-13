@@ -5,6 +5,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "vitest run",
-    "build:staging": "node scripts/build-staging.mjs"
+    "build:staging": "node scripts/build-staging.mjs",
+    "build:calibration": "node scripts/build-calibration.mjs"
   }
 }
