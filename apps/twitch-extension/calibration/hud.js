@@ -97,10 +97,15 @@ const title = make('strong', 'calib-hud__title', 'CALIBRATION');
 const gridBtn = make('button', 'calib-hud__btn', 'Grille');
 gridBtn.type = 'button';
 gridBtn.setAttribute('aria-pressed', 'false');
+// Graisse des textes du Hub (calibration/compact-video.css) : actuel → +1 → +2, comparaison visuelle.
+const weightBtn = make('button', 'calib-hud__btn', 'Poids 0');
+weightBtn.type = 'button';
+weightBtn.title = 'Comparer la graisse des textes du Hub';
+let weight = 0;
 const minBtn = make('button', 'calib-hud__btn', '–');
 minBtn.type = 'button';
 minBtn.title = 'Réduire le HUD';
-head.append(title, gridBtn, minBtn);
+head.append(title, weightBtn, gridBtn, minBtn);
 const body = make('dl', 'calib-hud__body');
 hud.append(head, body);
 
@@ -243,6 +248,12 @@ gridBtn.addEventListener('click', () => {
   grid.hidden = !grid.hidden;
   gridBtn.setAttribute('aria-pressed', String(!grid.hidden));
   render();
+});
+weightBtn.addEventListener('click', () => {
+  weight = (weight + 1) % 3;
+  doc.documentElement.classList.toggle('calib-w1', weight === 1);
+  doc.documentElement.classList.toggle('calib-w2', weight === 2);
+  weightBtn.textContent = `Poids ${weight ? `+${weight}` : 0}`;
 });
 minBtn.addEventListener('click', () => {
   hud.hidden = true;

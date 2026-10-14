@@ -211,7 +211,9 @@ export function createHubCarousel({
     const h = track.clientHeight;
     if (!w || !h) return;
     const wide = w > 460;
-    cw = wide ? 176 : w > 340 ? Math.min(224, w - 150) : Math.min(200, w - 110);
+    // Largeur large réglable par un profil de densité CSS (--rh-card-w) ; 176 px sinon.
+    const wideCw = parseFloat(document.defaultView?.getComputedStyle(track)?.getPropertyValue('--rh-card-w')) || 176;
+    cw = wide ? wideCw : w > 340 ? Math.min(224, w - 150) : Math.min(200, w - 110);
     side = Math.max(1, Math.min(wide ? 2 : 1, Math.floor((n - 1) / 2)));
     const ch = Math.max(180, Math.min(h - 18, Math.round(cw * 1.52)));
     gap = cw * 0.5 + cw * 0.86 * 0.5 + 12;

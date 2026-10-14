@@ -1,0 +1,242 @@
+/* Profil de densité « compact-video » — PROTOTYPE, build de calibration seulement (non validé).
+   But : recomposer nativement à 565×376 (Video Component 65 % · 3:2 · autoscale OFF) le Hub tel qu'il
+   s'affiche à 651×434 (75 %), sans transform/zoom global. Base ≈ 0,87 × les valeurs de hub.css, avec
+   un plancher de lisibilité sur les textes. Hub seulement : les modules ne sont pas touchés.
+   Fenêtre : Video Component (body.component-view) en largeur ≥ 521 px et hauteur 321–400 px ; le
+   « normal » (≥ 401 px de haut, dont le 600×432 du Lab) reste inchangé. Après validation, ces règles
+   iront telles quelles dans hub.css. */
+@media (min-width: 521px) and (min-height: 321px) and (max-height: 400px) {
+  body.component-view .rh-hub {
+    /* Lue par hub-carousel.js (largeur de la carte active ; 176 px en normal). */
+    --rh-card-w: 153px;
+    border-radius: 14px;
+  }
+
+  /* En-tête : 52 → 44 px. */
+  body.component-view .rh-top {
+    gap: 5px;
+    padding: 8px 9px 3px;
+  }
+  body.component-view .rh-brand {
+    gap: 7px;
+  }
+  body.component-view .rh-mark {
+    width: 26px;
+    height: 26px;
+    border-radius: 9px;
+    font-size: 12.5px;
+  }
+  body.component-view .rh-brand__copy small {
+    font-size: 8.5px;
+  }
+  body.component-view .rh-brand__copy strong {
+    font-size: 12.5px;
+  }
+  body.component-view .rh-top .jdm-notification-toggle,
+  body.component-view .rh-top .jdm-viewer-preferences-toggle {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    flex-basis: 26px;
+    border-radius: 8px;
+  }
+  body.component-view .rh-top .jdm-notification-toggle__icon {
+    width: 15px;
+    height: 15px;
+  }
+  body.component-view .rh-top .jdm-viewer-preferences-toggle__icon {
+    font-size: 14px;
+  }
+  /* Wallet : 92×38 → 84×33 (pièce et animation Jetons/Crédits inchangées). */
+  body.component-view .rh-top .rl-cswitch {
+    padding: 3px;
+  }
+  body.component-view .rh-top .rl-cswitch__chip {
+    height: 27px;
+    padding-right: 7px;
+  }
+  body.component-view .rh-top .rl-cswitch__val {
+    width: 36px;
+  }
+  body.component-view .rh-top .rl-cswitch__v {
+    font-size: 11px;
+  }
+
+  /* Carrousel : carte 176×268 → 153×233 (hauteur = 1,52 × largeur, calculée par hub-carousel.js). */
+  body.component-view .rh-nav {
+    width: 26px;
+    height: 26px;
+    margin-top: -13px;
+  }
+  body.component-view .rh-nav svg {
+    width: 13px;
+    height: 13px;
+  }
+  body.component-view .rh-nav--prev {
+    left: 5px;
+  }
+  body.component-view .rh-nav--next {
+    right: 5px;
+  }
+  body.component-view .rh-card {
+    border-radius: 21px;
+  }
+  body.component-view .rh-orb {
+    width: 75px;
+    height: 75px;
+    box-shadow:
+      0 9px 21px rgba(10, 4, 30, 0.35),
+      0 0 0 6px rgba(255, 255, 255, 0.22),
+      inset 0 -3px 7px rgba(80, 40, 140, 0.12);
+  }
+  body.component-view .rh-orb::before {
+    inset: -17px;
+  }
+  body.component-view .rh-orb .rh-icon {
+    width: 35px;
+    height: 35px;
+  }
+  body.component-view .rh-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    font-size: 9.5px;
+    line-height: 14px;
+  }
+  body.component-view .rh-body {
+    gap: 3px;
+    padding: 0 12px 12px;
+  }
+  body.component-view .rh-chip {
+    height: 18px;
+    gap: 4px;
+    padding: 0 8px;
+    font-size: 9.5px;
+  }
+  body.component-view .rh-chip::before {
+    width: 5px;
+    height: 5px;
+  }
+  body.component-view .rh-name {
+    font-size: 19px;
+  }
+  body.component-view .rh-name::after {
+    width: 21px;
+    margin: 5px auto 2px;
+  }
+  /* Plancher de lisibilité : 11 px (10,4 en proportion stricte). */
+  body.component-view .rh-desc {
+    font-size: 11px;
+  }
+  body.component-view .rh-cta {
+    height: 28px;
+    gap: 5px;
+    margin-top: 5px;
+    padding: 0 12px 0 14px;
+    font-size: 11.5px;
+  }
+  body.component-view .rh-cta .rh-icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* Bas : 66 → 57 px. */
+  body.component-view .rh-dock {
+    gap: 5px;
+    padding: 0 9px 7px;
+  }
+  body.component-view .rh-rail {
+    height: 10px;
+    gap: 5px;
+  }
+  body.component-view .rh-pos {
+    width: 5px;
+    height: 5px;
+  }
+  body.component-view .rh-pos.is-on {
+    width: 16px;
+  }
+  body.component-view .rh-util {
+    min-height: 30px;
+    padding: 5px 22px 0;
+  }
+  body.component-view .rh-util-btn {
+    height: 23px;
+    gap: 4px;
+    padding: 0 7px;
+    font-size: 10px;
+  }
+  body.component-view .rh-util-btn .rh-icon {
+    width: 12px;
+    height: 12px;
+  }
+  body.component-view .rh-all-toggle {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+  body.component-view .rh-all-toggle .rh-icon {
+    width: 14px;
+    height: 14px;
+  }
+  body.component-view .rh-tuto {
+    width: 23px;
+    height: 23px;
+  }
+  body.component-view .rh-tuto__q {
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+  }
+
+  /* Lanceur « Tous » et tiroirs : suivent la hauteur réduite du bas et de l'en-tête. */
+  body.component-view .rh-all {
+    bottom: 46px;
+    max-height: calc(100% - 96px);
+    grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+  }
+  body.component-view .rh-all__icon {
+    width: 35px;
+    height: 35px;
+    border-radius: 11px;
+  }
+  body.component-view .rh-all__icon .rh-icon {
+    width: 18px;
+    height: 18px;
+  }
+  body.component-view .rh-all__item {
+    font-size: 10px;
+  }
+  body.component-view .rh-hub > .jdm-notification-center,
+  body.component-view .rh-hub > .jdm-viewer-preferences {
+    top: 40px;
+  }
+}
+
+/* Comparaison de graisse (bouton « Poids » du HUD) : actuel → +1 → +2. Test visuel seulement. */
+html.calib-w1 body.component-view .rh-brand__copy strong,
+html.calib-w1 body.component-view .rh-util-btn {
+  font-weight: 800;
+}
+html.calib-w1 body.component-view .rh-desc {
+  font-weight: 700;
+}
+html.calib-w1 body.component-view .rh-chip,
+html.calib-w1 body.component-view .rh-cta,
+html.calib-w1 body.component-view .rh-top .rl-cswitch__v {
+  font-weight: 900;
+}
+html.calib-w2 body.component-view .rh-brand__copy strong,
+html.calib-w2 body.component-view .rh-util-btn,
+html.calib-w2 body.component-view .rh-chip,
+html.calib-w2 body.component-view .rh-cta,
+html.calib-w2 body.component-view .rh-top .rl-cswitch__v {
+  font-weight: 900;
+}
+html.calib-w2 body.component-view .rh-desc {
+  font-weight: 800;
+}
+html.calib-w2 body.component-view .rh-desc,
+html.calib-w2 body.component-view .rh-util-btn {
+  -webkit-text-stroke: 0.2px currentColor;
+}
