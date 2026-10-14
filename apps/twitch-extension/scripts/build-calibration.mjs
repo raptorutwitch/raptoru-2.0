@@ -6,7 +6,7 @@
 //   listen) + `fixtureCall` = calibration/adapter.js, so every answer of the client comes from local
 //   anonymised fixtures (no apiBase: no request can leave), environment 'calibration' (badge);
 // - video_component.html gets the calibration HUD (calibration/hud.js + hud.css, fixed overlay) and the
-//   « compact-video » density prototype of the Hub (calibration/compact-video.css, not validated);
+//   « compact-video » density prototype (calibration/compact-video.css + .js, not validated);
 // - panel.html, mobile.html, config.html become a static « Calibration build — Video Component only ».
 // Packaged like build-staging.mjs (files at the root, STORED, [A-Za-z0-9._/-] names, no .md). Refuses
 // to finish if a packaged file names a Raptoru endpoint (legacy, staging Core, /v1/ext, local hosts).
@@ -67,6 +67,7 @@ for (const name of [
   'hud.js',
   'hud.css',
   'compact-video.css',
+  'compact-video.js',
 ])
   copyFileSync(join(calibration, name), join(out, 'calibration', name));
 
@@ -141,7 +142,7 @@ video = insertOnce(
 video = insertOnce(
   video,
   '</body>',
-  '  <script type="module" src="calibration/hud.js"></script>',
+  '  <script type="module" src="calibration/compact-video.js"></script>\n  <script type="module" src="calibration/hud.js"></script>',
 );
 writeFileSync(videoPage, video);
 
