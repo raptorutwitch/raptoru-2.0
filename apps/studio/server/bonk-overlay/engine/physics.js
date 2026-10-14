@@ -1,7 +1,8 @@
 // Bonk VNext lot 1 — trajectory simulator, ported from the legacy `buildBonkTrajectory`
 // (bonk-v3-core.js, kept unchanged): same gravity, 16 ms step, wall bounces, ground hold and roll,
 // « fall » / « shrink » exits. Generalised: any entry point, flight time, gravity scale, lateral drift,
-// impact behaviour by category (rim bounce, traverse, graze, offset, centre) and preset.
+// impact behaviour (always a contact: edge reflection or surface knock, strong / normal / weak
+// bounce) and preset.
 // Output: points sampled every 16 ms ({t ms, x, y, rot °, sx, sy}), played by the scene.
 
 import { CANVAS } from './target.js';
@@ -62,41 +63,42 @@ export function buildTrajectory(p) {
   rot = p.spin.before * T;
   push(T, impact.x, impact.y, 'impact');
 
-  // --- impact: the velocity after the hit depends on where it hit -------------------------------
+  // --- impact: always a physical contact with the target -----------------------------------------
+  // The variety is the strength of the bounce (strong 25 %, normal 50 %, weak 25 %), never the
+  // absence of a collision: no projectile flies through or past the target (Antoni, 2026-10-14).
   let vx = vx0 + ax * T;
   let vy = vy0 + g * T;
-  const restitution = preset.restitution;
-  // Fullscreen (lot 2): « glass » knocks back like a centre hit, « pass » flies through like a
-  // traverse; no edge reflection without a camera frame.
-  if (impact.category === 'center' || impact.category === 'glass') {
-    vx *= between(random, 0.7, 1);
-    vy =
-      -between(random, 0.42, 0.82) *
-      Math.max(Math.abs(vy), 600) *
-      Math.min(1.3, restitution);
-  } else if (impact.category === 'traverse' || impact.category === 'pass') {
-    const k = between(random, 0.55, 0.75);
-    vx *= k;
-    vy *= k;
-  } else if (impact.category === 'offset') {
-    const k = between(random, 0.75, 0.9);
-    vx *= k;
-    vy *= k;
-  } else {
-    // rim / graze: reflection on the edge (outward normal), graze only deflects slightly.
-    const e =
-      impact.category === 'graze'
-        ? between(random, 0.15, 0.3)
-        : Math.min(0.95, between(random, 0.45, 0.7) * restitution);
-    const dot = vx * impact.nx + vy * impact.ny;
+  const tier = random();
+  const bounce = tier < 0.25 ? 'strong' : tier < 0.75 ? 'normal' : 'weak';
+  const e = Math.min(
+    0.95,
+    (bounce === 'strong'
+      ? between(random, 0.65, 0.85)
+      : bounce === 'normal'
+        ? between(random, 0.45, 0.65)
+        : between(random, 0.2, 0.35)) * preset.restitution,
+  );
+  const dot = vx * impact.nx + vy * impact.ny;
+  const onEdge = impact.category === 'rim' || impact.category === 'graze';
+  if (onEdge) {
+    // Edge of the target: reflection on its outward normal (always bounces off that edge).
     if (dot < 0) {
       vx -= (1 + e) * dot * impact.nx;
       vy -= (1 + e) * dot * impact.ny;
-      vx *= 0.85;
-    } else {
-      vx *= 0.8;
-      vy *= 0.8;
     }
+    vx *= 0.85;
+    // A nearly tangent touch would give no visible bounce: a readable minimum, along the normal.
+    const out = vx * impact.nx + vy * impact.ny;
+    const least = 600 * (e + 0.12);
+    if (out < least) {
+      vx += (least - out) * impact.nx;
+      vy += (least - out) * impact.ny;
+    }
+  } else {
+    // Surface of the target (inside, centre, Fullscreen « glass »): it knocks against it and
+    // bounces back up.
+    vx *= between(random, 0.6, 0.95);
+    vy = -Math.max(Math.abs(vy), 600) * (e + 0.12);
   }
   const spinAfter = p.spin.after;
 
@@ -217,6 +219,7 @@ export function buildTrajectory(p) {
     impactMs: T * 1000,
     durationMs: points.at(-1).t,
     exit: exit === 'shrink' || groundedUntil === null ? 'shrink' : 'fall',
+    bounce,
   };
 }
 

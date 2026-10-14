@@ -74,7 +74,7 @@ describe('sizes (audit §8, M = 140)', () => {
 });
 
 describe('impact zone (audit §6)', () => {
-  it('rim, traverse, graze, offset as weighted; the centre stays rare (≈ 3 %, core ≤ 4.5 %)', () => {
+  it('rim, inside, graze as weighted; the centre stays rare (≈ 3 %, core ≤ 4.5 %)', () => {
     const random = createSeededRandom(3);
     const N = 30_000;
     const counts = {};
@@ -93,11 +93,11 @@ describe('impact zone (audit §6)', () => {
     expect(share(core, N)).toBeLessThan(0.045);
   });
 
-  it('traverse never lands in the core; rim points hug the edges', () => {
+  it('inside never lands in the core; rim points hug the edges', () => {
     const random = createSeededRandom(4);
     for (let i = 0; i < 5000; i++) {
       const p = pickImpact(random, { facing: ['left'] });
-      if (p.category === 'traverse')
+      if (p.category === 'inside')
         expect(inCore(DEFAULT_TARGET, p.x, p.y)).toBe(false);
       if (p.category === 'rim') {
         const r = DEFAULT_TARGET;
@@ -189,6 +189,49 @@ describe('trajectories (physics ported from the legacy engine)', () => {
           first.y < 0 ||
           first.y > CANVAS.height,
       ).toBe(true);
+    }
+  });
+
+  it('every projectile physically hits the target: it bounces back off it, never flies through or past', () => {
+    const contact = (p) => {
+      const pts = p.trajectory.points;
+      const i = pts.findIndex((q) => q.phase === 'impact');
+      const after = pts[i + 1];
+      const vout = [after.x - pts[i].x, after.y - pts[i].y];
+      const { category, nx, ny } = p.impact;
+      if (category === 'rim' || category === 'graze')
+        // Edge contact: it always leaves that edge outwards.
+        return vout[0] * nx + vout[1] * ny > 0;
+      // Surface knock: it goes back up.
+      return vout[1] < 0;
+    };
+    const next2 = ids(31);
+    for (const mode of ['manual', 'fullscreen']) {
+      const counts = { strong: 0, normal: 0, weak: 0 };
+      for (let i = 0; i < 3000; i++) {
+        const p = planShot(next2(), { mode });
+        expect(contact(p)).toBe(true);
+        counts[p.trajectory.bounce] += 1;
+      }
+      expect(Math.abs(counts.strong / 3000 - 0.25)).toBeLessThan(0.03);
+      expect(Math.abs(counts.normal / 3000 - 0.5)).toBeLessThan(0.03);
+      expect(Math.abs(counts.weak / 3000 - 0.25)).toBeLessThan(0.03);
+    }
+  });
+
+  it('a graze always lands close enough to touch the edge, even around a big zone', () => {
+    const random = createSeededRandom(32);
+    const rect = { x: 26, y: 60, w: 1190, h: 763 }; // the legacy « Just Chatting » camera
+    for (let i = 0; i < 5000; i++) {
+      const p = pickImpact(random, { rect, size: 140 });
+      if (p.category !== 'graze') continue;
+      const toEdge = Math.min(
+        Math.abs(p.x - rect.x),
+        Math.abs(p.x - (rect.x + rect.w)),
+        Math.abs(p.y - rect.y),
+        Math.abs(p.y - (rect.y + rect.h)),
+      );
+      expect(toEdge).toBeLessThanOrEqual(0.4 * 140 + 0.001);
     }
   });
 
@@ -409,7 +452,7 @@ describe('scene (fake DOM and clock): nothing paid is ever dropped', () => {
     f.scene.setTarget({ mode: 'fullscreen' });
     expect(JSON.parse(JSON.stringify(first.plan))).toEqual(before); // in flight: untouched
     const second = await f.scene.play({ id: 'after', image: f.image() });
-    expect(['glass', 'pass']).toContain(second.plan.impact.category);
+    expect(second.plan.impact.category).toBe('glass');
     const zone = { mode: 'manual', rect: { x: 100, y: 600, w: 640, h: 360 } };
     f.scene.setTarget(zone);
     expect(f.scene.target).toEqual(zone);
@@ -427,7 +470,7 @@ describe('scene (fake DOM and clock): nothing paid is ever dropped', () => {
 });
 
 describe('targets (lot 2): Manuel zone and Fullscreen', () => {
-  it('Fullscreen: its own impact logic (glass 60 % / pass 40 %), anywhere on the canvas minus 6 %, no edge', () => {
+  it('Fullscreen: its own impact logic (always a knock on the screen), anywhere on the canvas minus 6 %, no edge', () => {
     const random = createSeededRandom(21);
     const N = 20_000;
     const counts = {};
@@ -443,7 +486,7 @@ describe('targets (lot 2): Manuel zone and Fullscreen', () => {
     }
     for (const [category, weight] of FULLSCREEN_CATEGORIES)
       expect(Math.abs(share(counts[category], N) - weight)).toBeLessThan(0.015);
-    expect(Object.keys(counts).sort()).toEqual(['glass', 'pass']);
+    expect(Object.keys(counts)).toEqual(['glass']);
     // Spread over the whole screen, not around one spot: every quarter gets its share.
     const random2 = createSeededRandom(22);
     const quarters = [0, 0, 0, 0];
@@ -454,11 +497,11 @@ describe('targets (lot 2): Manuel zone and Fullscreen', () => {
     for (const q of quarters) expect(share(q, 8000)).toBeGreaterThan(0.2);
   });
 
-  it('Fullscreen projectiles: valid trajectories through their impact, only glass / pass', () => {
+  it('Fullscreen projectiles: valid trajectories through their impact, always glass', () => {
     const next = ids(23);
     for (let i = 0; i < 500; i++) {
       const p = planShot(next(), { mode: 'fullscreen' });
-      expect(['glass', 'pass']).toContain(p.impact.category);
+      expect(p.impact.category).toBe('glass');
       const at = p.trajectory.points.find((q) => q.phase === 'impact');
       expect(Math.hypot(at.x - p.impact.x, at.y - p.impact.y)).toBeLessThan(1);
       for (const q of p.trajectory.points)

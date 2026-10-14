@@ -9,9 +9,8 @@ const MARGIN = 40;
 
 export const IMPACT_CATEGORIES = Object.freeze([
   ['rim', 0.45],
-  ['traverse', 0.22],
-  ['graze', 0.15],
-  ['offset', 0.15],
+  ['inside', 0.22],
+  ['graze', 0.3],
   ['center', 0.03],
 ]);
 /** Central core of the target (fraction of each side, around the centre). */
@@ -78,7 +77,7 @@ export function inCore(rect, x, y) {
   return Math.abs(x - cx) < CORE * rect.w && Math.abs(y - cy) < CORE * rect.h;
 }
 
-function samplePoint(random, rect, category, edge) {
+function samplePoint(random, rect, category, edge, size) {
   const m = Math.min(rect.w, rect.h);
   const cx = rect.x + rect.w / 2;
   const cy = rect.y + rect.h / 2;
@@ -94,14 +93,8 @@ function samplePoint(random, rect, category, edge) {
       rect,
       edge,
       between(random, 0.05, 0.95),
-      between(random, 0.12, 0.22) * m,
-    );
-  if (category === 'offset')
-    return edgePoint(
-      rect,
-      edge,
-      between(random, -0.1, 1.1),
-      between(random, 0.22, 0.4) * m,
+      // Just outside the edge, but always close enough for the projectile to touch it.
+      Math.min(between(random, 0.12, 0.22) * m, 0.4 * size),
     );
   let x;
   let y;
@@ -109,7 +102,7 @@ function samplePoint(random, rect, category, edge) {
     x = cx + between(random, -CORE, CORE) * rect.w;
     y = cy + between(random, -CORE, CORE) * rect.h;
   } else {
-    // Traverse: inside the target, outside its central core.
+    // Inside: on the target surface, outside its central core.
     for (let i = 0; i < 6; i++) {
       x = rect.x + rect.w * between(random, 0.1, 0.9);
       y = rect.y + rect.h * between(random, 0.1, 0.9);
@@ -136,7 +129,7 @@ export function pickImpact(
   const edge = pickEdge(random, rect, facing);
   let point;
   for (let attempt = 0; attempt < 3; attempt++) {
-    point = samplePoint(random, rect, category, edge);
+    point = samplePoint(random, rect, category, edge, size);
     point.x = clamp(point.x, MARGIN, CANVAS.width - MARGIN);
     point.y = clamp(point.y, MARGIN, CANVAS.height - MARGIN);
     const crowded = recent.some(
@@ -157,11 +150,8 @@ export const FULLSCREEN_TARGET = Object.freeze({
   w: CANVAS.width * (1 - 2 * FULLSCREEN_MARGIN),
   h: CANVAS.height * (1 - 2 * FULLSCREEN_MARGIN),
 });
-/** No edge to hit: it knocks against the screen (« glass », bounces back) or flies through. */
-export const FULLSCREEN_CATEGORIES = Object.freeze([
-  ['glass', 0.6],
-  ['pass', 0.4],
-]);
+/** No edge to hit: it always knocks against the screen (« glass ») and bounces back. */
+export const FULLSCREEN_CATEGORIES = Object.freeze([['glass', 1]]);
 
 /** Impact anywhere on the fullscreen area, with the same anti-clustering. */
 export function pickFullscreenImpact(random, { size = 140, recent = [] } = {}) {
