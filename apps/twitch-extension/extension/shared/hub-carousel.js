@@ -101,7 +101,7 @@ export function createHubCarousel({
     card.dataset.i = String(i);
     card.dataset.module = mod.id;
     card.setAttribute('role', 'option');
-    card.setAttribute('aria-label', `${mod.label}${mod.chip ? ` · ${mod.chip.text}` : ''}`);
+    card.setAttribute('aria-label', `${mod.label}${mod.chip ? ` · ${mod.chip.text}` : ''}${mod.corner ? ` · ${mod.corner.getAttribute('aria-label')}` : ''}`);
     card.style.setProperty('--m', mod.color);
     card.style.setProperty('--m2', mod.color2);
     const art = make('div', 'rh-art');
@@ -122,6 +122,8 @@ export function createHubCarousel({
     if (!mod.off) cta.append(hubIcon(document, 'arrow'));
     body.append(make('div', 'rh-name', mod.label), make('div', 'rh-desc', mod.description), cta);
     card.append(motif(document, mod.icon), art, body);
+    // Optional corner element (viewer restriction pill): absolute, never changes the card size.
+    if (mod.corner) card.append(mod.corner);
     track.append(card);
     return card;
   });

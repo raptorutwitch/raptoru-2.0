@@ -38,6 +38,16 @@ import { createModerationV2View } from './moderation-v2.js';
 import { createCommandsV2View } from './commands-v2.js';
 import { createCommandsPublicView } from './commands-public.js';
 import { createTombolaV2View } from './tombola-v2.js';
+import {
+  acknowledge,
+  isAcknowledged,
+  restrictionFor,
+  restrictionIndicator,
+  restrictionModal,
+  restrictionPill,
+  holdsAction,
+  tickRestrictions,
+} from './viewer-restrictions.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -1148,6 +1158,13 @@ export function disableBonkAmmoLoop(ammo, index = 0) {
  */
 export function createModulePanel({ root, client, onRefresh, initialModule = null, onNotificationChange = null }) {
   let state = null;
+  // Raptoru restrictions of this viewer (session `restrictions`, Core's rows): only times move here;
+  // when one ends, the screen is drawn again from the same data (no extra request).
+  const restrictionStorage = () => { try { return globalThis.localStorage ?? null; } catch { return null; } };
+  const restrictionOf = (moduleId) => restrictionFor(state?.restrictions, moduleId);
+  globalThis.setInterval?.(() => {
+    if (root.querySelector('[data-rl-end]') && tickRestrictions(root)) renderPreservingViewport();
+  }, 1000);
   let openModule = initialModule;
   let busy = false;
   let loadError = null;
@@ -3054,8 +3071,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const methodAvailable = usingCredits ? Boolean(selectedCreditRedemption) : hasEnoughTokens;
       const cost = usingCredits ? creditCost : tokenCost;
       const unit = usingCredits ? `crédit${creditCost > 1 ? 's' : ''}` : 'jetons';
+      const restricted = holdsAction(restrictionOf('soundboard')) ? restrictionOf('soundboard') : null;
       const hint = !sound ? ''
         : studioPlaceholder ? 'Placeholder Studio · aucune action réelle'
+          : restricted ? restricted.kind === 'cooldown' ? 'Cooldown en cours' : 'Indisponible pour ton compte'
           : unavailable ? unavailable.hint
             : mod.player_ready === false ? 'Lecteur du Studio hors ligne'
             : !interactionsAvailable && !state?.lab_mode
@@ -3093,7 +3112,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       price.dataset.method = method;
       priceUnit.textContent = unit;
-      send.disabled = studioPlaceholder || !sound || !methodSupported || !methodAvailable || Boolean(unavailable)
+      send.disabled = studioPlaceholder || !sound || !methodSupported || !methodAvailable || Boolean(unavailable) || Boolean(restricted)
         || (!interactionsAvailable && !state?.lab_mode);
       const summary = sound ? `Envoyer ${displayLabelFor(sound)} pour ${fmt(cost)} ${unit}` : 'Choisis d’abord un son';
       send.setAttribute('aria-label', summary);
@@ -3704,8 +3723,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           : `Ajouter ${favoriteTarget.label} aux favoris`);
         favoriteButton.title = favoriteButton.getAttribute('aria-label');
       }
-      for (const button of actionButtons) button.disabled = !dockEmote || !interactionsAvailable;
-      if (instantBonkButton) instantBonkButton.disabled = !dockEmote || !interactionsAvailable;
+      const restricted = holdsAction(restrictionOf('bonk'));
+      for (const button of actionButtons) button.disabled = !dockEmote || !interactionsAvailable || restricted;
+      if (instantBonkButton) instantBonkButton.disabled = !dockEmote || !interactionsAvailable || restricted;
       composer.classList.toggle('is-visible', Boolean(dockEmote));
       composer.setAttribute('aria-hidden', String(!dockEmote));
     }
@@ -5994,6 +6014,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
             chip,
             off,
             badge: moduleNotices(mod),
+            // Cooldown / restriction of this viewer: a small pill, never a sentence.
+            corner: holdsAction(restrictionOf(mod.id)) ? restrictionPill(document, restrictionOf(mod.id)) : null,
           };
         });
       const stage = el('div', 'rh-stage');
@@ -6119,6 +6141,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
 
       if (!isModeration) headRight.append(walletRow);
+      const restriction = restrictionOf(mod.id);
+      if (restriction && !isTombolaV2) headRight.prepend(restrictionIndicator(document, restriction));
 
       const item = el('section', 'jdm-module');
       item.dataset.module = mod.id;
@@ -6197,6 +6221,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           tombolaV2View.start();
         }
         tombolaV2View.update(state);
+        // Its own header (the host's is hidden): the restriction indicator goes there.
+        const tmbHead = tombolaV2View.node.querySelector('.head');
+        tmbHead?.querySelector('.rl-rind')?.remove();
+        const tmbRestriction = restrictionOf(mod.id);
+        if (tmbHead && tmbRestriction) tmbHead.querySelector('.grow')?.after(restrictionIndicator(document, tmbRestriction));
         body.append(tombolaV2View.node);
         queueMicrotask(() => tombolaV2View?.attached());
       } else if (mod.id === MODERATION_MODULE.id) {
@@ -6215,6 +6244,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       item.append(body);
       if (isSoundboard) (body.querySelector('.sbx-toast-slot') ?? item).append(createSoundboardFeedbackOverlay());
       screen.append(head, item);
+      // A real block (module or all): told once per state, « J'ai compris »; the module stays readable.
+      const blocked = restrictionOf(mod.id);
+      if (blocked?.kind === 'block' && !isAcknowledged(restrictionStorage(), state?.twitch_user_id, blocked)) {
+        screen.append(restrictionModal(document, blocked, () => acknowledge(restrictionStorage(), state?.twitch_user_id, blocked)));
+      }
       root.append(screen);
       if (isSoundboard) syncSoundboardPreviewButtons();
     }

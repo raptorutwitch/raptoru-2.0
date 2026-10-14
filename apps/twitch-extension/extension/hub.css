@@ -672,6 +672,172 @@ body.mobile .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .
   border-radius: 12px;
 }
 
+/* Restrictions Raptoru du viewer (jamais une sanction Twitch) : pastille de carte, indicateur d'en-tête
+   et son détail, modal « J'ai compris » d'un vrai blocage. Tailles fixes : rien ne pousse le layout. */
+.rl-rpill {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  gap: 3px;
+  padding: 0 7px 0 5px;
+  border-radius: 999px;
+  background: rgba(10, 6, 20, 0.66);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  color: #c3e4ff;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+.rl-rpill svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+.rl-rpill--block {
+  color: #ffc2ca;
+}
+.rl-rind {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.rl-rind__btn {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid rgba(124, 196, 255, 0.35);
+  border-radius: 9px;
+  background: rgba(124, 196, 255, 0.1);
+  color: #c3e4ff;
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  cursor: pointer;
+}
+.rl-rind--block .rl-rind__btn {
+  border-color: rgba(255, 122, 138, 0.4);
+  background: rgba(255, 122, 138, 0.1);
+  color: #ffc2ca;
+}
+.rl-rind__btn svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.rl-rind__btn:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 2px;
+}
+.rl-rind__detail {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  right: 0;
+  display: none;
+  min-width: 150px;
+  max-width: 220px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(214, 170, 255, 0.32);
+  border-radius: 10px;
+  background: #231a3b;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+  color: #eee2ff;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+.rl-rind:hover .rl-rind__detail,
+.rl-rind:focus-within .rl-rind__detail,
+.rl-rind.is-open .rl-rind__detail {
+  display: flex;
+}
+.rl-rind__title {
+  font-weight: 800;
+}
+.rl-rind__left b {
+  font-variant-numeric: tabular-nums;
+}
+.rl-rind__who {
+  overflow: hidden;
+  color: #a99cc4;
+  text-overflow: ellipsis;
+}
+.rl-rmodal {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(5, 3, 12, 0.6);
+}
+.rl-rmodal__card {
+  display: flex;
+  width: min(300px, 100%);
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid rgba(255, 122, 138, 0.35);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #2a1f47, #1b1432);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  color: #eee2ff;
+  text-align: center;
+}
+.rl-rmodal__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+}
+.rl-rmodal__title svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: #ff7a8a;
+}
+.rl-rmodal__left {
+  font-size: 13px;
+  font-weight: 700;
+}
+.rl-rmodal__left b {
+  font-variant-numeric: tabular-nums;
+}
+.rl-rmodal__who {
+  color: #a99cc4;
+  font-size: 12px;
+}
+.rl-rmodal__ok {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.rl-rmodal__ok:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 2px;
+}
+
 /* Tiroirs Notifications / Préférences : ancrés sous l'en-tête du Hub. */
 .rh-hub > .jdm-notification-center,
 .rh-hub > .jdm-viewer-preferences {
