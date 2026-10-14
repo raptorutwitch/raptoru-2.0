@@ -1,9 +1,134 @@
-# Bonk VNext — audit et architecture proposée (2026-10-14)
+# Bonk VNext — document de référence (état au 15/10/2026)
 
-> Audit seul, aucun code. Lu sur le vrai code au commit `c7f20de` (branche `feat/compact-video-port`).
-> Rien n'est validé ici : c'est une proposition à valider par Antoni avant tout lot.
+> **Document canonique de Bonk VNext.** La section 0 donne l'état exact (lots, commits, validations, règles figées,
+> déploiement, suite). Les sections 1–2 décrivent le Bonk **d'avant VNext** (audit du 14/10/2026 sur `c7f20de`,
+> historique). Les sections 3–17 sont l'architecture validée par Antoni le 14/10/2026 ; quand l'implémentation
+> diffère du plan, une note « Implémenté » le dit.
 
-## 1. Architecture Bonk actuelle (chaîne réelle)
+## 0. État au 15/10/2026
+
+Branche `feat/compact-video-port`, HEAD `639fc0f` (+ le commit de ce checkpoint). **Tout est local** : rien n'est
+poussé au-delà de `c7f20de`, rien n'est déployé, rien n'est dans `main`, aucune release Studio.
+
+| Lot                                        | Statut                         | Commits                                                              | Validation manuelle (Antoni, vrai Studio + vrai OBS) |
+| ------------------------------------------ | ------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------------- |
+| 0 — fondation production                   | **VALIDÉ**                     | `c410833`, `ba2dfc8`                                                 | OK le 14/10/2026 (Lab)                               |
+| 1 — renderer VNext                         | **VALIDÉ**                     | `af5c78e`                                                            | OK le 14/10/2026                                     |
+| 2 — cible Manuel / Plein écran             | **VALIDÉ**                     | `895e5dd`                                                            | OK le 14/10/2026                                     |
+| 3 — Auto OBS (+ correctif, + physique)     | **VALIDÉ**                     | `8267fda` (lot 3), `e5dab8e` (échelle négative), `639fc0f` (contact) | OK le 15/10/2026                                     |
+| 5 — Salves / rafales                       | **NEXT — non commencé**        | —                                                                    | —                                                    |
+| 4 — FX rares (explosion mini-emotes, etc.) | après les Salves, non commencé | —                                                                    | —                                                    |
+| 6 — combos (option)                        | non décidé                     | —                                                                    | —                                                    |
+
+### Lot 0 — fondation production (VALIDÉ)
+
+- **Sweep périodique** Bonk, Soundboard et TTS (Core public, toutes les 15 s, indépendant des claims) : un élément
+  orphelin (aucun Studio ne réclame sa chaîne) expire, remboursement au plus une fois, aucune ligne supprimée, baux
+  perdus → `execution_unknown`. Sûr avec plusieurs instances Core (verrou de chaîne, transitions conditionnelles,
+  index unique du registre ; test PostgreSQL réel à 3 Core).
+- **`wrong_channel`** : un Studio d'une autre chaîne que le Core est refusé en 409 au heartbeat (non enregistré →
+  viewer refusé `studio_offline` avant tout débit) et au claim, pour Bonk, Soundboard et TTS ; un Studio sans
+  `channel_id` dans son heartbeat reste accepté.
+- **Reconnexion OBS automatique** (1 / 2 / 5 / 10 s, arrêt sur mot de passe refusé) ; **mot de passe OBS** gardé par
+  Electron main via `safeStorage` (DPAPI sous Windows) dans `%APPDATA%\Raptoru Studio\obs-connection.json` (port en
+  clair, mot de passe chiffré, jamais en clair), rejoué au serveur à chaque démarrage.
+- **Reste à faire :** `wrong_channel` et le sweep ont une forte couverture automatique, mais **leur validation sur le
+  staging réel reste à faire au prochain déploiement**.
+- **Ordre de déploiement obligatoire : Core d'abord, Studio ensuite.** L'ancien Core staging refuse le nouveau champ
+  `channel_id` du heartbeat (schéma strict, 400 `invalid_request`) : un Studio de cette branche contre l'ancien Core
+  perd Bonk / Soundboard / TTS en profil Production.
+
+### Lot 1 — renderer VNext (VALIDÉ)
+
+- Moteur séparé `apps/studio/server/bonk-overlay/engine/` (`size`, `target`, `families`, `presets`, `physics`,
+  `plan`, `density`, `audio`, `scene`) ; `overlay.js` garde le transport et câble le moteur ; `bonk-v3-core.js`
+  inchangé (seul son générateur à graine est importé).
+- Tailles autour de **140 px** (80 % à ±10 px, 94 % à ±20 px, gros rares) ; **8 familles** de trajectoires pondérées
+  avec anti-répétition ; impacts variés ; rotations (lent / rapide / vrille) ; presets communs (impact, squash, rebond,
+  glisse, chute, vrille) ; densité **18 / 30** sans jamais perdre un tir payé ; **audio adaptatif** (1 sur 2 / 3 / 5,
+  ≤ 5 sons/s, volume jusqu'à 45 % en rafale, retour après calme) ; graine = `interaction_id`.
+- **Tester 1 / 5 / 10** : aperçu renderer-only (ni Core, ni wallet, ni journal, ni ACK, ni historique — test
+  d'invariant).
+- Aucun changement Core / paiement / transport / cadence / ACK.
+- **Paramètres visuels et audio validés : ne plus les modifier sans décision explicite d'Antoni.**
+
+### Lot 2 — cible Manuel / Plein écran (VALIDÉ)
+
+- Modes Manuel et Plein écran ; réglages **par profil** (`bonk-settings.json` à côté du journal Lab / Production),
+  écriture atomique, conservés au redémarrage.
+- Éditeur « Cible des Bonk » : capture de la scène programme OBS (lecture seule), rectangle déplaçable /
+  redimensionnable, champs en pixels, aimantation ; **brouillon local** jusqu'à « Enregistrer » ; « Annuler » revient à
+  la valeur enregistrée ; « Réinitialiser » remet la zone par défaut (480 × 300 autour de 960 × 400) dans le brouillon.
+
+### Lot 3 — Auto OBS (VALIDÉ)
+
+- **Aucune vision / IA** : uniquement obs-websocket en lecture seule (`GetVideoSettings`, `GetCurrentProgramScene`,
+  `GetSceneItemList`, `GetGroupSceneItemList`, `GetSourceScreenshot`), jamais de `Set…`.
+- Scène programme lue récursivement (groupes, scènes imbriquées) ; modèle libobs composé en matrices affines :
+  **crop, bounds, échelle, rotation, échelle négative (flip)**, découpage à chaque niveau (crop, `cropToBounds`, canvas
+  imbriqué), boîte englobante du polygone final dans l'espace de l'overlay.
+- **Candidats caméra déterministes et expliqués** (type de source, nom, surface) ; Browser / Game / Display / Window
+  Capture, images, texte, couleur, audio exclus ; deux caméras de taille proche → aucune cible Auto.
+- **Source préférée / épinglage** (par `sourceUuid`, sinon par nom), persisté par profil (réglages v2 ; fichiers v1
+  relus en v2).
+- **Fallback** : source épinglée visible → sinon meilleur candidat fiable visible → sinon zone Manuel du profil.
+  **Jamais une vieille géométrie Auto** : un événement qui peut masquer une caméra efface la cible Auto
+  immédiatement (Manuel jusqu'à la relecture), et l'overlay relit la cible juste avant chaque tir.
+- Suivi sur événements OBS (recalcul 150 ms après le dernier) + resynchronisation toutes les 10 s ; sans lecture
+  réussie depuis 15 s → Manuel.
+- Éditeur : modes Auto / Manuel / Plein écran, rectangle Auto en lecture seule sur la capture, libellé
+  « Auto : source · chemin », état, sélecteur de source préférée, candidats et leurs raisons, **Copier vers Manuel**.
+- **Bug réel corrigé pendant la validation (`e5dab8e`).** Structure réelle d'Antoni :
+  `Scène Dessin > overlay cam shushu > Rognage > Camera > Cam`. « Cam » était bien trouvée mais supprimée par le
+  calcul géométrique : l'item « Camera » a un `scaleX` négatif (retourné) et le moteur prenait `abs(scaleX)`.
+  Correctif : garder le signe de l'échelle comme libobs (la boîte part de l'autre côté du point d'ancrage) ; test avec
+  la structure et les transforms réels. Auto détecte maintenant « Cam ».
+- **Validé dans le vrai OBS :** Auto prêt sur « Cam » ; déplacement / resize / crop / rotation / flip suivis ;
+  changement de scène et masquage → fallback correct ; Manuel, Plein écran, épinglage et persistance OK.
+- **Non fait (assumé) :** Manuel par scène (reporté) ; occultation d'une caméra par une source opaque au-dessus
+  (OBS ne donne pas la transparence — l'épinglage règle ce cas).
+
+### Physique Bonk — décision produit FIGÉE (`639fc0f`, validée visuellement)
+
+**Tous les Bonk ont un contact physique lisible avec la cible.** Supprimés : traversée libre de la zone, passage à
+côté, traversée de l'écran en Plein écran.
+
+| Point d'impact        | Part | Contact                                                      |
+| --------------------- | ---- | ------------------------------------------------------------ |
+| Bord                  | 45 % | rebond vers l'extérieur                                      |
+| Intérieur hors centre | 22 % | choc sur la surface, rebond vers le haut                     |
+| Ras du bord (graze)   | 30 % | rebond vers l'extérieur (à moins de 0,4 × la taille du bord) |
+| Centre                | 3 %  | choc sur la surface                                          |
+
+- Plein écran : toujours un choc sur l'écran (« glass »), rebond.
+- **Intensité du rebond** : fort 25 %, normal 50 %, faible 25 % (× restitution du preset). Tout contact sur un bord
+  repart **vers l'extérieur**, avec une vitesse minimale lisible.
+- Retombées existantes conservées (glissade, chute, rebond au sol, vrille).
+- **Ne plus modifier cette physique sans décision explicite d'Antoni.**
+
+### État de déploiement (rien de VNext n'est déployé)
+
+- Travail **validé localement** sur `feat/compact-video-port` ; `main` intact (`d2b61ef`, = `origin/main`).
+- **Staging Coolify** (`raptoru-core-staging`) : toujours sur l'état déployé précédemment, `c7f20de` (= dernier commit
+  poussé de `origin/feat/compact-video-port` ; emotes Twitch OAuth B1 / B2), chaîne `raptoru_` (83603689), déploiement
+  manuel. Il ne contient **aucun** lot VNext.
+- **Hosted Test** : toujours le ZIP `raptoru-live-STAGING-hosted-test-c7f20de4430a.zip` (les lots VNext ne touchent
+  pas l'Extension).
+- **Studio publié** : n'a reçu aucun lot VNext.
+- **Prochain déploiement coordonné** (seulement avec l'accord d'Antoni) : Core staging d'abord, puis Studio,
+  validation sur le staging (dont `wrong_channel` et le sweep réels), puis seulement décision de promotion.
+- **Bloquants prod toujours ouverts** (hors Bonk VNext) : l'overlay refuse tout paiement non simulé ; le Core public
+  débite le Wallet de test (`labEconomy`) — lot cutover Wallet. La source overlay reste trouvée par son nom
+  « Raptoru Bonk Lab ».
+
+### NEXT — Salves / rafales (non commencé, aucun code)
+
+Direction produit déjà décidée (§ 4) : une salve = **N Bonk individuels** ; **admission atomique** ; **aucun Bonk payé
+perdu** ; livraison groupée possible ; cadence pilotée **côté overlay** ; contrôle utilisateur de type
+quantité / fréquence **à définir** ; **auto-fire maintenu hors scope** tant que les salves ne sont pas stables. Les FX
+rares (explosion en mini-emotes, etc.) viennent **après** les Salves.
+
+## 1. Architecture Bonk avant VNext (audit du 14/10/2026, historique)
 
 | #   | Étape            | Fichiers                                                                                                                                                         | Données                                                                                                                                                                                                                                                                                                                                        | Côté      |
 | --- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
@@ -38,7 +163,11 @@
 - **Densité** : file ≤ 50 ouverts par canal (refus `queue_full`), ≤ 12 entrées locales Studio. **Aucune limite visuelle** dans l'overlay.
 - **Son** : un `new Audio()` par impact, sans plafond.
 
-## 2. Limites actuelles
+## 2. Limites constatées avant VNext (historique)
+
+> Statut au 15/10/2026 : 1 → cible réglable (Lots 2–3), source overlay toujours au nom imposé ; 2 et 3 → résolus
+> (Lot 1) ; 4 → reste (Salves) ; 5 → OBS et sweep résolus (Lot 0), paiement simulé et `labEconomy` toujours ouverts ;
+> 6 → résolu (Lot 0, `wrong_channel`).
 
 1. Cible fixe, canvas fixe 1920×1080, source OBS au nom imposé « Raptoru Bonk Lab ».
 2. Taille unique ; une seule famille de trajectoire ; aucun FX hormis l'anneau jaune « Lab ».
@@ -101,6 +230,15 @@ Bornes Core : `shot_count` 1–10 et `cadence_ms` 90–600. Ces bornes, et le co
 
 ## 5. Détection Auto OBS (sources + transforms, sans IA)
 
+> **Implémenté (Lot 3, différences avec le plan ci-dessous) :** les transforms viennent des listes
+> `GetSceneItemList` / `GetGroupSceneItemList` (pas de `GetSceneItemTransform` ni `GetInputSettings`) ; recalcul
+> 150 ms après le dernier événement, resynchronisation toutes les 10 s, `SceneItemTransformChanged` demandé
+> explicitement ; rotation → boîte englobante du polygone transformé (pas de rectangle orienté) ; coordonnées dans
+> l'espace de l'overlay (via la source overlay si elle est trouvée, sinon mise à l'échelle du canvas) ; **l'échelle
+> garde son signe** (un flip étend la boîte de l'autre côté du point d'ancrage — jamais de valeur absolue) ; repli
+> réel : épinglée → meilleur candidat fiable → Manuel du profil (Manuel par scène reporté, le Plein écran n'est
+> jamais un repli). Score et règles : § 0 « Lot 3 ».
+
 **Requêtes obs-websocket v5, lecture seule** :
 
 - `GetVideoSettings` (canvas de base) ;
@@ -119,14 +257,14 @@ Bornes Core : `shot_count` 1–10 et `cadence_ms` 90–600. Ces bornes, et le co
 - `InputNameChanged` ;
 - `VideoSettingsChanged`.
 
-Chaque événement déclenche un recalcul débouncé (100 ms) et une nouvelle version de cible poussée à l'overlay. Une relecture complète toutes les 5 s sert de filet.
+Chaque événement déclenche un recalcul 150 ms après le dernier (un événement qui peut masquer une caméra efface la cible Auto immédiatement). Une relecture complète toutes les 10 s sert de filet.
 
 **Algorithme** : parcours récursif de la scène programme.
 
 - Pour chaque item **visible** (`sceneItemEnabled`), composer la matrice : position, rotation, échelle, alignement, bounds (type, taille, alignement), crop.
 - Si l'item est une scène imbriquée ou un groupe, descendre avec la matrice parente. Un parent masqué masque tout son sous-arbre.
 - Une caméra est un input de kind `dshow_input` (Windows), `av_capture_input(_v2)` (macOS) ou `v4l2_input` (Linux), **ou** une source épinglée par nom dans Studio (NDI, capture d'écran de téléphone, etc.).
-- Le rectangle final se calcule dans le canvas après crop et scale. En cas de rotation, on garde le rectangle orienté (centre, demi-axes, angle) et sa boîte englobante.
+- Le rectangle final se calcule dans le canvas après crop et échelle (**signée** : un flip étend la boîte de l'autre côté du point d'ancrage). En cas de rotation, c'est la boîte englobante du polygone transformé.
 - Coordonnées **normalisées 0..1 du canvas** : ça règle le cas d'un canvas différent de 1080p.
 - Il faut aussi lire la transform de la source overlay Bonk elle-même. Si elle ne couvre pas tout le canvas, convertir les coordonnées ou signaler « overlay non plein écran ».
 
@@ -138,23 +276,24 @@ Chaque événement déclenche un recalcul débouncé (100 ms) et une nouvelle ve
 
 Une même source réutilisée dans plusieurs scènes est traitée par instance : seule la scène programme compte.
 
-**Repli** si aucune caméra n'est visible : zone Manuel de la scène, sinon Manuel global, sinon Fullscreen. Le statut Studio indique la cible effective (« Auto · Cam Logitech · scène Just Chatting », ou « Auto → repli Fullscreen : aucune cam visible »).
+**Repli** si aucune caméra fiable n'est visible (ou en cas d'hésitation) : zone Manuel du profil (le Manuel par scène est reporté). Le statut Studio indique la cible effective (« Auto prêt » avec « Auto : source · chemin », ou « Aucun candidat fiable — Manuel », « Source épinglée absente — fallback », etc.).
 
 ## 6. Modèle de zone cible
 
-La cible est un rectangle orienté normalisé, `{mode, rect, angle, source, scene, version}`. Le point d'impact est tiré par catégorie pondérée, avec une graine par `interaction_id` :
+La cible est un rectangle de l'espace overlay 1920 × 1080 (Manuel, ou boîte Auto). Le point d'impact est tiré par catégorie pondérée, avec une graine par `interaction_id`. **Table en vigueur (physique figée du 15/10/2026, `639fc0f`)** — tous les impacts ont un contact :
 
-| Catégorie       | Poids | Point d'impact                                                 | Suite                             |
-| --------------- | ----- | -------------------------------------------------------------- | --------------------------------- |
-| Couronne (bord) | 45 %  | bande ±12 % autour du bord, pondérée par la longueur des côtés | rebond vers l'extérieur           |
-| Traversée       | 22 %  | intérieur hors noyau central (30 %)                            | la trajectoire continue à travers |
-| Effleurement    | 15 %  | juste à l'extérieur du bord                                    | déviation légère                  |
-| Décalé          | 15 %  | halo extérieur jusqu'à +25 %                                   | impact « raté » sobre             |
-| Centre          | 3 %   | noyau                                                          | impact franc                      |
+| Catégorie             | Poids | Point d'impact                                                        | Suite                                    |
+| --------------------- | ----- | --------------------------------------------------------------------- | ---------------------------------------- |
+| Bord                  | 45 %  | bande ±12 % autour du bord, côté d'où vient le projectile favorisé    | rebond vers l'extérieur                  |
+| Intérieur hors centre | 22 %  | intérieur hors noyau central (30 %)                                   | choc sur la surface, rebond vers le haut |
+| Ras du bord (graze)   | 30 %  | juste à l'extérieur du bord, à moins de 0,4 × la taille du projectile | rebond vers l'extérieur                  |
+| Centre                | 3 %   | noyau                                                                 | choc sur la surface                      |
+
+Intensité du rebond : fort 25 %, normal 50 %, faible 25 %. Les anciennes catégories « traversée », « décalé » (et « pass » en Plein écran) sont **supprimées** : aucun projectile ne traverse la cible ni ne passe à côté.
 
 Anti-agglutinement : rejet si le point tombe à moins d'une demi-taille d'un des 6 derniers impacts (2 essais, puis on garde).
 
-Fullscreen : la cible est le canvas moins une marge de 6 %, avec la même anti-agglutination, sans couronne.
+Fullscreen : la cible est le canvas moins une marge de 6 %, même anti-agglutinement, sans bord : toujours un choc sur l'écran (« glass ») et un rebond.
 
 ## 7. Modèle de trajectoires
 
@@ -180,6 +319,9 @@ Rotation, définie par famille :
 Anti-répétition : pas 3 fois de suite la même famille, ni 2 fois la même entrée.
 
 ## 8. Distribution de tailles
+
+> **Implémenté (Lot 1) :** M = **140 px** (décision d'Antoni), fixe ; le réglage « variance » existe dans le moteur
+> mais n'est pas exposé dans Studio. Les décalages du tableau s'appliquent tels quels autour de 140 px.
 
 La taille moyenne `M` est réglable, 128 px par défaut à 1080 p (mise à l'échelle avec la hauteur du canvas). Le décalage se tire dans un mélange :
 
@@ -262,6 +404,11 @@ La file Core (≤ 50) et le local Studio (≤ 12) restent les premières barriè
 
 ## 12. Config Studio
 
+> **Implémenté (Lots 1–3) :** carte Bonk avec statut OBS, « Cible des Bonk » (Auto / Manuel / Plein écran, aperçu,
+> source préférée, Copier vers Manuel) et Tester 1 / 5 / 10. **Non implémentés** : override par scène, réglages de
+> rendu (taille, variance, dispersion, intensité FX), densité et son réglables — les valeurs validées du Lot 1 sont
+> fixes. Stockage réel : `bonk-settings.json` v2 par profil (`mode`, `manual`, `auto.pinned`).
+
 Organisation logique de la carte Bonk (Production et Lab, même composant) :
 
 1. **Statut** : OBS, source overlay (trouvée et plein écran), renderer, cible effective.
@@ -319,6 +466,11 @@ Les réglages Core (coût par tir, bornes) réutilisent le stockage de réglages
 Aucune migration pour la cible, le rendu, les FX ou le son : tout est local Studio.
 
 ## 15. Lots d'implémentation
+
+> **Statut au 15/10/2026 :** Lots 0, 1, 2 et 3 **validés** (détail et commits : § 0) ; Lot 5 Salves = **NEXT, non
+> commencé** ; Lot 4 FX rares après les Salves ; Lot 6 combos non décidé. Écarts avec le tableau : le Lot 0 n'a pas
+> fait « source overlay retrouvée par URL » (toujours par son nom) ; le Lot 3 n'a pas fait l'override par scène
+> (reporté) ; le Lot 4 ne doit plus introduire de traversée ni de passage à côté (physique figée).
 
 Chaque lot fait l'objet d'un audit court, d'un patch minimal, de tests et d'une validation par Antoni dans le vrai Studio et le vrai OBS. Pas de staging sans accord.
 

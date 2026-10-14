@@ -165,6 +165,9 @@ Local test bench for the Twitch extension, without a stream: the production exte
   SAMMI, never the Core Wallet. The lab pages' CSP only allows the Studio origin.
 - **Local stage**: accepted actions are played in the Studio (sound file, TTS voice, Bonk
   animation, raffle) with a journal; wallets, modules and raffle are controllable.
+- **Bonk renderer and target** (Auto from the OBS scene / Manuel zone / Fullscreen, adaptive sound, « Tester »
+  preview): Bonk VNext, Lots 0–3 validated locally on `feat/compact-video-port`, not released — status and rules in
+  [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0.
 
 ```sh
 npm run studio                # build everything, open Raptoru Studio → "Extension Lab" tab

@@ -2,6 +2,9 @@
 
 > **Historique** : ce document décrit la tranche locale avant sa validation. Bonk V2 a depuis été validé
 > manuellement (27/09/2026, Studio 0.1.3). État courant : `Raptoru-2.0-HANDOFF.md`.
+> Le rendu et la cible décrits plus bas (impact fixe 960 × 400, une famille de trajectoire, pas de découverte de la
+> caméra) sont remplacés par **Bonk VNext** (Lots 0–3 validés le 15/10/2026, non déployés) :
+> [`BONK_VNEXT_AUDIT_2026-10.md`](BONK_VNEXT_AUDIT_2026-10.md).
 
 The Core/contract checkpoint already existed on disk as `3665773`. Review corrections were
 committed separately as `760cd5e`: claimant-specific readiness, expiration before queue capacity

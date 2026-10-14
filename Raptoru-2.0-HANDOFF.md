@@ -1,6 +1,41 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 14/10/2026 : premier test live réel validé · calibration géométrique Twitch (lire en premier)
+## État courant — 15/10/2026 : checkpoint Bonk VNext Lots 0–3 validés (lire en premier)
+
+Vérifier `git status` / `git log`. Branche de travail **`feat/compact-video-port`**, HEAD = commit de checkpoint docs
+au-dessus de `639fc0f`. **`main` intact** (`d2b61ef` = `origin/main`). `origin/feat/compact-video-port` = `c7f20de` :
+**tout ce qui suit `c7f20de` est local, non poussé.**
+
+- **Bonk VNext — Lots 0, 1, 2 et 3 VALIDÉS manuellement par Antoni** (vrai Studio + vrai OBS, 14–15/10/2026) :
+  fondation production (sweep périodique Bonk / Soundboard / TTS, `wrong_channel`, reconnexion OBS, mot de passe OBS
+  via `safeStorage`), nouveau moteur de rendu, cible Manuel / Plein écran, cible **Auto OBS** (scène programme lue par
+  obs-websocket, sans IA), physique « contact systématique » figée. Commits : `c410833`, `ba2dfc8`, `af5c78e`,
+  `895e5dd`, `8267fda`, `e5dab8e`, `639fc0f`. **Référence unique, détail et règles :**
+  [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0.
+- **Règles figées par Antoni :** tailles, trajectoires, sons et physique (contact systématique, rebond fort / normal /
+  faible) ne se modifient plus sans décision explicite.
+- **Rien de Bonk VNext n'est déployé** : ni staging, ni Hosted Test, ni Studio publié, ni `main`.
+- **Staging Coolify** (`raptoru-core-staging`, déploiement manuel, branche Coolify `feat/compact-video-port`) : sur
+  **`c7f20de`** (déployé le 14/10/2026) = emotes Twitch OAuth sur `/v1/ext` (B1 `6d7d381`, B2 `c7f20de`), chaîne
+  `raptoru_` (83603689). Migration `20261017120000_bonk_lab_viewer_oauth.sql` appliquée sur le staging ; variables
+  `EXT_TWITCH_REDIRECT_URI` et `EXT_TOKEN_KEY` posées (valeurs jamais dans le dépôt). Le SHA « non vérifié » du bloc
+  du 14/10 ci-dessous est donc connu : `c7f20de`.
+- **Hosted Test** : ZIP `raptoru-live-STAGING-hosted-test-c7f20de4430a.zip`. Test réel du 14/10/2026 sur LeCroupier_
+  (bascule temporaire de chaîne, puis retour à `raptoru_`) : OAuth Twitch, callback HTTPS, vraies emotes, persistance
+  après réouverture et Bonk Twitch accepté par le Core **validés par Antoni** ; affichage overlay **non validé**
+  (Studio sur l'autre chaîne pendant la bascule, pas un bug Bonk).
+- **Prochain déploiement coordonné** (uniquement avec l'accord d'Antoni) : **Core staging d'abord, puis Studio**
+  (l'ancien Core refuse le nouveau champ `channel_id` du heartbeat), validation sur le staging (dont `wrong_channel` et
+  le sweep réels), puis seulement décision de promotion.
+- **Autres commits de la branche** (antérieurs à Bonk VNext) : restrictions viewer (`2ed1d94`, `3bc40cb`) et
+  correctif d'autorisation des emotes (`5a218c1`) — statut de validation dans leurs messages de commit.
+- **NEXT — non commencé : Salves / rafales** (une salve = N Bonk individuels, admission atomique, aucun Bonk payé
+  perdu, cadence côté overlay ; auto-fire hors scope). FX rares après les Salves. Rien n'est codé.
+- **Toujours valable** : legacy (SAMMI, StreamElements, EBS `raptoru.fr/api`, Extension publiée) = production ;
+  aucune release Studio depuis 0.1.5 ; aucun push, déploiement, migration distante, release ou changement Twitch sans
+  feu vert explicite d'Antoni.
+
+## État — 14/10/2026 : premier test live réel validé · calibration géométrique Twitch (historique, valable sauf mention ci-dessus)
 
 Vérifier `git status` / `git log` (HEAD = `ac52bea` au début de cette phase, `origin/main` identique).
 
@@ -229,14 +264,14 @@ Pièges connus :
 
 ## 6. Modules
 
-| Module            | Référence UX (vérité)                                                              | État réel                                                                                                      | Validation Antoni                                                              |
-| ----------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **Hub**           | `prototypes/hub-nav-dots-footer/` (variante C « Tous dominant ») + Hub Pop Premium | Implémenté (`0a5c4e9`, `5538111`), dans 0.1.5                                                                  | **Validé** (28–29/09)                                                          |
-| **Bonk V2**       | Implémentation validée + audit Bonk V2 (pas de prototype dans `prototypes/`)       | Réel en Lab, dans 0.1.5 ; **depuis `5b66579` débité sur le wallet Lab** (200 J, remboursé si jamais affiché)   | **Validé** (27/09, avant le débit) ; reste Bonk Fidelity (polish)              |
-| **Soundboard V2** | Implémentation validée (pas de prototype)                                          | Réel en Lab, dans 0.1.5 ; **depuis `5b66579` débité sur le wallet Lab**, stop réel d’un son, remboursements    | **Validé** (28/09, avant débit / stop)                                         |
-| **TTS V2**        | `prototypes/tts-v2-extension-ux/` (D3) + `prototypes/tts-v2-player/`               | Réel en Lab, dans 0.1.5 ; **depuis `5b66579` : mots surveillés / bloqués, cooldown D4, pause globale**         | **Validé** (30/09) — dette : lecture possible avant la fin du shuffle / reveal |
-| **Modération V2** | **`prototypes/moderation-v2-d4/`** (spécification)                                 | **Parité D4 complète** (`5b66579`) — non releasé                                                               | **Validé** (01/10)                                                             |
-| **Tombola V2**    | `prototypes/tombola-v2/` (spécification) + section Tombola de la D4                | **Complète en Lab** (Core, Studio, Extension Panel / Mobile / Vidéo, overlay OBS, modération D4) — non releasé | **Validé** (02–03/10) — **checkpoint figé** (§ 13)                             |
+| Module            | Référence UX (vérité)                                                              | État réel                                                                                                      | Validation Antoni                                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Hub**           | `prototypes/hub-nav-dots-footer/` (variante C « Tous dominant ») + Hub Pop Premium | Implémenté (`0a5c4e9`, `5538111`), dans 0.1.5                                                                  | **Validé** (28–29/09)                                                                                                            |
+| **Bonk V2**       | Implémentation validée + audit Bonk V2 (pas de prototype dans `prototypes/`)       | Réel en Lab, dans 0.1.5 ; **depuis `5b66579` débité sur le wallet Lab** (200 J, remboursé si jamais affiché)   | **Validé** (27/09, avant le débit) ; Fidelity remplacé par **Bonk VNext** (Lots 0–3 validés, `docs/BONK_VNEXT_AUDIT_2026-10.md`) |
+| **Soundboard V2** | Implémentation validée (pas de prototype)                                          | Réel en Lab, dans 0.1.5 ; **depuis `5b66579` débité sur le wallet Lab**, stop réel d’un son, remboursements    | **Validé** (28/09, avant débit / stop)                                                                                           |
+| **TTS V2**        | `prototypes/tts-v2-extension-ux/` (D3) + `prototypes/tts-v2-player/`               | Réel en Lab, dans 0.1.5 ; **depuis `5b66579` : mots surveillés / bloqués, cooldown D4, pause globale**         | **Validé** (30/09) — dette : lecture possible avant la fin du shuffle / reveal                                                   |
+| **Modération V2** | **`prototypes/moderation-v2-d4/`** (spécification)                                 | **Parité D4 complète** (`5b66579`) — non releasé                                                               | **Validé** (01/10)                                                                                                               |
+| **Tombola V2**    | `prototypes/tombola-v2/` (spécification) + section Tombola de la D4                | **Complète en Lab** (Core, Studio, Extension Panel / Mobile / Vidéo, overlay OBS, modération D4) — non releasé | **Validé** (02–03/10) — **checkpoint figé** (§ 13)                                                                               |
 
 ### Modération V2 — détail exact (`5b66579`)
 

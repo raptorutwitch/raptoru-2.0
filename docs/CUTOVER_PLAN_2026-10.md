@@ -10,6 +10,13 @@ Registre de l'audit : [`ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-
 [`../Raptoru-2.0-HANDOFF.md`](../Raptoru-2.0-HANDOFF.md) · architecture cible :
 [`../Raptoru Studio — Infrastructure Spec.md`](<../Raptoru Studio — Infrastructure Spec.md>).
 
+> **Point d'étape 15/10/2026.** Bonk VNext Lots 0–3 validés localement sur `feat/compact-video-port` (détail :
+> [`BONK_VNEXT_AUDIT_2026-10.md`](BONK_VNEXT_AUDIT_2026-10.md) § 0), **non déployés** : le staging reste sur
+> `c7f20de`, le Hosted Test sur le ZIP `c7f20de4430a`, aucune release Studio, `main` intact. Le Lot 0 apporte au Core le
+> sweep périodique et le refus `wrong_channel` du transport Studio → **au prochain déploiement : Core staging d'abord,
+> puis Studio** (l'ancien Core refuse le champ `channel_id` du heartbeat), validation sur le staging, puis seulement
+> décision de promotion.
+
 ---
 
 ## 1. État de départ
@@ -253,9 +260,11 @@ Livré et vérifié sur le staging réel, **non validé manuellement**, P1-006 *
   Test déterministe + SHA-256. Décision D4 prise par Antoni le 06/10/2026 : **Hosted Test** (comptes testeurs), jamais
   une release.
 - Noms des viewers : Helix (app Twitch Raptoru 2.0, lecture seule) ; sans app, libellé neutre.
-- **Reste** : vrai secret d'Extension (secret de test aujourd'hui), version Hosted Test dans la console, emotes Twitch
-  personnelles (OAuth viewer), Commands, Points de chaîne réels (P1-010), paiement réel (P1-001), deux migrations Lab
-  manquantes au staging pour Tombola et les actions de modération de l'Extension (décision d'Antoni).
+- **Reste** : vrai secret d'Extension (secret de test aujourd'hui), version Hosted Test dans la console (faite le
+  07/10/2026), emotes Twitch personnelles (OAuth viewer — 15/10/2026 : sur `/v1/ext`, déployé au staging en `c7f20de`,
+  validé en Hosted Test le 14/10 sauf l'affichage overlay), Commands, Points de chaîne réels (P1-010), paiement réel (P1-001), deux migrations Lab
+  manquantes au staging pour Tombola et les actions de modération de l'Extension (appliquées depuis, voir le
+  HANDOFF).
 
 ### 4.3 P1-007 — Session de stream canonique
 

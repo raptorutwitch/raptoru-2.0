@@ -5,7 +5,8 @@
 > **Historique arrêté au 03/10/2026.** État courant (Commands V2 A0 → F, passes de l'audit Astra) : en tête de
 > [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md), [`docs/COMMANDS_V2_STATUS.md`](docs/COMMANDS_V2_STATUS.md) et
 > [`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](docs/ASTRA_GLOBAL_AUDIT_2026-10.md). Phase courante (depuis le 05/10/2026) :
-> préparation du cutover, [`docs/CUTOVER_PLAN_2026-10.md`](docs/CUTOVER_PLAN_2026-10.md).
+> préparation du cutover, [`docs/CUTOVER_PLAN_2026-10.md`](docs/CUTOVER_PLAN_2026-10.md). Bonk VNext (Lots 0–3 validés
+> les 14–15/10/2026, local, non déployé) : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0.
 
 > **Nouvel agent : lire d’abord [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md)** (état courant, règles de reprise, matrice de validation, prochaine action). Ce fichier-ci garde l’historique et le détail par domaine.
 
@@ -1103,11 +1104,10 @@ Façade Lab : catalogues en stale-while-revalidate (aucune requête ne dépasse 
 - aucune progression/stats réelles ;
 - zéro SAMMI, zéro StreamElements, zéro EBS prod.
 
-### Bonk Fidelity — encore à faire plus tard (polish futur, non bloquant)
-- impact FX plus proche du legacy ;
-- ciblage centre caméra ;
-- réglages variation de taille ;
-- disparition plus punchy / variantes.
+### Bonk Fidelity — remplacé par Bonk VNext (15/10/2026)
+- historique : impact FX, ciblage caméra, variation de taille, disparition ;
+- traité par Bonk VNext (moteur de rendu, cible Manuel / Plein écran / Auto OBS, physique à contact systématique),
+  Lots 0–3 validés, non déployés : voir `docs/BONK_VNEXT_AUDIT_2026-10.md` § 0.
 
 ### Encore à faire avant tout usage production (avec le feu vert global seulement)
 - nouvelle Twitch Extension non publiée : la console Twitch devra autoriser les domaines d’images `cdn.7tv.app`, `cdn.betterttv.net`, `cdn.frankerfacez.com` ;
@@ -1424,7 +1424,7 @@ BONK V2 = VALIDÉ (Lab), PAS ACTIVÉ EN PROD :
   animées dans la grille, favoris + drag & drop, étoile desktop, bouton favori tactile
 - test_mode=true, payment_mode=simulated, real_debited=0
 - zéro Wallet réel, zéro stats/progression réelle, zéro prod
-- reste (non bloquant) : Bonk Fidelity (impact FX, centre caméra, tailles, disparition)
+- reste : Bonk Fidelity → Bonk VNext (Lots 0–3 validés le 15/10/2026, non déployés ; docs/BONK_VNEXT_AUDIT_2026-10.md)
 
 PROCHAINE ACTION : à décider par Antoni (package local / release Studio sur feu vert, ou prochain module). Aucun chantier ouvert.
 RESTE À MIGRER : le reste de l'inventaire § 13 puis le cutover — Raptoru 2.0 n'est pas terminé.
