@@ -5,26 +5,35 @@ import { dirname } from 'node:path';
 // file, next to their journal). The zone is a fraction of the 1920 × 1080 canvas. Without a file (or
 // with an unreadable one) the defaults are exactly the lot 1 behaviour: Manuel, 480 × 300 around
 // (960, 400).
+// Lot 3: version 2 adds the Auto mode and the pinned camera source. A version 1 file is read as
+// version 2 (no pinned source) and rewritten as such at the next save.
 
-export type BonkTargetMode = 'manual' | 'fullscreen';
+export type BonkTargetMode = 'auto' | 'manual' | 'fullscreen';
 export interface BonkZone {
   x: number;
   y: number;
   w: number;
   h: number;
 }
+/** Camera source preferred by Auto (OBS source uuid when known, else its name). */
+export interface BonkPinned {
+  name: string;
+  uuid: string | null;
+}
 export interface BonkSettings {
-  version: 1;
+  version: 2;
   mode: BonkTargetMode;
   manual: BonkZone;
+  auto: { pinned: BonkPinned | null };
 }
 
 export const CANVAS = { width: 1920, height: 1080 } as const;
 /** Smallest zone side (fraction of the canvas side). */
 export const MIN_ZONE = 0.05;
 export const DEFAULT_SETTINGS: BonkSettings = Object.freeze({
-  version: 1,
+  version: 2,
   mode: 'manual',
+  auto: Object.freeze({ pinned: null }),
   manual: Object.freeze({
     x: 720 / CANVAS.width,
     y: 250 / CANVAS.height,
@@ -43,8 +52,30 @@ export function validateSettings(
   const s = input as Partial<BonkSettings> | null;
   if (!s || typeof s !== 'object')
     return { ok: false, error: 'invalid_settings' };
-  if (s.mode !== 'manual' && s.mode !== 'fullscreen')
+  const version = (s as { version?: unknown }).version;
+  if (version !== 1 && version !== 2)
+    return { ok: false, error: 'invalid_settings' };
+  if (
+    s.mode !== 'manual' &&
+    s.mode !== 'fullscreen' &&
+    !(version === 2 && s.mode === 'auto')
+  )
     return { ok: false, error: 'invalid_mode' };
+  let pinned: BonkPinned | null = null;
+  if (version === 2) {
+    const p = (s.auto as { pinned?: unknown } | undefined)?.pinned as
+      Partial<BonkPinned> | null | undefined;
+    if (p != null) {
+      if (
+        typeof p.name !== 'string' ||
+        !p.name ||
+        p.name.length > 256 ||
+        (p.uuid != null && (typeof p.uuid !== 'string' || p.uuid.length > 64))
+      )
+        return { ok: false, error: 'invalid_pinned' };
+      pinned = { name: p.name, uuid: p.uuid ?? null };
+    }
+  }
   const z = s.manual as Partial<BonkZone> | undefined;
   if (!z || ![z.x, z.y, z.w, z.h].every(finite))
     return { ok: false, error: 'invalid_zone' };
@@ -61,7 +92,12 @@ export function validateSettings(
     return { ok: false, error: 'invalid_zone' };
   return {
     ok: true,
-    settings: { version: 1, mode: s.mode, manual: { x, y, w, h } },
+    settings: {
+      version: 2,
+      mode: s.mode,
+      manual: { x, y, w, h },
+      auto: { pinned },
+    },
   };
 }
 
@@ -102,12 +138,18 @@ export class BonkSettingsStore {
     return this.current;
   }
 
-  /** What the overlay aims at, in canvas pixels. */
+  /**
+   * What the overlay aims at, in canvas pixels, without Auto: the Manuel zone (also the Auto
+   * fallback) or Fullscreen. The runtime replaces the rect with the Auto camera when there is one.
+   */
   target() {
     const z = this.current.manual;
     return {
       revision: this.revision,
-      mode: this.current.mode,
+      mode:
+        this.current.mode === 'fullscreen'
+          ? ('fullscreen' as const)
+          : ('manual' as const),
       rect: {
         x: z.x * CANVAS.width,
         y: z.y * CANVAS.height,

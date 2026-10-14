@@ -39,14 +39,20 @@ describe('Bonk target settings (per profile file)', () => {
     const f = await file();
     const store = await BonkSettingsStore.open(f);
     const zone = { x: 0.1, y: 0.5, w: 0.3, h: 0.4 };
-    await store.save({ version: 1, mode: 'fullscreen', manual: zone });
+    await store.save({
+      version: 2,
+      mode: 'fullscreen',
+      manual: zone,
+      auto: { pinned: null },
+    });
     expect(store.revision).toBe(1);
     expect(existsSync(`${f}.tmp`)).toBe(false);
     const reopened = await BonkSettingsStore.open(f);
     expect(reopened.settings).toEqual({
-      version: 1,
+      version: 2,
       mode: 'fullscreen',
       manual: zone,
+      auto: { pinned: null },
     });
     expect(reopened.target().mode).toBe('fullscreen');
   });
@@ -56,21 +62,53 @@ describe('Bonk target settings (per profile file)', () => {
     const store = await BonkSettingsStore.open(f);
     for (const [input, error] of [
       [null, 'invalid_settings'],
-      [{ mode: 'auto', manual: DEFAULT_ZONE }, 'invalid_mode'],
+      [{ mode: 'manual', manual: DEFAULT_ZONE }, 'invalid_settings'], // no version
+      [{ version: 1, mode: 'auto', manual: DEFAULT_ZONE }, 'invalid_mode'], // Auto is v2
+      [{ version: 2, mode: 'other', manual: DEFAULT_ZONE }, 'invalid_mode'],
       [
-        { mode: 'manual', manual: { x: 0, y: 0, w: 0.01, h: 0.5 } },
+        {
+          version: 2,
+          mode: 'auto',
+          manual: DEFAULT_ZONE,
+          auto: { pinned: { name: '' } },
+        },
+        'invalid_pinned',
+      ],
+      [
+        {
+          version: 2,
+          mode: 'auto',
+          manual: DEFAULT_ZONE,
+          auto: { pinned: { name: 'Cam', uuid: 5 } },
+        },
+        'invalid_pinned',
+      ],
+      [
+        { version: 2, mode: 'manual', manual: { x: 0, y: 0, w: 0.01, h: 0.5 } },
         'invalid_zone',
       ],
       [
-        { mode: 'manual', manual: { x: 0.9, y: 0, w: 0.2, h: 0.5 } },
+        {
+          version: 2,
+          mode: 'manual',
+          manual: { x: 0.9, y: 0, w: 0.2, h: 0.5 },
+        },
         'invalid_zone',
       ],
       [
-        { mode: 'manual', manual: { x: -0.1, y: 0, w: 0.2, h: 0.5 } },
+        {
+          version: 2,
+          mode: 'manual',
+          manual: { x: -0.1, y: 0, w: 0.2, h: 0.5 },
+        },
         'invalid_zone',
       ],
       [
-        { mode: 'manual', manual: { x: 'a', y: 0, w: 0.2, h: 0.5 } },
+        {
+          version: 2,
+          mode: 'manual',
+          manual: { x: 'a', y: 0, w: 0.2, h: 0.5 },
+        },
         'invalid_zone',
       ],
     ] as const) {
@@ -79,6 +117,46 @@ describe('Bonk target settings (per profile file)', () => {
     }
     expect(existsSync(f)).toBe(false);
     expect(store.revision).toBe(0);
+  });
+
+  it('v2: Auto mode and a pinned source round-trip; a lot 2 (v1) file is read as v2', async () => {
+    const f = await file();
+    const store = await BonkSettingsStore.open(f);
+    const pinned = { name: 'Webcam Logitech C920', uuid: 'a1b2' };
+    await store.save({
+      version: 2,
+      mode: 'auto',
+      manual: DEFAULT_ZONE,
+      auto: { pinned },
+    });
+    expect((await BonkSettingsStore.open(f)).settings).toEqual({
+      version: 2,
+      mode: 'auto',
+      manual: DEFAULT_ZONE,
+      auto: { pinned },
+    });
+    // Auto without a camera is the Manuel zone for the overlay (the runtime puts the camera in).
+    expect(store.target()).toMatchObject({
+      mode: 'manual',
+      rect: { x: 720, y: 250, w: 480, h: 300 },
+    });
+    const v1 = await file();
+    const zone = { x: 0.1, y: 0.5, w: 0.3, h: 0.4 };
+    writeFileSync(
+      v1,
+      JSON.stringify({ version: 1, mode: 'fullscreen', manual: zone }),
+    );
+    const migrated = await BonkSettingsStore.open(v1);
+    expect(migrated.settings).toEqual({
+      version: 2,
+      mode: 'fullscreen',
+      manual: zone,
+      auto: { pinned: null },
+    });
+    // Rewritten as v2 only at the next save.
+    expect(JSON.parse(readFileSync(v1, 'utf8')).version).toBe(1);
+    await migrated.save(migrated.settings);
+    expect(JSON.parse(readFileSync(v1, 'utf8')).version).toBe(2);
   });
 
   it('an unreadable or invalid file falls back to the defaults', async () => {

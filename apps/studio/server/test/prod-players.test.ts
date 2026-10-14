@@ -325,9 +325,10 @@ describe('Production players (set up from the Studio tab)', () => {
       (await hit(f.bonk, 'GET', '/api/bonk-lab/settings', STUDIO)).body,
     ).toEqual({
       settings: {
-        version: 1,
+        version: 2,
         mode: 'manual',
         manual: { x: 720 / 1920, y: 250 / 1080, w: 480 / 1920, h: 300 / 1080 },
+        auto: { pinned: null },
       },
     });
     f.bonk.worker.setObs(true, true);
@@ -360,14 +361,20 @@ describe('Production players (set up from the Studio tab)', () => {
     expect(
       (
         await hit(f.bonk, 'POST', '/api/bonk-lab/settings', STUDIO, {
-          version: 1,
+          version: 2,
           mode: 'manual',
           manual: zone,
+          auto: { pinned: null },
         })
       ).body,
     ).toEqual({
       ok: true,
-      settings: { version: 1, mode: 'manual', manual: zone },
+      settings: {
+        version: 2,
+        mode: 'manual',
+        manual: zone,
+        auto: { pinned: null },
+      },
     });
     expect(JSON.parse(await readFile(file, 'utf8')).manual).toEqual(zone);
     expect((await config('renderer-prod')).body).toEqual({
@@ -382,6 +389,138 @@ describe('Production players (set up from the Studio tab)', () => {
     expect(
       (await hit(f.bonk, 'GET', '/api/bonk-lab/obs-screenshot', STUDIO)).body,
     ).toEqual({ error: 'obs_offline' });
+  });
+
+  it('Bonk Auto (lot 3): the camera of the OBS program scene is served to the overlay; hidden → Manuel at once', async () => {
+    const f = await production();
+    const renderer = { 'x-bonk-token': f.bonk.worker.token };
+    const t = (o: Record<string, unknown>) => ({
+      positionX: 0,
+      positionY: 0,
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+      alignment: 5,
+      boundsType: 'OBS_BOUNDS_NONE',
+      boundsAlignment: 0,
+      boundsWidth: 0,
+      boundsHeight: 0,
+      cropLeft: 0,
+      cropRight: 0,
+      cropTop: 0,
+      cropBottom: 0,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      ...o,
+    });
+    const webcam = {
+      sceneItemId: 7,
+      sourceName: 'Webcam',
+      sourceUuid: 'uuid-webcam',
+      sourceType: 'OBS_SOURCE_TYPE_INPUT',
+      inputKind: 'dshow_input',
+      isGroup: false,
+      sceneItemEnabled: true,
+      sceneItemTransform: t({
+        positionX: 1400,
+        positionY: 760,
+        scaleX: 0.25,
+        scaleY: 0.25,
+      }),
+    };
+    const requests: string[] = [];
+    const sockets: (EventTarget & { emit(p: unknown): void })[] = [];
+    class Socket extends EventTarget {
+      constructor(readonly url: string) {
+        super();
+        sockets.push(this);
+        queueMicrotask(() => this.emit({ op: 0, d: { rpcVersion: 1 } }));
+      }
+      emit(packet: unknown) {
+        this.dispatchEvent(
+          new MessageEvent('message', { data: JSON.stringify(packet) }),
+        );
+      }
+      send(raw: string) {
+        const p = JSON.parse(raw);
+        if (p.op === 1)
+          return queueMicrotask(() => this.emit({ op: 2, d: {} }));
+        requests.push(p.d.requestType);
+        const data: Record<string, unknown> =
+          p.d.requestType === 'GetVideoSettings'
+            ? { baseWidth: 1920, baseHeight: 1080 }
+            : p.d.requestType === 'GetCurrentProgramScene'
+              ? { currentProgramSceneName: 'Live' }
+              : p.d.requestType === 'GetSceneItemList'
+                ? { sceneItems: [webcam] }
+                : {};
+        queueMicrotask(() =>
+          this.emit({
+            op: 7,
+            d: {
+              requestId: p.d.requestId,
+              requestStatus: { result: true },
+              responseData: data,
+            },
+          }),
+        );
+      }
+      close() {}
+    }
+    vi.stubGlobal('WebSocket', Socket);
+    try {
+      await f.bonk.obs.connect(4455, '');
+      await f.bonk.auto.resync();
+      f.bonk.worker.setObs(true, true);
+      await hit(f.bonk, 'POST', '/bonk-lab/renderer/heartbeat', renderer, {
+        renderer: 'renderer-prod',
+      });
+      const config = async () =>
+        (
+          await hit(f.bonk, 'POST', '/bonk-lab/renderer/config', renderer, {
+            renderer: 'renderer-prod',
+          })
+        ).body.target as { mode: string; rect: Record<string, number> };
+      // Manuel until Auto is saved.
+      expect((await config()).rect).toEqual({ x: 720, y: 250, w: 480, h: 300 });
+      await hit(f.bonk, 'POST', '/api/bonk-lab/settings', STUDIO, {
+        version: 2,
+        mode: 'auto',
+        manual: { x: 720 / 1920, y: 250 / 1080, w: 480 / 1920, h: 300 / 1080 },
+        auto: { pinned: null },
+      });
+      expect(await config()).toMatchObject({
+        mode: 'manual',
+        rect: { x: 1400, y: 760, w: 480, h: 270 },
+      });
+      const view = (await hit(f.bonk, 'GET', '/api/bonk-lab/auto', STUDIO))
+        .body;
+      expect(view).toMatchObject({
+        mode: 'auto',
+        status: 'ready',
+        reason: 'seule caméra fiable',
+        scene: 'Live',
+        chosen: { name: 'Webcam', path: ['Live', 'Webcam'] },
+      });
+      // Hidden in OBS: the overlay is served the Manuel zone immediately (never the old box).
+      webcam.sceneItemEnabled = false;
+      sockets.at(-1)!.emit({
+        op: 5,
+        d: {
+          eventType: 'SceneItemEnableStateChanged',
+          eventData: {
+            sceneName: 'Live',
+            sceneItemId: 7,
+            sceneItemEnabled: false,
+          },
+        },
+      });
+      expect((await config()).rect).toEqual({ x: 720, y: 250, w: 480, h: 300 });
+      expect(requests.every((r) => r.startsWith('Get'))).toBe(true);
+    } finally {
+      f.bonk.obs.disconnect();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('back to Lab: the Lab players keep their own tokens and journals, no collision with Production', async () => {

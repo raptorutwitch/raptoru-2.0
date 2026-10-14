@@ -6,6 +6,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { BonkLabThirdPartyCatalog } from '@raptoru/schemas';
 import { BonkWorker, localCoreClient, type CoreCall } from './worker.js';
 import { LabObs } from './obs.js';
+import { AUTO_EVENTS, ObsAuto } from './obs-auto.js';
+import type { Candidate } from './obs-scene.js';
 import { BonkSettingsStore } from './settings.js';
 import { ViewerAuth } from './viewer-auth.js';
 import { paths, REPO_ROOT } from '../test-lab/local-env.js';
@@ -37,7 +39,10 @@ const PREVIEW_EMOJIS = [
 ];
 
 export class BonkRuntime {
-  readonly obs = new LabObs();
+  /** Read-only OBS client; subscribed to the scene events Auto needs (lot 3). */
+  readonly obs = new LabObs(AUTO_EVENTS);
+  /** Auto target: the camera found in the OBS program scene (lot 3). */
+  readonly auto = new ObsAuto(this.obs);
   /** Pending « Tester » shots (memory only, never journaled, never sent to Core). */
   private readonly preview: { preview_id: string; emote_url: string }[] = [];
   private previewSeq = 0;
@@ -53,7 +58,10 @@ export class BonkRuntime {
     readonly production: boolean,
     /** Where the Bonks aim (lot 2), one file per profile next to its journal. */
     readonly settings: BonkSettingsStore,
-  ) {}
+  ) {
+    this.obs.onEvent = (type, data) => this.auto.onEvent(type, data);
+    this.obs.onConnected = () => this.auto.onConnected();
+  }
   /** Public 7TV/BTTV/FFZ catalog of the channel, resolved by Lab Core (metadata + CDN URLs). */
   readonly thirdPartyCatalog = (refresh = false) =>
     this.core<BonkLabThirdPartyCatalog>(
@@ -88,6 +96,45 @@ export class BonkRuntime {
       settings,
     );
   }
+  /**
+   * What the live renderer aims at: Fullscreen, the Manuel zone, or in Auto the camera found in the
+   * OBS program scene — the Manuel zone when Auto has no reliable camera right now (lot 3).
+   */
+  effectiveTarget() {
+    const t = this.settings.target();
+    const s = this.settings.settings;
+    if (s.mode !== 'auto') return t;
+    const chosen = this.auto.snapshot(s.auto.pinned).chosen;
+    return chosen ? { ...t, rect: { ...chosen.rect } } : t;
+  }
+
+  /** Auto state for the Studio editor (no polygons: names, paths, boxes, scores and reasons). */
+  autoView() {
+    const s = this.settings.settings;
+    const snap = this.auto.snapshot(s.auto.pinned);
+    const view = (c: Candidate) => ({
+      name: c.name,
+      uuid: c.uuid,
+      input_kind: c.inputKind,
+      path: c.path,
+      rect: c.rect,
+      area: c.area,
+      score: c.score,
+      reliable: c.reliable,
+      reasons: c.reasons,
+    });
+    return {
+      mode: s.mode,
+      status: snap.status,
+      reason: snap.reason,
+      scene: snap.scene,
+      pinned: snap.pinned,
+      chosen: snap.chosen ? view(snap.chosen) : null,
+      candidates: snap.candidates.map(view),
+      error: this.auto.error,
+    };
+  }
+
   /** Live OBS / overlay state (moderation cockpit). */
   summary() {
     return {
@@ -114,8 +161,10 @@ export class BonkRuntime {
     this.worker.onAdmitted = () => loop.wake();
     this.loop = loop;
     loop.start();
+    this.auto.start();
   }
   stop() {
+    this.auto.stop();
     this.loop?.stop();
     this.obs.disconnect();
     this.viewerAuth.stop();
@@ -224,6 +273,11 @@ export class BonkRuntime {
       ) {
         reply(200, { settings: this.settings.settings });
       } else if (
+        req.method === 'GET' &&
+        url.pathname === '/api/bonk-lab/auto'
+      ) {
+        reply(200, this.autoView());
+      } else if (
         req.method === 'POST' &&
         url.pathname === '/api/bonk-lab/settings'
       ) {
@@ -270,7 +324,7 @@ export class BonkRuntime {
           // Saved target only (the Studio editor's draft never reaches the overlay).
           reply(200, {
             target: this.worker.isLiveRenderer(renderer)
-              ? this.settings.target()
+              ? this.effectiveTarget()
               : null,
           });
         } else if (url.pathname.endsWith('/preview')) {

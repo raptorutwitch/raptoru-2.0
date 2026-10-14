@@ -80,6 +80,7 @@ async function play(i) {
   }
   let shown;
   try {
+    await freshTarget();
     shown = await scene.play({ id: i.interaction_id, image });
   } catch {
     await ack(i, 'failed');
@@ -105,6 +106,7 @@ async function showPreview(shot) {
   } catch {
     return;
   }
+  await freshTarget();
   void scene.play({ id: shot.preview_id, image }).catch(() => {});
 }
 setInterval(
@@ -118,22 +120,24 @@ setInterval(
       .catch(() => {}),
   250,
 );
-// Saved target of the Studio settings (lot 2: Manuel zone or Fullscreen), applied to new Bonks.
-setInterval(
-  () =>
-    void call('config', {})
-      .then(({ target }) => target && scene.setTarget(target))
-      .catch(() => {}),
-  1000,
-);
+// Target of the Studio settings (lot 2: Manuel zone or Fullscreen; lot 3: Auto camera, or the
+// Manuel zone when Auto has none), applied to new Bonks. Re-read right before each shot too, so a
+// camera that has just been hidden is never aimed at (Studio drops it at once).
+function refreshTarget() {
+  return call('config', {})
+    .then(({ target }) => target && scene.setTarget(target))
+    .catch(() => {});
+}
+function freshTarget() {
+  return Promise.race([refreshTarget(), sleep(300)]);
+}
+setInterval(() => void refreshTarget(), 1000);
 setInterval(() => void call('heartbeat', {}).catch(() => {}), 1500);
 // After an OBS refresh, the previous page still counts as the live renderer for a few seconds and
 // this first heartbeat is refused (renderer_already_connected). It must not stop the page: the
 // interval keeps announcing us, and `next` simply returns nothing until we are the renderer.
 await call('heartbeat', {}).catch(() => {});
-await call('config', {})
-  .then(({ target }) => target && scene.setTarget(target))
-  .catch(() => {});
+await refreshTarget();
 while (true) {
   try {
     const { interaction } = await call('next', {});

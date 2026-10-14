@@ -14,6 +14,13 @@ export class LabObs {
   connected = false;
   /** Last connection failure (status display); null once connected. */
   error: string | null = null;
+  /** OBS events (lot 3, Auto target): read-only notifications, nothing is ever changed in OBS. */
+  onEvent: ((type: string, data: Record<string, unknown>) => void) | null =
+    null;
+  /** Called after each successful (re)connection. */
+  onConnected: (() => void) | null = null;
+  /** obs-websocket event subscriptions (bit mask); 0 = none. */
+  constructor(private readonly events = 0) {}
   private target: { port: number; password: string } | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private attempt = 0;
@@ -137,7 +144,7 @@ export class LabObs {
                 op: 1,
                 d: {
                   rpcVersion: 1,
-                  eventSubscriptions: 0,
+                  eventSubscriptions: this.events,
                   ...(auth
                     ? {
                         authentication: hash(
@@ -153,12 +160,18 @@ export class LabObs {
             identified = true;
             this.connected = true;
             resolve();
+            this.onConnected?.();
           } else if (packet.op === 7) {
             const p = this.pending.get(packet.d.requestId);
             this.pending.delete(packet.d.requestId);
             if (packet.d.requestStatus.result)
               p?.resolve(packet.d.responseData ?? {});
             else p?.reject(new Error('obs_request_failed'));
+          } else if (packet.op === 5) {
+            this.onEvent?.(
+              String(packet.d.eventType),
+              (packet.d.eventData ?? {}) as Record<string, unknown>,
+            );
           }
         } catch {
           if (!identified) fail('obs_offline_or_auth_failed');
