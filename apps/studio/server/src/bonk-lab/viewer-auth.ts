@@ -2,6 +2,10 @@ import { createServer, type Server } from 'node:http';
 import type { BonkLabCatalog, BonkLabViewer } from '@raptoru/schemas';
 import type { CoreCall } from './worker.js';
 
+/** Twitch emotes state of a viewer (same values as /v1/ext/emotes `twitch_status`). */
+export type TwitchEmotesStatus =
+  'not_linked' | 'syncing' | 'ready' | 'stale' | 'reauth_required';
+
 // Twitch viewer connection for the Bonk Lab. Studio only relays the OAuth redirect to Core: the code
 // is exchanged by Core (which holds the app secret) and the token never reaches Studio, the extension
 // or OBS. The loopback listener on the already-registered redirect (localhost:3789/callback) only
@@ -35,6 +39,20 @@ export class ViewerAuth {
     );
     await this.listen();
     return result;
+  }
+
+  /** The Lab viewer's emotes: same states / cache as the public frontier (Core emotesState). */
+  emotes(refresh = false) {
+    return this.core<{
+      status: TwitchEmotesStatus;
+      viewer: { user_id: string; login: string; display_name: string } | null;
+      catalog: BonkLabCatalog | null;
+    }>(
+      `/v1/lab/bonk/viewer-emotes${refresh ? '?refresh=1' : ''}`,
+      undefined,
+      // A forced reload waits up to 6 s in Core, then answers with the stored catalog.
+      { timeoutMs: refresh ? 10_000 : 4_000 },
+    );
   }
 
   viewers() {

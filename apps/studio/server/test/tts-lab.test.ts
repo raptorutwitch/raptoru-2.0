@@ -394,6 +394,11 @@ describe('TTS V2 Lab: Extension Lab → Core → Studio worker → OBS player', 
       {
         generation: 1,
         viewers: async () => ({ viewers: [twitchViewer] }),
+        emotes: async () => ({
+          status: 'ready',
+          viewer: twitchViewer,
+          catalog: null,
+        }),
         catalog: async () => ({ groups: [] }),
       } as never,
     );

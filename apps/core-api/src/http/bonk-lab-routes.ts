@@ -144,6 +144,19 @@ function viewerRoutes(viewers: TwitchViewerCatalog): Route[] {
         }),
     },
     {
+      // The Lab viewer's Twitch emotes, same states and cache as /v1/ext/emotes (emotesState).
+      method: 'GET',
+      pattern: /^\/v1\/lab\/bonk\/viewer-emotes$/,
+      auth: 'studio',
+      handle: ({ url }) =>
+        mapped(async () => {
+          const id = await viewers.labViewerId();
+          if (!id) return { status: 'not_linked', viewer: null, catalog: null };
+          const force = url.searchParams.get('refresh') === '1';
+          return viewers.emotesState(id, { force, waitMs: force ? 6000 : 0 });
+        }),
+    },
+    {
       method: 'GET',
       pattern: /^\/v1\/lab\/bonk\/viewers$/,
       auth: 'studio',

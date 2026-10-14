@@ -211,6 +211,23 @@ export class TwitchViewerCatalog {
     );
   }
 
+  /**
+   * Lab convention (Studio's Extension Lab): its viewer role is the most recently linked account, or the
+   * one asked to reconnect. Null = none. The public frontier never uses this (the JWT names the viewer).
+   */
+  async labViewerId(): Promise<string | null> {
+    return (
+      (
+        await this.db.query<{ user_id: string }>(
+          `select user_id from (
+             select user_id, updated_at as at from bonk_lab_viewer_tokens
+             union all select user_id, at from bonk_lab_viewer_reauth
+           ) v order by at desc limit 1`,
+        )
+      )[0]?.user_id ?? null
+    );
+  }
+
   /** The viewer's own choice: revoked at Twitch, forgotten here (not linked, no reconnection asked). */
   async disconnect(userId: string): Promise<{ disconnected: boolean }> {
     const row = await this.tokenRow(userId);

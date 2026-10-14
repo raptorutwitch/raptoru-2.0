@@ -1281,6 +1281,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let emoteAuthorizationStarting = false;
   // Bonk : fenêtre « Lie ton compte Twitch » ouverte depuis la source Twitch de la colonne latérale.
   let bonkTwitchLinkOpen = false;
+  // Twitch emotes being synchronized (Core reloads them in the background): re-read every 3 s, at most
+  // 20 times per visit of Bonk, one timer only; stops as soon as the state is stable or Bonk is left.
+  let emoteSyncTimer = null;
+  let emoteSyncReads = 0;
   let emoteAuthorizationPopup = null;
   let emoteAuthorizationPoller = null;
   let emoteAuthorizationFinishing = false;
@@ -1698,6 +1702,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       viewerPreferencesOpen = false;
     }
     if (moduleId !== 'soundboard') stopSoundPreview();
+    if (moduleId !== openModule) {
+      // A new visit of Bonk follows a synchronization again; leaving it stops following.
+      clearTimeout(emoteSyncTimer);
+      emoteSyncTimer = null;
+      emoteSyncReads = 0;
+    }
     if (moduleId !== 'tts') {
       ttsV2View?.destroy();
       ttsV2View = null;
@@ -1738,13 +1748,31 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     restoreScrollPositions();
   }
 
-  async function loadEmotes({ force = false } = {}) {
+  /** not_linked · syncing · ready · stale · reauth_required (same values in the Lab and on Twitch). */
+  function twitchEmotesStatus() {
+    const key = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
+    const known = emoteCatalog && emoteCatalogKey === key ? emoteCatalog.twitch_status : null;
+    return known ?? state?.emotes?.twitch_status ?? (state?.emotes?.twitch_connected === true ? 'ready' : 'not_linked');
+  }
+
+  function followEmoteSync() {
+    clearTimeout(emoteSyncTimer);
+    emoteSyncTimer = null;
+    if (twitchEmotesStatus() !== 'syncing' || openModule !== 'bonk' || emoteSyncReads >= 20) return;
+    emoteSyncReads += 1;
+    emoteSyncTimer = setTimeout(() => {
+      emoteSyncTimer = null;
+      void loadEmotes({ poll: true });
+    }, 3000);
+  }
+
+  async function loadEmotes({ force = false, poll = false } = {}) {
     if (emoteLoading) {
       if (force) emoteForceReloadPending = true;
       return;
     }
     const requestKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
-    if (!force && emoteCatalog
+    if (!force && !poll && emoteCatalog
       && emoteCatalogKey === requestKey
       && Date.now() - emoteCatalogLoadedAt < EMOTE_CATALOG_REFRESH_MS) return;
     if (!state?.emotes?.connected || !client.emotes) return;
@@ -1763,6 +1791,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           count: Number(result.count || 0),
           diagnostics: result.diagnostics ?? null,
           twitch_connected: result.twitch_connected === true,
+          twitch_status: result.twitch_status
+            ?? (result.twitch_connected === true ? 'ready' : 'not_linked'),
         };
         emoteCatalogKey = requestKey;
         emoteCatalogLoadedAt = Date.now();
@@ -1774,6 +1804,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     } finally {
       emoteLoading = false;
       renderPreservingViewport();
+      followEmoteSync();
       if (emoteForceReloadPending) {
         emoteForceReloadPending = false;
         queueMicrotask(() => loadEmotes({ force: true }));
@@ -3305,13 +3336,17 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       && (!emoteCatalog || emoteCatalogKey !== emoteStateKey || emoteCatalogExpired)
       && !emoteLoading) {
       queueMicrotask(loadEmotes);
+    } else if (!emoteLoading && !emoteSyncTimer && twitchEmotesStatus() === 'syncing') {
+      queueMicrotask(followEmoteSync);
     }
+    const twitchStatus = twitchEmotesStatus();
     // Compte Twitch non lié : une source « Twitch » dans la colonne latérale (bonk-twitch-source.js) au
     // lieu d'un bandeau permanent ; sa fenêtre lance le vrai flow OAuth (beginEmoteAuthorization).
     let twitchSource = null;
     if (state?.emotes?.twitch_connected === false) {
       twitchSource = createTwitchEmoteSource({
         document,
+        reauth: twitchStatus === 'reauth_required',
         open: bonkTwitchLinkOpen,
         onOpen: () => {
           bonkTwitchLinkOpen = true;
@@ -3321,6 +3356,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       if (bonkTwitchLinkOpen) {
         const dialog = createTwitchEmoteDialog({
           document,
+          reauth: twitchStatus === 'reauth_required',
           starting: emoteAuthorizationStarting,
           onAuthorize: () => {
             bonkTwitchLinkOpen = false;
@@ -3357,7 +3393,29 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       oauthControls.append(refresh, disconnect);
       // Placés dans la ligne de recherche du picker (voir plus bas), plus au-dessus de la grille.
     }
-    if (emoteLoading) {
+    // Twitch emotes state: a short line in the picker's search row (the module body hides its hints in
+    // the video component), never an empty grid read as « no emotes ». The cached catalog stays usable
+    // while it syncs and when Twitch is briefly unreachable; a needed reconnection opens its window.
+    let twitchStatusNode = null;
+    if (twitchStatus === 'syncing') {
+      twitchStatusNode = el('span', 'rl-twitch-status', 'Synchronisation des emotes Twitch…');
+      twitchStatusNode.setAttribute('role', 'status');
+    } else if (twitchStatus === 'stale') {
+      twitchStatusNode = el('span', 'rl-twitch-status', 'Emotes en cache · Twitch momentanément indisponible');
+      twitchStatusNode.setAttribute('role', 'status');
+    } else if (twitchStatus === 'reauth_required') {
+      twitchStatusNode = el('button', 'rl-twitch-status rl-twitch-status--reauth', 'Reconnexion Twitch nécessaire');
+      twitchStatusNode.type = 'button';
+      twitchStatusNode.addEventListener('click', () => {
+        bonkTwitchLinkOpen = true;
+        renderPreservingViewport();
+      });
+    }
+    if (twitchStatusNode) {
+      oauthControls ??= el('div', 'jdm-emote-oauth-controls');
+      oauthControls.prepend(twitchStatusNode);
+    }
+    if (emoteLoading && !emoteCatalog) {
       body.append(el('p', 'jdm-hint', 'Chargement de tes emotes Twitch…'));
     } else if (emoteError) {
       body.append(el('p', 'jdm-hint', emoteError));

@@ -171,7 +171,16 @@ async function fixture() {
       `http://127.0.0.1:${port}/callback?code=${code}&state=${state}`,
     );
   };
-  return { call, connect, auth, worker };
+  /** What the extension does while « syncing »: read again until the catalog is there (bounded). */
+  const synced = async () => {
+    for (let i = 0; i < 40; i++) {
+      const body = (await call('viewer', 'GET', '/emotes')).body;
+      if (body.twitch_status !== 'syncing') return body;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error('still syncing');
+  };
+  return { call, connect, synced, auth, worker };
 }
 
 describe('Bonk Lab: real Twitch viewer identity → personal catalog → Core-validated Twitch Bonk', () => {
@@ -216,8 +225,17 @@ describe('Bonk Lab: real Twitch viewer identity → personal catalog → Core-va
   it('personal catalog in picker format (per channel, globals last; emoji come from the extension bank); Twitch Bonk validated by Core', async () => {
     const f = await fixture();
     await f.connect();
-    const emotes = (await f.call('viewer', 'GET', '/emotes')).body;
-    expect(emotes.twitch_connected).toBe(true);
+    // Right after the link: the catalog is being loaded (same state as /v1/ext), then ready.
+    expect((await f.call('viewer', 'GET', '/emotes')).body).toMatchObject({
+      twitch_connected: true,
+      twitch_status: 'syncing',
+    });
+    const emotes = await f.synced();
+    expect(emotes).toMatchObject({
+      twitch_connected: true,
+      twitch_status: 'ready',
+      twitch_login: 'Raptoru_',
+    });
     const groups = emotes.groups as {
       id: string;
       scope?: string;
@@ -317,22 +335,24 @@ describe('Bonk Lab: real Twitch viewer identity → personal catalog → Core-va
 });
 
 describe('Bonk Lab façade: a failed catalog reload never empties the picker', () => {
-  it('forced refresh timing out (seen live: ~7 s for 1141 emotes > 4 s) keeps the last good Twitch catalog', async () => {
+  it('Core unreachable on a refresh (e.g. a timeout) keeps the last good Twitch catalog', async () => {
     const f = await fixture();
     await f.connect();
-    const ok = (await f.call('viewer', 'GET', '/emotes')).body;
+    const ok = await f.synced();
     const twitchGroups = (b: Record<string, unknown>) =>
       (b.groups as { source: string }[]).filter((g) => g.source === 'twitch')
         .length;
     expect(twitchGroups(ok)).toBe(2);
-    // The next Core catalog call fails like the live timeout did.
-    f.auth.catalog = () =>
+    // The next Core call fails like a live timeout (a slow Helix reload is Core's: it answers with the
+    // stored catalog after 6 s).
+    f.auth.emotes = () =>
       Promise.reject(new Error('The operation was aborted due to timeout'));
     const refreshed = (await f.call('viewer', 'POST', '/emotes/refresh', {}))
       .body;
     expect(refreshed).toMatchObject({
       twitch_connected: true,
-      twitch_error: 'The operation was aborted due to timeout',
+      twitch_status: 'ready',
+      twitch_error: 'core_unavailable',
     });
     expect(twitchGroups(refreshed)).toBe(2);
     expect(twitchGroups((await f.call('viewer', 'GET', '/emotes')).body)).toBe(

@@ -500,3 +500,33 @@ html body .jdm-module[data-module="bonk"] .rl-bonk-picker .jdm-bonk-choice__favo
 .rl-twitch-link__btn--primary { border-color: transparent; background: #9146ff; color: #fff; }
 .rl-twitch-link__btn:disabled { cursor: progress; opacity: .6; }
 .rl-twitch-link__btn:focus-visible { outline: 2px solid #dcc4ff; outline-offset: 2px; }
+
+/* Bonk · état des emotes Twitch (synchronisation, cache, reconnexion) : une ligne courte, jamais une erreur. */
+.rl-twitch-src--reauth .rl-twitch-src__state {
+  background: #ff7a8a;
+  color: #2a0710;
+  font-size: 9px;
+}
+.rl-twitch-status {
+  overflow: hidden;
+  max-width: 220px;
+  flex: 0 1 auto;
+  align-self: center;
+  padding: 0 6px;
+  color: #b9a9d6;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-twitch-status--reauth {
+  height: 26px;
+  border: 1px solid rgba(255, 122, 138, 0.45);
+  border-radius: 8px;
+  background: rgba(255, 122, 138, 0.12);
+  color: #ffc2ca;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}

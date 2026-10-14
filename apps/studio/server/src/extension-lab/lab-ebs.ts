@@ -2,7 +2,6 @@ import {
   BonkLabProvider,
   type BonkLabCatalog,
   type BonkLabThirdPartyCatalog,
-  type BonkLabViewer,
   type SoundLabSound,
   type TtsLabViewerState,
 } from '@raptoru/schemas';
@@ -12,7 +11,10 @@ import type { LabCoreCall } from '../lab-moderation/proxy.js';
 import { commandsFacade } from './commands-facade.js';
 
 const BONK_PROVIDERS: readonly BonkLabProvider[] = BonkLabProvider.options;
-import type { ViewerAuth } from '../bonk-lab/viewer-auth.js';
+import type {
+  TwitchEmotesStatus,
+  ViewerAuth,
+} from '../bonk-lab/viewer-auth.js';
 import type { BonkWorker } from '../bonk-lab/worker.js';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -284,13 +286,14 @@ export class LabEbs {
       this.thirdParty = { ...this.thirdParty, at: Date.now() - 55_000 };
     }
   }
-  /** Linked real Twitch viewer (Bonk Lab) and its catalog, refreshed from Core. */
+  /** Linked real Twitch viewer (Bonk Lab), its emotes state and catalog, read from Core. */
   private twitch: {
-    viewer: BonkLabViewer | null;
+    viewer: { user_id: string; login: string; display_name: string } | null;
     groups: Json[];
+    status: TwitchEmotesStatus;
     error: string | null;
     at: number;
-  } = { viewer: null, groups: [], error: null, at: 0 };
+  } = { viewer: null, groups: [], status: 'not_linked', error: null, at: 0 };
   private soundWorker: SoundWorker | null = null;
   /** Core Soundboard catalog (last good one kept when Core is unreachable). */
   private soundCatalog: SoundLabSound[] = [];
@@ -738,55 +741,44 @@ export class LabEbs {
   private twitchLoading: Promise<void> | null = null;
 
   /**
-   * Stale-while-revalidate: with a catalog already known for the same linked viewer, answer now
-   * and reload in the background. A Helix reload takes 8-9 s for a big catalog (measured with
-   * 1141 emotes), around the extension request timeout (8 s). A forced refresh waits for it at
-   * most 6 s when a catalog is already known, then answers with it (the reload still completes).
+   * The Lab viewer's emotes from Core (emotesState: the same states and cache as /v1/ext/emotes).
+   * Core answers at once with the stored catalog and reloads it in the background (a Helix reload of a
+   * big catalog takes 8-9 s); a forced refresh waits for it at most 6 s. Re-read at most every 5 s,
+   * except while syncing (the extension follows the reload).
    */
   private async refreshTwitch(force = false) {
     if (!this.viewerAuth) return;
     const generation = this.viewerAuth.generation;
     const sameViewer = generation === this.twitchGeneration;
-    if (!force && sameViewer && Date.now() - this.twitch.at < 5000) return;
-    if (force) {
-      const load = this.loadTwitch(generation, true);
-      if (!(sameViewer && this.twitch.viewer)) return load;
-      await Promise.race([load, new Promise((r) => setTimeout(r, 6000))]);
+    if (
+      !force &&
+      sameViewer &&
+      this.twitch.status !== 'syncing' &&
+      Date.now() - this.twitch.at < 5000
+    )
       return;
-    }
+    if (force) return this.loadTwitch(generation, true);
     this.twitchLoading ??= this.loadTwitch(generation, false).finally(() => {
       this.twitchLoading = null;
     });
-    if (!(sameViewer && this.twitch.viewer)) await this.twitchLoading;
+    await this.twitchLoading;
   }
 
   private async loadTwitch(generation: number, force: boolean) {
     if (!this.viewerAuth) return;
     this.twitchGeneration = generation;
     try {
-      const viewer = (await this.viewerAuth.viewers()).viewers[0] ?? null;
-      let groups: Json[] = [];
-      let error: string | null = null;
-      if (viewer) {
-        try {
-          groups = twitchGroups(
-            await this.viewerAuth.catalog(viewer.user_id, force),
-          );
-        } catch (e) {
-          error = (e as Error).message;
-          // Never replace a good catalog with an empty one on a failed reload: keep the last
-          // catalog of the same viewer (the extension would otherwise store the empty one).
-          if (this.twitch.viewer?.user_id === viewer.user_id)
-            groups = this.twitch.groups;
-        }
-      }
+      const r = await this.viewerAuth.emotes(force);
+      const linked = ['ready', 'syncing', 'stale'].includes(r.status);
       this.twitch = {
-        viewer: error === 'reauth_required' ? null : viewer,
-        groups,
-        error,
+        viewer: linked ? r.viewer : null,
+        groups: r.catalog ? twitchGroups(r.catalog) : [],
+        status: r.status,
+        error: null,
         at: Date.now(),
       };
     } catch {
+      // Core unreachable: keep what is known (never an empty catalog in place of a good one).
       this.twitch = {
         ...this.twitch,
         error: 'core_unavailable',
@@ -1048,7 +1040,13 @@ export class LabEbs {
           await this.viewerAuth
             .disconnect(linked.user_id)
             .catch(() => undefined);
-        this.twitch = { viewer: null, groups: [], error: null, at: 0 };
+        this.twitch = {
+          viewer: null,
+          groups: [],
+          status: 'not_linked',
+          error: null,
+          at: 0,
+        };
         return this.ok({ revoked: true });
       }
       if (linked && caller.identityShared)
@@ -1546,6 +1544,11 @@ export class LabEbs {
       return this.ok({
         connected: true,
         twitch_connected: this.viewerAuth ? Boolean(this.twitch.viewer) : true,
+        // Same values as /v1/ext/emotes (the extension shows the same states in the Lab and on Twitch).
+        twitch_status: this.viewerAuth ? this.twitch.status : 'ready',
+        ...(this.twitch.viewer
+          ? { twitch_login: this.twitch.viewer.display_name }
+          : {}),
         ...(this.twitch.error ? { twitch_error: this.twitch.error } : {}),
         groups: [...this.twitch.groups, ...this.bonkGroups()],
       });
@@ -1969,6 +1972,7 @@ export class LabEbs {
             emotes: {
               connected: true,
               twitch_connected: Boolean(this.twitch.viewer),
+              twitch_status: this.twitch.status,
               connect_url: null,
             },
           }

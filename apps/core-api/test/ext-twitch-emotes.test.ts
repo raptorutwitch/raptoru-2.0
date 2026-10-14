@@ -395,6 +395,54 @@ describe('Bonk on /v1/ext with Twitch emotes', () => {
   });
 });
 
+describe('local Lab Core: the same emotes states (Studio Extension Lab)', () => {
+  it('its viewer is the last linked account, or the one asked to reconnect; old plain tokens stay readable', async () => {
+    const core = await setup();
+    core.clock.set(new Date());
+    const tw = fakeTwitch();
+    // Lab: no key (tokens stored as before), the viewer is not named by a JWT.
+    const lab = new TwitchViewerCatalog(
+      core.db,
+      core.clock,
+      APP,
+      tw.fetchImpl,
+      {
+        redirectUri: REDIRECT,
+      },
+    );
+    expect(await lab.labViewerId()).toBeNull();
+    const url = new URL((await lab.startAuth()).authorization_url);
+    await lab.completeAuth('good', url.searchParams.get('state')!);
+    expect(await lab.labViewerId()).toBe(ALICE);
+    const row = (
+      await core.db.query<{ access_token: string }>(
+        'select access_token from bonk_lab_viewer_tokens where user_id = $1',
+        [ALICE],
+      )
+    )[0]!;
+    expect(row.access_token.startsWith('AT-')).toBe(true); // plain, as before
+    // A plain token stays readable once a key is configured (no reconnection forced by the change).
+    expect(openToken(row.access_token, KEY)).toBe(row.access_token);
+    const keyed = new TwitchViewerCatalog(
+      core.db,
+      core.clock,
+      APP,
+      tw.fetchImpl,
+      { redirectUri: REDIRECT, tokenKey: KEY },
+    );
+    expect(
+      (await keyed.emotesState(ALICE, { force: true, waitMs: 1000 })).status,
+    ).toBe('ready');
+    // Twitch refuses the refresh: the Lab viewer stays the same, asked to reconnect.
+    tw.t.refreshRefused = true;
+    core.clock.advance(5 * 60 * MINUTE);
+    expect(
+      (await lab.emotesState(ALICE, { force: true, waitMs: 1000 })).status,
+    ).toBe('reauth_required');
+    expect(await lab.labViewerId()).toBe(ALICE);
+  });
+});
+
 describe('public Core without linking configured', () => {
   it('start answers twitch_emotes_unavailable; the emotes read stays not_linked', async () => {
     const core = await setup();
