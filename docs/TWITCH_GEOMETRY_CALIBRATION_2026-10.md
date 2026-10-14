@@ -1,6 +1,8 @@
 # Calibration géométrique du Twitch Video Component (ouverte le 14/10/2026)
 
-**Statut :** audit fait (Astra Max), **aucune mesure réelle Twitch encore relevée**, aucun code modifié.
+**Statut :** mesures relevées sur Twitch (LeCroupier_, build de calibration), cible **65 % · 3:2 · dimensions
+automatiques OFF → 565×376** décidée ; profil compact-video porté dans l'extension et Lab recalé (branche
+`feat/compact-video-port`, **non poussée, non validée**). Voir §4 et §5.
 Références : [`../Raptoru-2.0-HANDOFF.md`](../Raptoru-2.0-HANDOFF.md) ·
 [`TEST_REEL_STAGING_2026-10.md`](TEST_REEL_STAGING_2026-10.md).
 
@@ -63,4 +65,32 @@ d'une extension Twitch séparée). **Non validé manuellement, non publié.**
 
 ## 4. Mesures
 
-_Aucune pour l'instant._
+Relevées par Antoni sur Twitch (Hosted Test, LeCroupier_, HUD du build de calibration), viewport logique de
+l'iframe du Video Component :
+
+| Height Target | Ratio | Dimensions automatiques | Viewport mesuré      | Rendu                             |
+| ------------- | ----- | ----------------------- | -------------------- | --------------------------------- |
+| 60 %          | 3:2   | OFF                     | 521×347              | net                               |
+| 65 %          | 3:2   | OFF                     | **565×376**          | net — **cible retenue**           |
+| 75 %          | 3:2   | OFF                     | 651×434              | net, composition appréciée        |
+| 65 %          | —     | ON, scale_pixels 651    | (651 logique réduit) | composition du 75 % mais **flou** |
+| 65 %          | —     | ON, scale_pixels 600    | (600 logique réduit) | **flou**                          |
+
+`scale_pixels` est une largeur logique de référence (1920 le confirme), pas une résolution : l'autoscale
+réduit l'image, d'où le flou. Décision : 65 % · 3:2 · OFF, et recomposer **nativement** dans 565×376 la
+composition du rendu 651×434 (aucun transform/zoom global).
+
+## 5. Profil compact-video et Lab (14/10/2026)
+
+- **Extension (source de vérité)** : profil compact-video du Video Component dans `hub.css`, `tts-v2.css`,
+  `soundboard.css`, `tombola-v2.css` (fenêtre commune : largeur ≥ 521 px, hauteur 321–400 px) + bouton monnaie
+  unique TTS, source Twitch de Bonk (`shared/bonk-twitch-source.js`), noms longs au survol
+  (`shared/hover-marquee.js`, **dette UX : défilement encore un peu saccadé**), liste complète des participants
+  Tombola sans « Tout voir ». Règle de scroll : contenu fixe sans scroll global, seules les listes défilent.
+- **Calibration** = outil seulement (fixtures + HUD) : il emballe la vraie extension, plus de CSS propre.
+- **Lab** : preset **« Twitch réel — Desktop standard » 565×376** (référence) et « Comparaison 75 % » 651×434 ;
+  iframe à sa vraie taille logique (plus de lecteur 1280×720, de 60 %, de « 3:2 − 48 px », de transform), même
+  instance conservée au changement de preset et au redimensionnement ; décor Twitch approximatif autour.
+- **OAuth emotes (Bonk)** : sur le Core staging, `POST /v1/ext/emotes/oauth/start` répond toujours
+  `409 twitch_emotes_unavailable` (frontière minimale, ext-facade.ts) → la fenêtre Twitch s'ouvre puis se
+  referme. Manque backend, **non corrigé** par le portage UI ; le Lab, lui, a le vrai flow.

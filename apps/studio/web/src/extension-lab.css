@@ -248,15 +248,13 @@ main.tab-full {
   border-bottom: 2px solid var(--tw-purple);
   padding: 10px 0 8px;
 }
-.tw-player-scale {
+/* Video component: decor at 1:1 (no transform). Narrower stage → the decor's video side is cropped,
+   the extension viewport (right) always keeps its measured logical size. */
+.tw-player {
   position: relative;
   flex: none;
-}
-.tw-player {
-  position: absolute;
-  top: 0;
-  left: 0;
-  transform-origin: 0 0;
+  max-width: 100%;
+  margin-left: auto;
   background: #000;
   border-radius: 4px;
   overflow: hidden;
@@ -275,6 +273,19 @@ main.tab-full {
   top: 50%;
   transform: translateY(-50%);
   outline: 2px dashed color-mix(in srgb, var(--tw-purple) 70%, transparent);
+}
+.tw-viewport-tag {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--tw-purple);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .tw-component-column {
   position: absolute;

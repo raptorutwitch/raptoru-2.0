@@ -9,7 +9,7 @@ import { mountTtsLab } from './tts-lab.js';
 type Role = 'viewer' | 'moderator' | 'broadcaster';
 type SurfaceId =
   'panel' | 'window' | 'mobile' | 'video' | 'config' | 'live_config';
-type VideoLayout = 'normal' | 'theatre' | 'fullscreen';
+type VideoViewport = 'twitch' | 'reference75';
 
 interface LabEvent {
   seq: number;
@@ -43,10 +43,31 @@ interface LabState {
 const TWITCH = {
   panelHeight: 496,
   panelWidth: 318,
-  videoTargetHeight: 0.6,
-  videoRatio: 3 / 2,
-  /** Icon column Twitch keeps next to a video component (measured on the live player). */
+  /** Icon column Twitch keeps next to a video component (decor only: not part of the viewport). */
   videoReservedColumn: 48,
+};
+
+/** Video Component viewports MEASURED on Twitch (CSS px of the extension iframe, HUD of the calibration
+ *  build, docs/TWITCH_GEOMETRY_CALIBRATION_2026-10.md). The iframe gets exactly this logical size: no
+ *  zoom, no formula. `share` = Height Target, used only to draw the Twitch decor (16:9 player). */
+const VIDEO_VIEWPORTS: Record<
+  VideoViewport,
+  { label: string; width: number; height: number; share: number; note: string }
+> = {
+  twitch: {
+    label: 'Twitch réel — Desktop standard',
+    width: 565,
+    height: 376,
+    share: 0.65,
+    note: '65 % · 3:2 · dimensions automatiques OFF · mesuré le 14/10/2026',
+  },
+  reference75: {
+    label: 'Comparaison 75 % (651×434)',
+    width: 651,
+    height: 434,
+    share: 0.75,
+    note: 'ancienne référence visuelle, plus la cible',
+  },
 };
 
 const SURFACES: Record<
@@ -83,7 +104,7 @@ const SURFACES: Record<
   },
   video: {
     label: 'Video component',
-    hint: '60 % de la hauteur du player, ratio 3:2',
+    hint: 'Twitch réel : viewport 565×376 (65 % · 3:2 · auto OFF)',
     page: 'video_component.html',
     params: { anchor: 'component', mode: 'viewer', platform: 'web' },
   },
@@ -106,16 +127,6 @@ const PHONES = {
   standard: { label: 'Standard (390×844)', width: 390, height: 844 },
   large: { label: 'Grand (430×932)', width: 430, height: 932 },
 } as const;
-
-/** Player sizes on a 1080p screen (CSS px), per Twitch layout. */
-const PLAYERS: Record<
-  VideoLayout,
-  { label: string; width: number; height: number }
-> = {
-  normal: { label: 'Layout normal', width: 1280, height: 720 },
-  theatre: { label: 'Mode théâtre', width: 1600, height: 900 },
-  fullscreen: { label: 'Plein écran', width: 1920, height: 1080 },
-};
 
 const ROLES: Record<Role, string> = {
   viewer: 'Viewer',
@@ -153,7 +164,7 @@ export function mountExtensionLab(root: HTMLElement): {
     surface: 'panel' as SurfaceId,
     role: 'viewer' as Role,
     identity: true,
-    layout: 'normal' as VideoLayout,
+    video: 'twitch' as VideoViewport,
     phone: 'standard' as keyof typeof PHONES,
     sound: false,
     volume: 0.6,
@@ -165,6 +176,8 @@ export function mountExtensionLab(root: HTMLElement): {
   if (link.get('role') && link.get('role')! in ROLES)
     ui.role = link.get('role') as Role;
   if (link.get('identity') === '0') ui.identity = false;
+  if (link.get('video') && link.get('video')! in VIDEO_VIEWPORTS)
+    ui.video = link.get('video') as VideoViewport;
   let lastSeq = -1;
   let visible = false;
   let polling: ReturnType<typeof setTimeout> | undefined;
@@ -245,12 +258,12 @@ export function mountExtensionLab(root: HTMLElement): {
       .join('');
     const options = $('surface-options');
     if (ui.surface === 'video') {
-      options.innerHTML = `<label class="xlab-label">Taille du player</label><div class="xlab-seg">${(
-        Object.keys(PLAYERS) as VideoLayout[]
+      options.innerHTML = `<label class="xlab-label">Viewport mesuré</label><div class="xlab-seg xlab-seg--col">${(
+        Object.keys(VIDEO_VIEWPORTS) as VideoViewport[]
       )
         .map(
-          (l) =>
-            `<button type="button" data-layout="${l}" class="${l === ui.layout ? 'active' : ''}">${PLAYERS[l].label}</button>`,
+          (v) =>
+            `<button type="button" data-video="${v}" class="${v === ui.video ? 'active' : ''}"><strong>${VIDEO_VIEWPORTS[v].label}</strong> <small>${VIDEO_VIEWPORTS[v].width}×${VIDEO_VIEWPORTS[v].height} · ${VIDEO_VIEWPORTS[v].note}</small></button>`,
         )
         .join('')}</div>`;
     } else if (ui.surface === 'mobile') {
@@ -276,7 +289,6 @@ export function mountExtensionLab(root: HTMLElement): {
       ...(surface.params.popout ? { popout: surface.params.popout } : {}),
       labRole: ui.role,
       labIdentity: ui.identity ? '1' : '0',
-      labLayout: ui.layout,
     });
     return `/ext/${surface.page}?${params}`;
   }
@@ -315,19 +327,52 @@ export function mountExtensionLab(root: HTMLElement): {
         ${iframe(phone.width, extH)}
       </div>`;
     } else if (ui.surface === 'video') {
-      const player = PLAYERS[ui.layout];
-      const h = Math.round(player.height * TWITCH.videoTargetHeight);
-      const w = Math.round(h * TWITCH.videoRatio - TWITCH.videoReservedColumn);
-      dims = `${w} × ${h} px · 60 % de ${player.height} px · 3:2 moins ${TWITCH.videoReservedColumn} px de colonne Twitch`;
-      const available = Math.max(320, stage.clientWidth - 24);
-      const scale = Math.min(1, available / player.width);
-      stage.innerHTML = `<div class="tw-player-scale" style="width:${player.width * scale}px;height:${player.height * scale}px">
-        <div class="tw-player" style="width:${player.width}px;height:${player.height}px;transform:scale(${scale})">
-          <div class="tw-player-video">Vidéo du live (${player.width} × ${player.height})</div>
-          <div class="tw-component" style="width:${w}px;height:${h}px;right:${TWITCH.videoReservedColumn}px">${iframe(w, h, 'allowtransparency="true"')}</div>
-          <div class="tw-component-column" style="width:${TWITCH.videoReservedColumn}px"><i>ϟ</i><i>★</i><i>⋯</i></div>
-        </div></div>
-        <p class="xlab-muted xlab-center">Aperçu réduit à ${Math.round(scale * 100)} % pour tenir à l’écran ; l’extension reçoit sa vraie taille en pixels.</p>`;
+      // The iframe gets the measured logical size itself (real breakpoints, 1 CSS px = 1 px on
+      // screen): never a transform. Around it, an approximate Twitch decor (16:9 player whose Height
+      // Target gives this viewport), cropped on its video side when the stage is narrower.
+      const vp = VIDEO_VIEWPORTS[ui.video];
+      const playerH = Math.round(vp.height / vp.share);
+      const playerW = Math.round((playerH * 16) / 9);
+      const column = TWITCH.videoReservedColumn;
+      dims = `Viewport logique : ${vp.width}×${vp.height}`;
+      const frame = stage.querySelector<HTMLIFrameElement>(
+        '.tw-component iframe',
+      );
+      const caption = `<b>Viewport logique : ${vp.width}×${vp.height}</b> · ${esc(vp.note)} · iframe à taille réelle, sans zoom.
+        Décor Twitch approximatif autour (player ${playerW}×${playerH}, colonne d’icônes ${column} px), hors viewport.`;
+      if (
+        stage.dataset.surface === 'video' &&
+        frame?.getAttribute('src') === url
+      ) {
+        // Same extension instance: only its logical size changes (real resize in the iframe).
+        frame.style.width = `${vp.width}px`;
+        frame.style.height = `${vp.height}px`;
+        Object.assign(stage.querySelector<HTMLElement>('.tw-player')!.style, {
+          width: `${playerW}px`,
+          height: `${playerH}px`,
+          minWidth: `${vp.width + column + 16}px`,
+        });
+        Object.assign(
+          stage.querySelector<HTMLElement>('.tw-component')!.style,
+          {
+            width: `${vp.width}px`,
+            height: `${vp.height}px`,
+          },
+        );
+        stage.querySelector('.tw-viewport-tag')!.textContent =
+          `Extension · ${vp.width}×${vp.height}`;
+        stage.querySelector('.tw-player-video')!.textContent =
+          `Décor Twitch · player ${playerW}×${playerH}`;
+        stage.querySelector('.xlab-video-caption')!.innerHTML = caption;
+      } else {
+        stage.innerHTML = `<div class="tw-player" style="width:${playerW}px;height:${playerH}px;min-width:${vp.width + column + 16}px">
+          <div class="tw-player-video">Décor Twitch · player ${playerW}×${playerH}</div>
+          <div class="tw-component" style="width:${vp.width}px;height:${vp.height}px;right:${column}px">
+            <span class="tw-viewport-tag">Extension · ${vp.width}×${vp.height}</span>${iframe(vp.width, vp.height, 'allowtransparency="true"')}</div>
+          <div class="tw-component-column" style="width:${column}px"><i>ϟ</i><i>★</i><i>⋯</i></div>
+        </div>
+        <p class="xlab-muted xlab-center xlab-video-caption">${caption}</p>`;
+      }
     } else if (ui.surface === 'config') {
       dims = '860 × 720 px';
       stage.innerHTML = `<div class="tw-window"><div class="tw-window-bar">Extensions › Raptoru Live › Configuration</div>${iframe(860, 720)}</div>`;
@@ -337,6 +382,7 @@ export function mountExtensionLab(root: HTMLElement): {
         <div class="tw-window"><div class="tw-window-bar">Raptoru Live · configuration en direct</div>${iframe(340, 640)}</div></div>`;
     }
 
+    stage.dataset.surface = ui.surface;
     $('context').innerHTML = `
       <span class="xlab-pill xlab-pill--lab">LAB LOCAL · jetons fictifs · aucun appel prod</span>
       <span class="xlab-pill">${SURFACES[ui.surface].label}</span>
@@ -475,7 +521,11 @@ export function mountExtensionLab(root: HTMLElement): {
     polling = setTimeout(poll, 1000);
   }
 
-  const reloadFrames = () => renderStage();
+  // « Recharger » : a new extension instance (the video stage keeps its instance otherwise).
+  const reloadFrames = () => {
+    delete $('stage').dataset.surface;
+    renderStage();
+  };
   const refreshFrames = () =>
     root.querySelectorAll('iframe').forEach((f) =>
       f.contentWindow?.postMessage(
@@ -514,8 +564,8 @@ export function mountExtensionLab(root: HTMLElement): {
       ui.role = d.role as Role;
       renderChoices();
       renderStage();
-    } else if (d.layout) {
-      ui.layout = d.layout as VideoLayout;
+    } else if (d.video) {
+      ui.video = d.video as VideoViewport;
       renderChoices();
       renderStage();
     } else if (d.phone) {
@@ -587,13 +637,6 @@ export function mountExtensionLab(root: HTMLElement): {
       );
     else if (ev.data.type === 'minimize')
       toast('L’extension a demandé à se réduire (actions.minimize).');
-  });
-
-  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
-  window.addEventListener('resize', () => {
-    if (!visible || ui.surface !== 'video') return;
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(renderStage, 200);
   });
 
   renderChoices();
