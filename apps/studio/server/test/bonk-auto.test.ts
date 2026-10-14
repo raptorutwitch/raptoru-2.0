@@ -388,6 +388,127 @@ describe('geometry: final box on the canvas (libobs model)', () => {
     expect(viaOverlay.candidates.map((c) => c.name)).toEqual(['Webcam']);
   });
 
+  it('horizontal flip (negative scale): the box extends on the other side of the anchor, as OBS', async () => {
+    const r = await resolve(
+      {
+        Live: [
+          input(
+            'Webcam',
+            'dshow_input',
+            T({ positionX: 1880, positionY: 100, scaleX: -0.25, scaleY: 0.25 }),
+          ),
+        ],
+      },
+      'Live',
+    );
+    expect(box(r.chosen!.rect)).toEqual([1400, 100, 480, 270]);
+  });
+
+  it('real OBS structure (2026-10-14): scene → nested scene → cropped group → flipped cropped nested scene → dshow camera', async () => {
+    // Transforms exactly as read from Antoni's OBS (obs-websocket 5.7.4), the camera is « Cam ».
+    const store: Store = {
+      'Scène Dessin': [
+        input('Écran', 'monitor_capture', T(), false),
+        nested(
+          'overlay cam shushu',
+          T({
+            cropLeft: 143,
+            cropRight: 125,
+            positionX: 1233,
+            positionY: 601,
+            scaleX: 0.3834827244281769,
+            scaleY: 0.38333332538604736,
+          }),
+        ),
+        input(
+          'Chatbox Dessin',
+          'browser_source',
+          T({
+            positionX: 43,
+            positionY: 361,
+            sourceWidth: 440,
+            sourceHeight: 719,
+          }),
+        ),
+        input(BONK_SOURCE_NAME, 'browser_source', T()),
+      ],
+      'overlay cam shushu': [
+        group(
+          'Rognage',
+          T({
+            cropTop: 189,
+            positionX: 338,
+            positionY: 126,
+            sourceWidth: 1272,
+            sourceHeight: 907,
+          }),
+        ),
+        group(
+          'Groupe 2',
+          T({
+            positionX: 35.00006103515625,
+            positionY: 41.000213623046875,
+            sourceWidth: 1740,
+            sourceHeight: 979,
+          }),
+        ),
+      ],
+      Rognage: [
+        nested(
+          'Camera',
+          T({
+            cropBottom: 294,
+            cropLeft: 450,
+            cropRight: 693,
+            cropTop: 232,
+            positionX: 1271.6365966796875,
+            scaleX: -1.636597990989685,
+            scaleY: 1.6366782188415527,
+          }),
+        ),
+      ],
+      'Groupe 2': [
+        input(
+          'Overlay Shushu',
+          'browser_source',
+          T({
+            positionX: 0,
+            positionY: 0,
+            sourceWidth: 1631,
+            sourceHeight: 978,
+          }),
+        ),
+      ],
+      Camera: [
+        input(
+          'Cam',
+          'dshow_input',
+          T({
+            positionX: 561,
+            positionY: 338,
+            sourceWidth: 640,
+            sourceHeight: 480,
+          }),
+        ),
+      ],
+    };
+    const r = await resolve(store, 'Scène Dessin');
+    expect(r.status).toBe('ready');
+    expect(r.chosen!.name).toBe('Cam');
+    expect(r.chosen!.path).toEqual([
+      'Scène Dessin',
+      'overlay cam shushu',
+      'Rognage',
+      'Camera',
+      'Cam',
+    ]);
+    // By hand: Cam [561,1201]×[338,818] in « Camera », cropped to [450,1227]×[232,786], flipped
+    // ×−1.6366 from x = 1271.64, group crop top 189 then +(338, 126−189), parent crop left 143,
+    // ×0.3835 / ×0.3833 from (1233, 601).
+    expect(box(r.chosen!.rect)).toEqual([1324.1, 649.3, 401.67, 275.13]);
+    expect(r.candidates.map((c) => c.name)).toEqual(['Cam']);
+  });
+
   it('clipPolygon keeps the overlap of convex polygons', () => {
     const square = (x: number, y: number, s: number) =>
       [

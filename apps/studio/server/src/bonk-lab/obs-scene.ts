@@ -207,8 +207,10 @@ export function itemGeometry(t: ObsTransform): {
   const cropT = Math.max(0, t.cropTop);
   const cx = Math.max(0, t.sourceWidth - cropL - Math.max(0, t.cropRight));
   const cy = Math.max(0, t.sourceHeight - cropT - Math.max(0, t.cropBottom));
-  let sx = Math.abs(t.scaleX);
-  let sy = Math.abs(t.scaleY);
+  // Signed, as libobs: a negative scale (flip) extends the box on the other side of the alignment
+  // point (« width » < 0 in OBS), it does not mirror in place.
+  let sx = t.scaleX;
+  let sy = t.scaleY;
   let boxW = cx * sx;
   let boxH = cy * sy;
   let offX = 0;
