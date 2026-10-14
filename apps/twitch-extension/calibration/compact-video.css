@@ -488,20 +488,23 @@ html.calib-w2 body.component-view .rh-util-btn {
   }
 }
 
-/* Bandeau des textes qui débordent (classe posée par calibration/compact-video.js, qui mesure le
-   débordement --mq-d) : pause, défilement, pause, retour ; seul le texte bouge. */
-body.component-view .cv-marquee.cv-marquee {
+/* Noms qui débordent (classe .cv-marquee posée par calibration/compact-video.js, qui mesure le
+   débordement --mq-d) : statiques avec « … » par défaut ; défilement local seulement au survol de la
+   carte / ligne ou au focus clavier (pause, défilement, pause, retour). Un seul texte bouge à la fois. */
+body.component-view
+  :is(.sbx-card, .tmbx .row):is(:hover, :focus-within)
+  .cv-marquee.cv-marquee {
   text-overflow: clip;
   animation: cv-marquee var(--mq-t, 4s) ease-in-out infinite;
   mask-image: linear-gradient(90deg, #000 calc(100% - 10px), transparent);
 }
 @keyframes cv-marquee {
   0%,
-  18% {
+  14% {
     text-indent: 0;
   }
-  58%,
-  76% {
+  56%,
+  74% {
     text-indent: calc(-1 * var(--mq-d, 0px));
   }
   100% {
@@ -509,7 +512,9 @@ body.component-view .cv-marquee.cv-marquee {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  body.component-view .cv-marquee.cv-marquee {
+  body.component-view
+    :is(.sbx-card, .tmbx .row):is(:hover, :focus-within)
+    .cv-marquee.cv-marquee {
     text-overflow: ellipsis;
     animation: none;
   }
@@ -651,9 +656,15 @@ body.component-view .cv-marquee.cv-marquee {
    Référence de la politique de scroll. Avant : le corps entier défilait (+19 px) et la colonne gauche
    bougeait avec la liste. Budget 565×376 : en-tête 46 → 40 px ; colonne gauche (état, timer, montant,
    bouton, !join, compteurs) 323 → ≈ 270 px (≈ 311 px avec un message de refus sur 2 lignes), sans scroll ; colonne
-   droite : titre « Participants · N » et « Tout voir » fixes, seule la liste défile. Même règle sur
-   « Tout voir » (titre et filtres fixes). L'aperçu de 5 participants reste celui du module. */
+   droite : titre « Participants · N » fixe et TOUTE la liste dans la vue principale (tombola-v2.js lit
+   --tmbx-preview-all), qui défile seule. « Tout voir » (autre vue) est retiré. */
 @media (min-width: 521px) and (min-height: 321px) and (max-height: 400px) {
+  html:has(body.component-view) {
+    --tmbx-preview-all: 1;
+  }
+  body.component-view .tmbx .grid2 .sec [data-act='participants'] {
+    display: none;
+  }
   body.component-view .tmbx .head {
     height: 40px;
   }

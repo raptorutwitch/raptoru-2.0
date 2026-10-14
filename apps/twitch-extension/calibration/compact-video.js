@@ -1,6 +1,7 @@
 // Profil « compact-video » — PROTOTYPE, build de calibration seulement (non validé). Complète
 // calibration/compact-video.css là où le CSS seul ne suffit pas, sans toucher au code de l'extension :
-// - bandeau (.cv-marquee) sur les textes d'une ligne qui débordent réellement (mesure du débordement) ;
+// - bandeau (.cv-marquee) sur les textes d'une ligne qui débordent réellement (mesure du débordement ;
+//   le CSS ne le fait défiler qu'au survol / focus) ;
 // - Bonk : Twitch comme source de la colonne latérale + petite fenêtre d'autorisation.
 // Actif seulement dans la fenêtre du profil ; tout est retiré en dehors.
 const doc = document;

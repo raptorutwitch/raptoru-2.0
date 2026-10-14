@@ -216,6 +216,10 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       return `<div class="row ${isMe ? 'me' : ''}">${avatar(p.display_name, p.avatar_url)}<span class="name">${esc(p.display_name)}${isMe ? ' <span class="muted">(toi)</span>' : ''}</span>${srcPill(p.source)}</div>`;
     }).join('');
   }
+  // Aperçu de l'écran ouvert : 5 participants, ou toute la liste (défilement local) quand un profil de
+  // densité CSS le demande (--tmbx-preview-all: 1 sur la racine).
+  const previewLimit = () =>
+    document.defaultView?.getComputedStyle(document.documentElement)?.getPropertyValue('--tmbx-preview-all').trim() === '1' ? Infinity : 5;
   function participantsSec(r, limit) {
     return `<div class="sec"><span data-slot="pcount">Participants · ${r.participants}</span>${limit ? '<a data-act="participants">Tout voir</a>' : ''}</div>
       ${limit ? '' : `<div class="chips" data-slot="chips">${chips()}</div>`}
@@ -225,7 +229,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     return [['all', 'Tous'], ['chat', 'Chat'], ['extension', 'Extension']].map(([k, l]) => `<button class="chip ${filter === k ? 'on' : ''}" type="button" data-filter="${k}">${l}</button>`).join('');
   }
   function openView(r) {
-    return `<div class="grid2"><div>${heroA(r)}</div><div>${participantsSec(r, 5)}</div></div>`;
+    return `<div class="grid2"><div>${heroA(r)}</div><div>${participantsSec(r, previewLimit())}</div></div>`;
   }
   function drawingView(r) {
     const left = resultInMs();
@@ -417,7 +421,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       setSlot('count', `${ic('users')}<b>${r.participants}</b> participants`);
       setSlot('split', counts(r));
       setSlot('pcount', `Participants · ${r.participants}`);
-      setSlot('rows', rows(r, 5));
+      setSlot('rows', rows(r, previewLimit()));
       const hero = body.querySelector('.hero');
       hero?.classList.toggle('is-paused', !!r.paused);
       tick();
