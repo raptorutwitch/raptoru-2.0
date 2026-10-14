@@ -202,6 +202,15 @@ export function prodCoreClient(options: {
                 status,
               ),
             );
+          if (status === 409 && json.error === 'wrong_channel')
+            return reject(
+              new StudioTransportError(
+                'wrong_channel',
+                `Chaîne du Studio différente de celle du Core (Core : ${String(json.expected_channel_id ?? '?')}) : rien ne sera joué`,
+                status,
+                json,
+              ),
+            );
           reject(
             new StudioTransportError(
               json.error ?? 'core_error',

@@ -30,6 +30,8 @@ interface Module {
     file: string,
     core: CoreCall,
     studioId: string,
+    /** Channel the Studio serves (default: the test Core's). */
+    channel?: string,
   ): Promise<SoundWorker | TtsWorker>;
   ready(w: SoundWorker | TtsWorker, player: string): Promise<void>;
   admit(
@@ -62,8 +64,12 @@ interface Module {
 const sound: Module = {
   name: 'sound',
   table: 'sound_lab_deliveries',
-  open: (file, core, studioId) =>
-    SoundWorker.open(file, core, { base: '/v1/studio/sound', studioId }),
+  open: (file, core, studioId, channel) =>
+    SoundWorker.open(file, core, {
+      base: '/v1/studio/sound',
+      studioId,
+      channel,
+    }),
   ready: async (w, player) => {
     await (w as SoundWorker).playerHeartbeat(player, true);
     await w.tick();
@@ -111,8 +117,8 @@ const sound: Module = {
 const tts: Module = {
   name: 'tts',
   table: 'tts_lab_deliveries',
-  open: (file, core, studioId) =>
-    TtsWorker.open(file, core, { base: '/v1/studio/tts', studioId }),
+  open: (file, core, studioId, channel) =>
+    TtsWorker.open(file, core, { base: '/v1/studio/tts', studioId, channel }),
   ready: async (w, player) => {
     await (w as TtsWorker).playerHeartbeat(player, 12);
     await w.tick();
@@ -194,6 +200,27 @@ async function fixture(m: Module) {
 describe.each([sound, tts])(
   'production transport — $name (ASTRA-P1-019 lot 2)',
   (m) => {
+    it('a Studio of another channel: wrong_channel shown, the viewer is refused before any debit (Bonk VNext lot 0)', async () => {
+      const f = await fixture(m);
+      const other = await m.open(
+        join(f.dir, 'other', m.name, 'journal.json'),
+        f.client(),
+        f.installation.installationId,
+        '1239040922',
+      );
+      await m.ready(other, 'player-1');
+      expect(other.error).toBe(
+        'Chaîne du Studio différente de celle du Core (Core : 900100) : rien ne sera joué',
+      );
+      await expect(m.admit(f.core, other, 'k-wrong')).rejects.toMatchObject({
+        code: 'studio_offline',
+      });
+      // The Studio of the right channel works as before.
+      await m.ready(f.worker, 'player-1');
+      expect(f.worker.error).toBeNull();
+      await m.admit(f.core, f.worker, 'k-right');
+    });
+
     it('normal: claim over HTTPS, player plays, ACK started → completed; delivery owned by the installation', async () => {
       const f = await fixture(m);
       await m.ready(f.worker, 'player-1');

@@ -12,7 +12,7 @@ import {
 import { LabEbs, thirdPartyGroups } from '../src/extension-lab/lab-ebs.js';
 import { extensionFile } from '../src/extension-lab/serve.js';
 import { EXTENSION_DIR } from '../src/index.js';
-import { LabObs } from '../src/bonk-lab/obs.js';
+import { LabObs, OBS_RETRY_MS } from '../src/bonk-lab/obs.js';
 
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -395,5 +395,131 @@ describe('OBS v5 adapter', () => {
     expect(requests.every((r) => r.startsWith('Get'))).toBe(true);
     obs.disconnect();
     expect(obs.connected).toBe(false);
+  });
+});
+
+describe('OBS reconnection (Bonk VNext lot 0)', () => {
+  // A local OBS that can be stopped, restarted, or refuse the password. `mode` applies to the next
+  // connection attempts; `sockets` counts every attempt.
+  function fakeObs() {
+    const state = {
+      mode: 'up' as 'up' | 'down' | 'wrong_password',
+      sockets: [] as { close(code?: number): void; open: boolean }[],
+    };
+    class Socket extends EventTarget {
+      open = false;
+      constructor(readonly url: string) {
+        super();
+        state.sockets.push(this);
+        const mode = state.mode;
+        queueMicrotask(() => {
+          if (mode === 'down') {
+            this.dispatchEvent(new Event('error'));
+            this.end(1006);
+          } else this.emit({ op: 0, d: { rpcVersion: 1 } });
+        });
+      }
+      emit(packet: unknown) {
+        this.dispatchEvent(
+          new MessageEvent('message', { data: JSON.stringify(packet) }),
+        );
+      }
+      end(code: number) {
+        this.open = false;
+        this.dispatchEvent(Object.assign(new Event('close'), { code }));
+      }
+      send(raw: string) {
+        if (JSON.parse(raw).op !== 1) return;
+        queueMicrotask(() => {
+          if (state.mode === 'wrong_password') return this.end(4009);
+          this.open = true;
+          this.emit({ op: 2, d: {} });
+        });
+      }
+      close() {
+        // Closed by the client: no event is needed by the adapter.
+        this.open = false;
+      }
+    }
+    vi.stubGlobal('WebSocket', Socket);
+    return state;
+  }
+  const flush = () => new Promise((r) => setImmediate(r));
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('OBS closed then restarted: the connection comes back by itself, with a bounded backoff', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const obs = fakeObs();
+    const client = new LabObs();
+    await client.connect(4455, 'secret');
+    expect(client.connected).toBe(true);
+    // OBS quits: the established connection is lost.
+    obs.mode = 'down';
+    (obs.sockets.at(-1) as unknown as { end(code: number): void }).end(1006);
+    expect(client.connected).toBe(false);
+    expect(client.reconnecting).toBe(true);
+    expect(client.error).toBe('obs_offline');
+    // Retries while OBS is down: 1 s, 2 s, 5 s, then every 10 s.
+    for (const delay of OBS_RETRY_MS) {
+      const before = obs.sockets.length;
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(obs.sockets.length).toBe(before);
+      await vi.advanceTimersByTimeAsync(1);
+      await flush();
+      expect(obs.sockets.length).toBe(before + 1);
+    }
+    // OBS is back: the next retry (10 s) reconnects.
+    obs.mode = 'up';
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flush();
+    expect(client.connected).toBe(true);
+    expect(client.reconnecting).toBe(false);
+    expect(client.error).toBeNull();
+    client.disconnect();
+  });
+
+  it('OBS not started yet: the first attempt fails, the retries connect once it is up', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const obs = fakeObs();
+    obs.mode = 'down';
+    const client = new LabObs();
+    await expect(client.connect(4455, '')).rejects.toThrow(
+      'obs_offline_or_auth_failed',
+    );
+    expect(client.reconnecting).toBe(true);
+    obs.mode = 'up';
+    await vi.advanceTimersByTimeAsync(1000);
+    await flush();
+    expect(client.connected).toBe(true);
+    client.disconnect();
+  });
+
+  it('wrong password: explicit obs_auth_failed and no retry loop', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const obs = fakeObs();
+    obs.mode = 'wrong_password';
+    const client = new LabObs();
+    await expect(client.connect(4455, 'bad')).rejects.toThrow(
+      'obs_auth_failed',
+    );
+    expect(client.error).toBe('obs_auth_failed');
+    expect(client.reconnecting).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(obs.sockets).toHaveLength(1);
+  });
+
+  it('explicit disconnect: no reconnection afterwards', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const obs = fakeObs();
+    const client = new LabObs();
+    await client.connect(4455, 'secret');
+    client.disconnect();
+    obs.mode = 'down';
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(obs.sockets).toHaveLength(1);
+    expect(client.reconnecting).toBe(false);
+    expect(client.error).toBeNull();
   });
 });

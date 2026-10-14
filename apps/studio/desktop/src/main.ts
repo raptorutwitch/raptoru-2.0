@@ -10,10 +10,16 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  safeStorage,
   shell,
   type IpcMainInvokeEvent,
 } from 'electron';
 import { isTrustedPage, windowOpenDecision } from './ipc-guard.js';
+import {
+  forgetObsConnection,
+  loadObsConnection,
+  saveObsConnection,
+} from './obs-credentials.js';
 import { rotatingLog } from './rotating-log.js';
 import { setupUpdater } from './updater.js';
 import {
@@ -251,8 +257,10 @@ async function showStudio() {
 }
 supervisor.onChange((s: ServerStatus) => {
   sendStatus();
-  if (s.state === 'ready') void showStudio();
-  else if (
+  if (s.state === 'ready') {
+    void showStudio();
+    void restoreObs();
+  } else if (
     ['starting', 'crashed', 'restarting', 'fatal', 'stopped'].includes(
       s.state,
     ) &&
@@ -360,6 +368,47 @@ handleTrusted('studio:app:relaunch', () => {
   app.relaunch();
   app.quit();
 });
+
+// --- OBS connection (Bonk VNext lot 0) ---------------------------------------------------------
+// Remembered here, password encrypted by the OS (safeStorage), and handed to the server after each
+// start: the server keeps it in memory only and reconnects by itself while it runs.
+const obsFile = () => join(app.getPath('userData'), 'obs-connection.json');
+handleTrusted('studio:obs:connect', async (port, password) => {
+  if (!Number.isInteger(port) || typeof password !== 'string')
+    return { ok: false, error: 'invalid_payload' };
+  const connection = { port: port as number, password };
+  const result = await profileCall('/api/bonk-lab/connect', connection);
+  // OBS not running yet is fine (the server retries); a refused password or port is never kept.
+  if (
+    result.error === 'obs_auth_failed' ||
+    result.error === 'invalid_obs_port'
+  ) {
+    await forgetObsConnection(obsFile());
+    return { ...result, remembered: false };
+  }
+  const remembered = await saveObsConnection(
+    obsFile(),
+    safeStorage,
+    connection,
+  );
+  return { ...result, remembered };
+});
+handleTrusted('studio:obs:forget', async () => {
+  await forgetObsConnection(obsFile());
+  return profileCall('/api/bonk-lab/disconnect', {});
+});
+handleTrusted('studio:obs:remembered', async () => {
+  const connection = await loadObsConnection(obsFile(), safeStorage);
+  return { port: connection?.port ?? null };
+});
+async function restoreObs() {
+  const connection = await loadObsConnection(obsFile(), safeStorage);
+  if (!connection) return;
+  // The first failure (OBS not started yet) is expected: the server keeps retrying.
+  await profileCall('/api/bonk-lab/connect', connection).catch((e: Error) =>
+    serverLog(`[obs] restore failed: ${e.message}`),
+  );
+}
 
 void app.whenReady().then(async () => {
   if (!primary) return; // second launch: the first window was focused, nothing else starts

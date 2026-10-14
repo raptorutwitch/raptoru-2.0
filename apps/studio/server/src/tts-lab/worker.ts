@@ -378,6 +378,7 @@ export class TtsWorker {
             rules: { transition_gap_ms: number };
           }>(`${this.base}/studio/heartbeat`, {
             studio_instance_id: this.state.studio,
+            channel_id: this.channel,
             player_ready: this.ready,
           });
           this.moduleState = hb.module_state;

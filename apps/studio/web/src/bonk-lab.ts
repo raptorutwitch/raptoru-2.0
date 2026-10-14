@@ -1,3 +1,10 @@
+const obsText = (code: string) =>
+  code === 'obs_auth_failed'
+    ? 'Mot de passe OBS refusé : reconnecte OBS avec le bon mot de passe'
+    : code === 'invalid_obs_port'
+      ? 'Port OBS invalide'
+      : code;
+
 /** `production`: the same card for the Production profile (Studio tab), without Lab wording. */
 export function mountBonkLab(
   root: HTMLElement,
@@ -30,17 +37,55 @@ export function mountBonkLab(
     if (!r.ok) throw new Error(result.error ?? 'indisponible');
     return result;
   };
+  // Inside Raptoru Studio (Electron), main remembers the connection, password encrypted by the OS,
+  // and restores it at each start. Without it (bonk:lab in a browser): memory only, as before.
+  const bridge = (
+    window as unknown as {
+      raptoruStudio?: {
+        obs?: {
+          connect(
+            port: number,
+            password: string,
+          ): Promise<{ ok?: boolean; error?: string; remembered?: boolean }>;
+          forget(): Promise<unknown>;
+          remembered(): Promise<{ port: number | null }>;
+        };
+      };
+    }
+  ).raptoruStudio?.obs;
+  let note = '';
+  void bridge
+    ?.remembered()
+    .then(({ port }) => {
+      if (port) el<HTMLInputElement>('port').value = String(port);
+    })
+    .catch(() => {});
   el('connect').addEventListener('click', () => {
     const password = el<HTMLInputElement>('password').value;
     el<HTMLInputElement>('password').value = '';
-    void call('connect', {
-      port: Number(el<HTMLInputElement>('port').value),
-      password,
-    }).catch((e) => {
-      el('status').textContent = String(e.message);
-    });
+    const port = Number(el<HTMLInputElement>('port').value);
+    if (!bridge) {
+      void call('connect', { port, password }).catch((e) => {
+        el('status').textContent = String(e.message);
+      });
+      return;
+    }
+    void bridge.connect(port, password).then(
+      (r) => {
+        note = r.remembered
+          ? 'Connexion OBS mémorisée (mot de passe chiffré par le système).'
+          : 'Connexion OBS non mémorisée.';
+        if (r.error) el('status').textContent = obsText(r.error);
+      },
+      (e: Error) => {
+        el('status').textContent = String(e.message);
+      },
+    );
   });
-  el('disconnect').addEventListener('click', () => void call('disconnect', {}));
+  el('disconnect').addEventListener('click', () => {
+    note = '';
+    void (bridge ? bridge.forget() : call('disconnect', {}));
+  });
   el('copy').addEventListener('click', () => {
     void navigator.clipboard
       ?.writeText(el<HTMLInputElement>('url').value)
@@ -53,11 +98,15 @@ export function mountBonkLab(
       el('status').textContent = !s.enabled
         ? 'Non lancé. Utilise npm run bonk:lab depuis le dépôt.'
         : (s.error ??
-          (s.ready
-            ? 'Prêt · les clics Bonk passent par Core et OBS'
-            : s.obs
-              ? 'OBS connecté · en attente de la source et du renderer'
-              : 'OBS déconnecté'));
+            (s.ready
+              ? 'Prêt · les clics Bonk passent par Core et OBS'
+              : s.obs
+                ? 'OBS connecté · en attente de la source et du renderer'
+                : s.obs_reconnecting
+                  ? 'Reconnexion à OBS…'
+                  : s.obs_error
+                    ? obsText(s.obs_error)
+                    : 'OBS déconnecté')) + (note ? ` · ${note}` : '');
       if (s.enabled) el<HTMLInputElement>('url').value = s.overlayUrl;
       el('history').replaceChildren();
       for (const i of (s.interactions ?? []).slice(0, 12)) {

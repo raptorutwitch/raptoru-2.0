@@ -302,6 +302,50 @@ describe('Bonk Lab execution (Studio worker contract)', () => {
     });
   });
 
+  it('time-driven sweep: a channel no Studio claims still expires (refund once), leases end unknown, fresh work untouched', async () => {
+    const core = await setup();
+    await ready(core);
+    const claimed = (await core.bonkLab.admit(admitReq())).interaction;
+    await core.bonkLab.claim(STUDIO, CHANNEL);
+    const orphan = (await core.bonkLab.admit(admitReq())).interaction;
+    const refunds = async () =>
+      (
+        await core.db.query<{ n: number }>(
+          "select count(*)::int as n from lab_wallet_ledger where kind = 'refund' and interaction_id = $1",
+          [orphan.interaction_id],
+        )
+      )[0]!.n;
+    // Nothing is due yet: the sweep changes nothing.
+    expect(await core.bonkLab.sweepExpired()).toBe(0);
+    expect((await core.bonkLab.get(orphan.interaction_id)).status).toBe(
+      'queued',
+    );
+    // No Studio claims this channel any more (no heartbeat, no claim, no admission): time passes.
+    core.clock.set(
+      new Date(core.clock.now().getTime() + BONK_LAB_RULES.expiresAfterMs + 1),
+    );
+    expect(await core.bonkLab.sweepExpired()).toBe(1);
+    expect(await core.bonkLab.get(orphan.interaction_id)).toMatchObject({
+      status: 'failed',
+      error: { code: 'expired' },
+      refund_status: 'refunded',
+    });
+    expect((await core.bonkLab.get(claimed.interaction_id)).status).toBe(
+      'execution_unknown',
+    );
+    expect(await refunds()).toBe(1);
+    // Again (another tick, another Core instance): nothing due, never a second refund.
+    expect(await core.bonkLab.sweepExpired()).toBe(0);
+    expect(await refunds()).toBe(1);
+    // Work admitted now is not due: left queued.
+    await ready(core);
+    const fresh = (await core.bonkLab.admit(admitReq())).interaction;
+    await core.bonkLab.sweepExpired();
+    expect((await core.bonkLab.get(fresh.interaction_id)).status).toBe(
+      'queued',
+    );
+  });
+
   it('restart: an unsent claim is released and replayed once; completed work is never handed out again', async () => {
     const core = await setup();
     await ready(core);

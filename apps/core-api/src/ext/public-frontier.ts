@@ -131,9 +131,22 @@ export function createPublicFrontier(
             console.error('[core-api] avatars failed', e.message),
           );
       }, 5000);
+      // Bonk work nobody claims (no Studio on this channel) still expires and is refunded.
+      let sweeping = false;
+      const bonkSweep = setInterval(() => {
+        if (sweeping) return;
+        sweeping = true;
+        core.bonkLab
+          .sweepExpired()
+          .catch((e: Error) =>
+            console.error('[core-api] bonk expiry failed', e.message),
+          )
+          .finally(() => (sweeping = false));
+      }, 15_000);
       return () => {
         clearInterval(raffleTick);
         clearInterval(avatarTick);
+        clearInterval(bonkSweep);
       };
     },
   };

@@ -106,6 +106,8 @@ export const BonkLabHeartbeat = z.strictObject({
   obs: z.enum(['connected', 'offline']),
   source_ready: z.boolean(),
   overlay_ready: z.boolean(),
+  /** Channel this Studio serves: a Core of another channel refuses it (wrong_channel). Optional for older Studios. */
+  channel_id: Id.optional(),
 });
 export type BonkLabHeartbeat = z.infer<typeof BonkLabHeartbeat>;
 

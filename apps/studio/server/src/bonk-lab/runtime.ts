@@ -169,6 +169,8 @@ export class BonkRuntime {
         reply(200, {
           enabled: true,
           obs: this.obs.connected,
+          obs_reconnecting: this.obs.reconnecting,
+          obs_error: this.obs.error,
           ready: this.worker.ready,
           sourceReady: this.sourceReady,
           overlayUrl: this.overlayUrl,

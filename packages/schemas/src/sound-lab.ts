@@ -115,6 +115,8 @@ export type SoundLabAdmitResponse = z.infer<typeof SoundLabAdmitResponse>;
 export const SoundLabHeartbeat = z.strictObject({
   studio_instance_id: z.string().min(1).max(64),
   player_ready: z.boolean(),
+  /** Channel this Studio serves: a Core of another channel refuses it (wrong_channel). Optional for older Studios. */
+  channel_id: Id.optional(),
 });
 export type SoundLabHeartbeat = z.infer<typeof SoundLabHeartbeat>;
 

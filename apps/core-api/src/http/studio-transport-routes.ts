@@ -40,6 +40,19 @@ function ownBody<T extends { studio_instance_id: string }>(
   return req;
 }
 
+/**
+ * The Core serves one channel (TWITCH_CHANNEL_ID): a Studio of another channel is refused explicitly
+ * (409 wrong_channel) instead of heartbeating as « ready » and claiming nothing (Bonk VNext lot 0).
+ * A heartbeat without channel_id (older Studio) is still accepted.
+ */
+function assertChannel(expected: string | undefined, channelId?: string) {
+  if (expected && channelId !== undefined && channelId !== expected)
+    throw new HttpError(409, {
+      error: 'wrong_channel',
+      expected_channel_id: expected,
+    });
+}
+
 /** What the execution protocol needs from a module service (Bonk, Soundboard, TTS share it). */
 interface ExecutionService<H, A> {
   heartbeat(h: H): Promise<unknown>;
@@ -51,7 +64,7 @@ interface ExecutionService<H, A> {
 }
 
 function executionRoutes<
-  H extends { studio_instance_id: string },
+  H extends { studio_instance_id: string; channel_id?: string },
   C extends { studio_instance_id: string; channel_id: string },
   A extends { studio_instance_id: string },
 >(
@@ -59,6 +72,7 @@ function executionRoutes<
   service: ExecutionService<H, A>,
   schemas: { heartbeat: z.ZodType<H>; claim: z.ZodType<C>; ack: z.ZodType<A> },
   mapped: <T>(fn: () => Promise<T>) => Promise<T>,
+  channelId: string | undefined,
 ): Route[] {
   const base = `^\\/v1\\/studio\\/${module}`;
   return [
@@ -67,9 +81,11 @@ function executionRoutes<
       pattern: new RegExp(`${base}\\/studio\\/heartbeat$`),
       auth: 'studio_installation',
       handle: ({ body, installation }) =>
-        mapped(() =>
-          service.heartbeat(ownBody(installation!, schemas.heartbeat, body)),
-        ),
+        mapped(() => {
+          const req = ownBody(installation!, schemas.heartbeat, body);
+          assertChannel(channelId, req.channel_id);
+          return service.heartbeat(req);
+        }),
     },
     {
       method: 'POST',
@@ -78,6 +94,7 @@ function executionRoutes<
       handle: ({ body, installation }) =>
         mapped(async () => {
           const req = ownBody(installation!, schemas.claim, body);
+          assertChannel(channelId, req.channel_id);
           return {
             interaction: await service.claim(installation!, req.channel_id),
           };
@@ -111,11 +128,15 @@ function executionRoutes<
   ];
 }
 
-export function studioTransportRoutes(services: {
-  bonk?: BonkLabService;
-  sound?: SoundLabService;
-  tts?: TtsLabService;
-}): Route[] {
+export function studioTransportRoutes(
+  services: {
+    bonk?: BonkLabService;
+    sound?: SoundLabService;
+    tts?: TtsLabService;
+  },
+  /** The Core's channel; undefined = no channel check (no channel configured). */
+  channelId?: string,
+): Route[] {
   return [
     {
       // Handshake: credential and protocol accepted (the Studio checks it on (re)connection).
@@ -137,6 +158,7 @@ export function studioTransportRoutes(services: {
             ack: BonkLabAckRequest,
           },
           bonkMapped,
+          channelId,
         )
       : []),
     ...(services.sound
@@ -149,6 +171,7 @@ export function studioTransportRoutes(services: {
             ack: SoundLabAckRequest,
           },
           soundMapped,
+          channelId,
         )
       : []),
     ...(services.tts
@@ -161,6 +184,7 @@ export function studioTransportRoutes(services: {
             ack: TtsLabAckRequest,
           },
           ttsMapped,
+          channelId,
         )
       : []),
   ];

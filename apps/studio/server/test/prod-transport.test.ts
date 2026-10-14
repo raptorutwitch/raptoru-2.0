@@ -120,6 +120,52 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
     expect(f.worker.busy).toBe(false);
   });
 
+  it('a Studio of another channel: wrong_channel shown (heartbeat and claim), the viewer is refused before any debit (Bonk VNext lot 0)', async () => {
+    const f = await fixture();
+    const other = await BonkWorker.open(
+      join(f.dir, 'other-bonk', 'journal.json'),
+      f.client(),
+      {
+        base: BASE,
+        studioId: f.installation.installationId,
+        channel: '1239040922',
+      },
+    );
+    await f.ready(other);
+    expect(other.error).toBe(
+      'Chaîne du Studio différente de celle du Core (Core : 900100) : rien ne sera joué',
+    );
+    expect(other.ready).toBe(true); // locally ready: only the Core refuses it
+    expect(
+      await codeOf(
+        f.core.bonkLab.admit({
+          idempotency_key: 'k-wrong',
+          channel_id: CHANNEL,
+          viewer: { id: '900101', display_name: 'Viewer Lab' },
+          lab_session_id: other.session,
+          emote: { provider: 'unicode', id: 'unicode:1f600', glyph: '😀' },
+        }),
+      ),
+    ).toBe('studio_offline');
+    // The claim itself is refused too (not a silent « nothing to play »).
+    expect(
+      await codeOf(
+        f.client()(`${BASE}/claim`, {
+          studio_instance_id: f.installation.installationId,
+          channel_id: '1239040922',
+        }),
+      ),
+    ).toBe('wrong_channel');
+    // The Studio of the right channel works as before.
+    await f.ready(f.worker);
+    expect(f.worker.error).toBeNull();
+    const queued = await f.admit(f.worker);
+    await f.worker.tick();
+    expect((await f.worker.command('renderer-1'))?.interaction_id).toBe(
+      queued.interaction_id,
+    );
+  });
+
   it('TLS is really verified: without the trusted test certificate, or over http, nothing is called', async () => {
     const f = await fixture();
     await f.ready(f.worker);

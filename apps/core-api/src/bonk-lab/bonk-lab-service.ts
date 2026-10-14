@@ -829,6 +829,31 @@ export class BonkLabService {
     });
   }
 
+  /**
+   * Time-driven expiry, independent of claims (Bonk VNext lot 0): a channel no Studio claims any more
+   * still gets its expired work settled. Each channel runs the same `sweep` under the same channel
+   * lock as admission, claim and ACK, so several Core instances serialize on it; the transitions are
+   * conditional and the refund is at most once. Returns the number of channels swept.
+   */
+  async sweepExpired(): Promise<number> {
+    const channels = await this.db.query<{ channel_id: string }>(
+      `select distinct i.channel_id from bonk_lab_interactions i
+         left join bonk_lab_deliveries d using (interaction_id)
+       where (i.status = 'queued' and i.expires_at < $1 and d.interaction_id is null)
+          or (i.status in ('queued', 'executing') and d.lease_expires_at < $1)`,
+      [this.clock.now()],
+    );
+    for (const { channel_id } of channels)
+      await this.db.tx(async (q) => {
+        await q.query(
+          'select 1 from bonk_lab_channels where channel_id = $1 for update',
+          [channel_id],
+        );
+        await this.sweep(q, channel_id);
+      });
+    return channels.length;
+  }
+
   // --- helpers -------------------------------------------------------------------------------------
 
   /**

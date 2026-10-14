@@ -25,13 +25,22 @@ function newInstallation() {
   return { id, secret, code: `${id}.${sha256(secret)}` };
 }
 
-async function fixture() {
+/** `channelId`: the Core's own channel (public Core); absent = no channel check (Lab-like). */
+async function fixture({ channelId }: { channelId?: string } = {}) {
   const core = await setup();
   core.clock.set(new Date());
   const server = createApp({
     ...core,
     botSecret: 'bot-test-secret',
     studioSecret: 'studio-test-secret',
+    ...(channelId
+      ? {
+          cockpit: {
+            core: () => Promise.reject(new Error('cockpit unused here')),
+            channelId,
+          },
+        }
+      : {}),
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   closers.push(() => new Promise((r) => server.close(() => r())));
@@ -340,4 +349,115 @@ describe('Soundboard and TTS on the production transport (ASTRA-P1-019 lot 2)', 
       );
     },
   );
+});
+
+describe('Core channel scope on the production transport (Bonk VNext lot 0)', () => {
+  const OTHER = '1239040922';
+  it.each([
+    {
+      module: 'bonk',
+      body: (id: string) => heartbeat(id),
+      admit: async (core: TestCore) => ({
+        interaction: await queuedBonk(core),
+      }),
+    },
+    {
+      module: 'sound',
+      body: (id: string) => ({ studio_instance_id: id, player_ready: true }),
+      admit: (core: TestCore) =>
+        core.soundLab.admit({
+          idempotency_key: 'k-s',
+          channel_id: CHANNEL,
+          viewer: { id: '900101', display_name: 'Viewer Lab' },
+          lab_session_id: 'lab-1',
+          sound_id: 'boop',
+          payment_method: 'tokens',
+        }),
+    },
+    {
+      module: 'tts',
+      body: (id: string) => ({ studio_instance_id: id, player_ready: true }),
+      admit: (core: TestCore) =>
+        core.ttsLab.admit({
+          idempotency_key: 'k-t',
+          channel_id: CHANNEL,
+          viewer: { id: '900101', display_name: 'Viewer Lab' },
+          lab_session_id: 'lab-1',
+          text: 'Salut Raptoru, test du transport',
+          payment_method: 'tokens',
+        }),
+    },
+  ])(
+    '$module: a Studio of another channel is refused explicitly (heartbeat not recorded, admission refused before debit, claim 409); the right channel and older Studios keep working',
+    async ({ module, body, admit }) => {
+      const { core, a, call } = await fixture({ channelId: CHANNEL });
+      const base = `/v1/studio/${module}`;
+      const wrong = await call(`${base}/studio/heartbeat`, {
+        ...body(a.id),
+        channel_id: OTHER,
+      });
+      expect(wrong).toEqual({
+        status: 409,
+        body: { error: 'wrong_channel', expected_channel_id: CHANNEL },
+      });
+      // Not recorded: no Studio is ready for the channel, the viewer is refused before any debit.
+      const refused = await admit(core).then(
+        () => 'admitted',
+        (e: { code?: string }) => e.code,
+      );
+      expect(refused).toBe('studio_offline');
+      const claimWrong = await call(`${base}/claim`, {
+        studio_instance_id: a.id,
+        channel_id: OTHER,
+      });
+      expect(claimWrong).toEqual({
+        status: 409,
+        body: { error: 'wrong_channel', expected_channel_id: CHANNEL },
+      });
+      // Right channel: unchanged path.
+      expect(
+        (
+          await call(`${base}/studio/heartbeat`, {
+            ...body(a.id),
+            channel_id: CHANNEL,
+          })
+        ).status,
+      ).toBe(200);
+      const { interaction } = (await admit(core)) as {
+        interaction: { interaction_id: string };
+      };
+      const claim = await call(`${base}/claim`, {
+        studio_instance_id: a.id,
+        channel_id: CHANNEL,
+      });
+      expect(claim.status).toBe(200);
+      expect(claim.body.interaction.interaction_id).toBe(
+        interaction.interaction_id,
+      );
+      // Older Studio (no channel_id in its heartbeat): still accepted.
+      expect((await call(`${base}/studio/heartbeat`, body(a.id))).status).toBe(
+        200,
+      );
+    },
+  );
+
+  it('without a configured channel (no cockpit) nothing is checked, as before', async () => {
+    const { a, call } = await fixture();
+    expect(
+      (
+        await call('/v1/studio/bonk/studio/heartbeat', {
+          ...heartbeat(a.id),
+          channel_id: OTHER,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await call('/v1/studio/bonk/claim', {
+          studio_instance_id: a.id,
+          channel_id: OTHER,
+        })
+      ).body,
+    ).toEqual({ interaction: null });
+  });
 });

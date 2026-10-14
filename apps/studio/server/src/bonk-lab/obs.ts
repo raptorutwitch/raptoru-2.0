@@ -1,10 +1,23 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+/** Delays between reconnection attempts (the last one repeats). */
+export const OBS_RETRY_MS = [1000, 2000, 5000, 10_000];
+/** obs-websocket v5 close code: wrong password. */
+const AUTHENTICATION_FAILED = 4009;
+
 // Minimal read-only obs-websocket v5 client. No scene/source mutation and no streaming controls.
 // Protocol: https://github.com/obsproject/obs-websocket/blob/master/docs/generated/protocol.md
+// Bonk VNext lot 0: a lost or not yet available OBS is retried until `disconnect()` (memory only:
+// the password is never written by this class). A refused password stops the retries.
 export class LabObs {
   private socket: WebSocket | null = null;
   connected = false;
+  /** Last connection failure (status display); null once connected. */
+  error: string | null = null;
+  private target: { port: number; password: string } | null = null;
+  private retry: ReturnType<typeof setTimeout> | null = null;
+  private attempt = 0;
+  private generation = 0;
   private pending = new Map<
     string,
     {
@@ -13,7 +26,22 @@ export class LabObs {
     }
   >();
 
+  /** A connection is wanted but not established (OBS closed, restarting…). */
+  get reconnecting() {
+    return this.target !== null && !this.connected;
+  }
+
+  /** Explicit disconnection: no reconnection afterwards. */
   disconnect() {
+    this.target = null;
+    this.error = null;
+    this.generation += 1;
+    if (this.retry) clearTimeout(this.retry);
+    this.retry = null;
+    this.drop();
+  }
+
+  private drop() {
     this.connected = false;
     this.socket?.close();
     this.socket = null;
@@ -21,24 +49,82 @@ export class LabObs {
     this.pending.clear();
   }
 
+  /** Connects and keeps the connection: the first failure is thrown, the retries continue. */
   async connect(port: number, password: string) {
     if (!Number.isInteger(port) || port < 1 || port > 65535)
       throw new Error('invalid_obs_port');
     this.disconnect();
+    this.target = { port, password };
+    this.attempt = 0;
+    await this.tryOpen();
+  }
+
+  private async tryOpen() {
+    const target = this.target;
+    if (!target) return;
+    const generation = ++this.generation;
+    try {
+      await this.open(target.port, target.password);
+      this.error = null;
+      this.attempt = 0;
+    } catch (e) {
+      // A newer attempt or a disconnect took over: this one decides nothing.
+      if (generation !== this.generation) throw e;
+      this.error = (e as Error).message;
+      if (this.error === 'obs_auth_failed') this.target = null;
+      else this.schedule();
+      throw e;
+    }
+  }
+
+  private schedule() {
+    if (!this.target || this.retry) return;
+    const delay = OBS_RETRY_MS[Math.min(this.attempt, OBS_RETRY_MS.length - 1)];
+    this.attempt += 1;
+    this.retry = setTimeout(() => {
+      this.retry = null;
+      void this.tryOpen().catch(() => {});
+    }, delay);
+  }
+
+  private open(port: number, password: string) {
+    this.drop();
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
     this.socket = ws;
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        ws.close();
-        reject(new Error('obs_connect_timeout'));
-      }, 5000);
-      const fail = () => {
+    let identified = false;
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => fail('obs_connect_timeout'), 5000);
+      const fail = (code: string) => {
         clearTimeout(timer);
-        if (this.socket === ws) this.disconnect();
-        reject(new Error('obs_offline_or_auth_failed'));
+        if (this.socket === ws) this.drop();
+        reject(new Error(code));
       };
-      ws.addEventListener('error', fail, { once: true });
-      ws.addEventListener('close', fail, { once: true });
+      // Once identified, a socket error is followed by `close`, which reconnects.
+      ws.addEventListener(
+        'error',
+        () => {
+          if (!identified) fail('obs_offline_or_auth_failed');
+        },
+        { once: true },
+      );
+      ws.addEventListener(
+        'close',
+        (event) => {
+          if (!identified)
+            return fail(
+              (event as CloseEvent).code === AUTHENTICATION_FAILED
+                ? 'obs_auth_failed'
+                : 'obs_offline_or_auth_failed',
+            );
+          // Established connection lost (OBS closed or restarted): reconnect.
+          if (this.socket !== ws) return;
+          this.drop();
+          this.error = 'obs_offline';
+          this.attempt = 0;
+          this.schedule();
+        },
+        { once: true },
+      );
       ws.addEventListener('message', (event) => {
         try {
           const packet = JSON.parse(String(event.data));
@@ -64,6 +150,7 @@ export class LabObs {
             );
           } else if (packet.op === 2) {
             clearTimeout(timer);
+            identified = true;
             this.connected = true;
             resolve();
           } else if (packet.op === 7) {
@@ -74,7 +161,7 @@ export class LabObs {
             else p?.reject(new Error('obs_request_failed'));
           }
         } catch {
-          fail();
+          if (!identified) fail('obs_offline_or_auth_failed');
         }
       });
     });

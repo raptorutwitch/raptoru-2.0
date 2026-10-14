@@ -188,7 +188,10 @@ function routes({
   return [
     ...walletRoutes(wallet),
     ...(studioInstallations
-      ? studioTransportRoutes({ bonk: bonkLab, sound: soundLab, tts: ttsLab })
+      ? studioTransportRoutes(
+          { bonk: bonkLab, sound: soundLab, tts: ttsLab },
+          cockpit?.channelId,
+        )
       : []),
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
     ...(studioInstallations && cockpit

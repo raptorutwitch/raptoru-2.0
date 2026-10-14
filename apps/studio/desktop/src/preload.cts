@@ -40,4 +40,17 @@ const profile = {
   regenerate: () => ipcRenderer.invoke('studio:profile:regenerate'),
 };
 
-contextBridge.exposeInMainWorld('raptoruStudio', { update, server, profile });
+// OBS connection for Bonk: main remembers it (password encrypted by the OS) and restores it.
+const obs = {
+  connect: (port: number, password: string) =>
+    ipcRenderer.invoke('studio:obs:connect', port, password),
+  forget: () => ipcRenderer.invoke('studio:obs:forget'),
+  remembered: () => ipcRenderer.invoke('studio:obs:remembered'),
+};
+
+contextBridge.exposeInMainWorld('raptoruStudio', {
+  update,
+  server,
+  profile,
+  obs,
+});

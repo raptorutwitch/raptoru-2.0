@@ -559,6 +559,82 @@ describe.skipIf(!isLocal)('Core on a real Postgres', () => {
     }
   });
 
+  it('Bonk expiry sweep: 3 Cores ticking at once + a racing ACK, one refund per Bonk, no state regression', async () => {
+    const clock = new FakeClock(paris('2026-10-14', 21));
+    const pools = [db, createPgDb(url!), createPgDb(url!)];
+    const cores = pools.map((d) =>
+      createCore(d, clock, new DevFakeCreditProvider()),
+    );
+    try {
+      await cores[0]!.bonkLab.heartbeat({
+        studio_instance_id: 'itest-sweep',
+        obs: 'connected',
+        source_ready: true,
+        overlay_ready: true,
+      });
+      for (let i = 0; i < 12; i++)
+        await cores[i % 3]!.bonkLab.admit({
+          idempotency_key: `sw-${i}`,
+          channel_id: '990002',
+          viewer: { id: String(990200 + (i % 3)), display_name: `S${i}` },
+          lab_session_id: 'itest',
+          emote: { provider: 'unicode', id: 'unicode:1f600' },
+        });
+      // One Bonk is executing on a Studio that then disappears; the other 11 were never claimed.
+      const running = (await cores[0]!.bonkLab.claim('itest-sweep', '990002'))!;
+      const attempt = {
+        studio_instance_id: 'itest-sweep',
+        attempt_id: running.delivery.attempt_id!,
+      };
+      await cores[1]!.bonkLab.ack(running.interaction_id, {
+        ...attempt,
+        event: 'started',
+      });
+      clock.set(new Date(clock.now().getTime() + 121_000));
+      // Every Core ticks twice at the same time while the late Studio reports completion.
+      const lateAck = cores[2]!.bonkLab
+        .ack(running.interaction_id, { ...attempt, event: 'completed' })
+        .then(
+          () => 'completed',
+          (e: Error) => e.message,
+        );
+      await Promise.all([
+        ...cores.flatMap((c) => [
+          c.bonkLab.sweepExpired(),
+          c.bonkLab.sweepExpired(),
+        ]),
+        lateAck,
+      ]);
+      const states = await db.query<{ status: string; n: number }>(
+        "select status, count(*)::int as n from bonk_lab_interactions where channel_id = '990002' and interaction_id <> $1 group by status",
+        [running.interaction_id],
+      );
+      expect(states).toEqual([{ status: 'failed', n: 11 }]);
+      // One refund per expired Bonk, exactly; none for the one that was shown.
+      const refunds = await db.query<{ interaction_id: string; n: number }>(
+        `select l.interaction_id, count(*)::int as n from lab_wallet_ledger l
+           join bonk_lab_interactions i using (interaction_id)
+         where i.channel_id = '990002' and l.kind = 'refund' group by l.interaction_id`,
+      );
+      expect(refunds).toHaveLength(11);
+      expect(refunds.every((r) => r.n === 1)).toBe(true);
+      expect(
+        refunds.some((r) => r.interaction_id === running.interaction_id),
+      ).toBe(false);
+      // The racing ACK and the sweep serialize on the channel lock: whichever wins, the outcome is
+      // final and consistent (completed before the sweep, or execution_unknown and the ACK refused).
+      const final = await cores[0]!.bonkLab.get(running.interaction_id);
+      expect(['completed', 'execution_unknown']).toContain(final.status);
+      expect(await lateAck).toBe(
+        final.status === 'completed'
+          ? 'completed'
+          : 'cannot complete from execution_unknown',
+      );
+    } finally {
+      await Promise.all(pools.slice(1).map((p) => p.close()));
+    }
+  });
+
   it('Rewards Twitch V1 in preview: 3 Cores, duplicates, conflicts, hot config change, zero Wallet write', async () => {
     const clock = new FakeClock(paris('2026-09-28', 20));
     const provider = new DevFakeCreditProvider();

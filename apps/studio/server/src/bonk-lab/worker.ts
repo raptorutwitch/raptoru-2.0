@@ -287,6 +287,7 @@ export class BonkWorker {
         if (Date.now() - this.lastHeartbeat > 2000) {
           await this.core(`${this.base}/studio/heartbeat`, {
             studio_instance_id: this.state.studio,
+            channel_id: this.channel,
             obs: this.obs ? 'connected' : 'offline',
             source_ready: this.source,
             overlay_ready: this.ready,

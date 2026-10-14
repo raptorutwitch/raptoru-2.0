@@ -360,6 +360,7 @@ export class SoundWorker {
             `${this.base}/studio/heartbeat`,
             {
               studio_instance_id: this.state.studio,
+              channel_id: this.channel,
               player_ready: this.ready,
             },
           );

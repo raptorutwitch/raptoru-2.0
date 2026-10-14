@@ -137,6 +137,8 @@ export type TtsLabAdmitResponse = z.infer<typeof TtsLabAdmitResponse>;
 export const TtsLabHeartbeat = z.strictObject({
   studio_instance_id: StudioId,
   player_ready: z.boolean(),
+  /** Channel this Studio serves: a Core of another channel refuses it (wrong_channel). Optional for older Studios. */
+  channel_id: Id.optional(),
 });
 export type TtsLabHeartbeat = z.infer<typeof TtsLabHeartbeat>;
 
