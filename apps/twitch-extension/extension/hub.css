@@ -539,20 +539,26 @@ html body .m-refresh {
 .rh-hub.is-narrow .rh-util-btn {
   padding: 0 6px;
 }
-/* Lanceur « Tous » : cases denses au-dessus de la navigation secondaire. */
+/* Lanceur « Tous » : raccourci compact, centré au-dessus de la navigation secondaire. Largeur au
+   contenu ; au-delà d'une rangée, les cases passent à la ligne (centrées) puis la liste défile. */
 .rh-all {
   position: absolute;
   z-index: 40;
   right: 8px;
   bottom: 52px;
   left: 8px;
-  display: grid;
+  display: flex;
+  width: fit-content;
+  max-width: calc(100% - 16px);
   max-height: calc(100% - 110px);
   box-sizing: border-box;
-  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-  gap: 4px 2px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  margin-inline: auto;
   overflow-y: auto;
-  padding: 8px 6px;
+  overscroll-behavior: contain;
+  padding: 6px;
   border: 1px solid rgba(206, 170, 255, 0.26);
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(37, 27, 63, 0.98), rgba(26, 19, 48, 0.98));
@@ -564,7 +570,9 @@ html body .m-refresh {
 }
 .rh-all__item {
   display: flex;
+  width: 76px;
   min-width: 0;
+  flex: none;
   flex-direction: column;
   align-items: center;
   gap: 5px;
@@ -619,6 +627,49 @@ html body .m-refresh {
 }
 .rh-all__pip--staff {
   background: #7fe0c4;
+}
+
+/* Bouton Retour des modules (en-tête commun) : chevron seul dans un carré compact, même forme que la
+   Tombola V2. Remplace les variantes de base.css (pastille « ← Retour ») ; la Modération garde le sien. */
+body .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .jdm-back {
+  display: grid;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(216, 180, 254, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e6daf5;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s, color 0.14s, transform 0.14s;
+}
+body .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .jdm-back:hover {
+  border-color: rgba(214, 170, 255, 0.55);
+  background: rgba(168, 85, 247, 0.22);
+  color: #fff;
+}
+body .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .jdm-back:active {
+  transform: scale(0.94);
+}
+body .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .jdm-back:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 2px;
+}
+.jdm-back .jdm-back__icon {
+  width: 17px;
+  height: 17px;
+}
+/* Panel / mobile : zone tactile plus grande. */
+body.mobile .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .jdm-back {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  border-radius: 12px;
 }
 
 /* Tiroirs Notifications / Préférences : ancrés sous l'en-tête du Hub. */
@@ -854,6 +905,13 @@ html body .m-refresh {
     width: 14px;
     height: 14px;
   }
+  body.component-view .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .jdm-back {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border-radius: 9px;
+  }
   body.component-view .rh-tuto {
     width: 23px;
     height: 23px;
@@ -868,7 +926,7 @@ html body .m-refresh {
   body.component-view .rh-all {
     bottom: 46px;
     max-height: calc(100% - 96px);
-    grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+    padding: 5px;
   }
   body.component-view .rh-all__icon {
     width: 35px;
@@ -880,6 +938,8 @@ html body .m-refresh {
     height: 18px;
   }
   body.component-view .rh-all__item {
+    width: 70px;
+    padding: 5px 2px 4px;
     font-size: 10px;
   }
   body.component-view .rh-hub > .jdm-notification-center,

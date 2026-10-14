@@ -79,10 +79,9 @@ let sharedCalibration = null;
  *   lab?: boolean,
  *   onPaymentMethod?: (method: string, locked: boolean) => void,
  *   onPurchased?: () => void,
- *   onBack?: () => void,
  * }} options
  */
-export function createTtsV2View({ document, client, surface, assetBase, lab = false, onPaymentMethod, onPurchased, onBack }) {
+export function createTtsV2View({ document, client, surface, assetBase, lab = false, onPaymentMethod, onPurchased }) {
   const win = document.defaultView;
   const CAL = (sharedCalibration ??= createCalibration({ document, assetBase, allowLocalOverride: lab }));
   const REDUCE = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -274,7 +273,8 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
       <div class="facts-inline"><span>Position <b>${L.position}</b></span><span>Lecture prévue dans <b>${L.wait}</b></span><span>Cooldown <b>${secs(qt.cooldownS)}</b></span>${debit}</div>${surface === 'panel' ? '' : paid}`;
   }
   const slot = (arrows) => `<div class="slot${S.phase === 'landing' || S.phase === 'queued' ? ' is-cast' : ''}" data-slot-cast>${roster(arrows, true)}${castBlock()}</div>`;
-  const hubBtn = () => `<button class="cta cta--soft" type="button" data-act="hub-back">Retour au Hub</button>`;
+  // End screen: the header arrow is the only way back to the Hub; this one starts a new message.
+  const againBtn = () => `<button class="cta cta--soft" type="button" data-act="tts-again">Envoyer un autre message</button>`;
   const finalHtml = (video) => (tx?.interaction ? finalTop(video) : '');
   const accent = () => (tx?.interaction ? byId[tx.interaction.cast.character_id].accent : '#a855f7');
 
@@ -285,7 +285,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     return `<div class="scroll" data-scroll-key="tts-v2"><div class="${bodyCls} flow">
       <div class="swap" data-swap><div class="swap__prep">${composer(4)}${factsLine(tx.text)}</div><div class="swap__final done3" data-final style="--c:${accent()}">${finalHtml(false)}</div></div>
       ${zoneHtml()}${slot(true)}</div></div>
-      <div class="pay foot"><div class="foot__status">${txStatus()}</div><div class="foot__final">${hubBtn()}</div></div>`;
+      <div class="pay foot"><div class="foot__status">${txStatus()}</div><div class="foot__final">${againBtn()}</div></div>`;
   }
   function video() {
     if (S.phase === 'compose') {
@@ -295,7 +295,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     }
     return `<div class="cols">
       <div class="col col--swap"><div class="swap__prep">${composer(9)}${factsLine(tx.text)}<div class="spacer"></div><div class="pay">${txStatus()}</div></div>
-        <div class="swap__final done3" data-final style="--c:${accent()}">${finalHtml(true)}<div class="spacer"></div>${hubBtn()}</div></div>
+        <div class="swap__final done3" data-final style="--c:${accent()}">${finalHtml(true)}<div class="spacer"></div>${againBtn()}</div></div>
       <div class="col col--stage col--preview">${zoneHtml()}${slot(false)}</div></div>`;
   }
   const render = () => (surface === 'video' ? video() : stacked(surface === 'mobile' ? 'm-body' : 'body'));
@@ -349,7 +349,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     const final = node.querySelector('[data-final]');
     if (!final || !tx?.interaction) return;
     const video = surface === 'video';
-    final.innerHTML = finalTop(video) + (video ? `<div class="spacer"></div>${hubBtn()}` : '');
+    final.innerHTML = finalTop(video) + (video ? `<div class="spacer"></div>${againBtn()}` : '');
   }
 
   // --- ghost card (before purchase): « ? » until a character is preselected ------------------------------
@@ -511,7 +511,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     if (final) {
       final.style.setProperty('--c', accent());
       const video = surface === 'video';
-      final.innerHTML = finalTop(video) + (video ? `<div class="spacer"></div>${hubBtn()}` : '');
+      final.innerHTML = finalTop(video) + (video ? `<div class="spacer"></div>${againBtn()}` : '');
     }
     fitCast();
   }
@@ -602,7 +602,8 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     later(T.validate - (Date.now() - t0), runShuffle);
     schedulePoll(POLL_MS);
   }
-  function backToHub() {
+  /** « Envoyer un autre message »: back to a fresh composer (empty text), as if the module had just opened. */
+  function composeAgain() {
     if (S.phase !== 'queued') return;
     if (tx?.interaction) writeStore({ dismissed: tx.interaction.interaction_id });
     tx = null;
@@ -612,7 +613,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     S.phase = 'compose';
     hint = '';
     paint();
-    onBack?.();
+    node.querySelector('[data-msg]')?.focus({ preventScroll: true });
   }
 
   /** After (re)opening: the recorded purchase or the viewer's current TTS is shown again. */
@@ -633,7 +634,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     if (!current) return paint();
     const i = current.interaction;
     const mine = store.interaction_id === i.interaction_id;
-    // Left with « Retour au Hub »: stays dismissed (a new message can be written if Core allows it).
+    // Left with « Envoyer un autre message »: stays dismissed (a new message can be written if Core allows it).
     if (store.dismissed === i.interaction_id || (!OPEN.includes(i.status) && !mine)) return paint();
     tx = { key: i.idempotency_key, text: i.message, currency: i.payment_method, interaction: i, queue: current.queue };
     S.text = i.message;
@@ -698,7 +699,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     else if (a === 'confirm') void confirm();
     else if (a === 'ghost-pick' && !swallowClick) selectGhost(b.dataset.char);
     else if (a === 'ghost-step') stepGhost(Number(b.dataset.step));
-    else if (a === 'hub-back') backToHub();
+    else if (a === 'tts-again') composeAgain();
   });
   const offCal = CAL.onChange(() => { if (['compose', 'queued', 'landing'].includes(S.phase)) paint(); });
 

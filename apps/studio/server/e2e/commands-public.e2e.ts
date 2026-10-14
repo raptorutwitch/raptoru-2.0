@@ -3,15 +3,12 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 // Critical chain (ASTRA-P1-018): the production Extension (mobile surface) → Lab EBS → Lab Core →
 // Core's public projection, both ways. The stack seeds one public command, `!e2etest`.
 
-/** Opens a module of the Hub as a user does: « Voir tous les modules » → tile → Enter on the list. */
+/** Opens a module of the Hub as a user does: « Voir tous les modules » → tile (opens it directly). */
 async function openModule(browser: Browser, role: string, tile: RegExp) {
   const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
   await page.goto(`/ext/mobile.html?labRole=${role}`);
   await page.getByRole('button', { name: 'Voir tous les modules' }).click();
   await page.getByRole('button', { name: tile }).click();
-  const modules = page.getByLabel('Modules', { exact: true });
-  await modules.focus();
-  await modules.press('Enter');
   return page;
 }
 

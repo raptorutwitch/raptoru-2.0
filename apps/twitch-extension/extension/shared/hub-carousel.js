@@ -329,10 +329,14 @@ export function createHubCarousel({
     tileIcon.append(hubIcon(document, mod.icon));
     if (mod.chip) tileIcon.append(make('span', `rh-all__pip rh-all__pip--${mod.chip.tone || 'neutral'}`));
     tile.append(tileIcon, make('span', 'rh-all__name', mod.label));
+    // Raccourci : un module ouvrable s'ouvre directement (sa carte reste sélectionnée au retour) ;
+    // un module indisponible est seulement amené devant, comme avant.
     tile.addEventListener('click', (event) => {
       event.stopPropagation();
-      goTo(i);
       setPopover(false);
+      if (mod.off) return goTo(i);
+      onSelect?.(mod.id);
+      open(i);
     });
     popover.append(tile);
     popButtons.push(tile);

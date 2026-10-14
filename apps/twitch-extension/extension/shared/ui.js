@@ -2095,7 +2095,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           });
         },
         onPurchased: () => { void onRefresh?.(); },
-        onBack: () => navigateTo(null),
       });
       ttsV2View.setCurrency(ttsPaymentMethod);
     }
@@ -6080,11 +6079,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const headRight = el('div', 'jdm-module__screen-side jdm-module__screen-side--right');
       const back = el('button', 'jdm-back');
       back.type = 'button';
-      back.setAttribute('aria-label', 'Retour à l’accueil des modules');
-      back.title = 'Retour à l’accueil';
-      const backIcon = el('span', 'jdm-back__icon', '←');
-      backIcon.setAttribute('aria-hidden', 'true');
-      back.append(backIcon, el('span', 'jdm-back__label', 'Retour'));
+      back.setAttribute('aria-label', 'Retour au Hub');
+      back.title = 'Retour au Hub';
+      // Chevron seul, carré compact (même forme que la Tombola V2) : module-back.css.
+      back.append(hubIcon(document, 'chevL', 'jdm-back__icon'));
       back.addEventListener('click', () => navigateTo(null));
       headLeft.append(back);
       if (isRaffle) {
