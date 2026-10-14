@@ -15,7 +15,7 @@ export function mountBonkLab(
   panel.innerHTML = `${
     options.production
       ? '<h3>Bonk — overlay OBS (Production)</h3><p>Overlay servi par Studio avec le jeton du profil Production (différent de celui du Lab). Paiement encore simulé.</p>'
-      : '<h3>Bonk OBS Lab</h3><p>Une Twemoji · coût simulé, aucun débit ni progression. Impact au point 960 × 400 dans une source 1920 × 1080.</p>'
+      : '<h3>Bonk OBS Lab</h3><p>Coût simulé, aucun débit ni progression. Impacts autour d’une zone 480 × 300 centrée en 960 × 400, dans une source 1920 × 1080.</p>'
   }
     <p data-bonk="status">Lecture du statut…</p>
     <div data-bonk="controls" hidden><label>Port OBS <input data-bonk="port" type="number" value="4455"></label>
@@ -23,7 +23,10 @@ export function mountBonkLab(
     <button data-bonk="connect" type="button">Connecter OBS local</button><button data-bonk="disconnect" type="button">Déconnecter</button>
     <p>Dans une scène de test OBS, ajoute (ou mets à jour) une source navigateur nommée exactement <strong>Raptoru Bonk Lab</strong>${options.production ? ' (nom historique, à garder tel quel)' : ''}, 1920 × 1080, avec cette URL :</p>
     <p><input data-bonk="url" readonly aria-label="URL de la source OBS Bonk" style="width:100%"> <button type="button" data-bonk="copy">Copier</button></p>
-    <p>La source doit rester active. Ne l’ajoute pas à la scène diffusée.${options.production ? ' L’URL change avec le profil : remets celle-ci après un changement de profil.' : ' Sélectionne 😀 dans Bonk à gauche.'}</p></div><ol data-bonk="history"></ol>`;
+    <p>La source doit rester active. Ne l’ajoute pas à la scène diffusée.${options.production ? ' L’URL change avec le profil : remets celle-ci après un changement de profil.' : ' Sélectionne 😀 dans Bonk à gauche.'}</p>
+    <p>Tester le rendu (aperçu local : ni Core, ni paiement, ni historique) :
+    <button type="button" data-bonk-test="1">1 Bonk</button> <button type="button" data-bonk-test="5">Rafale de 5</button> <button type="button" data-bonk-test="10">Salve de 10</button>
+    ${options.production ? '<br><small>Visible en direct si la source Bonk est dans la scène diffusée.</small>' : ''}</p></div><ol data-bonk="history"></ol>`;
   root.prepend(panel);
   const el = <T extends HTMLElement>(key: string) =>
     panel.querySelector<T>(`[data-bonk="${key}"]`)!;
@@ -86,6 +89,22 @@ export function mountBonkLab(
     note = '';
     void (bridge ? bridge.forget() : call('disconnect', {}));
   });
+  for (const button of panel.querySelectorAll<HTMLButtonElement>(
+    '[data-bonk-test]',
+  ))
+    button.addEventListener('click', () => {
+      void call('preview', { count: Number(button.dataset.bonkTest) }).then(
+        () => {
+          note = '';
+        },
+        (e: Error) => {
+          note =
+            e.message === 'overlay_not_ready'
+              ? 'Aperçu impossible : overlay OBS pas prêt.'
+              : `Aperçu impossible : ${e.message}`;
+        },
+      );
+    });
   el('copy').addEventListener('click', () => {
     void navigator.clipboard
       ?.writeText(el<HTMLInputElement>('url').value)

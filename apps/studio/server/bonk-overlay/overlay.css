@@ -11,20 +11,25 @@ body {
   width: 1920px;
   height: 1080px;
 }
+/* Position, size, rotation and squash are set per frame by engine/scene.js. */
 .projectile {
   position: absolute;
-  left: 960px;
-  top: 400px;
-  width: 150px;
-  height: 150px;
+  left: 0;
+  top: 0;
+  transform-origin: 50% 50%;
+  will-change: transform;
 }
-.impact {
+/* Impact puff: short, soft, sober. */
+.puff {
   position: absolute;
-  left: 900px;
-  top: 340px;
-  width: 120px;
-  height: 120px;
-  border: 8px solid #ffd84a;
+  left: 0;
+  top: 0;
   border-radius: 50%;
-  box-sizing: border-box;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.18) 45%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  pointer-events: none;
 }

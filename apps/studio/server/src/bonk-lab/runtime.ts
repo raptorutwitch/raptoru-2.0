@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { WorkerLoop } from '../worker-loop.js';
 import { join, extname } from 'node:path';
@@ -9,8 +10,36 @@ import { ViewerAuth } from './viewer-auth.js';
 import { paths, REPO_ROOT } from '../test-lab/local-env.js';
 import type { RuntimeWiring } from '../worker-journal.js';
 
+/** Renderer modules of the overlay (bonk-overlay/engine), served next to overlay.js. */
+const ENGINE_FILES = [
+  'audio.js',
+  'density.js',
+  'families.js',
+  'physics.js',
+  'plan.js',
+  'presets.js',
+  'scene.js',
+  'size.js',
+  'target.js',
+];
+/** « Tester » preview: at most this many shots pending; local Twemoji only. */
+const PREVIEW_MAX = 10;
+const PREVIEW_EMOJIS = [
+  '1f600',
+  '1f923',
+  '1f60e',
+  '1f525',
+  '1f480',
+  '1f44d',
+  '1f4a5',
+  '1f921',
+];
+
 export class BonkRuntime {
   readonly obs = new LabObs();
+  /** Pending « Tester » shots (memory only, never journaled, never sent to Core). */
+  private readonly preview: { preview_id: string; emote_url: string }[] = [];
+  private previewSeq = 0;
   private loop: WorkerLoop | null = null;
   private lastObsCheck = 0;
   private sourceReady = false;
@@ -116,6 +145,7 @@ export class BonkRuntime {
       'overlay.js',
       'overlay.css',
       'bonk-v3-core.js',
+      ...ENGINE_FILES.map((f) => `engine/${f}`),
     ]);
     const file = url.pathname.slice('/bonk-lab/'.length);
     if (req.method === 'GET' && files.has(file)) {
@@ -185,6 +215,23 @@ export class BonkRuntime {
         reply(200, { ok: true });
       } else if (
         req.method === 'POST' &&
+        url.pathname === '/api/bonk-lab/preview'
+      ) {
+        // « Tester » (Bonk VNext lot 1): renderer-only shots kept in memory. No Core call, no
+        // wallet, no delivery journal, no ACK, no history.
+        const count = Number(body.count);
+        if (!Number.isInteger(count) || count < 1 || count > PREVIEW_MAX)
+          throw new Error('invalid_preview_count');
+        if (!this.worker.ready) throw new Error('overlay_not_ready');
+        for (let n = 0; n < count; n++)
+          this.preview.push({
+            preview_id: `preview-${randomUUID()}`,
+            emote_url: `assets/twemoji/svg/${PREVIEW_EMOJIS[this.previewSeq++ % PREVIEW_EMOJIS.length]}.svg`,
+          });
+        this.preview.splice(0, Math.max(0, this.preview.length - PREVIEW_MAX));
+        reply(200, { ok: true, queued: count });
+      } else if (
+        req.method === 'POST' &&
         url.pathname === '/api/bonk-lab/disconnect'
       ) {
         this.obs.disconnect();
@@ -197,6 +244,13 @@ export class BonkRuntime {
         if (url.pathname.endsWith('/heartbeat')) {
           await this.worker.rendererHeartbeat(renderer);
           reply(200, { ok: true });
+        } else if (url.pathname.endsWith('/preview')) {
+          // Only the live renderer draws previews; nothing else is read or written.
+          reply(200, {
+            shots: this.worker.isLiveRenderer(renderer)
+              ? this.preview.splice(0)
+              : [],
+          });
         } else if (url.pathname.endsWith('/next'))
           reply(200, { interaction: await this.worker.command(renderer) });
         else if (

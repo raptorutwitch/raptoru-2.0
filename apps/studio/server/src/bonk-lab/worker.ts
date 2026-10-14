@@ -141,6 +141,10 @@ export class BonkWorker {
       this.state.profile === 'production' || i.lab_session_id === this.session
     );
   }
+  /** `id` is the current renderer and its heartbeat is fresh. */
+  isLiveRenderer(id: string) {
+    return this.renderer?.id === id && Date.now() - this.renderer.at < 5000;
+  }
   get ready() {
     return (
       this.obs &&

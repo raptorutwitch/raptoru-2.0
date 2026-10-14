@@ -1,6 +1,7 @@
 // ASTRA-P1-019 lot 2 — Production players set up from Studio (not from the Extension Lab): the Bonk
 // overlay, Soundboard player and TTS source of the Production profile are served with their own
 // tokens, and a live player turns its module from offline to ready on the Production Core.
+import { readFile } from 'node:fs/promises';
 import { createServer, request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -229,6 +230,88 @@ describe('Production players (set up from the Studio tab)', () => {
     await f.bonk.worker.tick();
     vi.restoreAllMocks();
     expect(await code(admit())).toBe('ok');
+  });
+
+  it('Bonk « Tester » preview is renderer-only: no Core, no wallet, no delivery journal, no ACK, no history (Bonk VNext lot 1)', async () => {
+    const f = await production();
+    const renderer = { 'x-bonk-token': f.bonk.worker.token };
+    const preview = (count: unknown) =>
+      hit(f.bonk, 'POST', '/api/bonk-lab/preview', STUDIO, { count });
+    // No live overlay: refused, nothing queued.
+    expect((await preview(5)).body).toEqual({ error: 'overlay_not_ready' });
+    f.bonk.worker.setObs(true, true);
+    await hit(f.bonk, 'POST', '/bonk-lab/renderer/heartbeat', renderer, {
+      renderer: 'renderer-prod',
+    });
+    expect(f.bonk.worker.ready).toBe(true);
+
+    const journal = join(f.dir, 'production', 'bonk', 'journal.json');
+    const tables = [
+      'bonk_lab_interactions',
+      'bonk_lab_deliveries',
+      'bonk_lab_studios',
+      'lab_wallets',
+      'lab_wallet_ledger',
+    ];
+    const snapshot = async () => ({
+      rows: await Promise.all(
+        tables.map(
+          async (t) =>
+            (
+              await f.core.db.query<{ n: number }>(
+                `select count(*)::int as n from ${t}`,
+              )
+            )[0]!.n,
+        ),
+      ),
+      journal: await readFile(journal, 'utf8').catch(() => null),
+    });
+    const before = await snapshot();
+
+    for (const bad of [0, 11, 'x'])
+      expect((await preview(bad)).body).toEqual({
+        error: 'invalid_preview_count',
+      });
+    expect((await preview(5)).body).toEqual({ ok: true, queued: 5 });
+    // Another page with the token but not the live renderer gets nothing.
+    expect(
+      (
+        await hit(f.bonk, 'POST', '/bonk-lab/renderer/preview', renderer, {
+          renderer: 'renderer-other',
+        })
+      ).body,
+    ).toEqual({ shots: [] });
+    const shots = (
+      await hit(f.bonk, 'POST', '/bonk-lab/renderer/preview', renderer, {
+        renderer: 'renderer-prod',
+      })
+    ).body.shots as { preview_id: string; emote_url: string }[];
+    expect(shots).toHaveLength(5);
+    for (const s of shots) {
+      expect(s.preview_id).toMatch(/^preview-/);
+      expect(s.emote_url).toMatch(/^assets\/twemoji\/svg\/[0-9a-f-]+\.svg$/);
+    }
+    // Drawn once: a second read is empty; the delivery queue never saw them.
+    expect(
+      (
+        await hit(f.bonk, 'POST', '/bonk-lab/renderer/preview', renderer, {
+          renderer: 'renderer-prod',
+        })
+      ).body,
+    ).toEqual({ shots: [] });
+    expect(
+      (
+        await hit(f.bonk, 'POST', '/bonk-lab/renderer/next', renderer, {
+          renderer: 'renderer-prod',
+        })
+      ).body,
+    ).toEqual({ interaction: null });
+    expect(f.bonk.worker.busy).toBe(false);
+    expect(await snapshot()).toEqual(before);
+    expect(
+      (await hit(f.bonk, 'GET', '/api/bonk-lab/status', STUDIO)).body
+        .interactions,
+    ).toEqual([]);
   });
 
   it('back to Lab: the Lab players keep their own tokens and journals, no collision with Production', async () => {

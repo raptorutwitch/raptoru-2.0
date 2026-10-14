@@ -1,12 +1,17 @@
-/* global document, location, fetch, crypto, Image, Audio, setTimeout, setInterval, requestAnimationFrame, AbortSignal */
-import { buildBonkTrajectory } from './bonk-v3-core.js';
+/* global document, location, fetch, crypto, Image, setTimeout, setInterval, AbortSignal */
+import { createAudioPlayer } from './engine/audio.js';
+import { createScene } from './engine/scene.js';
 
-// Thin Lab renderer. Trajectory/physics are copied unchanged from the canonical legacy engine.
-// No catalog fetching, SAMMI, viewer progression or combos in this first slice.
+// Bonk renderer. Transport unchanged (poll, renderer ACKs, URL checks); the visual and the sound are
+// the VNext engine (engine/: trajectory families, sizes, impacts, density, adaptive sound).
+// No catalog fetching, SAMMI, viewer progression or combos.
 const renderer = crypto.randomUUID();
 const token = location.hash.slice(1);
 const stage = document.getElementById('stage');
+const scene = createScene({ stage, audio: createAudioPlayer(), document });
 const seen = new Set();
+const twemojiUrl =
+  /^assets\/twemoji\/svg\/[0-9a-f]{1,6}(-[0-9a-f]{1,6}){0,9}\.svg$/;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function call(path, data) {
   const response = await fetch('/bonk-lab/renderer/' + path, {
@@ -49,8 +54,6 @@ async function play(i) {
     bttv: /^https:\/\/cdn\.betterttv\.net\/emote\/[0-9a-f]{24}\/3x$/,
     ffz: /^https:\/\/cdn\.frankerfacez\.com\/emote\/[0-9]{1,10}\/(animated\/)?[124]$/,
   };
-  const twemojiUrl =
-    /^assets\/twemoji\/svg\/[0-9a-f]{1,6}(-[0-9a-f]{1,6}){0,9}\.svg$/;
   const src =
     i.provider === 'unicode' && twemojiUrl.test(i.emote_url)
       ? '/ext/' + i.emote_url
@@ -75,58 +78,46 @@ async function play(i) {
     await ack(i, 'failed');
     return;
   }
-  const trajectory = buildBonkTrajectory({
-    impactX: 960,
-    impactY: 400,
-    size: 150,
-    referenceId: i.interaction_id,
-  });
-  stage.append(image);
-  const animation = image.animate(trajectory.keyframes, {
-    duration: trajectory.duration,
-    fill: 'both',
-    easing: 'linear',
-  });
-  await animation.ready;
-  let impact = false;
-  const monitor = () => {
-    if (!impact && Number(animation.currentTime) >= trajectory.impactMs) {
-      impact = true;
-      const ring = document.createElement('div');
-      ring.className = 'impact';
-      stage.append(ring);
-      ring
-        .animate(
-          [
-            { transform: 'scale(.3)', opacity: 1 },
-            { transform: 'scale(1.6)', opacity: 0 },
-          ],
-          { duration: 250 },
-        )
-        .finished.finally(() => ring.remove());
-      const audio = new Audio('/ext/assets/sounds/punch-2.mp3');
-      audio.volume = 0.4;
-      void audio.play().catch(() => {});
-    }
-    if (animation.playState !== 'finished' && image.isConnected)
-      requestAnimationFrame(monitor);
-  };
-  requestAnimationFrame(monitor);
+  let shown;
+  try {
+    shown = await scene.play({ id: i.interaction_id, image });
+  } catch {
+    await ack(i, 'failed');
+    return;
+  }
+  await shown.started;
   const started = ack(i, 'started');
   // Completion acknowledgement is ordered after started, even if the first response was lost.
-  void animation.finished
-    .then(async () => {
-      image.remove();
-      await started;
-      await ack(i, 'completed');
-    })
-    .catch(() => {
-      image.remove();
-      void ack(i, 'failed').catch(() => {});
-    });
-  setTimeout(() => image.remove(), trajectory.duration + 1000);
+  void shown.finished.then(async () => {
+    await started;
+    await ack(i, 'completed');
+  });
   await started;
 }
+// Studio « Tester » preview: renderer only. No Core, no wallet, no delivery journal, no ACK: the shots
+// come from Studio's memory and are only drawn. Local stagger (not the Salves cadence, lot 5).
+async function showPreview(shot) {
+  if (!twemojiUrl.test(String(shot.emote_url))) return;
+  const image = new Image();
+  image.src = '/ext/' + shot.emote_url;
+  try {
+    await image.decode();
+  } catch {
+    return;
+  }
+  void scene.play({ id: shot.preview_id, image }).catch(() => {});
+}
+setInterval(
+  () =>
+    void call('preview', {})
+      .then(({ shots }) =>
+        (shots ?? []).forEach((shot, n) =>
+          setTimeout(() => void showPreview(shot), n * 180),
+        ),
+      )
+      .catch(() => {}),
+  250,
+);
 setInterval(() => void call('heartbeat', {}).catch(() => {}), 1500);
 // After an OBS refresh, the previous page still counts as the live renderer for a few seconds and
 // this first heartbeat is refused (renderer_already_connected). It must not stop the page: the
