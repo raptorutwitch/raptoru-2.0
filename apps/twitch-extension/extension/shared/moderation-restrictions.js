@@ -30,7 +30,7 @@ export function restrictionsView(h, f, data) {
 }
 
 export function restrictionRows(h, f, data) {
-  const { ic, esc, av } = h;
+  const { esc, av } = h;
   const q = f.q.trim().toLowerCase();
   const named = (id, name) => (!f.viewer || id === f.viewer) && (!q || String(name ?? id).toLowerCase().includes(q));
   if (f.state === 'history') {
@@ -51,22 +51,28 @@ export function restrictionRows(h, f, data) {
   if (!data.active) return `<div class="empty">${data.failed ? 'Restrictions indisponibles pour le moment.' : 'Chargement…'}</div>`;
   const rows = data.active.filter((r) => moduleMatch(f, r.module) && named(r.viewer_id, r.display_name));
   if (!rows.length) return '<div class="empty">Aucune restriction active</div>';
-  return rows
-    .map((r) => {
-      const cd = r.kind === 'cooldown';
-      const left = r.until
-        ? `<span class="timer tnum" data-until="${Date.parse(r.until)}">${h.mmss(Date.parse(r.until) - Date.now())}</span>`
-        : '<span class="timer timer--inf">∞ jusqu’au déblocage</span>';
-      const type = cd ? `<span class="rbadge rbadge--cd">${ic('clock')}Cooldown ${h.dur(r.delay_s)}</span>` : `<span class="rbadge rbadge--block">${ic('ban')}Bloqué</span>`;
-      return `<div class="r">
-        ${av(r.viewer_id, r.display_name, 'xs')}
-        <span class="r__main"><span class="r__l1"><button class="who" data-act="open-viewer" data-id="${esc(r.viewer_id)}">${esc(r.display_name)}</button>${type}${scopeBadge(h, r.module)}</span>
-        <span class="r__l2">${left} · ${esc(h.actorName(r.actor))}${r.reason ? ` · ${esc(r.reason)}` : ''}</span></span>
-        <button class="icon-btn icon-btn--xs" data-act="${cd ? 'cooldown' : 'block'}" data-v="${esc(r.viewer_id)}" data-m="${esc(r.module)}" data-tip="Modifier (remplace la restriction)" aria-label="Modifier">${ic('timeplus')}</button>
-        <button class="icon-btn icon-btn--xs" data-act="lift" data-v="${esc(r.viewer_id)}" data-kind="${r.kind}" data-m="${esc(r.module)}" data-tip="Lever la restriction" aria-label="Lever la restriction">${ic('x')}</button>
-      </div>`;
+  // One line per viewer; each restriction is a chip « TTS · Bloqué 04:12 » (click = change, × = lift).
+  const groups = new Map();
+  for (const r of rows) groups.set(r.viewer_id, [...(groups.get(r.viewer_id) ?? []), r]);
+  return [...groups.values()]
+    .map((list) => {
+      const v = list[0];
+      return `<div class="rv">${av(v.viewer_id, v.display_name, 'xs')}<button class="who" data-act="open-viewer" data-id="${esc(v.viewer_id)}">${esc(v.display_name)}</button>
+        <span class="rv__chips">${list.map((r) => restrictionChip(h, r)).join('')}</span></div>`;
     })
     .join('');
+}
+
+function restrictionChip(h, r) {
+  const { ic, esc, MODS } = h;
+  const cd = r.kind === 'cooldown';
+  const scope = r.module === 'all' ? 'Global' : (MODS[r.module]?.short || MODS[r.module]?.label || r.module);
+  const what = cd ? `Cooldown ${h.dur(r.delay_s)}` : 'Bloqué';
+  const left = r.until ? `<span class="timer tnum" data-until="${Date.parse(r.until)}">${h.mmss(Date.parse(r.until) - Date.now())}</span>` : '<span class="timer timer--inf">∞</span>';
+  const tip = [`Par ${h.actorName(r.actor)}`, r.reason].filter(Boolean).join(' · ');
+  return `<span class="rchip rchip--${cd ? 'cd' : 'block'}" data-tip="${esc(tip)}">
+    <button class="rchip__main" data-act="${cd ? 'cooldown' : 'block'}" data-v="${esc(r.viewer_id)}" data-m="${esc(r.module)}" aria-label="Modifier ${esc(scope)} · ${esc(what)}">${ic(cd ? 'clock' : 'ban')}<b>${esc(scope)}</b> · ${esc(what)}${left}</button>
+    <button class="rchip__x" data-act="lift" data-v="${esc(r.viewer_id)}" data-kind="${r.kind}" data-m="${esc(r.module)}" aria-label="Lever ${esc(scope)} · ${esc(what)}">${ic('x')}</button></span>`;
 }
 
 function scopeBadge(h, module) {

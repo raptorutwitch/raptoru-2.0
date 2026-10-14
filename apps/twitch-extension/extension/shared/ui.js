@@ -39,13 +39,15 @@ import { createCommandsV2View } from './commands-v2.js';
 import { createCommandsPublicView } from './commands-public.js';
 import { createTombolaV2View } from './tombola-v2.js';
 import {
-  acknowledge,
-  isAcknowledged,
+  hideRestrictions,
+  holdsAction,
+  isHidden,
+  restrictionChips,
   restrictionFor,
-  restrictionIndicator,
+  restrictionId,
   restrictionModal,
   restrictionPill,
-  holdsAction,
+  restrictionsFor,
   tickRestrictions,
 } from './viewer-restrictions.js';
 
@@ -1162,6 +1164,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   // when one ends, the screen is drawn again from the same data (no extra request).
   const restrictionStorage = () => { try { return globalThis.localStorage ?? null; } catch { return null; } };
   const restrictionOf = (moduleId) => restrictionFor(state?.restrictions, moduleId);
+  const restrictionsOf = (moduleId) => restrictionsFor(state?.restrictions, moduleId);
+  // Popup: closed ones are not shown again during this visit of the module (polls redraw the screen);
+  // a new visit shows them again, unless « Ne plus afficher ce message » was ticked for them.
+  let restrictionsSeen = new Set();
   globalThis.setInterval?.(() => {
     if (root.querySelector('[data-rl-end]') && tickRestrictions(root)) renderPreservingViewport();
   }, 1000);
@@ -1714,6 +1720,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       raffleHistoryOpen = false;
     }
     captureScrollPositions();
+    if (moduleId !== openModule) restrictionsSeen = new Set();
     openModule = moduleId;
     if (moduleId !== 'bonk') {
       bonkAmmoMode = false;
@@ -6141,8 +6148,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
 
       if (!isModeration) headRight.append(walletRow);
-      const restriction = restrictionOf(mod.id);
-      if (restriction && !isTombolaV2) headRight.prepend(restrictionIndicator(document, restriction));
+      // Active restrictions: chips on the left of the header (next to the way back), not by the wallet.
+      const restrictions = restrictionsOf(mod.id);
+      if (restrictions.length && !isTombolaV2) headLeft.append(restrictionChips(document, restrictions));
 
       const item = el('section', 'jdm-module');
       item.dataset.module = mod.id;
@@ -6221,11 +6229,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           tombolaV2View.start();
         }
         tombolaV2View.update(state);
-        // Its own header (the host's is hidden): the restriction indicator goes there.
+        // Its own header (the host's is hidden): the restriction chips go after its way back.
         const tmbHead = tombolaV2View.node.querySelector('.head');
-        tmbHead?.querySelector('.rl-rind')?.remove();
-        const tmbRestriction = restrictionOf(mod.id);
-        if (tmbHead && tmbRestriction) tmbHead.querySelector('.grow')?.after(restrictionIndicator(document, tmbRestriction));
+        tmbHead?.querySelector('.rl-rchips')?.remove();
+        const tmbRestrictions = restrictionsOf(mod.id);
+        if (tmbHead && tmbRestrictions.length) tmbHead.querySelector('[data-act="back"]')?.after(restrictionChips(document, tmbRestrictions));
         body.append(tombolaV2View.node);
         queueMicrotask(() => tombolaV2View?.attached());
       } else if (mod.id === MODERATION_MODULE.id) {
@@ -6244,10 +6252,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       item.append(body);
       if (isSoundboard) (body.querySelector('.sbx-toast-slot') ?? item).append(createSoundboardFeedbackOverlay());
       screen.append(head, item);
-      // A real block (module or all): told once per state, « J'ai compris »; the module stays readable.
-      const blocked = restrictionOf(mod.id);
-      if (blocked?.kind === 'block' && !isAcknowledged(restrictionStorage(), state?.twitch_user_id, blocked)) {
-        screen.append(restrictionModal(document, blocked, () => acknowledge(restrictionStorage(), state?.twitch_user_id, blocked)));
+      // Every active restriction of the module (blocks and cooldown) in one popup, at each visit; the
+      // module stays readable behind it.
+      const viewerId = state?.twitch_user_id;
+      const toTell = restrictionsOf(mod.id).filter((r) => !restrictionsSeen.has(restrictionId(viewerId, r)) && !isHidden(restrictionStorage(), viewerId, r));
+      if (toTell.length) {
+        screen.append(restrictionModal(document, toTell, (dontShowAgain) => {
+          for (const r of toTell) restrictionsSeen.add(restrictionId(viewerId, r));
+          if (dontShowAgain) hideRestrictions(restrictionStorage(), viewerId, toTell);
+        }));
       }
       root.append(screen);
       if (isSoundboard) syncSoundboardPreviewButtons();

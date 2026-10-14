@@ -672,7 +672,7 @@ body.mobile .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .
   border-radius: 12px;
 }
 
-/* Restrictions Raptoru du viewer (jamais une sanction Twitch) : pastille de carte, indicateur d'en-tête
+/* Restrictions Raptoru du viewer (jamais une sanction Twitch) : pastille de carte, chips d'en-tête
    et son détail, modal « J'ai compris » d'un vrai blocage. Tailles fixes : rien ne pousse le layout. */
 .rl-rpill {
   position: absolute;
@@ -702,6 +702,14 @@ body.mobile .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .
 .rl-rpill--block {
   color: #ffc2ca;
 }
+/* En-tête du module : une chip par restriction active, à gauche (après le retour). */
+.rl-rchips {
+  display: inline-flex;
+  min-width: 0;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
 .rl-rind {
   position: relative;
   display: inline-flex;
@@ -709,47 +717,70 @@ body.mobile .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .
 }
 .rl-rind__btn {
   display: inline-flex;
-  height: 28px;
+  height: 26px;
   align-items: center;
   gap: 4px;
-  padding: 0 8px;
-  border: 1px solid rgba(124, 196, 255, 0.35);
-  border-radius: 9px;
-  background: rgba(124, 196, 255, 0.1);
-  color: #c3e4ff;
+  padding: 0 8px 0 6px;
+  border: 1px solid rgba(255, 179, 92, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 179, 92, 0.1);
+  color: #ffd9a3;
   font: inherit;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
 }
 .rl-rind--block .rl-rind__btn {
-  border-color: rgba(255, 122, 138, 0.4);
-  background: rgba(255, 122, 138, 0.1);
+  border-color: rgba(255, 77, 109, 0.5);
+  background: rgba(255, 77, 109, 0.14);
   color: #ffc2ca;
 }
 .rl-rind__btn svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   flex: none;
+}
+.rl-rind--block .rl-rind__btn svg {
+  color: #ff4d6d;
+}
+.rl-rind__btn .rl-time {
+  color: #ffb35c;
+  font-variant-numeric: tabular-nums;
 }
 .rl-rind__btn:focus-visible {
   outline: 2px solid #dcc4ff;
   outline-offset: 2px;
 }
+.rl-rchips--multi .rl-rind:not(:first-child) .rl-rind__label {
+  display: none;
+}
+.rl-rchips--multi .rl-rind:not(:first-child) .rl-rind__btn {
+  padding: 0 6px;
+}
+/* Surfaces étroites (Panel, Mobile) : plusieurs restrictions = icônes seules, le titre reste lisible. */
+@media (max-width: 420px) {
+  .rl-rchips--multi .rl-rind .rl-rind__label,
+  .rl-rchips--multi .rl-rind .rl-rind__btn .rl-time {
+    display: none;
+  }
+  .rl-rchips--multi .rl-rind .rl-rind__btn {
+    padding: 0 6px;
+  }
+}
 .rl-rind__detail {
   position: absolute;
   z-index: 60;
   top: calc(100% + 6px);
-  right: 0;
+  left: 0;
   display: none;
-  min-width: 150px;
-  max-width: 220px;
+  min-width: 170px;
+  max-width: 240px;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
+  gap: 3px;
+  padding: 9px 11px;
   border: 1px solid rgba(214, 170, 255, 0.32);
-  border-radius: 10px;
+  border-radius: 11px;
   background: #231a3b;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
   color: #eee2ff;
@@ -766,14 +797,25 @@ body.mobile .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .
 .rl-rind__title {
   font-weight: 800;
 }
-.rl-rind__left b {
-  font-variant-numeric: tabular-nums;
-}
-.rl-rind__who {
+.rl-rind__why {
   overflow: hidden;
   color: #a99cc4;
   text-overflow: ellipsis;
 }
+/* Commun au détail et au popup : minuteur chaud, « Sanctionné par : » avec le nom mis en valeur. */
+.rl-left .rl-time {
+  color: #ffb35c;
+  font-variant-numeric: tabular-nums;
+}
+.rl-by {
+  color: #a99cc4;
+}
+.rl-by b {
+  color: #e9d5ff;
+  font-weight: 800;
+}
+
+/* Popup : toutes les restrictions actives du module, à chaque ouverture (sauf « Ne plus afficher »). */
 .rl-rmodal {
   position: fixed;
   z-index: 80;
@@ -781,49 +823,102 @@ body.mobile .jdm-module__screen-head:not(.jdm-module__screen-head--moderation) .
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgba(5, 3, 12, 0.6);
+  background: rgba(5, 3, 12, 0.62);
+  backdrop-filter: blur(2px);
 }
 .rl-rmodal__card {
   display: flex;
-  width: min(300px, 100%);
+  width: min(320px, 100%);
+  max-height: 100%;
+  box-sizing: border-box;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 16px;
-  border: 1px solid rgba(255, 122, 138, 0.35);
+  gap: 8px;
+  overflow-y: auto;
+  padding: 14px;
+  border: 1px solid rgba(214, 170, 255, 0.28);
   border-radius: 16px;
-  background: linear-gradient(180deg, #2a1f47, #1b1432);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  background:
+    radial-gradient(120% 70% at 0% 0%, rgba(255, 77, 109, 0.14), transparent 60%),
+    linear-gradient(180deg, #2a1f47, #1b1432);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   color: #eee2ff;
-  text-align: center;
+}
+.rl-rmodal__heading {
+  color: #c9b6e8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.rl-rmodal__entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 179, 92, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 179, 92, 0.06);
+}
+.rl-rmodal__entry--block {
+  border-color: rgba(255, 77, 109, 0.32);
+  background: rgba(255, 77, 109, 0.08);
+}
+.rl-rmodal__icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 179, 92, 0.16);
+  color: #ffb35c;
+}
+.rl-rmodal__entry--block .rl-rmodal__icon {
+  background: rgba(255, 77, 109, 0.2);
+  box-shadow: 0 0 14px rgba(255, 77, 109, 0.45);
+  color: #ff4d6d;
+}
+.rl-rmodal__icon svg {
+  width: 18px;
+  height: 18px;
+}
+.rl-rmodal__text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
 }
 .rl-rmodal__title {
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.rl-rmodal__text .rl-left {
+  font-weight: 700;
+}
+.rl-rmodal__why {
+  color: #a99cc4;
+}
+.rl-rmodal__hide {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 14px;
-}
-.rl-rmodal__title svg {
-  width: 18px;
-  height: 18px;
-  flex: none;
-  color: #ff7a8a;
-}
-.rl-rmodal__left {
-  font-size: 13px;
-  font-weight: 700;
-}
-.rl-rmodal__left b {
-  font-variant-numeric: tabular-nums;
-}
-.rl-rmodal__who {
-  color: #a99cc4;
+  color: #c9b6e8;
   font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rl-rmodal__hide input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #a855f7;
 }
 .rl-rmodal__ok {
   width: 100%;
   min-height: 36px;
-  margin-top: 6px;
   border: 0;
   border-radius: 10px;
   background: linear-gradient(135deg, #a855f7, #7c3aed);

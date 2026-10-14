@@ -568,8 +568,22 @@ body.mobile:has(.modv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 .modv2 .r__l2 { overflow: hidden; color: var(--muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
 .modv2 .r__l1 { overflow: hidden; }
 .modv2[data-mode='compact'] .r__l1 { flex-wrap: wrap; row-gap: 2px; }
-.modv2 .r__l2 .timer { font-size: 11px; }
-.modv2 .r__l2 .timer--inf { color: #ffc2ca; }
+/* Actives: one line per viewer, a chip per restriction (click = change, × = lift). */
+.modv2 .rv { display: flex; min-height: 36px; align-items: center; gap: 7px; padding: 4px 6px 4px 8px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
+.modv2 .rv > .who { max-width: 30%; flex: none; }
+.modv2 .rv__chips { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.modv2 .rchip { display: inline-flex; height: 24px; flex: none; align-items: center; border: 1px solid rgba(255, 179, 92, 0.32); border-radius: 999px; background: rgba(255, 179, 92, 0.08); color: #ffd9a3; }
+.modv2 .rchip--block { border-color: rgba(255, 77, 109, 0.4); background: rgba(255, 77, 109, 0.1); color: #ffc2ca; }
+.modv2 .rchip__main { display: inline-flex; height: 100%; align-items: center; gap: 4px; padding: 0 2px 0 7px; border: 0; background: none; color: inherit; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.modv2 .rchip__main b { color: #fff; font-weight: 800; }
+.modv2 .rchip__main svg { width: 12px; height: 12px; flex: none; }
+.modv2 .rchip--block .rchip__main svg { color: #ff4d6d; }
+.modv2 .rchip .timer { margin-left: 3px; color: #ffb35c; font-size: 11px; }
+.modv2 .rchip .timer--inf { font-size: 13px; line-height: 1; }
+.modv2 .rchip__x { display: grid; width: 22px; height: 100%; flex: none; place-items: center; padding: 0; border: 0; border-radius: 0 999px 999px 0; background: none; color: inherit; opacity: 0.7; cursor: pointer; }
+.modv2 .rchip__x:hover { background: rgba(255, 255, 255, 0.08); opacity: 1; }
+.modv2 .rchip__x svg { width: 11px; height: 11px; }
+.modv2 .rchip :focus-visible { outline: 2px solid #dcc4ff; outline-offset: -2px; border-radius: 999px; }
 .modv2 .rbadge { display: inline-flex; height: 18px; flex: none; align-items: center; gap: 3px; padding: 0 6px; border-radius: 6px; font-size: 10px; font-weight: 800; white-space: nowrap; }
 .modv2 .rbadge svg { width: 11px; height: 11px; }
 .modv2 .rbadge--block { background: rgba(255, 122, 138, 0.14); color: #ffc2ca; }
