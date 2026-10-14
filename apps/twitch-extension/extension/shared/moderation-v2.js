@@ -5,6 +5,7 @@
 // state, no business rule here, no localStorage. The same module is Studio's « Modération » console
 // (Studio = broadcaster), so Studio and the extension show the same moderation.
 import { moneyHtml } from './currency.js';
+import { freshRestrictionFilters, restrictionRows, restrictionsView } from './moderation-restrictions.js';
 
 const P = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -214,6 +215,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   let words = null;
   let hist = null; // { key, items, more } interactions or ledger of the current history view
   let audit = null;
+  let restr = { active: null, history: null, failed: false }; // Restrictions view (Core read models)
   let destroyed = false;
   let pollTimer = null;
   let tick = null;
@@ -228,7 +230,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     return w >= 900 ? 'window' : w >= 560 ? 'video' : 'compact';
   };
   const freshFilters = () => ({ module: 'all', status: 'all', period: 'all', viewer: '' });
-  const nav = { stack: [], viewer: null, dir: '', hf: freshFilters(), htab: 'ix', vq: false, auto: false, wtype: 'watch' };
+  const nav = { stack: [], viewer: null, dir: '', hf: freshFilters(), htab: 'ix', vq: false, auto: false, wtype: 'watch', rf: freshRestrictionFilters() };
   const reset = () => (nav.stack = mode() === 'compact' ? [{ v: 'home' }] : [{ v: 'module', m: 'tts' }]);
   reset();
   const top = () => nav.stack[nav.stack.length - 1];
@@ -274,6 +276,16 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       if (vid) void loadViewer(vid);
       push({ v: 'history', vid });
       void loadHistory();
+    },
+    /** Restrictions view, filters set by the entry point (module and / or viewer): one view, several doors. */
+    restrictions(filters = {}) {
+      closeSearch();
+      closeDrawers();
+      nav.rf = { ...freshRestrictionFilters(), ...filters };
+      restr = { active: restr.active, history: null, failed: false };
+      if (top().v === 'restrictions') render();
+      else push({ v: 'restrictions' });
+      void loadRestrictions();
     },
     jetons(vid) {
       closeDrawers();
@@ -360,6 +372,27 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       toast(errorText(e), false);
     }
   }
+  /** Restrictions view: running ones (every viewer), or the restriction events of the audit. */
+  async function loadRestrictions() {
+    if (top().v !== 'restrictions') return;
+    const f = nav.rf;
+    try {
+      if (f.state === 'history') {
+        // A module's history also shows the « Tout Raptoru » blocks: read unfiltered, filtered by the view.
+        const out = await client.modV2(`audit?${q({ limit: 200, viewer: f.viewer, module: f.module === 'all' ? 'all' : null })}`);
+        if (destroyed) return;
+        restr = { ...restr, history: out.audit ?? [] };
+      } else {
+        const out = await client.modV2('restrictions');
+        if (destroyed) return;
+        restr = { ...restr, active: out.restrictions ?? [], failed: false };
+      }
+    } catch (e) {
+      restr = { ...restr, failed: true, history: restr.history ?? [] };
+      if (f.state === 'history') toast(errorText(e), false);
+    }
+    renderRestrictionRows();
+  }
   /** The history view's rows, filtered and paginated by Core. */
   async function loadHistory(more = false) {
     const t = top();
@@ -418,6 +451,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     if (drawers.some((d) => d.key === 'team')) await loadTeam();
     if (drawers.some((d) => d.key === 'words')) await loadWords();
     if (['history', 'jetons'].includes(top().v)) await loadHistory();
+    if (top().v === 'restrictions') await loadRestrictions();
     return ok;
   }
 
@@ -578,9 +612,10 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     // The console replaces the host header: its only addition to D4 is the way back to the Hub.
     const hub = onBack ? `<button class="icon-btn icon-btn--sm" data-act="hub" data-tip="Retour au Hub" aria-label="Retour au Hub">${ic('hub')}</button>` : '';
     return `<div class="side__top">${hub}<label class="search"><span class="sr">Rechercher un viewer</span>${ic('search')}<input data-q placeholder="Viewer…" autocomplete="off"></label></div>
-      <nav class="mods" data-mods aria-label="Modules">${MOD_KEYS.map((m) => modLine(m, selM === m)).join('')}</nav>
+      <div class="side__scroll" data-scroll="side"><nav class="mods" data-mods aria-label="Modules">${MOD_KEYS.map((m) => modLine(m, selM === m)).join('')}</nav>
       <button class="sidelink${t.v === 'history' && !t.vid ? ' is-sel' : ''}" data-act="history" data-histlink>${ic('history')}Historique</button>
-      ${onCommands ? `<button class="sidelink" data-act="commands">${ic('note')}Commandes</button>` : ''}
+      <button class="sidelink${t.v === 'restrictions' ? ' is-sel' : ''}" data-act="restrictions" data-restrlink>${ic('ban')}Restrictions</button>
+      ${onCommands ? `<button class="sidelink" data-act="commands">${ic('note')}Commandes</button>` : ''}</div>
       <div class="side__foot" data-foot>${footHtml()}</div>`;
   }
 
@@ -628,6 +663,15 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       ${e.refunded_by ? '<span class="meta">remboursé</span>' : ''}${e.visible_in_moderation_activity === false ? '<span class="meta">auto</span>' : ''}<span class="meta tnum">${hhmm(e.created_at)}</span></button>`;
   }
   const sec = (t, end) => `<div class="sec"><span>${t}</span>${end || ''}</div>`;
+  /** Helpers lent to the Restrictions view (moderation-restrictions.js). */
+  const RH = { ic, esc, av, MODS, MOD_KEYS, mmss, dur, hhmm, dday, actorName, nameOf: (id) => restr.active?.find((r) => r.viewer_id === id)?.display_name ?? nameOf(id), actionLabel: (a) => ACTION[a] ?? a };
+  function renderRestrictionRows() {
+    if (top().v !== 'restrictions') return;
+    const rows = L.querySelector('[data-rrows]');
+    if (!rows) return render();
+    rows.innerHTML = restrictionRows(RH, nav.rf, restr);
+    liveTick();
+  }
   const statenote = (m) => {
     const st = stateOf(m);
     if (st === 'active') return '';
@@ -656,7 +700,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       ok
         ? `<button class="icon-btn icon-btn--sm hact${danger ? ' hact--danger' : ''}${disabled ? ' is-off' : ''}" data-act="${disabled ? '' : act}" data-m="${m}" data-tip="${tip}" aria-label="${tip}" ${disabled ? 'aria-disabled="true"' : ''}>${ic(icon)}</button>`
         : `<button class="icon-btn icon-btn--sm hact is-locked" data-act="locked" data-perm="${perm}" data-tip="${tip} · permission « ${PERMS[perm][0]} »" aria-label="${tip} (verrouillé)">${ic(icon)}<i class="hact__lock">${ic('lock')}</i></button>`;
-    const hist = hb('hist-module', 'history', `Historique ${MODS[m].label}`);
+    const hist = hb('restr-module', 'ban', `Restrictions ${MODS[m].label}`) + hb('hist-module', 'history', `Historique ${MODS[m].label}`);
     const purge = () => {
       const n = waiting(m).length;
       return hb('purge', 'trash', n ? `Purger toute la file (${n})` : 'Purger toute la file · file vide', { disabled: !n, danger: true });
@@ -737,7 +781,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     b += `<div class="vact">
       <button class="btn btn--primary" data-act="block" data-v="${esc(id)}" data-m="${ctxM}" ${staff ? 'disabled data-tip="Membre de l’équipe"' : ''}>${ic('ban')}Bloquer</button>
       <button class="btn" data-act="cooldown" data-v="${esc(id)}" data-m="${ctxM}" ${staff ? 'disabled' : ''}>${ic('clock')}Cooldown</button>
-      <button class="btn" data-act="viewer-more" data-v="${esc(id)}" data-tip="Historique, Jetons, notes, wallet">Plus${ic('down')}</button></div>`;
+      <button class="btn" data-act="viewer-more" data-v="${esc(id)}" data-tip="Historique, Jetons, notes, wallet">Plus${ic('down')}</button></div>
+      <button class="linkish vrestr" data-act="viewer-restr" data-v="${esc(id)}">${ic('ban')}Gérer les restrictions</button>`;
     if (live.length) b += sec('En ce moment') + `<div class="rows">${live.map((i) => queueRow(i, i.module, true)).join('')}</div>`;
     const recent = (v.activity ?? []).filter((a) => !isLive(a)).slice(0, 4);
     const led = (v.wallet_ledger ?? []).filter((e) => e.visible_in_moderation_activity !== false).slice(0, 4);
@@ -793,7 +838,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       <div class="scroll" data-scroll="${key}"><div class="pane__body ${anim}">${scr.body}</div></div></section>`;
   }
   const viewFor = (s) =>
-    s.v === 'module' ? moduleView(s.m) : s.v === 'viewer' ? viewerView(s.id) : s.v === 'history' ? historyView(s.vid) : s.v === 'jetons' ? jetonsView(s.vid) : { body: '' };
+    s.v === 'module' ? moduleView(s.m) : s.v === 'viewer' ? viewerView(s.id) : s.v === 'history' ? historyView(s.vid) : s.v === 'jetons' ? jetonsView(s.vid) : s.v === 'restrictions' ? restrictionsView(RH, nav.rf, restr) : { body: '' };
   const banner = () =>
     gPaused() ? `<div class="gbanner">${ic('pause')}<span class="grow">Pause globale · nouvelles interactions refusées${overview.global.refused ? ` (${overview.global.refused})` : ''}</span><button class="btn btn--sm" data-act="global-resume">Lever</button></div>` : '';
   let builtMode = null;
@@ -827,12 +872,15 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       } else {
         side.querySelector('[data-mods]').innerHTML = MOD_KEYS.map((m) => modLine(m, t.v === 'module' && t.m === m)).join('');
         side.querySelector('[data-histlink]').classList.toggle('is-sel', t.v === 'history' && !t.vid);
+        side.querySelector('[data-restrlink]').classList.toggle('is-sel', t.v === 'restrictions');
         side.querySelector('[data-foot]').innerHTML = footHtml();
       }
     }
     const stage = L.querySelector('[data-stage-body]');
     const typing = document.activeElement?.matches?.('[data-hq]') && node.contains(document.activeElement);
-    if (typing && t.v === 'history') {
+    const typingR = document.activeElement?.matches?.('[data-rq]') && node.contains(document.activeElement);
+    if (typingR && t.v === 'restrictions') renderRestrictionRows();
+    else if (typing && t.v === 'history') {
       // Filtering by viewer: only the rows change (the field keeps focus and caret).
       stage.querySelector('[data-hist]').innerHTML = historyRows(t.vid);
     } else if (md === 'compact' && t.v === 'home') {
@@ -1060,7 +1108,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
 
   function blockDialog(vid, m) {
     dialog({
-      state: { module: MODS[m] ? m : 'tts', d: 300, cv: 10, cu: 'min', reason: '', why: false },
+      state: { module: MODS[m] || m === 'all' ? m : 'tts', d: 300, cv: 10, cu: 'min', reason: '', why: false },
       render(s) {
         const forever = s.d === 'forever';
         const secs = forever ? null : s.d === 'custom' ? toSecs(s.cv, s.cu) : Number(s.d);
@@ -1274,7 +1322,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     return { kicker: 'Activité Jetons', title: esc(e.label), body: b };
   }
   function auditDrawer(id) {
-    const a = (hist?.items ?? audit ?? []).find((x) => String(x.id) === String(id));
+    const a = [...(hist?.items ?? audit ?? []), ...(restr.history ?? [])].find((x) => String(x.id) === String(id));
     if (!a) return null;
     return {
       kicker: `Historique · ${hhmm(a.created_at)}`,
@@ -1502,6 +1550,17 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       render();
     },
     history: (d) => open.history(d.v),
+    restrictions: () => open.restrictions(),
+    'restr-module': (d) => open.restrictions({ module: d.m }),
+    // From a viewer card: that viewer, and the module the card was opened from (if any).
+    'viewer-restr': (d) => open.restrictions({ viewer: d.v, module: [...nav.stack].reverse().find((s) => s.v === 'module')?.m ?? 'any' }),
+    rfilter: (d) => {
+      nav.rf = { ...nav.rf, [d.k]: d.k === 'viewer' ? d.val || null : d.val };
+      // Active rows are filtered here; the history is read again from Core (viewer / « Global » filters).
+      if (nav.rf.state === 'history') restr = { ...restr, history: null };
+      render();
+      void loadRestrictions();
+    },
     jetons: (d) => open.jetons(d.v),
     htab: (d) => {
       nav.htab = d.val;
@@ -1680,6 +1739,11 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   let hqTimer = null;
   node.addEventListener('input', (e) => {
     const t = e.target;
+    if (t.matches?.('[data-rq]')) {
+      nav.rf.q = t.value;
+      renderRestrictionRows();
+      return;
+    }
     if (t.matches?.('[data-hq]')) {
       nav.hf.viewer = t.value;
       win.clearTimeout(hqTimer);
@@ -1722,6 +1786,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       await refresh();
       const vid = viewerInView();
       if (vid) await loadViewer(vid);
+      if (top().v === 'restrictions' && nav.rf.state === 'active') await loadRestrictions();
       if (drawers.some((d) => d.key === 'team')) await loadTeam();
       for (const d of drawers) if (d.key?.startsWith('ix:')) await loadDetail(d.key.slice(3));
     }

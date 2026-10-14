@@ -538,3 +538,60 @@ body.mobile:has(.modv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 .modv2 .linkish svg { width: 12px; height: 12px; vertical-align: -1px; }
 /* Compact with a full live bar (4+ icons): the module name stays whole, its coloured badge gives way. */
 .modv2[data-mode='compact'] .pane__head:has(.hacts .hact:nth-child(4)) .pane__title .ttl-ic { display: none; }
+
+/* Left column: search on top and foot (En direct, équipe) always visible; only the middle part scrolls, if
+   needed (565×376: nothing cut, nothing shrunk). */
+.modv2 .side { min-height: 0; overflow: hidden; }
+.modv2 .side__scroll { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; gap: 4px; margin-right: -4px; padding-right: 4px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(168, 85, 247, 0.4) transparent; }
+.modv2 .side__scroll > .sidelink { flex: none; }
+.modv2 .side__foot { flex: none; }
+.modv2 .side--home .side__scroll { overflow: visible; }
+
+/* Restrictions (one view; filters set by its entry point). Compact rows: who · type · scope · time left. */
+.modv2 .rbar { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.modv2 .rbar .search--sm { min-width: 0; flex: 1; margin-top: 0; }
+.modv2 .rbar .chip { max-width: 55%; }
+.modv2 .rbar .chip svg { width: 12px; height: 12px; }
+.modv2 .rchips { margin: 6px 0 4px; gap: 3px; }
+.modv2 .rchips .chip { min-height: 26px; gap: 4px; padding: 0 7px; }
+.modv2 .rchips .mini { width: 13px; height: 13px; }
+.modv2 .rchips .mini svg { width: 12px; height: 12px; }
+.modv2 .rlist { display: flex; flex-direction: column; gap: 3px; }
+.modv2 .r { display: flex; min-height: 38px; align-items: center; gap: 7px; padding: 4px 2px 4px 8px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.03); color: var(--ink); text-align: left; }
+.modv2 .r--hist { width: 100%; padding-right: 8px; }
+.modv2 .r--hist:hover { background: rgba(255, 255, 255, 0.06); }
+.modv2 .r__t { flex: none; color: var(--faint); font-size: 10px; line-height: 1.2; text-align: right; }
+.modv2 .r__main { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 1px; }
+.modv2 .r__l1 { display: flex; min-width: 0; align-items: center; gap: 5px; font-size: 12px; }
+.modv2 .r__l1 .who { max-width: 40%; }
+.modv2 .r__l1 > b { max-width: 40%; font-size: 12px; }
+.modv2 .r__l2 { overflow: hidden; color: var(--muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.modv2 .r__l1 { overflow: hidden; }
+.modv2[data-mode='compact'] .r__l1 { flex-wrap: wrap; row-gap: 2px; }
+.modv2 .r__l2 .timer { font-size: 11px; }
+.modv2 .r__l2 .timer--inf { color: #ffc2ca; }
+.modv2 .rbadge { display: inline-flex; height: 18px; flex: none; align-items: center; gap: 3px; padding: 0 6px; border-radius: 6px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.modv2 .rbadge svg { width: 11px; height: 11px; }
+.modv2 .rbadge--block { background: rgba(255, 122, 138, 0.14); color: #ffc2ca; }
+.modv2 .rbadge--cd { background: rgba(124, 196, 255, 0.12); color: #c3e4ff; }
+.modv2 .rbadge--lift { background: rgba(94, 230, 160, 0.12); color: #b6f3d3; }
+.modv2 .rscope { display: inline-flex; height: 18px; flex: none; align-items: center; gap: 3px; padding: 0 5px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.modv2 .rscope svg { width: 11px; height: 11px; color: var(--c); }
+.modv2 .rscope--all { border-color: rgba(255, 122, 138, 0.35); color: #ffc2ca; }
+.modv2 .rfine { display: flex; align-items: center; gap: 5px; font-size: 10.5px; }
+.modv2 .rfine svg { width: 12px; height: 12px; flex: none; }
+.modv2 .vrestr { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; }
+.modv2 .vrestr svg { width: 13px; height: 13px; }
+/* Compact-video profile (565×376, same window as hub.css): denser left column, same font sizes. */
+@media (min-width: 521px) and (min-height: 321px) and (max-height: 400px) {
+  body.component-view .modv2 .side { gap: 3px; padding-top: 6px; }
+  body.component-view .modv2 .side__top { margin-bottom: 1px; }
+  body.component-view .modv2 .side__scroll { gap: 3px; }
+  body.component-view .modv2 .mods { gap: 3px; }
+  body.component-view .modv2 .mod { padding: 4px 9px 4px 10px; }
+  body.component-view .modv2 .sidelink { min-height: 28px; }
+  body.component-view .modv2 .side__foot { padding-top: 4px; }
+  /* Tombola with a round open (6 header icons): state button as a dot, like the compact mode. */
+  body.component-view .modv2 .pane__head:has(.hacts .hact:nth-child(6)) .pane__title .ttl-ic { display: none; }
+  body.component-view .modv2 .pane__head:has(.hacts .hact:nth-child(6)) .statebtn { gap: 3px; padding: 0 5px 0 8px; font-size: 0; }
+}
