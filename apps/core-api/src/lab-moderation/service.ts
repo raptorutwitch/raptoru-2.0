@@ -27,12 +27,14 @@ import {
   isStaff,
   LabForbiddenError,
   permissionsFor,
+  personalCooldownMs,
   readWallet,
   restrictions,
   setBlock,
   touchStaff,
   type Access,
   type Actor,
+  type LabModule,
 } from './store.js';
 import { normalizeWord, wordRules } from './words.js';
 
@@ -766,6 +768,33 @@ export class LabModerationService {
         ? { delay_s: r.delay_s ?? 0, stream: Boolean(r.stream) }
         : {}),
     }));
+  }
+
+  /**
+   * The viewer's own feedback (extension Hub / modules): the viewer card's `restrictions`, plus for a
+   * personal cooldown `wait_until` = when the next use is allowed (null = allowed now). Read only.
+   */
+  async viewerRestrictions(channelId: string, viewerId: string) {
+    const now = this.clock.now();
+    const rows = await restrictions(this.db, channelId, viewerId, now);
+    return Promise.all(
+      rows.map(async (r) => {
+        if (r.kind !== 'cooldown') return r;
+        const wait = await personalCooldownMs(
+          this.db,
+          channelId,
+          viewerId,
+          r.module as LabModule,
+          now,
+        );
+        return {
+          ...r,
+          wait_until: wait
+            ? new Date(now.getTime() + wait).toISOString()
+            : null,
+        };
+      }),
+    );
   }
 
   private async roleOf(q: Queryable, channelId: string, viewerId: string) {

@@ -87,6 +87,8 @@ interface LabUser {
   pending: Json[];
   receipts: Json[];
   levelUpSfx: boolean;
+  /** This viewer's own Raptoru restrictions (Core), for the Hub / module feedback. */
+  restrictions?: Json[];
 }
 
 interface Reply {
@@ -404,6 +406,18 @@ export class LabEbs {
           .catch(() => undefined),
       );
     }
+    if (viewerId)
+      tasks.push(
+        this.labCore<{ restrictions: Json[] }>(
+          `/v1/lab/moderation/${LAB_CHANNEL.id}/viewers/${viewerId}/restrictions`,
+          undefined,
+          { timeoutMs: 1500 },
+        )
+          .then((r) => {
+            this.user(viewerId).restrictions = r.restrictions;
+          })
+          .catch(() => undefined),
+      );
     tasks.push(this.refreshRaffle(viewerId));
     await Promise.all(tasks);
   }
@@ -1511,6 +1525,7 @@ export class LabEbs {
             'action_receipts',
             'recent_activity',
             'notifications',
+            'restrictions',
             // The extension only re-reads /state after its first load: the Soundboard Lab catalog
             // (prices, cooldowns, enabled) must follow, or a Studio change never reaches it.
             ...(this.soundWorker || this.ttsWorker ? ['modules'] : []),
@@ -1980,6 +1995,10 @@ export class LabEbs {
         : { unavailable: true },
       credits: { ...user.credits },
       pending_actions: identityShared ? structuredClone(user.pending) : [],
+      // Raptoru restrictions of this viewer (never a Twitch sanction): Core's rows, own ones only.
+      restrictions: identityShared
+        ? structuredClone(user.restrictions ?? [])
+        : [],
       action_receipts: user.receipts.slice(0, 10),
       notifications: [],
       moderation: isMod

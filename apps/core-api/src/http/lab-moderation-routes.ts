@@ -144,6 +144,16 @@ export function labModerationRoutes(
       })),
     },
     {
+      // The viewer's own restrictions (extension feedback), asked by the EBS for its caller only.
+      method: 'GET',
+      pattern:
+        /^\/v1\/lab\/moderation\/([^/]+)\/viewers\/([^/]+)\/restrictions$/,
+      auth: 'studio',
+      handle: read(async (c, _url, params) => ({
+        restrictions: await mod.viewerRestrictions(c, parse(Digits, params[1])),
+      })),
+    },
+    {
       method: 'GET',
       pattern: /^\/v1\/lab\/moderation\/([^/]+)\/viewers\/([^/]+)$/,
       auth: 'studio',

@@ -673,6 +673,47 @@ describe('Restrictions view (read model, every viewer of the channel)', () => {
   });
 });
 
+describe('Viewer feedback (own restrictions)', () => {
+  it('a personal cooldown says when the next use is allowed; a block keeps until, author and reason', async () => {
+    const { act, bonk, m, core } = await lab();
+    await act({
+      action: 'set_cooldown',
+      viewer_id: '900310',
+      module: 'bonk',
+      delay_s: 60,
+      span: 900,
+    });
+    await act({
+      action: 'block_viewer',
+      viewer_id: '900310',
+      module: 'tts',
+      duration_s: 300,
+      reason: 'spam',
+    });
+    const before = await m.viewerRestrictions(CHANNEL, '900310');
+    expect(before).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'cooldown',
+          module: 'bonk',
+          wait_until: null,
+        }),
+        expect.objectContaining({
+          kind: 'block',
+          module: 'tts',
+          reason: 'spam',
+          actor: 'studio:antoni',
+        }),
+      ]),
+    );
+    await bonk('900310'); // a use: the next one waits the imposed delay
+    const cd = (await m.viewerRestrictions(CHANNEL, '900310')).find(
+      (r) => r.kind === 'cooldown',
+    ) as { wait_until: string };
+    expect(Date.parse(cd.wait_until) - core.clock.now().getTime()).toBe(60_000);
+  });
+});
+
 describe('D4 internal notes', () => {
   it('any moderator adds a note (author, time, team only); a viewer cannot; audited; 140 characters max', async () => {
     const { act, code, m, core } = await lab();
