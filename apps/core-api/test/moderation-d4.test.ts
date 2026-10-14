@@ -612,6 +612,67 @@ describe('D4 watched / blocked words (TTS admission in Core)', () => {
   });
 });
 
+describe('Restrictions view (read model, every viewer of the channel)', () => {
+  it('lists running blocks (module, everything, until unblocked) and personal cooldowns; lifted or expired → gone', async () => {
+    const { act, sound, m, core } = await lab();
+    await sound('900300'); // seen: has a display name
+    await act({
+      action: 'block_viewer',
+      viewer_id: '900300',
+      module: 'tts',
+      duration_s: 300,
+      reason: 'spam',
+    });
+    await act({
+      action: 'block_viewer',
+      viewer_id: '900301',
+      module: 'all',
+      duration_s: null,
+    });
+    await act({
+      action: 'set_cooldown',
+      viewer_id: '900302',
+      module: 'bonk',
+      delay_s: 60,
+      span: 900,
+    });
+    const list = await m.activeRestrictions(CHANNEL);
+    expect(list).toHaveLength(3);
+    expect(list).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'block',
+          viewer_id: '900300',
+          display_name: 'V900300',
+          module: 'tts',
+          reason: 'spam',
+          actor: 'studio:antoni',
+        }),
+        expect.objectContaining({
+          kind: 'block',
+          viewer_id: '900301',
+          module: 'all',
+          until: null,
+        }),
+        expect.objectContaining({
+          kind: 'cooldown',
+          viewer_id: '900302',
+          module: 'bonk',
+          delay_s: 60,
+          stream: false,
+        }),
+      ]),
+    );
+    // Same rows as each viewer card.
+    expect((await m.viewer(CHANNEL, '900300')).restrictions).toHaveLength(1);
+    await act({ action: 'unblock_viewer', viewer_id: '900301', module: 'all' });
+    core.clock.advance(300_000); // the TTS block ends
+    expect(
+      (await m.activeRestrictions(CHANNEL)).map((r) => r.viewer_id),
+    ).toEqual(['900302']);
+  });
+});
+
 describe('D4 internal notes', () => {
   it('any moderator adds a note (author, time, team only); a viewer cannot; audited; 140 characters max', async () => {
     const { act, code, m, core } = await lab();

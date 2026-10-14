@@ -153,6 +153,8 @@ export function labProxy(d: LabProxyDeps) {
         );
       else if (get && (m = /^\/viewers\/(\d{1,32})$/.exec(p)))
         reply(200, await d.core(`/v1/lab/moderation/${C}/viewers/${m[1]}`));
+      else if (get && p === '/restrictions')
+        reply(200, await d.core(`/v1/lab/moderation/${C}/restrictions`));
       else if (get && p === '/audit') {
         const qs = new URLSearchParams();
         for (const k of ['module', 'viewer', 'limit']) {

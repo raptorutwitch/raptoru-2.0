@@ -725,6 +725,49 @@ export class LabModerationService {
     }));
   }
 
+  /**
+   * « Restrictions » view: every block and personal cooldown still running on the channel (same rows and
+   * same shape as the viewer card's `restrictions`, plus who). Read only: no new rule.
+   */
+  async activeRestrictions(channelId: string, limit = 200) {
+    const now = this.clock.now();
+    const rows = await this.db.query<{
+      kind: 'block' | 'cooldown';
+      viewer_id: string;
+      display_name: string | null;
+      module_id: string;
+      until: Date | null;
+      delay_s: number | null;
+      stream: boolean | null;
+      reason: string | null;
+      actor: string;
+      created_at: Date;
+    }>(
+      `select r.*, v.display_name from (
+         select 'block' as kind, viewer_id, module_id, until, null::int as delay_s, null::boolean as stream, reason, actor, created_at
+           from lab_viewer_blocks where channel_id = $1 and (until is null or until > $2)
+         union all
+         select 'cooldown', viewer_id, module_id, until, delay_s, stream, reason, actor, created_at
+           from lab_viewer_cooldowns where channel_id = $1 and until > $2
+       ) r left join lab_viewers v on v.channel_id = $1 and v.viewer_id = r.viewer_id
+       order by r.created_at desc limit $3`,
+      [channelId, now, limit],
+    );
+    return rows.map((r) => ({
+      kind: r.kind,
+      viewer_id: r.viewer_id,
+      display_name: r.display_name ?? r.viewer_id,
+      module: r.module_id,
+      until: r.until ? new Date(r.until).toISOString() : null,
+      reason: r.reason,
+      actor: r.actor,
+      created_at: new Date(r.created_at).toISOString(),
+      ...(r.kind === 'cooldown'
+        ? { delay_s: r.delay_s ?? 0, stream: Boolean(r.stream) }
+        : {}),
+    }));
+  }
+
   private async roleOf(q: Queryable, channelId: string, viewerId: string) {
     if (viewerId === channelId) return 'broadcaster';
     return (

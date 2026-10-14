@@ -591,6 +591,10 @@ export class LabEbs {
         return this.ok(
           await core<Json>(`/v1/lab/moderation/${C}/viewers/${m[1]}?${as}`),
         );
+      if (method === 'GET' && path === '/moderation/v2/restrictions')
+        return this.ok(
+          await core<Json>(`/v1/lab/moderation/${C}/restrictions?${as}`),
+        );
       if (method === 'GET' && path === '/moderation/v2/audit')
         return this.ok(
           await core<Json>(

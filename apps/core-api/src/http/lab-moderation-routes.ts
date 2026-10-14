@@ -137,6 +137,14 @@ export function labModerationRoutes(
     },
     {
       method: 'GET',
+      pattern: /^\/v1\/lab\/moderation\/([^/]+)\/restrictions$/,
+      auth: 'studio',
+      handle: read(async (c) => ({
+        restrictions: await mod.activeRestrictions(c),
+      })),
+    },
+    {
+      method: 'GET',
       pattern: /^\/v1\/lab\/moderation\/([^/]+)\/viewers\/([^/]+)$/,
       auth: 'studio',
       handle: read((c, _url, params) =>
