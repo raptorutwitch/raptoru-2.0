@@ -102,6 +102,10 @@ export interface AppDeps {
     facade: ExtFacade;
     secret: Buffer;
     channelId: string;
+    /** Twitch OAuth return of the Bonk emotes linking (no JWT): page shown in the viewer's browser. */
+    emotesCallback?: (
+      q: URLSearchParams,
+    ) => Promise<{ status: number; title: string; text: string }>;
     /** Rate limits (defaults below; tests use tiny ones). */
     limits?: { ip: BucketRule; viewer: BucketRule };
   };
@@ -371,6 +375,7 @@ function send(
 /** Pages of a Twitch Extension are served from https://<client id>.ext-twitch.tv only. */
 const EXTENSION_ORIGIN = /^https:\/\/[a-z0-9]{1,64}\.ext-twitch\.tv$/;
 const EXT_PREFIX = '/v1/ext/';
+const EXT_OAUTH_CALLBACK = '/v1/ext/emotes/oauth/callback';
 
 function extCors(origin: string | undefined): Record<string, string> {
   return {
@@ -420,6 +425,39 @@ export function createHandler(deps: AppDeps): RequestListener {
         'access-control-max-age': '600',
       });
       res.end();
+      return;
+    }
+    // Twitch sends the viewer's browser back here after the emotes authorization: no JWT (the
+    // one-time state names the viewer), an HTML page, rate limited per IP like the rest of /v1/ext.
+    if (
+      req.method === 'GET' &&
+      url.pathname === EXT_OAUTH_CALLBACK &&
+      deps.ext?.emotesCallback
+    ) {
+      const page = ipLimit.take(clientIp(req))
+        ? await deps.ext.emotesCallback(url.searchParams).catch(() => ({
+            status: 500,
+            title: 'Connexion Twitch indisponible',
+            text: 'Réessaie dans un instant depuis l’extension.',
+          }))
+        : {
+            status: 429,
+            title: 'Trop de demandes',
+            text: 'Réessaie dans un instant.',
+          };
+      const esc = (t: string) =>
+        t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+      res.writeHead(page.status, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'content-security-policy':
+          "default-src 'none'; style-src 'unsafe-inline'",
+        'referrer-policy': 'no-referrer',
+        'x-frame-options': 'DENY',
+      });
+      res.end(
+        `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(page.title)}</title><body style="font-family:system-ui;background:#111317;color:#e6e8eb;padding:40px"><h2>${esc(page.title)}</h2><p>${esc(page.text)}</p></body></html>`,
+      );
       return;
     }
     try {

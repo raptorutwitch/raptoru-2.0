@@ -1,4 +1,5 @@
 import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
+import type { TwitchViewerCatalog } from './bonk-lab/twitch-viewer.js';
 import { RaffleLabService } from './raffle-lab/raffle-lab-service.js';
 import { SoundLabService } from './sound-lab/sound-lab-service.js';
 import { TtsLabService } from './tts-lab/tts-lab-service.js';
@@ -27,6 +28,8 @@ export interface Core {
   soundLab: SoundLabService;
   ttsLab: TtsLabService;
   raffleLab: RaffleLabService;
+  /** Twitch viewers (Bonk emotes): linking + personal catalogs. Null = Twitch emotes off. */
+  twitchViewers: TwitchViewerCatalog | null;
   /** Studio installation credentials of the future production transport (ASTRA-P1-019). */
   studioInstallations: StudioInstallations;
 }
@@ -36,6 +39,7 @@ export function createCore(
   clock: Clock,
   provider: CreditProvider,
   loyaltyModes: LoyaltyModes = SHADOW_MODES,
+  twitchViewers: TwitchViewerCatalog | null = null,
 ): Core {
   const credits = new DailyCredits(db, provider);
   const wallet = createWalletModule(db, clock);
@@ -47,7 +51,9 @@ export function createCore(
     presence: new PresenceService(db, clock, loyalty.presenceListener),
     wallet,
     loyalty,
-    bonkLab: new BonkLabService(db, clock),
+    // The Bonk accepts a Twitch emote only from the viewer's own catalog (none: Twitch emotes off).
+    bonkLab: new BonkLabService(db, clock, twitchViewers),
+    twitchViewers,
     soundLab: new SoundLabService(db, clock),
     ttsLab: new TtsLabService(db, clock),
     raffleLab: new RaffleLabService(db, clock),

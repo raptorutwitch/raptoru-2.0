@@ -7,7 +7,10 @@ import {
   WalletCreditProvider,
 } from './daily/credits.js';
 import { createPgDb, SERVER_DB_LIMITS } from './db/db.js';
-import { createPublicFrontier } from './ext/public-frontier.js';
+import {
+  createPublicFrontier,
+  publicTwitchViewers,
+} from './ext/public-frontier.js';
 import { createApp } from './http/server.js';
 
 const config = loadConfig();
@@ -17,11 +20,17 @@ const dailyProvider: CreditProvider =
   config.DAILY_WALLET_CREDITS === 'true'
     ? new WalletCreditProvider(db)
     : new DevFakeCreditProvider();
-const core = createCore(db, systemClock, dailyProvider, {
-  preview: config.LOYALTY_PREVIEW === 'true',
-  passiveCredits: config.LOYALTY_PASSIVE_CREDITS === 'true',
-  eventCredits: config.LOYALTY_EVENT_CREDITS === 'true',
-});
+const core = createCore(
+  db,
+  systemClock,
+  dailyProvider,
+  {
+    preview: config.LOYALTY_PREVIEW === 'true',
+    passiveCredits: config.LOYALTY_PASSIVE_CREDITS === 'true',
+    eventCredits: config.LOYALTY_EVENT_CREDITS === 'true',
+  },
+  publicTwitchViewers(db, systemClock, config),
+);
 
 const interrupted = await core.credits.recoverInterrupted();
 if (interrupted)
@@ -72,6 +81,6 @@ createApp({
     `[core-api] listening on :${config.PORT} (daily credits: ${dailyProvider.name}, loyalty preview ${config.LOYALTY_PREVIEW}, passive credits ${config.LOYALTY_PASSIVE_CREDITS}, event credits ${config.LOYALTY_EVENT_CREDITS})`,
   );
   console.log(
-    `[core-api] channel ${config.TWITCH_CHANNEL_ID ?? 'none'} · viewer frontier /v1/ext ${frontier?.deps.ext ? 'ON' : 'OFF'} · Studio cockpit ${frontier ? 'ON' : 'OFF'} · Twitch names ${config.TWITCH_APP_CLIENT_ID ? 'ON' : 'OFF'} · payment simulated (${config.CORE_ENVIRONMENT})`,
+    `[core-api] channel ${config.TWITCH_CHANNEL_ID ?? 'none'} · viewer frontier /v1/ext ${frontier?.deps.ext ? 'ON' : 'OFF'} · Studio cockpit ${frontier ? 'ON' : 'OFF'} · Twitch names ${config.TWITCH_APP_CLIENT_ID ? 'ON' : 'OFF'} · Twitch emotes linking ${core.twitchViewers?.canLink ? 'ON' : 'OFF'} · payment simulated (${config.CORE_ENVIRONMENT})`,
   );
 });

@@ -1,4 +1,5 @@
 import type { Core } from '../app.js';
+import { TwitchViewerCatalog } from '../bonk-lab/twitch-viewer.js';
 import type { Clock } from '../clock.js';
 import type { CoreConfig } from '../config.js';
 import type { Db } from '../db/db.js';
@@ -17,6 +18,35 @@ import { TwitchNames } from './twitch-names.js';
 // the Lab services and routes (Moderation V2, Tombola, test wallet, Bonk / Soundboard / TTS admission)
 // behind an in-process call only — never mounted on the HTTP server. Off unless the Core is told its
 // channel (TWITCH_CHANNEL_ID); the viewer frontier also needs the extension secret.
+
+/**
+ * Twitch viewers of the public Core (Bonk emotes): the Twitch app of TWITCH_APP_CLIENT_ID (the same
+ * app as the local Lab Core's linking), the HTTPS redirect of EXT_TWITCH_REDIRECT_URI (absent = no
+ * linking, the catalogs still check the Bonk), tokens encrypted with EXT_TOKEN_KEY.
+ */
+export function publicTwitchViewers(
+  db: Db,
+  clock: Clock,
+  config: CoreConfig,
+): TwitchViewerCatalog | null {
+  if (!config.TWITCH_APP_CLIENT_ID || !config.TWITCH_APP_CLIENT_SECRET)
+    return null;
+  return new TwitchViewerCatalog(
+    db,
+    clock,
+    {
+      clientId: config.TWITCH_APP_CLIENT_ID,
+      clientSecret: config.TWITCH_APP_CLIENT_SECRET,
+    },
+    fetch,
+    {
+      redirectUri: config.EXT_TWITCH_REDIRECT_URI ?? null,
+      tokenKey: config.EXT_TOKEN_KEY
+        ? Buffer.from(config.EXT_TOKEN_KEY, 'base64')
+        : null,
+    },
+  );
+}
 
 export interface PublicFrontier {
   deps: Pick<AppDeps, 'ext' | 'cockpit'>;
@@ -57,6 +87,16 @@ export function createPublicFrontier(
   const secret = config.TWITCH_EXTENSION_SECRET
     ? Buffer.from(config.TWITCH_EXTENSION_SECRET, 'base64')
     : null;
+  const facade = new ExtFacade(
+    call,
+    new TwitchNames(app),
+    {
+      channelId,
+      channelLogin: config.TWITCH_CHANNEL_LOGIN,
+      environment: config.CORE_ENVIRONMENT,
+    },
+    core.twitchViewers,
+  );
   return {
     deps: {
       cockpit: { core: call, channelId },
@@ -64,11 +104,8 @@ export function createPublicFrontier(
         ? {
             secret,
             channelId,
-            facade: new ExtFacade(call, new TwitchNames(app), {
-              channelId,
-              channelLogin: config.TWITCH_CHANNEL_LOGIN,
-              environment: config.CORE_ENVIRONMENT,
-            }),
+            facade,
+            emotesCallback: (q: URLSearchParams) => facade.oauthCallback(q),
           }
         : undefined,
     },

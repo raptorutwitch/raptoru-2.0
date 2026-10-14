@@ -1,4 +1,9 @@
 import { BONK_LAB_RULES } from '../bonk-lab/bonk-lab-service.js';
+import {
+  type TwitchViewerCatalog,
+  TwitchViewerError,
+} from '../bonk-lab/twitch-viewer.js';
+import { twitchEmoteGroups } from './twitch-emote-groups.js';
 import type { LabCall, LabCallError } from './lab-internal.js';
 import type { ExtCaller } from './twitch-jwt.js';
 import type { TwitchName, TwitchNames } from './twitch-names.js';
@@ -110,6 +115,8 @@ export class ExtFacade {
     private readonly core: LabCall,
     private readonly names: TwitchNames,
     private readonly config: ExtConfig,
+    /** Twitch viewers (Bonk emotes): linking and personal catalogs; null = off. */
+    private readonly twitch: TwitchViewerCatalog | null = null,
   ) {}
 
   private get C() {
@@ -131,12 +138,19 @@ export class ExtFacade {
     if (method === 'GET' && path === '/tts/state') return this.ttsState(who);
     if (path === '/viewer/preferences')
       return this.viewerPreferences(who, method, body);
+    // Bonk « Twitch » source: always the account of the JWT (never an id sent by the client).
     if (path === '/emotes' || path === '/emotes/refresh')
-      return ok({ connected: true, twitch_connected: false, groups: [] });
-    if (method === 'POST' && path === '/emotes/oauth/disconnect')
+      return ok(await this.emotes(caller, path === '/emotes/refresh'));
+    if (method === 'POST' && path === '/emotes/oauth/disconnect') {
+      if (this.twitch && caller.userId)
+        await this.twitch.disconnect(caller.userId);
       return ok({ revoked: true });
-    if (method === 'POST' && path === '/emotes/oauth/start')
-      return fail(409, 'twitch_emotes_unavailable');
+    }
+    if (method === 'POST' && path === '/emotes/oauth/start') {
+      if (!this.twitch?.canLink) return fail(409, 'twitch_emotes_unavailable');
+      if (!caller.userId) return fail(403, 'identity_required');
+      return ok(await this.twitch.startAuth(caller.userId));
+    }
     if (method === 'GET' && path === '/raffle/state')
       return this.raffleState(who);
     if (method === 'POST' && path === '/actions/raffle')
@@ -160,6 +174,78 @@ export class ExtFacade {
       return this.legacyModeration(method, path, body, who);
     }
     return fail(404, 'not_available');
+  }
+
+  // --- Twitch emotes (Bonk) ----------------------------------------------------------------------
+
+  /** The viewer's Twitch emotes: state + catalog of the JWT's account (stored catalog at once). */
+  private async emotes(caller: ExtCaller, force: boolean): Promise<Json> {
+    if (!this.twitch || !caller.userId)
+      return {
+        connected: true,
+        twitch_connected: false,
+        twitch_status: 'not_linked',
+        groups: [],
+      };
+    const s = await this.twitch.emotesState(caller.userId, {
+      force,
+      waitMs: force ? 6000 : 0,
+    });
+    return {
+      connected: true,
+      twitch_connected: ['ready', 'syncing', 'stale'].includes(s.status),
+      twitch_status: s.status,
+      twitch_login: s.viewer?.display_name ?? null,
+      ...(s.catalog ? { twitch_fetched_at: s.catalog.fetched_at } : {}),
+      groups: s.catalog ? twitchEmoteGroups(s.catalog) : [],
+    };
+  }
+
+  /**
+   * GET /v1/ext/emotes/oauth/callback: Twitch sends the viewer's browser back here (no JWT; the
+   * one-time state names the viewer). Logs: user id, scopes, outcome — never a token.
+   */
+  async oauthCallback(
+    q: URLSearchParams,
+  ): Promise<{ status: number; title: string; text: string }> {
+    if (!this.twitch?.canLink)
+      return { status: 404, title: 'Introuvable', text: '' };
+    const code = q.get('code');
+    const state = q.get('state');
+    if (!code || !state)
+      return {
+        status: 400,
+        title: 'Connexion Twitch annulée',
+        text: 'Aucune autorisation n’a été donnée. Tu peux fermer cette fenêtre.',
+      };
+    try {
+      const viewer = await this.twitch.completeAuth(
+        code.slice(0, 512),
+        state.slice(0, 128),
+      );
+      console.info(
+        `[ext] Twitch emotes linked · user ${viewer.user_id} · scopes ${viewer.scopes.join(' ')}`,
+      );
+      return {
+        status: 200,
+        title: 'Connexion Twitch réussie',
+        text: `Compte : ${viewer.display_name}. Tu peux fermer cette fenêtre et revenir sur le stream.`,
+      };
+    } catch (error) {
+      const reason =
+        error instanceof TwitchViewerError ? error.code : 'oauth_failed';
+      console.warn(`[ext] Twitch emotes link refused · ${reason}`);
+      return {
+        status: 400,
+        title: 'Connexion Twitch refusée',
+        text:
+          reason === 'oauth_wrong_account'
+            ? 'Ce compte Twitch n’est pas celui avec lequel tu regardes le stream. Recommence depuis l’extension avec le bon compte.'
+            : reason === 'oauth_state_invalid'
+              ? 'Ce lien a expiré ou a déjà servi. Recommence depuis l’extension.'
+              : 'La connexion n’a pas pu aboutir. Recommence depuis l’extension.',
+      };
+    }
   }
 
   // --- identity ----------------------------------------------------------------------------------

@@ -216,24 +216,26 @@ describe('Lab / prod migration boundary', () => {
 });
 
 describe('staging scope (staging Core only)', () => {
-  it('= the production selection + exactly the two explicit Lab extras (never Commands V2)', async () => {
+  it('= the production selection + exactly the three explicit Lab extras (never Commands V2)', async () => {
     const files = await readdir(DEFAULT_MIGRATIONS_DIR);
     const prod = selectMigrations(files, 'prod');
     const staging = selectMigrations(files, 'staging');
     expect(staging.filter((f) => !prod.includes(f))).toEqual([
       '20261015120000_lab_moderation_idempotency.sql',
       '20261016130000_lab_stream_session_twitch_id.sql',
+      '20261017120000_bonk_lab_viewer_oauth.sql',
     ]);
     expect(staging.some((f) => f.includes('commands_v2'))).toBe(false);
     expect(prod.length).toBe(18);
   });
 
-  it('on a database already migrated in prod: applies the two extras only, once', async () => {
+  it('on a database already migrated in prod: applies the three extras only, once', async () => {
     const db = createPgliteDb(new PGlite());
     expect((await migrate(db, 'prod')).length).toBe(18);
     expect(await migrate(db, 'staging')).toEqual([
       '20261015120000_lab_moderation_idempotency.sql',
       '20261016130000_lab_stream_session_twitch_id.sql',
+      '20261017120000_bonk_lab_viewer_oauth.sql',
     ]);
     expect(await migrate(db, 'staging')).toEqual([]);
     expect(

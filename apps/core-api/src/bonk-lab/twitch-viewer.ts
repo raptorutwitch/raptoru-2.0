@@ -7,11 +7,13 @@ import type {
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import { openToken, sealToken } from './token-crypto.js';
 
-// Bonk V2 Lab — Twitch viewer identity and personal emote catalog. Read-only: the only scope is
-// user:read:emotes, the only Twitch data calls are Get User Emotes and Get Users. The OAuth token
-// lives in the local Lab database; no route returns it. Core builds every emote URL itself from the
-// emote id (the client never supplies a URL).
+// Bonk — Twitch viewer identity and personal emote catalog. Read-only: the only scope is
+// user:read:emotes, the only Twitch data calls are Get User Emotes and Get Users. One OAuth system for
+// the local Lab Core (Studio loopback redirect) and the public Core (/v1/ext, HTTPS redirect, viewer
+// of the extension JWT, tokens encrypted at rest). No route returns a token. Core builds every emote
+// URL itself from the emote id (the client never supplies a URL).
 
 export const VIEWER_SCOPES = ['user:read:emotes'];
 /** Already registered on the Raptoru 2.0 Twitch application (see twitch-bot `twitch:auth`). */
@@ -29,6 +31,8 @@ export class TwitchViewerError extends Error {
       | 'oauth_exchange_failed'
       | 'oauth_wrong_scopes'
       | 'oauth_wrong_client'
+      | 'oauth_wrong_account'
+      | 'oauth_unavailable'
       | 'reauth_required'
       | 'viewer_not_linked'
       | 'catalog_unavailable',
@@ -59,6 +63,17 @@ interface HelixEmote {
   format: string[];
 }
 
+/** Emotes of a viewer as the extension shows them (Bonk source « Twitch »). */
+export type TwitchEmotesStatus =
+  'not_linked' | 'syncing' | 'ready' | 'stale' | 'reauth_required';
+
+export interface TwitchViewerOptions {
+  /** OAuth redirect: the Studio loopback (default, Lab Core), an HTTPS URL (public Core), or null = no linking. */
+  redirectUri?: string | null;
+  /** EXT_TOKEN_KEY (32 bytes): tokens encrypted at rest. Null = stored as they are (local Lab Core). */
+  tokenKey?: Buffer | null;
+}
+
 /** CDN URL built only from a validated Twitch emote id (dark theme, largest scale). */
 export function twitchEmoteUrl(id: string, format: 'static' | 'animated') {
   if (!/^[A-Za-z0-9_]{1,64}$/.test(id))
@@ -67,26 +82,51 @@ export function twitchEmoteUrl(id: string, format: 'static' | 'animated') {
 }
 
 export class TwitchViewerCatalog {
+  private readonly redirectUri: string | null;
+  private readonly tokenKey: Buffer | null;
+  /** Background catalog reloads in flight, and the last one's error (per viewer, this process). */
+  private readonly syncs = new Map<string, Promise<void>>();
+  private readonly syncErrors = new Map<string, string>();
+
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
     private readonly app: { clientId: string; clientSecret: string },
     private readonly fetchImpl: Fetch = fetch,
-  ) {}
+    options: TwitchViewerOptions = {},
+  ) {
+    this.redirectUri =
+      options.redirectUri === undefined
+        ? VIEWER_REDIRECT_URI
+        : options.redirectUri;
+    this.tokenKey = options.tokenKey ?? null;
+  }
 
   // --- OAuth ---------------------------------------------------------------------------------------
 
-  async startAuth(): Promise<{ authorization_url: string }> {
+  /** Linking possible (a redirect is configured). */
+  get canLink() {
+    return this.redirectUri !== null;
+  }
+
+  /**
+   * @param viewerId Twitch user id the authorization is for (public frontier: the JWT's). The
+   *   account authorized at Twitch must be this one. Null = Lab (the Studio's own viewer).
+   */
+  async startAuth(
+    viewerId: string | null = null,
+  ): Promise<{ authorization_url: string }> {
+    if (!this.redirectUri) throw new TwitchViewerError('oauth_unavailable');
     const state = randomBytes(24).toString('hex');
     const now = this.clock.now();
     await this.db.query(
-      'insert into bonk_lab_oauth_states (state, created_at, expires_at) values ($1, $2, $3)',
-      [state, now, new Date(now.getTime() + STATE_TTL_MS)],
+      'insert into bonk_lab_oauth_states (state, created_at, expires_at, viewer_id) values ($1, $2, $3, $4)',
+      [state, now, new Date(now.getTime() + STATE_TTL_MS), viewerId],
     );
     const url = new URL('https://id.twitch.tv/oauth2/authorize');
     url.search = new URLSearchParams({
       client_id: this.app.clientId,
-      redirect_uri: VIEWER_REDIRECT_URI,
+      redirect_uri: this.redirectUri,
       response_type: 'code',
       scope: VIEWER_SCOPES.join(' '),
       state,
@@ -97,9 +137,10 @@ export class TwitchViewerCatalog {
 
   async completeAuth(code: string, state: string): Promise<BonkLabViewer> {
     const now = this.clock.now();
-    const used = await this.db.query(
+    if (!this.redirectUri) throw new TwitchViewerError('oauth_unavailable');
+    const used = await this.db.query<{ viewer_id: string | null }>(
       `update bonk_lab_oauth_states set used_at = $2
-       where state = $1 and used_at is null and expires_at > $2 returning state`,
+       where state = $1 and used_at is null and expires_at > $2 returning viewer_id`,
       [state, now],
     );
     if (!used.length) throw new TwitchViewerError('oauth_state_invalid');
@@ -107,13 +148,19 @@ export class TwitchViewerCatalog {
     const token = await this.tokenRequest({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: VIEWER_REDIRECT_URI,
+      redirect_uri: this.redirectUri,
     }).catch(() => {
       throw new TwitchViewerError('oauth_exchange_failed');
     });
     const info = await this.validate(token.access_token);
     if (info.client_id !== this.app.clientId)
       throw new TwitchViewerError('oauth_wrong_client');
+    // Public frontier: the authorized account must be the viewer the link was started for (JWT).
+    const expected = used[0]!.viewer_id;
+    if (expected && info.user_id !== expected) {
+      await this.revoke(token.access_token);
+      throw new TwitchViewerError('oauth_wrong_account');
+    }
     const scopes = [...(info.scopes ?? [])].sort();
     // Exactly the read-only scope: a token with more rights is refused (and revoked).
     if (JSON.stringify(scopes) !== JSON.stringify([...VIEWER_SCOPES].sort())) {
@@ -134,8 +181,8 @@ export class TwitchViewerCatalog {
         info.user_id,
         info.login,
         user?.display_name ?? info.login,
-        token.access_token,
-        token.refresh_token,
+        sealToken(token.access_token, this.tokenKey),
+        sealToken(token.refresh_token, this.tokenKey),
         scopes,
         new Date(now.getTime() + token.expires_in * 1000),
         now,
@@ -145,6 +192,11 @@ export class TwitchViewerCatalog {
       'delete from bonk_lab_viewer_catalogs where user_id = $1',
       [info.user_id],
     );
+    await this.db.query(
+      'delete from bonk_lab_viewer_reauth where user_id = $1',
+      [info.user_id],
+    );
+    this.syncErrors.delete(info.user_id);
     return {
       user_id: info.user_id,
       login: info.login,
@@ -159,15 +211,106 @@ export class TwitchViewerCatalog {
     );
   }
 
+  /** The viewer's own choice: revoked at Twitch, forgotten here (not linked, no reconnection asked). */
   async disconnect(userId: string): Promise<{ disconnected: boolean }> {
     const row = await this.tokenRow(userId);
-    if (!row) return { disconnected: false };
-    await this.revoke(row.access_token);
-    await this.db.query(
-      'delete from bonk_lab_viewer_tokens where user_id = $1',
+    if (row) await this.revoke(row.access_token);
+    const removed = await this.db.query(
+      'delete from bonk_lab_viewer_tokens where user_id = $1 returning 1',
       [userId],
     );
-    return { disconnected: true };
+    await this.db.query(
+      'delete from bonk_lab_viewer_reauth where user_id = $1',
+      [userId],
+    );
+    this.syncErrors.delete(userId);
+    return { disconnected: removed.length > 0 };
+  }
+
+  /**
+   * What the extension shows for this viewer: the stored catalog at once (never an empty screen when
+   * one exists), a reload in the background when it is missing or older than 10 min.
+   * - ready: fresh catalog; syncing: reload in progress (the stored catalog, if any, is shown);
+   * - stale: Twitch unreachable on the last reload, a catalog of less than 1 h is kept (same rule as the
+   *   Bonk admission); reauth_required: Twitch refused the authorization (revoked / invalid);
+   * - not_linked: never linked, or unlinked by the viewer.
+   * `waitMs`: how long to wait for the reload before answering (forced refresh).
+   */
+  async emotesState(
+    userId: string,
+    { force = false, waitMs = 0 } = {},
+  ): Promise<{
+    status: TwitchEmotesStatus;
+    viewer: { user_id: string; login: string; display_name: string } | null;
+    catalog: BonkLabCatalog | null;
+  }> {
+    const linked = async () =>
+      (
+        await this.db.query<{
+          user_id: string;
+          login: string;
+          display_name: string;
+        }>(
+          'select user_id, login, display_name from bonk_lab_viewer_tokens where user_id = $1',
+          [userId],
+        )
+      )[0] ?? null;
+    const notLinked = async () => {
+      const reauth = (
+        await this.db.query<{
+          user_id: string;
+          login: string;
+          display_name: string;
+        }>(
+          'select user_id, login, display_name from bonk_lab_viewer_reauth where user_id = $1',
+          [userId],
+        )
+      )[0];
+      return {
+        status: reauth ? ('reauth_required' as const) : ('not_linked' as const),
+        viewer: reauth ?? null,
+        catalog: null,
+      };
+    };
+    if (!(await linked())) return notLinked();
+    const before = await this.storedCatalog(userId);
+    const age = (c: BonkLabCatalog | null) =>
+      c ? this.clock.now().getTime() - Date.parse(c.fetched_at) : Infinity;
+    if (force || age(before) >= CATALOG_FRESH_MS) {
+      let sync = this.syncs.get(userId);
+      if (!sync) {
+        sync = this.fetchCatalog(userId)
+          .then(() => void this.syncErrors.delete(userId))
+          .catch((error: unknown) => {
+            this.syncErrors.set(
+              userId,
+              error instanceof TwitchViewerError
+                ? error.code
+                : 'catalog_unavailable',
+            );
+          })
+          .finally(() => this.syncs.delete(userId));
+        this.syncs.set(userId, sync);
+      }
+      if (waitMs > 0)
+        await Promise.race([
+          sync,
+          new Promise((r) => setTimeout(r, waitMs).unref?.()),
+        ]);
+    }
+    const viewer = await linked();
+    if (!viewer) return notLinked(); // refused during the reload
+    const catalog = await this.storedCatalog(userId);
+    let status: TwitchEmotesStatus;
+    if (this.syncs.has(userId)) status = 'syncing';
+    else if (age(catalog) < CATALOG_FRESH_MS) status = 'ready';
+    else if (catalog && age(catalog) < CATALOG_MAX_AGE_MS) status = 'stale';
+    else status = 'syncing'; // Twitch unreachable and nothing recent: the next read tries again
+    return {
+      status,
+      viewer,
+      catalog: catalog && age(catalog) < CATALOG_MAX_AGE_MS ? catalog : null,
+    };
   }
 
   // --- catalog -------------------------------------------------------------------------------------
@@ -360,8 +503,8 @@ export class TwitchViewerCatalog {
        where user_id = $1`,
       [
         row.user_id,
-        token.access_token,
-        token.refresh_token,
+        sealToken(token.access_token, this.tokenKey),
+        sealToken(token.refresh_token, this.tokenKey),
         expiresAt,
         this.clock.now(),
       ],
@@ -369,12 +512,18 @@ export class TwitchViewerCatalog {
     return { ...row, ...token, expires_at: expiresAt };
   }
 
-  /** Refused/revoked authorization: forget the token, ask the viewer to reconnect. */
+  /** Refused/revoked authorization: forget the token, remember that the viewer must reconnect. */
   private async unlink(userId: string) {
-    await this.db.query(
-      'delete from bonk_lab_viewer_tokens where user_id = $1',
+    const gone = await this.db.query<{ login: string; display_name: string }>(
+      'delete from bonk_lab_viewer_tokens where user_id = $1 returning login, display_name',
       [userId],
     );
+    if (gone[0])
+      await this.db.query(
+        `insert into bonk_lab_viewer_reauth (user_id, login, display_name, at) values ($1, $2, $3, $4)
+         on conflict (user_id) do update set login = excluded.login, display_name = excluded.display_name, at = excluded.at`,
+        [userId, gone[0].login, gone[0].display_name, this.clock.now()],
+      );
     return new TwitchViewerError('reauth_required');
   }
 
@@ -475,14 +624,19 @@ export class TwitchViewerCatalog {
     }));
   }
 
+  /** The stored token, decrypted. Unreadable (key changed / missing): the viewer must reconnect. */
   private async tokenRow(userId: string): Promise<TokenRow | null> {
-    return (
+    const row =
       (
         await this.db.query<TokenRow>(
           'select user_id, login, display_name, access_token, refresh_token, scopes, expires_at from bonk_lab_viewer_tokens where user_id = $1',
           [userId],
         )
-      )[0] ?? null
-    );
+      )[0] ?? null;
+    if (!row) return null;
+    const access = openToken(row.access_token, this.tokenKey);
+    const refresh = openToken(row.refresh_token, this.tokenKey);
+    if (access === null || refresh === null) throw await this.unlink(userId);
+    return { ...row, access_token: access, refresh_token: refresh };
   }
 }

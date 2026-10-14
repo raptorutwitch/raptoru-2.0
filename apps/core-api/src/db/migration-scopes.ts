@@ -50,6 +50,7 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261015120000_lab_moderation_idempotency.sql',
   // Twitch stream id of a Lab stream session (ASTRA-P1-007).
   '20261016130000_lab_stream_session_twitch_id.sql',
+  '20261017120000_bonk_lab_viewer_oauth.sql',
 ]);
 
 /**
@@ -74,12 +75,14 @@ export const LEGACY_LAB_IN_PROD: readonly string[] = Object.freeze([
 /**
  * The staging Core (Coolify, test data only) serves the Lab modules to real Twitch testers through the
  * viewer frontier and the Studio cockpit: on top of the production selection it needs exactly these
- * post-boundary Lab files (Extension moderation idempotency, Tombola stream sessions). Explicit and
- * closed: never Commands V2 or any other Lab file; never part of the production scope.
+ * post-boundary Lab files (Extension moderation idempotency, Tombola stream sessions, Bonk Twitch emotes
+ * linking of the viewer frontier). Explicit and closed: never Commands V2 or any other Lab file;
+ * never part of the production scope.
  */
 export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261015120000_lab_moderation_idempotency.sql',
   '20261016130000_lab_stream_session_twitch_id.sql',
+  '20261017120000_bonk_lab_viewer_oauth.sql',
 ]);
 
 export interface MigrationScopes {

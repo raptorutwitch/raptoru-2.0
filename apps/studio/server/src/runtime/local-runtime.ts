@@ -48,6 +48,7 @@ export const LAB_MIGRATIONS = [
   '20261014120000_commands_v2_categories.sql',
   '20261015120000_lab_moderation_idempotency.sql',
   '20261016130000_lab_stream_session_twitch_id.sql',
+  '20261017120000_bonk_lab_viewer_oauth.sql',
 ];
 
 export type ServiceState =
