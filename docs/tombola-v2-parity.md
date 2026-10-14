@@ -4,7 +4,7 @@
 `ed781f6`. Ne plus modifier sauf bug réel en usage ou nouvelle feature décidée. Migrations figées (jamais réécrites,
 évolutions = migrations additives) : `20261008120000_raffle_v2.sql`, `20261009120000_raffle_scheduler.sql`,
 `20261010120000_raffle_round_labels.sql` (+ dépendance `20261007120000_moderation_d4.sql`). Checkpoint complet :
-`Raptoru-2.0-HANDOFF.md` § 13.
+`Raptoru-2.0-ETAT-PROJET.md` § 16 « Tombola V2 » (statut courant : § 0.4).
 
 Spécification : `prototypes/tombola-v2/` (validée par Antoni comme spécification produit / UX / DA ; local, non
 versionné). Variantes retenues : overlay **C4** (ouverture), **G** (reveal normal / SUPER / giveaway), **roulette

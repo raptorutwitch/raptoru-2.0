@@ -2,7 +2,8 @@
 
 **Statut :** mesures relevées sur Twitch (LeCroupier_, build de calibration), cible **65 % · 3:2 · dimensions
 automatiques OFF → 565×376** décidée ; profil compact-video porté dans l'extension et Lab recalé (branche
-`feat/compact-video-port`, **non poussée, non validée**). Voir §4 et §5.
+`feat/compact-video-port`, poussée jusqu'à `c7f20de`, dans le ZIP Hosted Test `c7f20de4430a` ; **validation
+d'Antoni non consignée**). Voir §4 et §5. Statut global du projet : `../Raptoru-2.0-ETAT-PROJET.md` § 0.
 Références : [`../Raptoru-2.0-HANDOFF.md`](../Raptoru-2.0-HANDOFF.md) ·
 [`TEST_REEL_STAGING_2026-10.md`](TEST_REEL_STAGING_2026-10.md).
 
@@ -91,6 +92,6 @@ composition du rendu 651×434 (aucun transform/zoom global).
 - **Lab** : preset **« Twitch réel — Desktop standard » 565×376** (référence) et « Comparaison 75 % » 651×434 ;
   iframe à sa vraie taille logique (plus de lecteur 1280×720, de 60 %, de « 3:2 − 48 px », de transform), même
   instance conservée au changement de preset et au redimensionnement ; décor Twitch approximatif autour.
-- **OAuth emotes (Bonk)** : sur le Core staging, `POST /v1/ext/emotes/oauth/start` répond toujours
-  `409 twitch_emotes_unavailable` (frontière minimale, ext-facade.ts) → la fenêtre Twitch s'ouvre puis se
-  referme. Manque backend, **non corrigé** par le portage UI ; le Lab, lui, a le vrai flow.
+- **OAuth emotes (Bonk)** : ~~sur le Core staging, `POST /v1/ext/emotes/oauth/start` répondait
+  `409 twitch_emotes_unavailable`~~ — corrigé depuis : OAuth sur `/v1/ext` (`6d7d381`, `c7f20de`), déployé au
+  staging le 14/10/2026 et validé en Hosted Test sauf l'affichage overlay.

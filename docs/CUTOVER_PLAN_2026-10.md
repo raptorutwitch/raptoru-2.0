@@ -6,7 +6,8 @@
 en base de production, changement Twitch réel (récompenses, extension, EventSub), changement SAMMI ou StreamElements
 sans validation explicite d'Antoni, étape par étape.
 
-Registre de l'audit : [`ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-10.md) · contexte courant :
+Statut de tous les modules et roadmap : [`../Raptoru-2.0-ETAT-PROJET.md`](../Raptoru-2.0-ETAT-PROJET.md) § 0 · registre de
+l'audit : [`ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-10.md) · reprise rapide :
 [`../Raptoru-2.0-HANDOFF.md`](../Raptoru-2.0-HANDOFF.md) · architecture cible :
 [`../Raptoru Studio — Infrastructure Spec.md`](<../Raptoru Studio — Infrastructure Spec.md>).
 
@@ -246,7 +247,9 @@ tourne.
 d'un autre viewer / droit retiré après ouverture → refusés. Puis parcours § 7 avec de vrais JWT d'une version de test.
 
 **Lot 1 minimal — frontière viewer staging (06/10/2026, `482fc2e` + Extension `6660291` / `1e6236a`, déployé `44c895c`).**
-Livré et vérifié sur le staging réel, **non validé manuellement**, P1-006 **non fermé**. Procédure du premier test réel :
+Livré et vérifié sur le staging réel ; **premier live réel validé manuellement par Antoni le 07/10/2026** (Hosted
+Test → Core staging → Studio → OBS, paiement simulé) ; complété le 14/10/2026 par l’OAuth emotes viewer (`6d7d381`,
+`c7f20de`, déployé). P1-006 **non fermé**. Procédure du premier test réel :
 [`TEST_REEL_STAGING_2026-10.md`](TEST_REEL_STAGING_2026-10.md).
 
 - `/v1/ext/*` sur le Core : JWT d'Extension vérifié par le Core (HS256, secret base64, `exp`, chaîne configurée

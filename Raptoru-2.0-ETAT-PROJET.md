@@ -1,26 +1,186 @@
-# Raptoru 2.0 — État du projet / fichier de reprise
+# Raptoru 2.0 — État du projet et roadmap globale
 
-**Dernière mise à jour : 3 octobre 2026 — Studio 0.1.5 = dernière release publique (validée) ; HEAD fonctionnel `ed781f6`. **Tombola V2 — TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ** (Lab, validée manuellement par Antoni les 02–03/10/2026, commits de référence `ecc0275` + `ed781f6`) ; Modération V2 parité D4 validée le 01/10/2026 ; passe UX post-Tombola validée le 03/10/2026. Rien n’est releasé ni packagé depuis 0.1.5.**
+**Vue d'ensemble principale du projet** : où en est tout Raptoru 2.0, ce qui est validé, où chaque brique tourne
+(local / staging / Hosted Test / release / production), ce qui reste, les priorités, les bloquants et les dettes.
+Mis à jour le **15/10/2026** (vérifié sur Git, le code et les tests du jour).
 
-> **Historique arrêté au 03/10/2026.** État courant (Commands V2 A0 → F, passes de l'audit Astra) : en tête de
-> [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md), [`docs/COMMANDS_V2_STATUS.md`](docs/COMMANDS_V2_STATUS.md) et
-> [`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](docs/ASTRA_GLOBAL_AUDIT_2026-10.md). Phase courante (depuis le 05/10/2026) :
-> préparation du cutover, [`docs/CUTOVER_PLAN_2026-10.md`](docs/CUTOVER_PLAN_2026-10.md). Bonk VNext (Lots 0–3 validés
-> les 14–15/10/2026, local, non déployé) : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0.
+Répartition des documents (une seule source de vérité par sujet) :
 
-> **Nouvel agent : lire d’abord [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md)** (état courant, règles de reprise, matrice de validation, prochaine action). Ce fichier-ci garde l’historique et le détail par domaine.
+| Document | Rôle |
+| --- | --- |
+| **ce fichier** | vue globale, roadmap, santé du projet, statut de chaque module |
+| [`Raptoru-2.0-HANDOFF.md`](Raptoru-2.0-HANDOFF.md) | reprise rapide d'un agent : règles non négociables, commandes, pièges, contexte opérationnel |
+| [`docs/CUTOVER_PLAN_2026-10.md`](docs/CUTOVER_PLAN_2026-10.md) | déploiement, staging, migration legacy → 2.0, P1 de cutover, rollback, décisions D1–D6 |
+| [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) | détail technique de Bonk VNext (§ 0 = état) |
+| [`docs/COMMANDS_V2_STATUS.md`](docs/COMMANDS_V2_STATUS.md) | détail de Commands V2 |
+| [`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](docs/ASTRA_GLOBAL_AUDIT_2026-10.md) | registre des findings d'audit (statut, preuve, commit) |
+| autres `docs/` | détail technique ou historique d'un module (matrices de parité, calibration, procédures) |
 
-## But de ce fichier
-Ce fichier est la source de continuité du projet. Il doit permettre de reprendre Raptoru 2.0 dans une nouvelle conversation sans perdre :
-- l’architecture validée ;
-- les décisions produit ;
-- les validations réellement effectuées ;
-- ce qui est fini techniquement ;
-- ce qui reste à migrer/repenser ;
-- les règles de cutover ;
-- la direction produit autour de l’extension, du site, des stats et des cosmétiques.
+---
 
-## État courant (résumé — détail et matrice complète dans `Raptoru-2.0-HANDOFF.md`)
+# 0. État courant — 15/10/2026
+
+## 0.1 Git et environnements (vérifiés le 15/10/2026)
+
+| Élément | Valeur |
+| --- | --- |
+| Branche de travail | `feat/compact-video-port`, HEAD **`65fea03`** (checkpoint docs Bonk VNext) — + le commit de ce rafraîchissement |
+| `main` | **`d2b61ef`** = `origin/main` (intact depuis le 14/10/2026) |
+| `origin/feat/compact-video-port` | **`c7f20de`** — tout ce qui suit est **local, non poussé** : Bonk VNext (`c410833` → `639fc0f`) + docs |
+| Remote | `origin` = `github.com/raptorutwitch/raptoru-2.0` (privé) ; branche locale annexe `feat/calibration-video-component` (`d13dfb9`) |
+| **Staging Coolify** (`raptoru-core-staging`, `https://core-staging.raptoru.fr`) | Core sur **`c7f20de`** (déployé le 14/10/2026, manuel), PostgreSQL 17 dédié, chaîne `raptoru_` (83603689), paiement **simulé** (Wallet de test) |
+| **Hosted Test** (console Twitch, comptes testeurs) | ZIP **`raptoru-live-STAGING-hosted-test-c7f20de4430a.zip`** → Core staging |
+| **Studio publié** | **0.1.5** (30/09/2026, feed `raptorutwitch/raptoru-studio-releases`). 0.1.6 construit le 06/10 sur `5de2444`, **jamais publié, désormais périmé** |
+| **Production réelle** | **Legacy uniquement** : SAMMI + StreamElements + EBS `raptoru.fr/api` + Extension publiée `20260920-095259Z`. Aucune brique Raptoru 2.0 en production |
+
+## 0.2 Santé du projet
+
+- **Tests (15/10/2026)** : Core 457 (+21 ignorés sans PostgreSQL) · Core sur PostgreSQL réel 10 · Studio server 275 ·
+  Desktop 24 · Extension 41 · Bot 98 ; lint, format, typecheck, build verts. E2E navigateur versionnés : `npm run e2e`.
+- **Audit Astra** : P0 = 0. Restent ouverts les **5 P1 de cutover** (001, 006, 007, 010, 019 — en cours ou bloqués par
+  une décision), 3 P2 différés (015, 021, 025) et 3 P3 volontaires (001 signature Windows, 002 nommage BonkLab, 006 UX).
+- **Ce qui va bien** : tous les modules V2 du stream (Hub, Bonk, Soundboard, TTS, Tombola, Modération, Commands) sont
+  validés localement par Antoni ; un premier live réel Hosted Test → Core staging → Studio → OBS a été validé le
+  07/10/2026 ; Bonk VNext Lots 0–3 validés les 14–15/10/2026.
+- **Ce qui manque pour la production** : l'économie réelle (Wallet canonique, import StreamElements, Points de chaîne),
+  la publication de l'Extension, et la migration des fonctionnalités legacy encore absentes (Jeu des mots, alertes,
+  FX…). Voir 0.6 et 0.7.
+- **Écart local / livré** : beaucoup de travail validé n'est **pas encore livré** : rien depuis Studio 0.1.5 n'est
+  publié ; Bonk VNext n'est même pas sur le staging.
+
+## 0.3 Légende des statuts
+
+`NON COMMENCÉ` · `EN COURS` · `IMPLÉMENTÉ LOCAL` (codé, tests auto) · `VALIDÉ LOCAL` (testé par Antoni, Lab ou
+Studio source) · `STAGING` (déployé sur le Core staging / Hosted Test) · `VALIDÉ STAGING` (testé par Antoni sur le
+staging) · `RELEASED` (dans une release Studio publiée) · `PROD` (utilisé par le vrai stream) · `BLOQUÉ` · `REPORTÉ`.
+« Validé » = testé par Antoni lui-même, jamais un test automatique. Une brique peut être `VALIDÉ LOCAL` **et** absente de
+tout environnement livré : les deux colonnes se lisent séparément.
+
+## 0.4 Modules — état réel
+
+| Module | Implémentation | Validation Antoni | Environnement atteint | Bloquants restants | Prochaine action |
+| --- | --- | --- | --- | --- | --- |
+| **Core API** | Core unique : Wallet, Loyalty, Daily, Presence, modules V2 (Bonk, Sons, TTS, Tombola, Modération, Commands), frontière viewer `/v1/ext`, transport Studio `/v1/studio/*`, cockpit | modules validés en Lab ; staging validé le 07/10 | **STAGING** (`c7f20de`) ; Lot 0 VNext (sweep périodique, `wrong_channel`) **VALIDÉ LOCAL** seulement | P1 de cutover (0.7) ; ordre de déploiement **Core avant Studio** | déploiement coordonné du Lot 0 sur le staging (sur accord) |
+| **Twitch Bot** | adaptateur EventSub / Helix : Presence (chatters), Loyalty / Rewards (outbox durable), exécuteur chat de Commands (compte LeCroupier_), ingestion chat Lab (OFF par défaut) | Presence réelle (25/09), sortie chat réelle Commands (phase C) | **VALIDÉ LOCAL** ; pas sur le staging | P1-007 (un seul consommateur EventSub en production) ; bot et Commands **hors cutover** pour l'instant | aucune avant la décision de cutover |
+| **Studio / Desktop** | app Electron Windows : runtime local supervisé, profils Lab / Production (P1-019), cockpit Production, lecteurs Bonk / Sons / TTS / Tombola, Commandes, Modération, réglages Bonk | 0.1.5 validé ; Modération, Tombola, profils, cockpit, Bonk VNext validés localement | **RELEASED 0.1.5** (sans Modération V2, Tombola V2, profils, Bonk VNext) ; reste **VALIDÉ LOCAL** | release seulement **après** un Core staging compatible (champ heartbeat `channel_id`) | release après le déploiement Core coordonné et la validation staging |
+| **Twitch Extension** (Raptoru Live 2.0) | vraie extension importée et refondue : Hub, modules V2, Modération, Commands public, profil compact-video 565×376, restrictions viewer, emotes Twitch OAuth | live Hosted Test validé (07/10) ; OAuth emotes partiellement (14/10) ; compact-video, restrictions et passe UX TTS : **validation non consignée** | **STAGING / Hosted Test** (`c7f20de4430a`) ; **jamais publiée** — la production est l'extension legacy | vrai secret d'Extension, publication, capacité (P2-025), cutover économique | consigner la validation des lots non validés ; publication seulement au cutover |
+| **Viewer Web** | placeholder (`apps/viewer-web`, non relié au Core) | — | **NON COMMENCÉ** | hors phase (site, profils, stats) | après la migration des modules |
+| **Hub / navigation** | Hub Pop Premium, dots + lanceur, molette ; variante compact-video | **VALIDÉ** 28–29/09 (Lab) | **RELEASED 0.1.5** (copie Lab) + **Hosted Test** | publication de l'Extension | — |
+| **Wallet / crédits / Jetons** | Wallet Core multi-monnaie (idempotent, ledger) ; Wallet **de test** Lab utilisé par tous les modules (Lab et staging) ; port économique P1-001 lot 1 (débit + admission atomiques) | Wallet Core validé techniquement (tests) ; Wallet de test validé avec les modules | Wallet de test : **STAGING** ; Wallet Core : **IMPLÉMENTÉ LOCAL**, non branché ; Jetons réels = **PROD legacy** (StreamElements) | **BLOQUÉ** par D1 (soldes SE au cutover), D2 (crédits), import SE, lecteurs n'acceptant que `simulated` | décision D1 / D2, puis P1-001 lot 2 |
+| **Loyalty / Rewards / Daily** | gains passifs, sub / gift / bits / follow, Daily + streak, crédit Wallet derrière drapeaux | validés techniquement (Presence réelle 25/09) | **IMPLÉMENTÉ LOCAL**, drapeaux économiques **OFF** ; production = StreamElements / SAMMI | cutover économique unique | au cutover |
+| **Presence / sessions de stream** | Presence shadow (chatters toutes les ~2 min) ; P1-007 lot 1 : une session = un live Twitch (Tombola, Commands) | Presence validée en réel (25/09) | **VALIDÉ LOCAL** ; migration de session appliquée au staging | P1-007 frontière production (lecture des sessions, consommateur unique) | avec le raccordement production |
+| **Bonk VNext** | Lots 0–3 : fondation prod, moteur de rendu, cible Manuel / Plein écran, **Auto OBS** (sans IA), physique à contact systématique | **VALIDÉ LOCAL** 14–15/10/2026 ; paramètres visuels / audio et physique **figés** | **local uniquement** (commits jusqu'à `639fc0f`, checkpoint `65fea03`) — pas sur le staging, pas publié | déploiement coordonné ; paiement réel (lecteur `simulated`) | **NEXT : Lot 5 Salves (non commencé)** ; FX rares après — détail : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) |
+| **Bonk (picker et providers)** | picker V2 (Récents, Favoris, Twitch, Bits, 7TV / BTTV / FFZ, Twemoji), validation Core par provider / id | **VALIDÉ** 27/09 (Lab) ; Bonk **VALIDÉ STAGING** au live du 07/10 | **RELEASED 0.1.5** (ancien rendu) + **STAGING** | autoriser les CDN 7TV / BTTV / FFZ dans la console Twitch (publication) | — |
+| **OAuth / emotes viewer** | Lab : OAuth `user:read:emotes` (callback local) ; public : OAuth sur `/v1/ext` (callback HTTPS, jetons chiffrés `EXT_TOKEN_KEY`), états `not_linked / syncing / ready / stale / reauth_required` | Lab validé ; Hosted Test 14/10 : OAuth, callback, vraies emotes, persistance, Bonk accepté **validés** ; affichage overlay **non validé** (bascule de chaîne) | **STAGING** (`6d7d381` + `c7f20de`, migration `bonk_lab_viewer_oauth` appliquée) | affichage overlay à revalider ; rapport B3 final | refaire un Bonk Twitch sur `raptoru_` après le prochain déploiement |
+| **Soundboard V2** | 69 sons, réglages Studio, protection volume, stop / remboursement | **VALIDÉ** 28/09 (Lab) ; **VALIDÉ STAGING** 07/10 | **RELEASED 0.1.5** (Lab) + **STAGING** ; production = SAMMI | cutover | — |
+| **TTS V2** | règles legacy, cast décidé par Core, lecteur OBS, modération ; passe UX « Envoyer un autre message » (`8b297a7`) | **VALIDÉ** 30/09 (Lab) ; **VALIDÉ STAGING** 07/10 ; passe UX : non consignée | **RELEASED 0.1.5** (Lab) + **STAGING** ; production = SAMMI | dette : lecture avant la fin du reveal | — |
+| **Tombola V2** | Core + planificateur, Studio, Extension, overlay OBS, modération D4 — **checkpoint figé** | **VALIDÉ** 02–03/10 (Lab) ; **VALIDÉ STAGING** 07/10 | **STAGING** ; **pas** dans 0.1.5 | release Studio ; cutover (paiement des gains) | ne plus modifier sauf bug réel |
+| **Modération V2** | parité D4 complète ; vue Restrictions (`b6c5895`, `48ef6db`) ; retour viewer des restrictions (`1865d1e`, `2ed1d94`, `3bc40cb`) | D4 **VALIDÉ** 01/10 (Lab), **VALIDÉ STAGING** 07/10 ; Restrictions : **validation non consignée** | **STAGING** ; **pas** dans 0.1.5 | badges VIP / Sub et synchro ban / timeout Twitch (dépendances extérieures) | consigner la validation des Restrictions |
+| **Commands V2** | A0 → F : modèle, admission, file, onglet Studio, Extension (modération + public) | **VALIDÉ LOCAL** (Lab) | **local uniquement** — migrations Commands jamais au staging | hors cutover (décision) ; dettes mineures (`COMMANDS_V2_STATUS.md`) | — |
+| **Points de chaîne** | aucun raccordement V2 (le legacy EBS gère les redemptions) | — | **BLOQUÉ** (P1-010) ; production = legacy | décision D2 (modèle de redemption) | en dernier dans l'ordre du cutover |
+| **Activity / overlays / alertes** | overlays existants : Bonk, lecteur TTS, overlay Tombola, lecteur Soundboard ; historique / classement de l'Extension | overlays validés avec leurs modules | overlays : comme leurs modules ; **alertes stream (raid / follow / sub / bits / don / gift) : NON COMMENCÉ** (SAMMI) | conception d'un moteur d'alertes | après les modules prioritaires |
+| **Intégration OBS** | obs-websocket **lecture seule** : sources Bonk, reconnexion auto + mot de passe chiffré (`safeStorage`), capture de scène, cible Auto | **VALIDÉ LOCAL** (Lots 0–3) | **local** ; Studio 0.1.5 n'a que la connexion manuelle | aucun contrôle de scène (FX / Creepy / BRB) : **NON COMMENCÉ** | — |
+| **Transport Studio ↔ Core** (P1-019) | identité d'installation, HTTPS, protocole, profils, cockpit Production | **VALIDÉ STAGING** (06–07/10) | **STAGING** | rate limiting, coupures réseau réelles, cockpit incomplet (Commands…), URL en constante de build | `wrong_channel` réel au prochain déploiement |
+| **Frontière viewer** `/v1/ext` (P1-006) | JWT d'Extension vérifié par le Core, acteur du JWT, rate limit, CORS, idempotence | **VALIDÉ STAGING** (live 07/10, paiement simulé) | **STAGING** | vrai secret d'Extension, publication, capacité | au cutover |
+| **Déploiement / updater / release** | Coolify manuel ; updater Studio validé (0.1.0 → 0.1.1) ; `npm run studio:release` | pipeline validé | Core : **STAGING** ; Studio : **RELEASED 0.1.5** | ordre Core → Studio ; signature Windows (P3-001) avant diffusion large | prochain déploiement coordonné (0.6 D) |
+| **Migration legacy → 2.0** | plan de cutover par étapes, cutover économique unique, import SE à la toute fin | — | **EN COURS** (préparation) ; **aucun cutover** | 0.7 | suivre l'ordre du plan de cutover |
+
+## 0.5 Ce qui est vraiment validé (par Antoni)
+
+- **Lab local** : Studio autonome + supervision ; Hub ; Bonk V2 (picker, providers) ; Soundboard V2 ; TTS V2 ;
+  Modération V2 D4 ; Tombola V2 (figée) ; Commands V2 A0 → F ; P1-019 lots 1–2 ; Bonk VNext Lots 0–3.
+- **Staging réel** : Core staging (06/10) ; Studio Production appairé ; **live Hosted Test → Core staging → Studio →
+  OBS (07/10)** : Soundboard, TTS, STOP / remboursement, Bonk, Modération, Tombola ; OAuth emotes viewer (14/10, sauf
+  affichage overlay).
+- **Publié** : Studio 0.1.5 (Studio autonome, Hub, Bonk V2, Soundboard V2, TTS V2, en mode Lab).
+- **Production** : rien de Raptoru 2.0.
+
+## 0.6 Roadmap globale (ordre logique)
+
+**A. Consigner les validations manquantes** (code déjà livré au staging / Hosted Test, validation non consignée) :
+vue Restrictions et retour viewer des restrictions ; profil compact-video du Video Component ; passe UX TTS
+(`8b297a7`) ; affichage overlay d'un Bonk Twitch (B3).
+
+**B. NEXT produit — Bonk Lot 5 Salves (non commencé).** Une salve = N Bonk individuels, admission atomique, aucun
+Bonk payé perdu, livraison groupée possible, cadence côté overlay, contrôle quantité / fréquence à définir ; auto-fire
+hors scope. Puis **Lot 4 FX rares** (explosion en mini-emotes, etc.), puis Lot 6 combos (option).
+
+**C. Déploiement coordonné du travail validé** (sur accord d'Antoni) : Core staging (Lot 0 : sweep périodique,
+`wrong_channel`) **puis** Studio, validation staging (sweep et `wrong_channel` réels, chaîne complète Hosted Test →
+Core → Studio → OBS avec Bonk VNext), puis seulement décision de release Studio. L'Extension n'a pas besoin d'un
+nouveau ZIP pour Bonk VNext.
+
+**D. Préparation du cutover** (ordre du plan) : P1-019 (reste) → P1-001 port économique (décisions D1 / D2, lot 2,
+lecteurs non simulés) → P1-006 (vrai secret, capacité) → parcours vertical § 7 (Bonk payé en Jetons de test sur le
+staging) → P1-007 frontière production → P1-010 Points de chaîne → cutover économique unique.
+
+**E. Migration fonctionnelle restante** (inventaire § 13, ordre indicatif) : instrumentation stats / profils →
+**Jeu des mots 2.0** (module le plus populaire) → achievements / cosmétiques → FX / Creepy / BRB / NTM et alertes →
+Votekick / Caution / Ban aléatoire → Spotify → duel / roulette / slots / oracle (jeux SE) → commandes viewer
+personnalisées, cash-in PDC → site / Viewer Web.
+
+**F. Cutover final** : audit SE / SAMMI, import des soldes (dry-run, contrôle), gel court, bascule économique, puis
+modules un par un ; legacy coupé ensuite.
+
+## 0.7 Bloquants production (distincts de la roadmap)
+
+1. **Économie réelle** (P1-001) : Wallet canonique non branché ; D1 (soldes SE au point de coupure, import) et D2
+   (crédits) non tranchées ; lecteurs et overlay qui n'acceptent que `payment_mode = simulated` ; le Core public
+   débite le Wallet de test (`labEconomy`).
+2. **Points de chaîne** (P1-010) : modèle de redemption (D2) non décidé.
+3. **Extension** : jamais publiée ; vrai secret d'Extension à poser ; domaines CDN emotes à autoriser ; capacité de
+   l'EBS public (P2-025).
+4. **Session de stream** (P1-007) : en production, Tombola / Commands doivent lire la session canonique et le bot
+   principal rester l'unique consommateur EventSub.
+5. **Transport** (P1-019) : rate limiting, coupures réseau réelles, cockpit Production incomplet (Commands, config
+   encore sous `STUDIO_SECRET`).
+6. **Fonctionnel** : Jeu des mots, alertes, FX, jeux SE, Votekick… pas encore migrés — SAMMI / StreamElements doivent
+   continuer à les servir ou une décision les abandonne avant la coupure économique.
+7. **Livraison** : Studio 0.1.5 est loin du HEAD ; une release suppose le Core compatible déployé d'abord.
+
+## 0.8 Dettes connues
+
+- TTS : la lecture peut démarrer avant la fin de l'animation shuffle / reveal.
+- Extension : défilement des noms longs encore saccadé (compact-video) ; Commands : catégories sans version,
+  libellés dupliqués Studio / Extension, pas de rafraîchissement automatique pendant l'édition.
+- Modération : badges VIP / Sub inconnus du Core ; aucune synchro ban / timeout Twitch ; pop-out Twitch réel non
+  configuré.
+- Bonk : source overlay trouvée par son nom « Raptoru Bonk Lab » ; Manuel par scène reporté ; occultation d'une
+  caméra par une source opaque non calculée.
+- Staging : sans migrations, le Core ne démarre pas sur une base vierge ; une coupure PostgreSQL > ~40 s retire le
+  conteneur du routage Coolify ; le Core n'expose pas son SHA.
+- Audit : P2-015 (preuve d'exécution agrégée), P2-021 (quotas Commands sur historique croissant), P2-025 (polling) ;
+  P3-001 (signature Windows), P3-002 (nommage « Lab » des tables / modules), P3-006 (harmonisation UX).
+
+## 0.9 Décisions en attente (Antoni)
+
+- **D1** soldes Jetons au cutover (import SE recommandé) · **D2** modèle Points de chaîne / crédits · **D5** définition de
+  « ce stream » (recommandation : session pour le live, `stream_day` pour les quotas ; appliquée en partie par P1-007).
+  D3 (PostgreSQL dédié), D4 (Hosted Test) et D6 (une app, deux profils) sont tranchées et appliquées.
+- Salves : forme du contrôle quantité / fréquence côté viewer (au début du Lot 5).
+- Moment du déploiement coordonné et de la prochaine release Studio.
+
+## 0.10 Prochaine étape recommandée
+
+Le prochain lot produit décidé est le **Lot 5 Salves** (Bonk), non commencé. Avant de l'attaquer, un **déploiement
+coordonné du Lot 0 sur le staging (Core puis Studio)** est recommandé : les Salves modifient l'admission et le claim
+du Core, et il vaut mieux valider d'abord en réel le Core actuel (sweep, `wrong_channel`, Bonk VNext de bout en bout,
+affichage d'un Bonk Twitch) pour partir d'une base livrée. Les deux restent à décider par Antoni.
+
+---
+
+# Référence détaillée et historique
+
+Les sections suivantes gardent le détail par domaine et l'historique daté. **L'état courant est § 0** : en cas
+d'écart, § 0 fait foi.
+
+## Checkpoint du 03/10/2026 (historique)
+
+Il ne faut pas utiliser le mot **« terminé »** de façon ambiguë. Distinguer systématiquement :
+1. **Core / moteur techniquement validé** ;
+2. **feature fonctionnelle migrée et prête** ;
+3. **activée en production**.
+
 Vérifié le 03/10/2026 par `git status` / `git log` et relance des tests sur le HEAD.
 - **Git** : branche `main`, HEAD fonctionnel `ed781f6 — feat: post-Tombola UX pass — Studio Tombola sections and Moderation header actions (Lab)`, suivi du commit docs de checkpoint Tombola. Aucun remote Git sur le repo source (rien n’est poussé), aucun tag dans le repo source. `prototypes/` présent sur disque, exclu via `.git/info/exclude`, jamais versionné ni embarqué.
 - **Tests sur le HEAD** : Core 257 (7 skipped), Studio server 92, Desktop 17, Extension 12, Bot 77 ; lint, format, typecheck verts. **E2E** (Electron, environnement isolé Studio 4111 / Core Lab 4311, bases dédiées supprimées après usage) : D4 95/95 · UX 34/34 · console G 23/23 · Studio 46/46 · Extension 49/49 · Phase H Tombola A–L 57/57. Les scripts E2E restent dans le scratchpad de session : **ils ne sont pas dans le repo**.
@@ -38,11 +198,6 @@ Vérifié le 03/10/2026 par `git status` / `git log` et relance des tests sur le
 | Tombola (inventaire legacy § 13) | **Migrée en Tombola V2** : lancement automatique (planificateur lié au stream), montant aléatoire, `!join` + alias + Extension, anti-spoil, overlay, SUPER (ex-Big Tombola), FULL OSEILLE, Giveaway, paiement automatique — validée en Lab, pas en production |
 | Décisions de modération | **Tranchées le 30/09** (voir § « Modération V2 — parité D4 complète ») |
 | Production | SAMMI + StreamElements (+ ancienne extension publiée) ; aucun cutover, aucune migration prod |
-
-Il ne faut pas utiliser le mot **« terminé »** de façon ambiguë. Distinguer systématiquement :
-1. **Core / moteur techniquement validé** ;
-2. **feature fonctionnelle migrée et prête** ;
-3. **activée en production**.
 
 ---
 
@@ -80,13 +235,13 @@ Il ne faut pas utiliser le mot **« terminé »** de façon ambiguë. Distinguer
 
 ## Stack
 - monorepo npm workspaces + Turborepo ;
-- Node 22 ;
+- Node 24 en développement (Studio installé : Node embarqué par Electron) ;
 - TypeScript strict ;
 - Electron pour Studio ;
 - Core API ;
 - Twitch Bot ;
 - Postgres local via Docker ;
-- Supabase/Postgres dans l’architecture serveur ;
+- PostgreSQL dédié côté serveur (Coolify, décision D3 ; le staging tourne ainsi depuis le 06/10/2026) ;
 - Twitch EventSub / Helix ;
 - obs-websocket v5, local et réservé au Studio.
 
@@ -210,15 +365,19 @@ Historique principal :
 - **`ecc0275 — feat: Tombola V2 moderation in the D4 console, frozen round names and final polish (phase G, Lab)`** — checkpoint Tombola (fonctionnel)
 - **`ed781f6 — feat: post-Tombola UX pass — Studio Tombola sections and Moderation header actions (Lab)`** — checkpoint Tombola (UX final) ; **dernier commit fonctionnel**
 
-Règles Git inchangées :
-- branche `main` ;
-- le repo local Raptoru 2.0 n’a pas de remote Git configuré ;
-- aucun push du repo source effectué ;
-- un ancien repo privé `raptorutwitch/raptoru-2.0` existe sur GitHub mais contient l’ancien historique et ne doit pas être traité comme miroir du workspace local actuel.
+La liste ci-dessus s’arrête au checkpoint Tombola (03/10/2026). La suite (préparation du cutover, staging, Hosted
+Test, compact-video, restrictions, emotes OAuth, Bonk VNext) se lit dans `git log` ; les repères utiles sont dans
+§ 0.1, dans `docs/CUTOVER_PLAN_2026-10.md` et dans `docs/BONK_VNEXT_AUDIT_2026-10.md`.
+
+Règles Git (mises à jour le 15/10/2026 ; l’ancienne règle « aucun remote, aucun push » est périmée) :
+- remote `origin` = `github.com/raptorutwitch/raptoru-2.0` (privé) : `main` et la branche de travail y sont
+  poussés **uniquement sur accord explicite d’Antoni** ;
+- travail courant sur `feat/compact-video-port` (§ 0.1) ; jamais de merge dans `main` sans accord ;
+- aucun tag dans le repo source.
 
 Le pipeline `studio:release` crée un commit local de version après publication réussie ; toujours vérifier `git log -n 10` avant de reprendre.
 
-# 4. État technique actuel — résumé fiable
+# 4. Presence (shadow)
 
 ## Presence
 **Techniquement VALIDÉ. Production : NON.**
@@ -509,6 +668,11 @@ Le snapshot abonnements réel et les preflights ont été validés.
 
 **Application Windows installable + Extension Lab + auto-update + pipeline de release : VALIDÉS techniquement.**
 
+> **État au 15/10/2026 :** dernière release publique **0.1.5** (30/09). Depuis : profils Lab / Production et cockpit
+> Production (P1-019), Modération V2, Tombola V2, Bonk VNext (cible Auto / Manuel / Plein écran, reconnexion OBS avec
+> mot de passe chiffré) — **validés localement, non publiés**. 0.1.6 a été construit le 06/10 sans être publié (périmé).
+> Prochaine release seulement après un Core staging compatible (§ 0.6 C).
+
 ## Packaging
 Format officiel : installateur NSIS x64 per-user.
 
@@ -638,6 +802,11 @@ Commits `76c94c4` (runtime local) et `ef4025d` (supervision Electron). Validé m
 
 # 12. Extension Twitch + Extension Lab
 
+> **État au 15/10/2026 :** la **production** utilise toujours l’extension legacy publiée (`20260920-095259Z`, EBS
+> `raptoru.fr/api`). L’extension Raptoru 2.0 tourne en **Hosted Test** (ZIP STAGING `c7f20de4430a` → Core staging),
+> jamais publiée. Géométrie du Video Component mesurée sur Twitch : 65 % · 3:2 · dimensions automatiques OFF →
+> **565 × 376** ; profil compact-video et Lab recalés (`docs/TWITCH_GEOMETRY_CALIBRATION_2026-10.md`).
+
 ## Extension Twitch actuelle
 L’extension de production existante a été importée dans Raptoru 2.0 comme fichiers statiques.
 
@@ -674,7 +843,7 @@ Le Lab sert **la vraie extension importée**, mais remplace :
 Surfaces testables :
 - Panel viewer 318×496 ;
 - Mobile viewer ;
-- Video component, 60 % du player, ratio 3:2 ;
+- Video component : preset « Twitch réel » 565 × 376 (et comparaison 651 × 434) — l’ancien calcul 60 % · 3:2 − 48 px est abandonné ;
 - Config ;
 - Live config.
 
@@ -750,12 +919,16 @@ Le Creepy est une feature signature à préserver/améliorer.
 - extension actuelle déclenche SAMMI ;
 - objectif : migration vers Core/Studio avec catalogue propre, extension-first, recherche/catégories/prix/cooldowns possibles.
 
+→ **Migré : Soundboard V2** (validé en Lab, validé au staging le 07/10/2026 ; production = SAMMI).
+
 ## TTS
 - texte saisi dans l’extension pour ne pas spoiler le texte dans le chat ;
 - voix aléatoire ;
 - petit personnage animé aléatoire synchronisé ;
 - HTTP requests + animations WEBM ;
 - assets/dossiers existants à récupérer.
+
+→ **Migré : TTS V2** (validé en Lab, validé au staging le 07/10/2026 ; production = SAMMI).
 
 ## Ban aléatoire
 - choisit dans les viewers ;
@@ -782,7 +955,7 @@ Le Creepy est une feature signature à préserver/améliorer.
 - mods : `!songskip` ;
 - skip viewer existe mais doit être limité/cooldown pour éviter abus.
 
-## Onglet Studio « Commandes » (roadmap — demandé par Antoni le 01/10/2026, pas encore construit)
+## Onglet Studio « Commandes » (demandé le 01/10/2026 — construit : Commands V2 phase D, validée)
 
 Un onglet global de Studio pour voir et modifier toutes les commandes chat, organisé par catégorie / module
 (Tombola, TTS, Soundboard, Bonk, modération, commandes globales…), avec recherche et sections repliables. Pas de
@@ -842,6 +1015,9 @@ Feature signature, déjà dans l’extension actuelle.
 - providers : Twitch, emotes de chaînes suivies/sub, 7TV, BTTV, FFZ, emoji style Discord/mobile souhaité ;
 - ancien mode lock/loop/spam bancal : envoi par paquets de 5, pas fidèle à l’intention ;
 - objectif : queue/burst/combo beaucoup plus précis.
+
+→ **Bonk VNext** (Lots 0–3 validés localement le 15/10/2026) : cible caméra Auto / Manuel / Plein écran, physique à
+contact systématique ; les vraies rafales = **Lot 5 Salves (NEXT, non commencé)**, combos en option.
 
 ## Level Up Wizebot
 - détecte message Wizebot de level-up ;
@@ -999,7 +1175,10 @@ Ne pas créer un moteur générique de workflows. Construire le minimum commun n
 
 ---
 
-# 16. Roadmap fonctionnelle — état actuel
+# 16. Modules — détail validé et roadmap au 03/10/2026 (historique daté)
+
+> La roadmap et le statut courant sont en **§ 0.4 et § 0.6**. Cette section garde le détail technique de chaque module
+> tel que validé, avec ses dates.
 
 **Ne plus travailler sur l’infrastructure générale sauf bug réel.**
 Le socle nécessaire au développement des features est maintenant suffisamment solide.
@@ -1045,7 +1224,7 @@ Extension Lab (vraie extension servie localement)
 → OBS (obs-websocket, source navigateur « Raptoru Bonk Lab » 1920×1080)
 → overlay → ACK started / completed / failed
 ```
-Lancement historique : `npm run bonk:lab` (Studio 4101, Lab Core 4301) ; aujourd’hui le Studio autonome démarre le runtime Lab lui-même (4100 / 4301). Connexion OBS par mot de passe dans l’UI du Lab (non stocké).
+Lancement historique : `npm run bonk:lab` (Studio 4101, Lab Core 4301) ; aujourd’hui le Studio autonome démarre le runtime Lab lui-même (4100 / 4301). Connexion OBS par mot de passe dans l’UI du Lab (non stocké à l’époque ; depuis Bonk VNext Lot 0 : mot de passe chiffré par `safeStorage`, reconnexion automatique).
 Statuts : `accepted → queued → executing → completed` / `failed` / `execution_unknown` ; `executing` seulement après ACK `started`, `completed` seulement après fin réelle du rendu.
 
 ### Catalogue
@@ -1239,13 +1418,13 @@ Issue des prototypes locaux `prototypes/hub-nav-dots/` et `prototypes/hub-nav-do
 - **Tests de référence (verts sur `ed781f6`)** : Core 257 · Studio server 92 · Bot 77 · Extension 12 · Desktop 17 · lint / format / typecheck OK · E2E UX 34/34 · E2E D4 95/95 · E2E console G 23/23 · E2E Studio 46/46 · E2E Extension 49/49 · Phase H A–L 57/57.
 - **Pas fait volontairement** : package local, release, publication de l’extension, activation production (SAMMI + StreamElements restent la production). L’ingestion chat Twitch réelle du Lab reste un interrupteur OFF par défaut, jamais activé automatiquement.
 
-## Roadmap après Bonk
+## Roadmap après Bonk (historique du 03/10/2026, remplacée par § 0.6)
 Ordre recommandé à date (checkpoint 30/09/2026 : Studio autonome + Hub + Bonk V2 + Soundboard V2 + TTS V2 validés) :
 1. ~~Soundboard~~ (validé en Lab le 28/09/2026) ;
 2. ~~TTS~~ (runtime réel validé en Lab le 30/09/2026) ;
 3. ~~Modération V2~~ (parité D4 complète, validée en Lab le 01/10/2026, `5b66579` ; en-têtes sans « … » le 03/10/2026) ;
 4. ~~Tombola V2~~ (**TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ** en Lab le 03/10/2026, `ecc0275` + `ed781f6`) ;
-5. Bonk Fidelity (polish, non bloquant) ;
+5. ~~Bonk Fidelity (polish, non bloquant)~~ → remplacé par Bonk VNext (Lots 0–3 validés le 15/10/2026) ;
 6. instrumentation stats/profil au fil des modules ;
 7. Jeu des mots 2.0 ;
 8. achievements/cosmétiques ;
@@ -1258,9 +1437,11 @@ Cette roadmap reste modulable après audit réel de chaque feature.
 
 **Modules terminés / validés en Lab (non activés en production)** : Hub, Bonk V2, Soundboard V2, TTS V2, Modération V2 (D4), **Tombola V2**. **Restent à migrer** : tout le reste de l’inventaire § 13 (alertes, Jeu des mots, Votekick / Caution / Random Ban, Spotify, Cash-in PDC, commandes personnalisées, onglet Studio « Commandes », stats / profils, achievements / cosmétiques…) puis le cutover — **Raptoru 2.0 n’est pas terminé.**
 
-**Prochaines actions : à décider par Antoni** — package local puis release Studio (embarquant Modération V2 + Tombola V2, validées en Lab ; uniquement sur feu vert explicite) ; audits de parité des autres modules à prototype validé (voir HANDOFF § 11). Aucun chantier ouvert au 03/10/2026.
+**Prochaines actions : à décider par Antoni** — package local puis release Studio (embarquant Modération V2 + Tombola V2, validées en Lab ; uniquement sur feu vert explicite) ; audits de parité des autres modules à prototype validé (historique). Aucun chantier ouvert au 03/10/2026. *(Historique : ont suivi la consolidation de l’audit, Commands V2, la préparation du cutover, le staging, le live Hosted Test, compact-video, les restrictions, l’OAuth emotes public et Bonk VNext — § 0.)*
 
 # 17. Import des données historiques / cutover
+
+> Procédure détaillée, ordre des P1 et rollback : `docs/CUTOVER_PLAN_2026-10.md` (canonique).
 
 **À FAIRE TOUT À LA FIN.**
 
@@ -1317,7 +1498,7 @@ Conclusion pratique :
 ## Documentation commune
 `CLAUDE.md` existe à la racine pour les règles Claude/release.
 
-Un `AGENTS.md` commun à tous les agents a été proposé mais **n’est pas confirmé comme créé** à ce checkpoint. Ne pas supposer son existence : vérifier le repo.
+Aucun `AGENTS.md` n’existe dans le repo (vérifié le 15/10/2026) : les règles agents sont dans `CLAUDE.md` et le HANDOFF.
 
 # 19. Reprise dans une nouvelle conversation / nouvel agent
 
@@ -1325,7 +1506,7 @@ Au démarrage d’une nouvelle conversation ou d’une session Astra/Claude :
 
 1. travailler uniquement dans :
    `C:\Users\Antoni\Documents\Raptoru 2.0`
-2. lire **d’abord `Raptoru-2.0-HANDOFF.md`**, puis ce fichier pour le détail ;
+2. lire **d’abord `Raptoru-2.0-HANDOFF.md`** (règles, commandes, pièges), puis **§ 0 de ce fichier** (état et roadmap) ;
 3. lire `CLAUDE.md`, `README.md` et les docs pertinentes du module ;
 4. exécuter au minimum `git status`, `git log -n 10 --oneline` et vérifier le HEAD réel ;
 5. ne jamais supposer qu’un SHA de ce document est encore le HEAD ;
@@ -1337,7 +1518,7 @@ Au démarrage d’une nouvelle conversation ou d’une session Astra/Claude :
    - activé en production ;
 9. ne jamais cutover un module juste parce qu’il passe ses tests ;
 10. pour Studio, une feature validée peut ensuite passer par `npm run studio:release` ;
-11. Bonk V2 est validé (§ 16) : ne pas le refaire ; seul le polish Bonk Fidelity reste, non bloquant.
+11. Bonk : V2 et VNext Lots 0–3 validés ; paramètres visuels / audio et physique figés ; le prochain lot est le Lot 5 Salves (§ 0.6).
 
 ### Audit Bonk de référence
 Rapport :
@@ -1345,7 +1526,7 @@ Rapport :
 
 Le rapport est un audit statique. Aucun test OBS/SAMMI/prod n’a été exécuté pendant cet audit.
 
-### État Git à revérifier
+### État Git à revérifier (historique du 01/10/2026 — l’état courant est § 0.1)
 Au 01/10/2026 (handoff) :
 - branche `main`, aucun remote, aucun tag dans le repo source ;
 - HEAD fonctionnel `5b66579` (Modération V2 — parité D4 complète), suivi uniquement de commits docs ;
@@ -1356,90 +1537,35 @@ Au 01/10/2026 (handoff) :
 
 Toujours vérifier l’état actuel avant toute modification.
 
-# 20. Résumé ultra-court
+# 20. Résumé ultra-court (15/10/2026)
 
 ```text
-Raptoru 2.0 = Core central + Twitch Bot fin + Studio Electron local + Extension viewer + Postgres.
+Raptoru 2.0 = Core central + Twitch Bot fin + Studio Electron local + Extension viewer + PostgreSQL.
 
-VALIDÉ TECHNIQUEMENT, mais pas activé prod :
-- Presence
-- Wallet Core
-- Wallet Commands + Permissions
-- Loyalty passif
-- Rewards Twitch
-- Daily
-- Daily → Wallet
-- durabilité/restarts
-- Studio Windows
-- Extension Lab
-- auto-update Studio
-- pipeline studio:release
-- Bonk V2 Lab (validé visuellement le 27/09/2026)
-- Soundboard V2 Lab (validé le 28/09/2026 ; noms des sons default_label + custom_label validés)
-- wallet switch global de l’extension (validé le 28/09/2026)
-- Hub Pop Premium (validé / fermé le 28/09/2026)
-- navigation Hub : dots + grille / lanceur dense + molette verticale (validée le 29/09/2026, `5538111`)
-- Studio autonome : runtime local + supervision Electron du serveur Studio (validé le 30/09/2026)
-- TTS V2 Lab runtime réel (validé le 30/09/2026 ; dette : synchro reveal / lecture)
+PRODUCTION RÉELLE : legacy uniquement (SAMMI + StreamElements + EBS raptoru.fr/api + Extension publiée).
+Aucune brique Raptoru 2.0 en production. Import des soldes SE : seulement juste avant le cutover.
 
-IMPLÉMENTÉ + TESTS AUTO + E2E, VALIDÉ PAR ANTONI, NON RELEASE :
-- Modération V2 — parité D4 complète (5b66579, validée le 01/10/2026) : permissions fines par mod (Core), sanctions sensibles,
-  mots surveillés (TTS retenu) / bloqués, notes, pause globale, cooldown D4, wallet admin,
-  stop / remboursements Soundboard (Core → worker → lecteur → ACK), débit Bonk,
-  historiques Core ; une seule console pour l'extension et l'onglet Studio « Modération » ;
-  en-têtes sans menu « … » (actions en icônes, ed781f6, validé le 03/10/2026)
-- TOMBOLA V2 — TERMINÉE / VALIDÉE / CHECKPOINT FIGÉ (Lab, 02–03/10/2026 ; ecc0275 + ed781f6) :
-  Core + planificateur, Studio, Extension Panel / Mobile / Vidéo, overlay OBS, modération D4, noms figés,
-  anti-spoil, SUPER / FULL OSEILLE / Giveaway, monnaies Je / Cr ; Phase H A–L 57/57.
-  Migrations figées (jamais réécrites) : 20261008120000_raffle_v2, 20261009120000_raffle_scheduler,
-  20261010120000_raffle_round_labels (+ 20261007120000_moderation_d4). Ne plus modifier sauf bug réel / feature décidée.
-- correctif « Effacer le cooldown TTS » (890e71d), non régressé
+GIT : feat/compact-video-port @ 65fea03 (+ ce commit) ; main = origin/main = d2b61ef ;
+      origin/feat/compact-video-port = c7f20de ; Bonk VNext = local uniquement.
 
-DÉPENDANCES EXTÉRIEURES : badges VIP / Sub (API Twitch broadcaster), mouvements automatiques (Wallet réel),
-  pop-out Twitch réel (publication), synchro ban / timeout Twitch
+STAGING (Core c7f20de, Hosted Test ZIP c7f20de4430a, paiement simulé) :
+- live validé le 07/10 : Soundboard, TTS, STOP / remboursement, Bonk, Modération, Tombola
+- OAuth emotes viewer validé le 14/10 (sauf affichage overlay) ; transport Studio ↔ Core validé
 
-Studio :
-- updater réel validé en 0.1.0 → 0.1.1
-- v0.1.2 publiée via le pipeline one-command
-- Studio 0.1.1 détecte bien v0.1.2
-- v0.1.5 = checkpoint Studio autonome + Hub + Bonk V2 + Soundboard V2 + TTS V2 (dernière release, validée ; ne contient pas la Modération V2)
-- feed public = raptorutwitch/raptoru-studio-releases
-- repo source local non poussé
+PUBLIÉ : Studio 0.1.5 (Studio autonome, Hub, Bonk V2, Soundboard V2, TTS V2 — mode Lab).
 
-Extension :
-- vraie extension prod importée
-- Tombola du Lab = Tombola V2 complète dans le Core Lab (checkpoint figé)
-- TTS V2 exécuté réellement en Lab (Core Lab → Studio → lecteur OBS), validé
-- Soundboard V2 exécuté réellement en Lab (Core Lab → Studio → lecteur audio local)
-- Hub Pop Premium + wallet switch global (anciens wallets migrés)
-- nouvelle extension (picker V2, Soundboard V2, Hub) NON publiée sur Twitch
+VALIDÉ LOCAL, PAS ENCORE LIVRÉ : Bonk VNext Lots 0–3 (Auto OBS, Manuel / Plein écran, physique à contact
+systématique, paramètres figés) ; Commands V2 A0 → F ; Studio profils / cockpit, Modération V2, Tombola V2 (pas
+dans 0.1.5).
 
-BONK V2 = VALIDÉ (Lab), PAS ACTIVÉ EN PROD :
-- Extension Lab → Core local/test → Studio → OBS → overlay (ACK started/completed/failed)
-- catalogue : Twitch viewer (OAuth user:read:emotes) statiques + animées, Bits,
-  7TV / BTTV / FFZ (chaîne + globales), Twemoji complet (~1914)
-- Core valide provider/id et construit les URL ; aucune URL client
-- picker : rail Récents / Favoris / Twitch / Bits / Extension / Emoji,
-  continuous scroll, lazy, persistant entre les polls, recherche multi-provider,
-  animées dans la grille, favoris + drag & drop, étoile desktop, bouton favori tactile
-- test_mode=true, payment_mode=simulated, real_debited=0
-- zéro Wallet réel, zéro stats/progression réelle, zéro prod
-- reste : Bonk Fidelity → Bonk VNext (Lots 0–3 validés le 15/10/2026, non déployés ; docs/BONK_VNEXT_AUDIT_2026-10.md)
+À CONSIGNER : Restrictions (vue + retour viewer), compact-video, passe UX TTS, affichage d'un Bonk Twitch (B3).
 
-PROCHAINE ACTION : à décider par Antoni (package local / release Studio sur feu vert, ou prochain module). Aucun chantier ouvert.
-RESTE À MIGRER : le reste de l'inventaire § 13 puis le cutover — Raptoru 2.0 n'est pas terminé.
-RÈGLE : prototype validé = spécification ; rien n’est supprimé ou simplifié silencieusement.
-Roadmap indicative ensuite : stats/profils → Jeu des mots 2.0 → achievements/cosmétiques → FX → modération sociale → Spotify/casino.
+NEXT : Bonk Lot 5 Salves (non commencé) — FX rares après. Recommandé avant : déploiement coordonné du Lot 0
+(Core staging puis Studio) et validation staging.
 
-Production réelle actuelle :
-SAMMI + StreamElements.
+BLOQUANTS PROD : Wallet réel (D1 / D2, import SE), Points de chaîne (P1-010), Extension non publiée (vrai secret),
+session prod (P1-007), transport (rate limit, cockpit), modules legacy non migrés (Jeu des mots, alertes, FX…).
 
-Import historique :
-SEULEMENT à la toute fin juste avant cutover global.
-
-Agents :
-- Claude Code = agent principal
-- Astra Mid/Codex Code = accès confirmé au même workspace, bon pour audit/review/slices bornés
-- jamais deux agents en écriture en parallèle
+RÈGLES : prototype validé = spécification ; « validé » = testé par Antoni ; aucun push / deploy / release /
+migration distante / changement Twitch sans son accord ; ordre de déploiement Core → Studio.
 ```
-
