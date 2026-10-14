@@ -635,6 +635,83 @@ describe.skipIf(!isLocal)('Core on a real Postgres', () => {
     }
   });
 
+  it.each(['sound', 'tts'] as const)(
+    '%s expiry sweep: 3 Cores ticking at once, one refund per expired item, no state regression',
+    async (module) => {
+      const clock = new FakeClock(paris('2026-10-14', 22));
+      const pools = [db, createPgDb(url!), createPgDb(url!)];
+      const cores = pools.map((d) =>
+        createCore(d, clock, new DevFakeCreditProvider()),
+      );
+      const channel = module === 'sound' ? '990003' : '990004';
+      const table = `${module}_lab_interactions`;
+      try {
+        const lab = module === 'sound' ? cores[0]!.soundLab : cores[0]!.ttsLab;
+        await lab.heartbeat({
+          studio_instance_id: 'itest-sweep',
+          player_ready: true,
+        });
+        if (module === 'sound')
+          await cores[0]!.soundLab.updateSound('akh', {
+            playback_mode: 'queue',
+          });
+        // TTS keeps a short waiting line (max_waiting_global): 3 items are enough.
+        const items = module === 'sound' ? 6 : 3;
+        for (let i = 0; i < items; i++) {
+          const base = {
+            idempotency_key: `${module}-sw-${i}`,
+            channel_id: channel,
+            viewer: { id: String(990300 + i), display_name: `S${i}` },
+            lab_session_id: 'itest',
+            payment_method: 'tokens' as const,
+          };
+          if (module === 'sound')
+            await cores[i % 3]!.soundLab.admit({ ...base, sound_id: 'akh' });
+          else
+            await cores[i % 3]!.ttsLab.admit({
+              ...base,
+              text: `Message de test numéro ${i}`,
+            });
+        }
+        // The first item is playing on a Studio that then disappears; the others were never claimed.
+        const playing = (await lab.claim('itest-sweep', channel))!;
+        await lab.ack(playing.interaction_id, {
+          studio_instance_id: 'itest-sweep',
+          attempt_id: playing.delivery.attempt_id!,
+          event: 'started',
+        });
+        clock.set(new Date(clock.now().getTime() + 40 * 60_000));
+        await Promise.all(
+          cores.flatMap((c) => {
+            const s = module === 'sound' ? c.soundLab : c.ttsLab;
+            return [s.sweepExpired(), s.sweepExpired()];
+          }),
+        );
+        const states = await db.query<{ status: string; n: number }>(
+          `select status, count(*)::int as n from ${table} where channel_id = $1 group by status order by status`,
+          [channel],
+        );
+        expect(states).toEqual([
+          { status: 'execution_unknown', n: 1 },
+          { status: 'failed', n: items - 1 },
+        ]);
+        const refunds = await db.query<{ interaction_id: string; n: number }>(
+          `select l.interaction_id, count(*)::int as n from lab_wallet_ledger l
+             join ${table} i using (interaction_id)
+           where i.channel_id = $1 and l.kind = 'refund' group by l.interaction_id`,
+          [channel],
+        );
+        expect(refunds).toHaveLength(items - 1);
+        expect(refunds.every((r) => r.n === 1)).toBe(true);
+        expect(
+          refunds.some((r) => r.interaction_id === playing.interaction_id),
+        ).toBe(false);
+      } finally {
+        await Promise.all(pools.slice(1).map((p) => p.close()));
+      }
+    },
+  );
+
   it('Rewards Twitch V1 in preview: 3 Cores, duplicates, conflicts, hot config change, zero Wallet write', async () => {
     const clock = new FakeClock(paris('2026-09-28', 20));
     const provider = new DevFakeCreditProvider();

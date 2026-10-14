@@ -426,6 +426,42 @@ describe('Soundboard Lab admission and playback (Core)', () => {
     expect(later.sound_id).toBe(first!.id);
   });
 
+  it('time-driven sweep (Bonk VNext lot 0): no Studio claims any more, the work still expires (refund once), a lost lease ends unknown', async () => {
+    const core = await setup();
+    await ready(core);
+    await core.soundLab.updateSound('akh', { playback_mode: 'queue' });
+    const lost = (await core.soundLab.admit(admitReq({ sound_id: 'akh' })))
+      .interaction;
+    const [claimed] = await claimAll(core);
+    await ack(core, claimed!, 'started');
+    const waiting = (await core.soundLab.admit(admitReq({ sound_id: 'akh' })))
+      .interaction;
+    const refunds = async (id: string) =>
+      (
+        await core.db.query<{ n: number }>(
+          "select count(*)::int as n from lab_wallet_ledger where kind = 'refund' and interaction_id = $1",
+          [id],
+        )
+      )[0]!.n;
+    expect(await core.soundLab.sweepExpired()).toBe(0);
+    core.clock.advance(3 * MINUTE);
+    // No heartbeat, claim, admission or read: only the time-driven sweep.
+    expect(await core.soundLab.sweepExpired()).toBe(1);
+    expect(await core.soundLab.get(lost.interaction_id)).toMatchObject({
+      status: 'execution_unknown',
+      refund_status: 'none',
+    });
+    expect(await core.soundLab.get(waiting.interaction_id)).toMatchObject({
+      status: 'failed',
+      error: { code: 'expired' },
+      refund_status: 'refunded',
+    });
+    expect(await refunds(waiting.interaction_id)).toBe(1);
+    expect(await core.soundLab.sweepExpired()).toBe(0);
+    expect(await refunds(waiting.interaction_id)).toBe(1);
+    expect(await refunds(lost.interaction_id)).toBe(0);
+  });
+
   it('never turns abandoned work into a success: expired → failed, lost lease → execution_unknown', async () => {
     const core = await setup();
     await ready(core);

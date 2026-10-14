@@ -338,6 +338,39 @@ describe('TTS V2 execution, cooldown and refunds', () => {
     });
   });
 
+  it('time-driven sweep (Bonk VNext lot 0): no Studio claims any more, the queue still expires (refund once), a lost lease ends unknown', async () => {
+    const { core, tts } = await lab();
+    const playing = await tts.admit(req());
+    const c = (await tts.claim(STUDIO, CHANNEL))!;
+    expect(c.interaction_id).toBe(playing.interaction.interaction_id);
+    await ack(tts, c, 'started');
+    const waiting = await tts.admit(req());
+    const refunds = async (id: string) =>
+      (
+        await core.db.query<{ n: number }>(
+          "select count(*)::int as n from lab_wallet_ledger where kind = 'refund' and interaction_id = $1",
+          [id],
+        )
+      )[0]!.n;
+    expect(await tts.sweepExpired()).toBe(0);
+    core.clock.advance(31 * MINUTE);
+    // No heartbeat, claim, admission or read: only the time-driven sweep.
+    expect(await tts.sweepExpired()).toBe(1);
+    expect(await tts.get(waiting.interaction.interaction_id)).toMatchObject({
+      status: 'failed',
+      error: { code: 'expired' },
+      refund_status: 'refunded',
+    });
+    expect(await tts.get(c.interaction_id)).toMatchObject({
+      status: 'execution_unknown',
+      refund_status: 'none',
+    });
+    expect(await refunds(waiting.interaction.interaction_id)).toBe(1);
+    expect(await tts.sweepExpired()).toBe(0);
+    expect(await refunds(waiting.interaction.interaction_id)).toBe(1);
+    expect(await refunds(c.interaction_id)).toBe(0);
+  });
+
   it('expired queue entries fail and are refunded; a lost player lease is execution_unknown (not refunded)', async () => {
     const { core, tts } = await lab();
     await tts.moderate(CHANNEL, { action: 'pause', actor: 'mod' }); // nothing is claimed while paused
