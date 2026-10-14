@@ -195,7 +195,28 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     return `<div class="composer"><textarea data-msg data-draft-key="tts-v2-text" rows="${rows}" maxlength="${max * 2}" placeholder="Ton message…" aria-label="Message TTS">${esc(S.text)}</textarea>
       <span class="count tnum${qt.over ? ' is-over' : ''}" data-slot="count">${fmt(qt.length)}/${fmt(max)}</span></div>`;
   };
-  const curToggle = () => `<span class="cur" role="group" aria-label="Monnaie de paiement">${['tokens', 'credits'].map((c) => `<button type="button" data-act="cur-set" data-cur="${c}" aria-pressed="${S.currency === c}" title="Payer en ${c === 'tokens' ? 'Jetons' : 'crédits TTS'}" aria-label="Payer en ${c === 'tokens' ? 'Jetons' : 'crédits TTS'}"><i class="coin coin--${c}">${c === 'tokens' ? '◆' : '✦'}</i></button>`).join('')}</span>`;
+  // Monnaie : un seul bouton (validé le 14/10/2026, esprit du wallet) — il montre la monnaie choisie et
+  // passe à l'autre au clic (Entrée / Espace au clavier). La logique de paiement ne change pas.
+  const CUR = {
+    tokens: { glyph: '◆', label: 'Jetons', long: 'Jetons' },
+    credits: { glyph: '✦', label: 'Crédits', long: 'crédits TTS' },
+  };
+  const curTitle = (c) => `Payer en ${CUR[c].long} · cliquer pour payer en ${CUR[c === 'tokens' ? 'credits' : 'tokens'].long}`;
+  const curToggle = () => {
+    const c = S.currency;
+    return `<button type="button" class="cur" data-act="cur-toggle" data-cur="${c}" title="${curTitle(c)}" aria-label="${curTitle(c)}"><i class="coin coin--${c}" aria-hidden="true">${CUR[c].glyph}</i><span class="cur__label">${CUR[c].label}</span></button>`;
+  };
+  /** Bouton monnaie mis à jour sur place (le focus clavier reste dessus). */
+  function syncCur(button) {
+    const c = S.currency;
+    button.dataset.cur = c;
+    button.title = curTitle(c);
+    button.setAttribute('aria-label', curTitle(c));
+    const coin = button.querySelector('.coin');
+    coin.className = `coin coin--${c}`;
+    coin.textContent = CUR[c].glyph;
+    button.querySelector('.cur__label').textContent = CUR[c].label;
+  }
   function payBlock() {
     const qt = quote();
     return `<div class="pay" data-cur="${S.currency}"><div class="pay__row">${curToggle()}
@@ -318,7 +339,8 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
       const hintEl = node.querySelector('[data-slot="pay-hint"]');
       hintEl.textContent = hintText();
       hintEl.dataset.kind = hintKind();
-      node.querySelectorAll('[data-act="cur-set"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cur === S.currency)));
+      const cur = node.querySelector('[data-act="cur-toggle"]');
+      if (cur) syncCur(cur);
     }
     syncPayment();
   }
@@ -672,7 +694,7 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     const b = e.target.closest?.('[data-act]');
     if (!b || b.disabled || !node.contains(b)) return;
     const a = b.dataset.act;
-    if (a === 'cur-set' && S.phase === 'compose') { S.currency = b.dataset.cur; hint = ''; refresh(); }
+    if (a === 'cur-toggle' && S.phase === 'compose') { S.currency = S.currency === 'tokens' ? 'credits' : 'tokens'; hint = ''; refresh(); }
     else if (a === 'confirm') void confirm();
     else if (a === 'ghost-pick' && !swallowClick) selectGhost(b.dataset.char);
     else if (a === 'ghost-step') stepGhost(Number(b.dataset.step));

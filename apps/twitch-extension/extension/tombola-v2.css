@@ -981,3 +981,117 @@ body.mobile:has(.tmbx) .m-body { height: 100vh; max-height: 100vh; overflow: hid
   letter-spacing: normal;
   text-transform: none;
 }
+
+/* --- Profil compact-video : Video Component 65 % · 3:2 (565×376 mesuré sur Twitch, validé le 14/10/2026) ---
+   Même fenêtre dans hub.css, tts-v2.css, soundboard.css, tombola-v2.css : largeur ≥ 521 px, hauteur 321–400 px.
+   Colonne gauche sans scroll (aussi avec un message de refus) ; à droite, titre fixe et TOUTE la liste
+   (--tmbx-preview-all lu par tombola-v2.js, plus de « Tout voir »), qui défile seule. Pseudos longs :
+   « … », défilement au survol (keyframes rl-marquee de soundboard.css). */
+@media (min-width: 521px) and (min-height: 321px) and (max-height: 400px) {
+  html:has(body.component-view) {
+    --tmbx-preview-all: 1;
+  }
+  body.component-view .tmbx .head {
+    height: 40px;
+  }
+  body.component-view .tmbx .ib {
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+  }
+  body.component-view .tmbx .body:has(> .grid2 .hero),
+  body.component-view .tmbx .body:has([data-slot='chips']) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 10px 12px;
+  }
+  body.component-view .tmbx .body:has(> .grid2 .hero) > .grid2 {
+    flex: 1;
+    min-height: 0;
+    gap: 12px;
+    align-items: stretch;
+  }
+  body.component-view .tmbx .grid2:has(.hero) > div:last-child {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+  body.component-view .tmbx .body:has([data-slot='chips']) > .sec:first-child {
+    margin-top: 0;
+  }
+  body.component-view .tmbx .grid2:has(.hero) .rows,
+  body.component-view .tmbx .body:has([data-slot='chips']) .rows {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: rgba(47, 216, 196, 0.35) transparent;
+    scrollbar-width: thin;
+  }
+  body.component-view .tmbx .body:has([data-slot='chips']) .chips {
+    flex: none;
+  }
+
+  body.component-view .tmbx .hero {
+    gap: 6px;
+    padding: 10px 10px 10px;
+  }
+  body.component-view .tmbx .hero .lbl {
+    font-size: 11px;
+  }
+  body.component-view .tmbx .ringbig,
+  body.component-view .tmbx .ringbig svg {
+    width: 84px;
+    height: 84px;
+  }
+  body.component-view .tmbx .ringbig .in b {
+    font-size: 25px;
+  }
+  body.component-view .tmbx .ringbig .in span {
+    font-size: 9px;
+  }
+  body.component-view .tmbx .ringbig .pz i {
+    width: 8px;
+    height: 28px;
+  }
+  body.component-view .tmbx .hero .amt {
+    font-size: 26px;
+  }
+  body.component-view .tmbx .hero .join,
+  body.component-view .tmbx .joined {
+    height: 36px;
+    font-size: 14px;
+  }
+  body.component-view .tmbx .hero .refusal {
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  body.component-view .tmbx .hero .alt {
+    font-size: 12px;
+  }
+  body.component-view .tmbx .hero .alt code {
+    padding: 1px 6px;
+  }
+  body.component-view .tmbx .hero .join-err {
+    font-size: 11.5px;
+    line-height: 1.25;
+  }
+  body.component-view .tmbx .meta-row {
+    padding-top: 8px;
+    font-size: 12px;
+  }
+  body.component-view .tmbx .grid2 .sec {
+    margin-bottom: 6px;
+  }
+  body.component-view .tmbx .row {
+    min-height: 36px;
+    padding: 5px 10px;
+  }
+  body.component-view .tmbx .row:hover .name.rl-marquee {
+    text-overflow: clip;
+    animation: rl-marquee var(--mq-t, 4s) ease-in-out infinite;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 10px), transparent);
+  }
+}

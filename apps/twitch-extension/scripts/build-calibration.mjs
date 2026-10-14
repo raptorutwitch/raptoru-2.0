@@ -5,8 +5,7 @@
 // - shared/runtime-config.js, generated here: mode 'demo' (no Twitch authorization awaited, no Twitch
 //   listen) + `fixtureCall` = calibration/adapter.js, so every answer of the client comes from local
 //   anonymised fixtures (no apiBase: no request can leave), environment 'calibration' (badge);
-// - video_component.html gets the calibration HUD (calibration/hud.js + hud.css, fixed overlay) and the
-//   « compact-video » density prototype (calibration/compact-video.css + .js, not validated);
+// - video_component.html gets the calibration HUD (calibration/hud.js + hud.css, fixed overlay);
 // - panel.html, mobile.html, config.html become a static « Calibration build — Video Component only ».
 // Packaged like build-staging.mjs (files at the root, STORED, [A-Za-z0-9._/-] names, no .md). Refuses
 // to finish if a packaged file names a Raptoru endpoint (legacy, staging Core, /v1/ext, local hosts).
@@ -61,14 +60,7 @@ for (const file of files(src)) {
 
 cpSync(src, out, { recursive: true });
 mkdirSync(join(out, 'calibration'));
-for (const name of [
-  'adapter.js',
-  'fixtures.js',
-  'hud.js',
-  'hud.css',
-  'compact-video.css',
-  'compact-video.js',
-])
+for (const name of ['adapter.js', 'fixtures.js', 'hud.js', 'hud.css'])
   copyFileSync(join(calibration, name), join(out, 'calibration', name));
 
 // Twitch upload: documentation files are not assets (e.g. assets/tts/PROVENANCE.md).
@@ -137,12 +129,12 @@ let video = readFileSync(videoPage, 'utf8');
 video = insertOnce(
   video,
   '</head>',
-  '  <link rel="stylesheet" href="calibration/compact-video.css">\n  <link rel="stylesheet" href="calibration/hud.css">',
+  '  <link rel="stylesheet" href="calibration/hud.css">',
 );
 video = insertOnce(
   video,
   '</body>',
-  '  <script type="module" src="calibration/compact-video.js"></script>\n  <script type="module" src="calibration/hud.js"></script>',
+  '  <script type="module" src="calibration/hud.js"></script>',
 );
 writeFileSync(videoPage, video);
 

@@ -125,11 +125,13 @@ body.mobile:has(.ttsv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 .ttsv2 .nav:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
 .ttsv2 .pay { display: flex; flex: none; flex-direction: column; gap: 5px; padding: 8px 10px 10px; }
 .ttsv2 .pay__row { display: flex; align-items: stretch; gap: 8px; }
-.ttsv2 .cur { display: inline-flex; flex: none; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 13px; background: rgba(8, 5, 18, 0.35); }
-.ttsv2 .cur button { display: grid; width: 32px; height: 100%; min-height: 34px; place-items: center; padding: 0; border: 0; border-radius: 10px; background: none; opacity: 0.45; transition: opacity 0.15s, background 0.15s; }
-.ttsv2 .cur button:hover { opacity: 0.8; }
-.ttsv2 .cur button[aria-pressed='true'] { background: rgba(255, 255, 255, 0.07); opacity: 1; }
-.ttsv2 .cur button:focus-visible { outline: 2px solid #dcc4ff; outline-offset: 1px; }
+/* Monnaie : un seul bouton qui bascule Jetons ⇄ Crédits (esprit du wallet, validé le 14/10/2026). */
+.ttsv2 .cur { display: inline-flex; min-width: 92px; flex: none; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--token) 40%, transparent); border-radius: 13px; background: linear-gradient(180deg, color-mix(in srgb, var(--token) 10%, transparent), rgba(8, 5, 18, 0.6)); color: #ffe9b0; font-size: 12px; font-weight: 800; transition: border-color 0.3s, background 0.3s, color 0.3s, filter 0.15s; }
+.ttsv2 .cur[data-cur='credits'] { border-color: color-mix(in srgb, var(--credit) 40%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--credit) 10%, transparent), rgba(8, 5, 18, 0.6)); color: #d8efff; }
+.ttsv2 .cur:hover:not(:disabled) { filter: brightness(1.15); }
+.ttsv2 .cur:focus-visible { outline: 2px solid #dcc4ff; outline-offset: 1px; }
+.ttsv2 .cur .coin { transition: transform 0.3s var(--ease); }
+.ttsv2 .cur:active:not(:disabled) .coin { transform: scale(0.88); }
 .ttsv2 .coin { display: grid; width: 18px; height: 18px; place-items: center; border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); font-size: 9px; font-style: normal; font-weight: 900; }
 .ttsv2 .coin--tokens { background: radial-gradient(circle at 35% 30%, #fff3cf, #f2c65f 58%, #a8781f); color: #6a4a08; }
 .ttsv2 .coin--credits { background: radial-gradient(circle at 35% 30%, #eaf6ff, #7cc4ff 58%, #2f6fa8); color: #0d3a61; }
@@ -243,6 +245,9 @@ body.mobile:has(.ttsv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 .ttsv2[data-surface='video'] .cols { grid-template-columns: 1fr 250px; }
 .ttsv2[data-surface='video'] .stage { height: auto; flex: 1; min-height: 0; }
 .ttsv2[data-surface='video'] .pay, .ttsv2[data-surface='video'] .tx-foot { padding: 0; }
+/* Video : « Il te manque … » a sa ligne réservée au-dessus du paiement ; le bouton ne bouge jamais. */
+.ttsv2[data-surface='video'] .pay-hint { display: block; order: -1; height: 16px; overflow: hidden; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.ttsv2[data-surface='video'] .pay-hint:empty { visibility: hidden; }
 .ttsv2[data-surface='video'] .card__id b { font-size: 24px; }
 .ttsv2[data-surface='video'] .col--preview { gap: 10px; padding: 10px; }
 .ttsv2[data-surface='video'] .ghost { height: auto; flex: 1; min-height: 0; }
@@ -261,7 +266,7 @@ body.mobile:has(.ttsv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 .ttsv2[data-surface='mobile'] .nav { width: 40px; height: 48px; }
 .ttsv2[data-surface='mobile'] .pay, .ttsv2[data-surface='mobile'] .tx-foot { padding: 10px 12px 12px; border-top: 1px solid var(--line); background: rgba(12, 8, 24, 0.85); }
 .ttsv2[data-surface='mobile'] .cta { min-height: 50px; font-size: 16px; }
-.ttsv2[data-surface='mobile'] .cur button { width: 40px; min-height: 42px; }
+.ttsv2[data-surface='mobile'] .cur { min-width: 108px; font-size: 14px; }
 .ttsv2[data-surface='mobile'] .coin { width: 22px; height: 22px; font-size: 11px; }
 .ttsv2[data-surface='mobile'] .pay-hint { font-size: 12.5px; }
 .ttsv2[data-surface='mobile'] .card__id b { font-size: 26px; }
@@ -272,3 +277,15 @@ body.mobile:has(.ttsv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
 .ttsv2[data-surface='panel'] .stage { height: 236px; }
 .ttsv2[data-surface='panel'] .done3 .stage { height: 178px; }
 .ttsv2[data-surface='panel'] .done3 { gap: 8px; }
+
+/* --- Profil compact-video : Video Component 65 % · 3:2 (565×376 mesuré sur Twitch, validé le 14/10/2026) ---
+   Même fenêtre dans hub.css, soundboard.css, picker.css, tombola-v2.css : largeur ≥ 521 px, hauteur 321–400 px.
+   Budget : message · infos · ligne réservée « Il te manque … » · paiement, sans scroll global. */
+@media (min-width: 521px) and (min-height: 321px) and (max-height: 400px) {
+  body.component-view .ttsv2[data-surface='video'] .cols { gap: 10px; padding: 0 12px 10px; }
+  body.component-view .ttsv2[data-surface='video'] .col { gap: 7px; }
+  body.component-view .ttsv2[data-surface='video'] .col--preview { gap: 8px; padding: 8px; }
+  body.component-view .ttsv2[data-surface='video'] .pay { gap: 4px; }
+  body.component-view .ttsv2[data-surface='video'] .cta { min-height: 38px; border-radius: 12px; }
+  body.component-view .ttsv2[data-surface='video'] .cur { border-radius: 12px; }
+}

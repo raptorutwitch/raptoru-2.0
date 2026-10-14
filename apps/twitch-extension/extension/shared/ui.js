@@ -29,7 +29,9 @@ import {
 } from './ui-primitives.js';
 import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
 import { createEmotePicker } from './emote-picker.js';
+import { createTwitchEmoteDialog, createTwitchEmoteSource } from './bonk-twitch-source.js';
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
+import { hoverMarquee } from './hover-marquee.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
 import { createModerationV2View } from './moderation-v2.js';
@@ -1254,6 +1256,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let emoteCatalogGeneration = 0;
   let emoteForceReloadPending = false;
   let emoteAuthorizationStarting = false;
+  // Bonk : fenêtre « Lie ton compte Twitch » ouverte depuis la source Twitch de la colonne latérale.
+  let bonkTwitchLinkOpen = false;
   let emoteAuthorizationPopup = null;
   let emoteAuthorizationPoller = null;
   let emoteAuthorizationFinishing = false;
@@ -2497,6 +2501,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     grid.setAttribute('role', 'list');
     grid.setAttribute('aria-label', 'Catalogue Soundboard');
     grid.dataset.scrollKey = 'soundboard-grid';
+    hoverMarquee(grid, '.sbx-card', '.sbx-card__name');
 
     const visibleSounds = () => {
       let candidates = sounds.filter((sound) => soundboardSoundMatchesQuery(sound, drafts.soundboard.query, aliases));
@@ -3270,15 +3275,36 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       && !emoteLoading) {
       queueMicrotask(loadEmotes);
     }
+    // Compte Twitch non lié : une source « Twitch » dans la colonne latérale (bonk-twitch-source.js) au
+    // lieu d'un bandeau permanent ; sa fenêtre lance le vrai flow OAuth (beginEmoteAuthorization).
+    let twitchSource = null;
     if (state?.emotes?.twitch_connected === false) {
-      body.append(el('p', 'jdm-emote-personal-locked', '🔒 Emotes Twitch · Autorise Twitch pour afficher tes emotes personnelles et sub.'));
-      const connect = el('button', 'jdm-emote-connect', emoteAuthorizationStarting ? 'Ouverture Twitch…' : 'Autoriser mes emotes Twitch');
-      connect.type = 'button';
-      connect.disabled = emoteAuthorizationStarting;
-      connect.setAttribute('aria-label', 'Autoriser l’accès à mes emotes Twitch');
-      connect.addEventListener('click', () => beginEmoteAuthorization(body));
-      body.append(connect);
-      body.append(el('p', 'jdm-emote-connect__hint', 'Accès minimal user:read:emotes. Les emotes publiques restent utilisables sans autorisation.'));
+      twitchSource = createTwitchEmoteSource({
+        document,
+        open: bonkTwitchLinkOpen,
+        onOpen: () => {
+          bonkTwitchLinkOpen = true;
+          renderPreservingViewport();
+        },
+      });
+      if (bonkTwitchLinkOpen) {
+        const dialog = createTwitchEmoteDialog({
+          document,
+          starting: emoteAuthorizationStarting,
+          onAuthorize: () => {
+            bonkTwitchLinkOpen = false;
+            dialog.node.remove();
+            beginEmoteAuthorization(body);
+          },
+          onClose: () => {
+            bonkTwitchLinkOpen = false;
+            renderPreservingViewport();
+            queueMicrotask(() => root.querySelector('.rl-twitch-src')?.focus({ preventScroll: true }));
+          },
+        });
+        body.append(dialog.node);
+        queueMicrotask(dialog.focus);
+      }
     } else if (state?.emotes?.twitch_connected === true) {
       oauthControls = el('div', 'jdm-emote-oauth-controls');
       const refresh = createIconButton({
@@ -3853,6 +3879,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         : 'Partage ton identité Twitch pour utiliser les interactions. Aucun jeton ne sera consommé.'));
     }
     emotePicker.setExtras(oauthControls);
+    emotePicker.setLead(twitchSource);
     emotePicker.setData(pickerGroups());
     emotePicker.attached();
     renderAmmo();

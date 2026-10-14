@@ -11,6 +11,7 @@
 // tirage → résultat…); between two reads only the small values move (seconds, ring, counters, rows,
 // join zone), so the scroll, a click in progress and the animations are never reset by polling.
 import { errorLabel } from './api.js';
+import { hoverMarquee } from './hover-marquee.js';
 import { fitMoney, moneyHtml, unitHtml } from './currency.js';
 
 const POLL_ACTIVE_MS = 1000;
@@ -216,12 +217,12 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       return `<div class="row ${isMe ? 'me' : ''}">${avatar(p.display_name, p.avatar_url)}<span class="name">${esc(p.display_name)}${isMe ? ' <span class="muted">(toi)</span>' : ''}</span>${srcPill(p.source)}</div>`;
     }).join('');
   }
-  // Aperçu de l'écran ouvert : 5 participants, ou toute la liste (défilement local) quand un profil de
-  // densité CSS le demande (--tmbx-preview-all: 1 sur la racine).
+  // Aperçu de l'écran ouvert : 5 participants + « Tout voir » ; profil compact-video (tombola-v2.css pose
+  // --tmbx-preview-all: 1 sur la racine) : toute la liste, qui défile seule, et plus de « Tout voir ».
   const previewLimit = () =>
     document.defaultView?.getComputedStyle(document.documentElement)?.getPropertyValue('--tmbx-preview-all').trim() === '1' ? Infinity : 5;
   function participantsSec(r, limit) {
-    return `<div class="sec"><span data-slot="pcount">Participants · ${r.participants}</span>${limit ? '<a data-act="participants">Tout voir</a>' : ''}</div>
+    return `<div class="sec"><span data-slot="pcount">Participants · ${r.participants}</span>${Number.isFinite(limit) ? '<a data-act="participants">Tout voir</a>' : ''}</div>
       ${limit ? '' : `<div class="chips" data-slot="chips">${chips()}</div>`}
       <div class="rows" data-slot="rows">${rows(r, limit)}</div>`;
   }
@@ -512,6 +513,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     }
   }
 
+  hoverMarquee(node, '.row', '.name');
   node.addEventListener('click', (ev) => {
     const t = ev.target;
     const a = t.closest('[data-act]');

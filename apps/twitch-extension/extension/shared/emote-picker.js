@@ -122,6 +122,8 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
   let activeSectionId = null;
   let metricsWidth = 0;
   let extras = null;
+  // Entrée fixe en tête de la colonne (ex. source Twitch non liée de Bonk) : survit aux reconstructions.
+  let lead = null;
 
   // --- cellules ---------------------------------------------------------------------------------
 
@@ -361,6 +363,7 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
     navItems.clear();
     familyBlocks.clear();
     nav.replaceChildren();
+    if (lead) nav.append(lead);
     for (const group of groups) {
       const item = buildNavItem(group);
       navItems.set(group.id, item);
@@ -756,6 +759,12 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
     setHandlers(next) { handlers = { ...handlers, ...next }; },
     setData,
     // Contrôles propres à l'hôte (ex. OAuth Twitch), affichés au bout de la ligne de recherche.
+    setLead(node) {
+      if (node === lead) return;
+      lead?.remove();
+      lead = node ?? null;
+      if (lead) nav.prepend(lead);
+    },
     setExtras(node) {
       extras?.remove();
       extras = node ?? null;

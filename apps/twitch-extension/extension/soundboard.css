@@ -1235,3 +1235,149 @@ html body .jdm-module__screen-title:has(> .sbx-vol) {
     animation: none;
   }
 }
+
+/* --- Profil compact-video : Video Component 65 % · 3:2 (565×376 mesuré sur Twitch, validé le 14/10/2026) ---
+   Même fenêtre dans hub.css, tts-v2.css, soundboard.css, tombola-v2.css : largeur ≥ 521 px, hauteur 321–400 px.
+   4 colonnes, cartes 42 px, en-tête et paiement compacts ; seule la grille défile. Noms longs : « … » au
+   repos, défilement local au survol / focus seulement (shared/hover-marquee.js) — dette UX : encore un
+   peu saccadé, à reprendre. */
+@media (min-width: 521px) and (min-height: 321px) and (max-height: 400px) {
+  body.component-view .sbx-head {
+    gap: 5px;
+  }
+  body.component-view .sbx-search {
+    height: 28px;
+    border-radius: 10px;
+  }
+  body.component-view .sbx-iconbtn {
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+  }
+  body.component-view .sbx-iconbtn .sbx-icon {
+    width: 14px;
+    height: 14px;
+  }
+  body.component-view .sbx-filters {
+    padding: 2px;
+    border-radius: 9px;
+  }
+  body.component-view .sbx-filter {
+    height: 20px;
+    padding: 0 8px;
+    border-radius: 7px;
+    font-size: 11px;
+  }
+  body.component-view .sbx-status {
+    height: 20px;
+  }
+
+  body.component-view .sbx-grid {
+    grid-auto-rows: 42px;
+    gap: 5px 6px;
+    padding: 3px 4px;
+  }
+  body.component-view .sbx-card {
+    border-radius: 11px;
+  }
+  body.component-view .sbx-card.is-selected {
+    transform: translateY(-1px);
+  }
+  body.component-view .sbx-card.is-selected::before {
+    top: 9px;
+    bottom: 9px;
+  }
+  body.component-view .sbx-card__play {
+    width: 24px;
+    height: 24px;
+    margin-left: 6px;
+    border-radius: 7px;
+  }
+  body.component-view .sbx-card__play .sbx-icon {
+    width: 12px;
+    height: 12px;
+    margin-left: 1px;
+  }
+  body.component-view .sbx-card__play .sbx-eq {
+    height: 11px;
+  }
+  body.component-view .sbx-card__text {
+    gap: 3px;
+    margin: 0 6px;
+  }
+  body.component-view .sbx-card__name {
+    display: block;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    hyphens: none;
+  }
+  body.component-view .sbx-card__meta {
+    padding-right: 18px;
+  }
+  body.component-view .sbx-card__fav {
+    top: auto;
+    right: 2px;
+    bottom: 2px;
+    width: 18px;
+    height: 18px;
+  }
+  body.component-view .sbx-card__fav .sbx-icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  body.component-view .sbx-bar {
+    gap: 8px;
+    padding: 4px 5px 4px 10px;
+    border-radius: 12px;
+  }
+  body.component-view .sbx-bar__eyebrow {
+    font-size: 9.5px;
+  }
+  body.component-view .sbx-bar__name {
+    font-size: 13px;
+  }
+  body.component-view .sbx-bar .rl-cswitch {
+    padding: 3px;
+  }
+  body.component-view .sbx-bar .rl-cswitch__chip {
+    height: 26px;
+  }
+  body.component-view .sbx-price__value {
+    font-size: 16px;
+  }
+  body.component-view .sbx-send {
+    height: 30px;
+    padding: 0 12px 0 14px;
+    border-radius: 10px;
+    font-size: 12.5px;
+  }
+  body.component-view .sbx-card:is(:hover, :focus-within) .sbx-card__name.rl-marquee {
+    text-overflow: clip;
+    animation: rl-marquee var(--mq-t, 4s) ease-in-out infinite;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 10px), transparent);
+  }
+}
+/* Aller-retour d'un nom trop long (aussi utilisé par tombola-v2.css) : pause, aller, pause, retour. */
+@keyframes rl-marquee {
+  0%,
+  14% {
+    text-indent: 0;
+  }
+  56%,
+  74% {
+    text-indent: calc(-1 * var(--mq-d, 0px));
+  }
+  100% {
+    text-indent: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.component-view .sbx-card .sbx-card__name.rl-marquee {
+    text-overflow: ellipsis;
+    animation: none;
+  }
+}
