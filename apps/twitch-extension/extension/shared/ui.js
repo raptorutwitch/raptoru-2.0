@@ -1857,11 +1857,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       flash(node, 'La fenêtre Twitch est déjà ouverte.', 'ok');
       return;
     }
+    // Blank window first, in the click itself (browsers keep the user gesture). Raptoru Studio refuses it
+    // (only its own pages open inside; https links go to the system browser): then the Twitch URL itself
+    // is opened, which Studio hands to the system browser.
     const popup = window.open('about:blank', '_blank');
-    if (!popup) {
-      flash(node, 'Autorise les fenêtres Twitch pour ouvrir la connexion des emotes.', 'error');
-      return;
-    }
     emoteAuthorizationPopup = popup;
     emoteAuthorizationStarting = true;
     try {
@@ -1872,9 +1871,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         || authorizationUrl.hostname !== 'id.twitch.tv'
         || authorizationUrl.pathname !== '/oauth2/authorize'
       ) throw new Error('invalid_oauth_url');
-      popup.location.replace(authorizationUrl.href);
-      startEmoteAuthorizationPolling();
-      flash(node, 'Autorise user:read:emotes dans la fenêtre Twitch, puis reviens ici.', 'ok');
+      if (popup) {
+        popup.location.replace(authorizationUrl.href);
+        startEmoteAuthorizationPolling();
+        flash(node, 'Autorise user:read:emotes dans la fenêtre Twitch, puis reviens ici.', 'ok');
+      } else {
+        // Studio answers null too when it opened the system browser: the message covers both cases.
+        window.open(authorizationUrl.href, '_blank');
+        startEmoteAuthorizationPolling();
+        flash(node, 'Connexion Twitch ouverte dans ton navigateur. Si rien ne s’ouvre, autorise les fenêtres Twitch.', 'ok');
+      }
     } catch (error) {
       const poller = emoteAuthorizationPoller;
       emoteAuthorizationPoller = null;
