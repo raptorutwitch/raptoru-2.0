@@ -314,6 +314,76 @@ describe('Production players (set up from the Studio tab)', () => {
     ).toEqual([]);
   });
 
+  it('Bonk target settings (lot 2): read, refused when invalid, saved and served to the live renderer only', async () => {
+    const f = await production();
+    const renderer = { 'x-bonk-token': f.bonk.worker.token };
+    const config = (id: string) =>
+      hit(f.bonk, 'POST', '/bonk-lab/renderer/config', renderer, {
+        renderer: id,
+      });
+    expect(
+      (await hit(f.bonk, 'GET', '/api/bonk-lab/settings', STUDIO)).body,
+    ).toEqual({
+      settings: {
+        version: 1,
+        mode: 'manual',
+        manual: { x: 720 / 1920, y: 250 / 1080, w: 480 / 1920, h: 300 / 1080 },
+      },
+    });
+    f.bonk.worker.setObs(true, true);
+    await hit(f.bonk, 'POST', '/bonk-lab/renderer/heartbeat', renderer, {
+      renderer: 'renderer-prod',
+    });
+    expect((await config('renderer-prod')).body).toEqual({
+      target: {
+        revision: 0,
+        mode: 'manual',
+        rect: { x: 720, y: 250, w: 480, h: 300 },
+      },
+    });
+    const file = join(f.dir, 'production', 'bonk', 'bonk-settings.json');
+    const refused = await hit(
+      f.bonk,
+      'POST',
+      '/api/bonk-lab/settings',
+      STUDIO,
+      {
+        version: 1,
+        mode: 'manual',
+        manual: { x: 0.9, y: 0, w: 0.5, h: 0.5 },
+      },
+    );
+    expect(refused).toEqual({ status: 409, body: { error: 'invalid_zone' } });
+    expect(await readFile(file, 'utf8').catch(() => null)).toBeNull();
+    // « Enregistrer »: persisted next to the Production journal, then served (the draft never is).
+    const zone = { x: 0.05, y: 0.55, w: 0.3, h: 0.4 };
+    expect(
+      (
+        await hit(f.bonk, 'POST', '/api/bonk-lab/settings', STUDIO, {
+          version: 1,
+          mode: 'manual',
+          manual: zone,
+        })
+      ).body,
+    ).toEqual({
+      ok: true,
+      settings: { version: 1, mode: 'manual', manual: zone },
+    });
+    expect(JSON.parse(await readFile(file, 'utf8')).manual).toEqual(zone);
+    expect((await config('renderer-prod')).body).toEqual({
+      target: {
+        revision: 1,
+        mode: 'manual',
+        rect: { x: 0.05 * 1920, y: 0.55 * 1080, w: 0.3 * 1920, h: 0.4 * 1080 },
+      },
+    });
+    expect((await config('renderer-other')).body).toEqual({ target: null });
+    // The capture needs OBS (read-only); without it, a clear refusal.
+    expect(
+      (await hit(f.bonk, 'GET', '/api/bonk-lab/obs-screenshot', STUDIO)).body,
+    ).toEqual({ error: 'obs_offline' });
+  });
+
   it('back to Lab: the Lab players keep their own tokens and journals, no collision with Production', async () => {
     process.env.BONK_LAB_CORE_URL = 'http://127.0.0.1:1';
     process.env.BONK_LAB_SECRET = 'lab-secret';

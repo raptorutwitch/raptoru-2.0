@@ -8,6 +8,7 @@ import { createAudioGovernor } from './audio.js';
 import { DENSITY, densityDecision } from './density.js';
 import { sampleAt } from './physics.js';
 import { planShot } from './plan.js';
+import { CANVAS, DEFAULT_TARGET, MIN_SIDE } from './target.js';
 
 const RECENT_IMPACTS = 6;
 /** End guaranteed even without frames. */
@@ -32,6 +33,8 @@ export function createScene({
   const recent = [];
   const history = [];
   let lastEntry = null;
+  /** Saved target (Studio settings, lot 2); new projectiles only, the ones in flight keep theirs. */
+  let target = { mode: 'manual', rect: DEFAULT_TARGET };
   let looping = false;
   const governor = createAudioGovernor();
 
@@ -107,6 +110,31 @@ export function createScene({
 
   return {
     /** Projectiles on screen. */
+    /** Applies a saved target; anything malformed is ignored (the current one stays). */
+    setTarget(next) {
+      if (next?.mode === 'fullscreen') {
+        target = { mode: 'fullscreen', rect: null };
+        return;
+      }
+      const r = next?.rect;
+      const ok =
+        next?.mode === 'manual' &&
+        r &&
+        [r.x, r.y, r.w, r.h].every(Number.isFinite) &&
+        r.w >= MIN_SIDE &&
+        r.h >= MIN_SIDE &&
+        r.x >= 0 &&
+        r.y >= 0 &&
+        r.x + r.w <= CANVAS.width + 0.5 &&
+        r.y + r.h <= CANVAS.height + 0.5;
+      if (ok)
+        target = { mode: 'manual', rect: { x: r.x, y: r.y, w: r.w, h: r.h } };
+    },
+
+    get target() {
+      return target;
+    },
+
     get alive() {
       return sprites.length;
     },
@@ -129,6 +157,8 @@ export function createScene({
         history,
         lastEntry,
         reduced: decision.reduced,
+        mode: target.mode,
+        rect: target.rect,
       });
       recent.push({ x: plan.impact.x, y: plan.impact.y });
       if (recent.length > RECENT_IMPACTS) recent.shift();

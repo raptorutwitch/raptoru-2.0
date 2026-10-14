@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { WorkerLoop } from '../worker-loop.js';
-import { join, extname } from 'node:path';
+import { dirname, join, extname } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { BonkLabThirdPartyCatalog } from '@raptoru/schemas';
 import { BonkWorker, localCoreClient, type CoreCall } from './worker.js';
 import { LabObs } from './obs.js';
+import { BonkSettingsStore } from './settings.js';
 import { ViewerAuth } from './viewer-auth.js';
 import { paths, REPO_ROOT } from '../test-lab/local-env.js';
 import type { RuntimeWiring } from '../worker-journal.js';
@@ -49,7 +50,9 @@ export class BonkRuntime {
     readonly viewerAuth: ViewerAuth,
     private readonly core: CoreCall,
     /** Production profile: remote Core over the future-prod transport (ASTRA-P1-019). */
-    readonly production = false,
+    readonly production: boolean,
+    /** Where the Bonks aim (lot 2), one file per profile next to its journal. */
+    readonly settings: BonkSettingsStore,
   ) {}
   /** Public 7TV/BTTV/FFZ catalog of the channel, resolved by Lab Core (metadata + CDN URLs). */
   readonly thirdPartyCatalog = (refresh = false) =>
@@ -70,10 +73,11 @@ export class BonkRuntime {
         process.env.BONK_LAB_CORE_URL!,
         process.env.BONK_LAB_SECRET!,
       );
-    const worker = await BonkWorker.open(
-      production?.journal ?? join(paths.runtimeDir, 'bonk-lab', 'journal.json'),
-      core,
-      production?.transport,
+    const journal =
+      production?.journal ?? join(paths.runtimeDir, 'bonk-lab', 'journal.json');
+    const worker = await BonkWorker.open(journal, core, production?.transport);
+    const settings = await BonkSettingsStore.open(
+      join(dirname(journal), 'bonk-settings.json'),
     );
     return new BonkRuntime(
       worker,
@@ -81,6 +85,7 @@ export class BonkRuntime {
       new ViewerAuth(core),
       core,
       !!production,
+      settings,
     );
   }
   /** Live OBS / overlay state (moderation cockpit). */
@@ -214,6 +219,23 @@ export class BonkRuntime {
         await this.obs.connect(Number(body.port), String(body.password ?? ''));
         reply(200, { ok: true });
       } else if (
+        req.method === 'GET' &&
+        url.pathname === '/api/bonk-lab/settings'
+      ) {
+        reply(200, { settings: this.settings.settings });
+      } else if (
+        req.method === 'POST' &&
+        url.pathname === '/api/bonk-lab/settings'
+      ) {
+        // « Enregistrer » of the zone editor: validated, persisted, then served to the overlay.
+        reply(200, { ok: true, settings: await this.settings.save(body) });
+      } else if (
+        req.method === 'GET' &&
+        url.pathname === '/api/bonk-lab/obs-screenshot'
+      ) {
+        if (!this.obs.connected) throw new Error('obs_offline');
+        reply(200, { image: await this.obs.programScreenshot() });
+      } else if (
         req.method === 'POST' &&
         url.pathname === '/api/bonk-lab/preview'
       ) {
@@ -244,6 +266,13 @@ export class BonkRuntime {
         if (url.pathname.endsWith('/heartbeat')) {
           await this.worker.rendererHeartbeat(renderer);
           reply(200, { ok: true });
+        } else if (url.pathname.endsWith('/config')) {
+          // Saved target only (the Studio editor's draft never reaches the overlay).
+          reply(200, {
+            target: this.worker.isLiveRenderer(renderer)
+              ? this.settings.target()
+              : null,
+          });
         } else if (url.pathname.endsWith('/preview')) {
           // Only the live renderer draws previews; nothing else is read or written.
           reply(200, {

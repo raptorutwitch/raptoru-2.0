@@ -146,3 +146,37 @@ export function pickImpact(
   }
   return { ...point, category, edge };
 }
+
+// --- Fullscreen (lot 2): the whole canvas, no camera frame ------------------------------------
+
+/** Fullscreen target: the canvas minus a 6 % margin. */
+export const FULLSCREEN_MARGIN = 0.06;
+export const FULLSCREEN_TARGET = Object.freeze({
+  x: CANVAS.width * FULLSCREEN_MARGIN,
+  y: CANVAS.height * FULLSCREEN_MARGIN,
+  w: CANVAS.width * (1 - 2 * FULLSCREEN_MARGIN),
+  h: CANVAS.height * (1 - 2 * FULLSCREEN_MARGIN),
+});
+/** No edge to hit: it knocks against the screen (« glass », bounces back) or flies through. */
+export const FULLSCREEN_CATEGORIES = Object.freeze([
+  ['glass', 0.6],
+  ['pass', 0.4],
+]);
+
+/** Impact anywhere on the fullscreen area, with the same anti-clustering. */
+export function pickFullscreenImpact(random, { size = 140, recent = [] } = {}) {
+  const category = pickWeighted(random, FULLSCREEN_CATEGORIES);
+  const r = FULLSCREEN_TARGET;
+  let point;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    point = { x: r.x + random() * r.w, y: r.y + random() * r.h };
+    const crowded = recent.some(
+      (p) => Math.hypot(p.x - point.x, p.y - point.y) < size / 2,
+    );
+    if (!crowded) break;
+  }
+  return { ...point, nx: 0, ny: -1, category, edge: null };
+}
+
+/** Smallest accepted target side (px): 5 % of the canvas height. */
+export const MIN_SIDE = Math.round(CANVAS.height * 0.05);

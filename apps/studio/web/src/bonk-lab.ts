@@ -1,3 +1,5 @@
+import { mountBonkTarget } from './bonk-target.js';
+
 const obsText = (code: string) =>
   code === 'obs_auth_failed'
     ? 'Mot de passe OBS refusé : reconnecte OBS avec le bon mot de passe'
@@ -15,7 +17,7 @@ export function mountBonkLab(
   panel.innerHTML = `${
     options.production
       ? '<h3>Bonk — overlay OBS (Production)</h3><p>Overlay servi par Studio avec le jeton du profil Production (différent de celui du Lab). Paiement encore simulé.</p>'
-      : '<h3>Bonk OBS Lab</h3><p>Coût simulé, aucun débit ni progression. Impacts autour d’une zone 480 × 300 centrée en 960 × 400, dans une source 1920 × 1080.</p>'
+      : '<h3>Bonk OBS Lab</h3><p>Coût simulé, aucun débit ni progression. Impacts autour de la cible réglée ci-dessous, dans une source 1920 × 1080.</p>'
   }
     <p data-bonk="status">Lecture du statut…</p>
     <div data-bonk="controls" hidden><label>Port OBS <input data-bonk="port" type="number" value="4455"></label>
@@ -40,6 +42,8 @@ export function mountBonkLab(
     if (!r.ok) throw new Error(result.error ?? 'indisponible');
     return result;
   };
+  // Zone / Fullscreen editor (lot 2): local draft, applied to the overlay only on « Enregistrer ».
+  mountBonkTarget(el('controls'), call);
   // Inside Raptoru Studio (Electron), main remembers the connection, password encrypted by the OS,
   // and restores it at each start. Without it (bonk:lab in a browser): memory only, as before.
   const bridge = (

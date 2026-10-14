@@ -5,6 +5,7 @@ import './studio-home.css';
 import './moderation.css';
 import './tombola.css';
 import './commands.css';
+import './bonk-target.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
 import { mountSoundConfig } from './sound-config.js';

@@ -194,6 +194,20 @@ export class LabObs {
     });
   }
 
+  /** Still image of the program scene (read-only), as a data URL, for the Bonk zone editor. */
+  async programScreenshot(width = 960): Promise<string> {
+    const scene = await this.request('GetCurrentProgramScene', {});
+    const shot = await this.request('GetSourceScreenshot', {
+      sourceName: String(scene.currentProgramSceneName ?? ''),
+      imageFormat: 'jpg',
+      imageWidth: width,
+      imageCompressionQuality: 70,
+    });
+    const image = String(shot.imageData ?? '');
+    if (!image.startsWith('data:image/')) throw new Error('obs_request_failed');
+    return image;
+  }
+
   async sourceReady(overlayUrl: string): Promise<boolean> {
     if (!this.connected) return false;
     try {

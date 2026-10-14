@@ -118,11 +118,22 @@ setInterval(
       .catch(() => {}),
   250,
 );
+// Saved target of the Studio settings (lot 2: Manuel zone or Fullscreen), applied to new Bonks.
+setInterval(
+  () =>
+    void call('config', {})
+      .then(({ target }) => target && scene.setTarget(target))
+      .catch(() => {}),
+  1000,
+);
 setInterval(() => void call('heartbeat', {}).catch(() => {}), 1500);
 // After an OBS refresh, the previous page still counts as the live renderer for a few seconds and
 // this first heartbeat is refused (renderer_already_connected). It must not stop the page: the
 // interval keeps announcing us, and `next` simply returns nothing until we are the renderer.
 await call('heartbeat', {}).catch(() => {});
+await call('config', {})
+  .then(({ target }) => target && scene.setTarget(target))
+  .catch(() => {});
 while (true) {
   try {
     const { interaction } = await call('next', {});

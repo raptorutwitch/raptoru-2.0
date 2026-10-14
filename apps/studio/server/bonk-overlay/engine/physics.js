@@ -66,13 +66,15 @@ export function buildTrajectory(p) {
   let vx = vx0 + ax * T;
   let vy = vy0 + g * T;
   const restitution = preset.restitution;
-  if (impact.category === 'center') {
+  // Fullscreen (lot 2): « glass » knocks back like a centre hit, « pass » flies through like a
+  // traverse; no edge reflection without a camera frame.
+  if (impact.category === 'center' || impact.category === 'glass') {
     vx *= between(random, 0.7, 1);
     vy =
       -between(random, 0.42, 0.82) *
       Math.max(Math.abs(vy), 600) *
       Math.min(1.3, restitution);
-  } else if (impact.category === 'traverse') {
+  } else if (impact.category === 'traverse' || impact.category === 'pass') {
     const k = between(random, 0.55, 0.75);
     vx *= k;
     vy *= k;

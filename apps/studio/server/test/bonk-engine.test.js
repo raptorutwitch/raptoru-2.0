@@ -19,8 +19,11 @@ import { SIZE_MEAN, sampleSize } from '../bonk-overlay/engine/size.js';
 import {
   CANVAS,
   DEFAULT_TARGET,
+  FULLSCREEN_CATEGORIES,
+  FULLSCREEN_TARGET,
   IMPACT_CATEGORIES,
   inCore,
+  pickFullscreenImpact,
   pickImpact,
 } from '../bonk-overlay/engine/target.js';
 
@@ -397,5 +400,102 @@ describe('scene (fake DOM and clock): nothing paid is ever dropped', () => {
     expect(f.puffs).toHaveLength(1);
     expect(f.sounds).toHaveLength(1);
     expect(f.sounds[0].gain).toBe(AUDIO.volume);
+  });
+
+  it('a new target applies to the next projectiles only; a malformed one is ignored', async () => {
+    const f = fakeScene();
+    const first = await f.scene.play({ id: 'before', image: f.image() });
+    const before = JSON.parse(JSON.stringify(first.plan));
+    f.scene.setTarget({ mode: 'fullscreen' });
+    expect(JSON.parse(JSON.stringify(first.plan))).toEqual(before); // in flight: untouched
+    const second = await f.scene.play({ id: 'after', image: f.image() });
+    expect(['glass', 'pass']).toContain(second.plan.impact.category);
+    const zone = { mode: 'manual', rect: { x: 100, y: 600, w: 640, h: 360 } };
+    f.scene.setTarget(zone);
+    expect(f.scene.target).toEqual(zone);
+    for (const bad of [
+      null,
+      { mode: 'auto' },
+      { mode: 'manual', rect: { x: -5, y: 0, w: 300, h: 300 } },
+      { mode: 'manual', rect: { x: 0, y: 0, w: 10, h: 300 } },
+      { mode: 'manual', rect: { x: 1800, y: 0, w: 300, h: 300 } },
+    ]) {
+      f.scene.setTarget(bad);
+      expect(f.scene.target).toEqual(zone);
+    }
+  });
+});
+
+describe('targets (lot 2): Manuel zone and Fullscreen', () => {
+  it('Fullscreen: its own impact logic (glass 60 % / pass 40 %), anywhere on the canvas minus 6 %, no edge', () => {
+    const random = createSeededRandom(21);
+    const N = 20_000;
+    const counts = {};
+    const r = FULLSCREEN_TARGET;
+    for (let i = 0; i < N; i++) {
+      const p = pickFullscreenImpact(random);
+      counts[p.category] = (counts[p.category] ?? 0) + 1;
+      expect(p.edge).toBeNull();
+      expect(p.x).toBeGreaterThanOrEqual(r.x);
+      expect(p.x).toBeLessThanOrEqual(r.x + r.w);
+      expect(p.y).toBeGreaterThanOrEqual(r.y);
+      expect(p.y).toBeLessThanOrEqual(r.y + r.h);
+    }
+    for (const [category, weight] of FULLSCREEN_CATEGORIES)
+      expect(Math.abs(share(counts[category], N) - weight)).toBeLessThan(0.015);
+    expect(Object.keys(counts).sort()).toEqual(['glass', 'pass']);
+    // Spread over the whole screen, not around one spot: every quarter gets its share.
+    const random2 = createSeededRandom(22);
+    const quarters = [0, 0, 0, 0];
+    for (let i = 0; i < 8000; i++) {
+      const p = pickFullscreenImpact(random2);
+      quarters[(p.x > 960 ? 1 : 0) + (p.y > 540 ? 2 : 0)] += 1;
+    }
+    for (const q of quarters) expect(share(q, 8000)).toBeGreaterThan(0.2);
+  });
+
+  it('Fullscreen projectiles: valid trajectories through their impact, only glass / pass', () => {
+    const next = ids(23);
+    for (let i = 0; i < 500; i++) {
+      const p = planShot(next(), { mode: 'fullscreen' });
+      expect(['glass', 'pass']).toContain(p.impact.category);
+      const at = p.trajectory.points.find((q) => q.phase === 'impact');
+      expect(Math.hypot(at.x - p.impact.x, at.y - p.impact.y)).toBeLessThan(1);
+      for (const q of p.trajectory.points)
+        expect(Number.isFinite(q.x + q.y + q.rot + q.sx + q.sy)).toBe(true);
+    }
+  });
+
+  it('Manuel with another zone: same categories, centre still rare, around that zone', () => {
+    const rect = { x: 100, y: 600, w: 640, h: 360 };
+    const random = createSeededRandom(24);
+    const N = 20_000;
+    let core = 0;
+    let near = 0;
+    for (let i = 0; i < N; i++) {
+      const p = pickImpact(random, { rect });
+      if (inCore(rect, p.x, p.y)) core += 1;
+      const m = 0.4 * Math.min(rect.w, rect.h);
+      if (
+        p.x >= rect.x - m &&
+        p.x <= rect.x + rect.w + m &&
+        p.y >= rect.y - m &&
+        p.y <= rect.y + rect.h + m
+      )
+        near += 1;
+    }
+    expect(share(core, N)).toBeLessThan(0.045);
+    expect(share(near, N)).toBeGreaterThan(0.97);
+  });
+
+  it('default zone: exactly the lot 1 projectiles (validated render unchanged)', () => {
+    const next = ids(25);
+    for (let i = 0; i < 200; i++) {
+      const id = next();
+      const context = { recent: [{ x: 900, y: 300 }], history: ['arc'] };
+      expect(
+        planShot(id, { ...context, mode: 'manual', rect: DEFAULT_TARGET }),
+      ).toEqual(planShot(id, context));
+    }
   });
 });

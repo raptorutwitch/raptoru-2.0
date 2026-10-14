@@ -7,7 +7,7 @@ import { ENTRIES, entryPoint, pickEntry, pickFamily } from './families.js';
 import { buildTrajectory } from './physics.js';
 import { pickPreset } from './presets.js';
 import { sampleSize } from './size.js';
-import { DEFAULT_TARGET, pickImpact } from './target.js';
+import { DEFAULT_TARGET, pickFullscreenImpact, pickImpact } from './target.js';
 
 const between = (random, [min, max]) => min + random() * (max - min);
 
@@ -37,7 +37,7 @@ function pickSpin(random, family, preset) {
 
 /**
  * @param {string} id interaction id (the seed)
- * @param {{rect?:object, recent?:{x:number,y:number}[], history?:string[], lastEntry?:string|null,
+ * @param {{mode?:'manual'|'fullscreen', rect?:object, recent?:{x:number,y:number}[], history?:string[], lastEntry?:string|null,
  *   reduced?:boolean, sizeMean?:number}} [context]
  */
 export function planShot(id, context = {}) {
@@ -48,12 +48,15 @@ export function planShot(id, context = {}) {
   const preset = pickPreset(random);
   const spin = pickSpin(random, family, preset);
   const exit = random() < 0.5 ? 'fall' : 'shrink';
-  const impact = pickImpact(random, {
-    rect: context.rect ?? DEFAULT_TARGET,
-    facing: ENTRIES[entry].facing,
-    size,
-    recent: context.recent ?? [],
-  });
+  const impact =
+    context.mode === 'fullscreen'
+      ? pickFullscreenImpact(random, { size, recent: context.recent ?? [] })
+      : pickImpact(random, {
+          rect: context.rect ?? DEFAULT_TARGET,
+          facing: ENTRIES[entry].facing,
+          size,
+          recent: context.recent ?? [],
+        });
   const start = entryPoint(random, entry, impact);
   const drift = family.drift
     ? (random() < 0.5 ? -1 : 1) * between(random, family.drift)
