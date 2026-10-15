@@ -30,8 +30,11 @@ docs au-dessus de `639fc0f`). **Statut de tous les modules et roadmap :**
   le sweep réels), puis seulement décision de promotion.
 - **Autres commits de la branche** (antérieurs à Bonk VNext) : restrictions viewer (`2ed1d94`, `3bc40cb`) et
   correctif d'autorisation des emotes (`5a218c1`) — statut de validation dans leurs messages de commit.
-- **NEXT — non commencé : Salves / rafales** (une salve = N Bonk individuels, admission atomique, aucun Bonk payé
-  perdu, cadence côté overlay ; auto-fire hors scope). FX rares après les Salves. Rien n'est codé.
+- **EN COURS : Lot 5 Salves / Chargeur.** UX **validée et figée** par Antoni le 15/10/2026 (prototype
+  `prototypes/bonk-salves-ux/serie7/final.html` = spécification ; Manuel = 1 clic 1 Bonk, Auto = salve atomique des
+  munitions restantes, 4 cadences, Boucle et Rafale ×N supprimées, max par salve = règle Core canonique 10). Spec,
+  invariants et état d'implémentation : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0
+  « Lot 5 ». FX rares après les Salves.
 - **Toujours valable** : legacy (SAMMI, StreamElements, EBS `raptoru.fr/api`, Extension publiée) = production ;
   aucune release Studio depuis 0.1.5 ; aucun push, déploiement, migration distante, release ou changement Twitch sans
   feu vert explicite d'Antoni.

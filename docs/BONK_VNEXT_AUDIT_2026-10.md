@@ -10,15 +10,15 @@
 Branche `feat/compact-video-port`, HEAD `639fc0f` (+ le commit de ce checkpoint). **Tout est local** : rien n'est
 poussé au-delà de `c7f20de`, rien n'est déployé, rien n'est dans `main`, aucune release Studio.
 
-| Lot                                        | Statut                         | Commits                                                              | Validation manuelle (Antoni, vrai Studio + vrai OBS) |
-| ------------------------------------------ | ------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------------- |
-| 0 — fondation production                   | **VALIDÉ**                     | `c410833`, `ba2dfc8`                                                 | OK le 14/10/2026 (Lab)                               |
-| 1 — renderer VNext                         | **VALIDÉ**                     | `af5c78e`                                                            | OK le 14/10/2026                                     |
-| 2 — cible Manuel / Plein écran             | **VALIDÉ**                     | `895e5dd`                                                            | OK le 14/10/2026                                     |
-| 3 — Auto OBS (+ correctif, + physique)     | **VALIDÉ**                     | `8267fda` (lot 3), `e5dab8e` (échelle négative), `639fc0f` (contact) | OK le 15/10/2026                                     |
-| 5 — Salves / rafales                       | **NEXT — non commencé**        | —                                                                    | —                                                    |
-| 4 — FX rares (explosion mini-emotes, etc.) | après les Salves, non commencé | —                                                                    | —                                                    |
-| 6 — combos (option)                        | non décidé                     | —                                                                    | —                                                    |
+| Lot                                        | Statut                                           | Commits                                                              | Validation manuelle (Antoni, vrai Studio + vrai OBS) |
+| ------------------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------------- |
+| 0 — fondation production                   | **VALIDÉ**                                       | `c410833`, `ba2dfc8`                                                 | OK le 14/10/2026 (Lab)                               |
+| 1 — renderer VNext                         | **VALIDÉ**                                       | `af5c78e`                                                            | OK le 14/10/2026                                     |
+| 2 — cible Manuel / Plein écran             | **VALIDÉ**                                       | `895e5dd`                                                            | OK le 14/10/2026                                     |
+| 3 — Auto OBS (+ correctif, + physique)     | **VALIDÉ**                                       | `8267fda` (lot 3), `e5dab8e` (échelle négative), `639fc0f` (contact) | OK le 15/10/2026                                     |
+| 5 — Salves / Chargeur                      | **UX VALIDÉE / FIGÉE** ; implémentation en cours | —                                                                    | —                                                    |
+| 4 — FX rares (explosion mini-emotes, etc.) | après les Salves, non commencé                   | —                                                                    | —                                                    |
+| 6 — combos (option)                        | non décidé                                       | —                                                                    | —                                                    |
 
 ### Lot 0 — fondation production (VALIDÉ)
 
@@ -121,12 +121,55 @@ côté, traversée de l'écran en Plein écran.
   débite le Wallet de test (`labEconomy`) — lot cutover Wallet. La source overlay reste trouvée par son nom
   « Raptoru Bonk Lab ».
 
-### NEXT — Salves / rafales (non commencé, aucun code)
+### Lot 5 — Salves / Chargeur : UX VALIDÉE ET FIGÉE (15/10/2026), implémentation en cours
 
-Direction produit déjà décidée (§ 4) : une salve = **N Bonk individuels** ; **admission atomique** ; **aucun Bonk payé
-perdu** ; livraison groupée possible ; cadence pilotée **côté overlay** ; contrôle utilisateur de type
-quantité / fréquence **à définir** ; **auto-fire maintenu hors scope** tant que les salves ne sont pas stables. Les FX
-rares (explosion en mini-emotes, etc.) viennent **après** les Salves.
+**Référence visuelle et fonctionnelle :** le prototype `prototypes/bonk-salves-ux/serie7/final.html` (+ `cg7.js`,
+`cg7.css` ; dossier ignoré par Git, sur le poste d'Antoni). C'est une **spécification** : rien ne s'en retire, ne se
+simplifie ou ne se remplace en silence. Les séries 1 à 6 du même dossier sont de l'historique.
+
+Direction produit inchangée (§ 4) : une salve = **N Bonk individuels**, **admission atomique**, **aucun Bonk payé
+perdu**, cadence pilotée **côté overlay**. L'auto-fire maintenu reste hors scope.
+
+**Deux modes seulement** :
+
+| Mode   | Un clic sur le prix                                          | Prix affiché                            | Économie                                                                                       |
+| ------ | ------------------------------------------------------------ | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Manuel | **1 Bonk**, la munition suivante, dans l'ordre               | prix d'**un** Bonk                      | une admission Bonk individuelle normale par clic ; **pas de prépaiement du chargeur**          |
+| Auto   | **toute la salve restante**, d'affilée, à la cadence choisie | **munitions restantes × coût unitaire** | **une admission atomique de toute la salve** : débit total ou rien ; jamais de salve partielle |
+
+- **Prix** recalculé immédiatement dans les deux sens (ex. 7 restantes × 200 : Manuel 200, Auto 1 400, retour Manuel
+  200). 1 munition en Auto = même prix que Manuel (1 × coût) : normal.
+- **Cadence Auto** : bouton éclair compact, 4 niveaux (clic = niveau suivant) — **Lent 420 ms · Moyen 260 ms · Rapide
+  160 ms · Très rapide 95 ms** entre deux départs ; le libellé n'est qu'en infobulle / aide.
+- **Pendant une salve Auto** (admise, donc payée d'un bloc) : le switch Manuel / Auto est **verrouillé et visiblement
+  désactivé** (« Salve en cours… ») ; le prix Auto peut suivre les munitions restantes ; à la fin, le switch se libère
+  et le chargeur se recharge (la sélection reste pour relancer).
+- **Switch Manuel / Auto** : glissant, position et taille fixes ; **conserve le chargeur** (Auto envoie ce qui reste) ;
+  **ne rejoue jamais l'animation de recharge** ; aucune variation de géométrie.
+- **Supprimés** : la **Boucle** (doublon de « ↻ Recharger », gratuit, quand le chargeur est vide) et **Rafale ×N**
+  (aucun multiplicateur de chargement : un clic catalogue = une munition).
+
+**Invariants UX à ne pas modifier** :
+
+- Rangée fixe `[compartiment][switch 72 px][emplacement 28 px : vide en Manuel, éclair en Auto][prix 84 px]` : rien ne
+  bouge ni ne change de taille entre Manuel et Auto, déplié comme replié.
+- Compartiment sombre de largeur fixe ; emotes chargées **de gauche à droite** (une vignette par emote + badge de
+  quantité ; clic = −1, clic droit / appui long = retirer l'emote) ; jauge de munitions **de gauche à droite** (segments
+  compacts qui allongent la barre, ne se resserrent que quand la place manque).
+- Débordement : **aucune barre de défilement ni compteur** ; une petite flèche seulement du côté qui cache encore des
+  emotes ; molette / glisser / aimantation **captifs** au module (la page ne défile jamais).
+- **Vider** : languette qui sort du rebord gauche du compartiment (rattachée au rebord, côté libre arrondi), en
+  **overlay** (ne pousse rien), vide tout le chargeur, **annulable** (« Chargeur vidé · Annuler »).
+- **Recharge** : animation validée (segments un par un en accélérant, ~0,7 s) ; jouée seulement quand la réserve est
+  vraiment reconstruite (après une salve Auto, « ↻ Recharger », aléatoire, Annuler), **jamais** au changement de mode.
+- **Repli** : la rangée de munitions glisse dans la jauge ; replié, on tire et on change de mode, même géométrie.
+- **Catalogue** : aucun état de sélection redondant ; un clic = une munition ; l'emote vole vers le chargeur.
+- Aide « ? » : fiche des vrais contrôles, survol = mise en évidence dans le chargeur.
+
+**Nombre maximal de munitions : décision canonique conservée.** Les prototypes utilisaient 20 ; ce n'était pas une
+décision. La règle canonique est celle du § 4 et du § 12 : **bornes Core `shot_count` 1–10 et `cadence_ms` 90–600,
+réglages économiques du Core, jamais fixés par le client**. Le Lot 5 les garde dans **une seule** valeur Core
+(`BONK_LAB_RULES`), exposée à l'Extension qui l'affiche ; passer à 20 = changer cette seule valeur (décision d'Antoni).
 
 ## 1. Architecture Bonk avant VNext (audit du 14/10/2026, historique)
 
@@ -215,6 +258,9 @@ Overlay ── planificateur (cadence locale) → gouverneur densité → sélec
 | UX                        | Bonne                                          | Saccadée                                       | Bonne, cadence ressentie                                                                                                                            |
 
 **Recommandation : C.** On garde l'invariant « 1 tir = 1 interaction » (paiement, remboursement, historique, modération, ACK : rien à réinventer) et on ajoute un regroupement (`volley`) que le Core admet atomiquement et que le claim délivre d'un bloc. La cadence est jouée par l'overlay, seul endroit où le timing peut être exact. Un tir unique est simplement une salve de 1 : même chemin, aucune double implémentation.
+
+> **Remplacé par l'UX validée du Lot 5 (§ 0) :** deux modes seulement, Manuel (1 clic = 1 Bonk individuel) et Auto
+> (1 clic = salve atomique des munitions restantes, 4 cadences). Le tableau ci-dessous est l'historique du plan.
 
 Modes viewer (extension), tous sur ce même chemin :
 
