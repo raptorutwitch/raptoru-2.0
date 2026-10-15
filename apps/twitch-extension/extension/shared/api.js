@@ -497,6 +497,14 @@ export function createClient({
       body: { module_id: moduleId, payload },
       idempotencyKey: newIdempotencyKey(),
     }),
+    /**
+     * Bonk salve (lot 5, mode Auto): every shot admitted and paid by Core at once, or nothing. The key is
+     * chosen by the chargeur once per salve and reused on a retry: a salve is never paid twice.
+     */
+    spendBonkSalve: (idempotencyKey, payload) => call('POST', '/actions/tokens', {
+      body: { module_id: 'bonk', payload },
+      idempotencyKey,
+    }),
     /** Moderation V2 (D4): Core read models (overview, whoami, search, viewer card, audit). */
     modV2: (path) => call('GET', `/moderation/v2/${path}`),
     /** Moderation V2 command, executed and audited by Core with the caller's permissions. */

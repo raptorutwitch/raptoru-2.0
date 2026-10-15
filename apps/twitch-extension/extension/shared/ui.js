@@ -2,7 +2,7 @@
 // Les deux surfaces ont la MÊME logique et des CSS différents : une seule
 // implémentation métier, deux mises en page.
 
-import { ERROR_LABELS, errorLabel } from './api.js';
+import { ERROR_LABELS, errorLabel, newIdempotencyKey } from './api.js';
 import { modulePresentation, notificationCount, resolveExperience, syncNotificationCenter } from './experience.js';
 import {
   getNotifications,
@@ -25,10 +25,10 @@ import {
   providerPresentation,
   UI_ICONS,
   updateFeedbackSlot,
-  updateIconButton,
 } from './ui-primitives.js';
 import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
 import { createEmotePicker } from './emote-picker.js';
+import { createBonkChargeur } from './bonk-chargeur.js';
 import { createTwitchEmoteDialog, createTwitchEmoteSource } from './bonk-twitch-source.js';
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { hoverMarquee } from './hover-marquee.js';
@@ -1050,6 +1050,9 @@ export function preventBonkDoubleClick(event) {
 }
 
 export function bonkFeedbackForResult(result = {}) {
+  // Bonk lot 5: a salve is admitted (and paid) as one block.
+  if (Array.isArray(result?.interactions) && result?.volley_id)
+    return `Salve ×${result.interactions.length} acceptée ✓`;
   const status = String(result?.status ?? '').trim().toLowerCase();
   if (status === 'queued') return 'Bonk accepté · en file ✓';
   if (status === 'delivered') return 'Bonk livré ✓';
@@ -1101,55 +1104,6 @@ const ACTION_REQUIRED_RUNTIME_ERROR_CODES = new Set([
 export function shouldPersistRuntimeError(error) {
   const code = String(error?.code ?? error?.message ?? '').trim();
   return ACTIONABLE_RUNTIME_ERROR_CODES.has(code);
-}
-
-// Retire une occurrence précise avant le dispatch : le mode munitions reste
-// une orchestration UI locale et les doublons sont volontairement conservés.
-export function consumeNextBonkAmmo(ammo) {
-  if (!Array.isArray(ammo) || !ammo.length) return null;
-  return ammo.shift();
-}
-
-// Fait progresser une occurrence précise sans mélanger la préparation et le
-// dispatch réseau : en boucle la pile reste intacte, sinon l'occurrence est
-// retirée comme dans le mode Pass 5.
-export function consumeBonkAmmoAtIndex(ammo, index = 0, { loop = false } = {}) {
-  if (!Array.isArray(ammo) || !ammo.length) return { emote: null, nextIndex: 0 };
-  const requestedIndex = Number.isFinite(index) ? Math.trunc(index) : 0;
-  const safeIndex = Math.min(Math.max(requestedIndex, 0), ammo.length - 1);
-  const emote = ammo[safeIndex];
-  if (loop) return { emote, nextIndex: (safeIndex + 1) % ammo.length };
-  ammo.splice(safeIndex, 1);
-  return { emote, nextIndex: Math.min(safeIndex, ammo.length) };
-}
-
-// Recale l'index après le retrait d'une occurrence, y compris quand Loop
-// pointe vers le dernier élément et doit repartir au début du cycle.
-export function removeBonkAmmoAtIndex(ammo, index = 0, nextIndex = 0, { loop = false } = {}) {
-  if (!Array.isArray(ammo) || !ammo.length || !Number.isInteger(index)
-    || index < 0 || index >= ammo.length) {
-    return { emote: null, nextIndex: 0 };
-  }
-  const [emote] = ammo.splice(index, 1);
-  if (!ammo.length) return { emote, nextIndex: 0 };
-  const requestedNextIndex = Number.isFinite(nextIndex) ? Math.trunc(nextIndex) : 0;
-  let adjustedIndex = Math.max(requestedNextIndex, 0);
-  if (index < adjustedIndex) adjustedIndex -= 1;
-  adjustedIndex = loop
-    ? ((adjustedIndex % ammo.length) + ammo.length) % ammo.length
-    : Math.min(adjustedIndex, ammo.length);
-  return { emote, nextIndex: adjustedIndex };
-}
-
-// En quittant Loop, les occurrences déjà parcourues dans le cycle courant
-// ne redeviennent pas des tirs à venir. La prochaine occurrence devient donc
-// l'index zéro de la pile restante, sans aucun callback ni débit.
-export function disableBonkAmmoLoop(ammo, index = 0) {
-  if (!Array.isArray(ammo) || !ammo.length) return 0;
-  const requestedIndex = Number.isFinite(index) ? Math.trunc(index) : 0;
-  const safeIndex = Math.min(Math.max(requestedIndex, 0), ammo.length);
-  if (safeIndex > 0) ammo.splice(0, safeIndex);
-  return 0;
 }
 
 /**
@@ -1261,12 +1215,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let bonkInFlight = 0;
   let bonkFeedbackMessage = '';
   let bonkFeedbackKind = 'ok';
-  let bonkAmmoMode = false;
-  let bonkAmmunition = [];
-  let bonkAmmoIndex = 0;
-  let bonkAmmoLoop = false;
-  let bonkDrawerOpen = false;
   let bonkEmotePicker = null;
+  /** Bonk lot 5: the chargeur (persistent, like the picker) and the feedback slot of the current render. */
+  let bonkChargeur = null;
+  let bonkFeedbackNode = null;
   let raffleHistoryOpen = false;
   let raffleTimer = null;
   let raffleTimerSnapshot = null;
@@ -1304,7 +1256,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   root.classList.add('jdm-shell');
   root.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    if (notificationCenterOpen || viewerPreferencesOpen || tutorialOpen || soundboardVolumeOpen || drafts.soundboard.searchOpen || bonkDrawerOpen || raffleHistoryOpen || moderationUserHistoryOpen) {
+    if (notificationCenterOpen || viewerPreferencesOpen || tutorialOpen || soundboardVolumeOpen || drafts.soundboard.searchOpen || raffleHistoryOpen || moderationUserHistoryOpen) {
       event.preventDefault();
       event.stopPropagation();
     }
@@ -1333,12 +1285,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (drafts.soundboard.searchOpen) {
       event.preventDefault();
       soundboardSearchClose?.();
-      return;
-    }
-    if (bonkDrawerOpen) {
-      bonkDrawerOpen = false;
-      renderPreservingViewport();
-      queueMicrotask(() => root.querySelector('.jdm-bonk-drawer-toggle')?.focus({ preventScroll: true }));
       return;
     }
     if (raffleHistoryOpen) {
@@ -1732,13 +1678,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     captureScrollPositions();
     if (moduleId !== openModule) restrictionsSeen = new Set();
     openModule = moduleId;
-    if (moduleId !== 'bonk') {
-      bonkAmmoMode = false;
-      bonkAmmunition = [];
-      bonkAmmoIndex = 0;
-      bonkAmmoLoop = false;
-      bonkDrawerOpen = false;
-    }
+    if (moduleId !== 'bonk') bonkChargeur?.reset();
     soundboardVolumeOpen = false;
     if (moduleId === 'soundboard') {
       tutorialOpen = false;
@@ -2110,12 +2050,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     } catch (error) {
       request = Promise.reject(error);
     }
-    Promise.resolve(request)
+    return Promise.resolve(request)
       .then(async (result) => {
         try { await onRefresh?.(); } catch { /* le prochain polling récupérera l’état */ }
         bonkFeedbackMessage = bonkFeedbackForResult(result);
         bonkFeedbackKind = 'ok';
         syncBonkFeedback(node);
+        return true;
       })
       .catch((error) => {
         bonkFeedbackMessage = `Bonk non envoyé · ${errorLabel(error?.code)}`;
@@ -2126,6 +2067,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           title: 'Bonk non envoyé',
           actionModule: 'bonk',
         }));
+        return false;
       })
       .finally(() => {
         bonkInFlight = Math.max(0, bonkInFlight - 1);
@@ -3319,14 +3261,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const recentKey = 'raptoru-live:bonk-recents';
     let favorites = readStoredIds(favoriteKey);
     let recents = readStoredIds(recentKey);
-    let selectedEmote = null;
 
-    // Bonk est un outil de tir séquentiel : le premier clic prépare le tir,
-    // les clics suivants ajoutent naturellement les prochaines emotes. On
-    // conserve les primitives de munitions existantes pour garder l'ordre,
-    // la boucle, la consommation synchrone et le contrat d'envoi inchangés.
-    bonkAmmoMode = true;
-    bonkDrawerOpen = false;
+    // Bonk lot 5 : le catalogue charge le chargeur (bonk-chargeur.js), qui tire en Manuel (1 clic =
+    // 1 Bonk) ou envoie la salve en Auto. UX validée : prototypes/bonk-salves-ux/serie7/final.html.
 
     const emoteStateKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
     let oauthControls = null;
@@ -3433,7 +3370,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       ...UNICODE_EMOJI_GROUPS,
     ];
     const { realGroups, emoteById } = buildBonkEmoteIndex(rawRealGroups);
-    selectedEmote = emoteById.get(drafts.bonk.selectedId) ?? null;
 
     const normalizedFavorites = normalizeBonkFavoriteIds(favorites, emoteById.keys());
     if (normalizedFavorites.length !== favorites.length
@@ -3538,99 +3474,22 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     });
     const emotePicker = bonkEmotePicker;
     const picker = el('div', 'jdm-bonk-picker rl-bonk-picker');
-
-    const modeBar = el('div', 'jdm-bonk-modebar');
-    const modeToggle = el('button', 'jdm-bonk-ammo-toggle', '+ Munitions');
-    modeToggle.type = 'button';
-    modeToggle.hidden = true;
-    modeToggle.tabIndex = -1;
-    modeToggle.setAttribute('aria-hidden', 'true');
-    modeToggle.setAttribute('aria-pressed', String(bonkAmmoMode));
-    modeToggle.setAttribute('aria-controls', 'bonk-ammo-tray');
-    modeToggle.title = 'Préparer plusieurs emotes dans l’ordre';
-    const loopToggle = el('button', 'jdm-bonk-loop-toggle', '↻');
-    loopToggle.type = 'button';
-    loopToggle.hidden = true;
-    loopToggle.setAttribute('aria-pressed', String(bonkAmmoLoop));
-    loopToggle.setAttribute('aria-label', 'Boucle des munitions');
-    loopToggle.title = 'Boucle';
-    const ammoStatus = el('span', 'jdm-bonk-ammo-status');
-    ammoStatus.setAttribute('aria-live', 'polite');
-    modeBar.append(modeToggle, loopToggle, ammoStatus);
-
-    const ammoTray = el('div', 'jdm-bonk-ammo');
-    ammoTray.id = 'bonk-ammo-tray';
-    ammoTray.setAttribute('aria-label', 'Séquence de tirs Bonk');
-    ammoTray.setAttribute('aria-hidden', 'true');
-    const ammoSummary = el('span', 'jdm-bonk-ammo__summary');
-    ammoSummary.setAttribute('aria-hidden', 'true');
-    const ammoList = el('div', 'jdm-bonk-ammo__list');
-    ammoList.setAttribute('role', 'list');
-    const ammoClear = el('button', 'jdm-bonk-ammo__clear', '×');
-    ammoClear.type = 'button';
-    ammoClear.setAttribute('aria-label', 'Vider la séquence Bonk');
-    ammoClear.title = 'Vider la séquence';
-    ammoTray.append(ammoSummary, ammoList, ammoClear);
-
-    const drawer = el('aside', 'jdm-ui-drawer jdm-bonk-drawer');
-    drawer.id = 'bonk-config-drawer';
-    drawer.setAttribute('role', 'dialog');
-    drawer.setAttribute('aria-label', 'Configuration Bonk');
-    drawer.setAttribute('aria-hidden', String(!bonkDrawerOpen));
-    const drawerHead = el('div', 'jdm-bonk-drawer__head');
-    const drawerTitle = el('strong', 'jdm-bonk-drawer__title', 'Configuration Bonk');
-    const drawerHint = el('span', 'jdm-bonk-drawer__hint', 'Mode de tir et chargeur local');
-    const drawerClose = createIconButton({
-      icon: UI_ICONS.close,
-      label: 'Fermer la configuration Bonk',
-      title: 'Fermer la configuration',
-      className: 'jdm-bonk-drawer__close',
-      iconClassName: 'jdm-bonk-drawer__close-icon',
-    });
-    drawerHead.append(drawerTitle, drawerHint, drawerClose);
-    drawer.append(drawerHead, modeBar, ammoTray);
-
-    const chosen = el('div', 'jdm-bonk-choice');
-    chosen.setAttribute('aria-label', 'Emote sélectionnée');
-    chosen.setAttribute('aria-live', 'polite');
-    const chosenPreview = el('span', 'jdm-bonk-choice__preview', '…');
-    const chosenName = el('span', 'jdm-bonk-choice__name', 'Choisis une emote');
-    const favoriteButton = el('button', 'jdm-bonk-choice__favorite', '☆');
-    favoriteButton.type = 'button';
-    favoriteButton.disabled = true;
-    favoriteButton.setAttribute('aria-label', 'Ajouter l’emote aux favoris');
-    chosen.append(chosenPreview, chosenName, favoriteButton);
-
-    const actions = el('div', 'jdm-bonk-actions');
-    const actionButtons = [];
-    let instantBonkButton = null;
     const bonkFeedback = createFeedbackSlot({
       className: 'jdm-bonk-feedback',
       label: 'Retour du Bonk',
     });
-    const addAction = (className, label, task) => {
-      const button = el('button', `jdm-ui-action ${className}`, label);
-      button.type = 'button';
-      button.disabled = true;
-      button.addEventListener('click', () => {
-        const payload = getPayload();
-        if (payload) return run(body, () => task(payload));
-      });
-      actionButtons.push(button);
-      actions.append(button);
-    };
-
-    const nextBonkAmmo = () => {
-      if (!bonkAmmunition.length) {
-        bonkAmmoIndex = 0;
-        return null;
-      }
-      if (bonkAmmoLoop) {
-        bonkAmmoIndex = ((bonkAmmoIndex % bonkAmmunition.length) + bonkAmmunition.length)
-          % bonkAmmunition.length;
-      }
-      return bonkAmmunition[bonkAmmoIndex] ?? null;
-    };
+    bonkFeedbackNode = bonkFeedback;
+    const chargeur = bonkChargeurView();
+    const restricted = holdsAction(restrictionOf('bonk'));
+    // Core's price and salve bounds (module): the chargeur never decides them.
+    chargeur.configure({
+      cost: mod.token_cost,
+      volley: mod.volley ?? null,
+      ready: interactionsAvailable && !restricted,
+      reason: restricted
+        ? 'Bonk indisponible pour toi pour le moment'
+        : 'Interactions indisponibles pour le moment',
+    });
 
     const toggleFavorite = (emoteId) => {
       const id = String(emoteId ?? '');
@@ -3646,16 +3505,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       onSelect: (id) => {
         const emote = emoteById.get(id);
         if (!emote || !isBonkEmoteSelectable(emote, { demoMode, twitchLocked })) return;
-        bonkAmmoMode = true;
-        if (!bonkAmmunition.length) bonkAmmoIndex = 0;
-        bonkAmmunition.push(emote);
-        selectedEmote = emote;
         drafts.bonk.selectedId = emote.id;
+        // One catalogue click = one munition; the emote flies from its cell (read before re-render).
+        const cell = emotePicker.scroller.querySelector(`[data-id="${CSS.escape(emote.id)}"]`);
+        chargeur.add(emote, cell);
         recents = [emote.id, ...recents.filter((item) => item !== emote.id)].slice(0, 36);
         writeStoredIds(recentKey, recents);
-        renderAmmo();
-        syncBonkDrawer();
-        syncSelection();
         emotePicker.setData(pickerGroups());
       },
       onFavorite: (id) => toggleFavorite(id),
@@ -3670,298 +3525,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       },
     });
 
-    function renderAmmo() {
-      const count = bonkAmmunition.length;
-      const visible = bonkAmmoMode && count > 0;
-      const nextIndex = bonkAmmoMode && nextBonkAmmo() ? bonkAmmoIndex : -1;
-      modeToggle.hidden = true;
-      modeToggle.tabIndex = -1;
-      modeToggle.setAttribute('aria-hidden', 'true');
-      modeToggle.textContent = bonkAmmoMode ? '✓ Munitions' : '+ Munitions';
-      modeToggle.setAttribute('aria-pressed', String(bonkAmmoMode));
-      modeToggle.title = bonkAmmoMode
-        ? 'Revenir au mode simple sans tirer les munitions'
-        : 'Préparer plusieurs emotes dans l’ordre';
-      loopToggle.hidden = !bonkAmmoMode || count === 0;
-      loopToggle.setAttribute('aria-pressed', String(bonkAmmoLoop));
-      loopToggle.setAttribute('aria-label', bonkAmmoLoop
-        ? 'Désactiver la boucle de la séquence'
-        : 'Activer la boucle de la séquence');
-      loopToggle.title = bonkAmmoLoop ? 'Boucle activée' : 'Activer la boucle';
-      loopToggle.classList.toggle('is-on', bonkAmmoLoop);
-      ammoStatus.textContent = count
-        ? `Séquence · ${count} tir${count > 1 ? 's' : ''}`
-        : 'Ajoute une emote pour préparer le tir';
-      ammoTray.classList.toggle('is-visible', visible);
-      ammoTray.setAttribute('aria-hidden', String(!visible));
-      ammoSummary.textContent = count ? `${count} tir${count > 1 ? 's' : ''}` : '';
-      ammoClear.hidden = !visible;
-      ammoClear.disabled = !count;
-      ammoList.replaceChildren();
-      if (!bonkAmmoMode) return;
-      for (const [index, emote] of bonkAmmunition.entries()) {
-        const item = el('button', `jdm-bonk-ammo__item${index === nextIndex ? ' is-next' : ''}`);
-        item.type = 'button';
-        item.dataset.ammoIndex = String(index);
-        item.setAttribute('aria-label', `Retirer ${emote.label}, tir ${index + 1}`);
-        item.title = index === nextIndex
-          ? `Prochain tir · ${emote.label}`
-          : `Retirer ${emote.label}, tir ${index + 1}`;
-        if (index === nextIndex) item.setAttribute('aria-current', 'true');
-        const emoteImageUrl = bonkTwemojiAssetPath(emote) ?? emote.image_url;
-        if (emoteImageUrl) {
-          const image = el('img', 'jdm-bonk-ammo__image');
-          image.src = emoteImageUrl;
-          image.alt = '';
-          image.loading = 'lazy';
-          item.append(image);
-        } else if (emote.mark) {
-          const mark = el('span', 'jdm-bonk-ammo__mark', emote.mark);
-          mark.dataset.tone = emote.tone ?? 'violet';
-          item.append(mark);
-        } else {
-          item.append(el('span', 'jdm-bonk-ammo__glyph', emote.glyph ?? '◌'));
-        }
-        item.addEventListener('click', () => {
-          const removed = removeBonkAmmoAtIndex(
-            bonkAmmunition,
-            index,
-            bonkAmmoIndex,
-            { loop: bonkAmmoLoop },
-          );
-          bonkAmmoIndex = removed.nextIndex;
-          renderAmmo();
-          syncBonkDrawer();
-          syncSelection();
-        });
-        ammoList.append(item);
-      }
-      ammoStatus.classList.remove('is-updated');
-      void ammoStatus.offsetWidth;
-      ammoStatus.classList.add('is-updated');
-    }
-
+    // The chargeur shows the selection: no redundant selection state in the catalogue (validated UX).
     function syncSelection() {
-      const dockEmote = bonkAmmoMode ? nextBonkAmmo() : selectedEmote;
-      const queue = new Map();
-      for (const [index, item] of bonkAmmunition.entries()) {
-        if (!queue.has(item.id)) queue.set(item.id, index + 1);
-      }
-      emotePicker.setState({
-        selected: [...queue.keys(), ...(selectedEmote ? [selectedEmote.id] : [])],
-        favorites,
-        queue,
-        next: dockEmote?.id ?? null,
-      });
-      chosen.classList.toggle('is-empty', !dockEmote);
-      chosen.classList.toggle('is-selected', Boolean(dockEmote));
-      chosen.classList.toggle('is-next', bonkAmmoMode && Boolean(dockEmote));
-      picker.classList.toggle('has-selection', Boolean(dockEmote));
-      chosenPreview.replaceChildren();
-      if (!dockEmote) {
-        chosenPreview.textContent = '…';
-        chosenName.textContent = 'Choisis une emote';
-        favoriteButton.textContent = '☆';
-        favoriteButton.disabled = true;
-        favoriteButton.classList.remove('is-active');
-        favoriteButton.setAttribute('aria-pressed', 'false');
-      } else {
-        const emoteImageUrl = bonkTwemojiAssetPath(dockEmote) ?? dockEmote.image_url;
-        if (emoteImageUrl) {
-          const image = el('img', 'jdm-bonk-choice__image');
-          image.src = emoteImageUrl;
-          image.alt = '';
-          chosenPreview.append(image);
-        } else {
-          chosenPreview.textContent = dockEmote.mark ?? dockEmote.glyph ?? '◌';
-          if (dockEmote.mark) chosenPreview.dataset.tone = dockEmote.tone ?? 'violet';
-          else delete chosenPreview.dataset.tone;
-        }
-        chosenName.textContent = dockEmote.label;
-        chosen.setAttribute('aria-label', bonkAmmoMode
-          ? `Prochaine emote : ${dockEmote.label}`
-          : `Emote sélectionnée : ${dockEmote.label}`);
-        const favoriteTarget = selectedEmote ?? dockEmote;
-        const isFavorite = favorites.includes(favoriteTarget.id);
-        favoriteButton.textContent = isFavorite ? '★' : '☆';
-        favoriteButton.disabled = !favoriteTarget;
-        // Tactile : ce bouton gère le favori de l'emote touchée en dernier, nommée explicitement
-        // (la barre peut afficher une autre emote : la prochaine de la séquence).
-        favoriteButton.classList.toggle('is-active', isFavorite);
-        favoriteButton.setAttribute('aria-pressed', String(isFavorite));
-        favoriteButton.setAttribute('aria-label', isFavorite
-          ? `Retirer ${favoriteTarget.label} des favoris`
-          : `Ajouter ${favoriteTarget.label} aux favoris`);
-        favoriteButton.title = favoriteButton.getAttribute('aria-label');
-      }
-      const restricted = holdsAction(restrictionOf('bonk'));
-      for (const button of actionButtons) button.disabled = !dockEmote || !interactionsAvailable || restricted;
-      if (instantBonkButton) instantBonkButton.disabled = !dockEmote || !interactionsAvailable || restricted;
-      composer.classList.toggle('is-visible', Boolean(dockEmote));
-      composer.setAttribute('aria-hidden', String(!dockEmote));
+      emotePicker.setState({ selected: [], favorites, queue: new Map(), next: null });
     }
 
-    favoriteButton.addEventListener('click', () => {
-      const favoriteTarget = selectedEmote ?? nextBonkAmmo();
-      if (!favoriteTarget) return;
-      toggleFavorite(favoriteTarget.id);
-    });
-
-    modeToggle.addEventListener('click', () => {
-      bonkAmmoMode = !bonkAmmoMode;
-      if (bonkAmmoMode) {
-        // Le passage explicite en mode munitions commence vide : aucune
-        // sélection simple existante n’est ajoutée implicitement.
-        selectedEmote = null;
-        drafts.bonk.selectedId = null;
-        if (!bonkAmmunition.length) bonkAmmoIndex = 0;
-      }
-      renderAmmo();
-      syncBonkDrawer();
-      syncSelection();
-    });
-    loopToggle.addEventListener('click', () => {
-      if (!bonkAmmoMode) return;
-      const nextLoop = !bonkAmmoLoop;
-      if (!nextLoop) bonkAmmoIndex = disableBonkAmmoLoop(bonkAmmunition, bonkAmmoIndex);
-      bonkAmmoLoop = nextLoop;
-      renderAmmo();
-      syncBonkDrawer();
-      syncSelection();
-      ammoStatus.textContent = nextLoop ? 'Boucle activée' : 'Boucle désactivée';
-    });
-    ammoClear.addEventListener('click', () => {
-      if (!bonkAmmunition.length) return;
-      bonkAmmunition = [];
-      bonkAmmoIndex = 0;
-      renderAmmo();
-      syncBonkDrawer();
-      syncSelection();
-    });
-
-    const getPayload = (emote = bonkAmmoMode ? nextBonkAmmo() : selectedEmote) => {
-      if (!emote) {
-        bonkFeedbackMessage = 'Choisis une emote.';
-        bonkFeedbackKind = 'error';
-        syncBonkFeedback(bonkFeedback);
-        return null;
-      }
-      const twitchLocked = bonkTwitchLockedForRole(state);
-      if (!isBonkEmoteSelectable(emote, { demoMode: state?.demo_mode === true, twitchLocked })) {
-        bonkFeedbackMessage = twitchLocked && emote.source === 'twitch'
-          ? `${BONK_TWITCH_ROLE_HINT}.`
-          : 'Connecte tes emotes Twitch pour utiliser celle-ci.';
-        bonkFeedbackKind = 'error';
-        syncBonkFeedback(bonkFeedback);
-        return null;
-      }
-    // Le Bonk vise la caméra du streamer, pas un autre spectateur.
-      return {
-        target_login: 'streamer',
-        emotes: [emote.id],
-        emote_source: emote.source,
-        emote_glyph: emote.glyph ?? null,
-      };
-    };
-    // Bonk est volontairement token-only : il n'existe pas de reward Twitch dédié.
-    // La prochaine occurrence locale est consommée avant chaque dispatch, puis
-    // le clic suivant peut partir immédiatement même si le précédent est encore
-    // en vol.
-    if (mod.token_cost) {
-      instantBonkButton = el('button', 'jdm-btn jdm-ui-action jdm-btn--primary', null);
-      instantBonkButton.type = 'button';
-      instantBonkButton.append(
-        el('strong', 'jdm-bonk-cta__label', 'BONK'),
-        el('span', 'jdm-bonk-cta__cost', `${fmt(mod.token_cost)} jetons`),
-      );
-      instantBonkButton.setAttribute('aria-label', `Bonk · ${fmt(mod.token_cost)} jetons`);
-      // Le dblclick est neutralisé uniquement sur ce CTA. Les click qui le
-      // composent continuent chacun leur chemin normal de spam Bonk.
-      instantBonkButton.addEventListener('dblclick', preventBonkDoubleClick);
-      instantBonkButton.addEventListener('click', () => {
-        const emote = bonkAmmoMode ? nextBonkAmmo() : selectedEmote;
-        const payload = getPayload(emote);
-        if (!payload) return;
-        // La progression est synchrone : le clic suivant lit déjà la munition
-        // suivante, même si le callback réseau précédent est encore actif.
-        if (bonkAmmoMode) {
-          const consumed = consumeBonkAmmoAtIndex(bonkAmmunition, bonkAmmoIndex, {
-            loop: bonkAmmoLoop,
-          });
-          if (!consumed.emote) return;
-          bonkAmmoIndex = consumed.nextIndex;
-        }
-        renderAmmo();
-        syncBonkDrawer();
-        syncSelection();
-        void sendBonk(bonkFeedback, () => client.spendTokens('bonk', payload));
-      });
-      actions.append(instantBonkButton);
-    }
-    if (state?.lab_mode) {
-      addAction('jdm-btn jdm-btn--primary', 'Tester le Bonk', (payload) => client.runLab('bonk', payload));
-    }
-
-    const composer = el('div', 'jdm-bonk-composer');
-    composer.append(chosen, actions);
-    const dockMode = el('span', 'jdm-bonk-dock__mode', 'Choisis tes emotes');
-    const drawerToggle = createIconButton({
-      icon: '☷',
-      label: 'Ouvrir la configuration Bonk',
-      title: 'Configurer le mode de tir',
-      className: 'jdm-bonk-drawer-toggle jdm-btn--secondary',
-      iconClassName: 'jdm-bonk-drawer-toggle__icon',
-      visibleLabel: 'Config',
-    });
-    drawerToggle.setAttribute('aria-controls', drawer.id);
-    drawerToggle.setAttribute('aria-haspopup', 'dialog');
-    drawerToggle.hidden = true;
-    drawerToggle.tabIndex = -1;
-    drawerToggle.setAttribute('aria-hidden', 'true');
-    const dockMeta = el('div', 'jdm-bonk-dock__meta');
-    dockMeta.append(dockMode, modeBar, drawerToggle);
-    const dock = el('div', 'jdm-bonk-dock');
-    dock.append(dockMeta, ammoTray, composer);
-    const syncBonkDrawer = () => {
-      const count = bonkAmmunition.length;
-      const modeLabel = count
-        ? `${count} tir${count > 1 ? 's' : ''}`
-        : 'Choisis tes emotes';
-      dock.dataset.sequenceCount = String(count);
-      dockMode.textContent = count ? `×${count}` : modeLabel;
-      dockMode.classList.toggle('is-empty', !count);
-      dockMode.setAttribute('aria-label', count
-        ? `Séquence de ${modeLabel}`
-        : 'Choisis tes emotes pour préparer un Bonk');
-      dockMode.title = count ? `Séquence de ${modeLabel}` : modeLabel;
-      drawer.classList.toggle('is-open', bonkDrawerOpen);
-      drawer.setAttribute('aria-hidden', String(!bonkDrawerOpen));
-      drawerToggle.setAttribute('aria-expanded', String(bonkDrawerOpen));
-      updateIconButton(drawerToggle, {
-        icon: bonkDrawerOpen ? UI_ICONS.close : '☷',
-        label: bonkDrawerOpen ? 'Fermer la configuration Bonk' : 'Ouvrir la configuration Bonk',
-        title: bonkDrawerOpen ? 'Fermer la configuration' : 'Configurer le mode de tir',
-      });
-      drawer.inert = !bonkDrawerOpen;
-      drawerClose.tabIndex = bonkDrawerOpen ? 0 : -1;
-      drawer.hidden = true;
-      drawerToggle.hidden = true;
-      drawerToggle.tabIndex = -1;
-      drawerToggle.setAttribute('aria-hidden', 'true');
-    };
-    drawerToggle.addEventListener('click', () => {
-      bonkDrawerOpen = !bonkDrawerOpen;
-      syncBonkDrawer();
-      if (bonkDrawerOpen) {
-        queueMicrotask(() => drawerClose.focus({ preventScroll: true }));
-      }
-    });
-    drawerClose.addEventListener('click', () => {
-      bonkDrawerOpen = false;
-      syncBonkDrawer();
-      queueMicrotask(() => drawerToggle.focus({ preventScroll: true }));
-    });
-    picker.append(emotePicker.nav, emotePicker.searchRow, emotePicker.scroller, bonkFeedback, dock, drawer);
+    picker.append(emotePicker.nav, emotePicker.searchRow, emotePicker.scroller, bonkFeedback, chargeur.node);
     body.append(picker);
     if (!interactionsAvailable && !state?.lab_mode) {
       body.append(el('p', 'jdm-hint', identityShared()
@@ -3972,10 +3541,84 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     emotePicker.setLead(twitchSource);
     emotePicker.setData(pickerGroups());
     emotePicker.attached();
-    renderAmmo();
-    syncBonkDrawer();
+    chargeur.attached();
     syncSelection();
     syncBonkFeedback(bonkFeedback);
+  }
+
+  /** Bonk lot 5: the payload of one shot, or null (feedback shown) when this emote cannot be fired. */
+  function bonkShotPayload(emote) {
+    const twitchLocked = bonkTwitchLockedForRole(state);
+    if (!isBonkEmoteSelectable(emote, { demoMode: state?.demo_mode === true, twitchLocked })) {
+      bonkFeedbackMessage = twitchLocked && emote.source === 'twitch'
+        ? `${BONK_TWITCH_ROLE_HINT}.`
+        : 'Connecte tes emotes Twitch pour utiliser celle-ci.';
+      bonkFeedbackKind = 'error';
+      syncBonkFeedback(bonkFeedbackNode);
+      return null;
+    }
+    // Le Bonk vise la caméra du streamer, pas un autre spectateur.
+    return {
+      target_login: 'streamer',
+      emotes: [emote.id],
+      emote_source: emote.source,
+      emote_glyph: emote.glyph ?? null,
+    };
+  }
+
+  /** Emote face inside the chargeur (same sources as the picker: Twemoji, CDN image, mark, glyph). */
+  function bonkChargeurEmote(emote) {
+    const src = bonkTwemojiAssetPath(emote) ?? emote.image_url;
+    if (src) {
+      const image = el('img', 'bkc-am__img');
+      image.src = src;
+      image.alt = '';
+      image.draggable = false;
+      return image;
+    }
+    if (emote.mark) {
+      const mark = el('span', 'bkc-am__mark', emote.mark);
+      mark.dataset.tone = emote.tone ?? 'violet';
+      return mark;
+    }
+    return el('span', 'bkc-am__glyph', emote.glyph ?? '◌');
+  }
+
+  /**
+   * The chargeur, created once. Manuel: each click = one individual Bonk (unchanged Core admission).
+   * Auto: one click = the remaining munitions as one salve, admitted and paid atomically by Core.
+   */
+  function bonkChargeurView() {
+    bonkChargeur ??= createBonkChargeur({
+      document,
+      renderEmote: bonkChargeurEmote,
+      newKey: newIdempotencyKey,
+      onFire: (emote) => {
+        const payload = bonkShotPayload(emote);
+        if (!payload) return Promise.resolve(false);
+        return sendBonk(bonkFeedbackNode, () => client.spendTokens('bonk', payload));
+      },
+      onSalve: (emotes, cadenceMs, key) => {
+        const shots = [];
+        for (const emote of emotes) {
+          const payload = bonkShotPayload(emote);
+          if (!payload) return Promise.resolve(false);
+          shots.push({
+            emote_source: payload.emote_source,
+            emote: payload.emotes[0],
+            emote_glyph: payload.emote_glyph,
+          });
+        }
+        return sendBonk(bonkFeedbackNode, () => client.spendBonkSalve(key, {
+          target_login: 'streamer',
+          shots,
+          cadence_ms: cadenceMs,
+        }));
+      },
+    });
+    // Twitch interprète un double-clic rapide comme un plein écran : neutralisé sur tout le chargeur.
+    bonkChargeur.node.ondblclick = preventBonkDoubleClick;
+    return bonkChargeur;
   }
 
   function raffleForm(mod, body) {
@@ -6203,6 +5846,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       if (!isModeration) heading.append(screenIcon);
       heading.append(el('strong', 'jdm-module__screen-name', visibleModuleLabel(mod)));
+      if (isBonk) heading.append(bonkChargeurView().helpButton);
       head.append(headLeft, heading, headRight);
       if (!isModeration && !walletRow.classList.contains('rl-cswitch')) {
         walletRow.classList.add('jdm-wallet--shell-header');
