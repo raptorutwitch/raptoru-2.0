@@ -20,7 +20,11 @@ allow-list, simulated payment only) and wires the engine (`engine/`):
 - `families.js`, `presets.js`, `physics.js`, `plan.js`: weighted trajectory families, common impact
   presets, bounce strength strong / normal / weak (edge contacts always leave outwards), everything
   seeded by the interaction id;
-- `density.js`, `scene.js`: one requestAnimationFrame loop, density limits (soft 18, hard 30), puff;
+- `density.js`, `scene.js`: one requestAnimationFrame loop, density limits (soft 18, hard 30);
+- `impact-fx.js`: the historical impact FX of the legacy overlay (streaks, particles, 30 % with its wave), CSS in
+  `overlay.css` (lot 6);
+- `combo.js`: multi-viewer combo (distinct viewers among the Bonks played, 5 s window) and the size of its giant
+  finisher, played by the same scene (`plan.js` mass profile) (lot 6);
 - `audio.js`: adaptive impact sound (existing extension sounds `punch-2…6`, `roblox-oof`).
 
 The target comes from the Studio settings (`/bonk-lab/renderer/config`, re-read right before each

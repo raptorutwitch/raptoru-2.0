@@ -34,7 +34,13 @@ docs au-dessus de `639fc0f`). **Statut de tous les modules et roadmap :**
   `prototypes/bonk-salves-ux/serie7/final.html` = spécification ; Manuel = 1 clic 1 Bonk, Auto = salve atomique des
   munitions restantes, 4 cadences, Boucle et Rafale ×N supprimées, max par salve = règle Core canonique 10). Spec,
   invariants et état d'implémentation : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0
-  « Lot 5 ». FX rares après les Salves.
+  « Lot 5 ».
+- **Lot 6 — FX d'impact historique + combo multi-viewer : implémenté le 15/10/2026, NON VALIDÉ** (Studio `8d54b8f`,
+  overlay uniquement, local ; redémarrer Studio avant de tester). FX = celle de l'ancien overlay (`Alerte_system.html`),
+  70 % sans cercle / 30 % avec, 8 particules ; combo = viewers distincts (jamais les tirs), fenêtre 5 s, ≥ 2 viewers →
+  une emote géante jouée par le même moteur, taille selon le nombre de viewers (jusqu'à plein écran). Bonks normaux
+  inchangés. Détail : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0 « Lot 6 ». Lot 4 FX
+  rares non retenu : **Bonk VNext fonctionnellement terminé en local** une fois les Lots 5 et 6 validés par Antoni.
 - **Toujours valable** : legacy (SAMMI, StreamElements, EBS `raptoru.fr/api`, Extension publiée) = production ;
   aucune release Studio depuis 0.1.5 ; aucun push, déploiement, migration distante, release ou changement Twitch sans
   feu vert explicite d'Antoni.

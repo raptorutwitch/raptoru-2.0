@@ -17,8 +17,8 @@ poussé au-delà de `c7f20de`, rien n'est déployé, rien n'est dans `main`, auc
 | 2 — cible Manuel / Plein écran             | **VALIDÉ**                            | `895e5dd`                                                               | OK le 14/10/2026                                     |
 | 3 — Auto OBS (+ correctif, + physique)     | **VALIDÉ**                            | `8267fda` (lot 3), `e5dab8e` (échelle négative), `639fc0f` (contact)    | OK le 15/10/2026                                     |
 | 5 — Salves / Chargeur                      | UX figée ; **implémenté, non validé** | `f32dab9` (Core), `7ebf478` (Studio), `b64c3b9` + `6290b72` (Extension) | **à faire** (vrai Studio + vrai OBS)                 |
-| 4 — FX rares (explosion mini-emotes, etc.) | après les Salves, non commencé        | —                                                                       | —                                                    |
-| 6 — combos (option)                        | non décidé                            | —                                                                       | —                                                    |
+| 6 — FX historique + combo multi-viewer     | **implémenté, non validé**            | `8d54b8f` (Studio, overlay)                                             | **à faire** (vrai Studio + vrai OBS)                 |
+| 4 — FX rares (explosion mini-emotes, etc.) | **non retenu** (FX historique, lot 6) | —                                                                       | —                                                    |
 
 ### Lot 0 — fondation production (VALIDÉ)
 
@@ -205,6 +205,61 @@ réglages économiques du Core, jamais fixés par le client**. Le Lot 5 les gard
   staging (migration à appliquer avec accord), Hosted Test (nouveau ZIP Extension), vrai Twitch. Non fait : test
   Core Wallet canonique d'une salve (le Lab débite le Wallet de test) ; la lecture locale de la salve dans
   l'Extension est une estimation à la cadence (l'Extension ne voit pas l'overlay).
+
+### Lot 6 — FX d'impact historique + combo multi-viewer : implémenté (15/10/2026), validation locale restante
+
+Commit `8d54b8f` (Studio, overlay uniquement ; local, non poussé). Aucun changement Core, Extension, contrat,
+migration, wallet ni admission. **Les Bonks normaux sont identiques** au moteur validé : 8 000 plans comparés à
+`b5740b4` (zone par défaut, Plein écran, autre zone, scène dense) → 0 différence (tailles, trajectoires, physique,
+contact, rebonds, sons, densité, cibles, cadences inchangés).
+
+**FX d'impact = la FX historique** (source de vérité : `Alerte_system.html` de l'ancien overlay, `spawnBonkImpact`
+
+- `.bonk-wave` / `.bonk-streak` / `.bonk-particle` et leurs keyframes, identiques dans toutes les versions sauvegardées
+  de juin à août 2026). `engine/impact-fx.js` + `overlay.css` : 12 streaks (mêmes angles, longueurs, épaisseurs, rayons,
+  dégradé, `bonkStreak` 576 ms `cubic-bezier(.1,.75,.22,1)`), réglages `spread 0.68`, `epais 1.9`, `lent 1.6`, échelle
+  `taille / 130`, centrée sur l'emote au contact, onde derrière l'emote, éclats devant, retirée à 812 ms.
+
+* **Deux variantes** tirées par l'id du tir : **Legacy sans cercle 70 %**, **Legacy exact (onde `bonkWave`) 30 %**.
+* **Seul écart avec le legacy** (demande d'Antoni) : 8 particules au lieu de 11 (les 3 plus petites retirées).
+* Remplace l'ancien « puff » ; comme lui, pas de FX en scène dense (≥ 18 projectiles).
+
+**Combo multi-viewer** (`engine/combo.js`, branché dans `overlay.js` sur le vrai flux d'exécution) :
+
+- compte les **viewers distincts** (`Set` de `viewer_id`) parmi les Bonks **réellement joués** (après `started`) —
+  jamais les tirs : une salve de 10 d'un viewer = 1 participant ; jamais les aperçus « Tester » ; un `interaction_id`
+  rejoué (retry / idempotence Core) est déjà écarté par le renderer ;
+- fenêtre **`COMBO.windowMs = 5000`** (valeur canonique `BONK_COMBO_WINDOW_MS` du moteur legacy), rafraîchie par chaque
+  Bonk ; à l'expiration : **≥ 2 viewers → un finisher**, sinon rien ; puis remise à zéro complète. Un seul timer
+  vivant, un timer périmé ne ferme jamais une fenêtre plus récente (pas de double finisher, pas de combo fantôme) ;
+- état minimal : le `Set` des viewers + un compteur par emote distincte ; **emote du finisher** = la plus utilisée du
+  combo, la plus récente en cas d'égalité (déterministe).
+
+**Finisher** : une seule grosse emote jouée par **la même scène et le même simulateur** (`planShot` avec
+`finisherSize`, pas de moteur parallèle), jamais d'ACK ni d'appel Core (effet visuel, rien de payé n'en dépend).
+
+- **Taille = nombre de viewers distincts uniquement**, volontairement absurde : 2 → 260 px, 3 → 340, 4 → 430,
+  5 → 530, 6 → 640, 7 → 760, 8 → 880, 9 → 1 000, 10 → 1 100 (toute la hauteur), puis +130 px par viewer ;
+  **borne technique seule** `FINISHER.maxSize = 2400` px.
+- **Masse dérivée de la taille** (`finisherMass`, poids = log2(taille / 140)) : entrée plus lente, moins de rotation,
+  rebond plus mou, écrasement plus fort, plus longtemps au sol ; famille « lourd » (son lourd) ; départ entièrement
+  hors écran ; au-delà de 400 px, sortie par rétrécissement. Mesuré : normal ≈ 0,7 s d'entrée / 2,9 s à l'écran ;
+  2 viewers ≈ 1,1 / 3,4 s ; 10 viewers ≈ 1,6 / 4,6 s.
+- FX **Legacy exact** forcée, à l'échelle de l'emote ; jamais réduit par la densité ; hors du contexte
+  anti-répétition des Bonks normaux.
+
+**Preuves automatiques** : Studio 303 tests (dont 20 nouveaux du lot 6 : 1 viewer seul, 2 / 3 / 5 / 10 viewers, un viewer
+qui envoie plusieurs Bonks, salve d'un viewer, deux viewers avec salves, expiration, reset, timer périmé, emote du
+finisher, tailles et masse, trajectoire du finisher finie / bornée / passant par l'impact, FX exact / sans cercle,
+répartition 30 / 70, nettoyage du DOM, Bonk normal identique après un finisher géant), lint, typecheck. Banc
+navigateur : le **vrai** `overlay.js` dans Chromium, routes renderer de Studio simulées — salve solo de 6 → aucun
+finisher ; 3 viewers → finisher 340 px ; 12 viewers → finisher 1 360 px plein écran ; Bonk normal ensuite ; 25 / 25
+interactions `started` + `completed`, scène vide à la fin, aucune erreur.
+
+**Reste** : **validation d'Antoni dans le vrai Studio + vrai OBS** (redémarrer Studio : l'overlay a changé) — FX
+sur coups isolés et en salve, finisher à 2 viewers, puis gros finisher (plusieurs comptes viewers liés), Bonk
+normal juste après. Staging / Hosted Test restent des étapes séparées (accord d'Antoni). Lot 4 « FX rares » : **non
+retenu** (Bonk clôturé avec la FX historique, 15/10/2026).
 
 ## 1. Architecture Bonk avant VNext (audit du 14/10/2026, historique)
 
@@ -548,7 +603,7 @@ Aucune migration pour la cible, le rendu, les FX ou le son : tout est local Stud
 
 ## 15. Lots d'implémentation
 
-> **Statut au 15/10/2026 :** Lots 0, 1, 2 et 3 **validés** (détail et commits : § 0) ; Lot 5 Salves = **implémenté, non validé** (§ 0) ; Lot 4 FX rares après les Salves ; Lot 6 combos non décidé. Écarts avec le tableau : le Lot 0 n'a pas
+> **Statut au 15/10/2026 :** Lots 0, 1, 2 et 3 **validés** (détail et commits : § 0) ; Lot 5 Salves et Lot 6 (FX historique + combo multi-viewer) = **implémentés, non validés** (§ 0) ; Lot 4 FX rares non retenu. Écarts avec le tableau : le Lot 0 n'a pas
 > fait « source overlay retrouvée par URL » (toujours par son nom) ; le Lot 3 n'a pas fait l'override par scène
 > (reporté) ; le Lot 4 ne doit plus introduire de traversée ni de passage à côté (physique figée).
 
