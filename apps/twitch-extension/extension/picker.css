@@ -4,7 +4,7 @@
 html body .jdm-module[data-module="bonk"] .jdm-bonk-picker.rl-bonk-picker {
   display: grid !important;
   grid-template-columns: 40px minmax(0, 1fr) !important;
-  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
   gap: 5px 6px !important;
   min-width: 0 !important;
   min-height: 0 !important;
@@ -15,6 +15,8 @@ html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker.rl-bon
 html body .jdm-module[data-module="bonk"] .rl-bonk-picker > :not(.rl-picker__nav, .rl-picker__search, .rl-picker__scroll) {
   grid-column: 1 / -1 !important;
 }
+/* Bonk feedback: shown in the chargeur's bubble (bonk-chargeur.js); the old 8 px line is hidden (no row). */
+html body .jdm-module[data-module="bonk"] .rl-bonk-picker .jdm-bonk-feedback { display: none !important; }
 
 /* --- rail compacte : icônes/avatars ronds, familles repliables -------------------------------- */
 .rl-picker__nav {
@@ -89,6 +91,17 @@ html body .jdm-module[data-module="bonk"] .rl-bonk-picker > :not(.rl-picker__nav
   background: color-mix(in srgb, var(--rl-tone) 16%, rgba(255, 255, 255, .04));
   color: var(--jdm-text, #efeff1);
 }
+/* Famille (dossier) ≠ catégorie : tuile carrée « empilée » (une carte dépasse derrière), alors que les
+   catégories restent rondes. La hiérarchie se lit d'un coup d'œil, même famille repliée. */
+.rl-picker__nav-family .rl-picker__nav-icon {
+  overflow: visible;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--rl-tone) 45%, transparent),
+    3px -3px 0 -1px color-mix(in srgb, var(--rl-tone) 32%, rgba(24, 17, 38, .95));
+}
+/* Section repliée : son entrée du rail reste visible, un peu éteinte. */
+.rl-picker__nav-item.is-collapsed:not(.is-active) .rl-picker__nav-icon { opacity: .5; }
 .rl-picker__nav-caret {
   position: absolute;
   right: -1px;
@@ -228,6 +241,20 @@ html body.component-view .rl-picker__scroll { --rl-cell: 46px; }
   box-shadow: 0 0 6px color-mix(in srgb, var(--rl-tone) 70%, transparent);
 }
 .rl-picker__head-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* En-tête cliquable : replie / déplie la section. */
+.rl-picker__head { cursor: pointer; user-select: none; }
+.rl-picker__head:hover { color: #fff; }
+.rl-picker__head:focus-visible { outline: 2px solid var(--jdm-accent, #a970ff); outline-offset: -2px; }
+.rl-picker__head-caret {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--rl-tone) 60%, #fff);
+  font-size: 9px;
+  line-height: 1;
+  transition: transform .15s ease;
+}
+.rl-picker__section.is-collapsed .rl-picker__head-caret { transform: rotate(-90deg); }
+.rl-picker__section.is-collapsed .rl-picker__head { position: static; opacity: .72; margin-bottom: 0; }
+.rl-picker__section.is-collapsed > :not(.rl-picker__family, .rl-picker__head) { display: none; }
 .rl-picker__head-count {
   margin-left: auto;
   padding: 1px 6px;
@@ -382,7 +409,7 @@ html body .jdm-module[data-module="bonk"] .rl-picker__search .jdm-emote-oauth-bu
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rl-picker__nav-item, .rl-picker__nav-caret, .rl-picker__cell, .rl-picker__search { transition: none; }
+  .rl-picker__nav-item, .rl-picker__nav-caret, .rl-picker__head-caret, .rl-picker__cell, .rl-picker__search { transition: none; }
   .rl-picker__cell:active { transform: none; }
 }
 

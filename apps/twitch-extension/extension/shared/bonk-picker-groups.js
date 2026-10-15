@@ -10,7 +10,8 @@ export const BONK_PICKER_FAMILIES = {
   twitch: { id: 'twitch', label: 'Twitch', tone: '#a970ff' },
   bits: { id: 'bits', label: 'Bits', tone: '#e879f9', iconSrc: 'assets/bonk/providers/bits.svg' },
   extension: { id: 'extension', label: 'Extension', tone: '#38bdf8', iconSrc: twemoji('1f9e9') },
-  emoji: { id: 'emoji', label: 'Emoji', tone: '#f5c26b', iconSrc: twemoji('1f600') },
+  // Icône distincte de toutes ses catégories (Smileys = 😀) : le dossier ne se confond pas avec l'une d'elles.
+  emoji: { id: 'emoji', label: 'Emoji', tone: '#f5c26b', iconSrc: twemoji('1f60e') },
 };
 
 /** Provenances de la famille Extension, dans l'ordre d'affichage. */

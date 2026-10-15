@@ -29,6 +29,7 @@ import {
 import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
 import { createEmotePicker } from './emote-picker.js';
 import { createBonkChargeur } from './bonk-chargeur.js';
+import { createBonkTour } from './bonk-tour.js';
 import { createTwitchEmoteDialog, createTwitchEmoteSource } from './bonk-twitch-source.js';
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { hoverMarquee } from './hover-marquee.js';
@@ -522,6 +523,8 @@ const SOUNDBOARD_ORDER_KEY = 'raptoru-live:soundboard-order';
 const SOUNDBOARD_ALIASES_KEY = 'raptoru-live:soundboard-aliases';
 export const SOUNDBOARD_ALIAS_MAX_LENGTH = 32;
 const TUTORIAL_DISABLED_PREFIX = 'raptoru-live:tutorial-disabled:';
+/** Tutoriel du module Bonk (bonk-tour.js) : même préférence « Ne plus afficher » que le tutoriel global. */
+const BONK_TUTORIAL = { id: 'bonk', version: 1 };
 const EMOTE_CATALOG_REFRESH_MS = 10 * 60 * 1000;
 // Soundboard help copy, kept for the tutorial (not wired yet).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1218,6 +1221,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let bonkEmotePicker = null;
   /** Bonk lot 5: the chargeur (persistent, like the picker) and the feedback slot of the current render. */
   let bonkChargeur = null;
+  let bonkTour = null;
+  let bonkTourAutoOpened = false;
+  /** « Récents » shown while Bonk stays open: frozen, so a catalogue click never reflows the grid. */
+  let bonkRecentsShown = null;
   let bonkFeedbackNode = null;
   let raffleHistoryOpen = false;
   let raffleTimer = null;
@@ -2056,12 +2063,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         bonkFeedbackMessage = bonkFeedbackForResult(result);
         bonkFeedbackKind = 'ok';
         syncBonkFeedback(node);
+        // A salve has its own bubble at the end of its playback (bonk-chargeur.js).
+        if (!result?.volley_id) bonkChargeur?.notice(bonkFeedbackMessage);
         return true;
       })
       .catch((error) => {
         bonkFeedbackMessage = `Bonk non envoyé · ${errorLabel(error?.code)}`;
         bonkFeedbackKind = 'error';
         syncBonkFeedback(node);
+        bonkChargeur?.notice(bonkFeedbackMessage, 'error');
         publishRuntimeNotification(runtimeNotificationForError(error, {
           module: 'bonk',
           title: 'Bonk non envoyé',
@@ -3380,13 +3390,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     recents = recents.filter((id) => emoteById.has(id));
     if (recents.length !== readStoredIds(recentKey).length) writeStoredIds(recentKey, recents);
 
+    bonkRecentsShown ??= recents;
+    const shownRecents = bonkRecentsShown.filter((id) => emoteById.has(id));
     const getGroups = () => buildBonkVisibleGroups(realGroups, {
       favoriteIds: favorites,
-      recentIds: recents,
+      recentIds: shownRecents,
     });
     const groupEmotes = (group) => {
       if (group.id === 'favorites') return favorites.map((id) => emoteById.get(id)).filter(Boolean);
-      if (group.id === 'recents') return recents.map((id) => emoteById.get(id)).filter(Boolean);
+      if (group.id === 'recents') return shownRecents.map((id) => emoteById.get(id)).filter(Boolean);
       return group.emotes.map((item) => normalizeBonkEmote(group, item));
     };
 
@@ -3555,6 +3567,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         : 'Connecte tes emotes Twitch pour utiliser celle-ci.';
       bonkFeedbackKind = 'error';
       syncBonkFeedback(bonkFeedbackNode);
+      bonkChargeur?.notice(bonkFeedbackMessage, 'error');
       return null;
     }
     // Le Bonk vise la caméra du streamer, pas un autre spectateur.
@@ -3593,6 +3606,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       document,
       renderEmote: bonkChargeurEmote,
       newKey: newIdempotencyKey,
+      onHelp: () => bonkTourView().start(),
       onFire: (emote) => {
         const payload = bonkShotPayload(emote);
         if (!payload) return Promise.resolve(false);
@@ -3619,6 +3633,80 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     // Twitch interprète un double-clic rapide comme un plein écran : neutralisé sur tout le chargeur.
     bonkChargeur.node.ondblclick = preventBonkDoubleClick;
     return bonkChargeur;
+  }
+
+  // Tutoriel Bonk : une info par bulle, la zone concernée mise en avant (bonk-tour.js).
+  function bonkTourView() {
+    bonkTour ??= createBonkTour({
+      document,
+      steps: bonkTourSteps,
+      isDisabled: () => readTutorialDisabled(BONK_TUTORIAL),
+      setDisabled: (disabled) => writeTutorialDisabled(BONK_TUTORIAL, disabled),
+      // Pendant le tutoriel, le chargeur reste déplié, même vide : les bulles montrent ses vrais contrôles.
+      onOpenChange: (open) => bonkChargeur?.showcase(open),
+    });
+    return bonkTour;
+  }
+  function bonkTourSteps() {
+    const find = (selector) => () => root.querySelector(selector);
+    const twitchSource = root.querySelector('.rl-twitch-src');
+    const connected = state?.emotes?.twitch_connected === true;
+    return [
+      {
+        icon: '💥',
+        title: 'Bienvenue dans Bonk !',
+        body: 'Envoie tes emotes préférées droit au visage du streamer. On te montre comment en quelques bulles.',
+      },
+      {
+        icon: '🔗',
+        title: 'Tes emotes Twitch',
+        body: connected
+          ? 'Ton compte Twitch est connecté : tes emotes sont déjà dans le catalogue.'
+          : 'Connecte ton compte Twitch pour récupérer tes emotes et débloquer un catalogue plus étoffé. C’est ici, dans la colonne de gauche.',
+        // Le bouton Twitch de la colonne de gauche ; à défaut (pas encore proposé), la colonne elle-même.
+        target: find(connected
+          ? '.jdm-emote-oauth-controls'
+          : twitchSource ? '.rl-twitch-src' : '.jdm-module[data-module="bonk"] .rl-picker__nav'),
+        action: twitchSource
+          ? { label: 'Connecter mon compte Twitch', run: () => root.querySelector('.rl-twitch-src')?.click() }
+          : undefined,
+      },
+      {
+        icon: '🎯',
+        title: 'Remplis ton chargeur',
+        body: 'Clique sur les emotes du catalogue : elles s’ajoutent dans ton chargeur, juste ici.',
+        target: find('.bkc-dock'),
+      },
+      {
+        icon: '✋',
+        title: 'Gère tes munitions',
+        body: [
+          '**Clic gauche** sur une emote pour en retirer **une unité**.',
+          '**Clic droit** pour retirer **toute l’emote** de la file.',
+        ],
+        target: find('.bkc-dock'),
+      },
+      {
+        icon: '👆',
+        title: 'Mode Manuel',
+        body: '1 clic = 1 emote envoyée. Chargeur vide ? « ↻ Recharger » remet ta composition pour la rejouer.',
+        target: find('.bkc-right'),
+      },
+      {
+        icon: '⚡',
+        title: 'Mode Auto',
+        body: [
+          '1 clic envoie d’un coup toute la salve qui reste dans tes munitions.',
+          'L’éclair règle la vitesse : 4 niveaux, de Lent à Très rapide.',
+        ],
+        target: find('.bkc-right'),
+      },
+      {
+        icon: '🎉',
+        title: 'Amuse-toi bien !',
+        body: 'Tu peux revoir ce tutoriel à tout moment avec le bouton « ? » à côté de Bonk.',
+      },
+    ];
   }
 
   function raffleForm(mod, body) {
@@ -5975,6 +6063,21 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
 
     if (tutorialOpen && !openModule) root.append(tutorialDialog(experience.tutorial));
+    // Tutoriel Bonk : ouvert une fois par chargement en arrivant sur Bonk (sauf « Ne plus afficher »),
+    // fermé dès qu'on quitte le module.
+    if (openModule === 'bonk' && state && !loadError) {
+      if (!bonkTourAutoOpened) {
+        bonkTourAutoOpened = true;
+        if (!readTutorialDisabled(BONK_TUTORIAL)) {
+          setTimeout(() => {
+            if (openModule === 'bonk') bonkTourView().start();
+          }, 400);
+        }
+      }
+    } else if (bonkTour?.open) {
+      bonkTour.close();
+    }
+    if (openModule !== 'bonk') bonkRecentsShown = null;
   }
 
   return {

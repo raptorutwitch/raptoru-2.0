@@ -124,6 +124,31 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
   let extras = null;
   // Entrée fixe en tête de la colonne (ex. source Twitch non liée de Bonk) : survit aux reconstructions.
   let lead = null;
+  const navItems = new Map(); // section id -> bouton (rail)
+  // Sections repliées par le viewer (clic sur leur en-tête), mémorisées comme les familles du rail.
+  const readIds = (key) => {
+    if (!key) return new Set();
+    try {
+      const value = JSON.parse(localStorage.getItem(key) ?? '[]');
+      return new Set(Array.isArray(value) ? value.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  };
+  const writeIds = (key, ids) => {
+    try {
+      if (key) localStorage.setItem(key, JSON.stringify([...ids]));
+    } catch { /* stockage indisponible : l'état reste valable pour la session */ }
+  };
+  const collapsedKey = railKey ? `${railKey}:collapsed` : null;
+  const collapsed = readIds(collapsedKey);
+  function applyCollapsed(root, head, group) {
+    const folded = collapsed.has(group.id);
+    root.classList.toggle('is-collapsed', folded);
+    head.setAttribute('aria-expanded', String(!folded));
+    head.title = folded ? `${group.label} · déplier` : `${group.label} · replier`;
+    navItems.get(group.id)?.classList.toggle('is-collapsed', folded);
+  }
 
   // --- cellules ---------------------------------------------------------------------------------
 
@@ -224,6 +249,7 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
     if (!scroller.isConnected || !scroller.clientHeight || query) return;
     const bounds = scroller.getBoundingClientRect();
     for (const section of sections.values()) {
+      if (collapsed.has(section.group.id)) continue; // repliée : aucune géométrie à lire
       for (const chunk of section.chunks) {
         const box = chunk.node.getBoundingClientRect();
         const near = box.bottom >= bounds.top - NEAR_MARGIN && box.top <= bounds.bottom + NEAR_MARGIN;
@@ -270,11 +296,18 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
     // Première section d'une famille : intitulé discret (Twitch, Bits, Emoji) au-dessus.
     if (group.familyStart) root.append(make('div', 'rl-picker__family', group.family.label));
     const head = make('h3', 'rl-picker__head');
+    // En-tête cliquable : replie / déplie la section (état local persistant).
+    head.tabIndex = 0;
+    head.setAttribute('role', 'button');
+    const caret = make('span', 'rl-picker__head-caret', '▾');
+    caret.setAttribute('aria-hidden', 'true');
     head.append(
       make('span', 'rl-picker__head-label', group.label),
       make('span', 'rl-picker__head-count', String(group.emotes.length)),
+      caret,
     );
     root.append(head);
+    applyCollapsed(root, head, group);
     const chunks = [];
     const size = chunkSize();
     // Sous-groupes (ex. provenance 7TV / BTTV / FFZ d'un contexte) : petit sous-titre discret.
@@ -309,21 +342,8 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
 
   // --- rail : entrées simples + familles repliables (état local persistant) --------------------
 
-  const readExpanded = () => {
-    try {
-      const value = JSON.parse(localStorage.getItem(railKey) ?? '[]');
-      return new Set(Array.isArray(value) ? value.map(String) : []);
-    } catch {
-      return new Set();
-    }
-  };
-  const expanded = railKey ? readExpanded() : new Set();
-  const writeExpanded = () => {
-    try {
-      if (railKey) localStorage.setItem(railKey, JSON.stringify([...expanded]));
-    } catch { /* stockage indisponible : l'état reste valable pour la session */ }
-  };
-  const navItems = new Map(); // section id -> bouton
+  const expanded = readIds(railKey);
+  const writeExpanded = () => writeIds(railKey, expanded);
   const familyBlocks = new Map(); // family id -> { block, toggle }
   let navSignature = '';
 
@@ -366,6 +386,7 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
     if (lead) nav.append(lead);
     for (const group of groups) {
       const item = buildNavItem(group);
+      item.classList.toggle('is-collapsed', collapsed.has(group.id));
       navItems.set(group.id, item);
       const family = group.family;
       if (!family) {
@@ -540,6 +561,89 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
     applyQuery('');
   });
 
+  // --- replier / déplier une section ------------------------------------------------------------
+
+  function setCollapsed(id, folded) {
+    const section = sections.get(id);
+    if (!section || collapsed.has(id) === folded) return;
+    if (folded) collapsed.add(id);
+    else collapsed.delete(id);
+    writeIds(collapsedKey, collapsed);
+    const head = section.root.querySelector('.rl-picker__head');
+    applyCollapsed(section.root, head, section.group);
+    if (folded) {
+      // Replier une section dont l'en-tête était collé en haut : la vue reste sur cet en-tête.
+      if (section.root.offsetTop < scroller.scrollTop) scroller.scrollTop = section.root.offsetTop;
+    } else {
+      for (const chunk of section.chunks) {
+        if (!chunk.rendered) chunk.node.style.height = `${placeholderHeight(chunk) ?? 0}px`;
+      }
+    }
+    reconcile();
+    syncActiveSection();
+  }
+  sectionsHost.addEventListener('click', (event) => {
+    const head = event.target.closest('.rl-picker__head');
+    const id = head?.closest('.rl-picker__section')?.dataset.sectionId;
+    if (id) setCollapsed(id, !collapsed.has(id));
+  });
+  sectionsHost.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const head = event.target.closest?.('.rl-picker__head');
+    const id = head?.closest('.rl-picker__section')?.dataset.sectionId;
+    if (!id) return;
+    event.preventDefault();
+    setCollapsed(id, !collapsed.has(id));
+  });
+
+  // --- défilement fluide vers une section (rail) : rapide, départ doux, arrivée freinée ----------
+
+  let glideFrame = 0;
+  let glideTarget = null; // section visée : le rail la montre active pendant tout le trajet
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
+  function stopGlide() {
+    if (!glideFrame) return;
+    cancelAnimationFrame(glideFrame);
+    glideFrame = 0;
+    glideTarget = null;
+    reconcile();
+  }
+  function glideTo(section) {
+    stopGlide();
+    const from = scroller.scrollTop;
+    const to = Math.max(0, Math.min(section.root.offsetTop, scroller.scrollHeight - scroller.clientHeight));
+    const distance = to - from;
+    const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (Math.abs(distance) < 2 || reduced) {
+      scroller.scrollTop = to;
+      syncActiveSection();
+      return;
+    }
+    // 220 ms pour un petit saut, 420 ms au plus pour traverser tout le catalogue.
+    const duration = Math.min(420, 220 + Math.abs(distance) * 0.08);
+    const start = performance.now();
+    glideTarget = section.group.id;
+    // L'arrivée est déjà remplie ; les tranches survolées gardent leur place (rendues à l'arrivée).
+    for (const chunk of section.chunks.slice(0, 2)) renderChunk(chunk);
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      scroller.scrollTop = from + distance * easeInOut(t);
+      if (t < 1) glideFrame = requestAnimationFrame(step);
+      else {
+        glideFrame = 0;
+        glideTarget = null;
+        reconcile();
+        syncActiveSection();
+      }
+    };
+    glideFrame = requestAnimationFrame(step);
+    syncActiveSection();
+  }
+  // La main du viewer reprend toujours la priorité sur l'animation.
+  for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+    scroller.addEventListener(type, stopGlide, { passive: true });
+  }
+
   // --- navigation + scrollspy -------------------------------------------------------------------
 
   function syncActiveSection() {
@@ -551,6 +655,7 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
       else break;
     }
     current ??= ordered[0];
+    if (glideTarget) current = sections.get(glideTarget) ?? current;
     const id = current?.group.id ?? null;
     if (id === activeSectionId) return;
     activeSectionId = id;
@@ -576,7 +681,7 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
     if (scrollFrame) return;
     scrollFrame = requestAnimationFrame(() => {
       scrollFrame = 0;
-      reconcile();
+      if (!glideFrame) reconcile(); // pendant un défilement de rail : pas de rendu des tranches survolées
       syncActiveSection();
     });
   }, { passive: true });
@@ -597,8 +702,9 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
       input.value = '';
       applyQuery('');
     }
-    scroller.scrollTop = section.root.offsetTop;
-    syncActiveSection();
+    // Section repliée : on la déplie avant d'y aller.
+    setCollapsed(section.group.id, false);
+    glideTo(section);
   });
 
   // --- délégation : sélection, favori au survol, réorganisation des favoris --------------------

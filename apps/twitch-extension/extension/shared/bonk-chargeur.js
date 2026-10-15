@@ -22,11 +22,10 @@ const sw = (demo) =>
 const bolt = (demo) =>
   html`<button type="button" class="bkc-bolt" data-level="${demo ? 3 : 2}" ${demo ? 'tabindex="-1"' : 'data-bkc="speed"'}><span class="bkc-bolt__ic"><span class="bkc-bolt__o">${BOLT}</span><span class="bkc-bolt__f">${BOLT}</span></span><span class="bkc-bolt__ticks"><i></i><i></i><i></i><i></i></span></button>`;
 const wipe = (demo) =>
-  html`<button type="button" class="bkc-wipe" ${demo ? 'tabindex="-1"' : 'data-bkc="clear" title="Vider toutes les munitions" aria-label="Vider toutes les munitions"'}><span class="bkc-wipe__ic">${TRASH}</span></button>`;
+  html`<button type="button" class="bkc-wipe" ${demo ? 'tabindex="-1"' : 'data-bkc="clear" title="Vider toutes les munitions (annulable)" aria-label="Vider toutes les munitions"'}><span class="bkc-wipe__ic">${TRASH}</span></button>`;
 
 function template() {
   return html`
-    <p class="bkc-hint"><span class="bkc-hint__dot"></span>Touche une emote pour la charger</p>
     <div class="bkc-wrap"><div class="bkc-wrap__in">
       <div class="bkc-dock" data-bkc-dock>
         <button type="button" class="bkc-grab" data-bkc="fold" data-spot-target="grab" title="Réduire / déplier le chargeur" aria-label="Réduire ou déplier le chargeur"><i></i></button>
@@ -51,16 +50,7 @@ function template() {
       </div>
     </div></div>
     <div class="bkc-toast" role="status" aria-live="polite"><span data-bkc-toast></span><button type="button" data-bkc="undo">Annuler</button></div>
-    <div class="bkc-shade" data-bkc-shade>
-      <div class="bkc-help" role="dialog" aria-label="Aide du chargeur Bonk">
-        <div class="bkc-help__head"><b>Le chargeur Bonk</b><span>survole une ligne pour voir où c’est</span><button type="button" class="bkc-help__x" data-bkc="help-close" title="Fermer" aria-label="Fermer l’aide">✕</button></div>
-        <div class="bkc-help__row" data-spot="car"><span class="bkc-help__demo" inert><span class="bkc-am bkc-demo"><span class="bkc-am__glyph">😀</span><b class="bkc-badge">3</b></span></span><span class="bkc-help__t"><b>Charger</b> : touche une emote du catalogue (+1). Dans le chargeur : clic −1, clic droit retire tout.</span></div>
-        <div class="bkc-help__row" data-spot="mode"><span class="bkc-help__demo" inert>${sw('manual')}</span><span class="bkc-help__t"><b>Manuel</b> : 1 clic = 1 Bonk. <b>Auto</b> : 1 clic = tout ce qui reste, d’affilée.</span></div>
-        <div class="bkc-help__row" data-spot="speed"><span class="bkc-help__demo" inert>${bolt(true)}</span><span class="bkc-help__t"><b>Vitesse</b> (Auto) : chaque clic passe au niveau suivant — Lent, Moyen, Rapide, Très rapide.</span></div>
-        <div class="bkc-help__row" data-spot="cta"><span class="bkc-help__demo" inert><span class="bkc-cta bkc-demo"><span class="bkc-cta__in">◆ 200</span></span></span><span class="bkc-help__t"><b>Tirer / Envoyer</b> : le bouton affiche le prix du clic. Chargeur vide : <b>↻ Recharger</b> (gratuit).</span></div>
-        <div class="bkc-help__row" data-spot="clear"><span class="bkc-help__demo" inert><span class="bkc-help__pair">${wipe(true)}<span class="bkc-grab bkc-demo"><i></i></span></span></span><span class="bkc-help__t"><b>Vider</b> : languette rouge à gauche des munitions (annulable) · <b>Réduire</b> : on garde le tir et le mode.</span></div>
-      </div>
-    </div>`;
+`;
 }
 
 /**
@@ -70,23 +60,25 @@ function template() {
  *   onFire: (emote: object) => Promise<boolean>,
  *   onSalve: (emotes: object[], cadenceMs: number, key: string) => Promise<boolean>,
  *   newKey: () => string,
- * }} deps
+ *   onHelp?: () => void,
+ * }} deps `onHelp`: the « ? » button (the host opens the Bonk tutorial).
  */
-export function createBonkChargeur({ document, renderEmote, onFire, onSalve, newKey }) {
+export function createBonkChargeur({ document, renderEmote, onFire, onSalve, newKey, onHelp = () => {} }) {
   const model = createChargeurModel({ maxShots: FALLBACK_MAX_SHOTS });
   const m = model.state;
   const config = { cost: 0, cadence: { min: 90, max: 600 }, auto: false, ready: true, reason: '' };
-  const ui = { collapsed: false, help: false };
+  const ui = { collapsed: false };
   const timers = [];
   let reloading = false;
   /** Idempotency of an Auto salve: the same salve retried keeps its key (Core replays, never pays twice). */
   let pending = null;
+  /** Running « one unit less » animation per munition. */
+  const takes = new WeakMap();
 
   const root = document.createElement('div');
   root.className = 'bkc is-empty';
   root.innerHTML = template();
   const q = (sel) => root.querySelector(sel);
-  const qa = (sel) => root.querySelectorAll(sel);
   const car = q('[data-bkc-car]');
   const carbox = q('[data-bkc-carbox]');
   const gauge = q('[data-bkc-gauge]');
@@ -103,12 +95,11 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
   helpButton.type = 'button';
   helpButton.className = 'bkc-help-btn';
   helpButton.textContent = '?';
-  helpButton.title = 'Aide du chargeur Bonk';
-  helpButton.setAttribute('aria-label', 'Aide du chargeur Bonk');
+  helpButton.title = 'Tutoriel Bonk';
+  helpButton.setAttribute('aria-label', 'Tutoriel Bonk');
   helpButton.addEventListener('click', (event) => {
     event.stopPropagation();
-    ui.help = !ui.help;
-    sync();
+    onHelp();
   });
 
   const fmt = (n) => new Intl.NumberFormat('fr-FR').format(n).replace(/\s/g, ' ');
@@ -136,8 +127,10 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
     });
   }
   function syncCar() {
+    // FLIP: where each munition was, so that the others glide into a freed place instead of jumping.
+    const before = new Map([...car.children].map((el) => [el, el.getBoundingClientRect().left]));
     const live = new Map();
-    [...car.children].forEach((el) => !el.dataset.gone && live.set(el.dataset.id, el));
+    [...car.children].forEach((el) => live.set(el.dataset.id, el));
     const next = m.mode === 'manual' ? model.nextId() : null;
     let shown = false;
     m.items.forEach((it, idx) => {
@@ -158,7 +151,7 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
         });
       }
       live.delete(id);
-      const order = [...car.children].filter((x) => !x.dataset.gone);
+      const order = [...car.children];
       if (order[idx] !== el) car.insertBefore(el, order[idx] ?? null);
       // What is left of this emote (the same in both modes: switching keeps the chargeur as it is).
       const left = model.leftOf(id);
@@ -168,12 +161,50 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
       if (isNext) shown = true;
       el.classList.toggle('is-next', isNext);
     });
-    live.forEach((el) => {
-      el.dataset.gone = '1';
-      el.classList.add('is-out');
-      setTimeout(() => el.remove(), 240);
-    });
+    // Removed: out of the row at once (no in-row collapse, no drift), a ghost plays the exit in place.
+    // All ghosts first: removing one would move the next before it is measured (« Vider »).
+    live.forEach((el) => ghostOut(el));
+    live.forEach((el) => el.remove());
+    if (typeof car.animate === 'function')
+      before.forEach((left, el) => {
+        const d = el.isConnected ? left - el.getBoundingClientRect().left : 0;
+        if (Math.abs(d) > 0.5)
+          el.animate([{ transform: `translateX(${d}px)` }, { transform: 'none' }], {
+            duration: 220,
+            easing: 'cubic-bezier(.3,.7,.3,1)',
+          });
+      });
     requestAnimationFrame(fades);
+  }
+  /**
+   * Exit of a munition: a fixed ghost at its place tints grey-red,
+   * shrinks and fades. Not shown when the munition is out of sight (scrolled away, chargeur folded).
+   */
+  function ghostOut(el) {
+    const r = el.getBoundingClientRect();
+    const box = carbox.getBoundingClientRect();
+    if (ui.collapsed || !document.body || typeof el.animate !== 'function') return;
+    if (!r.width || r.right <= box.left || r.left >= box.right) return;
+    const ghost = el.cloneNode(true);
+    ghost.className = 'bkc-am bkc-ghost';
+    ghost.removeAttribute('role');
+    ghost.removeAttribute('title');
+    ghost.removeAttribute('data-id');
+    ghost.querySelector('.bkc-badge')?.remove();
+    Object.assign(ghost.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+    document.body.append(ghost);
+    const tint = 'grayscale(.75) sepia(.4) hue-rotate(-35deg)';
+    const done = () => ghost.remove();
+    ghost
+      .animate(
+        [
+          { transform: 'none', opacity: 1, filter: 'none' },
+          { transform: 'scale(.92)', opacity: 0.9, filter: tint, offset: 0.2 },
+          { transform: 'scale(.55)', opacity: 0, filter: tint },
+        ],
+        { duration: 260, easing: 'cubic-bezier(.3,.6,.4,1)' },
+      )
+      .finished.then(done, done);
   }
   function fades() {
     const max = car.scrollWidth - car.clientWidth;
@@ -195,12 +226,9 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
     const n = model.total();
     const rem = model.remaining();
     const auto = m.mode === 'auto';
-    root.classList.toggle('is-empty', !n);
     root.classList.toggle('is-auto', auto);
     root.classList.toggle('is-collapsed', ui.collapsed);
     root.classList.toggle('is-busy', m.busy);
-    root.classList.toggle('is-help', ui.help);
-    helpButton.classList.toggle('is-on', ui.help);
     // A salve is admitted and paid as one block: the switch is locked (visibly) until it has played.
     modeBtn.classList.toggle('is-auto', auto);
     modeBtn.setAttribute('aria-checked', String(auto));
@@ -235,6 +263,9 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
       syncGauge(rem, opts);
     }
     syncCar();
+    // After syncCar: `is-empty` adds the « + » socket at the head of the row, which would push the last
+    // munition 33 px right before syncCar measures it (its exit ghost would then start off its place).
+    root.classList.toggle('is-empty', !n);
   }
 
   // --- reload: segments one after the other, accelerating, then a glow (≈ 0,7 s) — validated ------
@@ -278,12 +309,14 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
   // --- feedback ------------------------------------------------------------------------------------
   let toastTimer = null;
   let undo = null;
-  function toast(text, withUndo = false) {
+  /** One feedback bubble above the dock. `kind`: ok (green), error (red, stays longer), info (neutral). */
+  function toast(text, withUndo = false, kind = 'ok') {
     q('[data-bkc-toast]').textContent = text;
+    toastEl.dataset.kind = kind;
     toastEl.classList.toggle('has-undo', withUndo);
     restart(toastEl, 'is-on');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove('is-on'), withUndo ? 3500 : 1500);
+    toastTimer = setTimeout(() => toastEl.classList.remove('is-on'), withUndo || kind === 'error' ? 4000 : 1600);
   }
   /** A ghost of the emote travelling from `from` to `to` (fixed layer, no layout impact). */
   function flight(emote, from, to, { duration = 300, rise = 26, end = 0.6 } = {}) {
@@ -400,7 +433,7 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
         swallow = true;
         if (model.remove(am.dataset.id)) {
           sync();
-          toast('Emote retirée du chargeur');
+          toast('Emote retirée du chargeur', false, 'info');
         }
       }, 480);
   });
@@ -428,39 +461,31 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
     const am = e.target.closest('.bkc-am');
     if (am && car.contains(am) && model.remove(am.dataset.id)) {
       sync();
-      toast('Emote retirée du chargeur');
+      toast('Emote retirée du chargeur', false, 'info');
     }
   });
-  q('[data-bkc-shade]').addEventListener('mouseover', (e) => {
-    const row = e.target.closest('[data-spot]');
-    qa('.bkc-spot').forEach((x) => x.classList.remove('bkc-spot'));
-    if (!row) return;
-    const spot = row.dataset.spot;
-    const target =
-      spot === 'mode' ? modeBtn
-        : spot === 'speed' ? speedBtn
-          : spot === 'cta' ? cta
-            : spot === 'clear' ? q('[data-bkc="clear"]')
-              : q('[data-spot-target="car"]');
-    target?.classList.add('bkc-spot');
-  });
-  q('[data-bkc-shade]').addEventListener('mouseleave', () => qa('.bkc-spot').forEach((x) => x.classList.remove('bkc-spot')));
-
   root.addEventListener('click', (e) => {
     if (swallow) {
       swallow = false;
       return;
     }
-    // A click outside the help card only closes it (never reaches what is underneath).
-    if (ui.help && e.target.closest('[data-bkc-shade]') && !e.target.closest('.bkc-help')) {
-      ui.help = false;
-      sync();
-      return;
-    }
     const am = e.target.closest('.bkc-am');
-    if (am && car.contains(am) && !am.dataset.gone) {
+    if (am && car.contains(am)) {
       if (model.dec(am.dataset.id)) {
-        restart(am, 'hit');
+        // One unit less (pile > 1): the munition itself shrinks, fades and tints (150 ms), then comes back
+        // with its new count. The last unit leaves in place (syncCar → ghostOut).
+        if (m.items.some((it) => it.emote.id === am.dataset.id) && typeof am.animate === 'function') {
+          const tint = 'grayscale(.75) sepia(.4) hue-rotate(-35deg)';
+          takes.get(am)?.cancel(); // a fast second click restarts it, never stacks
+          takes.set(am, am.animate(
+            [
+              { transform: 'none', opacity: 1, filter: 'none' },
+              { transform: 'scale(.72)', opacity: 0.35, filter: tint, borderColor: 'rgba(255, 98, 80, .7)', offset: 0.55 },
+              { transform: 'none', opacity: 1, filter: 'none' },
+            ],
+            { duration: 270, easing: 'ease-out' },
+          ));
+        }
         sync();
       }
       return;
@@ -491,7 +516,7 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
         undo = model.clear();
         stopReload();
         sync();
-        toast('Chargeur vidé', true);
+        toast('Chargeur vidé', true, 'info');
         break;
       case 'undo':
         if (!undo) break;
@@ -506,28 +531,28 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
         sync();
         restart(dock, 'settle');
         break;
-      case 'help-close':
-        ui.help = false;
-        sync();
-        break;
       case 'nav':
         car.scrollBy({ left: Number(a.dataset.dir) * car.clientWidth * 0.8, behavior: 'smooth' });
         break;
     }
   });
-  // Escape closes the help (only while it is open).
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && ui.help) {
-      ui.help = false;
-      sync();
-    }
-  });
-
   sync();
 
   return {
     node: root,
     helpButton,
+    /** A feedback from the host (send result, error) in the chargeur's bubble. */
+    notice(text, kind = 'ok') {
+      if (text) toast(text, false, kind);
+    },
+    /** Bonk tutorial: shows the dock unfolded while `on`. */
+    showcase(on) {
+      root.classList.toggle('is-tour', Boolean(on));
+      if (on && ui.collapsed) {
+        ui.collapsed = false;
+        sync();
+      }
+    },
     /**
      * Core's rules and availability (from the module): price of a Bonk, salve bounds, whether a click
      * can be paid now. `volley` absent (older Core) = no Auto, chargeur bounded by the canonical 10.
@@ -550,12 +575,12 @@ export function createBonkChargeur({ document, renderEmote, onFire, onSalve, new
       if (!result.ok) {
         if (result.reason === 'full') {
           restart(gauge, 'shake');
-          toast(`Chargeur plein · ${m.maxShots} max`);
+          toast(`Chargeur plein · ${m.maxShots} max`, false, 'info');
         }
         return result;
       }
       sync({ pop: true });
-      const thumb = car.querySelector(`[data-id="${CSS.escape(emote.id)}"]:not([data-gone])`);
+      const thumb = car.querySelector(`[data-id="${CSS.escape(emote.id)}"]`);
       if (thumb && !ui.collapsed) ensureVisible(thumb, 'auto');
       void flight(emote, fromCell, ui.collapsed ? count : thumb).then(() => {
         if (thumb && !ui.collapsed) restart(thumb, 'land');
