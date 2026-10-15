@@ -10,15 +10,15 @@
 Branche `feat/compact-video-port`, HEAD `639fc0f` (+ le commit de ce checkpoint). **Tout est local** : rien n'est
 poussé au-delà de `c7f20de`, rien n'est déployé, rien n'est dans `main`, aucune release Studio.
 
-| Lot                                        | Statut                                           | Commits                                                              | Validation manuelle (Antoni, vrai Studio + vrai OBS) |
-| ------------------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------------- |
-| 0 — fondation production                   | **VALIDÉ**                                       | `c410833`, `ba2dfc8`                                                 | OK le 14/10/2026 (Lab)                               |
-| 1 — renderer VNext                         | **VALIDÉ**                                       | `af5c78e`                                                            | OK le 14/10/2026                                     |
-| 2 — cible Manuel / Plein écran             | **VALIDÉ**                                       | `895e5dd`                                                            | OK le 14/10/2026                                     |
-| 3 — Auto OBS (+ correctif, + physique)     | **VALIDÉ**                                       | `8267fda` (lot 3), `e5dab8e` (échelle négative), `639fc0f` (contact) | OK le 15/10/2026                                     |
-| 5 — Salves / Chargeur                      | **UX VALIDÉE / FIGÉE** ; implémentation en cours | —                                                                    | —                                                    |
-| 4 — FX rares (explosion mini-emotes, etc.) | après les Salves, non commencé                   | —                                                                    | —                                                    |
-| 6 — combos (option)                        | non décidé                                       | —                                                                    | —                                                    |
+| Lot                                        | Statut                                | Commits                                                                 | Validation manuelle (Antoni, vrai Studio + vrai OBS) |
+| ------------------------------------------ | ------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| 0 — fondation production                   | **VALIDÉ**                            | `c410833`, `ba2dfc8`                                                    | OK le 14/10/2026 (Lab)                               |
+| 1 — renderer VNext                         | **VALIDÉ**                            | `af5c78e`                                                               | OK le 14/10/2026                                     |
+| 2 — cible Manuel / Plein écran             | **VALIDÉ**                            | `895e5dd`                                                               | OK le 14/10/2026                                     |
+| 3 — Auto OBS (+ correctif, + physique)     | **VALIDÉ**                            | `8267fda` (lot 3), `e5dab8e` (échelle négative), `639fc0f` (contact)    | OK le 15/10/2026                                     |
+| 5 — Salves / Chargeur                      | UX figée ; **implémenté, non validé** | `f32dab9` (Core), `7ebf478` (Studio), `b64c3b9` + `6290b72` (Extension) | **à faire** (vrai Studio + vrai OBS)                 |
+| 4 — FX rares (explosion mini-emotes, etc.) | après les Salves, non commencé        | —                                                                       | —                                                    |
+| 6 — combos (option)                        | non décidé                            | —                                                                       | —                                                    |
 
 ### Lot 0 — fondation production (VALIDÉ)
 
@@ -121,7 +121,7 @@ côté, traversée de l'écran en Plein écran.
   débite le Wallet de test (`labEconomy`) — lot cutover Wallet. La source overlay reste trouvée par son nom
   « Raptoru Bonk Lab ».
 
-### Lot 5 — Salves / Chargeur : UX VALIDÉE ET FIGÉE (15/10/2026), implémentation en cours
+### Lot 5 — Salves / Chargeur : UX VALIDÉE ET FIGÉE (15/10/2026) ; implémenté, NON VALIDÉ
 
 **Référence visuelle et fonctionnelle :** le prototype `prototypes/bonk-salves-ux/serie7/final.html` (+ `cg7.js`,
 `cg7.css` ; dossier ignoré par Git, sur le poste d'Antoni). C'est une **spécification** : rien ne s'en retire, ne se
@@ -170,6 +170,41 @@ perdu**, cadence pilotée **côté overlay**. L'auto-fire maintenu reste hors sc
 décision. La règle canonique est celle du § 4 et du § 12 : **bornes Core `shot_count` 1–10 et `cadence_ms` 90–600,
 réglages économiques du Core, jamais fixés par le client**. Le Lot 5 les garde dans **une seule** valeur Core
 (`BONK_LAB_RULES`), exposée à l'Extension qui l'affiche ; passer à 20 = changer cette seule valeur (décision d'Antoni).
+
+**Implémentation (15/10/2026, locale, non validée par Antoni)** — option C du § 4, sans architecture parallèle :
+
+- **Core** (`f32dab9`) : `admitVolley` = N Bonk individuels dans **une** transaction (modération une fois, chaque
+  emote résolue, séquences de chaîne contiguës, **un débit par tir** : un refus — solde, emote, file, bornes — et
+  rien n'est stocké ni payé). Idempotence par salve (clé `<clé>#<index>`, même hash ; rejouée = mêmes tirs, rien
+  repayé). `claimBatch` remet le tir suivant **et le reste de sa salve** dans la même transaction (chacun avec sa
+  livraison, son bail, son ACK, son remboursement avant démarrage, son sweep) ; le `claim` historique ne prend
+  toujours qu'un tir (jamais un tir réservé sans être rendu). Le Bonk simple (Manuel) est inchangé.
+- **Contrats** : migration Lab additive `20261018120000_bonk_lab_volleys.sql` (`volley_id`, `volley_index`,
+  `volley_count`, `cadence_ms`, nulles pour un Bonk simple ; périmètres Lab + extra staging, jamais prod) ;
+  `POST /v1/lab/bonk/volleys` ; `GET /v1/lab/bonk/rules` ; réponse du claim `{interaction, volley}` (champ ajouté,
+  ignoré par un ancien Studio) ; interaction `volley: {id, index, count, cadence_ms} | null` ; `/v1/ext` et la
+  façade Lab acceptent `payload.shots` + `cadence_ms` et exposent `module.volley` (bornes Core).
+- **Studio** (`7ebf478`) : le worker journalise une entrée par tir, dans l'ordre (garanties inchangées : « sent »
+  avant l'effet, redémarrage = `execution_unknown`, jamais rejoué). L'overlay démarre le tir k+1 `cadence_ms` après
+  le tir k (`engine/cadence.js`, pur et testé) en relisant la cible juste avant chaque tir ; tailles, trajectoires,
+  physique, son et cibles inchangés.
+- **Extension** (`b64c3b9`, `6290b72`) : chargeur persistant `shared/bonk-chargeur.js` (+ modèle pur
+  `bonk-chargeur-model.js`, `bonk-chargeur.css`) ; `ui.js` ne fait que le câbler (−358 lignes : ancien dock,
+  Boucle, tiroir et composer retirés). Manuel = `/actions/tokens` par clic (munition rendue si refus) ; Auto =
+  `spendBonkSalve` avec une clé conservée pour la même salve (retry réseau / double clic : jamais payé deux fois),
+  switch verrouillé pendant la lecture locale à la cadence, puis recharge.
+- **Preuves automatiques** : Core 469 tests (dont 12 salves : atomicité, solde insuffisant, idempotence, bornes,
+  ordre, claim groupé, remboursement par tir, Studio perdu, expiration, routes, `/v1/ext`) + PostgreSQL réel à
+  3 Core (même salve deux fois en parallèle + Bonk simples : une salve, séquences contiguës, payée une fois, remise
+  entière) ; Studio 283 (salve de bout en bout dans le worker, 4 cadences) ; Extension (modèle du chargeur).
+  Banc isolé avec la **vraie** extension à 565 × 376 + vrai Core Lab + vrai worker : 2 tirs Manuel joués, salve
+  « Rapide » à 161–169 ms entre départs, géométrie identique au switch, en replié et poubelle ouverte, plein à 10,
+  Vider / Annuler, aide.
+- **Reste** : validation d'Antoni dans le vrai Studio / OBS (redémarrer Studio : serveur et migration Lab modifiés)
+  — salves de 1 / 2 / 5 / 10 aux 4 vitesses, Manuel, switch, repli, coupure OBS au milieu d'une salve ; puis
+  staging (migration à appliquer avec accord), Hosted Test (nouveau ZIP Extension), vrai Twitch. Non fait : test
+  Core Wallet canonique d'une salve (le Lab débite le Wallet de test) ; la lecture locale de la salve dans
+  l'Extension est une estimation à la cadence (l'Extension ne voit pas l'overlay).
 
 ## 1. Architecture Bonk avant VNext (audit du 14/10/2026, historique)
 
@@ -513,8 +548,7 @@ Aucune migration pour la cible, le rendu, les FX ou le son : tout est local Stud
 
 ## 15. Lots d'implémentation
 
-> **Statut au 15/10/2026 :** Lots 0, 1, 2 et 3 **validés** (détail et commits : § 0) ; Lot 5 Salves = **NEXT, non
-> commencé** ; Lot 4 FX rares après les Salves ; Lot 6 combos non décidé. Écarts avec le tableau : le Lot 0 n'a pas
+> **Statut au 15/10/2026 :** Lots 0, 1, 2 et 3 **validés** (détail et commits : § 0) ; Lot 5 Salves = **implémenté, non validé** (§ 0) ; Lot 4 FX rares après les Salves ; Lot 6 combos non décidé. Écarts avec le tableau : le Lot 0 n'a pas
 > fait « source overlay retrouvée par URL » (toujours par son nom) ; le Lot 3 n'a pas fait l'override par scène
 > (reporté) ; le Lot 4 ne doit plus introduire de traversée ni de passage à côté (physique figée).
 

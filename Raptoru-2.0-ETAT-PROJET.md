@@ -69,7 +69,7 @@ tout environnement livré : les deux colonnes se lisent séparément.
 | **Wallet / crédits / Jetons** | Wallet Core multi-monnaie (idempotent, ledger) ; Wallet **de test** Lab utilisé par tous les modules (Lab et staging) ; port économique P1-001 lot 1 (débit + admission atomiques) | Wallet Core validé techniquement (tests) ; Wallet de test validé avec les modules | Wallet de test : **STAGING** ; Wallet Core : **IMPLÉMENTÉ LOCAL**, non branché ; Jetons réels = **PROD legacy** (StreamElements) | **BLOQUÉ** par D1 (soldes SE au cutover), D2 (crédits), import SE, lecteurs n'acceptant que `simulated` | décision D1 / D2, puis P1-001 lot 2 |
 | **Loyalty / Rewards / Daily** | gains passifs, sub / gift / bits / follow, Daily + streak, crédit Wallet derrière drapeaux | validés techniquement (Presence réelle 25/09) | **IMPLÉMENTÉ LOCAL**, drapeaux économiques **OFF** ; production = StreamElements / SAMMI | cutover économique unique | au cutover |
 | **Presence / sessions de stream** | Presence shadow (chatters toutes les ~2 min) ; P1-007 lot 1 : une session = un live Twitch (Tombola, Commands) | Presence validée en réel (25/09) | **VALIDÉ LOCAL** ; migration de session appliquée au staging | P1-007 frontière production (lecture des sessions, consommateur unique) | avec le raccordement production |
-| **Bonk VNext** | Lots 0–3 : fondation prod, moteur de rendu, cible Manuel / Plein écran, **Auto OBS** (sans IA), physique à contact systématique | **VALIDÉ LOCAL** 14–15/10/2026 ; paramètres visuels / audio et physique **figés** | **local uniquement** (commits jusqu'à `639fc0f`, checkpoint `65fea03`) — pas sur le staging, pas publié | déploiement coordonné ; paiement réel (lecteur `simulated`) | **Lot 5 Salves / Chargeur : UX figée (15/10), implémentation en cours** ; FX rares après — détail : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) |
+| **Bonk VNext** | Lots 0–3 : fondation prod, moteur de rendu, cible Manuel / Plein écran, **Auto OBS** (sans IA), physique à contact systématique | **VALIDÉ LOCAL** 14–15/10/2026 ; paramètres visuels / audio et physique **figés** | **local uniquement** (commits jusqu'à `639fc0f`, checkpoint `65fea03`) — pas sur le staging, pas publié | déploiement coordonné ; paiement réel (lecteur `simulated`) | **Lot 5 Salves / Chargeur : UX figée, implémenté, non validé (15/10)** ; FX rares après — détail : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) |
 | **Bonk (picker et providers)** | picker V2 (Récents, Favoris, Twitch, Bits, 7TV / BTTV / FFZ, Twemoji), validation Core par provider / id | **VALIDÉ** 27/09 (Lab) ; Bonk **VALIDÉ STAGING** au live du 07/10 | **RELEASED 0.1.5** (ancien rendu) + **STAGING** | autoriser les CDN 7TV / BTTV / FFZ dans la console Twitch (publication) | — |
 | **OAuth / emotes viewer** | Lab : OAuth `user:read:emotes` (callback local) ; public : OAuth sur `/v1/ext` (callback HTTPS, jetons chiffrés `EXT_TOKEN_KEY`), états `not_linked / syncing / ready / stale / reauth_required` | Lab validé ; Hosted Test 14/10 : OAuth, callback, vraies emotes, persistance, Bonk accepté **validés** ; affichage overlay **non validé** (bascule de chaîne) | **STAGING** (`6d7d381` + `c7f20de`, migration `bonk_lab_viewer_oauth` appliquée) | affichage overlay à revalider ; rapport B3 final | refaire un Bonk Twitch sur `raptoru_` après le prochain déploiement |
 | **Soundboard V2** | 69 sons, réglages Studio, protection volume, stop / remboursement | **VALIDÉ** 28/09 (Lab) ; **VALIDÉ STAGING** 07/10 | **RELEASED 0.1.5** (Lab) + **STAGING** ; production = SAMMI | cutover | — |
@@ -103,7 +103,7 @@ vue Restrictions et retour viewer des restrictions ; profil compact-video du Vid
 
 **B. EN COURS — Bonk Lot 5 Salves / Chargeur.** **UX validée et figée le 15/10/2026** (prototype de référence,
 Manuel = 1 clic 1 Bonk individuel, Auto = salve atomique des munitions restantes à 4 cadences, Boucle et Rafale ×N
-supprimées) ; implémentation en cours. Spécification complète : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md)
+supprimées) ; **implémenté le 15/10/2026, non validé** (Core `f32dab9`, Studio `7ebf478`, Extension `b64c3b9` + `6290b72`, local). Spécification, implémentation et reste à valider : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md)
 § 0 « Lot 5 ». Puis **Lot 4 FX rares** (explosion en mini-emotes, etc.), puis Lot 6 combos (option).
 
 **C. Déploiement coordonné du travail validé** (sur accord d'Antoni) : Core staging (Lot 0 : sweep périodique,
@@ -164,7 +164,7 @@ modules un par un ; legacy coupé ensuite.
 
 ## 0.10 Prochaine étape recommandée
 
-Le **Lot 5 Salves / Chargeur** (Bonk) est en cours sur décision d'Antoni (UX figée le 15/10/2026). Ensuite :
+Le **Lot 5 Salves / Chargeur** (Bonk) est implémenté (local, non validé). Ensuite :
 validation manuelle du Lot 5 dans le vrai Studio / OBS, puis **déploiement coordonné** (Core staging puis Studio, puis
 nouveau ZIP Hosted Test pour l'Extension) — seulement avec l'accord d'Antoni.
 
