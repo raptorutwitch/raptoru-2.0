@@ -7,18 +7,23 @@
 
 ## 0. État au 15/10/2026
 
-Branche `feat/compact-video-port`, HEAD `639fc0f` (+ le commit de ce checkpoint). **Tout est local** : rien n'est
-poussé au-delà de `c7f20de`, rien n'est déployé, rien n'est dans `main`, aucune release Studio.
+**Bonk VNext est FONCTIONNELLEMENT TERMINÉ ET VALIDÉ EN LOCAL** (Lots 0–3, 5 et 6 + tutoriel / UX, validation
+manuelle d'Antoni dans le vrai Studio + vrai OBS, 14–15/10/2026). Lot 4 FX rares : reporté, non bloquant.
 
-| Lot                                        | Statut                                | Commits                                                                 | Validation manuelle (Antoni, vrai Studio + vrai OBS) |
-| ------------------------------------------ | ------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
-| 0 — fondation production                   | **VALIDÉ**                            | `c410833`, `ba2dfc8`                                                    | OK le 14/10/2026 (Lab)                               |
-| 1 — renderer VNext                         | **VALIDÉ**                            | `af5c78e`                                                               | OK le 14/10/2026                                     |
-| 2 — cible Manuel / Plein écran             | **VALIDÉ**                            | `895e5dd`                                                               | OK le 14/10/2026                                     |
-| 3 — Auto OBS (+ correctif, + physique)     | **VALIDÉ**                            | `8267fda` (lot 3), `e5dab8e` (échelle négative), `639fc0f` (contact)    | OK le 15/10/2026                                     |
-| 5 — Salves / Chargeur                      | UX figée ; **implémenté, non validé** | `f32dab9` (Core), `7ebf478` (Studio), `b64c3b9` + `6290b72` (Extension) | **à faire** (vrai Studio + vrai OBS)                 |
-| 6 — FX historique + combo multi-viewer     | **implémenté, non validé**            | `8d54b8f` (Studio, overlay)                                             | **à faire** (vrai Studio + vrai OBS)                 |
-| 4 — FX rares (explosion mini-emotes, etc.) | **non retenu** (FX historique, lot 6) | —                                                                       | —                                                    |
+Branche `feat/compact-video-port`, dernier commit de code Bonk `c4b82c9` (+ le commit docs de ce checkpoint). **Tout est
+local** : rien n'est poussé au-delà de `c7f20de`, rien n'est déployé, rien n'est dans `main`, aucune release Studio.
+Staging, Hosted Test et cutover restent des étapes séparées.
+
+| Lot                                        | Statut                    | Commits                                                                 | Validation manuelle (Antoni, vrai Studio + vrai OBS) |
+| ------------------------------------------ | ------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| 0 — fondation production                   | **VALIDÉ**                | `c410833`, `ba2dfc8`                                                    | OK le 14/10/2026 (Lab)                               |
+| 1 — renderer VNext                         | **VALIDÉ**                | `af5c78e`                                                               | OK le 14/10/2026                                     |
+| 2 — cible Manuel / Plein écran             | **VALIDÉ**                | `895e5dd`                                                               | OK le 14/10/2026                                     |
+| 3 — Auto OBS (+ correctif, + physique)     | **VALIDÉ**                | `8267fda` (lot 3), `e5dab8e` (échelle négative), `639fc0f` (contact)    | OK le 15/10/2026                                     |
+| 5 — Salves / Chargeur                      | **VALIDÉ**                | `f32dab9` (Core), `7ebf478` (Studio), `b64c3b9` + `6290b72` (Extension) | OK le 15/10/2026                                     |
+| 6 — FX historique + combo multi-viewer     | **VALIDÉ**                | `8d54b8f` (Studio, overlay)                                             | OK le 15/10/2026                                     |
+| Tutoriel + UX Bonk (catalogue, chargeur)   | **VALIDÉ**                | `c4b82c9` (Extension)                                                   | OK le 15/10/2026                                     |
+| 4 — FX rares (explosion mini-emotes, etc.) | **reporté**, non bloquant | —                                                                       | —                                                    |
 
 ### Lot 0 — fondation production (VALIDÉ)
 
@@ -112,8 +117,8 @@ côté, traversée de l'écran en Plein écran.
 - **Staging Coolify** (`raptoru-core-staging`) : toujours sur l'état déployé précédemment, `c7f20de` (= dernier commit
   poussé de `origin/feat/compact-video-port` ; emotes Twitch OAuth B1 / B2), chaîne `raptoru_` (83603689), déploiement
   manuel. Il ne contient **aucun** lot VNext.
-- **Hosted Test** : toujours le ZIP `raptoru-live-STAGING-hosted-test-c7f20de4430a.zip` (les lots VNext ne touchent
-  pas l'Extension).
+- **Hosted Test** : toujours le ZIP `raptoru-live-STAGING-hosted-test-c7f20de4430a.zip`. Le Lot 5 et la passe
+  tutoriel / UX touchent l'Extension : **un nouveau ZIP sera nécessaire** au prochain test Hosted Test.
 - **Studio publié** : n'a reçu aucun lot VNext.
 - **Prochain déploiement coordonné** (seulement avec l'accord d'Antoni) : Core staging d'abord, puis Studio,
   validation sur le staging (dont `wrong_channel` et le sweep réels), puis seulement décision de promotion.
@@ -121,7 +126,7 @@ côté, traversée de l'écran en Plein écran.
   débite le Wallet de test (`labEconomy`) — lot cutover Wallet. La source overlay reste trouvée par son nom
   « Raptoru Bonk Lab ».
 
-### Lot 5 — Salves / Chargeur : UX VALIDÉE ET FIGÉE (15/10/2026) ; implémenté, NON VALIDÉ
+### Lot 5 — Salves / Chargeur : VALIDÉ (15/10/2026)
 
 **Référence visuelle et fonctionnelle :** le prototype `prototypes/bonk-salves-ux/serie7/final.html` (+ `cg7.js`,
 `cg7.css` ; dossier ignoré par Git, sur le poste d'Antoni). C'est une **spécification** : rien ne s'en retire, ne se
@@ -171,7 +176,7 @@ décision. La règle canonique est celle du § 4 et du § 12 : **bornes Core `sh
 réglages économiques du Core, jamais fixés par le client**. Le Lot 5 les garde dans **une seule** valeur Core
 (`BONK_LAB_RULES`), exposée à l'Extension qui l'affiche ; passer à 20 = changer cette seule valeur (décision d'Antoni).
 
-**Implémentation (15/10/2026, locale, non validée par Antoni)** — option C du § 4, sans architecture parallèle :
+**Implémentation (15/10/2026, locale, validée par Antoni le 15/10/2026)** — option C du § 4, sans architecture parallèle :
 
 - **Core** (`f32dab9`) : `admitVolley` = N Bonk individuels dans **une** transaction (modération une fois, chaque
   emote résolue, séquences de chaîne contiguës, **un débit par tir** : un refus — solde, emote, file, bornes — et
@@ -200,13 +205,16 @@ réglages économiques du Core, jamais fixés par le client**. Le Lot 5 les gard
   Banc isolé avec la **vraie** extension à 565 × 376 + vrai Core Lab + vrai worker : 2 tirs Manuel joués, salve
   « Rapide » à 161–169 ms entre départs, géométrie identique au switch, en replié et poubelle ouverte, plein à 10,
   Vider / Annuler, aide.
-- **Reste** : validation d'Antoni dans le vrai Studio / OBS (redémarrer Studio : serveur et migration Lab modifiés)
-  — salves de 1 / 2 / 5 / 10 aux 4 vitesses, Manuel, switch, repli, coupure OBS au milieu d'une salve ; puis
-  staging (migration à appliquer avec accord), Hosted Test (nouveau ZIP Extension), vrai Twitch. Non fait : test
-  Core Wallet canonique d'une salve (le Lab débite le Wallet de test) ; la lecture locale de la salve dans
-  l'Extension est une estimation à la cadence (l'Extension ne voit pas l'overlay).
+- **Validé localement par Antoni (15/10/2026)**, avec la passe tutoriel / UX `c4b82c9` : tutoriel Bonk à bulles (carte
+  fixe centrée, mise en avant douce, « Ne plus afficher ce tutoriel automatiquement », « ? »), catalogue (catégories
+  repliables, scroll doux, distinction groupe / catégorie, Récents figés pendant l'ouverture), chargeur toujours
+  visible même vide, retrait d'emotes (clic gauche, clic droit, dernière unité, pile > 1 — sortie sur place),
+  poubelle compacte + Vider tout / Annuler, feedbacks dans la bulle du chargeur.
+- **Reste (étapes séparées, accord d'Antoni)** : staging (migration Lab à appliquer), Hosted Test (nouveau ZIP
+  Extension), vrai Twitch. Non fait : test Core Wallet canonique d'une salve (le Lab débite le Wallet de test) ; la
+  lecture locale de la salve dans l'Extension est une estimation à la cadence (l'Extension ne voit pas l'overlay).
 
-### Lot 6 — FX d'impact historique + combo multi-viewer : implémenté (15/10/2026), validation locale restante
+### Lot 6 — FX d'impact historique + combo multi-viewer : VALIDÉ (15/10/2026)
 
 Commit `8d54b8f` (Studio, overlay uniquement ; local, non poussé). Aucun changement Core, Extension, contrat,
 migration, wallet ni admission. **Les Bonks normaux sont identiques** au moteur validé : 8 000 plans comparés à
@@ -256,10 +264,9 @@ navigateur : le **vrai** `overlay.js` dans Chromium, routes renderer de Studio s
 finisher ; 3 viewers → finisher 340 px ; 12 viewers → finisher 1 360 px plein écran ; Bonk normal ensuite ; 25 / 25
 interactions `started` + `completed`, scène vide à la fin, aucune erreur.
 
-**Reste** : **validation d'Antoni dans le vrai Studio + vrai OBS** (redémarrer Studio : l'overlay a changé) — FX
-sur coups isolés et en salve, finisher à 2 viewers, puis gros finisher (plusieurs comptes viewers liés), Bonk
-normal juste après. Staging / Hosted Test restent des étapes séparées (accord d'Antoni). Lot 4 « FX rares » : **non
-retenu** (Bonk clôturé avec la FX historique, 15/10/2026).
+**Validé localement par Antoni (15/10/2026)** : FX Legacy / Legacy sans cercle, combo multi-viewer et finisher
+géant. Staging / Hosted Test restent des étapes séparées (accord d'Antoni). Lot 4 « FX rares » : **reporté**, non
+bloquant (éventuel polish futur).
 
 ## 1. Architecture Bonk avant VNext (audit du 14/10/2026, historique)
 
@@ -603,7 +610,7 @@ Aucune migration pour la cible, le rendu, les FX ou le son : tout est local Stud
 
 ## 15. Lots d'implémentation
 
-> **Statut au 15/10/2026 :** Lots 0, 1, 2 et 3 **validés** (détail et commits : § 0) ; Lot 5 Salves et Lot 6 (FX historique + combo multi-viewer) = **implémentés, non validés** (§ 0) ; Lot 4 FX rares non retenu. Écarts avec le tableau : le Lot 0 n'a pas
+> **Statut au 15/10/2026 :** Lots 0, 1, 2 et 3 **validés** (détail et commits : § 0) ; Lot 5 Salves, Lot 6 (FX historique + combo multi-viewer) et tutoriel / UX = **validés** (§ 0) ; Lot 4 FX rares reporté (non bloquant). Écarts avec le tableau : le Lot 0 n'a pas
 > fait « source overlay retrouvée par URL » (toujours par son nom) ; le Lot 3 n'a pas fait l'override par scène
 > (reporté) ; le Lot 4 ne doit plus introduire de traversée ni de passage à côté (physique figée).
 

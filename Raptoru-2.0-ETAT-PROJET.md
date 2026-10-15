@@ -24,9 +24,9 @@ Répartition des documents (une seule source de vérité par sujet) :
 
 | Élément | Valeur |
 | --- | --- |
-| Branche de travail | `feat/compact-video-port`, HEAD **`65fea03`** (checkpoint docs Bonk VNext) — + le commit de ce rafraîchissement |
+| Branche de travail | `feat/compact-video-port`, dernier commit de code Bonk **`c4b82c9`** (tutoriel / UX) — + le commit docs de ce rafraîchissement |
 | `main` | **`d2b61ef`** = `origin/main` (intact depuis le 14/10/2026) |
-| `origin/feat/compact-video-port` | **`c7f20de`** — tout ce qui suit est **local, non poussé** : Bonk VNext (`c410833` → `639fc0f`) + docs |
+| `origin/feat/compact-video-port` | **`c7f20de`** — tout ce qui suit est **local, non poussé** : Bonk VNext (`c410833` → `c4b82c9`) + docs |
 | Remote | `origin` = `github.com/raptorutwitch/raptoru-2.0` (privé) ; branche locale annexe `feat/calibration-video-component` (`d13dfb9`) |
 | **Staging Coolify** (`raptoru-core-staging`, `https://core-staging.raptoru.fr`) | Core sur **`c7f20de`** (déployé le 14/10/2026, manuel), PostgreSQL 17 dédié, chaîne `raptoru_` (83603689), paiement **simulé** (Wallet de test) |
 | **Hosted Test** (console Twitch, comptes testeurs) | ZIP **`raptoru-live-STAGING-hosted-test-c7f20de4430a.zip`** → Core staging |
@@ -41,7 +41,7 @@ Répartition des documents (une seule source de vérité par sujet) :
   une décision), 3 P2 différés (015, 021, 025) et 3 P3 volontaires (001 signature Windows, 002 nommage BonkLab, 006 UX).
 - **Ce qui va bien** : tous les modules V2 du stream (Hub, Bonk, Soundboard, TTS, Tombola, Modération, Commands) sont
   validés localement par Antoni ; un premier live réel Hosted Test → Core staging → Studio → OBS a été validé le
-  07/10/2026 ; Bonk VNext Lots 0–3 validés les 14–15/10/2026.
+  07/10/2026 ; **Bonk VNext fonctionnellement terminé et validé en local** (Lots 0–3, 5, 6 + tutoriel / UX, 14–15/10/2026).
 - **Ce qui manque pour la production** : l'économie réelle (Wallet canonique, import StreamElements, Points de chaîne),
   la publication de l'Extension, et la migration des fonctionnalités legacy encore absentes (Jeu des mots, alertes,
   FX…). Voir 0.6 et 0.7.
@@ -69,7 +69,7 @@ tout environnement livré : les deux colonnes se lisent séparément.
 | **Wallet / crédits / Jetons** | Wallet Core multi-monnaie (idempotent, ledger) ; Wallet **de test** Lab utilisé par tous les modules (Lab et staging) ; port économique P1-001 lot 1 (débit + admission atomiques) | Wallet Core validé techniquement (tests) ; Wallet de test validé avec les modules | Wallet de test : **STAGING** ; Wallet Core : **IMPLÉMENTÉ LOCAL**, non branché ; Jetons réels = **PROD legacy** (StreamElements) | **BLOQUÉ** par D1 (soldes SE au cutover), D2 (crédits), import SE, lecteurs n'acceptant que `simulated` | décision D1 / D2, puis P1-001 lot 2 |
 | **Loyalty / Rewards / Daily** | gains passifs, sub / gift / bits / follow, Daily + streak, crédit Wallet derrière drapeaux | validés techniquement (Presence réelle 25/09) | **IMPLÉMENTÉ LOCAL**, drapeaux économiques **OFF** ; production = StreamElements / SAMMI | cutover économique unique | au cutover |
 | **Presence / sessions de stream** | Presence shadow (chatters toutes les ~2 min) ; P1-007 lot 1 : une session = un live Twitch (Tombola, Commands) | Presence validée en réel (25/09) | **VALIDÉ LOCAL** ; migration de session appliquée au staging | P1-007 frontière production (lecture des sessions, consommateur unique) | avec le raccordement production |
-| **Bonk VNext** | Lots 0–3 : fondation prod, moteur de rendu, cible Manuel / Plein écran, **Auto OBS** (sans IA), physique à contact systématique | **VALIDÉ LOCAL** 14–15/10/2026 ; paramètres visuels / audio et physique **figés** | **local uniquement** (commits jusqu'à `639fc0f`, checkpoint `65fea03`) — pas sur le staging, pas publié | déploiement coordonné ; paiement réel (lecteur `simulated`) | **Lot 5 Salves / Chargeur et Lot 6 FX historique + combo multi-viewer : implémentés, non validés (15/10)** ; FX rares non retenues — détail : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) |
+| **Bonk VNext** | Lots 0–3 (fondation prod, moteur de rendu, cible Manuel / Plein écran, **Auto OBS** sans IA, physique à contact systématique), Lot 5 Salves / Chargeur, Lot 6 FX historique + combo multi-viewer, tutoriel et UX Bonk | **FONCTIONNELLEMENT TERMINÉ ET VALIDÉ LOCAL** 14–15/10/2026 ; paramètres visuels / audio et physique **figés** ; Lot 4 FX rares reporté (non bloquant) | **local uniquement** (commits jusqu'à `c4b82c9`) — pas sur le staging, pas publié | déploiement coordonné (Core, migration Lab, Studio, nouveau ZIP Extension) ; paiement réel (lecteur `simulated`) | staging / Hosted Test / cutover sur accord — détail : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) |
 | **Bonk (picker et providers)** | picker V2 (Récents, Favoris, Twitch, Bits, 7TV / BTTV / FFZ, Twemoji), validation Core par provider / id | **VALIDÉ** 27/09 (Lab) ; Bonk **VALIDÉ STAGING** au live du 07/10 | **RELEASED 0.1.5** (ancien rendu) + **STAGING** | autoriser les CDN 7TV / BTTV / FFZ dans la console Twitch (publication) | — |
 | **OAuth / emotes viewer** | Lab : OAuth `user:read:emotes` (callback local) ; public : OAuth sur `/v1/ext` (callback HTTPS, jetons chiffrés `EXT_TOKEN_KEY`), états `not_linked / syncing / ready / stale / reauth_required` | Lab validé ; Hosted Test 14/10 : OAuth, callback, vraies emotes, persistance, Bonk accepté **validés** ; affichage overlay **non validé** (bascule de chaîne) | **STAGING** (`6d7d381` + `c7f20de`, migration `bonk_lab_viewer_oauth` appliquée) | affichage overlay à revalider ; rapport B3 final | refaire un Bonk Twitch sur `raptoru_` après le prochain déploiement |
 | **Soundboard V2** | 69 sons, réglages Studio, protection volume, stop / remboursement | **VALIDÉ** 28/09 (Lab) ; **VALIDÉ STAGING** 07/10 | **RELEASED 0.1.5** (Lab) + **STAGING** ; production = SAMMI | cutover | — |
@@ -88,7 +88,7 @@ tout environnement livré : les deux colonnes se lisent séparément.
 ## 0.5 Ce qui est vraiment validé (par Antoni)
 
 - **Lab local** : Studio autonome + supervision ; Hub ; Bonk V2 (picker, providers) ; Soundboard V2 ; TTS V2 ;
-  Modération V2 D4 ; Tombola V2 (figée) ; Commands V2 A0 → F ; P1-019 lots 1–2 ; Bonk VNext Lots 0–3.
+  Modération V2 D4 ; Tombola V2 (figée) ; Commands V2 A0 → F ; P1-019 lots 1–2 ; Bonk VNext complet (Lots 0–3, 5, 6, tutoriel / UX).
 - **Staging réel** : Core staging (06/10) ; Studio Production appairé ; **live Hosted Test → Core staging → Studio →
   OBS (07/10)** : Soundboard, TTS, STOP / remboursement, Bonk, Modération, Tombola ; OAuth emotes viewer (14/10, sauf
   affichage overlay).
@@ -101,18 +101,15 @@ tout environnement livré : les deux colonnes se lisent séparément.
 vue Restrictions et retour viewer des restrictions ; profil compact-video du Video Component ; passe UX TTS
 (`8b297a7`) ; affichage overlay d'un Bonk Twitch (B3).
 
-**B. EN VALIDATION — Bonk Lots 5 et 6.** Lot 5 Salves / Chargeur : **UX validée et figée le 15/10/2026** (prototype de référence,
-Manuel = 1 clic 1 Bonk individuel, Auto = salve atomique des munitions restantes à 4 cadences, Boucle et Rafale ×N
-supprimées) ; **implémenté le 15/10/2026, non validé** (Core `f32dab9`, Studio `7ebf478`, Extension `b64c3b9` + `6290b72`, local). Spécification, implémentation et reste à valider : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md)
-§ 0 « Lot 5 ». **Lot 6 (15/10/2026, implémenté, non validé, Studio `8d54b8f`)** : FX d'impact historique de
-l'ancien overlay (70 % sans cercle, 30 % avec) et combo multi-viewer (viewers distincts, fenêtre 5 s, ≥ 2 viewers →
-emote géante jouée par le même moteur, taille selon les viewers) — § 0 « Lot 6 ». Lot 4 FX rares non retenu : une
-fois les Lots 5 et 6 validés, **Bonk VNext est fonctionnellement terminé en local** (staging / Hosted Test à part).
+**B. TERMINÉ — Bonk VNext fonctionnellement terminé et validé en local (15/10/2026).** Lot 5 Salves / Chargeur
+(Core `f32dab9`, Studio `7ebf478`, Extension `b64c3b9` + `6290b72`), Lot 6 FX historique + combo multi-viewer (Studio
+`8d54b8f`) et tutoriel / UX Bonk (Extension `c4b82c9`) **validés manuellement par Antoni**. Lot 4 FX rares : reporté, non
+bloquant. Détail : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0.
 
 **C. Déploiement coordonné du travail validé** (sur accord d'Antoni) : Core staging (Lot 0 : sweep périodique,
 `wrong_channel`) **puis** Studio, validation staging (sweep et `wrong_channel` réels, chaîne complète Hosted Test →
-Core → Studio → OBS avec Bonk VNext), puis seulement décision de release Studio. L'Extension n'a pas besoin d'un
-nouveau ZIP pour Bonk VNext.
+Core → Studio → OBS avec Bonk VNext), puis seulement décision de release Studio. Bonk VNext demande aussi la
+migration Lab du Lot 5 sur le staging et un **nouveau ZIP Extension** (chargeur, tutoriel) pour le Hosted Test.
 
 **D. Préparation du cutover** (ordre du plan) : P1-019 (reste) → P1-001 port économique (décisions D1 / D2, lot 2,
 lecteurs non simulés) → P1-006 (vrai secret, capacité) → parcours vertical § 7 (Bonk payé en Jetons de test sur le
@@ -167,10 +164,9 @@ modules un par un ; legacy coupé ensuite.
 
 ## 0.10 Prochaine étape recommandée
 
-Les **Lots 5 (Salves / Chargeur) et 6 (FX historique + combo multi-viewer)** de Bonk sont implémentés (local, non
-validés). Ensuite : validation manuelle des Lots 5 et 6 dans le vrai Studio / OBS (Bonk alors fonctionnellement terminé
-en local), puis **déploiement coordonné** (Core staging puis Studio, puis
-nouveau ZIP Hosted Test pour l'Extension) — seulement avec l'accord d'Antoni.
+**Bonk VNext est terminé et validé en local** : chantier fermé. Prochaine étape : le module suivant de la roadmap
+(0.6 E) ; le **déploiement coordonné** de Bonk VNext (Core staging + migration Lab, puis Studio, puis nouveau ZIP
+Hosted Test pour l'Extension) reste une étape séparée, seulement avec l'accord d'Antoni.
 
 ---
 

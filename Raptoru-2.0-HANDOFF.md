@@ -1,6 +1,6 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 15/10/2026 : checkpoint Bonk VNext Lots 0–3 validés (lire en premier)
+## État courant — 15/10/2026 : Bonk VNext FONCTIONNELLEMENT TERMINÉ ET VALIDÉ EN LOCAL (lire en premier)
 
 Vérifier `git status` / `git log`. Branche de travail **`feat/compact-video-port`**, HEAD ≥ `65fea03` (checkpoints
 docs au-dessus de `639fc0f`). **Statut de tous les modules et roadmap :**
@@ -30,17 +30,21 @@ docs au-dessus de `639fc0f`). **Statut de tous les modules et roadmap :**
   le sweep réels), puis seulement décision de promotion.
 - **Autres commits de la branche** (antérieurs à Bonk VNext) : restrictions viewer (`2ed1d94`, `3bc40cb`) et
   correctif d'autorisation des emotes (`5a218c1`) — statut de validation dans leurs messages de commit.
-- **Lot 5 Salves / Chargeur : implémenté le 15/10/2026, NON VALIDÉ** (Core `f32dab9`, Studio `7ebf478`, Extension `b64c3b9` + `6290b72`, local ; redémarrer Studio avant de tester). UX **validée et figée** par Antoni le 15/10/2026 (prototype
-  `prototypes/bonk-salves-ux/serie7/final.html` = spécification ; Manuel = 1 clic 1 Bonk, Auto = salve atomique des
-  munitions restantes, 4 cadences, Boucle et Rafale ×N supprimées, max par salve = règle Core canonique 10). Spec,
-  invariants et état d'implémentation : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0
-  « Lot 5 ».
-- **Lot 6 — FX d'impact historique + combo multi-viewer : implémenté le 15/10/2026, NON VALIDÉ** (Studio `8d54b8f`,
-  overlay uniquement, local ; redémarrer Studio avant de tester). FX = celle de l'ancien overlay (`Alerte_system.html`),
-  70 % sans cercle / 30 % avec, 8 particules ; combo = viewers distincts (jamais les tirs), fenêtre 5 s, ≥ 2 viewers →
-  une emote géante jouée par le même moteur, taille selon le nombre de viewers (jusqu'à plein écran). Bonks normaux
-  inchangés. Détail : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0 « Lot 6 ». Lot 4 FX
-  rares non retenu : **Bonk VNext fonctionnellement terminé en local** une fois les Lots 5 et 6 validés par Antoni.
+- **Bonk VNext est FONCTIONNELLEMENT TERMINÉ ET VALIDÉ EN LOCAL** (validation manuelle d'Antoni, 15/10/2026) :
+  - **Lot 5 Salves / Chargeur — VALIDÉ** (Core `f32dab9`, Studio `7ebf478`, Extension `b64c3b9` + `6290b72`) :
+    Manuel = 1 clic 1 Bonk, Auto = salve atomique des munitions restantes, 4 cadences, max par salve = règle Core
+    canonique 10 ; prototype `prototypes/bonk-salves-ux/serie7/final.html` = spécification.
+  - **Lot 6 FX historique + combo multi-viewer — VALIDÉ** (Studio `8d54b8f`) : FX Legacy (70 % sans cercle / 30 %
+    avec), combo sur viewers distincts (fenêtre 5 s, ≥ 2 viewers) + finisher géant joué par le même moteur.
+  - **Tutoriel et UX Bonk — VALIDÉS** (Extension `c4b82c9`) : tutoriel à bulles (carte fixe centrée, mise en avant douce,
+    « Ne plus afficher ce tutoriel automatiquement », « ? » pour le rouvrir) ; catalogue (catégories repliables,
+    scroll doux vers les catégories, distinction groupe / catégorie, Récents figés pendant l'ouverture) ; chargeur
+    toujours visible même vide ; retrait d'emotes (clic gauche, clic droit, dernière unité, pile > 1) ; poubelle /
+    Vider tout / Annuler ; feedbacks dans la bulle du chargeur.
+  - **Lot 4 FX rares : reporté**, non bloquant (éventuel polish futur).
+  - Détail : [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0. **Staging, Hosted Test et
+    cutover restent des étapes séparées** (accord d'Antoni ; le Lot 5 exige un nouveau ZIP Extension et une
+    migration Lab sur le staging).
 - **Toujours valable** : legacy (SAMMI, StreamElements, EBS `raptoru.fr/api`, Extension publiée) = production ;
   aucune release Studio depuis 0.1.5 ; aucun push, déploiement, migration distante, release ou changement Twitch sans
   feu vert explicite d'Antoni.
