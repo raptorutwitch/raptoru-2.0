@@ -16,6 +16,7 @@ import type { RuntimeWiring } from '../worker-journal.js';
 /** Renderer modules of the overlay (bonk-overlay/engine), served next to overlay.js. */
 const ENGINE_FILES = [
   'audio.js',
+  'cadence.js',
   'density.js',
   'families.js',
   'physics.js',

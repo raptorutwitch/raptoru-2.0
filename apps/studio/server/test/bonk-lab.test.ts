@@ -119,6 +119,74 @@ describe('Bonk vertical Lab transport (real Core HTTP + PGlite + durable Studio)
       expect(await count(f.core.db, table)).toBe(0);
   });
 
+  it('salve (lot 5, Auto): one extension request, N shots admitted atomically, the whole salve claimed in one tick, played in order, never replayed', async () => {
+    const f = await fixture();
+    await f.ready();
+    const lab = await LabEbs.create(EXTENSION_DIR);
+    lab.connectBonk(f.worker);
+    const headers = {
+      authorization: `Bearer lab.${Buffer.from(JSON.stringify({ role: 'viewer', identity_shared: true })).toString('base64url')}`,
+      idempotencyKey: 'salve-1',
+    };
+    const session = await lab.handle('GET', '/session', undefined, headers);
+    expect(
+      (session.body.modules as { id: string; volley?: unknown }[]).find(
+        (m) => m.id === 'bonk',
+      )?.volley,
+    ).toEqual({ max_shots: 10, cadence_min_ms: 90, cadence_max_ms: 600 });
+    const shot = (emote: string, glyph: string) => ({
+      emote_source: 'unicode',
+      emote,
+      emote_glyph: glyph,
+    });
+    const payload = {
+      module_id: 'bonk',
+      payload: {
+        shots: [
+          shot('unicode:1f600', '😀'),
+          shot('unicode:1f525', '🔥'),
+          shot('unicode:1f600', '😀'),
+        ],
+        cadence_ms: 95,
+      },
+    };
+    const a = await lab.handle('POST', '/actions/tokens', payload, headers);
+    const b = await lab.handle('POST', '/actions/tokens', payload, headers);
+    expect(a.status).toBe(200);
+    expect(a.body).toMatchObject({ module_id: 'bonk', cost: 600 });
+    expect(b.body).toMatchObject({
+      volley_id: a.body.volley_id,
+      replayed: true,
+    });
+    const ids = (a.body.interactions as { interaction_id: string }[]).map(
+      (i) => i.interaction_id,
+    );
+    // One tick: the whole salve is in the journal, handed out in firing order with its cadence.
+    await f.worker.tick();
+    const played: string[] = [];
+    for (let n = 0; n < 3; n++) {
+      const c = (await f.worker.command('renderer-1'))!;
+      expect(c.volley).toMatchObject({ index: n, count: 3, cadence_ms: 95 });
+      played.push(c.interaction_id);
+      await f.worker.rendererAck(
+        c.interaction_id,
+        c.delivery.attempt_id!,
+        'renderer-1',
+        'started',
+      );
+    }
+    expect(played).toEqual(ids);
+    expect(await f.worker.command('renderer-1')).toBeNull();
+    // A restart cannot prove the end of a sent shot: unknown, never played again.
+    const reopened = await BonkWorker.open(f.file, f.client);
+    reopened.setObs(true, true);
+    await reopened.rendererHeartbeat('renderer-2');
+    await reopened.tick();
+    expect(await reopened.command('renderer-2')).toBeNull();
+    for (const id of ids)
+      expect((await f.core.bonkLab.get(id)).status).toBe('execution_unknown');
+  });
+
   it('20 overlapping Bonks, two viewers, duplicate submissions: ordered starts without batching', async () => {
     const f = await fixture();
     await f.ready();

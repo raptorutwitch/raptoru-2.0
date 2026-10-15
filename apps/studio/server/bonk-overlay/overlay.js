@@ -1,6 +1,7 @@
-/* global document, location, fetch, crypto, Image, setTimeout, setInterval, AbortSignal */
+/* global document, location, fetch, crypto, Image, setTimeout, setInterval, AbortSignal, performance */
 import { createAudioPlayer } from './engine/audio.js';
 import { createScene } from './engine/scene.js';
+import { moreInVolley, shotStarted, volleyDelay } from './engine/cadence.js';
 
 // Bonk renderer. Transport unchanged (poll, renderer ACKs, URL checks); the visual and the sound are
 // the VNext engine (engine/: trajectory families, sizes, impacts, density, adaptive sound).
@@ -13,6 +14,8 @@ const seen = new Set();
 const twemojiUrl =
   /^assets\/twemoji\/svg\/[0-9a-f]{1,6}(-[0-9a-f]{1,6}){0,9}\.svg$/;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Salves (lot 5): start of the previous shot of the salve being played (engine/cadence.js).
+let lastShot = null;
 async function call(path, data) {
   const response = await fetch('/bonk-lab/renderer/' + path, {
     method: 'POST',
@@ -81,12 +84,16 @@ async function play(i) {
   let shown;
   try {
     await freshTarget();
+    // Cadence of a salve: wait for this shot's slot (the target was re-read just before, as always).
+    const wait = volleyDelay(i, lastShot, performance.now());
+    if (wait > 0) await sleep(wait);
     shown = await scene.play({ id: i.interaction_id, image });
   } catch {
     await ack(i, 'failed');
     return;
   }
   await shown.started;
+  lastShot = shotStarted(i, performance.now()) ?? lastShot;
   const started = ack(i, 'started');
   // Completion acknowledgement is ordered after started, even if the first response was lost.
   void shown.finished.then(async () => {
@@ -139,11 +146,14 @@ setInterval(() => void call('heartbeat', {}).catch(() => {}), 1500);
 await call('heartbeat', {}).catch(() => {});
 await refreshTarget();
 while (true) {
+  let more = false;
   try {
     const { interaction } = await call('next', {});
     if (interaction) await play(interaction);
+    // Inside a salve the next shot is already in Studio's journal: ask for it at once (cadence).
+    more = moreInVolley(interaction);
   } catch {
     /* Core/Studio exposes offline/unknown. Never invent success or replay effects. */
   }
-  await sleep(100);
+  await sleep(more ? 0 : 100);
 }

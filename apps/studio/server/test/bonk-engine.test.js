@@ -5,6 +5,11 @@ import {
   createAudioGovernor,
   everyNth,
 } from '../bonk-overlay/engine/audio.js';
+import {
+  moreInVolley,
+  shotStarted,
+  volleyDelay,
+} from '../bonk-overlay/engine/cadence.js';
 import { DENSITY, densityDecision } from '../bonk-overlay/engine/density.js';
 import {
   ENTRIES,
@@ -540,5 +545,53 @@ describe('targets (lot 2): Manuel zone and Fullscreen', () => {
         planShot(id, { ...context, mode: 'manual', rect: DEFAULT_TARGET }),
       ).toEqual(planShot(id, context));
     }
+  });
+});
+
+describe('salve cadence (lot 5): shot k+1 starts cadence_ms after shot k', () => {
+  // The 4 speeds of the chargeur (Lent / Moyen / Rapide / Très rapide), within Core's 90–600 ms.
+  const SPEEDS = [420, 260, 160, 95];
+  const shot = (index, cadence_ms, id = 'v1', count = 5) => ({
+    volley: { id, index, count, cadence_ms },
+  });
+
+  it.each(SPEEDS)('%i ms: exact slots when the renderer is on time', (ms) => {
+    let last = null;
+    let now = 1000;
+    const starts = [];
+    for (let k = 0; k < 5; k++) {
+      now += volleyDelay(shot(k, ms), last, now); // wait for the slot
+      starts.push(now);
+      last = shotStarted(shot(k, ms), now);
+      now += 3; // ACK + next poll: a few ms
+    }
+    expect(starts.map((t, k) => (k ? t - starts[k - 1] : 0))).toEqual([
+      0,
+      ms,
+      ms,
+      ms,
+      ms,
+    ]);
+  });
+
+  it('a late shot is never hurried nor skipped: the next slots shift', () => {
+    const last = shotStarted(shot(0, 160), 1000);
+    expect(volleyDelay(shot(1, 160), last, 1500)).toBe(0); // already late: start now
+    expect(volleyDelay(shot(1, 160), last, 1100)).toBe(60);
+  });
+
+  it('no wait for a single Bonk, the first shot, or another salve', () => {
+    const last = shotStarted(shot(2, 160), 1000);
+    expect(volleyDelay({ volley: null }, last, 1001)).toBe(0);
+    expect(volleyDelay(shot(0, 160), last, 1001)).toBe(0);
+    expect(volleyDelay(shot(3, 160, 'v2'), last, 1001)).toBe(0);
+    expect(shotStarted({ volley: null }, 5)).toBeNull();
+  });
+
+  it('asks Studio for the next shot at once only inside a salve', () => {
+    expect(moreInVolley(shot(0, 160, 'v', 3))).toBe(true);
+    expect(moreInVolley(shot(2, 160, 'v', 3))).toBe(false);
+    expect(moreInVolley({ volley: null })).toBe(false);
+    expect(moreInVolley(null)).toBe(false);
   });
 });

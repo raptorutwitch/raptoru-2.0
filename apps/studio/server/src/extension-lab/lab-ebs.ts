@@ -253,6 +253,8 @@ export function thirdPartyGroups(catalog: BonkLabThirdPartyCatalog): Json[] {
 
 export class LabEbs {
   private bonkWorker: BonkWorker | null = null;
+  /** Core's salve bounds (Bonk lot 5), read once from Core and shown by the chargeur; null until known. */
+  private bonkVolley: Json | null = null;
   private viewerAuth: ViewerAuth | null = null;
   private thirdPartyCatalog:
     ((refresh?: boolean) => Promise<BonkLabThirdPartyCatalog>) | null = null;
@@ -1021,6 +1023,12 @@ export class LabEbs {
     if (this.bonkWorker && (path === '/session' || path.startsWith('/emotes')))
       // Never forced from the extension: Core caches the public catalogs 10 min.
       await this.refreshThirdParty();
+    if (this.bonkWorker && !this.bonkVolley && path === '/session')
+      this.bonkVolley = await this.bonkWorker
+        .rules()
+        .then((r) => r.volley as Json)
+        .catch(() => null); // Core not ready: the chargeur shows no Auto until known
+
     // Bonk Lab with a connected Twitch account: the viewer role IS that account (user_id = token
     // owner), like a real Twitch JWT would say. Other roles keep their fictitious identities.
     if (this.viewerAuth && caller.identity.role === 'viewer') {
@@ -1417,6 +1425,61 @@ export class LabEbs {
       if (!headers.idempotencyKey)
         return this.fail(400, 'idempotency_key_required');
       const p = body.payload as Json | undefined;
+      // Salve (lot 5, mode Auto): every shot admitted and paid by Core at once, or nothing.
+      if (p && Array.isArray(p.shots)) {
+        const shots = p.shots as Json[];
+        if (
+          !shots.length ||
+          shots.some(
+            (s) =>
+              !BONK_PROVIDERS.includes(s?.emote_source as BonkLabProvider) ||
+              typeof s?.emote !== 'string',
+          ) ||
+          typeof p.cadence_ms !== 'number'
+        )
+          return this.fail(400, 'invalid_payload');
+        try {
+          const out = await this.bonkWorker.admitVolley(
+            {
+              id: caller.identity.twitchUserId,
+              display_name: caller.identity.displayName,
+            },
+            headers.idempotencyKey,
+            shots.map((s) => {
+              const provider = s.emote_source as BonkLabProvider;
+              return {
+                provider,
+                id: String(s.emote),
+                glyph:
+                  provider === 'unicode' && typeof s.emote_glyph === 'string'
+                    ? s.emote_glyph
+                    : null,
+              };
+            }),
+            p.cadence_ms,
+          );
+          return this.ok({
+            status: 'queued',
+            module_id: 'bonk',
+            reference_id: out.volley_id,
+            volley_id: out.volley_id,
+            interactions: out.interactions,
+            replayed: out.replayed,
+            charged: false,
+            test_mode: true,
+            payment_mode: 'simulated',
+            cost: out.interactions.reduce(
+              (sum, i) => sum + i.simulated_cost,
+              0,
+            ),
+          });
+        } catch (e) {
+          return this.fail(
+            (e as { status?: number }).status ?? 503,
+            (e as Error).message,
+          );
+        }
+      }
       if (
         !p ||
         !BONK_PROVIDERS.includes(p.emote_source as BonkLabProvider) ||
@@ -1892,6 +1955,8 @@ export class LabEbs {
               groups: [...this.twitch.groups, ...this.bonkGroups()],
             },
             description: 'Bonk OBS Lab · coût simulé, aucun débit',
+            // Salves (lot 5): Core's bounds; absent until read (the chargeur then offers no Auto).
+            ...(this.bonkVolley ? { volley: this.bonkVolley } : {}),
           }
         : m.id === 'soundboard' && this.soundWorker
           ? // Soundboard Lab: the Core catalog with its live state, simulated payment.

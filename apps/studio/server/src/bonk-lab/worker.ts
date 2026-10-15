@@ -6,6 +6,7 @@ import type {
   BonkLabAckRequest,
   BonkLabAdmitRequest,
   BonkLabInteraction,
+  BonkLabVolleyAdmitResponse,
 } from '@raptoru/schemas';
 
 type Event = BonkLabAckRequest['event'];
@@ -224,6 +225,41 @@ export class BonkWorker {
     this.onAdmitted?.();
     return out;
   }
+  /**
+   * Salve (Bonk lot 5, mode Auto): every shot admitted and paid by Core in one transaction, or none.
+   * Lab only (in production, admissions come from the public frontier).
+   */
+  async admitVolley(
+    viewer: BonkLabAdmitRequest['viewer'],
+    key: string,
+    emotes: BonkLabAdmitRequest['emote'][],
+    cadenceMs: number,
+  ) {
+    const out = await this.core<BonkLabVolleyAdmitResponse>(
+      `${this.base}/volleys`,
+      {
+        channel_id: this.channel,
+        viewer,
+        idempotency_key: key,
+        lab_session_id: this.session,
+        emotes,
+        cadence_ms: cadenceMs,
+      },
+    );
+    this.onAdmitted?.();
+    return out;
+  }
+  /** Core's economic rules shown to the viewer (cost, salve bounds). Lab only. */
+  rules() {
+    return this.core<{
+      cost: number;
+      volley: {
+        max_shots: number;
+        cadence_min_ms: number;
+        cadence_max_ms: number;
+      };
+    }>(`${this.base}/rules`);
+  }
   recent(viewer?: string) {
     return this.core<{ interactions: BonkLabInteraction[] }>(
       `${this.base}/channels/${this.channel}/interactions?limit=50${viewer ? '&viewer_id=' + viewer : ''}`,
@@ -344,20 +380,24 @@ export class BonkWorker {
         );
         await this.save();
         if (this.ready && this.state.entries.length < 12) {
-          const { interaction } = await this.core<{
+          const { interaction, volley } = await this.core<{
             interaction: BonkLabInteraction | null;
+            /** The rest of a salve, claimed in the same transaction (Core lot 5); absent before. */
+            volley?: BonkLabInteraction[] | null;
           }>(`${this.base}/claim`, {
             studio_instance_id: this.state.studio,
             channel_id: this.channel,
           });
           if (interaction) {
-            this.state.entries.push({
-              interaction,
-              sent: false,
-              renderer: null,
-              events: this.ownSession(interaction) ? [] : ['failed'],
-              reported: [],
-            });
+            // One journal entry per shot, in firing order: each keeps its own attempt and ACKs.
+            for (const shot of [interaction, ...(volley ?? [])])
+              this.state.entries.push({
+                interaction: shot,
+                sent: false,
+                renderer: null,
+                events: this.ownSession(shot) ? [] : ['failed'],
+                reported: [],
+              });
             await this.save();
           }
         }
