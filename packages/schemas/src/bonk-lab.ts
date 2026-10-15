@@ -20,19 +20,43 @@ export const BonkLabProvider = z.enum([
 ]);
 export type BonkLabProvider = z.infer<typeof BonkLabProvider>;
 
+const Emote = z.strictObject({
+  provider: BonkLabProvider,
+  id: z.string().min(1).max(64),
+  glyph: z.string().max(32).nullable().optional(),
+});
+const Viewer = z.strictObject({
+  id: Id,
+  display_name: z.string().min(1).max(64),
+});
+
 /** Admission of one Bonk (one click = one interaction), sent by the Studio Lab façade. */
 export const BonkLabAdmitRequest = z.strictObject({
   idempotency_key: Key,
   channel_id: Id,
-  viewer: z.strictObject({ id: Id, display_name: z.string().min(1).max(64) }),
+  viewer: Viewer,
   lab_session_id: z.string().min(1).max(64),
-  emote: z.strictObject({
-    provider: BonkLabProvider,
-    id: z.string().min(1).max(64),
-    glyph: z.string().max(32).nullable().optional(),
-  }),
+  emote: Emote,
 });
 export type BonkLabAdmitRequest = z.infer<typeof BonkLabAdmitRequest>;
+
+/**
+ * Admission of a salve (Bonk lot 5, mode Auto): N individual Bonks admitted and paid in one transaction,
+ * all or nothing. The order of `emotes` is the firing order. The bounds (shots per salve, cadence) are
+ * Core rules (BONK_LAB_RULES): the schema only rejects absurd sizes. The key leaves room for the
+ * per-shot suffix (`#index`).
+ */
+export const BonkLabVolleyAdmitRequest = z.strictObject({
+  idempotency_key: z.string().min(1).max(120),
+  channel_id: Id,
+  viewer: Viewer,
+  lab_session_id: z.string().min(1).max(64),
+  emotes: z.array(Emote).min(1).max(50),
+  cadence_ms: z.number().int(),
+});
+export type BonkLabVolleyAdmitRequest = z.infer<
+  typeof BonkLabVolleyAdmitRequest
+>;
 
 export const BonkLabStatus = z.enum([
   'accepted',
@@ -76,6 +100,15 @@ export const BonkLabInteraction = z.object({
   emote_url: z.string(),
   emote_animated: z.boolean(),
   quantity: z.literal(1),
+  /** Salve this Bonk belongs to (lot 5), null for a single Bonk. `index` is the firing order. */
+  volley: z
+    .object({
+      id: z.string(),
+      index: z.number().int(),
+      count: z.number().int(),
+      cadence_ms: z.number().int(),
+    })
+    .nullable(),
   created_at: z.string(),
   channel_sequence: z.number().int(),
   test_mode: z.literal(true),
@@ -100,6 +133,16 @@ export const BonkLabAdmitResponse = z.object({
 });
 export type BonkLabAdmitResponse = z.infer<typeof BonkLabAdmitResponse>;
 
+/** The salve's Bonks in firing order (same lifecycle as single Bonks: one interaction per shot). */
+export const BonkLabVolleyAdmitResponse = z.object({
+  volley_id: z.string(),
+  interactions: z.array(BonkLabInteraction),
+  replayed: z.boolean(),
+});
+export type BonkLabVolleyAdmitResponse = z.infer<
+  typeof BonkLabVolleyAdmitResponse
+>;
+
 /** Studio worker readiness, refreshed every few seconds. */
 export const BonkLabHeartbeat = z.strictObject({
   studio_instance_id: z.string().min(1).max(64),
@@ -119,6 +162,11 @@ export type BonkLabClaimRequest = z.infer<typeof BonkLabClaimRequest>;
 
 export const BonkLabClaimResponse = z.object({
   interaction: BonkLabInteraction.nullable(),
+  /**
+   * When `interaction` opens a salve: the salve's other Bonks, claimed in the same transaction (each with
+   * its own delivery), in firing order — so the renderer can keep the cadence. Absent for older Cores.
+   */
+  volley: z.array(BonkLabInteraction).nullable().optional(),
 });
 export type BonkLabClaimResponse = z.infer<typeof BonkLabClaimResponse>;
 

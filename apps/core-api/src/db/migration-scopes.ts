@@ -51,6 +51,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   // Twitch stream id of a Lab stream session (ASTRA-P1-007).
   '20261016130000_lab_stream_session_twitch_id.sql',
   '20261017120000_bonk_lab_viewer_oauth.sql',
+  // Bonk VNext lot 5: salves (volley columns on bonk_lab_interactions).
+  '20261018120000_bonk_lab_volleys.sql',
 ]);
 
 /**
@@ -83,6 +85,8 @@ export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261015120000_lab_moderation_idempotency.sql',
   '20261016130000_lab_stream_session_twitch_id.sql',
   '20261017120000_bonk_lab_viewer_oauth.sql',
+  // Bonk VNext lot 5: the staging Core serves Bonk salves to the Extension (/v1/ext).
+  '20261018120000_bonk_lab_volleys.sql',
 ]);
 
 export interface MigrationScopes {

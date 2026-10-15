@@ -7,6 +7,8 @@ import type {
   BonkLabHeartbeat,
   BonkLabInteraction,
   BonkLabStatus,
+  BonkLabVolleyAdmitRequest,
+  BonkLabVolleyAdmitResponse,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
@@ -86,7 +88,21 @@ export const BONK_LAB_RULES = {
   executingLeaseMs: 60_000,
   /** Bounded queue: refused before admission, nothing recorded. */
   maxOpenPerChannel: 50,
+  /**
+   * Salves (lot 5, mode Auto). Canonical Core rules (Bonk VNext audit § 4 / § 12): shots per salve and
+   * cadence between two starts. The only place these bounds live; the Extension reads them from Core.
+   */
+  volleyMaxShots: 10,
+  volleyCadenceMinMs: 90,
+  volleyCadenceMaxMs: 600,
 };
+
+/** Salve rules as the clients see them (Extension: max munitions, cadence bounds). */
+export const bonkVolleyRules = () => ({
+  max_shots: BONK_LAB_RULES.volleyMaxShots,
+  cadence_min_ms: BONK_LAB_RULES.volleyCadenceMinMs,
+  cadence_max_ms: BONK_LAB_RULES.volleyCadenceMaxMs,
+});
 
 export class BonkLabError409 extends Error {
   constructor(
@@ -138,7 +154,19 @@ interface Row {
   lease_expires_at: Date | null;
   started_at: Date | null;
   completed_at: Date | null;
+  volley_id: string | null;
+  volley_index: number | null;
+  volley_count: number | null;
+  cadence_ms: number | null;
 }
+
+type Emote = BonkLabAdmitRequest['emote'];
+type ResolvedEmote = { glyph: string | null; url: string; animated: boolean };
+/** What admission needs from the network, fetched before the transaction. */
+type Prefetched = {
+  twitchError: string | null;
+  thirdParty: Map<string, ThirdPartyEmote | 'unavailable' | null>;
+};
 
 const SELECT = `select i.*, d.studio_instance_id, d.attempt_id, d.lease_expires_at, d.started_at, d.completed_at
   from bonk_lab_interactions i left join bonk_lab_deliveries d using (interaction_id)`;
@@ -161,6 +189,15 @@ function toInteraction(r: Row): BonkLabInteraction {
     emote_url: r.emote_url,
     emote_animated: r.emote_animated,
     quantity: 1,
+    volley:
+      r.volley_id === null
+        ? null
+        : {
+            id: r.volley_id,
+            index: Number(r.volley_index),
+            count: Number(r.volley_count),
+            cadence_ms: Number(r.cadence_ms),
+          },
     created_at: iso(r.created_at)!,
     channel_sequence: Number(r.channel_sequence),
     test_mode: true,
@@ -225,10 +262,13 @@ export class BonkLabService {
    */
   private async resolveEmote(
     q: Queryable,
-    req: BonkLabAdmitRequest,
-    twitchError: string | null,
-    thirdParty: ThirdPartyEmote | 'unavailable' | null = null,
-  ): Promise<{ glyph: string | null; url: string; animated: boolean }> {
+    viewerId: string,
+    e: Emote,
+    pre: Prefetched,
+  ): Promise<ResolvedEmote> {
+    const req = { emote: e, viewer: { id: viewerId } };
+    const twitchError = pre.twitchError;
+    const thirdParty = pre.thirdParty.get(`${e.provider}:${e.id}`) ?? null;
     if (isThirdParty(req.emote.provider)) {
       // Resolved before the transaction from the channel's public catalog: provider + id only.
       if (req.emote.glyph)
@@ -351,6 +391,167 @@ export class BonkLabService {
     }
   }
 
+  /**
+   * Network outside the transaction: refresh a stale Twitch catalog (its error is kept for the answer)
+   * and resolve each 7TV/BTTV/FFZ id from the channel's public catalog.
+   */
+  private async prefetch(
+    viewerId: string,
+    emotes: Emote[],
+  ): Promise<Prefetched> {
+    const pre: Prefetched = { twitchError: null, thirdParty: new Map() };
+    if (emotes.some((e) => e.provider === 'twitch') && this.twitch)
+      await this.twitch.catalog(viewerId).catch((error: unknown) => {
+        pre.twitchError =
+          error instanceof TwitchViewerError
+            ? error.code
+            : 'catalog_unavailable';
+      });
+    for (const e of emotes) {
+      const provider = e.provider;
+      const key = `${provider}:${e.id}`;
+      if (!isThirdParty(provider) || pre.thirdParty.has(key)) continue;
+      const prefix = `${provider}:`;
+      const id = e.id.startsWith(prefix) ? e.id.slice(prefix.length) : '';
+      pre.thirdParty.set(
+        key,
+        this.thirdParty
+          ? await this.thirdParty
+              .resolve(provider, id)
+              .catch(() => 'unavailable' as const)
+          : null,
+      );
+    }
+    return pre;
+  }
+
+  /** Channel row lock: serializes admissions of the channel (durable sequence allocation). */
+  private async lockChannel(q: Queryable, channelId: string) {
+    await q.query(
+      'insert into bonk_lab_channels (channel_id) values ($1) on conflict (channel_id) do nothing',
+      [channelId],
+    );
+    await q.query(
+      'select last_sequence from bonk_lab_channels where channel_id = $1 for update',
+      [channelId],
+    );
+  }
+
+  /** Moderation V2 (Core): refused before admission, nothing recorded. */
+  private async assertAdmissible(
+    q: Queryable,
+    channelId: string,
+    viewerId: string,
+  ) {
+    const now0 = this.clock.now();
+    await assertNotGloballyPaused(q, channelId);
+    const state = await moduleState(q, 'bonk');
+    if (state === 'disabled')
+      throw new BonkLabError409('module_disabled', 'Bonk disabled');
+    if (state === 'paused')
+      throw new BonkLabError409('bonk_paused', 'Bonk paused by moderation');
+    if (await activeBlock(q, channelId, viewerId, 'bonk', now0))
+      throw new BonkLabError409(
+        'viewer_blocked',
+        'Bonk unavailable for this viewer',
+      );
+    const imposed = await personalCooldownMs(
+      q,
+      channelId,
+      viewerId,
+      'bonk',
+      now0,
+    );
+    if (imposed > 0)
+      throw new BonkLabError409(
+        'viewer_cooldown',
+        `cooldown imposed by moderation (${Math.ceil(imposed / 1000)} s)`,
+      );
+  }
+
+  /** Executable now and room for `count` more open Bonks (bounded queue), else refused. */
+  private async assertCapacity(q: Queryable, channelId: string, count: number) {
+    await this.sweep(q, channelId);
+    await this.assertReady(q);
+    const open = (
+      await q.query<{ n: number | string }>(
+        "select count(*) as n from bonk_lab_interactions where channel_id = $1 and status in ('accepted', 'queued', 'executing')",
+        [channelId],
+      )
+    )[0]!;
+    if (Number(open.n) + count > BONK_LAB_RULES.maxOpenPerChannel)
+      throw new BonkLabError409('queue_full', 'too many Bonks waiting');
+  }
+
+  /** Reserves `count` contiguous channel sequences; returns the first one. */
+  private async allocate(q: Queryable, channelId: string, count: number) {
+    const last = (
+      await q.query<{ last_sequence: number | string }>(
+        'update bonk_lab_channels set last_sequence = last_sequence + $2 where channel_id = $1 returning last_sequence',
+        [channelId, count],
+      )
+    )[0]!.last_sequence;
+    return Number(last) - count + 1;
+  }
+
+  /** One admitted Bonk, already `queued` (accepted and queued commit in the same transaction). */
+  private async insertShot(
+    q: Queryable,
+    shot: {
+      id: string;
+      key: string;
+      requestHash: string;
+      channelId: string;
+      viewer: BonkLabAdmitRequest['viewer'];
+      labSessionId: string;
+      emote: Emote;
+      resolved: ResolvedEmote;
+      sequence: number;
+      now: Date;
+      volley: {
+        id: string;
+        index: number;
+        count: number;
+        cadenceMs: number;
+      } | null;
+    },
+  ) {
+    const v = shot.volley;
+    await q.query(
+      `insert into bonk_lab_interactions (interaction_id, idempotency_key, request_hash, source, channel_id,
+         viewer_id, viewer_display_name, type, provider, emote_id, emote_glyph, emote_url, emote_animated,
+         quantity, created_at, channel_sequence, test_mode, payment_mode, simulated_cost, simulated_currency,
+         real_debited, status, lab_session_id, expires_at, error, updated_at,
+         volley_id, volley_index, volley_count, cadence_ms)
+       values ($1, $2, $3, 'extension_lab', $4, $5, $6, 'bonk', $17, $7, $8, $9, $10,
+         1, $11, $12, true, 'simulated', $13, $14, 0, 'queued', $15, $16, null, $11,
+         $18, $19, $20, $21)`,
+      [
+        shot.id,
+        shot.key,
+        shot.requestHash,
+        shot.channelId,
+        shot.viewer.id,
+        shot.viewer.display_name,
+        shot.emote.id,
+        shot.resolved.glyph,
+        shot.resolved.url,
+        shot.resolved.animated,
+        shot.now,
+        shot.sequence,
+        BONK_LAB_RULES.simulatedCost,
+        BONK_LAB_RULES.simulatedCurrency,
+        shot.labSessionId,
+        new Date(shot.now.getTime() + BONK_LAB_RULES.expiresAfterMs),
+        shot.emote.provider,
+        v?.id ?? null,
+        v?.index ?? null,
+        v?.count ?? null,
+        v?.cadenceMs ?? null,
+      ],
+    );
+  }
+
   private async admitTx(
     req: BonkLabAdmitRequest,
   ): Promise<BonkLabAdmitResponse> {
@@ -366,39 +567,10 @@ export class BonkLabService {
         ]),
       )
       .digest('hex');
-    // Network outside the transaction: refresh a stale Twitch catalog (errors kept for the answer).
-    let twitchError: string | null = null;
-    if (req.emote.provider === 'twitch' && this.twitch)
-      await this.twitch.catalog(req.viewer.id).catch((error: unknown) => {
-        twitchError =
-          error instanceof TwitchViewerError
-            ? error.code
-            : 'catalog_unavailable';
-      });
-    let thirdParty: ThirdPartyEmote | 'unavailable' | null = null;
-    const provider = req.emote.provider;
-    if (isThirdParty(provider)) {
-      const prefix = `${provider}:`;
-      const id = req.emote.id.startsWith(prefix)
-        ? req.emote.id.slice(prefix.length)
-        : '';
-      thirdParty = this.thirdParty
-        ? await this.thirdParty
-            .resolve(provider, id)
-            .catch(() => 'unavailable' as const)
-        : null;
-    }
+    const pre = await this.prefetch(req.viewer.id, [req.emote]);
 
     return this.db.tx(async (q) => {
-      // Channel row lock: serializes admissions of the channel (durable sequence allocation).
-      await q.query(
-        'insert into bonk_lab_channels (channel_id) values ($1) on conflict (channel_id) do nothing',
-        [req.channel_id],
-      );
-      await q.query(
-        'select last_sequence from bonk_lab_channels where channel_id = $1 for update',
-        [req.channel_id],
-      );
+      await this.lockChannel(q, req.channel_id);
 
       const prior = (
         await q.query<Row>(
@@ -415,81 +587,26 @@ export class BonkLabService {
         return { interaction: toInteraction(prior), replayed: true };
       }
 
-      // Moderation V2 (Core): refused before admission, nothing recorded.
-      const now0 = this.clock.now();
-      await assertNotGloballyPaused(q, req.channel_id);
-      const state = await moduleState(q, 'bonk');
-      if (state === 'disabled')
-        throw new BonkLabError409('module_disabled', 'Bonk disabled');
-      if (state === 'paused')
-        throw new BonkLabError409('bonk_paused', 'Bonk paused by moderation');
-      if (await activeBlock(q, req.channel_id, req.viewer.id, 'bonk', now0))
-        throw new BonkLabError409(
-          'viewer_blocked',
-          'Bonk unavailable for this viewer',
-        );
-      const imposed = await personalCooldownMs(
-        q,
-        req.channel_id,
-        req.viewer.id,
-        'bonk',
-        now0,
-      );
-      if (imposed > 0)
-        throw new BonkLabError409(
-          'viewer_cooldown',
-          `cooldown imposed by moderation (${Math.ceil(imposed / 1000)} s)`,
-        );
+      await this.assertAdmissible(q, req.channel_id, req.viewer.id);
+      const emote = await this.resolveEmote(q, req.viewer.id, req.emote, pre);
+      await this.assertCapacity(q, req.channel_id, 1);
 
-      const emote = await this.resolveEmote(q, req, twitchError, thirdParty);
-
-      await this.sweep(q, req.channel_id);
-      await this.assertReady(q);
-      const open = (
-        await q.query<{ n: number | string }>(
-          "select count(*) as n from bonk_lab_interactions where channel_id = $1 and status in ('accepted', 'queued', 'executing')",
-          [req.channel_id],
-        )
-      )[0]!;
-      if (Number(open.n) >= BONK_LAB_RULES.maxOpenPerChannel)
-        throw new BonkLabError409('queue_full', 'too many Bonks waiting');
-
-      const seq = (
-        await q.query<{ last_sequence: number | string }>(
-          'update bonk_lab_channels set last_sequence = last_sequence + 1 where channel_id = $1 returning last_sequence',
-          [req.channel_id],
-        )
-      )[0]!.last_sequence;
+      const seq = await this.allocate(q, req.channel_id, 1);
       const now = this.clock.now();
       const id = randomUUID();
-      // accepted and queued are committed in the same transaction: the answer is already `queued`.
-      await q.query(
-        `insert into bonk_lab_interactions (interaction_id, idempotency_key, request_hash, source, channel_id,
-           viewer_id, viewer_display_name, type, provider, emote_id, emote_glyph, emote_url, emote_animated,
-           quantity, created_at, channel_sequence, test_mode, payment_mode, simulated_cost, simulated_currency,
-           real_debited, status, lab_session_id, expires_at, error, updated_at)
-         values ($1, $2, $3, 'extension_lab', $4, $5, $6, 'bonk', $17, $7, $8, $9, $10,
-           1, $11, $12, true, 'simulated', $13, $14, 0, 'queued', $15, $16, null, $11)`,
-        [
-          id,
-          req.idempotency_key,
-          requestHash,
-          req.channel_id,
-          req.viewer.id,
-          req.viewer.display_name,
-          req.emote.id,
-          emote.glyph,
-          emote.url,
-          emote.animated,
-          now,
-          Number(seq),
-          BONK_LAB_RULES.simulatedCost,
-          BONK_LAB_RULES.simulatedCurrency,
-          req.lab_session_id,
-          new Date(now.getTime() + BONK_LAB_RULES.expiresAfterMs),
-          req.emote.provider,
-        ],
-      );
+      await this.insertShot(q, {
+        id,
+        key: req.idempotency_key,
+        requestHash,
+        channelId: req.channel_id,
+        viewer: req.viewer,
+        labSessionId: req.lab_session_id,
+        emote: req.emote,
+        resolved: emote,
+        sequence: seq,
+        now,
+        volley: null,
+      });
       await seeViewer(
         q,
         req.channel_id,
@@ -508,6 +625,143 @@ export class BonkLabService {
       });
       return { interaction: (await this.byId(q, id))!, replayed: false };
     });
+  }
+
+  /**
+   * Salve (lot 5, mode Auto): N individual Bonks admitted in ONE transaction — validation, contiguous
+   * channel sequences and N debits (one per shot, the same debit as a single Bonk). One refusal (wallet,
+   * emote, queue, moderation…) and nothing is stored or paid: never a partial salve. Each shot then
+   * lives like a single Bonk (delivery, ACK, refund before start, sweep).
+   */
+  async admitVolley(
+    req: BonkLabVolleyAdmitRequest,
+  ): Promise<BonkLabVolleyAdmitResponse> {
+    try {
+      return await this.admitVolleyTx(req);
+    } catch (e) {
+      if (!(e instanceof GlobalPauseError)) throw e;
+      await countGlobalRefusal(this.db, req.channel_id, this.clock.now());
+      throw new BonkLabError409('global_pause', e.message);
+    }
+  }
+
+  private async admitVolleyTx(
+    req: BonkLabVolleyAdmitRequest,
+  ): Promise<BonkLabVolleyAdmitResponse> {
+    const count = req.emotes.length;
+    if (count > BONK_LAB_RULES.volleyMaxShots)
+      throw new BonkLabError409(
+        'volley_too_large',
+        `at most ${BONK_LAB_RULES.volleyMaxShots} Bonks per salve`,
+      );
+    if (
+      req.cadence_ms < BONK_LAB_RULES.volleyCadenceMinMs ||
+      req.cadence_ms > BONK_LAB_RULES.volleyCadenceMaxMs
+    )
+      throw new BonkLabError409(
+        'invalid_cadence',
+        `cadence between ${BONK_LAB_RULES.volleyCadenceMinMs} and ${BONK_LAB_RULES.volleyCadenceMaxMs} ms`,
+      );
+    const requestHash = createHash('sha256')
+      .update(
+        JSON.stringify([
+          'bonk_volley',
+          req.emotes.map((e) => [e.provider, e.id, e.glyph ?? null]),
+          req.cadence_ms,
+          req.lab_session_id,
+        ]),
+      )
+      .digest('hex');
+    // Each shot gets `<key>#<index>` (the unique per-viewer key of the table); the first one is the
+    // salve's idempotency record.
+    const keyOf = (index: number) => `${req.idempotency_key}#${index}`;
+    const pre = await this.prefetch(req.viewer.id, req.emotes);
+
+    return this.db.tx(async (q) => {
+      await this.lockChannel(q, req.channel_id);
+
+      const prior = (
+        await q.query<Row>(
+          `${SELECT} where i.channel_id = $1 and i.viewer_id = $2 and i.idempotency_key = $3`,
+          [req.channel_id, req.viewer.id, keyOf(0)],
+        )
+      )[0];
+      if (prior) {
+        if (prior.request_hash !== requestHash || prior.volley_id === null)
+          throw new BonkLabError409(
+            'idempotency_conflict',
+            'idempotency key already used for another salve',
+          );
+        return {
+          volley_id: prior.volley_id,
+          interactions: await this.byVolley(q, prior.volley_id),
+          replayed: true,
+        };
+      }
+
+      await this.assertAdmissible(q, req.channel_id, req.viewer.id);
+      const resolved: ResolvedEmote[] = [];
+      for (const e of req.emotes)
+        resolved.push(await this.resolveEmote(q, req.viewer.id, e, pre));
+      await this.assertCapacity(q, req.channel_id, count);
+
+      const first = await this.allocate(q, req.channel_id, count);
+      const now = this.clock.now();
+      const volleyId = randomUUID();
+      const ids = req.emotes.map(() => randomUUID());
+      for (const [index, emote] of req.emotes.entries())
+        await this.insertShot(q, {
+          id: ids[index]!,
+          key: keyOf(index),
+          requestHash,
+          channelId: req.channel_id,
+          viewer: req.viewer,
+          labSessionId: req.lab_session_id,
+          emote,
+          resolved: resolved[index]!,
+          sequence: first + index,
+          now,
+          volley: {
+            id: volleyId,
+            index,
+            count,
+            cadenceMs: req.cadence_ms,
+          },
+        });
+      await seeViewer(
+        q,
+        req.channel_id,
+        req.viewer.id,
+        req.viewer.display_name,
+        now,
+      );
+      // Same transaction: N debits or none (an insufficient balance on the last shot refuses the salve).
+      for (const id of ids)
+        await this.economy.debit(q, now, {
+          channelId: req.channel_id,
+          viewer: req.viewer,
+          currency: 'tokens',
+          amount: BONK_LAB_RULES.simulatedCost,
+          module: 'bonk',
+          interactionId: id,
+        });
+      return {
+        volley_id: volleyId,
+        interactions: await this.byVolley(q, volleyId),
+        replayed: false,
+      };
+    });
+  }
+
+  private async byVolley(
+    q: Queryable,
+    volleyId: string,
+  ): Promise<BonkLabInteraction[]> {
+    const rows = await q.query<Row>(
+      `${SELECT} where i.volley_id = $1 order by i.volley_index`,
+      [volleyId],
+    );
+    return rows.map(toInteraction);
   }
 
   async get(interactionId: string): Promise<BonkLabInteraction> {
@@ -648,10 +902,38 @@ export class BonkLabService {
     };
   }
 
+  /** Next Bonk only (historical shape). A salve's other shots are then claimed one at a time. */
   async claim(
     studioInstanceId: string,
     channelId: string,
   ): Promise<BonkLabInteraction | null> {
+    return (await this.claimTx(studioInstanceId, channelId, false)).interaction;
+  }
+
+  /**
+   * Next Bonk and, when it opens (or continues) a salve, the salve's remaining queued shots claimed in
+   * the same transaction, each with its own delivery and lease, in firing order: the renderer gets the
+   * whole salve at once and keeps its cadence. Used by the Lab and production transport routes.
+   */
+  async claimBatch(
+    studioInstanceId: string,
+    channelId: string,
+  ): Promise<{
+    interaction: BonkLabInteraction | null;
+    volley: BonkLabInteraction[] | null;
+  }> {
+    return this.claimTx(studioInstanceId, channelId, true);
+  }
+
+  private async claimTx(
+    studioInstanceId: string,
+    channelId: string,
+    batch: boolean,
+  ): Promise<{
+    interaction: BonkLabInteraction | null;
+    volley: BonkLabInteraction[] | null;
+  }> {
+    const none = { interaction: null, volley: null };
     return this.db.tx(async (q) => {
       await q.query(
         'insert into bonk_lab_channels (channel_id) values ($1) on conflict (channel_id) do nothing',
@@ -664,7 +946,7 @@ export class BonkLabService {
       await this.sweep(q, channelId);
       await this.assertReady(q, studioInstanceId);
       // Paused: waiting Bonks stay queued, nothing new is sent to OBS.
-      if ((await moduleState(q, 'bonk')) !== 'active') return null;
+      if ((await moduleState(q, 'bonk')) !== 'active') return none;
       const pendingStart = (
         await q.query<{ n: number | string }>(
           `select count(*) as n from bonk_lab_interactions i join bonk_lab_deliveries d using (interaction_id)
@@ -672,29 +954,51 @@ export class BonkLabService {
           [channelId],
         )
       )[0]!;
-      if (Number(pendingStart.n) > 0) return null;
+      if (Number(pendingStart.n) > 0) return none;
       const next = (
-        await q.query<{ interaction_id: string }>(
-          `select interaction_id from bonk_lab_interactions i
+        await q.query<{
+          interaction_id: string;
+          volley_id: string | null;
+          volley_index: number | null;
+        }>(
+          `select interaction_id, volley_id, volley_index from bonk_lab_interactions i
            where channel_id = $1 and status = 'queued'
              and not exists (select 1 from bonk_lab_deliveries d where d.interaction_id = i.interaction_id)
            order by channel_sequence limit 1`,
           [channelId],
         )
       )[0];
-      if (!next) return null;
+      if (!next) return none;
       const now = this.clock.now();
-      await q.query(
-        `insert into bonk_lab_deliveries (interaction_id, studio_instance_id, attempt_id, lease_expires_at)
-         values ($1, $2, $3, $4)`,
-        [
-          next.interaction_id,
-          studioInstanceId,
-          randomUUID(),
-          new Date(now.getTime() + BONK_LAB_RULES.claimLeaseMs),
-        ],
-      );
-      return (await this.byId(q, next.interaction_id))!;
+      // The rest of a salve: its later queued, unclaimed shots (contiguous sequences, same order).
+      const rest =
+        batch && next.volley_id !== null
+          ? await q.query<{ interaction_id: string }>(
+              `select interaction_id from bonk_lab_interactions i
+               where channel_id = $1 and volley_id = $2 and volley_index > $3 and status = 'queued'
+                 and not exists (select 1 from bonk_lab_deliveries d where d.interaction_id = i.interaction_id)
+               order by volley_index`,
+              [channelId, next.volley_id, next.volley_index],
+            )
+          : [];
+      const ids = [next.interaction_id, ...rest.map((r) => r.interaction_id)];
+      for (const id of ids)
+        await q.query(
+          `insert into bonk_lab_deliveries (interaction_id, studio_instance_id, attempt_id, lease_expires_at)
+           values ($1, $2, $3, $4)`,
+          [
+            id,
+            studioInstanceId,
+            randomUUID(),
+            new Date(now.getTime() + BONK_LAB_RULES.claimLeaseMs),
+          ],
+        );
+      const claimed: BonkLabInteraction[] = [];
+      for (const id of ids) claimed.push((await this.byId(q, id))!);
+      return {
+        interaction: claimed[0]!,
+        volley: next.volley_id === null ? null : claimed.slice(1),
+      };
     });
   }
 

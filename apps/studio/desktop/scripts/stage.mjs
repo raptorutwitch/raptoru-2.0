@@ -86,6 +86,7 @@ const runtimeFiles = [
   'supabase/migrations/20261015120000_lab_moderation_idempotency.sql',
   'supabase/migrations/20261016130000_lab_stream_session_twitch_id.sql',
   'supabase/migrations/20261017120000_bonk_lab_viewer_oauth.sql',
+  'supabase/migrations/20261018120000_bonk_lab_volleys.sql',
 ];
 for (const path of runtimeFiles)
   if (!existsSync(join(app, path)))

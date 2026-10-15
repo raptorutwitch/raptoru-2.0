@@ -57,6 +57,8 @@ function assertChannel(expected: string | undefined, channelId?: string) {
 interface ExecutionService<H, A> {
   heartbeat(h: H): Promise<unknown>;
   claim(studioInstanceId: string, channelId: string): Promise<unknown>;
+  /** Claim answer as a whole (Bonk lot 5: `{interaction, volley}`); else `{interaction: claim()}`. */
+  claimBatch?(studioInstanceId: string, channelId: string): Promise<unknown>;
   get(
     interactionId: string,
   ): Promise<{ delivery: { studio_instance_id: string | null } }>;
@@ -95,6 +97,8 @@ function executionRoutes<
         mapped(async () => {
           const req = ownBody(installation!, schemas.claim, body);
           assertChannel(channelId, req.channel_id);
+          if (service.claimBatch)
+            return service.claimBatch(installation!, req.channel_id);
           return {
             interaction: await service.claim(installation!, req.channel_id),
           };

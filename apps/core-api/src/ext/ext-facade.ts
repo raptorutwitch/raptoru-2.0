@@ -1,4 +1,7 @@
-import { BONK_LAB_RULES } from '../bonk-lab/bonk-lab-service.js';
+import {
+  BONK_LAB_RULES,
+  bonkVolleyRules,
+} from '../bonk-lab/bonk-lab-service.js';
 import {
   type TwitchViewerCatalog,
   TwitchViewerError,
@@ -71,6 +74,8 @@ const MODULE_PRESENTATION = {
     kinds: ['tokens'],
     token_cost: BONK_LAB_RULES.simulatedCost,
     channel_points_cost: null,
+    // Salves (lot 5): Core's bounds, shown by the chargeur (never decided by the client).
+    volley: bonkVolleyRules(),
   },
   raffle_join: {
     id: 'raffle_join',
@@ -588,6 +593,54 @@ export class ExtFacade {
     try {
       switch (body.module_id) {
         case 'bonk': {
+          // Salve (lot 5, mode Auto): every shot admitted and paid at once, or nothing.
+          if (Array.isArray(payload.shots)) {
+            const shots = payload.shots as Json[];
+            if (
+              !shots.length ||
+              shots.some(
+                (s) =>
+                  !BONK_PROVIDERS.includes(String(s?.emote_source)) ||
+                  typeof s?.emote !== 'string',
+              ) ||
+              typeof payload.cadence_ms !== 'number'
+            )
+              return fail(400, 'invalid_payload');
+            const out = await this.core<{
+              volley_id: string;
+              interactions: Json[];
+              replayed: boolean;
+            }>('/v1/lab/bonk/volleys', {
+              ...base,
+              emotes: shots.map((s) => {
+                const provider = String(s.emote_source);
+                return {
+                  provider,
+                  id: String(s.emote),
+                  glyph:
+                    provider === 'unicode' && typeof s.emote_glyph === 'string'
+                      ? s.emote_glyph
+                      : null,
+                };
+              }),
+              cadence_ms: payload.cadence_ms,
+            });
+            return ok({
+              status: 'queued',
+              module_id: 'bonk',
+              reference_id: out.volley_id,
+              volley_id: out.volley_id,
+              interactions: out.interactions,
+              replayed: out.replayed,
+              charged: false,
+              test_mode: true,
+              payment_mode: 'simulated',
+              cost: out.interactions.reduce(
+                (sum, i) => sum + Number(i.simulated_cost),
+                0,
+              ),
+            });
+          }
           if (
             !BONK_PROVIDERS.includes(String(payload.emote_source)) ||
             !Array.isArray(payload.emotes) ||

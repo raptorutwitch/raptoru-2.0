@@ -559,6 +559,101 @@ describe.skipIf(!isLocal)('Core on a real Postgres', () => {
     }
   });
 
+  it('Bonk salves (lot 5): 3 Cores, the same salve twice + singles racing — one salve, contiguous sequences, paid once, claimed whole', async () => {
+    const clock = new FakeClock(paris('2026-10-15', 21));
+    const pools = [db, createPgDb(url!), createPgDb(url!)];
+    const cores = pools.map((d) =>
+      createCore(d, clock, new DevFakeCreditProvider()),
+    );
+    const CH = '990003';
+    try {
+      await cores[0]!.bonkLab.heartbeat({
+        studio_instance_id: 'itest-volley',
+        obs: 'connected',
+        source_ready: true,
+        overlay_ready: true,
+      });
+      const smile = { provider: 'unicode' as const, id: 'unicode:1f600' };
+      const salve = (i: number) => ({
+        idempotency_key: `vl-${i}`,
+        channel_id: CH,
+        viewer: { id: String(990300 + i), display_name: `V${i}` },
+        lab_session_id: 'itest',
+        emotes: [smile, smile, smile, smile, smile],
+        cadence_ms: 160,
+      });
+      const single = (i: number) => ({
+        idempotency_key: `vs-${i}`,
+        channel_id: CH,
+        viewer: { id: String(990400 + i), display_name: `S${i}` },
+        lab_session_id: 'itest',
+        emote: smile,
+      });
+      // 4 salves, each sent twice to two Cores at once, interleaved with 8 single Bonks.
+      const results = await Promise.all([
+        ...[0, 1, 2, 3].flatMap((i) => [
+          cores[i % 3]!.bonkLab.admitVolley(salve(i)),
+          cores[(i + 1) % 3]!.bonkLab.admitVolley(salve(i)),
+        ]),
+        ...Array.from({ length: 8 }, (_, i) =>
+          cores[i % 3]!.bonkLab.admit(single(i)),
+        ),
+      ]);
+      const salves = results.slice(0, 8) as {
+        volley_id: string;
+        replayed: boolean;
+        interactions: { channel_sequence: number }[];
+      }[];
+      expect(salves.filter((r) => !r.replayed)).toHaveLength(4);
+      expect(new Set(salves.map((r) => r.volley_id)).size).toBe(4);
+      // Each salve occupies 5 contiguous sequences; all sequences 1..28 used exactly once.
+      for (const r of salves) {
+        const s = r.interactions.map((i) => i.channel_sequence);
+        expect(s).toEqual([s[0]!, s[0]! + 1, s[0]! + 2, s[0]! + 3, s[0]! + 4]);
+      }
+      const all = await db.query<{ channel_sequence: string }>(
+        'select channel_sequence from bonk_lab_interactions where channel_id = $1 order by channel_sequence',
+        [CH],
+      );
+      expect(all.map((r) => Number(r.channel_sequence))).toEqual(
+        Array.from({ length: 28 }, (_, i) => i + 1),
+      );
+      // Paid once per shot: 4 salves × 5 × 200 off their viewers' test wallets.
+      const spent = await db.query<{ tokens: string }>(
+        "select tokens from lab_wallets where channel_id = $1 and viewer_id like '9903%'",
+        [CH],
+      );
+      expect(spent.map((r) => Number(r.tokens))).toEqual([
+        11_000, 11_000, 11_000, 11_000,
+      ]);
+      // Claims race on 3 Cores: a salve is handed out whole, once, in order.
+      let handed = 0;
+      while (handed < 28) {
+        const claimed = (
+          await Promise.all(
+            cores.map((c) => c.bonkLab.claimBatch('itest-volley', CH)),
+          )
+        ).filter((c) => c.interaction !== null);
+        expect(claimed).toHaveLength(1);
+        const shots = [claimed[0]!.interaction!, ...(claimed[0]!.volley ?? [])];
+        expect(shots.map((s) => s.channel_sequence)).toEqual(
+          shots.map((_, k) => shots[0]!.channel_sequence + k),
+        );
+        expect(shots.length).toBe(shots[0]!.volley ? 5 : 1);
+        for (const s of shots)
+          await cores[handed % 3]!.bonkLab.ack(s.interaction_id, {
+            studio_instance_id: 'itest-volley',
+            attempt_id: s.delivery.attempt_id!,
+            event: 'started',
+          });
+        handed += shots.length;
+      }
+      expect(handed).toBe(28);
+    } finally {
+      await Promise.all(pools.slice(1).map((p) => p.close()));
+    }
+  });
+
   it('Bonk expiry sweep: 3 Cores ticking at once + a racing ACK, one refund per Bonk, no state regression', async () => {
     const clock = new FakeClock(paris('2026-10-14', 21));
     const pools = [db, createPgDb(url!), createPgDb(url!)];

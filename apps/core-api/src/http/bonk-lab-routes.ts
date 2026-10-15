@@ -4,9 +4,12 @@ import {
   BonkLabClaimRequest,
   BonkLabHeartbeat,
   BonkLabViewerAuthComplete,
+  BonkLabVolleyAdmitRequest,
 } from '@raptoru/schemas';
 import { z } from 'zod';
 import {
+  BONK_LAB_RULES,
+  bonkVolleyRules,
   BonkLabError409,
   BonkLabNotFoundError,
   BonkLabUnavailableError,
@@ -70,6 +73,24 @@ export function bonkLabRoutes(
         mapped(() => bonk.admit(parse(BonkLabAdmitRequest, body))),
     },
     {
+      // Economic rules the Lab façade shows the viewer (cost of a Bonk, salve bounds): Core's values only.
+      method: 'GET',
+      pattern: /^\/v1\/lab\/bonk\/rules$/,
+      auth: 'studio',
+      handle: async () => ({
+        cost: BONK_LAB_RULES.simulatedCost,
+        volley: bonkVolleyRules(),
+      }),
+    },
+    {
+      // Salve (lot 5, mode Auto): N Bonks admitted and paid atomically, or nothing.
+      method: 'POST',
+      pattern: /^\/v1\/lab\/bonk\/volleys$/,
+      auth: 'studio',
+      handle: ({ body }) =>
+        mapped(() => bonk.admitVolley(parse(BonkLabVolleyAdmitRequest, body))),
+    },
+    {
       method: 'GET',
       pattern: /^\/v1\/lab\/bonk\/interactions\/([^/]+)$/,
       auth: 'studio',
@@ -104,12 +125,8 @@ export function bonkLabRoutes(
       handle: ({ body }) =>
         mapped(async () => {
           const req = parse(BonkLabClaimRequest, body);
-          return {
-            interaction: await bonk.claim(
-              req.studio_instance_id,
-              req.channel_id,
-            ),
-          };
+          // The next Bonk and, for a salve, its other shots (lot 5): never claimed without being returned.
+          return bonk.claimBatch(req.studio_instance_id, req.channel_id);
         }),
     },
     {

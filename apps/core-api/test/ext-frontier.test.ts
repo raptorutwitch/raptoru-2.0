@@ -308,6 +308,66 @@ describe('public Core: viewer frontier /v1/ext', () => {
     );
   });
 
+  it('Bonk salve (lot 5, Auto): Core bounds in the session, N shots paid at once, replay-safe, all or nothing', async () => {
+    const { core, ext } = await fixture();
+    const jwt = viewer();
+    const s0 = await ext('/session', jwt);
+    expect(
+      s0.body.modules.find((m: { id: string }) => m.id === 'bonk').volley,
+    ).toEqual({ max_shots: 10, cadence_min_ms: 90, cadence_max_ms: 600 });
+    await core.bonkLab.heartbeat({
+      studio_instance_id: 'studio-1',
+      obs: 'connected',
+      source_ready: true,
+      overlay_ready: true,
+    });
+    const shot = (id: string, glyph: string) => ({
+      emote_source: 'unicode',
+      emote: id,
+      emote_glyph: glyph,
+    });
+    const salve = (shots: unknown[], cadence_ms = 160) => ({
+      module_id: 'bonk',
+      payload: { shots, cadence_ms },
+    });
+    const key = randomUUID();
+    const body = salve([
+      shot('unicode:1f600', '😀'),
+      shot('unicode:1f525', '🔥'),
+      shot('unicode:1f600', '😀'),
+    ]);
+    const r = await ext('/actions/tokens', jwt, body, key);
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({
+      module_id: 'bonk',
+      payment_mode: 'simulated',
+      charged: false,
+      cost: 600,
+      replayed: false,
+    });
+    expect(r.body.interactions).toHaveLength(3);
+    const again = await ext('/actions/tokens', jwt, body, key);
+    expect(again.body).toMatchObject({
+      volley_id: r.body.volley_id,
+      replayed: true,
+    });
+    expect((await ext('/session', jwt)).body.wallet.available).toBe(
+      12_000 - 600,
+    );
+    // Over the Core bound, or a malformed shot: refused, nothing paid.
+    const tooMany = await ext(
+      '/actions/tokens',
+      jwt,
+      salve(Array.from({ length: 11 }, () => shot('unicode:1f600', '😀'))),
+    );
+    expect(tooMany.body.error).toBe('volley_too_large');
+    const bad = await ext('/actions/tokens', jwt, salve([{ emote: 1 }]));
+    expect(bad.status).toBe(400);
+    expect((await ext('/session', jwt)).body.wallet.available).toBe(
+      12_000 - 600,
+    );
+  });
+
   it('refuses Channel Points payment and an action without Idempotency-Key', async () => {
     const { ext, send } = await fixture();
     const r = await ext('/actions/redemption', viewer(), {

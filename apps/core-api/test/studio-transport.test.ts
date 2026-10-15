@@ -458,6 +458,7 @@ describe('Core channel scope on the production transport (Bonk VNext lot 0)', ()
           channel_id: OTHER,
         })
       ).body,
-    ).toEqual({ interaction: null });
+      // Bonk lot 5: the claim answer also carries `volley` (null outside a salve; older Studios ignore it).
+    ).toEqual({ interaction: null, volley: null });
   });
 });
