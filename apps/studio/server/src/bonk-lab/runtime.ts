@@ -17,8 +17,10 @@ import type { RuntimeWiring } from '../worker-journal.js';
 const ENGINE_FILES = [
   'audio.js',
   'cadence.js',
+  'combo.js',
   'density.js',
   'families.js',
+  'impact-fx.js',
   'physics.js',
   'plan.js',
   'presets.js',

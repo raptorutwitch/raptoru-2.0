@@ -1,11 +1,14 @@
 /* global performance, requestAnimationFrame, setTimeout */
 // Bonk VNext lot 1 — the scene: one requestAnimationFrame loop moves every projectile along its
-// precomputed trajectory, triggers its impact (puff + governed sound) and applies the density rules.
+// precomputed trajectory, triggers its impact (historical FX, lot 6 + governed sound) and applies the
+// density rules. Lot 6: also plays the combo finisher (one giant projectile, same engine).
 // Time-driven (elapsed since the start), so a slow frame never changes a trajectory.
 
 import { createSeededRandom, seedFromReference } from '../bonk-v3-core.js';
 import { createAudioGovernor } from './audio.js';
+import { finisherSize } from './combo.js';
 import { DENSITY, densityDecision } from './density.js';
+import { pickImpactFx, spawnImpactFx } from './impact-fx.js';
 import { sampleAt } from './physics.js';
 import { planShot } from './plan.js';
 import { CANVAS, DEFAULT_TARGET, MIN_SIDE } from './target.js';
@@ -47,28 +50,17 @@ export function createScene({
     s.resolveFinished();
   };
 
-  const puff = (s) => {
-    const el = document.createElement('div');
-    el.className = 'puff';
-    const d = Math.round(s.plan.size * 0.9);
-    el.style.width = el.style.height = `${d}px`;
-    const at = `translate(${(s.plan.impact.x - d / 2).toFixed(1)}px, ${(s.plan.impact.y - d / 2).toFixed(1)}px)`;
-    el.style.transform = `${at} scale(0)`;
-    stage.append(el);
-    // Full transform keyframes (no individual `scale` property: older OBS browsers lack it).
-    const animation = el.animate?.(
-      [
-        { opacity: 0.55, transform: `${at} scale(0.4)` },
-        { opacity: 0, transform: `${at} scale(1.3)` },
-      ],
-      { duration: 180, easing: 'ease-out' },
-    );
-    if (animation) animation.finished.finally(() => el.remove());
-    else el.remove();
-  };
-
   const impact = (s, t) => {
-    if (!s.reduced) puff(s);
+    // Dense scene: no FX (as the former puff); the finisher always has its FX, always with the wave.
+    if (!s.reduced || s.plan.finisher)
+      spawnImpactFx({
+        document,
+        stage,
+        timer,
+        at: s.plan.impact,
+        size: s.plan.size,
+        variant: s.plan.finisher ? 'exact' : s.fx,
+      });
     const sound = governor.onImpact(t, s.audioRandom, { heavy: s.plan.heavy });
     if (sound.play) audio.play(sound);
   };
@@ -142,8 +134,14 @@ export function createScene({
     /**
      * Shows one projectile (`image`: decoded <img>). `started`: it is on screen; `finished`: it has
      * left. Never dropped: under density it is shorter, or waits (bounded) for a free slot.
+     * `finisherViewers` (lot 6): the combo finisher, sized by its distinct viewers; it stays out of the
+     * anti-repetition context of the normal shots and is never reduced.
      */
-    async play({ id, image }) {
+    async play({ id, image, finisherViewers = null }) {
+      const giant =
+        finisherViewers === null ? null : finisherSize(finisherViewers);
+      if (finisherViewers !== null && giant === null)
+        throw new Error('finisher_needs_viewers');
       const waitStart = now();
       let decision = densityDecision(sprites.length, 0, limits);
       while (decision.wait) {
@@ -156,20 +154,24 @@ export function createScene({
         recent,
         history,
         lastEntry,
-        reduced: decision.reduced,
+        reduced: giant ? false : decision.reduced,
         mode: target.mode,
         rect: target.rect,
+        ...(giant ? { finisherSize: giant } : {}),
       });
-      recent.push({ x: plan.impact.x, y: plan.impact.y });
-      if (recent.length > RECENT_IMPACTS) recent.shift();
-      history.push(plan.family);
-      if (history.length > 2) history.shift();
-      lastEntry = plan.entry;
+      if (!giant) {
+        recent.push({ x: plan.impact.x, y: plan.impact.y });
+        if (recent.length > RECENT_IMPACTS) recent.shift();
+        history.push(plan.family);
+        if (history.length > 2) history.shift();
+        lastEntry = plan.entry;
+      }
 
       const s = {
         el: image,
         plan,
-        reduced: decision.reduced,
+        reduced: giant ? false : decision.reduced,
+        fx: pickImpactFx(createSeededRandom(seedFromReference(`${id}:fx`))),
         audioRandom: createSeededRandom(seedFromReference(`${id}:audio`)),
         begin: now(),
         impacted: false,

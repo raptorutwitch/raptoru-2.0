@@ -8,6 +8,7 @@ body {
 }
 #stage {
   position: relative;
+  isolation: isolate;
   width: 1920px;
   height: 1080px;
 }
@@ -19,17 +20,98 @@ body {
   transform-origin: 50% 50%;
   will-change: transform;
 }
-/* Impact puff: short, soft, sober. */
-.puff {
+/* Lot 6 — historical impact FX (engine/impact-fx.js), CSS copied from the legacy overlay
+   (Alerte_system.html: .bonk-wave / .bonk-streak / .bonk-particle and their keyframes). The container
+   only carries --bonk-x / --bonk-y; #stage isolates the wave's z-index -1 (behind the projectile). */
+.bonk-fx {
   position: absolute;
   left: 0;
   top: 0;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.55) 0%,
-    rgba(255, 255, 255, 0.18) 45%,
-    rgba(255, 255, 255, 0) 70%
-  );
   pointer-events: none;
+}
+.bonk-wave {
+  position: absolute;
+  left: var(--bonk-x, 960px);
+  top: var(--bonk-y, 240px);
+  border-radius: 50%;
+  border-style: solid;
+  border-color: #ffd23c;
+  box-shadow: 0 0 9px 1px #ff9416;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  z-index: -1;
+}
+.bonk-streak {
+  position: absolute;
+  left: var(--bonk-x, 960px);
+  top: var(--bonk-y, 240px);
+  transform-origin: left center;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 148, 22, 0) 0%,
+    #ffd23c 55%,
+    #fff6cf 100%
+  );
+  border-radius: 999px;
+  opacity: 0;
+}
+.bonk-particle {
+  position: absolute;
+  left: var(--bonk-x, 960px);
+  top: var(--bonk-y, 240px);
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff6cf, #ff9416);
+  opacity: 0;
+}
+@keyframes bonkWave {
+  0% {
+    opacity: 0;
+    width: var(--w0);
+    height: var(--w0);
+    border-width: var(--bw0);
+  }
+  14% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    width: var(--w1);
+    height: var(--w1);
+    border-width: 1px;
+  }
+}
+@keyframes bonkStreak {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(var(--inner)) scaleX(0.15);
+  }
+  14% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(var(--inner)) scaleX(1);
+  }
+  88% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(calc(var(--inner) + var(--travel)))
+      scaleX(0.12);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a))
+      translateX(calc(var(--inner) + var(--travel) + 10px)) scaleX(0.05);
+  }
+}
+@keyframes bonkParticle {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--a)) translateX(10px)
+      scale(0.4);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--a)) translateX(var(--d))
+      scale(1);
+  }
 }

@@ -3,10 +3,16 @@
 // same projectile. The context (recent impacts, previous family / entry, dense scene) is explicit.
 
 import { createSeededRandom, seedFromReference } from '../bonk-v3-core.js';
-import { ENTRIES, entryPoint, pickEntry, pickFamily } from './families.js';
+import {
+  ENTRIES,
+  FAMILIES,
+  entryPoint,
+  pickEntry,
+  pickFamily,
+} from './families.js';
 import { buildTrajectory } from './physics.js';
 import { pickPreset } from './presets.js';
-import { sampleSize } from './size.js';
+import { SIZE_MEAN, sampleSize } from './size.js';
 import { DEFAULT_TARGET, pickFullscreenImpact, pickImpact } from './target.js';
 
 const between = (random, [min, max]) => min + random() * (max - min);
@@ -35,19 +41,58 @@ function pickSpin(random, family, preset) {
   };
 }
 
+const HEAVY = FAMILIES.find((f) => f.id === 'lourd');
+
+/**
+ * Lot 6 — mass of a combo finisher, from its size only: 0 at a normal size, +1 each time the size
+ * doubles. The same simulator gets a slower entry, less spin (inertia), a softer bounce, a stronger
+ * squash and a longer time on the ground — no separate physics.
+ */
+export function finisherMass(size) {
+  const w = Math.max(0, Math.log2(size / SIZE_MEAN));
+  return {
+    weight: w,
+    flight: 1 + 0.3 * w,
+    spin: 1 / (1 + 0.8 * w),
+    restitution: 1 / (1 + 0.35 * w),
+    squash: 1 + 0.15 * w,
+    hold: 1 + 0.4 * w,
+  };
+}
+
 /**
  * @param {string} id interaction id (the seed)
  * @param {{mode?:'manual'|'fullscreen', rect?:object, recent?:{x:number,y:number}[], history?:string[], lastEntry?:string|null,
- *   reduced?:boolean, sizeMean?:number}} [context]
+ *   reduced?:boolean, sizeMean?:number, finisherSize?:number}} [context] `finisherSize`: lot 6 combo
+ *   finisher (fixed size, heavy family, mass profile); every other shot is drawn exactly as before.
  */
 export function planShot(id, context = {}) {
   const random = createSeededRandom(seedFromReference(id));
-  const size = sampleSize(random, { mean: context.sizeMean });
-  const family = pickFamily(random, context.history);
+  const drawn = sampleSize(random, { mean: context.sizeMean });
+  const giant = Number.isFinite(context.finisherSize);
+  const size = giant ? context.finisherSize : drawn;
+  const mass = giant ? finisherMass(size) : null;
+  const family = giant ? HEAVY : pickFamily(random, context.history);
   const entry = pickEntry(random, family, context.lastEntry ?? null);
-  const preset = pickPreset(random);
-  const spin = pickSpin(random, family, preset);
-  const exit = random() < 0.5 ? 'fall' : 'shrink';
+  const drawnPreset = pickPreset(random);
+  const preset = mass
+    ? {
+        ...drawnPreset,
+        restitution: drawnPreset.restitution * mass.restitution,
+        holdScale: drawnPreset.holdScale * mass.hold,
+      }
+    : drawnPreset;
+  const drawnSpin = pickSpin(random, family, preset);
+  const spin = mass
+    ? {
+        ...drawnSpin,
+        before: drawnSpin.before * mass.spin,
+        after: drawnSpin.after * mass.spin,
+      }
+    : drawnSpin;
+  const drawnExit = random() < 0.5 ? 'fall' : 'shrink';
+  // A giant falling off the bottom would still be on screen when its course ends: it shrinks out.
+  const exit = giant && size > 400 ? 'shrink' : drawnExit;
   const impact =
     context.mode === 'fullscreen'
       ? pickFullscreenImpact(random, { size, recent: context.recent ?? [] })
@@ -57,7 +102,16 @@ export function planShot(id, context = {}) {
           size,
           recent: context.recent ?? [],
         });
-  const start = entryPoint(random, entry, impact);
+  const entered = entryPoint(random, entry, impact);
+  // A giant starts fully off screen: its entry point is pushed back by its extra half-size.
+  const back = giant ? Math.max(0, size / 2 - 120) : 0;
+  const dx = entered.x - impact.x;
+  const dy = entered.y - impact.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const start = {
+    x: entered.x + (dx / d) * back,
+    y: entered.y + (dy / d) * back,
+  };
   const drift = family.drift
     ? (random() < 0.5 ? -1 : 1) * between(random, family.drift)
     : 0;
@@ -65,12 +119,12 @@ export function planShot(id, context = {}) {
     random,
     impact,
     start,
-    flight: between(random, family.flight),
+    flight: between(random, family.flight) * (mass?.flight ?? 1),
     gravity: between(random, family.gravity),
     drift,
     size,
     spin,
-    squash: (family.squash ?? 1) * preset.squash,
+    squash: (family.squash ?? 1) * preset.squash * (mass?.squash ?? 1),
     preset,
     exit,
     reduced: Boolean(context.reduced),
@@ -84,6 +138,7 @@ export function planShot(id, context = {}) {
     spin: spin.profile,
     impact,
     heavy: family.id === 'lourd',
+    finisher: giant,
     trajectory,
   };
 }

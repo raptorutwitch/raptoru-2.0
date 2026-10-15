@@ -380,14 +380,21 @@ describe('scene (fake DOM and clock): nothing paid is ever dropped', () => {
     let frames = [];
     let timers = [];
     const sounds = [];
-    const puffs = [];
+    const fxs = [];
     const scene = createScene({
-      stage: { append() {} },
+      stage: { append: (el) => el.className === 'bonk-fx' && fxs.push(el) },
       audio: { play: (s) => sounds.push(s) },
       document: {
         createElement: () => {
-          const el = { style: {}, remove() {} };
-          puffs.push(el);
+          const el = {
+            style: { setProperty() {} },
+            className: '',
+            children: [],
+            append(c) {
+              this.children.push(c);
+            },
+            remove() {},
+          };
           return el;
         },
       },
@@ -405,7 +412,7 @@ describe('scene (fake DOM and clock): nothing paid is ever dropped', () => {
       for (const cb of run) cb();
     };
     const image = () => ({ style: {}, className: '', remove: vi.fn() });
-    return { scene, step, image, sounds, puffs, now: () => clock };
+    return { scene, step, image, sounds, fxs, now: () => clock };
   }
 
   it('40 shots in a row: every one starts and finishes; never more than 30 on screen; dense ones reduced', async () => {
@@ -441,11 +448,11 @@ describe('scene (fake DOM and clock): nothing paid is ever dropped', () => {
     expect(f.scene.alive).toBe(0);
   });
 
-  it('impact: one puff when the scene is calm, the sound goes through the governor', async () => {
+  it('impact: one historical FX when the scene is calm, the sound goes through the governor', async () => {
     const f = fakeScene();
     const s = await f.scene.play({ id: 'one', image: f.image() });
     while (f.now() < s.plan.trajectory.impactMs + 20) f.step();
-    expect(f.puffs).toHaveLength(1);
+    expect(f.fxs).toHaveLength(1);
     expect(f.sounds).toHaveLength(1);
     expect(f.sounds[0].gain).toBe(AUDIO.volume);
   });

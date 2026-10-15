@@ -1,11 +1,14 @@
-/* global document, location, fetch, crypto, Image, setTimeout, setInterval, AbortSignal, performance */
+/* global document, location, fetch, crypto, Image, setTimeout, clearTimeout, setInterval, AbortSignal, performance */
 import { createAudioPlayer } from './engine/audio.js';
 import { createScene } from './engine/scene.js';
 import { moreInVolley, shotStarted, volleyDelay } from './engine/cadence.js';
+import { createCombo } from './engine/combo.js';
 
 // Bonk renderer. Transport unchanged (poll, renderer ACKs, URL checks); the visual and the sound are
 // the VNext engine (engine/: trajectory families, sizes, impacts, density, adaptive sound).
-// No catalog fetching, SAMMI, viewer progression or combos.
+// Lot 6: historical impact FX and the multi-viewer combo (engine/combo.js) — every Bonk really played
+// counts its viewer once; when the window closes with ≥ 2 distinct viewers, one giant finisher is
+// thrown by the same scene. No catalog fetching, SAMMI or viewer progression.
 const renderer = crypto.randomUUID();
 const token = location.hash.slice(1);
 const stage = document.getElementById('stage');
@@ -16,6 +19,34 @@ const twemojiUrl =
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Salves (lot 5): start of the previous shot of the salve being played (engine/cadence.js).
 let lastShot = null;
+// Combo (lot 6): renderer-side only, fed by played interactions (never previews, never retries:
+// `seen` already drops a replayed interaction id). The finisher is a visual: no Core, no ACK.
+const combo = createCombo({
+  timer: (cb, ms) => setTimeout(cb, ms),
+  cancel: (handle) => clearTimeout(handle),
+  onFinish: ({ viewers, emote }) => void finisher(viewers, emote),
+});
+async function finisher(viewers, src) {
+  const image = new Image();
+  image.referrerPolicy = 'no-referrer';
+  image.src = src;
+  try {
+    await Promise.race([
+      image.decode(),
+      sleep(3000).then(() => {
+        throw new Error('image_timeout');
+      }),
+    ]);
+    await freshTarget();
+    await scene.play({
+      id: 'finisher:' + crypto.randomUUID(),
+      image,
+      finisherViewers: viewers,
+    });
+  } catch {
+    /* A finisher that cannot be shown is simply skipped (nothing paid depends on it). */
+  }
+}
 async function call(path, data) {
   const response = await fetch('/bonk-lab/renderer/' + path, {
     method: 'POST',
@@ -94,6 +125,8 @@ async function play(i) {
   }
   await shown.started;
   lastShot = shotStarted(i, performance.now()) ?? lastShot;
+  // Its emote URL was checked above; a salve's shots all carry the same viewer (one participant).
+  combo.add({ viewerId: i.viewer_id, key: src, emote: src });
   const started = ack(i, 'started');
   // Completion acknowledgement is ordered after started, even if the first response was lost.
   void shown.finished.then(async () => {
