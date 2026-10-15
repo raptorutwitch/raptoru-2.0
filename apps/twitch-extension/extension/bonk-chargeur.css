@@ -13,7 +13,7 @@
   -webkit-user-select: none;
   touch-action: manipulation;
 }
-.bkc button { font: inherit; color: inherit; margin: 0; }
+:where(.bkc) :where(button) { font: inherit; color: inherit; margin: 0; } /* zero specificity: never beats a component rule */
 
 /* empty: the dock slides away, a pulsing hint says what to do */
 .bkc-hint {
@@ -256,7 +256,7 @@
 }
 .bkc-help-btn:hover, .bkc-help-btn.is-on { background: rgba(173, 108, 255, .26); color: #fff; }
 .bkc-shade {
-  position: absolute; left: -2px; right: -2px; bottom: calc(100% - 12px); z-index: 20; height: 2000px; display: flex; align-items: flex-end;
+  position: absolute; left: 0; right: 0; bottom: calc(100% - 12px); z-index: 20; height: 2000px; display: flex; align-items: flex-end;
   padding: 4px; background: rgba(8, 5, 14, .7); opacity: 0; pointer-events: none; transition: opacity .2s ease;
 }
 .bkc.is-help .bkc-shade { opacity: 1; pointer-events: auto; }
