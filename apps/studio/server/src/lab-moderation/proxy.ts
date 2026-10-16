@@ -100,7 +100,7 @@ export interface LabProxyDeps {
   /** Live players / workers as seen by this Studio (not stored in Core). */
   players: () => Promise<Record<string, unknown>>;
   /** Viewers the Lab can act as (fictitious identities + the linked Twitch account). */
-  identities: () => { id: string; label: string }[];
+  identities: () => { id: string; label: string; login?: string }[];
   /** Called after a change the extension façade caches (wallet, module states). */
   onChange?: () => void;
   /** Channel of the Core (Production: the real channel); Lab default: the Lab channel. */

@@ -77,6 +77,7 @@ try {
     '20261019120000_cmd_steps_word_game.sql',
     '20261019130000_word_game_lab.sql',
     '20261020120000_mini_games_lab.sql',
+    '20261021120000_mini_game_duels_lab.sql',
   ]) {
     if (
       (

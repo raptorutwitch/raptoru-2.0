@@ -8,7 +8,10 @@ import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
 import { lockWallet } from '../lab-moderation/store.js';
 import { creditCurrency, currency } from '../raffle-lab/currencies.js';
+import { DuelService, type DuelOutcome } from './duel.js';
+import { parseDuelCommand } from './duel-rules.js';
 import * as R from './rules.js';
+import type { LoginLookup, TwitchUser } from './twitch-login.js';
 
 // Roulette and Slot V1 (Lab) — the service (docs/ROULETTE_SLOT_PARITY.md § 6). One chat message = one
 // transaction under the viewer's wallet lock: replay check, cooldown, bet and balance, draw, ONE balance
@@ -16,7 +19,7 @@ import * as R from './rules.js';
 // (cmd_steps origin mini_game). All or nothing. Refusals (invalid bet, cooldown…) are silent and write
 // nothing. Studio's switch « Mini-jeux » (OFF by default) gates everything.
 
-export type MiniGameOutcome = 'ignored' | 'mini_game_played';
+export type MiniGameOutcome = 'ignored' | 'mini_game_played' | DuelOutcome;
 
 /** Why a game command did not play (silent for the viewer; returned for the tests and the logs). */
 export type MiniGameSkip =
@@ -51,18 +54,61 @@ const toPlay = (r: PlayRow): MiniGamePlay => ({
 });
 
 export class MiniGamesService {
+  /** Duel V1: the simulator's identities seen in this Core (login → account), memory only. */
+  private readonly simulatorIdentities = new Map<string, TwitchUser>();
+  private readonly duels: DuelService;
+
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
     private readonly rng: R.Rng = R.cryptoRng,
-  ) {}
+    /** Helix « Get Users » by login (Lab app credentials); null = not configured. */
+    private readonly lookupLogin: LoginLookup | null = null,
+  ) {
+    this.duels = new DuelService(db, clock, rng, (login, msg) =>
+      this.resolveTarget(login, msg),
+    );
+  }
 
-  /** One chat message: only `!roulette` / `!slots` (and aliases) play; everything else is ignored. */
+  /**
+   * The Duel target, by exact login (docs/DUEL_PARITY.md § 3): a real-chat message only through Helix; a simulator
+   * message first among the simulator identities (never a real Twitch homonym), then Helix. Null = refused.
+   */
+  private async resolveTarget(
+    login: string,
+    msg: LabChatMessage,
+  ): Promise<TwitchUser | null> {
+    if (msg.source === 'simulator') {
+      const lab = this.simulatorIdentities.get(login);
+      if (lab) return lab;
+    }
+    return this.lookupLogin ? this.lookupLogin(login) : null;
+  }
+
+  /**
+   * One chat message: `!roulette` / `!slots` (and aliases) play, `!duel` / `!accept` / `!deny` / `!cancelduel` run
+   * the Duel; everything else is ignored. Every simulator message teaches its identity (for the Duel target).
+   */
   async chat(msg: LabChatMessage): Promise<{
     outcome: MiniGameOutcome;
     replayed?: boolean;
     skipped?: MiniGameSkip;
   }> {
+    if (
+      msg.source === 'simulator' &&
+      /^[a-z0-9_]{1,25}$/i.test(msg.chatter.login)
+    )
+      this.simulatorIdentities.set(msg.chatter.login.toLowerCase(), {
+        id: msg.chatter.id,
+        login: msg.chatter.login.toLowerCase(),
+        display_name: msg.chatter.display_name,
+      });
+    const duel = parseDuelCommand(msg.text);
+    if (duel) {
+      if (!(await this.enabled(this.db, msg.channel_id)))
+        return { outcome: 'ignored', skipped: 'disabled' };
+      return this.duels.chat(msg, duel);
+    }
     const cmd = R.parseCommand(msg.text);
     if (!cmd) return { outcome: 'ignored' };
     if (!(await this.enabled(this.db, msg.channel_id)))

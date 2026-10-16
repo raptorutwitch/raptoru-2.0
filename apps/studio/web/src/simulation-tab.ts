@@ -65,9 +65,16 @@ export function mountSimulationTab(root: HTMLElement) {
     root.querySelector<T>(`[data-id="${id}"]`)!;
 
   void getJson('/api/lab-chat/identities').then((r) => {
-    const ids = (r?.identities ?? []) as { id: string; label: string }[];
+    const ids = (r?.identities ?? []) as {
+      id: string;
+      label: string;
+      login?: string;
+    }[];
     $('who').innerHTML = ids
-      .map((i) => `<option value="${esc(i.id)}">${esc(i.label)}</option>`)
+      .map(
+        (i) =>
+          `<option value="${esc(i.id)}" data-label="${esc(i.label)}" data-login="${esc(i.login ?? '')}">${esc(i.label)}${i.login ? ` · @${esc(i.login)}` : ''}</option>`,
+      )
       .join('');
   });
 
@@ -149,12 +156,14 @@ export function mountSimulationTab(root: HTMLElement) {
     const text = $<HTMLInputElement>('text').value.trim();
     if (!text) return;
     const who = $<HTMLSelectElement>('who');
-    const label = who.selectedOptions[0]?.textContent ?? who.value;
+    const opt = who.selectedOptions[0];
+    const label = opt?.dataset.label || who.value;
     $('out').textContent = 'Envoi…';
     void post('/api/lab-chat/simulate', {
       viewer_id: who.value,
       display_name: label,
-      login: label,
+      // The identity's Twitch login (e.g. lab_modo): the Duel resolves « !duel @lab_modo » with it.
+      login: opt?.dataset.login || label,
       text,
       role: $<HTMLSelectElement>('role').value,
     })

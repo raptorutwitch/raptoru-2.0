@@ -20,6 +20,7 @@ import {
 } from '../commands/reserved.js';
 import { miniGamesRoutes } from '../http/mini-games-routes.js';
 import { MiniGamesService } from '../mini-games/service.js';
+import { twitchAppLoginLookup } from '../mini-games/twitch-login.js';
 import { CommandsAdmission } from '../commands/admission.js';
 import { CommandSteps } from '../commands/steps.js';
 import {
@@ -100,7 +101,13 @@ export function createLabCore({
   // Jeu des mots V1: reads the whole chat (plainText), answers through cmd_steps (origin word_game).
   const wordGame = new WordGameService(db, systemClock);
   // Roulette and Slot V1: chat commands only, Lab wallet, answers through cmd_steps (origin mini_game).
-  const miniGames = new MiniGamesService(db, systemClock);
+  // Duel V1: the target's Twitch ID by exact login (Helix, the Lab app credentials of the Tombola avatars).
+  const miniGames = new MiniGamesService(
+    db,
+    systemClock,
+    undefined,
+    twitch ? twitchAppLoginLookup(twitch) : null,
+  );
   const routes = [
     ...bonkLabRoutes(bonk, viewers),
     // Soundboard V2 Lab: same isolated Lab Core process and database.
@@ -116,7 +123,8 @@ export function createLabCore({
       [
         { name: 'commands', chat: (m) => admission.chat(m) },
         { name: 'word_game', plainText: true, chat: (m) => wordGame.chat(m) },
-        { name: 'mini_games', chat: (m) => miniGames.chat(m) },
+        // Whole chat: the simulator identities it learns are the Duel targets of the Simulation tab.
+        { name: 'mini_games', plainText: true, chat: (m) => miniGames.chat(m) },
       ],
     ),
     ...wordGameRoutes(wordGame),

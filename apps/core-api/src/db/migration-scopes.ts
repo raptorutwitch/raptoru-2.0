@@ -59,6 +59,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261019130000_word_game_lab.sql',
   // Roulette and Slot V1: plays, Studio switch; ledger kind and cmd_steps origin mini_game.
   '20261020120000_mini_games_lab.sql',
+  // Duel V1: challenges between two Twitch IDs (stake through the Lab wallet, answers through cmd_steps).
+  '20261021120000_mini_game_duels_lab.sql',
 ]);
 
 /**

@@ -210,6 +210,31 @@ describe('conversation', () => {
     expect(html).toContain('envoyé sur Twitch'); // the one Twitch acknowledged
   });
 
+  it('Duel outcomes are named', () => {
+    const duel = chatView(
+      chatTimeline(
+        [
+          inMsg('d1', 1, '!duel @lab_modo 500', {
+            handled: [{ module: 'mini_games', outcome: 'duel_challenged' }],
+          }),
+          inMsg('d2', 2, '!accept', {
+            chatter: {
+              id: '900102',
+              display_name: 'Modo Lab',
+              role: 'moderator',
+            },
+            handled: [{ module: 'mini_games', outcome: 'duel_resolved' }],
+          }),
+        ],
+        [],
+      ),
+      false,
+      T,
+    );
+    expect(duel).toContain('Mini-jeux : défi lancé');
+    expect(duel).toContain('Mini-jeux : duel joué');
+  });
+
   it('chat text is escaped; empty conversation explains what to do', () => {
     expect(
       chatView(chatTimeline([inMsg('x', 1, '<img src=x>')], []), false, T),

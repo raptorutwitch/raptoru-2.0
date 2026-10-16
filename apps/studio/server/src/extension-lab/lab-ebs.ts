@@ -992,15 +992,18 @@ export class LabEbs {
   }
 
   /** Viewers the Lab can act as: the fictitious identities, plus the linked Twitch account. */
-  labIdentities(): { id: string; label: string }[] {
+  labIdentities(): { id: string; label: string; login: string }[] {
     const out = (Object.keys(LAB_IDENTITIES) as LabRole[]).map((r) => ({
       id: LAB_IDENTITIES[r].twitchUserId,
       label: `${LAB_IDENTITIES[r].displayName} (${r})`,
+      // The Twitch login the simulator sends (e.g. the target of « !duel @lab_modo »).
+      login: LAB_IDENTITIES[r].login,
     }));
     if (this.twitch.viewer)
       out.unshift({
         id: this.twitch.viewer.user_id,
         label: `${this.twitch.viewer.display_name} (Twitch lié, rôle viewer)`,
+        login: this.twitch.viewer.login,
       });
     return out;
   }

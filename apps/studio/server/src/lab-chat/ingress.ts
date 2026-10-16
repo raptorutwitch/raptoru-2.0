@@ -37,7 +37,7 @@ export interface LabChatIngressDeps {
   /** Studio data folder of the ingress (its switch). */
   dir: string;
   /** Lab identities the chat simulator can speak as (fictitious viewers + linked Twitch account). */
-  identities: () => { id: string; label: string }[];
+  identities: () => { id: string; label: string; login?: string }[];
   process?: IngressProcess;
   /** Environment of the adapter process (Lab Core URL / secret / channel). */
   env?: () => Record<string, string>;
