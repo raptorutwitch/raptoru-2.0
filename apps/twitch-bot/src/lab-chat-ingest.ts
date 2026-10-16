@@ -3,8 +3,8 @@ import type { HelixStream } from './stream-watch.js';
 
 // Lab chat ingestion — the ONE Twitch → Lab Core adapter of the Lab (not a Tombola feature), started
 // by Studio only when its « Ingestion chat Twitch » switch is ON (OFF by default). It forwards, never
-// decides: every chat command goes to POST /v1/lab/chat, where Core routes it to the Lab modules
-// (Tombola today; TTS !canceltts, global commands, moderation test commands later), and the stream
+// decides: every chat message goes to POST /v1/lab/chat, where Core routes it to the Lab modules
+// (commands to Tombola / Commands V2, the whole chat to the Jeu des mots), and the stream
 // state (offline → live / live → offline) goes to POST /v1/lab/stream. A new module never adds a
 // second EventSub connection, token or process. Nothing is written to the chat.
 
@@ -153,8 +153,7 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
           const text = String(
             (event.message as { text?: unknown } | undefined)?.text ?? '',
           );
-          // Only commands are worth a round trip; Core routes them to the Lab modules (Tombola, later TTS, global commands…).
-          if (!text.trimStart().startsWith('!')) return;
+          // Every message goes to Core (the Jeu des mots reads the whole chat); Core decides which module sees it.
           await forwardChat({
             channel_id: d.labChannelId,
             message_id: String(event.message_id ?? messageId),

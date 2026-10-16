@@ -44,7 +44,34 @@ describe('Lab chat ingestion (Twitch → Lab Core, every module)', () => {
     ]);
   });
 
-  it('forwards chat commands with the badge role; ignores plain messages and its own', async () => {
+  it('Jeu des mots (Lot 5): every message is forwarded unchanged; Core decides', async () => {
+    const { ingest, calls } = setup();
+    const texts = ['!mots', 'bonjour', 'je pense que c’est angle', 'Requin'];
+    for (const [i, text] of texts.entries())
+      await ingest.handlers.notification(
+        'channel.chat.message',
+        chat({ message_id: `m-${i}`, message: { text } }),
+        `e-${i}`,
+        't',
+      );
+    expect(calls.map((c) => [c.path, c.body.message_id, c.body.text])).toEqual(
+      texts.map((text, i) => ['/v1/lab/chat', `m-${i}`, text]),
+    );
+  });
+
+  it('the bot account’s own messages (word announcements included) are never forwarded', async () => {
+    const { ingest, calls } = setup();
+    for (const text of ['🔸 lagne 🔸', 'Alice a trouvé angle !', '!mots'])
+      await ingest.handlers.notification(
+        'channel.chat.message',
+        chat({ chatter_user_id: '111', message: { text } }),
+        'e-1',
+        't',
+      );
+    expect(calls).toEqual([]);
+  });
+
+  it('forwards chat commands with the badge role; forwards plain messages; ignores its own', async () => {
     const { ingest, calls } = setup();
     await ingest.handlers.notification(
       'channel.chat.message',
@@ -64,7 +91,7 @@ describe('Lab chat ingestion (Twitch → Lab Core, every module)', () => {
     );
     await ingest.handlers.notification(
       'channel.chat.message',
-      chat({ message: { text: 'salut' } }),
+      chat({ message_id: 'm-3', message: { text: 'salut' } }),
       'e-3',
       't',
     );
@@ -98,6 +125,9 @@ describe('Lab chat ingestion (Twitch → Lab Core, every module)', () => {
             badges: ['moderator'],
           }),
         }),
+      }),
+      expect.objectContaining({
+        body: expect.objectContaining({ message_id: 'm-3', text: 'salut' }),
       }),
     ]);
   });
@@ -237,8 +267,13 @@ describe('chat retry when Core is briefly unreachable', () => {
       getStream: async () => null,
       log: (...a: unknown[]) => void logs.push(a.join(' ')),
     });
-    const send = () =>
-      ingest.handlers.notification('channel.chat.message', chat(), 'e-1', 't');
+    const send = (text = '!join') =>
+      ingest.handlers.notification(
+        'channel.chat.message',
+        chat({ message: { text } }),
+        'e-1',
+        't',
+      );
     return { ingest, attempts, logs, send, effects: () => effects };
   }
 
@@ -284,6 +319,22 @@ describe('chat retry when Core is briefly unreachable', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(f.attempts).toEqual([0]);
     expect(f.logs.at(-1)).toMatch(/refused by Core/);
+  });
+
+  it('a plain message (Jeu des mots answer) follows the same policy: 5xx retried, dedup, 4xx final', async () => {
+    const down = retrySetup({ upAt: 2_500 });
+    await down.send('angle');
+    await down.send('angle'); // same message_id received twice
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(down.effects()).toBe(1);
+    expect(down.attempts.slice(0, 2)).toEqual([0, 0]);
+    expect(down.attempts).toContain(1000);
+    vi.useRealTimers();
+    const refused = retrySetup({ status: 400 });
+    await refused.send('angle');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(refused.attempts).toEqual([0]);
+    expect(refused.logs.at(-1)).toMatch(/refused by Core/);
   });
 
   it('adapter stopping during the retries: pending ones are dropped, nothing is sent later', async () => {
