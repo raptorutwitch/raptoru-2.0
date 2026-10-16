@@ -5,6 +5,7 @@ import './studio-home.css';
 import './moderation.css';
 import './tombola.css';
 import './commands.css';
+import './word-game.css';
 import './bonk-target.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
@@ -14,12 +15,14 @@ import { mountStudioHome } from './studio-home.js';
 import { mountModeration } from './moderation.js';
 import { mountTombola } from './tombola.js';
 import { mountCommands } from './commands.js';
+import { mountWordGame } from './word-game.js';
 
 type TabId =
   | 'studio'
   | 'moderation'
   | 'tombola'
   | 'commands'
+  | 'word-game'
   | 'test-lab'
   | 'extension-lab'
   | 'soundboard';
@@ -36,6 +39,7 @@ if (app) {
         <button class="tab" type="button" data-tab="moderation">Modération <em>Core</em></button>
         <button class="tab" type="button" data-tab="tombola">Tombola <em>Core</em></button>
         <button class="tab" type="button" data-tab="commands">Commandes <em>Core</em></button>
+        <button class="tab" type="button" data-tab="word-game">Jeu des mots <em>Core</em></button>
         <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
         <button class="tab" type="button" data-tab="soundboard">Soundboard <em>config</em></button>
@@ -47,6 +51,7 @@ if (app) {
     <main id="tab-moderation" hidden></main>
     <main id="tab-tombola" class="tab-flush" hidden></main>
     <main id="tab-commands" hidden></main>
+    <main id="tab-word-game" hidden></main>
     <main id="tab-test-lab" hidden></main>
     <main id="tab-extension-lab" class="tab-full" hidden></main>
     <main id="tab-soundboard" hidden></main>`;
@@ -58,6 +63,9 @@ if (app) {
   const tombola = mountTombola(app.querySelector<HTMLElement>('#tab-tombola')!);
   const commands = mountCommands(
     app.querySelector<HTMLElement>('#tab-commands')!,
+  );
+  const wordGame = mountWordGame(
+    app.querySelector<HTMLElement>('#tab-word-game')!,
   );
   const extensionLab = mountExtensionLab(
     app.querySelector<HTMLElement>('#tab-extension-lab')!,
@@ -80,6 +88,9 @@ if (app) {
     app.querySelector<HTMLElement>('#tab-commands')!.hidden =
       tab !== 'commands';
     commands.setVisible(tab === 'commands');
+    app.querySelector<HTMLElement>('#tab-word-game')!.hidden =
+      tab !== 'word-game';
+    wordGame.setVisible(tab === 'word-game');
     app.querySelector<HTMLElement>('#tab-test-lab')!.hidden =
       tab !== 'test-lab';
     app.querySelector<HTMLElement>('#tab-extension-lab')!.hidden =
@@ -114,6 +125,7 @@ if (app) {
       remembered === 'moderation' ||
       remembered === 'tombola' ||
       remembered === 'commands' ||
+      remembered === 'word-game' ||
       remembered === 'soundboard' ||
       remembered === 'test-lab'
     )
@@ -127,6 +139,7 @@ if (app) {
     asked === 'moderation' ||
     asked === 'tombola' ||
     asked === 'commands' ||
+    asked === 'word-game' ||
     asked === 'test-lab' ||
     asked === 'extension-lab' ||
     asked === 'soundboard'

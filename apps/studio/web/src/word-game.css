@@ -1,0 +1,125 @@
+/* Jeu des mots V1 — Studio tab: compact functional panel, Studio's own tokens (style.css). */
+
+.wg {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 18px 20px 32px;
+}
+.wg h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.wg h2 {
+  margin: 20px 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.wg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wg-status {
+  display: flex;
+  gap: 6px;
+}
+.wg-chip {
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+}
+.wg-chip--live {
+  border-color: var(--ko);
+  color: var(--ko);
+}
+.wg-chip--on {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.wg-chip--stop {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.wg-chip--off {
+  color: var(--muted);
+}
+.wg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.wg-btn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.wg-btn--ghost {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.wg-muted {
+  color: var(--muted);
+}
+.wg-error {
+  color: var(--ko);
+}
+.wg-count {
+  margin-left: 4px;
+  color: var(--text);
+}
+.wg-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wg-word,
+.wg-win {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+.wg-word--gold {
+  border-color: var(--warn);
+}
+.wg-shuffled {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+}
+.wg-age {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.wg-tag {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--line);
+  font-size: 11px;
+}
+.wg-win time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.wg-gain {
+  margin-left: auto;
+  color: var(--ok);
+  white-space: nowrap;
+}
+.wg-obs {
+  margin-top: 24px;
+  font-size: 12px;
+  word-break: break-all;
+}

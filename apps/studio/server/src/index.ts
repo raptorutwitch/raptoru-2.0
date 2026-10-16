@@ -13,6 +13,7 @@ import {
   localLabCoreClient,
 } from './lab-moderation/proxy.js';
 import { RaffleRuntime } from './raffle-lab/runtime.js';
+import { WordGameRuntime } from './word-game/runtime.js';
 import { LabChatIngress } from './lab-chat/ingress.js';
 import { commandsRelay } from './commands/relay.js';
 import { ManagedProcess, PidStore } from './test-lab/managed-process.js';
@@ -340,6 +341,8 @@ export function createStudioServer(
   commands: ReturnType<typeof commandsRelay> | null = null,
   /** Studio profile (Lab / Production) status and main-process-only switch (ASTRA-P1-019 lot 2). */
   profile: ProfileApiDeps | null = null,
+  /** Jeu des mots V1 (Lab): panel relay + OBS sound source. */
+  wordGame: WordGameRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -382,6 +385,10 @@ export function createStudioServer(
         if (await commands(req, res, url)) return;
       }
       if (url.pathname === '/api/raffle/status' && !raffle)
+        return send(res, 200, { enabled: false });
+      // Jeu des mots V1: Core decides; Studio relays the panel and serves the OBS sound source.
+      if (wordGame && (await wordGame.handle(req, res, url))) return;
+      if (url.pathname === '/api/word-game/state' && !wordGame)
         return send(res, 200, { enabled: false });
       // Moderation V2 cockpit / TTS configuration / Lab test wallet (relayed to the local Lab Core).
       if (url.pathname.startsWith('/api/lab/')) {
@@ -705,6 +712,23 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         ),
       })
     : null;
+  // Jeu des mots V1 (Lab profile only: the production cockpit has no Jeu des mots routes).
+  const wordGame =
+    labCore && labProfile
+      ? await WordGameRuntime.create({
+          channelId: cockpitChannel,
+          core: labCore,
+          origin: `http://${host}:${port}`,
+          dir: join(paths.runtimeDir, 'word-game'),
+          playerDir: join(
+            REPO_ROOT,
+            'apps',
+            'studio',
+            'server',
+            'word-game-player',
+          ),
+        })
+      : null;
   // Single Lab chat ingress: ONE Twitch chat connection (bot adapter, switch OFF by default) for every
   // Lab module, plus the chat simulator. Never started automatically unless left ON and unblocked.
   // Lab profile only: in Production the chat / bot 2.0 stays off (no collision with SAMMI / legacy).
@@ -779,6 +803,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         tts?.stop();
       },
     },
+    wordGame,
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(
