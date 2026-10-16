@@ -17,6 +17,7 @@ import { RaffleRuntime } from './raffle-lab/runtime.js';
 import { WordGameRuntime } from './word-game/runtime.js';
 import { LabChatIngress } from './lab-chat/ingress.js';
 import { commandsRelay } from './commands/relay.js';
+import { miniGamesRelay } from './mini-games/relay.js';
 import { ManagedProcess, PidStore } from './test-lab/managed-process.js';
 import { existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -344,6 +345,8 @@ export function createStudioServer(
   profile: ProfileApiDeps | null = null,
   /** Jeu des mots V1 (Lab): panel relay + OBS sound source. */
   wordGame: WordGameRuntime | null = null,
+  /** Roulette and Slot V1 (Lab): the switch « Mini-jeux » (Simulation de stream panel). */
+  miniGames: ReturnType<typeof miniGamesRelay> | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -391,6 +394,15 @@ export function createStudioServer(
       if (wordGame && (await wordGame.handle(req, res, url))) return;
       if (url.pathname === '/api/word-game/state' && !wordGame)
         return send(res, 200, { enabled: false });
+      // Roulette and Slot V1: Core decides; Studio relays the switch « Mini-jeux ».
+      if (url.pathname.startsWith('/api/mini-games/')) {
+        if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
+        if (!miniGames)
+          return url.pathname === '/api/mini-games/state'
+            ? send(res, 200, { available: false })
+            : send(res, 503, { error: 'lab_core_unavailable' });
+        if (await miniGames(req, res, url)) return;
+      }
       // Moderation V2 cockpit / TTS configuration / Lab test wallet (relayed to the local Lab Core).
       if (url.pathname.startsWith('/api/lab/')) {
         if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
@@ -809,6 +821,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       },
     },
     wordGame,
+    labCore && labProfile ? miniGamesRelay(labCore) : null,
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(

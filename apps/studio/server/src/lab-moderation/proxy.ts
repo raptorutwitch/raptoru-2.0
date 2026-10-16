@@ -22,6 +22,8 @@ const PREFIXES = [
   '/v1/lab/commands/',
   // Jeu des mots V1: panel state / actions and the committed wins stream (OBS sound).
   '/v1/lab/word-game/',
+  // Roulette and Slot V1: the switch « Mini-jeux » and the last plays.
+  '/v1/lab/mini-games/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

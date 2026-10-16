@@ -1,0 +1,130 @@
+/* Studio Lab — « Simulation de stream » (top bar button + compact panel), Studio's own tokens (style.css). */
+
+.sim-widget {
+  position: relative;
+}
+.sim-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sim-toggle.is-open,
+.sim-toggle:hover {
+  border-color: var(--accent);
+}
+.sim-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.sim-dot--on {
+  background: var(--ok);
+}
+.sim-dot--warn {
+  background: var(--warn);
+}
+.sim-dot--off {
+  background: var(--muted);
+  opacity: 0.45;
+}
+.sim-dot--na {
+  background: transparent;
+  border: 1px dashed var(--muted);
+}
+.sim-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 50;
+  width: min(420px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+.sim-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.sim-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.sim-chip--warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.sim-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.sim-what {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+.sim-what span {
+  color: var(--text);
+  font-size: 12px;
+}
+.sim-what small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.sim-btn {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sim-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.sim-btn--danger {
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+  color: var(--warn);
+}
+.sim-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.sim-muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+.sim-foot {
+  margin: 6px 0 0;
+}
+.sim-error {
+  margin: 4px 0;
+  color: var(--ko);
+  font-size: 12px;
+}

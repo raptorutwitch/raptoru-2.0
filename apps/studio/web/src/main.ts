@@ -7,6 +7,7 @@ import './tombola.css';
 import './commands.css';
 import './word-game.css';
 import './bonk-target.css';
+import './simulation.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
 import { mountSoundConfig } from './sound-config.js';
@@ -16,6 +17,7 @@ import { mountModeration } from './moderation.js';
 import { mountTombola } from './tombola.js';
 import { mountCommands } from './commands.js';
 import { mountWordGame } from './word-game.js';
+import { mountSimulation } from './simulation.js';
 
 type TabId =
   | 'studio'
@@ -44,6 +46,7 @@ if (app) {
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
         <button class="tab" type="button" data-tab="soundboard">Soundboard <em>config</em></button>
       </nav>
+      <div class="sim-widget"></div>
       <div class="update-widget"></div>
       <span class="topbar-safety">Local uniquement · aucun crédit réel</span>
     </header>
@@ -74,6 +77,8 @@ if (app) {
     app.querySelector<HTMLElement>('#tab-soundboard')!,
   );
   mountUpdateWidget(app.querySelector<HTMLElement>('.update-widget')!);
+  // « Simulation de stream »: live, chat ingestion, real output, mini-games (from any tab).
+  mountSimulation(app.querySelector<HTMLElement>('.sim-widget')!);
 
   const show = (tab: TabId) => {
     for (const button of app.querySelectorAll<HTMLElement>('[data-tab]'))
