@@ -264,6 +264,16 @@ describe('Lab chat ingress (Studio)', () => {
     ).toEqual([{ id: '900101', label: 'lab_viewer' }]);
   });
 
+  it('Simulation chat: the last received messages are read from Core (GET only, nothing written)', async () => {
+    const f = await setup();
+    const out = await f.studio('/api/lab-chat/recent');
+    expect(out.status).toBe(200);
+    expect(f.calls.at(-1)).toEqual({
+      path: '/v1/lab/chat/900100/recent',
+      body: undefined,
+    });
+  });
+
   it('« Sortie chat réelle »: ON refused without user:write:chat (nothing sent to Core); OFF always allowed', async () => {
     const f = await setup();
     const on = await f.studio('/api/lab-chat/output', { enabled: true });

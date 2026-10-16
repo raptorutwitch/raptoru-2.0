@@ -345,6 +345,13 @@ export function labModerationRoutes(
         mappedModeration(() => labChat.message(parse(LabChatMessage, body))),
     },
     {
+      // Studio « Simulation » chat: the last received messages (memory only), with the modules' outcomes.
+      method: 'GET',
+      pattern: /^\/v1\/lab\/chat\/([^/]+)\/recent$/,
+      auth: 'studio',
+      handle: async ({ params }) => labChat.recent(channel(params)),
+    },
+    {
       // Stream state from the same adapter (offline → live / live → offline).
       method: 'POST',
       pattern: /^\/v1\/lab\/stream$/,

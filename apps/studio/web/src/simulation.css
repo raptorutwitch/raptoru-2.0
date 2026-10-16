@@ -128,3 +128,196 @@
   color: var(--ko);
   font-size: 12px;
 }
+
+/* « Simulation » tab: the same switches (static panel) + the chat as a viewer would see it. */
+.st {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 20px 28px;
+}
+.st-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.st-head h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.st-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .st-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.st-side .sim-panel {
+  position: static;
+  width: auto;
+  box-shadow: none;
+}
+.st-log {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  max-height: 96px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+.st-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+}
+.sc-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.sc-head .sim-btn {
+  margin-left: auto;
+}
+.sc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: min(58vh, 560px);
+  padding: 8px 12px;
+  overflow-y: auto;
+}
+.sc-empty {
+  margin: auto;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.sc-msg {
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.sc-msg:hover {
+  background: color-mix(in srgb, var(--line) 45%, transparent);
+}
+.sc-msg--bot {
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.sc-msg--twitch {
+  border-left: 2px solid #9146ff;
+}
+.sc-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  line-height: 1.45;
+}
+.sc-line time {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.sc-who {
+  color: #7cc4ff;
+}
+.sc-who--bot {
+  color: #c4a6ff;
+}
+.sc-text {
+  word-break: break-word;
+}
+.sc-src,
+.sc-tag {
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.sc-src--sim {
+  background: var(--line);
+  color: var(--muted);
+}
+.sc-src--twitch {
+  background: #9146ff;
+  color: #fff;
+}
+.sc-src--bot {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text);
+}
+.sc-tag {
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.sc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 0 56px;
+  font-size: 11px;
+}
+.sc-res {
+  color: var(--ok);
+}
+.sc-res--bad,
+.sc-state--bad {
+  color: var(--ko);
+}
+.sc-state--ok {
+  color: var(--ok);
+}
+.sc-state--wait {
+  color: var(--warn);
+}
+.sc-state--off {
+  color: var(--muted);
+}
+.sc-compose {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+}
+.sc-input {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.sc-field {
+  flex: 1;
+  min-width: 180px;
+}
+.sc-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.sc-send {
+  border-color: var(--accent);
+}
+.sc-out {
+  margin: 0;
+  padding: 0 12px 8px;
+}

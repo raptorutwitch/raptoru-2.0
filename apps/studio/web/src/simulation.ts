@@ -8,12 +8,15 @@ import {
 // Studio Lab — « Simulation de stream » (top bar). One compact panel over the EXISTING commands and states:
 // shared simulated live (Tombola status / actions), Twitch chat ingestion and real output (lab-chat), and
 // the mini-games switch. No new system: each button calls the route the detailed tabs already use.
+// The « Simulation » tab uses the same state reader and actions (loadSimState / runSimAction).
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 const POLL_OPEN_MS = 2000;
 const POLL_CLOSED_MS = 10_000;
 
-async function getJson(path: string): Promise<Record<string, unknown> | null> {
+export async function getJson(
+  path: string,
+): Promise<Record<string, unknown> | null> {
   try {
     const res = await fetch(path, { headers: HEADERS });
     return res.ok ? ((await res.json()) as Record<string, unknown>) : null;
@@ -22,7 +25,7 @@ async function getJson(path: string): Promise<Record<string, unknown> | null> {
   }
 }
 
-async function post(path: string, body: unknown) {
+export async function post(path: string, body: unknown) {
   const res = await fetch(path, {
     method: 'POST',
     headers: HEADERS,
@@ -34,6 +37,7 @@ async function post(path: string, body: unknown) {
   };
   if (!res.ok)
     throw new Error(out.message ?? out.error ?? `HTTP ${res.status}`);
+  return out;
 }
 
 /** The route each panel button already uses elsewhere in Studio. */
@@ -51,6 +55,69 @@ const ACTIONS: Record<string, [string, unknown]> = {
   games_off: ['/api/mini-games/settings', { enabled: false }],
 };
 
+/** Fired after any switch changed, so the top bar panel and the Simulation tab both refresh at once. */
+export const SIM_CHANGED = 'raptoru:simulation-changed';
+
+/** The effective states of the four services, from their existing routes (read only). */
+export async function loadSimState(): Promise<SimState> {
+  const [raffle, ingress, output, games] = await Promise.all([
+    getJson('/api/raffle/status'),
+    getJson('/api/lab-chat/status'),
+    getJson('/api/lab-chat/output'),
+    getJson('/api/mini-games/state'),
+  ]);
+  const state: SimState = {
+    stream:
+      raffle && 'stream' in raffle
+        ? (raffle.stream as SimState['stream'])
+        : undefined,
+    ingress:
+      ingress && typeof ingress.enabled === 'boolean'
+        ? (ingress as unknown as SimState['ingress'])
+        : null,
+    output:
+      output && typeof output.enabled === 'boolean'
+        ? (output as unknown as SimState['output'])
+        : null,
+    games:
+      games && typeof games.enabled === 'boolean'
+        ? { enabled: games.enabled }
+        : null,
+  };
+  // Production profile: the lab-chat status says « unavailable ».
+  if (
+    ingress &&
+    (ingress.blocked as { code?: string } | null)?.code === 'unavailable'
+  )
+    state.ingress = null;
+  return state;
+}
+
+/**
+ * One switch, after its confirmation when it could make LeCroupier_ write in the real chat. Returns null
+ * when done or declined, else the error to show.
+ */
+export async function runSimAction(
+  action: string,
+  state: SimState,
+): Promise<string | null> {
+  const target = ACTIONS[action];
+  if (!target) return null;
+  const question = confirmFor(action, state);
+  if (question && !window.confirm(question)) return null;
+  try {
+    await post(...target);
+    return null;
+  } catch (e) {
+    const m = (e as Error).message;
+    return m === 'missing_write_scope'
+      ? 'LeCroupier_ n’a pas l’autorisation d’écrire dans le chat.'
+      : m;
+  } finally {
+    window.dispatchEvent(new Event(SIM_CHANGED));
+  }
+}
+
 export function mountSimulation(root: HTMLElement) {
   let state: SimState | null = null;
   let open = false;
@@ -64,36 +131,7 @@ export function mountSimulation(root: HTMLElement) {
   };
 
   async function refresh() {
-    const [raffle, ingress, output, games] = await Promise.all([
-      getJson('/api/raffle/status'),
-      getJson('/api/lab-chat/status'),
-      getJson('/api/lab-chat/output'),
-      getJson('/api/mini-games/state'),
-    ]);
-    state = {
-      stream:
-        raffle && 'stream' in raffle
-          ? (raffle.stream as SimState['stream'])
-          : undefined,
-      ingress:
-        ingress && typeof ingress.enabled === 'boolean'
-          ? (ingress as unknown as SimState['ingress'])
-          : null,
-      output:
-        output && typeof output.enabled === 'boolean'
-          ? (output as unknown as SimState['output'])
-          : null,
-      games:
-        games && typeof games.enabled === 'boolean'
-          ? { enabled: games.enabled }
-          : null,
-    };
-    // Production profile: the lab-chat status says « unavailable ».
-    if (
-      ingress &&
-      (ingress.blocked as { code?: string } | null)?.code === 'unavailable'
-    )
-      state.ingress = null;
+    state = await loadSimState();
     render();
   }
 
@@ -121,25 +159,17 @@ export function mountSimulation(root: HTMLElement) {
       schedule();
       return;
     }
-    const target = ACTIONS[action];
-    if (!target || !state) return;
-    const question = confirmFor(action, state);
-    if (question && !window.confirm(question)) return;
+    if (!state) return;
     busy = true;
     error = null;
     render();
-    void post(...target)
-      .catch((e: Error) => {
-        error =
-          e.message === 'missing_write_scope'
-            ? 'LeCroupier_ n’a pas l’autorisation d’écrire dans le chat.'
-            : e.message;
-      })
-      .finally(() => {
-        busy = false;
-        void refresh();
-      });
+    void runSimAction(action, state).then((e) => {
+      error = e;
+      busy = false;
+      void refresh();
+    });
   });
+  window.addEventListener(SIM_CHANGED, () => void refresh());
 
   // Escape closes the panel.
   document.addEventListener('keydown', (ev) => {

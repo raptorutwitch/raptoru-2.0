@@ -273,6 +273,12 @@ export class LabChatIngress {
         ),
       );
     }
+    // Studio « Simulation » chat: the last messages Core received (simulator and real chat), read only.
+    if (get && p === '/recent')
+      return reply(
+        200,
+        await this.d.core(`/v1/lab/chat/${LAB_CHANNEL_ID}/recent`),
+      );
     if (get) return reply(404, { error: 'not_found' });
     const json = JSON.parse(
       (await readBody(req, 16 * 1024)).toString('utf8') || '{}',

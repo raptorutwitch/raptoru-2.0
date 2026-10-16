@@ -7,8 +7,8 @@ import { ic } from './tombola-icons.js';
 // intentions (configuration, launch, +time, draw, pause, cancel, participants…). Additions decided
 // with Antoni (D12, minimal, no new art direction): automatic scheduler, launch sounds, overlay
 // display durations, editable chat commands (main + aliases), participant tools, round card. The chat
-// (Twitch ingestion switch + simulator) is the Lab's single chat ingress (/api/lab-chat/*), shared
-// by every module — not a Tombola feature.
+// (Twitch ingestion switch + simulator) is the Lab's single chat ingress, shared by every module — not
+// a Tombola feature: it lives in the « Simulation » tab.
 
 type Json = Record<string, unknown>;
 type View = 'setup' | 'live' | 'history';
@@ -45,15 +45,6 @@ interface Status {
   titles?: { normal: Titles; super: Titles; giveaway: Titles; idle: string };
   overlay_url: string;
   preview_url: string;
-}
-/** Single Lab chat ingress (Studio): its switch and why it cannot be turned on. */
-interface Ingress {
-  enabled: boolean;
-  running: boolean;
-  blocked: { code: string; message: string } | null;
-  token_login: string | null;
-  lines: string[];
-  last_exit: { code: number | null; at: string } | null;
 }
 /** `no_participants`: over with no entry (no draw, no winner, no payment) — not a cancellation. */
 type Outcome = 'cancelled' | 'no_participants' | 'winners' | null;
@@ -266,17 +257,6 @@ async function api<T = Json>(
   return out;
 }
 
-/** Lab chat ingress (shared by every module): switch, status, simulator. */
-const chatApi = <T = Json>(path: string, body?: unknown) =>
-  api<T>(path, body, undefined, '/api/lab-chat');
-
-/** Lab chat ingress outcomes, as the simulator shows them. */
-const OUTCOME_FR: Record<string, string> = {
-  joined: 'inscrit',
-  already_joined: 'déjà inscrit',
-  cancelled: 'Tombola annulée',
-};
-const MODULE_FR: Record<string, string> = { raffle: 'Tombola' };
 type CmdList = 'join_commands' | 'cancel_commands';
 const CMD_RE = /^![\p{L}\p{N}_]{1,24}$/u;
 const normCmd = (v: string) => {
@@ -336,9 +316,6 @@ export function mountTombola(root: HTMLElement) {
     cancelled_at: string | null;
   })[] = [];
   let openCard: Card | null = null;
-  let identities: { id: string; label: string }[] = [];
-  let ingress: Ingress | null = null;
-  let simOutcome = '';
   /** Command being edited (list + index) and the last refusal shown under each list. */
   let editing: { list: CmdList; i: number } | null = null;
   const cmdErr: Record<CmdList, string> = {
@@ -638,30 +615,9 @@ export function mountTombola(root: HTMLElement) {
         <label class="field" style="margin:0"><span>Décalage résultat Extension après le stream</span><span class="inline"><input class="input" style="width:80px" data-display="stream_margin_s" data-id="extDelay" value="${d.stream_margin_s}"><span class="muted">secondes</span></span></label>
         <p class="fine" style="margin:10px 0 0">L’Extension affiche le résultat ce nombre de secondes après la fin de son animation sur le stream (le stream a du retard sur la réalité) : jamais avant. 0 à 60 s, enregistré dans Core, appliqué aux prochaines Tombolas. Calibrage côte à côte overlay / Extension en phase F.</p></div>`;
   }
-  /** Ingestion switch: its state, and the exact reason when it cannot be turned on. */
-  function ingressBox() {
-    const ing = ingress;
-    if (!ing)
-      return '<p class="fine">État de l’ingestion indisponible (Studio ne répond pas).</p>';
-    const locked = !!ing.blocked && !ing.enabled;
-    const state = ing.running
-      ? '<b style="color:var(--t-ok)">Connectée.</b>'
-      : ing.enabled
-        ? '<b style="color:#ffbf6e">Activée, pas connectée.</b>'
-        : 'Désactivée.';
-    return `<div class="tog"><div class="txt"><b>Ingestion chat Twitch réelle</b><span class="fine" style="display:block;margin-top:4px">Une seule connexion Twitch pour tout le Lab : Core route chaque commande vers le module concerné (Tombola aujourd’hui ; TTS, commandes globales… ensuite) et suit l’état du stream (hors ligne → en direct). L’ingestion seule n’écrit rien dans le chat (la « Sortie chat réelle » des Commandes est un interrupteur distinct). OFF par défaut ; un ON choisi est restauré au redémarrage de Studio. ${state}${ing.token_login ? ` Compte : ${esc(ing.token_login)}.` : ''}</span></div>
-        <button type="button" class="sw ${ing.enabled ? 'on' : ''}" data-ingest="${ing.enabled ? 'off' : 'on'}" ${locked ? 'disabled title="Activation impossible : voir la raison ci-dessous"' : ''}></button></div>
-      ${ing.blocked ? `<p class="blocked">${ic('lock')}<span>${esc(ing.blocked.message)}</span></p>` : ''}
-      ${ing.lines.length ? `<pre class="log">${esc(ing.lines.slice(-4).join('\n'))}</pre>` : ''}`;
-  }
+  /** The Lab chat ingress (Twitch ingestion + simulator) moved to the « Simulation » tab. */
   function chatCard() {
-    return `<div class="card c12"><h3>${ic('chat')}Chat & Twitch<span class="r">Lab · commun à tous les modules</span></h3>
-      <div data-id="ingressBox">${ingressBox()}</div>
-      <div class="field"><span>Simulateur de chat (Lab) — même entrée Core que le vrai chat</span>
-        <div class="inline"><select class="input" data-id="simWho" style="font-family:var(--t-font)">${identities.map((i) => `<option value="${esc(i.id)}">${esc(i.label)}</option>`).join('')}</select>
-          <select class="input" data-id="simRole" style="font-family:var(--t-font)"><option value="viewer">Viewer</option><option value="moderator">Modérateur</option></select>
-          <input class="input" data-id="simText" style="width:200px;font-family:var(--t-font)" value="${esc(cfg?.join_commands[0] ?? '!join')}">
-          <button class="t-btn" type="button" data-act="sim">${ic('chat')}Envoyer</button><span class="fine" data-id="simOut">${esc(simOutcome)}</span></div></div></div>`;
+    return `<div class="card c12"><p class="fine" style="margin:0">${ic('chat')} Ingestion du chat Twitch réelle et simulateur de chat (commun à tous les modules) : onglet <b>Simulation</b>.</p></div>`;
   }
   /** Client check before sending (Core checks again): format, duplicate, the other list. */
   function cmdProblem(
@@ -870,14 +826,13 @@ export function mountTombola(root: HTMLElement) {
           `[data-cmd-edit-in="${editing.list}:${editing.i}"]`,
         )
         ?.focus();
-    schedSig = streamSig = ingressSig = '';
+    schedSig = streamSig = '';
     renderStatusParts();
     paintHintLines();
   }
-  /** Parts driven by Core's live state (scheduler, stream, chat ingress): refreshed on every read. */
+  /** Parts driven by Core's live state (scheduler, stream): refreshed on every read. */
   let schedSig = '';
   let streamSig = '';
-  let ingressSig = '';
   function renderStatusParts() {
     if (!status) return;
     const s = status.scheduler;
@@ -901,12 +856,6 @@ export function mountTombola(root: HTMLElement) {
     if (sl && sig2 !== streamSig) {
       streamSig = sig2;
       sl.innerHTML = streamLine();
-    }
-    const sig3 = JSON.stringify(ingress);
-    const ib = root.querySelector('[data-id="ingressBox"]');
-    if (ib && sig3 !== ingressSig) {
-      ingressSig = sig3;
-      ib.innerHTML = ingressBox();
     }
   }
 
@@ -1174,12 +1123,10 @@ export function mountTombola(root: HTMLElement) {
     if (busy && !full) return;
     busy = true;
     try {
-      const [st, snap, ing] = await Promise.all([
+      const [st, snap] = await Promise.all([
         api<Status>('/status'),
         api<{ server_time: string; round: Round | null }>('/snapshot'),
-        chatApi<Ingress>('/status').catch(() => null),
       ]);
-      ingress = ing;
       const firstConfig = !cfg || full;
       status = st;
       if (firstConfig) cfg = st.config;
@@ -1285,29 +1232,6 @@ export function mountTombola(root: HTMLElement) {
         $('confirm').hidden = true;
         void act({ action: 'cancel', reason: 'annulée depuis Studio' });
       }
-      if (a === 'sim') {
-        const who = identities.find(
-          (i) => i.id === $<HTMLSelectElement>('simWho').value,
-        );
-        void chatApi<{ handled: { module: string; outcome: string }[] }>(
-          '/simulate',
-          {
-            viewer_id: who?.id,
-            display_name: who?.label,
-            login: who?.label,
-            text: $<HTMLInputElement>('simText').value,
-            role: $<HTMLSelectElement>('simRole').value,
-          },
-        )
-          .then((o) => {
-            simOutcome = o.handled.length
-              ? `→ ${o.handled.map((h) => `${MODULE_FR[h.module] ?? h.module} : ${OUTCOME_FR[h.outcome] ?? ERRORS[h.outcome] ?? h.outcome}`).join(' · ')}`
-              : '→ aucun module concerné (message ignoré)';
-            $('simOut').textContent = simOutcome;
-            void refresh();
-          })
-          .catch(fail);
-      }
       if (a === 'add-search') {
         const q = $<HTMLInputElement>('addQ').value.trim();
         void api<{ viewers: { viewer_id: string; display_name: string }[] }>(
@@ -1376,19 +1300,6 @@ export function mountTombola(root: HTMLElement) {
     if (g('[data-close-round]')) {
       openCard = null;
       renderHistory();
-      return;
-    }
-    if ((b = g('[data-ingest]'))) {
-      if ((b as HTMLButtonElement).disabled) return;
-      void chatApi<Ingress>('/ingress', { enabled: b.dataset.ingest === 'on' })
-        .then((r) => {
-          ingress = r;
-          renderStatusParts();
-        })
-        .catch((e) => {
-          fail(e);
-          void refresh();
-        });
       return;
     }
     if ((b = g('[data-stream]'))) {
@@ -1718,9 +1629,6 @@ export function mountTombola(root: HTMLElement) {
       }
     }
   };
-  void chatApi<{ identities: { id: string; label: string }[] }>('/identities')
-    .then((r) => (identities = r.identities ?? []))
-    .catch(() => {});
 
   return {
     setVisible(v: boolean) {
