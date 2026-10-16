@@ -51,6 +51,7 @@ export const LAB_MIGRATIONS = [
   '20261017120000_bonk_lab_viewer_oauth.sql',
   '20261018120000_bonk_lab_volleys.sql',
   '20261019120000_cmd_steps_word_game.sql',
+  '20261019130000_word_game_lab.sql',
 ];
 
 export type ServiceState =

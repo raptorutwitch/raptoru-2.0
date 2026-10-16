@@ -1629,7 +1629,9 @@ describe('Lab chat ingress (Core router, every module)', () => {
     expect(await router.message(msg('bonjour', 'r-3'))).toEqual({
       handled: [],
     });
-    expect(other).toEqual(['!join', '!canceltts', 'bonjour']);
+    // A plain message only reaches the modules that read the whole chat (`plainText`, the Jeu des
+    // mots — docs/WORD_GAME_PARITY.md § 20); command modules see commands only.
+    expect(other).toEqual(['!join', '!canceltts']);
   });
 });
 

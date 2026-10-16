@@ -55,6 +55,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261018120000_bonk_lab_volleys.sql',
   // Jeu des mots V1 lot 2: cmd_steps also carries Jeu des mots messages (origin, no invocation).
   '20261019120000_cmd_steps_word_game.sql',
+  // Jeu des mots V1 lot 3: words, winning messages, finds, channel state; ledger kind word_game.
+  '20261019130000_word_game_lab.sql',
 ]);
 
 /**

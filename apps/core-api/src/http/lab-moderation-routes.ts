@@ -33,6 +33,7 @@ import {
   type TtsLabService,
 } from '../tts-lab/tts-lab-service.js';
 import { HttpError, limitParam, parse, type Route } from './server.js';
+import { WordGameError } from '../word-game/service.js';
 
 // Moderation V2 (D4) + Lab test wallet + TTS configuration + Tombola. Registered by the Lab Core only
 // (bonk-lab/local-server.ts: local, secret-protected, Lab database) — never by the production Core.
@@ -53,6 +54,10 @@ export async function mappedModeration<T>(fn: () => Promise<T>): Promise<T> {
         role: error.role,
         message: error.message,
       });
+    // Jeu des mots (Lab chat ingress): a refused Wallet credit rolled the whole message back; 503 =
+    // transient for the chat adapter, which sends the same message_id again (no double gain possible).
+    if (error instanceof WordGameError)
+      throw new HttpError(error.status, { error: error.code });
     if (error instanceof LabWalletError)
       throw new HttpError(409, { error: error.code, ...error.details });
     if (error instanceof TtsLabError409)

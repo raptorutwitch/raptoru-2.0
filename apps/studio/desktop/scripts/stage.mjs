@@ -30,6 +30,8 @@ mkdirSync(app, { recursive: true });
 const copies = [
   'apps/core-api/dist',
   'apps/core-api/package.json',
+  // Jeu des mots word bank (read from src/ by dist/word-game/bank.js).
+  'apps/core-api/src/word-game/words-fr.txt',
   'apps/twitch-bot/dist',
   'apps/twitch-bot/package.json',
   'apps/studio/server/dist',
@@ -88,6 +90,9 @@ const runtimeFiles = [
   'supabase/migrations/20261017120000_bonk_lab_viewer_oauth.sql',
   'supabase/migrations/20261018120000_bonk_lab_volleys.sql',
   'supabase/migrations/20261019120000_cmd_steps_word_game.sql',
+  'supabase/migrations/20261019130000_word_game_lab.sql',
+  // Jeu des mots word bank, read by the Lab Core from src/ (like the migrations).
+  'apps/core-api/src/word-game/words-fr.txt',
 ];
 for (const path of runtimeFiles)
   if (!existsSync(join(app, path)))

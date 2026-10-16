@@ -17,6 +17,8 @@ import { CommandsService } from '../commands/service.js';
 import { raffleReservedWords } from '../commands/reserved.js';
 import { CommandsAdmission } from '../commands/admission.js';
 import { CommandSteps } from '../commands/steps.js';
+import { wordGameRoutes } from '../http/word-game-routes.js';
+import { WordGameService } from '../word-game/service.js';
 import type { Clock } from '../clock.js';
 import { dbReady, type Db } from '../db/db.js';
 
@@ -49,7 +51,11 @@ export function createLabCore({
   secret,
   twitch,
   channelTwitchId = '',
-}: LabCoreOptions): { server: Server; raffle: RaffleLabService } {
+}: LabCoreOptions): {
+  server: Server;
+  raffle: RaffleLabService;
+  wordGame: WordGameService;
+} {
   if (secret.length < 32) throw new Error('bonk_secret_required');
   // Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
   const viewers = twitch
@@ -82,6 +88,8 @@ export function createLabCore({
     broadcasterOf,
   });
   const steps = new CommandSteps(db, systemClock);
+  // Jeu des mots V1: reads the whole chat (plainText), answers through cmd_steps (origin word_game).
+  const wordGame = new WordGameService(db, systemClock);
   const routes = [
     ...bonkLabRoutes(bonk, viewers),
     // Soundboard V2 Lab: same isolated Lab Core process and database.
@@ -94,8 +102,12 @@ export function createLabCore({
       new LabModerationService(db, systemClock, tts, sound, bonk, raffle),
       tts,
       raffle,
-      [{ name: 'commands', chat: (m) => admission.chat(m) }],
+      [
+        { name: 'commands', chat: (m) => admission.chat(m) },
+        { name: 'word_game', plainText: true, chat: (m) => wordGame.chat(m) },
+      ],
     ),
+    ...wordGameRoutes(wordGame),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
   ];
@@ -147,5 +159,5 @@ export function createLabCore({
       send(500, { error: 'bonk_core_error' });
     }
   });
-  return { server, raffle };
+  return { server, raffle, wordGame };
 }
