@@ -11,6 +11,7 @@ import {
   LAB_CHANNEL_ID,
   labProxy,
   localLabCoreClient,
+  localLabCoreEvents,
 } from './lab-moderation/proxy.js';
 import { RaffleRuntime } from './raffle-lab/runtime.js';
 import { WordGameRuntime } from './word-game/runtime.js';
@@ -718,6 +719,10 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       ? await WordGameRuntime.create({
           channelId: cockpitChannel,
           core: labCore,
+          events: localLabCoreEvents(
+            labCoreUrl!,
+            process.env.BONK_LAB_SECRET ?? '',
+          ),
           origin: `http://${host}:${port}`,
           dir: join(paths.runtimeDir, 'word-game'),
           playerDir: join(

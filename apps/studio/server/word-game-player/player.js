@@ -1,48 +1,49 @@
-/* global location, document, localStorage, fetch, Audio, setTimeout */
-// Jeu des mots V1 — OBS sound source (browser source, served by Studio; nothing visible). Every second it
-// reads Core's recent wins through Studio (token from the URL hash) and plays ShuffleWordsSong.ogg once
-// per new winning message (model.js). The cursor is remembered by the source: a reload never replays.
-import { winsToPlay } from './model.js';
+/* global location, document, localStorage, EventSource, Audio */
+// Jeu des mots V1 — OBS sound source (browser source, served by Studio; nothing visible). It listens to
+// Studio's win events (pushed, never polled; token from the URL hash) and plays ShuffleWordsSong.ogg
+// once per new winning message (model.js). The stream is live only: a reload or a reconnection never
+// replays the past (a win during a disconnection is missed). EventSource reconnects on its own.
+import { admit } from './model.js';
 
-const POLL_MS = 1000;
-const CURSOR_KEY = 'raptoru-word-game-sound-cursor';
+const PLAYED_KEY = 'raptoru-word-game-sound-played';
 const SOUND_URL = '/word-game/ShuffleWordsSong.ogg';
 const token = location.hash.slice(1);
 const status = document.querySelector('#status');
 
-let cursor = null;
+let played = [];
 try {
-  cursor = JSON.parse(localStorage.getItem(CURSOR_KEY) ?? 'null');
+  const stored = JSON.parse(localStorage.getItem(PLAYED_KEY) ?? '[]');
+  if (Array.isArray(stored))
+    played = stored.filter((id) => typeof id === 'string');
 } catch {
-  cursor = null;
+  played = [];
 }
 
-function remember(next) {
-  cursor = next;
+const events = new EventSource(
+  `/word-game/events?t=${encodeURIComponent(token)}`,
+);
+events.addEventListener('win', (e) => {
+  let win;
   try {
-    localStorage.setItem(CURSOR_KEY, JSON.stringify(next));
+    win = JSON.parse(e.data);
   } catch {
-    /* storage unavailable: the cursor stays in memory */
+    return;
   }
-}
-
-async function poll() {
+  const r = admit(played, win?.message_id);
+  if (!r.play) return;
+  played = r.played;
   try {
-    const res = await fetch('/word-game/feed', {
-      headers: { 'x-word-game-token': token },
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error(`feed ${res.status}`);
-    const { recent } = await res.json();
-    const { play, cursor: next } = winsToPlay(recent ?? [], cursor, Date.now());
-    remember(next);
-    play.forEach(() => void new Audio(SOUND_URL).play().catch(() => {}));
-    if (status) status.textContent = 'ok';
-  } catch (e) {
-    if (status) status.textContent = String(e);
-  } finally {
-    setTimeout(poll, POLL_MS);
+    localStorage.setItem(PLAYED_KEY, JSON.stringify(played));
+  } catch {
+    /* storage unavailable: remembered in memory */
   }
-}
-
-void poll();
+  void new Audio(SOUND_URL).play().catch(() => {});
+});
+events.onopen = () => {
+  if (status) status.textContent = 'ok';
+};
+events.onerror = () => {
+  if (status)
+    status.textContent =
+      events.readyState === EventSource.CLOSED ? 'refused' : 'reconnecting';
+};

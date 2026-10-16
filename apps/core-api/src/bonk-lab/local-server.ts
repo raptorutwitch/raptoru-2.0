@@ -67,6 +67,8 @@ const stop = () => {
   clearInterval(wordGameTick);
   clearInterval(avatarTick);
   server.close(() => void db.close().then(() => process.exit(0)));
+  // Open event streams (Jeu des mots → Studio) would otherwise keep the server from closing.
+  server.closeAllConnections();
 };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);

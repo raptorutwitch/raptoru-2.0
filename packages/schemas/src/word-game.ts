@@ -21,6 +21,17 @@ export interface WordGameActiveWord {
   age_seconds: number;
 }
 
+/**
+ * A committed winning message (words, streak, Wallet credit and win all written), pushed by the Lab Core
+ * to Studio's OBS sound source (GET /v1/lab/word-game/:channel/events, server-sent events). Never sent
+ * for a replayed message, a refused credit, a command or a new word.
+ */
+export interface WordGameWinEvent {
+  channel_id: string;
+  message_id: string;
+  created_at: string;
+}
+
 export interface WordGameRecentWin {
   message_id: string;
   viewer_id: string;

@@ -17,7 +17,10 @@ import { CommandsService } from '../commands/service.js';
 import { raffleReservedWords } from '../commands/reserved.js';
 import { CommandsAdmission } from '../commands/admission.js';
 import { CommandSteps } from '../commands/steps.js';
-import { wordGameRoutes } from '../http/word-game-routes.js';
+import {
+  serveWordGameEvents,
+  wordGameRoutes,
+} from '../http/word-game-routes.js';
 import { WordGameService } from '../word-game/service.js';
 import type { Clock } from '../clock.js';
 import { dbReady, type Db } from '../db/db.js';
@@ -128,6 +131,8 @@ export function createLabCore({
     const expected = Buffer.from(`Bearer ${secret}`);
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
       return send(401, { error: 'unauthorized' });
+    // Jeu des mots: committed wins pushed to Studio (OBS sound), an open server-sent events stream.
+    if (serveWordGameEvents(wordGame, req, res, requestUrl)) return;
     try {
       const route = routes.find(
         (r) => r.method === req.method && r.pattern.test(requestUrl.pathname),

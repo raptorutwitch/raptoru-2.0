@@ -2,12 +2,16 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import type { LabCoreCall } from '../lab-moderation/proxy.js';
+import type { LabCoreCall, LabCoreEvents } from '../lab-moderation/proxy.js';
 
 // Jeu des mots V1 in Studio (docs/WORD_GAME_PARITY.md §§ 14, 18). Core decides and stores everything;
 // Studio only relays the panel's calls (state, stop / start / new word) and serves the OBS sound source:
-// a page with no visual that plays ShuffleWordsSong.ogg once per winning message, reading Core's recent
-// wins through a token-protected feed (like the Tombola OBS source). Nothing decided, nothing kept here.
+// a page with no visual that plays ShuffleWordsSong.ogg once per winning message. Wins are PUSHED, never
+// polled: Core's committed wins stream (server-sent events) is relayed to the connected OBS sources
+// (token-protected) while at least one is connected. Live only: nothing is buffered or replayed.
+
+/** Delays between reconnections to Core's stream while an OBS source listens (the last one repeats). */
+export const EVENTS_RETRY_MS = [1000, 2000, 5000, 10_000];
 
 const MAX_BODY = 1024;
 const PLAYER_FILES: Record<string, string> = {
@@ -20,6 +24,8 @@ const PLAYER_FILES: Record<string, string> = {
 export interface WordGameRuntimeDeps {
   channelId: string;
   core: LabCoreCall;
+  /** Core's committed wins stream (server-sent events). */
+  events: LabCoreEvents;
   /** Studio's own origin (http://127.0.0.1:<port>). */
   origin: string;
   /** Studio storage for this module (the OBS source token). */
@@ -28,12 +34,14 @@ export interface WordGameRuntimeDeps {
   playerDir: string;
 }
 
-interface Win {
-  message_id: string;
-  created_at: string;
-}
-
 export class WordGameRuntime {
+  /** Connected OBS sources (server-sent events responses). */
+  private readonly clients = new Set<ServerResponse>();
+  /** Open connection to Core's stream (only while a source listens). */
+  private upstream: AbortController | null = null;
+  private retry: ReturnType<typeof setTimeout> | null = null;
+  private attempt = 0;
+
   private constructor(
     private readonly d: WordGameRuntimeDeps,
     private readonly token: string,
@@ -131,7 +139,7 @@ export class WordGameRuntime {
     reply(404, { error: 'not_found' });
   }
 
-  /** OBS source files and its feed (token): only the recent wins' ids and times. */
+  /** OBS source files and its events stream (token): only the new wins' ids and times. */
   private async page(
     req: IncomingMessage,
     res: ServerResponse,
@@ -141,18 +149,11 @@ export class WordGameRuntime {
     const name = url.pathname.slice('/word-game/'.length);
     if (req.method !== 'GET')
       return reply(405, { error: 'method_not_allowed' });
-    if (name === 'feed') {
-      if (req.headers['x-word-game-token'] !== this.token)
+    if (name === 'events') {
+      // EventSource cannot send headers: the token comes in the query string.
+      if (url.searchParams.get('t') !== this.token)
         return reply(403, { error: 'forbidden' });
-      const state = await this.d.core<{ recent?: Win[] }>(
-        `/v1/lab/word-game/${this.d.channelId}/state`,
-      );
-      return reply(200, {
-        recent: (state.recent ?? []).map((w) => ({
-          message_id: w.message_id,
-          created_at: w.created_at,
-        })),
-      });
+      return this.listen(res);
     }
     if (!(name in PLAYER_FILES)) return reply(404, { error: 'not_found' });
     let data: Buffer;
@@ -168,5 +169,88 @@ export class WordGameRuntime {
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self'; frame-ancestors 'self'",
     });
     res.end(data);
+  }
+
+  /** An OBS source listens: new wins only (nothing replayed); Core's stream opens with the first one. */
+  private listen(res: ServerResponse) {
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store',
+      connection: 'keep-alive',
+    });
+    res.write(': connected\n\n');
+    this.clients.add(res);
+    res.on('close', () => {
+      this.clients.delete(res);
+      if (!this.clients.size) this.stop();
+    });
+    if (!this.upstream && !this.retry) void this.connect();
+  }
+
+  /** No source left (or Studio stopping): Core's stream is closed, no reconnection. */
+  stop() {
+    this.upstream?.abort();
+    this.upstream = null;
+    if (this.retry) clearTimeout(this.retry);
+    this.retry = null;
+    this.attempt = 0;
+  }
+
+  /** Reads Core's stream until it ends (Core stopped / restarted), then reconnects while a source listens. */
+  private async connect() {
+    const ac = new AbortController();
+    this.upstream = ac;
+    try {
+      const res = await this.d.events(
+        `/v1/lab/word-game/${this.d.channelId}/events`,
+        ac.signal,
+      );
+      this.attempt = 0;
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        for (let i; (i = buffer.indexOf('\n\n')) >= 0;) {
+          this.relay(buffer.slice(0, i));
+          buffer = buffer.slice(i + 2);
+        }
+      }
+    } catch {
+      /* Core unreachable, restarted, or the stream was closed on purpose */
+    }
+    if (this.upstream !== ac) return; // stopped meanwhile
+    this.upstream = null;
+    if (!this.clients.size) return;
+    const delay =
+      EVENTS_RETRY_MS[Math.min(this.attempt++, EVENTS_RETRY_MS.length - 1)];
+    this.retry = setTimeout(() => {
+      this.retry = null;
+      if (this.clients.size) void this.connect();
+    }, delay);
+  }
+
+  /** One Core event → every connected source (the win's id and time only). */
+  private relay(block: string) {
+    if (!/^event: win$/m.test(block)) return;
+    let win: {
+      channel_id?: unknown;
+      message_id?: unknown;
+      created_at?: unknown;
+    };
+    try {
+      win = JSON.parse(/^data: (.*)$/m.exec(block)?.[1] ?? '') as typeof win;
+    } catch {
+      return;
+    }
+    if (
+      win.channel_id !== this.d.channelId ||
+      typeof win.message_id !== 'string'
+    )
+      return;
+    const out = `event: win\ndata: ${JSON.stringify({ message_id: win.message_id, created_at: String(win.created_at ?? '') })}\n\n`;
+    for (const client of this.clients) client.write(out);
   }
 }

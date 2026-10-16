@@ -7,7 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WordGameRuntime } from '../src/word-game/runtime.js';
 
 // Jeu des mots V1 in Studio (Lot 4): the panel's relay to Core (no game logic here) and the OBS sound
-// source behind its token (docs/WORD_GAME_PARITY.md §§ 14, 18).
+// source behind its token (docs/WORD_GAME_PARITY.md §§ 14, 18): Core's committed wins are pushed
+// (server-sent events) to the connected sources, never polled.
 
 const CH = '900400';
 const PLAYER_DIR = join(import.meta.dirname, '..', 'word-game-player');
@@ -43,11 +44,40 @@ const STATE = {
   ],
 };
 
+/** A fake Core events stream Studio opened: the test pushes text into it or ends it. */
+interface Upstream {
+  path: string;
+  signal: AbortSignal;
+  push(text: string): void;
+  end(): void;
+}
+
 async function setup(
   core: (path: string, body?: unknown) => Promise<unknown> = async () => STATE,
 ) {
   dir = await mkdtemp(join(tmpdir(), 'word-game-'));
   const calls: { path: string; body?: unknown }[] = [];
+  const upstreams: Upstream[] = [];
+  const events = async (path: string, signal: AbortSignal) => {
+    let ctrl!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start: (c) => void (ctrl = c),
+    });
+    signal.addEventListener('abort', () => {
+      try {
+        ctrl.error(new Error('aborted'));
+      } catch {
+        /* already closed */
+      }
+    });
+    upstreams.push({
+      path,
+      signal,
+      push: (t) => ctrl.enqueue(new TextEncoder().encode(t)),
+      end: () => ctrl.close(),
+    });
+    return new Response(body);
+  };
   server = createServer();
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -58,6 +88,7 @@ async function setup(
         calls.push({ path, body });
         return core(path, body);
       }) as never,
+      events,
       origin,
       dir: join(dir, 'word-game'),
       playerDir: PLAYER_DIR,
@@ -81,6 +112,7 @@ async function setup(
   return {
     origin,
     calls,
+    upstreams,
     studio,
     get rt() {
       return rt;
@@ -186,16 +218,74 @@ describe('OBS sound source', () => {
     );
   });
 
-  it('feed: token required; only the ids and times of the recent wins', async () => {
+  it('events: token required; no polling feed any more', async () => {
     const s = await setup();
-    expect((await fetch(`${s.origin}/word-game/feed`)).status).toBe(403);
+    expect((await fetch(`${s.origin}/word-game/events`)).status).toBe(403);
+    expect((await fetch(`${s.origin}/word-game/events?t=nope`)).status).toBe(
+      403,
+    );
     const token = new URL(s.rt.playerUrl).hash.slice(1);
-    const res = await fetch(`${s.origin}/word-game/feed`, {
-      headers: { 'x-word-game-token': token },
-    });
-    expect(await res.json()).toEqual({
-      recent: [{ message_id: 'tw-2', created_at: '2026-10-16T20:01:00.000Z' }],
-    });
+    expect(
+      (
+        await fetch(`${s.origin}/word-game/feed`, {
+          headers: { 'x-word-game-token': token },
+        })
+      ).status,
+    ).toBe(404);
+    expect(s.upstreams).toEqual([]);
+    expect(s.calls).toEqual([]);
+  });
+
+  it('a pushed win reaches the source at once (id and time only); nothing replayed, other events ignored', async () => {
+    const s = await setup();
+    const obs = await listen(s);
+    await until(() => s.upstreams.length === 1);
+    expect(s.upstreams[0]!.path).toBe(`/v1/lab/word-game/${CH}/events`);
+    const up = s.upstreams[0]!;
+    up.push(': connected\n\n');
+    up.push(win('other', '999999'));
+    up.push('event: ping\ndata: {}\n\n');
+    up.push(win('tw-1').slice(0, 20)); // a chunk boundary inside an event
+    up.push(win('tw-1').slice(20));
+    up.push(win('tw-2'));
+    await obs.until('tw-2');
+    expect(obs.wins()).toEqual(['tw-1', 'tw-2']);
+    expect(obs.text()).toContain(
+      `event: win\ndata: ${JSON.stringify({ message_id: 'tw-1', created_at: '2026-10-16T20:01:00.000Z' })}\n\n`,
+    );
+    expect(obs.text()).not.toContain(CH);
+    expect(s.calls).toEqual([]); // never a read of Core's state
+    obs.close();
+  });
+
+  it('two sources share one Core stream; the last one leaving closes it', async () => {
+    const s = await setup();
+    const a = await listen(s);
+    const b = await listen(s);
+    await until(() => s.upstreams.length === 1);
+    s.upstreams[0]!.push(win('tw-1'));
+    await a.until('tw-1');
+    await b.until('tw-1');
+    a.close();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(s.upstreams[0]!.signal.aborted).toBe(false);
+    b.close();
+    await until(() => s.upstreams[0]!.signal.aborted);
+    expect(s.upstreams).toHaveLength(1);
+  });
+
+  it('Core restarted: Studio reconnects (1 s) while a source listens; only new wins are relayed', async () => {
+    const s = await setup();
+    const obs = await listen(s);
+    await until(() => s.upstreams.length === 1);
+    s.upstreams[0]!.push(win('tw-1'));
+    await obs.until('tw-1');
+    s.upstreams[0]!.end(); // Core stopped
+    await until(() => s.upstreams.length === 2, 3000);
+    s.upstreams[1]!.push(win('tw-2'));
+    await obs.until('tw-2');
+    expect(obs.wins()).toEqual(['tw-1', 'tw-2']);
+    obs.close();
   });
 
   it('the source URL (token) survives a Studio restart', async () => {
@@ -205,3 +295,40 @@ describe('OBS sound source', () => {
     expect(s.rt.playerUrl).toBe(before);
   });
 });
+
+const win = (id: string, channel = CH) =>
+  `event: win\ndata: ${JSON.stringify({ channel_id: channel, message_id: id, created_at: '2026-10-16T20:01:00.000Z' })}\n\n`;
+
+async function until(ok: () => boolean, ms = 2000) {
+  const end = Date.now() + ms;
+  while (!ok()) {
+    if (Date.now() > end) throw new Error('timeout');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+/** An OBS source connected to Studio's events stream (what EventSource does). */
+async function listen(s: { origin: string; rt: WordGameRuntime }) {
+  const ac = new AbortController();
+  const token = new URL(s.rt.playerUrl).hash.slice(1);
+  const res = await fetch(`${s.origin}/word-game/events?t=${token}`, {
+    signal: ac.signal,
+  });
+  expect(res.status).toBe(200);
+  expect(res.headers.get('content-type')).toContain('text/event-stream');
+  let text = '';
+  void (async () => {
+    const reader = res.body!.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      text += new TextDecoder().decode(value);
+    }
+  })().catch(() => {});
+  return {
+    text: () => text,
+    wins: () => [...text.matchAll(/"message_id":"([^"]+)"/g)].map((m) => m[1]),
+    until: (needle: string) => until(() => text.includes(needle)),
+    close: () => ac.abort(),
+  };
+}

@@ -1,3 +1,4 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { WordGameAction } from '@raptoru/schemas';
 import { WordGameError, type WordGameService } from '../word-game/service.js';
 import { HttpError, parse, type Route } from './server.js';
@@ -35,4 +36,34 @@ export function wordGameRoutes(game: WordGameService): Route[] {
         mapped(() => game.act(channel(params), parse(WordGameAction, body))),
     },
   ];
+}
+
+const EVENTS = /^\/v1\/lab\/word-game\/(\d{1,32})\/events$/;
+
+/**
+ * Committed wins of a channel, pushed as server-sent events (`event: win`) to Studio, which relays them to
+ * the OBS sound source. Live only: nothing is replayed on (re)connection. Called by the Lab Core server
+ * after its Bearer check; returns false for any other request.
+ */
+export function serveWordGameEvents(
+  game: WordGameService,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): boolean {
+  const m = EVENTS.exec(url.pathname);
+  if (!m || req.method !== 'GET') return false;
+  const channelId = m[1]!;
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-store',
+    connection: 'keep-alive',
+  });
+  res.write(': connected\n\n');
+  const off = game.onWin((w) => {
+    if (w.channel_id === channelId)
+      res.write(`event: win\ndata: ${JSON.stringify(w)}\n\n`);
+  });
+  res.on('close', off);
+  return true;
 }

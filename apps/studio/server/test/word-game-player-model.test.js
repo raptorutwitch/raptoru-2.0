@@ -1,85 +1,54 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FRESH_MS, winsToPlay } from '../word-game-player/model.js';
+import { admit, PLAYED_MEMORY } from '../word-game-player/model.js';
 
 // Jeu des mots V1 — OBS sound source model: one sound per winning message, never a replay
-// (docs/WORD_GAME_PARITY.md § 18). Core's recent wins only hold paid winning messages.
+// (docs/WORD_GAME_PARITY.md § 18). Core pushes committed wins only, live only.
 
-const T0 = Date.parse('2026-10-16T20:00:00.000Z');
-const win = (id, ms) => ({
-  message_id: id,
-  created_at: new Date(T0 + ms).toISOString(),
-});
+/** Plays a sequence of received events; returns the ids actually played and the memory. */
+const receive = (ids, played = []) => {
+  const sounds = [];
+  for (const id of ids) {
+    const r = admit(played, id);
+    played = r.played;
+    if (r.play) sounds.push(id);
+  }
+  return { sounds, played };
+};
 
-describe('sound source: which wins to play', () => {
-  it('first read (nothing remembered): plays nothing, remembers the newest win', () => {
-    expect(winsToPlay([win('a', 0), win('b', 1000)], null, T0 + 2000)).toEqual({
-      play: [],
-      cursor: win('b', 1000),
-    });
-    expect(winsToPlay([], null, T0)).toEqual({ play: [], cursor: null });
+describe('sound source: which events play', () => {
+  it('one event → one sound', () => {
+    expect(receive(['tw-1']).sounds).toEqual(['tw-1']);
   });
 
-  it('one new win → one sound', () => {
-    const cursor = win('a', 0);
-    expect(
-      winsToPlay([win('b', 5000), win('a', 0)], cursor, T0 + 6000),
-    ).toEqual({
-      play: ['b'],
-      cursor: win('b', 5000),
-    });
+  it('the same event received twice → one sound', () => {
+    expect(receive(['tw-1', 'tw-1']).sounds).toEqual(['tw-1']);
   });
 
-  it('two new wins between two reads → two sounds, oldest first', () => {
-    const cursor = win('a', 0);
-    const recent = [win('c', 2500), win('b', 2000), win('a', 0)]; // Core order: newest first
-    expect(winsToPlay(recent, cursor, T0 + 3000).play).toEqual(['b', 'c']);
+  it('two distinct wins → two sounds, in order', () => {
+    expect(receive(['tw-1', 'tw-2']).sounds).toEqual(['tw-1', 'tw-2']);
   });
 
-  it('the same win read again → no second sound', () => {
-    const first = winsToPlay(
-      [win('b', 5000), win('a', 0)],
-      win('a', 0),
-      T0 + 6000,
+  it('after a reload (remembered ids), an already played win delivered again does not replay', () => {
+    const { played } = receive(['tw-1', 'tw-2']);
+    expect(receive(['tw-2', 'tw-3'], played).sounds).toEqual(['tw-3']);
+  });
+
+  it('an event without a message id is ignored; the memory is bounded', () => {
+    expect(receive([undefined, '', 42]).sounds).toEqual([]);
+    const ids = Array.from({ length: PLAYED_MEMORY + 10 }, (_, i) => `tw-${i}`);
+    const { played } = receive(ids);
+    expect(played).toHaveLength(PLAYED_MEMORY);
+    expect(played.at(-1)).toBe(ids.at(-1));
+  });
+
+  it('the source listens to pushed events: no polling, no timer, no read of recent wins', async () => {
+    const js = await readFile(
+      join(import.meta.dirname, '..', 'word-game-player', 'player.js'),
+      'utf8',
     );
-    expect(first.play).toEqual(['b']);
-    expect(
-      winsToPlay([win('b', 5000), win('a', 0)], first.cursor, T0 + 7000),
-    ).toEqual({
-      play: [],
-      cursor: win('b', 5000),
-    });
-  });
-
-  it('a reload with the remembered cursor: no replay; a fresh win missed meanwhile is played', () => {
-    const remembered = win('b', 5000);
-    expect(
-      winsToPlay([win('b', 5000), win('a', 0)], remembered, T0 + 60_000).play,
-    ).toEqual([]);
-    expect(
-      winsToPlay([win('c', 50_000), win('b', 5000)], remembered, T0 + 60_000)
-        .play,
-    ).toEqual(['c']);
-  });
-
-  it('a win older than FRESH_MS when first seen is not played', () => {
-    const now = T0 + 10_000 + FRESH_MS + 1;
-    expect(
-      winsToPlay([win('b', 10_000), win('a', 0)], win('a', 0), now),
-    ).toEqual({
-      play: [],
-      cursor: win('b', 10_000),
-    });
-  });
-
-  it('two wins in the same millisecond: ordered by message id, both played once', () => {
-    const r = winsToPlay(
-      [win('y', 1000), win('x', 1000), win('a', 0)],
-      win('a', 0),
-      T0 + 2000,
-    );
-    expect(r.play).toEqual(['x', 'y']);
-    expect(
-      winsToPlay([win('y', 1000), win('x', 1000)], r.cursor, T0 + 3000).play,
-    ).toEqual([]);
+    expect(js).toContain('new EventSource(');
+    expect(js).not.toMatch(/setTimeout|setInterval|fetch\(|recent|feed/);
   });
 });

@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { LabChatMessage } from '@raptoru/schemas';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import type { LabChatMessage, WordGameWinEvent } from '@raptoru/schemas';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Db } from '../src/db/db.js';
-import { wordGameRoutes } from '../src/http/word-game-routes.js';
+import {
+  serveWordGameEvents,
+  wordGameRoutes,
+} from '../src/http/word-game-routes.js';
 import { HttpError } from '../src/http/server.js';
 import { mappedModeration } from '../src/http/lab-moderation-routes.js';
 import { LabChatRouter } from '../src/lab-chat/router.js';
@@ -730,5 +735,112 @@ describe('Lab chat router (§ 20)', () => {
       'commands:  !join',
       'word_game:  !join',
     ]);
+  });
+});
+
+// The OBS sound is pushed, never polled: one event per COMMITTED winning message (after words, streak,
+// Wallet credit and win are written), nothing for a replay, a rollback, a command or a new word.
+describe('win events (OBS sound push)', () => {
+  const events = () => {
+    const seen: WordGameWinEvent[] = [];
+    game.onWin((w) => seen.push(w));
+    return seen;
+  };
+
+  it('a committed win → one event (channel, Twitch message id, time); a replay → none', async () => {
+    const s = await live();
+    await addWord(s, 'angle');
+    const seen = events();
+    await game.chat(msg('angle', ALICE, 'tw-win'));
+    await game.chat(msg('angle', ALICE, 'tw-win'));
+    expect(seen).toEqual([
+      { channel_id: CH, message_id: 'tw-win', created_at: T0.toISOString() },
+    ]);
+  });
+
+  it('a refused Wallet credit (rollback) → no event; the later successful retry → one', async () => {
+    const s = await live();
+    await addWord(s, 'angle');
+    const seen = events();
+    await db.query(
+      "update lab_currencies set max_balance = $1 where currency_id = 'tokens'",
+      [DEFAULT_LAB_WALLET.tokens + 1],
+    );
+    await expect(game.chat(msg('angle', ALICE, 'tw-cap'))).rejects.toThrow();
+    expect(seen).toEqual([]);
+    await db.query(
+      "update lab_currencies set max_balance = $1 where currency_id = 'tokens'",
+      [1_000_000_000],
+    );
+    await game.chat(msg('angle', ALICE, 'tw-cap'));
+    expect(seen.map((w) => w.message_id)).toEqual(['tw-cap']);
+  });
+
+  it('!mots, !streakmot, « Nouveau mot », Arrêter / Reprendre and a plain miss → no event', async () => {
+    const s = await live();
+    await addWord(s, 'angle');
+    const seen = events();
+    await game.chat(msg('!mots'));
+    await game.chat(msg('!streakmot'));
+    await game.chat(msg('bonjour'));
+    await game.act(CH, { action: 'new_word', request_id: randomUUID() });
+    await game.act(CH, { action: 'stop' });
+    await game.act(CH, { action: 'start' });
+    expect(await count('cmd_steps')).toBeGreaterThan(0); // the commands did answer
+    expect(seen).toEqual([]);
+  });
+
+  it('two winning messages → two events, in order', async () => {
+    const s = await live();
+    await addWord(s, 'angle');
+    await addWord(s, 'requin');
+    const seen = events();
+    await game.chat(msg('angle', ALICE, 'tw-a'));
+    await game.chat(msg('requin', BOB, 'tw-b'));
+    expect(seen.map((w) => w.message_id)).toEqual(['tw-a', 'tw-b']);
+  });
+
+  it('the events stream: only this channel’s new wins, nothing replayed on connection, unsubscribed on close', async () => {
+    const s = await live();
+    await addWord(s, 'angle');
+    await addWord(s, 'requin');
+    await game.chat(msg('angle', ALICE, 'tw-old')); // before the connection: never sent
+    const server = createServer((req, res) => {
+      const url = new URL(req.url ?? '/', 'http://core');
+      if (!serveWordGameEvents(game, req, res, url)) res.writeHead(404).end();
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      expect((await fetch(`${base}/v1/lab/word-game/${CH}/state`)).status).toBe(
+        404,
+      );
+      const ac = new AbortController();
+      const res = await fetch(`${base}/v1/lab/word-game/${CH}/events`, {
+        signal: ac.signal,
+      });
+      expect(res.headers.get('content-type')).toContain('text/event-stream');
+      const reader = res.body!.getReader();
+      let text = '';
+      const until = async (needle: string) => {
+        while (!text.includes(needle))
+          text += new TextDecoder().decode((await reader.read()).value);
+      };
+      await until(': connected');
+      game.onWin(() => {}); // another listener does not change the stream
+      await game.chat(msg('requin', BOB, 'tw-new'));
+      await until('tw-new');
+      expect(text).not.toContain('tw-old');
+      expect(text).toContain(
+        `event: win\ndata: ${JSON.stringify({ channel_id: CH, message_id: 'tw-new', created_at: T0.toISOString() })}\n\n`,
+      );
+      ac.abort();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(
+        (game as unknown as { winListeners: Set<unknown> }).winListeners.size,
+      ).toBe(1);
+    } finally {
+      server.close();
+    }
   });
 });

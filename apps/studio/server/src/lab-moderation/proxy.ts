@@ -20,6 +20,8 @@ const PREFIXES = [
   '/v1/lab/chat',
   // Commands V2: « Sortie chat réelle » and the step debug view.
   '/v1/lab/commands/',
+  // Jeu des mots V1: panel state / actions and the committed wins stream (OBS sound).
+  '/v1/lab/word-game/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */
@@ -56,6 +58,30 @@ export function localLabCoreClient(base: string, secret: string): LabCoreCall {
         body: result,
       });
     return result;
+  };
+}
+
+/** Opens a server-sent events stream of the local Lab Core (same checks; no timeout: it stays open). */
+export type LabCoreEvents = (
+  path: string,
+  signal: AbortSignal,
+) => Promise<Response>;
+
+export function localLabCoreEvents(
+  base: string,
+  secret: string,
+): LabCoreEvents {
+  localLabCoreClient(base, secret); // same base / secret checks
+  return async (path, signal) => {
+    if (!PREFIXES.some((p) => path.startsWith(p)))
+      throw new Error('lab_route_required');
+    const res = await fetch(new URL(path, base), {
+      redirect: 'error',
+      headers: { authorization: `Bearer ${secret}` },
+      signal,
+    });
+    if (!res.ok || !res.body) throw new Error(`lab_core_${res.status}`);
+    return res;
   };
 }
 

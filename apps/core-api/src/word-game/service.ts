@@ -5,6 +5,7 @@ import type {
   WordGameActiveWord,
   WordGameRecentWin,
   WordGameState,
+  WordGameWinEvent,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import {
@@ -89,6 +90,8 @@ export type WordGameChatOutcome =
 
 export class WordGameService {
   private readonly bank: readonly string[];
+  /** Committed wins listeners (the OBS sound events stream). */
+  private readonly winListeners = new Set<(w: WordGameWinEvent) => void>();
 
   constructor(
     private readonly db: Db,
@@ -97,6 +100,12 @@ export class WordGameService {
     bank?: readonly string[],
   ) {
     this.bank = bank ?? loadWordBank();
+  }
+
+  /** Called once per committed winning message (never for a replay or a rollback); returns the unsubscribe. */
+  onWin(listener: (w: WordGameWinEvent) => void): () => void {
+    this.winListeners.add(listener);
+    return () => this.winListeners.delete(listener);
   }
 
   // --- chat (§§ 11, 17, 21, 22) ---------------------------------------------------------------------
@@ -122,14 +131,17 @@ export class WordGameService {
       if (!R.matchWords(msg.text, active.map(toActive)).length)
         return { outcome: 'ignored' };
     }
-    return this.db.tx(async (q) => {
+    let wonAt = null as Date | null; // set inside the transaction when this message wins
+    const result = await this.db.tx(async (q) => {
       const now = this.clock.now();
       if (await this.won(q, msg))
         return { outcome: 'word_game_win' as const, replayed: true };
       const { row, live } = await this.enter(q, msg.channel_id, now);
       let outcome: WordGameChatOutcome = 'ignored';
-      if (live && (await this.win(q, row, live, msg, now)))
+      if (live && (await this.win(q, row, live, msg, now))) {
         outcome = 'word_game_win';
+        wonAt = now;
+      }
       if (isMots && (await this.mots(q, row, live, msg, now)))
         outcome = outcome === 'ignored' ? 'word_game_command' : outcome;
       if (isStreak) {
@@ -149,6 +161,21 @@ export class WordGameService {
       }
       return { outcome };
     });
+    // After the commit only: a rolled back message (refused credit…) has thrown before this point.
+    if (wonAt) {
+      const event: WordGameWinEvent = {
+        channel_id: msg.channel_id,
+        message_id: msg.message_id,
+        created_at: wonAt.toISOString(),
+      };
+      for (const listener of this.winListeners)
+        try {
+          listener(event);
+        } catch {
+          /* a broken listener never fails the chat message */
+        }
+    }
+    return result;
   }
 
   /** Words found by this message, if any: everything in one go (§§ 4–10, 12.3–12.6, 21, 22). */
