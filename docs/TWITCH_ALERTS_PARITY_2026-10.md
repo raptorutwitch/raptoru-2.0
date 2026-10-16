@@ -1,6 +1,12 @@
 # Alertes Twitch — audit de parité legacy (A0, 16/10/2026)
 
-> **Statut : audit et documentation uniquement.** Rien n'est implémenté ; aucune alerte legacy, source OBS, deck
+> **Statut courant (16/10/2026, voir § 16)** : A0 audit **terminé** · A1 fondation (contrat, variantes, file durable)
+> **implémentée, validée techniquement** (`5d86e2b`) · A2 rendu OBS + aperçu Studio **implémenté, testé
+> automatiquement et examiné visuellement par Antoni** (`b942b58`, `166e7ed`) — validation visuelle globale, pas
+> pixel-perfect. **Non branché** aux vrais événements Twitch, **non testé dans OBS**, **pas en production** (SAMMI
+> sert toujours les alertes).
+>
+> **Statut d'origine (A0) : audit et documentation uniquement.** Rien n'est implémenté ; aucune alerte legacy, source OBS, deck
 > SAMMI, configuration StreamElements / Streamlabs ni abonnement EventSub n'a été modifié. Lecture seule des decks
 > SAMMI (`decks_data.json`), des collections de scènes OBS (`%APPDATA%/obs-studio/basic/scenes/`), du dossier
 > `C:\Users\Antoni\Videos\Alertes Twitch Pour Claude\Version webm\` et du code Raptoru 2.0. Aucun secret recopié
@@ -310,3 +316,42 @@ lecture → `expired` sans rejeu (tests Core). Marges : raid 21,7 s < sécurité
 
 **Non vérifié** : rendu dans OBS / CEF et dans la fenêtre Electron ; son réel (les tests navigateur sont muets) ;
 la petite fixture VP8 des tests ne reproduit pas la corruption (vérifiée sur les vrais fichiers).
+
+## 16. Checkpoint A0 / A1 / A2 (16/10/2026)
+
+| Lot                            | État                                                                   | Preuve                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| A0 — audit de parité           | **terminé**                                                            | §§ 1–12 (variantes, médias, sons, textes, timings, sélection, priorités)                    |
+| A1 — fondation                 | **implémentée, validée techniquement** (tests auto)                    | `5d86e2b`, § 13 ; réception Twitch réelle **non branchée** (aucun abonnement EventSub créé) |
+| A2 — rendu OBS + aperçu Studio | **implémenté, testé automatiquement, examiné visuellement par Antoni** | `b942b58` (§ 14), `166e7ed` (§ 15)                                                          |
+
+**Niveaux de preuve, à ne pas confondre :**
+
+1. **Tests automatiques** (166e7ed) : Core 675 (+ 22 ignorés : PostgreSQL réel absent), Bot 111, Studio 381,
+   Playwright 13/13 (dont 7 alertes, Chromium) ; typecheck, lint, build verts.
+2. **Vrais médias dans Chromium** (agent) : captures de chaque variante et images figées par la timeline ; mesures du
+   canal alpha et des sons (§ 15).
+3. **Validation visuelle manuelle d'Antoni** (onglet Alertes du Studio) : « le texte est globalement bien placé,
+   certaines alertes présentent des erreurs mineures de formatage et de petites imperfections d'animation, mais le
+   résultat général est satisfaisant » — **validation visuelle globale**, pas une validation de chaque variante.
+4. **Non testé** : rendu dans une vraie source OBS, son sur la machine de diffusion, enchaînement réel de la file par
+   la source OBS, vrais événements Twitch, dons StreamElements.
+5. **Production** : rien ; SAMMI / StreamElements servent les alertes.
+
+**Réserves UX / visuelles** (passe ultérieure, aucune corrigée dans ce checkpoint) :
+
+- formats de texte incorrects sur certaines variantes — **à identifier précisément avec Antoni** ;
+- petits défauts d'animation (à lister avec Antoni) ;
+- Follow Dofus Ébène : texte possiblement un peu précoce (lancé à 1,50 s, bandeau plein à ~1,67 s) ;
+- Eren Sub : synchronisation des sous-titres à confirmer à l'oreille si nécessaire ;
+- Don MoneyTest : troncature des pseudos longs (CSS legacy identique) ;
+- Raid Titan : position, message et timings provisoires.
+
+**Suite proposée (rien n'est lancé sans accord)** :
+
+1. corrections de formatage et d'animation, listées avec Antoni ;
+2. test du rendu et du son dans une source OBS de test, hors live ;
+3. calibrage persistant dans Studio (inspiré du mode legacy `?calib=1`, A7) ;
+4. ensuite : raccordement progressif des événements Twitch réels (déduplication, droits du jeton, consommateur
+   EventSub unique), adaptateur des dons StreamElements, neutralisation des sources d'alerte legacy uniquement lors
+   d'une bascule contrôlée.

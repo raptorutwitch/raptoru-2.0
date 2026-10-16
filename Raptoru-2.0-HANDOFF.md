@@ -1,71 +1,81 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 16/10/2026 : Roulette et Slot V1 MIGRÉS ET VALIDÉS EN CONDITIONS RÉELLES · onglet Simulation (lire en premier)
+## État courant — 16/10/2026 (soir) : CHECKPOINT GLOBAL · alertes A2 examinées (lire en premier)
 
-Vérifier `git status` / `git log`. Branche **`feat/compact-video-port`**, HEAD ≥ `42efc87` (+ commit docs du
-checkpoint). Tout ce qui suit `c7f20de` reste **local, non poussé** ; `main` intact (`d2b61ef`). Statut global :
-[`Raptoru-2.0-ETAT-PROJET.md`](Raptoru-2.0-ETAT-PROJET.md) § 0. **Référence unique du module :**
-[`docs/ROULETTE_SLOT_PARITY.md`](docs/ROULETTE_SLOT_PARITY.md) (§ 0 = checkpoint).
+**Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`**, HEAD **`166e7ed`** + le commit
+docs de ce checkpoint. Tout ce qui suit `c7f20de` est **local, non poussé** ; `main` = `origin/main` = `d2b61ef`.
+Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Antoni :
+`docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md` (audit des données historiques) et
+`docs/RAPTORU_2_0_GLOBAL_CHECKPOINT_2026-10-16.md` (point d'étape de pilotage).
 
-- **Validation réelle : 16/10/2026** (par Antoni), vrai chat Twitch, ingestion Lab, sortie LeCroupier_, Wallet Lab :
-  `!roulette 100` victoire +100, `!slots 20` trois symboles identiques +480, `!roulette all` solde doublé, emotes de
-  chaîne affichées ; défaites validées au simulateur. RET-GAME-001 Roulette et RET-GAME-002 Slot **MIGRÉ**.
-- **Commits** : `d4b6b0b` (Core Roulette / Slot) · `73f0235` (panneau rapide Simulation) · `42efc87` (onglet
-  Simulation + chat simulé universel, validé par Antoni).
-- **Règles V1 figées** : Roulette 50 %, net +1× / −1×, `all` = messages all-in ; Slot 3 rouleaux indépendants,
-  5 symboles (🍒 🍊 🍇 🍉 🍈), 3 identiques (1/25), net +24× / −1× ; minimum 20 ; cooldowns 10 s / 2 s par viewer ;
-  textes StreamElements de la chaîne mot pour mot (`/me` retiré) ; refus silencieux ; interrupteur Mini-jeux OFF par
-  défaut.
-- **Onglet Simulation** : chat Lab déplacé depuis Tombola (ingestion, simulateur, identités, rôles) ; mêmes contrôles
-  que le panneau rapide ; conversation = messages reçus (gardés en mémoire par Core, 100 derniers, badge Simulé /
-  Twitch) + vraies réponses `cmd_steps` de LeCroupier_ (« Simulé · non envoyé sur Twitch » quand la sortie est OFF).
-- **Pièges Lab** : live simulé, ingestion Twitch, « Sortie chat réelle » et Mini-jeux se règlent dans l'onglet **Simulation** ou le
-  panneau rapide « Simulation » de la barre du haut (confirmation avant toute écriture dans le vrai chat ; le live
-  simulé reste aussi dans l'onglet Tombola) ; couper Roulette / Slot dans
-  StreamElements (et le Jeu des mots dans SAMMI) avant un test en vrai chat avec la sortie ON. Au dernier relevé
-  (16/10/2026) : sortie réelle OFF, ingestion ON, Mini-jeux ON.
-- **Pas encore en production** : StreamElements reste la production. Activation au cutover économique (Wallet
-  canonique P1-001 lot 2, chat / session de production P1-007).
-- **Duel V1** (RET-GAME-003, `2bf4fc8`, `docs/DUEL_PARITY.md`) : implémenté ; validé par Antoni le 16/10/2026 en
-  Simulation (deux identités) et en vrai chat (VieweruMobilu / Raptoru_ : défi, refus d'un second défi, acceptation,
-  gagnant) **avec la sortie LeCroupier\_ OFF** ; transfert Wallet de ce scénario réel non vérifié manuellement.
-- **Économie unifiée en Lab (16/10/2026)** : Jeu des mots, Roulette / Slot, Duel et gains Tombola passent par
-  `EconomyPort` (`hold` / `move` / `transfer`, dans la transaction métier) ; `labEconomy` reste le défaut,
-  `coreWalletEconomy` refuse explicitement ces mouvements ; **aucun cutover**. Détail : `docs/CUTOVER_PLAN_2026-10.md`
-  § 4.1. Point d'étape global : `docs/RAPTORU_2_0_GLOBAL_CHECKPOINT_2026-10-16.md`.
-- **Prochaine étape** : sur décision d'Antoni (clore le Duel en réel avec sortie ON, décisions D1 / D2 / DM1–DM9, puis
-  alertes Twitch V1 recommandées).
+**Environnements**
 
-## État — 16/10/2026 : Jeu des mots V1 MIGRÉ ET VALIDÉ EN CONDITIONS RÉELLES (historique, valable sauf mention ci-dessus)
+| Où                                                                                                         | Quoi                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local (Studio Lab : `npm run studio`, Studio `http://127.0.0.1:4100`, Core Lab 4301, Docker `raptoru2-pg`) | tout le travail récent, données fictives (Wallet Lab)                                                                                                                                                                                                                         |
+| Staging Coolify `core-staging.raptoru.fr` + Hosted Test                                                    | Core `c7f20de` (14/10), ZIP `c7f20de4430a` ; **rien de postérieur** (ni Bonk VNext, ni jeux, ni alertes)                                                                                                                                                                      |
+| Studio publié                                                                                              | 0.1.5 (30/09)                                                                                                                                                                                                                                                                 |
+| Production                                                                                                 | **legacy uniquement** : SAMMI, StreamElements (Jetons, jeux), EBS / site / leaderboard Coolify et leur base Supabase, Wizebot, Extension publiée. Raptoru 2.0 = Core (staging Coolify, PostgreSQL 17 dédié), Studio Electron, Bot, Extension Hosted Test : rien en production |
 
-Vérifier `git status` / `git log`. Branche **`feat/compact-video-port`**, HEAD ≥ `b82851f` (+ commit docs du
-checkpoint). Tout ce qui suit `c7f20de` reste **local, non poussé** ; `main` intact (`d2b61ef`). Statut global :
-[`Raptoru-2.0-ETAT-PROJET.md`](Raptoru-2.0-ETAT-PROJET.md) § 0. **Référence unique du module :**
-[`docs/WORD_GAME_PARITY.md`](docs/WORD_GAME_PARITY.md) (§ 0 = checkpoint, § 2 = statuts RET-WORD).
+**Ce qui fonctionne et son niveau de preuve** (« validé » = testé par Antoni)
 
-- **Validation réelle : 16/10/2026** (par Antoni) — Studio Lab sur la vraie pile, vrai chat Twitch (SAMMI fermé),
-  Wallet Lab, sortie chat LeCroupier_, son OBS par push SSE, panneau Studio. RET-WORD-001 à 004 **MIGRÉ**, RET-WORD-005
-  **PARTIEL** (stats enregistrées ; affichage / progression plus tard).
-- **Commits** : Lot 0 `b4a67aa` · Lot 1 `cf0e88b` · Lot 2 `ebb9f12` · Lot 3 `bde4c11` · Lot 4 `d260f09` · Lot 5
-  `55bb8d1` · son push `3a89b9c` · « Voir la réponse » `b82851f`.
-- **Décisions figées (V1 = parité legacy, pas de refonte)** : pas d'UI viewer Extension ; mots actifs remis à zéro
-  entre deux sessions live, restaurés après un restart dans la même session ; jamais un mot déjà actif retiré une
-  seconde fois (un mot terminé peut ressortir) ; casse ignorée, accents obligatoires ; mot doré ×4 en un seul message ;
-  un seul crédit Wallet par message gagnant, échec Wallet = rollback complet ; LeCroupier_ = compte de sortie chat ;
-  Studio ne montre la réponse que sur demande (« Voir la réponse »), localement.
-- **Son** : plus de polling. Victoire commitée → `WordGameWinEvent` → SSE Core → Studio → source OBS (`EventSource`)
-  → `ShuffleWordsSong.ogg` ; dédoublonnage par `message_id`, reconnexion sans rejeu. Ne pas retoucher sans décision.
-- **Pièges Lab** : live simulé, ingestion Twitch, « Sortie chat réelle » et Mini-jeux se règlent dans l'onglet **Simulation** ou le
-  panneau rapide « Simulation » de la barre du haut (confirmation avant toute écriture dans le vrai chat ; le live
-  simulé reste aussi dans l'onglet Tombola) ; sortie ON = LeCroupier_ écrit
-  dans le vrai chat de `raptoru_` (couper le Jeu des mots SAMMI pendant un test) ; la source OBS du son doit être
-  ajoutée avec l'URL copiée dans le panneau ; Studio Lab exige Docker Desktop (conteneur `raptoru2-pg`). Suite Core :
-  `npx vitest run --maxWorkers=4` (timeouts de charge en parallélisme complet).
-- **Pas encore en production** : SAMMI reste la production. Activation et coupure du deck SAMMI « Jeu des mots »
-  seulement au cutover économique (Wallet canonique P1-001 lot 2, chat / session de production P1-007).
-- **Prochaine étape** (stratégie : finir la migration du legacy retenu avant les gros reworks) : **Roulette + Slot**
-  (RET-GAME-001 / 002) en V1 de parité legacy rapide — refonte Extension plus tard (décision d'Antoni). Alternative
-  du registre : alertes (PRIORITÉ 2, moteur complet). Choix à confirmer par Antoni.
+- **Validé en Lab / vrai chat Twitch** : Hub, Bonk VNext, Soundboard, TTS, Tombola, Modération D4, Commands V2,
+  onglet Simulation, **Jeu des mots V1**, **Roulette / Slot V1**, **Duel V1** (réserves ci-dessous).
+- **Validé au staging** (live Hosted Test du 07/10) : Soundboard, TTS, STOP / remboursement, Bonk V2, Modération,
+  Tombola.
+- **Implémenté, tests automatiques seulement** : `EconomyPort` unifié (Jeu des mots, Roulette / Slot, Duel, gains
+  Tombola ; Bonk / Sons / TTS inchangés ; Wallet canonique non branché) ; alertes A1 (file durable).
+- **Examiné visuellement par Antoni** : alertes A2 (onglet Alertes du Studio, vrais médias) — « globalement bien
+  placé », erreurs mineures de formatage et d'animation, résultat satisfaisant : **validation globale, pas
+  pixel-perfect**. **Non testé** : rendu et son dans OBS, vrais événements Twitch, dons StreamElements.
+- **Tests au `166e7ed`** : Core 675 (+22 ignorés : PostgreSQL réel absent), Studio 381, Bot 111, Playwright 13/13 ;
+  typecheck, lint, build verts.
+
+**Réserves ouvertes (non bloquantes, rien de corrigé dans ce checkpoint)**
+
+- Alertes A2 (`docs/TWITCH_ALERTS_PARITY_2026-10.md` § 16) : formats de texte incorrects sur certaines variantes (à
+  identifier avec Antoni), petits défauts d'animation, Dofus Ébène (texte un peu précoce ?), Eren Sub (synchro à
+  l'oreille), Don MoneyTest (pseudos longs tronqués), Raid Titan (position, message, timings provisoires).
+- Duel (`docs/DUEL_PARITY.md`) : annonce réelle LeCroupier\_ et variation des deux soldes non revérifiées dans le
+  dernier scénario réel.
+
+**Fonctions legacy retenues** (registre figé du 06/10, 76) : 26 migrées (Lab ou réel), 25 partielles (dont les 7
+alertes), 25 absentes, 0 en production — détail et incertitudes : `Raptoru-2.0-ETAT-PROJET.md` § 0.5b.
+
+**Priorités suivantes (rien ne se lance sans accord d'Antoni)**
+
+1. Alertes : lister puis corriger les petites erreurs de formatage / animation ; tester rendu et son dans une
+   **source OBS de test hors live** ; calibrage persistant dans Studio (A7, inspiré de `?calib=1`).
+2. Ensuite : raccordement progressif des vrais événements Twitch (déduplication, droits du jeton, consommateur
+   EventSub unique), adaptateur des dons StreamElements ; neutralisation des sources d'alerte legacy **uniquement**
+   lors d'une bascule contrôlée.
+3. Puis : Oracle / Eight Ball et les autres fonctions retenues ; décisions et imports historiques du Wallet
+   canonique (D1, D2, DM1–DM9) ; déploiement coordonné du staging quand Antoni le décide.
+
+**Pièges Lab** : live simulé, ingestion Twitch, « Sortie chat réelle » et Mini-jeux se règlent dans l'onglet
+**Simulation** ou le panneau « Simulation » de la barre du haut ; dernier relevé (16/10/2026) : sortie réelle OFF,
+ingestion ON, Mini-jeux ON. Sortie ON = LeCroupier\_ écrit dans le vrai chat de `raptoru_` : couper le module
+équivalent dans SAMMI / StreamElements avant un test réel. La source OBS des alertes s'ajoute avec l'URL copiée dans
+l'onglet Alertes (jeton persistant) ; médias d'alertes dans le stockage Studio (`.runtime/alerts/media`, import :
+`apps/studio/server/src/alerts/import-cli.ts`, originaux jamais modifiés). Suite Core : `npx vitest run
+--maxWorkers=4`.
+
+**Interdits sans feu vert explicite d'Antoni** : push, merge, tag, `studio:release`, déploiement, migration distante,
+publication d'Extension, changement Twitch (EventSub, récompenses), SAMMI, OBS de production, StreamElements, Wallet
+réel, médias originaux. Des tests Lab réussis ne valent jamais « prêt pour la production ».
+
+**Documents canoniques** : statut global `Raptoru-2.0-ETAT-PROJET.md` § 0 · cutover `docs/CUTOVER_PLAN_2026-10.md`
+· alertes `docs/TWITCH_ALERTS_PARITY_2026-10.md` (§ 16) · Jeu des mots `docs/WORD_GAME_PARITY.md` · Roulette / Slot
+`docs/ROULETTE_SLOT_PARITY.md` · Duel `docs/DUEL_PARITY.md` · Bonk `docs/BONK_VNEXT_AUDIT_2026-10.md` · audit
+`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`.
+
+## Historique — 16/10/2026 (journée) : Jeu des mots, Roulette / Slot, Simulation, Duel, EconomyPort
+
+Détail et commits dans les références de module (§ 0 de chacune) ; résumé : Jeu des mots V1 (`b4a67aa` →
+`b82851f`, son OBS par push SSE à ne pas retoucher sans décision) et Roulette / Slot V1 (`d4b6b0b`) validés en vrai
+chat le 16/10 ; onglet Simulation (`73f0235`, `42efc87`) validé ; Duel V1 (`2bf4fc8`) validé en Lab ; `EconomyPort`
+(`85a48fe`, `docs/CUTOVER_PLAN_2026-10.md` § 4.1). Activation production de ces modules : au cutover économique
+(Wallet canonique P1-001 lot 2, chat / session de production P1-007).
 
 ## État — 15/10/2026 : Bonk VNext FONCTIONNELLEMENT TERMINÉ ET VALIDÉ EN LOCAL (historique, valable sauf mention ci-dessus)
 

@@ -26,9 +26,9 @@ Répartition des documents (une seule source de vérité par sujet) :
 
 | Élément | Valeur |
 | --- | --- |
-| Branche de travail | `feat/compact-video-port`, dernier commit de code **`42efc87`** (onglet Simulation) — + le commit docs de ce checkpoint ; Roulette / Slot `d4b6b0b`, Jeu des mots jusqu'à `b82851f`, Bonk VNext jusqu'à `c4b82c9` |
+| Branche de travail | `feat/compact-video-port`, dernier commit de code **`166e7ed`** (consolidation alertes A2) — + le commit docs de ce checkpoint ; alertes A1 `5d86e2b` / A2 `b942b58`, `EconomyPort` `85a48fe`, Duel `2bf4fc8`, Roulette / Slot `d4b6b0b`, Simulation `42efc87`, Jeu des mots jusqu'à `b82851f`, Bonk VNext jusqu'à `c4b82c9` |
 | `main` | **`d2b61ef`** = `origin/main` (intact depuis le 14/10/2026) |
-| `origin/feat/compact-video-port` | **`c7f20de`** — tout ce qui suit est **local, non poussé** : Bonk VNext (`c410833` → `c4b82c9`), Jeu des mots V1 (`b4a67aa` → `b82851f`), Roulette / Slot et Simulation (`d4b6b0b` → `42efc87`) + docs |
+| `origin/feat/compact-video-port` | **`c7f20de`** — tout ce qui suit est **local, non poussé** : Bonk VNext (`c410833` → `c4b82c9`), Jeu des mots V1 (`b4a67aa` → `b82851f`), Roulette / Slot et Simulation (`d4b6b0b` → `42efc87`), Duel (`2bf4fc8`), `EconomyPort` (`85a48fe`), alertes A1 / A2 (`5d86e2b` → `166e7ed`) + docs |
 | Remote | `origin` = `github.com/raptorutwitch/raptoru-2.0` (privé) ; branche locale annexe `feat/calibration-video-component` (`d13dfb9`) |
 | **Staging Coolify** (`raptoru-core-staging`, `https://core-staging.raptoru.fr`) | Core sur **`c7f20de`** (déployé le 14/10/2026, manuel), PostgreSQL 17 dédié, chaîne `raptoru_` (83603689), paiement **simulé** (Wallet de test) |
 | **Hosted Test** (console Twitch, comptes testeurs) | ZIP **`raptoru-live-STAGING-hosted-test-c7f20de4430a.zip`** → Core staging |
@@ -37,9 +37,10 @@ Répartition des documents (une seule source de vérité par sujet) :
 
 ## 0.2 Santé du projet
 
-- **Tests (16/10/2026)** : Core 600 (+22 ignorés sans PostgreSQL ; `--maxWorkers=4`) · Studio server 353 (en suite
-  complète, quelques tests lourds Bonk / TTS / transport tombent sous charge et passent seuls) · Bot 101 ;
-  Desktop 24 · Extension 41 (15/10, non touchés depuis) ; lint, format, typecheck, build verts. E2E navigateur versionnés : `npm run e2e`.
+- **Tests (16/10/2026, `166e7ed`)** : Core 675 (+22 ignorés : tests sur PostgreSQL réel, base locale non lancée ;
+  `--maxWorkers=4`) · Studio server 381 · Bot 111 · Playwright 13/13 (dont 7 alertes, Chromium ; `npm run e2e`) ;
+  Desktop 24 · Extension 41 (15/10, non touchés depuis) ; lint, format, typecheck, build verts. En suite complète sous
+  charge, quelques tests lourds Studio peuvent tomber et passent seuls (connu).
 - **Audit Astra** : P0 = 0. Restent ouverts les **5 P1 de cutover** (001, 006, 007, 010, 019 — en cours ou bloqués par
   une décision), 3 P2 différés (015, 021, 025) et 3 P3 volontaires (001 signature Windows, 002 nommage BonkLab, 006 UX).
 - **Ce qui va bien** : tous les modules V2 du stream (Hub, Bonk, Soundboard, TTS, Tombola, Modération, Commands) sont
@@ -47,10 +48,14 @@ Répartition des documents (une seule source de vérité par sujet) :
   07/10/2026 ; **Bonk VNext fonctionnellement terminé et validé en local** (Lots 0–3, 5, 6 + tutoriel / UX, 14–15/10/2026) ;
   **Jeu des mots V1 fonctionnellement migré et validé en conditions réelles le 16/10/2026** (vrai chat Twitch, Wallet
   Lab, sortie LeCroupier_, son OBS SSE, Studio) ; **Roulette et Slot V1 fonctionnellement migrés et validés en
-  conditions réelles le 16/10/2026** (vrai chat Twitch, Wallet Lab, LeCroupier_) ; onglet Studio **Simulation** validé.
+  conditions réelles le 16/10/2026** (vrai chat Twitch, Wallet Lab, LeCroupier_) ; onglet Studio **Simulation** validé ;
+  **Duel V1 validé en Lab** (Simulation + vrai chat, réserves mineures) ; économie des modules **unifiée sur
+  `EconomyPort`** (Lab) ; **alertes Twitch A0 / A1 / A2** : audit, file durable, source OBS et aperçu Studio, examinés
+  visuellement par Antoni (réserves UX ; non branchées aux vrais événements ; non testées dans OBS).
 - **Ce qui manque pour la production** : l'économie réelle (Wallet canonique, import StreamElements, Points de chaîne),
-  la publication de l'Extension, et la migration des fonctionnalités legacy encore absentes (jeux SE duel / oracle,
-  alertes, FX…). Voir 0.6 et 0.7.
+  la publication de l'Extension, les données historiques, et la migration des fonctionnalités legacy encore absentes
+  (Oracle, FX / Points de chaîne, modération ludique, progression…) ; les alertes restent à brancher et à valider
+  dans OBS. Voir 0.5b, 0.6 et 0.7.
 - **Écart local / livré** : beaucoup de travail validé n'est **pas encore livré** : rien depuis Studio 0.1.5 n'est
   publié ; Bonk VNext n'est même pas sur le staging.
 
@@ -84,10 +89,12 @@ tout environnement livré : les deux colonnes se lisent séparément.
 | **Modération V2** | parité D4 complète ; vue Restrictions (`b6c5895`, `48ef6db`) ; retour viewer des restrictions (`1865d1e`, `2ed1d94`, `3bc40cb`) | D4 **VALIDÉ** 01/10 (Lab), **VALIDÉ STAGING** 07/10 ; Restrictions : **validation non consignée** | **STAGING** ; **pas** dans 0.1.5 | badges VIP / Sub et synchro ban / timeout Twitch (dépendances extérieures) | consigner la validation des Restrictions |
 | **Jeu des mots V1** | parité legacy (deck SAMMI) : règles pures + banque, service Core (session live, cycle 5–15 min, transaction unique, un crédit Wallet par message, idempotence), sortie chat par `cmd_steps` (LeCroupier_), Bot qui transmet tout le chat, panneau Studio (« Voir la réponse » local), son OBS par push SSE — `b4a67aa` → `b82851f` | **VALIDÉ** en conditions réelles le **16/10/2026** (Studio Lab, vrai chat Twitch, Wallet Lab, OBS) | **local uniquement** — pas sur le staging, pas publié ; production = deck SAMMI | cutover économique (Wallet canonique P1-001 lot 2) et chat / session de production (P1-007) ; RET-WORD-005 : affichage des stats plus tard | aucune avant le cutover ; détail : [`docs/WORD_GAME_PARITY.md`](docs/WORD_GAME_PARITY.md) § 0 |
 | **Roulette / Slot V1** | parité StreamElements : règles pures (mises nombre / % / k / m / `all`, 50 % / 3 rouleaux 1/25, net +1× / +24×), service Core (transaction unique sous verrou Wallet, cooldowns 10 s / 2 s, idempotence, refus silencieux, plafond Wallet avant tirage), textes et symboles de la chaîne, réponses LeCroupier_ par `cmd_steps`, interrupteur Mini-jeux OFF par défaut — `d4b6b0b` | **VALIDÉ** en conditions réelles le **16/10/2026** (vrai chat Twitch, Wallet Lab ; défaites au simulateur) | **local uniquement** — pas sur le staging, pas publié ; production = StreamElements | cutover économique (P1-001 lot 2) et chat / session de production (P1-007) | aucune avant le cutover ; détail : [`docs/ROULETTE_SLOT_PARITY.md`](docs/ROULETTE_SLOT_PARITY.md) § 0 |
+| **Duel V1** | parité StreamElements (`!duel <pseudo> [mise]`, `!accept` / `!deny` / `!cancelduel`, 2 min, 50/50, mise max 100 000 ramenée, transfert perdant → gagnant via `EconomyPort.transfer`, idempotence, concurrence), même module et interrupteur que Roulette / Slot — `2bf4fc8` | **VALIDÉ** en Lab le 16/10/2026 (Simulation + vrai chat avec de vrais comptes : défi, refus d'un second défi, acceptation, résultat) ; réserves : annonce réelle LeCroupier\_ et variation des deux soldes non revérifiées dans ce scénario | **local uniquement** ; production = StreamElements | cutover économique (P1-001 lot 2, P1-007) | observer une fois l'annonce réelle et les soldes ; détail : [`docs/DUEL_PARITY.md`](docs/DUEL_PARITY.md) |
 | **Studio — Simulation** | panneau rapide « Simulation » (barre du haut : live simulé, ingestion, sortie réelle, mini-jeux, confirmations) `73f0235` ; onglet **Simulation** (chat Lab déplacé depuis Tombola, chat simulé universel : messages reçus gardés en mémoire par Core + vraies réponses `cmd_steps`, statuts honnêtes) `42efc87` | **VALIDÉ** par Antoni le 16/10/2026 | **local uniquement** (pas dans une release) | — | — |
 | **Commands V2** | A0 → F : modèle, admission, file, onglet Studio, Extension (modération + public) | **VALIDÉ LOCAL** (Lab) | **local uniquement** — migrations Commands jamais au staging | hors cutover (décision) ; dettes mineures (`COMMANDS_V2_STATUS.md`) | — |
 | **Points de chaîne** | aucun raccordement V2 (le legacy EBS gère les redemptions) | — | **BLOQUÉ** (P1-010) ; production = legacy | décision D2 (modèle de redemption) | en dernier dans l'ordre du cutover |
-| **Activity / overlays / alertes** | overlays existants : Bonk, lecteur TTS, overlay Tombola, lecteur Soundboard ; historique / classement de l'Extension | overlays validés avec leurs modules | overlays : comme leurs modules ; **alertes stream (raid / follow / sub / bits / don / gift) : NON COMMENCÉ** (SAMMI) | conception d'un moteur d'alertes | après les modules prioritaires |
+| **Activity / overlays** | overlays existants : Bonk, lecteur TTS, overlay Tombola, lecteur Soundboard ; historique / classement de l'Extension | overlays validés avec leurs modules | comme leurs modules | — | — |
+| **Alertes Twitch** (follow, sub, gifts, bits, raid, don) | A0 audit ; A1 contrat normalisé, variantes legacy, file durable (dédup, priorités, bail, reprise) — `5d86e2b` ; A2 médias importés dans le stockage Studio, raid Titan converti (alpha + son séparé), moteur commun source OBS / aperçu, onglet Alertes avec timeline — `b942b58`, `166e7ed` | A1 : tests auto ; A2 : **examen visuel global par Antoni** (« globalement bien placé », erreurs mineures de formatage / animation) — pas pixel-perfect | **local uniquement** ; production = SAMMI | réception Twitch réelle non branchée ; rendu et son dans OBS non testés ; réserves UX ; dons SE sans adaptateur | corrections UX listées avec Antoni, test dans une source OBS de test ; détail : [`docs/TWITCH_ALERTS_PARITY_2026-10.md`](docs/TWITCH_ALERTS_PARITY_2026-10.md) § 16 |
 | **Intégration OBS** | obs-websocket **lecture seule** : sources Bonk, reconnexion auto + mot de passe chiffré (`safeStorage`), capture de scène, cible Auto | **VALIDÉ LOCAL** (Lots 0–3) | **local** ; Studio 0.1.5 n'a que la connexion manuelle | aucun contrôle de scène (FX / Creepy / BRB) : **NON COMMENCÉ** | — |
 | **Transport Studio ↔ Core** (P1-019) | identité d'installation, HTTPS, protocole, profils, cockpit Production | **VALIDÉ STAGING** (06–07/10) | **STAGING** | rate limiting, coupures réseau réelles, cockpit incomplet (Commands…), URL en constante de build | `wrong_channel` réel au prochain déploiement |
 | **Frontière viewer** `/v1/ext` (P1-006) | JWT d'Extension vérifié par le Core, acteur du JWT, rate limit, CORS, idempotence | **VALIDÉ STAGING** (live 07/10, paiement simulé) | **STAGING** | vrai secret d'Extension, publication, capacité | au cutover |
@@ -101,12 +108,31 @@ tout environnement livré : les deux colonnes se lisent séparément.
 - **Lab + vrai chat Twitch** : **Jeu des mots V1** — validation réelle le 16/10/2026 (vrai chat, Wallet Lab, annonces
   LeCroupier_, son OBS SSE, Studio ; SAMMI fermé pendant le test) ; **Roulette et Slot V1** — validation réelle le
   16/10/2026 (victoires Roulette / Slot / all-in en vrai chat, défaites au simulateur, Wallet Lab, LeCroupier_) ;
-  onglet **Simulation** de Studio (16/10/2026).
+  onglet **Simulation** de Studio (16/10/2026) ; **Duel V1** (16/10/2026, Simulation + vrai chat ; réserves : annonce
+  réelle et soldes non revérifiés dans ce scénario).
+- **Examen visuel (Studio, vrais médias)** : alertes A2 — résultat général satisfaisant selon Antoni, avec réserves
+  de formatage / animation ; **pas** de test dans OBS ni avec de vrais événements.
 - **Staging réel** : Core staging (06/10) ; Studio Production appairé ; **live Hosted Test → Core staging → Studio →
   OBS (07/10)** : Soundboard, TTS, STOP / remboursement, Bonk, Modération, Tombola ; OAuth emotes viewer (14/10, sauf
   affichage overlay).
 - **Publié** : Studio 0.1.5 (Studio autonome, Hub, Bonk V2, Soundboard V2, TTS V2, en mode Lab).
 - **Production** : rien de Raptoru 2.0.
+
+## 0.5b Fonctions legacy retenues (registre figé du 06/10/2026, 76 entrées)
+
+Le registre lui-même (PDF du 06/10) n'est pas modifié et n'est pas dans le dépôt. Décompte au 16/10/2026, à partir du
+dernier point (checkpoint global du 16/10 : **26 migrées / 18 partielles / 32 absentes** ; un autre rapport citait
+25 / 19 / 32 — écart d'une entrée non résolu) et des preuves enregistrées depuis :
+
+| Statut | Nombre | Contenu |
+| --- | --- | --- |
+| Migrées et validées (Lab ou réel) | **26** | dont Jeu des mots (RET-WORD-001 à 004), Roulette / Slot (RET-GAME-001 / 002), Duel (RET-GAME-003, réserves) ; une dizaine validées aussi au staging (live du 07/10 : Hub, TTS, Sons, Bonk V2, Tombola, Modération) |
+| Partielles | **25** | les 18 précédentes + **RET-ALERT-001 à 007** (fonctionnelles en Lab, examinées visuellement ; non branchées aux événements Twitch, non testées dans OBS) |
+| Absentes | **25** | Oracle, effets OBS / Points de chaîne, modération ludique, économie sub, progression, site / profils, Shushu, musique |
+| Actives en production | **0** | la production reste legacy |
+
+Incertitude : les libellés exacts des sept entrées RET-ALERT ne sont pas relus (registre hors dépôt) ; elles sont
+comptées ensemble comme partielles. « Migrée » n'implique aucun environnement livré.
 
 ## 0.6 Roadmap globale (ordre logique)
 
@@ -129,6 +155,11 @@ moment-là). Détail : [`docs/WORD_GAME_PARITY.md`](docs/WORD_GAME_PARITY.md) §
 RET-GAME-001 et 002 MIGRÉ (Wallet Lab). Activation production au cutover économique (Roulette / Slot coupés dans
 StreamElements à ce moment-là). Détail : [`docs/ROULETTE_SLOT_PARITY.md`](docs/ROULETTE_SLOT_PARITY.md) § 0.
 
+**B4. TERMINÉ (en Lab) — Duel V1, économie unifiée, alertes A0–A2 (16/10/2026).** Duel `2bf4fc8` validé en Lab
+(réserves mineures, `docs/DUEL_PARITY.md`) ; `EconomyPort` pour Jeu des mots, Roulette / Slot, Duel et gains Tombola
+(`85a48fe` ; Bonk / Sons / TTS inchangés ; Wallet canonique plus tard) ; alertes A0 audit, A1 fondation `5d86e2b`, A2
+rendu OBS + aperçu Studio `b942b58` / `166e7ed` (réserves UX, `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 16).
+
 **C. Déploiement coordonné du travail validé** (sur accord d'Antoni) : Core staging (Lot 0 : sweep périodique,
 `wrong_channel`) **puis** Studio, validation staging (sweep et `wrong_channel` réels, chaîne complète Hosted Test →
 Core → Studio → OBS avec Bonk VNext), puis seulement décision de release Studio. Bonk VNext demande aussi la
@@ -140,12 +171,12 @@ staging) → P1-007 frontière production → P1-010 Points de chaîne → cutov
 
 **E. Migration fonctionnelle restante** (inventaire § 13, ordre indicatif ; stratégie : finir la migration du legacy
 retenu avant les gros reworks) : ~~Jeu des mots~~ (migré, 16/10/2026) → ~~Roulette et Slot~~ (migrés, 16/10/2026)
-→ **prochaine cible : Duel** (RET-GAME-003, StreamElements, V1 de parité ; préparation faite, implémentation sur
-accord d'Antoni) → Oracle (RET-GAME-004) → instrumentation stats / profils →
+→ ~~Duel~~ (migré en Lab, 16/10/2026) → **alertes Twitch : finir A2** (corrections UX, test OBS, calibrage
+persistant A7) puis raccordement des vrais événements et des dons SE → Oracle (RET-GAME-004) → instrumentation stats /
+profils →
 achievements / cosmétiques → FX / Creepy / BRB / NTM et alertes → Votekick / Caution / Ban aléatoire → Spotify →
-commandes viewer personnalisées, cash-in PDC → site / Viewer Web. À arbitrer par Antoni : le registre du 06/10 classe
-les alertes (RET-ALERT-001 à 007) en PRIORITÉ 2 et les jeux en APRÈS PILOTE ; les alertes demandent un moteur
-d'alertes complet, les jeux réutilisent le schéma déjà validé (chat, Wallet Lab, `cmd_steps`).
+commandes viewer personnalisées, cash-in PDC → site / Viewer Web. En parallèle : décisions et imports historiques
+nécessaires au Wallet canonique (D1, D2, DM1–DM9 de l'audit données).
 
 **F. Cutover final** : audit SE / SAMMI, import des soldes (dry-run, contrôle), gel court, bascule économique, puis
 modules un par un ; legacy coupé ensuite.
@@ -162,10 +193,10 @@ modules un par un ; legacy coupé ensuite.
    principal rester l'unique consommateur EventSub.
 5. **Transport** (P1-019) : rate limiting, coupures réseau réelles, cockpit Production incomplet (Commands, config
    encore sous `STUDIO_SECRET`).
-6. **Fonctionnel** : alertes, FX, jeux SE (duel, oracle), Votekick… pas encore migrés — SAMMI / StreamElements
-   doivent continuer à les servir ou une décision les abandonne avant la coupure économique. Le Jeu des mots V1,
-   Roulette et Slot V1 sont migrés (16/10/2026) mais restent servis par SAMMI / StreamElements jusqu'au cutover
-   économique.
+6. **Fonctionnel** : Oracle, FX / Points de chaîne, Votekick… pas encore migrés ; alertes portées en Lab mais non
+   branchées aux événements Twitch ni testées dans OBS — SAMMI / StreamElements doivent continuer à servir tout cela
+   ou une décision l'abandonne avant la coupure. Le Jeu des mots, Roulette / Slot et le Duel sont migrés en Lab
+   (16/10/2026) mais restent servis par SAMMI / StreamElements jusqu'au cutover économique.
 7. **Livraison** : Studio 0.1.5 est loin du HEAD ; une release suppose le Core compatible déployé d'abord.
 
 ## 0.8 Dettes connues
@@ -193,9 +224,11 @@ modules un par un ; legacy coupé ensuite.
 
 ## 0.10 Prochaine étape recommandée
 
-**Bonk VNext est terminé et validé en local** : chantier fermé. Prochaine étape : le module suivant de la roadmap
-(0.6 E) ; le **déploiement coordonné** de Bonk VNext (Core staging + migration Lab, puis Studio, puis nouveau ZIP
-Hosted Test pour l'Extension) reste une étape séparée, seulement avec l'accord d'Antoni.
+**Finir les alertes A2 avant tout nouveau module** (sur accord d'Antoni) : lister avec lui les erreurs de formatage
+et d'animation puis les corriger ; tester le rendu et le son dans une **source OBS de test hors live** ; calibrage
+persistant dans Studio (A7, inspiré de `?calib=1`). Ensuite seulement : vrais événements Twitch, dons
+StreamElements, puis Oracle. Le **déploiement coordonné** (Core staging + migrations Lab, puis Studio, nouveau ZIP
+Hosted Test) reste une étape séparée, seulement avec l'accord d'Antoni.
 
 ---
 
@@ -930,6 +963,9 @@ SAMMI gère actuellement :
 - Gift.
 
 Objectif futur : moteur d’alertes centralisé, cohérent avec Raptoru 2.0, sans multiplier des boutons SAMMI indépendants.
+
+État au 16/10/2026 : moteur porté en Lab (A1 file durable, A2 source OBS + aperçu Studio), non branché aux vrais
+événements, non testé dans OBS ; SAMMI reste la production. Voir § 0.4 et `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 16.
 
 ## Cam / OBS / ambiance
 - overlay cam Shushu animé avec expressions ;

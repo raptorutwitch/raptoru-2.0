@@ -17,6 +17,14 @@ l'audit : [`ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-10.md) · re
 > sweep périodique et le refus `wrong_channel` du transport Studio → **au prochain déploiement : Core staging d'abord,
 > puis Studio** (l'ancien Core refuse le champ `channel_id` du heartbeat), validation sur le staging, puis seulement
 > décision de promotion.
+>
+> **Point d'étape 16/10/2026** (HEAD local `166e7ed`, rien de poussé ni déployé au-delà de `c7f20de`). Migrés et validés
+> **en Lab** depuis : Jeu des mots, Roulette / Slot, Duel (réserves : `DUEL_PARITY.md`), unification `EconomyPort`
+> (§ 4.1, Wallet Lab), alertes Twitch A1 / A2 (`TWITCH_ALERTS_PARITY_2026-10.md` § 16 : file durable, source OBS
+> servie par Studio, aperçu — **non branchées** aux événements Twitch, **non testées dans OBS**). Aucun de ces modules
+> n'est sur le staging (leurs migrations Lab n'y sont pas). Coexistence : SAMMI / StreamElements gardent les jeux et
+> les alertes en production ; les sources d'alerte legacy ne seront neutralisées que lors d'une bascule contrôlée, et
+> les abonnements EventSub d'alertes resteront au seul consommateur Raptoru 2.0 (P1-007).
 
 ---
 
@@ -833,7 +841,8 @@ Validation manuelle par Antoni requise avant de considérer le parcours comme va
 - Toute création, modification ou suppression de récompense Channel Points réelle ; toute release d'extension ; tout
   changement EventSub réel. Exception décidée par Antoni le 06/10/2026 : un ZIP **Hosted Test** STAGING pour le
   premier test réel (comptes testeurs, Core staging, paiement simulé), téléversé par Antoni.
-- Viewer Web, statistiques / achievements, alertes, Spotify, jeux SE, Jeu des mots : hors de cette phase.
+- Viewer Web, statistiques / achievements, Spotify : hors de cette phase. Alertes, jeux SE et Jeu des mots sont
+  portés en Lab (point d'étape du 16/10) mais leur activation en production reste hors de cette phase.
 - Bus d'événements, Realtime, microservices, moteur de workflow, refonte du framework frontend.
 - Renommage des tables / modules « Lab » (P3-002, dette acceptée), signature Windows (P3-001, avant diffusion
   large), backlog UX (P3-006), P2-015 / P2-021 / P2-025 (différés ; P2-025 se dimensionne avec P1-006).

@@ -1,7 +1,13 @@
 # Duel V1 — référence de parité (RET-GAME-003)
 
-> **Statut (16/10/2026) : implémenté en Lab (tests automatiques verts), PAS ENCORE VALIDÉ par Antoni** (Simulation
-> puis vrai chat Twitch). Migration fonctionnelle rapide du Duel
+> **Statut (16/10/2026) : DUEL V1 FONCTIONNELLEMENT MIGRÉ ET VALIDÉ EN LAB — PAS EN PRODUCTION** (`2bf4fc8`).
+> Validé par Antoni le 16/10/2026 dans l'onglet Simulation et en vrai chat Twitch avec de vrais comptes (création du
+> défi, refus d'un second défi, acceptation, résultat). Transferts Wallet et protections : tests automatiques. Réserves
+> (non bloquantes, non testées) : l'annonce réelle par LeCroupier\_ n'a pas été vérifiée pendant le dernier scénario
+> (sortie chat réelle OFF) et la variation des deux soldes n'a pas été revérifiée à la main dans ce scénario. Depuis
+> `85a48fe`, le transfert passe par `EconomyPort.transfer` (Wallet Lab, aucun cutover).
+>
+> Migration fonctionnelle rapide du Duel
 > StreamElements, **sans refonte** : chat seulement, Wallet Lab (Jetons), réponses par LeCroupier_ via la file durable
 > `cmd_steps`, même module Core que Roulette / Slot (`apps/core-api/src/mini-games/`) et même interrupteur
 > « Mini-jeux » (OFF par défaut). Pas d'Extension, pas d'onglet Studio dédié. Production = StreamElements jusqu'au
@@ -101,6 +107,10 @@ Le `/me` initial est retiré à l'envoi (message normal, jamais un « /me » lit
 Automatique : parsing, mises, états, transferts, idempotence, concurrence, expiration, rollback, mots réservés.
 Manuelle (Antoni) : onglet Simulation avec deux identités (« Viewer Lab » = `lab_viewer`, « Modo Lab » = `lab_modo`),
 puis vrai chat Twitch avec le Duel coupé dans StreamElements.
+
+**Résultat (16/10/2026)** : validé par Antoni en Simulation (deux identités) puis en vrai chat Twitch (VieweruMobilu /
+Raptoru\_ : défi, refus d'un second défi, acceptation, gagnant). Reste à observer une fois (réserves ci-dessus) :
+l'annonce réelle avec la sortie LeCroupier\_ ON et les deux soldes avant / après un duel avec mise.
 
 ## 8. Plus tard (hors V1)
 

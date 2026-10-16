@@ -14,7 +14,8 @@
 
 ## 0. Checkpoint de migration (16/10/2026)
 
-**Module prêt ; production en attente du cutover.** Commits locaux, branche `feat/compact-video-port`, non poussés :
+**Module prêt ; production en attente du cutover.** Depuis `85a48fe` (16/10/2026), leurs mises et gains passent par
+`EconomyPort` (Wallet Lab inchangé, aucun cutover ; `docs/CUTOVER_PLAN_2026-10.md` § 4.1). Commits locaux, branche `feat/compact-video-port`, non poussés :
 
 | Commit    | Contenu                                                                                                                                                       |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
