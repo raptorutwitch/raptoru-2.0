@@ -272,3 +272,41 @@ Simulation ; aperçu / calibrage (A7).
 - **Limites** : aucun test dans OBS réel ni Electron ; raid provisoire ; Bits / MoneyTest sont du VP8 + alpha (lus par
   Chromium, à confirmer dans OBS) ; les noms / montants longs du don sont tronqués comme dans le legacy (pas de boucle
   d'ajustement d'origine) ; Bot toujours non branché (aucun abonnement EventSub) ; calibrage persistant = A7.
+
+## 15. Consolidation A2 (16/10/2026) — synchronisation et timeline
+
+**Réglages** : les 14 variantes du catalogue Core reprennent à l'identique `Twitch_Alerts.html` (vidéo, son,
+gabarit, `showAt` / `fadeOutAt` / `hideAt`, durée, zone, position et taille Dofus, volume, priorité). Comme le legacy,
+les timings comptent depuis le lancement de l'alerte (pas depuis le départ vidéo). Seul écart voulu : la fin
+d'alerte attend la fin du son `keepAudio` (le legacy libérait la file à la fin de la vidéo).
+
+**Mesures sur les vrais médias** (canal alpha image par image, ffmpeg) + images figées Chromium par la timeline :
+
+| Variante                      | Constat                                                                                                                                                     | Classement                                                                                                                                                        |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gifts 1 / 5 / 10 / 20 + ciblé | barre opaque à 2,125 s, texte à 2,279 s ; fondu barre 5,708 → 6,083 s ≈ fondu texte 5,745 → 6,093 s ; compteur 0 → N conforme                               | **Concordant**                                                                                                                                                    |
+| Dofus Éliatrope               | bandeau plein ~1,58 s, texte 1,60 s ; sortie bandeau 4,25 → 4,6 s, texte parti à 3,7 s                                                                      | **Concordant**                                                                                                                                                    |
+| Dofus Émeraude                | bandeau plein ~1,75–1,92 s, texte 2,00 s                                                                                                                    | **Concordant**                                                                                                                                                    |
+| Dofus Ébène                   | bandeau qui s'ouvre de 1,42 à 1,67 s ; texte lancé à 1,50 s (≈ 20 % d'opacité à 1,58 s sur un bandeau pas encore plein), lisible une fois le bandeau ouvert | **Incertain** (réglage legacy conservé ; à juger à l'œil, piste : ~1,65 s)                                                                                        |
+| Follows Eren / Discord        | élément principal ~1,0 s, texte 0,8 → 4,5 s, son jusqu'à 5,1–5,2 s                                                                                          | **Concordant**                                                                                                                                                    |
+| Eren Sub                      | voix continue de 0 à 4,67 s, aucun silence mesurable entre les deux phrases (niveau ~ −23 dB vers 1,4–1,5 s) ; sous-titres 0,3–1,4 s puis 1,5–4,3 s         | **Incertain** (à l'oreille)                                                                                                                                       |
+| Bits                          | VP8 + alpha, 1,67 s en boucle, durée imposée 4,15 s ; lu et figé correctement dans Chromium ; texte petit (zone legacy 400×80)                              | **Concordant** (à confirmer dans OBS)                                                                                                                             |
+| MoneyTest (don)               | VP8 + alpha 7,2 s ; la vidéo dessine elle-même un panneau gris à ~2,6 s, recouvert par l'encadré à 2,66 s ; fondus 800 / 300 ms conformes                   | **Concordant** ; **écart d'affichage probable** : un pseudo de 8 lettres est coupé (« Donat… ») car le montant se réserve 42 % de la ligne (CSS legacy identique) |
+| Raid Titan                    | vidéo 19,92 s (transparente vers 19,0 s), son audible jusqu'à 21,04 s (fichier 21,71 s) ; texte provisoire 1,5 → 8,0 s en haut                              | **Provisoire** (à calibrer)                                                                                                                                       |
+
+**Bugs démontrés et corrigés (aperçu Studio uniquement ; OBS et lecture inchangés)** :
+
+1. Timeline sur Bits / MoneyTest : ces WebM VP8 + alpha n'ont qu'une image clé ; un saut Chromium y échoue
+   (`PIPELINE_ERROR_DECODE`) ou, après un saut précédent, affiche **sans erreur** une image corrompue (vérifié contre
+   les images décodées par ffmpeg). L'aperçu lit l'en-tête WebM (4 Ko) : VP8 → décodage depuis l'image 0 jusqu'à
+   l'instant voulu (précision ± 1 image) ; VP9 → saut direct. La lecture normale (chemin OBS) est propre, y compris
+   un don juste après des bits.
+2. Timeline sur un fondu vidéo commencé après un autre (MoneyTest à 6,9 s) : le fondu de sortie partait d'une
+   opacité fausse (0 au lieu de 0,67). Les animations sont maintenant avancées au temps virtuel avant chaque étape.
+
+**Fiabilité** : file A1 (claim / ACK, une alerte à la fois, pas de rejeu, média manquant → `failed media_missing`,
+vidéo cassée → `failed video-error`, redémarrage de Studio) couverte par Playwright ; source OBS disparue en cours de
+lecture → `expired` sans rejeu (tests Core). Marges : raid 21,7 s < sécurité 29,9 s < bail 34,9 s.
+
+**Non vérifié** : rendu dans OBS / CEF et dans la fenêtre Electron ; son réel (les tests navigateur sont muets) ;
+la petite fixture VP8 des tests ne reproduit pas la corruption (vérifiée sur les vrais fichiers).

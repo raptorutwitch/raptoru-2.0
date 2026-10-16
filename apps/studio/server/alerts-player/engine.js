@@ -1,4 +1,4 @@
-/* global document, performance, window, SpeechSynthesisUtterance, setTimeout, clearTimeout */
+/* global document, performance, window, SpeechSynthesisUtterance, setTimeout, clearTimeout, fetch, TextDecoder */
 // Twitch alerts V1 (A2) — the alert engine, ONE implementation for the OBS player and the Studio preview. Port of the
 // legacy page `Twitch_Alerts.html` (playAlert, createLetters, showSubgift, showBits, showDonation, Eren subtitles,
 // finishAlert) driven by a frozen variant (Core) instead of the page's own table. Viewer data is untrusted: it is only
@@ -263,6 +263,7 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     video.className = v.style || 'default';
     video.classList.toggle('money-fade', Boolean(v.videoFade));
     video.loop = Boolean(v.loop);
+    video.playbackRate = 1;
     if (v.videoFade) {
       video.style.setProperty('--money-fade-in', v.videoFade.in + 'ms');
       video.style.setProperty('--money-fade-out', v.videoFade.out + 'ms');
@@ -386,6 +387,56 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     });
 
   /**
+   * Whether the timeline may jump inside a media. The legacy VP8 + alpha files (Bits, MoneyTest: a single keyframe)
+   * cannot: Chromium's jump errors, or after an earlier jump silently shows a corrupt image (and a test jump is not
+   * a reliable probe). So the WebM header is read once per file: VP8 → decoded from its start instead.
+   */
+  const seekable = new Map();
+  const probeSeek = (src) => {
+    if (!seekable.has(src))
+      seekable.set(
+        src,
+        fetch(src, { headers: { range: 'bytes=0-4095' } })
+          .then((r) => r.arrayBuffer())
+          .then((b) => !new TextDecoder('latin1').decode(b).includes('V_VP8'))
+          .catch(() => false),
+      );
+    return seekable.get(src);
+  };
+
+  /**
+   * Timeline fallback: plays the video muted from its start and pauses on the image
+   * shown at `target` (s), within one image. Preview only: the OBS source never seeks.
+   */
+  async function decodeTo(v, target, token) {
+    const half = 0.5 / (v.fps || 24);
+    // Always from image 0 (the only keyframe), on a reloaded decoder.
+    const src = video.getAttribute('src');
+    video.removeAttribute('src');
+    video.load();
+    video.src = src;
+    video.load();
+    await once(video, 'loadeddata');
+    if (token !== seekToken || half >= target) return;
+    video.muted = true;
+    video.playbackRate = 2;
+    await new Promise((resolve) => {
+      const onFrame = (_, meta) => {
+        if (token !== seekToken || meta.mediaTime + half >= target) {
+          video.pause();
+          return resolve();
+        }
+        video.requestVideoFrameCallback(onFrame);
+      };
+      video.requestVideoFrameCallback(onFrame);
+      video.onended = resolve;
+      video.play().catch(resolve);
+    });
+    video.onended = null;
+    video.playbackRate = 1;
+  }
+
+  /**
    * Studio preview timeline: the alert FROZEN at `ms` — the real video image, the texts as the same schedule leaves
    * them at that instant, each CSS animation paused at its own progress. No sound, no queue, no timer: the steps run
    * on a virtual clock. Resolves { ms, lengthMs, videoMs, marks }, or null when a newer seek / play replaced it.
@@ -398,7 +449,7 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     clearAnimations();
     video.muted = true;
     const src = mediaUrl(v.video);
-    if (video.getAttribute('src') !== src) {
+    if (video.getAttribute('src') !== src || video.error) {
       video.src = src;
       video.load();
     }
@@ -410,8 +461,15 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     const target =
       (v.loop && videoMs ? at % videoMs : Math.min(at, videoMs)) / 1000;
     if (Math.abs(video.currentTime - target) > 1e-4 || video.readyState < 2) {
-      video.currentTime = target;
-      await once(video, 'seeked');
+      if (!(await probeSeek(src))) await decodeTo(v, target, token);
+      else if (token === seekToken)
+        try {
+          video.currentTime = target;
+          await once(video, 'seeked');
+        } catch {
+          seekable.set(src, Promise.resolve(false));
+          await decodeTo(v, target, token);
+        }
       if (token !== seekToken) return null;
     }
     // After its end a video stays on its last image under an imposed duration, else it is gone (as in play).
@@ -432,18 +490,24 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     for (const step of schedule(v))
       later(() => applyStep(v, data, step, later, ctx), step.at);
     if (v.videoFade) later(() => video.classList.add('money-visible'), 0);
+    // Running animations are moved to the virtual time first: a transition started by a later step (MoneyTest
+    // fade-out after its fade-in) then starts from the value it really has at that instant.
+    const advance = (t) => {
+      for (const a of stage.getAnimations({ subtree: true })) {
+        if (!startedAt.has(a)) startedAt.set(a, t);
+        a.pause();
+        a.currentTime = t - startedAt.get(a);
+      }
+    };
     while (queue.length) {
       queue.sort((x, y) => x.due - y.due || x.seq - y.seq);
       const task = queue.shift();
+      advance(task.due);
       now = task.due;
       task.fn();
-      for (const a of stage.getAnimations({ subtree: true }))
-        if (!startedAt.has(a)) startedAt.set(a, now);
+      advance(now);
     }
-    for (const a of stage.getAnimations({ subtree: true })) {
-      a.pause();
-      a.currentTime = at - (startedAt.get(a) ?? at);
-    }
+    advance(at);
     return {
       ms: at,
       lengthMs: visualLengthMs(v, videoMs),

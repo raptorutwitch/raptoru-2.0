@@ -77,6 +77,8 @@ test.beforeAll(async () => {
       from: join(FIX, 'audio-2_5s.mp3'),
     },
     { name: 'Alerte Sub 5.webm', from: join(FIX, 'video-1s.webm') },
+    // Like the legacy Bits / MoneyTest: VP8 + alpha with a single keyframe (Chromium cannot jump inside it).
+    { name: 'Dofus Ebène Son.webm', from: join(FIX, 'vp8-one-keyframe.webm') },
     { name: 'Alerte follow Eren.webm', from: join(FIX, 'video-1s-sound.webm') },
     // A broken file under a real name: the player reports the error.
     { name: 'Alerte Bits.webm', from: join(FIX, 'broken.webm') },
@@ -407,6 +409,36 @@ test('preview timeline: frozen real image + texts at the instant, no sound, neve
   await expect(page.locator('.gift-count')).toHaveText('37');
   // Imposed duration: past the 1 s video, its last image stays.
   await expect(video).toHaveCSS('visibility', 'visible');
+
+  // Single-keyframe VP8 (like the legacy Bits / MoneyTest): the decode-from-start path gives the right instant,
+  // forward and back, without error. (The corrupt image itself only showed with the real legacy files: checked on
+  // them in Chromium, see docs/TWITCH_ALERTS_PARITY_2026-10.md § 15; this tiny fixture does not reproduce it.)
+  const vp8 = {
+    ...ALERT_VARIANTS.don_moneytest,
+    video: 'Dofus Ebène Son.webm',
+    audio: null,
+    fps: 12,
+    duration: 1900,
+    videoFade: { in: 800, out: 300, outAt: 1000 },
+  };
+  for (const at of [0, 1500, 1583, 1250]) {
+    const frame = await p.seek(vp8, { pseudo: 'X', amount: '5' }, at);
+    expect(frame.ms).toBe(at);
+    expect(
+      await video.evaluate(
+        (v: HTMLVideoElement, t) => [
+          v.error,
+          Math.abs(v.currentTime - t / 1000) <= 1 / 12 + 0.02,
+        ],
+        at,
+      ),
+    ).toEqual([null, true]);
+  }
+  // Fade-out started after the fade-in: it starts from the real opacity (100 ms into 300 ms → 2/3).
+  await p.seek(vp8, { pseudo: 'X', amount: '5' }, 1100);
+  expect(
+    await video.evaluate((v) => Number(getComputedStyle(v).opacity)),
+  ).toBeCloseTo(2 / 3, 2);
 
   await p.stop();
   await expect(video).toHaveCSS('visibility', 'hidden');
