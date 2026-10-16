@@ -19,6 +19,8 @@ import {
   withMiniGameWords,
 } from '../commands/reserved.js';
 import { miniGamesRoutes } from '../http/mini-games-routes.js';
+import { alertsRoutes } from '../http/alerts-routes.js';
+import { AlertsService } from '../alerts/service.js';
 import { MiniGamesService } from '../mini-games/service.js';
 import { twitchAppLoginLookup } from '../mini-games/twitch-login.js';
 import { CommandsAdmission } from '../commands/admission.js';
@@ -129,6 +131,8 @@ export function createLabCore({
     ),
     ...wordGameRoutes(wordGame),
     ...miniGamesRoutes(miniGames),
+    // Twitch alerts V1 (A1): normalized events, durable queue, claim / ACK (no economy).
+    ...alertsRoutes(new AlertsService(db, systemClock)),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
   ];

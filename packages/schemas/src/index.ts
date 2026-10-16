@@ -11,3 +11,4 @@ export * from './raffle-v2.js';
 export * from './commands.js';
 export * from './word-game.js';
 export * from './mini-games.js';
+export * from './alerts.js';

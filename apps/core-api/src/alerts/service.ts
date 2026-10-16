@@ -1,0 +1,322 @@
+import { randomUUID } from 'node:crypto';
+import type {
+  AlertAckRequest,
+  AlertEventInput,
+  AlertEventOutcome,
+  AlertStatus,
+} from '@raptoru/schemas';
+import type { Clock } from '../clock.js';
+import type { Db, Queryable } from '../db/db.js';
+import { alertData, decideAlert, type Rng } from './rules.js';
+import type { AlertVariant } from './variants.js';
+
+// Twitch alerts V1 (Lab) — the durable queue (docs/TWITCH_ALERTS_PARITY_2026-10.md § 7). Conventions of the
+// Soundboard / TTS queues: a channel row lock serializes the claims, each claim gets an attempt id and a lease, a
+// sweep settles abandoned work, a started alert is never replayed.
+//
+// Delivery policy (at most once once it started; never « exactly once »):
+// - queued → claimed (attempt, 15 s lease to report « started ») → playing (lease = media / timings + 15 s) →
+//   completed. A failure reported by the player → failed (kept for diagnosis, not replayed).
+// - claimed, lease over, never started (Studio crashed before the player began): back to queued, up to 3 attempts,
+//   then expired — the viewer never saw it, so it is offered again.
+// - playing, lease over, no « completed »: expired (it may have been seen): never replayed.
+// - one alert in flight per channel (unique index); priority first, then arrival order (legacy queue).
+// Alerts never touch the wallet, the loyalty engine or any other economy.
+
+export const ALERT_RULES = {
+  claimLeaseMs: 15_000,
+  playMarginMs: 15_000,
+  /** When neither the media length nor the timings are known (raid). */
+  defaultPlayMs: 10_000,
+  maxAttempts: 3,
+} as const;
+
+export class AlertError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(code);
+  }
+}
+
+interface ItemRow {
+  alert_id: string;
+  channel_id: string;
+  seq: string | number;
+  type: string;
+  variant_id: string;
+  variant: AlertVariant;
+  data: Record<string, unknown>;
+  priority: number;
+  status: AlertStatus;
+  consumer_id: string | null;
+  attempt_id: string | null;
+  attempts: number;
+  lease_expires_at: Date | null;
+  created_at: Date;
+  claimed_at: Date | null;
+  started_at: Date | null;
+  ended_at: Date | null;
+  failure: Record<string, unknown> | null;
+}
+
+const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
+
+export const alertView = (r: ItemRow) => ({
+  alert_id: r.alert_id,
+  channel_id: r.channel_id,
+  type: r.type,
+  variant_id: r.variant_id,
+  variant: r.variant,
+  data: r.data,
+  priority: r.priority,
+  status: r.status,
+  consumer_id: r.consumer_id,
+  attempt_id: r.attempt_id,
+  attempts: r.attempts,
+  lease_expires_at: iso(r.lease_expires_at),
+  created_at: iso(r.created_at),
+  claimed_at: iso(r.claimed_at),
+  started_at: iso(r.started_at),
+  ended_at: iso(r.ended_at),
+  failure: r.failure,
+});
+export type AlertView = ReturnType<typeof alertView>;
+
+/** How long the player may take once started: media length or last timing, plus a margin. */
+export function playLeaseMs(v: AlertVariant) {
+  const base = Math.max(
+    v.duration ?? 0,
+    v.mediaMs ?? 0,
+    v.hideAt ?? 0,
+    ...(v.subtitles ?? []).map((s) => s.hideAt),
+  );
+  return (base || ALERT_RULES.defaultPlayMs) + ALERT_RULES.playMarginMs;
+}
+
+export class AlertsService {
+  constructor(
+    private readonly db: Db,
+    private readonly clock: Clock,
+    private readonly rng: Rng = Math.random,
+  ) {}
+
+  /** One normalized event: deduplicated, decided (variant drawn once), queued when it makes an alert. */
+  async receive(e: AlertEventInput): Promise<{
+    outcome: AlertEventOutcome;
+    alert: AlertView | null;
+  }> {
+    return this.db.tx(async (q) => {
+      const now = this.clock.now();
+      const decision = decideAlert(e, this.rng);
+      const outcome = decision.outcome;
+      const inserted = await q.query(
+        `insert into alert_events (channel_id, source, source_event_id, type, payload, outcome, received_at)
+         values ($1, $2, $3, $4, $5, $6, $7) on conflict do nothing returning 1`,
+        [
+          e.channel_id,
+          e.source,
+          e.source_event_id,
+          e.type,
+          JSON.stringify(e),
+          outcome,
+          now,
+        ],
+      );
+      if (!inserted.length) {
+        // Redelivery: the first reception already decided; nothing new.
+        const prior = (
+          await q.query<{ alert_id: string | null }>(
+            'select alert_id from alert_events where channel_id = $1 and source = $2 and source_event_id = $3',
+            [e.channel_id, e.source, e.source_event_id],
+          )
+        )[0];
+        return {
+          outcome: 'duplicate' as const,
+          alert: prior?.alert_id ? await this.byId(q, prior.alert_id) : null,
+        };
+      }
+      if (decision.outcome !== 'queued') return { outcome, alert: null };
+      const alertId = randomUUID();
+      await q.query(
+        `insert into alert_items (alert_id, channel_id, type, variant_id, variant, data, priority, status, created_at)
+         values ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)`,
+        [
+          alertId,
+          e.channel_id,
+          e.type,
+          decision.variant.id,
+          JSON.stringify(decision.variant),
+          JSON.stringify(alertData(e)),
+          decision.variant.priority,
+          now,
+        ],
+      );
+      await q.query(
+        'update alert_events set alert_id = $4 where channel_id = $1 and source = $2 and source_event_id = $3',
+        [e.channel_id, e.source, e.source_event_id, alertId],
+      );
+      return { outcome, alert: await this.byId(q, alertId) };
+    });
+  }
+
+  /** Waiting, in flight and the last finished alerts of a channel (Studio supervision). */
+  async state(channelId: string) {
+    await this.db.tx((q) => this.sweep(q, channelId));
+    const rows = await this.db.query<ItemRow>(
+      `select * from alert_items where channel_id = $1 and status in ('queued', 'claimed', 'playing')
+       order by (status = 'queued'), priority desc, seq`,
+      [channelId],
+    );
+    const recent = await this.db.query<ItemRow>(
+      `select * from alert_items where channel_id = $1 and status in ('completed', 'failed', 'expired')
+       order by ended_at desc limit 20`,
+      [channelId],
+    );
+    return {
+      channel_id: channelId,
+      in_flight: rows.filter((r) => r.status !== 'queued').map(alertView),
+      queued: rows.filter((r) => r.status === 'queued').map(alertView),
+      recent: recent.map(alertView),
+    };
+  }
+
+  async get(alertId: string) {
+    const a = await this.byId(this.db, alertId);
+    if (!a) throw new AlertError(404, 'alert_not_found');
+    return a;
+  }
+
+  /** The next alert for this consumer, or null while another one is in flight (one at a time per channel). */
+  async claim(channelId: string, consumerId: string) {
+    return this.db.tx(async (q) => {
+      await q.query(
+        'insert into alert_channels (channel_id) values ($1) on conflict do nothing',
+        [channelId],
+      );
+      await q.query(
+        'select 1 from alert_channels where channel_id = $1 for update',
+        [channelId],
+      );
+      await this.sweep(q, channelId);
+      const busy = await q.query(
+        `select 1 from alert_items where channel_id = $1 and status in ('claimed', 'playing')`,
+        [channelId],
+      );
+      if (busy.length) return null;
+      const next = (
+        await q.query<{ alert_id: string }>(
+          `select alert_id from alert_items where channel_id = $1 and status = 'queued'
+           order by priority desc, seq limit 1`,
+          [channelId],
+        )
+      )[0];
+      if (!next) return null;
+      const now = this.clock.now();
+      await q.query(
+        `update alert_items set status = 'claimed', consumer_id = $2, attempt_id = $3, attempts = attempts + 1,
+           claimed_at = $4, lease_expires_at = $5 where alert_id = $1`,
+        [
+          next.alert_id,
+          consumerId,
+          randomUUID(),
+          now,
+          new Date(now.getTime() + ALERT_RULES.claimLeaseMs),
+        ],
+      );
+      return this.byId(q, next.alert_id);
+    });
+  }
+
+  /**
+   * The player's report for its attempt. Idempotent: the same report twice changes nothing; a late report after the
+   * alert ended (expired, other attempt) is refused with 409, the final state is kept.
+   */
+  async ack(alertId: string, a: AlertAckRequest) {
+    return this.db.tx(async (q) => {
+      const ch = (
+        await q.query<{ channel_id: string }>(
+          'select channel_id from alert_items where alert_id = $1',
+          [alertId],
+        )
+      )[0];
+      if (!ch) throw new AlertError(404, 'alert_not_found');
+      await q.query(
+        'select 1 from alert_channels where channel_id = $1 for update',
+        [ch.channel_id],
+      );
+      await this.sweep(q, ch.channel_id);
+      const cur = (await this.byId(q, alertId))!;
+      const now = this.clock.now();
+      const final = ['completed', 'failed', 'expired'].includes(cur.status);
+      if (
+        cur.attempt_id !== a.attempt_id ||
+        cur.consumer_id !== a.consumer_id
+      ) {
+        // The same final report again (attempt ids are cleared only on requeue): accepted as is.
+        throw new AlertError(409, final ? 'alert_ended' : 'attempt_mismatch');
+      }
+      if (final) {
+        const same =
+          (a.event === 'completed' && cur.status === 'completed') ||
+          (a.event === 'failed' && cur.status === 'failed');
+        if (same) return cur;
+        throw new AlertError(409, 'alert_ended');
+      }
+      if (a.event === 'started') {
+        if (cur.status === 'playing') return cur;
+        await q.query(
+          `update alert_items set status = 'playing', started_at = $2, lease_expires_at = $3 where alert_id = $1`,
+          [alertId, now, new Date(now.getTime() + playLeaseMs(cur.variant))],
+        );
+      } else if (a.event === 'completed') {
+        await q.query(
+          `update alert_items set status = 'completed', ended_at = $2, lease_expires_at = null where alert_id = $1`,
+          [alertId, now],
+        );
+      } else {
+        await q.query(
+          `update alert_items set status = 'failed', ended_at = $2, lease_expires_at = null, failure = $3 where alert_id = $1`,
+          [
+            alertId,
+            now,
+            JSON.stringify({ code: 'player_failed', message: a.error ?? null }),
+          ],
+        );
+      }
+      return (await this.byId(q, alertId))!;
+    });
+  }
+
+  /** Abandoned work (policy at the top): never turned into a success. */
+  private async sweep(q: Queryable, channelId: string) {
+    const now = this.clock.now();
+    await q.query(
+      `update alert_items set status = 'expired', ended_at = $2, lease_expires_at = null,
+         failure = '{"code":"lease_expired_playing","message":"started, no end report before the lease ended"}'::jsonb
+       where channel_id = $1 and status = 'playing' and lease_expires_at < $2`,
+      [channelId, now],
+    );
+    await q.query(
+      `update alert_items set status = 'expired', ended_at = $2, lease_expires_at = null,
+         failure = '{"code":"never_started","message":"claimed but never started, attempts exhausted"}'::jsonb
+       where channel_id = $1 and status = 'claimed' and lease_expires_at < $2 and attempts >= $3`,
+      [channelId, now, ALERT_RULES.maxAttempts],
+    );
+    await q.query(
+      `update alert_items set status = 'queued', consumer_id = null, attempt_id = null, lease_expires_at = null
+       where channel_id = $1 and status = 'claimed' and lease_expires_at < $2`,
+      [channelId, now],
+    );
+  }
+
+  private async byId(q: Queryable, id: string) {
+    const r = (
+      await q.query<ItemRow>('select * from alert_items where alert_id = $1', [
+        id,
+      ])
+    )[0];
+    return r ? alertView(r) : null;
+  }
+}

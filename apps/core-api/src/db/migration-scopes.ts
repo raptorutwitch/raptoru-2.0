@@ -61,6 +61,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261020120000_mini_games_lab.sql',
   // Duel V1: challenges between two Twitch IDs (stake through the Lab wallet, answers through cmd_steps).
   '20261021120000_mini_game_duels_lab.sql',
+  // Twitch alerts V1 lot A1: source events (dedup), durable alert queue.
+  '20261022120000_alerts_lab.sql',
 ]);
 
 /**
