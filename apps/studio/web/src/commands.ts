@@ -95,7 +95,9 @@ interface Invocation {
 }
 interface StepRow {
   step_id: string;
-  invocation_id: string;
+  /** Null for a Jeu des mots message (origin word_game: no Commands invocation). */
+  invocation_id: string | null;
+  origin?: 'commands' | 'word_game';
   kind: string;
   params: { mode?: string; text?: string };
   status: string;
@@ -977,7 +979,7 @@ export function mountCommands(root: HTMLElement) {
           : byDay(
               h.steps ?? [],
               (s) =>
-                `<div class="arow"><time>${clock(s.created_at)}</time><span class="res res--${STEP[s.status]?.[1] ?? 'off'}">${esc(STEP[s.status]?.[0] ?? s.status)}</span><div class="arow__t">${esc(s.params.text ?? '')}<small>${esc({ normal: 'Message', announce: 'Annonce', reply: 'Réponse Twitch', me: '/me' }[s.params.mode ?? ''] ?? s.params.mode ?? '')} · ${esc(s.kind === 'refusal' ? 'réponse de refus' : s.kind === 'reply' ? 'réponse' : 'autre message')}${s.attempt_count > 1 ? ` · ${s.attempt_count} tentatives` : ''}${s.error?.code ? ` · ${esc(s.error.code)}` : ''}${s.twitch_message_id ? ' · preuve Twitch reçue' : ''}</small></div></div>`,
+                `<div class="arow"><time>${clock(s.created_at)}</time><span class="res res--${STEP[s.status]?.[1] ?? 'off'}">${esc(STEP[s.status]?.[0] ?? s.status)}</span><div class="arow__t">${esc(s.params.text ?? '')}<small>${esc({ normal: 'Message', announce: 'Annonce', reply: 'Réponse Twitch', me: '/me' }[s.params.mode ?? ''] ?? s.params.mode ?? '')} · ${esc(s.origin === 'word_game' ? 'Jeu des mots' : s.kind === 'refusal' ? 'réponse de refus' : s.kind === 'reply' ? 'réponse' : 'autre message')}${s.attempt_count > 1 ? ` · ${s.attempt_count} tentatives` : ''}${s.error?.code ? ` · ${esc(s.error.code)}` : ''}${s.twitch_message_id ? ' · preuve Twitch reçue' : ''}</small></div></div>`,
               'Aucun envoi.',
             );
     return `<div class="mhead"><h1>Historique</h1></div><div class="page scroll"><div class="pin pin--wide"><div class="seg">${[

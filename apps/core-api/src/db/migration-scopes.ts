@@ -53,6 +53,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261017120000_bonk_lab_viewer_oauth.sql',
   // Bonk VNext lot 5: salves (volley columns on bonk_lab_interactions).
   '20261018120000_bonk_lab_volleys.sql',
+  // Jeu des mots V1 lot 2: cmd_steps also carries Jeu des mots messages (origin, no invocation).
+  '20261019120000_cmd_steps_word_game.sql',
 ]);
 
 /**

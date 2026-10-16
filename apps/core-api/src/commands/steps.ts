@@ -123,10 +123,15 @@ export function draftSteps(r: Rendered): StepDraft[] {
   );
 }
 
+/** Who wrote the step: a Commands V2 invocation, or the Jeu des mots (no invocation). */
+export type StepOrigin = 'commands' | 'word_game';
+
 interface StepRow {
   step_id: string;
   seq_global: number;
-  invocation_id: string;
+  origin: StepOrigin;
+  /** Null only for origin = 'word_game' (database constraint). */
+  invocation_id: string | null;
   channel_id: string;
   seq: number;
   idempotency_key: string;
@@ -153,6 +158,7 @@ interface StepRow {
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 export const stepView = (r: StepRow) => ({
   step_id: r.step_id,
+  origin: r.origin,
   invocation_id: r.invocation_id,
   seq: r.seq,
   idempotency_key: r.idempotency_key,
@@ -215,6 +221,65 @@ export async function insertSteps(
     );
   }
   return seq;
+}
+
+/** A Jeu des mots chat message (docs/WORD_GAME_PARITY.md § 19). */
+export interface WordGameStepDraft {
+  /** Stable and unique (e.g. `jdm:msg:<message_id>:find`): writing the same message again is a no-op. */
+  idempotencyKey: string;
+  mode: 'normal' | 'announce';
+  text: string;
+  /** Send no earlier than now + delayMs (legacy delays: 500 / 2 000 / 2 100 ms). */
+  delayMs?: number;
+}
+
+/**
+ * Queues Jeu des mots chat messages on the channel's durable chat queue (inside the caller's
+ * transaction), in the given order, after everything already queued. No invocation: origin
+ * 'word_game', on_error 'continue' (one message never cancels another). Each step expires ttlMs after
+ * its send time. Creates the cmd_channels row if missing, never touching « Sortie chat réelle ».
+ * Returns the number of steps actually written (an idempotency key already present writes nothing).
+ */
+export async function insertWordGameSteps(
+  q: Queryable,
+  s: {
+    channelId: string;
+    now: Date;
+    ttlMs?: number;
+    drafts: WordGameStepDraft[];
+  },
+) {
+  const ttlMs = s.ttlMs ?? STEP_RULES.ttlMs;
+  await q.query(
+    'insert into cmd_channels (channel_id) values ($1) on conflict (channel_id) do nothing',
+    [s.channelId],
+  );
+  let written = 0;
+  let seq = 0;
+  for (const d of s.drafts) {
+    seq++;
+    const available = new Date(s.now.getTime() + (d.delayMs ?? 0));
+    const rows = await q.query(
+      `insert into cmd_steps (step_id, origin, invocation_id, channel_id, seq, idempotency_key, executor, kind,
+         type, params, on_error, status, available_at, expires_at, created_at, updated_at)
+       values ($1, 'word_game', null, $2, $3, $4, 'twitch_chat', 'action', 'chat', $5, 'continue', 'queued',
+         $6, $7, $8, $8)
+       on conflict (idempotency_key) do nothing
+       returning step_id`,
+      [
+        randomUUID(),
+        s.channelId,
+        seq,
+        d.idempotencyKey,
+        JSON.stringify({ mode: d.mode, text: d.text }),
+        available,
+        new Date(available.getTime() + ttlMs),
+        s.now,
+      ],
+    );
+    written += rows.length;
+  }
+  return written;
 }
 
 /** The executor polls every second while idle: silent for longer than this = absent. */
@@ -552,17 +617,21 @@ export class CommandSteps {
     );
   }
 
-  /** A failed / unknown / expired step with on_error = stop cancels the rest of its invocation. */
+  /**
+   * A failed / unknown / expired step with on_error = stop cancels the rest of its invocation.
+   * Commands invocations only: never a Jeu des mots step, never from one.
+   */
   private async cascade(
     q: Queryable,
-    s: Pick<StepRow, 'invocation_id' | 'seq' | 'on_error'>,
+    s: Pick<StepRow, 'origin' | 'invocation_id' | 'seq' | 'on_error'>,
     now: Date,
   ) {
-    if (s.on_error !== 'stop') return;
+    if (s.origin !== 'commands' || !s.invocation_id || s.on_error !== 'stop')
+      return;
     await q.query(
       `update cmd_steps set status = 'cancelled', updated_at = $3, finished_at = $3,
          error = '{"code":"previous_step_failed","message":"an earlier step of this invocation did not succeed"}'::jsonb
-       where invocation_id = $1 and seq > $2 and status = 'queued'`,
+       where origin = 'commands' and invocation_id = $1 and seq > $2 and status = 'queued'`,
       [s.invocation_id, s.seq, now],
     );
   }
