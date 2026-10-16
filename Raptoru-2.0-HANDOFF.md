@@ -26,8 +26,15 @@ checkpoint). Tout ce qui suit `c7f20de` reste **local, non poussé** ; `main` in
   (16/10/2026) : sortie réelle OFF, ingestion ON, Mini-jeux ON.
 - **Pas encore en production** : StreamElements reste la production. Activation au cutover économique (Wallet
   canonique P1-001 lot 2, chat / session de production P1-007).
-- **Prochaine étape** : **Duel** (RET-GAME-003) en V1 de parité StreamElements — préparation faite (règles connues,
-  inconnues, périmètre), **implémentation sur accord d'Antoni**.
+- **Duel V1** (RET-GAME-003, `2bf4fc8`, `docs/DUEL_PARITY.md`) : implémenté ; validé par Antoni le 16/10/2026 en
+  Simulation (deux identités) et en vrai chat (VieweruMobilu / Raptoru_ : défi, refus d'un second défi, acceptation,
+  gagnant) **avec la sortie LeCroupier\_ OFF** ; transfert Wallet de ce scénario réel non vérifié manuellement.
+- **Économie unifiée en Lab (16/10/2026)** : Jeu des mots, Roulette / Slot, Duel et gains Tombola passent par
+  `EconomyPort` (`hold` / `move` / `transfer`, dans la transaction métier) ; `labEconomy` reste le défaut,
+  `coreWalletEconomy` refuse explicitement ces mouvements ; **aucun cutover**. Détail : `docs/CUTOVER_PLAN_2026-10.md`
+  § 4.1. Point d'étape global : `docs/RAPTORU_2_0_GLOBAL_CHECKPOINT_2026-10-16.md`.
+- **Prochaine étape** : sur décision d'Antoni (clore le Duel en réel avec sortie ON, décisions D1 / D2 / DM1–DM9, puis
+  alertes Twitch V1 recommandées).
 
 ## État — 16/10/2026 : Jeu des mots V1 MIGRÉ ET VALIDÉ EN CONDITIONS RÉELLES (historique, valable sauf mention ci-dessus)
 

@@ -181,6 +181,22 @@ atomiques, crédits refusés ; défaut Lab intact. `economy.integration` (Postgr
 solde jamais négatif. Suites : Core 400 (`--maxWorkers=3`), intégration PostgreSQL 13, Studio server 199 (crash Windows connu `0xC0000409` une fois sous charge, vert en relance) ; lint,
 typecheck, build.
 
+**Unification économique des modules via `EconomyPort` (16/10/2026, Lab uniquement, aucun cutover).** Le port gagne
+trois mouvements, toujours **dans la transaction de l'appelant** : `hold` (verrouille les Wallets dans l'ordre des
+IDs, lit soldes et plafond), `move` (un mouvement signé + sa ligne de ledger ; refus avant toute écriture :
+`CurrencyCreditError` au crédit, `LabWalletError` au débit) et `transfer` (viewer → viewer, deux lignes, somme nulle).
+Raccordés : **Jeu des mots** (crédit unique par message), **Roulette / Slot** (verrou, plafond avant tirage, une
+variation), **Duel** (verrou des deux Wallets, transfert atomique perdant → gagnant), **gains Tombola** (crédit dans la
+monnaie de la manche, ligne `raffle_win` unique). Plus aucune écriture directe dans `lab_wallets` /
+`lab_wallet_ledger` dans ces modules ; seules deux **lectures** Tombola restent (« ce gagnant est-il déjà payé ? » et
+la fiche de manche) — à transposer au raccordement canonique. Comportement inchangé : `labEconomy` reste le défaut ;
+`coreWalletEconomy` **refuse explicitement** `hold` / `move` / `transfer` (`economy_unavailable`,
+`canonical_not_wired`) tant que P1-001 lot 2 ne les branche pas. Preuves : `economy-movements` (14, PGlite : crédit /
+débit exacts, solde insuffisant, plafond, même clé, rollback métier, Tombola, concurrence, transfert somme nulle /
+émetteur insuffisant / receveur au plafond / croisés, refus canonique) ; suites Jeu des mots, mini-jeux, Duel, Tombola
+inchangées et vertes ; Core 648 (`--maxWorkers=4`) ; tests Studio adossés au Core (Bonk, Sons, TTS, Tombola,
+Modération) 47.
+
 **Reste de P1-001 (non fermé).** Décision D1 (import des soldes SE / point de coupure) et outil d'import (dry-run,
 contrôle) ; modèle des crédits TTS / sons (D2) ; schéma d'interactions de production (les tables Lab imposent
 `payment_mode = 'simulated'`, `real_debited = 0`) et contrat des lecteurs pour un paiement réel ; branchement d'un
