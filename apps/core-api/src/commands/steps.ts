@@ -124,13 +124,13 @@ export function draftSteps(r: Rendered): StepDraft[] {
 }
 
 /** Who wrote the step: a Commands V2 invocation, or the Jeu des mots (no invocation). */
-export type StepOrigin = 'commands' | 'word_game';
+export type StepOrigin = 'commands' | 'word_game' | 'mini_game';
 
 interface StepRow {
   step_id: string;
   seq_global: number;
   origin: StepOrigin;
-  /** Null only for origin = 'word_game' (database constraint). */
+  /** Null for origin word_game / mini_game (database constraint). */
   invocation_id: string | null;
   channel_id: string;
   seq: number;
@@ -247,6 +247,8 @@ export async function insertWordGameSteps(
     now: Date;
     ttlMs?: number;
     drafts: WordGameStepDraft[];
+    /** Who writes (no invocation): the Jeu des mots by default, or the mini-games (Roulette / Slot). */
+    origin?: 'word_game' | 'mini_game';
   },
 ) {
   const ttlMs = s.ttlMs ?? STEP_RULES.ttlMs;
@@ -262,7 +264,7 @@ export async function insertWordGameSteps(
     const rows = await q.query(
       `insert into cmd_steps (step_id, origin, invocation_id, channel_id, seq, idempotency_key, executor, kind,
          type, params, on_error, status, available_at, expires_at, created_at, updated_at)
-       values ($1, 'word_game', null, $2, $3, $4, 'twitch_chat', 'action', 'chat', $5, 'continue', 'queued',
+       values ($1, $9, null, $2, $3, $4, 'twitch_chat', 'action', 'chat', $5, 'continue', 'queued',
          $6, $7, $8, $8)
        on conflict (idempotency_key) do nothing
        returning step_id`,
@@ -275,6 +277,7 @@ export async function insertWordGameSteps(
         available,
         new Date(available.getTime() + ttlMs),
         s.now,
+        s.origin ?? 'word_game',
       ],
     );
     written += rows.length;

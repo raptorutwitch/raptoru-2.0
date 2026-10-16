@@ -1,4 +1,5 @@
 import type { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
+import { MINI_GAME_WORDS } from '../mini-games/rules.js';
 import type { ReservedWords } from './service.js';
 
 /**
@@ -15,4 +16,15 @@ export function raffleReservedWords(
       module: 'raffle',
     }));
   };
+}
+
+/** Roulette / Slot words (StreamElements aliases included) on top of another module's reserved words. */
+export function withMiniGameWords(base: ReservedWords): ReservedWords {
+  return async (q, channelId) => [
+    ...(await base(q, channelId)),
+    ...Object.keys(MINI_GAME_WORDS).map((word) => ({
+      word,
+      module: 'Mini-jeux',
+    })),
+  ];
 }

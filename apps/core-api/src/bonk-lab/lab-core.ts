@@ -14,7 +14,12 @@ import { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
 import { HttpError } from '../http/server.js';
 import { commandsRoutes } from '../http/commands-routes.js';
 import { CommandsService } from '../commands/service.js';
-import { raffleReservedWords } from '../commands/reserved.js';
+import {
+  raffleReservedWords,
+  withMiniGameWords,
+} from '../commands/reserved.js';
+import { miniGamesRoutes } from '../http/mini-games-routes.js';
+import { MiniGamesService } from '../mini-games/service.js';
 import { CommandsAdmission } from '../commands/admission.js';
 import { CommandSteps } from '../commands/steps.js';
 import {
@@ -84,7 +89,8 @@ export function createLabCore({
   // Commands V2 (Lab): Tombola's chat words stay Tombola's (reserved, read through its own configuration
   // reader). Admission (phase B) records; accepted answers become durable steps (phase C), handed to the
   // Lab Twitch adapter only while « Sortie chat réelle » is ON (OFF by default).
-  const reserved = raffleReservedWords(raffle);
+  // Roulette / Slot words are the mini-games' too (StreamElements aliases included).
+  const reserved = withMiniGameWords(raffleReservedWords(raffle));
   const commands = new CommandsService(db, systemClock, { reserved });
   const admission = new CommandsAdmission(db, systemClock, {
     reserved,
@@ -93,6 +99,8 @@ export function createLabCore({
   const steps = new CommandSteps(db, systemClock);
   // Jeu des mots V1: reads the whole chat (plainText), answers through cmd_steps (origin word_game).
   const wordGame = new WordGameService(db, systemClock);
+  // Roulette and Slot V1: chat commands only, Lab wallet, answers through cmd_steps (origin mini_game).
+  const miniGames = new MiniGamesService(db, systemClock);
   const routes = [
     ...bonkLabRoutes(bonk, viewers),
     // Soundboard V2 Lab: same isolated Lab Core process and database.
@@ -108,9 +116,11 @@ export function createLabCore({
       [
         { name: 'commands', chat: (m) => admission.chat(m) },
         { name: 'word_game', plainText: true, chat: (m) => wordGame.chat(m) },
+        { name: 'mini_games', chat: (m) => miniGames.chat(m) },
       ],
     ),
     ...wordGameRoutes(wordGame),
+    ...miniGamesRoutes(miniGames),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
   ];
