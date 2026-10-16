@@ -3,8 +3,7 @@ import type { LabChatMessage } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
-import { lockWallet } from '../lab-moderation/store.js';
-import { creditCurrency, currency } from '../raffle-lab/currencies.js';
+import type { EconomyPort } from '../economy/economy.js';
 import * as D from './duel-rules.js';
 import type { Rng } from './rules.js';
 import type { TwitchUser } from './twitch-login.js';
@@ -44,6 +43,8 @@ export class DuelService {
     private readonly clock: Clock,
     private readonly rng: Rng,
     private readonly resolveTarget: TargetResolver,
+    /** Stakes: locks, balances, cap and the atomic transfer (the Lab wallet today). */
+    private readonly economy: EconomyPort,
   ) {}
 
   async chat(
@@ -147,7 +148,15 @@ export class DuelService {
         ],
       );
       if (recent.length) return { outcome: 'ignored' as const }; // cooldown: silent
-      const wallet = await lockWallet(q, msg.channel_id, msg.chatter.id, now);
+      const balance = (
+        await this.economy.hold(
+          q,
+          now,
+          msg.channel_id,
+          [msg.chatter.id],
+          'tokens',
+        )
+      ).balances.get(msg.chatter.id)!;
       const busy = await q.query<{ challenger_id: string }>(
         `select challenger_id from mini_game_duels where channel_id = $1 and status = 'pending'
            and (challenger_id = $2 or target_id = $3)`,
@@ -157,7 +166,7 @@ export class DuelService {
         return refuse('pending');
       if (busy.length)
         return refuse('target_busy', { target: target.display_name });
-      const bet = D.resolveDuelBet(cmd.arg, wallet.tokens);
+      const bet = D.resolveDuelBet(cmd.arg, balance);
       if ('refused' in bet)
         return bet.refused === 'insufficient'
           ? refuse('insufficient')
@@ -218,16 +227,19 @@ export class DuelService {
       [duel.target_id]: duel.target_name,
     };
     if (bet > 0) {
-      // Both wallets locked in a stable order (by Twitch ID): two duels never wait on each other.
-      const balances: Record<string, number> = {};
-      for (const id of [duel.challenger_id, duel.target_id].sort())
-        balances[id] = (await lockWallet(q, msg.channel_id, id, now)).tokens;
-      const short = [duel.challenger_id, duel.target_id].find(
-        (id) => balances[id]! < bet,
+      // Both wallets locked in a stable order (by Twitch ID, economy port): two duels never wait on each other.
+      const { balances, maxBalance } = await this.economy.hold(
+        q,
+        now,
+        msg.channel_id,
+        [duel.challenger_id, duel.target_id],
+        'tokens',
       );
-      const cap = (await currency(q, 'tokens'))?.max_balance ?? Infinity;
+      const short = [duel.challenger_id, duel.target_id].find(
+        (id) => balances.get(id)! < bet,
+      );
       const overCap = [duel.challenger_id, duel.target_id].some(
-        (id) => balances[id]! + bet > cap,
+        (id) => balances.get(id)! + bet > maxBalance,
       );
       if (short || overCap) {
         await this.end(q, duel.duel_id, 'refused', msg.message_id, now);
@@ -245,31 +257,19 @@ export class DuelService {
           );
         return { outcome: 'duel_refused' as const };
       }
-      await q.query(
-        'update lab_wallets set tokens = $3, updated_at = $4 where channel_id = $1 and viewer_id = $2',
-        [msg.channel_id, loserId, balances[loserId]! - bet, now],
-      );
-      await creditCurrency(q, now, {
+      // ONE atomic transfer, loser → winner, in this transaction (sum zero, two ledger rows).
+      await this.economy.transfer(q, now, {
         channelId: msg.channel_id,
-        viewerId: winnerId,
-        currencyId: 'tokens',
+        from: loserId,
+        to: winnerId,
+        currency: 'tokens',
         amount: bet,
+        kind: 'mini_game',
+        keys: {
+          from: `mg:duel:${duel.duel_id}:loser`,
+          to: `mg:duel:${duel.duel_id}:winner`,
+        },
       });
-      for (const [viewer, amount, side] of [
-        [loserId, -bet, 'loser'],
-        [winnerId, bet, 'winner'],
-      ] as const)
-        await q.query(
-          `insert into lab_wallet_ledger (channel_id, viewer_id, kind, currency, amount, module_id, actor, reason, created_at)
-           values ($1, $2, 'mini_game', 'tokens', $3, null, 'system', $4, $5)`,
-          [
-            msg.channel_id,
-            viewer,
-            amount,
-            `mg:duel:${duel.duel_id}:${side}`,
-            now,
-          ],
-        );
     }
     await q.query(
       `update mini_game_duels set status = 'resolved', ended_at = $2, end_message_id = $3, winner_id = $4, loser_id = $5

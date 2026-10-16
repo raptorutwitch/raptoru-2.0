@@ -13,10 +13,8 @@ import {
   type WordGameStepDraft,
 } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
-import {
-  creditCurrency,
-  CurrencyCreditError,
-} from '../raffle-lab/currencies.js';
+import { type EconomyPort, labEconomy } from '../economy/economy.js';
+import { CurrencyCreditError } from '../raffle-lab/currencies.js';
 import {
   type ChannelSession,
   liveChannelSession,
@@ -98,6 +96,8 @@ export class WordGameService {
     private readonly clock: Clock,
     private readonly rng: R.Rng = Math.random,
     bank?: readonly string[],
+    /** Winnings (Lab wallet by default; the canonical Wallet once P1-001 lot 2 wires it). */
+    private readonly economy: EconomyPort = labEconomy,
   ) {
     this.bank = bank ?? loadWordBank();
   }
@@ -213,14 +213,20 @@ export class WordGameService {
     // ONE Wallet credit for the whole message (Lab test wallet, Jetons). A refused credit (balance cap,
     // currency unavailable) fails the whole message: the transaction rolls back (words still active,
     // streak, finds and chat untouched, no gain announced) and the message can be processed again.
+    // Through the economy port, in this transaction (key = ledger reason, unique per message).
     const key = `jdm:${msg.channel_id}:${msg.message_id}`;
+    let ledger: number;
     try {
-      await creditCurrency(q, now, {
-        channelId: msg.channel_id,
-        viewerId: chatter.id,
-        currencyId: 'tokens',
-        amount: out.total,
-      });
+      ledger = (
+        await this.economy.move(q, now, {
+          channelId: msg.channel_id,
+          viewerId: chatter.id,
+          currency: 'tokens',
+          amount: out.total,
+          kind: 'word_game',
+          key,
+        })
+      ).ledgerId;
     } catch (e) {
       if (e instanceof CurrencyCreditError)
         throw new WordGameError(
@@ -230,15 +236,6 @@ export class WordGameService {
         );
       throw e;
     }
-    const ledger = Number(
-      (
-        await q.query<{ id: number }>(
-          `insert into lab_wallet_ledger (channel_id, viewer_id, kind, currency, amount, module_id, actor, reason, created_at)
-           values ($1, $2, 'word_game', 'tokens', $3, null, 'system', $4, $5) returning id`,
-          [msg.channel_id, chatter.id, out.total, key, now],
-        )
-      )[0]!.id,
-    );
     const pointsOfWords = out.finds.reduce((s, f) => s + f.points, 0);
     await q.query(
       `insert into word_game_messages (channel_id, message_id, session_id, viewer_id, viewer_display_name,

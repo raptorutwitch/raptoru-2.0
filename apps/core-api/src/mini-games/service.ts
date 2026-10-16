@@ -6,8 +6,7 @@ import type {
 import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
-import { lockWallet } from '../lab-moderation/store.js';
-import { creditCurrency, currency } from '../raffle-lab/currencies.js';
+import { type EconomyPort, labEconomy } from '../economy/economy.js';
 import { DuelService, type DuelOutcome } from './duel.js';
 import { parseDuelCommand } from './duel-rules.js';
 import * as R from './rules.js';
@@ -64,9 +63,15 @@ export class MiniGamesService {
     private readonly rng: R.Rng = R.cryptoRng,
     /** Helix « Get Users » by login (Lab app credentials); null = not configured. */
     private readonly lookupLogin: LoginLookup | null = null,
+    /** Bets, gains and Duel stakes (Lab wallet by default; the canonical Wallet once P1-001 lot 2 wires it). */
+    private readonly economy: EconomyPort = labEconomy,
   ) {
-    this.duels = new DuelService(db, clock, rng, (login, msg) =>
-      this.resolveTarget(login, msg),
+    this.duels = new DuelService(
+      db,
+      clock,
+      rng,
+      (login, msg) => this.resolveTarget(login, msg),
+      economy,
     );
   }
 
@@ -116,8 +121,15 @@ export class MiniGamesService {
     const rules = R.MINI_GAME_RULES[cmd.game];
     return this.db.tx(async (q) => {
       const now = this.clock.now();
-      // The wallet lock first: the same viewer's games (and a resent message) are serialized here.
-      const wallet = await lockWallet(q, msg.channel_id, msg.chatter.id, now);
+      // The wallet lock first (economy port): the same viewer's games (and a resent message) are serialized here.
+      const hold = await this.economy.hold(
+        q,
+        now,
+        msg.channel_id,
+        [msg.chatter.id],
+        'tokens',
+      );
+      const tokens = hold.balances.get(msg.chatter.id)!;
       const played = await q.query(
         'select 1 from mini_game_plays where channel_id = $1 and message_id = $2',
         [msg.channel_id, msg.message_id],
@@ -136,40 +148,27 @@ export class MiniGamesService {
         now.getTime() - new Date(last.created_at).getTime() < rules.cooldownMs
       )
         return { outcome: 'ignored' as const, skipped: 'cooldown' as const };
-      const bet = R.resolveBet(cmd.game, cmd.arg, wallet.tokens);
+      const bet = R.resolveBet(cmd.game, cmd.arg, tokens);
       if ('refused' in bet)
         return { outcome: 'ignored' as const, skipped: bet.refused };
-      // A win that the Lab wallet could not hold is refused before the draw (never a drawn-then-lost win).
-      const tokens = await currency(q, 'tokens');
+      // A win that the wallet could not hold is refused before the draw (never a drawn-then-lost win).
       const best = R.netGain(cmd.game, bet.amount, true);
-      if (tokens && wallet.tokens + best > tokens.max_balance)
+      if (tokens + best > hold.maxBalance)
         return { outcome: 'ignored' as const, skipped: 'balance_cap' as const };
       const d = R.draw(cmd.game, this.rng);
       const delta = R.netGain(cmd.game, bet.amount, d.won);
-      let balanceAfter: number;
-      if (delta > 0)
-        balanceAfter = await creditCurrency(q, now, {
+      // ONE balance change and its ledger row (key unique per message), in this transaction.
+      const { balanceAfter, ledgerId: ledger } = await this.economy.move(
+        q,
+        now,
+        {
           channelId: msg.channel_id,
           viewerId: msg.chatter.id,
-          currencyId: 'tokens',
+          currency: 'tokens',
           amount: delta,
-        });
-      else {
-        balanceAfter = wallet.tokens + delta;
-        await q.query(
-          'update lab_wallets set tokens = $3, updated_at = $4 where channel_id = $1 and viewer_id = $2',
-          [msg.channel_id, msg.chatter.id, balanceAfter, now],
-        );
-      }
-      const key = `mg:${msg.channel_id}:${msg.message_id}`;
-      const ledger = Number(
-        (
-          await q.query<{ id: number }>(
-            `insert into lab_wallet_ledger (channel_id, viewer_id, kind, currency, amount, module_id, actor, reason, created_at)
-             values ($1, $2, 'mini_game', 'tokens', $3, null, 'system', $4, $5) returning id`,
-            [msg.channel_id, msg.chatter.id, delta, key, now],
-          )
-        )[0]!.id,
+          kind: 'mini_game',
+          key: `mg:${msg.channel_id}:${msg.message_id}`,
+        },
       );
       await q.query(
         `insert into mini_game_plays (channel_id, message_id, game, viewer_id, viewer_display_name, bet, all_in,

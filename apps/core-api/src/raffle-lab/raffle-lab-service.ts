@@ -35,9 +35,9 @@ import {
   type Actor,
   type LabRole,
 } from '../lab-moderation/store.js';
+import { type EconomyPort, labEconomy } from '../economy/economy.js';
 import { avatarUrls } from './avatars.js';
 import {
-  creditCurrency,
   currency,
   CurrencyCreditError,
   listCurrencies,
@@ -221,6 +221,8 @@ export class RaffleLabService {
     private readonly random: () => number = Math.random,
     /** The channel's real Twitch broadcaster (chat cancel by the streamer): see lab-chat/broadcaster.ts. */
     private readonly broadcasterOf?: BroadcasterOf,
+    /** Winnings (Lab wallet by default; the canonical Wallet once P1-001 lot 2 wires it). */
+    private readonly economy: EconomyPort = labEconomy,
   ) {}
 
   // --- configuration -----------------------------------------------------------------------------------
@@ -936,13 +938,22 @@ export class RaffleLabService {
       );
       return w;
     }
+    // Through the economy port, in this transaction: the credit and its ledger row (one per winner and round).
+    let ledger: { id: number };
     try {
-      await creditCurrency(q, now, {
-        channelId,
-        viewerId,
-        currencyId: w.currency_id!,
-        amount: Number(w.amount),
-      });
+      ledger = {
+        id: (
+          await this.economy.move(q, now, {
+            channelId,
+            viewerId,
+            currency: w.currency_id!,
+            amount: Number(w.amount),
+            kind: 'raffle_win',
+            moduleId: 'raffle',
+            raffleId,
+          })
+        ).ledgerId,
+      };
     } catch (e) {
       if (!(e instanceof CurrencyCreditError)) throw e;
       await q.query(
@@ -951,13 +962,6 @@ export class RaffleLabService {
       );
       return w;
     }
-    const ledger = (
-      await q.query<{ id: number }>(
-        `insert into lab_wallet_ledger (channel_id, viewer_id, kind, currency, amount, module_id, interaction_id, actor, reason, created_at, raffle_id)
-         values ($1, $2, 'raffle_win', $3, $4, 'raffle', null, 'system', null, $5, $6) returning id`,
-        [channelId, viewerId, w.currency_id, Number(w.amount), now, raffleId],
-      )
-    )[0]!;
     await q.query(
       `update lab_raffle_winners set payout_status = 'paid', ledger_id = $3, paid_at = $4, failure = null, attempts = attempts + 1
        where raffle_id = $1 and viewer_id = $2`,
