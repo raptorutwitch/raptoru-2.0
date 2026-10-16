@@ -1,12 +1,48 @@
 # Roulette et Slot V1 — référence de parité (RET-GAME-001 / 002)
 
-> **Statut (16/10/2026) : règles décidées par Antoni ; implémentation Lab en cours.** Migration fonctionnelle rapide
+> **Statut (16/10/2026) : ROULETTE ET SLOT V1 FONCTIONNELLEMENT MIGRÉS ET VALIDÉS EN CONDITIONS RÉELLES — PAS EN
+> PRODUCTION.** **Validation réelle : 16/10/2026** (par Antoni) — vrai chat Twitch, ingestion Lab, sortie LeCroupier_,
+> Wallet Lab ; défaites validées au simulateur. Activation production liée au cutover économique (§ 0).
+>
+> Migration fonctionnelle rapide
 > des jeux StreamElements, **sans refonte** (la refonte Extension viendra plus tard). Chat seulement, Wallet Lab
 > (Jetons), réponses par LeCroupier_ via la file durable `cmd_steps`. Pas d'Extension, pas de framework de mini-jeux,
 > pas de Wallet production. Production = StreamElements jusqu'au cutover économique.
 >
 > **Textes et symboles : ceux de la configuration StreamElements de la chaîne** (captures transcrites, 16/10/2026),
 > mot pour mot (§ 5) ; une seule constante (`apps/core-api/src/mini-games/rules.ts`, `TEXTS` et `SLOT_SYMBOLS`).
+
+## 0. Checkpoint de migration (16/10/2026)
+
+**Module prêt ; production en attente du cutover.** Commits locaux, branche `feat/compact-video-port`, non poussés :
+
+| Commit    | Contenu                                                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `d4b6b0b` | feat(mini-games): Roulette et Slot V1 dans le Core Lab (règles, service, migration Lab `20261020120000_mini_games_lab.sql`, Wallet Lab, mots réservés, tests) |
+| `73f0235` | feat(studio): panneau rapide « Simulation de stream » (barre du haut) + interrupteur Mini-jeux                                                                |
+| `42efc87` | feat(studio): onglet « Simulation » et chat simulé universel (validé par Antoni le 16/10/2026)                                                                |
+
+**Validé par Antoni le 16/10/2026, vrai chat Twitch** (ingestion Lab, sortie réelle LeCroupier_) :
+`!roulette 100` → victoire +100 Jetons, annonce réelle correcte ; `!slots 20` → trois symboles identiques, +480 Jetons,
+annonce réelle correcte ; `!roulette all` → victoire, solde doublé, message all-in correct ; emotes de chaîne
+(`raptor199Pog`, `raptor199Money`) correctement affichées ; aucune double réponse StreamElements observée (test hors
+stream). Défaites Roulette et Slot validées au simulateur, textes personnalisés. `!jetons` (StreamElements) annonce un
+solde distinct du Wallet Lab : les deux économies restent séparées.
+
+**Statuts RET (registre figé du 06/10 : NON MIGRÉ)** : **RET-GAME-001 Roulette = MIGRÉ** · **RET-GAME-002 Slot =
+MIGRÉ** — validés en réel le 16/10/2026 sur le Wallet Lab. RET-GAME-003 Duel et RET-GAME-004 Oracle : NON MIGRÉ.
+
+**Couverture automatique** (pas une validation manuelle de chaque cas limite) : formats de mise, probabilités exactes,
+gains, cooldowns par viewer et par jeu, idempotence du `message_id`, refus silencieux, plafond du Wallet (refus avant
+tirage), rollback complet, concurrence (deux messages simultanés).
+
+**Exploitation Lab** : interrupteur « Mini-jeux » (OFF par défaut) dans le panneau rapide « Simulation » (barre du
+haut) et l'onglet « Simulation » ; couper Roulette / Slot dans StreamElements avant un test en vrai chat avec la sortie
+réelle ON (double réponse sinon).
+
+**Reste avant la production** (transversal) : Wallet canonique (P1-001 lot 2) et cutover économique ; chat / session
+de production (P1-007). Au cutover : désactiver Roulette et Slot dans StreamElements et activer la V1. D'ici là,
+StreamElements reste la production.
 
 ## 1. Sources
 
@@ -82,9 +118,9 @@ Symboles (ordre de la capture) : 🍒 🍊 🍇 🍉 🍈.
 
 ## 7. Validation
 
-Automatique : formats de mise, probabilités, gains, cooldowns, doublons, concurrence, refus, rollback.
-Manuelle (Antoni) : Studio (simulateur), puis vrai chat Twitch avec les modules StreamElements Roulette / Slot coupés
-pendant le test, Wallet Lab, LeCroupier_.
+Automatique : formats de mise, probabilités, gains, cooldowns, doublons, concurrence, refus, rollback — verts.
+Manuelle (Antoni) : **faite le 16/10/2026** — simulateur Studio (victoires et défaites), puis vrai chat Twitch
+(victoires Roulette, Slot, all-in ; § 0). Non couvert manuellement : un vrai stream complet avec StreamElements coupé.
 
 ## 8. Plus tard (hors V1)
 

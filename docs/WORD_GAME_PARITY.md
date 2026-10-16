@@ -38,11 +38,9 @@ série + victoire atomiques, échec Wallet = rollback complet ; son `ShuffleWord
 double son au replay / rechargement ; panneau Studio, avec « Voir la réponse » / « Masquer » par mot actif (caché par
 défaut, état local à Studio, jamais envoyé au chat, à l'Extension ni à OBS).
 
-**Exploitation Lab** : le live simulé se lance dans l'onglet **Tombola** (carte « Tombola automatique », « Simuler
-début de stream ») — session commune lue par le Jeu des mots. « Sortie chat réelle » n'a **pas de contrôle UI**
-(indicateur seul dans l'onglet Commandes) : `POST http://127.0.0.1:4100/api/lab-chat/output` avec l'en-tête
-`x-raptoru-studio: 1` et `{"enabled":true}` (ou `false`). L'ingestion se règle par « Ingestion chat Twitch » (onglet
-Tombola). Sortie réelle ON = LeCroupier_ écrit dans le vrai chat de `raptoru_` : couper le Jeu des mots SAMMI pendant
+**Exploitation Lab** (mise à jour 16/10/2026) : live simulé (session commune lue par le Jeu des mots), ingestion
+Twitch et « Sortie chat réelle » se règlent dans l'onglet **Simulation** de Studio ou son panneau rapide (barre du
+haut), avec confirmation avant toute écriture dans le vrai chat. Sortie réelle ON = LeCroupier_ écrit dans le vrai chat de `raptoru_` : couper le Jeu des mots SAMMI pendant
 un test. La source OBS du son s'ajoute avec l'URL copiée depuis le panneau (sans elle, aucun son).
 
 **Reste avant la production** (transversal, pas propre au module) : gains sur le Wallet canonique (P1-001 lot 2) ;

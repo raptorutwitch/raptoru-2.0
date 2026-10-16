@@ -1,6 +1,35 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 16/10/2026 : Jeu des mots V1 MIGRÉ ET VALIDÉ EN CONDITIONS RÉELLES (lire en premier)
+## État courant — 16/10/2026 : Roulette et Slot V1 MIGRÉS ET VALIDÉS EN CONDITIONS RÉELLES · onglet Simulation (lire en premier)
+
+Vérifier `git status` / `git log`. Branche **`feat/compact-video-port`**, HEAD ≥ `42efc87` (+ commit docs du
+checkpoint). Tout ce qui suit `c7f20de` reste **local, non poussé** ; `main` intact (`d2b61ef`). Statut global :
+[`Raptoru-2.0-ETAT-PROJET.md`](Raptoru-2.0-ETAT-PROJET.md) § 0. **Référence unique du module :**
+[`docs/ROULETTE_SLOT_PARITY.md`](docs/ROULETTE_SLOT_PARITY.md) (§ 0 = checkpoint).
+
+- **Validation réelle : 16/10/2026** (par Antoni), vrai chat Twitch, ingestion Lab, sortie LeCroupier_, Wallet Lab :
+  `!roulette 100` victoire +100, `!slots 20` trois symboles identiques +480, `!roulette all` solde doublé, emotes de
+  chaîne affichées ; défaites validées au simulateur. RET-GAME-001 Roulette et RET-GAME-002 Slot **MIGRÉ**.
+- **Commits** : `d4b6b0b` (Core Roulette / Slot) · `73f0235` (panneau rapide Simulation) · `42efc87` (onglet
+  Simulation + chat simulé universel, validé par Antoni).
+- **Règles V1 figées** : Roulette 50 %, net +1× / −1×, `all` = messages all-in ; Slot 3 rouleaux indépendants,
+  5 symboles (🍒 🍊 🍇 🍉 🍈), 3 identiques (1/25), net +24× / −1× ; minimum 20 ; cooldowns 10 s / 2 s par viewer ;
+  textes StreamElements de la chaîne mot pour mot (`/me` retiré) ; refus silencieux ; interrupteur Mini-jeux OFF par
+  défaut.
+- **Onglet Simulation** : chat Lab déplacé depuis Tombola (ingestion, simulateur, identités, rôles) ; mêmes contrôles
+  que le panneau rapide ; conversation = messages reçus (gardés en mémoire par Core, 100 derniers, badge Simulé /
+  Twitch) + vraies réponses `cmd_steps` de LeCroupier_ (« Simulé · non envoyé sur Twitch » quand la sortie est OFF).
+- **Pièges Lab** : live simulé, ingestion Twitch, « Sortie chat réelle » et Mini-jeux se règlent dans l'onglet **Simulation** ou le
+  panneau rapide « Simulation » de la barre du haut (confirmation avant toute écriture dans le vrai chat ; le live
+  simulé reste aussi dans l'onglet Tombola) ; couper Roulette / Slot dans
+  StreamElements (et le Jeu des mots dans SAMMI) avant un test en vrai chat avec la sortie ON. Au dernier relevé
+  (16/10/2026) : sortie réelle OFF, ingestion ON, Mini-jeux ON.
+- **Pas encore en production** : StreamElements reste la production. Activation au cutover économique (Wallet
+  canonique P1-001 lot 2, chat / session de production P1-007).
+- **Prochaine étape** : **Duel** (RET-GAME-003) en V1 de parité StreamElements — préparation faite (règles connues,
+  inconnues, périmètre), **implémentation sur accord d'Antoni**.
+
+## État — 16/10/2026 : Jeu des mots V1 MIGRÉ ET VALIDÉ EN CONDITIONS RÉELLES (historique, valable sauf mention ci-dessus)
 
 Vérifier `git status` / `git log`. Branche **`feat/compact-video-port`**, HEAD ≥ `b82851f` (+ commit docs du
 checkpoint). Tout ce qui suit `c7f20de` reste **local, non poussé** ; `main` intact (`d2b61ef`). Statut global :
@@ -19,9 +48,9 @@ checkpoint). Tout ce qui suit `c7f20de` reste **local, non poussé** ; `main` in
   Studio ne montre la réponse que sur demande (« Voir la réponse »), localement.
 - **Son** : plus de polling. Victoire commitée → `WordGameWinEvent` → SSE Core → Studio → source OBS (`EventSource`)
   → `ShuffleWordsSong.ogg` ; dédoublonnage par `message_id`, reconnexion sans rejeu. Ne pas retoucher sans décision.
-- **Pièges Lab** : live simulé = onglet **Tombola** › « Simuler début de stream » (session commune) ; « Sortie chat
-  réelle » n'a **pas de bouton** (indicateur dans Commandes) : `POST /api/lab-chat/output` sur
-  `http://127.0.0.1:4100`, en-tête `x-raptoru-studio: 1`, `{"enabled":true|false}` ; sortie ON = LeCroupier_ écrit
+- **Pièges Lab** : live simulé, ingestion Twitch, « Sortie chat réelle » et Mini-jeux se règlent dans l'onglet **Simulation** ou le
+  panneau rapide « Simulation » de la barre du haut (confirmation avant toute écriture dans le vrai chat ; le live
+  simulé reste aussi dans l'onglet Tombola) ; sortie ON = LeCroupier_ écrit
   dans le vrai chat de `raptoru_` (couper le Jeu des mots SAMMI pendant un test) ; la source OBS du son doit être
   ajoutée avec l'URL copiée dans le panneau ; Studio Lab exige Docker Desktop (conteneur `raptoru2-pg`). Suite Core :
   `npx vitest run --maxWorkers=4` (timeouts de charge en parallélisme complet).
