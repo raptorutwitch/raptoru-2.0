@@ -4,6 +4,7 @@ import {
   AlertEventInput,
 } from '@raptoru/schemas';
 import { AlertError, type AlertsService } from '../alerts/service.js';
+import { ALERT_VARIANTS } from '../alerts/variants.js';
 import { HttpError, parse, type Route } from './server.js';
 
 // Twitch alerts V1 (Lab) — routes of the Lab Core only (Bearer secret, Lab database; never the production or public
@@ -21,6 +22,13 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
 
 export function alertsRoutes(alerts: AlertsService): Route[] {
   return [
+    {
+      // The variant catalogue (Studio preview: renders a variant without touching the queue).
+      method: 'GET',
+      pattern: /^\/v1\/lab\/alerts\/catalog$/,
+      auth: 'studio',
+      handle: async () => ({ variants: Object.values(ALERT_VARIANTS) }),
+    },
     {
       // One normalized event (deduplicated by source + id); `source: simulation` for tests.
       method: 'POST',

@@ -1,0 +1,196 @@
+/* Twitch alerts V1 (A2) — Studio tab « Alertes »: compact functional panel, Studio's own tokens (style.css). */
+
+.al {
+  padding: 16px 20px 32px;
+}
+.al-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.al h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.al h1 em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 14px;
+}
+.al h2 {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.al h3 {
+  margin: 10px 0 4px;
+  font-size: 13px;
+}
+.al-note,
+.al-hint,
+.al-empty {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 4px 0;
+}
+.al-grid {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+}
+.al-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.al-field input,
+.al-field select,
+.al-field textarea {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 7px;
+}
+.al-check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.al-presets,
+.al-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.al-small {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.al-preview-status {
+  font-size: 12px;
+  margin: 2px 0;
+}
+.al-stage {
+  --al-scale: 0.4;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  /* Checkerboard: the overlay is transparent, like in OBS over the scene. */
+  background: repeating-conic-gradient(#20232a 0 25%, #2a2e36 0 50%) 0 0 / 32px
+    32px;
+}
+.al-stage iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  border: 0;
+  /* Same color scheme as the alert page: otherwise Chromium paints the frame opaque (Studio is dark). */
+  color-scheme: light;
+  transform: scale(var(--al-scale));
+  transform-origin: 0 0;
+}
+.al-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+.al-list,
+.al-missing {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.al-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.al-item code {
+  color: var(--muted);
+}
+.al-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.al-status {
+  margin-left: auto;
+}
+.al-item--playing .al-status,
+.al-item--claimed .al-status {
+  color: var(--warn);
+}
+.al-item--completed .al-status {
+  color: var(--ok);
+}
+.al-item--failed .al-status,
+.al-item--expired .al-status,
+.al-failure,
+.al-error {
+  color: var(--ko);
+}
+.al-ok {
+  color: var(--ok);
+}
+.al-failure {
+  flex-basis: 100%;
+}
+.al-url {
+  display: flex;
+  gap: 6px;
+}
+.al-url input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+@media (max-width: 1100px) {
+  .al-grid,
+  .al-columns {
+    grid-template-columns: 1fr;
+  }
+}
+.al-timeline {
+  margin: 8px 0 4px;
+}
+.al-timeline input[type='range'] {
+  width: 100%;
+}
+.al-scrub-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+.al-scrub-actions output {
+  min-width: 150px;
+  text-align: center;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}

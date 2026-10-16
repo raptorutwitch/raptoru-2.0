@@ -66,8 +66,11 @@ export function alertData(e: AlertEventInput) {
   const anonymousGifter =
     (e.type === 'gift_targeted' || e.type === 'gift_community') &&
     (e.anonymous === true || !e.actor);
+  // The renderer formats it like the legacy page (« 5€ », « $5 », « 5 CAD »).
   const amount = e.amount
-    ? `${(e.amount.value / 10 ** e.amount.decimal_place).toFixed(e.amount.decimal_place)} ${e.amount.currency}`
+    ? (e.amount.value / 10 ** e.amount.decimal_place).toFixed(
+        e.amount.decimal_place,
+      )
     : undefined;
   return {
     pseudo: anonymousGifter
@@ -76,7 +79,7 @@ export function alertData(e: AlertEventInput) {
     ...(e.recipient ? { recipient: e.recipient.display_name } : {}),
     ...(e.count !== undefined ? { count: e.count } : {}),
     ...(e.bits !== undefined ? { amount: String(e.bits) } : {}),
-    ...(amount ? { amount } : {}),
+    ...(amount ? { amount, currency: e.amount!.currency } : {}),
     ...(e.viewers !== undefined ? { viewers: e.viewers } : {}),
     ...(e.tier ? { tier: e.tier } : {}),
     ...(e.months !== undefined ? { months: e.months } : {}),

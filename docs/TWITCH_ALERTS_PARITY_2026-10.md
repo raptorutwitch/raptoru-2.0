@@ -239,3 +239,36 @@ StreamElements (tips) n'ont pas encore d'adaptateur (point d'intégration : `sou
 **Reste pour A2** : copier les médias legacy dans le stockage Studio ; porter la page de rendu (`Twitch_Alerts.html`)
 en source OBS servie par Studio, alimentée par la variante figée ; worker Studio claim / ACK ; tests depuis l'onglet
 Simulation ; aperçu / calibrage (A7).
+
+## 14. Lot A2 — médias, rendu OBS, aperçu Studio (16/10/2026, Lab, non validé manuellement)
+
+- **Médias** (`apps/studio/server/src/alerts/media-store.ts`, `import-cli.ts`) : copies **exactes** dans le stockage
+  Studio `<données>/apps/studio/server/.runtime/alerts/media` (hors Git, survit aux mises à jour), nommées par
+  empreinte SHA-256, `manifest.json` par nom legacy. L'import ne fait que **lire** les originaux et vérifie l'empreinte
+  de chaque copie. Import réel fait : 18 / 18 (16 legacy « Version webm » + raid) ; originaux revérifiés identiques.
+- **Raid** : `Titan Avi 4.avi` (BGRA brut, alpha réel, 1920×1080, 12 i/s, 19,92 s) converti en `Raid Titan.webm`
+  (VP9 `yuva420p`, CRF 28, sans audio, 5,8 Mo) ; alpha redécodé identique (±0,05/255), contrôle Chromium : ombre et
+  transparence conservées, aucune incrustation. Le MP3 séparé (21,7 s) est copié tel quel et **prolonge** l'alerte
+  (`keepAudio`). Texte / position / timings du raid **provisoires** (`provisional: true`).
+- **Moteur unique** (`apps/studio/server/alerts-player/`) : `timeline.js` (pur : planning des textes, fin d'alerte,
+  formats legacy) + `engine.js` (DOM, ids / classes du legacy, CSS legacy `alerts.css` portée telle quelle). Même
+  code pour la source OBS (`player.html`) et l'aperçu (`preview.html`). Texte viewer **uniquement via textContent**.
+- **Fin d'alerte** = cycle réel : durée imposée + 300 ms (legacy) sinon fin de la vidéo ; un son `keepAudio` repousse
+  la fin jusqu'à sa dernière seconde ; délai de sécurité (média + 10 s) < bail Core → `failed timeout`.
+- **Source OBS** : `http://127.0.0.1:4100/alerts/player.html#<jeton>` (jeton persistant), seule consommatrice de la
+  file A1 : `POST /alerts/next` (claim Core avec son identifiant) → lecture → ACK `started` au vrai départ vidéo, puis
+  `completed` ou `failed` (motif). Média absent au moment du claim → `failed media_missing` par Studio (jamais joué à
+  moitié). Une alerte à la fois (verrou Core), pas de file parallèle en mémoire.
+- **Onglet Studio « Alertes Lab »** : catégorie, variante (média manquant signalé, raid « provisoire »), fausses
+  données (Normal, Pseudo long, HTML hostile, Anonyme), Lancer / Rejouer / Arrêter, volume de l'aperçu (vidéo, son,
+  TTS), timeline image par image (±0,01 s, ±1 image, `fps` mesuré par variante), état des médias, file Core, URL OBS
+  à copier, « Envoyer dans la file » (événement `simulation` par Core → joué par la source OBS). L'aperçu **ne réclame
+  ni n'acquitte jamais** rien.
+- **Preuves** : Studio `alerts-timeline` / `alerts-studio` / `alerts-view` (27), Playwright Chromium
+  `e2e/alerts.e2e.ts` (7 : aperçu isolé de la file, Stop, raid prolongé par le son, HTML hostile, compteur de gifts,
+  anonyme, Dofus long, claim / ACK, deux sources simultanées = une alerte à la fois, pas de rejeu après rechargement,
+  média absent, vidéo cassée, redémarrage de Studio, timeline) ; Core 675 (+ 22 ignorés), Bot 111, Studio 381 ;
+  captures Chromium de chaque variante avec les vrais médias.
+- **Limites** : aucun test dans OBS réel ni Electron ; raid provisoire ; Bits / MoneyTest sont du VP8 + alpha (lus par
+  Chromium, à confirmer dans OBS) ; les noms / montants longs du don sont tronqués comme dans le legacy (pas de boucle
+  d'ajustement d'origine) ; Bot toujours non branché (aucun abonnement EventSub) ; calibrage persistant = A7.

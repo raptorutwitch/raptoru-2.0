@@ -13,6 +13,8 @@ import {
   localLabCoreClient,
   localLabCoreEvents,
 } from './lab-moderation/proxy.js';
+import { AlertMediaStore } from './alerts/media-store.js';
+import { AlertsRuntime } from './alerts/runtime.js';
 import { RaffleRuntime } from './raffle-lab/runtime.js';
 import { WordGameRuntime } from './word-game/runtime.js';
 import { LabChatIngress } from './lab-chat/ingress.js';
@@ -347,6 +349,8 @@ export function createStudioServer(
   wordGame: WordGameRuntime | null = null,
   /** Roulette and Slot V1 (Lab): the switch « Mini-jeux » (Simulation de stream panel). */
   miniGames: ReturnType<typeof miniGamesRelay> | null = null,
+  /** Twitch alerts V1 (Lab): OBS source + media, Studio preview, queue relay. */
+  alerts: AlertsRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -393,6 +397,10 @@ export function createStudioServer(
       // Jeu des mots V1: Core decides; Studio relays the panel and serves the OBS sound source.
       if (wordGame && (await wordGame.handle(req, res, url))) return;
       if (url.pathname === '/api/word-game/state' && !wordGame)
+        return send(res, 200, { enabled: false });
+      // Twitch alerts V1: Core queues; Studio serves the OBS source / preview and relays the claims / reports.
+      if (alerts && (await alerts.handle(req, res, url))) return;
+      if (url.pathname === '/api/alerts/state' && !alerts)
         return send(res, 200, { enabled: false });
       // Roulette and Slot V1: Core decides; Studio relays the switch « Mini-jeux ».
       if (url.pathname.startsWith('/api/mini-games/')) {
@@ -746,6 +754,26 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           ),
         })
       : null;
+  // Twitch alerts V1 (Lab profile only): media in Studio's storage (imported by alerts/import-cli.ts).
+  const alerts =
+    labCore && labProfile
+      ? await AlertsRuntime.create({
+          channelId: cockpitChannel,
+          core: labCore,
+          origin: `http://${host}:${port}`,
+          dir: join(paths.runtimeDir, 'alerts'),
+          playerDir: join(
+            REPO_ROOT,
+            'apps',
+            'studio',
+            'server',
+            'alerts-player',
+          ),
+          media: await AlertMediaStore.open(
+            join(paths.runtimeDir, 'alerts', 'media'),
+          ),
+        })
+      : null;
   // Single Lab chat ingress: ONE Twitch chat connection (bot adapter, switch OFF by default) for every
   // Lab module, plus the chat simulator. Never started automatically unless left ON and unblocked.
   // Lab profile only: in Production the chat / bot 2.0 stays off (no collision with SAMMI / legacy).
@@ -822,6 +850,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     },
     wordGame,
     labCore && labProfile ? miniGamesRelay(labCore) : null,
+    alerts,
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(

@@ -1,0 +1,408 @@
+/* Twitch alerts V1 (A2) - the legacy alert styles, ported AS IS from the legacy page
+   « Alertes Twitch Pour Claude/Version webm/Twitch_Alerts.html » (17/09/2026, lines 8-383; the calibration UI
+   is left out). Same ids / classes as the legacy page: the engine drives them the same way. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: transparent;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+#stage { position: absolute; inset: 0; }
+#alertVideo {
+    position: absolute;
+    background: transparent;
+    visibility: hidden;
+}
+#alertVideo.default {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+#alertVideo.bits-video {
+    left: 15%;
+    top: 15%;
+    width: 70%;
+    height: 70%;
+    object-fit: contain;
+}
+#alertVideo.dofus-banner {
+    width: 60%;
+    height: auto;
+    top: -15%;
+    left: 50%;
+    transform: translateX(-50%);
+    object-fit: contain;
+}
+#alertVideo.money-fade {
+    opacity: 0;
+    transition: opacity var(--money-fade-in, 800ms) linear;
+}
+#alertVideo.money-fade.money-visible { opacity: 1; }
+#alertVideo.money-fade.money-fading-out {
+    opacity: 0;
+    transition-duration: var(--money-fade-out, 300ms);
+}
+#alertAudio { display: none; }
+
+.pseudo-classic {
+    position: absolute;
+    top: 12%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+    text-shadow:
+        -2px -2px 0 #000, 2px -2px 0 #000,
+        -2px 2px 0 #000, 2px 2px 0 #000,
+        0 0 15px rgba(0, 200, 255, .6);
+}
+.pseudo-classic.show { animation: classicIn .3s ease-out forwards; }
+.pseudo-classic.hide { animation: classicOut .3s ease-in forwards; }
+@keyframes classicIn {
+    from { opacity: 0; transform: translateX(calc(-50% - 80px)); }
+    to { opacity: 1; transform: translateX(-50%); }
+}
+@keyframes classicOut {
+    from { opacity: 1; transform: translateX(-50%); }
+    to { opacity: 0; transform: translateX(calc(-50% + 80px)); }
+}
+
+.pseudo-dofus {
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+    text-shadow:
+        -2px -2px 0 #000, 2px -2px 0 #000,
+        -2px 2px 0 #000, 2px 2px 0 #000,
+        0 0 8px rgba(0, 0, 0, .6);
+}
+.pseudo-dofus.show { animation: dofusIn .6s ease-out forwards; }
+.pseudo-dofus.hide { animation: dofusOut 1s ease-in forwards; }
+.pseudo-dofus .letter {
+    display: inline-block;
+    transition: color .25s ease, text-shadow .25s ease, transform .25s ease;
+}
+.pseudo-dofus .letter.sweeping {
+    color: #ffd700;
+    transform: scale(1.15);
+    text-shadow:
+        -2px -2px 0 #000, 2px -2px 0 #000,
+        -2px 2px 0 #000, 2px 2px 0 #000,
+        0 0 20px #ffd700, 0 0 40px rgba(255, 215, 0, .7);
+}
+@keyframes dofusIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(30px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes dofusOut {
+    from { opacity: 1; transform: translateX(-50%) translateY(-10px); }
+    to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+}
+
+.eren-subtitle {
+    position: absolute;
+    left: 50%;
+    bottom: 13%;
+    transform: translateX(-50%);
+    max-width: 1740px;
+    color: white;
+    font-size: 48px;
+    font-weight: 800;
+    letter-spacing: .5px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 11;
+    text-shadow:
+        -2px -2px 0 #080c12, 2px -2px 0 #080c12,
+        -2px 2px 0 #080c12, 2px 2px 0 #080c12,
+        0 0 14px rgba(0, 200, 255, .55);
+}
+.eren-subtitle.show { animation: erenIn .2s steps(3) forwards; }
+.eren-subtitle.tremble {
+    opacity: 1;
+    animation: erenTremble .085s steps(1) infinite;
+    text-shadow:
+        -2px -2px 0 #080c12, 2px -2px 0 #080c12,
+        -2px 2px 0 #080c12, 2px 2px 0 #080c12,
+        -4px 0 0 rgba(0, 229, 255, .9), 4px 0 0 rgba(255, 45, 45, .85),
+        0 0 14px rgba(0, 200, 255, .55);
+}
+.eren-subtitle.out { animation: erenOut .1s steps(2) forwards; }
+@keyframes erenIn {
+    0% { opacity: 0; transform: translateX(-50%) translate(7px, 0); }
+    33% { opacity: .5; transform: translateX(-50%) translate(-5px, 0); }
+    66% { opacity: 1; transform: translateX(-50%) translate(3px, 0); }
+    100% { opacity: 1; transform: translateX(-50%); }
+}
+@keyframes erenTremble {
+    0% { transform: translateX(-50%); }
+    18% { transform: translateX(-50%) translate(-7px, 2px); }
+    36% { transform: translateX(-50%) translate(6px, -3px); }
+    54% { transform: translateX(-50%) translate(-4px, 2px); }
+    72% { transform: translateX(-50%) translate(8px, 1px); }
+    90% { transform: translateX(-50%) translate(-5px, -2px); }
+    100% { transform: translateX(-50%) translate(3px, 2px); }
+}
+@keyframes erenOut {
+    from { opacity: 1; transform: translateX(-50%); }
+    to { opacity: 0; transform: translateX(-50%) translate(7px, 0); }
+}
+
+.pseudo-don {
+    position: absolute;
+    top: var(--don-top, 597px);
+    left: var(--don-left, 925px);
+    width: var(--don-width, 408px);
+    min-height: var(--don-height, 168px);
+    transform: translate(-50%, 18px) scale(.96);
+    color: white;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+    text-shadow:
+        -2px -2px 0 #000, 2px -2px 0 #000,
+        -2px 2px 0 #000, 2px 2px 0 #000,
+        0 0 18px rgba(255, 214, 84, .72);
+}
+.pseudo-don.show { animation: donIn var(--don-enter-duration, 340ms) ease-out forwards; }
+.pseudo-don.hide { animation: donOut var(--don-exit-duration, 300ms) ease-in forwards; }
+.don-text-box {
+    width: 100%;
+    height: var(--don-height, auto);
+    min-height: var(--don-height, 0);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: var(--don-padding, 14px 20px 16px);
+    overflow: hidden;
+    border: 2px solid rgba(255, 220, 130, .82);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(12, 16, 22, .92), rgba(42, 33, 46, .88));
+    box-shadow: 0 12px 26px rgba(0, 0, 0, .42), inset 0 0 22px rgba(255, 220, 130, .1);
+}
+.don-line-main {
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 7px;
+}
+.don-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--don-name-size, 46px);
+    line-height: 1;
+    font-weight: 950;
+}
+.don-amount {
+    flex: 0 1 42%;
+    min-width: 0;
+    max-width: 42%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #7ee2a0;
+    font-size: var(--don-amount-size, 42px);
+    line-height: 1;
+    font-weight: 950;
+}
+.don-message {
+    width: 100%;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    font-size: var(--don-message-size, 26px);
+    line-height: 1.16;
+    font-weight: 800;
+    opacity: 0;
+    animation: donMessageIn 360ms ease-out var(--don-message-delay, 520ms) forwards;
+    display: -webkit-box;
+    -webkit-line-clamp: var(--don-message-lines, 3);
+    -webkit-box-orient: vertical;
+}
+.pseudo-don.no-message .don-message { display: none; }
+@keyframes donIn {
+    from { opacity: 0; transform: translate(-50%, 18px) scale(.96); }
+    to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes donMessageIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes donOut {
+    from { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    to { opacity: 0; transform: translate(-50%, -8px) scale(.98); }
+}
+
+.pseudo-subgift {
+    position: absolute;
+    left: var(--gift-x, 600px);
+    top: var(--gift-y, 700px);
+    width: var(--gift-w, 720px);
+    height: var(--gift-h, 130px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    overflow: hidden;
+    color: white;
+    font-size: var(--gift-font-size, 48px);
+    line-height: 1;
+    font-weight: 900;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 20;
+    text-shadow:
+        -3px -3px 0 #090a12, 3px -3px 0 #090a12,
+        -3px 3px 0 #090a12, 3px 3px 0 #090a12,
+        0 0 18px rgba(120, 210, 255, .95);
+}
+.pseudo-subgift.show { animation: giftNameIn 220ms ease-out forwards; }
+.pseudo-subgift.hide {
+    animation: giftNameOut var(--gift-fade-duration, 348ms) ease-in forwards;
+}
+.gift-content {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: .18em;
+    max-width: 100%;
+    white-space: nowrap;
+}
+.pseudo-subgift .gift-name {
+    color: #6ee7ff;
+    text-shadow:
+        -3px -3px 0 #090a12, 3px -3px 0 #090a12,
+        -3px 3px 0 #090a12, 3px 3px 0 #090a12,
+        0 0 15px rgba(0, 210, 255, .95);
+}
+.pseudo-subgift .gift-x { color: #fff; }
+.pseudo-subgift .gift-count {
+    min-width: 1ch;
+    color: #ffe477;
+    font-variant-numeric: tabular-nums;
+    text-shadow:
+        -3px -3px 0 #090a12, 3px -3px 0 #090a12,
+        -3px 3px 0 #090a12, 3px 3px 0 #090a12,
+        0 0 16px rgba(255, 201, 45, .95);
+}
+.pseudo-subgift .gift-targeted-offer {
+    color: #fff;
+    font-size: .64em;
+    font-weight: 800;
+    letter-spacing: .01em;
+    text-shadow:
+        -2px -2px 0 #090a12, 2px -2px 0 #090a12,
+        -2px 2px 0 #090a12, 2px 2px 0 #090a12,
+        0 0 12px rgba(255, 255, 255, .75);
+}
+.pseudo-subgift .gift-recipient {
+    color: #ff91d7;
+    text-shadow:
+        -3px -3px 0 #090a12, 3px -3px 0 #090a12,
+        -3px 3px 0 #090a12, 3px 3px 0 #090a12,
+        0 0 15px rgba(255, 105, 204, .95);
+}
+.pseudo-subgift .gift-count.tick {
+    animation: giftCounterTick 90ms cubic-bezier(.2, 1.8, .4, 1);
+}
+@keyframes giftNameIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes giftNameOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+@keyframes giftCounterTick {
+    0% { transform: translateY(-.18em) scale(1.18); filter: brightness(1.8); }
+    100% { transform: translateY(0) scale(1); filter: brightness(1); }
+}
+
+.pseudo-bits {
+    position: absolute;
+    left: var(--bits-x, 760px);
+    top: var(--bits-y, 500px);
+    width: var(--bits-w, 400px);
+    height: var(--bits-h, 80px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    color: white;
+    font-size: var(--bits-font-size, 42px);
+    line-height: 1;
+    font-weight: 900;
+    text-align: center;
+    opacity: 0;
+    z-index: 20;
+    text-shadow:
+        -3px -3px 0 #090a12, 3px -3px 0 #090a12,
+        -3px 3px 0 #090a12, 3px 3px 0 #090a12,
+        0 0 16px rgba(170, 90, 255, .95);
+}
+.pseudo-bits.show { animation: giftNameIn 220ms ease-out forwards; }
+.pseudo-bits.hide { animation: giftNameOut var(--bits-fade-duration, 350ms) ease-in forwards; }
+.bits-content {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: .18em;
+    max-width: 100%;
+    white-space: nowrap;
+}
+.bits-name { color: #d9a7ff; }
+.bits-amount { color: #ffe477; font-variant-numeric: tabular-nums; }
+
+/* Raid (A2): no legacy text style exists. PROVISIONAL zone text, same look family as the bits / gifts. */
+.pseudo-zone {
+    position: absolute;
+    left: var(--zone-x, 460px);
+    top: var(--zone-y, 60px);
+    width: var(--zone-w, 1000px);
+    height: var(--zone-h, 90px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    color: white;
+    font-size: var(--zone-font-size, 54px);
+    line-height: 1;
+    font-weight: 900;
+    text-align: center;
+    opacity: 0;
+    z-index: 20;
+    text-shadow:
+        -3px -3px 0 #090a12, 3px -3px 0 #090a12,
+        -3px 3px 0 #090a12, 3px 3px 0 #090a12,
+        0 0 16px rgba(255, 120, 60, .95);
+}
+.pseudo-zone.show { animation: giftNameIn 220ms ease-out forwards; }
+.pseudo-zone.hide { animation: giftNameOut var(--zone-fade-duration, 350ms) ease-in forwards; }
+.zone-content { display: inline-flex; align-items: baseline; gap: .18em; max-width: 100%; white-space: nowrap; }
+.zone-name { color: #ffb38a; }
+.zone-number { color: #ffe477; font-variant-numeric: tabular-nums; }

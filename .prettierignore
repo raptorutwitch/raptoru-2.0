@@ -14,3 +14,6 @@ prototypes/
 
 # Audit register imported as is (wide reference tables, maintained by hand: never reformatted)
 docs/ASTRA_GLOBAL_AUDIT_2026-10.md
+
+# Legacy alert styles ported as is from Twitch_Alerts.html (docs/TWITCH_ALERTS_PARITY_2026-10.md)
+apps/studio/server/alerts-player/alerts.css

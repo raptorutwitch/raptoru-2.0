@@ -124,7 +124,7 @@ describe('reception', () => {
     );
     expect(don.alert).toMatchObject({
       variant_id: 'don_moneytest',
-      data: { amount: '5.00 EUR', message: 'merci' },
+      data: { amount: '5.00', currency: 'EUR', message: 'merci' },
     });
   });
 });
@@ -263,7 +263,7 @@ describe('lease and recovery', () => {
   it('play lease: media length or last timing, plus the margin', () => {
     expect(playLeaseMs(ALERT_VARIANTS.subgift_1!)).toBe(6341 + 15_000);
     expect(playLeaseMs(ALERT_VARIANTS.don_moneytest!)).toBe(7600 + 15_000);
-    expect(playLeaseMs(ALERT_VARIANTS.raid_default!)).toBe(10_000 + 15_000);
+    expect(playLeaseMs(ALERT_VARIANTS.raid_default!)).toBe(19_916 + 15_000);
   });
 });
 
@@ -283,6 +283,19 @@ describe('isolation', () => {
     expect(await count('lab_wallets')).toBe(0);
     expect(await count('lab_wallet_ledger')).toBe(0);
     expect(await count('wallet_transactions')).toBe(0);
+  });
+
+  it('the catalogue route lists every variant (preview, no queue access)', async () => {
+    const get = alertsRoutes(alerts).find((r) =>
+      r.pattern.test('/v1/lab/alerts/catalog'),
+    )!;
+    const out = (await get.handle({
+      params: [],
+      body: undefined,
+      url: new URL('http://x/v1/lab/alerts/catalog'),
+    })) as { variants: { id: string }[] };
+    expect(out.variants.map((v) => v.id)).toHaveLength(14);
+    expect(await count('alert_items')).toBe(0);
   });
 
   it('routes validate the event contract', async () => {

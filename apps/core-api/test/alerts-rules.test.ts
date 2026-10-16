@@ -93,12 +93,15 @@ describe('other events', () => {
     expect(idOf(ev({ type: 'bits', bits: 10 }), 0)).toBe('bits_default');
   });
 
-  it('raid: supported, rendering still to define (no invented media)', () => {
+  it('raid: its found media (A2), text / position / timings flagged provisional', () => {
     expect(idOf(ev({ type: 'raid', viewers: 42 }), 0)).toBe('raid_default');
     expect(ALERT_VARIANTS.raid_default).toMatchObject({
-      video: null,
-      audio: null,
-      pending: true,
+      video: 'Raid Titan.webm',
+      audio: 'Raptoru_Alerte_Raid_Sound.mp3',
+      keepAudio: true,
+      text: '{pseudo} débarque avec {viewers} viewers !',
+      mediaMs: 19916,
+      provisional: true,
     });
   });
 
@@ -186,6 +189,6 @@ describe('display data (untrusted)', () => {
           message: '<b>gg</b>',
         }),
       ),
-    ).toMatchObject({ amount: '12.50 EUR', message: '<b>gg</b>' });
+    ).toMatchObject({ amount: '12.50', currency: 'EUR', message: '<b>gg</b>' });
   });
 });

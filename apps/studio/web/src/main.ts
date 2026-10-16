@@ -8,6 +8,7 @@ import './commands.css';
 import './word-game.css';
 import './bonk-target.css';
 import './simulation.css';
+import './alerts.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
 import { mountSoundConfig } from './sound-config.js';
@@ -19,6 +20,7 @@ import { mountCommands } from './commands.js';
 import { mountWordGame } from './word-game.js';
 import { mountSimulation } from './simulation.js';
 import { mountSimulationTab } from './simulation-tab.js';
+import { mountAlerts } from './alerts-tab.js';
 
 type TabId =
   | 'studio'
@@ -26,6 +28,7 @@ type TabId =
   | 'tombola'
   | 'commands'
   | 'word-game'
+  | 'alerts'
   | 'simulation'
   | 'test-lab'
   | 'extension-lab'
@@ -44,6 +47,7 @@ if (app) {
         <button class="tab" type="button" data-tab="tombola">Tombola <em>Core</em></button>
         <button class="tab" type="button" data-tab="commands">Commandes <em>Core</em></button>
         <button class="tab" type="button" data-tab="word-game">Jeu des mots <em>Core</em></button>
+        <button class="tab" type="button" data-tab="alerts">Alertes <em>Lab</em></button>
         <button class="tab" type="button" data-tab="simulation">Simulation <em>Lab</em></button>
         <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
@@ -58,6 +62,7 @@ if (app) {
     <main id="tab-tombola" class="tab-flush" hidden></main>
     <main id="tab-commands" hidden></main>
     <main id="tab-word-game" hidden></main>
+    <main id="tab-alerts" hidden></main>
     <main id="tab-simulation" hidden></main>
     <main id="tab-test-lab" hidden></main>
     <main id="tab-extension-lab" class="tab-full" hidden></main>
@@ -74,6 +79,7 @@ if (app) {
   const wordGame = mountWordGame(
     app.querySelector<HTMLElement>('#tab-word-game')!,
   );
+  const alerts = mountAlerts(app.querySelector<HTMLElement>('#tab-alerts')!);
   const simulationTab = mountSimulationTab(
     app.querySelector<HTMLElement>('#tab-simulation')!,
   );
@@ -103,6 +109,8 @@ if (app) {
     app.querySelector<HTMLElement>('#tab-word-game')!.hidden =
       tab !== 'word-game';
     wordGame.setVisible(tab === 'word-game');
+    app.querySelector<HTMLElement>('#tab-alerts')!.hidden = tab !== 'alerts';
+    alerts.setVisible(tab === 'alerts');
     app.querySelector<HTMLElement>('#tab-simulation')!.hidden =
       tab !== 'simulation';
     simulationTab.setVisible(tab === 'simulation');
@@ -141,6 +149,7 @@ if (app) {
       remembered === 'tombola' ||
       remembered === 'commands' ||
       remembered === 'word-game' ||
+      remembered === 'alerts' ||
       remembered === 'simulation' ||
       remembered === 'soundboard' ||
       remembered === 'test-lab'
@@ -156,6 +165,7 @@ if (app) {
     asked === 'tombola' ||
     asked === 'commands' ||
     asked === 'word-game' ||
+    asked === 'alerts' ||
     asked === 'test-lab' ||
     asked === 'extension-lab' ||
     asked === 'soundboard'

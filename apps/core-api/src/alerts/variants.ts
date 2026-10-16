@@ -55,8 +55,12 @@ export interface AlertVariant {
   priority: number;
   /** Measured media length (ms), when known: used for the playing lease only. */
   mediaMs?: number;
-  /** No rendering defined yet (raid): queued and observable, configured later. */
+  /** Measured video frame rate: the Studio preview timeline steps image by image. */
+  fps?: number;
+  /** No rendering defined yet: queued and observable, configured later. */
   pending?: boolean;
+  /** Text, position and timings are placeholders awaiting Antoni's visual validation (raid). */
+  provisional?: boolean;
 }
 
 const GIFT = {
@@ -69,6 +73,7 @@ const GIFT = {
   zone: { x: 820, y: 261, w: 319, h: 48 },
   audio: null,
   mediaMs: 6341,
+  fps: 24,
 } as const;
 
 export const ALERT_VARIANTS: Record<string, AlertVariant> = {
@@ -85,6 +90,7 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     hideAt: 4500,
     priority: 10,
     mediaMs: 6299,
+    fps: 24,
   },
   follow_eren: {
     id: 'follow_eren',
@@ -99,6 +105,7 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     hideAt: 4500,
     priority: 10,
     mediaMs: 6292,
+    fps: 24,
   },
   follow_dofus_ebene: {
     id: 'follow_dofus_ebene',
@@ -115,6 +122,7 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     maxFontSize: 38,
     priority: 10,
     mediaMs: 4674,
+    fps: 24,
   },
   follow_dofus_eliatrope: {
     id: 'follow_dofus_eliatrope',
@@ -131,6 +139,7 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     maxFontSize: 44,
     priority: 10,
     mediaMs: 4716,
+    fps: 24,
   },
   follow_dofus_emeraude: {
     id: 'follow_dofus_emeraude',
@@ -147,6 +156,7 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     maxFontSize: 35,
     priority: 10,
     mediaMs: 4299,
+    fps: 24,
   },
   eren_sub: {
     id: 'eren_sub',
@@ -167,6 +177,7 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     ],
     priority: 30,
     mediaMs: 4417,
+    fps: 24,
   },
   subgift_1: {
     id: 'subgift_1',
@@ -225,6 +236,7 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     duration: 3850,
     zone: { x: 761, y: 156, w: 400, h: 80 },
     priority: 20,
+    fps: 12,
   },
   don_moneytest: {
     id: 'don_moneytest',
@@ -255,19 +267,30 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
       lang: 'fr-FR',
     },
     priority: 40,
+    fps: 15,
   },
-  // Raid: kept (decision 16/10/2026) but no custom media exists in the legacy (Streamlabs only): queued and observable,
-  // its rendering is chosen later. No invented animation or sound.
+  // Raid: kept (decision 16/10/2026). Media found by Antoni in `Documents\Twitch\Alertes\Raid` (A2): « Titan Avi 4.avi »
+  // (raw BGRA, real alpha) converted to VP9 + alpha WebM, 19 916 ms, 1920×1080, 12 fps; its separate sound plays on
+  // after the video (21.7 s). The TEXT, POSITION, TIMINGS and PRIORITY are PROVISIONAL (no legacy reference): to be
+  // calibrated by Antoni. Variables: {pseudo}, {viewers}.
   raid_default: {
     id: 'raid_default',
     type: 'raid',
-    video: null,
-    audio: null,
+    video: 'Raid Titan.webm',
+    audio: 'Raptoru_Alerte_Raid_Sound.mp3',
+    keepAudio: true,
     volume: LEGACY_VOLUME,
     style: 'default',
-    textStyle: 'pseudo-classic',
+    textStyle: 'pseudo-zone',
+    text: '{pseudo} débarque avec {viewers} viewers !',
+    showAt: 1500,
+    fadeOutAt: 7650,
+    hideAt: 8000,
+    zone: { x: 460, y: 60, w: 1000, h: 90 },
     priority: 30,
-    pending: true,
+    mediaMs: 19916,
+    fps: 12,
+    provisional: true,
   },
 };
 

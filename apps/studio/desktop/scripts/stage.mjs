@@ -43,6 +43,8 @@ const copies = [
   // Tombola V2 OBS overlay (single browser source served by the Studio server).
   'apps/studio/server/raffle-overlay',
   'apps/studio/server/word-game-player',
+  // Twitch alerts V1 OBS source / Studio preview (media live in Studio's storage, never in the package).
+  'apps/studio/server/alerts-player',
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
@@ -73,6 +75,8 @@ const runtimeFiles = [
   'apps/studio/server/raffle-overlay/overlay.html',
   'apps/studio/server/word-game-player/player.html',
   'apps/studio/server/word-game-player/ShuffleWordsSong.ogg',
+  'apps/studio/server/alerts-player/player.html',
+  'apps/studio/server/alerts-player/engine.js',
   'apps/studio/web/dist/index.html',
   'apps/studio/desktop/static/status.html',
   'apps/twitch-extension/extension/panel.html',
