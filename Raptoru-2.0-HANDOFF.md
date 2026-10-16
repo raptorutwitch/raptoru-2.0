@@ -1,6 +1,37 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 15/10/2026 : Bonk VNext FONCTIONNELLEMENT TERMINÉ ET VALIDÉ EN LOCAL (lire en premier)
+## État courant — 16/10/2026 : Jeu des mots V1 MIGRÉ ET VALIDÉ EN CONDITIONS RÉELLES (lire en premier)
+
+Vérifier `git status` / `git log`. Branche **`feat/compact-video-port`**, HEAD ≥ `b82851f` (+ commit docs du
+checkpoint). Tout ce qui suit `c7f20de` reste **local, non poussé** ; `main` intact (`d2b61ef`). Statut global :
+[`Raptoru-2.0-ETAT-PROJET.md`](Raptoru-2.0-ETAT-PROJET.md) § 0. **Référence unique du module :**
+[`docs/WORD_GAME_PARITY.md`](docs/WORD_GAME_PARITY.md) (§ 0 = checkpoint, § 2 = statuts RET-WORD).
+
+- **Validation réelle : 16/10/2026** (par Antoni) — Studio Lab sur la vraie pile, vrai chat Twitch (SAMMI fermé),
+  Wallet Lab, sortie chat LeCroupier_, son OBS par push SSE, panneau Studio. RET-WORD-001 à 004 **MIGRÉ**, RET-WORD-005
+  **PARTIEL** (stats enregistrées ; affichage / progression plus tard).
+- **Commits** : Lot 0 `b4a67aa` · Lot 1 `cf0e88b` · Lot 2 `ebb9f12` · Lot 3 `bde4c11` · Lot 4 `d260f09` · Lot 5
+  `55bb8d1` · son push `3a89b9c` · « Voir la réponse » `b82851f`.
+- **Décisions figées (V1 = parité legacy, pas de refonte)** : pas d'UI viewer Extension ; mots actifs remis à zéro
+  entre deux sessions live, restaurés après un restart dans la même session ; jamais un mot déjà actif retiré une
+  seconde fois (un mot terminé peut ressortir) ; casse ignorée, accents obligatoires ; mot doré ×4 en un seul message ;
+  un seul crédit Wallet par message gagnant, échec Wallet = rollback complet ; LeCroupier_ = compte de sortie chat ;
+  Studio ne montre la réponse que sur demande (« Voir la réponse »), localement.
+- **Son** : plus de polling. Victoire commitée → `WordGameWinEvent` → SSE Core → Studio → source OBS (`EventSource`)
+  → `ShuffleWordsSong.ogg` ; dédoublonnage par `message_id`, reconnexion sans rejeu. Ne pas retoucher sans décision.
+- **Pièges Lab** : live simulé = onglet **Tombola** › « Simuler début de stream » (session commune) ; « Sortie chat
+  réelle » n'a **pas de bouton** (indicateur dans Commandes) : `POST /api/lab-chat/output` sur
+  `http://127.0.0.1:4100`, en-tête `x-raptoru-studio: 1`, `{"enabled":true|false}` ; sortie ON = LeCroupier_ écrit
+  dans le vrai chat de `raptoru_` (couper le Jeu des mots SAMMI pendant un test) ; la source OBS du son doit être
+  ajoutée avec l'URL copiée dans le panneau ; Studio Lab exige Docker Desktop (conteneur `raptoru2-pg`). Suite Core :
+  `npx vitest run --maxWorkers=4` (timeouts de charge en parallélisme complet).
+- **Pas encore en production** : SAMMI reste la production. Activation et coupure du deck SAMMI « Jeu des mots »
+  seulement au cutover économique (Wallet canonique P1-001 lot 2, chat / session de production P1-007).
+- **Prochaine étape** (stratégie : finir la migration du legacy retenu avant les gros reworks) : **Roulette + Slot**
+  (RET-GAME-001 / 002) en V1 de parité legacy rapide — refonte Extension plus tard (décision d'Antoni). Alternative
+  du registre : alertes (PRIORITÉ 2, moteur complet). Choix à confirmer par Antoni.
+
+## État — 15/10/2026 : Bonk VNext FONCTIONNELLEMENT TERMINÉ ET VALIDÉ EN LOCAL (historique, valable sauf mention ci-dessus)
 
 Vérifier `git status` / `git log`. Branche de travail **`feat/compact-video-port`**, HEAD ≥ `65fea03` (checkpoints
 docs au-dessus de `639fc0f`). **Statut de tous les modules et roadmap :**

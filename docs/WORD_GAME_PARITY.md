@@ -1,12 +1,54 @@
 # Jeu des mots V1 — référence de parité (Lot 0)
 
-> **Statut : Lot 0 documentaire, rédigé le 16/10/2026, à valider par Antoni. Rien n'est implémenté.**
+> **Statut (16/10/2026) : JEU DES MOTS V1 FONCTIONNELLEMENT MIGRÉ ET VALIDÉ EN CONDITIONS RÉELLES.**
+> **Validation réelle : 16/10/2026** (par Antoni) — vrai chat Twitch, Wallet Lab, sortie chat LeCroupier_, son OBS
+> (SSE), Studio. **Pas encore en production** : l'activation définitive et la coupure du deck SAMMI dépendent du
+> cutover économique global (Wallet canonique P1-001 lot 2, chat / session de production P1-007) — § 0.
+> Rédigé le 16/10/2026 (Lot 0) ; règles inchangées depuis, sauf le mécanisme du son (§ 18).
 > Ce document est la référence unique de la migration V1 du Jeu des mots (RET-WORD-001 à 005). Objectif :
 > **pouvoir couper le Jeu des mots SAMMI sans perdre de fonction importante.** Parité fonctionnelle avec le legacy,
 > pas de refonte. Toute règle ci-dessous cite sa preuve legacy (bouton / position dans le deck SAMMI) ou la décision
 > d'Antoni qui la remplace (§ 25).
 
 ---
+
+## 0. Checkpoint de migration (16/10/2026)
+
+**Module prêt ; production en attente du cutover.** Commits locaux, branche `feat/compact-video-port`, non poussés :
+
+| Lot    | Commit    | Contenu                                                                                                  |
+| ------ | --------- | -------------------------------------------------------------------------------------------------------- |
+| 0      | `b4a67aa` | docs(word-game): freeze legacy parity rules                                                              |
+| 1      | `cf0e88b` | feat(word-game): implement legacy parity rules (règles pures, banque)                                    |
+| 2      | `ebb9f12` | feat(word-game): reuse durable chat output queue (`cmd_steps` origin `word_game`)                        |
+| 3      | `bde4c11` | feat(word-game): implement core game service (session, cycle, transaction unique, Wallet, routes Studio) |
+| 4      | `d260f09` | feat(word-game): add Studio controls and OBS sound                                                       |
+| 5      | `55bb8d1` | feat(word-game): forward plain chat messages to Core (Bot : tous les messages, plus seulement `!`)       |
+| Son    | `3a89b9c` | refactor(word-game): push win sound events to OBS (SSE, remplace le polling du Lot 4)                    |
+| Studio | `b82851f` | feat(word-game): add optional answer reveal in Studio                                                    |
+
+**Validé par Antoni le 16/10/2026** (Studio Lab sur la vraie pile, puis vrai chat Twitch, SAMMI fermé) :
+migrations Lab appliquées ; session live simulée commune détectée ; mot manuel et tirage planifié 5–15 min ; message
+ordinaire ignoré ; bonne réponse depuis le vrai chat (casse ignorée, accents exigés) ; annonce réelle par
+LeCroupier_ ; crédit Wallet Lab exact, un seul crédit par message ; série, casse-série, `!mots`, `!streakmot` ;
+plusieurs mots / combo ; mot doré ×4 (un seul message `🔸 X 🔸`) ; Arrêter / Reprendre (mots actifs toujours
+trouvables) ; restart Core dans la même session (état restauré) ; nouvelle session (mots abandonnés, remise à zéro) ;
+aucun mot actif en double ; annonces de LeCroupier_ non réinjectées ; idempotence des `message_id` ; Wallet + stats +
+série + victoire atomiques, échec Wallet = rollback complet ; son `ShuffleWordsSong.ogg` dans OBS par push SSE, sans
+double son au replay / rechargement ; panneau Studio, avec « Voir la réponse » / « Masquer » par mot actif (caché par
+défaut, état local à Studio, jamais envoyé au chat, à l'Extension ni à OBS).
+
+**Exploitation Lab** : le live simulé se lance dans l'onglet **Tombola** (carte « Tombola automatique », « Simuler
+début de stream ») — session commune lue par le Jeu des mots. « Sortie chat réelle » n'a **pas de contrôle UI**
+(indicateur seul dans l'onglet Commandes) : `POST http://127.0.0.1:4100/api/lab-chat/output` avec l'en-tête
+`x-raptoru-studio: 1` et `{"enabled":true}` (ou `false`). L'ingestion se règle par « Ingestion chat Twitch » (onglet
+Tombola). Sortie réelle ON = LeCroupier_ écrit dans le vrai chat de `raptoru_` : couper le Jeu des mots SAMMI pendant
+un test. La source OBS du son s'ajoute avec l'URL copiée depuis le panneau (sans elle, aucun son).
+
+**Reste avant la production** (transversal, pas propre au module) : gains sur le Wallet canonique (P1-001 lot 2) ;
+chat et session de production (P1-007, bot principal seul consommateur EventSub). Au cutover économique : désactiver
+le deck SAMMI « Jeu des mots » (cycle de tirage, détection chat, `!mots`, `!streakmot`, annonces, son) et activer la
+V1. D'ici là, SAMMI reste la production.
 
 ## 1. Architecture legacy prouvée
 
@@ -30,15 +72,17 @@ Le deck contient le secret SAMMI du leaderboard en clair dans des URL : **il n'e
 
 ## 2. Les 5 entrées RET-WORD (document canonique de migration du 06/10/2026)
 
-| ID               | Besoin                                                             | Couverture V1                                                                         |
-| ---------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| **RET-WORD-001** | Chercher des mots et recevoir les gains ; consultation par `!mots` | §§ 3–5, 11, 14–17                                                                     |
-| **RET-WORD-002** | Bonus mots dorés, rapidité et combos                               | §§ 5–7                                                                                |
-| **RET-WORD-003** | Séries pendant le live, consultation, annonces                     | §§ 8, 10, 11                                                                          |
-| **RET-WORD-004** | Bonus de rupture de série                                          | § 9                                                                                   |
-| **RET-WORD-005** | Statistiques et progression des trouvailles                        | § 21 (stats minimales enregistrées) ; affichage site / leaderboard = PLUS TARD (§ 24) |
+| ID               | Besoin                                                             | Couverture V1                                                                         | État V2 au 16/10/2026 (registre du 06/10 : NON MIGRÉ)                                          |
+| ---------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **RET-WORD-001** | Chercher des mots et recevoir les gains ; consultation par `!mots` | §§ 3–5, 11, 14–17                                                                     | **MIGRÉ** · validé en réel le 16/10 (Wallet Lab)                                               |
+| **RET-WORD-002** | Bonus mots dorés, rapidité et combos                               | §§ 5–7                                                                                | **MIGRÉ** · validé en réel le 16/10                                                            |
+| **RET-WORD-003** | Séries pendant le live, consultation, annonces                     | §§ 8, 10, 11                                                                          | **MIGRÉ** · validé en réel le 16/10                                                            |
+| **RET-WORD-004** | Bonus de rupture de série                                          | § 9                                                                                   | **MIGRÉ** · validé en réel le 16/10                                                            |
+| **RET-WORD-005** | Statistiques et progression des trouvailles                        | § 21 (stats minimales enregistrées) ; affichage site / leaderboard = PLUS TARD (§ 24) | **PARTIEL** · critère V1 atteint (stats enregistrées) ; progression / affichage = APRÈS PILOTE |
 
-RET-WORD-006 (ancien jeu des mots) reste obsolète.
+RET-WORD-006 (ancien jeu des mots) reste obsolète. Le registre (PDF du 06/10/2026, hors dépôt) est figé : l'état à
+jour des RET-WORD est cette colonne. « MIGRÉ » = fonction portée et validée ; l'**activation production** reste liée
+au cutover économique (§ 0).
 
 ## 3. Règles fonctionnelles — vue d'ensemble
 
@@ -291,8 +335,16 @@ channel-sessions.ts`, ASTRA-P1-007). Elle est ouverte et fermée par l'événeme
 
 - `ShuffleWordsSong.ogg` (§ 1), versionné dans le dépôt (asset unique du module, pas de catalogue).
 - Joué **une fois par message gagnant**, quel que soit le nombre de mots (`JeuDesMots` pos 115, hors de la boucle).
-- Mécanisme : une **source navigateur OBS servie par Studio**, comme les lecteurs Soundboard et TTS. Aucun visuel,
-  aucun accusé de réception, aucun paiement lié au son. Un son manqué (source fermée) ne change rien d'autre.
+- Mécanisme : une **source navigateur OBS servie par Studio**. Aucun visuel, aucun accusé de réception, aucun
+  paiement lié au son. Un son manqué (source fermée) ne change rien d'autre.
+- **Mécanisme final (`3a89b9c`, validé en réel le 16/10/2026) : push, sans polling.** Le polling 1 s de `recent` du
+  Lot 4 initial est supprimé. Chaîne : victoire entièrement commitée (mots, série, stats, Wallet, victoire) →
+  `WordGameWinEvent` (`channel_id`, `message_id` Twitch, `created_at`) → SSE Core → Studio
+  (`GET /v1/lab/word-game/:channel/events`, Lab uniquement) → SSE Studio → source OBS (`/word-game/events`, jeton,
+  `EventSource`) → `ShuffleWordsSong.ogg`.
+- Aucun événement si le Wallet est refusé (rollback), sur un message rejoué, ni pour `!mots`, `!streakmot` ou
+  « Nouveau mot ». La source mémorise les derniers `message_id` joués (aucun double son) ; reconnexion sans rejeu de
+  l'historique. Une victoire pendant une coupure peut être ratée : accepté pour la V1.
 
 ## 19. Contrat de sortie chat — `cmd_steps` (feu vert d'Antoni, 16/10/2026)
 
@@ -375,29 +427,32 @@ Réutilisation de la file durable existante de Commands V2 ; **aucun deuxième c
 
 ## 23. Critères de validation (RET-WORD-001 à 004 = MIGRÉ ; RET-WORD-005 = stats enregistrées)
 
+État au 16/10/2026 : automatiques verts ; manuels validés par Antoni (§ 0), sauf « un vrai stream complet » et le
+cutover.
+
 Automatiques (Lots 1–4) :
 
-- [ ] Cas de référence du § 5, combos § 7, primes § 9, paliers et variantes § 10 / 12.5.
-- [ ] Sous-chaîne, casse ignorée (y compris lettres accentuées), accents exigés (§ 17).
-- [ ] Plusieurs mots par message, série +1 par mot, prime au plus une fois.
-- [ ] Deux messages simultanés → un seul gagnant ; renvoi d'un `message_id` → aucun double crédit ni message.
-- [ ] Session : nouvelle session → zéro mot, série vide ; restart même session → restauration ; heure dépassée → un
+- [x] Cas de référence du § 5, combos § 7, primes § 9, paliers et variantes § 10 / 12.5.
+- [x] Sous-chaîne, casse ignorée (y compris lettres accentuées), accents exigés (§ 17).
+- [x] Plusieurs mots par message, série +1 par mot, prime au plus une fois.
+- [x] Deux messages simultanés → un seul gagnant ; renvoi d'un `message_id` → aucun double crédit ni message.
+- [x] Session : nouvelle session → zéro mot, série vide ; restart même session → restauration ; heure dépassée → un
       seul mot.
-- [ ] Hors live → aucune détection, aucun mot.
-- [ ] Tirage sans mot actif en double ; doublon de banque neutralisé.
-- [ ] `cmd_steps` : tests Commands inchangés verts ; lignes word_game ordonnées, sans cascade.
-- [ ] Router : Tombola et Commands ne reçoivent pas les messages ordinaires.
+- [x] Hors live → aucune détection, aucun mot.
+- [x] Tirage sans mot actif en double ; doublon de banque neutralisé.
+- [x] `cmd_steps` : tests Commands inchangés verts ; lignes word_game ordonnées, sans cascade.
+- [x] Router : Tombola et Commands ne reçoivent pas les messages ordinaires.
 
 Manuels, par Antoni (« validé » = testé par Antoni) :
 
-- [ ] Lab, simulateur Studio puis vrai chat (chaîne de test, ou Jeu des mots SAMMI coupé pendant le test pour
+- [x] Lab, simulateur Studio puis vrai chat (chaîne de test, ou Jeu des mots SAMMI coupé pendant le test pour
       éviter un double jeu) : mot publié (normal et doré, **un seul message**), trouvaille, combo, série et annonces,
       casse-série, `!mots`, `!streakmot`, textes au caractère près.
-- [ ] Son joué une fois par message gagnant dans OBS.
-- [ ] Crédit unique visible dans le Wallet de test.
-- [ ] « Arrêter », « Nouveau mot », restart Core pendant un live.
-- [ ] Un vrai stream complet sans erreur.
-- [ ] Cutover : à la bascule économique (Wallet canonique, chat de production P1-007), désactiver le deck SAMMI
+- [x] Son joué une fois par message gagnant dans OBS.
+- [x] Crédit unique visible dans le Wallet de test.
+- [x] « Arrêter », « Nouveau mot », restart Core pendant un live.
+- [ ] Un vrai stream complet sans erreur (à observer au premier stream réel en V1).
+- [ ] Cutover (pas encore) : à la bascule économique (Wallet canonique, chat de production P1-007), désactiver le deck SAMMI
       « Jeu des mots », activer la V1.
 
 ## 24. PLUS TARD (hors V1, ne bloque rien)
