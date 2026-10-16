@@ -98,6 +98,12 @@
   font-size: 15px;
   letter-spacing: 0.06em;
 }
+.wg-answer {
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--line);
+  font-weight: 600;
+}
 .wg-age {
   margin-left: auto;
   color: var(--muted);

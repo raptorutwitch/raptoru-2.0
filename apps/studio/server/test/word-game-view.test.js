@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ageLabel, wordGameView } from '../../web/src/word-game-view.ts';
+import {
+  ageLabel,
+  keepRevealed,
+  wordGameView,
+} from '../../web/src/word-game-view.ts';
 
 // Jeu des mots V1 — Studio panel view (Lot 4): what the streamer sees, from Core's state only
 // (docs/WORD_GAME_PARITY.md § 14). The clear words never appear (only what the chat saw).
@@ -157,6 +161,65 @@ describe('panel view', () => {
     const html = wordGameView(
       state({ streak: { holder_id: '1', holder_name: '<b>x</b>', count: 1 } }),
       NOW,
+    );
+    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
+  });
+
+  it('« Voir la réponse »: hidden by default, revealed for that line only, « Masquer » hides it again', () => {
+    const st = state({
+      active: [
+        word({ occurrence_id: 'jdm-1', word: 'angle', shuffled: 'lagne' }),
+        word({ occurrence_id: 'jdm-2', word: 'requin', shuffled: 'quiner' }),
+      ],
+    });
+    const reveal = (html, id) =>
+      new RegExp(
+        `<button[^>]*data-reveal="${id}" aria-pressed="(true|false)">([^<]*)</button>`,
+      ).exec(html);
+    const hidden = wordGameView(st, NOW);
+    expect(hidden).not.toContain('angle');
+    expect(hidden).not.toContain('requin');
+    expect(reveal(hidden, 'jdm-1').slice(1)).toEqual([
+      'false',
+      'Voir la réponse',
+    ]);
+    expect(reveal(hidden, 'jdm-2').slice(1)).toEqual([
+      'false',
+      'Voir la réponse',
+    ]);
+    const one = wordGameView(st, NOW, false, null, new Set(['jdm-1']));
+    expect(one).toContain(
+      '<span class="wg-answer" title="Réponse">angle</span>',
+    );
+    expect(one).not.toContain('requin');
+    expect(reveal(one, 'jdm-1').slice(1)).toEqual(['true', 'Masquer']);
+    expect(reveal(one, 'jdm-2').slice(1)).toEqual(['false', 'Voir la réponse']);
+    // Hidden again: the same view as before.
+    expect(wordGameView(st, NOW, false, null, new Set())).toBe(hidden);
+    // Reveal buttons stay usable offline / while an action runs (local display only).
+    expect(reveal(wordGameView(st, NOW, true, null), 'jdm-1')[0]).not.toContain(
+      'disabled',
+    );
+  });
+
+  it('a word that leaves the list forgets its reveal; no state → nothing revealed', () => {
+    const st = state({ active: [word({ occurrence_id: 'jdm-2' })] });
+    expect([...keepRevealed(new Set(['jdm-1', 'jdm-2']), st)]).toEqual([
+      'jdm-2',
+    ]);
+    expect([...keepRevealed(new Set(['jdm-1']), null)]).toEqual([]);
+    expect([...keepRevealed(new Set(['jdm-1']), { enabled: false })]).toEqual(
+      [],
+    );
+  });
+
+  it('the answer is escaped', () => {
+    const html = wordGameView(
+      state({ active: [word({ occurrence_id: 'jdm-1', word: '<b>x</b>' })] }),
+      NOW,
+      false,
+      null,
+      new Set(['jdm-1']),
     );
     expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
   });

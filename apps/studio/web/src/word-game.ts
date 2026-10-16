@@ -1,7 +1,12 @@
-import { type WordGamePanel, wordGameView } from './word-game-view.js';
+import {
+  keepRevealed,
+  type WordGamePanel,
+  wordGameView,
+} from './word-game-view.js';
 
 // Jeu des mots V1 — Studio tab (docs/WORD_GAME_PARITY.md § 14). Polls Core's state through Studio every
 // second while visible (same pattern as the Tombola tab) and relays the three actions. No game logic.
+// « Voir la réponse » is local to this tab, in memory only: leaving or reloading it hides every answer.
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 
@@ -9,10 +14,13 @@ export function mountWordGame(root: HTMLElement) {
   let state: WordGamePanel | null = null;
   let busy = false;
   let error: string | null = null;
+  /** Occurrence ids whose answer is shown (never sent anywhere). */
+  let revealed = new Set<string>();
   const timers: number[] = [];
 
   const render = () => {
-    root.innerHTML = wordGameView(state, Date.now(), busy, error);
+    revealed = keepRevealed(revealed, state);
+    root.innerHTML = wordGameView(state, Date.now(), busy, error, revealed);
   };
 
   async function refresh() {
@@ -59,6 +67,15 @@ export function mountWordGame(root: HTMLElement) {
   }
 
   root.addEventListener('click', (ev) => {
+    const reveal = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+      '[data-reveal]',
+    );
+    if (reveal) {
+      const id = reveal.dataset.reveal!;
+      if (!revealed.delete(id)) revealed.add(id);
+      render();
+      return;
+    }
     const button = (ev.target as HTMLElement).closest<HTMLButtonElement>(
       '[data-action]',
     );
@@ -76,7 +93,10 @@ export function mountWordGame(root: HTMLElement) {
   return {
     setVisible(v: boolean) {
       for (const t of timers.splice(0)) window.clearInterval(t);
-      if (!v) return;
+      if (!v) {
+        revealed.clear(); // leaving the tab hides every answer
+        return;
+      }
       void refresh();
       timers.push(window.setInterval(() => void refresh(), 1000));
     },

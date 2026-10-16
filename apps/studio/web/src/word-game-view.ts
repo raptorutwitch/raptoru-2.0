@@ -2,7 +2,8 @@ import type { WordGameState } from '@raptoru/schemas';
 
 // Jeu des mots V1 — Studio panel, pure view (docs/WORD_GAME_PARITY.md § 14). Everything shown comes from
 // Core's state (relayed by Studio); nothing is decided here. Kept apart from the DOM to be tested alone.
-// The clear words are never shown (Studio can be on screen during the live): only what the chat saw.
+// The clear words are hidden by default (Studio can be on screen during the live): only what the chat saw.
+// The streamer can reveal one word at a time (« Voir la réponse »): a local, per-word choice of the tab.
 
 export type WordGamePanel =
   | (WordGameState & {
@@ -37,15 +38,28 @@ const time = (iso: string) =>
     second: '2-digit',
   });
 
+/** The revealed words still active (a word that left the list forgets its reveal). */
+export function keepRevealed(
+  revealed: ReadonlySet<string>,
+  s: WordGamePanel | null,
+): Set<string> {
+  const active = new Set(
+    s && 'live' in s ? s.active.map((w) => w.occurrence_id) : [],
+  );
+  return new Set([...revealed].filter((id) => active.has(id)));
+}
+
 /**
  * The panel's HTML. `now` (ms) ages the words between two polls; `busy` disables the buttons while an
- * action is in flight; `error` is the last refused call, if any.
+ * action is in flight; `error` is the last refused call, if any; `revealed` holds the occurrence ids
+ * whose answer the streamer chose to see.
  */
 export function wordGameView(
   s: WordGamePanel | null,
   now: number,
   busy = false,
   error: string | null = null,
+  revealed: ReadonlySet<string> = new Set(),
 ): string {
   if (!s)
     return `<section class="wg"><p class="wg-muted">Chargement…</p></section>`;
@@ -62,10 +76,10 @@ export function wordGameView(
   const drift = (now - (s.fetched_at ?? now)) / 1000;
   const words = s.active.length
     ? `<ul class="wg-list">${s.active
-        .map(
-          (w) =>
-            `<li class="wg-word${w.golden ? ' wg-word--gold' : ''}"><span class="wg-shuffled">${w.golden ? '🔸 ' : ''}${esc(w.shuffled)}${w.golden ? ' 🔸' : ''}</span><span class="wg-age" title="Âge du mot">${esc(ageLabel(w.age_seconds + drift))}</span>${w.golden ? '<span class="wg-tag">doré</span>' : ''}${w.source === 'manual' ? '<span class="wg-tag">manuel</span>' : ''}</li>`,
-        )
+        .map((w) => {
+          const shown = revealed.has(w.occurrence_id);
+          return `<li class="wg-word${w.golden ? ' wg-word--gold' : ''}"><span class="wg-shuffled">${w.golden ? '🔸 ' : ''}${esc(w.shuffled)}${w.golden ? ' 🔸' : ''}</span>${shown ? `<span class="wg-answer" title="Réponse">${esc(w.word)}</span>` : ''}<span class="wg-age" title="Âge du mot">${esc(ageLabel(w.age_seconds + drift))}</span>${w.golden ? '<span class="wg-tag">doré</span>' : ''}${w.source === 'manual' ? '<span class="wg-tag">manuel</span>' : ''}<button type="button" class="wg-btn wg-btn--ghost" data-reveal="${esc(w.occurrence_id)}" aria-pressed="${shown}">${shown ? 'Masquer' : 'Voir la réponse'}</button></li>`;
+        })
         .join('')}</ul>`
     : `<p class="wg-muted">${s.live ? 'Aucun mot en cours.' : 'Aucun mot : le jeu ne tourne que pendant un live.'}</p>`;
   const streak = s.streak.holder_id
