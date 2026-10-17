@@ -876,10 +876,10 @@ Détail (niveaux de preuve, fichiers, routes, schéma, modes) : `TWITCH_ALERTS_P
 
 ## 14. Points de chaîne V1 — checklist du cutover (17/10/2026)
 
-Statut : implémenté, testé automatiquement, **non connecté** (autorisation broadcaster manquante), **non déployé**,
-interrupteur OFF ; SAMMI exécute les récompenses de production. Détail : `CHANNEL_POINTS_V1.md`.
+Statut : **développement terminé, validations fonctionnelles Lab réussies (17/10/2026), prêt pour la préparation du
+cutover, non déployé** ; SAMMI exécute les récompenses de production. Détail : `CHANNEL_POINTS_V1.md`.
 
-1. **Autorisation** : `CHANNEL_POINTS_EVENTS=true` puis `twitch:auth -- --broadcaster` (raptoru\_, lecture seule
+1. **Autorisation** (faite le 17/10/2026 pour le Lab) : `CHANNEL_POINTS_EVENTS=true` puis `twitch:auth -- --broadcaster` (raptoru\_, lecture seule
    `channel:read:redemptions`) ; aucun droit de gestion (Twitch ne laisse gérer que les récompenses créées par l'app).
 2. **Réception unique** : bot de production (option `CHANNEL_POINTS_EVENTS`, connexion broadcaster partagée avec
    loyalty) ; adaptateur chat Lab arrêté (jamais deux consommateurs du jeton broadcaster).

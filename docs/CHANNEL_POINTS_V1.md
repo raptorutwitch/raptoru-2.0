@@ -1,9 +1,16 @@
 # Points de chaîne V1 — infrastructure officielle (17/10/2026)
 
-**Statut (17/10/2026, soir)** : connecté à Twitch en Lab (jeton broadcaster réautorisé par Antoni : 36 récompenses lues).
-**Validé par Antoni** : action OBS (« Tester »), réception d'une vraie récompense (compte LeCroupier\_), exécution réelle
-Twitch → Core → Studio → OBS (« Test Lab » → scène « Waiting screen »), persistance après redémarrage. **Son : non
-validé** (défaut corrigé, à revérifier, § 10). Non déployé ; SAMMI exécute toujours les récompenses de production.
+**Statut : POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ** (clôture du 17/10/2026, code `f3129c7` + correctif son `000148b`).
+
+Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
+LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS
+(« Test Lab » → scène « Waiting screen ») ; action temporaire sur une source OBS ; son du Soundboard réellement audible
+après `000148b`, cycle de lecture suivi (en attente → en lecture → exécutée) ; configuration conservée après redémarrage.
+
+Connecté en Lab seulement (adaptateur chat Lab, jeton broadcaster raptoru\_ avec `channel:read:redemptions`). Non déployé :
+Core de production sans la migration, bot de production désactivé (`TWITCH_ENABLED=false`). SAMMI exécute toujours les
+récompenses de production ; aucune récompense Twitch n'a été modifiée par Raptoru. Cutover : § 8 et
+`CUTOVER_PLAN_2026-10.md` § 14.
 
 ## 1. Chaîne
 

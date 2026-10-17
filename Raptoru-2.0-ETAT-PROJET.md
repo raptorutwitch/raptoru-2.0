@@ -189,8 +189,8 @@ modules un par un ; legacy coupé ensuite.
    débite le Wallet de test (`labEconomy`).
 2. **Points de chaîne** (P1-010) : modèle de redemption (D2) non décidé pour l'économie ; **Points de chaîne V1**
    (17/10/2026) fournit la réception, les règles et les actions OBS / son (`docs/CHANNEL_POINTS_V1.md`), en lecture
-   seule (Raptoru ne peut ni valider ni rembourser les récompenses existantes) ; réception réelle bloquée tant que le
-   jeton broadcaster n'a pas `channel:read:redemptions`.
+   seule (Raptoru ne peut ni valider ni rembourser les récompenses existantes) ; **validé en Lab le 17/10/2026**
+   (réception, exécution OBS et son réelles), non déployé.
 3. **Extension** : jamais publiée ; vrai secret d'Extension à poser ; domaines CDN emotes à autoriser ; capacité de
    l'EBS public (P2-025).
 4. **Session de stream** (P1-007) : en production, Tombola / Commands doivent lire la session canonique et le bot
@@ -231,8 +231,8 @@ modules un par un ; legacy coupé ensuite.
 **Alertes V1 clôturées (17/10/2026)** : développement terminé, prêt pour le cutover, non déployé (checklist :
 `docs/CUTOVER_PLAN_2026-10.md` § 13). **Priorité « zéro SAMMI »** (audit SAMMI du 17/10/2026 : au moins 29 groupes de
 fonctions encore exécutés par SAMMI, dont 13 derrière la réception des récompenses et les actions OBS) : **Points de
-chaîne V1** implémenté (`docs/CHANNEL_POINTS_V1.md`, OFF, non connecté) → réautorisation broadcaster et test contrôlé
-par Antoni → modération ludique → Spotify. Le **déploiement coordonné** (Core staging + migrations Lab, puis Studio, nouveau ZIP
+chaîne V1** clôturé (`docs/CHANNEL_POINTS_V1.md` : validé en Lab, prêt pour la préparation du cutover, non déployé) →
+reprise des récompenses SAMMI sur ce socle → modération ludique → Spotify. Le **déploiement coordonné** (Core staging + migrations Lab, puis Studio, nouveau ZIP
 Hosted Test) reste une étape séparée, seulement avec l'accord d'Antoni.
 
 ---

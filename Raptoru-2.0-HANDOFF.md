@@ -1,9 +1,9 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 17/10/2026 : Points de chaîne V1 implémenté (OFF, non connecté) · Alertes V1 clôturé · checkpoint global du 16/10 (lire en premier)
+## État courant — 17/10/2026 : Points de chaîne V1 clôturé (validé en Lab, non déployé) · Alertes V1 clôturé · checkpoint global du 16/10 (lire en premier)
 
-**Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`**, HEAD **`beb42b1`** (alertes) + le
-commit docs de clôture des alertes. Tout ce qui suit `c7f20de` est **local, non poussé** ; `main` = `origin/main` =
+**Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`**, HEAD **`000148b`** (correctif son
+des Points de chaîne) + le commit docs de clôture des Points de chaîne. Tout ce qui suit `c7f20de` est **local, non poussé** ; `main` = `origin/main` =
 `d2b61ef`.
 Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Antoni :
 `docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md` (audit des données historiques) et
@@ -32,16 +32,16 @@ Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Anton
 - **Tests au `166e7ed`** : Core 675 (+22 ignorés : PostgreSQL réel absent), Studio 381, Bot 111, Playwright 13/13 ;
   typecheck, lint, build verts.
 
-**POINTS DE CHAÎNE V1 (17/10/2026, local, non déployé)** — connecté à Twitch en Lab (36 récompenses lues) ; **validé par
-Antoni** : test OBS, vraie récompense reçue (LeCroupier\_), exécution réelle Twitch → Core → Studio → OBS, persistance ;
-**son à revérifier** après le correctif Soundboard (`docs/CHANNEL_POINTS_V1.md` § 10). Infrastructure officielle
+**POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ (17/10/2026)**. Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
+LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS
+(« Test Lab » → scène « Waiting screen ») ; action temporaire sur une source OBS ; son du Soundboard réellement audible
+après `000148b`, cycle de lecture suivi (en attente → en lecture → exécutée) ; configuration conservée après redémarrage. Infrastructure officielle
 récompenses Twitch → bot (connexion broadcaster) → Core (dédoublonnage, interrupteur, règles, actions typées : son du
 Soundboard, source / filtre / scène OBS) → Studio (exécution OBS sur sa connexion unique, effets temporaires annulés
 seulement si inchangés) ; onglet « Points de chaîne · Core » ; migrations Lab `20261025120000_channel_points_lab.sql` et
 production `20261025130000_channel_points.sql` (**non appliquée**). Lecture seule : Raptoru ne peut ni valider ni
-rembourser les récompenses existantes (règle Twitch). **Bloqué pour le réel** : le jeton broadcaster raptoru\_ n'a pas
-`channel:read:redemptions` (réautorisation à faire par Antoni, procédure `docs/CHANNEL_POINTS_V1.md` § 6). SAMMI exécute
-toujours les récompenses. Détail, inventaire des récompenses SAMMI et étapes avant cutover : `docs/CHANNEL_POINTS_V1.md`.
+rembourser les récompenses existantes (règle Twitch). Jeton broadcaster raptoru\_ réautorisé par Antoni
+(`channel:read:redemptions`, droits précédents conservés). SAMMI exécute toujours les récompenses de production. Détail, inventaire des récompenses SAMMI et étapes avant cutover : `docs/CHANNEL_POINTS_V1.md`.
 
 **ALERTES V1 — DÉVELOPPEMENT TERMINÉ / PRÊT POUR CUTOVER / NON DÉPLOYÉ (17/10/2026, chantier clôturé par Antoni)**.
 Validé par Antoni : animations, sons, calibrages, files simultanées dans OBS, vrai follow reçu en TEST, connexion
@@ -69,8 +69,8 @@ validé ; connecté ensuite en TEST par Antoni (§ 23).
 - Alertes : les réserves visuelles A2 du 16/10 (§ 16) ont été reprises par les finitions et le calibrage du 17/10 ;
   Antoni a validé le rendu dans OBS (animations, calibrages, files simultanées) ; l'adaptation des pseudos longs du
   don (`97761a0`) n'est testée qu'automatiquement ; restent les validations réelles différées et le raccordement du bot de
-  production (§ 23 du doc alertes). Jeton de LeCroupier\_ réautorisé sans `user:write:chat` : « Sortie chat réelle »
-  des Commands V2 impossible tant qu'il n'est pas réautorisé avec `LAB_CHAT_OUTPUT=true`.
+  production (§ 23 du doc alertes). Jeton de LeCroupier\_ : `user:write:chat` et `moderator:manage:announcements`
+  récupérés (relevé du 17/10, soir) ; « Sortie chat réelle » toujours OFF.
 - Duel (`docs/DUEL_PARITY.md`) : annonce réelle LeCroupier\_ et variation des deux soldes non revérifiées dans le
   dernier scénario réel.
 
@@ -82,10 +82,9 @@ alertes), 25 absentes, 0 en production — détail et incertitudes : `Raptoru-2.
 1. ~~Alertes V1~~ : clôturé le 17/10/2026 (prêt pour cutover, non déployé) ; ne pas poursuivre sans demande
    d'Antoni. Le reste (bot de production, activation persistante, migration, bascule OBS, validations réelles) se
    fait pendant le cutover global : `docs/CUTOVER_PLAN_2026-10.md` § 13.
-2. **Points de chaîne V1** (en cours, priorité « zéro SAMMI », audit du 17/10) : réautorisation broadcaster par Antoni,
-   puis test contrôlé d'une récompense non sensible (« Tester », puis une vraie récompense avec l'interrupteur ON sur une
-   scène de test) ; ajouter à la banque du Soundboard les sons des récompenses SAMMI. Ensuite : modération ludique,
-   Spotify (audit SAMMI). Oracle n'a aucune dépendance SAMMI démontrée.
+2. ~~Points de chaîne V1~~ : clôturé le 17/10/2026 (validé en Lab, non déployé) ; reste la reprise des récompenses
+   SAMMI (inventaire de récupération à valider avec Antoni), puis modération ludique et Spotify (priorité « zéro SAMMI »).
+   Oracle n'a aucune dépendance SAMMI démontrée.
 3. Décisions et imports historiques du Wallet canonique (D1, D2, DM1–DM9) ; déploiement coordonné du staging quand
    Antoni le décide.
 
