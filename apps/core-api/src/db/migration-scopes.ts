@@ -25,6 +25,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20260928120000_daily_wallet.sql',
   // Studio installations: per-installation credential of the production transport (ASTRA-P1-019).
   '20261016120000_studio_installations.sql',
+  // Twitch alerts V1, production schema: the final Lab alerts tables in one additive, idempotent file (the Lab keeps
+  // its two files; same resulting schema, checked by test/alerts-prod-migration.test.ts).
+  '20261024120000_alerts.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */

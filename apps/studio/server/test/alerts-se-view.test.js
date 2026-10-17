@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { seEntryView, seStatusView } from '../../web/src/alerts-se.ts';
-import { twitchStatusView } from '../../web/src/alerts-twitch.ts';
+import { activeLabel, twitchStatusView } from '../../web/src/alerts-twitch.ts';
+import { sourceView } from '../../web/src/alerts-view.ts';
 
 // Studio tab « Alertes », pure views of the real-event sections: donor texts always escaped, states readable.
 
@@ -74,5 +75,58 @@ describe('Dons StreamElements views', () => {
         null,
       ),
     ).toContain('Follows : reçus');
+  });
+
+  it('environment and safety: ACTIVE names its Core, a resumed ACTIVE is said, Twitch unavailable in Production', () => {
+    expect(activeLabel('lab')).toBe('ACTIVE · Core Lab');
+    expect(activeLabel('production')).toBe('ACTIVE · Core production');
+    const base = {
+      mode: 'test',
+      ingestion_enabled: true,
+      ingestion_running: true,
+      token_login: 'x',
+      follow_scope: true,
+    };
+    expect(
+      twitchStatusView({ ...base, resumed_from_active: true }, null),
+    ).toContain('jamais repris automatiquement');
+    expect(
+      twitchStatusView(
+        { ...base, environment: 'production', available: false },
+        null,
+      ),
+    ).toContain('bot Twitch de production n’est pas encore raccordé');
+    expect(
+      seStatusView(
+        {
+          mode: 'test',
+          token: { present: false, type: null },
+          state: 'no_token',
+          state_label: 'x',
+          room: null,
+          topics: [],
+          error: null,
+          last_event: null,
+          journal: [],
+          resumed_from_active: true,
+        },
+        null,
+      ),
+    ).toContain('jamais repris automatiquement');
+  });
+
+  it('OBS source line', () => {
+    expect(
+      sourceView({ source: { seen: false, ago_ms: null, current: null } }),
+    ).toContain('Aucune source OBS');
+    expect(
+      sourceView({ source: { seen: false, ago_ms: 12000, current: true } }),
+    ).toContain('silencieuse depuis 12 s');
+    expect(
+      sourceView({ source: { seen: true, ago_ms: 300, current: true } }),
+    ).toContain('connectée, à jour');
+    expect(
+      sourceView({ source: { seen: true, ago_ms: 300, current: false } }),
+    ).toContain('se rechargera seule');
   });
 });

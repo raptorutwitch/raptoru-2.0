@@ -10,7 +10,16 @@ export interface TwitchState {
   ingestion_running: boolean;
   token_login: string | null;
   follow_scope: boolean;
+  /** Which Core the ACTIVE mode feeds (§ 22). */
+  environment?: 'lab' | 'production';
+  /** Real Twitch events can reach this profile (Lab chat adapter; the production bot is not wired yet). */
+  available?: boolean;
+  resumed_from_active?: boolean;
 }
+
+/** The ACTIVE button names the Core it really feeds. */
+export const activeLabel = (env?: string) =>
+  env === 'production' ? 'ACTIVE · Core production' : 'ACTIVE · Core Lab';
 
 const MODES: { id: TwitchState['mode']; label: string; hint: string }[] = [
   {
@@ -43,7 +52,12 @@ const esc = (s: string) =>
 export function twitchStatusView(s: TwitchState | null, error: string | null) {
   if (error) return `<p class="al-error">${esc(error)}</p>`;
   if (!s) return '<p class="al-hint">Chargement…</p>';
+  if (s.available === false)
+    return '<p class="al-error">Indisponible dans ce profil : le bot Twitch de production n’est pas encore raccordé aux alertes (aucun événement Twitch réel n’arrive ici).</p>';
   const lines = [
+    s.resumed_from_active
+      ? '<p class="al-error">ACTIVE n’est jamais repris automatiquement au démarrage de Studio : mode TEST (observation). Choisis ACTIVE à nouveau pour jouer les vrais événements.</p>'
+      : '',
     s.ingestion_enabled
       ? s.ingestion_running
         ? `<p class="al-ok">Ingestion Twitch active (compte ${esc(s.token_login ?? '?')}).</p>`
@@ -70,6 +84,9 @@ export function mountTwitchMode(host: HTMLElement) {
     for (const b of host.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
       const on = state?.mode === b.dataset.mode;
       b.classList.toggle('primary', on);
+      if (b.dataset.mode === 'active')
+        b.textContent = activeLabel(state?.environment);
+      b.disabled = state?.available === false && b.dataset.mode !== 'off';
       b.setAttribute('aria-pressed', String(on));
     }
     host.querySelector('[data-role="twitch-hint"]')!.textContent =

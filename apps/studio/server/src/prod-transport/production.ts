@@ -98,6 +98,8 @@ export interface ProductionRuntimes {
    * /v1/studio/cockpit. Never the Lab chat nor Commands V2 (off in Production).
    */
   cockpit: LabCoreCall;
+  /** Twitch alerts V1 (§ 22): the installation client for /v1/studio/alerts (same alerts runtime as the Lab). */
+  alertsCore: LabCoreCall;
 }
 
 /** `/v1/lab/<rest>` of the Studio cockpit → `/v1/studio/cockpit/<rest>` on the Production Core. */
@@ -145,6 +147,7 @@ export async function createProductionRuntimes(
     sound: await SoundRuntime.create(origin, wiring('sound')),
     tts: await TtsRuntime.create(origin, wiring('tts')),
     cockpit: cockpitClient(core),
+    alertsCore: core,
   };
 }
 

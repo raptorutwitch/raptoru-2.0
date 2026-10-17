@@ -10,6 +10,7 @@ import {
   previewData,
   previewStatus,
   queueView,
+  sourceView,
   scrubLabel,
   scrubMarks,
   testEvent,
@@ -42,8 +43,8 @@ export function mountAlerts(root: HTMLElement) {
 
   root.innerHTML = `
     <section class="al">
-      <div class="al-head"><h1>Alertes Twitch <em>Lab</em></h1>
-        <span class="al-note">Aperçu local : n’utilise pas la file, rien n’est envoyé au stream.</span></div>
+      <div class="al-head"><h1>Alertes <em data-role="alerts-env">Core</em></h1>
+        <span class="al-note">Aperçu : local, sans file. Simulation : passe par la file du Core. Événements réels : réglés plus bas (OFF par défaut).</span></div>
       <div class="al-grid">
         <div class="al-side">
           <h2>Alerte</h2>
@@ -74,9 +75,9 @@ export function mountAlerts(root: HTMLElement) {
             <input type="range" min="0" max="100" value="50" data-role="volume"/></label>
           <p class="al-preview-status" data-role="preview-status">Prêt.</p>
           <div data-role="calib"></div>
-          <h2>File (test)</h2>
+          <h2>Simulation (file réelle)</h2>
           <button type="button" data-act="queue">Envoyer dans la file</button>
-          <p class="al-hint">Passe par Core (événement simulé) : la source OBS le joue.</p>
+          <p class="al-hint">Événement simulé, mis dans la file du Core de ce profil : la source OBS le joue.</p>
           <p class="al-hint" data-role="queue-result"></p>
         </div>
         <div class="al-main">
@@ -98,6 +99,7 @@ export function mountAlerts(root: HTMLElement) {
             <div><h2>Source OBS</h2>
               <div class="al-url"><input readonly data-role="obs-url"/><button type="button" class="al-small" data-act="copy">Copier</button></div>
               <p class="al-hint">Source navigateur 1920×1080, fond transparent. Seule consommatrice de la file.</p>
+              <div data-role="source"></div>
               <h2>Médias</h2><div data-role="media"></div>
               <h2>Événements Twitch réels</h2><div data-role="twitch"></div></div>
           </div>
@@ -139,7 +141,11 @@ export function mountAlerts(root: HTMLElement) {
   const renderState = () => {
     $('queue').innerHTML = queueView(state, error);
     $('media').innerHTML = mediaView(state);
+    $('source').innerHTML = sourceView(state);
     if (state) $<HTMLInputElement>('obs-url').value = state.player_url;
+    if (state?.environment)
+      $('alerts-env').textContent =
+        state.environment === 'production' ? 'Core production' : 'Core Lab';
   };
 
   /** Reads the visible inputs back into the fake data. */

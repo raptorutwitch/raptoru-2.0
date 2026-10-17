@@ -25,6 +25,10 @@ l'audit : [`ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-10.md) · re
 > n'est sur le staging (leurs migrations Lab n'y sont pas). Coexistence : SAMMI / StreamElements gardent les jeux et
 > les alertes en production ; les sources d'alerte legacy ne seront neutralisées que lors d'une bascule contrôlée, et
 > les abonnements EventSub d'alertes resteront au seul consommateur Raptoru 2.0 (P1-007).
+>
+> **Alertes V1, 17/10/2026** : module officiel préparé pour le profil Production (schéma `20261024120000_alerts.sql`
+> non appliqué, routes `/v1/studio/alerts`, Studio multi-profil) ; prérequis, bascule par type, retour arrière et
+> blocage (réception Twitch de production) : `TWITCH_ALERTS_PARITY_2026-10.md` § 22. Rien de déployé ni basculé.
 
 ---
 

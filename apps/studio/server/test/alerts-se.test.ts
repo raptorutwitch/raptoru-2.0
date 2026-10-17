@@ -532,4 +532,39 @@ describe('SeTipsLink — token, reconnection, errors', () => {
     });
     expect(again.se.status().journal).toHaveLength(1);
   });
+
+  it('a saved ACTIVE is never resumed by a Studio start: TEST (observation), said so, until chosen again', async () => {
+    const t = await link();
+    await t.se.setMode('active');
+    t.se.close();
+    const again = await link({ dir: t.dir });
+    expect(again.se.status()).toMatchObject({
+      mode: 'test',
+      resumed_from_active: true,
+      environment: 'lab',
+    });
+    again.se.setToken('jwt', FAKE_JWT, null);
+    again.last().welcome();
+    again.last().push(SE_TIP_EXAMPLE);
+    await again.settle();
+    expect(again.posts).toEqual([]); // observation only
+    await again.se.setMode('active');
+    expect(again.se.status()).toMatchObject({
+      mode: 'active',
+      resumed_from_active: false,
+    });
+  });
+
+  it('a fresh storage folder (new install, production profile) is created: the mode can be saved', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'se-fresh-'));
+    dirs.push(root);
+    const t = await link({ dir: join(root, 'production', 'alerts') });
+    await t.se.setMode('test');
+    expect(
+      await readFile(
+        join(root, 'production', 'alerts', 'se-mode.json'),
+        'utf8',
+      ),
+    ).toBe('{"mode":"test"}');
+  });
 });

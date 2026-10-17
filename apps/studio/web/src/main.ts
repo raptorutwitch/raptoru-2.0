@@ -47,7 +47,7 @@ if (app) {
         <button class="tab" type="button" data-tab="tombola">Tombola <em>Core</em></button>
         <button class="tab" type="button" data-tab="commands">Commandes <em>Core</em></button>
         <button class="tab" type="button" data-tab="word-game">Jeu des mots <em>Core</em></button>
-        <button class="tab" type="button" data-tab="alerts">Alertes <em>Lab</em></button>
+        <button class="tab" type="button" data-tab="alerts">Alertes <em>Core</em></button>
         <button class="tab" type="button" data-tab="simulation">Simulation <em>Lab</em></button>
         <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>

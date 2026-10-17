@@ -90,12 +90,18 @@ export interface AlertsRuntimeDeps {
   };
   /** Real StreamElements donations (se-tips.ts): its own mode, connection and journal under /api/alerts/se. */
   se?: SeTipsLink;
+  /**
+   * Which Core holds the queue (§ 22): the Lab Core (/v1/lab/alerts, default) or the production Core of the paired
+   * Studio (/v1/studio/alerts). Same service, same sub-paths: only the base and the client change.
+   */
+  environment?: 'lab' | 'production';
 }
 
 /**
  * « Événements Twitch réels », Studio storage, OFF by default and after any unreadable file:
- * off = no alert subscription; test = received and logged, never queued; active = queued in the Lab Core (the OBS
- * source connected to this Studio plays them). Lab profile only (no alerts runtime in Production).
+ * off = no alert subscription; test = received and logged, never queued; active = queued in the Core of this profile
+ * (the OBS source connected to this Studio plays them). A saved ACTIVE is never resumed by a Studio start: it starts
+ * in TEST until chosen again (§ 22).
  */
 export const TWITCH_MODES = ['off', 'test', 'active'] as const;
 export type TwitchMode = (typeof TWITCH_MODES)[number];
@@ -106,7 +112,24 @@ export class AlertsRuntime {
     private readonly token: string,
     readonly placement: AlertPlacementStore,
     private mode: TwitchMode,
+    /** ACTIVE was saved but this start resumed in TEST (shown until a mode is chosen). */
+    private resumedFromActive = false,
   ) {}
+
+  private lastSource: { at: number; current: boolean } | null = null;
+
+  /** OBS source: seen in the last 5 s (it asks every second), on the current files or not. */
+  private sourceView() {
+    if (!this.lastSource) return { seen: false, ago_ms: null, current: null };
+    const ago = Date.now() - this.lastSource.at;
+    return { seen: ago < 5000, ago_ms: ago, current: this.lastSource.current };
+  }
+
+  private get base() {
+    return this.d.environment === 'production'
+      ? '/v1/studio/alerts'
+      : '/v1/lab/alerts';
+  }
 
   /** The mode given to the Lab chat adapter at its start. */
   get twitchMode() {
@@ -135,11 +158,14 @@ export class AlertsRuntime {
     } catch {
       /* OFF by default */
     }
+    // Never an automatic start of the real alerts: a saved ACTIVE resumes as TEST (observation).
+    const resumed = mode === 'active';
     return new AlertsRuntime(
       d,
       token,
       await AlertPlacementStore.open(join(d.dir, 'placement.json')),
-      mode,
+      resumed ? 'test' : mode,
+      resumed,
     );
   }
 
@@ -226,15 +252,17 @@ export class AlertsRuntime {
     if (req.method === 'GET' && p === '/state')
       return reply(200, {
         ...(await this.d.core<Record<string, unknown>>(
-          `/v1/lab/alerts/${this.d.channelId}/state`,
+          `${this.base}/${this.d.channelId}/state`,
         )),
         media: this.d.media.status(),
+        environment: this.d.environment ?? 'lab',
+        source: this.sourceView(),
         player_url: this.playerUrl,
         preview_url: '/alerts/preview.html',
       });
     if (req.method === 'GET' && p === '/catalog') {
       const { variants } = await this.d.core<{ variants: Variant[] }>(
-        '/v1/lab/alerts/catalog',
+        `${this.base}/catalog`,
       );
       return reply(200, {
         variants: variants.map((v) => ({ ...v, missing: this.missing(v) })),
@@ -246,13 +274,15 @@ export class AlertsRuntime {
       const mode = (await this.body(req)).mode as TwitchMode;
       if (!TWITCH_MODES.includes(mode))
         return reply(400, { error: 'invalid_mode' });
-      if (mode !== this.mode) {
+      if (mode !== this.mode || this.resumedFromActive) {
         await writeFile(
           join(this.d.dir, 'twitch-mode.json'),
           JSON.stringify({ mode }),
         );
+        const changed = mode !== this.mode;
         this.mode = mode;
-        await this.d.twitch?.restart();
+        this.resumedFromActive = false;
+        if (changed) await this.d.twitch?.restart();
       }
       return reply(200, this.twitchView());
     }
@@ -272,7 +302,7 @@ export class AlertsRuntime {
         source_event_id: `studio-test-${randomUUID()}`,
       };
       for (const k of TEST_FIELDS) if (k in body) event[k] = body[k];
-      return reply(200, await this.d.core('/v1/lab/alerts/events', event));
+      return reply(200, await this.d.core(`${this.base}/events`, event));
     }
     reply(404, { error: 'not_found' });
   }
@@ -280,6 +310,10 @@ export class AlertsRuntime {
   private twitchView() {
     return {
       mode: this.mode,
+      environment: this.d.environment ?? 'lab',
+      /** Real Twitch events reach this profile (the Lab chat adapter); the production bot is not wired yet. */
+      available: Boolean(this.d.twitch),
+      resumed_from_active: this.resumedFromActive,
       ...(this.d.twitch?.status() ?? {
         ingestion_enabled: false,
         ingestion_running: false,
@@ -307,6 +341,11 @@ export class AlertsRuntime {
       // Stale source (17/10/2026): a page that runs another version of the files gets no alert (it reloads once its
       // alerts end) unless it already reloaded in vain (stale_ok). A page without a version (older) claims as before.
       const version = await this.playerVersion();
+      // The OBS source's state for the tab: its last request and whether it runs the current files (no extra polling).
+      this.lastSource = {
+        at: Date.now(),
+        current: body.version === version,
+      };
       // The source hung up meanwhile (Studio stopping, page gone): never reserve an alert nobody will receive.
       if (req.socket.destroyed) return;
       const stale =
@@ -366,7 +405,7 @@ export class AlertsRuntime {
   private async next(consumer: string) {
     for (let i = 0; i < 5; i++) {
       const { alert } = await this.d.core<{ alert: ClaimedAlert | null }>(
-        `/v1/lab/alerts/${this.d.channelId}/claim`,
+        `${this.base}/${this.d.channelId}/claim`,
         { consumer_id: consumer },
       );
       if (!alert) return null;
@@ -380,7 +419,7 @@ export class AlertsRuntime {
           data: alert.data,
           placement: this.placement.get(alert.variant.id),
         };
-      await this.d.core(`/v1/lab/alerts/items/${alert.alert_id}/ack`, {
+      await this.d.core(`${this.base}/items/${alert.alert_id}/ack`, {
         consumer_id: consumer,
         attempt_id: alert.attempt_id,
         event: 'failed',
@@ -401,7 +440,7 @@ export class AlertsRuntime {
     };
     if (typeof body.error === 'string') report.error = body.error.slice(0, 200);
     if (typeof body.family === 'string') report.family = body.family; // Core checks it against the alert
-    return this.d.core(`/v1/lab/alerts/items/${id}/ack`, report);
+    return this.d.core(`${this.base}/items/${id}/ack`, report);
   }
 
   private async serveMedia(

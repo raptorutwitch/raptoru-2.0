@@ -356,6 +356,35 @@ describe('AlertsRuntime', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('OBS source state for the tab: never seen, then seen on the current files or an older version', async () => {
+    const { origin, rt, token, post } = await setup((path) =>
+      path.endsWith('/claim')
+        ? { alert: null }
+        : { in_flight: [], queued: [], recent: [] },
+    );
+    const state = async () =>
+      (await (
+        await fetch(`${origin}/api/alerts/state`, {
+          headers: { 'x-raptoru-studio': '1' },
+        })
+      ).json()) as { source: unknown; environment: string };
+    expect(await state()).toMatchObject({
+      environment: 'lab',
+      source: { seen: false, ago_ms: null, current: null },
+    });
+    await post('/alerts/next', {
+      token,
+      consumer_id: 'obs-1',
+      version: await rt.playerVersion(),
+    });
+    expect((await state()).source).toMatchObject({ seen: true, current: true });
+    await post('/alerts/next', { token, consumer_id: 'obs-1', version: 'old' });
+    expect((await state()).source).toMatchObject({
+      seen: true,
+      current: false,
+    });
+  });
+
   it('the version follows the files on disk', async () => {
     const dir = await tmp();
     for (const f of await readdir(PLAYER_DIR))

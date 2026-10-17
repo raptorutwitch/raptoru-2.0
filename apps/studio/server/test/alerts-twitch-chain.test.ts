@@ -258,6 +258,9 @@ describe('Studio « Événements Twitch réels » mode', () => {
       });
     expect(await (await call('GET')).json()).toEqual({
       mode: 'off',
+      environment: 'lab',
+      available: true,
+      resumed_from_active: false,
       ingestion_enabled: true,
       ingestion_running: true,
       token_login: 'lecroupier_',
@@ -284,6 +287,21 @@ describe('Studio « Événements Twitch réels » mode', () => {
       ).status,
     ).toBe(403);
     // Kept across a Studio restart; an unreadable file means OFF.
+    expect((await AlertsRuntime.create(deps)).twitchMode).toBe('test');
+    // ACTIVE is never resumed by a Studio start: TEST, said so, until a mode is chosen again (§ 22).
+    await call('POST', { mode: 'active' });
+    expect(rt.twitchMode).toBe('active');
+    const restarted = await AlertsRuntime.create(deps);
+    expect(restarted.twitchMode).toBe('test');
+    rt = restarted;
+    expect(await (await call('GET')).json()).toMatchObject({
+      mode: 'test',
+      resumed_from_active: true,
+    });
+    await call('POST', { mode: 'test' });
+    expect(await (await call('GET')).json()).toMatchObject({
+      resumed_from_active: false,
+    });
     expect((await AlertsRuntime.create(deps)).twitchMode).toBe('test');
     await writeFile(join(dir, 'twitch-mode.json'), '{oops');
     expect((await AlertsRuntime.create(deps)).twitchMode).toBe('off');
@@ -352,8 +370,13 @@ describe('real StreamElements tips → Lab Core donation queue', () => {
     push(SE_TIP_EXAMPLE); // same id as the moderation echo: duplicate
     await settle();
     test.close();
-    const again = await open(); // Studio restart: mode kept (active), token handed again
+    const again = await open(); // Studio restart: ACTIVE resumes as TEST (never automatic), token handed again
+    expect(again.status()).toMatchObject({
+      mode: 'test',
+      resumed_from_active: true,
+    });
     again.setToken('jwt', FAKE_JWT, null);
+    await again.setMode('active'); // the streamer's explicit choice
     push({ type: 'welcome', data: {} });
     push(
       tip({

@@ -31,6 +31,14 @@ Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Anton
 - **Tests au `166e7ed`** : Core 675 (+22 ignorés : PostgreSQL réel absent), Studio 381, Bot 111, Playwright 13/13 ;
   typecheck, lint, build verts.
 
+**Alertes V1 — module officiel préparé (17/10/2026, local, rien déployé)** : développement validé par Antoni
+(animations, calibrages, files simultanées dans OBS, vrai follow reçu en TEST, StreamElements connecté) ; même
+implémentation servie au profil Production (`/v1/studio/alerts` par identifiant d'installation, migration de
+production `20261024120000_alerts.sql` **non appliquée**, runtime Studio multi-profil) ; un ACTIVE n'est jamais repris
+au démarrage (TEST) ; **blocage** : le bot Twitch de production n'est pas raccordé aux alertes. Bilan A / B / C / D,
+checklist de bascule OBS et retour arrière : `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 22. Restent : vrai don, sous-types
+Twitch réels, bascule OBS, stabilité en live, décision sur la réception Twitch de production.
+
 **Depuis le checkpoint (17/10/2026, local, non validé manuellement)** : finitions des alertes (`f3557f6`, `4a5c14a`)
 puis **calibrage persistant par variante** dans l'onglet Alertes (placement enregistré dans le stockage Studio, utilisé
 par la source OBS dès l'alerte suivante) — `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 17 ; blocs Bits séparés ; **files par

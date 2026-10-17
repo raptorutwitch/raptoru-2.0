@@ -27,6 +27,10 @@ export interface AlertItem {
 }
 
 export interface AlertsState {
+  /** Which Core holds the queue (§ 22). */
+  environment?: 'lab' | 'production';
+  /** OBS source seen by Studio (it asks every second). */
+  source?: { seen: boolean; ago_ms: number | null; current: boolean | null };
   in_flight: AlertItem[];
   queued: AlertItem[];
   recent: AlertItem[];
@@ -281,6 +285,19 @@ export function queueView(s: AlertsState | null, error: string | null) {
   return `<h3>En cours</h3>${list(s.in_flight, 'Aucune alerte en cours.')}
     <h3>En attente (${s.queued.length})</h3>${list(s.queued, 'File vide.')}
     <h3>Récentes</h3>${list(s.recent, 'Aucune alerte jouée.')}`;
+}
+
+/** The OBS source line (pure, tested). */
+export function sourceView(s: AlertsState | null) {
+  const src = s?.source;
+  if (!src) return '';
+  if (!src.seen)
+    return src.ago_ms === null
+      ? '<p class="al-error">Aucune source OBS connectée depuis le démarrage de Studio.</p>'
+      : `<p class="al-error">Source OBS silencieuse depuis ${Math.round(src.ago_ms / 1000)} s (OBS fermé, source masquée avec « Arrêter la source quand elle n’est pas visible », ou URL différente).</p>`;
+  return src.current
+    ? '<p class="al-ok">Source OBS connectée, à jour.</p>'
+    : '<p class="al-hint">Source OBS connectée, ancienne version : elle se rechargera seule dès qu’aucune alerte ne joue.</p>';
 }
 
 export function mediaView(s: AlertsState | null) {

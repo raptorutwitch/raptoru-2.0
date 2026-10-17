@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
 import type { AlertEventInput } from '@raptoru/schemas';
 import { join } from 'node:path';
@@ -191,6 +191,8 @@ export interface SeTipsDeps {
   socket?: (url: string) => SeSocket;
   now?: () => Date;
   log?: (line: string) => void;
+  /** Which Core receives the donations (§ 22): the Lab Core (default) or the paired production Core. */
+  environment?: 'lab' | 'production';
 }
 
 const STATE_FR: Record<SeState, string> = {
@@ -225,12 +227,15 @@ export class SeTipsLink {
     private readonly d: SeTipsDeps,
     private modeValue: SeMode,
     private journal: SeJournalEntry[],
+    /** ACTIVE was saved but this start resumed in TEST (shown until a mode is chosen). */
+    private resumedFromActive = false,
   ) {
     // Until Electron main hands the token over (each start), an ON mode waits for it.
     this.stateValue = modeValue === 'off' ? 'off' : 'no_token';
   }
 
   static async open(d: SeTipsDeps) {
+    await mkdir(d.dir, { recursive: true });
     const read = async <T>(f: string, fallback: T): Promise<T> => {
       try {
         return JSON.parse(await readFile(join(d.dir, f), 'utf8')) as T;
@@ -240,10 +245,13 @@ export class SeTipsLink {
     };
     const saved = (await read<{ mode?: unknown }>('se-mode.json', {})).mode;
     const journal = await read<SeJournalEntry[]>('se-journal.json', []);
+    const mode = SE_MODES.includes(saved as SeMode) ? (saved as SeMode) : 'off';
+    // Never an automatic start of the real alerts: a saved ACTIVE resumes as TEST (observation).
     return new SeTipsLink(
       d,
-      SE_MODES.includes(saved as SeMode) ? (saved as SeMode) : 'off',
+      mode === 'active' ? 'test' : mode,
       Array.isArray(journal) ? journal.slice(-JOURNAL_MAX) : [],
+      mode === 'active',
     );
   }
 
@@ -262,6 +270,8 @@ export class SeTipsLink {
   status() {
     return {
       mode: this.modeValue,
+      environment: this.d.environment ?? 'lab',
+      resumed_from_active: this.resumedFromActive,
       token: this.token
         ? { present: true, type: this.token.type }
         : { present: false, type: null },
@@ -293,8 +303,9 @@ export class SeTipsLink {
   }
 
   async setMode(mode: SeMode) {
-    if (mode === this.modeValue) return;
+    if (mode === this.modeValue && !this.resumedFromActive) return;
     await this.write('se-mode.json', { mode });
+    this.resumedFromActive = false;
     const was = this.modeValue;
     this.modeValue = mode;
     // TEST ↔ ACTIVE keeps the connection (each tip reads the mode when it arrives); OFF / from OFF (re)applies.
@@ -476,7 +487,9 @@ export class SeTipsLink {
     const send = async (): Promise<void> => {
       try {
         const out = await this.d.core<{ outcome?: string }>(
-          '/v1/lab/alerts/events',
+          this.d.environment === 'production'
+            ? '/v1/studio/alerts/events'
+            : '/v1/lab/alerts/events',
           body,
         );
         const outcome = out.outcome === 'duplicate' ? 'duplicate' : 'queued';

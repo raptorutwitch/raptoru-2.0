@@ -1,3 +1,4 @@
+import { AlertsService } from './alerts/service.js';
 import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
 import type { TwitchViewerCatalog } from './bonk-lab/twitch-viewer.js';
 import { RaffleLabService } from './raffle-lab/raffle-lab-service.js';
@@ -32,6 +33,8 @@ export interface Core {
   twitchViewers: TwitchViewerCatalog | null;
   /** Studio installation credentials of the future production transport (ASTRA-P1-019). */
   studioInstallations: StudioInstallations;
+  /** Twitch alerts V1: the durable queue (same service as the Lab Core). */
+  alerts: AlertsService;
 }
 
 export function createCore(
@@ -58,5 +61,6 @@ export function createCore(
     ttsLab: new TtsLabService(db, clock),
     raffleLab: new RaffleLabService(db, clock),
     studioInstallations: new StudioInstallations(db, clock),
+    alerts: new AlertsService(db, clock),
   };
 }

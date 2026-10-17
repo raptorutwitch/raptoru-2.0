@@ -758,45 +758,63 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           ),
         })
       : null;
-  // Real StreamElements donations (Lab profile only): own mode (OFF by default), token handed by Electron main.
+  // Twitch alerts V1 (§ 22): ONE runtime, on the Core of the profile — the Lab Core, or the paired production Core
+  // (/v1/studio/alerts). Media, calibration and the OBS source token are shared by both profiles (runtimeDir/alerts:
+  // the OBS URL does not change at the cutover); the StreamElements mode and journal are per profile.
+  const alertsEnv: 'lab' | 'production' | null =
+    labCore && labProfile ? 'lab' : production ? 'production' : null;
+  const alertsCore =
+    alertsEnv === 'lab' ? labCore : (production?.alertsCore ?? null);
+  // Real StreamElements donations: own mode (OFF by default, ACTIVE never resumed at start), token from Electron main.
   const se =
-    labCore && labProfile
+    alertsCore && alertsEnv
       ? await SeTipsLink.open({
-          dir: join(paths.runtimeDir, 'alerts'),
+          dir:
+            alertsEnv === 'lab'
+              ? join(paths.runtimeDir, 'alerts')
+              : join(paths.runtimeDir, 'production', 'alerts'),
+          environment: alertsEnv,
           channelId: cockpitChannel,
-          core: labCore,
+          core: alertsCore,
           fromMain: (req) => fromMain(req, { RAPTORU_MAIN_TOKEN: mainToken }),
           log: (line) => lab.logs.add('studio', line),
         })
       : null;
   seRef = se;
-  // Twitch alerts V1 (Lab profile only): media in Studio's storage (imported by alerts/import-cli.ts).
+  // Media in Studio's storage (imported by alerts/import-cli.ts).
   const alerts: AlertsRuntime | null =
-    labCore && labProfile
+    alertsCore && alertsEnv
       ? await AlertsRuntime.create({
           channelId: cockpitChannel,
-          core: labCore,
+          core: alertsCore,
+          environment: alertsEnv,
           origin: `http://${host}:${port}`,
           dir: join(paths.runtimeDir, 'alerts'),
           se: se ?? undefined,
           // Real Twitch events ride on the Lab chat adapter (created below): its state, and a restart on a new mode.
-          twitch: {
-            status: () => {
-              const ingress = labChat?.status();
-              const token = readTokenSummary(
-                process.env.TWITCH_TOKEN_FILE ?? paths.tokenFile,
-              );
-              return {
-                ingestion_enabled: ingress?.enabled ?? false,
-                ingestion_running: ingress?.running ?? false,
-                token_login: token.login,
-                follow_scope: token.scopes.includes('moderator:read:followers'),
-              };
-            },
-            restart: async () => {
-              await labChat?.restart();
-            },
-          },
+          // Production profile: the production bot is not wired to the alerts yet (§ 22), nothing here.
+          twitch:
+            alertsEnv === 'production'
+              ? undefined
+              : {
+                  status: () => {
+                    const ingress = labChat?.status();
+                    const token = readTokenSummary(
+                      process.env.TWITCH_TOKEN_FILE ?? paths.tokenFile,
+                    );
+                    return {
+                      ingestion_enabled: ingress?.enabled ?? false,
+                      ingestion_running: ingress?.running ?? false,
+                      token_login: token.login,
+                      follow_scope: token.scopes.includes(
+                        'moderator:read:followers',
+                      ),
+                    };
+                  },
+                  restart: async () => {
+                    await labChat?.restart();
+                  },
+                },
           playerDir: join(
             REPO_ROOT,
             'apps',

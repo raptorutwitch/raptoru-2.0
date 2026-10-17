@@ -42,6 +42,8 @@ import {
 } from '../wallet/wallet-service.js';
 import { walletRoutes } from './wallet-routes.js';
 import { studioTransportRoutes } from './studio-transport-routes.js';
+import { alertsRoutes } from './alerts-routes.js';
+import type { AlertsService } from '../alerts/service.js';
 import {
   STUDIO_PROTOCOL,
   STUDIO_PROTOCOL_HEADER,
@@ -90,6 +92,11 @@ export interface AppDeps {
    * mounts the /v1/studio/* execution routes. Never set by the Lab Core.
    */
   studioInstallations?: StudioInstallations;
+  /**
+   * Twitch alerts V1 (§ 22): with studioInstallations and a channel (cockpit), the /v1/studio/alerts/* routes of the
+   * canonical alerts service. Never set by the Lab Core (it serves /v1/lab/alerts itself).
+   */
+  alerts?: AlertsService;
   /** Readiness probe (GET /ready): the database answers. */
   db?: Pick<Db, 'query'>;
   /**
@@ -180,6 +187,7 @@ function routes({
   labModeration,
   raffleLab,
   studioInstallations,
+  alerts,
   db,
   labRoutes = true,
   ext,
@@ -192,6 +200,9 @@ function routes({
           { bonk: bonkLab, sound: soundLab, tts: ttsLab },
           cockpit?.channelId,
         )
+      : []),
+    ...(studioInstallations && alerts && cockpit?.channelId
+      ? alertsRoutes(alerts, { channelId: cockpit.channelId })
       : []),
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
     ...(studioInstallations && cockpit

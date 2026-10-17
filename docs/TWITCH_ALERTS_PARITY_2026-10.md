@@ -612,3 +612,76 @@ connexion StreamElements, vrai don, IPC Electron réelle.
 **Limites** : pas de garantie « zéro perte » (Astro ne rejoue rien après une coupure, renvoi au Core en mémoire 90 s) ;
 si l'Overlay Token n'a pas `tips:moderation`, un don mis en attente puis accepté ne sera pas vu ; valeurs de `status`
 autres que `success` non documentées (toutes refusées) ; montant affiché tel qu'envoyé (« 4.2$ » comme le legacy).
+
+## 22. Alertes V1 : module officiel, prêt pour une future mise en service (17/10/2026, local, non déployé)
+
+Décision d'Antoni (17/10/2026) : développement fonctionnel validé ; préparer le module officiel **sans** aucune bascule
+(SAMMI, StreamElements legacy et sources OBS actuelles restent seuls en production).
+
+**Dépendances au Lab constatées avant cette passe** : schéma (migrations dans le seul périmètre Lab), routes Core
+(`/v1/lab/alerts`, Core Lab seulement), runtime Studio créé en profil Lab seulement, réception Twitch par l'adaptateur
+chat Lab (`lab-chat-main`), StreamElements dans le serveur Studio Lab. **Déjà indépendants du profil** : médias,
+calibrages, jeton de la source OBS (`runtimeDir/alerts`), moteur OBS, règles de file (service unique). Le mot « Lab »
+dans `AlertsService` / `alerts-routes` ne désigne pas un second système : c'est l'implémentation canonique, comme
+`BonkLabService` / `SoundLabService` / `TtsLabService`, que le Core de production sert déjà.
+
+**Architecture officielle (une seule implémentation)** :
+
+| Couche         | Profil Lab                                                                  | Profil Production (préparé, non actif)                                                                                                                                                                                                                                    |
+| -------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schéma         | `20261022…_alerts_lab.sql` + `20261023…_alerts_lab_families.sql` (base Lab) | `20261024120000_alerts.sql` (périmètre prod, additif, idempotent ; schéma identique, testé)                                                                                                                                                                               |
+| Core           | `alertsRoutes(alerts)` → `/v1/lab/alerts/*` (secret Studio)                 | **même fonction** `alertsRoutes(alerts, { channelId })` → `/v1/studio/alerts/*` (identifiant d'installation Studio, chaîne du Core seulement, événements `twitch` refusés depuis Studio) ; `AlertsService` dans `createCore`, monté si installations + chaîne configurées |
+| Studio         | `AlertsRuntime` (environnement `lab`)                                       | **même runtime** (environnement `production`, client d'installation `prodCoreClient`) ; mêmes médias, calibrages et URL OBS                                                                                                                                               |
+| StreamElements | `SeTipsLink` → Core Lab                                                     | même lien → Core de production ; mode / journal séparés (`runtimeDir/production/alerts`)                                                                                                                                                                                  |
+| Twitch         | adaptateur chat Lab (connexion EventSub Lab existante)                      | **non raccordé** : le bot de production n'a aucun code d'alerte (voir blocages)                                                                                                                                                                                           |
+
+**Cycle de vie** : aucun mode réel n'est repris automatiquement — un ACTIVE enregistré (Twitch ou StreamElements)
+redémarre en **TEST** (observation), signalé dans l'onglet jusqu'à un nouveau choix. Files et historiques dans la base
+du Core (survivent aux redémarrages ; bail / reprise / jamais de rejeu après démarrage, § 13 / § 18) ; paramètres et
+journal SE dans le stockage Studio ; jeton SE chiffré par Electron (DPAPI). Reconnexions : EventSub (adaptateur Lab),
+Astro (2 → 60 s, `reconnect_token`), source OBS (interrogation 1 s, rechargement si périmée, § 19), Core indisponible
+(nouvel envoi en mémoire 90 s). Pas de garantie « zéro perte » : ni Twitch ni StreamElements ne rejouent une
+déconnexion. Aucun processus ajouté : SE vit dans le serveur Studio, Twitch dans l'adaptateur existant ; l'état de la
+source OBS se déduit de son interrogation (aucun polling en plus).
+
+**Studio** : onglet « Alertes · Core » (en-tête « Core Lab » / « Core production » selon le profil réel) ; Aperçu
+(local, sans file) / **Simulation (file réelle)** / événements réels **OFF · TEST · ACTIVE · Core Lab|production**
+(confirmation pour ACTIVE) ; état de la source OBS (connectée, à jour, ancienne version, silencieuse) ; Twitch
+« indisponible dans ce profil » en Production ; StreamElements : compte, connexion, topics, erreur, dernier don,
+journal conservé.
+
+**Checklist de la future bascule OBS (à faire avec Antoni, rien de fait aujourd'hui)** :
+
+1. Prérequis : Core de production déployé avec la migration `20261024120000_alerts.sql` et `TWITCH_CHANNEL_ID`
+   (accord d'Antoni) ; Studio apparié (profil Production) ; médias importés (18/18, « Médias » dans l'onglet) ;
+   réception Twitch de production décidée (voir blocages).
+2. Source : celle déjà créée dans la collection de scènes, URL copiée de l'onglet (`http://127.0.0.1:4100/alerts/player.html#<jeton>`,
+   jeton local, inchangé entre les profils), 1920 × 1080, fond transparent ; **ne pas** cocher « Arrêter la source quand
+   elle n'est pas visible » (elle doit interroger la file en continu) ; une seule source par file.
+3. Répétition hors live : Simulation (file réelle) de chaque famille, son, calibrage ; puis événements réels en TEST.
+4. Bascule par type, legacy coupé **pour ce type seulement** (sinon double alerte) : Twitch (follow, subs / gifts,
+   bits, raid) → ACTIVE ; dons → ACTIVE StreamElements après avoir coupé l'alerte de don legacy (SE / page
+   `Twitch_Alerts.html`) ; Streamlabs : sources visibles à neutraliser.
+5. Retour arrière (immédiat) : mode OFF dans l'onglet (Twitch et/ou StreamElements) **et** réactiver la source legacy
+   du type ; la source Raptoru peut rester dans la scène (sans alerte, elle n'affiche rien). Aucune donnée legacy
+   n'est modifiée par Raptoru.
+
+**Bilan** — A. **Terminé** : moteur, files par famille, calibrage, rechargement des sources périmées, réception Twitch
+(Lab) et StreamElements, schéma + routes de production, runtime Studio multi-profil, garde de démarrage ; **validé
+manuellement** : animations, calibrages, files simultanées dans OBS, vrai follow reçu en TEST, connexion
+StreamElements (abonnements créés). B. **Prêt mais inactif** : routes `/v1/studio/alerts` (Core non déployé),
+migration de production (non appliquée), profil Production des alertes (aucun Studio apparié en production), modes
+réels OFF / TEST. C. **À valider** : vrai don, chaque sous-type Twitch réel, bascule OBS, stabilité en live. D.
+**Blocages avant mise en service** : (1) le bot Twitch de production n'envoie aucun événement d'alerte au Core de
+production — choix à faire (bot de production + route `bot`, ou adaptateur Studio en profil Production) et
+modification du bot à autoriser ; (2) déploiement du Core de production + migration (accord) ; (3) appairage Studio
+production ; (4) ne pas lancer deux consommateurs EventSub avec le même jeton (garde existante côté Studio).
+
+**Preuves** : Core 689 (+22 ignorés) dont `alerts-prod-migration` (schéma prod = schéma Lab : colonnes, contraintes,
+index ; service sur la base prod ; idempotence) et `alerts-production-routes` (cycle complet par identifiant
+d'installation, refus : sans identifiant, autre chaîne, événement `twitch`, routes Lab absentes, routes non servies
+sans chaîne) ; Studio server 426 (`--maxWorkers=4` ; en parallélisme par défaut, des fichiers sans rapport dépassent
+leur délai sous charge sur ce PC, limite connue) dont `alerts-production` (runtime + SE + source OBS sur le **vrai**
+`createApp` de production : tout passe par `/v1/studio/alerts`, Twitch « indisponible ») et la garde « ACTIVE jamais
+repris » (Twitch et SE) ; Bot 123 ; Desktop 26 ; Playwright alertes 15/15 ; onglet vérifié dans Chromium. Rien
+déployé, aucune base distante touchée, aucun mode réel changé, OBS non modifié.
