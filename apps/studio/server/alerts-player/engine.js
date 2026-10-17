@@ -10,6 +10,7 @@ import {
   fill,
   formatAmount,
   giftCounterDuration,
+  pickNameColor,
   schedule,
   templateParts,
   textParts,
@@ -32,6 +33,9 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
 
   let current = null;
   let seekToken = 0;
+  /** The viewer-name colour of the current alert (a new one per play; the preview timeline keeps the last one). */
+  let nameColor = pickNameColor(null);
+  stage.style.setProperty('--name-color', nameColor);
   /** Real time while playing (the seek uses a virtual clock instead). */
   const realClock = { clock: () => performance.now(), live: true };
 
@@ -179,7 +183,10 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     const count = Math.max(1, Math.round(Number(data.count) || 1));
     // Sized with the final number in place: a long name must not push « × 20 » out of the bar as the counter grows.
     if (counter) counter.textContent = String(count);
-    fit(`--${zoneVar}-font-size`, zoneVar === 'gift' ? 48 : Math.min(54, z.h));
+    fit(
+      `--${zoneVar}-font-size`,
+      v.maxFontSize ?? (zoneVar === 'gift' ? 48 : Math.min(54, z.h)),
+    );
     if (counter) {
       const total = giftCounterDuration(count);
       const startedAt = ctx.clock();
@@ -297,6 +304,8 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
    */
   function play(v, data = {}, { volume, onStarted } = {}) {
     stop('replaced');
+    nameColor = pickNameColor(nameColor);
+    stage.style.setProperty('--name-color', nameColor);
     ttsVolume = Math.min(1, Math.max(0, volume ?? 1));
     return new Promise((resolve) => {
       const timers = new Set();
@@ -352,6 +361,7 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
       video.oncanplay = () => {
         video.oncanplay = null;
         video.style.visibility = 'visible';
+        video.classList.add('entered'); // media entrance (bits), from its first visible image
         if (v.videoFade) {
           void video.offsetWidth;
           video.classList.add('money-visible');
@@ -497,6 +507,7 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     };
     for (const step of schedule(v))
       later(() => applyStep(v, data, step, later, ctx), step.at);
+    later(() => video.classList.add('entered'), 0);
     if (v.videoFade) later(() => video.classList.add('money-visible'), 0);
     // Running animations are moved to the virtual time first: a transition started by a later step (MoneyTest
     // fade-out after its fade-in) then starts from the value it really has at that instant.

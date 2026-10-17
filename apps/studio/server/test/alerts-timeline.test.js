@@ -7,6 +7,8 @@ import {
   formatAmount,
   giftCounterDuration,
   schedule,
+  NAME_COLORS,
+  pickNameColor,
   templateParts,
   textParts,
 } from '../alerts-player/timeline.js';
@@ -135,15 +137,31 @@ describe('texts (inserted with textContent by the engine)', () => {
     ]);
   });
 
-  it('targeted gift: « Alice offre un sub à » / « Bob » on two lines', () => {
+  it('targeted gift: the recipient only (the gifter stays in the data)', () => {
     expect(
       textParts(V.subgift_targeted, { pseudo: 'Alice', recipient: 'Bob' }),
-    ).toEqual([
-      ['gift-name', 'Alice'],
-      ['gift-targeted-offer', 'offre un sub à'],
-      ['gift-break', ''],
-      ['gift-recipient', 'Bob'],
+    ).toEqual([['gift-recipient', 'Bob']]);
+  });
+
+  it('bits: « [gem] × N » above, « pseudo me permet de manger ! » below', () => {
+    expect(textParts(V.bits_default, { pseudo: 'A', amount: '250' })).toEqual([
+      ['bits-logo', ''],
+      ['bits-amount', '× 250'],
+      ['bits-break', ''],
+      ['bits-name', 'A'],
+      ['', 'me permet de manger !'],
     ]);
+  });
+
+  it('name colour: one of the palette, never twice in a row', () => {
+    let previous = null;
+    for (let i = 0; i < 50; i++) {
+      const c = pickNameColor(previous);
+      expect(NAME_COLORS).toContain(c);
+      expect(c).not.toBe(previous);
+      previous = c;
+    }
+    expect(pickNameColor(NAME_COLORS[0], () => 0)).toBe(NAME_COLORS[1]);
   });
 
   it('follows and Eren sub: the pseudo in its own coloured part', () => {
@@ -166,7 +184,7 @@ describe('texts (inserted with textContent by the engine)', () => {
     ]);
   });
 
-  it('raid: pseudo and viewers around « débarque avec … titans ! »; bits amount', () => {
+  it('raid: pseudo and viewers around « débarque avec … titans ! »', () => {
     expect(
       textParts(V.raid_default, { pseudo: '<img src=x>', viewers: 42 }),
     ).toEqual([
@@ -175,8 +193,5 @@ describe('texts (inserted with textContent by the engine)', () => {
       ['zone-number', '42'],
       ['', 'titans !'],
     ]);
-    expect(
-      textParts(V.bits_default, { pseudo: 'A', amount: '250' })[2],
-    ).toEqual(['bits-amount', '250']);
   });
 });

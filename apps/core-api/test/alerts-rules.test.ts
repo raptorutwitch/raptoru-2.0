@@ -142,7 +142,8 @@ describe('legacy timings copied exactly', () => {
       fadeOutAt: 3800,
       hideAt: 4150,
       duration: 3850,
-      zone: { x: 761, y: 156, w: 400, h: 80 },
+      // Text zone redesigned on 17/10/2026 (« × N » above the animation, the pseudo below): legacy was 761/156/400/80.
+      zone: { x: 460, y: 262, w: 1000, h: 690 },
       priority: 20,
     });
     expect(ALERT_VARIANTS.don_moneytest).toMatchObject({

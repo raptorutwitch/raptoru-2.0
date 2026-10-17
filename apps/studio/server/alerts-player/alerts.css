@@ -28,6 +28,12 @@ html, body {
     height: 70%;
     object-fit: contain;
 }
+/* Bits media entrance (17/10/2026): short rise + slight zoom + fade of the animation itself, from its first image. */
+#alertVideo.bits-video.entered { animation: bitsVideoIn 520ms cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes bitsVideoIn {
+    from { opacity: 0; transform: translateY(48px) scale(.94); }
+    to { opacity: 1; transform: none; }
+}
 #alertVideo.dofus-banner {
     width: 60%;
     height: auto;
@@ -65,9 +71,10 @@ html, body {
         -2px 2px 0 #000, 2px 2px 0 #000,
         0 0 15px rgba(0, 200, 255, .6);
 }
-/* Finishing pass (17/10/2026): the viewer's name in its own colour (follows, Eren sub) and a softer entrance / exit
+/* Finishing pass (17/10/2026): the viewer's name in a colour picked per alert (--name-color, set by the engine) and a
+   softer entrance / exit
    for the follows (short rise + unblur + tracking in; lift + blur out) instead of the legacy 80 px side slide. */
-.alert-name { color: #6ee7ff; }
+.alert-name, .bits-name, .zone-name { color: var(--name-color, #6ee7ff); }
 .pseudo-classic.show { animation: classicIn .45s cubic-bezier(.22, 1, .36, 1) forwards; }
 .pseudo-classic.hide { animation: classicOut .35s cubic-bezier(.4, 0, 1, 1) forwards; }
 @keyframes classicIn {
@@ -326,15 +333,12 @@ html, body {
         0 0 12px rgba(255, 255, 255, .75);
 }
 .pseudo-subgift .gift-recipient {
-    color: #ff91d7;
+    color: var(--name-color, #ff91d7);
     text-shadow:
         -3px -3px 0 #090a12, 3px -3px 0 #090a12,
         -3px 3px 0 #090a12, 3px 3px 0 #090a12,
-        0 0 15px rgba(255, 105, 204, .95);
+        0 0 15px var(--name-color, #ff91d7);
 }
-/* Targeted gift (17/10/2026): « gifter offre un sub à » / « recipient » on two lines, in its own wider zone. */
-.pseudo-subgift .gift-targeted-content { flex-wrap: wrap; row-gap: .08em; }
-.pseudo-subgift .gift-break { flex-basis: 100%; height: 0; }
 .pseudo-subgift .gift-count.tick {
     animation: giftCounterTick 90ms cubic-bezier(.2, 1.8, .4, 1);
 }
@@ -373,23 +377,29 @@ html, body {
         -3px 3px 0 #090a12, 3px 3px 0 #090a12,
         0 0 16px rgba(170, 90, 255, .95);
 }
-/* Bits entrance (17/10/2026): short rise + scale + unblur instead of a flat fade. */
-.pseudo-bits.show { animation: bitsIn 420ms cubic-bezier(.22, 1, .36, 1) forwards; }
-@keyframes bitsIn {
-    from { opacity: 0; transform: translateY(16px) scale(.92); filter: blur(4px); }
-    to { opacity: 1; transform: none; filter: blur(0); }
-}
+.pseudo-bits.show { animation: giftNameIn 220ms ease-out forwards; }
 .pseudo-bits.hide { animation: giftNameOut var(--bits-fade-duration, 350ms) ease-in forwards; }
+/* Bits text (17/10/2026): « [gem] × N » above the animation, « {pseudo} me permet de manger ! » below it — the two
+   lines are pushed to the top and bottom of the zone (the inner margins match the engine's fit check). */
 .bits-content {
-    display: inline-flex;
-    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: space-between;
     justify-content: center;
-    gap: .18em;
-    max-width: 100%;
+    column-gap: .25em;
+    width: calc(100% - 10px);
+    height: calc(100% - 4px);
     white-space: nowrap;
 }
-.bits-name { color: #d9a7ff; }
-.bits-amount { color: #ffe477; font-variant-numeric: tabular-nums; }
+.bits-break { flex-basis: 100%; height: 0; }
+.bits-amount { color: #ffe477; font-size: 1.3em; font-variant-numeric: tabular-nums; }
+.bits-logo {
+    width: 1em;
+    height: 1.25em;
+    background: linear-gradient(160deg, #f1dcff 0%, #b98aff 35%, #9146ff 60%, #5a1fb8 100%);
+    clip-path: polygon(50% 0, 100% 40%, 50% 100%, 0 40%);
+}
 
 /* Raid (A2): no legacy text style exists. PROVISIONAL zone text, same look family as the bits / gifts. */
 .pseudo-zone {
@@ -417,5 +427,4 @@ html, body {
 .pseudo-zone.show { animation: giftNameIn 220ms ease-out forwards; }
 .pseudo-zone.hide { animation: giftNameOut var(--zone-fade-duration, 350ms) ease-in forwards; }
 .zone-content { display: inline-flex; align-items: baseline; gap: .18em; max-width: 100%; white-space: nowrap; }
-.zone-name { color: #ffb38a; }
 .zone-number { color: #ffe477; font-variant-numeric: tabular-nums; }

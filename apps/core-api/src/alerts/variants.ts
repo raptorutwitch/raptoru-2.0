@@ -215,9 +215,9 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     id: 'subgift_targeted',
     type: 'gift_targeted',
     video: 'Alerte Sub 1.webm',
-    // Anonymous gifter: « Un généreux anonyme » (legacy). Shown on two lines (« {pseudo} offre un sub à » /
-    // « {recipient} », 17/10/2026): one line in the 319×48 zone was unreadable; the bar itself is ~390×88.
-    text: '{pseudo} offre un sub à {recipient}',
+    // Shows the RECIPIENT only, on one line shrinking to fit (decision 17/10/2026); the gifter (anonymous:
+    // « Un généreux anonyme ») stays in the event data. Zone = the real bar (~390×88), wider than the gifts' 319×48.
+    text: '{recipient}',
     priority: 30,
     ...GIFT,
     zone: { x: 805, y: 244, w: 370, h: 80 },
@@ -231,12 +231,14 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     volume: 0.5,
     style: 'bits-video',
     textStyle: 'pseudo-bits',
-    text: '{pseudo} a envoyé {amount} bits !',
+    // « [gem] × {amount} » above the animation, « {pseudo} me permet de manger ! » below (17/10/2026).
+    text: '× {amount} / {pseudo} me permet de manger !',
     showAt: 800,
     fadeOutAt: 3800,
     hideAt: 4150,
     duration: 3850,
-    zone: { x: 761, y: 156, w: 400, h: 80 },
+    zone: { x: 460, y: 262, w: 1000, h: 690 },
+    maxFontSize: 44,
     priority: 20,
     fps: 12,
   },

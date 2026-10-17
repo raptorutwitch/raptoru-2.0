@@ -23,6 +23,22 @@ export function fill(template, data) {
   );
 }
 
+/** Viewer-name colours (17/10/2026): readable light tones of the alerts' family, no yellow (amounts / counters). */
+export const NAME_COLORS = [
+  '#6ee7ff',
+  '#ff91d7',
+  '#ffb38a',
+  '#7ef0b4',
+  '#c3a6ff',
+  '#8fc4ff',
+];
+
+/** One colour per alert, never the previous one (the name keeps it for the whole alert). */
+export function pickNameColor(previous, random = Math.random) {
+  const choices = NAME_COLORS.filter((c) => c !== previous);
+  return choices[Math.floor(random() * choices.length)] ?? NAME_COLORS[0];
+}
+
 /** A template split around its variables: [class, text] parts, each variable named in `classes` in its own class. */
 export function templateParts(template, data, classes) {
   return String(template ?? '')
@@ -133,28 +149,25 @@ export function textParts(v, data) {
   const pseudo = String(data?.pseudo ?? '').trim();
   switch (v.textStyle) {
     case 'pseudo-subgift':
-      // Targeted gift on two lines (« Alice offre un sub à » / « Bob »): one line was unreadable in the bar.
+      // Targeted gift: the recipient only, one line (decision 17/10/2026); the gifter stays in the event data.
       return data?.recipient && v.type === 'gift_targeted'
-        ? [
-            ['gift-name', pseudo],
-            ['gift-targeted-offer', 'offre un sub à'],
-            ['gift-break', ''],
-            ['gift-recipient', String(data.recipient)],
-          ]
+        ? [['gift-recipient', String(data.recipient)]]
         : [
             ['gift-name', pseudo],
             ['gift-x', '×'],
             ['gift-count', '0'],
           ];
     case 'pseudo-bits':
+      // « [gem] × N » above the animation, « {pseudo} me permet de manger ! » below it (17/10/2026).
       return [
-        ['bits-name', pseudo],
-        ['', 'a envoyé'],
+        ['bits-logo', ''],
         [
           'bits-amount',
-          String(Math.max(1, Math.round(Number(data?.amount) || 10))),
+          '× ' + Math.max(1, Math.round(Number(data?.amount) || 10)),
         ],
-        ['', 'bits !'],
+        ['bits-break', ''],
+        ['bits-name', pseudo],
+        ['', 'me permet de manger !'],
       ];
     case 'pseudo-zone':
       // Raid template « {pseudo} … {viewers} … » split around its variables (wording from the variant).
