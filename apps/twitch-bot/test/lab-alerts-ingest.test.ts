@@ -327,3 +327,35 @@ describe('never in production', () => {
     );
   });
 });
+
+describe('adapter start (lab-chat-main)', () => {
+  it('accepts the environment Studio gives it (alerts mode + channel): it goes on to the Twitch app config', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const { fileURLToPath } = await import('node:url');
+    // No Twitch app config on purpose: the process stops right after its own environment, before any connection.
+    const run = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        fileURLToPath(new URL('../src/lab-chat-main.ts', import.meta.url)),
+      ],
+      {
+        env: {
+          PATH: process.env.PATH,
+          SYSTEMROOT: process.env.SYSTEMROOT,
+          LAB_CHAT_CORE_URL: 'http://127.0.0.1:9',
+          LAB_CHAT_SECRET: 'x'.repeat(40),
+          LAB_CHAT_CHANNEL_ID: '900100',
+          LAB_ALERTS_MODE: 'test',
+          LAB_ALERTS_CHANNEL_ID: '900100',
+        },
+        encoding: 'utf8',
+        timeout: 30_000,
+      },
+    );
+    expect(run.stderr).not.toContain('LAB_ALERTS');
+    expect(run.stderr).not.toContain('LAB_CHAT');
+    expect(run.stderr).toContain('invalid Twitch app environment');
+  });
+});

@@ -35,7 +35,7 @@ const Env = z.object({
   /** Alerts channel of the Lab Core (Studio's alerts runtime); default: the Lab channel. */
   LAB_ALERTS_CHANNEL_ID: z
     .string()
-    .regex(/^d{1,32}$/)
+    .regex(/^\d{1,32}$/)
     .optional(),
   /** Helix stream-state repair period (same setting and default as the main bot). */
   STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
