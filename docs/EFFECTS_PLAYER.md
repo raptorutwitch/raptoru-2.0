@@ -185,7 +185,10 @@ superposition, miroirs aléatoires, volume qui baisse, 5ᵉ muette ; comparer av
 
 ## 9. Creepy dans Raptoru (P0.2 C2)
 
-**Statut : DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS.**
+**Statut : CREEPY — DÉVELOPPEMENT TERMINÉ / TESTS AUTOMATISÉS RÉUSSIS / VALIDATION FONCTIONNELLE OBS RÉUSSIE / NON
+DÉPLOYÉ** (code `ac48842`). Validé manuellement par Antoni dans son vrai OBS le 18/10/2026 : animations OBS existantes,
+son et retour de scène conformes (traces Lab : 4 tests Studio « Creepy » exécutés, 00:19 – 00:20). Pas encore de vraie
+récompense Twitch (automatisations OFF).
 
 Interaction native **« Creepy »** (règle `{ type: 'interaction', interaction: 'creepy' }`, choisie dans Studio : «
 Interaction native » → « Creepy » ; rien d'autre à régler). Code : `apps/studio/server/src/interactions/creepy.ts`.
