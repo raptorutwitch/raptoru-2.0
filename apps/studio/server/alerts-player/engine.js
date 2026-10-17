@@ -11,6 +11,7 @@ import {
   formatAmount,
   giftCounterDuration,
   schedule,
+  templateParts,
   textParts,
   visualLengthMs,
 } from './timeline.js';
@@ -78,7 +79,14 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
   };
 
   function showText(v, data, later, ctx) {
-    if (v.textStyle === 'pseudo-classic' || v.textStyle === 'pseudo-dofus') {
+    if (v.textStyle === 'pseudo-classic') {
+      text.textContent = '';
+      text.append(spans(textParts(v, data), 'classic-content'));
+      text.className = 'pseudo-classic show';
+      text.style.top = v.textTop || '';
+      return;
+    }
+    if (v.textStyle === 'pseudo-dofus') {
       const value = fill(v.text, data);
       text.textContent = '';
       for (const ch of value) {
@@ -87,23 +95,20 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
         s.textContent = ch === ' ' ? ' ' : ch;
         text.append(s);
       }
-      text.className = v.textStyle + ' show';
-      text.style.top = v.textTop || '';
-      if (v.textStyle === 'pseudo-dofus') {
-        const base = v.maxFontSize || 44;
-        const size = dofusFontSize(value.length, base);
-        text.style.fontSize = size + 'px';
-        text.style.top = `calc(${v.textTop} + ${(base - size) * 0.5}px)`;
-        [...text.children].forEach((letter, index) =>
-          later(
-            () => {
-              letter.classList.add('sweeping');
-              later(() => letter.classList.remove('sweeping'), 200);
-            },
-            700 + index * 50,
-          ),
-        );
-      }
+      text.className = 'pseudo-dofus show';
+      const base = v.maxFontSize || 44;
+      const size = dofusFontSize(value.length, base);
+      text.style.fontSize = size + 'px';
+      text.style.top = `calc(${v.textTop} + ${(base - size) * 0.5}px)`;
+      [...text.children].forEach((letter, index) =>
+        later(
+          () => {
+            letter.classList.add('sweeping');
+            later(() => letter.classList.remove('sweeping'), 200);
+          },
+          700 + index * 50,
+        ),
+      );
       return;
     }
     if (v.textStyle === 'pseudo-don') {
@@ -220,7 +225,10 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
 
   function showSubtitle(v, data, index) {
     const s = v.subtitles[index];
-    subtitle.textContent = fill(s.text, data);
+    subtitle.textContent = '';
+    subtitle.append(
+      spans(templateParts(s.text, data, { pseudo: 'alert-name' }), ''),
+    );
     subtitle.style.fontSize = '48px';
     let size = 48;
     while (subtitle.scrollWidth > 1740 && size > 36) {

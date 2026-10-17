@@ -23,6 +23,19 @@ export function fill(template, data) {
   );
 }
 
+/** A template split around its variables: [class, text] parts, each variable named in `classes` in its own class. */
+export function templateParts(template, data, classes) {
+  return String(template ?? '')
+    .split(/(\{\w+\})/)
+    .filter(Boolean)
+    .map((p) => {
+      const k = p.slice(1, -1);
+      return p[0] === '{' && classes[k]
+        ? [classes[k], String(data?.[k] ?? '')]
+        : ['', fill(p, data)];
+    });
+}
+
 /** Legacy Dofus banner: names over 14 characters shrink proportionally. */
 export function dofusFontSize(length, base = 44) {
   return length > 14 ? Math.round(base * (14 / length) * 10) / 10 : base;
@@ -120,12 +133,13 @@ export function textParts(v, data) {
   const pseudo = String(data?.pseudo ?? '').trim();
   switch (v.textStyle) {
     case 'pseudo-subgift':
+      // Targeted gift on two lines (« Alice offre un sub à » / « Bob »): one line was unreadable in the bar.
       return data?.recipient && v.type === 'gift_targeted'
         ? [
             ['gift-name', pseudo],
-            ['gift-targeted-offer', ' offre un abonnement à '],
+            ['gift-targeted-offer', 'offre un sub à'],
+            ['gift-break', ''],
             ['gift-recipient', String(data.recipient)],
-            ['gift-targeted-offer', ' !'],
           ]
         : [
             ['gift-name', pseudo],
@@ -142,20 +156,17 @@ export function textParts(v, data) {
         ],
         ['', 'bits !'],
       ];
-    case 'pseudo-zone': {
-      // Raid template « {pseudo} … {viewers} … » split around its variables (provisional wording from the variant).
-      const parts = [];
-      String(v.text ?? '{pseudo}')
-        .split(/(\{pseudo\}|\{viewers\})/)
-        .filter(Boolean)
-        .forEach((p) => {
-          if (p === '{pseudo}') parts.push(['zone-name', pseudo]);
-          else if (p === '{viewers}')
-            parts.push(['zone-number', String(data?.viewers ?? 0)]);
-          else parts.push(['', p.trim()]);
-        });
-      return parts.filter(([, t]) => t !== '');
-    }
+    case 'pseudo-zone':
+      // Raid template « {pseudo} … {viewers} … » split around its variables (wording from the variant).
+      return templateParts(
+        v.text ?? '{pseudo}',
+        { ...data, pseudo, viewers: data?.viewers ?? 0 },
+        { pseudo: 'zone-name', viewers: 'zone-number' },
+      )
+        .map(([cls, t]) => [cls, t.trim()])
+        .filter(([, t]) => t !== '');
+    case 'pseudo-classic':
+      return templateParts(v.text, data, { pseudo: 'alert-name' });
     default:
       return [['', fill(v.text, data)]];
   }

@@ -99,7 +99,7 @@ describe('other events', () => {
       video: 'Raid Titan.webm',
       audio: 'Raptoru_Alerte_Raid_Sound.mp3',
       keepAudio: true,
-      text: '{pseudo} débarque avec {viewers} viewers !',
+      text: '{pseudo} débarque avec {viewers} titans !',
       mediaMs: 19916,
       provisional: true,
     });

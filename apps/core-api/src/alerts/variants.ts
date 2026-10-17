@@ -215,10 +215,12 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     id: 'subgift_targeted',
     type: 'gift_targeted',
     video: 'Alerte Sub 1.webm',
-    // Anonymous gifter: « Un généreux anonyme » (legacy).
-    text: '{pseudo} offre un abonnement à {recipient} !',
+    // Anonymous gifter: « Un généreux anonyme » (legacy). Shown on two lines (« {pseudo} offre un sub à » /
+    // « {recipient} », 17/10/2026): one line in the 319×48 zone was unreadable; the bar itself is ~390×88.
+    text: '{pseudo} offre un sub à {recipient}',
     priority: 30,
     ...GIFT,
+    zone: { x: 805, y: 244, w: 370, h: 80 },
   },
   bits_default: {
     id: 'bits_default',
@@ -271,8 +273,8 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
   },
   // Raid: kept (decision 16/10/2026). Media found by Antoni in `Documents\Twitch\Alertes\Raid` (A2): « Titan Avi 4.avi »
   // (raw BGRA, real alpha) converted to VP9 + alpha WebM, 19 916 ms, 1920×1080, 12 fps; its separate sound plays on
-  // after the video (21.7 s). The TEXT, POSITION, TIMINGS and PRIORITY are PROVISIONAL (no legacy reference): to be
-  // calibrated by Antoni. Variables: {pseudo}, {viewers}.
+  // after the video (21.7 s). Text chosen by Antoni (17/10/2026); POSITION, TIMINGS and PRIORITY stay PROVISIONAL (no
+  // legacy reference): to be calibrated. Variables: {pseudo}, {viewers}.
   raid_default: {
     id: 'raid_default',
     type: 'raid',
@@ -282,7 +284,7 @@ export const ALERT_VARIANTS: Record<string, AlertVariant> = {
     volume: LEGACY_VOLUME,
     style: 'default',
     textStyle: 'pseudo-zone',
-    text: '{pseudo} débarque avec {viewers} viewers !',
+    text: '{pseudo} débarque avec {viewers} titans !',
     showAt: 1500,
     fadeOutAt: 7650,
     hideAt: 8000,

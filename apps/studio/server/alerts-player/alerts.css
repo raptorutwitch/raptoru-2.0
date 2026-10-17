@@ -65,15 +65,18 @@ html, body {
         -2px 2px 0 #000, 2px 2px 0 #000,
         0 0 15px rgba(0, 200, 255, .6);
 }
-.pseudo-classic.show { animation: classicIn .3s ease-out forwards; }
-.pseudo-classic.hide { animation: classicOut .3s ease-in forwards; }
+/* Finishing pass (17/10/2026): the viewer's name in its own colour (follows, Eren sub) and a softer entrance / exit
+   for the follows (short rise + unblur + tracking in; lift + blur out) instead of the legacy 80 px side slide. */
+.alert-name { color: #6ee7ff; }
+.pseudo-classic.show { animation: classicIn .45s cubic-bezier(.22, 1, .36, 1) forwards; }
+.pseudo-classic.hide { animation: classicOut .35s cubic-bezier(.4, 0, 1, 1) forwards; }
 @keyframes classicIn {
-    from { opacity: 0; transform: translateX(calc(-50% - 80px)); }
-    to { opacity: 1; transform: translateX(-50%); }
+    from { opacity: 0; transform: translateX(-50%) translateY(14px); filter: blur(6px); letter-spacing: 6px; }
+    to { opacity: 1; transform: translateX(-50%); filter: blur(0); letter-spacing: 2px; }
 }
 @keyframes classicOut {
-    from { opacity: 1; transform: translateX(-50%); }
-    to { opacity: 0; transform: translateX(calc(-50% + 80px)); }
+    from { opacity: 1; transform: translateX(-50%); filter: blur(0); }
+    to { opacity: 0; transform: translateX(-50%) translateY(-10px); filter: blur(4px); }
 }
 
 .pseudo-dofus {
@@ -96,25 +99,27 @@ html, body {
 }
 .pseudo-dofus.show { animation: dofusIn .6s ease-out forwards; }
 .pseudo-dofus.hide { animation: dofusOut 1s ease-in forwards; }
+/* Finishing pass (17/10/2026): the name stays still in the banner (no 30 px rise in, no 10 px jump out); the golden
+   sweep is a light wave (quick glow, slow decay) without the per-letter scale that made the letters hop. */
 .pseudo-dofus .letter {
     display: inline-block;
-    transition: color .25s ease, text-shadow .25s ease, transform .25s ease;
+    transition: color .5s ease, text-shadow .5s ease;
 }
 .pseudo-dofus .letter.sweeping {
     color: #ffd700;
-    transform: scale(1.15);
+    transition-duration: .18s;
     text-shadow:
         -2px -2px 0 #000, 2px -2px 0 #000,
         -2px 2px 0 #000, 2px 2px 0 #000,
-        0 0 20px #ffd700, 0 0 40px rgba(255, 215, 0, .7);
+        0 0 16px #ffd700, 0 0 30px rgba(255, 215, 0, .55);
 }
 @keyframes dofusIn {
-    from { opacity: 0; transform: translateX(-50%) translateY(30px); }
-    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    from { opacity: 0; filter: blur(4px); }
+    to { opacity: 1; filter: blur(0); }
 }
 @keyframes dofusOut {
-    from { opacity: 1; transform: translateX(-50%) translateY(-10px); }
-    to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+    from { opacity: 1; }
+    to { opacity: 0; }
 }
 
 .eren-subtitle {
@@ -327,6 +332,9 @@ html, body {
         -3px 3px 0 #090a12, 3px 3px 0 #090a12,
         0 0 15px rgba(255, 105, 204, .95);
 }
+/* Targeted gift (17/10/2026): « gifter offre un sub à » / « recipient » on two lines, in its own wider zone. */
+.pseudo-subgift .gift-targeted-content { flex-wrap: wrap; row-gap: .08em; }
+.pseudo-subgift .gift-break { flex-basis: 100%; height: 0; }
 .pseudo-subgift .gift-count.tick {
     animation: giftCounterTick 90ms cubic-bezier(.2, 1.8, .4, 1);
 }
@@ -365,7 +373,12 @@ html, body {
         -3px 3px 0 #090a12, 3px 3px 0 #090a12,
         0 0 16px rgba(170, 90, 255, .95);
 }
-.pseudo-bits.show { animation: giftNameIn 220ms ease-out forwards; }
+/* Bits entrance (17/10/2026): short rise + scale + unblur instead of a flat fade. */
+.pseudo-bits.show { animation: bitsIn 420ms cubic-bezier(.22, 1, .36, 1) forwards; }
+@keyframes bitsIn {
+    from { opacity: 0; transform: translateY(16px) scale(.92); filter: blur(4px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
+}
 .pseudo-bits.hide { animation: giftNameOut var(--bits-fade-duration, 350ms) ease-in forwards; }
 .bits-content {
     display: inline-flex;

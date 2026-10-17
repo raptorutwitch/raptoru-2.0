@@ -7,6 +7,7 @@ import {
   formatAmount,
   giftCounterDuration,
   schedule,
+  templateParts,
   textParts,
 } from '../alerts-player/timeline.js';
 import { ALERT_VARIANTS } from '../../../core-api/src/alerts/variants.ts';
@@ -134,25 +135,45 @@ describe('texts (inserted with textContent by the engine)', () => {
     ]);
   });
 
-  it('targeted gift: « offre un abonnement à »', () => {
+  it('targeted gift: « Alice offre un sub à » / « Bob » on two lines', () => {
     expect(
       textParts(V.subgift_targeted, { pseudo: 'Alice', recipient: 'Bob' }),
     ).toEqual([
       ['gift-name', 'Alice'],
-      ['gift-targeted-offer', ' offre un abonnement à '],
+      ['gift-targeted-offer', 'offre un sub à'],
+      ['gift-break', ''],
       ['gift-recipient', 'Bob'],
-      ['gift-targeted-offer', ' !'],
     ]);
   });
 
-  it('raid: pseudo and viewers around the provisional wording; bits amount', () => {
+  it('follows and Eren sub: the pseudo in its own coloured part', () => {
+    expect(textParts(V.follow_eren, { pseudo: '<b>A</b>' })).toEqual([
+      ['alert-name', '<b>A</b>'],
+      ['', ' vient de follow !'],
+    ]);
+    expect(
+      templateParts(
+        V.eren_sub.subtitles[1].text,
+        { pseudo: 'A' },
+        {
+          pseudo: 'alert-name',
+        },
+      ),
+    ).toEqual([
+      ['', 'Remercie '],
+      ['alert-name', 'A'],
+      ['', ' pour son abonnement !'],
+    ]);
+  });
+
+  it('raid: pseudo and viewers around « débarque avec … titans ! »; bits amount', () => {
     expect(
       textParts(V.raid_default, { pseudo: '<img src=x>', viewers: 42 }),
     ).toEqual([
       ['zone-name', '<img src=x>'],
       ['', 'débarque avec'],
       ['zone-number', '42'],
-      ['', 'viewers !'],
+      ['', 'titans !'],
     ]);
     expect(
       textParts(V.bits_default, { pseudo: 'A', amount: '250' })[2],
