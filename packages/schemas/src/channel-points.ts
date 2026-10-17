@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EffectSoundId, EffectVolume } from './effects.js';
 import { SoundLabSoundId } from './sound-lab.js';
 
 // Points de chaîne V1 (17/10/2026) — Twitch channel points custom rewards → Core rules → typed, allow-listed actions.
@@ -19,6 +20,12 @@ const DurationMs = z.number().int().min(500).max(600_000);
 export const CpAction = z.discriminatedUnion('type', [
   /** A Soundboard sound, through the Soundboard queue and player (paid by the channel points). */
   z.strictObject({ type: z.literal('sound'), sound_id: SoundLabSoundId }),
+  /** An effect sound, played at once by Studio's effects player (outside the Soundboard: no queue, price, cooldown). */
+  z.strictObject({
+    type: z.literal('effect_sound'),
+    sound_id: EffectSoundId,
+    volume: EffectVolume,
+  }),
   /** Show or hide one source of one scene; optionally for a while. */
   z.strictObject({
     type: z.literal('obs_source'),
@@ -110,8 +117,24 @@ export const CpActionResult = z.strictObject({
     .max(CP_MAX_ACTIONS - 1),
   ok: z.boolean(),
   error: z.string().max(200).optional(),
+  /** Effect actions: the player started it (ok) — still pending until its end is reported (CpEffectReport). */
+  playing: z.literal(true).optional(),
 });
 export type CpActionResult = z.infer<typeof CpActionResult>;
+
+/** Studio's report of the end of an effect it started for a job (after the job's own `completed`). */
+export const CpEffectReport = z.strictObject({
+  consumer_id: z.string().min(1).max(64),
+  index: z
+    .number()
+    .int()
+    .min(0)
+    .max(CP_MAX_ACTIONS - 1),
+  /** completed: the player played it to the end · failed: stopped by an error · unknown: no end reported. */
+  event: z.enum(['completed', 'failed', 'unknown']),
+  error: z.string().max(200).optional(),
+});
+export type CpEffectReport = z.infer<typeof CpEffectReport>;
 
 export const CpAckRequest = z.strictObject({
   consumer_id: z.string().min(1).max(64),

@@ -18,6 +18,7 @@ import { AlertMediaStore } from './alerts/media-store.js';
 import { AlertsRuntime } from './alerts/runtime.js';
 import { SeTipsLink } from './alerts/se-tips.js';
 import { ChannelPointsRuntime } from './channel-points/runtime.js';
+import { EffectsPlayer } from './effects/player.js';
 import { RaffleRuntime } from './raffle-lab/runtime.js';
 import { WordGameRuntime } from './word-game/runtime.js';
 import { LabChatIngress } from './lab-chat/ingress.js';
@@ -902,6 +903,21 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
               ? join(paths.runtimeDir, 'channel-points')
               : join(paths.runtimeDir, 'production', 'channel-points'),
           obs: () => bonk?.obs ?? null,
+          // Effects player (P0.1): one OBS browser source; media imported by effects/import-cli.ts.
+          effects: await EffectsPlayer.create({
+            dir: join(paths.runtimeDir, 'effects'),
+            origin: `http://${host}:${port}`,
+            media: await AlertMediaStore.open(
+              join(paths.runtimeDir, 'effects', 'media'),
+            ),
+            playerDir: join(
+              REPO_ROOT,
+              'apps',
+              'studio',
+              'server',
+              'effects-player',
+            ),
+          }),
           twitch: () => ({
             scope: readTokenSummary(broadcasterTokenFile).scopes.includes(
               'channel:read:redemptions',

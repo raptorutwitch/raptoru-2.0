@@ -3,6 +3,7 @@
 
 export type CpActionView =
   | { type: 'sound'; sound_id: string }
+  | { type: 'effect_sound'; sound_id: string; volume: number }
   | {
       type: 'obs_source';
       scene: string;
@@ -56,7 +57,24 @@ export interface CpState {
   environment: 'lab' | 'production';
   obs: { connected: boolean; pending_reverts: number };
   twitch: { scope: boolean; adapter_running: boolean; profile_note?: string };
+  /** Studio's effects player (null: not wired in this Studio). */
+  effects: {
+    url: string;
+    connected: boolean;
+    audio: boolean;
+    playing: number;
+    sounds: EffectSoundView[];
+  } | null;
   executor_error: string | null;
+}
+
+export interface EffectSoundView {
+  id: string;
+  label: string;
+  /** Original volume (default of a new action). */
+  volume: number;
+  /** Imported into Studio's storage. */
+  available: boolean;
 }
 
 export const esc = (s: string) =>
@@ -96,6 +114,15 @@ const ERRORS: Record<string, string> = {
   queue_full: 'file du Soundboard pleine',
   studio_absent: 'Studio absent',
   execution_unknown: 'exécution non confirmée',
+  effects_player_offline: 'lecteur d’effets non ouvert (source OBS absente)',
+  effects_player_muted: 'lecteur d’effets ouvert mais son bloqué',
+  effects_player_unavailable: 'lecteur d’effets indisponible dans ce Studio',
+  effects_busy: 'trop d’effets en même temps',
+  effect_media_missing: 'fichier du son non importé dans Studio',
+  effect_start_timeout: 'lecture non démarrée',
+  file_missing: 'fichier du son illisible',
+  playback_error: 'erreur pendant la lecture',
+  start_timeout: 'lecture non démarrée',
 };
 const PROGRESS = {
   queued: 'en attente du lecteur Soundboard',
@@ -109,10 +136,13 @@ const seconds = (ms?: number) =>
 export function actionLabel(
   a: CpActionView,
   sounds: CpState['sounds'] = [],
+  effects: EffectSoundView[] = [],
 ): string {
   switch (a.type) {
     case 'sound':
       return `Son « ${sounds.find((s) => s.id === a.sound_id)?.label ?? a.sound_id} »`;
+    case 'effect_sound':
+      return `Son d’effet « ${effects.find((s) => s.id === a.sound_id)?.label ?? a.sound_id} » (${a.volume} %)`;
     case 'obs_source':
       return `${a.visible ? 'Afficher' : 'Masquer'} « ${a.source} » (scène « ${a.scene} »)${seconds(a.duration_ms)}`;
     case 'obs_filter':
@@ -122,12 +152,51 @@ export function actionLabel(
   }
 }
 
+const chip = (cls: string, text: string, title = '') =>
+  `<span class="cp-chip cp-chip--${cls}"${title ? ` title="${esc(title)}"` : ''}>${esc(text)}</span>`;
+
+/** The effects player as Studio sees it (its OBS source). */
+function effectsChip(e: CpState['effects']) {
+  if (!e) return '';
+  if (!e.connected)
+    return chip(
+      'warn',
+      'Lecteur d’effets : non ouvert',
+      'Ajoute la source navigateur du lecteur d’effets dans OBS (URL dans « Lecteur d’effets »).',
+    );
+  if (!e.audio) return chip('warn', 'Lecteur d’effets : son bloqué');
+  return chip(
+    'on',
+    e.playing
+      ? `Lecteur d’effets : ${e.playing} en lecture`
+      : 'Lecteur d’effets prêt',
+  );
+}
+
+/** The effects player's OBS source (URL to copy) and the imported sounds. */
+export function effectsView(e: CpState['effects']) {
+  if (!e) return '';
+  const missing = e.sounds.filter((s) => !s.available).length;
+  return `<details class="cp-effects"><summary>Lecteur d’effets (source OBS)</summary>
+    <p class="cp-muted">Une seule source navigateur OBS joue les sons d’effet, tout de suite et en superposition, hors
+      Soundboard. URL de la source :</p>
+    <input class="cp-url" readonly value="${esc(e.url)}"/>
+    <p class="cp-muted">${e.sounds.length - missing} / ${e.sounds.length} son(s) importé(s)${
+      missing
+        ? ' — à importer : ' +
+          e.sounds
+            .filter((s) => !s.available)
+            .map((s) => esc(s.label))
+            .join(', ')
+        : ''
+    }.</p>
+  </details>`;
+}
+
 /** The status chips of the header. */
 export function statusView(s: CpState | null, error: string | null) {
   if (error) return `<p class="cp-error">${esc(error)}</p>`;
   if (!s) return '<p class="cp-muted">Chargement…</p>';
-  const chip = (cls: string, text: string, title = '') =>
-    `<span class="cp-chip cp-chip--${cls}"${title ? ` title="${esc(title)}"` : ''}>${esc(text)}</span>`;
   const twitch =
     s.environment === 'production'
       ? chip(
@@ -152,6 +221,7 @@ export function statusView(s: CpState | null, error: string | null) {
     ${chip(s.settings.enabled ? 'on' : 'off', s.settings.enabled ? 'Automatisations : ON' : 'Automatisations : OFF')}
     ${twitch}
     ${chip(s.obs.connected ? 'on' : 'warn', s.obs.connected ? 'OBS connecté' : 'OBS non connecté')}
+    ${effectsChip(s.effects)}
     ${s.obs.pending_reverts ? chip('off', `${s.obs.pending_reverts} effet(s) temporaire(s) en cours`) : ''}
     ${s.executor_error ? chip('warn', 'Exécution : Core injoignable', s.executor_error) : ''}`;
 }
@@ -216,7 +286,7 @@ export function historyView(s: CpState) {
                     : x.error
                       ? (ERRORS[x.error] ?? x.error)
                       : '';
-                return `${mark} ${a ? esc(actionLabel(a, s.sounds)) : ''}${note ? ` — ${esc(note)}` : ''}`;
+                return `${mark} ${a ? esc(actionLabel(a, s.sounds, s.effects?.sounds)) : ''}${note ? ` — ${esc(note)}` : ''}`;
               })
               .join('<br>');
       return `<tr class="cp-row--${r.status}">

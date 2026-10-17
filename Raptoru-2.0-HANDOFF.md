@@ -32,6 +32,12 @@ Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Anton
 - **Tests au `166e7ed`** : Core 675 (+22 ignorés : PostgreSQL réel absent), Studio 381, Bot 111, Playwright 13/13 ;
   typecheck, lint, build verts.
 
+**LECTEUR D'EFFETS P0.1 (17/10/2026, local, non validé, non déployé)** — capacité native de Studio : une source
+navigateur OBS joue tout de suite (superposition, hors Soundboard, sans Wallet) les sons d'effet d'une règle Points de
+chaîne (`effect_sound`, même circuit de jobs Studio). 6 sons SAMMI importés par copie (Eren cri, Tiens bon !, Seigneur
+Percé, Bzez, Skyzz, Arrêteuh ; volumes SAMMI). Reste : source OBS à ajouter par Antoni et validation réelle
+(`docs/EFFECTS_PLAYER.md` § 3 et § 5). Suite prévue : P0.2 (Creepy, NTM, BRB).
+
 **POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ (17/10/2026)**. Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
 LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS
 (« Test Lab » → scène « Waiting screen ») ; action temporaire sur une source OBS ; son du Soundboard réellement audible

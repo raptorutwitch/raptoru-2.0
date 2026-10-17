@@ -45,6 +45,8 @@ const copies = [
   'apps/studio/server/word-game-player',
   // Twitch alerts V1 OBS source / Studio preview (media live in Studio's storage, never in the package).
   'apps/studio/server/alerts-player',
+  // Effects player OBS source (effect media live in Studio's storage, never in the package).
+  'apps/studio/server/effects-player',
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
@@ -77,6 +79,8 @@ const runtimeFiles = [
   'apps/studio/server/word-game-player/ShuffleWordsSong.ogg',
   'apps/studio/server/alerts-player/player.html',
   'apps/studio/server/alerts-player/engine.js',
+  'apps/studio/server/effects-player/player.html',
+  'apps/studio/server/effects-player/player.js',
   'apps/studio/web/dist/index.html',
   'apps/studio/desktop/static/status.html',
   'apps/twitch-extension/extension/panel.html',

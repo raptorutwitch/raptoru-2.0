@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Raptoru — lecteur d'effets</title>
+    <style>
+      /* OBS browser source: transparent, nothing visible unless the sound needs a click (outside OBS). */
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        color: #efeff1;
+        font:
+          13px system-ui,
+          sans-serif;
+      }
+      #panel {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        margin: 10px 12px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: #14111ccc;
+      }
+      #panel[hidden],
+      button[hidden] {
+        display: none;
+      }
+      button {
+        padding: 6px 12px;
+        border: 1px solid #a970ff;
+        border-radius: 8px;
+        background: #2a1f3d;
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="panel" hidden>
+      <button id="enable" type="button">Activer le son</button>
+      <span id="status"></span>
+    </div>
+    <script type="module" src="player.js"></script>
+  </body>
+</html>

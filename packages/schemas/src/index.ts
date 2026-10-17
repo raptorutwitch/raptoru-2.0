@@ -13,3 +13,4 @@ export * from './word-game.js';
 export * from './mini-games.js';
 export * from './alerts.js';
 export * from './channel-points.js';
+export * from './effects.js';

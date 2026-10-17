@@ -1,6 +1,7 @@
 import {
   CpAckRequest,
   CpClaimRequest,
+  CpEffectReport,
   CpRedemptionInput,
   CpRewardsSync,
   CpRuleInput,
@@ -123,6 +124,14 @@ export function channelPointsRoutes(
       auth,
       handle: ({ params, body }) =>
         mapped(() => cp.ack(params[0]!, parse(CpAckRequest, body))),
+    },
+    {
+      // The end of an effect sound Studio started for this job (effects player).
+      method: 'POST',
+      pattern: at(base, '/jobs/([0-9a-f-]{36})/effects'),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() => cp.effectReport(params[0]!, parse(CpEffectReport, body))),
     },
   ];
   // Redemptions and the reward list: the Lab adapter (Studio secret) or, in production, the bot (bot secret).

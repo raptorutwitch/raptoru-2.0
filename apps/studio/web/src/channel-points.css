@@ -54,6 +54,20 @@
   color: var(--muted);
   font-size: 13px;
 }
+.cp-effects {
+  margin-top: 10px;
+}
+.cp-effects summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+.cp-url {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: monospace;
+  font-size: 12px;
+}
 .cp-error {
   color: var(--ko);
 }

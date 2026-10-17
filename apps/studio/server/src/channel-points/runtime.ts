@@ -2,6 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import type { CpAction } from '@raptoru/schemas';
+import {
+  type EffectEnd,
+  EffectError,
+  type EffectsPlayer,
+} from '../effects/player.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
 import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 
@@ -9,7 +14,8 @@ import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 // Studio is the control panel and the only one that touches OBS: it claims the OBS part of each redemption, runs it
 // through the typed executor (obs-actions.ts) and reports per-action results. The loop runs with Studio, in both
 // profiles (Lab Core or paired production Core: same sub-paths, only the base changes); nothing runs unless Core
-// queued a job (switch ON, or an explicit « Tester »). Sounds are Core's (Soundboard queue).
+// queued a job (switch ON, or an explicit « Tester »). Sounds are Core's (Soundboard queue). Effect sounds are played by
+// Studio's effects player (effects/player.ts): reported « playing » in the job once started, their end reported after.
 
 const MAX_BODY = 16 * 1024;
 const POLL_MS = 1000;
@@ -23,6 +29,8 @@ export interface ChannelPointsRuntimeDeps {
   dir: string;
   /** Studio's OBS connection (the Bonk's), or null when absent. */
   obs: () => ObsLike | null;
+  /** Studio's effects player (effect sounds); absent → those actions fail with a readable reason. */
+  effects?: EffectsPlayer | null;
   /** Twitch reception as Studio sees it (token summary, adapter). */
   twitch: () => {
     scope: boolean;
@@ -103,16 +111,31 @@ export class ChannelPointsRuntime {
         ...extra,
       });
     await ack('started');
-    const results: { index: number; ok: boolean; error?: string }[] = [];
+    const results: {
+      index: number;
+      ok: boolean;
+      error?: string;
+      playing?: true;
+    }[] = [];
+    const ends: { index: number; end: Promise<EffectEnd> }[] = [];
     for (const { index, action } of job.actions) {
       try {
+        if (action.type === 'effect_sound') {
+          if (!this.d.effects)
+            throw new EffectError('effects_player_unavailable');
+          // Waits for the START only: the job ends at once, the next redemption may overlap this sound.
+          const { end } = await this.d.effects.play(action);
+          ends.push({ index, end });
+          results.push({ index, ok: true, playing: true });
+          continue;
+        }
         await this.obs.run(action);
         results.push({ index, ok: true });
       } catch (e) {
         results.push({
           index,
           ok: false,
-          error: (e instanceof ObsActionError
+          error: (e instanceof ObsActionError || e instanceof EffectError
             ? e.message
             : 'erreur inattendue'
           ).slice(0, 200),
@@ -120,7 +143,29 @@ export class ChannelPointsRuntime {
       }
     }
     await ack('completed', { results });
+    // The ends, after the job's report (Core needs the « playing » first); never awaited by the loop.
+    for (const { index, end } of ends)
+      void end.then((r) => this.reportEffect(job.job_id, index, r));
     return true;
+  }
+
+  /** The end of an effect, to Core (a few retries; Core marks it unknown if it never arrives). */
+  private async reportEffect(jobId: string, index: number, r: EffectEnd) {
+    for (let n = 0; n < 5; n++) {
+      try {
+        await this.d.core(`${this.base}/jobs/${jobId}/effects`, {
+          consumer_id: this.consumer,
+          index,
+          event: r.event,
+          ...(r.error ? { error: r.error } : {}),
+        });
+        return;
+      } catch (e) {
+        // Refused by Core (job unknown, not an effect): retrying changes nothing.
+        if ((e as { status?: number }).status) return;
+        await new Promise((ok) => setTimeout(ok, 500 * (n + 1)));
+      }
+    }
   }
 
   async handle(
@@ -128,6 +173,8 @@ export class ChannelPointsRuntime {
     res: ServerResponse,
     url: URL,
   ): Promise<boolean> {
+    if (this.d.effects && (await this.d.effects.handle(req, res, url)))
+      return true;
     if (!url.pathname.startsWith('/api/channel-points')) return false;
     const reply = (status: number, body: unknown) => {
       res.writeHead(status, {
@@ -195,6 +242,9 @@ export class ChannelPointsRuntime {
           pending_reverts: this.obs.pending,
         },
         twitch: this.d.twitch(),
+        effects: this.d.effects
+          ? { ...this.d.effects.status(), sounds: this.d.effects.sounds() }
+          : null,
         executor_error: this.lastError,
       });
     }

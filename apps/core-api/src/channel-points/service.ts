@@ -4,6 +4,7 @@ import {
   type CpAction,
   CpAction as CpActionSchema,
   type CpActionResult,
+  type CpEffectReport,
   type CpRedemptionInput,
   type CpRedemptionStatus,
   type CpRewardsSync,
@@ -21,6 +22,9 @@ import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 // - OBS actions: one job for Studio (the only one that talks to OBS), one job in flight per channel, a lease; a job
 //   claimed but never started is offered again (3 attempts); a started job is NEVER replayed (expired if its lease ends
 //   without a report: it may have run).
+// - effect sounds (P0.1): in the same Studio job; Studio hands them to its effects player and reports them « playing »
+//   once the player started them (the job ends at once: the next redemption may overlap), then their end through
+//   effectReport. No end within CP_RULES.effectEndMs → unknown (never replayed).
 // Raptoru never fulfils or cancels a redemption on Twitch (only the app that created a reward may; docs § 2).
 
 export const CP_RULES = {
@@ -30,6 +34,8 @@ export const CP_RULES = {
   maxAttempts: 3,
   /** A real redemption older than this at reception is not executed (late after an outage / reconnection). */
   maxAgeMs: 120_000,
+  /** An effect reported playing whose end is not reported within this delay is « unknown » (Studio gone…). */
+  effectEndMs: 120_000,
 } as const;
 
 export class CpError extends Error {
@@ -49,6 +55,8 @@ type Result = {
   /** Sound actions: the Soundboard interaction, and where it stands until its player reports the end. */
   sound_interaction_id?: string;
   progress?: 'queued' | 'playing';
+  /** Effect actions reported playing: their end must be reported before this instant. */
+  effect_deadline?: string;
 };
 
 /** A result update: final (ok / error / unknown) or, for a sound still in the Soundboard, its progress only. */
@@ -130,6 +138,7 @@ function overall(results: Result[]): CpRedemptionStatus {
   return ok === 0 ? 'failed' : 'partial';
 }
 
+/** Actions run by Studio (OBS, effects player); Soundboard sounds are admitted by Core itself. */
 const obsAction = (a: CpAction) => a.type !== 'sound';
 
 export class ChannelPointsService {
@@ -465,6 +474,14 @@ export class ChannelPointsService {
     const merged = row.results.map((r) => {
       const n = results.find((x) => x.index === r.index);
       if (!n || r.status !== 'pending') return r;
+      if (n.playing && n.ok)
+        return {
+          ...r,
+          progress: 'playing' as const,
+          effect_deadline: new Date(
+            this.clock.now().getTime() + CP_RULES.effectEndMs,
+          ).toISOString(),
+        };
       if (n.progress)
         return {
           ...r,
@@ -534,6 +551,83 @@ export class ChannelPointsService {
     }
   }
 
+  /** Effects reported playing whose end never came (Studio closed, player gone): unknown, never replayed. */
+  private async settleEffects(channelId: string) {
+    const rows = await this.db.query<RedemptionRow>(
+      `select * from cp_redemptions where channel_id = $1 and status = 'pending'
+         and results::text like '%effect_deadline%' order by received_at desc limit 50`,
+      [channelId],
+    );
+    const now = this.clock.now().getTime();
+    for (const row of rows) {
+      const late = row.results.filter(
+        (r) =>
+          r.status === 'pending' &&
+          r.effect_deadline &&
+          new Date(r.effect_deadline).getTime() < now,
+      );
+      if (late.length)
+        await this.setResults(
+          channelId,
+          row.source,
+          row.redemption_id,
+          late.map((r) => ({
+            index: r.index,
+            ok: false,
+            unknown: true,
+            error: 'playback_not_confirmed',
+          })),
+        );
+    }
+  }
+
+  /**
+   * The end of an effect Studio started for a job (after the job's `completed`). Only the job's consumer, only an
+   * effect action still pending; a late or repeated report changes nothing (the first final result stays).
+   */
+  async effectReport(jobId: string, r: CpEffectReport) {
+    return this.db.tx(async (q) => {
+      const job = (
+        await q.query<JobRow>('select * from cp_jobs where job_id = $1', [
+          jobId,
+        ])
+      )[0];
+      if (!job) throw new CpError(404, 'job_not_found');
+      if (job.consumer_id !== r.consumer_id)
+        throw new CpError(409, 'not_current_attempt');
+      const action = job.actions.find((x) => x.index === r.index);
+      if (action?.action.type !== 'effect_sound')
+        throw new CpError(409, 'not_an_effect');
+      const row = await this.redemption(
+        job.channel_id,
+        job.source,
+        job.redemption_id,
+        q,
+      );
+      if (row.results.find((x) => x.index === r.index)?.status !== 'pending')
+        return { status: 'already_final' as const };
+      await this.setResults(
+        job.channel_id,
+        job.source,
+        job.redemption_id,
+        [
+          r.event === 'completed'
+            ? { index: r.index, ok: true }
+            : r.event === 'unknown'
+              ? {
+                  index: r.index,
+                  ok: false,
+                  unknown: true,
+                  error: r.error ?? 'playback_not_confirmed',
+                }
+              : { index: r.index, ok: false, error: r.error ?? 'failed' },
+        ],
+        q,
+      );
+      return { status: 'recorded' as const };
+    });
+  }
+
   // --- OBS jobs (Studio) ------------------------------------------------------------------------------------------
 
   /** Settles abandoned jobs: never started → offered again (3 attempts); started → expired, never replayed. */
@@ -579,6 +673,7 @@ export class ChannelPointsService {
   /** The next OBS job for this Studio (one in flight per channel), or null. */
   async claim(channelId: string, consumerId: string) {
     await this.settleSounds(channelId);
+    await this.settleEffects(channelId);
     return this.db.tx(async (q) => {
       await q.query(
         `insert into cp_settings (channel_id, enabled, updated_at) values ($1, false, $2)
@@ -699,6 +794,7 @@ export class ChannelPointsService {
   /** The Studio tab: switch, rewards with their rule, recent redemptions, jobs in flight, Soundboard sounds. */
   async state(channelId: string) {
     await this.settleSounds(channelId);
+    await this.settleEffects(channelId);
     const recent = await this.db.query<RedemptionRow>(
       'select * from cp_redemptions where channel_id = $1 order by received_at desc limit 30',
       [channelId],

@@ -2,6 +2,7 @@ import {
   actionLabel,
   type CpActionView,
   type CpState,
+  effectsView,
   esc,
   historyView,
   rewardsView,
@@ -11,10 +12,12 @@ import {
 // Points de chaîne V1 — Studio tab (docs/CHANNEL_POINTS_V1.md). Twitch rewards (left), the local rule of the selected
 // reward (right: ordered actions, typed fields, suggestions read from OBS), the history (below). The master switch is
 // persistent in Core and OFF by default; turning it on asks for a confirmation. « Tester » runs the saved rule for
-// real (OBS / Soundboard), on an explicit click only.
+// real (OBS / Soundboard / effects player), on an explicit click only. « Écouter » previews an effect sound in this
+// window only (nothing in OBS, no history).
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 const TYPES: { id: CpActionView['type']; label: string }[] = [
+  { id: 'effect_sound', label: 'Son d’effet (lecture immédiate)' },
   { id: 'sound', label: 'Jouer un son (Soundboard)' },
   { id: 'obs_source', label: 'Afficher / masquer une source OBS' },
   { id: 'obs_filter', label: 'Activer / désactiver un filtre OBS' },
@@ -22,13 +25,15 @@ const TYPES: { id: CpActionView['type']; label: string }[] = [
 ];
 
 const blank = (type: CpActionView['type']): CpActionView =>
-  type === 'sound'
-    ? { type, sound_id: '' }
-    : type === 'obs_source'
-      ? { type, scene: '', source: '', visible: true }
-      : type === 'obs_filter'
-        ? { type, source: '', filter: '', enabled: true }
-        : { type, scene: '' };
+  type === 'effect_sound'
+    ? { type, sound_id: '', volume: 100 }
+    : type === 'sound'
+      ? { type, sound_id: '' }
+      : type === 'obs_source'
+        ? { type, scene: '', source: '', visible: true }
+        : type === 'obs_filter'
+          ? { type, source: '', filter: '', enabled: true }
+          : { type, scene: '' };
 
 export function mountChannelPoints(root: HTMLElement) {
   let state: CpState | null = null;
@@ -47,6 +52,7 @@ export function mountChannelPoints(root: HTMLElement) {
     <div class="cp-head"><h1>Points de chaîne <em>Core</em></h1>
       <button type="button" data-act="switch"></button></div>
     <div class="cp-status" data-role="status"></div>
+    <div data-role="effects"></div>
     <p class="cp-muted">Les récompenses viennent de Twitch (lecture seule : Raptoru ne les valide ni ne les rembourse).
       Les règles sont propres à Raptoru. SAMMI exécute encore les récompenses de production.</p>
     <div class="cp-grid">
@@ -104,7 +110,18 @@ export function mountChannelPoints(root: HTMLElement) {
     const duration = (ms?: number) =>
       `<label class="cp-inline">pendant <input type="number" min="0" max="600" step="0.5" data-i="${i}" data-f="duration" value="${ms ? ms / 1000 : ''}" placeholder="toujours"/> s</label>`;
     let body: string;
-    if (a.type === 'sound')
+    if (a.type === 'effect_sound')
+      body = `<select data-i="${i}" data-f="sound_id"><option value="">— choisir un son d’effet —</option>${(
+        state?.effects?.sounds ?? []
+      )
+        .map(
+          (s) =>
+            `<option value="${esc(s.id)}"${s.id === a.sound_id ? ' selected' : ''}${s.available || s.id === a.sound_id ? '' : ' disabled'}>${esc(s.label)}${s.available ? '' : ' (non importé)'}</option>`,
+        )
+        .join('')}</select>
+        <label class="cp-inline">volume <input type="number" min="0" max="100" step="1" data-i="${i}" data-f="volume" value="${a.volume}"/> %</label>
+        <button type="button" class="cp-ghost" data-act="preview" data-i="${i}"${a.sound_id ? '' : ' disabled'} title="Écouter ici (dans Studio, pas dans OBS)">▶ Écouter</button>`;
+    else if (a.type === 'sound')
       body = `<select data-i="${i}" data-f="sound_id"><option value="">— choisir un son —</option>${(
         state?.sounds ?? []
       )
@@ -142,7 +159,7 @@ export function mountChannelPoints(root: HTMLElement) {
         <button type="button" data-act="test"${r.rule ? '' : ' disabled'} title="Exécute la règle enregistrée pour de vrai (OBS / Soundboard)">Tester</button>
       </div>
       <p class="cp-muted" data-role="message">${esc(message)}</p>
-      ${r.rule ? `<p class="cp-muted">Enregistré : ${r.rule.actions.map((a) => esc(actionLabel(a, state?.sounds))).join(' → ')}</p>` : ''}`;
+      ${r.rule ? `<p class="cp-muted">Enregistré : ${r.rule.actions.map((a) => esc(actionLabel(a, state?.sounds, state?.effects?.sounds))).join(' → ')}</p>` : ''}`;
   };
 
   const render = () => {
@@ -153,6 +170,9 @@ export function mountChannelPoints(root: HTMLElement) {
     sw.className = state?.settings.enabled ? '' : 'cp-primary';
     sw.disabled = !state;
     $('status').innerHTML = statusView(state, error);
+    // Kept while open (the URL may be selected for copying).
+    if (!$('effects').querySelector('details[open]'))
+      $('effects').innerHTML = effectsView(state?.effects ?? null);
     $('rewards').innerHTML = state ? rewardsView(state, selected) : '';
     $('history').innerHTML = state ? historyView(state) : '';
     renderEditor();
@@ -210,7 +230,7 @@ export function mountChannelPoints(root: HTMLElement) {
             enabled: r.rule.enabled,
             actions: r.rule.actions.map((a) => ({ ...a })),
           }
-        : { enabled: true, actions: [blank('sound')] };
+        : { enabled: true, actions: [blank('effect_sound')] };
       message = '';
       render();
       void loadLists();
@@ -235,7 +255,22 @@ export function mountChannelPoints(root: HTMLElement) {
     }
     if (!draft) return;
     if (act === 'add' && draft.actions.length < 5)
-      draft.actions.push(blank('sound'));
+      draft.actions.push(blank('effect_sound'));
+    if (act === 'preview') {
+      const a =
+        draft.actions[Number(t.closest<HTMLElement>('[data-i]')!.dataset.i)];
+      if (a?.type === 'effect_sound' && a.sound_id) {
+        const audio = new Audio(
+          `/effects/media/${encodeURIComponent(a.sound_id)}`,
+        );
+        audio.volume = Math.min(1, Math.max(0, a.volume / 100));
+        void audio.play().catch(() => {
+          message = 'Écoute impossible : son non importé ou illisible.';
+          renderEditor();
+        });
+      }
+      return;
+    }
     if (act === 'remove')
       draft.actions.splice(
         Number(t.closest<HTMLElement>('[data-i]')!.dataset.i),
@@ -268,7 +303,7 @@ export function mountChannelPoints(root: HTMLElement) {
     if (act === 'test' && selected) {
       if (
         !confirm(
-          'Tester cette récompense ?\n\nLa règle enregistrée est exécutée pour de vrai : OBS et Soundboard.',
+          'Tester cette récompense ?\n\nLa règle enregistrée est exécutée pour de vrai : OBS, Soundboard et lecteur d’effets.',
         )
       )
         return;
@@ -300,7 +335,15 @@ export function mountChannelPoints(root: HTMLElement) {
     const f = t.dataset.f!;
     if (f === 'type') draft.actions[i] = blank(t.value as CpActionView['type']);
     else if (f === 'visible' || f === 'enabled') a[f] = t.value === '1';
-    else if (f === 'duration') {
+    else if (f === 'volume')
+      a.volume = Math.min(100, Math.max(0, Math.round(Number(t.value) || 0)));
+    else if (f === 'sound_id' && a.type === 'effect_sound') {
+      // A sound chosen: its original volume (SAMMI) by default.
+      a.sound_id = t.value;
+      a.volume =
+        state?.effects?.sounds.find((x) => x.id === t.value)?.volume ?? 100;
+      renderEditor();
+    } else if (f === 'duration') {
       const s = Number(t.value);
       if (s > 0) a.duration_ms = Math.round(s * 1000);
       else delete a.duration_ms;

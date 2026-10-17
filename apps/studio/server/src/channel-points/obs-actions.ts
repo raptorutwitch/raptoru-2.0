@@ -151,10 +151,11 @@ export class ObsActions {
       });
   }
 
-  /** Runs one OBS action of a rule (sound actions are Core's). Throws ObsActionError with a readable reason. */
+  /** Runs one OBS action of a rule (sounds: Core's / the effects player). Throws ObsActionError with a readable reason. */
   async run(action: CpAction) {
+    if (action.type === 'sound' || action.type === 'effect_sound')
+      throw new ObsActionError('action non OBS');
     const obs = this.connected();
-    if (action.type === 'sound') throw new ObsActionError('action non OBS');
     if (action.type === 'obs_scene') {
       await obs
         .request('SetCurrentProgramScene', { sceneName: action.scene })

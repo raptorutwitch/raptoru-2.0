@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionLabel,
+  effectsView,
   historyView,
   rewardsView,
   statusView,
@@ -17,6 +18,7 @@ const base = {
   environment: 'lab',
   obs: { connected: false, pending_reverts: 0 },
   twitch: { scope: false, adapter_running: true },
+  effects: null,
   executor_error: null,
 };
 
@@ -159,5 +161,96 @@ describe('Points de chaîne views', () => {
         ],
       }),
     ).toContain('? Son « Eren cri » — lecture non confirmée par le lecteur');
+  });
+
+  it('effect sounds: label with volume, player state chips, OBS URL, missing imports, readable failures', () => {
+    const effects = {
+      url: 'http://127.0.0.1:4100/effects/player.html#abc',
+      connected: false,
+      audio: false,
+      playing: 0,
+      sounds: [
+        { id: 'tiens-bon', label: 'Tiens bon !', volume: 41, available: true },
+        {
+          id: 'glory-holes',
+          label: 'Glory holes',
+          volume: 100,
+          available: false,
+        },
+      ],
+    };
+    expect(
+      actionLabel(
+        { type: 'effect_sound', sound_id: 'tiens-bon', volume: 41 },
+        [],
+        effects.sounds,
+      ),
+    ).toBe('Son d’effet « Tiens bon ! » (41 %)');
+    expect(statusView({ ...base, effects }, null)).toContain(
+      'Lecteur d’effets : non ouvert',
+    );
+    expect(
+      statusView({ ...base, effects: { ...effects, connected: true } }, null),
+    ).toContain('son bloqué');
+    expect(
+      statusView(
+        {
+          ...base,
+          effects: { ...effects, connected: true, audio: true, playing: 2 },
+        },
+        null,
+      ),
+    ).toContain('Lecteur d’effets : 2 en lecture');
+    expect(statusView(base, null)).not.toContain('Lecteur d’effets');
+    const panel = effectsView(effects);
+    expect(panel).toContain(
+      'value="http://127.0.0.1:4100/effects/player.html#abc"',
+    );
+    expect(panel).toContain(
+      '1 / 2 son(s) importé(s) — à importer : Glory holes',
+    );
+    expect(effectsView(null)).toBe('');
+    const history = historyView({
+      ...base,
+      effects,
+      recent: [
+        {
+          source: 'twitch',
+          redemption_id: 'r1',
+          reward: { title: 'Tiens bon !', cost: 500 },
+          user: { display_name: 'Viewer' },
+          user_input: null,
+          received_at: '2026-10-18T20:00:00Z',
+          status: 'failed',
+          reason: null,
+          actions: [
+            { type: 'effect_sound', sound_id: 'tiens-bon', volume: 41 },
+          ],
+          results: [
+            { index: 0, status: 'failed', error: 'effects_player_offline' },
+          ],
+        },
+        {
+          source: 'twitch',
+          redemption_id: 'r2',
+          reward: { title: 'Tiens bon !', cost: 500 },
+          user: { display_name: 'Viewer' },
+          user_input: null,
+          received_at: '2026-10-18T20:00:01Z',
+          status: 'pending',
+          reason: null,
+          actions: [
+            { type: 'effect_sound', sound_id: 'tiens-bon', volume: 41 },
+          ],
+          results: [{ index: 0, status: 'pending', progress: 'playing' }],
+        },
+      ],
+    });
+    expect(history).toContain(
+      'lecteur d’effets non ouvert (source OBS absente)',
+    );
+    expect(history).toContain(
+      'Son d’effet « Tiens bon ! » (41 %) — en cours de lecture',
+    );
   });
 });
