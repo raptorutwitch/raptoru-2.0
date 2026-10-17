@@ -1,6 +1,10 @@
 # Alertes Twitch — audit de parité legacy (A0, 16/10/2026)
 
-> **Statut courant (16/10/2026, voir § 16)** : A0 audit **terminé** · A1 fondation (contrat, variantes, file durable)
+> **Statut courant (17/10/2026, voir § 23)** : **ALERTES V1 — DÉVELOPPEMENT TERMINÉ / PRÊT POUR CUTOVER / NON
+> DÉPLOYÉ**. Production : SAMMI / StreamElements legacy. Niveaux de preuve, architecture, checklist du cutover et
+> retour arrière : § 23 (les §§ 13 à 22 décrivent chaque lot dans son état du moment).
+>
+> **Statut du 16/10/2026 (historique, § 16)** : A0 audit **terminé** · A1 fondation (contrat, variantes, file durable)
 > **implémentée, validée techniquement** (`5d86e2b`) · A2 rendu OBS + aperçu Studio **implémenté, testé
 > automatiquement et examiné visuellement par Antoni** (`b942b58`, `166e7ed`) — validation visuelle globale, pas
 > pixel-perfect. **Non branché** aux vrais événements Twitch, **non testé dans OBS**, **pas en production** (SAMMI
@@ -492,16 +496,16 @@ famille → Studio (`/alerts/next`) → source OBS. **Aucune nouvelle connexion 
 nouveau processus** : les abonnements d'alerte s'ajoutent à la connexion Lab existante. Le bot de production
 (`index.ts`, désactivé) et le Core de production n'ont aucun code d'alerte (test de garde).
 
-| Événement               | Source EventSub (v)                                                                   | Droit                                            | Statut                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------- |
-| Sub, Prime              | `channel.chat.notification` (1) `sub`                                                 | `user:read:chat` (présent)                       | raccordé                                                  |
-| Resub (message partagé) | idem `resub`                                                                          | idem                                             | raccordé (type distinct, animation Eren)                  |
-| Gift ciblé              | idem `sub_gift` sans `community_gift_id`                                              | idem                                             | raccordé                                                  |
-| Gift communautaire      | idem `community_sub_gift` (+ un `sub_gift` par bénéficiaire avec `community_gift_id`) | idem                                             | raccordé, **une** alerte                                  |
-| Bits                    | `channel.chat.message` (1), champ `cheer.bits` (déjà abonné)                          | idem                                             | raccordé                                                  |
-| Raid entrant            | `channel.chat.notification` `raid`                                                    | idem                                             | raccordé                                                  |
-| Follow                  | `channel.follow` (2), `moderator_user_id` = LeCroupier_                               | **`moderator:read:followers`** (absent du jeton) | prêt, **non reçu** tant que le jeton n'est pas réautorisé |
-| Don                     | StreamElements (hors EventSub)                                                        | JWT SE                                           | **non raccordé** (voir plus bas)                          |
+| Événement               | Source EventSub (v)                                                                   | Droit                                            | Statut                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| Sub, Prime              | `channel.chat.notification` (1) `sub`                                                 | `user:read:chat` (présent)                       | raccordé                                                                                                               |
+| Resub (message partagé) | idem `resub`                                                                          | idem                                             | raccordé (type distinct, animation Eren)                                                                               |
+| Gift ciblé              | idem `sub_gift` sans `community_gift_id`                                              | idem                                             | raccordé                                                                                                               |
+| Gift communautaire      | idem `community_sub_gift` (+ un `sub_gift` par bénéficiaire avec `community_gift_id`) | idem                                             | raccordé, **une** alerte                                                                                               |
+| Bits                    | `channel.chat.message` (1), champ `cheer.bits` (déjà abonné)                          | idem                                             | raccordé                                                                                                               |
+| Raid entrant            | `channel.chat.notification` `raid`                                                    | idem                                             | raccordé                                                                                                               |
+| Follow                  | `channel.follow` (2), `moderator_user_id` = LeCroupier_                               | **`moderator:read:followers`** (absent du jeton) | prêt, **non reçu** tant que le jeton n'est pas réautorisé (historique : réautorisé le 17/10, vrai follow reçu en TEST) |
+| Don                     | StreamElements (hors EventSub)                                                        | JWT SE                                           | **non raccordé** (voir plus bas ; historique : raccordé au § 21)                                                       |
 
 **Déduplication** : clé = identifiant Twitch stable (`message_id` de la notification ou du message de chat ; follow :
 `message_id` EventSub, identique sur une redélivrance), unique en base Lab par (chaîne, source, id) : une redélivrance,
@@ -544,11 +548,12 @@ indisponible puis rétabli, 4xx, expiration, arrêt ; garde « jamais en product
 complète trames → routeur → adaptateur → **vrai Core Lab** : une alerte par événement, gift communautaire unique,
 bits < 10 sous le seuil, familles indépendantes ; rejeu après redémarrage = `duplicate` ; mode OFF / TEST / ACTIVE
 enregistré, redémarrage de l'adaptateur, valeur invalide refusée) ; mutations vérifiées. Panneau vérifié dans Chromium.
-**Aucun** événement Twitch réel reçu, **aucun** abonnement réel créé.
+**Aucun** événement Twitch réel reçu, **aucun** abonnement réel créé (état au commit ; ensuite mode TEST choisi par
+Antoni, abonnements créés, vrai follow reçu — § 23).
 
 **Toujours vrai** : production = SAMMI / StreamElements ; rien n'est activé tant qu'Antoni ne choisit pas TEST puis ACTIVE.
 
-## 21. Dons réels StreamElements (17/10/2026, Lab, non validé manuellement, aucune connexion réelle faite)
+## 21. Dons réels StreamElements (17/10/2026, Lab ; aucune connexion réelle au commit, ensuite connecté en TEST par Antoni, § 23)
 
 **Documentation suivie** (docs.streamelements.com, lue le 17/10/2026, pages mises à jour le 14/10/2026) : passerelle
 WebSocket **Astro** `wss://astro.streamelements.com/` (`/websockets`), topics `channel.tips` (scope `tips:read`, « un
@@ -685,3 +690,121 @@ leur délai sous charge sur ce PC, limite connue) dont `alerts-production` (runt
 `createApp` de production : tout passe par `/v1/studio/alerts`, Twitch « indisponible ») et la garde « ACTIVE jamais
 repris » (Twitch et SE) ; Bot 123 ; Desktop 26 ; Playwright alertes 15/15 ; onglet vérifié dans Chromium. Rien
 déployé, aucune base distante touchée, aucun mode réel changé, OBS non modifié.
+
+## 23. Statut officiel et dossier de reprise du cutover (17/10/2026)
+
+**ALERTES V1 — DÉVELOPPEMENT TERMINÉ / PRÊT POUR CUTOVER / NON DÉPLOYÉ** (décision d'Antoni, 17/10/2026 : chantier
+clôturé ; les derniers raccordements se feront pendant la migration globale de Raptoru 2.0). Ce statut ne veut **pas**
+dire que les alertes Raptoru 2.0 sont actives : la production reste SAMMI / StreamElements legacy. Code : HEAD
+`beb42b1` (local, non poussé ; `origin` = `c7f20de`).
+
+### 23.1 Niveaux de preuve (ne pas les confondre)
+
+| Élément                                                                         | Implémenté | Testé auto                 | Validé par Antoni                                                                                       | Connecté en réel                                                          | En production |
+| ------------------------------------------------------------------------------- | ---------- | -------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------- |
+| Moteur OBS, 18 médias, sons, animations                                         | oui        | oui                        | **oui** (OBS)                                                                                           | —                                                                         | non           |
+| Calibrage persistant (média, texte, blocs Bits)                                 | oui        | oui                        | **oui** (enregistré : `bits_default` ; autres variantes aux valeurs d'origine, validées telles quelles) | —                                                                         | non           |
+| 5 familles, FIFO, dédoublonnage, ACK, bail                                      | oui        | oui                        | **oui** (files simultanées dans OBS)                                                                    | —                                                                         | non           |
+| Rechargement des sources OBS périmées                                           | oui        | oui                        | non                                                                                                     | —                                                                         | non           |
+| Twitch EventSub (adaptateur Lab, LeCroupier\_)                                  | oui        | oui                        | **vrai follow reçu en TEST**                                                                            | oui, Lab, mode TEST (`channel.chat.notification`, `channel.follow` créés) | non           |
+| Sub, resub, gifts, Bits, raid réels                                             | oui        | oui (fixtures Twitch)      | non                                                                                                     | reçus seulement si l'événement survient (TEST)                            | non           |
+| StreamElements Astro (`channel.tips`, `channel.tips.moderation`)                | oui        | oui (fixtures officielles) | connexion établie, abonnements créés                                                                    | oui, Lab, mode TEST (jeton chiffré par Electron)                          | non           |
+| Vrai don StreamElements                                                         | —          | —                          | **non** (aucun don reçu à ce jour)                                                                      | —                                                                         | non           |
+| Core de production (`/v1/studio/alerts`, migration `20261024120000_alerts.sql`) | oui        | oui                        | non                                                                                                     | **non** (Core non déployé, migration non appliquée)                       | non           |
+| Profil Production de Studio pour les alertes                                    | oui        | oui                        | non                                                                                                     | non (aucun Studio apparié en production)                                  | non           |
+
+Réglages relevés le 17/10/2026 (non modifiés) : événements Twitch **TEST**, dons StreamElements **TEST**, ingestion
+chat ON ; jeton de LeCroupier\_ avec `moderator:read:followers` mais **sans** `user:write:chat` /
+`moderator:manage:announcements` depuis la réautorisation (la « Sortie chat réelle » des Commands V2 ne peut plus
+écrire : ajouter `LAB_CHAT_OUTPUT=true` à côté de `LAB_ALERTS_FOLLOW=true` avant toute nouvelle réautorisation).
+
+### 23.2 Architecture canonique (fichiers)
+
+- **Contrat** : `packages/schemas/src/alerts.ts` (`AlertEventInput`, `ALERT_FAMILIES`, `alertFamilyOf`).
+- **Core** : `apps/core-api/src/alerts/` (`service.ts` file durable, `rules.ts` décision / variante, `variants.ts`
+  catalogue). Routes `apps/core-api/src/http/alerts-routes.ts` : **une** fonction servie deux fois — Lab
+  `/v1/lab/alerts/*` (secret Studio, `bonk-lab/lab-core.ts`) et production `/v1/studio/alerts/*` (identifiant
+  d'installation, chaîne du Core ; montée par `http/server.ts` si `studioInstallations` + chaîne ; service créé dans
+  `app.ts` → `createCore`).
+- **Routes** (mêmes sous-chemins) : `GET catalog`, `POST events`, `GET {canal}/state`, `GET items/{id}`,
+  `POST {canal}/claim`, `POST items/{id}/ack` (`started` / `completed` / `failed`, `family` vérifiée). En production,
+  un événement `source: twitch` venant de Studio est refusé (réservé au bot).
+- **Schéma** : Lab `20261022120000_alerts_lab.sql` + `20261023120000_alerts_lab_families.sql` ; production
+  `20261024120000_alerts.sql` (même schéma, testé ; additif, idempotent ; retour arrière dans l'en-tête du fichier).
+- **Studio** : `apps/studio/server/src/alerts/runtime.ts` (source OBS, médias, calibrage, relais claim / ACK,
+  environnement `lab` | `production`), `placement-store.ts`, `media-store.ts`, `se-tips.ts` (Astro) ; lecteur
+  `apps/studio/server/alerts-player/` (`player.js`, `engine.js`, `timeline.js`, `alerts.css`) ; onglet
+  `apps/studio/web/src/alerts-*.ts` ; câblage `apps/studio/server/src/index.ts` ; jeton SE
+  `apps/studio/desktop/src/se-credentials.ts` + `main.ts` (`studio:se:*`).
+- **Twitch** : normalisation `apps/twitch-bot/src/alert-events.ts` ; adaptateur `lab-alerts-ingest.ts`, branché dans
+  `lab-chat-ingest.ts` / `lab-chat-main.ts` (connexion EventSub Lab de LeCroupier\_, lancée par Studio).
+- **Stockage local** : `<runtimeDir>/alerts/` (médias + `manifest.json`, `placement.json`, `player-token`,
+  `twitch-mode.json`, `se-mode.json`, `se-journal.json`), commun aux deux profils sauf StreamElements en Production
+  (`<runtimeDir>/production/alerts/`) ; jeton SE : `%APPDATA%/Raptoru Studio/se-connection.json` (DPAPI).
+- **Source OBS** : `http://127.0.0.1:4100/alerts/player.html#<jeton>` (jeton local, inchangé entre les profils).
+
+### 23.3 Modes actuels (provisoires) et dépendances encore propres au Lab
+
+- Modes séparés Twitch / StreamElements : **OFF** (aucune connexion ni abonnement) · **TEST** (reçu, journalisé,
+  jamais mis en file) · **ACTIVE · Core Lab | Core production** (mis en file, avec confirmation). Un ACTIVE enregistré
+  redémarre en TEST : **comportement provisoire**, à remplacer au cutover (23.4, points 6 et 7).
+- Encore propres au Lab : la réception Twitch (adaptateur chat Lab, profil Lab seulement) et son mode (lu par
+  l'adaptateur à son démarrage) ; le journal TEST Twitch (journal de l'ingestion, onglet Simulation). Tout le reste
+  (moteur, files, Core, StreamElements, Studio) existe déjà pour le profil Production.
+
+### 23.4 Checklist du cutover des alertes (pendant la migration globale)
+
+**Raccordement Twitch officiel — réserve principale : un lot de développement, pas un interrupteur.** Le bot de
+production (`apps/twitch-bot/src/index.ts`, désactivé) a déjà **deux** connexions EventSub : principale (jeton
+LeCroupier\_ : `stream.online` / `stream.offline`, `channel.chat.message`) et « loyalty » (jeton broadcaster
+`raptoru_` : `channel.subscribe`, `channel.subscription.message`, `channel.subscription.gift`, `channel.cheer`,
+`channel.follow`). Sans troisième connexion ni abonnement en double :
+
+1. Choisir la source des alertes : soit `channel.chat.notification` + cheers de `channel.chat.message` sur la
+   connexion principale (choix du Lab : un gift communautaire = une alerte, corrélation `community_gift_id`), soit les
+   abonnements broadcaster existants (mais `channel.subscribe` arrive aussi pour chaque bénéficiaire d'un gift :
+   corrélation à écrire). Follow : un seul abonnement `channel.follow` qui alimente loyalty et alertes.
+2. Core : route bot `POST /v1/bot/alerts/events` (auth `bot`, chaîne du Core) — **n'existe pas encore**.
+3. Bot : réutiliser `alert-events.ts` / `lab-alerts-ingest.ts` (chemin d'envoi à paramétrer) dans la connexion choisie.
+4. Arrêter l'adaptateur chat Lab en production (un seul consommateur par jeton ; la garde Studio « bot déjà
+   connecté » existe) — lié à la migration de l'ingestion chat des autres modules (P1-007).
+5. Autorisations : `user:read:chat` et `moderator:read:followers` présents sur LeCroupier\_ (broadcaster : idem pour
+   le follow) ; ne réautoriser qu'avec la liste complète des options du `.env` (voir 23.1).
+
+**Activation définitive** (remplace les modes provisoires) :
+
+6. Un contrôle principal « Alertes activées » (Twitch, dons), état **persistant côté Core** (lu par le bot et par
+   Studio : le mode ne peut plus vivre seulement dans le stockage Studio, puisque le bot de production n'est pas lancé
+   par Studio). Démarrage automatique avec Studio après l'activation initiale, reconnexions automatiques, plus de
+   réactivation à chaque lancement : **retirer** alors la règle ACTIVE → TEST au démarrage (et ses tests).
+7. Garder séparés l'aperçu, la simulation (file réelle) et l'observation (TEST) dans l'onglet.
+
+**Core et données** :
+
+8. Appliquer `20261024120000_alerts.sql` au Core de production au moment voulu, avec le déploiement du Core qui sert
+   `/v1/studio/alerts` ; vérifier `TWITCH_CHANNEL_ID`, l'identité Studio appariée, `GET /v1/studio/alerts/catalog`.
+9. Conserver `<runtimeDir>/alerts/` (médias, calibrages, jeton OBS) : rien à migrer, commun aux profils. En profil
+   Production, vérifier le jeton SE (rendu par Electron à chaque démarrage) et le mode SE de ce profil (OFF au premier
+   lancement).
+
+**OBS et legacy** :
+
+10. Source officielle : la source existante (URL de l'onglet), 1920 × 1080, fond transparent, « Arrêter la source
+    quand elle n'est pas visible » **décoché** ; l'onglet doit afficher « Source OBS connectée, à jour ».
+11. Identifier précisément les sources legacy au moment du cutover (lecture OBS et SAMMI) : page
+    `Twitch_Alerts.html` (déclenchée par SAMMI pour follow, subs, gifts, bits ; dons par le socket StreamElements de la
+    page), sources Streamlabs encore visibles (bits, don, raid), alertes StreamElements éventuelles.
+12. Coexistence : basculer **type par type**, le legacy coupé pour ce type seulement (sinon double alerte) ; ne
+    désactiver un système legacy qu'après la validation du type.
+13. Retour arrière immédiat : couper la source dans l'onglet (OFF, puis « Alertes activées » coupé) et réactiver la
+    source legacy du type ; Raptoru ne modifie aucune donnée legacy.
+
+**Validations différées** (ne bloquent pas la clôture du développement ; nécessaires pour déclarer le cutover
+réussi) : vrai don StreamElements ; subs, resubs, gifts (ciblés, communautaires, anonymes), Bits, raids réels ;
+parcours complet événement réel → Core de production → file → OBS ; stabilité pendant un vrai stream (reconnexions,
+aucune alerte en double, source OBS stable).
+
+**Vérifications automatiques à relancer au cutover** : Core (`alerts-*`, `alerts-production-routes`,
+`alerts-prod-migration`, `migration-scopes`), Studio server (`alerts-*`, `alerts-production`, `alerts-twitch-chain`,
+`alerts-se*` ; `--maxWorkers=4` sur ce PC), Bot (`alert-events`, `lab-alerts-ingest`), Desktop (`se-credentials`),
+Playwright `e2e/alerts.e2e.ts`.

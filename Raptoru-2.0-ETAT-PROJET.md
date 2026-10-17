@@ -50,11 +50,12 @@ Répartition des documents (une seule source de vérité par sujet) :
   Lab, sortie LeCroupier_, son OBS SSE, Studio) ; **Roulette et Slot V1 fonctionnellement migrés et validés en
   conditions réelles le 16/10/2026** (vrai chat Twitch, Wallet Lab, LeCroupier_) ; onglet Studio **Simulation** validé ;
   **Duel V1 validé en Lab** (Simulation + vrai chat, réserves mineures) ; économie des modules **unifiée sur
-  `EconomyPort`** (Lab) ; **alertes Twitch A0 / A1 / A2** : audit, file durable, source OBS et aperçu Studio, examinés
-  visuellement par Antoni (réserves UX ; non branchées aux vrais événements ; non testées dans OBS).
+  `EconomyPort`** (Lab) ; **Alertes V1 (17/10/2026) : développement terminé / prêt pour cutover / non déployé** (animations,
+  calibrages et files simultanées validés dans OBS ; vrai follow et connexion StreamElements en TEST ;
+  `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 23).
 - **Ce qui manque pour la production** : l'économie réelle (Wallet canonique, import StreamElements, Points de chaîne),
   la publication de l'Extension, les données historiques, et la migration des fonctionnalités legacy encore absentes
-  (Oracle, FX / Points de chaîne, modération ludique, progression…) ; les alertes restent à brancher et à valider
+  (Oracle, FX / Points de chaîne, modération ludique, progression…) ; les alertes sont prêtes pour le cutover (bot Twitch de production à raccorder, validations réelles différées) et à valider
   dans OBS. Voir 0.5b, 0.6 et 0.7.
 - **Écart local / livré** : beaucoup de travail validé n'est **pas encore livré** : rien depuis Studio 0.1.5 n'est
   publié ; Bonk VNext n'est même pas sur le staging.
@@ -171,8 +172,8 @@ staging) → P1-007 frontière production → P1-010 Points de chaîne → cutov
 
 **E. Migration fonctionnelle restante** (inventaire § 13, ordre indicatif ; stratégie : finir la migration du legacy
 retenu avant les gros reworks) : ~~Jeu des mots~~ (migré, 16/10/2026) → ~~Roulette et Slot~~ (migrés, 16/10/2026)
-→ ~~Duel~~ (migré en Lab, 16/10/2026) → **alertes Twitch : finir A2** (corrections UX, test OBS, calibrage
-persistant A7) puis raccordement des vrais événements et des dons SE → Oracle (RET-GAME-004) → instrumentation stats /
+→ ~~Duel~~ (migré en Lab, 16/10/2026) → ~~alertes Twitch~~ (Alertes V1 clôturé le 17/10/2026 : prêt pour le
+cutover, non déployé, § 23 du doc alertes) → Oracle (RET-GAME-004) → instrumentation stats /
 profils →
 achievements / cosmétiques → FX / Creepy / BRB / NTM et alertes → Votekick / Caution / Ban aléatoire → Spotify →
 commandes viewer personnalisées, cash-in PDC → site / Viewer Web. En parallèle : décisions et imports historiques
@@ -193,8 +194,8 @@ modules un par un ; legacy coupé ensuite.
    principal rester l'unique consommateur EventSub.
 5. **Transport** (P1-019) : rate limiting, coupures réseau réelles, cockpit Production incomplet (Commands, config
    encore sous `STUDIO_SECRET`).
-6. **Fonctionnel** : Oracle, FX / Points de chaîne, Votekick… pas encore migrés ; alertes portées en Lab mais non
-   branchées aux événements Twitch ni testées dans OBS — SAMMI / StreamElements doivent continuer à servir tout cela
+6. **Fonctionnel** : Oracle, FX / Points de chaîne, Votekick… pas encore migrés ; Alertes V1 prêtes pour le cutover
+   (validées dans OBS, Core de production préparé, bot Twitch de production à raccorder) — SAMMI / StreamElements doivent continuer à servir tout cela
    ou une décision l'abandonne avant la coupure. Le Jeu des mots, Roulette / Slot et le Duel sont migrés en Lab
    (16/10/2026) mais restent servis par SAMMI / StreamElements jusqu'au cutover économique.
 7. **Livraison** : Studio 0.1.5 est loin du HEAD ; une release suppose le Core compatible déployé d'abord.
@@ -224,10 +225,8 @@ modules un par un ; legacy coupé ensuite.
 
 ## 0.10 Prochaine étape recommandée
 
-**Finir les alertes A2 avant tout nouveau module** (sur accord d'Antoni) : lister avec lui les erreurs de formatage
-et d'animation puis les corriger ; tester le rendu et le son dans une **source OBS de test hors live** ; calibrage
-persistant dans Studio (A7, inspiré de `?calib=1`). Ensuite seulement : vrais événements Twitch, dons
-StreamElements, puis Oracle. Le **déploiement coordonné** (Core staging + migrations Lab, puis Studio, nouveau ZIP
+**Alertes V1 clôturées (17/10/2026)** : développement terminé, prêt pour le cutover, non déployé (checklist :
+`docs/CUTOVER_PLAN_2026-10.md` § 13). Module suivant selon la feuille de route (Oracle), sur accord d'Antoni. Le **déploiement coordonné** (Core staging + migrations Lab, puis Studio, nouveau ZIP
 Hosted Test) reste une étape séparée, seulement avec l'accord d'Antoni.
 
 ---

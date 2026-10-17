@@ -1,9 +1,10 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 16/10/2026 (soir) : CHECKPOINT GLOBAL · alertes A2 examinées (lire en premier)
+## État courant — 17/10/2026 : Alertes V1 clôturé (prêt pour cutover, non déployé) · checkpoint global du 16/10 (lire en premier)
 
-**Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`**, HEAD **`166e7ed`** + le commit
-docs de ce checkpoint. Tout ce qui suit `c7f20de` est **local, non poussé** ; `main` = `origin/main` = `d2b61ef`.
+**Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`**, HEAD **`beb42b1`** (alertes) + le
+commit docs de clôture des alertes. Tout ce qui suit `c7f20de` est **local, non poussé** ; `main` = `origin/main` =
+`d2b61ef`.
 Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Antoni :
 `docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md` (audit des données historiques) et
 `docs/RAPTORU_2_0_GLOBAL_CHECKPOINT_2026-10-16.md` (point d'étape de pilotage).
@@ -31,13 +32,15 @@ Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Anton
 - **Tests au `166e7ed`** : Core 675 (+22 ignorés : PostgreSQL réel absent), Studio 381, Bot 111, Playwright 13/13 ;
   typecheck, lint, build verts.
 
-**Alertes V1 — module officiel préparé (17/10/2026, local, rien déployé)** : développement validé par Antoni
-(animations, calibrages, files simultanées dans OBS, vrai follow reçu en TEST, StreamElements connecté) ; même
-implémentation servie au profil Production (`/v1/studio/alerts` par identifiant d'installation, migration de
-production `20261024120000_alerts.sql` **non appliquée**, runtime Studio multi-profil) ; un ACTIVE n'est jamais repris
-au démarrage (TEST) ; **blocage** : le bot Twitch de production n'est pas raccordé aux alertes. Bilan A / B / C / D,
-checklist de bascule OBS et retour arrière : `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 22. Restent : vrai don, sous-types
-Twitch réels, bascule OBS, stabilité en live, décision sur la réception Twitch de production.
+**ALERTES V1 — DÉVELOPPEMENT TERMINÉ / PRÊT POUR CUTOVER / NON DÉPLOYÉ (17/10/2026, chantier clôturé par Antoni)**.
+Validé par Antoni : animations, sons, calibrages, files simultanées dans OBS, vrai follow reçu en TEST, connexion
+StreamElements (abonnements créés). Implémenté et testé automatiquement : 5 familles FIFO, dédoublonnage, ACK,
+rechargement des sources périmées, dons StreamElements, Core de production (`/v1/studio/alerts`, migration
+`20261024120000_alerts.sql` **non appliquée**), Studio multi-profil. **Rien en production** (SAMMI / StreamElements
+legacy). Modes actuels : Twitch TEST, dons TEST. Non validé : vrai don, sous-types Twitch réels, parcours réel complet,
+stabilité en live. Réserve principale du cutover : raccorder le **bot Twitch de production** (un lot : route bot Core,
+choix des abonnements dans ses deux connexions existantes, état « Alertes activées » persistant côté Core). Statut,
+fichiers, checklist et retour arrière : `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 23 ; cutover : `docs/CUTOVER_PLAN_2026-10.md` § 13.
 
 **Depuis le checkpoint (17/10/2026, local, non validé manuellement)** : finitions des alertes (`f3557f6`, `4a5c14a`)
 puis **calibrage persistant par variante** dans l'onglet Alertes (placement enregistré dans le stockage Studio, utilisé
@@ -46,15 +49,17 @@ famille** (follow, abonnements, bits, don, raid jouent ensemble, chacune FIFO ; 
 `20261023120000_alerts_lab_families.sql`) — § 18, **validé dans OBS par Antoni le 17/10** ; source OBS périmée
 rechargée automatiquement quand elle est inactive (§ 19, non validé) ; **vrais événements Twitch raccordés** à la
 connexion Lab existante (sub, resub, gifts, bits, raid ; follow prêt mais droit `moderator:read:followers` absent ;
-dons SE non raccordés), mode « Événements Twitch réels » **OFF** par défaut (§ 20 ; réception d'un vrai follow vue en TEST) ; **dons
+dons SE raccordés ensuite, § 21), mode « Événements Twitch réels » **OFF** par défaut (§ 20 ; réception d'un vrai follow vue en TEST) ; **dons
 StreamElements** raccordés (Astro `channel.tips`, mode séparé OFF par défaut, jeton chiffré par Electron) — § 21, non
-validé, aucune connexion réelle faite.
+validé ; connecté ensuite en TEST par Antoni (§ 23).
 
 **Réserves ouvertes (non bloquantes, rien de corrigé dans ce checkpoint)**
 
-- Alertes A2 (`docs/TWITCH_ALERTS_PARITY_2026-10.md` § 16) : formats de texte incorrects sur certaines variantes (à
-  identifier avec Antoni), petits défauts d'animation, Dofus Ébène (texte un peu précoce ?), Eren Sub (synchro à
-  l'oreille), Don MoneyTest (pseudos longs tronqués), Raid Titan (position, message, timings provisoires).
+- Alertes : les réserves visuelles A2 du 16/10 (§ 16) ont été reprises par les finitions et le calibrage du 17/10 ;
+  Antoni a validé le rendu dans OBS (animations, calibrages, files simultanées) ; l'adaptation des pseudos longs du
+  don (`97761a0`) n'est testée qu'automatiquement ; restent les validations réelles différées et le raccordement du bot de
+  production (§ 23 du doc alertes). Jeton de LeCroupier\_ réautorisé sans `user:write:chat` : « Sortie chat réelle »
+  des Commands V2 impossible tant qu'il n'est pas réautorisé avec `LAB_CHAT_OUTPUT=true`.
 - Duel (`docs/DUEL_PARITY.md`) : annonce réelle LeCroupier\_ et variation des deux soldes non revérifiées dans le
   dernier scénario réel.
 
@@ -63,12 +68,10 @@ alertes), 25 absentes, 0 en production — détail et incertitudes : `Raptoru-2.
 
 **Priorités suivantes (rien ne se lance sans accord d'Antoni)**
 
-1. Alertes : lister puis corriger les petites erreurs de formatage / animation ; tester rendu et son dans une
-   **source OBS de test hors live** ; calibrage persistant dans Studio (A7, inspiré de `?calib=1`).
-2. Ensuite : raccordement progressif des vrais événements Twitch (déduplication, droits du jeton, consommateur
-   EventSub unique), adaptateur des dons StreamElements ; neutralisation des sources d'alerte legacy **uniquement**
-   lors d'une bascule contrôlée.
-3. Puis : Oracle / Eight Ball et les autres fonctions retenues ; décisions et imports historiques du Wallet
+1. ~~Alertes V1~~ : clôturé le 17/10/2026 (prêt pour cutover, non déployé) ; ne pas poursuivre sans demande
+   d'Antoni. Le reste (bot de production, activation persistante, migration, bascule OBS, validations réelles) se
+   fait pendant le cutover global : `docs/CUTOVER_PLAN_2026-10.md` § 13.
+2. Module suivant : Oracle / Eight Ball et les autres fonctions retenues ; décisions et imports historiques du Wallet
    canonique (D1, D2, DM1–DM9) ; déploiement coordonné du staging quand Antoni le décide.
 
 **Pièges Lab** : live simulé, ingestion Twitch, « Sortie chat réelle » et Mini-jeux se règlent dans l'onglet

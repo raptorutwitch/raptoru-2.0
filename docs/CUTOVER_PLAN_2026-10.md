@@ -26,7 +26,7 @@ l'audit : [`ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-10.md) · re
 > les alertes en production ; les sources d'alerte legacy ne seront neutralisées que lors d'une bascule contrôlée, et
 > les abonnements EventSub d'alertes resteront au seul consommateur Raptoru 2.0 (P1-007).
 >
-> **Alertes V1, 17/10/2026** : module officiel préparé pour le profil Production (schéma `20261024120000_alerts.sql`
+> **Alertes V1, 17/10/2026 : développement terminé / prêt pour cutover / non déployé** (§ 13 ci-dessous). Module officiel préparé pour le profil Production (schéma `20261024120000_alerts.sql`
 > non appliqué, routes `/v1/studio/alerts`, Studio multi-profil) ; prérequis, bascule par type, retour arrière et
 > blocage (réception Twitch de production) : `TWITCH_ALERTS_PARITY_2026-10.md` § 22. Rien de déployé ni basculé.
 
@@ -850,3 +850,26 @@ Validation manuelle par Antoni requise avant de considérer le parcours comme va
 - Bus d'événements, Realtime, microservices, moteur de workflow, refonte du framework frontend.
 - Renommage des tables / modules « Lab » (P3-002, dette acceptée), signature Windows (P3-001, avant diffusion
   large), backlog UX (P3-006), P2-015 / P2-021 / P2-025 (différés ; P2-025 se dimensionne avec P1-006).
+
+## 13. Alertes V1 — checklist du cutover (17/10/2026)
+
+Statut : **développement terminé / prêt pour cutover / non déployé** ; production = SAMMI / StreamElements legacy.
+Détail (niveaux de preuve, fichiers, routes, schéma, modes) : `TWITCH_ALERTS_PARITY_2026-10.md` § 23.
+
+1. **Bot Twitch de production** (réserve principale, un lot) : choisir les abonnements dans ses deux connexions
+   existantes (`channel.chat.notification` + cheers sur la connexion LeCroupier\_, ou abonnements broadcaster avec
+   corrélation des bénéficiaires de gifts ; un seul `channel.follow`) ; ajouter la route Core `POST
+/v1/bot/alerts/events` (absente) ; réutiliser `alert-events.ts` / `lab-alerts-ingest.ts` ; arrêter l'adaptateur chat
+   Lab (un consommateur par jeton, P1-007) ; autorisations vérifiées, réautorisation avec toutes les options du `.env`.
+2. **Activation** : contrôle « Alertes activées » persistant côté Core (Twitch, dons), démarrage et reconnexion
+   automatiques ; retirer la règle provisoire ACTIVE → TEST au démarrage ; garder aperçu / simulation / observation
+   séparés.
+3. **Core et données** : migration `20261024120000_alerts.sql` avec le déploiement du Core (accord d'Antoni) ; vérifier
+   chaîne, identité Studio, `/v1/studio/alerts` ; `<runtimeDir>/alerts` conservé tel quel ; jeton et mode
+   StreamElements du profil Production vérifiés.
+4. **OBS et legacy** : source existante (1920 × 1080, transparente, toujours active) ; identifier les déclencheurs
+   legacy (SAMMI → `Twitch_Alerts.html`, socket StreamElements de la page, Streamlabs) ; bascule type par type, legacy
+   coupé pour ce type seulement ; désactivation définitive après validation ; retour arrière : OFF dans l'onglet +
+   source legacy réactivée.
+5. **Validations différées** (nécessaires pour déclarer le cutover réussi) : vrai don, subs / resubs / gifts / Bits /
+   raids réels, parcours réel complet jusqu'à OBS, stabilité pendant un stream.
