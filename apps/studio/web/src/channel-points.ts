@@ -383,7 +383,7 @@ export function mountChannelPoints(root: HTMLElement) {
       if (s > 0) a.duration_ms = Math.round(s * 1000);
       else delete a.duration_ms;
     } else a[f] = t.value.trim();
-    if (f === 'type') renderEditor();
+    if (f === 'type' || f === 'interaction') renderEditor();
     if (f === 'scene' || f === 'source')
       void loadLists(String(a.scene ?? ''), String(a.source ?? ''));
   });

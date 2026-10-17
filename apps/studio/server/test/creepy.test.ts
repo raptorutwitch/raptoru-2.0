@@ -121,6 +121,7 @@ function fakeEffects(c: { now: () => number }, ok = true) {
     status: () => ({ url: '', connected: true, audio: true, playing: 0 }),
     sounds: () => [],
     videos: () => [],
+    interactionMedia: () => [],
   } as unknown as EffectsPlayer;
   return { effects, sounds };
 }

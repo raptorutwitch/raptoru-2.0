@@ -17,7 +17,7 @@ const ObsName = z.string().trim().min(1).max(256);
 const DurationMs = z.number().int().min(500).max(600_000);
 
 /** The native interactions Studio knows (each one fully written in code). */
-export const CpInteractionId = z.enum(['creepy']);
+export const CpInteractionId = z.enum(['creepy', 'brb']);
 export type CpInteractionId = z.infer<typeof CpInteractionId>;
 
 /** The allow-list of V1 actions. Nothing else can ever be executed (no script, no system command). */
@@ -64,7 +64,7 @@ export const CpAction = z.discriminatedUnion('type', [
   }),
   /**
    * A native interaction, written in Studio's code with its legacy parameters (P0.2): nothing to assemble. `creepy`:
-   * the SAMMI « Creepy » reward (docs/EFFECTS_PLAYER.md § 9).
+   * the SAMMI « Creepy » reward (docs/EFFECTS_PLAYER.md § 9); `brb`: « Be Right Back » (§ 10).
    */
   z.strictObject({
     type: z.literal('interaction'),

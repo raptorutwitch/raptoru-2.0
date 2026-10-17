@@ -201,6 +201,9 @@ describe('Points de chaîne views', () => {
         [...effects.sounds, ...effects.videos],
       ),
     ).toBe('Vidéo d’effet « NTM — Fuck You » (10 %)');
+    expect(actionLabel({ type: 'interaction', interaction: 'brb' })).toBe(
+      'Interaction « BRB »',
+    );
     expect(actionLabel({ type: 'interaction', interaction: 'creepy' })).toBe(
       'Interaction « Creepy »',
     );

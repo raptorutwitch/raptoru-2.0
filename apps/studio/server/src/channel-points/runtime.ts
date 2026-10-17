@@ -8,6 +8,7 @@ import {
   type EffectsPlayer,
 } from '../effects/player.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
+import { Brb } from '../interactions/brb.js';
 import { InteractionError, Interactions } from '../interactions/creepy.js';
 import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 
@@ -48,12 +49,14 @@ export class ChannelPointsRuntime {
   private lastError: string | null = null;
   /** Native interactions (Creepy…): on this runtime's OBS executor and effects player. */
   readonly interactions: Interactions;
+  readonly brb: Brb;
 
   private constructor(
     private readonly d: ChannelPointsRuntimeDeps,
     readonly obs: ObsActions,
   ) {
     this.interactions = new Interactions({ obs, effects: d.effects ?? null });
+    this.brb = new Brb({ obs, effects: d.effects ?? null });
   }
 
   static async create(d: ChannelPointsRuntimeDeps) {
@@ -140,7 +143,10 @@ export class ChannelPointsRuntime {
         }
         if (action.type === 'interaction') {
           // Accepted now (it may wait for the same interaction already running); its end is reported after.
-          const { end } = this.interactions.start(action.interaction);
+          const { end } =
+            action.interaction === 'brb'
+              ? this.brb.start()
+              : this.interactions.start(action.interaction);
           ends.push({ index, end });
           results.push({ index, ok: true, playing: true });
           continue;
@@ -265,6 +271,7 @@ export class ChannelPointsRuntime {
               ...this.d.effects.status(),
               sounds: this.d.effects.sounds(),
               videos: this.d.effects.videos(),
+              interaction_media: this.d.effects.interactionMedia(),
             }
           : null,
         executor_error: this.lastError,

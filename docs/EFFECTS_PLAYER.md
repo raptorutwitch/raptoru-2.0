@@ -156,8 +156,13 @@ la source du lecteur d'effets, placée dans cette scène, est visible partout (C
 - Overlay (C) : fond noir, capture d'écran (saturation 0,8, contraste 1,04, luminosité 0,78) + voile brun, capture de la
   caméra qui descend en 1000 ms après 1000 ms, vidéo `We'll be right back_3.webm` par-dessus ; à la fin de la vidéo,
   fondu 200 ms après 500 ms.
-- **Incompatibilité** : « Musique Isolée » n'existe pas dans la collection active (C) → dans SAMMI cette coupure échoue
-  déjà ; « Écran » n'est pas dans « Scène PS5 » (la capture fonctionne quand même : la source existe).
+- **Correction (18/10/2026, C)** : « Musique Isolée » **existe** : c'est une source audio globale d'OBS (Paramètres → Audio,
+  « Mic/Aux 2 » = `AuxAudioDevice2`, capture d'entrée), absente de la liste des sources de scène — l'audit du 17/10
+  ne regardait que cette liste. La coupure SAMMI de « Micro » et de « Musique Isolée » fonctionne donc. « Écran » n'est
+  pas dans « Scène PS5 » (la capture fonctionne quand même : la source existe).
+- Vidéo (C) : `We'll be right back_3.webm`, 1920×1080, VP9 avec transparence + son Opus, 5,55 s, jouée au volume 1
+  (jamais réglé dans l'overlay) ; elle apparaît 80 ms après le début (transition 0,3 s de l'overlay) ; la couche
+  disparaît 700 ms après la fin de la vidéo (≈ t+7,45 s), indépendamment du rétablissement du son (t+7,2 s).
 - Simultanés : bouton ni `queueable` ni `overlappable` → une 2ᵉ redemption pendant l'effet est ignorée (H).
 - Restauration : micro rétabli par le bouton lui-même (aucune protection si SAMMI s'arrête pendant les 6 s) (C).
 
@@ -222,3 +227,45 @@ Validation manuelle (avec accord) : Studio → Points de chaîne → « Creepy �
 Effect » avec ses animations, puis retour à la scène de départ à ~5 s ; depuis « Waiting screen » : rien (historique «
 Creepy ignoré ») ; deux Tester rapprochés : enchaînés ; changer de scène à la main pendant l'effet : pas de retour forcé ;
 comparer avec le bouton SAMMI.
+
+## 10. BRB dans Raptoru (P0.2 C3)
+
+**Statut : DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS.**
+
+Interaction native **« BRB »** (règle `{ type: 'interaction', interaction: 'brb' }` : « Interaction native » → « BRB »).
+Code : `apps/studio/server/src/interactions/brb.ts`.
+
+- Chronologie SAMMI (§ 7) : t0 capture de « Écran » ; t+0,6 s capture de « overlay cam shushu » ; t+1,2 s couche BRB
+  sur le lecteur d'effets + coupure de « Micro » et « Musique Isolée » ; t+7,2 s rétablissement.
+- **Capture instantanée** (capacité réutilisable du moteur OBS) : `GetSourceScreenshot` PNG pleine résolution, prise
+  à l'instant demandé, gardée **en mémoire** (jamais de fichier, plus de `C:/OBSFreeze`), servie à la page du lecteur
+  sous un identifiant non devinable pendant l'effet seulement, puis supprimée (fin, échec ou effet jamais démarré).
+- **Rendu** : la couche « jouerWbrb » de `Alerte_system.html` reprise telle quelle dans le lecteur d'effets (mêmes CSS :
+  fond capturé assombri + voile brun, caméra qui descend après 1 s, vidéo par-dessus à 80 ms, fondu 200 ms 500 ms
+  après la fin, retrait à 700 ms). Plus aucune dépendance à `Alerte_system.html` ni à l'événement `pdc_wbrb`. Vidéo
+  importée par copie (original intact).
+- **Coupures audio** : même mécanisme de retour que les autres effets temporaires (`obs-reverts.json`) : rétablies à
+  t+7,2 s, après une erreur, après un redémarrage de Studio, ou au retour d'OBS — seulement si encore coupées (un
+  rétablissement manuel est conservé ; une entrée déjà coupée avant BRB reste coupée). Si la couche ne peut pas
+  démarrer, les coupures sont annulées aussitôt.
+- **Condition de départ** : « Scène Dessin », « Scène Fullscreen » ou « Scène PS5 » ; sinon rien (aucune capture, aucune
+  coupure) et l'historique indique « BRB refusé : scène … non prévue (aucun remboursement possible : récompense créée
+  par SAMMI) ».
+- **Un seul BRB à la fois** (bouton SAMMI ni en file ni superposable) : un BRB demandé pendant un autre est refusé
+  (« BRB déjà en cours »).
+- **Lecteur d'effets absent** : rien n'est fait (pas de coupure sans l'animation), raison lisible.
+
+Écarts avec SAMMI (provisoires, à décider) :
+
+- **Remboursement et message chat** quand la scène n'est pas la bonne : impossibles tant que la récompense appartient à
+  SAMMI (seule l'app qui l'a créée peut la rembourser). Le refus est enregistré avec sa raison ; le jour où Studio
+  gérera ses propres récompenses (`channel:manage:redemptions`), ce refus deviendra un remboursement, et le message
+  « Pas la bonne scène pour ça ! » passera par la sortie chat de Raptoru.
+- Lecteur d'effets absent : SAMMI aurait quand même coupé le micro ; Raptoru ne coupe rien.
+- Captures en mémoire au lieu de `C:/OBSFreeze/*.png` (les anciens fichiers ne sont plus écrits ni lus).
+
+Validation manuelle (avec accord) : source du lecteur d'effets en 1920×1080 (déjà fait pour NTM) ; « Be Right Back » →
+Interaction native « BRB » → Enregistrer ; depuis « Scène Fullscreen » (ou Dessin / PS5) : Tester → image figée de
+l'écran, caméra qui descend, vidéo BRB, micro et « Musique Isolée » coupés ~6 s puis rétablis (mixeur OBS) ; depuis
+« Just Chatting » : rien (historique « BRB refusé ») ; deux Tester rapprochés : le 2ᵉ refusé ; comparer avec le bouton
+SAMMI (cadrage des captures, timing, son).

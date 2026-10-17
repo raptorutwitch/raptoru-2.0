@@ -1,4 +1,4 @@
-/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, clearTimeout, setInterval, AbortSignal, requestAnimationFrame, cancelAnimationFrame, performance */
+/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, clearTimeout, setInterval, AbortSignal, requestAnimationFrame, cancelAnimationFrame, performance, Event */
 
 // Raptoru effects player (docs/EFFECTS_PLAYER.md) — ONE OBS browser source (1920×1080). Every effect handed by Studio
 // plays at once (effects overlap; Studio caps how many) and reports started → completed / failed / unknown. Nothing is
@@ -7,7 +7,10 @@
 // - sound (P0.1): its own audio element, at the volume Studio gives;
 // - video (P0.2): full frame (object-fit contain), its own sound, presented as its legacy overlay did
 //   (Alerte_system.html « jouerAlerteSuperposee »): random horizontal mirror, rise from +550 px with a 220 ms fade in,
-//   500 ms fade out before the end, ducking of the plays of the same video (only the oldest `audible` heard).
+//   500 ms fade out before the end, ducking of the plays of the same video (only the oldest `audible` heard);
+// - wbrb (P0.2, BRB): the legacy « jouerWbrb » layer — the screen capture (dimmed, brown veil), the camera capture
+//   dropping in after 1 s, the « We'll be right back » video on top (shown 80 ms after the start); at the video's end:
+//   fade out after 500 ms (200 ms), removed at 700 ms — the effect ends then.
 //
 // In OBS the page may play sound without a click. In a normal browser it shows « Activer le son » and takes no effect
 // until sound is allowed (Studio then reports the player as muted instead of handing effects to a silent page).
@@ -85,6 +88,7 @@ async function unlock(fromClick) {
 enable.addEventListener('click', () => void unlock(true));
 
 const MEDIA_URL = /^media\/[a-z0-9][a-z0-9-]{0,47}$/;
+const CAPTURE_URL = /^capture\/[0-9a-f-]{36}$/;
 const clamp = (v) => Math.min(1, Math.max(0, Number(v) || 0));
 
 // --- ducking (legacy « reglerVolumesSuperposes ») ---------------------------------------------------------------------
@@ -177,6 +181,48 @@ function videoElement(effect) {
   };
 }
 
+/** Legacy « jouerWbrb » / « arreterWbrb ». The element whose events drive the effect is the video; done after the tail. */
+function wbrbElement(effect) {
+  const layer = document.createElement('div');
+  layer.className = 'wbrb';
+  const bg = document.createElement('img');
+  bg.className = 'wbrb-bg';
+  bg.alt = '';
+  bg.src = effect.images.screen;
+  const shade = document.createElement('div');
+  shade.className = 'wbrb-bg-shade';
+  const cam = document.createElement('img');
+  cam.className = 'wbrb-cam';
+  cam.alt = '';
+  cam.src = effect.images.cam;
+  const el = document.createElement('video');
+  el.playsInline = true;
+  el.preload = 'auto';
+  el.volume = clamp(effect.volume);
+  el.src = effect.url;
+  layer.append(bg, shade, cam, el);
+  stage.append(layer);
+  const timers = [setTimeout(() => layer.classList.add('video-ready'), 80)];
+  el.addEventListener(
+    'ended',
+    () => {
+      timers.push(
+        setTimeout(() => layer.classList.add('fade-out'), 500),
+        setTimeout(() => el.dispatchEvent(new Event('effect-done')), 700),
+      );
+    },
+    { once: true },
+  );
+  return {
+    el,
+    doneEvent: 'effect-done',
+    release() {
+      timers.forEach(clearTimeout);
+      layer.remove();
+    },
+  };
+}
+
 function audioElement(effect) {
   const el = new Audio(effect.url);
   el.volume = clamp(effect.volume);
@@ -191,11 +237,22 @@ async function play(effect) {
     effect.kind === 'video' &&
     effect.presentation &&
     typeof effect.effect_id === 'string';
-  if ((effect.kind !== 'sound' && !video) || !MEDIA_URL.test(effect.url)) {
+  const wbrb =
+    effect.kind === 'wbrb' &&
+    CAPTURE_URL.test(effect.images?.screen ?? '') &&
+    CAPTURE_URL.test(effect.images?.cam ?? '');
+  if (
+    (effect.kind !== 'sound' && !video && !wbrb) ||
+    !MEDIA_URL.test(effect.url)
+  ) {
     await report(effect, 'failed', 'invalid_effect');
     return;
   }
-  const media = video ? videoElement(effect) : audioElement(effect);
+  const media = wbrb
+    ? wbrbElement(effect)
+    : video
+      ? videoElement(effect)
+      : audioElement(effect);
   const el = media.el;
   let started = false;
   let endGuard = null;
@@ -212,7 +269,9 @@ async function play(effect) {
         ms + END_MARGIN_MS,
       );
     });
-    el.addEventListener('ended', () => resolve({ event: 'completed' }));
+    el.addEventListener(media.doneEvent ?? 'ended', () =>
+      resolve({ event: 'completed' }),
+    );
     el.addEventListener('error', () =>
       resolve({
         event: 'failed',

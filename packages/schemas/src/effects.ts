@@ -91,3 +91,15 @@ export const EffectVideoId = z.enum(
   EFFECT_VIDEOS.map((v) => v.id) as [EffectVideo['id'], ...EffectVideo['id'][]],
 );
 export type EffectVideoId = z.infer<typeof EffectVideoId>;
+
+/**
+ * Media used only inside a native interaction (never offered as an effect on its own), imported like the others. BRB:
+ * the legacy « We'll be right back » video of Alerte_system.html (VP9 with alpha + Opus, played at volume 1).
+ */
+export const INTERACTION_MEDIA = [
+  {
+    id: 'brb-video',
+    label: 'BRB — We’ll be right back',
+    file: "We'll be right back_3.webm",
+  },
+] as const;

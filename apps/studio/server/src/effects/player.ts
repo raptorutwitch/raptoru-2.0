@@ -3,13 +3,18 @@ import { createReadStream } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join } from 'node:path';
-import { EFFECT_SOUNDS, EFFECT_VIDEOS } from '@raptoru/schemas';
+import {
+  EFFECT_SOUNDS,
+  EFFECT_VIDEOS,
+  INTERACTION_MEDIA,
+} from '@raptoru/schemas';
 import type { AlertMediaStore } from '../alerts/media-store.js';
 
 // Effects player (P0.1, docs/EFFECTS_PLAYER.md) — Studio's native capability to play an effect at once on ONE local
 // page (OBS browser source), outside the Soundboard: no queue, no price, no cooldown, effects overlap. Effect sounds
 // (EFFECT_SOUNDS) and full-frame effect videos with their legacy presentation (EFFECT_VIDEOS, P0.2), media in Studio's
-// storage. Studio hands each effect to the page that asks
+// storage. BRB (P0.2): the legacy « We'll be right back » layer over two instant OBS captures (screen, camera) held in
+// memory only, served to the page under an unguessable id for the effect's lifetime and dropped at its end. Studio hands each effect to the page that asks
 // first (never two pages), waits for its `started`, then follows its end. Nothing is ever replayed: an effect not taken
 // by a page within PICKUP_MS fails (player absent); one started whose end never comes is « unknown »; the hand-overs
 // live in memory only (a Studio restart drops them).
@@ -44,7 +49,7 @@ type Presentation = {
 
 interface Delivery {
   delivery_id: string;
-  kind: 'sound' | 'video';
+  kind: 'sound' | 'video' | 'wbrb';
   /** Catalogue id (the page groups the plays of one video for its ducking). */
   effect_id: string;
   label: string;
@@ -52,6 +57,8 @@ interface Delivery {
   /** 0-1 */
   volume: number;
   presentation: Presentation | null;
+  /** BRB: its captures (ids of `captures`). */
+  images: { screen: string; cam: string } | null;
   player: string | null;
   started: boolean;
   onStart: (ok: true | EffectError) => void;
@@ -71,7 +78,7 @@ const MEDIA_TYPES: Record<string, string> = {
 
 /** One catalogue (sounds and videos share the media route: ids are unique across both). */
 const CATALOGUE: {
-  kind: 'sound' | 'video';
+  kind: 'sound' | 'video' | 'interaction';
   id: string;
   label: string;
   file: string;
@@ -88,7 +95,14 @@ const CATALOGUE: {
     label: v.label,
     file: v.file,
   })),
+  ...INTERACTION_MEDIA.map((m) => ({
+    kind: 'interaction' as const,
+    id: m.id,
+    label: m.label,
+    file: m.file,
+  })),
 ];
+const CAPTURE = /^capture\/([0-9a-f-]{36})$/;
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self'; frame-ancestors 'self'";
 
@@ -106,6 +120,8 @@ export interface EffectsPlayerDeps {
 
 export class EffectsPlayer {
   private readonly deliveries = new Map<string, Delivery>();
+  /** Captures of the effects in progress (PNG, memory only). */
+  private readonly captures = new Map<string, Buffer>();
   private page: { player: string; at: number; audio: boolean } | null = null;
 
   private constructor(
@@ -163,6 +179,15 @@ export class EffectsPlayer {
     }));
   }
 
+  /** Media of the native interactions, imported or not. */
+  interactionMedia() {
+    return INTERACTION_MEDIA.map((m) => ({
+      id: m.id,
+      label: m.label,
+      available: this.d.media.path(m.file) !== null,
+    }));
+  }
+
   /** The video catalogue with each video's availability in Studio's storage. */
   videos() {
     return EFFECT_VIDEOS.map((v) => ({
@@ -178,10 +203,15 @@ export class EffectsPlayer {
    * promise of its end; rejects with a readable code when it cannot start (player absent or muted, too many effects,
    * media missing, unreadable file…).
    */
-  async play(effect: { kind: 'sound' | 'video'; id: string; volume: number }) {
-    const item = CATALOGUE.find(
-      (c) => c.kind === effect.kind && c.id === effect.id,
-    );
+  async play(
+    effect:
+      | { kind: 'sound' | 'video'; id: string; volume: number }
+      | { kind: 'wbrb'; screen: Buffer; cam: Buffer },
+  ) {
+    const item =
+      effect.kind === 'wbrb'
+        ? CATALOGUE.find((c) => c.id === 'brb-video')
+        : CATALOGUE.find((c) => c.kind === effect.kind && c.id === effect.id);
     if (!item) throw new EffectError('effect_unknown');
     if (!this.d.media.path(item.file))
       throw new EffectError('effect_media_missing');
@@ -199,17 +229,28 @@ export class EffectsPlayer {
     if (!page.audio) throw new EffectError('effects_player_muted');
     if (this.deliveries.size >= this.rules.maxActive)
       throw new EffectError('effects_busy');
+    let images: Delivery['images'] = null;
+    if (effect.kind === 'wbrb') {
+      images = { screen: randomUUID(), cam: randomUUID() };
+      this.captures.set(images.screen, effect.screen);
+      this.captures.set(images.cam, effect.cam);
+    }
     let end!: Promise<EffectEnd>;
     const started = new Promise<true | EffectError>((onStart) => {
       end = new Promise<EffectEnd>((onEnd) => {
         const x: Delivery = {
           delivery_id: randomUUID(),
-          kind: item.kind,
+          kind: effect.kind === 'wbrb' ? 'wbrb' : effect.kind,
           effect_id: item.id,
           label: item.label,
           url: `media/${item.id}`,
-          volume: Math.min(100, Math.max(0, effect.volume)) / 100,
+          // BRB: the legacy video element's volume (never set: 1).
+          volume:
+            effect.kind === 'wbrb'
+              ? 1
+              : Math.min(100, Math.max(0, effect.volume)) / 100,
           presentation,
+          images,
           player: null,
           started: false,
           onStart,
@@ -236,14 +277,28 @@ export class EffectsPlayer {
   /** Never started: a clean failure (nothing was heard). */
   private fail(x: Delivery, code: string) {
     if (x.timer) clearTimeout(x.timer);
-    this.deliveries.delete(x.delivery_id);
+    this.drop(x);
     x.onStart(new EffectError(code));
     x.onEnd({ event: 'failed', error: code });
   }
 
+  /** An effect leaves: its captures with it (nothing kept after the effect). */
+  private drop(x: Delivery) {
+    this.deliveries.delete(x.delivery_id);
+    if (x.images) {
+      this.captures.delete(x.images.screen);
+      this.captures.delete(x.images.cam);
+    }
+  }
+
+  /** Captures held now (diagnostic, tests). */
+  get capturesHeld() {
+    return this.captures.size;
+  }
+
   private finish(x: Delivery, end: EffectEnd) {
     if (x.timer) clearTimeout(x.timer);
-    this.deliveries.delete(x.delivery_id);
+    this.drop(x);
     x.onEnd(end);
   }
 
@@ -287,6 +342,14 @@ export class EffectsPlayer {
         url: x.url,
         volume: x.volume,
         ...(x.presentation ? { presentation: x.presentation } : {}),
+        ...(x.images
+          ? {
+              images: {
+                screen: `capture/${x.images.screen}`,
+                cam: `capture/${x.images.cam}`,
+              },
+            }
+          : {}),
       });
     }
     return out;
@@ -321,6 +384,21 @@ export class EffectsPlayer {
         'content-security-policy': CSP,
       });
       res.end(await readFile(join(this.d.playerDir, name)));
+      return true;
+    }
+    const capture = CAPTURE.exec(name);
+    if (req.method === 'GET' && capture) {
+      const image = this.captures.get(capture[1]!);
+      if (!image) {
+        reply(404, { error: 'capture_gone' });
+        return true;
+      }
+      res.writeHead(200, {
+        'content-type': 'image/png',
+        'content-length': image.length,
+        'cache-control': 'no-store',
+      });
+      res.end(image);
       return true;
     }
     if (req.method === 'GET' && name.startsWith('media/')) {

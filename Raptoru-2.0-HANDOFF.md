@@ -39,7 +39,9 @@ chaîne (`effect_sound`, même circuit de jobs Studio). 6 sons SAMMI importés p
 Percé, Bzez, Skyzz, Arrêteuh ; volumes SAMMI). Source OBS ajoutée et testée par Antoni (`docs/EFFECTS_PLAYER.md`). En
 cours : P0.2 — **NTM validé dans OBS par Antoni** (17/10/2026, `e0fc606`, rendu identique à SAMMI) ; **Creepy
 validé dans OBS par Antoni** (18/10/2026, `ac48842` : interaction native, scène temporaire avec retour sûr,
-`docs/EFFECTS_PLAYER.md` § 9) ; en cours : BRB (fiches de parité : § 7).
+`docs/EFFECTS_PLAYER.md` § 9) ; **BRB développé** (interaction native : captures OBS
+instantanées en mémoire, couche « We'll be right back » reprise dans le lecteur d'effets, micro + « Musique Isolée »
+coupés 6 s avec retour sûr ; **non validé dans OBS**, § 10).
 
 **POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ (17/10/2026)**. Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
 LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS

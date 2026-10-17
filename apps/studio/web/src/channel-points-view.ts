@@ -20,17 +20,22 @@ export type CpActionView =
       duration_ms?: number;
     }
   | { type: 'obs_scene'; scene: string; duration_ms?: number }
-  | { type: 'interaction'; interaction: 'creepy' };
+  | { type: 'interaction'; interaction: 'creepy' | 'brb' };
 
 /** The native interactions (written in Studio's code: nothing to configure but the reward). */
 export const INTERACTIONS: Record<
-  'creepy',
+  'creepy' | 'brb',
   { label: string; description: string }
 > = {
   creepy: {
     label: 'Creepy',
     description:
       'Comme SAMMI : effet « Prowler Effect », son Prowler, scène « Creepy Effect » (animations OBS) pendant 4,2 s puis retour à la scène de départ. Seulement depuis Fullscreen, Just Chatting, PS5 ou Dessin ; plusieurs Creepy se suivent.',
+  },
+  brb: {
+    label: 'BRB',
+    description:
+      'Comme SAMMI : capture de l’écran puis de la caméra, animation « We’ll be right back » par-dessus, micro et « Musique Isolée » coupés 6 s puis rétablis. Seulement depuis Dessin, Fullscreen ou PS5 ; un seul BRB à la fois ; nécessite le lecteur d’effets.',
   },
 };
 
@@ -79,6 +84,8 @@ export interface CpState {
     playing: number;
     sounds: EffectSoundView[];
     videos: EffectSoundView[];
+    /** Media of the native interactions (BRB video). */
+    interaction_media?: { id: string; label: string; available: boolean }[];
   } | null;
   executor_error: string | null;
 }
@@ -205,7 +212,7 @@ function effectsChip(e: CpState['effects']) {
 /** The effects player's OBS source (URL to copy) and the imported sounds. */
 export function effectsView(e: CpState['effects']) {
   if (!e) return '';
-  const all = effectItems(e);
+  const all = [...effectItems(e), ...(e.interaction_media ?? [])];
   const missing = all.filter((s) => !s.available).length;
   return `<details class="cp-effects"><summary>Lecteur d’effets (source OBS)</summary>
     <p class="cp-muted">Une seule source navigateur OBS (1920 × 1080, plein cadre) joue les sons et vidéos d’effet, tout

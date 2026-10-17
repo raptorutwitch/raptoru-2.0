@@ -5,7 +5,11 @@
 //     [--videos-from "<…\Videos\Alertes Twitch Pour Claude\Version webm>"] [--runtime "<runtimeDir>"]
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { EFFECT_SOUNDS, EFFECT_VIDEOS } from '@raptoru/schemas';
+import {
+  EFFECT_SOUNDS,
+  EFFECT_VIDEOS,
+  INTERACTION_MEDIA,
+} from '@raptoru/schemas';
 import { AlertMediaStore } from '../alerts/media-store.js';
 import { paths } from '../test-lab/local-env.js';
 
@@ -25,6 +29,10 @@ const entries = [
   ...EFFECT_VIDEOS.map((v) => ({
     name: v.file,
     from: join(videosFrom, v.file),
+  })),
+  ...INTERACTION_MEDIA.map((m) => ({
+    name: m.file,
+    from: join(videosFrom, m.file),
   })),
 ];
 console.table(await store.import(entries));

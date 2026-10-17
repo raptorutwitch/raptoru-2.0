@@ -47,12 +47,20 @@ async function studio(video?: Buffer) {
   await writeFile(join(src, 'ErenScream.ogg'), wav(600));
   await writeFile(join(src, 'Tiens bon !.ogg'), wav(900));
   if (video) await writeFile(join(src, 'Fuck You.webm'), video);
+  // The BRB video (any real WebM: the layer around it is what is under test).
+  if (video) await writeFile(join(src, "We'll be right back_3.webm"), video);
   const media = await AlertMediaStore.open(join(dir, 'media'));
   await media.import([
     { name: 'ErenScream.ogg', from: join(src, 'ErenScream.ogg') },
     { name: 'Tiens bon !.ogg', from: join(src, 'Tiens bon !.ogg') },
     ...(video
-      ? [{ name: 'Fuck You.webm', from: join(src, 'Fuck You.webm') }]
+      ? [
+          { name: 'Fuck You.webm', from: join(src, 'Fuck You.webm') },
+          {
+            name: "We'll be right back_3.webm",
+            from: join(src, "We'll be right back_3.webm"),
+          },
+        ]
       : []),
   ]);
   let player: EffectsPlayer | null = null;
@@ -297,6 +305,89 @@ test.describe('Effects player — NTM video (as in OBS)', () => {
         await page.$eval('#stage video', (v) => v.classList.contains('out')),
       ).toBe(true);
       expect(await end).toEqual({ event: 'completed' });
+    } finally {
+      await close();
+      await s.close();
+    }
+  });
+});
+
+/** A real PNG drawn by Chromium (size and colour checked on the page). */
+async function png(page: Page, w: number, h: number, colour: string) {
+  const data = await page.evaluate(
+    ([width, height, fill]) => {
+      const c = document.createElement('canvas');
+      c.width = width as number;
+      c.height = height as number;
+      const g = c.getContext('2d')!;
+      g.fillStyle = fill as string;
+      g.fillRect(0, 0, c.width, c.height);
+      return c.toDataURL('image/png').split(',')[1]!;
+    },
+    [w, h, colour] as const,
+  );
+  return Buffer.from(data, 'base64');
+}
+
+test.describe('Effects player — BRB layer (as in OBS)', () => {
+  test('screen + camera captures under the BRB video, legacy layout and timings, volume 1; removed 700 ms after the video, captures dropped', async () => {
+    const { page, close } = await obsLike();
+    await page.goto('about:blank');
+    const video = await recordWebm(page, 2000);
+    const screen = await png(page, 1920, 1080, '#3050a0');
+    const cam = await png(page, 1920, 1080, '#a03050');
+    const s = await studio(video);
+    try {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.goto(s.player.url);
+      await connected(s.player, true);
+      const { end } = await s.player.play({ kind: 'wbrb', screen, cam });
+      expect(s.player.capturesHeld).toBe(2);
+      await page.waitForTimeout(400);
+      const layer = await page.$eval('#stage .wbrb', (l) => {
+        const [bg, , camImg, v] = [...l.children] as [
+          HTMLImageElement,
+          HTMLElement,
+          HTMLImageElement,
+          HTMLVideoElement,
+        ];
+        const cs = getComputedStyle(camImg);
+        return {
+          classes: l.className,
+          order: [...l.children].map(
+            (c) => c.className || c.tagName.toLowerCase(),
+          ),
+          bg: [bg.naturalWidth, bg.naturalHeight, getComputedStyle(bg).filter],
+          cam: [
+            camImg.naturalWidth,
+            cs.left,
+            cs.top,
+            cs.width,
+            cs.height,
+            cs.animationName,
+            cs.animationDelay,
+          ],
+          video: [v.volume, v.muted, getComputedStyle(v).opacity !== '0'],
+        };
+      });
+      expect(layer).toEqual({
+        classes: 'wbrb video-ready',
+        order: ['wbrb-bg', 'wbrb-bg-shade', 'wbrb-cam', 'video'],
+        bg: [1920, 1080, 'saturate(0.8) contrast(1.04) brightness(0.78)'],
+        cam: [
+          1920,
+          '506px',
+          '-141px',
+          '1766px',
+          '1436px',
+          'wbrbCamCurtain',
+          '1s',
+        ],
+        video: [1, false, true],
+      });
+      expect(await end).toEqual({ event: 'completed' });
+      expect(await page.$$eval('#stage .wbrb', (l) => l.length)).toBe(0);
+      expect(s.player.capturesHeld).toBe(0);
     } finally {
       await close();
       await s.close();

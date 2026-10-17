@@ -266,7 +266,8 @@ describe('Points de chaîne — effect sounds', () => {
     const ok = (a: unknown) =>
       CpRuleInput.safeParse({ enabled: true, actions: [a] }).success;
     expect(ok({ type: 'interaction', interaction: 'creepy' })).toBe(true);
-    expect(ok({ type: 'interaction', interaction: 'brb' })).toBe(false);
+    expect(ok({ type: 'interaction', interaction: 'brb' })).toBe(true);
+    expect(ok({ type: 'interaction', interaction: 'fx-cam' })).toBe(false);
     expect(ok({ type: 'interaction', interaction: 'creepy', delay: 5 })).toBe(
       false,
     );

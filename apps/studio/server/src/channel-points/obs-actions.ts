@@ -10,7 +10,10 @@ import type { CpAction } from '@raptoru/schemas';
 // Studio restart reverts what is due when OBS answers again (same check); one older than an hour is dropped.
 // Temporary scene (P0.2, Creepy and later interactions): the program goes back to the scene it replaced, only if it is
 // still on the temporary scene; a second temporary scene over a temporary one goes back to the first original scene.
-// Native interactions also use two direct requests here: the program scene name, and a media input restart.
+// Native interactions also use direct requests here: the program scene name, a media input restart, an instant
+// screenshot of a source (in memory: never a file), and a temporary mute of an audio input (BRB, P0.2) — reverted like
+// the other temporary actions: unmuted when it ends only if still muted (a manual change is kept; an input muted before
+// is left muted), after a Studio restart too.
 
 export interface ObsLike {
   readonly connected: boolean;
@@ -22,7 +25,8 @@ export interface ObsLike {
 
 type Target =
   | { kind: 'source'; scene: string; source: string }
-  | { kind: 'filter'; source: string; filter: string };
+  | { kind: 'filter'; source: string; filter: string }
+  | { kind: 'mute'; input: string };
 /** A temporary scene: `scene` shown until `at`, then back to `back` if the program is still on `scene`. */
 type SceneRevert = { kind: 'scene'; scene: string; back: string; at: number };
 type Revert =
@@ -32,7 +36,9 @@ const STALE_MS = 60 * 60_000;
 const key = (t: Target) =>
   t.kind === 'source'
     ? `source|${t.scene}|${t.source}`
-    : `filter|${t.source}|${t.filter}`;
+    : t.kind === 'mute'
+      ? `mute|${t.input}`
+      : `filter|${t.source}|${t.filter}`;
 
 /** A readable failure for the history (French, no ids). */
 export class ObsActionError extends Error {}
@@ -121,6 +127,37 @@ export class ObsActions {
       });
   }
 
+  /**
+   * An instant screenshot of a source (or scene) at its full resolution, PNG, kept in memory by the caller. Taken when
+   * asked (no background capture).
+   */
+  async screenshot(source: string): Promise<Buffer> {
+    const r = await this.connected()
+      .request('GetSourceScreenshot', {
+        sourceName: source,
+        imageFormat: 'png',
+      })
+      .catch((e) => {
+        throw readable(e, `la source « ${source} »`);
+      });
+    const m = /^data:image\/png;base64,(.+)$/s.exec(String(r.imageData ?? ''));
+    if (!m) throw new ObsActionError(`capture de « ${source} » vide`);
+    return Buffer.from(m[1]!, 'base64');
+  }
+
+  /** Mutes an audio input for `ms` (temporary, see the header). Nothing to restore if it was already muted. */
+  async temporaryMute(input: string, ms: number) {
+    await this.setFor(this.connected(), { kind: 'mute', input }, true, ms);
+  }
+
+  /** Ends a temporary mute now (an interaction that failed after muting): restored with the usual check. */
+  async endMute(input: string) {
+    const r = this.reverts.find((x) => x.kind === 'mute' && x.input === input);
+    if (!r) return;
+    r.at = Math.min(r.at, this.now());
+    await this.tick();
+  }
+
   /** A temporary scene: switched now, back to the replaced scene after `ms` (see the header). */
   private async temporaryScene(obs: ObsLike, scene: string, ms: number) {
     const before = await this.currentScene();
@@ -166,6 +203,14 @@ export class ObsActions {
   }
 
   private async read(obs: ObsLike, t: Target): Promise<boolean> {
+    if (t.kind === 'mute') {
+      const r = await obs
+        .request('GetInputMute', { inputName: t.input })
+        .catch((e) => {
+          throw readable(e, `l'entrée audio « ${t.input} »`);
+        });
+      return r.inputMuted === true;
+    }
     if (t.kind === 'source') {
       const id = await this.itemId(obs, t.scene, t.source);
       const r = await obs
@@ -187,6 +232,14 @@ export class ObsActions {
   }
 
   private async write(obs: ObsLike, t: Target, value: boolean) {
+    if (t.kind === 'mute') {
+      await obs
+        .request('SetInputMute', { inputName: t.input, inputMuted: value })
+        .catch((e) => {
+          throw readable(e, `l'entrée audio « ${t.input} »`);
+        });
+      return;
+    }
     if (t.kind === 'source') {
       const id = await this.itemId(obs, t.scene, t.source);
       await obs
@@ -238,10 +291,20 @@ export class ObsActions {
         : { kind: 'filter', source: action.source, filter: action.filter };
     const value =
       action.type === 'obs_source' ? action.visible : action.enabled;
-    const before = action.duration_ms ? await this.read(obs, target) : null;
+    await this.setFor(obs, target, value, action.duration_ms);
+  }
+
+  /** Sets a target; with a duration, records its conditional revert (one per target and value, the later end wins). */
+  private async setFor(
+    obs: ObsLike,
+    target: Target,
+    value: boolean,
+    duration?: number,
+  ) {
+    const before = duration ? await this.read(obs, target) : null;
     await this.write(obs, target, value);
-    if (!action.duration_ms) return;
-    const at = this.now() + action.duration_ms;
+    if (!duration) return;
+    const at = this.now() + duration;
     const same = this.reverts.find(
       (r) => r.kind !== 'scene' && key(r) === key(target) && r.set === value,
     );
