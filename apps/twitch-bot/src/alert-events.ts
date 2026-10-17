@@ -1,10 +1,10 @@
 import type { AlertEventInput } from '@raptoru/schemas';
 
 // Twitch alerts V1, lot A1 — EventSub notification → normalized alert event (docs/TWITCH_ALERTS_PARITY_2026-10.md).
-// Pure functions, NOT WIRED yet: no subscription is created in A1 (changing the real EventSub subscriptions needs
-// Antoni's go). The Bot stays the single EventSub consumer; loyalty / wallet and alerts are two distinct consumers of
-// the same events (enabling alerts never enables any economy flag). Field names follow the Twitch EventSub reference
-// (checked 16/10/2026), not yet seen on real traffic.
+// Pure functions, wired by the Lab chat adapter (lab-alerts-ingest.ts, 17/10/2026) only when Studio's « Événements
+// Twitch réels » mode is not OFF. The Bot stays the single EventSub consumer; loyalty / wallet and alerts are two
+// distinct consumers of the same events (enabling alerts never enables any economy flag). Field names follow the
+// Twitch EventSub reference (checked 16 and 17/10/2026), not yet seen on real traffic.
 
 /** What each source needs once wired (documentation of the blocking points). */
 export const ALERT_EVENTSUB_SOURCES = [
@@ -67,6 +67,9 @@ export function normalizeAlertEvent(
   e: Payload,
   messageId: string,
 ): Out | null {
+  // Shared chat session: an action in another participant's channel is not an alert of this channel.
+  const source = str(e.source_broadcaster_user_id);
+  if (source && source !== str(e.broadcaster_user_id)) return null;
   const base = (sourceEventId: unknown) => ({
     source: 'twitch' as const,
     source_event_id: String(str(sourceEventId) ?? messageId).slice(0, 128),
@@ -99,17 +102,18 @@ export function normalizeAlertEvent(
   }
   if (type === 'channel.chat.message') {
     const bits = num((e.cheer as Payload | null | undefined)?.bits);
-    const actor = person(
-      e.chatter_user_id,
-      e.chatter_user_login,
-      e.chatter_user_name,
-    );
-    if (!bits || !actor) return null;
+    // Twitch's anonymous cheerer account (legacy IRC convention, not seen on real traffic yet): no viewer identity.
+    const anonymous =
+      String(e.chatter_user_login ?? '').toLowerCase() === 'ananonymouscheerer';
+    const actor = anonymous
+      ? undefined
+      : person(e.chatter_user_id, e.chatter_user_login, e.chatter_user_name);
+    if (!bits || (!actor && !anonymous)) return null;
     const text = str((e.message as Payload | undefined)?.text);
     return {
       ...base(e.message_id),
       type: 'bits',
-      actor,
+      ...(actor ? { actor } : { anonymous }),
       bits,
       ...(text ? { message: text.slice(0, 500) } : {}),
     };

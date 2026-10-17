@@ -20,6 +20,7 @@ const baseConfig: BotConfig = {
   PRESENCE_SHADOW: 'true',
   LAB_CHAT_INGEST: 'false',
   LAB_CHAT_OUTPUT: 'false',
+  LAB_ALERTS_FOLLOW: 'false',
   LAB_CHAT_JOURNAL_FILE: '.lab-chat-journal.json',
 };
 

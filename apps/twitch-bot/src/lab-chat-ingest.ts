@@ -1,3 +1,4 @@
+import type { LabAlertsIngest } from './lab-alerts-ingest.js';
 import type { EventSubHandlers } from './twitch/eventsub.js';
 import type { HelixStream } from './stream-watch.js';
 
@@ -23,7 +24,10 @@ export interface LabChatIngestDeps {
     type: string,
     condition: Record<string, string>,
     sessionId: string,
+    version?: string,
   ): Promise<void>;
+  /** Twitch alerts on the same connection (lab-alerts-ingest.ts); absent / OFF: nothing more is subscribed. */
+  alerts?: Pick<LabAlertsIngest, 'subscriptions' | 'handle' | 'close'>;
   getStream(): Promise<HelixStream | null>;
   log?: (...args: unknown[]) => void;
   /** Injectable clock (tests). */
@@ -41,7 +45,7 @@ export const CHAT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 export const CHAT_RETRY_TTL_MS = 15_000;
 
 /** Worth retrying: Core unreachable / timed out / 5xx / 408 / 429. A 4xx answer will not change. */
-function transient(error: unknown): boolean {
+export function transient(error: unknown): boolean {
   const m = /^lab_core_(\d{3})$/.exec((error as Error)?.message ?? '');
   if (!m) return true;
   const status = Number(m[1]);
@@ -142,13 +146,30 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
         sessionId,
       );
       log('[lab-chat] EventSub subscriptions created (chat, stream state)');
+      // An alert source refused (missing scope, not moderator) never takes the chat ingestion down with it.
+      for (const s of d.alerts?.subscriptions() ?? [])
+        try {
+          await d.subscribe(s.type, s.condition, sessionId, s.version);
+          log(`[lab-alerts] abonnement ${s.type} créé`);
+        } catch (error) {
+          log(
+            `[lab-alerts] abonnement ${s.type} refusé`,
+            (error as Error).message,
+          );
+        }
     },
     async notification(type, event, messageId) {
       try {
         if (type === 'stream.online')
           await stream('online', String(event.id ?? ''));
         else if (type === 'stream.offline') await stream('offline');
+        else if (
+          type === 'channel.chat.notification' ||
+          type === 'channel.follow'
+        )
+          await d.alerts?.handle(type, event, messageId);
         else if (type === 'channel.chat.message') {
+          if (event.cheer) await d.alerts?.handle(type, event, messageId);
           if (String(event.chatter_user_id) === d.tokenUserId) return;
           const text = String(
             (event.message as { text?: unknown } | undefined)?.text ?? '',
@@ -201,6 +222,7 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
         );
       for (const t of retries) clearTimeout(t);
       retries.clear();
+      d.alerts?.close();
     },
     async reconcileStream() {
       const live = await d.getStream();

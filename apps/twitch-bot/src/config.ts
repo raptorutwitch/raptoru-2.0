@@ -55,6 +55,9 @@ const TwitchApp = z.object({
   // réelle » is ON — OFF by default in Core). Only makes `twitch:auth` ask for user:write:chat
   // (Send Chat Message) and moderator:manage:announcements (announce mode).
   LAB_CHAT_OUTPUT: Flag,
+  // Twitch alerts, follows (Lab): only makes `twitch:auth` ask for moderator:read:followers (channel.follow v2 read
+  // by the moderator LeCroupier_). Receiving them still needs Studio's « Événements Twitch réels » mode.
+  LAB_ALERTS_FOLLOW: Flag,
   // Bot journal of the Lab chat sends (about_to_send → outcome), git-ignored runtime data.
   LAB_CHAT_JOURNAL_FILE: z.string().min(1).default('.lab-chat-journal.json'),
 });
@@ -100,7 +103,7 @@ export function requiredScopes(
     | 'PRESENCE_SHADOW'
     | 'LAB_CHAT_INGEST'
   > &
-    Partial<Pick<TwitchAppConfig, 'LAB_CHAT_OUTPUT'>>,
+    Partial<Pick<TwitchAppConfig, 'LAB_CHAT_OUTPUT' | 'LAB_ALERTS_FOLLOW'>>,
 ): string[] {
   const chatCommands =
     config.DAILY_CHAT_COMMANDS === 'true' ||
@@ -114,6 +117,9 @@ export function requiredScopes(
       : []),
     ...(config.PRESENCE_SHADOW === 'true' ? ['moderator:read:chatters'] : []),
     ...(labOutput ? ['user:write:chat', 'moderator:manage:announcements'] : []),
+    ...(config.LAB_ALERTS_FOLLOW === 'true'
+      ? ['moderator:read:followers']
+      : []),
   ];
   return [...new Set(scopes)];
 }

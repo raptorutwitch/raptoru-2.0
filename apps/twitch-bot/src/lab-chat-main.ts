@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { loadTwitchAppConfig } from './config.js';
+import { ALERTS_MODES, createLabAlertsIngest } from './lab-alerts-ingest.js';
 import { createLabChatIngest } from './lab-chat-ingest.js';
 import {
   createLabChatOutput,
@@ -29,6 +30,13 @@ const Env = z.object({
     .default('900100'),
   /** Messages per 30 s (Twitch: 20 regular account, 100 moderator). Default: the safe 20. */
   LAB_CHAT_OUTPUT_RATE: z.coerce.number().int().min(1).max(100).default(20),
+  /** Twitch alerts (Studio « Événements Twitch réels »): off (default) / test (log only) / active (Lab queue). */
+  LAB_ALERTS_MODE: z.enum(ALERTS_MODES).default('off'),
+  /** Alerts channel of the Lab Core (Studio's alerts runtime); default: the Lab channel. */
+  LAB_ALERTS_CHANNEL_ID: z
+    .string()
+    .regex(/^d{1,32}$/)
+    .optional(),
   /** Helix stream-state repair period (same setting and default as the main bot). */
   STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
 });
@@ -86,17 +94,29 @@ const labCall = async (path: string, body: unknown) => {
   });
   return { status: res.status, body: (await res.json()) as unknown };
 };
+const alerts = createLabAlertsIngest({
+  mode: env.LAB_ALERTS_MODE,
+  channelId: env.LAB_ALERTS_CHANNEL_ID ?? env.LAB_CHAT_CHANNEL_ID,
+  broadcasterId: app.TWITCH_BROADCASTER_ID,
+  tokenUserId: status.userId!,
+  scopes: status.scopes,
+  lab,
+});
 const ingest = createLabChatIngest({
   lab,
   labChannelId: env.LAB_CHAT_CHANNEL_ID,
   broadcasterId: app.TWITCH_BROADCASTER_ID,
   tokenUserId: status.userId!,
-  subscribe: (type, condition, sessionId) =>
-    helix.subscribe(type, condition, sessionId),
+  subscribe: (type, condition, sessionId, version) =>
+    helix.subscribe(type, condition, sessionId, version),
+  alerts,
   getStream: () => helix.getStream(app.TWITCH_BROADCASTER_ID),
 });
 console.log(
   `[lab-chat] reading the chat of ${app.TWITCH_BROADCASTER_ID} as ${status.login} → Lab channel ${env.LAB_CHAT_CHANNEL_ID}`,
+);
+console.log(
+  `[lab-alerts] événements Twitch réels : ${env.LAB_ALERTS_MODE.toUpperCase()}`,
 );
 // Every (re)connection re-subscribes, then re-reads the real stream state (a missed online / offline
 // event while disconnected is caught up).

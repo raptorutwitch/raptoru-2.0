@@ -63,4 +63,17 @@ describe('requiredScopes', () => {
       'moderator:manage:announcements',
     ]);
   });
+
+  it('Lab alerts follows → moderator:read:followers, asked only when LAB_ALERTS_FOLLOW is on', () => {
+    expect(requiredScopes({ ...off, LAB_CHAT_INGEST: 'true' })).not.toContain(
+      'moderator:read:followers',
+    );
+    expect(
+      requiredScopes({
+        ...off,
+        LAB_CHAT_INGEST: 'true',
+        LAB_ALERTS_FOLLOW: 'true',
+      }),
+    ).toEqual(['user:read:chat', 'moderator:read:followers']);
+  });
 });

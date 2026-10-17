@@ -163,6 +163,12 @@ export class LabChatIngress {
     if (this.enabled && !this.blocked() && !this.d.process!.running)
       this.d.process!.start(this.d.env!());
   }
+  /** A running adapter reloads its settings (alerts mode): stopped then started again; a stopped one stays so. */
+  async restart() {
+    if (!this.d.process?.running) return;
+    await this.d.process.stop();
+    this.start();
+  }
   async stop() {
     this.closed = true;
     clearInterval(this.watch);

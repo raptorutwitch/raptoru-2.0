@@ -74,14 +74,41 @@ export interface AlertsRuntimeDeps {
   /** The OBS source / preview files (apps/studio/server/alerts-player). */
   playerDir: string;
   media: AlertMediaStore;
+  /**
+   * Real Twitch events (17/10/2026): the Lab chat adapter's state (it carries the alert subscriptions) and its
+   * restart, so a new mode applies (the adapter reads it at start). Absent: the mode is kept but unused.
+   */
+  twitch?: {
+    status(): {
+      ingestion_enabled: boolean;
+      ingestion_running: boolean;
+      token_login: string | null;
+      follow_scope: boolean;
+    };
+    restart(): Promise<void>;
+  };
 }
+
+/**
+ * « Événements Twitch réels », Studio storage, OFF by default and after any unreadable file:
+ * off = no alert subscription; test = received and logged, never queued; active = queued in the Lab Core (the OBS
+ * source connected to this Studio plays them). Lab profile only (no alerts runtime in Production).
+ */
+export const TWITCH_MODES = ['off', 'test', 'active'] as const;
+export type TwitchMode = (typeof TWITCH_MODES)[number];
 
 export class AlertsRuntime {
   private constructor(
     private readonly d: AlertsRuntimeDeps,
     private readonly token: string,
     readonly placement: AlertPlacementStore,
+    private mode: TwitchMode,
   ) {}
+
+  /** The mode given to the Lab chat adapter at its start. */
+  get twitchMode() {
+    return this.mode;
+  }
 
   static async create(d: AlertsRuntimeDeps) {
     await mkdir(d.dir, { recursive: true });
@@ -96,10 +123,20 @@ export class AlertsRuntime {
       token = randomBytes(16).toString('hex');
       await writeFile(tokenFile, token);
     }
+    let mode: TwitchMode = 'off';
+    try {
+      const saved = JSON.parse(
+        await readFile(join(d.dir, 'twitch-mode.json'), 'utf8'),
+      ).mode;
+      if (TWITCH_MODES.includes(saved)) mode = saved;
+    } catch {
+      /* OFF by default */
+    }
     return new AlertsRuntime(
       d,
       token,
       await AlertPlacementStore.open(join(d.dir, 'placement.json')),
+      mode,
     );
   }
 
@@ -196,6 +233,22 @@ export class AlertsRuntime {
         variants: variants.map((v) => ({ ...v, missing: this.missing(v) })),
       });
     }
+    if (req.method === 'GET' && p === '/twitch')
+      return reply(200, this.twitchView());
+    if (req.method === 'POST' && p === '/twitch') {
+      const mode = (await this.body(req)).mode as TwitchMode;
+      if (!TWITCH_MODES.includes(mode))
+        return reply(400, { error: 'invalid_mode' });
+      if (mode !== this.mode) {
+        await writeFile(
+          join(this.d.dir, 'twitch-mode.json'),
+          JSON.stringify({ mode }),
+        );
+        this.mode = mode;
+        await this.d.twitch?.restart();
+      }
+      return reply(200, this.twitchView());
+    }
     if (req.method === 'GET' && p === '/placement')
       return reply(200, { variants: this.placement.all() });
     const placed = /^\/placement\/([a-z0-9_]{1,64})$/.exec(p);
@@ -215,6 +268,18 @@ export class AlertsRuntime {
       return reply(200, await this.d.core('/v1/lab/alerts/events', event));
     }
     reply(404, { error: 'not_found' });
+  }
+
+  private twitchView() {
+    return {
+      mode: this.mode,
+      ...(this.d.twitch?.status() ?? {
+        ingestion_enabled: false,
+        ingestion_running: false,
+        token_login: null,
+        follow_scope: false,
+      }),
+    };
   }
 
   /** OBS source / preview files, media (Range for the videos) and the source's queue calls (token). */

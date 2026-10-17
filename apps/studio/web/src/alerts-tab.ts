@@ -16,6 +16,7 @@ import {
   variantLabel,
 } from './alerts-view.js';
 import { mountCalibration } from './alerts-calibrate.js';
+import { mountTwitchMode } from './alerts-twitch.js';
 
 // Twitch alerts V1 (A2) — Studio tab « Alertes » (docs/TWITCH_ALERTS_PARITY_2026-10.md § 14). The preview iframe runs
 // the SAME engine as the OBS source, driven by postMessage: it never claims or reports anything (no queue).
@@ -96,7 +97,8 @@ export function mountAlerts(root: HTMLElement) {
             <div><h2>Source OBS</h2>
               <div class="al-url"><input readonly data-role="obs-url"/><button type="button" class="al-small" data-act="copy">Copier</button></div>
               <p class="al-hint">Source navigateur 1920×1080, fond transparent. Seule consommatrice de la file.</p>
-              <h2>Médias</h2><div data-role="media"></div></div>
+              <h2>Médias</h2><div data-role="media"></div>
+              <h2>Événements Twitch réels</h2><div data-role="twitch"></div></div>
           </div>
         </div>
       </div>
@@ -106,6 +108,8 @@ export function mountAlerts(root: HTMLElement) {
     root.querySelector<T>(`[data-role="${role}"]`)!;
   const frame = root.querySelector('iframe')!;
   const stageBox = root.querySelector<HTMLElement>('.al-stage')!;
+
+  mountTwitchMode($('twitch'));
 
   const calib = mountCalibration({
     host: $('calib'),

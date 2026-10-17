@@ -755,13 +755,31 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         })
       : null;
   // Twitch alerts V1 (Lab profile only): media in Studio's storage (imported by alerts/import-cli.ts).
-  const alerts =
+  const alerts: AlertsRuntime | null =
     labCore && labProfile
       ? await AlertsRuntime.create({
           channelId: cockpitChannel,
           core: labCore,
           origin: `http://${host}:${port}`,
           dir: join(paths.runtimeDir, 'alerts'),
+          // Real Twitch events ride on the Lab chat adapter (created below): its state, and a restart on a new mode.
+          twitch: {
+            status: () => {
+              const ingress = labChat?.status();
+              const token = readTokenSummary(
+                process.env.TWITCH_TOKEN_FILE ?? paths.tokenFile,
+              );
+              return {
+                ingestion_enabled: ingress?.enabled ?? false,
+                ingestion_running: ingress?.running ?? false,
+                token_login: token.login,
+                follow_scope: token.scopes.includes('moderator:read:followers'),
+              };
+            },
+            restart: async () => {
+              await labChat?.restart();
+            },
+          },
           playerDir: join(
             REPO_ROOT,
             'apps',
@@ -778,7 +796,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Lab module, plus the chat simulator. Never started automatically unless left ON and unblocked.
   // Lab profile only: in Production the chat / bot 2.0 stays off (no collision with SAMMI / legacy).
   const ingressLines: string[] = [];
-  const labChat =
+  const labChat: LabChatIngress | null =
     labCore && labProfile
       ? await LabChatIngress.create({
           core: labCore,
@@ -802,6 +820,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
             LAB_CHAT_CORE_URL: process.env.BONK_LAB_CORE_URL ?? '',
             LAB_CHAT_SECRET: process.env.BONK_LAB_SECRET ?? '',
             LAB_CHAT_CHANNEL_ID: LAB_CHANNEL_ID,
+            // Twitch alerts: OFF unless chosen in the Alertes tab (read at start; a change restarts the adapter).
+            LAB_ALERTS_MODE: alerts?.twitchMode ?? 'off',
+            LAB_ALERTS_CHANNEL_ID: cockpitChannel,
             // Never the production chat features: this process only reads for the Lab modules.
             DAILY_CHAT_COMMANDS: 'false',
             LOYALTY_CHAT_COMMANDS: 'false',

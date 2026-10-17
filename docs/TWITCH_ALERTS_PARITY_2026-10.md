@@ -483,4 +483,67 @@ jouait une alerte à la fois alors que Core et la base étaient à jour.
   un TTS bloqué « en train de parler » dans le navigateur retarderait le rechargement (jamais de coupure) ; l'aperçu
   Studio n'est pas concerné (il se recharge avec l'onglet).
 
-**Toujours vrai** : réception Twitch réelle non branchée ; production = SAMMI / StreamElements.
+## 20. Raccordement des vrais événements Twitch (17/10/2026, Lab, non validé manuellement, rien d'activé)
+
+**Chaîne** : Twitch EventSub (WebSocket) → **adaptateur chat Lab du bot** (`lab-chat-main`, jeton de LeCroupier_, lancé par
+Studio quand « Ingestion chat Twitch » est ON) → `lab-alerts-ingest.ts` (normalisation `alert-events.ts`) →
+`POST /v1/lab/alerts/events` du **Core Lab** (secret Bearer, base Lab) → déduplication + variante figée + file de la
+famille → Studio (`/alerts/next`) → source OBS. **Aucune nouvelle connexion EventSub, aucun nouveau jeton, aucun
+nouveau processus** : les abonnements d'alerte s'ajoutent à la connexion Lab existante. Le bot de production
+(`index.ts`, désactivé) et le Core de production n'ont aucun code d'alerte (test de garde).
+
+| Événement               | Source EventSub (v)                                                                   | Droit                                            | Statut                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------- |
+| Sub, Prime              | `channel.chat.notification` (1) `sub`                                                 | `user:read:chat` (présent)                       | raccordé                                                  |
+| Resub (message partagé) | idem `resub`                                                                          | idem                                             | raccordé (type distinct, animation Eren)                  |
+| Gift ciblé              | idem `sub_gift` sans `community_gift_id`                                              | idem                                             | raccordé                                                  |
+| Gift communautaire      | idem `community_sub_gift` (+ un `sub_gift` par bénéficiaire avec `community_gift_id`) | idem                                             | raccordé, **une** alerte                                  |
+| Bits                    | `channel.chat.message` (1), champ `cheer.bits` (déjà abonné)                          | idem                                             | raccordé                                                  |
+| Raid entrant            | `channel.chat.notification` `raid`                                                    | idem                                             | raccordé                                                  |
+| Follow                  | `channel.follow` (2), `moderator_user_id` = LeCroupier_                               | **`moderator:read:followers`** (absent du jeton) | prêt, **non reçu** tant que le jeton n'est pas réautorisé |
+| Don                     | StreamElements (hors EventSub)                                                        | JWT SE                                           | **non raccordé** (voir plus bas)                          |
+
+**Déduplication** : clé = identifiant Twitch stable (`message_id` de la notification ou du message de chat ; follow :
+`message_id` EventSub, identique sur une redélivrance), unique en base Lab par (chaîne, source, id) : une redélivrance,
+une reconnexion ou un redémarrage du bot qui renvoie le même événement donne `duplicate`, sans nouvelle alerte. Le
+routeur EventSub ignore aussi les messages déjà vus (mémoire, 500). Gift communautaire : l'alerte vient de
+`community_sub_gift` ; chaque `sub_gift` portant son `community_gift_id` devient `gift_recipient`, **absorbé**
+(corrélation exacte par id, jamais par pseudo ni délai). Pas de `channel.subscribe` (qui produirait une alerte par
+bénéficiaire). Chat partagé : tout événement dont `source_broadcaster_user_id` désigne une autre chaîne est ignoré.
+Anonymes : gift (`chatter_is_anonymous`) → « Un généreux anonyme » ; cheer de `ananonymouscheerer` → anonyme (convention
+IRC, non observée en réel). Variante tirée une fois à l'admission (inchangé).
+
+**Mode « Événements Twitch réels »** (onglet Alertes, stockage Studio `alerts/twitch-mode.json`, **OFF par défaut** et
+si le fichier est illisible ; lu par l'adaptateur à son démarrage, un changement le redémarre) :
+
+- **OFF** : aucun abonnement d'alerte créé, rien n'est lu pour les alertes (le chat continue).
+- **TEST** : abonnements créés, événements normalisés et écrits dans le journal de l'ingestion (onglet Simulation),
+  **jamais envoyés au Core** : rien en file, rien dans OBS.
+- **ACTIVE (Lab)** (confirmation) : envoyés au Core Lab et mis en file ; **la source OBS de ce Studio les joue**, y compris
+  si elle est dans une scène de live, en plus des alertes legacy.
+- Sans « Ingestion chat Twitch » ON, rien n'arrive, quel que soit le mode. Profil Production : pas d'alertes.
+
+**Résilience** : un abonnement refusé (droit manquant, pas modérateur) est journalisé sans couper l'ingestion du chat ;
+Core indisponible → nouvel envoi en mémoire avec le **même id** (1, 2, 4, 8, 15, 30 s ; abandon après 90 s, journalisé),
+4xx non réessayé ; arrêt de l'adaptateur → envois en attente abandonnés (journalisés). Charge utile invalide ou
+incomplète → ignorée. Reconnexion EventSub : abonnements recréés, et dédoublonnage Core. Jeton refusé : comportement
+existant de l'adaptateur (arrêt, motif affiché dans Studio). Aucun jeton dans les journaux.
+**Limite** : livraison **non durable** entre le bot et le Core (mémoire seulement), et Twitch ne rejoue pas les
+événements d'une session WebSocket perdue : un événement reçu pendant une coupure longue du Core, ou émis pendant une
+déconnexion, peut être perdu. Aucune garantie « zéro perte ».
+
+**Dons (StreamElements)** : Raptoru 2.0 n'a aucune intégration StreamElements (seul le legacy `Twitch_Alerts.html`
+écoute le socket SE avec un JWT local). Non raccordé. Contrat d'admission prévu : `POST /v1/lab/alerts/events` avec
+`source: external`, `source_event_id` = id du tip SE, `type: donation`, `actor.display_name`, `amount` (unités mineures,
+`decimal_place`, devise ISO), `provider: streamelements`, `message` ; nécessite une décision (JWT / canal SE) avant tout
+adaptateur.
+
+**Preuves** : Bot 122 (dont 10 : modes OFF / TEST / ACTIVE, trames complètes au format de la référence Twitch, anonymes,
+Prime, chat partagé, charges invalides, follow sans droit, abonnement refusé, redélivrance, redémarrage, Core
+indisponible puis rétabli, 4xx, expiration, arrêt ; garde « jamais en production ») ; Studio server 401 (dont chaîne
+complète trames → routeur → adaptateur → **vrai Core Lab** : une alerte par événement, gift communautaire unique,
+bits < 10 sous le seuil, familles indépendantes ; rejeu après redémarrage = `duplicate` ; mode OFF / TEST / ACTIVE
+enregistré, redémarrage de l'adaptateur, valeur invalide refusée) ; mutations vérifiées. Panneau vérifié dans Chromium.
+**Aucun** événement Twitch réel reçu, **aucun** abonnement réel créé.
+
+**Toujours vrai** : production = SAMMI / StreamElements ; rien n'est activé tant qu'Antoni ne choisit pas TEST puis ACTIVE.
