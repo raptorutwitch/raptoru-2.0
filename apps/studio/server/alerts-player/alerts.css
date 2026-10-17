@@ -381,20 +381,26 @@ html, body {
 }
 .pseudo-bits.show { animation: giftNameIn 220ms ease-out forwards; }
 .pseudo-bits.hide { animation: giftNameOut var(--bits-fade-duration, 350ms) ease-in forwards; }
-/* Bits text (17/10/2026): « [gem] × N » above the animation, « {pseudo} me permet de manger ! » below it — the two
-   lines are pushed to the top and bottom of the zone (the inner margins match the engine's fit check). */
+/* Bits text (17/10/2026): « [gem] × N » above the animation, « {pseudo} me permet de manger ! » below it — two
+   blocks pushed to the top and bottom of the zone (the inner margins match the engine's fit check), each one
+   calibratable on its own (transform around its centre, set by the engine); the zone does not clip a moved block. */
+.pseudo-bits { overflow: visible; }
 .bits-content {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: center;
-    align-content: space-between;
-    justify-content: center;
-    column-gap: .25em;
+    justify-content: space-between;
     width: calc(100% - 10px);
     height: calc(100% - 4px);
     white-space: nowrap;
 }
-.bits-break { flex-basis: 100%; height: 0; }
+.bits-line {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    column-gap: .25em;
+    transform-origin: 50% 50%;
+}
 .bits-amount { color: #ffe477; font-size: 1.3em; font-variant-numeric: tabular-nums; }
 .bits-logo {
     width: 1em;

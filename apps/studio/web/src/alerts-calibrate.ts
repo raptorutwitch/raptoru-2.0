@@ -6,10 +6,12 @@ import {
   identity,
   moveBy,
   nudge,
+  placeOf,
   resizeFromCorner,
   samePlacement,
   setField,
   STAGE,
+  TEXT_PARTS,
   textInstant,
   type VariantPlacement,
 } from './alerts-calib.js';
@@ -21,10 +23,7 @@ import {
 // storage, and the OBS source gets them with the next alert of that variant.
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
-const LABELS: Record<CalibElement, string> = {
-  media: 'Animation entière',
-  text: 'Textes',
-};
+const CORNERS = ['nw', 'ne', 'sw', 'se'] as const;
 
 export interface CalibrationDeps {
   /** Where the panel goes (side column). */
@@ -33,6 +32,8 @@ export interface CalibrationDeps {
   stage: HTMLElement;
   frame: HTMLIFrameElement;
   variantId: () => string | undefined;
+  /** The selected variant's text style (which text blocks it can place on their own). */
+  textStyle: () => string | undefined;
   send: (msg: unknown) => void;
   /** Asks the tab to freeze the preview at `ms` (timeline). */
   seekTo: (ms: number) => void;
@@ -46,7 +47,10 @@ export function mountCalibration(d: CalibrationDeps) {
   let hideFrames = false;
   let selected: CalibElement = 'media';
   let marks: { at: number; action: string }[] = [];
-  let boxes: Record<CalibElement, Box | null> = { media: null, text: null };
+  let boxes: Record<CalibElement, Box | null> = {};
+  /** The editable elements of the variant on screen, and the key they were last drawn for. */
+  let elements: { id: CalibElement; label: string }[] = [];
+  let drawnKey = '';
   let drag: {
     el: CalibElement;
     corner: Corner | null;
@@ -63,12 +67,7 @@ export function mountCalibration(d: CalibrationDeps) {
     <h2>Calibrage</h2>
     <label class="al-check"><input type="checkbox" data-c="on"/> Calibrer la variante</label>
     <div class="al-calib-panel" data-c="panel" hidden>
-      <div class="al-calib-els">${(['media', 'text'] as const)
-        .map(
-          (k) =>
-            `<button type="button" class="al-small" data-el="${k}">${LABELS[k]}</button>`,
-        )
-        .join('')}</div>
+      <div class="al-calib-els" data-c="els"></div>
       <p class="al-hint" data-c="box"></p>
       <div class="al-calib-fields">
         <label class="al-field"><span>X (px)</span><input type="number" step="1" data-f="x"/></label>
@@ -94,18 +93,10 @@ export function mountCalibration(d: CalibrationDeps) {
   layer.hidden = true;
   layer.innerHTML = `<div class="al-calib-stage">
       <div class="al-guide al-guide--v"></div><div class="al-guide al-guide--h"></div>
-      ${(['media', 'text'] as const)
-        .map(
-          (k) =>
-            `<div class="al-box al-box--${k}" data-box="${k}" hidden><span class="al-box-label">${LABELS[k]}</span>${(
-              ['nw', 'ne', 'sw', 'se'] as const
-            )
-              .map((c) => `<i class="al-h al-h--${c}" data-corner="${c}"></i>`)
-              .join('')}</div>`,
-        )
-        .join('')}
+      <div data-c="boxes"></div>
     </div>`;
   d.stage.append(layer);
+  const boxesHost = layer.querySelector<HTMLElement>('[data-c="boxes"]')!;
 
   const current = () => d.variantId();
   const savedOf = (id: string) => saved.get(id) ?? identity();
@@ -123,10 +114,64 @@ export function mountCalibration(d: CalibrationDeps) {
     d.send({ type: 'place', placement: next });
   };
 
+  /**
+   * The editable elements: the animation, then the text blocks of the variant when it has some (bits: badge,
+   * sentence), else its texts as one. A saved whole-text offset of a variant with blocks stays editable.
+   */
+  const listElements = () => {
+    const id = current();
+    const parts = TEXT_PARTS[d.textStyle() ?? ''] ?? [];
+    const textMoved =
+      id !== undefined &&
+      !samePlacement(
+        { ...identity(), text: placeOf(draftOf(id), 'text') },
+        identity(),
+      );
+    return [
+      { id: 'media', label: 'Animation entière' },
+      ...(parts.length && !textMoved
+        ? []
+        : [
+            {
+              id: 'text',
+              label: parts.length ? 'Textes (ensemble)' : 'Textes',
+            },
+          ]),
+      ...parts,
+    ];
+  };
+
+  /** Buttons and frames of the variant's elements, redrawn when they change. */
+  const drawElements = () => {
+    elements = listElements();
+    const key = `${current()}|${elements.map((e) => e.id).join(',')}`;
+    if (key === drawnKey) return;
+    drawnKey = key;
+    if (!elements.some((e) => e.id === selected)) selected = 'media';
+    const esc = (v: string) => v.replace(/[^a-zA-Z0-9_ ()éè]/g, '');
+    $('els').innerHTML = elements
+      .map(
+        (e) =>
+          `<button type="button" class="al-small" data-el="${esc(e.id)}">${esc(e.label)}</button>`,
+      )
+      .join('');
+    boxesHost.innerHTML = elements
+      .map(
+        (e) =>
+          `<div class="al-box al-box--${e.id === 'media' ? 'media' : 'text'}" data-box="${esc(e.id)}" hidden><span class="al-box-label">${esc(e.label)}</span>${CORNERS.map(
+            (c) => `<i class="al-h al-h--${c}" data-corner="${c}"></i>`,
+          ).join('')}</div>`,
+      )
+      .join('');
+  };
+  const labelOf = (el: CalibElement) =>
+    elements.find((e) => e.id === el)?.label ?? el;
+
   /** The drawn boxes, read from the preview document (stage pixels: the iframe's own 1920×1080 viewport). */
   const measure = () => {
     const doc = d.frame.contentDocument;
-    if (!doc) return { media: null, text: null };
+    const out: Record<CalibElement, Box | null> = {};
+    if (!doc) return out;
     const rect = (el: Element | null): Box | null => {
       if (!el) return null;
       const r = el.getBoundingClientRect();
@@ -151,20 +196,25 @@ export function mountCalibration(d: CalibrationDeps) {
           };
         })
       : null;
-    return { media: rect(doc.getElementById('alertVideo')), text };
+    out.media = rect(doc.getElementById('alertVideo'));
+    out.text = text;
+    for (const e of elements)
+      if (e.id !== 'media' && e.id !== 'text')
+        out[e.id] = rect(doc.querySelector(`[data-part="${e.id}"]`));
+    return out;
   };
 
   const renderPanel = () => {
     const id = current();
     for (const b of d.host.querySelectorAll<HTMLElement>('[data-el]'))
       b.classList.toggle('al-on', b.dataset.el === selected);
-    const box = boxes[selected];
-    $('box').textContent = `${LABELS[selected]} : ${boxLabel(box)}`;
+    const box = boxes[selected] ?? null;
+    $('box').textContent = `${labelOf(selected)} : ${boxLabel(box)}`;
     const p = id ? draftOf(id) : identity();
     const values = {
       x: box ? Math.round(box.x) : '',
       y: box ? Math.round(box.y) : '',
-      scale: Math.round(p[selected].scale * 1000) / 10,
+      scale: Math.round(placeOf(p, selected).scale * 1000) / 10,
     };
     for (const input of d.host.querySelectorAll<HTMLInputElement>('[data-f]'))
       if (document.activeElement !== input)
@@ -183,8 +233,9 @@ export function mountCalibration(d: CalibrationDeps) {
 
   const renderBoxes = () => {
     layer.classList.toggle('al-calib-layer--bare', hideFrames);
-    for (const el of ['media', 'text'] as const) {
-      const node = layer.querySelector<HTMLElement>(`[data-box="${el}"]`)!;
+    for (const { id: el } of elements) {
+      const node = boxesHost.querySelector<HTMLElement>(`[data-box="${el}"]`);
+      if (!node) continue;
       const b = boxes[el];
       node.hidden = !b || hideFrames;
       node.classList.toggle('al-box--on', el === selected);
@@ -201,6 +252,7 @@ export function mountCalibration(d: CalibrationDeps) {
   const tick = () => {
     loop = 0;
     if (!on || !visible) return;
+    drawElements();
     boxes = measure();
     renderBoxes();
     renderPanel();
@@ -272,7 +324,7 @@ export function mountCalibration(d: CalibrationDeps) {
       selected = el;
       // No text on screen at this instant: jump to one where the variant shows its texts.
       const at = textInstant(marks);
-      if (el === 'text' && !boxes.text && at !== null) d.seekTo(at);
+      if (el !== 'media' && !boxes[el] && at !== null) d.seekTo(at);
       return;
     }
     const id = current();

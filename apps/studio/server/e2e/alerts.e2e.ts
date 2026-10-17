@@ -651,3 +651,66 @@ test('calibration: the preview draws the same transform (shared engine); a froze
     /translate/,
   );
 });
+
+test('calibration: bits badge and sentence placed on their own, after the font fit, around their centre', async ({
+  page,
+}) => {
+  await preview(page);
+  // The bits layout on a playable fixture (the e2e « Alerte Bits.webm » is a broken file on purpose).
+  const bits = {
+    ...ALERT_VARIANTS.bits_default,
+    video: 'Raid Titan.webm',
+    loop: false,
+  };
+  const P = {
+    media: { x: 0, y: 0, scale: 1 },
+    text: { x: 0, y: 0, scale: 1 },
+    parts: { bitsBadge: { x: 300, y: 120, scale: 1.5 } },
+  };
+  const seekWith = (pl: unknown) =>
+    page.evaluate(
+      ([v, pl2]) =>
+        window.postMessage(
+          {
+            type: 'seek',
+            variant: v,
+            data: { pseudo: 'Mangeur', amount: '500' },
+            ms: 1500,
+            placement: pl2,
+          },
+          location.origin,
+        ),
+      [bits, pl] as const,
+    );
+  await seekWith(null);
+  const badge = page.locator('[data-part="bitsBadge"]');
+  const message = page.locator('[data-part="bitsMessage"]');
+  await expect(badge).toContainText('× 500');
+  await expect(message).toContainText('Mangeur');
+  const fontBefore = await page
+    .locator('#pseudoText')
+    .evaluate((e) => getComputedStyle(e).getPropertyValue('--bits-font-size'));
+  const before = await message.boundingBox();
+  await seekWith(P);
+  await expect(badge).toHaveAttribute(
+    'style',
+    /transform: translate\(300px, 120px\) scale\(1\.5\)/,
+  );
+  // The sentence did not move, the fitted size did not change (block placed after the fit).
+  expect(await message.boundingBox()).toEqual(before);
+  expect(
+    await page
+      .locator('#pseudoText')
+      .evaluate((e) =>
+        getComputedStyle(e).getPropertyValue('--bits-font-size'),
+      ),
+  ).toBe(fontBefore);
+  // Live editor update of the sentence only.
+  await page.evaluate(
+    (pl) =>
+      window.postMessage({ type: 'place', placement: pl }, location.origin),
+    { ...P, parts: { ...P.parts, bitsMessage: { x: -40, y: 0, scale: 1 } } },
+  );
+  await expect(message).toHaveAttribute('style', /translate\(-40px, 0px\)/);
+  await expect(badge).toHaveAttribute('style', /translate\(300px, 120px\)/);
+});

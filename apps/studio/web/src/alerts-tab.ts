@@ -108,6 +108,7 @@ export function mountAlerts(root: HTMLElement) {
     stage: stageBox,
     frame,
     variantId: () => selected()?.id,
+    textStyle: () => selected()?.textStyle,
     send: (msg) => send(msg),
     seekTo: (ms) => seek(ms),
   });

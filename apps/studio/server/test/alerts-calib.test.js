@@ -3,6 +3,7 @@ import {
   identity,
   moveBy,
   nudge,
+  placeOf,
   resizeFromCorner,
   samePlacement,
   scaleAbout,
@@ -105,5 +106,33 @@ describe('calibration math (stage pixels)', () => {
       ]),
     ).toBe(2500);
     expect(textInstant([])).toBeNull();
+  });
+
+  it('text blocks (bits badge / sentence): moved inside scaled layers, scaled around their own centre', () => {
+    const base = {
+      media: { x: 100, y: 0, scale: 0.5 },
+      text: { x: 0, y: 0, scale: 2 },
+    };
+    // Layers: parent scale 0.5 × 2 = 1, so 30 drawn px = 30 px for the block; the other block is untouched.
+    const moved = moveBy(base, 'bitsBadge', 30, -12);
+    expect(moved.parts).toEqual({ bitsBadge: { x: 30, y: -12, scale: 1 } });
+    expect(placeOf(moved, 'bitsMessage')).toEqual({ x: 0, y: 0, scale: 1 });
+    // A block drawn at 600,400 (200 × 50): the NW handle pulled in keeps its SE corner on the stage.
+    const box = { x: 600, y: 400, w: 200, h: 50 };
+    const r = resizeFromCorner(moved, 'bitsBadge', box, 'nw', 100, 25);
+    const s = placeOf(r, 'bitsBadge');
+    expect(s.scale).toBeCloseTo(0.5, 4);
+    // Drawn box after: centre-origin transform → corner = centre_new + s_ratio × (corner - centre_old).
+    const centreOld = { x: 700, y: 425 };
+    const centreNew = {
+      x: centreOld.x + (s.x - 30), // parent scale 1: offsets are stage px
+      y: centreOld.y + (s.y + 12),
+    };
+    const ratio = s.scale / 1;
+    expect(centreNew.x + ratio * (800 - centreOld.x)).toBeCloseTo(800, 1);
+    expect(centreNew.y + ratio * (450 - centreOld.y)).toBeCloseTo(450, 1);
+    // Back to where the layout puts it: not stored any more.
+    expect(moveBy(moved, 'bitsBadge', -30, 12).parts).toBeUndefined();
+    expect(samePlacement(moveBy(moved, 'bitsBadge', -30, 12), base)).toBe(true);
   });
 });

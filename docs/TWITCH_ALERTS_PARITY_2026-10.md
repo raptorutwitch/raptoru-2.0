@@ -392,8 +392,13 @@ indépendamment :
   aucun cadre en OBS, même transformation dans l'aperçu) ; pilotage de l'onglet réel dans Chromium avec les vrais
   médias (glisser, poignée, texte, sauvegarde, rechargement, fenêtre redimensionnée, flèches, indépendance des
   variantes, Dofus stable une fois calibré, réinitialisation) — **pas** de test dans OBS ni dans Electron.
+- **Blocs de texte séparés** (même jour) : une variante peut exposer des blocs calibrables à part (`parts`, dans la
+  couche texte, transformés autour de leur centre, appliqués **après** l'ajustement de taille). **Bits** : « Animation
+  entière », « Badge Bits » (gemme + « × N ») et « Phrase » ; les autres variantes gardent « Animation entière » +
+  « Textes ». Liste par style de texte : `TEXT_PARTS` (`web/src/alerts-calib.ts`), blocs marqués `data-part` par le
+  moteur — extensible au raid ou aux sous-titres Eren sans changer le stockage.
 - **Limites** : le cadre « Animation entière » est celui de la vidéo (zones transparentes comprises : plein écran
-  pour la plupart, 60 % pour Dofus) ; les textes d'une variante bougent ensemble (bits : montant et phrase ; don :
+  pour la plupart, 60 % pour Dofus) ; les textes d'une variante bougent ensemble, sauf les blocs déclarés (don :
   l'encadré ; raid : la phrase) ; pas de copie de réglages entre variantes ; les timings (`showAt`…) ne se calibrent
   pas ici.
 

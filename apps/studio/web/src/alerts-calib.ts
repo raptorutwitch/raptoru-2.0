@@ -1,7 +1,8 @@
 // Twitch alerts — visual calibration (17/10/2026), pure part of the Studio editor: placement math in the 1920×1080
 // stage (never in window pixels). Same schema as the server store (apps/studio/server/src/alerts/placement-store.ts)
 // and the shared engine: `media` = translate(x, y) scale(s) of the whole animation from the stage's top-left corner,
-// `text` = the same, inside the animation. No DOM, no fetch.
+// `text` = the same, inside the animation; `parts` = text blocks placed on their own inside the text layer, scaled
+// around their own centre (bits: badge and sentence). No DOM, no fetch.
 
 export interface Place {
   x: number;
@@ -11,8 +12,10 @@ export interface Place {
 export interface VariantPlacement {
   media: Place;
   text: Place;
+  parts?: Record<string, Place>;
 }
-export type CalibElement = 'media' | 'text';
+/** 'media', 'text', or the id of a text block (`data-part` in the engine). */
+export type CalibElement = string;
 /** A box in stage pixels, as drawn (calibration included). */
 export interface Box {
   x: number;
@@ -25,10 +28,19 @@ export type Corner = 'nw' | 'ne' | 'sw' | 'se';
 export const STAGE = { w: 1920, h: 1080 };
 export const SCALE_RANGE = { min: 0.1, max: 5 };
 
+/** Text blocks a variant can place on their own, by text style (only bits so far). */
+export const TEXT_PARTS: Record<string, { id: string; label: string }[]> = {
+  'pseudo-bits': [
+    { id: 'bitsBadge', label: 'Badge Bits' },
+    { id: 'bitsMessage', label: 'Phrase' },
+  ],
+};
+
 export const identity = (): VariantPlacement => ({
   media: { x: 0, y: 0, scale: 1 },
   text: { x: 0, y: 0, scale: 1 },
 });
+const ONE: Place = { x: 0, y: 0, scale: 1 };
 
 const round = (v: number, d: number) => Math.round(v * d) / d;
 const tidy = (p: Place): Place => ({
@@ -38,53 +50,89 @@ const tidy = (p: Place): Place => ({
 });
 const clampScale = (s: number) =>
   Math.min(SCALE_RANGE.max, Math.max(SCALE_RANGE.min, s));
+const same = (a: Place, b: Place) =>
+  a.x === b.x && a.y === b.y && a.scale === b.scale;
+
+/** An element's own place (a block never placed = where the layout puts it). */
+export const placeOf = (p: VariantPlacement, el: CalibElement): Place =>
+  el === 'media' ? p.media : el === 'text' ? p.text : (p.parts?.[el] ?? ONE);
+
+const withPlace = (
+  p: VariantPlacement,
+  el: CalibElement,
+  place: Place,
+): VariantPlacement => {
+  if (el === 'media' || el === 'text') return { ...p, [el]: tidy(place) };
+  const parts = { ...p.parts, [el]: tidy(place) };
+  if (same(parts[el]!, ONE)) delete parts[el];
+  const rest: VariantPlacement = { media: p.media, text: p.text };
+  return Object.keys(parts).length ? { ...rest, parts } : rest;
+};
 
 export const samePlacement = (a: VariantPlacement, b: VariantPlacement) =>
-  (['media', 'text'] as const).every(
-    (k) => a[k].x === b[k].x && a[k].y === b[k].y && a[k].scale === b[k].scale,
-  );
+  same(a.media, b.media) &&
+  same(a.text, b.text) &&
+  [
+    ...new Set([...Object.keys(a.parts ?? {}), ...Object.keys(b.parts ?? {})]),
+  ].every((k) => same(placeOf(a, k), placeOf(b, k)));
 
-/** Moves an element by (dx, dy) as SEEN on the stage (the text layer lives inside the scaled animation). */
+/** Where an element's parent coordinates are drawn on the stage: offset + scale (animation → text layer → block). */
+function parentOf(p: VariantPlacement, el: CalibElement) {
+  if (el === 'media') return { x: 0, y: 0, k: 1 };
+  if (el === 'text') return { x: p.media.x, y: p.media.y, k: p.media.scale };
+  return {
+    x: p.media.x + p.media.scale * p.text.x,
+    y: p.media.y + p.media.scale * p.text.y,
+    k: p.media.scale * p.text.scale,
+  };
+}
+
+/** Moves an element by (dx, dy) as SEEN on the stage (inner layers live inside scaled ones). */
 export function moveBy(
   p: VariantPlacement,
   el: CalibElement,
   dx: number,
   dy: number,
 ): VariantPlacement {
-  const k = el === 'media' ? 1 : p.media.scale;
-  const cur = p[el];
-  return { ...p, [el]: tidy({ ...cur, x: cur.x + dx / k, y: cur.y + dy / k }) };
+  const { k } = parentOf(p, el);
+  const cur = placeOf(p, el);
+  return withPlace(p, el, { ...cur, x: cur.x + dx / k, y: cur.y + dy / k });
 }
 
 /**
  * Scales an element by `ratio` around a stage point that stays still (the opposite corner when a handle is dragged,
- * the box centre when the scale is typed). Uniform: the media keeps its proportions.
+ * the box centre when the scale is typed). Uniform: proportions kept. A text block scales around its own centre
+ * (CSS transform-origin), found from its drawn `box`.
  */
 export function scaleAbout(
   p: VariantPlacement,
   el: CalibElement,
   anchor: { x: number; y: number },
   ratio: number,
+  box?: Box,
 ): VariantPlacement {
-  const cur = p[el];
+  const cur = placeOf(p, el);
   const scale = clampScale(cur.scale * ratio);
   const r = scale / cur.scale;
-  // The anchor in the element's own parent coordinates (the stage for the media, the animation for the text).
-  const a =
-    el === 'media'
-      ? anchor
-      : {
-          x: (anchor.x - p.media.x) / p.media.scale,
-          y: (anchor.y - p.media.y) / p.media.scale,
-        };
-  return {
-    ...p,
-    [el]: tidy({
-      x: a.x + r * (cur.x - a.x),
-      y: a.y + r * (cur.y - a.y),
-      scale,
-    }),
+  const parent = parentOf(p, el);
+  // The anchor in the element's parent coordinates.
+  const a = {
+    x: (anchor.x - parent.x) / parent.k,
+    y: (anchor.y - parent.y) / parent.k,
   };
+  // The transform origin in the same coordinates: 0 for the layers, the block's untransformed centre for a block.
+  const o =
+    el === 'media' || el === 'text' || !box
+      ? { x: 0, y: 0 }
+      : {
+          x: (box.x + box.w / 2 - parent.x) / parent.k - cur.x,
+          y: (box.y + box.h / 2 - parent.y) / parent.k - cur.y,
+        };
+  return withPlace(p, el, {
+    x: a.x - o.x + r * (o.x + cur.x - a.x),
+    y: a.y - o.y + r * (o.y + cur.y - a.y),
+    scale,
+  });
 }
 
 const corners = (b: Box) => ({
@@ -120,7 +168,7 @@ export function resizeFromCorner(
     ((c[corner].x + dx - anchor.x) * dX + (c[corner].y + dy - anchor.y) * dY) /
       len,
   );
-  return scaleAbout(p, el, anchor, ratio);
+  return scaleAbout(p, el, anchor, ratio, box);
 }
 
 /** Typed fields: X / Y = the box's top-left corner on the stage, scale in % (around the box centre). */
@@ -139,7 +187,8 @@ export function setField(
     p,
     el,
     { x: box.x + box.w / 2, y: box.y + box.h / 2 },
-    target / p[el].scale,
+    target / placeOf(p, el).scale,
+    box,
   );
 }
 

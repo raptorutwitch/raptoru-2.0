@@ -141,6 +141,22 @@ describe('AlertPlacementStore (calibration, Studio storage)', () => {
       text: { x: 0, y: 0, scale: 1 },
     });
     expect(again.get('follow_dofus_ebene')).toEqual(IDENTITY_PLACEMENT);
+    // Text blocks (bits badge / sentence) are kept per id; one back at its layout place is not stored.
+    const withParts = {
+      ...IDENTITY_PLACEMENT,
+      parts: {
+        bitsBadge: { x: 0, y: -60, scale: 1.2 },
+        bitsMessage: { x: 0, y: 0, scale: 1 },
+      },
+    };
+    expect(await again.save('bits_alt', withParts)).toEqual({
+      ...IDENTITY_PLACEMENT,
+      parts: { bitsBadge: { x: 0, y: -60, scale: 1.2 } },
+    });
+    expect(
+      (await AlertPlacementStore.open(file)).get('bits_alt').parts,
+    ).toEqual({ bitsBadge: { x: 0, y: -60, scale: 1.2 } });
+    await again.save('bits_alt', IDENTITY_PLACEMENT);
     await again.save('raid_default', IDENTITY_PLACEMENT);
     expect(Object.keys(again.all())).toEqual(['bits_default']);
     expect((await AlertPlacementStore.open(file)).get('bits_default')).toEqual(
@@ -166,6 +182,12 @@ describe('AlertPlacementStore (calibration, Studio storage)', () => {
         'invalid_placement',
       );
     await expect(store.save('../x', P)).rejects.toThrow('bad_variant');
+    await expect(
+      store.save('bits_default', { ...P, parts: { 'bad id': P.media } }),
+    ).rejects.toThrow('invalid_placement');
+    await expect(
+      store.save('bits_default', { ...P, parts: { bitsBadge: { scale: 99 } } }),
+    ).rejects.toThrow('invalid_placement');
     expect(store.get('bits_default')).toEqual(P);
     await writeFile(file, '{ not json');
     expect((await AlertPlacementStore.open(file)).all()).toEqual({});

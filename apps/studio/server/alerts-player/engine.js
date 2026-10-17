@@ -52,9 +52,17 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
       : `translate(${x}px, ${y}px) scale(${s})`;
   };
   /** Applies a variant's placement ({ media, text }); none = the uncalibrated layout. */
+  let parts = {};
+  /** Text blocks placed on their own (`data-part`, e.g. the bits badge / sentence), around their own centre. */
+  const placeParts = () => {
+    for (const el of text.querySelectorAll('[data-part]'))
+      el.style.transform = transformOf(parts[el.dataset.part]);
+  };
   const place = (placement) => {
     alertPlace.style.transform = transformOf(placement?.media);
     textPlace.style.transform = transformOf(placement?.text);
+    parts = placement?.parts ?? {};
+    placeParts();
   };
 
   let current = null;
@@ -203,7 +211,19 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
       zone: 'zone-content',
     }[zoneVar];
     text.textContent = '';
-    text.append(spans(textParts(v, data), wrapper));
+    const pieces = textParts(v, data);
+    const cut = pieces.findIndex(([cls]) => cls === 'bits-break');
+    if (zoneVar === 'bits' && cut >= 0) {
+      // Two blocks, each calibratable: the « × N » badge (top) and the sentence (bottom).
+      const content = document.createElement('span');
+      content.className = wrapper;
+      const badge = spans(pieces.slice(0, cut), 'bits-line');
+      badge.dataset.part = 'bitsBadge';
+      const message = spans(pieces.slice(cut + 1), 'bits-line');
+      message.dataset.part = 'bitsMessage';
+      content.append(badge, message);
+      text.append(content);
+    } else text.append(spans(pieces, wrapper));
     text.className = v.textStyle + ' show';
     const counter = text.querySelector('.gift-count');
     const count = Math.max(1, Math.round(Number(data.count) || 1));
@@ -213,6 +233,7 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
       `--${zoneVar}-font-size`,
       v.maxFontSize ?? (zoneVar === 'gift' ? 48 : Math.min(54, z.h)),
     );
+    placeParts(); // after the fit: a moved block must not shrink the text
     if (counter) {
       const total = giftCounterDuration(count);
       const startedAt = ctx.clock();

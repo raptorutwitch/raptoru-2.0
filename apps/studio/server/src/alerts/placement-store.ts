@@ -7,6 +7,8 @@ import { dirname } from 'node:path';
 // uniform scale (origin: the stage's top-left corner — the engine applies `translate(x, y) scale(s)`). An absent
 // variant or element is drawn exactly as before (offset 0, scale 1). The OBS source receives the SAVED values with
 // each claimed alert, so a change applies from the next alert on, never to one already playing.
+// Sub-elements (17/10/2026): a variant whose texts are made of distinct blocks (bits: the « × N » badge and the
+// sentence) may also place each block on its own (`parts`, inside the text layer, scaled around the block's centre).
 
 export interface Place {
   x: number;
@@ -16,12 +18,16 @@ export interface Place {
 export interface VariantPlacement {
   media: Place;
   text: Place;
+  /** Optional text blocks placed on their own (id → place); absent = where the layout puts them. */
+  parts?: Record<string, Place>;
 }
 
 export const IDENTITY: Place = { x: 0, y: 0, scale: 1 };
 const LIMIT = { offset: 3840, minScale: 0.1, maxScale: 5 };
 const ID = /^[a-z0-9_]{1,64}$/;
 const MAX_VARIANTS = 200;
+const PART_ID = /^[a-zA-Z0-9_]{1,32}$/;
+const MAX_PARTS = 8;
 
 const isIdentity = (p: Place) => p.x === 0 && p.y === 0 && p.scale === 1;
 
@@ -49,7 +55,18 @@ export function validatePlacement(raw: unknown): VariantPlacement | null {
   const r = raw as Record<string, unknown>;
   const media = place(r.media);
   const text = place(r.text);
-  return media && text ? { media, text } : null;
+  if (!media || !text) return null;
+  if (r.parts === undefined) return { media, text };
+  if (!r.parts || typeof r.parts !== 'object') return null;
+  const entries = Object.entries(r.parts as Record<string, unknown>);
+  if (entries.length > MAX_PARTS) return null;
+  const parts: Record<string, Place> = {};
+  for (const [id, value] of entries) {
+    const p = PART_ID.test(id) && value !== undefined ? place(value) : null;
+    if (!p) return null;
+    if (!isIdentity(p)) parts[id] = p; // identity = where the layout puts it: not stored
+  }
+  return Object.keys(parts).length ? { media, text, parts } : { media, text };
 }
 
 export class AlertPlacementStore {
@@ -96,7 +113,7 @@ export class AlertPlacementStore {
     if (!p)
       throw Object.assign(new Error('invalid_placement'), { status: 400 });
     const next = new Map(this.variants);
-    if (isIdentity(p.media) && isIdentity(p.text)) next.delete(id);
+    if (isIdentity(p.media) && isIdentity(p.text) && !p.parts) next.delete(id);
     else next.set(id, p);
     if (next.size > MAX_VARIANTS)
       throw Object.assign(new Error('too_many_variants'), { status: 400 });
