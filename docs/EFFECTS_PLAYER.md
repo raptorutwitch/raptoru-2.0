@@ -1,7 +1,9 @@
 # Lecteur d'effets (P0.1) — sons d'effet joués par Studio
 
-**Statut (17/10/2026)** : implémenté et testé automatiquement en Lab ; **non validé manuellement** (OBS / Twitch réels à
-faire avec Antoni) ; non déployé. SAMMI exécute toujours les récompenses de production.
+**Statut : LECTEUR D'EFFETS P0.1 — DÉVELOPPEMENT TERMINÉ / TESTS AUTOMATISÉS RÉUSSIS / VALIDATION FONCTIONNELLE OBS
+RÉUSSIE / NON DÉPLOYÉ** (code `77039d7`). Validé manuellement par Antoni dans son vrai OBS le 17/10/2026 (source
+navigateur ajoutée, tests Studio « Eren cri » → son d'effet joué dans OBS ; traces Lab : 2 tests exécutés à 23:14). Pas
+encore de vraie récompense Twitch (automatisations OFF). SAMMI exécute toujours les récompenses de production.
 
 Direction (audit du 17/10/2026) : OBS compose les effets, Studio les pilote, les interactions sont écrites dans le code.
 Le lecteur d'effets est une **capacité native de Studio** (aujourd'hui : sons ; plus tard : vidéos, fondus, images),

@@ -877,7 +877,9 @@ Détail (niveaux de preuve, fichiers, routes, schéma, modes) : `TWITCH_ALERTS_P
 ## 14. Points de chaîne V1 — checklist du cutover (17/10/2026)
 
 Statut : **développement terminé, validations fonctionnelles Lab réussies (17/10/2026), prêt pour la préparation du
-cutover, non déployé** ; SAMMI exécute les récompenses de production. Détail : `CHANNEL_POINTS_V1.md`.
+cutover, non déployé** ; SAMMI exécute les récompenses de production. Détail : `CHANNEL_POINTS_V1.md`. Sons d'effet
+(lecteur d'effets P0.1, validé dans OBS le 17/10/2026, `EFFECTS_PLAYER.md`) : la source navigateur du lecteur d'effets
+ajoutée par Antoni fait partie de la collection à conserver au cutover.
 
 1. **Autorisation** (faite le 17/10/2026 pour le Lab) : `CHANNEL_POINTS_EVENTS=true` puis `twitch:auth -- --broadcaster` (raptoru\_, lecture seule
    `channel:read:redemptions`) ; aucun droit de gestion (Twitch ne laisse gérer que les récompenses créées par l'app).
