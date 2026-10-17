@@ -21,6 +21,38 @@ export const ALERT_TYPES = [
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
+/**
+ * Alert families (17/10/2026): one FIFO queue each, one alert playing per family, families play side by side. Sub and
+ * gifts share `subscription` (a gift never plays over a sub). The order is also the stacking order of the OBS source,
+ * bottom to top (visual only, never a queue priority).
+ */
+export const ALERT_FAMILIES = [
+  'follow',
+  'subscription',
+  'bits',
+  'donation',
+  'raid',
+] as const;
+export type AlertFamily = (typeof ALERT_FAMILIES)[number];
+
+/** The family of an event type (never of a variant or a video). */
+export function alertFamilyOf(type: AlertType): AlertFamily {
+  switch (type) {
+    case 'follow':
+      return 'follow';
+    case 'sub':
+    case 'resub':
+    case 'gift_targeted':
+    case 'gift_community':
+    case 'gift_recipient':
+      return 'subscription';
+    case 'bits':
+    case 'raid':
+    case 'donation':
+      return type;
+  }
+}
+
 const Name = z.string().trim().min(1).max(64);
 const Person = z.strictObject({
   id: z
@@ -81,5 +113,7 @@ export const AlertAckRequest = z.strictObject({
   attempt_id: z.uuid(),
   event: z.enum(['started', 'completed', 'failed']),
   error: z.string().max(200).optional(),
+  /** The family the player played it in: checked against the alert when given. */
+  family: z.enum(ALERT_FAMILIES).optional(),
 });
 export type AlertAckRequest = z.infer<typeof AlertAckRequest>;

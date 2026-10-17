@@ -50,6 +50,7 @@ interface Variant {
 interface ClaimedAlert {
   alert_id: string;
   attempt_id: string;
+  family?: string;
   variant: Variant;
   data: Record<string, unknown>;
 }
@@ -267,6 +268,7 @@ export class AlertsRuntime {
         return {
           alert_id: alert.alert_id,
           attempt_id: alert.attempt_id,
+          family: alert.family,
           variant: alert.variant,
           data: alert.data,
           placement: this.placement.get(alert.variant.id),
@@ -291,6 +293,7 @@ export class AlertsRuntime {
       event: body.event,
     };
     if (typeof body.error === 'string') report.error = body.error.slice(0, 200);
+    if (typeof body.family === 'string') report.family = body.family; // Core checks it against the alert
     return this.d.core(`/v1/lab/alerts/items/${id}/ack`, report);
   }
 

@@ -404,3 +404,50 @@ indépendamment :
 
 **Toujours vrai** : réception Twitch réelle non branchée (aucun abonnement EventSub) ; production = SAMMI /
 StreamElements.
+
+## 18. Files par famille et lectures simultanées (17/10/2026, Lab, non validé manuellement)
+
+Remplace la règle A1 « une alerte en vol par chaîne » (§ 13) : **une alerte en vol par chaîne et par famille**,
+plusieurs familles jouent ensemble dans la même source OBS.
+
+| Famille        | Événements                                       | Couche OBS (bas → haut) |
+| -------------- | ------------------------------------------------ | ----------------------- |
+| `follow`       | follow (Dofus ×3, Eren, Discord)                 | 1                       |
+| `subscription` | sub, resub, sub offert ciblé, gift communautaire | 2                       |
+| `bits`         | bits                                             | 3                       |
+| `donation`     | don                                              | 4                       |
+| `raid`         | raid                                             | 5                       |
+
+- **Core** : colonne `family` (déduite du **type d'événement**, `alertFamilyOf` dans `@raptoru/schemas`), index unique
+  « en vol » sur (chaîne, famille), FIFO **par ordre d'arrivée** dans une famille (la priorité legacy reste sur la ligne
+  mais ne fait plus doubler une alerte plus ancienne). Le claim rend la plus ancienne alerte en attente parmi les
+  familles libres ; le lecteur rappelle tant qu'il en reçoit. Déduplication, variante figée, 3 tentatives avant
+  démarrage, jamais de rejeu après démarrage, baux : inchangés. L'ACK peut porter `family` (refus `family_mismatch`).
+  Migration Lab additionnelle `20261023120000_alerts_lab_families.sql` (lignes existantes classées depuis leur type),
+  ajoutée aux listes Lab (`migration-scopes.ts`, runtime local Studio, `bonk-lab.mjs`, `stage.mjs`).
+- **Source OBS** (`alerts-player/player.js`) : chaque alerte a **sa propre instance du moteur** dans sa propre couche
+  (vidéo, son, textes, minuteries, couleur du pseudo, placement enregistré), détruite à sa fin ; aucune alerte ne
+  touche une autre. Couleurs : une alerte évite la précédente et celles à l'écran. Si la source recevait quand même deux
+  alertes d'une famille (bail perdu en pleine lecture), la seconde attend la première. Polling inchangé (1 s), réveil
+  immédiat quand une famille se libère.
+- **Son** : aucun verrou audio ; chaque alerte garde son volume ; `keepAudio` (Eren Sub, raid) inchangé. **TTS du don** :
+  la synthèse vocale de Chromium est **unique par page** (non isolable) ; seule la famille `donation` parle, un don à la
+  fois, donc un nouveau don coupe seulement le TTS du don précédent (comportement legacy) ; la fin ou l'arrêt d'une
+  autre famille ne coupe plus le TTS (seule l'instance qui a parlé peut l'arrêter).
+- **Calibrage** : inchangé (`media` / `text` / `parts`, repère 1920×1080 commun, placement figé par alerte, le suivant
+  prend le nouveau) ; la superposition de familles au même endroit est permise.
+- **Aperçu Studio** : l'alerte éditée a sa couche (empilée selon sa famille) ; bouton « Superposer les autres
+  familles » = un Follow, un Sub, des Bits, un Don, un Raid (hors famille éditée) à leurs positions, dans l'aperçu
+  seulement (jamais la file). Éditeur de calibrage, timeline, blocs Bits : inchangés.
+- **Preuves** : Core 683 (+22 ignorés) dont familles 7 (10 follows FIFO, sub / gift jamais ensemble, follow + sub
+  ensemble, 5 familles en vol, follow suivant pendant un raid, crash par famille, ACK de mauvaise famille / tentative,
+  rafale dédoublonnée) et migration depuis une base A1 (1) ; Studio server 392 ; Desktop 24 ; Playwright alertes 12/12
+  (dont 3 familles simultanées dans une vraie page OBS, jamais deux d'une famille, z-index, son du raid jamais coupé,
+  nettoyage des couches ; superposition dans l'aperçu sans toucher la file) ; vraie page OBS + vrai Core Lab en mémoire
+  - **vrais médias** dans Chromium : Follow, Sub, Bits, Don et Raid ensemble (5 couches), positions calibrées, tout
+    `completed`. **Pas** de test dans OBS ni Electron.
+- **Limites** : les ids DOM du moteur (`#alertVideo`…) se répètent d'une couche à l'autre (le CSS legacy est par id) ;
+  un média plein écran opaque (brume du raid) recouvre les familles du dessous, c'est l'ordre voulu ; deux sources OBS
+  ouvertes se partageraient les familles (une seule source attendue).
+
+**Toujours vrai** : réception Twitch réelle non branchée ; production = SAMMI / StreamElements.

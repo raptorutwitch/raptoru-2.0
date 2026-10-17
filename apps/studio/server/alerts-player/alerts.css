@@ -10,6 +10,9 @@ html, body {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 #stage { position: absolute; inset: 0; }
+/* Families (17/10/2026): one full-stage layer per alert on screen, stacked by family (z-index set by the player:
+   follow 1, subscription 2, bits 3, donation 4, raid 5). Transparent; each layer is its own stacking context. */
+.alert-layer { position: absolute; inset: 0; pointer-events: none; }
 /* Calibration layers (17/10/2026): full stage, transformed from the top-left corner by the engine. */
 #alertPlace, #textPlace { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
 #alertVideo {

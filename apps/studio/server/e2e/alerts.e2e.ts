@@ -82,6 +82,15 @@ test.beforeAll(async () => {
     { name: 'Alerte follow Eren.webm', from: join(FIX, 'video-1s-sound.webm') },
     // A broken file under a real name: the player reports the error.
     { name: 'Alerte Bits.webm', from: join(FIX, 'broken.webm') },
+    // Every follow variant (the follow is drawn at random), for the families tests.
+    {
+      name: 'Alerte follow Discord monsieur.webm',
+      from: join(FIX, 'video-1s.webm'),
+    },
+    { name: 'Dofus Eliatrope Son.webm', from: join(FIX, 'video-1s.webm') },
+    { name: 'Dofus Emeraude Son.webm', from: join(FIX, 'video-1s.webm') },
+    { name: 'son_follow_discord.mp3', from: join(FIX, 'audio-2_5s.mp3') },
+    { name: 'son_follow_eren.mp3', from: join(FIX, 'audio-2_5s.mp3') },
     // MoneyTest.webm / Son Alerte Don.mp3 are left missing on purpose.
   ]);
   studio = studioServer();
@@ -713,4 +722,164 @@ test('calibration: bits badge and sentence placed on their own, after the font f
   );
   await expect(message).toHaveAttribute('style', /translate\(-40px, 0px\)/);
   await expect(badge).toHaveAttribute('style', /translate\(300px, 120px\)/);
+});
+
+test('families: follow, subscription and raid play together in ONE source; each family strictly one after the other', async ({
+  page,
+}) => {
+  await page.goto(rt.playerUrl);
+  // Watch the layers the source draws: family, z-index, and whether the raid's sound is still playing.
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      samples: {
+        families: string[];
+        z: Record<string, string>;
+        raidAudio: boolean | null;
+      }[];
+    };
+    w.samples = [];
+    setInterval(() => {
+      const layers = [
+        ...document.querySelectorAll<HTMLElement>('.alert-layer'),
+      ];
+      const raid = layers.find((l) => l.dataset.family === 'raid');
+      w.samples.push({
+        families: layers.map((l) => l.dataset.family!),
+        z: Object.fromEntries(
+          layers.map((l) => [l.dataset.family!, l.style.zIndex]),
+        ),
+        raidAudio: raid
+          ? (() => {
+              const a = raid.querySelector('audio')!;
+              return !a.paused || a.ended; // still playing, or played to its end: never cut
+            })()
+          : null,
+      });
+    }, 50);
+  });
+  const raid = await event({
+    type: 'raid',
+    actor: { display_name: 'Titan' },
+    viewers: 9,
+  });
+  await until(raid.alert!.alert_id, ['playing']);
+  const follows = [];
+  for (const name of ['F1', 'F2', 'F3'])
+    follows.push(
+      (await event({ type: 'follow', actor: { display_name: name } })).alert!
+        .alert_id,
+    );
+  const gifts = [];
+  for (const name of ['G1', 'G2'])
+    gifts.push(
+      (
+        await event({
+          type: 'gift_community',
+          actor: { display_name: name },
+          count: 5,
+        })
+      ).alert!.alert_id,
+    );
+  const items = [];
+  for (const id of [raid.alert!.alert_id, ...follows, ...gifts])
+    items.push(await until(id, ['completed', 'failed', 'expired'], 30_000));
+  for (const it of items)
+    expect(it).toMatchObject({ status: 'completed', attempts: 1 });
+  const samples = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          samples: {
+            families: string[];
+            z: Record<string, string>;
+            raidAudio: boolean | null;
+          }[];
+        }
+      ).samples,
+  );
+  // Never two layers of one family; at some point three families at once.
+  for (const s of samples)
+    expect(new Set(s.families).size).toBe(s.families.length);
+  expect(Math.max(...samples.map((s) => s.families.length))).toBe(3);
+  // Deterministic stacking: follow 1 < subscription 2 < raid 5, whatever the arrival order.
+  const z = Object.assign({}, ...samples.map((s) => s.z));
+  expect(z).toMatchObject({ follow: '1', subscription: '2', raid: '5' });
+  // The raid's sound kept playing while the follows / gifts came and went.
+  const withOthers = samples.filter(
+    (s) => s.families.includes('raid') && s.families.length > 1,
+  );
+  expect(withOthers.length).toBeGreaterThan(0);
+  expect(withOthers.every((s) => s.raidAudio === true)).toBe(true);
+  // Inside a family: arrival order, each one after the previous one ended.
+  const byId = new Map(items.map((i) => [i.alert_id, i]));
+  for (const group of [follows, gifts])
+    for (let i = 1; i < group.length; i++)
+      expect(
+        Date.parse(byId.get(group[i]!)!.started_at!),
+      ).toBeGreaterThanOrEqual(Date.parse(byId.get(group[i - 1]!)!.ended_at!));
+  // Families overlapped in time: the first follow started before the raid ended.
+  expect(Date.parse(byId.get(follows[0]!)!.started_at!)).toBeLessThan(
+    Date.parse(byId.get(raid.alert!.alert_id)!.ended_at!),
+  );
+  // Each alert cleaned its own layer.
+  await expect(page.locator('.alert-layer')).toHaveCount(0);
+});
+
+test('families: the preview overlap test plays other families beside the edited one, never the queue', async ({
+  page,
+}) => {
+  const queued = await event({
+    type: 'raid',
+    actor: { display_name: 'Attend' },
+    viewers: 1,
+  });
+  const p = await preview(page);
+  await p.play(ALERT_VARIANTS.raid_default, { pseudo: 'Edit', viewers: 2 });
+  await page.evaluate(
+    (items) =>
+      window.postMessage(
+        { type: 'overlay', volume: 0, items },
+        location.origin,
+      ),
+    [
+      {
+        variant: ALERT_VARIANTS.subgift_5,
+        data: { pseudo: 'Gifter', count: 5 },
+        placement: {
+          media: { x: 40, y: 0, scale: 0.5 },
+          text: { x: 0, y: 0, scale: 1 },
+        },
+      },
+      // Same family as the edited raid: ignored (one per family).
+      {
+        variant: ALERT_VARIANTS.raid_default,
+        data: { pseudo: 'X', viewers: 1 },
+      },
+    ],
+  );
+  await expect(page.locator('.alert-layer')).toHaveCount(2);
+  await expect(
+    page.locator('.alert-layer[data-family="subscription"] #alertPlace'),
+  ).toHaveAttribute('style', /translate\(40px, 0px\) scale\(0\.5\)/);
+  await expect(
+    page.locator('.alert-layer[data-family="raid"] #alertVideo'),
+  ).toHaveCSS('visibility', 'visible');
+  // Different name colours side by side.
+  const colors = await page.$$eval('.alert-layer', (ls) =>
+    ls.map((l) => (l as HTMLElement).style.getPropertyValue('--name-color')),
+  );
+  expect(new Set(colors).size).toBe(2);
+  await p.stop();
+  await expect(page.locator('.alert-layer')).toHaveCount(1); // the edited alert's own layer stays
+  expect((await item(queued.alert!.alert_id))!).toMatchObject({
+    status: 'queued',
+    attempts: 0,
+  });
+  // Leave the queue empty for the next tests.
+  await page.goto(rt.playerUrl);
+  await until(
+    queued.alert!.alert_id,
+    ['completed', 'failed', 'expired'],
+    20_000,
+  );
 });

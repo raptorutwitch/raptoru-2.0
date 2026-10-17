@@ -130,39 +130,23 @@ describe('reception', () => {
 });
 
 describe('queue', () => {
-  it('priority first (gift 20 > donation > sub > bits > follow), then arrival order', async () => {
-    await alerts.receive(ev({ type: 'follow' }));
-    await alerts.receive(ev({ type: 'bits', bits: 100 }));
+  it('inside a family, arrival order only: a later gift 20 never overtakes an earlier sub', async () => {
     await alerts.receive(ev({ type: 'sub' }));
-    await alerts.receive(
-      ev({
-        type: 'donation',
-        amount: { value: 1, decimal_place: 0, currency: 'EUR' },
-      }),
-    );
     await alerts.receive(ev({ type: 'gift_community', count: 25 }));
-    await alerts.receive(
-      ev({ type: 'follow', source_event_id: 'late-follow' }),
-    );
+    await alerts.receive(ev({ type: 'gift_targeted' }));
     const order: string[] = [];
     for (;;) {
       const a = await alerts.claim(CH, 'studio-A');
       if (!a) break;
+      expect(a.family).toBe('subscription');
       order.push(a.variant_id);
       await ack(a.alert_id, a.attempt_id!, 'started');
       await ack(a.alert_id, a.attempt_id!, 'completed');
     }
-    expect(order).toEqual([
-      'subgift_20',
-      'don_moneytest',
-      'eren_sub',
-      'bits_default',
-      'follow_dofus_ebene',
-      'follow_dofus_ebene',
-    ]);
+    expect(order).toEqual(['eren_sub', 'subgift_20', 'subgift_targeted']);
   });
 
-  it('one alert in flight per channel; two consumers at once: one gets it', async () => {
+  it('one alert in flight per family; two consumers at once: one gets it', async () => {
     await alerts.receive(ev());
     await alerts.receive(ev());
     const [a, b] = await Promise.all([
@@ -218,6 +202,135 @@ describe('queue', () => {
   });
 });
 
+describe('families (one FIFO queue each, families side by side)', () => {
+  const play = async (consumer = 'studio-A') => {
+    const a = await alerts.claim(CH, consumer);
+    if (a) await ack(a.alert_id, a.attempt_id!, 'started', consumer);
+    return a;
+  };
+  const done = (a: { alert_id: string; attempt_id: string | null }) =>
+    ack(a.alert_id, a.attempt_id!, 'completed');
+  const donation = () =>
+    ev({
+      type: 'donation',
+      amount: { value: 500, decimal_place: 2, currency: 'EUR' },
+    });
+
+  it('ten follows: strictly one after the other, in arrival order', async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++)
+      ids.push((await alerts.receive(ev())).alert!.alert_id);
+    const played: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const a = (await play())!;
+      expect(await alerts.claim(CH, 'studio-A')).toBeNull(); // the next follow waits
+      expect((await alerts.state(CH)).in_flight).toHaveLength(1);
+      played.push(a.alert_id);
+      await done(a);
+    }
+    expect(played).toEqual(ids);
+  });
+
+  it('sub and gifts share one queue (never together); follow and sub play together', async () => {
+    await alerts.receive(ev({ type: 'sub' }));
+    await alerts.receive(ev({ type: 'gift_targeted' }));
+    await alerts.receive(ev({ type: 'follow' }));
+    const sub = (await play())!;
+    const follow = (await play())!;
+    expect([sub.type, follow.type]).toEqual(['sub', 'follow']);
+    expect(await alerts.claim(CH, 'studio-A')).toBeNull(); // the gift waits for the sub
+    await done(follow);
+    expect(await alerts.claim(CH, 'studio-A')).toBeNull(); // still the sub
+    await done(sub);
+    expect((await play())!.type).toBe('gift_targeted');
+  });
+
+  it('follow + sub + bits + raid + donation: five in flight at once, one per family', async () => {
+    await alerts.receive(ev({ type: 'follow' }));
+    await alerts.receive(ev({ type: 'follow' }));
+    await alerts.receive(ev({ type: 'follow' }));
+    await alerts.receive(ev({ type: 'sub' }));
+    await alerts.receive(ev({ type: 'gift_community', count: 5 }));
+    await alerts.receive(ev({ type: 'bits', bits: 100 }));
+    await alerts.receive(ev({ type: 'raid', viewers: 3 }));
+    await alerts.receive(donation());
+    const got = [];
+    for (let a = await play(); a; a = await play()) got.push(a);
+    expect(got.map((a) => a.family)).toEqual([
+      'follow',
+      'subscription',
+      'bits',
+      'raid',
+      'donation',
+    ]);
+    const state = await alerts.state(CH);
+    expect(state.in_flight).toHaveLength(5);
+    expect(state.queued.map((a) => a.type)).toEqual([
+      'follow',
+      'follow',
+      'gift_community',
+    ]);
+  });
+
+  it('a follow ending lets the next follow start while the raid keeps playing', async () => {
+    await alerts.receive(ev({ type: 'raid', viewers: 3 }));
+    await alerts.receive(ev({ type: 'follow' }));
+    await alerts.receive(ev({ type: 'follow' }));
+    const raid = (await play())!;
+    const f1 = (await play())!;
+    expect(await alerts.claim(CH, 'studio-A')).toBeNull();
+    await done(f1);
+    const f2 = (await play())!;
+    expect(f2.type).toBe('follow');
+    expect((await alerts.get(raid.alert_id)).status).toBe('playing');
+  });
+
+  it('a crash in one family neither blocks nor replays the others', async () => {
+    await alerts.receive(ev({ type: 'sub' }));
+    await alerts.receive(ev({ type: 'follow' }));
+    const sub = (await play())!; // started: never replayed
+    const follow = (await alerts.claim(CH, 'studio-A'))!; // claimed only: offered again
+    clock.advance(playLeaseMs(ALERT_VARIANTS.eren_sub!) + 1);
+    const again = (await alerts.claim(CH, 'studio-B'))!;
+    expect(again.alert_id).toBe(follow.alert_id);
+    expect(again.attempts).toBe(2);
+    expect((await alerts.get(sub.alert_id)).status).toBe('expired');
+    expect(await alerts.claim(CH, 'studio-B')).toBeNull();
+  });
+
+  it('a report naming another family, a stale attempt or a late report is refused', async () => {
+    await alerts.receive(ev({ type: 'bits', bits: 100 }));
+    const a = (await alerts.claim(CH, 'studio-A'))!;
+    await expect(
+      alerts.ack(a.alert_id, {
+        consumer_id: 'studio-A',
+        attempt_id: a.attempt_id!,
+        event: 'started',
+        family: 'follow',
+      }),
+    ).rejects.toMatchObject({ status: 409, code: 'family_mismatch' });
+    expect(
+      await alerts.ack(a.alert_id, {
+        consumer_id: 'studio-A',
+        attempt_id: a.attempt_id!,
+        event: 'started',
+        family: 'bits',
+      }),
+    ).toMatchObject({ status: 'playing', family: 'bits' });
+    await expect(
+      ack(a.alert_id, '00000000-0000-4000-8000-000000000000', 'completed'),
+    ).rejects.toMatchObject({ code: 'attempt_mismatch' });
+  });
+
+  it('a redelivered event in a burst is still one alert', async () => {
+    const results = await Promise.all(
+      [1, 2, 3].map(() => alerts.receive(ev({ source_event_id: 'burst-1' }))),
+    );
+    expect(results.filter((r) => r.outcome === 'queued')).toHaveLength(1);
+    expect(await count('alert_items')).toBe(1);
+  });
+});
+
 describe('lease and recovery', () => {
   it('claimed but never started (Studio crashed): offered again, at most 3 attempts, then expired', async () => {
     await alerts.receive(ev());
@@ -236,12 +349,13 @@ describe('lease and recovery', () => {
 
   it('started then silent past its lease: expired, never replayed; a late report is refused', async () => {
     await alerts.receive(ev({ type: 'sub' }));
-    await alerts.receive(ev());
+    await alerts.receive(ev({ type: 'resub' }));
     const a = (await alerts.claim(CH, 'studio-A'))!;
     await ack(a.alert_id, a.attempt_id!, 'started');
+    expect(await alerts.claim(CH, 'studio-A')).toBeNull(); // same family: waits
     clock.advance(playLeaseMs(ALERT_VARIANTS.eren_sub!) + 1);
     const next = (await alerts.claim(CH, 'studio-A'))!;
-    expect(next.type).toBe('follow'); // the sub is not handed out again
+    expect(next.type).toBe('resub'); // the sub is not handed out again
     expect((await alerts.get(a.alert_id)).status).toBe('expired');
     await expect(
       ack(a.alert_id, a.attempt_id!, 'completed'),

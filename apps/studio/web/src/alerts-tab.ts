@@ -5,6 +5,7 @@ import {
   type FakeData,
   formView,
   mediaView,
+  overlapCategories,
   PRESETS,
   previewData,
   previewStatus,
@@ -64,6 +65,9 @@ export function mountAlerts(root: HTMLElement) {
             <button type="button" data-act="replay">Rejouer</button>
             <button type="button" data-act="stop">Arrêter</button>
           </div>
+          <button type="button" class="al-small" data-act="overlay">Superposer les autres familles</button>
+          <p class="al-hint">Joue aussi un Follow, un Sub, des Bits, un Don et un Raid (sauf la famille choisie), chacun à sa
+            position enregistrée, comme dans OBS. Aperçu local uniquement.</p>
           <label class="al-field"><span>Volume de l’aperçu <b data-role="vol-label">50 %</b></span>
             <input type="range" min="0" max="100" value="50" data-role="volume"/></label>
           <p class="al-preview-status" data-role="preview-status">Prêt.</p>
@@ -290,9 +294,26 @@ export function mountAlerts(root: HTMLElement) {
     }
     readForm();
     const event = testEvent(category, fake);
-    if (act === 'play') {
+    if (act === 'play' || act === 'overlay') {
       const variant = selected();
       if (variant) play({ variant, data: previewData(event) });
+      if (act === 'overlay')
+        send({
+          type: 'overlay',
+          volume: volume(),
+          items: overlapCategories(category).flatMap((cat) => {
+            const v = variants.find((x) => x.type === cat && !x.missing.length);
+            return v
+              ? [
+                  {
+                    variant: v,
+                    data: previewData(testEvent(cat, fake)),
+                    placement: calib.placement(v.id),
+                  },
+                ]
+              : [];
+          }),
+        });
       return;
     }
     if (act === 'queue') {

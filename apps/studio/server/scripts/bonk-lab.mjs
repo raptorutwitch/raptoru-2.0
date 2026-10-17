@@ -79,6 +79,7 @@ try {
     '20261020120000_mini_games_lab.sql',
     '20261021120000_mini_game_duels_lab.sql',
     '20261022120000_alerts_lab.sql',
+    '20261023120000_alerts_lab_families.sql',
   ]) {
     if (
       (

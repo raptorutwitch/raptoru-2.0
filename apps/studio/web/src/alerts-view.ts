@@ -58,6 +58,20 @@ export const CATEGORIES: Record<string, string> = {
   raid: 'Raid',
 };
 
+/**
+ * Alert families (same as @raptoru/schemas `alertFamilyOf`, checked by a test): the overlap test plays one variant
+ * of each OTHER family beside the edited one, like the OBS source does.
+ */
+export const familyOfType = (type: string) =>
+  ['sub', 'resub', 'gift_targeted', 'gift_community'].includes(type)
+    ? 'subscription'
+    : type;
+const FAMILY_SAMPLES = ['follow', 'sub', 'bits', 'donation', 'raid'];
+
+/** The categories to play beside `category` in the overlap test (one per other family). */
+export const overlapCategories = (category: string) =>
+  FAMILY_SAMPLES.filter((c) => familyOfType(c) !== familyOfType(category));
+
 const BASE: FakeData = {
   pseudo: 'Raptoru_Fan',
   anonymous: false,

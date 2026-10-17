@@ -195,3 +195,32 @@ describe('texts (inserted with textContent by the engine)', () => {
     ]);
   });
 });
+
+describe('families (OBS source layers)', () => {
+  it('same families, mapping and stacking order as the Core contract and the Studio tab', async () => {
+    const { ALERT_FAMILIES, ALERT_TYPES, alertFamilyOf } =
+      await import('@raptoru/schemas');
+    const { familyOfType } = await import('../../web/src/alerts-view.ts');
+    const { FAMILY_ORDER, familyLayer, familyOf } =
+      await import('../alerts-player/timeline.js');
+    expect(FAMILY_ORDER).toEqual([...ALERT_FAMILIES]);
+    for (const t of ALERT_TYPES) {
+      expect(familyOf(t), t).toBe(alertFamilyOf(t));
+      if (t !== 'gift_recipient')
+        expect(familyOfType(t), t).toBe(alertFamilyOf(t));
+    }
+    // Follow at the bottom, raid on top (visual only).
+    expect(FAMILY_ORDER.map(familyLayer)).toEqual([1, 2, 3, 4, 5]);
+    expect(familyLayer('raid')).toBeGreaterThan(familyLayer('donation'));
+  });
+
+  it('name colours: a new alert avoids the previous one and those on screen', async () => {
+    const { NAME_COLORS, pickNameColor } =
+      await import('../alerts-player/timeline.js');
+    const busy = NAME_COLORS.slice(0, 5);
+    for (let i = 0; i < 20; i++)
+      expect(pickNameColor(busy)).toBe(NAME_COLORS[5]);
+    for (let i = 0; i < 20; i++)
+      expect(busy.slice(1)).not.toContain(pickNameColor(busy.slice(1)));
+  });
+});

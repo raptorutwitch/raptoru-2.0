@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type {
-  AlertAckRequest,
-  AlertEventInput,
-  AlertEventOutcome,
-  AlertStatus,
+import {
+  type AlertAckRequest,
+  type AlertEventInput,
+  type AlertEventOutcome,
+  type AlertFamily,
+  alertFamilyOf,
+  type AlertStatus,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
@@ -20,7 +22,9 @@ import type { AlertVariant } from './variants.js';
 // - claimed, lease over, never started (Studio crashed before the player began): back to queued, up to 3 attempts,
 //   then expired — the viewer never saw it, so it is offered again.
 // - playing, lease over, no « completed »: expired (it may have been seen): never replayed.
-// - one alert in flight per channel (unique index); priority first, then arrival order (legacy queue).
+// - one alert in flight per channel AND family (unique index, 17/10/2026): follow, subscription (sub + gifts), bits,
+//   raid and donation play side by side; inside a family strictly first in, first out (arrival order; the legacy
+//   priority is kept on the row for information but no longer lets a later alert overtake an earlier one).
 // Alerts never touch the wallet, the loyalty engine or any other economy.
 
 export const ALERT_RULES = {
@@ -45,6 +49,7 @@ interface ItemRow {
   channel_id: string;
   seq: string | number;
   type: string;
+  family: AlertFamily;
   variant_id: string;
   variant: AlertVariant;
   data: Record<string, unknown>;
@@ -67,6 +72,7 @@ export const alertView = (r: ItemRow) => ({
   alert_id: r.alert_id,
   channel_id: r.channel_id,
   type: r.type,
+  family: r.family,
   variant_id: r.variant_id,
   variant: r.variant,
   data: r.data,
@@ -140,8 +146,9 @@ export class AlertsService {
       if (decision.outcome !== 'queued') return { outcome, alert: null };
       const alertId = randomUUID();
       await q.query(
-        `insert into alert_items (alert_id, channel_id, type, variant_id, variant, data, priority, status, created_at)
-         values ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)`,
+        `insert into alert_items (alert_id, channel_id, type, family, variant_id, variant, data, priority, status,
+           created_at)
+         values ($1, $2, $3, $9, $4, $5, $6, $7, 'queued', $8)`,
         [
           alertId,
           e.channel_id,
@@ -151,6 +158,7 @@ export class AlertsService {
           JSON.stringify(alertData(e)),
           decision.variant.priority,
           now,
+          alertFamilyOf(e.type),
         ],
       );
       await q.query(
@@ -166,7 +174,7 @@ export class AlertsService {
     await this.db.tx((q) => this.sweep(q, channelId));
     const rows = await this.db.query<ItemRow>(
       `select * from alert_items where channel_id = $1 and status in ('queued', 'claimed', 'playing')
-       order by (status = 'queued'), priority desc, seq`,
+       order by (status = 'queued'), seq`,
       [channelId],
     );
     const recent = await this.db.query<ItemRow>(
@@ -188,7 +196,10 @@ export class AlertsService {
     return a;
   }
 
-  /** The next alert for this consumer, or null while another one is in flight (one at a time per channel). */
+  /**
+   * The next alert for this consumer: the oldest waiting one among the families with nothing in flight (one at a time
+   * per family), or null. A player playing several families calls again until null.
+   */
   async claim(channelId: string, consumerId: string) {
     return this.db.tx(async (q) => {
       await q.query(
@@ -200,15 +211,13 @@ export class AlertsService {
         [channelId],
       );
       await this.sweep(q, channelId);
-      const busy = await q.query(
-        `select 1 from alert_items where channel_id = $1 and status in ('claimed', 'playing')`,
-        [channelId],
-      );
-      if (busy.length) return null;
       const next = (
         await q.query<{ alert_id: string }>(
-          `select alert_id from alert_items where channel_id = $1 and status = 'queued'
-           order by priority desc, seq limit 1`,
+          `select i.alert_id from alert_items i
+           where i.channel_id = $1 and i.status = 'queued'
+             and not exists (select 1 from alert_items b where b.channel_id = i.channel_id and b.family = i.family
+               and b.status in ('claimed', 'playing'))
+           order by i.seq limit 1`,
           [channelId],
         )
       )[0];
@@ -250,6 +259,8 @@ export class AlertsService {
       const cur = (await this.byId(q, alertId))!;
       const now = this.clock.now();
       const final = ['completed', 'failed', 'expired'].includes(cur.status);
+      if (a.family && a.family !== cur.family)
+        throw new AlertError(409, 'family_mismatch');
       if (
         cur.attempt_id !== a.attempt_id ||
         cur.consumer_id !== a.consumer_id

@@ -33,11 +33,47 @@ export const NAME_COLORS = [
   '#8fc4ff',
 ];
 
-/** One colour per alert, never the previous one (the name keeps it for the whole alert). */
-export function pickNameColor(previous, random = Math.random) {
-  const choices = NAME_COLORS.filter((c) => c !== previous);
+/**
+ * One colour per alert, never the previous one nor one in use by an alert playing beside it (`avoid`: a colour or a
+ * list); the name keeps it for the whole alert.
+ */
+export function pickNameColor(avoid, random = Math.random) {
+  const skip = new Set([avoid].flat());
+  const choices = NAME_COLORS.filter((c) => !skip.has(c));
   return choices[Math.floor(random() * choices.length)] ?? NAME_COLORS[0];
 }
+
+/**
+ * Alert families (same as @raptoru/schemas ALERT_FAMILIES, checked by a test): one alert per family at a time, the
+ * families side by side. Their order is the stacking order in the OBS source, bottom to top (visual only).
+ */
+export const FAMILY_ORDER = [
+  'follow',
+  'subscription',
+  'bits',
+  'donation',
+  'raid',
+];
+
+/** The family of an event type (never of a variant or a video). */
+export function familyOf(type) {
+  if (type === 'follow') return 'follow';
+  if (
+    [
+      'sub',
+      'resub',
+      'gift_targeted',
+      'gift_community',
+      'gift_recipient',
+    ].includes(type)
+  )
+    return 'subscription';
+  return FAMILY_ORDER.includes(type) ? type : 'follow';
+}
+
+/** z-index of a family's layer in the source (1 = bottom). */
+export const familyLayer = (family) =>
+  Math.max(0, FAMILY_ORDER.indexOf(family)) + 1;
 
 /** A template split around its variables: [class, text] parts, each variable named in `classes` in its own class. */
 export function templateParts(template, data, classes) {

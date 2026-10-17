@@ -267,7 +267,10 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
       message,
     });
     try {
+      // Page-wide in Chromium (one speech queue per page): only the donation family ever speaks, one donation at a
+      // time, so this only cuts a previous donation's TTS still talking (legacy behaviour).
       window.speechSynthesis.cancel();
+      spoke = true;
       const u = new SpeechSynthesisUtterance(sentence);
       u.lang = v.tts.lang;
       u.volume = ttsVolume;
@@ -332,11 +335,19 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     }
   }
 
+  /** Only the instance that started a speech may cut it (another family's Stop / end never touches the donation TTS). */
+  let spoke = false;
+  const hush = () => {
+    if (!spoke) return;
+    spoke = false;
+    window.speechSynthesis?.cancel();
+  };
+
   /** Stops the current alert at once (preview Stop, a new alert replacing it); clears a frozen timeline image. */
   function stop(reason = 'stopped') {
     seekToken++;
     if (current) return current.finish(reason);
-    if (reason === 'stopped') window.speechSynthesis?.cancel();
+    if (reason === 'stopped') hush();
     video.pause();
     audio.pause();
     video.style.visibility = 'hidden';
@@ -349,10 +360,15 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
    * 'duration' (success) or 'video-error', 'video-play-error', 'no-media', 'timeout', 'stopped'.
    * `onStarted` fires when the video really starts playing.
    */
-  function play(v, data = {}, { volume, onStarted, placement } = {}) {
+  function play(
+    v,
+    data = {},
+    { volume, onStarted, placement, nameColor: imposed } = {},
+  ) {
     stop('replaced');
     place(placement); // fixed for the whole alert (the OBS source gets the saved values with the claim)
-    nameColor = pickNameColor(nameColor);
+    // The OBS source picks it across its simultaneous alerts (`imposed`); alone, a new one each time.
+    nameColor = imposed ?? pickNameColor(nameColor);
     stage.style.setProperty('--name-color', nameColor);
     ttsVolume = Math.min(1, Math.max(0, volume ?? 1));
     return new Promise((resolve) => {
@@ -378,7 +394,7 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
         video.pause();
         audio.pause();
         // The donation TTS may outlive its alert (legacy); only an explicit Stop cuts it.
-        if (reason === 'stopped') window.speechSynthesis?.cancel();
+        if (reason === 'stopped') hush();
         video.style.visibility = 'hidden';
         video.classList.remove('money-visible', 'money-fading-out');
         video.onended = video.oncanplay = video.onerror = audio.onended = null;
@@ -584,5 +600,29 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     };
   }
 
-  return { play, stop, seek, place, video, audio };
+  /**
+   * Multi-alert players (17/10/2026): stops this instance and releases ITS OWN media and nodes only. The donation
+   * TTS is left to finish (legacy: it may outlive its alert).
+   */
+  function destroy() {
+    stop('replaced');
+    video.removeAttribute('src');
+    audio.removeAttribute('src');
+    video.load();
+    audio.load();
+    stage.textContent = '';
+  }
+
+  return {
+    play,
+    stop,
+    seek,
+    place,
+    destroy,
+    get nameColor() {
+      return nameColor;
+    },
+    video,
+    audio,
+  };
 }

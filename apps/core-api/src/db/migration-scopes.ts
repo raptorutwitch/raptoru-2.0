@@ -63,6 +63,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261021120000_mini_game_duels_lab.sql',
   // Twitch alerts V1 lot A1: source events (dedup), durable alert queue.
   '20261022120000_alerts_lab.sql',
+  // Twitch alerts: one queue per family (follow, subscription, bits, raid, donation), several families at once.
+  '20261023120000_alerts_lab_families.sql',
 ]);
 
 /**

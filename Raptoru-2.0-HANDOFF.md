@@ -33,7 +33,9 @@ Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Anton
 
 **Depuis le checkpoint (17/10/2026, local, non validé manuellement)** : finitions des alertes (`f3557f6`, `4a5c14a`)
 puis **calibrage persistant par variante** dans l'onglet Alertes (placement enregistré dans le stockage Studio, utilisé
-par la source OBS dès l'alerte suivante) — `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 17. Réception Twitch réelle
+par la source OBS dès l'alerte suivante) — `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 17 ; blocs Bits séparés ; **files par
+famille** (follow, abonnements, bits, don, raid jouent ensemble, chacune FIFO ; migration Lab
+`20261023120000_alerts_lab_families.sql`) — § 18. Réception Twitch réelle
 toujours non branchée.
 
 **Réserves ouvertes (non bloquantes, rien de corrigé dans ce checkpoint)**
