@@ -1,9 +1,11 @@
-// Effects player (P0.1) — one-off import of the effect sounds into Studio's storage, by COPY (originals only read: never
-// moved, converted or modified; the copy's hash is checked).
-//   npx tsx apps/studio/server/src/effects/import-cli.ts [--from "<…\Documents\Rendu Audacity>"] [--runtime "<runtimeDir>"]
+// Effects player — one-off import of the effect media into Studio's storage, by COPY (originals only read: never moved,
+// converted or modified; the copy's hash is checked). Sounds (P0.1) from the SAMMI sound folder, videos (P0.2) from the
+// legacy overlay folder.
+//   npx tsx apps/studio/server/src/effects/import-cli.ts [--from "<…\Documents\Rendu Audacity>"]
+//     [--videos-from "<…\Videos\Alertes Twitch Pour Claude\Version webm>"] [--runtime "<runtimeDir>"]
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { EFFECT_SOUNDS } from '@raptoru/schemas';
+import { EFFECT_SOUNDS, EFFECT_VIDEOS } from '@raptoru/schemas';
 import { AlertMediaStore } from '../alerts/media-store.js';
 import { paths } from '../test-lab/local-env.js';
 
@@ -12,16 +14,23 @@ const arg = (k: string) => {
   return i > 0 ? process.argv[i + 1] : undefined;
 };
 const from = arg('from') ?? join(homedir(), 'Documents', 'Rendu Audacity');
+const videosFrom =
+  arg('videos-from') ??
+  join(homedir(), 'Videos', 'Alertes Twitch Pour Claude', 'Version webm');
 const store = await AlertMediaStore.open(
   join(arg('runtime') ?? paths.runtimeDir, 'effects', 'media'),
 );
-const names = EFFECT_SOUNDS.map((s) => s.file);
-console.table(
-  await store.import(names.map((name) => ({ name, from: join(from, name) }))),
-);
+const entries = [
+  ...EFFECT_SOUNDS.map((s) => ({ name: s.file, from: join(from, s.file) })),
+  ...EFFECT_VIDEOS.map((v) => ({
+    name: v.file,
+    from: join(videosFrom, v.file),
+  })),
+];
+console.table(await store.import(entries));
 console.log(`store: ${store.dir}`);
 const missing = store
-  .status(names)
+  .status(entries.map((e) => e.name))
   .filter((s) => !s.available)
   .map((s) => s.name);
 if (missing.length) {

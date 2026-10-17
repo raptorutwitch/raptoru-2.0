@@ -596,7 +596,10 @@ export class ChannelPointsService {
       if (job.consumer_id !== r.consumer_id)
         throw new CpError(409, 'not_current_attempt');
       const action = job.actions.find((x) => x.index === r.index);
-      if (action?.action.type !== 'effect_sound')
+      if (
+        action?.action.type !== 'effect_sound' &&
+        action?.action.type !== 'effect_video'
+      )
         throw new CpError(409, 'not_an_effect');
       const row = await this.redemption(
         job.channel_id,

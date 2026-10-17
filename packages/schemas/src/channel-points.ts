@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EffectSoundId, EffectVolume } from './effects.js';
+import { EffectSoundId, EffectVideoId, EffectVolume } from './effects.js';
 import { SoundLabSoundId } from './sound-lab.js';
 
 // Points de chaîne V1 (17/10/2026) — Twitch channel points custom rewards → Core rules → typed, allow-listed actions.
@@ -24,6 +24,12 @@ export const CpAction = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('effect_sound'),
     sound_id: EffectSoundId,
+    volume: EffectVolume,
+  }),
+  /** An effect video (full frame, its own sound), played at once by the effects player; legacy presentation kept. */
+  z.strictObject({
+    type: z.literal('effect_video'),
+    video_id: EffectVideoId,
     volume: EffectVolume,
   }),
   /** Show or hide one source of one scene; optionally for a while. */

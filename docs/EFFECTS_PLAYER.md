@@ -1,4 +1,4 @@
-# Lecteur d'effets (P0.1) — sons d'effet joués par Studio
+# Lecteur d'effets — sons et vidéos d'effet joués par Studio (P0.1, P0.2)
 
 **Statut : LECTEUR D'EFFETS P0.1 — DÉVELOPPEMENT TERMINÉ / TESTS AUTOMATISÉS RÉUSSIS / VALIDATION FONCTIONNELLE OBS
 RÉUSSIE / NON DÉPLOYÉ** (code `77039d7`). Validé manuellement par Antoni dans son vrai OBS le 17/10/2026 (source
@@ -96,3 +96,82 @@ que le son n'est pas autorisé (Studio indique « son bloqué »).
 `apps/studio/web/src/channel-points{,-view}.ts` · tests : `apps/core-api/test/channel-points-effects.test.ts`,
 `apps/studio/server/test/effects-player.test.ts`, `apps/studio/server/e2e/effects-player.e2e.ts`. Aucune migration de
 base (les actions sont du JSON).
+
+## 7. P0.2 — fiches de parité SAMMI (lecture seule du 17/10/2026)
+
+Sources : `decks_data.json` (deck « Points de chaine »), `Alerte_system.html`, collection OBS active
+(`Twitch_Dofus.codex-backup-20260919-144407.json`), doc officielle SAMMI. **C** = confirmé dans les fichiers, **H** =
+hypothèse. SAMMI : les délais des commandes sont **absolus depuis le déclenchement** (« Command delays are absolute and
+not related to each other », sammi.solutions/docs/commands/introduction) ; seule la commande Wait suspend le bouton.
+« Alerte complète » est superposée à toutes les scènes par le plugin Downstream Keyer (DSK 1, sauf « Slow Mo FAIL ») :
+la source du lecteur d'effets, placée dans cette scène, est visible partout (C).
+
+### NTM (bouton `ID18`, récompense « ntm », 2000 pts, active)
+
+- Déclencheur : récompense (C). Aucune condition, aucun remboursement, aucun message (C). Bouton non `queueable`,
+  non `overlappable` ; il ne fait qu'émettre un événement (durée quasi nulle) → les redemptions rapprochées se
+  superposent toutes (C pour l'overlay, H pour le bouton).
+- Effet : `CallVendorRequest obs-browser emit_event pdc_fuck_you` → source « Alerte (Sammi) » (`Alerte_system.html`)
+  → `jouerAlerteSuperposee` (C).
+- Média : `Videos\Alertes Twitch Pour Claude\Version webm\Fuck You.webm` (1920×1080, VP9 avec transparence, 8,5 s, son
+  intégré) (C).
+- Volume : `0.2 × VOLUME_GLOBAL 0.5` = **0,1** (C). Ducking entre lectures simultanées : `max(0.0125, 0.1 − (n−1) ×
+0.025)`, rampe 450 ms (cubique) ; seules les 4 plus anciennes sont audibles, les suivantes muettes mais affichées (C).
+- Présentation : plein cadre `object-fit: contain` ; miroir horizontal si `Math.random() < 0.35` ; montée depuis
+  +550 px en 2200 ms linéaire avec apparition 220 ms ; fondu de sortie 500 ms à (durée − 500 ms) ; retrait à la fin (C).
+- Nombre de lectures simultanées : illimité dans l'overlay (C).
+- Échec : rien (aucun retour vers SAMMI) (C).
+
+### Creepy (bouton `ID28`, récompense « Creepy », 700 pts, active)
+
+- Garde (commande « exit if », C sur les valeurs, H sur la combinaison ET / OU) : ne s'exécute que si la scène courante
+  est « Scène Fullscreen », « Just Chatting », « Scène PS5 » ou « Scène Dessin », et jamais si elle est déjà « Creepy
+  Effect ». Sinon : rien, aucun remboursement, aucun message.
+- Chronologie (C, délais absolus) : t0 relance du média « Prowler Effect » + affichage de « Prowler Effect » dans
+  « Alerte complète » ; t+500 ms son `Rendu Audacity\Prowler Effect.ogg` à 0,29 ; t+800 ms scène « Creepy Effect » ;
+  t+4000 ms masquage de « Prowler Effect » ; t+5000 ms retour à la scène précédente (`previous_scene` suivie par SAMMI).
+- OBS (C) : « Prowler Effect » = source média `Documents\Twitch\Effet de stream\Test delay.mov` (sans boucle,
+  « redémarrer à l'activation » par défaut) ; scène « Creepy Effect » = Cam + Groupe + `creepy_overlay.html`, filtres
+  Move « Move Source » (Groupe, 5000 ms, déclenché à l'activation) puis « Move Source 2 » ; **transition forcée
+  « Coupure »** sur cette scène. Le retour utilise la transition normale de la scène de destination (H : stinger
+  « Portail Eliotrope »).
+- Simultanés : bouton `queueable` (durée 6000 ms) → une 2ᵉ redemption attend la fin de la 1ʳᵉ (C sur le réglage, H sur
+  l'effet exact).
+- Restauration : retour inconditionnel à la scène précédente, même si le streamer a changé de scène entre-temps (C).
+
+### BRB (bouton `ID48`, récompense « Be Right Back », 1500 pts, active)
+
+- Garde (C) : seulement en « Scène Dessin », « Scène Fullscreen » ou « Scène PS5 » (pas Just Chatting) ; sinon
+  remboursement Twitch (`CANCELED`), message « Pas la bonne scène pour ça ! », arrêt. **Raptoru ne peut pas
+  rembourser** cette récompense (créée par SAMMI).
+- Chronologie (C, avec Wait) : t0 capture PNG de la source « Écran » → `C:/OBSFreeze/wbrb_screen.png` ; t+600 ms capture
+  de « overlay cam shushu » → `C:/OBSFreeze/wbrb_cam.png` ; t+1200 ms événement `pdc_wbrb` → `Alerte_system.html`
+  (`jouerWbrb`), coupure de « Micro » et de « Musique Isolée » ; t+7200 ms rétablissement de « Musique Isolée » puis
+  « Micro ».
+- Overlay (C) : fond noir, capture d'écran (saturation 0,8, contraste 1,04, luminosité 0,78) + voile brun, capture de la
+  caméra qui descend en 1000 ms après 1000 ms, vidéo `We'll be right back_3.webm` par-dessus ; à la fin de la vidéo,
+  fondu 200 ms après 500 ms.
+- **Incompatibilité** : « Musique Isolée » n'existe pas dans la collection active (C) → dans SAMMI cette coupure échoue
+  déjà ; « Écran » n'est pas dans « Scène PS5 » (la capture fonctionne quand même : la source existe).
+- Simultanés : bouton ni `queueable` ni `overlappable` → une 2ᵉ redemption pendant l'effet est ignorée (H).
+- Restauration : micro rétabli par le bouton lui-même (aucune protection si SAMMI s'arrête pendant les 6 s) (C).
+
+## 8. NTM dans Raptoru (P0.2 C1)
+
+**Statut : DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS.**
+
+- Action de règle `{ type: 'effect_video', video_id: 'fuck-you', volume }` (catalogue `EFFECT_VIDEOS`, volume par
+  défaut 10 % = la valeur effective de l'overlay). Même circuit que les sons d'effet (job Studio, « en cours de lecture »,
+  fin rapportée).
+- Le lecteur d'effets reprend exactement la présentation de `jouerAlerteSuperposee` (§ 7) : plein cadre, miroir 35 %,
+  montée 2,2 s, fondu de sortie, ducking (4 audibles), son de la vidéo. Plus d'événement `pdc_fuck_you`, plus de
+  dépendance à SAMMI ni à `Alerte_system.html`.
+- Média importé par copie (`Fuck You.webm`, empreinte identique, original intact).
+- **Écart assumé** : 8 effets simultanés au maximum (sons et vidéos confondus ; au-delà : refus lisible), là où
+  l'overlay n'avait pas de limite.
+- **Source OBS** : le lecteur doit couvrir le canevas : propriétés de la source du lecteur d'effets → largeur **1920**,
+  hauteur **1080**, position (0, 0), taille 100 % (la source actuelle « Test son » fait 300 × 100).
+
+Validation manuelle (avec accord) : passer la source en 1920×1080 ; NTM → « Vidéo d'effet » « NTM — Fuck You » 10 % →
+Enregistrer → Tester (automatisations OFF) : vidéo plein cadre qui monte, son faible ; 2 à 5 « Tester » rapprochés :
+superposition, miroirs aléatoires, volume qui baisse, 5ᵉ muette ; comparer avec l'ancienne alerte NTM (SAMMI).

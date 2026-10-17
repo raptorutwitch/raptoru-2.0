@@ -2,6 +2,7 @@ import {
   actionLabel,
   type CpActionView,
   type CpState,
+  effectItems,
   effectsView,
   esc,
   historyView,
@@ -18,6 +19,7 @@ import {
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 const TYPES: { id: CpActionView['type']; label: string }[] = [
   { id: 'effect_sound', label: 'Son d’effet (lecture immédiate)' },
+  { id: 'effect_video', label: 'Vidéo d’effet (lecture immédiate)' },
   { id: 'sound', label: 'Jouer un son (Soundboard)' },
   { id: 'obs_source', label: 'Afficher / masquer une source OBS' },
   { id: 'obs_filter', label: 'Activer / désactiver un filtre OBS' },
@@ -27,13 +29,15 @@ const TYPES: { id: CpActionView['type']; label: string }[] = [
 const blank = (type: CpActionView['type']): CpActionView =>
   type === 'effect_sound'
     ? { type, sound_id: '', volume: 100 }
-    : type === 'sound'
-      ? { type, sound_id: '' }
-      : type === 'obs_source'
-        ? { type, scene: '', source: '', visible: true }
-        : type === 'obs_filter'
-          ? { type, source: '', filter: '', enabled: true }
-          : { type, scene: '' };
+    : type === 'effect_video'
+      ? { type, video_id: '', volume: 100 }
+      : type === 'sound'
+        ? { type, sound_id: '' }
+        : type === 'obs_source'
+          ? { type, scene: '', source: '', visible: true }
+          : type === 'obs_filter'
+            ? { type, source: '', filter: '', enabled: true }
+            : { type, scene: '' };
 
 export function mountChannelPoints(root: HTMLElement) {
   let state: CpState | null = null;
@@ -121,6 +125,16 @@ export function mountChannelPoints(root: HTMLElement) {
         .join('')}</select>
         <label class="cp-inline">volume <input type="number" min="0" max="100" step="1" data-i="${i}" data-f="volume" value="${a.volume}"/> %</label>
         <button type="button" class="cp-ghost" data-act="preview" data-i="${i}"${a.sound_id ? '' : ' disabled'} title="Écouter ici (dans Studio, pas dans OBS)">▶ Écouter</button>`;
+    else if (a.type === 'effect_video')
+      body = `<select data-i="${i}" data-f="video_id"><option value="">— choisir une vidéo d’effet —</option>${(
+        state?.effects?.videos ?? []
+      )
+        .map(
+          (s) =>
+            `<option value="${esc(s.id)}"${s.id === a.video_id ? ' selected' : ''}${s.available || s.id === a.video_id ? '' : ' disabled'}>${esc(s.label)}${s.available ? '' : ' (non importée)'}</option>`,
+        )
+        .join('')}</select>
+        <label class="cp-inline">volume <input type="number" min="0" max="100" step="1" data-i="${i}" data-f="volume" value="${a.volume}"/> %</label>`;
     else if (a.type === 'sound')
       body = `<select data-i="${i}" data-f="sound_id"><option value="">— choisir un son —</option>${(
         state?.sounds ?? []
@@ -159,7 +173,7 @@ export function mountChannelPoints(root: HTMLElement) {
         <button type="button" data-act="test"${r.rule ? '' : ' disabled'} title="Exécute la règle enregistrée pour de vrai (OBS / Soundboard)">Tester</button>
       </div>
       <p class="cp-muted" data-role="message">${esc(message)}</p>
-      ${r.rule ? `<p class="cp-muted">Enregistré : ${r.rule.actions.map((a) => esc(actionLabel(a, state?.sounds, state?.effects?.sounds))).join(' → ')}</p>` : ''}`;
+      ${r.rule ? `<p class="cp-muted">Enregistré : ${r.rule.actions.map((a) => esc(actionLabel(a, state?.sounds, effectItems(state?.effects)))).join(' → ')}</p>` : ''}`;
   };
 
   const render = () => {
@@ -342,6 +356,12 @@ export function mountChannelPoints(root: HTMLElement) {
       a.sound_id = t.value;
       a.volume =
         state?.effects?.sounds.find((x) => x.id === t.value)?.volume ?? 100;
+      renderEditor();
+    } else if (f === 'video_id' && a.type === 'effect_video') {
+      // A video chosen: its legacy effective volume by default.
+      a.video_id = t.value;
+      a.volume =
+        state?.effects?.videos.find((x) => x.id === t.value)?.volume ?? 100;
       renderEditor();
     } else if (f === 'duration') {
       const s = Number(t.value);

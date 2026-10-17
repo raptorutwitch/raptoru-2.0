@@ -1,13 +1,15 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join } from 'node:path';
-import { EFFECT_SOUNDS } from '@raptoru/schemas';
+import { EFFECT_SOUNDS, EFFECT_VIDEOS } from '@raptoru/schemas';
 import type { AlertMediaStore } from '../alerts/media-store.js';
 
 // Effects player (P0.1, docs/EFFECTS_PLAYER.md) — Studio's native capability to play an effect at once on ONE local
-// page (OBS browser source), outside the Soundboard: no queue, no price, no cooldown, effects overlap. Today: effect
-// sounds of the catalogue (EFFECT_SOUNDS, media in Studio's storage). Studio hands each effect to the page that asks
+// page (OBS browser source), outside the Soundboard: no queue, no price, no cooldown, effects overlap. Effect sounds
+// (EFFECT_SOUNDS) and full-frame effect videos with their legacy presentation (EFFECT_VIDEOS, P0.2), media in Studio's
+// storage. Studio hands each effect to the page that asks
 // first (never two pages), waits for its `started`, then follows its end. Nothing is ever replayed: an effect not taken
 // by a page within PICKUP_MS fails (player absent); one started whose end never comes is « unknown »; the hand-overs
 // live in memory only (a Studio restart drops them).
@@ -33,14 +35,23 @@ export type EffectEnd = {
   error?: string;
 };
 
+/** What the page needs to present a video as its legacy overlay did (catalogue entry). */
+type Presentation = {
+  mirror: number;
+  rise: boolean;
+  ducking: { audible: number; step: number; min: number };
+};
+
 interface Delivery {
   delivery_id: string;
-  kind: 'sound';
-  sound_id: string;
+  kind: 'sound' | 'video';
+  /** Catalogue id (the page groups the plays of one video for its ducking). */
+  effect_id: string;
   label: string;
   url: string;
   /** 0-1 */
   volume: number;
+  presentation: Presentation | null;
   player: string | null;
   started: boolean;
   onStart: (ok: true | EffectError) => void;
@@ -55,7 +66,29 @@ const PLAYER_FILES: Record<string, string> = {
 const MEDIA_TYPES: Record<string, string> = {
   '.ogg': 'audio/ogg',
   '.mp3': 'audio/mpeg',
+  '.webm': 'video/webm',
 };
+
+/** One catalogue (sounds and videos share the media route: ids are unique across both). */
+const CATALOGUE: {
+  kind: 'sound' | 'video';
+  id: string;
+  label: string;
+  file: string;
+}[] = [
+  ...EFFECT_SOUNDS.map((s) => ({
+    kind: 'sound' as const,
+    id: s.id,
+    label: s.label,
+    file: s.file,
+  })),
+  ...EFFECT_VIDEOS.map((v) => ({
+    kind: 'video' as const,
+    id: v.id,
+    label: v.label,
+    file: v.file,
+  })),
+];
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self'; frame-ancestors 'self'";
 
@@ -130,15 +163,37 @@ export class EffectsPlayer {
     }));
   }
 
+  /** The video catalogue with each video's availability in Studio's storage. */
+  videos() {
+    return EFFECT_VIDEOS.map((v) => ({
+      id: v.id,
+      label: v.label,
+      volume: v.volume,
+      available: this.d.media.path(v.file) !== null,
+    }));
+  }
+
   /**
-   * Plays an effect sound now. Resolves once the page STARTED it, with the promise of its end; rejects with a readable
-   * code when it cannot start (player absent or muted, too many effects, media missing, unreadable file…).
+   * Plays an effect now (a sound, or a video with its legacy presentation). Resolves once the page STARTED it, with the
+   * promise of its end; rejects with a readable code when it cannot start (player absent or muted, too many effects,
+   * media missing, unreadable file…).
    */
-  async play(effect: { sound_id: string; volume: number }) {
-    const sound = EFFECT_SOUNDS.find((s) => s.id === effect.sound_id);
-    if (!sound) throw new EffectError('effect_unknown');
-    if (!this.d.media.path(sound.file))
+  async play(effect: { kind: 'sound' | 'video'; id: string; volume: number }) {
+    const item = CATALOGUE.find(
+      (c) => c.kind === effect.kind && c.id === effect.id,
+    );
+    if (!item) throw new EffectError('effect_unknown');
+    if (!this.d.media.path(item.file))
       throw new EffectError('effect_media_missing');
+    const video = EFFECT_VIDEOS.find((v) => v.id === item.id);
+    const presentation: Presentation | null =
+      item.kind === 'video' && video
+        ? {
+            mirror: video.mirror,
+            rise: video.rise,
+            ducking: { ...video.ducking },
+          }
+        : null;
     const page = this.status();
     if (!page.connected) throw new EffectError('effects_player_offline');
     if (!page.audio) throw new EffectError('effects_player_muted');
@@ -149,11 +204,12 @@ export class EffectsPlayer {
       end = new Promise<EffectEnd>((onEnd) => {
         const x: Delivery = {
           delivery_id: randomUUID(),
-          kind: 'sound',
-          sound_id: sound.id,
-          label: sound.label,
-          url: `media/${sound.id}`,
+          kind: item.kind,
+          effect_id: item.id,
+          label: item.label,
+          url: `media/${item.id}`,
           volume: Math.min(100, Math.max(0, effect.volume)) / 100,
+          presentation,
           player: null,
           started: false,
           onStart,
@@ -226,9 +282,11 @@ export class EffectsPlayer {
       out.push({
         delivery_id: x.delivery_id,
         kind: x.kind,
+        effect_id: x.effect_id,
         label: x.label,
         url: x.url,
         volume: x.volume,
+        ...(x.presentation ? { presentation: x.presentation } : {}),
       });
     }
     return out;
@@ -266,20 +324,21 @@ export class EffectsPlayer {
       return true;
     }
     if (req.method === 'GET' && name.startsWith('media/')) {
-      const sound = EFFECT_SOUNDS.find((s) => s.id === name.slice(6));
-      const file = sound ? this.d.media.path(sound.file) : null;
-      if (!sound || !file) {
+      const item = CATALOGUE.find((c) => c.id === name.slice(6));
+      const file = item ? this.d.media.path(item.file) : null;
+      if (!item || !file) {
         reply(404, { error: 'media_missing' });
         return true;
       }
       res.writeHead(200, {
         'content-type':
-          MEDIA_TYPES[extname(sound.file).toLowerCase()] ??
+          MEDIA_TYPES[extname(item.file).toLowerCase()] ??
           'application/octet-stream',
         'content-length': (await stat(file)).size,
         'cache-control': 'no-store',
       });
-      res.end(await readFile(file));
+      // Streamed (videos are a few MB).
+      createReadStream(file).pipe(res);
       return true;
     }
     if (req.method !== 'POST' || !name.startsWith('player/')) {

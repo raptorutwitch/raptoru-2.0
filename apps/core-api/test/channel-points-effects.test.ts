@@ -221,4 +221,44 @@ describe('Points de chaîne — effect sounds', () => {
       }),
     ).rejects.toMatchObject({ code: 'not_an_effect' });
   });
+
+  it('effect video (NTM): catalogue video only; same cycle as a sound — a Studio job, playing, then done', async () => {
+    const ok = (a: unknown) =>
+      CpRuleInput.safeParse({ enabled: true, actions: [a] }).success;
+    expect(ok({ type: 'effect_video', video_id: 'fuck-you', volume: 10 })).toBe(
+      true,
+    );
+    expect(
+      ok({ type: 'effect_video', video_id: 'eren-scream', volume: 10 }),
+    ).toBe(false);
+    expect(
+      ok({ type: 'effect_video', video_id: 'fuck-you', volume: 101 }),
+    ).toBe(false);
+    const { core, cp } = await fixture();
+    await cp.saveRule(CH, REWARD, {
+      enabled: true,
+      actions: [{ type: 'effect_video', video_id: 'fuck-you', volume: 10 }],
+      expected_version: 1,
+    });
+    const e = redemption(core);
+    await cp.receive(e);
+    const job = await runJob(cp);
+    expect(job.actions[0]!.action).toEqual({
+      type: 'effect_video',
+      video_id: 'fuck-you',
+      volume: 10,
+    });
+    expect((await cp.state(CH)).recent[0]).toMatchObject({
+      results: [{ status: 'pending', progress: 'playing' }],
+    });
+    await cp.effectReport(job.job_id, {
+      consumer_id: 'studio-1',
+      index: 0,
+      event: 'completed',
+    });
+    expect((await cp.state(CH)).recent[0]).toMatchObject({
+      status: 'done',
+      results: [{ status: 'done' }],
+    });
+  });
 });

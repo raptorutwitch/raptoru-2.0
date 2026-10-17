@@ -14,7 +14,53 @@
           13px system-ui,
           sans-serif;
       }
+      /* The OBS canvas (1920×1080): effect videos fill it like the legacy overlay (Alerte_system.html). */
+      #stage {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      #stage video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: transparent;
+        opacity: 0;
+        --rise: 550px;
+        --mirror: 1;
+        transform: translateY(var(--rise)) scaleX(var(--mirror));
+        transition:
+          opacity 220ms linear,
+          transform 2200ms linear;
+      }
+      #stage video.mirror {
+        --mirror: -1;
+      }
+      #stage video.in {
+        opacity: 1;
+        --rise: 0px;
+      }
+      #stage video.still {
+        opacity: 1;
+        --rise: 0px;
+        transition: opacity 500ms ease;
+      }
+      #stage video.out {
+        opacity: 0;
+        transition:
+          opacity 500ms ease,
+          transform 500ms ease;
+      }
       #panel {
+        position: relative;
+        z-index: 1;
         display: inline-flex;
         gap: 8px;
         align-items: center;
@@ -39,6 +85,7 @@
     </style>
   </head>
   <body>
+    <div id="stage"></div>
     <div id="panel" hidden>
       <button id="enable" type="button">Activer le son</button>
       <span id="status"></span>

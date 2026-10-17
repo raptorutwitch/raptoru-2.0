@@ -120,11 +120,15 @@ export class ChannelPointsRuntime {
     const ends: { index: number; end: Promise<EffectEnd> }[] = [];
     for (const { index, action } of job.actions) {
       try {
-        if (action.type === 'effect_sound') {
+        if (action.type === 'effect_sound' || action.type === 'effect_video') {
           if (!this.d.effects)
             throw new EffectError('effects_player_unavailable');
-          // Waits for the START only: the job ends at once, the next redemption may overlap this sound.
-          const { end } = await this.d.effects.play(action);
+          // Waits for the START only: the job ends at once, the next redemption may overlap this effect.
+          const { end } = await this.d.effects.play(
+            action.type === 'effect_sound'
+              ? { kind: 'sound', id: action.sound_id, volume: action.volume }
+              : { kind: 'video', id: action.video_id, volume: action.volume },
+          );
           ends.push({ index, end });
           results.push({ index, ok: true, playing: true });
           continue;
@@ -243,7 +247,11 @@ export class ChannelPointsRuntime {
         },
         twitch: this.d.twitch(),
         effects: this.d.effects
-          ? { ...this.d.effects.status(), sounds: this.d.effects.sounds() }
+          ? {
+              ...this.d.effects.status(),
+              sounds: this.d.effects.sounds(),
+              videos: this.d.effects.videos(),
+            }
           : null,
         executor_error: this.lastError,
       });

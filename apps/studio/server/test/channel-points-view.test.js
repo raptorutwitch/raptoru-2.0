@@ -178,6 +178,14 @@ describe('Points de chaîne views', () => {
           available: false,
         },
       ],
+      videos: [
+        {
+          id: 'fuck-you',
+          label: 'NTM — Fuck You',
+          volume: 10,
+          available: true,
+        },
+      ],
     };
     expect(
       actionLabel(
@@ -186,6 +194,13 @@ describe('Points de chaîne views', () => {
         effects.sounds,
       ),
     ).toBe('Son d’effet « Tiens bon ! » (41 %)');
+    expect(
+      actionLabel(
+        { type: 'effect_video', video_id: 'fuck-you', volume: 10 },
+        [],
+        [...effects.sounds, ...effects.videos],
+      ),
+    ).toBe('Vidéo d’effet « NTM — Fuck You » (10 %)');
     expect(statusView({ ...base, effects }, null)).toContain(
       'Lecteur d’effets : non ouvert',
     );
@@ -207,7 +222,7 @@ describe('Points de chaîne views', () => {
       'value="http://127.0.0.1:4100/effects/player.html#abc"',
     );
     expect(panel).toContain(
-      '1 / 2 son(s) importé(s) — à importer : Glory holes',
+      '2 / 3 média(s) importé(s) — à importer : Glory holes',
     );
     expect(effectsView(null)).toBe('');
     const history = historyView({

@@ -119,20 +119,20 @@ describe('Effects player', () => {
   it('readable refusals: page absent, page muted, media not imported, unknown sound', async () => {
     const { p, origin, token } = await player();
     await expect(
-      p.play({ sound_id: 'eren-scream', volume: 100 }),
+      p.play({ kind: 'sound', id: 'eren-scream', volume: 100 }),
     ).rejects.toThrow('effects_player_offline');
     const pg = page(origin, token);
     await pg.heartbeat(false);
     await expect(
-      p.play({ sound_id: 'eren-scream', volume: 100 }),
+      p.play({ kind: 'sound', id: 'eren-scream', volume: 100 }),
     ).rejects.toThrow('effects_player_muted');
     await pg.heartbeat(true);
     await expect(
-      p.play({ sound_id: 'glory-holes', volume: 100 }),
+      p.play({ kind: 'sound', id: 'glory-holes', volume: 100 }),
     ).rejects.toThrow('effect_media_missing');
-    await expect(p.play({ sound_id: 'nope', volume: 100 })).rejects.toThrow(
-      'effect_unknown',
-    );
+    await expect(
+      p.play({ kind: 'sound', id: 'nope', volume: 100 }),
+    ).rejects.toThrow('effect_unknown');
     expect(p.status()).toMatchObject({
       connected: true,
       audio: true,
@@ -151,8 +151,8 @@ describe('Effects player', () => {
     const a = page(origin, token);
     const b = page(origin, token);
     await a.heartbeat();
-    const first = p.play({ sound_id: 'eren-scream', volume: 100 });
-    const second = p.play({ sound_id: 'tiens-bon', volume: 41 });
+    const first = p.play({ kind: 'sound', id: 'eren-scream', volume: 100 });
+    const second = p.play({ kind: 'sound', id: 'tiens-bon', volume: 41 });
     const got = await taken(a, 2);
     expect(await b.next()).toEqual([]); // never a second page
     expect(got.map((x) => [x.url, x.volume, x.kind])).toEqual([
@@ -182,18 +182,18 @@ describe('Effects player', () => {
     const pg = page(origin, token);
     await pg.heartbeat();
     await expect(
-      p.play({ sound_id: 'eren-scream', volume: 100 }),
+      p.play({ kind: 'sound', id: 'eren-scream', volume: 100 }),
     ).rejects.toThrow('effects_player_offline');
-    const blocked = p.play({ sound_id: 'eren-scream', volume: 100 });
+    const blocked = p.play({ kind: 'sound', id: 'eren-scream', volume: 100 });
     await taken(pg);
     await expect(blocked).rejects.toThrow('effect_start_timeout');
-    const lost = p.play({ sound_id: 'eren-scream', volume: 100 });
+    const lost = p.play({ kind: 'sound', id: 'eren-scream', volume: 100 });
     const [x] = await taken(pg);
     await pg.report(x!.delivery_id, 'started');
     const { end } = await lost;
-    await expect(p.play({ sound_id: 'tiens-bon', volume: 50 })).rejects.toThrow(
-      'effects_busy',
-    );
+    await expect(
+      p.play({ kind: 'sound', id: 'tiens-bon', volume: 50 }),
+    ).rejects.toThrow('effects_busy');
     expect(await end).toEqual({
       event: 'unknown',
       error: 'playback_not_confirmed',
@@ -221,7 +221,9 @@ describe('Effects player', () => {
     // An effect handed over, then Studio restarts: the new instance has the same OBS URL and nothing to hand out.
     const pg = page(origin, token);
     await pg.heartbeat();
-    void p.play({ sound_id: 'eren-scream', volume: 100 }).catch(() => {});
+    void p
+      .play({ kind: 'sound', id: 'eren-scream', volume: 100 })
+      .catch(() => {});
     const again = await EffectsPlayer.create({
       dir,
       origin,
@@ -233,6 +235,51 @@ describe('Effects player', () => {
       token,
     );
     expect(again.status().playing).toBe(0);
+  });
+});
+
+describe('Effects player — effect videos (NTM)', () => {
+  it('a video is handed with its legacy presentation and volume; streamed as video/webm; kinds never mixed', async () => {
+    const dir = await tmp();
+    let p: EffectsPlayer | null = null;
+    const origin = await serve((req, res, url) => p!.handle(req, res, url));
+    p = await EffectsPlayer.create({
+      dir,
+      origin,
+      media: await store(dir, ['Fuck You.webm']),
+      playerDir: PLAYER_DIR,
+    });
+    expect(p.videos()).toEqual([
+      { id: 'fuck-you', label: 'NTM — Fuck You', volume: 10, available: true },
+    ]);
+    const pg = page(origin, p.url.split('#')[1]!);
+    await pg.heartbeat();
+    await expect(
+      p.play({ kind: 'video', id: 'eren-scream', volume: 10 }),
+    ).rejects.toThrow('effect_unknown');
+    await expect(
+      p.play({ kind: 'sound', id: 'fuck-you', volume: 10 }),
+    ).rejects.toThrow('effect_unknown');
+    const playing = p.play({ kind: 'video', id: 'fuck-you', volume: 10 });
+    const [x] = await taken(pg);
+    expect(x).toMatchObject({
+      kind: 'video',
+      effect_id: 'fuck-you',
+      url: 'media/fuck-you',
+      volume: 0.1,
+      presentation: {
+        mirror: 0.35,
+        rise: true,
+        ducking: { audible: 4, step: 0.25, min: 0.125 },
+      },
+    });
+    await pg.report(x!.delivery_id, 'started');
+    const { end } = await playing;
+    await pg.report(x!.delivery_id, 'completed');
+    expect(await end).toEqual({ event: 'completed' });
+    const media = await fetch(`${origin}/effects/media/fuck-you`);
+    expect(media.headers.get('content-type')).toBe('video/webm');
+    expect(await media.text()).toBe('OggS fake Fuck You.webm');
   });
 });
 

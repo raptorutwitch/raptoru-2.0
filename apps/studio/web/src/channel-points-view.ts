@@ -4,6 +4,7 @@
 export type CpActionView =
   | { type: 'sound'; sound_id: string }
   | { type: 'effect_sound'; sound_id: string; volume: number }
+  | { type: 'effect_video'; video_id: string; volume: number }
   | {
       type: 'obs_source';
       scene: string;
@@ -64,10 +65,12 @@ export interface CpState {
     audio: boolean;
     playing: number;
     sounds: EffectSoundView[];
+    videos: EffectSoundView[];
   } | null;
   executor_error: string | null;
 }
 
+/** Effect sounds and videos (same shape; ids unique across both). */
 export interface EffectSoundView {
   id: string;
   label: string;
@@ -132,6 +135,12 @@ const PROGRESS = {
 const seconds = (ms?: number) =>
   ms ? ` pendant ${String(ms / 1000).replace('.', ',')} s` : '';
 
+/** Every effect of the catalogue (for labels). */
+export const effectItems = (e: CpState['effects'] | undefined) => [
+  ...(e?.sounds ?? []),
+  ...(e?.videos ?? []),
+];
+
 /** One action in plain French. */
 export function actionLabel(
   a: CpActionView,
@@ -143,6 +152,8 @@ export function actionLabel(
       return `Son « ${sounds.find((s) => s.id === a.sound_id)?.label ?? a.sound_id} »`;
     case 'effect_sound':
       return `Son d’effet « ${effects.find((s) => s.id === a.sound_id)?.label ?? a.sound_id} » (${a.volume} %)`;
+    case 'effect_video':
+      return `Vidéo d’effet « ${effects.find((s) => s.id === a.video_id)?.label ?? a.video_id} » (${a.volume} %)`;
     case 'obs_source':
       return `${a.visible ? 'Afficher' : 'Masquer'} « ${a.source} » (scène « ${a.scene} »)${seconds(a.duration_ms)}`;
     case 'obs_filter':
@@ -176,15 +187,16 @@ function effectsChip(e: CpState['effects']) {
 /** The effects player's OBS source (URL to copy) and the imported sounds. */
 export function effectsView(e: CpState['effects']) {
   if (!e) return '';
-  const missing = e.sounds.filter((s) => !s.available).length;
+  const all = effectItems(e);
+  const missing = all.filter((s) => !s.available).length;
   return `<details class="cp-effects"><summary>Lecteur d’effets (source OBS)</summary>
-    <p class="cp-muted">Une seule source navigateur OBS joue les sons d’effet, tout de suite et en superposition, hors
-      Soundboard. URL de la source :</p>
+    <p class="cp-muted">Une seule source navigateur OBS (1920 × 1080, plein cadre) joue les sons et vidéos d’effet, tout
+      de suite et en superposition, hors Soundboard. URL de la source :</p>
     <input class="cp-url" readonly value="${esc(e.url)}"/>
-    <p class="cp-muted">${e.sounds.length - missing} / ${e.sounds.length} son(s) importé(s)${
+    <p class="cp-muted">${all.length - missing} / ${all.length} média(s) importé(s)${
       missing
         ? ' — à importer : ' +
-          e.sounds
+          all
             .filter((s) => !s.available)
             .map((s) => esc(s.label))
             .join(', ')
@@ -286,7 +298,7 @@ export function historyView(s: CpState) {
                     : x.error
                       ? (ERRORS[x.error] ?? x.error)
                       : '';
-                return `${mark} ${a ? esc(actionLabel(a, s.sounds, s.effects?.sounds)) : ''}${note ? ` — ${esc(note)}` : ''}`;
+                return `${mark} ${a ? esc(actionLabel(a, s.sounds, effectItems(s.effects))) : ''}${note ? ` — ${esc(note)}` : ''}`;
               })
               .join('<br>');
       return `<tr class="cp-row--${r.status}">

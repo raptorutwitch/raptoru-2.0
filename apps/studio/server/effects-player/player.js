@@ -1,9 +1,13 @@
-/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, clearTimeout, setInterval, AbortSignal */
+/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, clearTimeout, setInterval, AbortSignal, requestAnimationFrame, cancelAnimationFrame, performance */
 
-// Raptoru effects player (P0.1, docs/EFFECTS_PLAYER.md) — ONE OBS browser source. Every effect handed by Studio plays
-// at once in its own audio element (effects overlap; Studio caps how many) at the volume Studio gives, and reports
-// started → completed / failed / unknown. Nothing is ever replayed: an effect handed to this page is played once or
-// reported failed; one whose end never comes is released and reported unknown.
+// Raptoru effects player (docs/EFFECTS_PLAYER.md) — ONE OBS browser source (1920×1080). Every effect handed by Studio
+// plays at once (effects overlap; Studio caps how many) and reports started → completed / failed / unknown. Nothing is
+// ever replayed: an effect handed to this page is played once or reported failed; one whose end never comes is released
+// and reported unknown.
+// - sound (P0.1): its own audio element, at the volume Studio gives;
+// - video (P0.2): full frame (object-fit contain), its own sound, presented as its legacy overlay did
+//   (Alerte_system.html « jouerAlerteSuperposee »): random horizontal mirror, rise from +550 px with a 220 ms fade in,
+//   500 ms fade out before the end, ducking of the plays of the same video (only the oldest `audible` heard).
 //
 // In OBS the page may play sound without a click. In a normal browser it shows « Activer le son » and takes no effect
 // until sound is allowed (Studio then reports the player as muted instead of handing effects to a silent page).
@@ -12,6 +16,7 @@ const token = location.hash.slice(1);
 const panel = document.getElementById('panel');
 const status = document.getElementById('status');
 const enable = document.getElementById('enable');
+const stage = document.getElementById('stage');
 const seen = new Set();
 let playing = 0;
 let audioEnabled = false;
@@ -20,6 +25,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /** Started, end never signalled: released after its duration plus this margin (Studio waits longer). */
 const END_MARGIN_MS = 15_000;
 const START_TIMEOUT_MS = 5000;
+/** Legacy overlay: fade out 500 ms before the end of a video. */
+const FADE_OUT_MS = 500;
+/** Legacy overlay: volume ramps of the ducking (cubic ease out). */
+const RAMP_MS = 450;
 
 async function call(path, data) {
   const response = await fetch('/effects/player/' + path, {
@@ -75,35 +84,136 @@ async function unlock(fromClick) {
 // OBS: allowed at once. A normal browser: needs the click.
 enable.addEventListener('click', () => void unlock(true));
 
-const SOUND_URL = /^media\/[a-z0-9][a-z0-9-]{0,47}$/;
+const MEDIA_URL = /^media\/[a-z0-9][a-z0-9-]{0,47}$/;
+const clamp = (v) => Math.min(1, Math.max(0, Number(v) || 0));
+
+// --- ducking (legacy « reglerVolumesSuperposes ») ---------------------------------------------------------------------
+
+/** effect_id → plays of that video, oldest first. */
+const groups = new Map();
+
+function ramp(el, target) {
+  cancelAnimationFrame(Number(el.dataset.volumeFrame || 0));
+  const from = el.volume;
+  const start = performance.now();
+  const tick = (now) => {
+    const t = Math.min(1, (now - start) / RAMP_MS);
+    el.volume = clamp(from + (target - from) * (1 - Math.pow(1 - t, 3)));
+    if (t < 1 && el.isConnected)
+      el.dataset.volumeFrame = String(requestAnimationFrame(tick));
+  };
+  el.dataset.volumeFrame = String(requestAnimationFrame(tick));
+}
+
+function duck(effectId) {
+  const plays = groups.get(effectId) ?? [];
+  if (!plays.length) return;
+  const { base, ducking } = plays[0];
+  const n = plays.length;
+  const audible = Math.min(n, ducking.audible);
+  const level = Math.max(
+    base * ducking.min,
+    base - (n - 1) * base * ducking.step,
+  );
+  plays.forEach((p, i) => {
+    p.el.muted = i >= audible;
+    ramp(p.el, i < audible ? level : 0);
+  });
+  stage.dataset[`plays_${effectId.replace(/-/g, '_')}`] = String(n);
+}
+
+// --- one effect -----------------------------------------------------------------------------------------------------
+
+function videoElement(effect) {
+  const p = effect.presentation;
+  const el = document.createElement('video');
+  el.playsInline = true;
+  el.preload = 'auto';
+  el.volume = clamp(effect.volume);
+  el.dataset.effect = effect.effect_id;
+  if (p && Math.random() < Number(p.mirror)) el.classList.add('mirror');
+  el.src = effect.url;
+  stage.append(el);
+  const entry = { el, base: clamp(effect.volume), ducking: p.ducking };
+  const plays = groups.get(effect.effect_id) ?? [];
+  plays.push(entry);
+  groups.set(effect.effect_id, plays);
+  duck(effect.effect_id);
+  let fadeTimer = null;
+  el.addEventListener(
+    'canplay',
+    () => {
+      // Two frames so the starting position is painted before the rise.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => el.classList.add(p.rise ? 'in' : 'still')),
+      );
+    },
+    { once: true },
+  );
+  el.addEventListener(
+    'loadedmetadata',
+    () => {
+      if (Number.isFinite(el.duration))
+        fadeTimer = setTimeout(
+          () => el.classList.add('out'),
+          Math.max(0, el.duration * 1000 - FADE_OUT_MS),
+        );
+    },
+    { once: true },
+  );
+  return {
+    el,
+    release() {
+      clearTimeout(fadeTimer);
+      cancelAnimationFrame(Number(el.dataset.volumeFrame || 0));
+      el.remove();
+      const rest = (groups.get(effect.effect_id) ?? []).filter(
+        (x) => x !== entry,
+      );
+      if (rest.length) groups.set(effect.effect_id, rest);
+      else groups.delete(effect.effect_id);
+      duck(effect.effect_id);
+    },
+  };
+}
+
+function audioElement(effect) {
+  const el = new Audio(effect.url);
+  el.volume = clamp(effect.volume);
+  return { el, release() {} };
+}
 
 async function play(effect) {
   if (seen.has(effect.delivery_id)) return;
   seen.add(effect.delivery_id);
   if (seen.size > 500) seen.delete(seen.values().next().value);
-  if (effect.kind !== 'sound' || !SOUND_URL.test(effect.url)) {
+  const video =
+    effect.kind === 'video' &&
+    effect.presentation &&
+    typeof effect.effect_id === 'string';
+  if ((effect.kind !== 'sound' && !video) || !MEDIA_URL.test(effect.url)) {
     await report(effect, 'failed', 'invalid_effect');
     return;
   }
-  const audio = new Audio(effect.url);
-  audio.volume = Math.min(1, Math.max(0, Number(effect.volume)));
+  const media = video ? videoElement(effect) : audioElement(effect);
+  const el = media.el;
   let started = false;
   let endGuard = null;
   const outcome = new Promise((resolve) => {
-    audio.addEventListener('playing', () => {
+    el.addEventListener('playing', () => {
       if (started) return;
       started = true;
       playing += 1;
       document.body.dataset.playing = String(playing);
       void report(effect, 'started');
-      const ms = Number.isFinite(audio.duration) ? audio.duration * 1000 : 0;
+      const ms = Number.isFinite(el.duration) ? el.duration * 1000 : 0;
       endGuard = setTimeout(
         () => resolve({ event: 'unknown' }),
         ms + END_MARGIN_MS,
       );
     });
-    audio.addEventListener('ended', () => resolve({ event: 'completed' }));
-    audio.addEventListener('error', () =>
+    el.addEventListener('ended', () => resolve({ event: 'completed' }));
+    el.addEventListener('error', () =>
       resolve({
         event: 'failed',
         error: started ? 'playback_error' : 'file_missing',
@@ -113,7 +223,7 @@ async function play(effect) {
       if (!started) resolve({ event: 'failed', error: 'start_timeout' });
     }, START_TIMEOUT_MS);
   });
-  audio.play().catch((e) => {
+  el.play().catch((e) => {
     if (e && e.name === 'NotAllowedError') {
       audioEnabled = false;
       show();
@@ -121,10 +231,11 @@ async function play(effect) {
   });
   const result = await outcome;
   clearTimeout(endGuard);
-  // Release the element: no player kept alive after a burst.
-  audio.pause();
-  audio.removeAttribute('src');
-  audio.load();
+  // Release the element: nothing kept alive after a burst.
+  el.pause();
+  media.release();
+  el.removeAttribute('src');
+  el.load();
   if (started) {
     playing -= 1;
     document.body.dataset.playing = String(playing);
