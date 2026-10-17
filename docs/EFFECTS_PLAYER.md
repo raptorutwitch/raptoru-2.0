@@ -138,6 +138,11 @@ la source du lecteur d'effets, placée dans cette scène, est visible partout (C
 - Simultanés : bouton `queueable` (durée 6000 ms) → une 2ᵉ redemption attend la fin de la 1ʳᵉ (C sur le réglage, H sur
   l'effet exact).
 - Restauration : retour inconditionnel à la scène précédente, même si le streamer a changé de scène entre-temps (C).
+- Compléments (18/10/2026, C) : « Prowler Effect » est une vidéo **sans piste audio** (QuickTime Animation, 5,5 s) — le
+  seul son est `Prowler Effect.ogg` ; la sortie de « Creepy Effect » est aussi une coupure (plugin Transition Table :
+  « Creepy Effect → Any : Coupure 50 », entrée « Any → Creepy Effect : Coupure 500 » + transition forcée de la scène) ;
+  la garde SAMMI n'a que 4 conditions actives (le 5ᵉ champ « == Creepy Effect » est inactif) : même résultat, Creepy
+  n'est jamais lancé depuis « Creepy Effect » puisque cette scène n'est pas dans la liste.
 
 ### BRB (bouton `ID48`, récompense « Be Right Back », 1500 pts, active)
 
@@ -158,7 +163,9 @@ la source du lecteur d'effets, placée dans cette scène, est visible partout (C
 
 ## 8. NTM dans Raptoru (P0.2 C1)
 
-**Statut : DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS.**
+**Statut : NTM — DÉVELOPPEMENT TERMINÉ / TESTS AUTOMATISÉS RÉUSSIS / VALIDATION FONCTIONNELLE OBS RÉUSSIE / NON
+DÉPLOYÉ** (code `e0fc606`). Validé manuellement par Antoni dans son vrai OBS le 17/10/2026 : rendu identique à SAMMI, y
+compris l'animation de la vidéo. Pas encore de vraie récompense Twitch (automatisations OFF).
 
 - Action de règle `{ type: 'effect_video', video_id: 'fuck-you', volume }` (catalogue `EFFECT_VIDEOS`, volume par
   défaut 10 % = la valeur effective de l'overlay). Même circuit que les sons d'effet (job Studio, « en cours de lecture »,
@@ -175,3 +182,40 @@ la source du lecteur d'effets, placée dans cette scène, est visible partout (C
 Validation manuelle (avec accord) : passer la source en 1920×1080 ; NTM → « Vidéo d'effet » « NTM — Fuck You » 10 % →
 Enregistrer → Tester (automatisations OFF) : vidéo plein cadre qui monte, son faible ; 2 à 5 « Tester » rapprochés :
 superposition, miroirs aléatoires, volume qui baisse, 5ᵉ muette ; comparer avec l'ancienne alerte NTM (SAMMI).
+
+## 9. Creepy dans Raptoru (P0.2 C2)
+
+**Statut : DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS.**
+
+Interaction native **« Creepy »** (règle `{ type: 'interaction', interaction: 'creepy' }`, choisie dans Studio : «
+Interaction native » → « Creepy » ; rien d'autre à régler). Code : `apps/studio/server/src/interactions/creepy.ts`.
+
+- **OBS fait le rendu, Studio ne refait rien** : animations Move de « Groupe » (déclenchées à l'activation de la
+  scène), overlay `creepy_overlay.html` (boucle continue), filtres, transitions d'entrée et de sortie (coupures) sont
+  ceux d'OBS. Studio ne touche à aucun filtre, aucune transition, aucune animation.
+- **Studio exécute exactement la chronologie SAMMI** (§ 7) : t0 relance du média « Prowler Effect » + affichage dans «
+  Alerte complète » ; t+0,5 s son `Prowler Effect.ogg` à 29 % (lecteur d'effets) ; t+0,8 s scène « Creepy Effect » ;
+  t+4 s masquage du média ; t+5 s retour à la scène de départ.
+- **Scène temporaire** (nouvelle capacité du moteur OBS existant, réutilisable) : action `obs_scene` avec durée, et la
+  même mécanique de retour que les sources / filtres temporaires (`obs-reverts.json`) : retour **seulement si le
+  programme est encore sur « Creepy Effect »** (un changement manuel est conservé) ; une scène temporaire posée sur une
+  autre revient à la scène d'origine ; Studio redémarré pendant l'effet → seul le retour dû est appliqué, rien n'est
+  rejoué ; OBS déconnecté → le retour attend OBS (et vérifie la scène), abandonné après une heure. Correctif du même
+  mécanisme : un retour ajouté pendant une vérification n'est plus perdu.
+- **Condition de départ** : programme sur « Scène Fullscreen », « Just Chatting », « Scène PS5 » ou « Scène Dessin » ;
+  sinon rien n'est fait (comme SAMMI) et l'historique l'indique (« Creepy ignoré : scène … non prévue »).
+- **Déclenchements rapprochés** : comme le bouton SAMMI (file, 6 s) — les Creepy se suivent, chacun revient à sa scène
+  de départ ; 1 en cours + 4 en attente au maximum (au-delà : refus lisible).
+- **Lecteur d'effets absent** : l'effet visuel a lieu quand même (comme SAMMI), l'historique indique « Creepy exécuté
+  sans son ».
+- Son importé par copie (`Prowler Effect.ogg`, original intact) dans le catalogue des sons d'effet.
+
+Écarts avec SAMMI : retour à la scène de départ **seulement** si l'on est encore sur « Creepy Effect » (SAMMI revenait
+toujours, y compris après un changement manuel) ; refus au-delà de 4 Creepy en attente ; la commande SAMMI `137` (6000)
+et la variable inutilisée `FiltreName` ne sont pas reprises (aucun effet visible, H).
+
+Validation manuelle (avec accord) : Studio → Points de chaîne → « Creepy » → Interaction native « Creepy » → Enregistrer
+→ depuis « Just Chatting » (ou Fullscreen / PS5 / Dessin) : Tester ; vérifier média Prowler, son, coupure vers « Creepy
+Effect » avec ses animations, puis retour à la scène de départ à ~5 s ; depuis « Waiting screen » : rien (historique «
+Creepy ignoré ») ; deux Tester rapprochés : enchaînés ; changer de scène à la main pendant l'effet : pas de retour forcé ;
+comparer avec le bouton SAMMI.

@@ -201,6 +201,16 @@ describe('Points de chaîne views', () => {
         [...effects.sounds, ...effects.videos],
       ),
     ).toBe('Vidéo d’effet « NTM — Fuck You » (10 %)');
+    expect(actionLabel({ type: 'interaction', interaction: 'creepy' })).toBe(
+      'Interaction « Creepy »',
+    );
+    expect(
+      actionLabel({
+        type: 'obs_scene',
+        scene: 'Creepy Effect',
+        duration_ms: 4200,
+      }),
+    ).toBe('Passer sur la scène « Creepy Effect » pendant 4,2 s, puis revenir');
     expect(statusView({ ...base, effects }, null)).toContain(
       'Lecteur d’effets : non ouvert',
     );

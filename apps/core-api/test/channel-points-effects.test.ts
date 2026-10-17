@@ -261,4 +261,47 @@ describe('Points de chaîne — effect sounds', () => {
       results: [{ status: 'done' }],
     });
   });
+
+  it('native interaction (Creepy) and temporary scene: typed only; the interaction rides the Studio job and reports its end', async () => {
+    const ok = (a: unknown) =>
+      CpRuleInput.safeParse({ enabled: true, actions: [a] }).success;
+    expect(ok({ type: 'interaction', interaction: 'creepy' })).toBe(true);
+    expect(ok({ type: 'interaction', interaction: 'brb' })).toBe(false);
+    expect(ok({ type: 'interaction', interaction: 'creepy', delay: 5 })).toBe(
+      false,
+    );
+    expect(
+      ok({ type: 'obs_scene', scene: 'Creepy Effect', duration_ms: 4200 }),
+    ).toBe(true);
+    expect(
+      ok({ type: 'obs_scene', scene: 'Creepy Effect', duration_ms: 100 }),
+    ).toBe(false);
+    const { core, cp } = await fixture();
+    await cp.saveRule(CH, REWARD, {
+      enabled: true,
+      actions: [{ type: 'interaction', interaction: 'creepy' }],
+      expected_version: 1,
+    });
+    await cp.receive(redemption(core));
+    const job = await runJob(cp);
+    expect(job.actions[0]!.action).toEqual({
+      type: 'interaction',
+      interaction: 'creepy',
+    });
+    await cp.effectReport(job.job_id, {
+      consumer_id: 'studio-1',
+      index: 0,
+      event: 'failed',
+      error: 'Creepy ignoré : scène « Waiting screen » non prévue',
+    });
+    expect((await cp.state(CH)).recent[0]).toMatchObject({
+      status: 'failed',
+      results: [
+        {
+          status: 'failed',
+          error: 'Creepy ignoré : scène « Waiting screen » non prévue',
+        },
+      ],
+    });
+  });
 });

@@ -37,8 +37,9 @@ DÉPLOYÉ** (`77039d7`) — capacité native de Studio : une source
 navigateur OBS joue tout de suite (superposition, hors Soundboard, sans Wallet) les sons d'effet d'une règle Points de
 chaîne (`effect_sound`, même circuit de jobs Studio). 6 sons SAMMI importés par copie (Eren cri, Tiens bon !, Seigneur
 Percé, Bzez, Skyzz, Arrêteuh ; volumes SAMMI). Source OBS ajoutée et testée par Antoni (`docs/EFFECTS_PLAYER.md`). En
-cours : P0.2 — NTM développé (vidéo d'effet `effect_video`, testé automatiquement, **non validé dans OBS** ; source
-du lecteur à passer en 1920×1080), puis Creepy, puis BRB (fiches de parité : `docs/EFFECTS_PLAYER.md` § 7).
+cours : P0.2 — **NTM validé dans OBS par Antoni** (17/10/2026, `e0fc606`, rendu identique à SAMMI) ; **Creepy
+développé** (interaction native, scène temporaire avec retour sûr, **non validé dans OBS**, `docs/EFFECTS_PLAYER.md`
+§ 9) ; BRB ensuite, après validation de Creepy (fiches de parité : § 7).
 
 **POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ (17/10/2026)**. Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
 LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS

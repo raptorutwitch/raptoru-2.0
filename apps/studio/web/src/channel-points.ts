@@ -5,6 +5,7 @@ import {
   effectItems,
   effectsView,
   esc,
+  INTERACTIONS,
   historyView,
   rewardsView,
   statusView,
@@ -20,6 +21,7 @@ const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 const TYPES: { id: CpActionView['type']; label: string }[] = [
   { id: 'effect_sound', label: 'Son d’effet (lecture immédiate)' },
   { id: 'effect_video', label: 'Vidéo d’effet (lecture immédiate)' },
+  { id: 'interaction', label: 'Interaction native' },
   { id: 'sound', label: 'Jouer un son (Soundboard)' },
   { id: 'obs_source', label: 'Afficher / masquer une source OBS' },
   { id: 'obs_filter', label: 'Activer / désactiver un filtre OBS' },
@@ -37,7 +39,9 @@ const blank = (type: CpActionView['type']): CpActionView =>
           ? { type, scene: '', source: '', visible: true }
           : type === 'obs_filter'
             ? { type, source: '', filter: '', enabled: true }
-            : { type, scene: '' };
+            : type === 'interaction'
+              ? { type, interaction: 'creepy' }
+              : { type, scene: '' };
 
 export function mountChannelPoints(root: HTMLElement) {
   let state: CpState | null = null;
@@ -151,7 +155,18 @@ export function mountChannelPoints(root: HTMLElement) {
     else if (a.type === 'obs_filter')
       body = `${field(i, 'source', a.source, 'cp-sources', 'Source')}${field(i, 'filter', a.filter, 'cp-filters', 'Filtre')}
         <select data-i="${i}" data-f="enabled"><option value="1"${a.enabled ? ' selected' : ''}>Activer</option><option value="0"${a.enabled ? '' : ' selected'}>Désactiver</option></select>${duration(a.duration_ms)}`;
-    else body = field(i, 'scene', a.scene, 'cp-scenes', 'Scène');
+    else if (a.type === 'interaction')
+      body = `<select data-i="${i}" data-f="interaction">${Object.entries(
+        INTERACTIONS,
+      )
+        .map(
+          ([id, x]) =>
+            `<option value="${id}"${id === a.interaction ? ' selected' : ''}>${esc(x.label)}</option>`,
+        )
+        .join('')}</select>
+        <p class="cp-muted">${esc(INTERACTIONS[a.interaction]?.description ?? '')}</p>`;
+    else
+      body = `${field(i, 'scene', a.scene, 'cp-scenes', 'Scène')}${duration(a.duration_ms)}`;
     return `<li class="cp-action"><span class="cp-step">${i + 1}</span>${type}<div class="cp-fields">${body}</div>
       <button type="button" class="cp-ghost" data-act="remove" data-i="${i}" title="Retirer">✕</button></li>`;
   };

@@ -43,6 +43,13 @@ export const EFFECT_SOUNDS = [
     file: 'Karma Arreteuh.ogg',
     volume: 100,
   },
+  {
+    // Creepy (SAMMI « Creepy »: Play Sound at +500 ms, volume 0.29). Played by the Creepy interaction.
+    id: 'prowler-effect',
+    label: 'Creepy — Prowler',
+    file: 'Prowler Effect.ogg',
+    volume: 29,
+  },
 ] as const;
 
 export type EffectSound = (typeof EFFECT_SOUNDS)[number];

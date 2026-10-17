@@ -8,6 +8,7 @@ import {
   type EffectsPlayer,
 } from '../effects/player.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
+import { InteractionError, Interactions } from '../interactions/creepy.js';
 import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 
 // Points de chaîne V1 in Studio (docs/CHANNEL_POINTS_V1.md). Core decides (master switch, rules, dedup, history);
@@ -45,11 +46,15 @@ export class ChannelPointsRuntime {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   private lastError: string | null = null;
+  /** Native interactions (Creepy…): on this runtime's OBS executor and effects player. */
+  readonly interactions: Interactions;
 
   private constructor(
     private readonly d: ChannelPointsRuntimeDeps,
     readonly obs: ObsActions,
-  ) {}
+  ) {
+    this.interactions = new Interactions({ obs, effects: d.effects ?? null });
+  }
 
   static async create(d: ChannelPointsRuntimeDeps) {
     return new ChannelPointsRuntime(
@@ -133,13 +138,22 @@ export class ChannelPointsRuntime {
           results.push({ index, ok: true, playing: true });
           continue;
         }
+        if (action.type === 'interaction') {
+          // Accepted now (it may wait for the same interaction already running); its end is reported after.
+          const { end } = this.interactions.start(action.interaction);
+          ends.push({ index, end });
+          results.push({ index, ok: true, playing: true });
+          continue;
+        }
         await this.obs.run(action);
         results.push({ index, ok: true });
       } catch (e) {
         results.push({
           index,
           ok: false,
-          error: (e instanceof ObsActionError || e instanceof EffectError
+          error: (e instanceof ObsActionError ||
+          e instanceof EffectError ||
+          e instanceof InteractionError
             ? e.message
             : 'erreur inattendue'
           ).slice(0, 200),

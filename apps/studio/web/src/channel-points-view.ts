@@ -19,7 +19,20 @@ export type CpActionView =
       enabled: boolean;
       duration_ms?: number;
     }
-  | { type: 'obs_scene'; scene: string };
+  | { type: 'obs_scene'; scene: string; duration_ms?: number }
+  | { type: 'interaction'; interaction: 'creepy' };
+
+/** The native interactions (written in Studio's code: nothing to configure but the reward). */
+export const INTERACTIONS: Record<
+  'creepy',
+  { label: string; description: string }
+> = {
+  creepy: {
+    label: 'Creepy',
+    description:
+      'Comme SAMMI : effet « Prowler Effect », son Prowler, scène « Creepy Effect » (animations OBS) pendant 4,2 s puis retour à la scène de départ. Seulement depuis Fullscreen, Just Chatting, PS5 ou Dessin ; plusieurs Creepy se suivent.',
+  },
+};
 
 export interface CpReward {
   id: string;
@@ -126,6 +139,7 @@ const ERRORS: Record<string, string> = {
   file_missing: 'fichier du son illisible',
   playback_error: 'erreur pendant la lecture',
   start_timeout: 'lecture non démarrée',
+  creepy_no_sound: 'Creepy exécuté sans son (lecteur d’effets indisponible)',
 };
 const PROGRESS = {
   queued: 'en attente du lecteur Soundboard',
@@ -159,7 +173,11 @@ export function actionLabel(
     case 'obs_filter':
       return `${a.enabled ? 'Activer' : 'Désactiver'} le filtre « ${a.filter} » de « ${a.source} »${seconds(a.duration_ms)}`;
     case 'obs_scene':
-      return `Passer sur la scène « ${a.scene} »`;
+      return a.duration_ms
+        ? `Passer sur la scène « ${a.scene} »${seconds(a.duration_ms)}, puis revenir`
+        : `Passer sur la scène « ${a.scene} »`;
+    case 'interaction':
+      return `Interaction « ${INTERACTIONS[a.interaction]?.label ?? a.interaction} »`;
   }
 }
 
@@ -294,7 +312,9 @@ export function historyView(s: CpState) {
                         : '✗';
                 const note =
                   x.status === 'pending' && x.progress
-                    ? PROGRESS[x.progress]
+                    ? a?.type === 'interaction'
+                      ? 'en cours'
+                      : PROGRESS[x.progress]
                     : x.error
                       ? (ERRORS[x.error] ?? x.error)
                       : '';

@@ -8,6 +8,9 @@ import type { CpAction } from '@raptoru/schemas';
 // A temporary action (duration) is reverted when it ends ONLY if the item is still in the state the action set (a
 // change made meanwhile by the streamer or another action is kept). Pending reverts are saved in Studio's storage: a
 // Studio restart reverts what is due when OBS answers again (same check); one older than an hour is dropped.
+// Temporary scene (P0.2, Creepy and later interactions): the program goes back to the scene it replaced, only if it is
+// still on the temporary scene; a second temporary scene over a temporary one goes back to the first original scene.
+// Native interactions also use two direct requests here: the program scene name, and a media input restart.
 
 export interface ObsLike {
   readonly connected: boolean;
@@ -20,7 +23,10 @@ export interface ObsLike {
 type Target =
   | { kind: 'source'; scene: string; source: string }
   | { kind: 'filter'; source: string; filter: string };
-type Revert = Target & { set: boolean; restore: boolean; at: number };
+/** A temporary scene: `scene` shown until `at`, then back to `back` if the program is still on `scene`. */
+type SceneRevert = { kind: 'scene'; scene: string; back: string; at: number };
+type Revert =
+  (Target & { set: boolean; restore: boolean; at: number }) | SceneRevert;
 
 const STALE_MS = 60 * 60_000;
 const key = (t: Target) =>
@@ -93,6 +99,60 @@ export class ObsActions {
     await rename(`${this.file}.tmp`, this.file);
   }
 
+  /** The program scene now (native interactions: start conditions). */
+  async currentScene() {
+    const r = await this.connected()
+      .request('GetCurrentProgramScene', {})
+      .catch((e) => {
+        throw readable(e, 'la scène en cours');
+      });
+    return String(r.currentProgramSceneName ?? r.sceneName ?? '');
+  }
+
+  /** Restarts a media input from its beginning (native interactions). */
+  async restartMedia(input: string) {
+    await this.connected()
+      .request('TriggerMediaInputAction', {
+        inputName: input,
+        mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART',
+      })
+      .catch((e) => {
+        throw readable(e, `le média « ${input} »`);
+      });
+  }
+
+  /** A temporary scene: switched now, back to the replaced scene after `ms` (see the header). */
+  private async temporaryScene(obs: ObsLike, scene: string, ms: number) {
+    const before = await this.currentScene();
+    await obs
+      .request('SetCurrentProgramScene', { sceneName: scene })
+      .catch((e) => {
+        throw readable(e, `la scène « ${scene} »`);
+      });
+    if (before === scene) {
+      // Already on it: a pending temporary of this scene lasts longer, nothing else to restore.
+      const same = this.reverts.find(
+        (r): r is SceneRevert => r.kind === 'scene' && r.scene === scene,
+      );
+      if (same) same.at = Math.max(same.at, this.now() + ms);
+      await this.save();
+      return;
+    }
+    // Over another temporary scene: back to that one's original scene, at the later end (never stuck on a temporary).
+    const under = this.reverts.find(
+      (r): r is SceneRevert => r.kind === 'scene' && r.scene === before,
+    );
+    const at = Math.max(this.now() + ms, under?.at ?? 0);
+    this.reverts = this.reverts.filter((r) => r !== under);
+    this.reverts.push({
+      kind: 'scene',
+      scene,
+      back: under?.back ?? before,
+      at,
+    });
+    await this.save();
+  }
+
   private async itemId(obs: ObsLike, scene: string, source: string) {
     try {
       const r = await obs.request('GetSceneItemId', {
@@ -159,7 +219,11 @@ export class ObsActions {
       action.type === 'effect_video'
     )
       throw new ObsActionError('action non OBS');
+    if (action.type === 'interaction')
+      throw new ObsActionError('action non OBS');
     const obs = this.connected();
+    if (action.type === 'obs_scene' && action.duration_ms)
+      return this.temporaryScene(obs, action.scene, action.duration_ms);
     if (action.type === 'obs_scene') {
       await obs
         .request('SetCurrentProgramScene', { sceneName: action.scene })
@@ -179,7 +243,7 @@ export class ObsActions {
     if (!action.duration_ms) return;
     const at = this.now() + action.duration_ms;
     const same = this.reverts.find(
-      (r) => key(r) === key(target) && r.set === value,
+      (r) => r.kind !== 'scene' && key(r) === key(target) && r.set === value,
     );
     if (same)
       same.at = Math.max(same.at, at); // a second redemption while the first one lasts: one revert, later
@@ -194,24 +258,28 @@ export class ObsActions {
     this.busy = true;
     try {
       const obs = this.obs();
-      const keep: Revert[] = [];
-      for (const r of this.reverts) {
-        if (r.at > this.now()) {
-          keep.push(r);
-          continue;
-        }
+      const done = new Set<Revert>();
+      for (const r of [...this.reverts]) {
+        if (r.at > this.now()) continue;
         if (!obs?.connected) {
-          if (this.now() - r.at < STALE_MS) keep.push(r);
+          if (this.now() - r.at >= STALE_MS) done.add(r);
           continue;
         }
+        done.add(r);
         try {
-          if ((await this.read(obs, r)) === r.set)
+          if (r.kind === 'scene') {
+            if ((await this.currentScene()) === r.scene)
+              await obs.request('SetCurrentProgramScene', {
+                sceneName: r.back,
+              });
+          } else if ((await this.read(obs, r)) === r.set)
             await this.write(obs, r, r.restore);
         } catch {
           /* item gone or OBS refused: nothing to restore */
         }
       }
-      this.reverts = keep;
+      // Only what was handled leaves: a revert added meanwhile (an action run during this tick) is kept.
+      this.reverts = this.reverts.filter((r) => !done.has(r));
       await this.save();
     } finally {
       this.busy = false;

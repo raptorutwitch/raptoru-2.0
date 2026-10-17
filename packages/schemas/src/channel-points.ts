@@ -16,6 +16,10 @@ const ObsName = z.string().trim().min(1).max(256);
 /** A temporary action is reverted after this long (only if nobody changed it meanwhile). */
 const DurationMs = z.number().int().min(500).max(600_000);
 
+/** The native interactions Studio knows (each one fully written in code). */
+export const CpInteractionId = z.enum(['creepy']);
+export type CpInteractionId = z.infer<typeof CpInteractionId>;
+
 /** The allow-list of V1 actions. Nothing else can ever be executed (no script, no system command). */
 export const CpAction = z.discriminatedUnion('type', [
   /** A Soundboard sound, through the Soundboard queue and player (paid by the channel points). */
@@ -49,7 +53,23 @@ export const CpAction = z.discriminatedUnion('type', [
     duration_ms: DurationMs.optional(),
   }),
   /** Switch the program scene (explicitly configured only). */
-  z.strictObject({ type: z.literal('obs_scene'), scene: ObsName }),
+  /**
+   * Switch the program scene (explicitly configured only); optionally for a while (temporary scene): back to the scene
+   * it replaced when it ends, only if the program is still on this scene (a manual change is kept).
+   */
+  z.strictObject({
+    type: z.literal('obs_scene'),
+    scene: ObsName,
+    duration_ms: DurationMs.optional(),
+  }),
+  /**
+   * A native interaction, written in Studio's code with its legacy parameters (P0.2): nothing to assemble. `creepy`:
+   * the SAMMI « Creepy » reward (docs/EFFECTS_PLAYER.md § 9).
+   */
+  z.strictObject({
+    type: z.literal('interaction'),
+    interaction: CpInteractionId,
+  }),
 ]);
 export type CpAction = z.infer<typeof CpAction>;
 export const CP_MAX_ACTIONS = 5;
