@@ -14,11 +14,13 @@ import {
   testEvent,
   variantLabel,
 } from './alerts-view.js';
+import { mountCalibration } from './alerts-calibrate.js';
 
 // Twitch alerts V1 (A2) — Studio tab « Alertes » (docs/TWITCH_ALERTS_PARITY_2026-10.md § 14). The preview iframe runs
 // the SAME engine as the OBS source, driven by postMessage: it never claims or reports anything (no queue).
 // « Envoyer dans la file » posts a simulated event through Core's normal path: the OBS source plays it.
-// No editor in A2 (calibration comes later and will only change the variants).
+// Calibration (17/10/2026): alerts-calibrate.ts (placement per variant, saved in Studio's storage); the tab only
+// passes the placement along with its play / seek messages.
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 
@@ -65,6 +67,7 @@ export function mountAlerts(root: HTMLElement) {
           <label class="al-field"><span>Volume de l’aperçu <b data-role="vol-label">50 %</b></span>
             <input type="range" min="0" max="100" value="50" data-role="volume"/></label>
           <p class="al-preview-status" data-role="preview-status">Prêt.</p>
+          <div data-role="calib"></div>
           <h2>File (test)</h2>
           <button type="button" data-act="queue">Envoyer dans la file</button>
           <p class="al-hint">Passe par Core (événement simulé) : la source OBS le joue.</p>
@@ -99,6 +102,15 @@ export function mountAlerts(root: HTMLElement) {
     root.querySelector<T>(`[data-role="${role}"]`)!;
   const frame = root.querySelector('iframe')!;
   const stageBox = root.querySelector<HTMLElement>('.al-stage')!;
+
+  const calib = mountCalibration({
+    host: $('calib'),
+    stage: stageBox,
+    frame,
+    variantId: () => selected()?.id,
+    send: (msg) => send(msg),
+    seekTo: (ms) => seek(ms),
+  });
 
   const renderVariants = () => {
     const list = variants.filter((v) => v.type === category);
@@ -146,12 +158,19 @@ export function mountAlerts(root: HTMLElement) {
       variant,
       data: previewData(testEvent(category, fake)),
       ms: scrubMs,
+      placement: calib.placement(variant.id),
     });
   };
 
   const play = (p: { variant: AlertVariantInfo; data: unknown }) => {
     last = p;
-    send({ type: 'play', variant: p.variant, data: p.data, volume: volume() });
+    send({
+      type: 'play',
+      variant: p.variant,
+      data: p.data,
+      volume: volume(),
+      placement: calib.placement(p.variant.id),
+    });
   };
 
   async function load() {
@@ -214,6 +233,7 @@ export function mountAlerts(root: HTMLElement) {
         .map((k) => `<option value="${Math.round(k.at)}"></option>`)
         .join('');
       $('scrub-marks').textContent = scrubMarks(f.marks);
+      calib.onFrame(f.marks);
       $('preview-status').textContent = 'Image figée (timeline).';
       return;
     }
@@ -311,6 +331,7 @@ export function mountAlerts(root: HTMLElement) {
     setVisible(visible: boolean) {
       if (timer !== null) clearInterval(timer);
       timer = null;
+      calib.setVisible(visible);
       if (!visible) {
         send({ type: 'stop' });
         return;

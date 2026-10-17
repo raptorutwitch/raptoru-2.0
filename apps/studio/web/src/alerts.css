@@ -194,3 +194,140 @@
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+
+/* Calibration editor (17/10/2026): frames and handles drawn ABOVE the preview, in 1920×1080 stage pixels scaled like
+   the iframe (never inside the alert page, so never in OBS). Line / handle sizes are divided by the scale to stay
+   readable at any window size. */
+.al-calib-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.al-calib-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  transform: scale(var(--al-scale));
+  transform-origin: 0 0;
+}
+.al-guide {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+}
+.al-guide--v {
+  left: 960px;
+  top: 0;
+  bottom: 0;
+  width: calc(1px / var(--al-scale));
+}
+.al-guide--h {
+  top: 540px;
+  left: 0;
+  right: 0;
+  height: calc(1px / var(--al-scale));
+}
+.al-calib-layer--bare .al-guide {
+  display: none;
+}
+.al-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: calc(1.5px / var(--al-scale)) dashed rgba(110, 231, 255, 0.55);
+  cursor: move;
+  touch-action: none;
+}
+.al-box--text {
+  border-color: rgba(255, 145, 215, 0.55);
+}
+.al-box--on {
+  /* The selected element is grabbed first (the text zone of some variants covers the animation). */
+  z-index: 2;
+  border-style: solid;
+  border-color: #6ee7ff;
+  background: rgba(110, 231, 255, 0.05);
+}
+.al-box--text.al-box--on {
+  border-color: #ff91d7;
+  background: rgba(255, 145, 215, 0.06);
+}
+.al-box-label {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  padding: calc(2px / var(--al-scale)) calc(6px / var(--al-scale));
+  font:
+    600 calc(11px / var(--al-scale)) / 1.2 system-ui,
+    sans-serif;
+  color: #0b0d12;
+  background: rgba(110, 231, 255, 0.85);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.al-box--text .al-box-label {
+  background: rgba(255, 145, 215, 0.85);
+}
+.al-box--media .al-box-label {
+  bottom: auto;
+  top: 0;
+}
+.al-h {
+  position: absolute;
+  width: calc(12px / var(--al-scale));
+  height: calc(12px / var(--al-scale));
+  margin: calc(-6px / var(--al-scale));
+  background: #fff;
+  border: calc(1.5px / var(--al-scale)) solid #0b0d12;
+  border-radius: 2px;
+}
+.al-box:not(.al-box--on) .al-h {
+  display: none;
+}
+.al-h--nw {
+  left: 0;
+  top: 0;
+  cursor: nwse-resize;
+}
+.al-h--se {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+.al-h--ne {
+  right: 0;
+  top: 0;
+  cursor: nesw-resize;
+}
+.al-h--sw {
+  left: 0;
+  bottom: 0;
+  cursor: nesw-resize;
+}
+.al-calib-els {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.al-calib-els .al-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.al-calib-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.al-calib-fields input {
+  width: 100%;
+  min-width: 0;
+}
+.al-calib-status {
+  font-size: 12px;
+  margin: 4px 0;
+  color: var(--muted);
+}
+.al-calib-status--dirty {
+  color: var(--warn);
+}

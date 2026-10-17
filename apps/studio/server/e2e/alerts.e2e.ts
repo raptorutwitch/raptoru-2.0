@@ -552,3 +552,102 @@ test('OBS source: Studio restarting meanwhile — the source picks up again by i
   );
   expect(done).toMatchObject({ status: 'completed', attempts: 1 });
 });
+
+test('calibration: the OBS source draws the SAVED placement, never changes an alert already playing, no editor frame', async ({
+  page,
+}) => {
+  const P1 = {
+    media: { x: 100, y: -50, scale: 0.5 },
+    text: { x: 0, y: 40, scale: 1.25 },
+  };
+  const P2 = {
+    media: { x: -200, y: 0, scale: 0.75 },
+    text: { x: 0, y: 0, scale: 1 },
+  };
+  await rt.placement.save('raid_default', P1);
+  await page.goto(rt.playerUrl);
+  const first = await event({
+    type: 'raid',
+    actor: { display_name: 'Calibre' },
+    viewers: 3,
+  });
+  await until(first.alert!.alert_id, ['playing']);
+  const place = page.locator('#alertPlace');
+  await expect(place).toHaveAttribute(
+    'style',
+    /transform: translate\(100px, -50px\) scale\(0\.5\)/,
+  );
+  await expect(page.locator('#textPlace')).toHaveAttribute(
+    'style',
+    /transform: translate\(0px, 40px\) scale\(1\.25\)/,
+  );
+  // The calibration transform sits on the wrappers only: the text keeps its own animation, the video its class.
+  await expect(page.locator('#alertPlace > #alertVideo')).toHaveCount(1);
+  await expect(
+    page.locator('#alertPlace > #textPlace > #pseudoText'),
+  ).toHaveCount(1);
+  // Saved again while it plays: this alert does not move.
+  await rt.placement.save('raid_default', P2);
+  await page.waitForTimeout(400);
+  await expect(place).toHaveAttribute('style', /translate\(100px, -50px\)/);
+  expect(await page.locator('.al-box, .al-h, .al-calib-layer').count()).toBe(0);
+  await until(first.alert!.alert_id, ['completed']);
+  // The next alert of the variant uses the new values.
+  const second = await event({
+    type: 'raid',
+    actor: { display_name: 'Calibre2' },
+    viewers: 4,
+  });
+  await until(second.alert!.alert_id, ['playing']);
+  await expect(place).toHaveAttribute(
+    'style',
+    /translate\(-200px, 0px\) scale\(0\.75\)/,
+  );
+  await until(second.alert!.alert_id, ['completed']);
+  await rt.placement.save('raid_default', {
+    media: { x: 0, y: 0, scale: 1 },
+    text: { x: 0, y: 0, scale: 1 },
+  });
+});
+
+test('calibration: the preview draws the same transform (shared engine); a frozen image follows the placement', async ({
+  page,
+}) => {
+  const p = await preview(page);
+  const P = {
+    media: { x: 100, y: -50, scale: 0.5 },
+    text: { x: 0, y: 40, scale: 1.25 },
+  };
+  await page.evaluate(
+    ([v, d, pl]) =>
+      window.postMessage(
+        { type: 'seek', variant: v, data: d, ms: 500, placement: pl },
+        location.origin,
+      ),
+    [ALERT_VARIANTS.raid_default, { pseudo: 'X', viewers: 1 }, P] as const,
+  );
+  await expect(page.locator('#alertPlace')).toHaveAttribute(
+    'style',
+    /transform: translate\(100px, -50px\) scale\(0\.5\)/,
+  );
+  // Live editor update (unsaved values): applied at once, without replaying.
+  await page.evaluate(
+    (pl) =>
+      window.postMessage({ type: 'place', placement: pl }, location.origin),
+    { media: { x: 0, y: 0, scale: 1 }, text: { x: 5, y: 0, scale: 1 } },
+  );
+  await expect(page.locator('#alertPlace')).not.toHaveAttribute(
+    'style',
+    /translate/,
+  );
+  await expect(page.locator('#textPlace')).toHaveAttribute(
+    'style',
+    /translate\(5px, 0px\)/,
+  );
+  // No placement at all: drawn as before calibration existed.
+  await p.seek(ALERT_VARIANTS.raid_default, { pseudo: 'X', viewers: 1 }, 500);
+  await expect(page.locator('#textPlace')).not.toHaveAttribute(
+    'style',
+    /translate/,
+  );
+});

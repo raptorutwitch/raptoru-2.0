@@ -5,11 +5,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
 import type { AlertMediaStore } from './media-store.js';
+import { AlertPlacementStore } from './placement-store.js';
 
 // Twitch alerts V1 (A2) in Studio (docs/TWITCH_ALERTS_PARITY_2026-10.md § 14). Core decides and queues; Studio serves
 // the OBS source and its media, and relays the source's claim / reports to Core (token from the source URL). The
 // Studio tab's preview plays the same engine WITHOUT the queue (no claim, no report). A claimed alert whose media is
 // missing in Studio's storage is reported failed (media_missing) at once: never played half, never replayed.
+// Calibration (17/10/2026): each claimed alert carries its variant's SAVED placement (placement-store.ts), read at
+// claim time, so a change applies from the next alert on and never moves one already playing.
 
 const MAX_BODY = 4096;
 const PLAYER_FILES: Record<string, string> = {
@@ -67,6 +70,7 @@ export class AlertsRuntime {
   private constructor(
     private readonly d: AlertsRuntimeDeps,
     private readonly token: string,
+    readonly placement: AlertPlacementStore,
   ) {}
 
   static async create(d: AlertsRuntimeDeps) {
@@ -82,7 +86,11 @@ export class AlertsRuntime {
       token = randomBytes(16).toString('hex');
       await writeFile(tokenFile, token);
     }
-    return new AlertsRuntime(d, token);
+    return new AlertsRuntime(
+      d,
+      token,
+      await AlertPlacementStore.open(join(d.dir, 'placement.json')),
+    );
   }
 
   /** The OBS browser source (1920×1080). */
@@ -178,6 +186,13 @@ export class AlertsRuntime {
         variants: variants.map((v) => ({ ...v, missing: this.missing(v) })),
       });
     }
+    if (req.method === 'GET' && p === '/placement')
+      return reply(200, { variants: this.placement.all() });
+    const placed = /^\/placement\/([a-z0-9_]{1,64})$/.exec(p);
+    if (req.method === 'PUT' && placed)
+      return reply(200, {
+        placement: await this.placement.save(placed[1]!, await this.body(req)),
+      });
     if (req.method === 'POST' && p === '/test') {
       // A simulated event through Core's normal path (dedup, variant draw, queue): the OBS source plays it.
       const body = await this.body(req);
@@ -254,6 +269,7 @@ export class AlertsRuntime {
           attempt_id: alert.attempt_id,
           variant: alert.variant,
           data: alert.data,
+          placement: this.placement.get(alert.variant.id),
         };
       await this.d.core(`/v1/lab/alerts/items/${alert.alert_id}/ack`, {
         consumer_id: consumer,

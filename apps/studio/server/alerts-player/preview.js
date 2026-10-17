@@ -21,11 +21,18 @@ window.addEventListener('message', async (ev) => {
     return;
   const m = ev.data || {};
   if (m.type === 'stop') return engine.stop('stopped');
+  // Calibration editor: moves the current image / alert at once (unsaved values, preview only).
+  if (m.type === 'place') return engine.place(m.placement);
   if (!m.variant) return;
   if (m.type === 'seek') {
     const id = ++run;
     try {
-      const frame = await engine.seek(m.variant, m.data || {}, m.ms);
+      const frame = await engine.seek(
+        m.variant,
+        m.data || {},
+        m.ms,
+        m.placement,
+      );
       if (frame) tell({ type: 'frame', run: id, ...frame });
     } catch (e) {
       tell({
@@ -44,6 +51,7 @@ window.addEventListener('message', async (ev) => {
   const startedAt = performance.now();
   const { reason } = await engine.play(m.variant, m.data || {}, {
     volume: m.volume,
+    placement: m.placement,
     onStarted: () => tell({ type: 'state', run: id, state: 'playing' }),
   });
   tell({

@@ -31,6 +31,11 @@ Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Anton
 - **Tests au `166e7ed`** : Core 675 (+22 ignorés : PostgreSQL réel absent), Studio 381, Bot 111, Playwright 13/13 ;
   typecheck, lint, build verts.
 
+**Depuis le checkpoint (17/10/2026, local, non validé manuellement)** : finitions des alertes (`f3557f6`, `4a5c14a`)
+puis **calibrage persistant par variante** dans l'onglet Alertes (placement enregistré dans le stockage Studio, utilisé
+par la source OBS dès l'alerte suivante) — `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 17. Réception Twitch réelle
+toujours non branchée.
+
 **Réserves ouvertes (non bloquantes, rien de corrigé dans ce checkpoint)**
 
 - Alertes A2 (`docs/TWITCH_ALERTS_PARITY_2026-10.md` § 16) : formats de texte incorrects sur certaines variantes (à

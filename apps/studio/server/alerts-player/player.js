@@ -64,6 +64,7 @@ async function loop() {
     }
     let started = null;
     const { reason } = await engine.play(alert.variant, alert.data, {
+      placement: alert.placement, // saved calibration, read by Studio when the alert was claimed
       onStarted: () => {
         started = ack(alert, 'started');
       },

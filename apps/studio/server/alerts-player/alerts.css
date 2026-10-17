@@ -10,6 +10,8 @@ html, body {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 #stage { position: absolute; inset: 0; }
+/* Calibration layers (17/10/2026): full stage, transformed from the top-left corner by the engine. */
+#alertPlace, #textPlace { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
 #alertVideo {
     position: absolute;
     background: transparent;

@@ -355,3 +355,47 @@ la petite fixture VP8 des tests ne reproduit pas la corruption (vérifiée sur l
 4. ensuite : raccordement progressif des événements Twitch réels (déduplication, droits du jeton, consommateur
    EventSub unique), adaptateur des dons StreamElements, neutralisation des sources d'alerte legacy uniquement lors
    d'une bascule contrôlée.
+
+## 17. Finitions et calibrage visuel (17/10/2026, Lab, non validé manuellement)
+
+**Finitions A2** (`f3557f6`, `4a5c14a`), demandées par Antoni après son examen : pseudo coloré par une petite palette
+tirée à chaque alerte (follows, Eren Sub, raid, bits, sub offert ciblé ; gifts 1 / 5 / 10 / 20 et MoneyTest
+inchangés) ; follows Discord / Eren : entrée / sortie adoucies ; Dofus : texte immobile dans le bandeau (plus de
+montée de 30 px ni de saut de 10 px), balayage doré sans grossissement des lettres ; sub offert ciblé : destinataire
+seul, une ligne ; bits : entrée animée sur la vidéo elle-même, « [gemme] × N » au-dessus, « {pseudo} me permet de
+manger ! » en dessous ; raid : « {pseudo} débarque avec {viewers} titans ! ».
+
+**Calibrage persistant (lot A7, partie placement)** — une seule source OBS 1920×1080, chaque variante placée
+indépendamment :
+
+- **Modèle** : par variante, `media` (l'animation entière, textes compris) et `text` (les textes, relatifs à
+  l'animation), chacun = décalage (px de la scène) + échelle uniforme depuis le coin haut-gauche. Absent = rendu
+  inchangé. Aucune donnée Core ni média modifié.
+- **Moteur commun** (`alerts-player/engine.js`) : deux conteneurs `#alertPlace` (vidéo + textes) et `#textPlace`
+  (textes) reçoivent seuls la transformation ; les animations CSS validées restent sur les éléments internes
+  (centrage, fondus, Dofus, entrée bits).
+- **Stockage** : Studio, `<runtime>/alerts/placement.json` (à côté du jeton OBS, hors dépôt et hors paquet, survit
+  aux mises à jour) ; écriture atomique ; valeurs validées (décalage ±3 840 px, échelle 10–500 %) ; fichier absent,
+  corrompu ou partiellement invalide → entrées valides seulement, sinon rendu d'origine
+  (`server/src/alerts/placement-store.ts`).
+- **OBS** : `/alerts/next` joint le placement **enregistré** de la variante à chaque alerte réservée ; il est figé
+  pour toute l'alerte (une sauvegarde pendant la lecture ne la déplace pas, elle vaut dès la suivante). Aucun cadre
+  d'édition dans la page OBS.
+- **Éditeur Studio** (onglet Alertes › Calibrage, `web/src/alerts-calibrate.ts` + `alerts-calib.ts`) : cadres et
+  poignées dessinés **au-dessus** de l'iframe d'aperçu, en coordonnées scène 1920×1080 (échelle relue à chaque
+  mouvement : exact après redimensionnement de la fenêtre) ; éléments « Animation entière » / « Textes » ; glisser,
+  poignées d'angle (proportions gardées, angle opposé fixe), champs X / Y / Échelle, flèches 10 px (Maj : 1 px),
+  repères centraux, « Masquer les cadres », « Enregistrer », « Annuler les modifications », « Valeurs d'origine »,
+  indicateur de modifications non enregistrées. L'aperçu montre le brouillon ; la source OBS, l'enregistré.
+- **Preuves** : Studio server 393 (dont `alerts-calib` 6, store / API 3) ; Playwright `e2e/alerts.e2e.ts` 9/9 (dont
+  placement enregistré appliqué par la source OBS, inchangé pendant une alerte en cours, appliqué à la suivante,
+  aucun cadre en OBS, même transformation dans l'aperçu) ; pilotage de l'onglet réel dans Chromium avec les vrais
+  médias (glisser, poignée, texte, sauvegarde, rechargement, fenêtre redimensionnée, flèches, indépendance des
+  variantes, Dofus stable une fois calibré, réinitialisation) — **pas** de test dans OBS ni dans Electron.
+- **Limites** : le cadre « Animation entière » est celui de la vidéo (zones transparentes comprises : plein écran
+  pour la plupart, 60 % pour Dofus) ; les textes d'une variante bougent ensemble (bits : montant et phrase ; don :
+  l'encadré ; raid : la phrase) ; pas de copie de réglages entre variantes ; les timings (`showAt`…) ne se calibrent
+  pas ici.
+
+**Toujours vrai** : réception Twitch réelle non branchée (aucun abonnement EventSub) ; production = SAMMI /
+StreamElements.

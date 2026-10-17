@@ -6,6 +6,7 @@ import {
   readdir,
   rm,
   stat,
+  writeFile,
 } from 'node:fs/promises';
 import { createServer, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -13,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AlertMediaStore } from '../src/alerts/media-store.js';
+import { AlertPlacementStore } from '../src/alerts/placement-store.js';
 import { AlertsRuntime } from '../src/alerts/runtime.js';
 
 // Twitch alerts V1 (A2) in Studio: media storage (exact copies, originals only read) and the routes (OBS source
@@ -114,6 +116,75 @@ const CLAIMED = {
   data: { pseudo: 'A', viewers: 3 },
   status: 'claimed',
 };
+
+const IDENTITY_PLACEMENT = {
+  media: { x: 0, y: 0, scale: 1 },
+  text: { x: 0, y: 0, scale: 1 },
+};
+
+describe('AlertPlacementStore (calibration, Studio storage)', () => {
+  const P = {
+    media: { x: -320.5, y: 140, scale: 0.75 },
+    text: { x: 12, y: -8, scale: 1.2 },
+  };
+
+  it('saves per variant atomically, survives a restart, keeps variants independent; identity = removed', async () => {
+    const file = join(await tmp(), 'alerts', 'placement.json');
+    const store = await AlertPlacementStore.open(file);
+    expect(store.get('bits_default')).toEqual(IDENTITY_PLACEMENT);
+    await store.save('bits_default', P);
+    await store.save('raid_default', { media: { x: 5, y: 0, scale: 1 } });
+    const again = await AlertPlacementStore.open(file);
+    expect(again.get('bits_default')).toEqual(P);
+    expect(again.get('raid_default')).toEqual({
+      media: { x: 5, y: 0, scale: 1 },
+      text: { x: 0, y: 0, scale: 1 },
+    });
+    expect(again.get('follow_dofus_ebene')).toEqual(IDENTITY_PLACEMENT);
+    await again.save('raid_default', IDENTITY_PLACEMENT);
+    expect(Object.keys(again.all())).toEqual(['bits_default']);
+    expect((await AlertPlacementStore.open(file)).get('bits_default')).toEqual(
+      P,
+    );
+    expect((await readdir(join(file, '..'))).sort()).toEqual([
+      'placement.json',
+    ]);
+  });
+
+  it('refuses invalid values without changing anything; a corrupt or partly invalid file falls back per entry', async () => {
+    const file = join(await tmp(), 'placement.json');
+    const store = await AlertPlacementStore.open(file);
+    await store.save('bits_default', P);
+    for (const bad of [
+      { media: { x: 'a' } },
+      { media: { x: 99999 } },
+      { media: { scale: 0 } },
+      { text: { scale: 50 } },
+      null,
+    ])
+      await expect(store.save('bits_default', bad)).rejects.toThrow(
+        'invalid_placement',
+      );
+    await expect(store.save('../x', P)).rejects.toThrow('bad_variant');
+    expect(store.get('bits_default')).toEqual(P);
+    await writeFile(file, '{ not json');
+    expect((await AlertPlacementStore.open(file)).all()).toEqual({});
+    await writeFile(
+      file,
+      JSON.stringify({
+        version: 1,
+        variants: {
+          bits_default: P,
+          raid_default: { media: { scale: -1 } },
+          'bad id': P,
+        },
+      }),
+    );
+    expect((await AlertPlacementStore.open(file)).all()).toEqual({
+      bits_default: P,
+    });
+  });
+});
 
 async function setup(
   core: (path: string, body?: unknown) => unknown,
@@ -229,6 +300,7 @@ describe('AlertsRuntime', () => {
         attempt_id: CLAIMED.attempt_id,
         variant: VARIANT,
         data: CLAIMED.data,
+        placement: IDENTITY_PLACEMENT,
       },
     });
     expect(calls).toEqual([
@@ -345,6 +417,51 @@ describe('AlertsRuntime', () => {
       `/v1/lab/alerts/${CH}/state`,
       '/v1/lab/alerts/catalog',
     ]);
+  });
+
+  it('calibration: tab API behind the Studio header; the OBS source gets the SAVED placement with each claim', async () => {
+    const { origin, token, post } = await setup((path) =>
+      path.endsWith('/claim') ? { alert: CLAIMED } : {},
+    );
+    const H = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
+    const put = (
+      id: string,
+      body: unknown,
+      headers: Record<string, string> = H,
+    ) =>
+      fetch(`${origin}/api/alerts/placement/${id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(body),
+      });
+    const P = {
+      media: { x: 100, y: -50, scale: 0.5 },
+      text: { x: 0, y: 20, scale: 1 },
+    };
+    expect(
+      (await put('raid_default', P, { 'content-type': 'application/json' }))
+        .status,
+    ).toBe(403);
+    expect((await put('raid_default', { media: { scale: 9 } })).status).toBe(
+      400,
+    );
+    const next = async () =>
+      (
+        (await (
+          await post('/alerts/next', { token, consumer_id: 'obs-1' })
+        ).json()) as { alert: { placement: unknown } }
+      ).alert.placement;
+    expect(await next()).toEqual(IDENTITY_PLACEMENT);
+    expect(await (await put('raid_default', P)).json()).toEqual({
+      placement: P,
+    });
+    expect(
+      await (
+        await fetch(`${origin}/api/alerts/placement`, { headers: H })
+      ).json(),
+    ).toEqual({ variants: { raid_default: P } });
+    // Read at claim time: the next alert of the variant uses it.
+    expect(await next()).toEqual(P);
   });
 
   it('test event: a simulation through Core, only the event fields, a fresh id each time', async () => {

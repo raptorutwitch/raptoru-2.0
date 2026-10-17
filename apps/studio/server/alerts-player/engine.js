@@ -29,7 +29,33 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
   const subtitle = document.createElement('div');
   subtitle.id = 'erenSubtitle';
   subtitle.className = 'eren-subtitle';
-  stage.append(video, audio, text, subtitle);
+  // Calibration (17/10/2026): two full-stage placement layers. `alertPlace` carries the whole animation (video + its
+  // texts), `textPlace` the texts relative to it. Only these wrappers get the calibration transform: the elements'
+  // own CSS animations (centring, slides, fades, Dofus, bits entrance) are untouched.
+  const alertPlace = document.createElement('div');
+  alertPlace.id = 'alertPlace';
+  const textPlace = document.createElement('div');
+  textPlace.id = 'textPlace';
+  textPlace.append(text, subtitle);
+  alertPlace.append(video, textPlace);
+  stage.append(alertPlace, audio);
+
+  /** Offset (stage px) + uniform scale from the stage's top-left corner; anything invalid draws as before. */
+  const transformOf = (p) => {
+    const n = (v, d, min, max) =>
+      Number.isFinite(Number(v)) ? Math.min(max, Math.max(min, Number(v))) : d;
+    const x = n(p?.x, 0, -3840, 3840);
+    const y = n(p?.y, 0, -3840, 3840);
+    const s = n(p?.scale, 1, 0.1, 5);
+    return x === 0 && y === 0 && s === 1
+      ? ''
+      : `translate(${x}px, ${y}px) scale(${s})`;
+  };
+  /** Applies a variant's placement ({ media, text }); none = the uncalibrated layout. */
+  const place = (placement) => {
+    alertPlace.style.transform = transformOf(placement?.media);
+    textPlace.style.transform = transformOf(placement?.text);
+  };
 
   let current = null;
   let seekToken = 0;
@@ -302,8 +328,9 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
    * 'duration' (success) or 'video-error', 'video-play-error', 'no-media', 'timeout', 'stopped'.
    * `onStarted` fires when the video really starts playing.
    */
-  function play(v, data = {}, { volume, onStarted } = {}) {
+  function play(v, data = {}, { volume, onStarted, placement } = {}) {
     stop('replaced');
+    place(placement); // fixed for the whole alert (the OBS source gets the saved values with the claim)
     nameColor = pickNameColor(nameColor);
     stage.style.setProperty('--name-color', nameColor);
     ttsVolume = Math.min(1, Math.max(0, volume ?? 1));
@@ -459,8 +486,9 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
    * them at that instant, each CSS animation paused at its own progress. No sound, no queue, no timer: the steps run
    * on a virtual clock. Resolves { ms, lengthMs, videoMs, marks }, or null when a newer seek / play replaced it.
    */
-  async function seek(v, data = {}, ms = 0) {
+  async function seek(v, data = {}, ms = 0, placement) {
     stop('replaced');
+    place(placement);
     const token = seekToken;
     if (!v.video) return { ms, lengthMs: 0, videoMs: 0, marks: [] };
     dressVideo(v);
@@ -535,5 +563,5 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     };
   }
 
-  return { play, stop, seek, video, audio };
+  return { play, stop, seek, place, video, audio };
 }
