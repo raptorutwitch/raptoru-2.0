@@ -83,7 +83,8 @@ describe('Points de chaîne — reception and decisions', () => {
       actions: [{ type: 'sound', sound_id: 'random' }],
     });
     const e = redemption(core);
-    expect((await cp.receive(e)).outcome).toBe('done');
+    // Admitted in the Soundboard, not yet played: pending.
+    expect((await cp.receive(e)).outcome).toBe('pending');
     const again = await cp.receive(e);
     expect(again.outcome).toBe('duplicate');
     expect(
@@ -140,7 +141,58 @@ describe('Points de chaîne — reception and decisions', () => {
     });
     await soundReady(core);
     const ok = await cp.receive(redemption(core));
-    expect(ok.redemption.status).toBe('done');
+    // Admitted is NOT played: pending (« en file ») until the Soundboard player reports the end.
+    expect(ok.redemption).toMatchObject({
+      status: 'pending',
+      results: [
+        { index: 0, type: 'sound', status: 'pending', progress: 'queued' },
+      ],
+    });
+    const stateOf = async () =>
+      (await cp.state(CH)).recent.find(
+        (r) => r.redemption_id === ok.redemption.redemption_id,
+      )!;
+    const played = (await core.soundLab.claim('studio-1', CH))!;
+    const ackSound = (event: 'started' | 'completed' | 'failed') =>
+      core.soundLab.ack(played.interaction_id, {
+        studio_instance_id: 'studio-1',
+        attempt_id: played.delivery.attempt_id!,
+        event,
+        ...(event === 'failed'
+          ? { error: { code: 'audio_error', message: 'x', retryable: false } }
+          : {}),
+      } as never);
+    await ackSound('started');
+    expect(await stateOf()).toMatchObject({
+      status: 'pending',
+      results: [{ status: 'pending', progress: 'playing' }],
+    });
+    await ackSound('completed');
+    expect(await stateOf()).toMatchObject({
+      status: 'done',
+      results: [{ status: 'done' }],
+    });
+    // The player reports a failure: the action fails with the player's reason.
+    const bad = await cp.receive(redemption(core));
+    const second = (await core.soundLab.claim('studio-1', CH))!;
+    await core.soundLab.ack(second.interaction_id, {
+      studio_instance_id: 'studio-1',
+      attempt_id: second.delivery.attempt_id!,
+      event: 'failed',
+      error: {
+        code: 'audio_error',
+        message: 'decode failed',
+        retryable: false,
+      },
+    } as never);
+    expect(
+      (await cp.state(CH)).recent.find(
+        (r) => r.redemption_id === bad.redemption.redemption_id,
+      ),
+    ).toMatchObject({
+      status: 'failed',
+      results: [{ status: 'failed', error: 'audio_error' }],
+    });
     const row = (
       await core.db.query<{
         source: string;
@@ -164,6 +216,27 @@ describe('Points de chaîne — reception and decisions', () => {
     expect(
       [...queue.waiting, ...queue.playing].every((i) => !i.refundable),
     ).toBe(true);
+  });
+
+  it('a sound nobody plays (player closed) ends « expired » after 2 min instead of « en attente » for ever', async () => {
+    const { core, cp } = await fixture();
+    await cp.setEnabled(CH, true, 'test');
+    await soundReady(core);
+    await cp.saveRule(CH, REWARD, {
+      enabled: true,
+      actions: [{ type: 'sound', sound_id: 'random' }],
+    });
+    const e = await cp.receive(redemption(core));
+    expect(e.redemption.status).toBe('pending');
+    core.clock.advance(121_000);
+    expect((await cp.state(CH)).recent[0]).toMatchObject({
+      status: 'failed',
+      results: [{ status: 'failed', error: 'expired' }],
+    });
+    // Never refunded / debited (paid on Twitch).
+    expect(await core.db.query('select 1 from lab_wallet_ledger')).toHaveLength(
+      0,
+    );
   });
 
   it('rules: known rewards only, typed actions only, version conflicts refused', async () => {

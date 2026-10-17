@@ -46,6 +46,29 @@ type Result = {
   type: CpAction['type'];
   status: 'pending' | 'done' | 'failed' | 'unknown';
   error?: string;
+  /** Sound actions: the Soundboard interaction, and where it stands until its player reports the end. */
+  sound_interaction_id?: string;
+  progress?: 'queued' | 'playing';
+};
+
+/** A result update: final (ok / error / unknown) or, for a sound still in the Soundboard, its progress only. */
+type ResultUpdate = CpActionResult & {
+  unknown?: boolean;
+  progress?: 'queued' | 'playing';
+  sound_interaction_id?: string;
+};
+
+/** Soundboard status → this action's result (« done » only when the player reported the sound ended). */
+const SOUND_FINAL: Record<string, (error: string | null) => ResultUpdate> = {
+  completed: () => ({ index: 0, ok: true }),
+  failed: (e) => ({ index: 0, ok: false, error: e ?? 'failed' }),
+  cancelled: () => ({ index: 0, ok: false, error: 'stopped_by_moderation' }),
+  execution_unknown: () => ({
+    index: 0,
+    ok: false,
+    unknown: true,
+    error: 'playback_not_confirmed',
+  }),
 };
 
 interface RedemptionRow {
@@ -376,9 +399,10 @@ export class ChannelPointsService {
     // Sounds: after the commit (the Soundboard has its own transaction); a refusal is this action's failure.
     for (const { index, action } of decided.sounds) {
       let error: string | undefined;
+      let interaction: string | undefined;
       try {
         if (!this.sound) throw new Error('soundboard_unavailable');
-        await this.sound.admitChannelPoints({
+        const admitted = await this.sound.admitChannelPoints({
           idempotency_key: `cp:${e.source}:${e.redemption_id}:${index}`.slice(
             0,
             64,
@@ -387,13 +411,22 @@ export class ChannelPointsService {
           viewer: { id: e.user.id, display_name: e.user.display_name },
           sound_id: (action as { sound_id: string }).sound_id,
         });
+        interaction = admitted.interaction.interaction_id;
       } catch (err) {
         error = String(
           (err as { code?: string }).code ?? (err as Error).message,
         ).slice(0, 200);
       }
+      // Admitted is NOT played: the action stays pending (« en file ») until the Soundboard player reports the end.
       await this.setResults(e.channel_id, e.source, e.redemption_id, [
-        { index, ok: !error, ...(error ? { error } : {}) },
+        error
+          ? { index, ok: false, error }
+          : {
+              index,
+              ok: false,
+              progress: 'queued',
+              sound_interaction_id: interaction,
+            },
       ]);
     }
     const row = await this.redemption(e.channel_id, e.source, e.redemption_id);
@@ -419,7 +452,7 @@ export class ChannelPointsService {
     channelId: string,
     source: string,
     id: string,
-    results: (CpActionResult & { unknown?: boolean })[],
+    results: ResultUpdate[],
     q: Queryable = this.db,
   ) {
     const row = (
@@ -432,16 +465,73 @@ export class ChannelPointsService {
     const merged = row.results.map((r) => {
       const n = results.find((x) => x.index === r.index);
       if (!n || r.status !== 'pending') return r;
+      if (n.progress)
+        return {
+          ...r,
+          progress: n.progress,
+          ...(n.sound_interaction_id
+            ? { sound_interaction_id: n.sound_interaction_id }
+            : {}),
+        };
       return n.unknown
         ? { ...r, status: 'unknown' as const, error: n.error }
         : n.ok
-          ? { index: r.index, type: r.type, status: 'done' as const }
+          ? {
+              index: r.index,
+              type: r.type,
+              status: 'done' as const,
+              ...(r.sound_interaction_id
+                ? { sound_interaction_id: r.sound_interaction_id }
+                : {}),
+            }
           : { ...r, status: 'failed' as const, error: n.error ?? 'failed' };
     });
     await q.query(
       'update cp_redemptions set results = $4, status = $5 where channel_id = $1 and source = $2 and redemption_id = $3',
       [channelId, source, id, JSON.stringify(merged), overall(merged)],
     );
+  }
+
+  /**
+   * Pending sound actions follow their Soundboard interaction: queued / playing, then done only when the player
+   * reported `completed`; failed (expired, refused by the player, moderation stop) or unknown (no end report).
+   */
+  private async settleSounds(channelId: string) {
+    // The Soundboard's own expiry rule first (the Lab Core only runs it when a player claims): a sound nobody played
+    // within 2 min becomes « expired » instead of staying « en attente » for ever.
+    await this.sound?.sweepExpired().catch(() => 0);
+    const rows = await this.db.query<RedemptionRow>(
+      `select * from cp_redemptions where channel_id = $1 and status = 'pending'
+         and results::text like '%sound_interaction_id%' order by received_at desc limit 50`,
+      [channelId],
+    );
+    for (const row of rows) {
+      const updates: ResultUpdate[] = [];
+      for (const r of row.results) {
+        if (r.status !== 'pending' || !r.sound_interaction_id) continue;
+        const sound = (
+          await this.db.query<{ status: string; code: string | null }>(
+            "select status, error->>'code' as code from sound_lab_interactions where interaction_id = $1",
+            [r.sound_interaction_id],
+          )
+        )[0];
+        if (!sound) continue;
+        const final = SOUND_FINAL[sound.status];
+        if (final) updates.push({ ...final(sound.code), index: r.index });
+        else {
+          const progress = sound.status === 'executing' ? 'playing' : 'queued';
+          if (progress !== r.progress)
+            updates.push({ index: r.index, ok: false, progress });
+        }
+      }
+      if (updates.length)
+        await this.setResults(
+          channelId,
+          row.source,
+          row.redemption_id,
+          updates,
+        );
+    }
   }
 
   // --- OBS jobs (Studio) ------------------------------------------------------------------------------------------
@@ -488,6 +578,7 @@ export class ChannelPointsService {
 
   /** The next OBS job for this Studio (one in flight per channel), or null. */
   async claim(channelId: string, consumerId: string) {
+    await this.settleSounds(channelId);
     return this.db.tx(async (q) => {
       await q.query(
         `insert into cp_settings (channel_id, enabled, updated_at) values ($1, false, $2)
@@ -607,6 +698,7 @@ export class ChannelPointsService {
 
   /** The Studio tab: switch, rewards with their rule, recent redemptions, jobs in flight, Soundboard sounds. */
   async state(channelId: string) {
+    await this.settleSounds(channelId);
     const recent = await this.db.query<RedemptionRow>(
       'select * from cp_redemptions where channel_id = $1 order by received_at desc limit 30',
       [channelId],

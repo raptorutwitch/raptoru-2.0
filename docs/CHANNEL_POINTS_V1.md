@@ -1,7 +1,9 @@
 # Points de chaîne V1 — infrastructure officielle (17/10/2026)
 
-**Statut** : implémenté et testé automatiquement, **non validé manuellement**, **non connecté à Twitch** (autorisation
-manquante), **non déployé**, interrupteur principal **OFF**. SAMMI exécute toujours les récompenses de production.
+**Statut (17/10/2026, soir)** : connecté à Twitch en Lab (jeton broadcaster réautorisé par Antoni : 36 récompenses lues).
+**Validé par Antoni** : action OBS (« Tester »), réception d'une vraie récompense (compte LeCroupier\_), exécution réelle
+Twitch → Core → Studio → OBS (« Test Lab » → scène « Waiting screen »), persistance après redémarrage. **Son : non
+validé** (défaut corrigé, à revérifier, § 10). Non déployé ; SAMMI exécute toujours les récompenses de production.
 
 ## 1. Chaîne
 
@@ -47,7 +49,9 @@ lecteur OBS, sa modération) · OBS : tâche reprise par **Studio** (seul à par
 - Statuts : `ignored` (raison : automatisations désactivées, aucune action, règle désactivée, reçue trop tard > 2 min)
   · `pending` · `done` · `partial` · `failed` ; résultat par action (`done` / `failed` + raison lisible / `unknown`).
 - Sons : admis dans le Soundboard à la réception (son lecteur doit être prêt ; pause globale, blocages et cooldowns du
-  Soundboard s'appliquent ; échec = raison du Soundboard).
+  Soundboard s'appliquent ; échec = raison du Soundboard). **Admis n'est pas joué** : l'action reste « en attente du
+  lecteur Soundboard », puis « en cours de lecture », et n'est « faite » qu'au `completed` du lecteur (fin de l'audio dans
+  la page du lecteur) ; échec (expiré après 2 min, erreur du lecteur, arrêt de modération) ou « lecture non confirmée ».
 - OBS : une tâche par redemption, **une en vol par chaîne**, bail ; réservée mais jamais commencée → reproposée (3
   essais) puis échec « Studio absent » ; commencée sans rapport → `unknown`, **jamais rejouée**.
 - Effets temporaires : annulés à l'échéance **seulement si** l'élément est toujours dans l'état posé (un changement fait
@@ -116,3 +120,16 @@ seule) ; Studio 433 dont `channel-points-studio` (4 : exécuteur sur OBS **simul
 après redémarrage, chaîne complète avec le vrai Core Lab et le vrai client Studio) et `channel-points-view` (3) ;
 lecteurs Playwright 5/5 (Soundboard) ; mutation sur l'interrupteur vérifiée ; onglet vérifié dans Chromium (OBS
 simulé). **Aucune** récompense Twitch réelle reçue ni modifiée, **aucune** action sur le vrai OBS.
+
+## 10. Correctif Soundboard (17/10/2026, soir)
+
+Constat (base Lab) : le 1ᵉʳ son « Hello » admis a été rejeté par le worker Soundboard de Studio
+(`foreign_session : admitted by another Studio session`) — en Lab le worker ne joue que les sons portant **sa** session
+(protection contre le rejeu d'une session précédente) et un son de points de chaîne porte `lab_session_id =
+channel_points` ; le 2ᵉ est resté en file (lecteur plus prêt, aucune expiration en Lab sans passage du worker). Pendant ce
+temps l'historique affichait « Exécutée » dès l'admission. Correctifs : le worker joue les sons payés en points de chaîne
+(`apps/studio/server/src/sound-lab/worker.ts`) ; l'historique suit le Soundboard jusqu'à la confirmation du lecteur et
+applique son expiration (`apps/core-api/src/channel-points/service.ts`) ; libellés lisibles
+(`apps/studio/web/src/channel-points-view.ts`). Tests : Core `channel-points` 9, Studio `sound-lab` (son de points de
+chaîne remis au vrai worker puis au lecteur ; échoue sans le correctif), vues 4. Limite : `completed` prouve que la page
+du lecteur a joué l'audio jusqu'au bout, pas que la sortie audio (OBS / Windows) était audible.

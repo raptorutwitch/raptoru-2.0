@@ -38,7 +38,13 @@ export interface CpRedemption {
   status: 'ignored' | 'pending' | 'done' | 'partial' | 'failed';
   reason: string | null;
   actions: CpActionView[];
-  results: { index: number; status: string; error?: string }[];
+  results: {
+    index: number;
+    status: string;
+    error?: string;
+    /** Sound actions: in the Soundboard queue or being played (pending until the player reports the end). */
+    progress?: 'queued' | 'playing';
+  }[];
 }
 
 export interface CpState {
@@ -74,6 +80,26 @@ const STATUS: Record<CpRedemption['status'], string> = {
   done: 'Exécutée',
   partial: 'Partielle',
   failed: 'Échec',
+};
+
+/** Readable reasons (Core / Soundboard / OBS codes); OBS reasons are already in French. */
+const ERRORS: Record<string, string> = {
+  player_offline: 'lecteur Soundboard non ouvert ou son non activé',
+  studio_offline: 'Studio absent',
+  expired: 'non joué à temps (expiré)',
+  playback_not_confirmed: 'lecture non confirmée par le lecteur',
+  stopped_by_moderation: 'arrêté par la modération',
+  soundboard_paused: 'Soundboard en pause',
+  module_disabled: 'Soundboard désactivé',
+  sound_disabled: 'son désactivé',
+  sound_cooldown: 'son en cooldown',
+  queue_full: 'file du Soundboard pleine',
+  studio_absent: 'Studio absent',
+  execution_unknown: 'exécution non confirmée',
+};
+const PROGRESS = {
+  queued: 'en attente du lecteur Soundboard',
+  playing: 'en cours de lecture',
 };
 
 const seconds = (ms?: number) =>
@@ -184,7 +210,13 @@ export function historyView(s: CpState) {
                       : x.status === 'unknown'
                         ? '?'
                         : '✗';
-                return `${mark} ${a ? esc(actionLabel(a, s.sounds)) : ''}${x.error ? ` — ${esc(x.error)}` : ''}`;
+                const note =
+                  x.status === 'pending' && x.progress
+                    ? PROGRESS[x.progress]
+                    : x.error
+                      ? (ERRORS[x.error] ?? x.error)
+                      : '';
+                return `${mark} ${a ? esc(actionLabel(a, s.sounds)) : ''}${note ? ` — ${esc(note)}` : ''}`;
               })
               .join('<br>');
       return `<tr class="cp-row--${r.status}">

@@ -113,4 +113,51 @@ describe('Points de chaîne views', () => {
     expect(html).toContain('✗ Passer sur la scène « BRB » — OBS non connecté');
     expect(html).toContain('Test Studio');
   });
+
+  it('sounds: « en attente du lecteur » / « en cours de lecture » until the player confirms; readable reasons', () => {
+    const row = (results) => ({
+      source: 'twitch',
+      redemption_id: 'z',
+      reward: { title: 'Hello', cost: 1 },
+      user: { display_name: 'V' },
+      user_input: null,
+      received_at: '2026-10-17T20:00:00Z',
+      status: 'pending',
+      reason: null,
+      actions: [{ type: 'sound', sound_id: 'eren' }],
+      results,
+    });
+    expect(
+      historyView({
+        ...base,
+        recent: [row([{ index: 0, status: 'pending', progress: 'queued' }])],
+      }),
+    ).toContain('… Son « Eren cri » — en attente du lecteur Soundboard');
+    expect(
+      historyView({
+        ...base,
+        recent: [row([{ index: 0, status: 'pending', progress: 'playing' }])],
+      }),
+    ).toContain('en cours de lecture');
+    expect(
+      historyView({
+        ...base,
+        recent: [
+          row([{ index: 0, status: 'failed', error: 'player_offline' }]),
+        ],
+      }),
+    ).toContain(
+      '✗ Son « Eren cri » — lecteur Soundboard non ouvert ou son non activé',
+    );
+    expect(
+      historyView({
+        ...base,
+        recent: [
+          row([
+            { index: 0, status: 'unknown', error: 'playback_not_confirmed' },
+          ]),
+        ],
+      }),
+    ).toContain('? Son « Eren cri » — lecture non confirmée par le lecteur');
+  });
 });

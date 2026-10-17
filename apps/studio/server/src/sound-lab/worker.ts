@@ -149,10 +149,19 @@ export class SoundWorker {
   get session() {
     return this.state.session;
   }
-  /** Lab: never another Studio session's sound. Production: admitted by the public EBS (see Bonk). */
-  private ownSession(i: { lab_session_id: string | null }) {
+  /**
+   * Lab: never another Studio session's sound. Production: admitted by the public EBS (see Bonk). A channel points
+   * sound (Points de chaîne V1) is admitted by Core for a Twitch redemption, not by a Studio session: it is played by
+   * the Studio that serves the channel (Core expires it if nobody plays it within 2 min, never a late replay).
+   */
+  private ownSession(i: {
+    lab_session_id: string | null;
+    payment_method: string;
+  }) {
     return (
-      this.state.profile === 'production' || i.lab_session_id === this.session
+      this.state.profile === 'production' ||
+      i.lab_session_id === this.session ||
+      i.payment_method === 'channel_points'
     );
   }
   /** A live player page whose audio output has been enabled by a user gesture. */

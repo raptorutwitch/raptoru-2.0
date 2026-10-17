@@ -207,6 +207,58 @@ describe('Soundboard Lab: Extension Lab → Core → Studio worker → local pla
     );
   });
 
+  it('a channel points sound (admitted by Core, not by this Studio session) is played, and only the player end makes it « done »', async () => {
+    const f = await fixture();
+    await f.ready();
+    const cp = f.core.channelPoints;
+    await cp.syncRewards({
+      channel_id: '900100',
+      rewards: [
+        { id: 'reward-hello', title: 'Hello', cost: 100, is_enabled: true },
+      ],
+    });
+    await cp.saveRule('900100', 'reward-hello', {
+      enabled: true,
+      actions: [{ type: 'sound', sound_id: 'boop' }],
+    });
+    const out = await cp.receive({
+      channel_id: '900100',
+      source: 'simulation',
+      redemption_id: 'test-hello',
+      reward: { id: 'reward-hello', title: 'Hello', cost: 100 },
+      user: { id: '900100', login: 'studio', display_name: 'Test Studio' },
+      redeemed_at: new Date().toISOString(),
+    });
+    expect(out.redemption.status).toBe('pending');
+    await f.worker.tick();
+    // Handed to the player (it used to be refused as « foreign_session »).
+    const command = (await f.worker.command('player-1'))!;
+    expect(command).toMatchObject({ sound_url: 'assets/sounds/boop.mp3' });
+    const state = async () => (await cp.state('900100')).recent[0]!;
+    await f.worker.playerAck(
+      command.interaction_id,
+      command.delivery.attempt_id!,
+      'player-1',
+      'started',
+    );
+    await f.worker.tick();
+    expect(await state()).toMatchObject({
+      status: 'pending',
+      results: [{ progress: 'playing' }],
+    });
+    await f.worker.playerAck(
+      command.interaction_id,
+      command.delivery.attempt_id!,
+      'player-1',
+      'completed',
+    );
+    await f.worker.tick();
+    expect(await state()).toMatchObject({
+      status: 'done',
+      results: [{ status: 'done' }],
+    });
+  });
+
   it('missing file / audio error is an explicit failure with its code; a wrong player cannot ACK', async () => {
     const f = await fixture();
     await f.ready();

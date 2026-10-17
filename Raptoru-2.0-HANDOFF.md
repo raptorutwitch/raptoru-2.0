@@ -32,7 +32,9 @@ Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Anton
 - **Tests au `166e7ed`** : Core 675 (+22 ignorés : PostgreSQL réel absent), Studio 381, Bot 111, Playwright 13/13 ;
   typecheck, lint, build verts.
 
-**POINTS DE CHAÎNE V1 (17/10/2026, local, non validé, non connecté, interrupteur OFF)** : infrastructure officielle
+**POINTS DE CHAÎNE V1 (17/10/2026, local, non déployé)** — connecté à Twitch en Lab (36 récompenses lues) ; **validé par
+Antoni** : test OBS, vraie récompense reçue (LeCroupier\_), exécution réelle Twitch → Core → Studio → OBS, persistance ;
+**son à revérifier** après le correctif Soundboard (`docs/CHANNEL_POINTS_V1.md` § 10). Infrastructure officielle
 récompenses Twitch → bot (connexion broadcaster) → Core (dédoublonnage, interrupteur, règles, actions typées : son du
 Soundboard, source / filtre / scène OBS) → Studio (exécution OBS sur sa connexion unique, effets temporaires annulés
 seulement si inchangés) ; onglet « Points de chaîne · Core » ; migrations Lab `20261025120000_channel_points_lab.sql` et
