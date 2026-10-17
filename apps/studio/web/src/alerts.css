@@ -331,3 +331,49 @@
 .al-calib-status--dirty {
   color: var(--warn);
 }
+
+/* Dons StreamElements (17/10/2026): readable journal under the columns. */
+.al-se {
+  margin-top: 18px;
+}
+.al-se-connect {
+  margin: 8px 0 12px;
+}
+.al-se-connect summary {
+  cursor: pointer;
+}
+.al-se-journal {
+  max-height: 360px;
+  overflow: auto;
+}
+.al-se-journal table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.al-se-journal th,
+.al-se-journal td {
+  text-align: left;
+  vertical-align: top;
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-wrap: anywhere;
+}
+.al-se-journal th {
+  position: sticky;
+  top: 0;
+  background: var(--bg, #15171c);
+}
+.al-se-test td:nth-child(2) b {
+  color: #8fc4ff;
+}
+.al-se-queued td:nth-child(2) b {
+  color: #7ee2a0;
+}
+.al-se-ignored td:nth-child(2) b,
+.al-se-duplicate td:nth-child(2) b {
+  color: #c9c9c9;
+}
+.al-se-error td:nth-child(2) b {
+  color: #ff8a8a;
+}

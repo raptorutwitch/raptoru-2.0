@@ -289,3 +289,128 @@ describe('Studio « Événements Twitch réels » mode', () => {
     expect((await AlertsRuntime.create(deps)).twitchMode).toBe('off');
   });
 });
+
+describe('real StreamElements tips → Lab Core donation queue', () => {
+  it('ACTIVE: one donation alert (MoneyTest), exact name and amount; moderation echo / reconnection replay = duplicate; TEST queues nothing; other families untouched', async () => {
+    const { SeTipsLink } = await import('../src/alerts/se-tips.js');
+    const { SE_MODERATION, SE_TIP_EXAMPLE, tip, FAKE_JWT } =
+      await import('./fixtures/se-tips.js');
+    const core = await labCore();
+    const dir = await mkdtemp(join(tmpdir(), 'se-chain-'));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
+    const sockets: { onmessage: ((e: { data: unknown }) => void) | null }[] =
+      [];
+    const open = () =>
+      SeTipsLink.open({
+        dir,
+        channelId: CH,
+        core: core.call as never,
+        fromMain: () => true,
+        socket: () => {
+          const s = {
+            send() {},
+            close() {},
+            onmessage: null,
+            onclose: null,
+            onerror: null,
+          };
+          sockets.push(s);
+          return s;
+        },
+        log: () => {},
+      });
+    const push = (m: unknown) =>
+      sockets.at(-1)!.onmessage!({ data: JSON.stringify(m) });
+    const settle = () => new Promise((r) => setTimeout(r, 300));
+    const state = async () =>
+      (await core.call(`/v1/lab/alerts/${CH}/state`)) as unknown as State;
+
+    // TEST: received, journaled, nothing in the queue.
+    const test = await open();
+    test.setToken('jwt', FAKE_JWT, null);
+    await test.setMode('test');
+    push({ type: 'welcome', data: {} });
+    push(tip({ _id: 'tip-test-1', username: 'Testeur', amount: 3 }));
+    await settle();
+    expect((await state()).queued).toEqual([]);
+    expect(test.status().last_event).toMatchObject({ decision: 'test' });
+
+    // ACTIVE: a real-looking tip, its moderation echo, then the same tip again after a reconnection.
+    await test.setMode('active');
+    push({ type: 'welcome', data: {} });
+    const name = 'Le Pigeon Fou 🐦 <b>';
+    push(
+      tip({
+        _id: 'tip-1',
+        username: name,
+        amount: 19.99,
+        currency: 'EUR',
+        message: 'Courage <3',
+      }),
+    );
+    push(SE_MODERATION('allowed')); // the official example: another tip id (allowed)
+    push(SE_TIP_EXAMPLE); // same id as the moderation echo: duplicate
+    await settle();
+    test.close();
+    const again = await open(); // Studio restart: mode kept (active), token handed again
+    again.setToken('jwt', FAKE_JWT, null);
+    push({ type: 'welcome', data: {} });
+    push(
+      tip({
+        _id: 'tip-1',
+        username: name,
+        amount: 19.99,
+        currency: 'EUR',
+        message: 'Courage <3',
+      }),
+    );
+    await settle();
+    again.close();
+
+    const queued = (await state()).queued;
+    expect(queued.map((q) => [q.type, q.family, q.variant_id])).toEqual([
+      ['donation', 'donation', 'don_moneytest'],
+      ['donation', 'donation', 'don_moneytest'],
+    ]);
+    expect(queued[0]!.data).toMatchObject({
+      pseudo: name,
+      amount: '19.99',
+      currency: 'EUR',
+      message: 'Courage <3',
+    });
+    expect(queued[1]!.data).toMatchObject({
+      pseudo: 'Styler',
+      amount: '4.2',
+      currency: 'USD',
+    });
+    expect(again.status().journal.map((e) => e.decision)).toEqual([
+      'duplicate',
+      'duplicate',
+      'queued',
+      'queued',
+      'test',
+    ]);
+    // The donation family plays beside the others: a follow / raid sent now are claimed together with it.
+    await adapter(core.call).deliver(
+      'channel.chat.notification',
+      EVENTS.raid,
+      'r1',
+    );
+    await core.call('/v1/lab/alerts/events', {
+      channel_id: CH,
+      source: 'simulation',
+      source_event_id: 'sim-follow-1',
+      type: 'follow',
+      actor: { display_name: 'F' },
+    });
+    const claimed: string[] = [];
+    for (;;) {
+      const { alert } = (await core.call(`/v1/lab/alerts/${CH}/claim`, {
+        consumer_id: 'obs-test',
+      })) as { alert: { family: string } | null };
+      if (!alert) break;
+      claimed.push(alert.family);
+    }
+    expect(claimed.sort()).toEqual(['donation', 'follow', 'raid']);
+  });
+});

@@ -547,3 +547,68 @@ enregistré, redémarrage de l'adaptateur, valeur invalide refusée) ; mutations
 **Aucun** événement Twitch réel reçu, **aucun** abonnement réel créé.
 
 **Toujours vrai** : production = SAMMI / StreamElements ; rien n'est activé tant qu'Antoni ne choisit pas TEST puis ACTIVE.
+
+## 21. Dons réels StreamElements (17/10/2026, Lab, non validé manuellement, aucune connexion réelle faite)
+
+**Documentation suivie** (docs.streamelements.com, lue le 17/10/2026, pages mises à jour le 14/10/2026) : passerelle
+WebSocket **Astro** `wss://astro.streamelements.com/` (`/websockets`), topics `channel.tips` (scope `tips:read`, « un
+don une fois terminé ») et `channel.tips.moderation` (`tips:moderation`, états `pending` / `allowed` / `rejected`).
+Jetons acceptés : `jwt`, `apikey` (Overlay Token), `oauth2`. **Aucune procédure publique** pour obtenir des
+identifiants OAuth2 StreamElements n'est documentée : seuls le JWT et l'Overlay Token (dashboard) sont utilisables.
+Les droits exacts de l'Overlay Token sur `channel.tips` ne sont **pas** documentés (à vérifier à la connexion :
+Studio affiche le refus éventuel). Astro ne documente **aucune** retransmission des événements manqués pendant une
+coupure ; la reconnexion propre passe par `reconnect_token` (abonnements restaurés). Ping / pong : géré par le client
+WebSocket (Node / Electron).
+
+**Chaîne** : Astro → `apps/studio/server/src/alerts/se-tips.ts` (serveur Studio, profil Lab) → `POST /v1/lab/alerts/events`
+du Core Lab (`source: external`, `source_event_id` = `streamelements-tip-<_id>`, `type: donation`) → dédoublonnage,
+variante `don_moneytest` figée → file **donation** → source OBS existante (médias et calibrage du Studio). Aucun
+nouveau moteur, aucune nouvelle source OBS, aucun paiement, aucun appel à l'historique (REST) : seul ce qu'Astro pousse
+pendant la connexion.
+
+**Normalisation** : nom = `data.donation.user.username` **exactement** (casse, espaces internes, accents, emoji, noms
+absurdes ; seuls les espaces de début / fin partent, 64 caractères max, jamais coupé au milieu d'un caractère) ;
+« Anonyme » seulement si le nom est vraiment absent ; jamais l'e-mail, le pays ou un autre identifiant (non lus).
+Montant : chiffres exacts tels qu'envoyés (`4.2` → 42 × 10⁻¹, `19.99` → 1999 × 10⁻², aucun arrondi flottant), devise
+ISO en majuscules ; message ≤ 500 caractères ; date = `createdAt`. Données non fiables : affichées avec
+`textContent` (moteur) / échappées (Studio). **Admission** : seulement `status` = `success` **et** `approved` =
+`allowed` quand ces champs sont présents (un champ absent n'est pas deviné) ; `pending` → ignoré (le passage à
+`allowed` arrive par `channel.tips.moderation`, admis une fois) ; `rejected` / autre statut → ignoré. Le même `_id`
+reçu par les deux topics, une reconnexion ou un redémarrage = **une** alerte (base Lab).
+
+**Modes** (indépendants des événements Twitch ; `alerts/se-mode.json`, **OFF** par défaut) : **OFF** = aucune connexion ;
+**TEST** = connecté, chaque don dans le journal, **jamais** envoyé au Core ; **ACTIVE (Lab)** (confirmation) = dons
+admis mis en file, joués par la source OBS de ce Studio (en plus des alertes StreamElements legacy). TEST ↔ ACTIVE
+garde la connexion.
+
+**Secret** : saisi dans l'onglet Alertes (champ masqué, vidé aussitôt) → Electron main → chiffré par Windows
+(`safeStorage` / DPAPI, `userData/se-connection.json`, comme le mot de passe OBS) → remis au serveur à chaque démarrage
+(mémoire seulement ; route `/api/alerts/se/connect` réservée à main, `x-raptoru-main`). Jamais renvoyé par une API,
+jamais écrit par le serveur, jamais dans un journal ni dans une URL OBS.
+
+**Studio** (onglet Alertes, « Dons StreamElements ») : compte (jeton enregistré, type, chaîne SE), état de connexion
+(connecté / reconnexion / jeton refusé), état de chaque topic (abonné / refusé + raison), erreur lisible, dernier don,
+**journal conservé** (`alerts/se-journal.json`, 200 derniers, 50 affichés, rafraîchi toutes les 2 s) : heure, décision
+(TEST · reçu / mis en file / doublon / ignoré + raison / erreur), nom affiché, montant, message, statut, id.
+
+**Résilience** : coupure → reconnexion 2 / 5 / 15 / 30 / 60 s ; message `reconnect` → reconnexion immédiate avec son
+jeton, sans réabonnement ; topic des dons refusé (`err_unauthorized` / `err_bad_request`) → « jeton refusé », plus
+de tentative jusqu'à un nouveau jeton ; refus du seul topic de modération → noté, les dons continuent ; Core
+indisponible → nouvel envoi en mémoire avec le même id (90 s), refus 4xx → ligne « erreur ». Messages malformés :
+ignorés, jamais d'arrêt.
+
+**Affichage du nom** (moteur, famille don) : un nom long rétrécit sur sa ligne ; sous 24 px il passe sur sa propre
+ligne au-dessus du montant (cadre agrandi vers le bas) et rétrécit encore ; coupé (…) seulement sous 12 px (≈ 60
+caractères). Noms courts : mise en page legacy inchangée.
+
+**Preuves** : Studio server 420 (dont `alerts-se` 15 : exemple officiel verbatim, noms, messages, montants exacts,
+statuts / modération, messages malformés, JWT, modes OFF / TEST / ACTIVE, secret jamais exposé, accès main seul, refus
+du jeton sans boucle, reconnexions, Core indisponible / refus, persistance ; chaîne avec le **vrai Core Lab** : TEST
+sans file, ACTIVE = 2 dons MoneyTest exacts, écho de modération / rejeu après redémarrage = doublons, familles
+indépendantes ; vues échappées) ; Desktop 26 (stockage chiffré) ; Playwright alertes 15/15 (dont nom long / hostile) ;
+mutation vérifiée ; rendu du vrai MoneyTest et de la section Studio vérifiés dans Chromium. **Non testé** : vraie
+connexion StreamElements, vrai don, IPC Electron réelle.
+
+**Limites** : pas de garantie « zéro perte » (Astro ne rejoue rien après une coupure, renvoi au Core en mémoire 90 s) ;
+si l'Overlay Token n'a pas `tips:moderation`, un don mis en attente puis accepté ne sera pas vu ; valeurs de `status`
+autres que `success` non documentées (toutes refusées) ; montant affiché tel qu'envoyé (« 4.2$ » comme le legacy).

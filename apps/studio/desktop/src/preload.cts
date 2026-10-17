@@ -48,9 +48,18 @@ const obs = {
   remembered: () => ipcRenderer.invoke('studio:obs:remembered'),
 };
 
+// StreamElements token for the real donations (alerts, Lab): main keeps it encrypted by the OS and hands it to the
+// server; nothing ever reads it back to the page.
+const se = {
+  connect: (tokenType: string, token: string, room: string) =>
+    ipcRenderer.invoke('studio:se:connect', tokenType, token, room),
+  forget: () => ipcRenderer.invoke('studio:se:forget'),
+};
+
 contextBridge.exposeInMainWorld('raptoruStudio', {
   update,
   server,
   profile,
   obs,
+  se,
 });

@@ -166,7 +166,7 @@ export interface ProfileApiDeps {
 const MAIN_HEADER = 'x-raptoru-main';
 
 /** Only the Electron main process (which shows a native confirmation) may change the profile. */
-function fromMain(req: IncomingMessage, env: ProfileApiDeps['env']) {
+export function fromMain(req: IncomingMessage, env: ProfileApiDeps['env']) {
   const expected = env.RAPTORU_MAIN_TOKEN ?? '';
   const actual = String(req.headers[MAIN_HEADER] ?? '');
   const a = Buffer.from(actual);

@@ -38,7 +38,9 @@ famille** (follow, abonnements, bits, don, raid jouent ensemble, chacune FIFO ; 
 `20261023120000_alerts_lab_families.sql`) — § 18, **validé dans OBS par Antoni le 17/10** ; source OBS périmée
 rechargée automatiquement quand elle est inactive (§ 19, non validé) ; **vrais événements Twitch raccordés** à la
 connexion Lab existante (sub, resub, gifts, bits, raid ; follow prêt mais droit `moderator:read:followers` absent ;
-dons SE non raccordés), mode « Événements Twitch réels » **OFF** par défaut (§ 20, non validé, rien d'activé).
+dons SE non raccordés), mode « Événements Twitch réels » **OFF** par défaut (§ 20 ; réception d'un vrai follow vue en TEST) ; **dons
+StreamElements** raccordés (Astro `channel.tips`, mode séparé OFF par défaut, jeton chiffré par Electron) — § 21, non
+validé, aucune connexion réelle faite.
 
 **Réserves ouvertes (non bloquantes, rien de corrigé dans ce checkpoint)**
 

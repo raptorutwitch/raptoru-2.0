@@ -2,6 +2,7 @@ import { BonkRuntime } from './bonk-lab/runtime.js';
 import { bootPlan } from './prod-transport/profile.js';
 import {
   createProductionRuntimes,
+  fromMain,
   handleProfileApi,
   type ProfileApiDeps,
 } from './prod-transport/production.js';
@@ -15,6 +16,7 @@ import {
 } from './lab-moderation/proxy.js';
 import { AlertMediaStore } from './alerts/media-store.js';
 import { AlertsRuntime } from './alerts/runtime.js';
+import { SeTipsLink } from './alerts/se-tips.js';
 import { RaffleRuntime } from './raffle-lab/runtime.js';
 import { WordGameRuntime } from './word-game/runtime.js';
 import { LabChatIngress } from './lab-chat/ingress.js';
@@ -629,6 +631,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       : null;
   // Lab chat ingress, created below (the shutdown may run before it exists).
   let labChatRef: LabChatIngress | null = null;
+  let seRef: SeTipsLink | null = null;
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
@@ -637,6 +640,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     sound?.stop();
     tts?.stop();
     production?.link.stop();
+    seRef?.close();
     lab.logs.add(
       'studio',
       'Studio closing: stopping bot and Core (Postgres keeps running)',
@@ -754,6 +758,18 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           ),
         })
       : null;
+  // Real StreamElements donations (Lab profile only): own mode (OFF by default), token handed by Electron main.
+  const se =
+    labCore && labProfile
+      ? await SeTipsLink.open({
+          dir: join(paths.runtimeDir, 'alerts'),
+          channelId: cockpitChannel,
+          core: labCore,
+          fromMain: (req) => fromMain(req, { RAPTORU_MAIN_TOKEN: mainToken }),
+          log: (line) => lab.logs.add('studio', line),
+        })
+      : null;
+  seRef = se;
   // Twitch alerts V1 (Lab profile only): media in Studio's storage (imported by alerts/import-cli.ts).
   const alerts: AlertsRuntime | null =
     labCore && labProfile
@@ -762,6 +778,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           core: labCore,
           origin: `http://${host}:${port}`,
           dir: join(paths.runtimeDir, 'alerts'),
+          se: se ?? undefined,
           // Real Twitch events ride on the Lab chat adapter (created below): its state, and a restart on a new mode.
           twitch: {
             status: () => {

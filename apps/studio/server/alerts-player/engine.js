@@ -184,6 +184,24 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
       text.textContent = '';
       text.append(box);
       text.className = 'pseudo-don show' + (message ? '' : ' no-message');
+      // A long donor name (17/10/2026) shrinks until it fits beside the amount; under 24 px it gets its own line above
+      // the amount (box grows downwards) and shrinks again; cut (…) only under 12 px. Short names: legacy layout.
+      const name = line.querySelector('.don-name');
+      let nameSize = sizes.name;
+      const shrink = (floor) => {
+        while (nameSize > floor && name.scrollWidth > name.clientWidth) {
+          nameSize -= 1;
+          set('--don-name-size', nameSize + 'px');
+        }
+      };
+      shrink(24);
+      if (name.scrollWidth > name.clientWidth) {
+        line.classList.add('don-stacked');
+        box.style.height = 'auto';
+        nameSize = sizes.name;
+        set('--don-name-size', nameSize + 'px');
+        shrink(12);
+      }
       if (ctx.live) speak(v, pseudo, title, message, later);
       return;
     }

@@ -972,3 +972,49 @@ test('stale source: a page that still comes back old (cache) reloads once, not i
   expect(reloads).toHaveLength(1);
   expect(await pageVersion(page)).not.toBe(await rt.playerVersion());
 });
+
+test('donation: a long public donor name shrinks until it fits its line, a short one keeps the legacy size; text only', async ({
+  page,
+}) => {
+  const p = await preview(page);
+  const don = {
+    ...ALERT_VARIANTS.don_moneytest,
+    video: 'Raid Titan.webm',
+    audio: null,
+    tts: null,
+  };
+  const nameBox = page.locator('.don-name');
+  const measure = () =>
+    nameBox.evaluate((el: HTMLElement) => ({
+      fits: el.scrollWidth <= el.clientWidth,
+      size: parseFloat(getComputedStyle(el).fontSize),
+      text: el.textContent,
+    }));
+  await p.seek(don, { pseudo: 'Bob', amount: '5', currency: 'EUR' }, 3000);
+  expect(await measure()).toEqual({ fits: true, size: 46, text: 'Bob' });
+  const long = 'Le Pigeon Voyageur Qui A Traversé Tout 🐦';
+  await p.seek(don, { pseudo: long, amount: '19.99', currency: 'EUR' }, 3000);
+  const m = await measure();
+  expect(m.text).toBe(long);
+  expect(m.fits).toBe(true);
+  expect(m.size).toBeLessThan(46);
+  expect(m.size).toBeGreaterThanOrEqual(12);
+  // Its own line above the amount, the box stays inside the 1080 p frame.
+  await expect(page.locator('.don-line-main')).toHaveClass(/don-stacked/);
+  const box = await page
+    .locator('.don-text-box')
+    .evaluate((el) => el.getBoundingClientRect().bottom);
+  expect(box).toBeLessThan(1080);
+  // Short name: legacy line (name beside the amount).
+  await p.seek(don, { pseudo: 'Bob', amount: '5' }, 3000);
+  await expect(page.locator('.don-line-main')).not.toHaveClass(/don-stacked/);
+  // Hostile name: shown as text, no element created from it.
+  await p.seek(
+    don,
+    { pseudo: '<img src=x onerror=alert(1)>', amount: '1' },
+    3000,
+  );
+  await expect(nameBox).toHaveText('<img src=x onerror=alert(1)>');
+  expect(await page.locator('.don-name img').count()).toBe(0);
+  await p.stop();
+});

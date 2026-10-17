@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
 import type { AlertMediaStore } from './media-store.js';
 import { AlertPlacementStore } from './placement-store.js';
+import type { SeTipsLink } from './se-tips.js';
 
 // Twitch alerts V1 (A2) in Studio (docs/TWITCH_ALERTS_PARITY_2026-10.md § 14). Core decides and queues; Studio serves
 // the OBS source and its media, and relays the source's claim / reports to Core (token from the source URL). The
@@ -87,6 +88,8 @@ export interface AlertsRuntimeDeps {
     };
     restart(): Promise<void>;
   };
+  /** Real StreamElements donations (se-tips.ts): its own mode, connection and journal under /api/alerts/se. */
+  se?: SeTipsLink;
 }
 
 /**
@@ -216,6 +219,10 @@ export class AlertsRuntime {
     reply: (s: number, b: unknown) => void,
   ) {
     const p = url.pathname.slice('/api/alerts'.length);
+    if (p === '/se' || p.startsWith('/se/'))
+      return this.d.se
+        ? this.d.se.api(req, p.slice(3), () => this.body(req), reply)
+        : reply(404, { error: 'not_found' });
     if (req.method === 'GET' && p === '/state')
       return reply(200, {
         ...(await this.d.core<Record<string, unknown>>(

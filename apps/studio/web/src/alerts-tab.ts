@@ -16,6 +16,7 @@ import {
   variantLabel,
 } from './alerts-view.js';
 import { mountCalibration } from './alerts-calibrate.js';
+import { mountSeDonations } from './alerts-se.js';
 import { mountTwitchMode } from './alerts-twitch.js';
 
 // Twitch alerts V1 (A2) — Studio tab « Alertes » (docs/TWITCH_ALERTS_PARITY_2026-10.md § 14). The preview iframe runs
@@ -100,6 +101,8 @@ export function mountAlerts(root: HTMLElement) {
               <h2>Médias</h2><div data-role="media"></div>
               <h2>Événements Twitch réels</h2><div data-role="twitch"></div></div>
           </div>
+          <div class="al-se"><h2>Dons StreamElements</h2><div data-role="se"></div>
+          </div>
         </div>
       </div>
     </section>`;
@@ -110,6 +113,7 @@ export function mountAlerts(root: HTMLElement) {
   const stageBox = root.querySelector<HTMLElement>('.al-stage')!;
 
   mountTwitchMode($('twitch'));
+  mountSeDonations($('se'));
 
   const calib = mountCalibration({
     host: $('calib'),

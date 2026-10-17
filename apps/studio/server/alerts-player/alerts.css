@@ -261,6 +261,10 @@ html, body {
     -webkit-box-orient: vertical;
 }
 .pseudo-don.no-message .don-message { display: none; }
+/* Long donor name (17/10/2026): on its own line above the amount, full width (set by the engine's fit). */
+.don-line-main.don-stacked { flex-direction: column; align-items: center; gap: 4px; }
+.don-stacked .don-name { flex: none; width: 100%; text-align: center; }
+.don-stacked .don-amount { flex: none; max-width: 100%; }
 @keyframes donIn {
     from { opacity: 0; transform: translate(-50%, 18px) scale(.96); }
     to { opacity: 1; transform: translate(-50%, 0) scale(1); }

@@ -21,6 +21,11 @@ import {
   saveObsConnection,
 } from './obs-credentials.js';
 import { rotatingLog } from './rotating-log.js';
+import {
+  forgetSeConnection,
+  loadSeConnection,
+  saveSeConnection,
+} from './se-credentials.js';
 import { setupUpdater } from './updater.js';
 import {
   ServerSupervisor,
@@ -260,6 +265,7 @@ supervisor.onChange((s: ServerStatus) => {
   if (s.state === 'ready') {
     void showStudio();
     void restoreObs();
+    void restoreSe();
   } else if (
     ['starting', 'crashed', 'restarting', 'fatal', 'stopped'].includes(
       s.state,
@@ -407,6 +413,40 @@ async function restoreObs() {
   // The first failure (OBS not started yet) is expected: the server keeps retrying.
   await profileCall('/api/bonk-lab/connect', connection).catch((e: Error) =>
     serverLog(`[obs] restore failed: ${e.message}`),
+  );
+}
+
+// --- StreamElements donations (alerts, Lab) -------------------------------------------------------
+// Same rule as OBS: the token is encrypted by the OS here, handed to the server (memory only) after each start, and
+// never sent back to the page. The server accepts it from main only (x-raptoru-main).
+const seFile = () => join(app.getPath('userData'), 'se-connection.json');
+handleTrusted('studio:se:connect', async (tokenType, token, room) => {
+  if (
+    typeof tokenType !== 'string' ||
+    typeof token !== 'string' ||
+    typeof room !== 'string'
+  )
+    return { ok: false, error: 'invalid_payload' };
+  const connection = {
+    token_type: tokenType as 'jwt' | 'apikey',
+    token: token.trim(),
+    room: room.trim(),
+  };
+  const result = await profileCall('/api/alerts/se/connect', connection);
+  if (!result.ok) return { ok: false, error: result.error ?? 'refused' };
+  const remembered = await saveSeConnection(seFile(), safeStorage, connection);
+  return { ok: true, remembered };
+});
+handleTrusted('studio:se:forget', async () => {
+  await forgetSeConnection(seFile());
+  return profileCall('/api/alerts/se/forget', {});
+});
+async function restoreSe() {
+  const connection = await loadSeConnection(seFile(), safeStorage);
+  if (!connection) return;
+  // Production profile: no alerts runtime, the call is simply refused.
+  await profileCall('/api/alerts/se/connect', connection).catch((e: Error) =>
+    serverLog(`[se] restore failed: ${e.message}`),
   );
 }
 
