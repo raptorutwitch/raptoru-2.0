@@ -5,7 +5,9 @@ export const OBS_RETRY_MS = [1000, 2000, 5000, 10_000];
 /** obs-websocket v5 close code: wrong password. */
 const AUTHENTICATION_FAILED = 4009;
 
-// Minimal read-only obs-websocket v5 client. No scene/source mutation and no streaming controls.
+// Minimal obs-websocket v5 client, read-only for the Bonk. The only writes go through the typed Points de chaîne
+// executor (channel-points/obs-actions.ts: one source's visibility, one filter, the program scene); never streaming
+// controls.
 // Protocol: https://github.com/obsproject/obs-websocket/blob/master/docs/generated/protocol.md
 // Bonk VNext lot 0: a lost or not yet available OBS is retried until `disconnect()` (memory only:
 // the password is never written by this class). A refused password stops the retries.
@@ -166,7 +168,13 @@ export class LabObs {
             this.pending.delete(packet.d.requestId);
             if (packet.d.requestStatus.result)
               p?.resolve(packet.d.responseData ?? {});
-            else p?.reject(new Error('obs_request_failed'));
+            // Same message as before; the obs-websocket status code is kept (600 = resource not found…).
+            else
+              p?.reject(
+                Object.assign(new Error('obs_request_failed'), {
+                  code: packet.d.requestStatus.code as number | undefined,
+                }),
+              );
           } else if (packet.op === 5) {
             this.onEvent?.(
               String(packet.d.eventType),

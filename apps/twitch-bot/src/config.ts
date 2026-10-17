@@ -18,6 +18,24 @@ export const BROADCASTER_SCOPES = [
   'moderator:read:followers',
 ];
 
+/**
+ * Scopes asked for the broadcaster token: loyalty's, plus channel:read:redemptions when Points de chaîne is on
+ * (CHANNEL_POINTS_EVENTS). Read only: Raptoru never manages a redemption.
+ */
+export function broadcasterScopes(
+  config: Partial<
+    Pick<TwitchAppConfig, 'LOYALTY_TWITCH_EVENTS' | 'CHANNEL_POINTS_EVENTS'>
+  >,
+): string[] {
+  const loyalty = config.LOYALTY_TWITCH_EVENTS !== 'false';
+  return [
+    ...(loyalty ? BROADCASTER_SCOPES : []),
+    ...(config.CHANNEL_POINTS_EVENTS === 'true'
+      ? ['channel:read:redemptions']
+      : []),
+  ];
+}
+
 export const DEFAULT_TOKEN_FILE = fileURLToPath(
   new URL('../.twitch-tokens.json', import.meta.url),
 );
@@ -44,6 +62,10 @@ const TwitchApp = z.object({
   // Forwards subs, gifts, cheers and follows to Core (needs the broadcaster token). Core alone
   // decides shadow / preview / credit; nothing is written to chat.
   LOYALTY_TWITCH_EVENTS: Flag,
+  // Points de chaîne V1: the broadcaster connection also receives the channel points redemptions (read only) and
+  // reads the reward list; needs channel:read:redemptions on the broadcaster token. Core's master switch (OFF by
+  // default) decides whether anything is executed.
+  CHANNEL_POINTS_EVENTS: Flag,
   // Loyalty events not yet answered by Core (survives bot restarts), git-ignored.
   LOYALTY_OUTBOX_FILE: z.string().min(1).default(DEFAULT_LOYALTY_OUTBOX_FILE),
   // Shadow presence tracker (Get Chatters, read-only). Needs scope moderator:read:chatters.

@@ -1,0 +1,633 @@
+import { randomUUID } from 'node:crypto';
+import {
+  type CpAckRequest,
+  type CpAction,
+  CpAction as CpActionSchema,
+  type CpActionResult,
+  type CpRedemptionInput,
+  type CpRedemptionStatus,
+  type CpRewardsSync,
+  type CpRuleInput,
+} from '@raptoru/schemas';
+import type { Clock } from '../clock.js';
+import type { Db, Queryable } from '../db/db.js';
+import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
+
+// Points de chaîne V1 (docs/CHANNEL_POINTS_V1.md) — the ONE implementation, served to the Lab Core and to the
+// production Core (same pattern as the alerts). A Twitch redemption (read only) is recorded once (dedup by its Twitch
+// id), checked against the channel's master switch (OFF by default) and the reward's rule, then executed:
+// - sound actions: admitted at once into the Soundboard queue (its player, moderation and pause apply), paid by the
+//   channel points (no wallet debit);
+// - OBS actions: one job for Studio (the only one that talks to OBS), one job in flight per channel, a lease; a job
+//   claimed but never started is offered again (3 attempts); a started job is NEVER replayed (expired if its lease ends
+//   without a report: it may have run).
+// Raptoru never fulfils or cancels a redemption on Twitch (only the app that created a reward may; docs § 2).
+
+export const CP_RULES = {
+  claimLeaseMs: 15_000,
+  /** Lease of a running job: its temporary actions' durations plus this margin. */
+  runMarginMs: 15_000,
+  maxAttempts: 3,
+  /** A real redemption older than this at reception is not executed (late after an outage / reconnection). */
+  maxAgeMs: 120_000,
+} as const;
+
+export class CpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(code);
+  }
+}
+
+type Result = {
+  index: number;
+  type: CpAction['type'];
+  status: 'pending' | 'done' | 'failed' | 'unknown';
+  error?: string;
+};
+
+interface RedemptionRow {
+  channel_id: string;
+  source: string;
+  redemption_id: string;
+  reward_id: string;
+  reward_title: string;
+  reward_cost: number;
+  user_id: string;
+  user_login: string;
+  user_name: string;
+  user_input: string | null;
+  twitch_status: string | null;
+  redeemed_at: Date;
+  received_at: Date;
+  status: CpRedemptionStatus;
+  reason: string | null;
+  actions: CpAction[];
+  results: Result[];
+  job_id: string | null;
+}
+
+interface JobRow {
+  job_id: string;
+  channel_id: string;
+  source: string;
+  redemption_id: string;
+  actions: { index: number; action: CpAction }[];
+  status: 'queued' | 'claimed' | 'running' | 'completed' | 'failed' | 'expired';
+  consumer_id: string | null;
+  attempt_id: string | null;
+  attempts: number;
+  lease_expires_at: Date | null;
+}
+
+const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
+
+export const redemptionView = (r: RedemptionRow) => ({
+  source: r.source,
+  redemption_id: r.redemption_id,
+  reward: { id: r.reward_id, title: r.reward_title, cost: r.reward_cost },
+  user: { id: r.user_id, login: r.user_login, display_name: r.user_name },
+  user_input: r.user_input,
+  twitch_status: r.twitch_status,
+  redeemed_at: iso(r.redeemed_at),
+  received_at: iso(r.received_at),
+  status: r.status,
+  reason: r.reason,
+  actions: r.actions,
+  results: r.results,
+});
+
+/** Overall status from the per-action results. */
+function overall(results: Result[]): CpRedemptionStatus {
+  if (results.some((r) => r.status === 'pending')) return 'pending';
+  const ok = results.filter((r) => r.status === 'done').length;
+  if (ok === results.length) return 'done';
+  return ok === 0 ? 'failed' : 'partial';
+}
+
+const obsAction = (a: CpAction) => a.type !== 'sound';
+
+export class ChannelPointsService {
+  constructor(
+    private readonly db: Db,
+    private readonly clock: Clock,
+    /** The Soundboard of this Core (sound actions); absent → sound actions fail explicitly. */
+    private readonly sound?: SoundLabService,
+  ) {}
+
+  // --- settings, rewards, rules (Studio configuration) -----------------------------------------------------------
+
+  async settings(channelId: string) {
+    const row = (
+      await this.db.query<{ enabled: boolean; updated_at: Date }>(
+        'select enabled, updated_at from cp_settings where channel_id = $1',
+        [channelId],
+      )
+    )[0];
+    return {
+      enabled: row?.enabled ?? false,
+      updated_at: iso(row?.updated_at ?? null),
+    };
+  }
+
+  /** The master switch (persistent; OFF by default). */
+  async setEnabled(channelId: string, enabled: boolean, actor: string) {
+    await this.db.query(
+      `insert into cp_settings (channel_id, enabled, updated_at, updated_by) values ($1, $2, $3, $4)
+       on conflict (channel_id) do update set enabled = $2, updated_at = $3, updated_by = $4`,
+      [channelId, enabled, this.clock.now(), actor.slice(0, 64)],
+    );
+    return this.settings(channelId);
+  }
+
+  /** The rewards Twitch lists (read only): upserted; a reward gone from Twitch keeps its rule but is marked unseen. */
+  async syncRewards(s: CpRewardsSync) {
+    const now = this.clock.now();
+    await this.db.tx(async (q) => {
+      for (const r of s.rewards)
+        await q.query(
+          `insert into cp_rewards (channel_id, reward_id, title, cost, prompt, is_enabled, user_input_required, source,
+             last_seen_at) values ($1, $2, $3, $4, $5, $6, $7, 'twitch_api', $8)
+           on conflict (channel_id, reward_id) do update set title = $3, cost = $4, prompt = $5, is_enabled = $6,
+             user_input_required = $7, source = 'twitch_api', last_seen_at = $8`,
+          [
+            s.channel_id,
+            r.id,
+            r.title,
+            r.cost,
+            r.prompt ?? null,
+            r.is_enabled && !r.is_paused,
+            r.user_input_required ?? false,
+            now,
+          ],
+        );
+      // Listed before, absent now: deleted on Twitch (rule kept, shown as missing).
+      await q.query(
+        `update cp_rewards set is_enabled = null where channel_id = $1 and source = 'twitch_api'
+           and not (reward_id = any($2::text[]))`,
+        [s.channel_id, s.rewards.map((r) => r.id)],
+      );
+    });
+    return { synced: s.rewards.length };
+  }
+
+  async rewards(channelId: string) {
+    const rows = await this.db.query<{
+      reward_id: string;
+      title: string;
+      cost: number;
+      prompt: string | null;
+      is_enabled: boolean | null;
+      user_input_required: boolean;
+      source: string;
+      last_seen_at: Date;
+      rule_enabled: boolean | null;
+      rule_actions: CpAction[] | null;
+      rule_version: number | null;
+    }>(
+      `select w.reward_id, w.title, w.cost, w.prompt, w.is_enabled, w.user_input_required, w.source, w.last_seen_at,
+         r.enabled as rule_enabled, r.actions as rule_actions, r.version as rule_version
+       from cp_rewards w left join cp_rules r on r.channel_id = w.channel_id and r.reward_id = w.reward_id
+       where w.channel_id = $1 order by w.cost, w.title`,
+      [channelId],
+    );
+    return rows.map((r) => ({
+      id: r.reward_id,
+      title: r.title,
+      cost: r.cost,
+      prompt: r.prompt,
+      /** true enabled on Twitch · false disabled / paused · null no longer listed by Twitch (or never listed). */
+      twitch_enabled: r.is_enabled,
+      user_input_required: r.user_input_required,
+      listed_by_twitch: r.source === 'twitch_api',
+      last_seen_at: iso(r.last_seen_at),
+      rule: r.rule_actions
+        ? {
+            enabled: r.rule_enabled!,
+            actions: r.rule_actions,
+            version: r.rule_version!,
+          }
+        : null,
+    }));
+  }
+
+  /** Create / replace a reward's rule (known rewards only; optimistic version check). */
+  async saveRule(channelId: string, rewardId: string, input: CpRuleInput) {
+    return this.db.tx(async (q) => {
+      const known = await q.query(
+        'select 1 from cp_rewards where channel_id = $1 and reward_id = $2',
+        [channelId, rewardId],
+      );
+      if (!known.length) throw new CpError(404, 'unknown_reward');
+      const prior = (
+        await q.query<{ version: number }>(
+          'select version from cp_rules where channel_id = $1 and reward_id = $2 for update',
+          [channelId, rewardId],
+        )
+      )[0];
+      if ((prior?.version ?? undefined) !== input.expected_version)
+        throw new CpError(409, 'version_conflict');
+      const version = (prior?.version ?? 0) + 1;
+      await q.query(
+        `insert into cp_rules (channel_id, reward_id, enabled, actions, version, updated_at)
+         values ($1, $2, $3, $4, $5, $6)
+         on conflict (channel_id, reward_id) do update set enabled = $3, actions = $4, version = $5, updated_at = $6`,
+        [
+          channelId,
+          rewardId,
+          input.enabled,
+          JSON.stringify(input.actions),
+          version,
+          this.clock.now(),
+        ],
+      );
+      return { enabled: input.enabled, actions: input.actions, version };
+    });
+  }
+
+  // --- redemptions ----------------------------------------------------------------------------------------------
+
+  /**
+   * One redemption: recorded once, decided, executed. A redelivery (same source + Twitch id) changes nothing and
+   * answers the first decision. `source: simulation` = a Studio test of a rule: it ignores the master switch and the
+   * age check (an explicit click), never the rule.
+   */
+  async receive(e: CpRedemptionInput) {
+    const now = this.clock.now();
+    const decided = await this.db.tx(async (q) => {
+      await q.query(
+        `insert into cp_settings (channel_id, enabled, updated_at) values ($1, false, $2)
+         on conflict (channel_id) do nothing`,
+        [e.channel_id, now],
+      );
+      // Channel lock: serializes receptions and claims of a channel.
+      const settings = (
+        await q.query<{ enabled: boolean }>(
+          'select enabled from cp_settings where channel_id = $1 for update',
+          [e.channel_id],
+        )
+      )[0]!;
+      const prior = (
+        await q.query<RedemptionRow>(
+          'select * from cp_redemptions where channel_id = $1 and source = $2 and redemption_id = $3',
+          [e.channel_id, e.source, e.redemption_id],
+        )
+      )[0];
+      if (prior)
+        return { duplicate: true as const, row: prior, sounds: [] as never[] };
+      // The reward as seen in this redemption (kept for the Studio list, even when Twitch's list is not readable).
+      await q.query(
+        `insert into cp_rewards (channel_id, reward_id, title, cost, prompt, source, last_seen_at)
+         values ($1, $2, $3, $4, $5, 'redemption', $6)
+         on conflict (channel_id, reward_id) do update set title = $3, cost = $4, last_seen_at = $6`,
+        [
+          e.channel_id,
+          e.reward.id,
+          e.reward.title,
+          e.reward.cost,
+          e.reward.prompt ?? null,
+          now,
+        ],
+      );
+      const rule = (
+        await q.query<{ enabled: boolean; actions: unknown[] }>(
+          'select enabled, actions from cp_rules where channel_id = $1 and reward_id = $2',
+          [e.channel_id, e.reward.id],
+        )
+      )[0];
+      const real = e.source === 'twitch';
+      const reason = !rule
+        ? 'no_rule'
+        : !rule.enabled
+          ? 'rule_disabled'
+          : real && !settings.enabled
+            ? 'automations_off'
+            : real &&
+                now.getTime() - new Date(e.redeemed_at).getTime() >
+                  CP_RULES.maxAgeMs
+              ? 'late'
+              : null;
+      // Actions frozen at reception (a later edit of the rule never changes this redemption).
+      const actions = reason
+        ? []
+        : rule!.actions.map((a) => CpActionSchema.parse(a));
+      const results: Result[] = actions.map((a, index) => ({
+        index,
+        type: a.type,
+        status: 'pending',
+      }));
+      const obs = actions
+        .map((action, index) => ({ index, action }))
+        .filter((x) => obsAction(x.action));
+      const jobId = obs.length ? randomUUID() : null;
+      await q.query(
+        `insert into cp_redemptions (channel_id, source, redemption_id, reward_id, reward_title, reward_cost, user_id,
+           user_login, user_name, user_input, twitch_status, redeemed_at, received_at, status, reason, actions, results,
+           job_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+        [
+          e.channel_id,
+          e.source,
+          e.redemption_id,
+          e.reward.id,
+          e.reward.title,
+          e.reward.cost,
+          e.user.id,
+          e.user.login,
+          e.user.display_name,
+          e.user_input?.trim() ? e.user_input : null,
+          e.twitch_status ?? null,
+          new Date(e.redeemed_at),
+          now,
+          reason ? 'ignored' : 'pending',
+          reason,
+          JSON.stringify(actions),
+          JSON.stringify(results),
+          jobId,
+        ],
+      );
+      if (jobId)
+        await q.query(
+          `insert into cp_jobs (job_id, channel_id, source, redemption_id, actions, status, created_at)
+           values ($1, $2, $3, $4, $5, 'queued', $6)`,
+          [
+            jobId,
+            e.channel_id,
+            e.source,
+            e.redemption_id,
+            JSON.stringify(obs),
+            now,
+          ],
+        );
+      return {
+        duplicate: false as const,
+        row: null,
+        sounds: actions
+          .map((action, index) => ({ index, action }))
+          .filter((x) => x.action.type === 'sound'),
+      };
+    });
+    if (decided.duplicate)
+      return {
+        outcome: 'duplicate' as const,
+        redemption: redemptionView(decided.row),
+      };
+    // Sounds: after the commit (the Soundboard has its own transaction); a refusal is this action's failure.
+    for (const { index, action } of decided.sounds) {
+      let error: string | undefined;
+      try {
+        if (!this.sound) throw new Error('soundboard_unavailable');
+        await this.sound.admitChannelPoints({
+          idempotency_key: `cp:${e.source}:${e.redemption_id}:${index}`.slice(
+            0,
+            64,
+          ),
+          channel_id: e.channel_id,
+          viewer: { id: e.user.id, display_name: e.user.display_name },
+          sound_id: (action as { sound_id: string }).sound_id,
+        });
+      } catch (err) {
+        error = String(
+          (err as { code?: string }).code ?? (err as Error).message,
+        ).slice(0, 200);
+      }
+      await this.setResults(e.channel_id, e.source, e.redemption_id, [
+        { index, ok: !error, ...(error ? { error } : {}) },
+      ]);
+    }
+    const row = await this.redemption(e.channel_id, e.source, e.redemption_id);
+    return { outcome: row.status, redemption: redemptionView(row) };
+  }
+
+  private async redemption(
+    channelId: string,
+    source: string,
+    id: string,
+    q: Queryable = this.db,
+  ) {
+    return (
+      await q.query<RedemptionRow>(
+        'select * from cp_redemptions where channel_id = $1 and source = $2 and redemption_id = $3',
+        [channelId, source, id],
+      )
+    )[0]!;
+  }
+
+  /** Merges action results into a redemption and recomputes its status. */
+  private async setResults(
+    channelId: string,
+    source: string,
+    id: string,
+    results: (CpActionResult & { unknown?: boolean })[],
+    q: Queryable = this.db,
+  ) {
+    const row = (
+      await q.query<RedemptionRow>(
+        'select * from cp_redemptions where channel_id = $1 and source = $2 and redemption_id = $3 for update',
+        [channelId, source, id],
+      )
+    )[0];
+    if (!row || row.status === 'ignored') return;
+    const merged = row.results.map((r) => {
+      const n = results.find((x) => x.index === r.index);
+      if (!n || r.status !== 'pending') return r;
+      return n.unknown
+        ? { ...r, status: 'unknown' as const, error: n.error }
+        : n.ok
+          ? { index: r.index, type: r.type, status: 'done' as const }
+          : { ...r, status: 'failed' as const, error: n.error ?? 'failed' };
+    });
+    await q.query(
+      'update cp_redemptions set results = $4, status = $5 where channel_id = $1 and source = $2 and redemption_id = $3',
+      [channelId, source, id, JSON.stringify(merged), overall(merged)],
+    );
+  }
+
+  // --- OBS jobs (Studio) ------------------------------------------------------------------------------------------
+
+  /** Settles abandoned jobs: never started → offered again (3 attempts); started → expired, never replayed. */
+  private async sweep(q: Queryable, channelId: string) {
+    const now = this.clock.now();
+    const stale = await q.query<JobRow>(
+      `select * from cp_jobs where channel_id = $1 and status in ('claimed', 'running') and lease_expires_at < $2`,
+      [channelId, now],
+    );
+    for (const j of stale) {
+      if (j.status === 'claimed' && j.attempts < CP_RULES.maxAttempts) {
+        await q.query(
+          `update cp_jobs set status = 'queued', attempt_id = null, lease_expires_at = null, consumer_id = null
+           where job_id = $1`,
+          [j.job_id],
+        );
+        continue;
+      }
+      const why =
+        j.status === 'claimed'
+          ? 'never_started'
+          : 'started_without_report: may have run, not replayed';
+      await q.query(
+        `update cp_jobs set status = 'expired', ended_at = $2, failure = $3, attempt_id = null,
+           lease_expires_at = null where job_id = $1`,
+        [j.job_id, now, why],
+      );
+      await this.setResults(
+        channelId,
+        j.source,
+        j.redemption_id,
+        j.actions.map((a) => ({
+          index: a.index,
+          ok: false,
+          error: j.status === 'claimed' ? 'studio_absent' : 'execution_unknown',
+          unknown: j.status === 'running',
+        })),
+        q,
+      );
+    }
+  }
+
+  /** The next OBS job for this Studio (one in flight per channel), or null. */
+  async claim(channelId: string, consumerId: string) {
+    return this.db.tx(async (q) => {
+      await q.query(
+        `insert into cp_settings (channel_id, enabled, updated_at) values ($1, false, $2)
+         on conflict (channel_id) do nothing`,
+        [channelId, this.clock.now()],
+      );
+      await q.query(
+        'select 1 from cp_settings where channel_id = $1 for update',
+        [channelId],
+      );
+      await this.sweep(q, channelId);
+      const busy = await q.query(
+        "select 1 from cp_jobs where channel_id = $1 and status in ('claimed', 'running')",
+        [channelId],
+      );
+      if (busy.length) return null;
+      const next = (
+        await q.query<JobRow>(
+          "select * from cp_jobs where channel_id = $1 and status = 'queued' order by seq limit 1",
+          [channelId],
+        )
+      )[0];
+      if (!next) return null;
+      const now = this.clock.now();
+      const attempt = randomUUID();
+      await q.query(
+        `update cp_jobs set status = 'claimed', consumer_id = $2, attempt_id = $3, attempts = attempts + 1,
+           claimed_at = $4, lease_expires_at = $5 where job_id = $1`,
+        [
+          next.job_id,
+          consumerId,
+          attempt,
+          now,
+          new Date(now.getTime() + CP_RULES.claimLeaseMs),
+        ],
+      );
+      const redemption = await this.redemption(
+        channelId,
+        next.source,
+        next.redemption_id,
+        q,
+      );
+      return {
+        job_id: next.job_id,
+        attempt_id: attempt,
+        actions: next.actions,
+        redemption: {
+          reward_title: redemption.reward_title,
+          user_name: redemption.user_name,
+        },
+      };
+    });
+  }
+
+  /** Studio's report for its attempt (idempotent; a late report after the job ended is refused with 409). */
+  async ack(jobId: string, a: CpAckRequest) {
+    return this.db.tx(async (q) => {
+      const head = (
+        await q.query<{ channel_id: string }>(
+          'select channel_id from cp_jobs where job_id = $1',
+          [jobId],
+        )
+      )[0];
+      if (!head) throw new CpError(404, 'job_not_found');
+      await q.query(
+        'select 1 from cp_settings where channel_id = $1 for update',
+        [head.channel_id],
+      );
+      const job = (
+        await q.query<JobRow>('select * from cp_jobs where job_id = $1', [
+          jobId,
+        ])
+      )[0]!;
+      if (job.attempt_id !== a.attempt_id || job.consumer_id !== a.consumer_id)
+        throw new CpError(409, 'not_current_attempt');
+      const now = this.clock.now();
+      if (a.event === 'started') {
+        if (job.status === 'running') return { status: job.status };
+        if (job.status !== 'claimed') throw new CpError(409, 'job_ended');
+        const hold = job.actions.reduce(
+          (t, x) =>
+            t + ('duration_ms' in x.action ? (x.action.duration_ms ?? 0) : 0),
+          0,
+        );
+        await q.query(
+          `update cp_jobs set status = 'running', started_at = $2, lease_expires_at = $3 where job_id = $1`,
+          [jobId, now, new Date(now.getTime() + hold + CP_RULES.runMarginMs)],
+        );
+        return { status: 'running' };
+      }
+      if (job.status !== 'running' && job.status !== 'claimed')
+        throw new CpError(409, 'job_ended');
+      const final = a.event === 'completed' ? 'completed' : 'failed';
+      await q.query(
+        `update cp_jobs set status = $2, ended_at = $3, failure = $4, attempt_id = null, lease_expires_at = null
+         where job_id = $1`,
+        [jobId, final, now, a.error ?? null],
+      );
+      const given = new Map((a.results ?? []).map((r) => [r.index, r]));
+      await this.setResults(
+        job.channel_id,
+        job.source,
+        job.redemption_id,
+        job.actions.map(
+          (x) =>
+            given.get(x.index) ?? {
+              index: x.index,
+              ok: false,
+              error: a.error ?? 'not_reported',
+            },
+        ),
+        q,
+      );
+      return { status: final };
+    });
+  }
+
+  /** The Studio tab: switch, rewards with their rule, recent redemptions, jobs in flight, Soundboard sounds. */
+  async state(channelId: string) {
+    const recent = await this.db.query<RedemptionRow>(
+      'select * from cp_redemptions where channel_id = $1 order by received_at desc limit 30',
+      [channelId],
+    );
+    const inFlight = await this.db.query<{ n: number | string }>(
+      "select count(*) as n from cp_jobs where channel_id = $1 and status in ('queued', 'claimed', 'running')",
+      [channelId],
+    );
+    const sounds = this.sound
+      ? (await this.sound.config()).sounds.map((s) => ({
+          id: s.id,
+          label: s.label,
+          enabled: s.enabled,
+        }))
+      : [];
+    return {
+      settings: await this.settings(channelId),
+      rewards: await this.rewards(channelId),
+      recent: recent.map(redemptionView),
+      jobs_waiting: Number(inFlight[0]!.n),
+      sounds,
+    };
+  }
+}

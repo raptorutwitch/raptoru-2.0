@@ -6,7 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import {
-  BROADCASTER_SCOPES,
+  broadcasterScopes,
   loadTwitchAppConfig,
   requiredScopes,
 } from '../config.js';
@@ -23,7 +23,10 @@ const TIMEOUT_MS = 5 * 60 * 1000;
 const config = loadTwitchAppConfig();
 // --broadcaster: separate token owned by the broadcaster, for subscriptions/cheers/follows.
 const broadcasterMode = process.argv.includes('--broadcaster');
-const scopes = broadcasterMode ? BROADCASTER_SCOPES : requiredScopes(config);
+// A broadcaster token always keeps loyalty's scopes (an existing token is never narrowed by this script).
+const scopes = broadcasterMode
+  ? broadcasterScopes({ ...config, LOYALTY_TWITCH_EVENTS: 'true' })
+  : requiredScopes(config);
 const tokenFile = broadcasterMode
   ? config.TWITCH_BROADCASTER_TOKEN_FILE
   : config.TWITCH_TOKEN_FILE;

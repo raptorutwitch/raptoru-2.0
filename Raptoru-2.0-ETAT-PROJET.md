@@ -187,7 +187,10 @@ modules un par un ; legacy coupé ensuite.
 1. **Économie réelle** (P1-001) : Wallet canonique non branché ; D1 (soldes SE au point de coupure, import) et D2
    (crédits) non tranchées ; lecteurs et overlay qui n'acceptent que `payment_mode = simulated` ; le Core public
    débite le Wallet de test (`labEconomy`).
-2. **Points de chaîne** (P1-010) : modèle de redemption (D2) non décidé.
+2. **Points de chaîne** (P1-010) : modèle de redemption (D2) non décidé pour l'économie ; **Points de chaîne V1**
+   (17/10/2026) fournit la réception, les règles et les actions OBS / son (`docs/CHANNEL_POINTS_V1.md`), en lecture
+   seule (Raptoru ne peut ni valider ni rembourser les récompenses existantes) ; réception réelle bloquée tant que le
+   jeton broadcaster n'a pas `channel:read:redemptions`.
 3. **Extension** : jamais publiée ; vrai secret d'Extension à poser ; domaines CDN emotes à autoriser ; capacité de
    l'EBS public (P2-025).
 4. **Session de stream** (P1-007) : en production, Tombola / Commands doivent lire la session canonique et le bot
@@ -226,7 +229,10 @@ modules un par un ; legacy coupé ensuite.
 ## 0.10 Prochaine étape recommandée
 
 **Alertes V1 clôturées (17/10/2026)** : développement terminé, prêt pour le cutover, non déployé (checklist :
-`docs/CUTOVER_PLAN_2026-10.md` § 13). Module suivant selon la feuille de route (Oracle), sur accord d'Antoni. Le **déploiement coordonné** (Core staging + migrations Lab, puis Studio, nouveau ZIP
+`docs/CUTOVER_PLAN_2026-10.md` § 13). **Priorité « zéro SAMMI »** (audit SAMMI du 17/10/2026 : au moins 29 groupes de
+fonctions encore exécutés par SAMMI, dont 13 derrière la réception des récompenses et les actions OBS) : **Points de
+chaîne V1** implémenté (`docs/CHANNEL_POINTS_V1.md`, OFF, non connecté) → réautorisation broadcaster et test contrôlé
+par Antoni → modération ludique → Spotify. Le **déploiement coordonné** (Core staging + migrations Lab, puis Studio, nouveau ZIP
 Hosted Test) reste une étape séparée, seulement avec l'accord d'Antoni.
 
 ---

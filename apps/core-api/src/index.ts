@@ -75,6 +75,8 @@ createApp({
   studioInstallations: core.studioInstallations,
   // Twitch alerts V1 (§ 22): served to the paired Studio for the configured channel only.
   alerts: core.alerts,
+  // Points de chaîne V1: configuration by the paired Studio, redemptions by the bot (switch OFF by default).
+  channelPoints: core.channelPoints,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
   db,

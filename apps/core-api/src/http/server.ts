@@ -43,6 +43,8 @@ import {
 import { walletRoutes } from './wallet-routes.js';
 import { studioTransportRoutes } from './studio-transport-routes.js';
 import { alertsRoutes } from './alerts-routes.js';
+import { channelPointsRoutes } from './channel-points-routes.js';
+import type { ChannelPointsService } from '../channel-points/service.js';
 import type { AlertsService } from '../alerts/service.js';
 import {
   STUDIO_PROTOCOL,
@@ -97,6 +99,8 @@ export interface AppDeps {
    * canonical alerts service. Never set by the Lab Core (it serves /v1/lab/alerts itself).
    */
   alerts?: AlertsService;
+  /** Points de chaîne V1: /v1/studio/channel-points/* and /v1/bot/channel-points/* (same conditions as alerts). */
+  channelPoints?: ChannelPointsService;
   /** Readiness probe (GET /ready): the database answers. */
   db?: Pick<Db, 'query'>;
   /**
@@ -188,6 +192,7 @@ function routes({
   raffleLab,
   studioInstallations,
   alerts,
+  channelPoints,
   db,
   labRoutes = true,
   ext,
@@ -203,6 +208,9 @@ function routes({
       : []),
     ...(studioInstallations && alerts && cockpit?.channelId
       ? alertsRoutes(alerts, { channelId: cockpit.channelId })
+      : []),
+    ...(studioInstallations && channelPoints && cockpit?.channelId
+      ? channelPointsRoutes(channelPoints, { channelId: cockpit.channelId })
       : []),
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
     ...(studioInstallations && cockpit

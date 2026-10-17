@@ -1,6 +1,6 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 17/10/2026 : Alertes V1 clôturé (prêt pour cutover, non déployé) · checkpoint global du 16/10 (lire en premier)
+## État courant — 17/10/2026 : Points de chaîne V1 implémenté (OFF, non connecté) · Alertes V1 clôturé · checkpoint global du 16/10 (lire en premier)
 
 **Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`**, HEAD **`beb42b1`** (alertes) + le
 commit docs de clôture des alertes. Tout ce qui suit `c7f20de` est **local, non poussé** ; `main` = `origin/main` =
@@ -31,6 +31,15 @@ Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Anton
   pixel-perfect**. **Non testé** : rendu et son dans OBS, vrais événements Twitch, dons StreamElements.
 - **Tests au `166e7ed`** : Core 675 (+22 ignorés : PostgreSQL réel absent), Studio 381, Bot 111, Playwright 13/13 ;
   typecheck, lint, build verts.
+
+**POINTS DE CHAÎNE V1 (17/10/2026, local, non validé, non connecté, interrupteur OFF)** : infrastructure officielle
+récompenses Twitch → bot (connexion broadcaster) → Core (dédoublonnage, interrupteur, règles, actions typées : son du
+Soundboard, source / filtre / scène OBS) → Studio (exécution OBS sur sa connexion unique, effets temporaires annulés
+seulement si inchangés) ; onglet « Points de chaîne · Core » ; migrations Lab `20261025120000_channel_points_lab.sql` et
+production `20261025130000_channel_points.sql` (**non appliquée**). Lecture seule : Raptoru ne peut ni valider ni
+rembourser les récompenses existantes (règle Twitch). **Bloqué pour le réel** : le jeton broadcaster raptoru\_ n'a pas
+`channel:read:redemptions` (réautorisation à faire par Antoni, procédure `docs/CHANNEL_POINTS_V1.md` § 6). SAMMI exécute
+toujours les récompenses. Détail, inventaire des récompenses SAMMI et étapes avant cutover : `docs/CHANNEL_POINTS_V1.md`.
 
 **ALERTES V1 — DÉVELOPPEMENT TERMINÉ / PRÊT POUR CUTOVER / NON DÉPLOYÉ (17/10/2026, chantier clôturé par Antoni)**.
 Validé par Antoni : animations, sons, calibrages, files simultanées dans OBS, vrai follow reçu en TEST, connexion
@@ -71,8 +80,12 @@ alertes), 25 absentes, 0 en production — détail et incertitudes : `Raptoru-2.
 1. ~~Alertes V1~~ : clôturé le 17/10/2026 (prêt pour cutover, non déployé) ; ne pas poursuivre sans demande
    d'Antoni. Le reste (bot de production, activation persistante, migration, bascule OBS, validations réelles) se
    fait pendant le cutover global : `docs/CUTOVER_PLAN_2026-10.md` § 13.
-2. Module suivant : Oracle / Eight Ball et les autres fonctions retenues ; décisions et imports historiques du Wallet
-   canonique (D1, D2, DM1–DM9) ; déploiement coordonné du staging quand Antoni le décide.
+2. **Points de chaîne V1** (en cours, priorité « zéro SAMMI », audit du 17/10) : réautorisation broadcaster par Antoni,
+   puis test contrôlé d'une récompense non sensible (« Tester », puis une vraie récompense avec l'interrupteur ON sur une
+   scène de test) ; ajouter à la banque du Soundboard les sons des récompenses SAMMI. Ensuite : modération ludique,
+   Spotify (audit SAMMI). Oracle n'a aucune dépendance SAMMI démontrée.
+3. Décisions et imports historiques du Wallet canonique (D1, D2, DM1–DM9) ; déploiement coordonné du staging quand
+   Antoni le décide.
 
 **Pièges Lab** : live simulé, ingestion Twitch, « Sortie chat réelle » et Mini-jeux se règlent dans l'onglet
 **Simulation** ou le panneau « Simulation » de la barre du haut ; dernier relevé (16/10/2026) : sortie réelle OFF,

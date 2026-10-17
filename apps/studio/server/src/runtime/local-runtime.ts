@@ -56,6 +56,7 @@ export const LAB_MIGRATIONS = [
   '20261021120000_mini_game_duels_lab.sql',
   '20261022120000_alerts_lab.sql',
   '20261023120000_alerts_lab_families.sql',
+  '20261025120000_channel_points_lab.sql',
 ];
 
 export type ServiceState =

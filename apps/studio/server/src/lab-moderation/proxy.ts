@@ -26,6 +26,8 @@ const PREFIXES = [
   '/v1/lab/mini-games/',
   // Twitch alerts V1: catalogue, queue state, test events, the OBS source's claim / reports.
   '/v1/lab/alerts/',
+  // Points de chaîne V1: switch, rules, tests, state, the OBS jobs (claim / reports).
+  '/v1/lab/channel-points/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

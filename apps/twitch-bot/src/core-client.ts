@@ -18,6 +18,8 @@ import {
   type StreamOfflineRequest,
   type StreamOnlineRequest,
   type StreamSyncRequest,
+  type CpRedemptionInput,
+  type CpRewardsSync,
 } from '@raptoru/schemas';
 import { z } from 'zod';
 
@@ -38,6 +40,11 @@ export interface CoreClient {
   subscriptionSnapshot(
     body: SubscriptionSnapshot,
   ): Promise<{ subscribers: number }>;
+  /** Points de chaîne V1: a redemption (read from Twitch) and the reward list; Core decides everything. */
+  channelPointsRedemption(
+    body: CpRedemptionInput,
+  ): Promise<{ outcome: string }>;
+  channelPointsRewards(body: CpRewardsSync): Promise<{ synced: number }>;
 }
 
 export class CoreHttpError extends Error {
@@ -108,6 +115,18 @@ export function createCoreClient(
         '/v1/bot/loyalty/subscriptions/snapshot',
         body,
         z.object({ subscribers: z.number() }),
+      ),
+    channelPointsRedemption: (body) =>
+      call(
+        '/v1/bot/channel-points/redemptions',
+        body,
+        z.object({ outcome: z.string() }).loose(),
+      ),
+    channelPointsRewards: (body) =>
+      call(
+        '/v1/bot/channel-points/rewards',
+        body,
+        z.object({ synced: z.number() }),
       ),
   };
 }

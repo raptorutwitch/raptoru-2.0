@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import { BROADCASTER_SCOPES, loadConfig, requiredScopes } from './config.js';
+import { broadcasterScopes, loadConfig, requiredScopes } from './config.js';
+import { createChannelPointsEvents } from './channel-points-events.js';
 import { createCoreClient } from './core-client.js';
 import { createBroadcasterEvents } from './loyalty-events.js';
 import { fileOutbox } from './loyalty-outbox.js';
@@ -89,12 +90,16 @@ validateLoop();
 
 // Loyalty Twitch events (opt-in): a separate broadcaster token and EventSub connection. Without a
 // valid broadcaster token they stay off; presence keeps running.
-if (config.LOYALTY_TWITCH_EVENTS === 'true') {
+// Broadcaster EventSub connection (separate broadcaster token): loyalty events and / or Points de chaîne
+// redemptions, both opt-in. One connection for both; each module keeps its own subscriptions and checks.
+const loyaltyOn = config.LOYALTY_TWITCH_EVENTS === 'true';
+const pointsOn = config.CHANNEL_POINTS_EVENTS === 'true';
+if (loyaltyOn || pointsOn) {
   const broadcasterAuth = new TwitchAuth({
     clientId: config.TWITCH_CLIENT_ID,
     clientSecret: config.TWITCH_CLIENT_SECRET,
     store: fileTokenStore(config.TWITCH_BROADCASTER_TOKEN_FILE),
-    requiredScopes: BROADCASTER_SCOPES,
+    requiredScopes: broadcasterScopes(config),
   });
   try {
     await broadcasterAuth.init();
@@ -109,34 +114,66 @@ if (config.LOYALTY_TWITCH_EVENTS === 'true') {
       handleUnauthorized: (rejected) =>
         broadcasterAuth.handleUnauthorized(rejected),
     });
-    const events = createBroadcasterEvents({
-      core: createCoreClient(config.CORE_API_URL, config.BOT_SECRET),
-      subscribe: (type, condition, sessionId, version) =>
-        broadcasterHelix.subscribe(type, condition, sessionId, version),
-      listEnabledSubscriptions: () =>
-        broadcasterHelix.listEnabledSubscriptions(),
-      getSubscriptionsPage: (after) =>
-        broadcasterHelix.getSubscriptionsPage(
-          config.TWITCH_BROADCASTER_ID,
-          after,
-        ),
-      broadcasterId: config.TWITCH_BROADCASTER_ID,
-      outbox: fileOutbox(config.LOYALTY_OUTBOX_FILE),
+    const core = createCoreClient(config.CORE_API_URL, config.BOT_SECRET);
+    const events = loyaltyOn
+      ? createBroadcasterEvents({
+          core,
+          subscribe: (type, condition, sessionId, version) =>
+            broadcasterHelix.subscribe(type, condition, sessionId, version),
+          listEnabledSubscriptions: () =>
+            broadcasterHelix.listEnabledSubscriptions(),
+          getSubscriptionsPage: (after) =>
+            broadcasterHelix.getSubscriptionsPage(
+              config.TWITCH_BROADCASTER_ID,
+              after,
+            ),
+          broadcasterId: config.TWITCH_BROADCASTER_ID,
+          outbox: fileOutbox(config.LOYALTY_OUTBOX_FILE),
+        })
+      : null;
+    // Points de chaîne V1: read only; Core's master switch (OFF by default) decides whether anything runs.
+    const points = pointsOn
+      ? createChannelPointsEvents({
+          channelId: config.TWITCH_BROADCASTER_ID,
+          broadcasterId: config.TWITCH_BROADCASTER_ID,
+          postRedemption: (body) => core.channelPointsRedemption(body),
+          postRewards: (body) => core.channelPointsRewards(body),
+          subscribe: (type, condition, sessionId, version) =>
+            broadcasterHelix.subscribe(type, condition, sessionId, version),
+          getCustomRewards: () =>
+            broadcasterHelix.getCustomRewards(config.TWITCH_BROADCASTER_ID),
+        })
+      : null;
+    events?.resumePending(); // events a previous run could not deliver to Core
+    runEventSub({
+      async subscribe(sessionId) {
+        if (events) await events.eventSub.subscribe(sessionId);
+        if (points) {
+          await points.subscribe(sessionId);
+          void points.syncRewards();
+        }
+      },
+      async notification(type, event, messageId, timestamp) {
+        if (points && (await points.handle(type, event))) return;
+        if (events)
+          await events.eventSub.notification(type, event, messageId, timestamp);
+      },
+      log: events?.eventSub.log,
     });
-    events.resumePending(); // events a previous run could not deliver to Core
-    runEventSub(events.eventSub);
-    // Tier reconciliation: full snapshot at startup, then every 6 hours (chained, never overlapping).
-    const snapshotLoop = async () => {
-      await events.syncSubscriptions();
-      setTimeout(snapshotLoop, 6 * 60 * 60 * 1000);
-    };
-    await snapshotLoop();
+    if (events) {
+      // Tier reconciliation: full snapshot at startup, then every 6 hours (chained, never overlapping).
+      const snapshotLoop = async () => {
+        await events.syncSubscriptions();
+        setTimeout(snapshotLoop, 6 * 60 * 60 * 1000);
+      };
+      await snapshotLoop();
+    }
     console.log(
-      '[twitch-bot] loyalty Twitch events on (subs, gifts, cheers, follows)',
+      `[twitch-bot] broadcaster events on: ${[loyaltyOn ? 'loyalty (subs, gifts, cheers, follows)' : '', pointsOn ? 'Points de chaîne (read only)' : ''].filter(Boolean).join(' + ')}`,
     );
   } catch (error) {
     console.error(
-      `[twitch-bot] loyalty Twitch events OFF: ${(error as Error).message}`,
+      `[twitch-bot] broadcaster events OFF: ${(error as Error).message}`,
     );
   }
 }

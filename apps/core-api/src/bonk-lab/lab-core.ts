@@ -20,6 +20,8 @@ import {
 } from '../commands/reserved.js';
 import { miniGamesRoutes } from '../http/mini-games-routes.js';
 import { alertsRoutes } from '../http/alerts-routes.js';
+import { channelPointsRoutes } from '../http/channel-points-routes.js';
+import { ChannelPointsService } from '../channel-points/service.js';
 import { AlertsService } from '../alerts/service.js';
 import { MiniGamesService } from '../mini-games/service.js';
 import { twitchAppLoginLookup } from '../mini-games/twitch-login.js';
@@ -133,6 +135,8 @@ export function createLabCore({
     ...miniGamesRoutes(miniGames),
     // Twitch alerts V1 (A1): normalized events, durable queue, claim / ACK (no economy).
     ...alertsRoutes(new AlertsService(db, systemClock)),
+    // Points de chaîne V1: redemptions (Lab chat adapter), rules, OBS jobs (Studio); sounds through this Soundboard.
+    ...channelPointsRoutes(new ChannelPointsService(db, systemClock, sound)),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
   ];

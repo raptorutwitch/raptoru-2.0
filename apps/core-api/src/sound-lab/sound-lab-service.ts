@@ -45,7 +45,11 @@ import { SOUND_BANK, type SoundBankEntry } from './bank.js';
 // module imports nothing from Wallet, Loyalty or stats.
 
 export const SOUND_LAB_RULES = {
-  simulatedCurrency: { tokens: 'jetons_lab', credits: 'credits_lab' },
+  simulatedCurrency: {
+    tokens: 'jetons_lab',
+    credits: 'credits_lab',
+    channel_points: 'points_de_chaine',
+  },
   /** A queued sound not started within this delay fails as expired (no stale replay later). */
   expiresAfterMs: 120_000,
   /** Studio heartbeat freshness required to admit or claim. */
@@ -201,6 +205,11 @@ const err = (code: string, message: string): SoundLabError => ({
   message,
   retryable: false,
 });
+
+/** An admission: a viewer purchase (public schema) or, internally, a channel points sound. */
+type Admission = Omit<SoundLabAdmitRequest, 'payment_method'> & {
+  payment_method: SoundLabAdmitRequest['payment_method'] | 'channel_points';
+};
 
 export class SoundLabService {
   private seeded = false;
@@ -401,7 +410,25 @@ export class SoundLabService {
 
   // --- admission ---------------------------------------------------------------------------------
 
-  async admit(req: SoundLabAdmitRequest): Promise<SoundLabAdmitResponse> {
+  /**
+   * Points de chaîne V1: a sound for a channel points redemption. Same queue, player, moderation, global pause and
+   * readiness rules as a purchase, but paid on Twitch: no wallet debit, never refundable here. Internal (Core only):
+   * the public admission schema still accepts tokens / credits only.
+   */
+  admitChannelPoints(req: {
+    idempotency_key: string;
+    channel_id: string;
+    viewer: { id: string; display_name: string };
+    sound_id: string;
+  }): Promise<SoundLabAdmitResponse> {
+    return this.admit({
+      ...req,
+      lab_session_id: 'channel_points',
+      payment_method: 'channel_points',
+    });
+  }
+
+  async admit(req: Admission): Promise<SoundLabAdmitResponse> {
     try {
       return await this.admitTx(req);
     } catch (e) {
@@ -412,9 +439,8 @@ export class SoundLabService {
     }
   }
 
-  private async admitTx(
-    req: SoundLabAdmitRequest,
-  ): Promise<SoundLabAdmitResponse> {
+  private async admitTx(req: Admission): Promise<SoundLabAdmitResponse> {
+    const pointsPaid = req.payment_method === 'channel_points';
     // Hash of what the viewer asked for: a retry with the same key must ask for the same sound.
     const requestHash = createHash('sha256')
       .update(
@@ -566,8 +592,9 @@ export class SoundLabService {
         );
       const file =
         played.files[Math.floor(this.random() * played.files.length)]!;
-      const cost =
-        req.payment_method === 'credits'
+      const cost = pointsPaid
+        ? 0
+        : req.payment_method === 'credits'
           ? config.credit_cost
           : config.token_cost;
 
@@ -584,7 +611,7 @@ export class SoundLabService {
            viewer_id, viewer_display_name, type, requested_sound_id, sound_id, sound_label, sound_url, duration_ms,
            playback_mode, volume, created_at, channel_sequence, test_mode, payment_mode, payment_method,
            simulated_cost, simulated_currency, real_debited, status, lab_session_id, expires_at, error, updated_at)
-         values ($1, $2, $3, 'extension_lab', $4, $5, $6, 'sound', $7, $8, $9, $10, $11,
+         values ($1, $2, $3, $21, $4, $5, $6, 'sound', $7, $8, $9, $10, $11,
            $12, $13, $14, $15, true, 'simulated', $16, $17, $18, 0, 'queued', $19, $20, null, $14)`,
         [
           id,
@@ -612,6 +639,7 @@ export class SoundLabService {
           SOUND_LAB_RULES.simulatedCurrency[req.payment_method],
           req.lab_session_id,
           new Date(now.getTime() + SOUND_LAB_RULES.expiresAfterMs),
+          pointsPaid ? 'channel_points' : 'extension_lab',
         ],
       );
       await seeViewer(
@@ -622,15 +650,17 @@ export class SoundLabService {
         now,
       );
       // Lab test wallet: debited in the same transaction (refused → nothing admitted, nothing stored).
-      await this.economy.debit(q, now, {
-        channelId: req.channel_id,
-        viewer: req.viewer,
-        currency:
-          req.payment_method === 'credits' ? 'credits_soundboard' : 'tokens',
-        amount: cost,
-        module: 'soundboard',
-        interactionId: id,
-      });
+      // A channel points sound is paid on Twitch: nothing is debited here.
+      if (!pointsPaid)
+        await this.economy.debit(q, now, {
+          channelId: req.channel_id,
+          viewer: req.viewer,
+          currency:
+            req.payment_method === 'credits' ? 'credits_soundboard' : 'tokens',
+          amount: cost,
+          module: 'soundboard',
+          interactionId: id,
+        });
       return { interaction: (await this.byId(q, id))!, replayed: false };
     });
   }
@@ -723,7 +753,10 @@ export class SoundLabService {
       ).map(toInteraction);
       const view = (i: SoundLabInteraction) => ({
         ...i,
-        refundable: ENDED.includes(i.status) && i.refund_status === 'none',
+        refundable:
+          ENDED.includes(i.status) &&
+          i.refund_status === 'none' &&
+          i.payment_method !== 'channel_points',
       });
       return {
         module_state: await moduleState(q, 'soundboard'),
@@ -757,7 +790,8 @@ export class SoundLabService {
     const now = this.clock.now();
     const done = await q.query<{ channel_id: string; viewer_id: string }>(
       `update sound_lab_interactions set refund_status = 'refunded', refunded_at = $2, updated_at = $2
-       where interaction_id = $1 and refund_status = 'none' returning channel_id, viewer_id`,
+       where interaction_id = $1 and refund_status = 'none' and payment_method <> 'channel_points'
+       returning channel_id, viewer_id`,
       [interactionId, now],
     );
     if (!done.length) return false;

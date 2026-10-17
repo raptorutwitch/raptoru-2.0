@@ -17,6 +17,7 @@ import {
 import { AlertMediaStore } from './alerts/media-store.js';
 import { AlertsRuntime } from './alerts/runtime.js';
 import { SeTipsLink } from './alerts/se-tips.js';
+import { ChannelPointsRuntime } from './channel-points/runtime.js';
 import { RaffleRuntime } from './raffle-lab/runtime.js';
 import { WordGameRuntime } from './word-game/runtime.js';
 import { LabChatIngress } from './lab-chat/ingress.js';
@@ -30,7 +31,7 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
-import { extname, join, normalize } from 'node:path';
+import { dirname, extname, join, normalize } from 'node:path';
 import { LabEbs } from './extension-lab/lab-ebs.js';
 import {
   EXT_PREFIX,
@@ -353,6 +354,8 @@ export function createStudioServer(
   miniGames: ReturnType<typeof miniGamesRelay> | null = null,
   /** Twitch alerts V1 (Lab): OBS source + media, Studio preview, queue relay. */
   alerts: AlertsRuntime | null = null,
+  /** Points de chaîne V1: tab API and the OBS executor of the redemptions. */
+  points: ChannelPointsRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -402,6 +405,7 @@ export function createStudioServer(
         return send(res, 200, { enabled: false });
       // Twitch alerts V1: Core queues; Studio serves the OBS source / preview and relays the claims / reports.
       if (alerts && (await alerts.handle(req, res, url))) return;
+      if (points && (await points.handle(req, res, url))) return;
       if (url.pathname === '/api/alerts/state' && !alerts)
         return send(res, 200, { enabled: false });
       // Roulette and Slot V1: Core decides; Studio relays the switch « Mini-jeux ».
@@ -632,6 +636,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Lab chat ingress, created below (the shutdown may run before it exists).
   let labChatRef: LabChatIngress | null = null;
   let seRef: SeTipsLink | null = null;
+  let pointsRef: ChannelPointsRuntime | null = null;
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
@@ -641,6 +646,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     tts?.stop();
     production?.link.stop();
     seRef?.close();
+    pointsRef?.stop();
     lab.logs.add(
       'studio',
       'Studio closing: stopping bot and Core (Postgres keeps running)',
@@ -877,6 +883,41 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         })
       : null;
   labChatRef = labChat;
+  // Points de chaîne V1 (both profiles, on the Core of the profile): Studio runs the OBS part of the redemptions on
+  // its one OBS connection (the Bonk's). Starts with Studio; nothing runs unless Core queued a job (master switch ON
+  // in Core, or an explicit « Tester »). Twitch reception: the Lab chat adapter's broadcaster connection (Lab) or
+  // the production bot (Production).
+  const broadcasterTokenFile =
+    process.env.TWITCH_BROADCASTER_TOKEN_FILE ??
+    join(dirname(paths.tokenFile), '.twitch-tokens.broadcaster.json');
+  const points =
+    alertsCore && alertsEnv
+      ? await ChannelPointsRuntime.create({
+          core: alertsCore,
+          environment: alertsEnv,
+          channelId: cockpitChannel,
+          origin: `http://${host}:${port}`,
+          dir:
+            alertsEnv === 'lab'
+              ? join(paths.runtimeDir, 'channel-points')
+              : join(paths.runtimeDir, 'production', 'channel-points'),
+          obs: () => bonk?.obs ?? null,
+          twitch: () => ({
+            scope: readTokenSummary(broadcasterTokenFile).scopes.includes(
+              'channel:read:redemptions',
+            ),
+            adapter_running:
+              alertsEnv === 'lab'
+                ? (labChat?.status().running ?? false)
+                : false,
+            ...(alertsEnv === 'production'
+              ? { profile_note: 'production_bot' }
+              : {}),
+          }),
+        })
+      : null;
+  points?.start();
+  pointsRef = points;
   labChat?.start();
   const httpServer = createStudioServer(
     lab,
@@ -907,6 +948,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     wordGame,
     labCore && labProfile ? miniGamesRelay(labCore) : null,
     alerts,
+    points,
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(

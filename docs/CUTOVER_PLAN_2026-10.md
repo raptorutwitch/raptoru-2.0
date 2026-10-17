@@ -873,3 +873,19 @@ Détail (niveaux de preuve, fichiers, routes, schéma, modes) : `TWITCH_ALERTS_P
    source legacy réactivée.
 5. **Validations différées** (nécessaires pour déclarer le cutover réussi) : vrai don, subs / resubs / gifts / Bits /
    raids réels, parcours réel complet jusqu'à OBS, stabilité pendant un stream.
+
+## 14. Points de chaîne V1 — checklist du cutover (17/10/2026)
+
+Statut : implémenté, testé automatiquement, **non connecté** (autorisation broadcaster manquante), **non déployé**,
+interrupteur OFF ; SAMMI exécute les récompenses de production. Détail : `CHANNEL_POINTS_V1.md`.
+
+1. **Autorisation** : `CHANNEL_POINTS_EVENTS=true` puis `twitch:auth -- --broadcaster` (raptoru\_, lecture seule
+   `channel:read:redemptions`) ; aucun droit de gestion (Twitch ne laisse gérer que les récompenses créées par l'app).
+2. **Réception unique** : bot de production (option `CHANNEL_POINTS_EVENTS`, connexion broadcaster partagée avec
+   loyalty) ; adaptateur chat Lab arrêté (jamais deux consommateurs du jeton broadcaster).
+3. **Core** : migration `20261025130000_channel_points.sql` avec le déploiement (accord d'Antoni) ; routes
+   `/v1/studio/channel-points` (Studio apparié) et `/v1/bot/channel-points` (bot) ; interrupteur OFF au départ.
+4. **Soundboard** : sons des récompenses ajoutés à la banque ; lecteur Soundboard actif dans OBS.
+5. **Bascule récompense par récompense** : règle saisie et testée (« Tester »), bouton SAMMI de la récompense
+   désactivé, interrupteur ON ; retour arrière : interrupteur OFF + bouton SAMMI réactivé.
+6. **Validations différées** : vraie redemption reçue et exécutée, effets temporaires en live, coupures OBS / Studio.

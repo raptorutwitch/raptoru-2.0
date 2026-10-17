@@ -16,6 +16,8 @@ function fakeCore() {
     walletAdmin: vi.fn(),
     loyaltyEvent: vi.fn(),
     subscriptionSnapshot: vi.fn(),
+    channelPointsRedemption: vi.fn(),
+    channelPointsRewards: vi.fn(),
   } satisfies Record<keyof CoreClient, unknown>;
 }
 

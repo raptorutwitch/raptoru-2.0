@@ -1,0 +1,197 @@
+// Points de chaîne V1 — Studio tab, pure part (tested): readable statuses, reward list, history. Every Twitch text
+// (reward titles, viewer names, inputs) is untrusted and escaped. No JSON, no ids shown.
+
+export type CpActionView =
+  | { type: 'sound'; sound_id: string }
+  | {
+      type: 'obs_source';
+      scene: string;
+      source: string;
+      visible: boolean;
+      duration_ms?: number;
+    }
+  | {
+      type: 'obs_filter';
+      source: string;
+      filter: string;
+      enabled: boolean;
+      duration_ms?: number;
+    }
+  | { type: 'obs_scene'; scene: string };
+
+export interface CpReward {
+  id: string;
+  title: string;
+  cost: number;
+  twitch_enabled: boolean | null;
+  listed_by_twitch: boolean;
+  rule: { enabled: boolean; actions: CpActionView[]; version: number } | null;
+}
+
+export interface CpRedemption {
+  source: string;
+  redemption_id: string;
+  reward: { title: string; cost: number };
+  user: { display_name: string };
+  user_input: string | null;
+  received_at: string;
+  status: 'ignored' | 'pending' | 'done' | 'partial' | 'failed';
+  reason: string | null;
+  actions: CpActionView[];
+  results: { index: number; status: string; error?: string }[];
+}
+
+export interface CpState {
+  settings: { enabled: boolean };
+  rewards: CpReward[];
+  recent: CpRedemption[];
+  jobs_waiting: number;
+  sounds: { id: string; label: string; enabled: boolean }[];
+  environment: 'lab' | 'production';
+  obs: { connected: boolean; pending_reverts: number };
+  twitch: { scope: boolean; adapter_running: boolean; profile_note?: string };
+  executor_error: string | null;
+}
+
+export const esc = (s: string) =>
+  s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
+        c
+      ]!,
+  );
+
+const REASON: Record<string, string> = {
+  automations_off: 'automatisations désactivées',
+  no_rule: 'aucune action configurée',
+  rule_disabled: 'règle désactivée',
+  late: 'reçue trop tard',
+};
+const STATUS: Record<CpRedemption['status'], string> = {
+  ignored: 'Ignorée',
+  pending: 'En cours',
+  done: 'Exécutée',
+  partial: 'Partielle',
+  failed: 'Échec',
+};
+
+const seconds = (ms?: number) =>
+  ms ? ` pendant ${String(ms / 1000).replace('.', ',')} s` : '';
+
+/** One action in plain French. */
+export function actionLabel(
+  a: CpActionView,
+  sounds: CpState['sounds'] = [],
+): string {
+  switch (a.type) {
+    case 'sound':
+      return `Son « ${sounds.find((s) => s.id === a.sound_id)?.label ?? a.sound_id} »`;
+    case 'obs_source':
+      return `${a.visible ? 'Afficher' : 'Masquer'} « ${a.source} » (scène « ${a.scene} »)${seconds(a.duration_ms)}`;
+    case 'obs_filter':
+      return `${a.enabled ? 'Activer' : 'Désactiver'} le filtre « ${a.filter} » de « ${a.source} »${seconds(a.duration_ms)}`;
+    case 'obs_scene':
+      return `Passer sur la scène « ${a.scene} »`;
+  }
+}
+
+/** The status chips of the header. */
+export function statusView(s: CpState | null, error: string | null) {
+  if (error) return `<p class="cp-error">${esc(error)}</p>`;
+  if (!s) return '<p class="cp-muted">Chargement…</p>';
+  const chip = (cls: string, text: string, title = '') =>
+    `<span class="cp-chip cp-chip--${cls}"${title ? ` title="${esc(title)}"` : ''}>${esc(text)}</span>`;
+  const twitch =
+    s.environment === 'production'
+      ? chip(
+          'off',
+          'Twitch : bot de production',
+          'En profil Production, les récompenses arrivent par le bot Twitch de production (option CHANNEL_POINTS_EVENTS).',
+        )
+      : !s.twitch.scope
+        ? chip(
+            'warn',
+            'Twitch : autorisation manquante',
+            'Le jeton broadcaster (raptoru_) n’a pas le droit channel:read:redemptions : aucune récompense n’est reçue.',
+          )
+        : s.twitch.adapter_running
+          ? chip('on', 'Twitch : réception active')
+          : chip(
+              'warn',
+              'Twitch : ingestion chat arrêtée',
+              'Onglet Simulation › Ingestion chat Twitch.',
+            );
+  return `
+    ${chip(s.settings.enabled ? 'on' : 'off', s.settings.enabled ? 'Automatisations : ON' : 'Automatisations : OFF')}
+    ${twitch}
+    ${chip(s.obs.connected ? 'on' : 'warn', s.obs.connected ? 'OBS connecté' : 'OBS non connecté')}
+    ${s.obs.pending_reverts ? chip('off', `${s.obs.pending_reverts} effet(s) temporaire(s) en cours`) : ''}
+    ${s.executor_error ? chip('warn', 'Exécution : Core injoignable', s.executor_error) : ''}`;
+}
+
+/** The rewards Twitch lists (left column), with their local rule. */
+export function rewardsView(s: CpState, selected: string | null) {
+  if (!s.rewards.length)
+    return `<p class="cp-muted">Aucune récompense connue. Elles apparaissent dès que Twitch les liste (autorisation
+      channel:read:redemptions) ou à la première utilisation par un viewer.</p>`;
+  return `<ul class="cp-rewards">${s.rewards
+    .map((r) => {
+      const twitch =
+        r.twitch_enabled === false
+          ? '<span class="cp-tag">désactivée sur Twitch</span>'
+          : r.twitch_enabled === null && r.listed_by_twitch
+            ? '<span class="cp-tag cp-tag--warn">plus listée par Twitch</span>'
+            : '';
+      const rule = !r.rule
+        ? '<span class="cp-tag">aucune action</span>'
+        : r.rule.enabled
+          ? `<span class="cp-tag cp-tag--on">${r.rule.actions.length} action(s)</span>`
+          : '<span class="cp-tag">règle désactivée</span>';
+      return `<li><button type="button" class="cp-reward${r.id === selected ? ' cp-reward--sel' : ''}" data-reward="${esc(r.id)}">
+        <span class="cp-reward-title">${esc(r.title)}</span>
+        <span class="cp-muted">${r.cost.toLocaleString('fr-FR')} pts</span>${twitch}${rule}</button></li>`;
+    })
+    .join('')}</ul>`;
+}
+
+const time = (iso: string) =>
+  new Date(iso).toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+/** The last redemptions and what happened to each action. */
+export function historyView(s: CpState) {
+  if (!s.recent.length)
+    return '<p class="cp-muted">Aucune récompense reçue.</p>';
+  return `<table class="cp-history"><thead><tr><th>Heure</th><th>Viewer</th><th>Récompense</th><th>Résultat</th></tr></thead><tbody>${s.recent
+    .map((r) => {
+      const detail =
+        r.status === 'ignored'
+          ? esc(REASON[r.reason ?? ''] ?? r.reason ?? '')
+          : r.results
+              .map((x) => {
+                const a = r.actions[x.index];
+                const mark =
+                  x.status === 'done'
+                    ? '✓'
+                    : x.status === 'pending'
+                      ? '…'
+                      : x.status === 'unknown'
+                        ? '?'
+                        : '✗';
+                return `${mark} ${a ? esc(actionLabel(a, s.sounds)) : ''}${x.error ? ` — ${esc(x.error)}` : ''}`;
+              })
+              .join('<br>');
+      return `<tr class="cp-row--${r.status}">
+        <td>${esc(time(r.received_at))}</td>
+        <td>${r.source === 'simulation' ? '<i>Test Studio</i>' : esc(r.user.display_name)}${r.user_input ? `<br><small>« ${esc(r.user_input)} »</small>` : ''}</td>
+        <td>${esc(r.reward.title)}</td>
+        <td><b>${STATUS[r.status]}</b><br><small>${detail}</small></td></tr>`;
+    })
+    .join('')}</tbody></table>`;
+}

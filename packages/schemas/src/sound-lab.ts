@@ -90,7 +90,8 @@ export const SoundLabInteraction = z.object({
   channel_sequence: z.number().int(),
   test_mode: z.literal(true),
   payment_mode: z.literal('simulated'),
-  payment_method: SoundLabPaymentMethod,
+  /** `channel_points`: played for a channel points reward (Points de chaîne V1) — paid on Twitch, never debited here. */
+  payment_method: z.enum(['tokens', 'credits', 'channel_points']),
   simulated_cost: z.number().int(),
   simulated_currency: z.string(),
   real_debited: z.literal(0),

@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { loadTwitchAppConfig } from './config.js';
+import {
+  CP_READ_SCOPE,
+  createChannelPointsEvents,
+} from './channel-points-events.js';
 import { ALERTS_MODES, createLabAlertsIngest } from './lab-alerts-ingest.js';
 import { createLabChatIngest } from './lab-chat-ingest.js';
 import {
@@ -131,10 +135,72 @@ runEventSub({
       );
   },
 });
+// Points de chaîne V1 (read only): Twitch requires the BROADCASTER's authorization for the redemption events, which
+// LeCroupier_'s token cannot carry — so a broadcaster-token connection carrying ONLY this subscription, opened only
+// when that token holds channel:read:redemptions (Antoni's explicit authorization). Core's master switch (OFF by
+// default) decides whether anything is executed. Never run beside the production bot's broadcaster connection.
+const points = await (async () => {
+  // Stored scopes first, without any network call: a token without the scope is never validated nor refreshed
+  // (a refresh rewrites the token file) by this adapter.
+  const stored = await fileTokenStore(app.TWITCH_BROADCASTER_TOKEN_FILE)
+    .load()
+    .catch(() => null);
+  if (!stored?.scopes?.includes(CP_READ_SCOPE)) {
+    console.log(
+      `[channel-points] réception désactivée : le jeton broadcaster n'a pas ${CP_READ_SCOPE}`,
+    );
+    return null;
+  }
+  const pointsAuth = new TwitchAuth({
+    clientId: app.TWITCH_CLIENT_ID,
+    clientSecret: app.TWITCH_CLIENT_SECRET,
+    store: fileTokenStore(app.TWITCH_BROADCASTER_TOKEN_FILE),
+    requiredScopes: [CP_READ_SCOPE],
+  });
+  try {
+    await pointsAuth.init();
+    if (pointsAuth.status().userId !== app.TWITCH_BROADCASTER_ID)
+      throw new Error('broadcaster token of another account');
+  } catch (error) {
+    console.log(
+      `[channel-points] réception désactivée : jeton broadcaster sans ${CP_READ_SCOPE} (${(error as Error).message})`,
+    );
+    return null;
+  }
+  const broadcasterHelix = createHelix({
+    clientId: app.TWITCH_CLIENT_ID,
+    getAccessToken: () => pointsAuth.getAccessToken(),
+    handleUnauthorized: (rejected) => pointsAuth.handleUnauthorized(rejected),
+  });
+  const events = createChannelPointsEvents({
+    channelId: env.LAB_ALERTS_CHANNEL_ID ?? env.LAB_CHAT_CHANNEL_ID,
+    broadcasterId: app.TWITCH_BROADCASTER_ID,
+    postRedemption: (body) => lab('/v1/lab/channel-points/redemptions', body),
+    postRewards: (body) => lab('/v1/lab/channel-points/rewards', body),
+    subscribe: (type, condition, sessionId, version) =>
+      broadcasterHelix.subscribe(type, condition, sessionId, version),
+    getCustomRewards: () =>
+      broadcasterHelix.getCustomRewards(app.TWITCH_BROADCASTER_ID),
+  });
+  runEventSub({
+    async subscribe(sessionId) {
+      await events.subscribe(sessionId);
+      void events.syncRewards();
+    },
+    async notification(type, event) {
+      await events.handle(type, event);
+    },
+  });
+  console.log(
+    '[channel-points] réception des récompenses active (lecture seule)',
+  );
+  return events;
+})();
 // Stopping (Studio OFF / closing): chat retries in memory are dropped explicitly, never persisted.
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
   process.on(signal, () => {
     ingest.close();
+    points?.close();
     process.exit(0);
   });
 // Lost stream transitions (Core down when the event came) are repaired from Helix, like the main bot's

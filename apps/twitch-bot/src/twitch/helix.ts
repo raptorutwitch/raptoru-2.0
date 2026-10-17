@@ -278,6 +278,21 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       throw new Error('eventsub subscriptions: too many pages');
     },
 
+    /** The broadcaster's custom rewards (Points de chaîne V1, read only: channel:read:redemptions). */
+    async getCustomRewards(broadcasterId: string) {
+      const qs = new URLSearchParams({ broadcaster_id: broadcasterId });
+      const res = await request('GET', `/channel_points/custom_rewards?${qs}`);
+      return (res.data ?? []) as {
+        id: string;
+        title: string;
+        cost: number;
+        prompt?: string;
+        is_enabled: boolean;
+        is_paused?: boolean;
+        is_user_input_required?: boolean;
+      }[];
+    },
+
     async subscribe(
       type: string,
       condition: Record<string, string>,

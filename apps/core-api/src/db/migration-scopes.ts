@@ -28,6 +28,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Twitch alerts V1, production schema: the final Lab alerts tables in one additive, idempotent file (the Lab keeps
   // its two files; same resulting schema, checked by test/alerts-prod-migration.test.ts).
   '20261024120000_alerts.sql',
+  // Points de chaîne V1, production schema (same as the Lab file; Soundboard accepts sounds paid by channel points).
+  '20261025130000_channel_points.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -68,6 +70,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261022120000_alerts_lab.sql',
   // Twitch alerts: one queue per family (follow, subscription, bits, raid, donation), several families at once.
   '20261023120000_alerts_lab_families.sql',
+  // Points de chaîne V1: rewards, rules, redemptions, OBS jobs; Soundboard sounds paid by channel points.
+  '20261025120000_channel_points_lab.sql',
 ]);
 
 /**
