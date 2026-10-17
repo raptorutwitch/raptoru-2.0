@@ -405,7 +405,7 @@ indépendamment :
 **Toujours vrai** : réception Twitch réelle non branchée (aucun abonnement EventSub) ; production = SAMMI /
 StreamElements.
 
-## 18. Files par famille et lectures simultanées (17/10/2026, Lab, non validé manuellement)
+## 18. Files par famille et lectures simultanées (17/10/2026, Lab, validé manuellement dans OBS le 17/10/2026)
 
 Remplace la règle A1 « une alerte en vol par chaîne » (§ 13) : **une alerte en vol par chaîne et par famille**,
 plusieurs familles jouent ensemble dans la même source OBS.
@@ -449,5 +449,38 @@ plusieurs familles jouent ensemble dans la même source OBS.
 - **Limites** : les ids DOM du moteur (`#alertVideo`…) se répètent d'une couche à l'autre (le CSS legacy est par id) ;
   un média plein écran opaque (brume du raid) recouvre les familles du dessous, c'est l'ordre voulu ; deux sources OBS
   ouvertes se partageraient les familles (une seule source attendue).
+
+## 19. Source OBS périmée : rechargement automatique sans couper une alerte (17/10/2026, Lab, non validé manuellement)
+
+Constat (diagnostic du 17/10) : une source OBS restée ouverte pendant une mise à jour du lecteur garde l'ancien
+JavaScript (le redémarrage de Studio ne la recharge pas, le jeton persistant la laisse fonctionner) ; l'ancien lecteur
+jouait une alerte à la fois alors que Core et la base étaient à jour.
+
+- **Version** : Studio calcule une empreinte des fichiers de la source (`player.html`, `player.js`, `engine.js`,
+  `timeline.js`, `alerts.css`) **sur disque, à chaque demande** ; `player.html` est servi avec cette version
+  (`<meta name="alerts-player-version">`) ; les autres fichiers sont chargés après, donc au moins aussi récents.
+- **Contrôle** : chaque demande d'alerte (`/alerts/next`, toutes les secondes au plus) envoie la version de la page ;
+  Studio répond toujours avec la version servie. Version différente : **Studio ne réserve rien dans Core** pour cette
+  page (aucune alerte réservée sans lecteur pendant la transition). Une page plus ancienne sans version réserve comme
+  avant (elle se recharge une fois à la main).
+- **Rechargement** : la page ne demande plus rien, attend que **toutes ses alertes** soient finies **et leurs ACK
+  envoyés** (y compris les nouvelles tentatives d'ACK) **et** que le TTS du don ait fini de parler, puis
+  `location.reload()` (même URL, jeton conservé ; fichiers servis `no-store`). Les autres familles en attente reprennent
+  juste après, sur la nouvelle page (rechargement entre deux lectures, sans attendre que la file durable soit vide).
+- **Anti-boucle** : une seule tentative par nouvelle version (`sessionStorage`) ; si la page revient encore ancienne
+  (cache), elle continue de jouer avec son code (`stale_ok`), sans recharger à nouveau ; sans `sessionStorage`, pas de
+  rechargement automatique. Studio / Core injoignable : aucune version reçue, donc aucun rechargement.
+- Une demande dont la connexion est déjà coupée (Studio qui s'arrête, page fermée) ne réserve plus rien.
+- Aucun changement Core / SQL / calibrage / règles de file.
+- **Preuves** : Studio server 398 (dont version servie = version des fichiers, refus de réserver pour une autre
+  version, `stale_ok`, version qui suit les fichiers) ; Playwright alertes 14/14 répétés 3 fois (version différente
+  pendant raid + follow + gift : rechargement unique après la fin et les ACK de toutes, alerte arrivée pendant la
+  transition jouée une fois par la nouvelle page ; page revenue ancienne : un seul rechargement puis elle joue ;
+  redémarrage de Studio : aucun rechargement) ; mutations vérifiées (sans attente → échec ; sans garde → 298
+  rechargements). Vrais médias, vrai Core Lab en mémoire, Chromium : rechargement 0,09 s après la fin du raid, puis les
+  5 familles ensemble aux positions enregistrées. **Pas** de test dans OBS.
+- **Limites** : pendant la transition, une famille libre attend la fin des autres (au pire la durée d'un raid, ~20 s) ;
+  un TTS bloqué « en train de parler » dans le navigateur retarderait le rechargement (jamais de coupure) ; l'aperçu
+  Studio n'est pas concerné (il se recharge avec l'onglet).
 
 **Toujours vrai** : réception Twitch réelle non branchée ; production = SAMMI / StreamElements.

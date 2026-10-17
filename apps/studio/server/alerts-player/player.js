@@ -1,4 +1,4 @@
-/* global document, location, crypto, fetch, setTimeout, clearTimeout */
+/* global document, location, crypto, fetch, setTimeout, clearTimeout, sessionStorage, window */
 // Twitch alerts V1 (A2) — the OBS browser source (1920×1080, transparent). The ONLY consumer of Core's alert queue:
 // it asks Studio for the next alert (Studio claims it from Core with this page's consumer id), plays it with the
 // shared engine and reports « started » when the video really starts, then « completed » or « failed » with the
@@ -115,17 +115,52 @@ function start(alert) {
   running.set(family, run);
 }
 
+/**
+ * Stale page (17/10/2026): Studio reports the version of the files it serves with each answer and hands this page no
+ * alert while it differs. The page then claims nothing more, waits until every alert, report and donation TTS is
+ * over, and reloads (same URL, token kept; files served no-store). One reload per new version: if the page still
+ * comes back old (a cache), it keeps playing with its code (stale_ok) instead of reloading in a loop.
+ */
+const VERSION =
+  document.querySelector('meta[name="alerts-player-version"]')?.content ?? '';
+const RELOAD_KEY = 'alerts-player-reloaded-to';
+let staleOk = false;
+
+const triedReload = (version) => {
+  try {
+    return sessionStorage.getItem(RELOAD_KEY) === version;
+  } catch {
+    return true; // no storage: no guard against a loop, so no automatic reload
+  }
+};
+
+async function reloadWhenIdle(version) {
+  const tts = window.speechSynthesis;
+  while (running.size || tts?.speaking || tts?.pending) await wait(250);
+  try {
+    sessionStorage.setItem(RELOAD_KEY, version);
+  } catch {
+    staleOk = true;
+    return loop();
+  }
+  location.reload();
+}
+
 async function loop() {
   for (;;) {
-    let alert = null;
+    let res = null;
     try {
-      alert = (await post('next', {})).alert;
+      res = await post('next', { version: VERSION, stale_ok: staleOk });
     } catch {
       /* Studio or Core unreachable: try again later */
     }
+    if (res?.alert) start(res.alert);
+    if (res?.version && res.version !== VERSION && !staleOk) {
+      if (!triedReload(res.version)) return reloadWhenIdle(res.version);
+      staleOk = true;
+    }
     // An alert: ask again at once (another family may be waiting); nothing: wait for a family to end or the poll.
-    if (alert) start(alert);
-    else await nap(POLL_MS);
+    if (!res?.alert) await nap(POLL_MS);
   }
 }
 

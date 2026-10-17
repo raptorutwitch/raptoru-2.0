@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { appendFile, cp, mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -37,6 +37,8 @@ let origin = '';
 let secret = '';
 let coreUrl = '';
 let dir = '';
+// A copy of the OBS source files: the stale-source tests change one to make a new version.
+let playerDir = '';
 let closeDb: () => Promise<void>;
 
 const listen = (s: Server, port = 0) =>
@@ -93,6 +95,8 @@ test.beforeAll(async () => {
     { name: 'son_follow_eren.mp3', from: join(FIX, 'audio-2_5s.mp3') },
     // MoneyTest.webm / Son Alerte Don.mp3 are left missing on purpose.
   ]);
+  playerDir = join(dir, 'player');
+  await cp(join(here, '..', 'alerts-player'), playerDir, { recursive: true });
   studio = studioServer();
   const port = await listen(studio);
   origin = `http://127.0.0.1:${port}`;
@@ -101,7 +105,7 @@ test.beforeAll(async () => {
     core: localLabCoreClient(coreUrl, secret),
     origin,
     dir,
-    playerDir: join(here, '..', 'alerts-player'),
+    playerDir,
     media,
   });
 });
@@ -159,6 +163,17 @@ const until = async (id: string, statuses: string[], timeout = 15_000) => {
     .toMatch(new RegExp(`^(${statuses.join('|')})$`));
   return (await item(id))!;
 };
+
+/** Times at which the page reloaded itself (main frame navigations after this call). */
+function watchReloads(page: Page) {
+  const at: number[] = [];
+  page.on('framenavigated', (f) => {
+    if (f === page.mainFrame()) at.push(Date.now());
+  });
+  return at;
+}
+const pageVersion = (page: Page) =>
+  page.locator('meta[name="alerts-player-version"]').getAttribute('content');
 
 /** The preview page alone: its messages to « the parent » (itself here) are recorded. */
 async function preview(page: Page) {
@@ -543,6 +558,7 @@ test('OBS source: Studio restarting meanwhile — the source picks up again by i
   page,
 }) => {
   await page.goto(rt.playerUrl);
+  const reloads = watchReloads(page);
   const port = Number(new URL(origin).port);
   await close(studio);
   const queued = await event({
@@ -560,6 +576,8 @@ test('OBS source: Studio restarting meanwhile — the source picks up again by i
     20_000,
   );
   expect(done).toMatchObject({ status: 'completed', attempts: 1 });
+  // Same files before and after the restart: the page never reloaded (unreachable Studio is not a new version).
+  expect(reloads).toEqual([]);
 });
 
 test('calibration: the OBS source draws the SAVED placement, never changes an alert already playing, no editor frame', async ({
@@ -882,4 +900,75 @@ test('families: the preview overlap test plays other families beside the edited 
     ['completed', 'failed', 'expired'],
     20_000,
   );
+});
+
+test('stale source: a new version waits for every family and its reports, claims nothing meanwhile, then reloads once', async ({
+  page,
+}) => {
+  await page.goto(rt.playerUrl);
+  expect(await pageVersion(page)).toBe(await rt.playerVersion());
+  const reloads = watchReloads(page);
+  const raid = await event({
+    type: 'raid',
+    actor: { display_name: 'Long' },
+    viewers: 2,
+  });
+  await until(raid.alert!.alert_id, ['playing']);
+  const follow = await event({
+    type: 'follow',
+    actor: { display_name: 'Court' },
+  });
+  const gift = await event({
+    type: 'gift_community',
+    actor: { display_name: 'G' },
+    count: 5,
+  });
+  await until(follow.alert!.alert_id, ['playing', 'completed']);
+  await until(gift.alert!.alert_id, ['playing', 'completed']);
+  // A new version of the files while three families play, then an alert queued during the transition.
+  await appendFile(join(playerDir, 'engine.js'), '\n// new version\n');
+  const v2 = await rt.playerVersion();
+  const late = await event({
+    type: 'follow',
+    actor: { display_name: 'Apres' },
+  });
+  await expect.poll(() => reloads.length, { timeout: 20_000 }).toBe(1);
+  // Every alert played to its end and was reported before the reload (a family that ended first did not trigger it).
+  for (const e of [raid, follow, gift]) {
+    const it = (await item(e.alert!.alert_id))!;
+    expect(it).toMatchObject({ status: 'completed', attempts: 1 });
+    expect(Date.parse(it.ended_at!)).toBeLessThanOrEqual(reloads[0]!);
+  }
+  expect(await pageVersion(page)).toBe(v2);
+  // The alert queued meanwhile was never reserved by the old page: the reloaded one plays it, once.
+  const done = await until(
+    late.alert!.alert_id,
+    ['completed', 'failed', 'expired'],
+    20_000,
+  );
+  expect(done).toMatchObject({ status: 'completed', attempts: 1 });
+  expect(Date.parse(done.started_at!)).toBeGreaterThan(reloads[0]!);
+  await page.waitForTimeout(2500);
+  expect(reloads).toHaveLength(1);
+});
+
+test('stale source: a page that still comes back old (cache) reloads once, not in a loop, and keeps playing', async ({
+  page,
+}) => {
+  await page.goto(rt.playerUrl);
+  // From now on the page always comes back as it is (a stale cache).
+  const old = await (await fetch(`${origin}/alerts/player.html`)).text();
+  await page.route('**/alerts/player.html', (r) =>
+    r.fulfill({ contentType: 'text/html; charset=utf-8', body: old }),
+  );
+  const reloads = watchReloads(page);
+  await appendFile(join(playerDir, 'timeline.js'), '\n// newer\n');
+  await expect.poll(() => reloads.length, { timeout: 10_000 }).toBe(1);
+  const f = await event({ type: 'follow', actor: { display_name: 'Cache' } });
+  expect(
+    await until(f.alert!.alert_id, ['completed', 'failed', 'expired'], 20_000),
+  ).toMatchObject({ status: 'completed', attempts: 1 });
+  await page.waitForTimeout(3000);
+  expect(reloads).toHaveLength(1);
+  expect(await pageVersion(page)).not.toBe(await rt.playerVersion());
 });

@@ -35,7 +35,8 @@ Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Anton
 puis **calibrage persistant par variante** dans l'onglet Alertes (placement enregistré dans le stockage Studio, utilisé
 par la source OBS dès l'alerte suivante) — `docs/TWITCH_ALERTS_PARITY_2026-10.md` § 17 ; blocs Bits séparés ; **files par
 famille** (follow, abonnements, bits, don, raid jouent ensemble, chacune FIFO ; migration Lab
-`20261023120000_alerts_lab_families.sql`) — § 18. Réception Twitch réelle
+`20261023120000_alerts_lab_families.sql`) — § 18, **validé dans OBS par Antoni le 17/10** ; source OBS périmée
+rechargée automatiquement quand elle est inactive (§ 19, non validé). Réception Twitch réelle
 toujours non branchée.
 
 **Réserves ouvertes (non bloquantes, rien de corrigé dans ce checkpoint)**

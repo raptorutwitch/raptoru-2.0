@@ -324,10 +324,57 @@ describe('AlertsRuntime', () => {
         data: CLAIMED.data,
         placement: IDENTITY_PLACEMENT,
       },
+      version: expect.stringMatching(/^[a-f0-9]{16}$/),
     });
     expect(calls).toEqual([
       { path: `/v1/lab/alerts/${CH}/claim`, body: { consumer_id: 'obs-1' } },
     ]);
+  });
+
+  it('stale source: the page carries the version of the files; another version gets no alert (no claim) unless stale_ok', async () => {
+    const { origin, rt, token, calls, post } = await setup((path) =>
+      path.endsWith('/claim') ? { alert: CLAIMED } : {},
+    );
+    const version = await rt.playerVersion();
+    const html = await (await fetch(`${origin}/alerts/player.html`)).text();
+    expect(html).toContain(
+      `<meta name="alerts-player-version" content="${version}" />`,
+    );
+    const next = async (body: Record<string, unknown>) =>
+      (await (
+        await post('/alerts/next', { token, consumer_id: 'obs-1', ...body })
+      ).json()) as { alert: unknown; version: string };
+    // Up to date: claims.
+    expect((await next({ version })).alert).not.toBeNull();
+    // Another version: nothing claimed from Core, the current version given back.
+    expect(await next({ version: 'old' })).toEqual({ alert: null, version });
+    expect(calls).toHaveLength(1);
+    // A page that already reloaded in vain keeps playing.
+    expect(
+      (await next({ version: 'old', stale_ok: true })).alert,
+    ).not.toBeNull();
+    expect(calls).toHaveLength(2);
+  });
+
+  it('the version follows the files on disk', async () => {
+    const dir = await tmp();
+    for (const f of await readdir(PLAYER_DIR))
+      await copyFile(join(PLAYER_DIR, f), join(dir, f));
+    const rt = await AlertsRuntime.create({
+      channelId: CH,
+      core: (async () => ({})) as never,
+      origin: 'http://127.0.0.1:1',
+      dir: await tmp(),
+      playerDir: dir,
+      media: await AlertMediaStore.open(await tmp()),
+    });
+    const v1 = await rt.playerVersion();
+    expect(await rt.playerVersion()).toBe(v1);
+    await writeFile(
+      join(dir, 'engine.js'),
+      (await readFile(join(dir, 'engine.js'), 'utf8')) + '\n// changed\n',
+    );
+    expect(await rt.playerVersion()).not.toBe(v1);
   });
 
   it('an alert whose media is missing is reported failed (media_missing) and never handed to the source', async () => {
@@ -340,7 +387,7 @@ describe('AlertsRuntime', () => {
       ['Raid Titan.webm'],
     );
     const res = await post('/alerts/next', { token, consumer_id: 'obs-1' });
-    expect(await res.json()).toEqual({ alert: null });
+    expect((await res.json()).alert).toBeNull();
     expect(calls[1]).toEqual({
       path: `/v1/lab/alerts/items/${CLAIMED.alert_id}/ack`,
       body: {

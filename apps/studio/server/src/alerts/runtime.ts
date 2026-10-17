@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -24,6 +24,15 @@ const PLAYER_FILES: Record<string, string> = {
   'timeline.js': 'text/javascript; charset=utf-8',
   'alerts.css': 'text/css; charset=utf-8',
 };
+/** The files the OBS source runs: their content is its version (a change on disk = a new version). */
+const SOURCE_FILES = [
+  'player.html',
+  'player.js',
+  'engine.js',
+  'timeline.js',
+  'alerts.css',
+];
+const VERSION_MARK = '%PLAYER_VERSION%';
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self'; frame-ancestors 'self'";
 
@@ -222,12 +231,20 @@ export class AlertsRuntime {
       const body = await this.body(req);
       if (body.token !== this.token) return reply(403, { error: 'forbidden' });
       const consumer = String(body.consumer_id ?? '');
-      return reply(
-        200,
-        name === 'next'
-          ? { alert: await this.next(consumer) }
-          : await this.ack(consumer, body),
-      );
+      if (name === 'ack') return reply(200, await this.ack(consumer, body));
+      // Stale source (17/10/2026): a page that runs another version of the files gets no alert (it reloads once its
+      // alerts end) unless it already reloaded in vain (stale_ok). A page without a version (older) claims as before.
+      const version = await this.playerVersion();
+      // The source hung up meanwhile (Studio stopping, page gone): never reserve an alert nobody will receive.
+      if (req.socket.destroyed) return;
+      const stale =
+        typeof body.version === 'string' &&
+        body.version !== version &&
+        body.stale_ok !== true;
+      return reply(200, {
+        alert: stale ? null : await this.next(consumer),
+        version,
+      });
     }
     if (req.method !== 'GET' && req.method !== 'HEAD')
       return reply(405, { error: 'method_not_allowed' });
@@ -252,7 +269,25 @@ export class AlertsRuntime {
       'cache-control': 'no-store',
       'content-security-policy': CSP,
     });
+    // The page loads its other files after this one: they are at least as recent as the version it carries.
+    if (name === 'player.html')
+      data = Buffer.from(
+        data.toString('utf8').replace(VERSION_MARK, await this.playerVersion()),
+      );
     res.end(data);
+  }
+
+  /** Version of the OBS source: a hash of the files on disk now (read each time; a few small files). */
+  async playerVersion() {
+    const h = createHash('sha256');
+    for (const f of SOURCE_FILES) {
+      try {
+        h.update(await readFile(join(this.d.playerDir, f)));
+      } catch {
+        h.update(`missing:${f}`);
+      }
+    }
+    return h.digest('hex').slice(0, 16);
   }
 
   /** Claims the next alert for this source; one with missing media is reported failed and skipped. */
