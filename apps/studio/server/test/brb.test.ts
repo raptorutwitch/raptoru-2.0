@@ -325,9 +325,12 @@ async function realPlayer() {
 describe('Effects player — BRB layer with in-memory captures', () => {
   it('captures served to the page only during the effect (PNG), then dropped; BRB video at volume 1', async () => {
     const { p, origin, call } = await realPlayer();
-    expect(p.interactionMedia()).toEqual([
-      { id: 'brb-video', label: 'BRB — We’ll be right back', available: true },
-    ]);
+    // (the Random Ban media follow it in the same list: not imported in this test)
+    expect(p.interactionMedia()[0]).toEqual({
+      id: 'brb-video',
+      label: 'BRB — We’ll be right back',
+      available: true,
+    });
     const playing = p.play({
       kind: 'wbrb',
       screen: Buffer.from('SCREEN'),

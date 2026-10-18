@@ -12,6 +12,7 @@ import { Brb } from '../interactions/brb.js';
 import { InteractionError, Interactions } from '../interactions/creepy.js';
 import { ColorCam } from '../interactions/color-cam.js';
 import { FxCam } from '../interactions/fx-cam.js';
+import { RandomBanRuntime } from '../random-ban/runtime.js';
 import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 
 // Points de chaîne V1 in Studio (docs/CHANNEL_POINTS_V1.md). Core decides (master switch, rules, dedup, history);
@@ -54,6 +55,8 @@ export class ChannelPointsRuntime {
   readonly brb: Brb;
   readonly fxCam: FxCam;
   readonly colorCam: ColorCam;
+  /** Random Ban V2: its animations (Core + the Twitch executor decide and time out). */
+  readonly randomBan: RandomBanRuntime;
 
   private constructor(
     private readonly d: ChannelPointsRuntimeDeps,
@@ -63,6 +66,12 @@ export class ChannelPointsRuntime {
     this.brb = new Brb({ obs, effects: d.effects ?? null });
     this.fxCam = new FxCam({ obs });
     this.colorCam = new ColorCam({ obs });
+    this.randomBan = new RandomBanRuntime({
+      core: d.core,
+      environment: d.environment,
+      channelId: d.channelId,
+      effects: d.effects ?? null,
+    });
   }
 
   static async create(d: ChannelPointsRuntimeDeps) {
@@ -81,6 +90,7 @@ export class ChannelPointsRuntime {
   /** Starts with Studio: the job loop and the pending reverts (nothing happens without a job). */
   start() {
     this.obs.start();
+    this.randomBan.start();
     const loop = async () => {
       if (this.stopped) return;
       let worked = false;
@@ -103,6 +113,7 @@ export class ChannelPointsRuntime {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.obs.stop();
+    this.randomBan.stop();
   }
 
   /** One job if Core has one: started, actions in order, per-action results, completed. Returns true if one ran. */
@@ -209,7 +220,8 @@ export class ChannelPointsRuntime {
   ): Promise<boolean> {
     if (this.d.effects && (await this.d.effects.handle(req, res, url)))
       return true;
-    if (!url.pathname.startsWith('/api/channel-points')) return false;
+    const rb = url.pathname.startsWith('/api/random-ban');
+    if (!url.pathname.startsWith('/api/channel-points') && !rb) return false;
     const reply = (status: number, body: unknown) => {
       res.writeHead(status, {
         'content-type': 'application/json',
@@ -227,7 +239,16 @@ export class ChannelPointsRuntime {
       return true;
     }
     try {
-      await this.api(req, url, reply);
+      if (rb)
+        reply(
+          200,
+          await this.randomBan.api(
+            req.method ?? 'GET',
+            url.pathname.slice('/api/random-ban'.length),
+            () => this.body(req),
+          ),
+        );
+      else await this.api(req, url, reply);
     } catch (e) {
       const err = e as {
         status?: number;

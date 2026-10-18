@@ -43,6 +43,8 @@ function wav(ms: number) {
 async function studio(
   video?: Buffer,
   playerDir = join(here, '..', 'effects-player'),
+  /** More media of the catalogue (file name → content), e.g. the Random Ban videos. */
+  extra: Record<string, Buffer> = {},
 ) {
   const dir = await mkdtemp(join(tmpdir(), 'effects-e2e-'));
   const src = join(dir, 'src');
@@ -52,8 +54,11 @@ async function studio(
   if (video) await writeFile(join(src, 'Fuck You.webm'), video);
   // The BRB video (any real WebM: the layer around it is what is under test).
   if (video) await writeFile(join(src, "We'll be right back_3.webm"), video);
+  for (const [name, data] of Object.entries(extra))
+    await writeFile(join(src, name), data);
   const media = await AlertMediaStore.open(join(dir, 'media'));
   await media.import([
+    ...Object.keys(extra).map((name) => ({ name, from: join(src, name) })),
     { name: 'ErenScream.ogg', from: join(src, 'ErenScream.ogg') },
     { name: 'Tiens bon !.ogg', from: join(src, 'Tiens bon !.ogg') },
     ...(video
@@ -436,6 +441,129 @@ test.describe('Effects player — stale OBS page (BRB fix)', () => {
       await close();
       await s.close();
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+test.describe('Effects player — Random Ban V2 layers (as in OBS)', () => {
+  test('ban: legacy layer (mirror variant, volume 0,5, phrase with both names as text), ends at the video end or the legacy watchdog; CSC; flop text + trumpet', async () => {
+    const { page, close } = await obsLike();
+    await page.goto('about:blank');
+    const short = await recordWebm(page, 1500);
+    const long = await recordWebm(page, 4600);
+    const s = await studio(undefined, undefined, {
+      'Alerte R&M RB 1.webm': short,
+      'RandomBan Classic.webm': long,
+      'CSC bruité Fix.webm': short,
+      'Fail Trumpet Sound Effect [TubeRipper.cc].ogg': wav(1200),
+    });
+    try {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.goto(s.player.url);
+      await connected(s.player, true);
+      // R&M mirror: phrase of the « rm » pool, names as text (never HTML), shown at 500 ms.
+      const t0 = Date.now();
+      const rm = await s.player.play({
+        kind: 'ban',
+        animation: 'ban_rm_mirror',
+        trigger: 'Buyer',
+        banned: '<b>Target</b>',
+      });
+      await page.waitForTimeout(900);
+      const layer = await page.$eval('#stage .rb', (l) => {
+        const v = l.querySelector('video')!;
+        const t = l.querySelector('.pseudo-ban')!;
+        return {
+          mirror: v.classList.contains('mirror'),
+          transform: getComputedStyle(v).transform,
+          volume: v.volume,
+          muted: v.muted,
+          shown: t.className,
+          trigger: t.querySelector('.trigger')?.textContent,
+          banned: t.querySelector('.banned')?.textContent,
+          bold: t.querySelectorAll('b').length,
+          text: t.textContent,
+          color: getComputedStyle(t.querySelector('.banned')!).color,
+        };
+      });
+      expect(layer).toMatchObject({
+        mirror: true,
+        transform: 'matrix(-1, 0, 0, 1, 0, 0)',
+        volume: 0.5,
+        muted: false,
+        shown: 'pseudo-ban show',
+        trigger: 'Buyer',
+        banned: '<b>Target</b>',
+        bold: 0,
+        color: 'rgb(255, 77, 77)',
+      });
+      expect([
+        'Buyer a dégommé <b>Target</b>',
+        "<b>Target</b> s'est fait dégommer par Buyer",
+        'Buyer a ouvert un portail et a fumé <b>Target</b>',
+        "<b>Target</b> s'est pris un laser de Buyer",
+      ]).toContain(layer.text);
+      expect(await (await rm).end).toEqual({ event: 'completed' });
+      // The 1,5 s video ends before the watchdog (4 s + 0,8 s): done at the video's end.
+      expect(Date.now() - t0).toBeLessThan(3500);
+      expect(await page.$$eval('#stage .rb', (l) => l.length)).toBe(0);
+      // Classic, 4,6 s video: the legacy watchdog (3 s + 0,8 s) ends it first.
+      const t1 = Date.now();
+      const classic = await s.player.play({
+        kind: 'ban',
+        animation: 'ban_classic',
+        trigger: 'A',
+        banned: 'B',
+      });
+      expect(await (await classic).end).toEqual({ event: 'completed' });
+      const took = Date.now() - t1;
+      expect(took).toBeGreaterThan(3500);
+      expect(took).toBeLessThan(4500);
+      // CSC.
+      const csc = await s.player.play({
+        kind: 'ban',
+        animation: 'ban_csc',
+        trigger: 'Buyer',
+        banned: 'Buyer',
+      });
+      await page.waitForTimeout(800);
+      expect(await page.$eval('#stage .pseudo-ban', (t) => t.textContent)).toBe(
+        'Buyer est une grosse merde',
+      );
+      expect(await (await csc).end).toEqual({ event: 'completed' });
+      // Flop: the legacy text source (white Arial 256 px scaled at 647,316, faded in), the trumpet at 0,5.
+      const t2 = Date.now();
+      const flop = await s.player.play({ kind: 'flop', trigger: 'Buyer' });
+      await page.waitForTimeout(800);
+      const text = await page.$eval('#stage .rb-flop', (t) => {
+        const cs = getComputedStyle(t);
+        return {
+          text: t.textContent,
+          opacity: cs.opacity,
+          left: cs.left,
+          top: cs.top,
+          size: cs.fontSize,
+          color: cs.color,
+          transform: cs.transform,
+        };
+      });
+      expect(text).toMatchObject({
+        text: 'Buyer a flop cheh !',
+        opacity: '1',
+        left: '647px',
+        top: '316px',
+        size: '256px',
+        color: 'rgb(255, 255, 255)',
+      });
+      expect(text.transform).toMatch(
+        /^matrix\(0\.2768\d*, 0, 0, 0\.2765\d*, 0, 0\)$/,
+      );
+      expect(await (await flop).end).toEqual({ event: 'completed' });
+      expect(Date.now() - t2).toBeGreaterThan(2400);
+      expect(await page.$$eval('#stage .rb-flop', (l) => l.length)).toBe(0);
+    } finally {
+      await close();
+      await s.close();
     }
   });
 });

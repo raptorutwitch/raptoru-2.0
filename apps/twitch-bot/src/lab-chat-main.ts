@@ -11,6 +11,10 @@ import {
   createRateLimiter,
   fileJournal,
 } from './lab-chat-output.js';
+import {
+  createRandomBanExecutor,
+  fileRbJournal,
+} from './random-ban-executor.js';
 import { AuthError, fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { runEventSub } from './twitch/eventsub.js';
 import { createHelix } from './twitch/helix.js';
@@ -194,13 +198,18 @@ const points = await (async () => {
   console.log(
     '[channel-points] réception des récompenses active (lecture seule)',
   );
-  return events;
+  // Random Ban V2 reads the moderators, the bans and the subscriptions with this same broadcaster connection.
+  return {
+    events,
+    helix: broadcasterHelix,
+    scopes: pointsAuth.status().scopes,
+  };
 })();
 // Stopping (Studio OFF / closing): chat retries in memory are dropped explicitly, never persisted.
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
   process.on(signal, () => {
     ingest.close();
-    points?.close();
+    points?.events.close();
     process.exit(0);
   });
 // Lost stream transitions (Core down when the event came) are repaired from Helix, like the main bot's
@@ -246,6 +255,65 @@ if (status.scopes.includes('user:write:chat')) {
   console.log(
     '[lab-chat] output executor off: the token lacks user:write:chat (nothing can be sent)',
   );
+// Random Ban V2 (docs/RANDOM_BAN_V2.md): the Twitch executor of the Random Ban requests Core queues (the channel
+// points rule; Studio's dry runs). It always tells Core what its tokens allow; it times out only with LeCroupier_'s
+// moderator:manage:banned_users, and searches only with the broadcaster's moderation:read + channel:read:subscriptions.
+{
+  const bh = points?.helix ?? null;
+  const rbChannel = env.LAB_ALERTS_CHANNEL_ID ?? env.LAB_CHAT_CHANNEL_ID;
+  const randomBan = createRandomBanExecutor({
+    core: labCall,
+    channelId: rbChannel,
+    broadcasterId: app.TWITCH_BROADCASTER_ID,
+    executorId: `lab-chat-${status.userId}`,
+    login: status.login ?? 'LeCroupier_',
+    botScopes: status.scopes,
+    broadcasterScopes: points?.scopes ?? null,
+    twitch: {
+      chattersPage: async (after) => {
+        const p = await helix.getChattersPage(
+          app.TWITCH_BROADCASTER_ID,
+          status.userId!,
+          after,
+        );
+        return {
+          chatters: p.chatters.map((c) => ({
+            id: c.twitchUserId,
+            login: c.login,
+            name: c.displayName,
+          })),
+          cursor: p.cursor,
+        };
+      },
+      moderators: (ids) =>
+        bh
+          ? bh.getModeratorIds(app.TWITCH_BROADCASTER_ID, ids)
+          : Promise.reject(new Error('broadcaster_token_absent')),
+      bans: (ids) =>
+        bh
+          ? bh.getBans(app.TWITCH_BROADCASTER_ID, ids)
+          : Promise.reject(new Error('broadcaster_token_absent')),
+      follows: (id) => helix.isFollower(app.TWITCH_BROADCASTER_ID, id),
+      subscribers: (ids) =>
+        bh
+          ? bh.getSubscriberIds(app.TWITCH_BROADCASTER_ID, ids)
+          : Promise.reject(new Error('broadcaster_token_absent')),
+      ban: (id, duration, reason) =>
+        helix.timeoutUser(
+          app.TWITCH_BROADCASTER_ID,
+          status.userId!,
+          id,
+          duration,
+          reason,
+        ),
+    },
+    journal: fileRbJournal(app.LAB_RANDOM_BAN_JOURNAL_FILE),
+  });
+  console.log(
+    `[random-ban] exécuteur prêt — recherche : ${randomBan.ready.canSearch ? 'oui' : 'non'}, timeout : ${randomBan.ready.canTimeout ? 'oui' : 'non'}${randomBan.ready.missing.length ? ` (manque : ${randomBan.ready.missing.join(', ')})` : ''}`,
+  );
+  void randomBan.run();
+}
 // Hourly token validation (required by Twitch).
 setInterval(
   () => {

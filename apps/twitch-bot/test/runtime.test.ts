@@ -22,7 +22,9 @@ const baseConfig: BotConfig = {
   LAB_CHAT_OUTPUT: 'false',
   LAB_ALERTS_FOLLOW: 'false',
   CHANNEL_POINTS_EVENTS: 'false',
+  RANDOM_BAN: 'false',
   LAB_CHAT_JOURNAL_FILE: '.lab-chat-journal.json',
+  LAB_RANDOM_BAN_JOURNAL_FILE: '.lab-random-ban-journal.json',
 };
 
 let messageSeq = 0;

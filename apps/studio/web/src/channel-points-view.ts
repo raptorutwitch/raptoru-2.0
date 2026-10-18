@@ -24,7 +24,7 @@ export type CpActionView =
   | { type: 'obs_scene'; scene: string; duration_ms?: number }
   | {
       type: 'interaction';
-      interaction: 'creepy' | 'brb' | 'fx_cam' | 'color_cam';
+      interaction: 'creepy' | 'brb' | 'fx_cam' | 'color_cam' | 'random_ban';
       /** fx_cam: the effect Core resolved from the viewer's text. */
       effect?: string;
       /** color_cam: the colour Core resolved from the viewer's text. */
@@ -33,7 +33,7 @@ export type CpActionView =
 
 /** The native interactions (written in Studio's code: nothing to configure but the reward). */
 export const INTERACTIONS: Record<
-  'creepy' | 'brb' | 'fx_cam' | 'color_cam',
+  'creepy' | 'brb' | 'fx_cam' | 'color_cam' | 'random_ban',
   { label: string; description: string }
 > = {
   creepy: {
@@ -49,6 +49,11 @@ export const INTERACTIONS: Record<
   fx_cam: {
     label: 'FX Cam',
     description: `Comme SAMMI : le viewer écrit le nom d’un effet ; son filtre OBS (shader) sur « ${FX_CAM.source} » est activé ${FX_CAM.durationMs / 1000} s puis désactivé. Effets reconnus (majuscules et espaces ignorés) : ${FX_CAM.effects.join(', ')}. Seulement depuis Dessin ou Fullscreen ; le même effet déjà actif est refusé, des effets différents se cumulent.`,
+  },
+  random_ban: {
+    label: 'Random Ban',
+    description:
+      'Ban aléatoire : un chatter présent (lurkers compris) qui suit la chaîne, ni modérateur ni déjà banni, tiré au hasard ; timeout par LeCroupier_ (3 min abonné, 5 min sinon), puis l’animation historique. Aucun éligible : flop. « Tester » fait un tirage à blanc (jamais de timeout). Détails et tests : section Random Ban plus bas.',
   },
   color_cam: {
     label: 'Couleur Cam',
@@ -81,6 +86,8 @@ export interface CpRedemption {
     error?: string;
     /** Sound actions: in the Soundboard queue or being played (pending until the player reports the end). */
     progress?: 'queued' | 'playing';
+    /** Random Ban: what happened once it ended (target and duration, flop, simulation). */
+    detail?: string;
   }[];
 }
 
@@ -169,6 +176,7 @@ const ERRORS: Record<string, string> = {
   start_timeout: 'lecture non démarrée',
   creepy_no_sound: 'Creepy exécuté sans son (lecteur d’effets indisponible)',
   color_cam_unknown: `couleur inconnue — aucun remboursement possible : récompense créée par SAMMI`,
+  random_ban_unavailable: 'Random Ban indisponible dans ce Core',
   fx_cam_unknown: `effet inconnu (effets : ${FX_CAM.effects.join(', ')}) — aucun remboursement possible : récompense créée par SAMMI`,
 };
 const PROGRESS = {
@@ -357,7 +365,9 @@ export function historyView(s: CpState) {
                       : PROGRESS[x.progress]
                     : x.error
                       ? (ERRORS[x.error] ?? x.error)
-                      : '';
+                      : x.detail
+                        ? x.detail
+                        : '';
                 return `${mark} ${a ? esc(actionLabel(a, s.sounds, effectItems(s.effects))) : ''}${note ? ` — ${esc(note)}` : ''}`;
               })
               .join('<br>');

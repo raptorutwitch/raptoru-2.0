@@ -28,6 +28,8 @@ const PREFIXES = [
   '/v1/lab/alerts/',
   // Points de chaîne V1: switch, rules, tests, state, the OBS jobs (claim / reports).
   '/v1/lab/channel-points/',
+  // Random Ban V2: state, Studio tests, the animations (claim / report).
+  '/v1/lab/random-ban/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

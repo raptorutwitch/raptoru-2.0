@@ -44,6 +44,8 @@ import { walletRoutes } from './wallet-routes.js';
 import { studioTransportRoutes } from './studio-transport-routes.js';
 import { alertsRoutes } from './alerts-routes.js';
 import { channelPointsRoutes } from './channel-points-routes.js';
+import { randomBanRoutes } from './random-ban-routes.js';
+import type { RandomBanService } from '../random-ban/service.js';
 import type { ChannelPointsService } from '../channel-points/service.js';
 import type { AlertsService } from '../alerts/service.js';
 import {
@@ -101,6 +103,8 @@ export interface AppDeps {
   alerts?: AlertsService;
   /** Points de chaîne V1: /v1/studio/channel-points/* and /v1/bot/channel-points/* (same conditions as alerts). */
   channelPoints?: ChannelPointsService;
+  /** Random Ban V2: /v1/studio/random-ban/* and /v1/bot/random-ban/* (same conditions as the channel points). */
+  randomBan?: RandomBanService;
   /** Readiness probe (GET /ready): the database answers. */
   db?: Pick<Db, 'query'>;
   /**
@@ -193,6 +197,7 @@ function routes({
   studioInstallations,
   alerts,
   channelPoints,
+  randomBan,
   db,
   labRoutes = true,
   ext,
@@ -211,6 +216,9 @@ function routes({
       : []),
     ...(studioInstallations && channelPoints && cockpit?.channelId
       ? channelPointsRoutes(channelPoints, { channelId: cockpit.channelId })
+      : []),
+    ...(studioInstallations && randomBan && cockpit?.channelId
+      ? randomBanRoutes(randomBan, { channelId: cockpit.channelId })
       : []),
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
     ...(studioInstallations && cockpit

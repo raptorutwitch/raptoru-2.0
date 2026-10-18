@@ -11,6 +11,7 @@ import {
   rewardsView,
   statusView,
 } from './channel-points-view.js';
+import { mountRandomBan } from './random-ban.js';
 
 // Points de chaîne V1 — Studio tab (docs/CHANNEL_POINTS_V1.md). Twitch rewards (left), the local rule of the selected
 // reward (right: ordered actions, typed fields, suggestions read from OBS), the history (below). The master switch is
@@ -71,10 +72,12 @@ export function mountChannelPoints(root: HTMLElement) {
       <div><h2>Actions de la récompense</h2><div data-role="editor"></div></div>
     </div>
     <h2>Historique</h2><div data-role="history"></div>
+    <h2>Random Ban</h2><div data-role="random-ban"></div>
     <datalist id="cp-scenes"></datalist><datalist id="cp-sources"></datalist><datalist id="cp-filters"></datalist>
   </section>`;
   const $ = (role: string) =>
     root.querySelector<HTMLElement>(`[data-role="${role}"]`)!;
+  const randomBan = mountRandomBan($('random-ban'));
 
   const reward = () => state?.rewards.find((r) => r.id === selected) ?? null;
   /** The saved rule reads the viewer's text (FX Cam, Couleur Cam): the suggestions of its test field, else null. */
@@ -428,7 +431,11 @@ export function mountChannelPoints(root: HTMLElement) {
       timer = null;
       if (!visible) return;
       void load();
-      timer = window.setInterval(() => void load(), 3000);
+      void randomBan.load();
+      timer = window.setInterval(() => {
+        void load();
+        void randomBan.load();
+      }, 3000);
     },
   };
 }

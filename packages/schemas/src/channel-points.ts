@@ -19,7 +19,13 @@ const ObsName = z.string().trim().min(1).max(256);
 const DurationMs = z.number().int().min(500).max(600_000);
 
 /** The native interactions Studio knows (each one fully written in code). */
-export const CpInteractionId = z.enum(['creepy', 'brb', 'fx_cam', 'color_cam']);
+export const CpInteractionId = z.enum([
+  'creepy',
+  'brb',
+  'fx_cam',
+  'color_cam',
+  'random_ban',
+]);
 export type CpInteractionId = z.infer<typeof CpInteractionId>;
 
 /** The allow-list of V1 actions. Nothing else can ever be executed (no script, no system command). */
@@ -67,7 +73,8 @@ export const CpAction = z.discriminatedUnion('type', [
   /**
    * A native interaction, written in Studio's code with its legacy parameters (P0.2): nothing to assemble. `creepy`:
    * the SAMMI « Creepy » reward (docs/EFFECTS_PLAYER.md § 9); `brb`: « Be Right Back » (§ 10); `fx_cam`: « FX cam »
-   * (§ 11); `color_cam`: « Couleur Cam » (§ 12).
+   * (§ 11); `color_cam`: « Couleur Cam » (§ 12); `random_ban`: « Ban aléatoire » (run by Core and the Twitch executor,
+   * docs/RANDOM_BAN_V2.md — never a Studio OBS job).
    */
   z.strictObject({
     type: z.literal('interaction'),

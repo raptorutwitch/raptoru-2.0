@@ -1,4 +1,5 @@
 import { AlertsService } from './alerts/service.js';
+import { RandomBanService } from './random-ban/service.js';
 import { ChannelPointsService } from './channel-points/service.js';
 import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
 import type { TwitchViewerCatalog } from './bonk-lab/twitch-viewer.js';
@@ -38,6 +39,8 @@ export interface Core {
   alerts: AlertsService;
   /** Points de chaîne V1 (same service as the Lab Core; sounds through this Core's Soundboard). */
   channelPoints: ChannelPointsService;
+  /** Random Ban V2 (same service as the Lab Core; triggered by the channel points rule). */
+  randomBan: RandomBanService;
 }
 
 export function createCore(
@@ -51,6 +54,7 @@ export function createCore(
   const wallet = createWalletModule(db, clock);
   const loyalty = new LoyaltyEngine(db, clock, wallet.wallet, loyaltyModes);
   const soundLab = new SoundLabService(db, clock);
+  const randomBan = new RandomBanService(db, clock);
   return {
     credits,
     daily: new DailyService(db, clock, credits),
@@ -66,6 +70,7 @@ export function createCore(
     raffleLab: new RaffleLabService(db, clock),
     studioInstallations: new StudioInstallations(db, clock),
     alerts: new AlertsService(db, clock),
-    channelPoints: new ChannelPointsService(db, clock, soundLab),
+    channelPoints: new ChannelPointsService(db, clock, soundLab, randomBan),
+    randomBan,
   };
 }

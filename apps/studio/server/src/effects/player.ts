@@ -7,6 +7,12 @@ import {
   EFFECT_SOUNDS,
   EFFECT_VIDEOS,
   INTERACTION_MEDIA,
+  RANDOM_BAN_ANIMATIONS,
+  RANDOM_BAN_FLOP,
+  RANDOM_BAN_MEDIA,
+  RANDOM_BAN_PHRASES,
+  RANDOM_BAN_VIDEO_VOLUME,
+  type RandomBanAnimationId,
 } from '@raptoru/schemas';
 import type { AlertMediaStore } from '../alerts/media-store.js';
 
@@ -15,6 +21,8 @@ import type { AlertMediaStore } from '../alerts/media-store.js';
 // (EFFECT_SOUNDS) and full-frame effect videos with their legacy presentation (EFFECT_VIDEOS, P0.2), media in Studio's
 // storage. BRB (P0.2): the legacy « We'll be right back » layer over two instant OBS captures (screen, camera) held in
 // memory only, served to the page under an unguessable id for the effect's lifetime and dropped at its end.
+// Random Ban V2 (docs/RANDOM_BAN_V2.md): the legacy ban layer (video, mirror, phrase with both names, its timings) and
+// the flop (trumpet + text) — parameters from RANDOM_BAN_*, nothing decided here.
 // Stale page (BRB fix, 18/10/2026): an OBS browser source keeps the files it loaded while Studio restarts with new ones
 // (a page from before BRB answered « invalid_effect » to a BRB). The page carries the version of its files (a hash of
 // player.html + player.js, injected when served) in every call; Studio hands nothing to a page of another version — the
@@ -54,7 +62,7 @@ type Presentation = {
 
 interface Delivery {
   delivery_id: string;
-  kind: 'sound' | 'video' | 'wbrb';
+  kind: 'sound' | 'video' | 'wbrb' | 'ban' | 'flop';
   /** Catalogue id (the page groups the plays of one video for its ducking). */
   effect_id: string;
   label: string;
@@ -64,6 +72,8 @@ interface Delivery {
   presentation: Presentation | null;
   /** BRB: its captures (ids of `captures`). */
   images: { screen: string; cam: string } | null;
+  /** Random Ban: what the page shows (the ban layer, or the flop text). */
+  ban: Record<string, unknown> | null;
   player: string | null;
   started: boolean;
   onStart: (ok: true | EffectError) => void;
@@ -101,6 +111,12 @@ const CATALOGUE: {
     file: v.file,
   })),
   ...INTERACTION_MEDIA.map((m) => ({
+    kind: 'interaction' as const,
+    id: m.id,
+    label: m.label,
+    file: m.file,
+  })),
+  ...RANDOM_BAN_MEDIA.map((m) => ({
     kind: 'interaction' as const,
     id: m.id,
     label: m.label,
@@ -212,7 +228,7 @@ export class EffectsPlayer {
 
   /** Media of the native interactions, imported or not. */
   interactionMedia() {
-    return INTERACTION_MEDIA.map((m) => ({
+    return [...INTERACTION_MEDIA, ...RANDOM_BAN_MEDIA].map((m) => ({
       id: m.id,
       label: m.label,
       available: this.d.media.path(m.file) !== null,
@@ -237,12 +253,30 @@ export class EffectsPlayer {
   async play(
     effect:
       | { kind: 'sound' | 'video'; id: string; volume: number }
-      | { kind: 'wbrb'; screen: Buffer; cam: Buffer },
+      | { kind: 'wbrb'; screen: Buffer; cam: Buffer }
+      | {
+          kind: 'ban';
+          animation: Exclude<RandomBanAnimationId, 'flop'>;
+          trigger: string;
+          banned: string;
+        }
+      | { kind: 'flop'; trigger: string },
   ) {
+    const anim =
+      effect.kind === 'ban'
+        ? RANDOM_BAN_ANIMATIONS.find((a) => a.id === effect.animation)
+        : undefined;
+    if (effect.kind === 'ban' && !anim) throw new EffectError('effect_unknown');
     const item =
       effect.kind === 'wbrb'
         ? CATALOGUE.find((c) => c.id === 'brb-video')
-        : CATALOGUE.find((c) => c.kind === effect.kind && c.id === effect.id);
+        : effect.kind === 'ban'
+          ? CATALOGUE.find((c) => c.id === anim!.media)
+          : effect.kind === 'flop'
+            ? CATALOGUE.find((c) => c.id === RANDOM_BAN_FLOP.media)
+            : CATALOGUE.find(
+                (c) => c.kind === effect.kind && c.id === effect.id,
+              );
     if (!item) throw new EffectError('effect_unknown');
     if (!this.d.media.path(item.file))
       throw new EffectError('effect_media_missing');
@@ -267,12 +301,38 @@ export class EffectsPlayer {
       this.captures.set(images.screen, effect.screen);
       this.captures.set(images.cam, effect.cam);
     }
+    const ban: Delivery['ban'] =
+      effect.kind === 'ban'
+        ? {
+            animation: anim!.id,
+            mirror: anim!.mirror,
+            phrases: [...RANDOM_BAN_PHRASES[anim!.pool]],
+            show_at: anim!.showAt,
+            hide_at: anim!.hideAt,
+            duration: anim!.duration,
+            trigger: effect.trigger.slice(0, 64),
+            banned: effect.banned.slice(0, 64),
+          }
+        : effect.kind === 'flop'
+          ? {
+              text: RANDOM_BAN_FLOP.text.replace(
+                '{trigger}',
+                effect.trigger.slice(0, 64),
+              ),
+              fade_ms: RANDOM_BAN_FLOP.fadeMs,
+              visible_ms: RANDOM_BAN_FLOP.visibleMs,
+              left: RANDOM_BAN_FLOP.left,
+              top: RANDOM_BAN_FLOP.top,
+              scale_x: RANDOM_BAN_FLOP.scaleX,
+              scale_y: RANDOM_BAN_FLOP.scaleY,
+            }
+          : null;
     let end!: Promise<EffectEnd>;
     const started = new Promise<true | EffectError>((onStart) => {
       end = new Promise<EffectEnd>((onEnd) => {
         const x: Delivery = {
           delivery_id: randomUUID(),
-          kind: effect.kind === 'wbrb' ? 'wbrb' : effect.kind,
+          kind: effect.kind,
           effect_id: item.id,
           label: item.label,
           url: `media/${item.id}`,
@@ -280,9 +340,14 @@ export class EffectsPlayer {
           volume:
             effect.kind === 'wbrb'
               ? 1
-              : Math.min(100, Math.max(0, effect.volume)) / 100,
+              : effect.kind === 'ban'
+                ? RANDOM_BAN_VIDEO_VOLUME
+                : effect.kind === 'flop'
+                  ? RANDOM_BAN_FLOP.volume
+                  : Math.min(100, Math.max(0, effect.volume)) / 100,
           presentation,
           images,
+          ban,
           player: null,
           started: false,
           onStart,
@@ -382,6 +447,7 @@ export class EffectsPlayer {
               },
             }
           : {}),
+        ...(x.ban ? { ban: x.ban } : {}),
       });
     }
     return out;

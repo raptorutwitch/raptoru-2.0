@@ -30,6 +30,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261024120000_alerts.sql',
   // Points de chaîne V1, production schema (same as the Lab file; Soundboard accepts sounds paid by channel points).
   '20261025130000_channel_points.sql',
+  // Random Ban V2 (M1.1), production schema (same as the Lab file).
+  '20261026130000_random_ban.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -72,6 +74,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261023120000_alerts_lab_families.sql',
   // Points de chaîne V1: rewards, rules, redemptions, OBS jobs; Soundboard sounds paid by channel points.
   '20261025120000_channel_points_lab.sql',
+  // Random Ban V2 (M1.1): requests, target, sanction, refund owed, animation.
+  '20261026120000_random_ban_lab.sql',
 ]);
 
 /**

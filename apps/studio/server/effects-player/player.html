@@ -123,6 +123,102 @@
           transform: translateY(0);
         }
       }
+      /* Random Ban V2: the legacy ban layer of Alerte_system.html (video « default » / « mirror-h », « pseudo-ban »
+         text), values copied as they are. */
+      #stage .rb {
+        position: absolute;
+        inset: 0;
+        z-index: 7000;
+        pointer-events: none;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      }
+      #stage .rb video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        opacity: 1;
+        transform: none;
+        transition: all 0.3s ease;
+      }
+      #stage .rb video.mirror {
+        transform: scaleX(-1);
+      }
+      #stage .pseudo-ban {
+        position: absolute;
+        top: calc(8% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        color: white;
+        font-size: 42px;
+        font-weight: 700;
+        text-shadow:
+          -2px -2px 0 #000,
+          2px -2px 0 #000,
+          -2px 2px 0 #000,
+          2px 2px 0 #000,
+          0 0 15px rgba(255, 0, 0, 0.4);
+        opacity: 0;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 10;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        letter-spacing: 2px;
+      }
+      #stage .pseudo-ban .trigger {
+        color: #4da6ff;
+        font-weight: 900;
+      }
+      #stage .pseudo-ban .banned {
+        color: #ff4d4d;
+        font-weight: 900;
+      }
+      #stage .pseudo-ban.show {
+        animation: banSlideUp 0.3s ease-out forwards;
+      }
+      #stage .pseudo-ban.hide {
+        animation: banSlideDown 0.3s ease-in forwards;
+      }
+      @keyframes banSlideUp {
+        0% {
+          opacity: 0;
+          transform: translateX(-50%) translateY(20px);
+        }
+        100% {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+        }
+      }
+      @keyframes banSlideDown {
+        0% {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+        }
+        100% {
+          opacity: 0;
+          transform: translateX(-50%) translateY(20px);
+        }
+      }
+      /* Random Ban V2 flop: the legacy OBS text source « randomban » (GDI+ text, OBS defaults: Arial 256 px, white,
+         scaled), its opacity faded by a colour correction filter. */
+      #stage .rb-flop {
+        position: absolute;
+        z-index: 7000;
+        transform-origin: 0 0;
+        font-family: Arial, sans-serif;
+        font-size: 256px;
+        line-height: 1.15;
+        color: #fff;
+        white-space: nowrap;
+        opacity: 0;
+        transition-property: opacity;
+        transition-timing-function: linear;
+      }
+      #stage .rb-flop.on {
+        opacity: 1;
+      }
       #panel {
         position: relative;
         z-index: 1;

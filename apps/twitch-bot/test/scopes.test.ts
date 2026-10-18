@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { requiredScopes } from '../src/config.js';
+import { broadcasterScopes, requiredScopes } from '../src/config.js';
 
 // Scopes asked by `twitch:auth` (and checked by the bot): derived from the enabled features only.
 
@@ -75,5 +75,29 @@ describe('requiredScopes', () => {
         LAB_ALERTS_FOLLOW: 'true',
       }),
     ).toEqual(['user:read:chat', 'moderator:read:followers']);
+  });
+
+  it('Random Ban V2 (RANDOM_BAN, off by default): LeCroupier_ may time out; the broadcaster reads moderators and bans', () => {
+    expect(requiredScopes({ ...off, LAB_CHAT_INGEST: 'true' })).not.toContain(
+      'moderator:manage:banned_users',
+    );
+    expect(
+      requiredScopes({ ...off, LAB_CHAT_INGEST: 'true', RANDOM_BAN: 'true' }),
+    ).toEqual([
+      'user:read:chat',
+      'moderator:read:chatters',
+      'moderator:read:followers',
+      'moderator:manage:banned_users',
+    ]);
+    expect(broadcasterScopes({})).not.toContain('moderation:read');
+    expect(
+      broadcasterScopes({ CHANNEL_POINTS_EVENTS: 'true', RANDOM_BAN: 'true' }),
+    ).toEqual([
+      'channel:read:subscriptions',
+      'bits:read',
+      'moderator:read:followers',
+      'channel:read:redemptions',
+      'moderation:read',
+    ]);
   });
 });

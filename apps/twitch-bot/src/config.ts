@@ -20,19 +20,28 @@ export const BROADCASTER_SCOPES = [
 
 /**
  * Scopes asked for the broadcaster token: loyalty's, plus channel:read:redemptions when Points de chaîne is on
- * (CHANNEL_POINTS_EVENTS). Read only: Raptoru never manages a redemption.
+ * (CHANNEL_POINTS_EVENTS). Read only: Raptoru never manages a redemption. Random Ban V2 (RANDOM_BAN): moderation:read
+ * (the moderators and the bans / timeouts of the chatters, read only) and channel:read:subscriptions (3 or 5 min).
  */
 export function broadcasterScopes(
   config: Partial<
-    Pick<TwitchAppConfig, 'LOYALTY_TWITCH_EVENTS' | 'CHANNEL_POINTS_EVENTS'>
+    Pick<
+      TwitchAppConfig,
+      'LOYALTY_TWITCH_EVENTS' | 'CHANNEL_POINTS_EVENTS' | 'RANDOM_BAN'
+    >
   >,
 ): string[] {
   const loyalty = config.LOYALTY_TWITCH_EVENTS !== 'false';
   return [
-    ...(loyalty ? BROADCASTER_SCOPES : []),
-    ...(config.CHANNEL_POINTS_EVENTS === 'true'
-      ? ['channel:read:redemptions']
-      : []),
+    ...new Set([
+      ...(loyalty ? BROADCASTER_SCOPES : []),
+      ...(config.CHANNEL_POINTS_EVENTS === 'true'
+        ? ['channel:read:redemptions']
+        : []),
+      ...(config.RANDOM_BAN === 'true'
+        ? ['moderation:read', 'channel:read:subscriptions']
+        : []),
+    ]),
   ];
 }
 
@@ -66,6 +75,12 @@ const TwitchApp = z.object({
   // reads the reward list; needs channel:read:redemptions on the broadcaster token. Core's master switch (OFF by
   // default) decides whether anything is executed.
   CHANNEL_POINTS_EVENTS: Flag,
+  /**
+   * Random Ban V2 (docs/RANDOM_BAN_V2.md): only changes the rights `twitch:auth` asks for — LeCroupier_:
+   * moderator:manage:banned_users (timeouts) + moderator:read:chatters / moderator:read:followers; broadcaster:
+   * moderation:read. OFF by default; the executor itself only reads what the tokens hold.
+   */
+  RANDOM_BAN: Flag,
   // Loyalty events not yet answered by Core (survives bot restarts), git-ignored.
   LOYALTY_OUTBOX_FILE: z.string().min(1).default(DEFAULT_LOYALTY_OUTBOX_FILE),
   // Shadow presence tracker (Get Chatters, read-only). Needs scope moderator:read:chatters.
@@ -82,6 +97,11 @@ const TwitchApp = z.object({
   LAB_ALERTS_FOLLOW: Flag,
   // Bot journal of the Lab chat sends (about_to_send → outcome), git-ignored runtime data.
   LAB_CHAT_JOURNAL_FILE: z.string().min(1).default('.lab-chat-journal.json'),
+  /** Random Ban V2: timeouts about to be sent / sent, until Core knows their outcome (never sent twice). */
+  LAB_RANDOM_BAN_JOURNAL_FILE: z
+    .string()
+    .min(1)
+    .default('.lab-random-ban-journal.json'),
 });
 
 const Env = TwitchApp.extend({
@@ -125,7 +145,12 @@ export function requiredScopes(
     | 'PRESENCE_SHADOW'
     | 'LAB_CHAT_INGEST'
   > &
-    Partial<Pick<TwitchAppConfig, 'LAB_CHAT_OUTPUT' | 'LAB_ALERTS_FOLLOW'>>,
+    Partial<
+      Pick<
+        TwitchAppConfig,
+        'LAB_CHAT_OUTPUT' | 'LAB_ALERTS_FOLLOW' | 'RANDOM_BAN'
+      >
+    >,
 ): string[] {
   const chatCommands =
     config.DAILY_CHAT_COMMANDS === 'true' ||
@@ -141,6 +166,13 @@ export function requiredScopes(
     ...(labOutput ? ['user:write:chat', 'moderator:manage:announcements'] : []),
     ...(config.LAB_ALERTS_FOLLOW === 'true'
       ? ['moderator:read:followers']
+      : []),
+    ...(config.RANDOM_BAN === 'true'
+      ? [
+          'moderator:read:chatters',
+          'moderator:read:followers',
+          'moderator:manage:banned_users',
+        ]
       : []),
   ];
   return [...new Set(scopes)];

@@ -293,6 +293,76 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       }[];
     },
 
+    // --- Random Ban V2 (docs/RANDOM_BAN_V2.md) -------------------------------------------------------------------
+
+    /** Moderators among these ids (Get Moderators, ≤ 100 ids; broadcaster token, moderation:read). */
+    async getModeratorIds(broadcasterId: string, userIds: string[]) {
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        first: '100',
+      });
+      for (const id of userIds) qs.append('user_id', id);
+      const res = await request('GET', `/moderation/moderators?${qs}`);
+      return ((res.data ?? []) as { user_id: string }[]).map((m) =>
+        String(m.user_id),
+      );
+    },
+
+    /** Bans and timeouts among these ids (Get Banned Users, ≤ 100 ids; broadcaster token, moderation:read). */
+    async getBans(broadcasterId: string, userIds: string[]) {
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        first: '100',
+      });
+      for (const id of userIds) qs.append('user_id', id);
+      const res = await request('GET', `/moderation/banned?${qs}`);
+      return (
+        (res.data ?? []) as { user_id: string; expires_at: string }[]
+      ).map((b) => ({
+        user_id: String(b.user_id),
+        expires_at: b.expires_at ?? '',
+      }));
+    },
+
+    /** Does this user follow the channel (Get Channel Followers + user_id; broadcaster or moderator token). */
+    async isFollower(broadcasterId: string, userId: string) {
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        user_id: userId,
+      });
+      const res = await request('GET', `/channels/followers?${qs}`);
+      return (res.data ?? []).length > 0;
+    },
+
+    /** Subscribers among these ids (Get Broadcaster Subscriptions, ≤ 100 ids; broadcaster token). */
+    async getSubscriberIds(broadcasterId: string, userIds: string[]) {
+      const qs = new URLSearchParams({ broadcaster_id: broadcasterId });
+      for (const id of userIds) qs.append('user_id', id);
+      const res = await request('GET', `/subscriptions?${qs}`);
+      return ((res.data ?? []) as { user_id: string }[]).map((s) =>
+        String(s.user_id),
+      );
+    },
+
+    /** A TIMEOUT (Ban User with a duration — never a permanent ban here; moderator:manage:banned_users). */
+    async timeoutUser(
+      broadcasterId: string,
+      moderatorId: string,
+      userId: string,
+      durationS: number,
+      reason: string,
+    ): Promise<void> {
+      if (!(durationS >= 1 && durationS <= 1_209_600))
+        throw new Error('timeout_duration_required');
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        moderator_id: moderatorId,
+      });
+      await request('POST', `/moderation/bans?${qs}`, {
+        data: { user_id: userId, duration: durationS, reason },
+      });
+    },
+
     async subscribe(
       type: string,
       condition: Record<string, string>,

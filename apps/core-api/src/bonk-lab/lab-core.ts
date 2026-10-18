@@ -22,6 +22,8 @@ import { miniGamesRoutes } from '../http/mini-games-routes.js';
 import { alertsRoutes } from '../http/alerts-routes.js';
 import { channelPointsRoutes } from '../http/channel-points-routes.js';
 import { ChannelPointsService } from '../channel-points/service.js';
+import { randomBanRoutes } from '../http/random-ban-routes.js';
+import { RandomBanService } from '../random-ban/service.js';
 import { AlertsService } from '../alerts/service.js';
 import { MiniGamesService } from '../mini-games/service.js';
 import { twitchAppLoginLookup } from '../mini-games/twitch-login.js';
@@ -112,6 +114,7 @@ export function createLabCore({
     undefined,
     twitch ? twitchAppLoginLookup(twitch) : null,
   );
+  const randomBan = new RandomBanService(db, systemClock);
   const routes = [
     ...bonkLabRoutes(bonk, viewers),
     // Soundboard V2 Lab: same isolated Lab Core process and database.
@@ -136,7 +139,11 @@ export function createLabCore({
     // Twitch alerts V1 (A1): normalized events, durable queue, claim / ACK (no economy).
     ...alertsRoutes(new AlertsService(db, systemClock)),
     // Points de chaîne V1: redemptions (Lab chat adapter), rules, OBS jobs (Studio); sounds through this Soundboard.
-    ...channelPointsRoutes(new ChannelPointsService(db, systemClock, sound)),
+    ...channelPointsRoutes(
+      new ChannelPointsService(db, systemClock, sound, randomBan),
+    ),
+    // Random Ban V2: Studio (state, tests, animations) and the Lab chat adapter (Twitch executor).
+    ...randomBanRoutes(randomBan),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
   ];

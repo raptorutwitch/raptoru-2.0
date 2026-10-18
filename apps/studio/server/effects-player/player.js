@@ -10,7 +10,11 @@
 //   500 ms fade out before the end, ducking of the plays of the same video (only the oldest `audible` heard);
 // - wbrb (P0.2, BRB): the legacy « jouerWbrb » layer — the screen capture (dimmed, brown veil), the camera capture
 //   dropping in after 1 s, the « We'll be right back » video on top (shown 80 ms after the start); at the video's end:
-//   fade out after 500 ms (200 ms), removed at 700 ms — the effect ends then.
+//   fade out after 500 ms (200 ms), removed at 700 ms — the effect ends then;
+// - ban (Random Ban V2): the legacy ban layer (Alerte_system.html « jouerAlerte » ban_*): the video (its own sound, mirror
+//   variants), the phrase with both names shown at show_at / hidden at hide_at (slide 0.3 s); ends at the video's end or
+//   duration + 800 ms (the legacy watchdog), whichever first;
+// - flop (Random Ban V2): the trumpet and « X a flop cheh ! » (the legacy OBS text source: fade in, 2 s, fade out).
 //
 // In OBS the page may play sound without a click. In a normal browser it shows « Activer le son » and takes no effect
 // until sound is allowed (Studio then reports the player as muted instead of handing effects to a silent page).
@@ -276,6 +280,112 @@ function wbrbElement(effect) {
   };
 }
 
+/** Legacy ban layer: video + phrase; « effect-done » at the video's end or the watchdog (duration + 800 ms). */
+function banElement(effect) {
+  const b = effect.ban;
+  const layer = document.createElement('div');
+  layer.className = 'rb';
+  const el = document.createElement('video');
+  el.playsInline = true;
+  el.preload = 'auto';
+  el.volume = clamp(effect.volume);
+  if (b.mirror) el.classList.add('mirror');
+  el.style.visibility = 'hidden';
+  el.src = effect.url;
+  const text = document.createElement('div');
+  // Legacy: one phrase of the pool at random, names in their colours (text only: never HTML from a name).
+  const phrase = b.phrases[Math.floor(Math.random() * b.phrases.length)];
+  for (const part of phrase.split(/(\{trigger\}|\{banned\})/)) {
+    if (!part) continue;
+    if (part === '{trigger}' || part === '{banned}') {
+      const span = document.createElement('span');
+      span.className = part === '{trigger}' ? 'trigger' : 'banned';
+      span.textContent = part === '{trigger}' ? b.trigger : b.banned;
+      text.append(span);
+    } else text.append(part);
+  }
+  layer.append(el, text);
+  stage.append(layer);
+  el.addEventListener('canplay', () => (el.style.visibility = 'visible'), {
+    once: true,
+  });
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    el.style.visibility = 'hidden';
+    el.dispatchEvent(new Event('effect-done'));
+  };
+  const timers = [
+    setTimeout(() => (text.className = 'pseudo-ban show'), Number(b.show_at)),
+    setTimeout(() => (text.className = 'pseudo-ban hide'), Number(b.hide_at)),
+    setTimeout(finish, Number(b.duration) + 800),
+  ];
+  el.addEventListener('ended', finish, { once: true });
+  return {
+    el,
+    doneEvent: 'effect-done',
+    release() {
+      timers.forEach(clearTimeout);
+      layer.remove();
+    },
+  };
+}
+
+/** Legacy flop: the trumpet and the text (fade in, visible, fade out); done when both are over. */
+function flopElement(effect) {
+  const f = effect.ban;
+  const el = new Audio(effect.url);
+  el.volume = clamp(effect.volume);
+  const text = document.createElement('div');
+  text.className = 'rb-flop';
+  text.textContent = f.text;
+  text.style.left = Number(f.left) + 'px';
+  text.style.top = Number(f.top) + 'px';
+  text.style.transform = `scale(${Number(f.scale_x)}, ${Number(f.scale_y)})`;
+  text.style.transitionDuration = Number(f.fade_ms) + 'ms';
+  stage.append(text);
+  let soundOver = false;
+  let textOver = false;
+  const check = () => {
+    if (soundOver && textOver) el.dispatchEvent(new Event('effect-done'));
+  };
+  const timers = [];
+  el.addEventListener(
+    'playing',
+    () => {
+      requestAnimationFrame(() => text.classList.add('on'));
+      timers.push(
+        setTimeout(() => text.classList.remove('on'), Number(f.visible_ms)),
+        setTimeout(
+          () => {
+            textOver = true;
+            check();
+          },
+          Number(f.visible_ms) + Number(f.fade_ms),
+        ),
+      );
+    },
+    { once: true },
+  );
+  el.addEventListener(
+    'ended',
+    () => {
+      soundOver = true;
+      check();
+    },
+    { once: true },
+  );
+  return {
+    el,
+    doneEvent: 'effect-done',
+    release() {
+      timers.forEach(clearTimeout);
+      text.remove();
+    },
+  };
+}
+
 function audioElement(effect) {
   const el = new Audio(effect.url);
   el.volume = clamp(effect.volume);
@@ -294,8 +404,13 @@ async function play(effect) {
     effect.kind === 'wbrb' &&
     CAPTURE_URL.test(effect.images?.screen ?? '') &&
     CAPTURE_URL.test(effect.images?.cam ?? '');
+  const ban =
+    effect.kind === 'ban' &&
+    Array.isArray(effect.ban?.phrases) &&
+    effect.ban.phrases.length > 0;
+  const flop = effect.kind === 'flop' && typeof effect.ban?.text === 'string';
   if (
-    (effect.kind !== 'sound' && !video && !wbrb) ||
+    (effect.kind !== 'sound' && !video && !wbrb && !ban && !flop) ||
     !MEDIA_URL.test(effect.url)
   ) {
     await report(effect, 'failed', 'invalid_effect');
@@ -303,9 +418,13 @@ async function play(effect) {
   }
   const media = wbrb
     ? wbrbElement(effect)
-    : video
-      ? videoElement(effect)
-      : audioElement(effect);
+    : ban
+      ? banElement(effect)
+      : flop
+        ? flopElement(effect)
+        : video
+          ? videoElement(effect)
+          : audioElement(effect);
   const el = media.el;
   let started = false;
   let endGuard = null;

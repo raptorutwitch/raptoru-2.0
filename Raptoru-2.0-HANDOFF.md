@@ -52,7 +52,11 @@ Twitch** avec saisie textuelle après activation des automatisations : texte du 
 filtre shader de « overlay cam shushu » activé 10 s ; `!fx` en jetons non migré ; § 11) ; **Couleur Cam validé de bout en bout en Lab
 par Antoni** (18/10/2026, `8e37c35` : 26 préréglages SAMMI, filtre « Raptoru — Couleur Cam » sur « Overlay Shushu »
 créé par Antoni, « Groupe 2 » supprimé, transitions fluides de 2 s, couleur conservée ; **vraie récompense Twitch**
-« emeraude » exécutée, SAMMI fermé ; non déployé, § 12).
+« emeraude » exécutée, SAMMI fermé ; non déployé, § 12). **Random Ban V2 (M1.1) développé, non validé**
+(18/10/2026, `docs/RANDOM_BAN_V2.md` : tirage uniforme parmi les chatters qui suivent la chaîne, timeout confirmé par
+LeCroupier\_ avant l'animation historique — 9 variantes + CSC + flop — sur le lecteur d'effets ; aucun timeout réel
+fait : LeCroupier\_ n'a pas `moderator:manage:banned_users` et raptoru\_ pas `moderation:read`, réautorisation à
+décider par Antoni).
 
 **POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ (17/10/2026)**. Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
 LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS

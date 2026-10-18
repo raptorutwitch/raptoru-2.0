@@ -886,7 +886,11 @@ filtre « Raptoru — Couleur Cam » sur « Overlay Shushu » à conserver, filt
 ID45 désactivé ; pas de variante en jetons. **Double exécution** (18/10/2026) : tant que SAMMI est lancé, une
 récompense dont la règle Raptoru est active est traitée deux fois — couper le bouton SAMMI **avant** d'activer
 l'interrupteur. **D7** (nouvelle décision, `Raptoru-2.0-ETAT-PROJET.md` § 0.0.7) : pour rembourser comme SAMMI, les
-récompenses doivent être recréées par l'app Raptoru (`channel:manage:redemptions`).
+récompenses doivent être recréées par l'app Raptoru (`channel:manage:redemptions`). Random Ban V2
+(`RANDOM_BAN_V2.md`) : migration `20261026130000_random_ban.sql` avec le Core de production ; l'exécuteur Twitch
+(timeouts) ne tourne aujourd'hui que dans l'adaptateur du Lab — le raccorder au bot de production (routes
+`/v1/bot/random-ban` prêtes) ; droits `moderator:manage:banned_users` (LeCroupier\_) et `moderation:read`
+(raptoru\_) ; couper les boutons SAMMI ID56 (récompense) et, au cutover économique, ID74 (`!rb`).
 
 1. **Autorisation** (faite le 17/10/2026 pour le Lab) : `CHANNEL_POINTS_EVENTS=true` puis `twitch:auth -- --broadcaster` (raptoru\_, lecture seule
    `channel:read:redemptions`) ; aucun droit de gestion (Twitch ne laisse gérer que les récompenses créées par l'app).

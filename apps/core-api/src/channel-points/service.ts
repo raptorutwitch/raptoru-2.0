@@ -14,6 +14,7 @@ import {
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import type { RandomBanService } from '../random-ban/service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 
 // Points de chaîne V1 (docs/CHANNEL_POINTS_V1.md) — the ONE implementation, served to the Lab Core and to the
@@ -59,6 +60,9 @@ type Result = {
   progress?: 'queued' | 'playing';
   /** Effect actions reported playing: their end must be reported before this instant. */
   effect_deadline?: string;
+  /** Random Ban: its request (docs/RANDOM_BAN_V2.md), followed until it ends; then what happened, in plain French. */
+  random_ban_id?: string;
+  detail?: string;
 };
 
 /** A result update: final (ok / error / unknown) or, for a sound still in the Soundboard, its progress only. */
@@ -66,6 +70,8 @@ type ResultUpdate = CpActionResult & {
   unknown?: boolean;
   progress?: 'queued' | 'playing';
   sound_interaction_id?: string;
+  random_ban_id?: string;
+  detail?: string;
 };
 
 /** Soundboard status → this action's result (« done » only when the player reported the sound ended). */
@@ -176,8 +182,51 @@ const unresolved = (a: CpAction) =>
         ? 'color_cam_unknown'
         : null;
 
+/** A finished Random Ban → this action's result (null while it runs). */
+function randomBanResult(
+  index: number,
+  rb: NonNullable<Awaited<ReturnType<RandomBanService['outcome']>>>,
+): ResultUpdate | null {
+  const minutes = rb.duration_s ? `${rb.duration_s / 60} min` : '';
+  const refund =
+    rb.refund === 'needed'
+      ? ' — remboursement nécessaire (non effectué : récompense créée par SAMMI)'
+      : rb.refund === 'to_verify'
+        ? ' — vérifier sur Twitch avant tout remboursement'
+        : '';
+  switch (rb.status) {
+    case 'confirmed':
+      return {
+        index,
+        ok: true,
+        detail: `${rb.target?.name} en timeout ${minutes}${rb.target?.id === rb.buyer.id ? ' (CSC)' : ''}`,
+      };
+    case 'simulated':
+      return {
+        index,
+        ok: true,
+        detail: `simulation : ${rb.target?.name ?? '—'} aurait eu ${minutes} (aucun timeout)`,
+      };
+    case 'flop':
+      return { index, ok: true, detail: 'flop : aucun follower éligible' };
+    case 'failed':
+      return { index, ok: false, error: `${rb.error ?? 'échec'}${refund}` };
+    case 'uncertain':
+      return {
+        index,
+        ok: false,
+        unknown: true,
+        error: `${rb.error ?? 'résultat incertain'}${refund}`,
+      };
+    default:
+      return null;
+  }
+}
+
 /** Actions run by Studio (OBS, effects player); Soundboard sounds are admitted by Core itself. */
-const obsAction = (a: CpAction) => a.type !== 'sound';
+const obsAction = (a: CpAction) =>
+  a.type !== 'sound' &&
+  !(a.type === 'interaction' && a.interaction === 'random_ban');
 
 export class ChannelPointsService {
   constructor(
@@ -185,6 +234,8 @@ export class ChannelPointsService {
     private readonly clock: Clock,
     /** The Soundboard of this Core (sound actions); absent → sound actions fail explicitly. */
     private readonly sound?: SoundLabService,
+    /** Random Ban V2: the « random_ban » interaction (absent → it fails explicitly). */
+    private readonly randomBan?: RandomBanService,
   ) {}
 
   // --- settings, rewards, rules (Studio configuration) -----------------------------------------------------------
@@ -441,6 +492,13 @@ export class ChannelPointsService {
         sounds: actions
           .map((action, index) => ({ index, action }))
           .filter((x) => x.action.type === 'sound'),
+        randomBans: actions
+          .map((action, index) => ({ index, action }))
+          .filter(
+            (x) =>
+              x.action.type === 'interaction' &&
+              x.action.interaction === 'random_ban',
+          ),
       };
     });
     if (decided.duplicate)
@@ -480,6 +538,34 @@ export class ChannelPointsService {
               sound_interaction_id: interaction,
             },
       ]);
+    }
+    // Random Ban: one request per action (dedup by the redemption), executed by the Twitch executor; a Studio test
+    // (simulation) is a dry run — the real search, never a timeout.
+    for (const { index } of decided.randomBans) {
+      let update: ResultUpdate;
+      try {
+        if (!this.randomBan) throw new Error('random_ban_unavailable');
+        const request = await this.randomBan.request({
+          channel_id: e.channel_id,
+          source: 'channel_points',
+          source_ref: `${e.source}:${e.redemption_id}:${index}`,
+          mode: e.source === 'simulation' ? 'dry_run' : 'real',
+          buyer: {
+            id: e.user.id,
+            login: e.user.login,
+            name: e.user.display_name,
+          },
+        });
+        update = {
+          index,
+          ok: false,
+          progress: 'queued',
+          random_ban_id: request.request_id,
+        };
+      } catch (err) {
+        update = { index, ok: false, error: (err as Error).message };
+      }
+      await this.setResults(e.channel_id, e.source, e.redemption_id, [update]);
     }
     const row = await this.redemption(e.channel_id, e.source, e.redemption_id);
     return { outcome: row.status, redemption: redemptionView(row) };
@@ -532,6 +618,7 @@ export class ChannelPointsService {
           ...(n.sound_interaction_id
             ? { sound_interaction_id: n.sound_interaction_id }
             : {}),
+          ...(n.random_ban_id ? { random_ban_id: n.random_ban_id } : {}),
         };
       return n.unknown
         ? { ...r, status: 'unknown' as const, error: n.error }
@@ -543,6 +630,8 @@ export class ChannelPointsService {
               ...(r.sound_interaction_id
                 ? { sound_interaction_id: r.sound_interaction_id }
                 : {}),
+              ...(r.random_ban_id ? { random_ban_id: r.random_ban_id } : {}),
+              ...(n.detail ? { detail: n.detail } : {}),
             }
           : { ...r, status: 'failed' as const, error: n.error ?? 'failed' };
     });
@@ -838,10 +927,31 @@ export class ChannelPointsService {
     });
   }
 
+  /** Random Ban actions follow their request until it ends (Random Ban's own history holds the details). */
+  private async settleRandomBans(channelId: string) {
+    if (!this.randomBan) return;
+    const rows = await this.db.query<RedemptionRow>(
+      `select * from cp_redemptions where channel_id = $1 and status = 'pending'
+         and results::text like '%random_ban_id%' order by received_at desc limit 50`,
+      [channelId],
+    );
+    for (const row of rows)
+      for (const r of row.results) {
+        if (r.status !== 'pending' || !r.random_ban_id) continue;
+        const rb = await this.randomBan.outcome(r.random_ban_id);
+        const update = rb && randomBanResult(r.index, rb);
+        if (update)
+          await this.setResults(channelId, row.source, row.redemption_id, [
+            update,
+          ]);
+      }
+  }
+
   /** The Studio tab: switch, rewards with their rule, recent redemptions, jobs in flight, Soundboard sounds. */
   async state(channelId: string) {
     await this.settleSounds(channelId);
     await this.settleEffects(channelId);
+    await this.settleRandomBans(channelId);
     const recent = await this.db.query<RedemptionRow>(
       'select * from cp_redemptions where channel_id = $1 order by received_at desc limit 30',
       [channelId],

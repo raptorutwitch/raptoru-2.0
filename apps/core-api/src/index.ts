@@ -77,6 +77,8 @@ createApp({
   alerts: core.alerts,
   // Points de chaîne V1: configuration by the paired Studio, redemptions by the bot (switch OFF by default).
   channelPoints: core.channelPoints,
+  // Random Ban V2: the paired Studio (state, tests, animations) and the bot (Twitch executor).
+  randomBan: core.randomBan,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
   db,
