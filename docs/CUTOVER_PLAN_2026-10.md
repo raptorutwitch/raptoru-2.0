@@ -881,7 +881,9 @@ cutover, non déployé** ; SAMMI exécute les récompenses de production. Détai
 (lecteur d'effets P0.1, validé dans OBS le 17/10/2026, `EFFECTS_PLAYER.md`) : la source navigateur du lecteur d'effets
 ajoutée par Antoni fait partie de la collection à conserver au cutover. FX Cam (`EFFECTS_PLAYER.md` § 11) : désactiver le
 bouton SAMMI « FX CAM » (ID12) ; le minuteur « FX JANITOR » (ID26) peut rester (il n'agit que sur ses compteurs) ; la
-commande `!fx` en jetons (ID19, StreamElements) reste à SAMMI jusqu'à la migration de l'économie.
+commande `!fx` en jetons (ID19, StreamElements) reste à SAMMI jusqu'à la migration de l'économie. Couleur Cam (§ 12) :
+filtre « Raptoru — Couleur Cam » sur « Overlay Shushu » à conserver, filtre couleur de « Groupe 2 » masqué, bouton SAMMI
+ID45 désactivé ; pas de variante en jetons.
 
 1. **Autorisation** (faite le 17/10/2026 pour le Lab) : `CHANNEL_POINTS_EVENTS=true` puis `twitch:auth -- --broadcaster` (raptoru\_, lecture seule
    `channel:read:redemptions`) ; aucun droit de gestion (Twitch ne laisse gérer que les récompenses créées par l'app).

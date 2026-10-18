@@ -1,4 +1,4 @@
-import { FX_CAM } from '@raptoru/schemas';
+import { COLOR_CAM_PRESETS, FX_CAM } from '@raptoru/schemas';
 import {
   actionLabel,
   type CpActionView,
@@ -50,8 +50,8 @@ export function mountChannelPoints(root: HTMLElement) {
   let selected: string | null = null;
   let draft: { enabled: boolean; actions: CpActionView[] } | null = null;
   let message = '';
-  /** « Tester » of an FX Cam reward: the text a viewer would type. */
-  let testInput: string = FX_CAM.effects.at(-1)!;
+  /** « Tester » of an FX Cam / Couleur Cam reward: the text a viewer would type. */
+  let testInput = '';
   let lists: { scenes: string[]; sources: string[]; filters: string[] } = {
     scenes: [],
     sources: [],
@@ -77,13 +77,18 @@ export function mountChannelPoints(root: HTMLElement) {
     root.querySelector<HTMLElement>(`[data-role="${role}"]`)!;
 
   const reward = () => state?.rewards.find((r) => r.id === selected) ?? null;
-  /** The saved rule runs FX Cam (its test takes a viewer text). */
-  const fxCam = (r: CpState['rewards'][number]) =>
-    Boolean(
-      r.rule?.actions.some(
-        (a) => a.type === 'interaction' && a.interaction === 'fx_cam',
-      ),
+  /** The saved rule reads the viewer's text (FX Cam, Couleur Cam): the suggestions of its test field, else null. */
+  const textChoices = (r: CpState['rewards'][number]) => {
+    const a = r.rule?.actions.find(
+      (x) =>
+        x.type === 'interaction' &&
+        (x.interaction === 'fx_cam' || x.interaction === 'color_cam'),
     );
+    if (a?.type !== 'interaction') return null;
+    return a.interaction === 'fx_cam'
+      ? [...FX_CAM.effects]
+      : [...COLOR_CAM_PRESETS.map((p) => p.name), 'aléatoire'];
+  };
 
   const fillLists = () => {
     for (const [id, values] of [
@@ -188,6 +193,7 @@ export function mountChannelPoints(root: HTMLElement) {
         '<p class="cp-muted">Choisis une récompense à gauche.</p>';
       return;
     }
+    const choices = textChoices(r);
     $('editor').innerHTML = `
       <p><b>${esc(r.title)}</b> <span class="cp-muted">· ${r.cost.toLocaleString('fr-FR')} pts</span></p>
       <label class="cp-inline"><input type="checkbox" data-f="rule-enabled"${draft.enabled ? ' checked' : ''}/> Règle active</label>
@@ -197,9 +203,9 @@ export function mountChannelPoints(root: HTMLElement) {
         <button type="button" class="cp-primary" data-act="save">Enregistrer</button>
         <button type="button" data-act="test"${r.rule ? '' : ' disabled'} title="Exécute la règle enregistrée pour de vrai (OBS / Soundboard)">Tester</button>
         ${
-          fxCam(r)
-            ? `<label class="cp-inline">avec le texte <input data-f="test-input" list="cp-fx-effects" size="10" value="${esc(testInput)}" title="Ce qu’un viewer écrirait (effet inconnu possible)"/></label>
-        <datalist id="cp-fx-effects">${FX_CAM.effects.map((x) => `<option value="${x}"></option>`).join('')}</datalist>`
+          choices
+            ? `<label class="cp-inline">avec le texte <input data-f="test-input" list="cp-text-choices" size="12" value="${esc(testInput || choices[0]!)}" title="Ce qu’un viewer écrirait (texte inconnu possible)"/></label>
+        <datalist id="cp-text-choices">${choices.map((x) => `<option value="${esc(x)}"></option>`).join('')}</datalist>`
             : ''
         }
       </div>
@@ -269,6 +275,7 @@ export function mountChannelPoints(root: HTMLElement) {
     const t = ev.target as HTMLElement;
     const rewardId = t.closest<HTMLElement>('[data-reward]')?.dataset.reward;
     if (rewardId) {
+      if (rewardId !== selected) testInput = '';
       selected = rewardId;
       const r = reward();
       draft = r?.rule
@@ -354,9 +361,10 @@ export function mountChannelPoints(root: HTMLElement) {
       )
         return;
       const r = reward();
+      const choices = r && textChoices(r);
       void post('/test', {
         reward_id: selected,
-        ...(r && fxCam(r) ? { user_input: testInput } : {}),
+        ...(choices ? { user_input: testInput || choices[0]! } : {}),
       }).then(
         async () => {
           message = 'Test envoyé : voir l’historique.';

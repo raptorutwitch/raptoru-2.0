@@ -9,6 +9,7 @@ import {
   type CpRedemptionStatus,
   type CpRewardsSync,
   type CpRuleInput,
+  resolveColorCam,
   resolveFxCam,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
@@ -144,14 +145,36 @@ function overall(results: Result[]): CpRedemptionStatus {
  * (none: the action fails here, nothing reaches Studio). Only the resolved id travels: never the viewer's text.
  */
 function withViewerText(a: CpAction, text: string | undefined): CpAction {
-  if (a.type !== 'interaction' || a.interaction !== 'fx_cam') return a;
-  const effect = resolveFxCam(text);
-  return {
-    type: a.type,
-    interaction: a.interaction,
-    ...(effect ? { effect } : {}),
-  };
+  if (a.type !== 'interaction') return a;
+  if (a.interaction === 'fx_cam') {
+    const effect = resolveFxCam(text);
+    return {
+      type: a.type,
+      interaction: a.interaction,
+      ...(effect ? { effect } : {}),
+    };
+  }
+  // Couleur Cam (§ 12): same rule; « aléatoire » is drawn here, so the history shows the colour really applied.
+  if (a.interaction === 'color_cam') {
+    const color = resolveColorCam(text);
+    return {
+      type: a.type,
+      interaction: a.interaction,
+      ...(color ? { color } : {}),
+    };
+  }
+  return a;
 }
+
+/** A viewer-text interaction whose text matched nothing: its readable code (fails in Core, never sent to Studio). */
+const unresolved = (a: CpAction) =>
+  a.type !== 'interaction'
+    ? null
+    : a.interaction === 'fx_cam' && !a.effect
+      ? 'fx_cam_unknown'
+      : a.interaction === 'color_cam' && !a.color
+        ? 'color_cam_unknown'
+        : null;
 
 /** Actions run by Studio (OBS, effects player); Soundboard sounds are admitted by Core itself. */
 const obsAction = (a: CpAction) => a.type !== 'sound';
@@ -362,11 +385,12 @@ export class ChannelPointsService {
         : rule!.actions.map((a) =>
             withViewerText(CpActionSchema.parse(a), e.user_input),
           );
-      const results: Result[] = actions.map((a, index) =>
-        a.type === 'interaction' && a.interaction === 'fx_cam' && !a.effect
-          ? { index, type: a.type, status: 'failed', error: 'fx_cam_unknown' }
-          : { index, type: a.type, status: 'pending' },
-      );
+      const results: Result[] = actions.map((a, index) => {
+        const error = unresolved(a);
+        return error
+          ? { index, type: a.type, status: 'failed', error }
+          : { index, type: a.type, status: 'pending' };
+      });
       const obs = actions
         .map((action, index) => ({ index, action }))
         .filter(

@@ -120,6 +120,37 @@ export class ObsActions {
     return this.read(this.connected(), { kind: 'filter', source, filter });
   }
 
+  /** A filter's state and settings now (Couleur Cam: the start of its transition). */
+  async filter(source: string, filter: string) {
+    const r = await this.connected()
+      .request('GetSourceFilter', { sourceName: source, filterName: filter })
+      .catch((e) => {
+        throw readable(e, `le filtre « ${filter} » de « ${source} »`);
+      });
+    return {
+      enabled: r.filterEnabled === true,
+      settings: (r.filterSettings ?? {}) as Record<string, unknown>,
+    };
+  }
+
+  /** Sets some settings of a filter, the others kept (Couleur Cam: one step of its transition). */
+  async setFilterSettings(
+    source: string,
+    filter: string,
+    settings: Record<string, number>,
+  ) {
+    await this.connected()
+      .request('SetSourceFilterSettings', {
+        sourceName: source,
+        filterName: filter,
+        filterSettings: settings,
+        overlay: true,
+      })
+      .catch((e) => {
+        throw readable(e, `le filtre « ${filter} » de « ${source} »`);
+      });
+  }
+
   /** Restarts a media input from its beginning (native interactions). */
   async restartMedia(input: string) {
     await this.connected()

@@ -243,6 +243,34 @@ describe('Points de chaîne views', () => {
       ],
     });
     expect(fx).toContain('✓ FX Cam « rage »');
+    // Couleur Cam: the colour applied (drawn by Core for « aléatoire »); unknown readable.
+    expect(
+      actionLabel({
+        type: 'interaction',
+        interaction: 'color_cam',
+        color: 'bleu ciel',
+      }),
+    ).toBe('Couleur Cam « bleu ciel »');
+    const color = historyView({
+      ...base,
+      recent: [
+        {
+          source: 'twitch',
+          redemption_id: 'c1',
+          reward: { title: 'Couleur Cam', cost: 100 },
+          user: { display_name: 'Viewer' },
+          user_input: 'pourpre',
+          received_at: '2026-10-18T10:00:00.000Z',
+          status: 'failed',
+          reason: null,
+          actions: [{ type: 'interaction', interaction: 'color_cam' }],
+          results: [{ index: 0, status: 'failed', error: 'color_cam_unknown' }],
+        },
+      ],
+    });
+    expect(color).toContain(
+      '✗ Interaction « Couleur Cam » — couleur inconnue — aucun remboursement possible',
+    );
     expect(fx).toContain('« &lt;b&gt;feu&lt;/b&gt; »');
     expect(fx).toContain(
       '✗ Interaction « FX Cam » — effet inconnu (effets : prison, bighead, pixel, drunk, glitch, rage)',

@@ -10,6 +10,7 @@ import {
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
 import { Brb } from '../interactions/brb.js';
 import { InteractionError, Interactions } from '../interactions/creepy.js';
+import { ColorCam } from '../interactions/color-cam.js';
 import { FxCam } from '../interactions/fx-cam.js';
 import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 
@@ -52,6 +53,7 @@ export class ChannelPointsRuntime {
   readonly interactions: Interactions;
   readonly brb: Brb;
   readonly fxCam: FxCam;
+  readonly colorCam: ColorCam;
 
   private constructor(
     private readonly d: ChannelPointsRuntimeDeps,
@@ -60,6 +62,7 @@ export class ChannelPointsRuntime {
     this.interactions = new Interactions({ obs, effects: d.effects ?? null });
     this.brb = new Brb({ obs, effects: d.effects ?? null });
     this.fxCam = new FxCam({ obs });
+    this.colorCam = new ColorCam({ obs });
   }
 
   static async create(d: ChannelPointsRuntimeDeps) {
@@ -151,7 +154,9 @@ export class ChannelPointsRuntime {
               ? this.brb.start()
               : action.interaction === 'fx_cam'
                 ? this.fxCam.start(action.effect)
-                : this.interactions.start(action.interaction);
+                : action.interaction === 'color_cam'
+                  ? this.colorCam.start(action.color)
+                  : this.interactions.start(action.interaction);
           ends.push({ index, end });
           results.push({ index, ok: true, playing: true });
           continue;

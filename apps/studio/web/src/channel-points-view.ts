@@ -1,7 +1,7 @@
 // Points de chaîne V1 — Studio tab, pure part (tested): readable statuses, reward list, history. Every Twitch text
 // (reward titles, viewer names, inputs) is untrusted and escaped. No JSON, no ids shown.
 
-import { FX_CAM } from '@raptoru/schemas';
+import { COLOR_CAM, COLOR_CAM_PRESETS, FX_CAM } from '@raptoru/schemas';
 
 export type CpActionView =
   | { type: 'sound'; sound_id: string }
@@ -24,14 +24,16 @@ export type CpActionView =
   | { type: 'obs_scene'; scene: string; duration_ms?: number }
   | {
       type: 'interaction';
-      interaction: 'creepy' | 'brb' | 'fx_cam';
+      interaction: 'creepy' | 'brb' | 'fx_cam' | 'color_cam';
       /** fx_cam: the effect Core resolved from the viewer's text. */
       effect?: string;
+      /** color_cam: the colour Core resolved from the viewer's text. */
+      color?: string;
     };
 
 /** The native interactions (written in Studio's code: nothing to configure but the reward). */
 export const INTERACTIONS: Record<
-  'creepy' | 'brb' | 'fx_cam',
+  'creepy' | 'brb' | 'fx_cam' | 'color_cam',
   { label: string; description: string }
 > = {
   creepy: {
@@ -47,6 +49,10 @@ export const INTERACTIONS: Record<
   fx_cam: {
     label: 'FX Cam',
     description: `Comme SAMMI : le viewer écrit le nom d’un effet ; son filtre OBS (shader) sur « ${FX_CAM.source} » est activé ${FX_CAM.durationMs / 1000} s puis désactivé. Effets reconnus (majuscules et espaces ignorés) : ${FX_CAM.effects.join(', ')}. Seulement depuis Dessin ou Fullscreen ; le même effet déjà actif est refusé, des effets différents se cumulent.`,
+  },
+  color_cam: {
+    label: 'Couleur Cam',
+    description: `Comme SAMMI : le viewer écrit une couleur ; le cadre Shushu (filtre « ${COLOR_CAM.filter} » de « ${COLOR_CAM.source} ») y passe en ${COLOR_CAM.transitionMs / 1000} s puis la garde jusqu’à la suivante. Couleurs (majuscules, accents et espaces ignorés ; « aléatoire » ou « random » au hasard) : ${COLOR_CAM_PRESETS.map((p) => p.name).join(', ')}. Seulement depuis Dessin ou Fullscreen ; une nouvelle couleur reprend la transition en cours.`,
   },
 };
 
@@ -162,6 +168,7 @@ const ERRORS: Record<string, string> = {
   playback_error: 'erreur pendant la lecture',
   start_timeout: 'lecture non démarrée',
   creepy_no_sound: 'Creepy exécuté sans son (lecteur d’effets indisponible)',
+  color_cam_unknown: `couleur inconnue — aucun remboursement possible : récompense créée par SAMMI`,
   fx_cam_unknown: `effet inconnu (effets : ${FX_CAM.effects.join(', ')}) — aucun remboursement possible : récompense créée par SAMMI`,
 };
 const PROGRESS = {
@@ -202,7 +209,9 @@ export function actionLabel(
     case 'interaction':
       return a.interaction === 'fx_cam' && a.effect
         ? `FX Cam « ${a.effect} »`
-        : `Interaction « ${INTERACTIONS[a.interaction]?.label ?? a.interaction} »`;
+        : a.interaction === 'color_cam' && a.color
+          ? `Couleur Cam « ${a.color} »`
+          : `Interaction « ${INTERACTIONS[a.interaction]?.label ?? a.interaction} »`;
   }
 }
 

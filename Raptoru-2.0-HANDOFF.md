@@ -42,9 +42,11 @@ validé dans OBS par Antoni** (18/10/2026, `ac48842` : interaction native, scèn
 `docs/EFFECTS_PLAYER.md` § 9) ; **BRB validé dans OBS par Antoni** (18/10/2026, `72062a3` + correctif `31d82ef` :
 captures OBS instantanées en mémoire, couche « We'll be right back » dans le lecteur d'effets, micro + « Musique
 Isolée » coupés 6 s avec retour sûr ; réserve non bloquante : légère latence au démarrage, à voir à l'audit global ;
-§ 10) ; **FX Cam développé** (interaction native : texte du viewer résolu par Core sur 6 effets, filtre shader de
-« overlay cam shushu » activé 10 s par l'action temporaire existante ; `!fx` en jetons non migré ; **non validé dans
-OBS**, § 11).
+§ 10) ; **FX Cam validé dans OBS par Antoni** (18/10/2026, `2957148`, y compris par une **vraie récompense
+Twitch** avec saisie textuelle après activation des automatisations : texte du viewer résolu par Core sur 6 effets,
+filtre shader de « overlay cam shushu » activé 10 s ; `!fx` en jetons non migré ; § 11) ; **Couleur Cam développé**
+(interaction native : 26 préréglages SAMMI, filtre dédié « Raptoru — Couleur Cam » sur « Overlay Shushu » à créer par
+Antoni, transition 2 s In/Out, la couleur reste ; **non validé dans OBS**, § 12).
 
 **POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ (17/10/2026)**. Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
 LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS

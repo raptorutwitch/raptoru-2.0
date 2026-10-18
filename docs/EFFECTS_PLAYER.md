@@ -295,7 +295,12 @@ SAMMI (cadrage des captures, timing, son).
 
 ## 11. FX Cam dans Raptoru (P0.2 C4)
 
-**Statut : FX CAM — DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS / NON DÉPLOYÉ.**
+**Statut : FX CAM — DÉVELOPPEMENT TERMINÉ / TESTS AUTOMATISÉS RÉUSSIS / VALIDATION FONCTIONNELLE OBS RÉUSSIE / NON
+DÉPLOYÉ** (code `2957148`). Validé manuellement par Antoni le 18/10/2026 dans son vrai OBS, par « Tester » (`rage`
+appliqué puis désactivé, `feu` refusé) **et par une vraie récompense Twitch « FX cam »** avec saisie textuelle. Traces
+Lab : une première vraie redemption (« bighead », 09:19) reçue avec son texte mais **ignorée car les automatisations
+étaient OFF** (`automations_off`, comportement attendu) ; après activation de l'interrupteur, vraie redemption
+« drunk » (09:21) exécutée de bout en bout Twitch → bot → Core → Studio → OBS, sans SAMMI.
 
 Interaction native **« FX Cam »** (règle `{ type: 'interaction', interaction: 'fx_cam' }` : « Interaction native » →
 « FX Cam » ; rien d'autre à régler). Code : `packages/schemas/src/fx-cam.ts` (liste et lecture du texte),
@@ -390,3 +395,112 @@ non l'absence de condition de scène de SAMMI.
    « déjà actif » ; `rage` puis `pixel` → les deux cumulés.
 5. Depuis « Just Chatting » : rien (« FX Cam refusé »).
 6. Comparer avec la récompense SAMMI (durée, rendu).
+
+## 12. Couleur Cam dans Raptoru (P0.2 C5)
+
+**Statut : COULEUR CAM — DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS / NON DÉPLOYÉ.**
+
+Interaction native **« Couleur Cam »** (règle `{ type: 'interaction', interaction: 'color_cam' }`). Code :
+`packages/schemas/src/color-cam.ts` (26 préréglages, lecture du texte), `apps/core-api/src/channel-points/service.ts`
+(résolution à la réception, comme FX Cam), `apps/studio/server/src/interactions/color-cam.ts`.
+
+### Ce que fait SAMMI (lecture seule du 18/10/2026)
+
+- Récompense Twitch **« Couleur Cam »** (100 points, saisie obligatoire, id `61b64cc8-c6e4-4676-a4b2-7ab7798b8f5c`,
+  invite « Couleur : saumon/bleu sombre/…/bleu ciel ») → bouton **ID45 « Couleur Shushu »** (Deck Principal ; durée
+  2000 ms, ni en file ni superposable). « Couleur overlay Cam » (ID102, deck inactif, récompense désactivée) et
+  « Couleur Shushu INI » (ID45_SYNCH : aucun déclencheur, appelé par rien) sont morts.
+- **Cible SAMMI** : filtre natif « Correction des couleurs » du groupe **« Groupe 2 »**, qui ne contient que
+  **« Overlay Shushu »** (la page du cadre et des yeux Shushu). **La caméra elle-même n'est pas recolorée.** Le filtre a
+  un gamma fixe de 0,47 (jamais animé) ; sa valeur actuelle est « canard ».
+- Déroulé : attente 200 ms ; scène « Scène Dessin » ou « Scène Fullscreen », sinon remboursement + « @x pas la bonne scène
+  idiot, t'es refund ! » ; texte comparé **exactement** (sensible à la casse, sans nettoyage) à la liste ; `aléatoire`,
+  `aleatoire`, `random` → une des 26 au hasard ; inconnu → remboursement + « @x couleur inconnue : … (points
+  remboursés) » ; attente 500 ms ; lecture des valeurs actuelles du filtre ; puis 4 **« Motion: Filter Settings »**
+  (teinte, contraste, luminosité, saturation) des valeurs actuelles vers le préréglage en **2000 ms, lissage In/Out**
+  (doc SAMMI : un `SetSourceFilterSettings` par image SAMMI et par paramètre). Aucun son, aucune validation
+  FULFILLED. **La couleur reste** jusqu'à la suivante (aucun retour au neutre).
+- Deux demandes rapprochées : bouton non mis en file et non superposable → une demande arrivée pendant les 2 s du
+  bouton est **ignorée** (redemption perdue, ni remboursée ni exécutée) ; une demande juste après peut lancer ses
+  animations pendant la fin des précédentes (les deux se battent sur les mêmes paramètres).
+- **Pas de variante commande chat en jetons** (aucun déclencheur chat lié à la couleur dans les decks).
+- Les 26 préréglages (valeurs SAMMI exactes, gamma 0,47 commun) :
+
+  | Couleur     | Teinte  | Contraste | Luminosité | Saturation |
+  | ----------- | ------- | --------- | ---------- | ---------- |
+  | saumon      | 2.09    | 2.4       | -0.1163    | -0.53      |
+  | fuschia     | 31      | 1.08      | -0.0233    | -0.28      |
+  | magenta     | 55      | 0.38      | -0.0233    | 0          |
+  | violet      | 80      | -0.58     | -0.0233    | 1.97       |
+  | myrtille    | 100.47  | -0.58     | 0.0465     | 1.06       |
+  | bleu sombre | 100.47  | -0.17     | -0.1279    | 0.63       |
+  | bleu        | 144.42  | -0.21     | -0.0349    | 3.19       |
+  | cyan        | 163.26  | -0.21     | -0.0349    | 3.19       |
+  | turquoise   | 180     | 0         | -0.0116    | 2.22       |
+  | orange      | -18.84  | 0.08      | 0.0233     | 1.5        |
+  | gold        | -29.3   | 0.38      | 0.0233     | 5          |
+  | jaune       | -49     | -0.08     | 0.0233     | 3.59       |
+  | lime        | -73     | -0.08     | 0.0233     | 1.97       |
+  | vert pomme  | -89     | -0.37     | -0.0581    | 2.91       |
+  | vert        | -108.84 | 0.04      | -0.2209    | 1.38       |
+  | emeraude    | -144.42 | -0.42     | 0          | 2.28       |
+  | rouge       | 0       | -0.42     | 0          | 1.97       |
+  | ivoire      | 0       | 2.83      | 0.0465     | -1         |
+  | gris        | 0       | 0         | -0.0233    | -1         |
+  | canard      | -180    | 0         | -0.0233    | -0.53      |
+  | marron      | -23.02  | -0.67     | -0.0233    | -0.47      |
+  | givre       | 173.72  | 3         | -0.0233    | -0.78      |
+  | rose        | 52.33   | 1.96      | -0.0233    | -0.72      |
+  | beige       | -8.37   | 1.96      | -0.0233    | -0.72      |
+  | bleu ciel   | -180    | 1.96      | -0.0233    | -0.72      |
+  | noir        | 100     | -0.67     | -0.1279    | -1         |
+
+### Dans Raptoru
+
+- **Cible (décision d'Antoni du 18/10/2026)** : le cadre Shushu, comme SAMMI, mais par un filtre dédié posé sur la source
+  **« Overlay Shushu »** : **« Raptoru — Couleur Cam »** (filtre natif « Correction des couleurs », réglages par défaut =
+  image intacte). « Groupe 2 » n'est plus utilisé. Les shaders FX Cam restent sur la scène « overlay cam shushu » :
+  filtres différents, aucun conflit d'ordre (le cadre est recoloré avant que la scène soit composée).
+- **Texte** : même circuit que FX Cam (Core fige la couleur résolue ; seul le nom du préréglage va à Studio). Majuscules,
+  accents et espaces en trop ignorés (« Bleu Ciel », « Émeraude ») ; `aléatoire` / `aleatoire` / `random` tirés **par
+  Core** (l'historique affiche la couleur réellement appliquée) ; tout le reste refusé dans Core (« couleur inconnue »).
+  Aucune valeur OBS ne vient du viewer.
+- **Animation** : Studio lit les valeurs actuelles du filtre (un réglage manuel est le point de départ), puis envoie
+  ~30 fois par seconde **une** requête `SetSourceFilterSettings` (5 valeurs, `overlay`) en 2 s, lissage In/Out
+  (sinusoïdal : la courbe exacte de SAMMI n'est pas documentée), chaque pas attendant la réponse d'OBS (jamais
+  d'accumulation), dernier pas = préréglage exact. Pourquoi pas une animation locale d'OBS : le plugin Move (installé)
+  pourrait animer via un filtre « Move Value », mais il faudrait en créer et régler un de plus dans OBS (réglages propres
+  à la version du plugin, non vérifiables sans toucher ton OBS) pour un gain faible ; SAMMI faisait déjà ~4 requêtes par
+  image ; ici ~60 requêtes en 2 s, négligeable pour OBS en local.
+- **Persistance** : la couleur reste (comme SAMMI). Rien n'est sauvegardé : redémarrage de Studio ou coupure d'OBS
+  pendant une transition → la couleur atteinte reste, la suivante part d'elle.
+- **Concurrence (écart volontaire, meilleur)** : la plus récente gagne. Une couleur demandée pendant une transition la
+  reprend depuis les valeurs atteintes ; l'ancienne s'arrête avant son pas suivant et ne peut plus rien écrire. SAMMI
+  perdait la demande (ni exécutée ni remboursée).
+- **Erreurs lisibles** : scène sans caméra, filtre absent, filtre désactivé dans OBS, OBS non connecté, OBS perdu
+  pendant la transition (« interrompue … couleur atteinte conservée »).
+
+Écarts avec SAMMI : remboursements et messages chat impossibles (récompense créée par SAMMI, comme FX Cam / BRB) ;
+normalisation plus tolérante (SAMMI refusait « Rouge ») ; demande pendant une transition reprise au lieu d'être perdue ;
+filtre dédié sur « Overlay Shushu » au lieu de « Groupe 2 ».
+
+### Préparer OBS (manipulation manuelle d'Antoni, une seule fois)
+
+1. Source **« Overlay Shushu »** (dans « overlay cam shushu » › Groupe 2) → clic droit › Filtres → **+** › « Correction
+   des couleurs » → nom exact **`Raptoru — Couleur Cam`** (tiret long « — »), réglages par défaut, laisser activé.
+2. Sur le groupe **« Groupe 2 »** : **masquer (œil)** son filtre « Correction des couleurs » (ne pas le supprimer) — sinon
+   l'ancien filtre SAMMI (actuellement « canard ») s'ajoute au nouveau. Retour arrière : réafficher l'œil.
+3. Tant que SAMMI tourne, une vraie redemption « Couleur Cam » est aussi traitée par SAMMI (il anime alors le filtre
+   masqué de Groupe 2 : sans effet visible). Au cutover : désactiver le bouton SAMMI ID45.
+
+### Tester (Lab, avec accord)
+
+1. `npm run studio`, OBS connecté ; Points de chaîne → « Couleur Cam » → Interaction native → **Couleur Cam** →
+   Enregistrer.
+2. Scène Fullscreen ou Dessin : « avec le texte » `rouge` → Tester → le cadre passe au rouge en 2 s et le reste ;
+   `Bleu Ciel` → transition depuis le rouge ; deux Tester rapprochés → la 2ᵉ couleur reprend la transition ; `pourpre` →
+   « couleur inconnue », rien dans OBS ; `aléatoire` → l'historique nomme la couleur tirée ; depuis Just Chatting →
+   refus.
+3. FX Cam `rage` pendant une couleur : les deux visibles ensemble.
+4. Vraie récompense : automatisations **ON** (bouton en haut de l'onglet), un viewer (ou LeCroupier_) prend « Couleur
+   Cam » avec `rouge` → historique « Couleur Cam « rouge » » ; remettre OFF après le test.

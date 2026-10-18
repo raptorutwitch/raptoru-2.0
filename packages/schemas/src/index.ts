@@ -15,3 +15,4 @@ export * from './alerts.js';
 export * from './channel-points.js';
 export * from './effects.js';
 export * from './fx-cam.js';
+export * from './color-cam.js';
