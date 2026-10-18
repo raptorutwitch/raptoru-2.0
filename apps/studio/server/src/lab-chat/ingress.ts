@@ -19,7 +19,7 @@ import {
 export const CHAT_READ_SCOPE = 'user:read:chat';
 /** Scope LeCroupier_ needs to send the Commands V2 answers (Send Chat Message). */
 export const CHAT_WRITE_SCOPE = 'user:write:chat';
-const OUTPUT_SCOPE_MISSING = `Le jeton Twitch du bot n'a pas le droit d'écrire dans le chat (scope ${CHAT_WRITE_SCOPE} manquant). Ajoute LAB_CHAT_OUTPUT=true dans apps/twitch-bot/.env, puis relance « npm run twitch:auth -w apps/twitch-bot » (il doit afficher « … user:write:chat moderator:manage:announcements »).`;
+const OUTPUT_SCOPE_MISSING = `Le jeton Twitch du bot n'a pas le droit d'écrire dans le chat (scope ${CHAT_WRITE_SCOPE} manquant). Coupe l’ingestion puis réautorise LeCroupier_ dans Studio → Connexions → Comptes Twitch. Réactive ensuite l’ingestion ; la sortie réelle se règle séparément.`;
 
 /** The bot's Lab chat adapter, as a managed child process (injectable for tests). */
 export interface IngressProcess {
@@ -62,7 +62,7 @@ const SUPERVISE_MS = 5_000;
 type DownCode = 'auth_failed' | 'crash_loop';
 const DOWN_FR: Record<DownCode, string> = {
   auth_failed:
-    'L’ingestion s’est arrêtée : le jeton Twitch du bot est refusé. Relance « npm run twitch:auth -w apps/twitch-bot », puis désactive et réactive l’ingestion.',
+    'L’ingestion s’est arrêtée : le jeton Twitch du bot est refusé. Coupe l’ingestion puis réautorise LeCroupier_ dans Studio → Connexions → Comptes Twitch. Réactive ensuite l’ingestion.',
   crash_loop:
     'L’ingestion s’arrête en boucle (3 redémarrages en 10 min) : voir le journal ci-dessous, puis désactive et réactive l’ingestion.',
 };
@@ -83,8 +83,8 @@ const BLOCKED_FR: Record<BlockedCode, string> = {
   bot_not_built:
     'Adaptateur du bot non compilé : lance « npm run build -w apps/twitch-bot ».',
   no_token:
-    'Aucun jeton Twitch pour le bot : lance « npm run twitch:auth -w apps/twitch-bot ».',
-  missing_scope: `Le jeton Twitch du bot n'a pas le droit de lire le chat (scope ${CHAT_READ_SCOPE} manquant). Ajoute LAB_CHAT_INGEST=true dans apps/twitch-bot/.env, puis relance « npm run twitch:auth -w apps/twitch-bot » (il doit afficher « Scopes requested: user:read:chat … »).`,
+    'Aucun jeton Twitch pour le bot : connecte LeCroupier_ dans Studio → Connexions → Comptes Twitch.',
+  missing_scope: `Le jeton Twitch du bot n'a pas le droit de lire le chat (scope ${CHAT_READ_SCOPE} manquant). Coupe l’ingestion puis réautorise LeCroupier_ dans Studio → Connexions → Comptes Twitch.`,
   bot_running:
     'Le bot du Labo de test est déjà connecté à Twitch avec ce jeton : arrête-le avant d’activer l’ingestion.',
 };

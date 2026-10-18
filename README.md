@@ -223,12 +223,12 @@ TEST_DATABASE_URL=postgres://user:pass@127.0.0.1:5432/raptoru_test npm run test:
 
 - `twitch-bot` (`PRESENCE_SHADOW=true`) takes a full Get Chatters snapshot at live start, then every 2 minutes, and reports each snapshot or failure to Core.
 - Core credits the interval between two snapshots only to viewers present in both. The two snapshots must be consecutive successful cycles of the same worker, at most 3 minutes apart. Errors, restarts and gaps are never turned into watch time.
-- Twitch auth: confidential app of Raptoru 2.0; the refresh token is used automatically (single-flight, a rejected refresh stops the tracker). Token owner = broadcaster, or a moderator of the channel.
+- Twitch auth: confidential app of Raptoru 2.0; separate fixed profiles for LeCroupier_ and raptoru_, strict owner/client checks, atomic storage and coordinated refresh. See [Twitch OAuth](docs/TWITCH_OAUTH.md) for Studio reauthorization, concurrency protection and the approved scopes. Get Chatters runs as LeCroupier_, which must remain a moderator of the channel.
 - Storage: one row per cycle (`presence_cycles`) and one row per viewer per stream (`presence_viewer_streams`).
 
 ```sh
 npm run twitch:auth -w @raptoru/twitch-bot                     # once: OAuth in the browser, writes .twitch-tokens.json (git-ignored)
-npm run presence:preflight -w @raptoru/twitch-bot              # read-only token/scope/Get Chatters check
+npm run presence:preflight -w @raptoru/twitch-bot              # operational check; may refresh and save the token
 npm run presence:report -w @raptoru/core-api -- --latest       # read-only report (works during the live too)
 npm run presence:report -w @raptoru/core-api -- --stream <id> --csv presence.csv
 ```
@@ -266,5 +266,5 @@ The pipeline is: source event → Loyalty calculation → Wallet. Presence and T
 
 ```sh
 npm run loyalty:report -w @raptoru/core-api -- --latest [--csv loyalty.csv]   # read-only preview/credit report
-npm run loyalty:preflight -w @raptoru/twitch-bot                              # read-only broadcaster token check
+npm run loyalty:preflight -w @raptoru/twitch-bot                              # operational check; may refresh and save the token
 ```

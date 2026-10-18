@@ -1,4 +1,8 @@
-import type { CpRedemptionInput, CpRewardsSync } from '@raptoru/schemas';
+import {
+  hasTwitchScope,
+  type CpRedemptionInput,
+  type CpRewardsSync,
+} from '@raptoru/schemas';
 
 // Points de chaîne V1 (docs/CHANNEL_POINTS_V1.md) — Twitch custom reward redemptions → Core. READ ONLY: the
 // subscription `channel.channel_points_custom_reward_redemption.add` v1 and Get Custom Reward need
@@ -10,6 +14,8 @@ import type { CpRedemptionInput, CpRewardsSync } from '@raptoru/schemas';
 // Twitch does not replay the events of a lost WebSocket session either: no « zero loss » guarantee.
 
 export const CP_READ_SCOPE = 'channel:read:redemptions';
+export const canReadChannelPoints = (scopes: readonly string[]) =>
+  hasTwitchScope(scopes, CP_READ_SCOPE);
 export const CP_SUBSCRIPTION = {
   type: 'channel.channel_points_custom_reward_redemption.add',
   version: '1',
@@ -123,6 +129,7 @@ export function createChannelPointsEvents(d: ChannelPointsEventsDeps) {
   const log = d.log ?? console.log;
   const now = d.now ?? Date.now;
   const retries = new Set<ReturnType<typeof setTimeout>>();
+  let subscribed = false;
 
   const forward = async (body: CpRedemptionInput) => {
     const receivedAt = now();
@@ -158,6 +165,7 @@ export function createChannelPointsEvents(d: ChannelPointsEventsDeps) {
   return {
     /** Subscribes this broadcaster session; a refusal is logged, never thrown (the other events go on). */
     async subscribe(sessionId: string) {
+      subscribed = false;
       try {
         await d.subscribe(
           CP_SUBSCRIPTION.type,
@@ -165,6 +173,7 @@ export function createChannelPointsEvents(d: ChannelPointsEventsDeps) {
           sessionId,
           CP_SUBSCRIPTION.version,
         );
+        subscribed = true;
         log('[channel-points] abonnement aux récompenses créé');
       } catch (error) {
         log(
@@ -173,6 +182,7 @@ export function createChannelPointsEvents(d: ChannelPointsEventsDeps) {
         );
       }
     },
+    subscriptionStatus: () => (subscribed ? 'subscribed' : 'inactive'),
     /** Handles a notification of the redemption type; returns false for any other type. Never throws. */
     async handle(type: string, event: Obj) {
       if (type !== CP_SUBSCRIPTION.type) return false;
@@ -215,6 +225,7 @@ export function createChannelPointsEvents(d: ChannelPointsEventsDeps) {
     },
     pendingRetries: () => retries.size,
     close() {
+      subscribed = false;
       for (const t of retries) clearTimeout(t);
       retries.clear();
     },

@@ -37,6 +37,7 @@ function fakeTwitch(
         return valid.has(token)
           ? json({
               login: 'raptoru_',
+              client_id: 'client-id',
               user_id: '100',
               expires_in: 4 * 3600,
               scopes: opts.scopes ?? ['moderator:read:chatters'],
@@ -104,6 +105,7 @@ function newAuth(
 ) {
   return new TwitchAuth({
     clientId: 'client-id',
+    expectedUserId: '100',
     clientSecret: SECRET,
     store,
     requiredScopes: ['moderator:read:chatters'],

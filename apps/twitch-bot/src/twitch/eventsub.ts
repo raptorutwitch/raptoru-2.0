@@ -35,6 +35,8 @@ export interface EventSubHandlers {
     timestamp: string,
   ): Promise<void>;
   log?: (...args: unknown[]) => void;
+  /** A revoked subscription requires an explicit recovery; do not keep advertising it as active. */
+  revocation?: (type: string, status: string) => void;
 }
 
 /** Pure message routing, separated from the socket for tests. */
@@ -83,6 +85,10 @@ export function createEventSubRouter(
         return { kind: 'other' };
       case 'revocation':
         log('[eventsub] subscription revoked', message.payload.subscription);
+        handlers.revocation?.(
+          message.payload.subscription?.type ?? '',
+          message.payload.subscription?.status ?? 'unknown',
+        );
         return { kind: 'other' };
       default:
         return { kind: 'other' };
@@ -91,26 +97,49 @@ export function createEventSubRouter(
 }
 
 /** Keeps one EventSub session alive forever. Any unexpected close reconnects from scratch. */
-export function runEventSub(handlers: EventSubHandlers): void {
-  const route = createEventSubRouter(handlers);
+export function runEventSub(handlers: EventSubHandlers): { stop(): void } {
+  let stopped = false;
+  const sockets = new Set<WebSocket>();
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  function stop() {
+    stopped = true;
+    for (const timer of timers) clearTimeout(timer);
+    timers.clear();
+    for (const socket of sockets) socket.close();
+    sockets.clear();
+  }
+  const route = createEventSubRouter({
+    ...handlers,
+    revocation(type, status) {
+      stop();
+      handlers.revocation?.(type, status);
+    },
+  });
   const log = handlers.log ?? console.log;
 
   const connect = (url: string, fresh: boolean, previous?: WebSocket) => {
+    if (stopped) return;
     const socket = new WebSocket(url);
+    sockets.add(socket);
     let watchdog: ReturnType<typeof setTimeout> | undefined;
     let replaced = false;
     let keepaliveSeconds = 10;
     const arm = () => {
       clearTimeout(watchdog);
+      if (watchdog) timers.delete(watchdog);
+      if (stopped) return;
       watchdog = setTimeout(
         () => socket.close(),
         (keepaliveSeconds + 5) * 1000,
       );
+      timers.add(watchdog);
     };
 
     socket.onmessage = async (ev) => {
+      if (stopped) return;
       try {
         const result = await route(String(ev.data), fresh);
+        if (stopped) return;
         if (result.kind === 'welcome') {
           previous?.close();
           keepaliveSeconds = result.keepaliveSeconds;
@@ -128,11 +157,18 @@ export function runEventSub(handlers: EventSubHandlers): void {
     };
     socket.onclose = () => {
       clearTimeout(watchdog);
-      if (replaced) return;
+      if (watchdog) timers.delete(watchdog);
+      sockets.delete(socket);
+      if (stopped || replaced) return;
       log('[eventsub] connection closed, reconnecting in 5s');
-      setTimeout(() => connect(EVENTSUB_URL, true), 5000);
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        connect(EVENTSUB_URL, true);
+      }, 5000);
+      timers.add(timer);
     };
   };
 
   connect(EVENTSUB_URL, true);
+  return { stop };
 }

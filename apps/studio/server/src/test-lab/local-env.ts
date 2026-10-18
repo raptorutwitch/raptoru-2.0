@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Local files of the other apps, read server-side only. Values never leave this process except
@@ -64,6 +64,25 @@ export function applyDataRootEnv(): void {
 
 export type EnvFile = Record<string, string>;
 
+/** Same precedence and working directory as the bot child: process > env file > data-root default. */
+export function twitchTokenFiles(
+  env: NodeJS.ProcessEnv = process.env,
+  botEnv: EnvFile = readEnvFile(paths.botEnv),
+) {
+  return {
+    bot: resolve(
+      paths.botDir,
+      env.TWITCH_TOKEN_FILE ?? botEnv.TWITCH_TOKEN_FILE ?? paths.tokenFile,
+    ),
+    broadcaster: resolve(
+      paths.botDir,
+      env.TWITCH_BROADCASTER_TOKEN_FILE ??
+        botEnv.TWITCH_BROADCASTER_TOKEN_FILE ??
+        paths.broadcasterTokenFile,
+    ),
+  };
+}
+
 export function readEnvFile(path: string): EnvFile {
   let text: string;
   try {
@@ -89,7 +108,9 @@ export interface TokenFileSummary {
 }
 
 /** Non-secret view of the Twitch token file. */
-export function readTokenSummary(path = paths.tokenFile): TokenFileSummary {
+export function readTokenSummary(
+  path = twitchTokenFiles().bot,
+): TokenFileSummary {
   try {
     const t = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
     return {
@@ -129,26 +150,22 @@ export function collectSecrets(): string[] {
       if (password) values.push(password);
     }
   }
-  try {
-    const t = JSON.parse(readFileSync(paths.tokenFile, 'utf8')) as Record<
-      string,
-      unknown
-    >;
-    for (const key of ['accessToken', 'refreshToken']) {
-      if (typeof t[key] === 'string') values.push(t[key]);
+  for (const file of Object.values(twitchTokenFiles())) {
+    try {
+      const token = JSON.parse(readFileSync(file, 'utf8')) as Record<
+        string,
+        unknown
+      >;
+      for (const key of [
+        'accessToken',
+        'refreshToken',
+        'pendingRefreshToken',
+      ]) {
+        if (typeof token[key] === 'string') values.push(token[key]);
+      }
+    } catch {
+      /* Missing or unreadable token. */
     }
-  } catch {
-    /* no token file */
-  }
-  try {
-    const b = JSON.parse(
-      readFileSync(paths.broadcasterTokenFile, 'utf8'),
-    ) as Record<string, unknown>;
-    for (const key of ['accessToken', 'refreshToken']) {
-      if (typeof b[key] === 'string') values.push(b[key]);
-    }
-  } catch {
-    /* no broadcaster token */
   }
   return values.filter((v) => v.length >= 6);
 }
@@ -163,13 +180,12 @@ export function currentSecrets(): string[] {
   const key = [
     paths.coreEnv,
     paths.botEnv,
-    paths.tokenFile,
-    paths.broadcasterTokenFile,
+    ...Object.values(twitchTokenFiles()),
   ]
     .map((p) => {
       try {
         const s = statSync(p);
-        return `${s.size}:${s.mtimeMs}`;
+        return `${p}:${s.size}:${s.mtimeMs}`;
       } catch {
         return '-';
       }

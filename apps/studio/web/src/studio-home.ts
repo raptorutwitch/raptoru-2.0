@@ -5,6 +5,7 @@ import { mountBonkLab } from './bonk-lab.js';
 import { mountSoundLab } from './sound-lab.js';
 import { mountStudioProfile } from './studio-profile.js';
 import { mountTtsLab } from './tts-lab.js';
+import { mountTwitchConnections } from './twitch-connections.js';
 
 type Service = {
   id: string;
@@ -101,6 +102,7 @@ export function mountStudioHome(root: HTMLElement) {
       <article class="card">
         <h2>Connexions</h2>
         <div data-slot="links"></div>
+        <div data-slot="twitch-connections"></div>
       </article>
       <article class="card">
         <h2>Modules</h2>
@@ -137,6 +139,7 @@ export function mountStudioHome(root: HTMLElement) {
     slot('profile'),
     document.querySelector<HTMLElement>('.topbar-safety'),
   );
+  const twitchConnections = mountTwitchConnections(slot('twitch-connections'));
   let visible = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let logSeq = 0;
@@ -261,7 +264,7 @@ export function mountStudioHome(root: HTMLElement) {
       <div class="row home-row"><span>Données locales</span><span>${rt ? (rt.packaged ? 'Application installée' : 'Repo (dev)') : '—'}</span></div>
       <p class="home-detail">${esc(rt?.dataRoot ?? '—')} · .env et jetons lus ici, jamais embarqués.</p>
       <div class="row home-row"><span>Production</span><span>SAMMI + StreamElements</span></div>
-      <p class="home-detail">Studio tourne en mode test : aucun débit réel, aucune action sur la chaîne de prod.</p>`;
+      <p class="home-detail">Économie de test ; les connexions Twitch peuvent lire de vrais événements et exécuter des actions réelles selon les automatismes activés.</p>`;
     if (Array.isArray(logs) && logs.length) {
       logSeq = logs[logs.length - 1]!.seq;
       logLines.push(
@@ -290,6 +293,7 @@ export function mountStudioHome(root: HTMLElement) {
     setVisible(v: boolean) {
       visible = v;
       clearTimeout(timer);
+      twitchConnections.setVisible(v);
       showPlayers(v && production);
       if (v) void loop();
     },

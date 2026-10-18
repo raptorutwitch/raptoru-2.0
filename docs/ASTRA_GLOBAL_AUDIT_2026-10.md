@@ -8,6 +8,13 @@
 
 Ce document fige les constats, preuves, raisonnements et réserves de l'audit initial. Il constitue le registre de départ pour la correction et la consolidation. Il ne certifie ni l'état du déploiement réel, ni le fonctionnement d'une installation Windows, ni la fermeture de points modifiés après l'audit.
 
+**Complément ciblé OAuth, 18/10/2026 (après audit de `9fae46e`).** Le lot local documenté dans
+[`TWITCH_OAUTH.md`](TWITCH_OAUTH.md) traite les profils variables selon les flags, l'absence de contrôle du compte bot,
+les écritures/refresh concurrents, la validation du broadcaster et les diagnostics Studio. Tests sur tokens fictifs ;
+aucune réautorisation ni sanction réelle. Les essais manuels, les anciens processus et la reprise d'un verrou abandonné
+restent explicitement distingués des garanties automatisées. Ce complément ne modifie pas le décompte des findings
+de l'audit initial et ne certifie aucun déploiement.
+
 ## Résumé exécutif
 
 **Raptoru 2.0 reste sur une base adaptée à son objectif. La recommandation initiale est de continuer avec Core et PostgreSQL, après une passe ciblée de consolidation avant le prochain gros module.**

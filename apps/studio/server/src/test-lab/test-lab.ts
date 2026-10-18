@@ -6,6 +6,7 @@ import {
   readEnvFile,
   readTokenSummary,
   redact,
+  twitchTokenFiles,
   type EnvFile,
 } from './local-env.js';
 import { LogBuffer, type LogSource } from './log-buffer.js';
@@ -110,6 +111,10 @@ export function botGuard(env: EnvFile): string | null {
 }
 
 export class TestLab {
+  /** OAuth must not race a running bot, a preflight refresh or a start/stop sequence. */
+  get tokenOperationsBusy() {
+    return this.busy !== null || this.sequence.running || this.deps.bot.running;
+  }
   private busy: string | null = null;
   private sequence: {
     running: boolean;
@@ -290,7 +295,7 @@ export class TestLab {
     const botEnv = this.deps.readBotEnv();
     const token = this.deps.readToken();
     const coreEnv = this.deps.readCoreEnv();
-    const broadcaster = this.deps.readToken(paths.broadcasterTokenFile);
+    const broadcaster = this.deps.readToken(twitchTokenFiles().broadcaster);
     const { core, bot } = this.deps;
     return {
       busy: this.busy,

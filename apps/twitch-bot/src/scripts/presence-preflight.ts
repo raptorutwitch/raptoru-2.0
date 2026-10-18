@@ -1,7 +1,9 @@
-// Read-only check before a shadow presence run:
+// Operational check before a shadow presence run (NOT a token-preserving audit):
 //   npm run presence:preflight -w @raptoru/twitch-bot [-- --refresh]
 // Twitch calls: token validation (and a token refresh if the token is expiring, or with --refresh),
 // then ONE Get Chatters page. Never subscribes to EventSub, never writes to chat, never calls Core.
+// Initialization / refresh may replace the stored tokens. Do not run this during a read-only audit.
+import { TWITCH_OAUTH_PROFILES } from '@raptoru/schemas';
 import { loadTwitchAppConfig } from '../config.js';
 import { fileTokenStore, TwitchAuth } from '../twitch/auth.js';
 import { createHelix, HelixError } from '../twitch/helix.js';
@@ -12,6 +14,7 @@ const auth = new TwitchAuth({
   clientSecret: config.TWITCH_CLIENT_SECRET,
   store: fileTokenStore(config.TWITCH_TOKEN_FILE),
   requiredScopes: ['moderator:read:chatters'],
+  expectedUserId: TWITCH_OAUTH_PROFILES.bot.expectedUserId,
   log: () => {},
 });
 

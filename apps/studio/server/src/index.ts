@@ -22,6 +22,11 @@ import { EffectsPlayer } from './effects/player.js';
 import { RaffleRuntime } from './raffle-lab/runtime.js';
 import { WordGameRuntime } from './word-game/runtime.js';
 import { LabChatIngress } from './lab-chat/ingress.js';
+import { hasTwitchScope } from '@raptoru/schemas';
+import {
+  createTwitchConnections,
+  type TwitchConnections,
+} from './twitch-oauth/twitch-connections.js';
 import { commandsRelay } from './commands/relay.js';
 import { miniGamesRelay } from './mini-games/relay.js';
 import { ManagedProcess, PidStore } from './test-lab/managed-process.js';
@@ -32,7 +37,7 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
-import { dirname, extname, join, normalize } from 'node:path';
+import { extname, join, normalize } from 'node:path';
 import { LabEbs } from './extension-lab/lab-ebs.js';
 import {
   EXT_PREFIX,
@@ -48,8 +53,10 @@ import {
   applyDataRootEnv,
   DATA_ROOT,
   paths,
+  readEnvFile,
   readTokenSummary,
   REPO_ROOT,
+  twitchTokenFiles,
 } from './test-lab/local-env.js';
 import { createTestLab, type TestLab } from './test-lab/test-lab.js';
 import {
@@ -357,12 +364,36 @@ export function createStudioServer(
   alerts: AlertsRuntime | null = null,
   /** Points de chaîne V1: tab API and the OBS executor of the redemptions. */
   points: ChannelPointsRuntime | null = null,
+  /** Account diagnostics are passive; authorization is an explicit, guarded user action. */
+  twitchConnections: TwitchConnections | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
     try {
       if (req.method === 'GET' && url.pathname === '/health') {
         return send(res, 200, { service: 'studio-server', status: 'ok' });
+      }
+      if (
+        url.pathname === '/api/twitch-connections' ||
+        url.pathname.startsWith('/api/twitch-connections/')
+      ) {
+        if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
+        if (req.headers[STUDIO_HEADER] !== '1')
+          return send(res, 403, { error: 'missing_studio_header' });
+        if (!twitchConnections)
+          return send(res, 503, { error: 'twitch_connections_unavailable' });
+        if (await twitchConnections.handle(req, res, url)) return;
+      }
+      // Do not start a preflight/bot or enable the supervised ingress halfway through OAuth.
+      if (
+        twitchConnections?.authorizing &&
+        req.method === 'POST' &&
+        (url.pathname.startsWith('/api/test-lab/') ||
+          url.pathname === '/api/lab-chat/ingress')
+      ) {
+        if (!sameHost(req) || req.headers[STUDIO_HEADER] !== '1')
+          return send(res, 403, { error: 'forbidden' });
+        return send(res, 409, { error: 'twitch_authorization_in_progress' });
       }
       if (bonk && (await bonk.handle(req, res, url))) return;
       if (sound && (await sound.handle(req, res, url))) return;
@@ -638,6 +669,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   let labChatRef: LabChatIngress | null = null;
   let seRef: SeTipsLink | null = null;
   let pointsRef: ChannelPointsRuntime | null = null;
+  let twitchConnectionsRef: TwitchConnections | null = null;
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
@@ -658,6 +690,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       {
         // The Lab chat ingress (bot child process) is awaited like the others before exiting.
         labchat: ingress ? () => ingress.stop() : undefined,
+        twitchOAuth: twitchConnectionsRef
+          ? () => twitchConnectionsRef!.stop()
+          : undefined,
         testlab: full ? () => lab.shutdown() : undefined,
         runtime: full && runtime ? () => runtime.stop() : undefined,
       },
@@ -871,8 +906,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
             LOYALTY_TWITCH_EVENTS: 'false',
             PRESENCE_SHADOW: 'false',
           }),
-          token: () =>
-            readTokenSummary(process.env.TWITCH_TOKEN_FILE ?? paths.tokenFile),
+          token: () => readTokenSummary(twitchTokenFiles().bot),
           prerequisite: () =>
             !existsSync(paths.botEnv)
               ? 'bot_env_missing'
@@ -888,9 +922,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // its one OBS connection (the Bonk's). Starts with Studio; nothing runs unless Core queued a job (master switch ON
   // in Core, or an explicit « Tester »). Twitch reception: the Lab chat adapter's broadcaster connection (Lab) or
   // the production bot (Production).
-  const broadcasterTokenFile =
-    process.env.TWITCH_BROADCASTER_TOKEN_FILE ??
-    join(dirname(paths.tokenFile), '.twitch-tokens.broadcaster.json');
+  const broadcasterTokenFile = twitchTokenFiles().broadcaster;
   const points =
     alertsCore && alertsEnv
       ? await ChannelPointsRuntime.create({
@@ -919,7 +951,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
             ),
           }),
           twitch: () => ({
-            scope: readTokenSummary(broadcasterTokenFile).scopes.includes(
+            scope: hasTwitchScope(
+              readTokenSummary(broadcasterTokenFile).scopes,
               'channel:read:redemptions',
             ),
             adapter_running:
@@ -935,6 +968,24 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   points?.start();
   pointsRef = points;
   labChat?.start();
+  const twitchConnections = createTwitchConnections({
+    clientId:
+      process.env.TWITCH_CLIENT_ID ??
+      readEnvFile(paths.botEnv).TWITCH_CLIENT_ID ??
+      '',
+    tokenFiles: twitchTokenFiles(),
+    botDir: paths.botDir,
+    envFile: paths.botEnv,
+    canAuthorize: () =>
+      lab.tokenOperationsBusy || labChat?.status().enabled
+        ? {
+            ok: false,
+            reason:
+              'Coupe Ingestion chat Twitch dans Simulation, arrête le bot dans Test Lab et attends la fin des opérations. Arrête aussi les anciens processus lancés à part.',
+          }
+        : { ok: true },
+  });
+  twitchConnectionsRef = twitchConnections;
   const httpServer = createStudioServer(
     lab,
     shutdown,
@@ -965,6 +1016,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     labCore && labProfile ? miniGamesRelay(labCore) : null,
     alerts,
     points,
+    twitchConnections,
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(

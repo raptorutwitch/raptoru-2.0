@@ -279,7 +279,8 @@ describe('Lab chat ingress (Studio)', () => {
     const on = await f.studio('/api/lab-chat/output', { enabled: true });
     expect(on.status).toBe(409);
     expect(on.json).toMatchObject({ error: 'missing_write_scope' });
-    expect(String(on.json.message)).toContain('LAB_CHAT_OUTPUT=true');
+    expect(String(on.json.message)).toContain('Comptes Twitch');
+    expect(String(on.json.message)).not.toContain('LAB_CHAT_OUTPUT=true');
     expect(f.calls).toEqual([]);
     expect(
       (await f.studio('/api/lab-chat/output', { enabled: false })).status,

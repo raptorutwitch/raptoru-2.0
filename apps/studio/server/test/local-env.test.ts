@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Packaged Studio: code (REPO_ROOT) and local data (DATA_ROOT) are apart. local-env reads both at
@@ -86,5 +86,55 @@ describe('redaction secrets (ASTRA-P2-022): cached, re-read only when a source f
       r.env.currentSecrets(),
     );
     expect(line).toBe('token *** / secret ***');
+  });
+});
+
+describe('Twitch token sources: same effective files for diagnostics, OAuth and redaction', () => {
+  it('uses data-root defaults and resolves process overrides before env-file overrides from the bot cwd', async () => {
+    const { env } = await roots();
+    expect(env.twitchTokenFiles({}, {})).toEqual({
+      bot: env.paths.tokenFile,
+      broadcaster: env.paths.broadcasterTokenFile,
+    });
+    expect(
+      env.twitchTokenFiles(
+        { TWITCH_TOKEN_FILE: 'process.json' },
+        {
+          TWITCH_TOKEN_FILE: 'ignored.json',
+          TWITCH_BROADCASTER_TOKEN_FILE: '../broadcaster.json',
+        },
+      ),
+    ).toEqual({
+      bot: resolve(env.paths.botDir, 'process.json'),
+      broadcaster: resolve(env.paths.botDir, '../broadcaster.json'),
+    });
+  });
+
+  it('reads and redacts tokens from explicit paths, including a pending rotated refresh token', async () => {
+    const { env } = await roots();
+    const custom = join(env.paths.botDir, 'custom.json');
+    process.env.TWITCH_TOKEN_FILE = custom;
+    writeFileSync(
+      custom,
+      JSON.stringify({
+        login: 'fake_bot',
+        userId: '1',
+        accessToken: 'fake-access-12345',
+        refreshToken: 'fake-refresh-12345',
+        pendingRefreshToken: 'fake-pending-12345',
+        scopes: ['user:read:chat'],
+      }),
+    );
+    expect(env.readTokenSummary()).toMatchObject({
+      login: 'fake_bot',
+      userId: '1',
+      scopes: ['user:read:chat'],
+    });
+    expect(
+      env.redact(
+        'fake-access-12345 fake-refresh-12345 fake-pending-12345',
+        env.currentSecrets(),
+      ),
+    ).toBe('*** *** ***');
   });
 });

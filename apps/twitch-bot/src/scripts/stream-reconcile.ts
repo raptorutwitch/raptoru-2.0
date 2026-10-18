@@ -2,6 +2,9 @@
 //   npm run stream:reconcile -w @raptoru/twitch-bot
 // Twitch: token validation and one Get Streams read. Core: POST /v1/bot/stream/sync.
 // A Helix failure changes nothing (never interpreted as offline). No chat, no EventSub.
+// Operational command: initialization / refresh may replace tokens and the Core session is updated.
+// Do not run this during a read-only audit.
+import { TWITCH_OAUTH_PROFILES } from '@raptoru/schemas';
 import { loadConfig } from '../config.js';
 import { createCoreClient } from '../core-client.js';
 import { fileTokenStore, TwitchAuth } from '../twitch/auth.js';
@@ -13,6 +16,7 @@ const auth = new TwitchAuth({
   clientSecret: config.TWITCH_CLIENT_SECRET,
   store: fileTokenStore(config.TWITCH_TOKEN_FILE),
   requiredScopes: [],
+  expectedUserId: TWITCH_OAUTH_PROFILES.bot.expectedUserId,
   log: () => {},
 });
 

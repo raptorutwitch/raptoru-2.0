@@ -23,6 +23,13 @@ Répartition des documents (une seule source de vérité par sujet) :
 
 # 0. État courant — 18/10/2026
 
+**Complément OAuth (après `9fae46e`, local uniquement).** Corrections de fiabilité et préparation de la réautorisation
+groupée autorisées par Antoni : deux profils fixes de six scopes, vérification du compte et du client avant sauvegarde,
+protection des refresh/écritures concurrents, validation des deux comptes et carte Connexions Studio. Référence et
+procédure : [`docs/TWITCH_OAUTH.md`](docs/TWITCH_OAUTH.md). Aucun OAuth réel, aucun token réel changé, aucun timeout,
+aucune publication. Les tests automatisés de ce lot ne valent pas validation manuelle ; les deux autorisations restent
+à effectuer avec Antoni avant les essais réels Random Ban. Cela ne réalise ni la décision D7 ni le cutover.
+
 ## 0.0 Point d'avancement SAMMI → Raptoru (18/10/2026) — référence centrale
 
 Vérifié le 18/10/2026 sur : base Lab (`cp_rewards`, `cp_rules`, `cp_redemptions`), decks SAMMI

@@ -1,5 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import {
+  TwitchTokenValidationError,
+  validateTwitchTokenInfo,
+  type TwitchTokenValidationCode,
+} from '@raptoru/schemas';
+import { sameTokenVersion, TokenStoreError } from './token-store.js';
+export {
+  fileTokenStore,
+  sameTokenVersion,
+  TokenStoreError,
+} from './token-store.js';
 
 // Twitch user-token lifecycle (official OAuth authorization code flow + refresh tokens).
 // Reusable by any Twitch feature of the bot; knows nothing about presence, Daily or chat.
@@ -21,11 +31,21 @@ export interface StoredToken {
   expiresAt: number;
   userId: string;
   login: string;
+  /** Changes on a refresh or a new authorization; legacy token files have no revision. */
+  revision?: string;
+  /** Preserves refresh rotation if Twitch validation is temporarily unavailable after the exchange. */
+  pendingRefreshToken?: string;
 }
 
 export interface TokenStore {
   load(): Promise<StoredToken | null>;
   save(token: StoredToken): Promise<void>;
+  /** Locked operations use an unlocked store to avoid recursively acquiring the same lock. */
+  withLock?<T>(operation: (store: TokenStore) => Promise<T>): Promise<T>;
+  saveIfCurrent?(
+    expected: StoredToken | null,
+    token: StoredToken,
+  ): Promise<void>;
 }
 
 export type AuthErrorCode =
@@ -33,7 +53,10 @@ export type AuthErrorCode =
   | 'missing_scopes'
   | 'refresh_rejected'
   | 'invalid_token'
-  | 'twitch_unavailable';
+  | 'twitch_unavailable'
+  | 'store_conflict'
+  | 'invalid_store'
+  | TwitchTokenValidationCode;
 
 export class AuthError extends Error {
   constructor(
@@ -44,45 +67,9 @@ export class AuthError extends Error {
   }
 }
 
-/** JSON file store. Writes go to a temp file then rename, so the file is never half-written. */
-export function fileTokenStore(path: string): TokenStore {
-  return {
-    async load() {
-      try {
-        return JSON.parse(await readFile(path, 'utf8')) as StoredToken;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
-        throw error;
-      }
-    },
-    async save(token) {
-      const tmp = `${path}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`;
-      await writeFile(tmp, JSON.stringify(token, null, 2), {
-        encoding: 'utf8',
-        mode: 0o600,
-      });
-      // Windows briefly refuses a rename over a file another process is replacing: retry shortly.
-      for (let attempt = 0; ; attempt++) {
-        try {
-          await rename(tmp, path);
-          return;
-        } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (
-            attempt >= 10 ||
-            (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')
-          )
-            throw error;
-          await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
-        }
-      }
-    },
-  };
-}
-
 interface TokenResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in?: number;
   scope?: string[];
 }
@@ -90,23 +77,27 @@ interface TokenResponse {
 export interface TwitchAuthOptions {
   clientId: string;
   clientSecret: string;
+  expectedUserId: string;
   store: TokenStore;
-  requiredScopes: string[];
+  requiredScopes: readonly string[];
   fetch?: typeof fetch;
   now?: () => number;
   log?: (...args: unknown[]) => void;
   /** Refresh this long before expiry. */
   refreshMarginMs?: number;
+  /** Called once for an error that needs user action; never for network/429/5xx trouble. */
+  onFailure?: (code: AuthErrorCode) => void;
 }
 
 export interface AuthStatus {
-  state: 'ready' | 'failed' | 'uninitialized';
+  state: 'ready' | 'pending_validation' | 'failed' | 'uninitialized';
   login: string | null;
   userId: string | null;
   scopes: string[];
   expiresAt: string | null;
   hasRefreshToken: boolean;
   lastRefreshAt: string | null;
+  lastValidatedAt: string | null;
   error: string | null;
 }
 
@@ -116,24 +107,61 @@ export async function requestToken(
   fetchImpl: typeof fetch = fetch,
 ): Promise<
   | { ok: true; token: TokenResponse }
-  | { ok: false; status: number; message: string }
+  | { ok: false; status: number; message: string; retryAfterMs?: number }
 > {
-  const res = await fetchImpl(TWITCH_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(params),
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      message = ((await res.json()) as { message?: string }).message ?? message;
-    } catch {
-      /* body without JSON */
-    }
-    return { ok: false, status: res.status, message };
+  let res: Response;
+  try {
+    res = await fetchImpl(TWITCH_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(params),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    throw new AuthError(
+      'twitch_unavailable',
+      'Twitch est injoignable. Réessaie plus tard.',
+    );
   }
-  return { ok: true, token: (await res.json()) as TokenResponse };
+  if (!res.ok) {
+    // Upstream messages can echo request parameters. Only the HTTP status leaves this layer.
+    const retryAfter = res.headers.get('retry-after');
+    const seconds = retryAfter === null ? NaN : Number(retryAfter);
+    const retryAfterMs =
+      Number.isFinite(seconds) && seconds >= 0
+        ? seconds * 1000
+        : retryAfter
+          ? Math.max(0, Date.parse(retryAfter) - Date.now())
+          : NaN;
+    return {
+      ok: false,
+      status: res.status,
+      message: `Twitch HTTP ${res.status}`,
+      ...(Number.isFinite(retryAfterMs) ? { retryAfterMs } : {}),
+    };
+  }
+  let token: TokenResponse;
+  try {
+    token = (await res.json()) as TokenResponse;
+    if (
+      !token ||
+      typeof token.access_token !== 'string' ||
+      !token.access_token ||
+      (token.refresh_token !== undefined &&
+        typeof token.refresh_token !== 'string') ||
+      (token.expires_in !== undefined &&
+        (typeof token.expires_in !== 'number' ||
+          !Number.isFinite(token.expires_in) ||
+          token.expires_in <= 0))
+    )
+      throw new Error();
+  } catch {
+    throw new AuthError(
+      'invalid_token_info',
+      'La réponse OAuth Twitch est invalide.',
+    );
+  }
+  return { ok: true, token };
 }
 
 /** GET /oauth2/validate: null when Twitch says the token is invalid (401). */
@@ -141,22 +169,38 @@ export async function validateAccessToken(
   accessToken: string,
   fetchImpl: typeof fetch = fetch,
 ) {
-  const res = await fetchImpl(TWITCH_VALIDATE_URL, {
-    headers: { authorization: `OAuth ${accessToken}` },
-    signal: AbortSignal.timeout(10_000),
-  });
+  let res: Response;
+  try {
+    res = await fetchImpl(TWITCH_VALIDATE_URL, {
+      headers: { authorization: `OAuth ${accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    throw new AuthError(
+      'twitch_unavailable',
+      'La validation Twitch est temporairement indisponible.',
+    );
+  }
   if (res.status === 401) return null;
   if (!res.ok)
     throw new AuthError(
       'twitch_unavailable',
       `token validation failed (HTTP ${res.status})`,
     );
-  return (await res.json()) as {
-    login: string;
-    user_id: string;
-    expires_in: number;
-    scopes: string[] | null;
-  };
+  try {
+    return (await res.json()) as {
+      client_id: string;
+      login: string;
+      user_id: string;
+      expires_in: number;
+      scopes: string[] | null;
+    };
+  } catch {
+    throw new AuthError(
+      'invalid_token_info',
+      'La réponse de validation Twitch est invalide.',
+    );
+  }
 }
 
 export class TwitchAuth {
@@ -164,6 +208,9 @@ export class TwitchAuth {
   private refreshing: Promise<StoredToken> | null = null;
   private failure: AuthError | null = null;
   private lastRefreshAt: number | null = null;
+  private lastValidatedAt: number | null = null;
+  private refreshRetryAt = 0;
+  private storedSnapshot: StoredToken | null = null;
   private readonly fetch: typeof fetch;
   private readonly now: () => number;
   private readonly log: (...args: unknown[]) => void;
@@ -178,13 +225,22 @@ export class TwitchAuth {
 
   /** Loads, validates (refreshing if needed) and checks scopes. Throws AuthError when unusable. */
   async init(): Promise<AuthStatus> {
-    const stored = await this.options.store.load();
+    let stored: StoredToken | null;
+    try {
+      stored = await this.options.store.load();
+    } catch {
+      throw this.fail(
+        'invalid_store',
+        'Le stockage du jeton Twitch est invalide ou inaccessible.',
+      );
+    }
     if (!stored)
       throw this.fail(
         'no_token',
         'no Twitch token stored: run `npm run twitch:auth -w @raptoru/twitch-bot`',
       );
     this.token = stored;
+    this.storedSnapshot = stored;
     await this.validate();
     return this.status();
   }
@@ -193,43 +249,37 @@ export class TwitchAuth {
   async validate(): Promise<void> {
     this.throwIfFailed();
     const current = this.requireToken();
-    let info = await validateAccessToken(current.accessToken, this.fetch);
+    if (current.pendingRefreshToken) {
+      await this.refresh();
+      return;
+    }
+    let info: Awaited<ReturnType<typeof validateAccessToken>>;
+    try {
+      info = await validateAccessToken(current.accessToken, this.fetch);
+    } catch (error) {
+      // A refresh may have completed while this GET was in flight. Its newer grant takes precedence.
+      if (this.token !== current) return;
+      if (error instanceof AuthError && error.code === 'invalid_token_info')
+        throw this.fail(error.code, error.message);
+      throw error;
+    }
+    if (this.token !== current) return;
     if (!info) {
       await this.refresh();
-      info = await validateAccessToken(
-        this.requireToken().accessToken,
-        this.fetch,
-      );
-      if (!info)
-        throw this.fail(
-          'invalid_token',
-          'Twitch rejects the freshly refreshed token',
-        );
+      return;
     }
-    const scopes = info.scopes ?? [];
-    const missing = this.options.requiredScopes.filter(
-      (s) => !scopes.includes(s),
-    );
-    this.token = {
-      ...this.requireToken(),
-      scopes,
-      userId: info.user_id,
-      login: info.login,
-      expiresAt: this.now() + info.expires_in * 1000,
-    };
-    if (missing.length) {
-      throw this.fail(
-        'missing_scopes',
-        `token of ${info.login} lacks scopes: ${missing.join(', ')}`,
-      );
-    }
+    this.token = this.acceptInfo(current, info);
   }
 
   /** Current access token, refreshed first if it is about to expire. */
   async getAccessToken(): Promise<string> {
     this.throwIfFailed();
+    if (this.lastValidatedAt === null) await this.validate();
     const token = this.requireToken();
-    if (token.expiresAt - this.now() <= this.margin)
+    if (
+      token.pendingRefreshToken ||
+      token.expiresAt - this.now() <= this.margin
+    )
       return (await this.refresh()).accessToken;
     return token.accessToken;
   }
@@ -258,7 +308,14 @@ export class TwitchAuth {
 
   status(): AuthStatus {
     return {
-      state: this.failure ? 'failed' : this.token ? 'ready' : 'uninitialized',
+      state: this.failure
+        ? 'failed'
+        : this.token &&
+            (this.token.pendingRefreshToken || this.lastValidatedAt === null)
+          ? 'pending_validation'
+          : this.token
+            ? 'ready'
+            : 'uninitialized',
       login: this.token?.login ?? null,
       userId: this.token?.userId ?? null,
       scopes: this.token?.scopes ?? [],
@@ -266,59 +323,166 @@ export class TwitchAuth {
         ? new Date(this.token.expiresAt).toISOString()
         : null,
       hasRefreshToken: Boolean(this.token?.refreshToken),
-      lastRefreshAt: this.lastRefreshAt
-        ? new Date(this.lastRefreshAt).toISOString()
-        : null,
+      lastRefreshAt:
+        this.lastRefreshAt === null
+          ? null
+          : new Date(this.lastRefreshAt).toISOString(),
+      lastValidatedAt:
+        this.lastValidatedAt === null
+          ? null
+          : new Date(this.lastValidatedAt).toISOString(),
       error: this.failure?.message ?? null,
     };
   }
 
   private async doRefresh(): Promise<StoredToken> {
-    const current = this.requireToken();
-    let result;
-    try {
-      result = await requestToken(
-        {
-          grant_type: 'refresh_token',
-          refresh_token: current.refreshToken,
-          client_id: this.options.clientId,
-          client_secret: this.options.clientSecret,
-        },
-        this.fetch,
-      );
-    } catch (error) {
-      // Network trouble: not final, the next call may retry.
-      throw new AuthError(
-        'twitch_unavailable',
-        `token refresh unreachable: ${(error as Error).message}`,
-      );
-    }
-    if (!result.ok) {
-      if (result.status >= 500) {
+    const refreshLocked = async (store: TokenStore): Promise<StoredToken> => {
+      let current = this.requireToken();
+      // Another process may have refreshed or reauthorized since init. Never overwrite its grant.
+      const disk = await store.load();
+      if (!disk)
+        throw this.fail(
+          'store_conflict',
+          'Le jeton Twitch a disparu. Recommence l’autorisation.',
+        );
+      if (!sameTokenVersion(disk, this.storedSnapshot)) {
+        const info = await this.readInfo(disk.accessToken);
+        if (info && !disk.pendingRefreshToken) {
+          current = this.acceptInfo(disk, info);
+          this.token = current;
+          this.storedSnapshot = disk;
+          return current;
+        }
+        // The newer token can legitimately have expired while this process was idle.
+        current = disk;
+      }
+      if (this.now() < this.refreshRetryAt)
         throw new AuthError(
           'twitch_unavailable',
-          `token refresh failed (HTTP ${result.status})`,
+          'Twitch limite les renouvellements. Réessaie après le délai indiqué.',
+        );
+      let result;
+      try {
+        result = await requestToken(
+          {
+            grant_type: 'refresh_token',
+            refresh_token: current.pendingRefreshToken ?? current.refreshToken,
+            client_id: this.options.clientId,
+            client_secret: this.options.clientSecret,
+          },
+          this.fetch,
+        );
+      } catch (error) {
+        if (error instanceof AuthError && error.code === 'invalid_token_info')
+          throw this.fail(error.code, error.message);
+        throw new AuthError(
+          'twitch_unavailable',
+          'Le renouvellement Twitch est temporairement indisponible.',
         );
       }
+      if (!result.ok) {
+        if (result.status === 429)
+          this.refreshRetryAt =
+            this.now() + Math.max(250, result.retryAfterMs ?? 5000);
+        if (result.status >= 500 || result.status === 429) {
+          throw new AuthError(
+            'twitch_unavailable',
+            `token refresh failed (HTTP ${result.status})`,
+          );
+        }
+        throw this.fail(
+          'refresh_rejected',
+          'Twitch a refusé le renouvellement. Recommence l’autorisation.',
+        );
+      }
+      const candidate: StoredToken = {
+        ...current,
+        accessToken: result.token.access_token,
+        refreshToken:
+          result.token.refresh_token ||
+          current.pendingRefreshToken ||
+          current.refreshToken,
+        scopes: result.token.scope ?? current.scopes,
+        expiresAt: this.now() + (result.token.expires_in ?? 3600) * 1000,
+        revision: randomUUID(),
+      };
+      delete candidate.pendingRefreshToken;
+      // Validate the actual grant before saving it or allowing a Helix call to use it.
+      let info: Awaited<ReturnType<typeof validateAccessToken>>;
+      try {
+        info = await this.readInfo(candidate.accessToken);
+      } catch (error) {
+        if (error instanceof AuthError && error.code === 'twitch_unavailable') {
+          // Retain only the rotated refresh credential. The unvalidated access token is never exposed.
+          const pending = {
+            ...current,
+            pendingRefreshToken: candidate.refreshToken,
+            revision: randomUUID(),
+          };
+          await store.save(pending);
+          this.token = pending;
+          this.storedSnapshot = pending;
+        }
+        throw error;
+      }
+      if (!info)
+        throw this.fail(
+          'invalid_token',
+          'Twitch refuse le jeton nouvellement renouvelé.',
+        );
+      const next = this.acceptInfo(candidate, info);
+      await store.save(next);
+      this.token = next;
+      this.storedSnapshot = next;
+      this.lastRefreshAt = this.now();
+      this.log(
+        `[twitch-auth] token refreshed for ${next.login}, valid ${Math.round((next.expiresAt - this.now()) / 60000)} min`,
+      );
+      return next;
+    };
+    try {
+      return this.options.store.withLock
+        ? await this.options.store.withLock(refreshLocked)
+        : await refreshLocked(this.options.store);
+    } catch (error) {
+      if (error instanceof TokenStoreError) {
+        if (error.code === 'store_busy')
+          throw new AuthError('twitch_unavailable', error.message);
+        throw this.fail(error.code, error.message);
+      }
+      throw error;
+    }
+  }
+
+  private acceptInfo(token: StoredToken, info: unknown): StoredToken {
+    try {
+      const checked = validateTwitchTokenInfo(info, this.options);
+      this.lastValidatedAt = this.now();
+      return {
+        ...token,
+        scopes: checked.scopes,
+        userId: checked.userId,
+        login: checked.login,
+        expiresAt: this.now() + checked.expiresIn * 1000,
+      };
+    } catch (error) {
+      if (error instanceof TwitchTokenValidationError)
+        throw this.fail(error.code, error.message);
       throw this.fail(
-        'refresh_rejected',
-        `Twitch rejected the refresh token (${result.message}): run twitch:auth again`,
+        'invalid_token_info',
+        'La réponse de validation Twitch est invalide.',
       );
     }
-    const next: StoredToken = {
-      ...current,
-      accessToken: result.token.access_token,
-      refreshToken: result.token.refresh_token || current.refreshToken,
-      scopes: result.token.scope ?? current.scopes,
-      expiresAt: this.now() + (result.token.expires_in ?? 3600) * 1000,
-    };
-    await this.options.store.save(next);
-    this.token = next;
-    this.lastRefreshAt = this.now();
-    this.log(
-      `[twitch-auth] token refreshed for ${next.login}, valid ${Math.round((next.expiresAt - this.now()) / 60000)} min`,
-    );
-    return next;
+  }
+
+  private async readInfo(accessToken: string) {
+    try {
+      return await validateAccessToken(accessToken, this.fetch);
+    } catch (error) {
+      if (error instanceof AuthError && error.code === 'invalid_token_info')
+        throw this.fail(error.code, error.message);
+      throw error;
+    }
   }
 
   private requireToken(): StoredToken {
@@ -332,8 +496,10 @@ export class TwitchAuth {
   }
 
   private fail(code: AuthErrorCode, message: string): AuthError {
+    if (this.failure) return this.failure;
     this.failure = new AuthError(code, message);
     this.log(`[twitch-auth] ${message}`);
+    this.options.onFailure?.(code);
     return this.failure;
   }
 }

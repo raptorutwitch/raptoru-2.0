@@ -6,6 +6,12 @@
 en base de production, changement Twitch réel (récompenses, extension, EventSub), changement SAMMI ou StreamElements
 sans validation explicite d'Antoni, étape par étape.
 
+**Préparation OAuth (18/10/2026, local).** Le lot de fiabilisation après `9fae46e` prépare deux profils fixes de six
+scopes et leur réautorisation depuis **Studio → Connexions** : [`TWITCH_OAUTH.md`](TWITCH_OAUTH.md). Aucun token réel
+ni consentement n'a été changé pendant son développement. Les anciennes instructions liant la demande de droits aux
+flags sont historiques ; les flags continuent de sélectionner les fonctionnalités. Cette préparation ne réalise ni
+le transfert de propriété des récompenses (D7), ni le démarrage du bot de production, ni la bascule EventSub.
+
 Statut de tous les modules et roadmap : [`../Raptoru-2.0-ETAT-PROJET.md`](../Raptoru-2.0-ETAT-PROJET.md) § 0 · registre de
 l'audit : [`ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-10.md) · reprise rapide :
 [`../Raptoru-2.0-HANDOFF.md`](../Raptoru-2.0-HANDOFF.md) · architecture cible :

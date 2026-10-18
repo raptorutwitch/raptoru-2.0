@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CP_RETRY_TTL_MS,
   CP_SUBSCRIPTION,
+  canReadChannelPoints,
   createChannelPointsEvents,
   normalizeRedemption,
 } from '../src/channel-points-events.js';
@@ -137,9 +138,15 @@ function setup(
 }
 
 describe('channel points events (bot)', () => {
+  it('accepts manage-only redemptions without granting unrelated capabilities', () => {
+    expect(canReadChannelPoints(['channel:manage:redemptions'])).toBe(true);
+    expect(canReadChannelPoints(['channel:read:redemptions'])).toBe(true);
+    expect(canReadChannelPoints(['moderation:read'])).toBe(false);
+  });
   it('subscribes the broadcaster redemption type (v1) and reads the reward list', async () => {
     const s = setup();
     await s.events.subscribe('sess');
+    expect(s.events.subscriptionStatus()).toBe('subscribed');
     await s.events.syncRewards();
     expect(s.subs).toEqual([
       {
@@ -168,6 +175,7 @@ describe('channel points events (bot)', () => {
   it('a refused subscription is logged, never thrown (the connection and other events go on)', async () => {
     const s = setup({ subscribeFails: true });
     await expect(s.events.subscribe('sess')).resolves.toBeUndefined();
+    expect(s.events.subscriptionStatus()).toBe('inactive');
     expect(s.logs.join('\n')).toContain('abonnement aux récompenses refusé');
   });
 

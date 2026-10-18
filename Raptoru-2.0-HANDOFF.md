@@ -2,14 +2,22 @@
 
 ## État courant — 18/10/2026 : migrations SAMMI P0 terminées en Lab · point d'avancement et roadmap centralisés
 
+**OAuth Twitch — correctifs locaux après l'audit de `9fae46e` (18/10/2026).** Profils stables approuvés : six scopes
+pour `raptoru_` (`83603689`), six pour `LeCroupier_` (`1239040922`), indépendants des flags d'exécution ; contrôle
+strict des identités et du client, renouvellement protégé entre processus, diagnostic et réautorisation dans la carte
+**Studio → Connexions**. Procédure et limites : `docs/TWITCH_OAUTH.md`. **Aucune réautorisation réelle effectuée,
+aucun token réel modifié, aucun timeout réel, aucun déploiement ni release.** Attendre la validation d'Antoni avant
+les deux autorisations ; Random Ban reste non validé en réel. Les anciens processus doivent être arrêtés avant la
+première réautorisation avec ce code.
+
 **Point d'avancement complet (ce qui est migré, validé, encore SAMMI, à décider) et roadmap des migrations :
 `Raptoru-2.0-ETAT-PROJET.md` § 0.0** — lire en premier. Prochaine étape proposée : M0 (configuration des Points de
 chaîne simples) puis M1 modération ludique ; décision urgente : Couleur Cam servie par SAMMI est cassée en live
 (« Groupe 2 » supprimé, § 0.0.7).
 
-**Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`**, HEAD **`8e37c35`** (Couleur Cam) +
-le commit docs du point d'avancement du 18/10. 62 commits après `c7f20de`, **locaux, non poussés** ; `main` =
-`origin/main` = `d2b61ef`.
+**Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`** ; dernier commit avant le lot OAuth
+**`9fae46e`** (Random Ban V2). Le lot OAuth décrit ci-dessus est ajouté localement. Tout ce qui suit `c7f20de` reste
+**local, non poussé** ; `main` = `origin/main` = `d2b61ef`.
 Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Antoni :
 `docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md` (audit des données historiques) et
 `docs/RAPTORU_2_0_GLOBAL_CHECKPOINT_2026-10-16.md` (point d'étape de pilotage).

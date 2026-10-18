@@ -1,7 +1,9 @@
-// Read-only check of the broadcaster token used by the Loyalty Twitch events:
+// Operational check of the broadcaster token (NOT a token-preserving audit):
 //   npm run loyalty:preflight -w @raptoru/twitch-bot
 // Twitch calls: token validation (refresh if expiring) and ONE Get Broadcaster Subscriptions page.
 // Never subscribes to EventSub, never writes to chat, never calls Core.
+// Initialization / refresh may replace the stored tokens. Do not run this during a read-only audit.
+import { TWITCH_OAUTH_PROFILES } from '@raptoru/schemas';
 import { BROADCASTER_SCOPES, loadTwitchAppConfig } from '../config.js';
 import { fileTokenStore, TwitchAuth } from '../twitch/auth.js';
 import { createHelix } from '../twitch/helix.js';
@@ -12,6 +14,7 @@ const auth = new TwitchAuth({
   clientSecret: config.TWITCH_CLIENT_SECRET,
   store: fileTokenStore(config.TWITCH_BROADCASTER_TOKEN_FILE),
   requiredScopes: BROADCASTER_SCOPES,
+  expectedUserId: TWITCH_OAUTH_PROFILES.broadcaster.expectedUserId,
   log: () => {},
 });
 

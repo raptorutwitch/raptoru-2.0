@@ -1,5 +1,10 @@
 # Random Ban V2 (M1.1)
 
+**OAuth, complément du 18/10 :** correctifs locaux et procédure de réautorisation groupée dans
+[`TWITCH_OAUTH.md`](TWITCH_OAUTH.md). Le lot approuvé comprend le droit de timeout de LeCroupier_ et les lectures
+de raptoru_, indépendamment des flags de demande de scopes. Aucune autorisation réelle ni sanction réelle n'a été
+effectuée pendant ce développement ; la validation de Random Ban reste distincte et à faire avec Antoni.
+
 **Statut : DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ (ni OBS, ni Twitch) / NON DÉPLOYÉ — 18/10/2026.**
 Aucun timeout réel n'a été fait. Le test réel attend deux réautorisations Twitch (§ 6) et l'accord d'Antoni.
 

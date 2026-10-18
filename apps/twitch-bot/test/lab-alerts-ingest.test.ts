@@ -319,7 +319,10 @@ describe('never in production', () => {
     const src = (f: string) =>
       readFile(new URL(`../src/${f}`, import.meta.url), 'utf8');
     for (const f of ['index.ts', 'runtime.ts'])
-      expect(await src(f)).not.toMatch(/alert/i);
+      // A disabled scope flag may be mentioned here without wiring any alert consumer.
+      expect(await src(f)).not.toMatch(
+        /createLabAlertsIngest|normalizeAlertEvent|\/alerts\/events/,
+      );
     expect(await src('lab-chat-main.ts')).toContain('createLabAlertsIngest');
     // The adapter itself only ever posts to the Lab Core's alerts route.
     expect(await src('lab-alerts-ingest.ts')).toContain(

@@ -1,5 +1,11 @@
 # Points de chaîne V1 — infrastructure officielle (17/10/2026)
 
+**OAuth, complément du 18/10 :** les profils stables et la procédure Studio sont dans
+[`TWITCH_OAUTH.md`](TWITCH_OAUTH.md). L'autorisation ne dépend plus de `CHANNEL_POINTS_EVENTS` et les lectures
+acceptent `channel:read:redemptions` ou `channel:manage:redemptions`. Le lot groupé approuvé demande les deux.
+Aucune réautorisation ni modification de récompense n'a été effectuée par les correctifs OAuth ; la propriété des
+récompenses historiques et leur recréation restent la décision D7.
+
 **Statut : POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ** (clôture du 17/10/2026, code `f3129c7` + correctif son `000148b`).
 
 Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte

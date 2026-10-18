@@ -2,6 +2,22 @@
 .home-row {
   align-items: center;
 }
+.twitch-connection {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.twitch-connection .home-row {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.twitch-connection details {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.twitch-connection summary {
+  cursor: pointer;
+  color: var(--muted);
+}
 .home-detail {
   margin: 2px 0 8px;
   color: var(--muted);

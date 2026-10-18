@@ -151,7 +151,7 @@ function render(s: Status): string {
       <h2>Twitch Auth ${s.auth.lastPreflight ? (s.auth.lastPreflight.ok ? badge('Preflight OK', 'ok') : badge('Preflight KO', 'ko')) : badge('Non vérifié', 'idle')}</h2>
       ${row('Compte du token', esc(s.auth.login ?? (s.auth.tokenFile ? '?' : 'aucun token')))}
       ${row('Scopes', esc(s.auth.scopes.join(' ') || '—'))}
-      ${row('Access token', s.auth.accessTokenFresh ? `valide jusqu’à ${time(s.auth.expiresAt)}` : 'expiré (refresh auto au démarrage)')}
+      ${row('Expiration enregistrée', s.auth.accessTokenFresh ? `jusqu’à ${time(s.auth.expiresAt)} · validité Twitch non vérifiée ici` : 'dépassée ou inconnue (refresh possible au démarrage)')}
       ${row('Refresh token', s.auth.hasRefreshToken ? 'disponible' : '<b>absent</b>')}
       ${row('Dernier preflight', time(s.auth.lastPreflight?.at))}
       ${s.auth.lastPreflight ? `<pre>${esc(s.auth.lastPreflight.lines.join('\n'))}</pre>` : ''}

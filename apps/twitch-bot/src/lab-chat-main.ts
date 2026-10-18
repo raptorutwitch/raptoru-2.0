@@ -1,7 +1,9 @@
 import { z } from 'zod';
+import { TWITCH_OAUTH_PROFILES, missingTwitchScopes } from '@raptoru/schemas';
 import { loadTwitchAppConfig } from './config.js';
 import {
   CP_READ_SCOPE,
+  canReadChannelPoints,
   createChannelPointsEvents,
 } from './channel-points-events.js';
 import { ALERTS_MODES, createLabAlertsIngest } from './lab-alerts-ingest.js';
@@ -14,8 +16,10 @@ import {
 import {
   createRandomBanExecutor,
   fileRbJournal,
+  RB_SCOPES,
 } from './random-ban-executor.js';
-import { AuthError, fileTokenStore, TwitchAuth } from './twitch/auth.js';
+import { fileTokenStore, TwitchAuth } from './twitch/auth.js';
+import { superviseTwitchAuth } from './twitch/auth-supervision.js';
 import { runEventSub } from './twitch/eventsub.js';
 import { createHelix } from './twitch/helix.js';
 
@@ -51,6 +55,14 @@ const Env = z.object({
 
 /** Unusable Twitch token: Studio's supervision shows it and does not restart (EXIT_AUTH in ingress.ts). */
 const EXIT_AUTH = 78;
+const consumers = new Set<() => void>();
+function authorizationLost(account: string, reason: string): never {
+  console.error(
+    `[lab-chat] ${account}: ${reason}; consumers stopped, reauthorization required`,
+  );
+  for (const stop of consumers) stop();
+  process.exit(EXIT_AUTH);
+}
 
 const env = Env.parse(process.env);
 const app = loadTwitchAppConfig();
@@ -59,6 +71,8 @@ const auth = new TwitchAuth({
   clientSecret: app.TWITCH_CLIENT_SECRET,
   store: fileTokenStore(app.TWITCH_TOKEN_FILE),
   requiredScopes: ['user:read:chat'],
+  expectedUserId: TWITCH_OAUTH_PROFILES.bot.expectedUserId,
+  onFailure: (code) => authorizationLost('LeCroupier_', code),
 });
 try {
   await auth.init();
@@ -68,6 +82,14 @@ try {
   process.exit(auth.status().state === 'failed' ? EXIT_AUTH : 1);
 }
 const status = auth.status();
+const botValidation = superviseTwitchAuth(
+  auth,
+  (reason) => authorizationLost('LeCroupier_', reason),
+  {
+    log: (message) => console.error(`[lab-chat] ${message}`),
+  },
+);
+consumers.add(() => botValidation.stop());
 const helix = createHelix({
   clientId: app.TWITCH_CLIENT_ID,
   getAccessToken: () => auth.getAccessToken(),
@@ -120,6 +142,7 @@ const ingest = createLabChatIngest({
   alerts,
   getStream: () => helix.getStream(app.TWITCH_BROADCASTER_ID),
 });
+consumers.add(() => ingest.close());
 console.log(
   `[lab-chat] reading the chat of ${app.TWITCH_BROADCASTER_ID} as ${status.login} → Lab channel ${env.LAB_CHAT_CHANNEL_ID}`,
 );
@@ -128,8 +151,9 @@ console.log(
 );
 // Every (re)connection re-subscribes, then re-reads the real stream state (a missed online / offline
 // event while disconnected is caught up).
-runEventSub({
+const botSocket = runEventSub({
   ...ingest.handlers,
+  revocation: (_type, reason) => authorizationLost('LeCroupier_', reason),
   async subscribe(sessionId) {
     await ingest.handlers.subscribe(sessionId);
     await ingest
@@ -139,35 +163,48 @@ runEventSub({
       );
   },
 });
-// Points de chaîne V1 (read only): Twitch requires the BROADCASTER's authorization for the redemption events, which
-// LeCroupier_'s token cannot carry — so a broadcaster-token connection carrying ONLY this subscription, opened only
-// when that token holds channel:read:redemptions (Antoni's explicit authorization). Core's master switch (OFF by
-// default) decides whether anything is executed. Never run beside the production bot's broadcaster connection.
-const points = await (async () => {
-  // Stored scopes first, without any network call: a token without the scope is never validated nor refreshed
-  // (a refresh rewrites the token file) by this adapter.
+consumers.add(() => botSocket.stop());
+// The broadcaster token serves two independent modules: Points de chaîne (read OR manage redemptions)
+// and Random Ban's moderation/subscription reads. Only Points de chaîne opens a second EventSub socket.
+// Never run beside the production bot's broadcaster consumer.
+const broadcaster = await (async () => {
+  // Stored scopes first: do not validate/refresh a token that serves neither module.
   const stored = await fileTokenStore(app.TWITCH_BROADCASTER_TOKEN_FILE)
     .load()
     .catch(() => null);
-  if (!stored?.scopes?.includes(CP_READ_SCOPE)) {
+  const canPoints = canReadChannelPoints(stored?.scopes ?? []);
+  const canRandomBan =
+    stored &&
+    missingTwitchScopes(stored.scopes, RB_SCOPES.broadcaster).length === 0;
+  if (!canPoints && !canRandomBan) {
     console.log(
-      `[channel-points] réception désactivée : le jeton broadcaster n'a pas ${CP_READ_SCOPE}`,
+      '[channel-points] réception désactivée : droits broadcaster absents (Points de chaîne / Random Ban)',
     );
     return null;
   }
+  let broadcasterReady = false;
   const pointsAuth = new TwitchAuth({
     clientId: app.TWITCH_CLIENT_ID,
     clientSecret: app.TWITCH_CLIENT_SECRET,
     store: fileTokenStore(app.TWITCH_BROADCASTER_TOKEN_FILE),
-    requiredScopes: [CP_READ_SCOPE],
+    requiredScopes: [
+      ...(canPoints ? [CP_READ_SCOPE] : []),
+      ...(canRandomBan ? RB_SCOPES.broadcaster : []),
+    ],
+    expectedUserId: TWITCH_OAUTH_PROFILES.broadcaster.expectedUserId,
+    onFailure: (code) => {
+      // Missing/rejected broadcaster authorization at startup only disables its modules.
+      if (broadcasterReady) authorizationLost('raptoru_', code);
+    },
   });
   try {
     await pointsAuth.init();
     if (pointsAuth.status().userId !== app.TWITCH_BROADCASTER_ID)
       throw new Error('broadcaster token of another account');
+    broadcasterReady = true;
   } catch (error) {
     console.log(
-      `[channel-points] réception désactivée : jeton broadcaster sans ${CP_READ_SCOPE} (${(error as Error).message})`,
+      `[lab-chat] broadcaster indisponible (${(error as Error).message})`,
     );
     return null;
   }
@@ -176,28 +213,44 @@ const points = await (async () => {
     getAccessToken: () => pointsAuth.getAccessToken(),
     handleUnauthorized: (rejected) => pointsAuth.handleUnauthorized(rejected),
   });
-  const events = createChannelPointsEvents({
-    channelId: env.LAB_ALERTS_CHANNEL_ID ?? env.LAB_CHAT_CHANNEL_ID,
-    broadcasterId: app.TWITCH_BROADCASTER_ID,
-    postRedemption: (body) => lab('/v1/lab/channel-points/redemptions', body),
-    postRewards: (body) => lab('/v1/lab/channel-points/rewards', body),
-    subscribe: (type, condition, sessionId, version) =>
-      broadcasterHelix.subscribe(type, condition, sessionId, version),
-    getCustomRewards: () =>
-      broadcasterHelix.getCustomRewards(app.TWITCH_BROADCASTER_ID),
-  });
-  runEventSub({
-    async subscribe(sessionId) {
-      await events.subscribe(sessionId);
-      void events.syncRewards();
+  const validation = superviseTwitchAuth(
+    pointsAuth,
+    (reason) => authorizationLost('raptoru_', reason),
+    {
+      log: (message) => console.error(`[lab-chat] broadcaster: ${message}`),
     },
-    async notification(type, event) {
-      await events.handle(type, event);
-    },
-  });
-  console.log(
-    '[channel-points] réception des récompenses active (lecture seule)',
   );
+  consumers.add(() => validation.stop());
+  const events = canPoints
+    ? createChannelPointsEvents({
+        channelId: env.LAB_ALERTS_CHANNEL_ID ?? env.LAB_CHAT_CHANNEL_ID,
+        broadcasterId: app.TWITCH_BROADCASTER_ID,
+        postRedemption: (body) =>
+          lab('/v1/lab/channel-points/redemptions', body),
+        postRewards: (body) => lab('/v1/lab/channel-points/rewards', body),
+        subscribe: (type, condition, sessionId, version) =>
+          broadcasterHelix.subscribe(type, condition, sessionId, version),
+        getCustomRewards: () =>
+          broadcasterHelix.getCustomRewards(app.TWITCH_BROADCASTER_ID),
+      })
+    : null;
+  if (events) {
+    consumers.add(() => events.close());
+    const socket = runEventSub({
+      async subscribe(sessionId) {
+        await events.subscribe(sessionId);
+        void events.syncRewards();
+      },
+      async notification(type, event) {
+        await events.handle(type, event);
+      },
+      revocation: (_type, reason) => authorizationLost('raptoru_', reason),
+    });
+    consumers.add(() => socket.stop());
+    console.log(
+      '[channel-points] connexion prête ; abonnement aux récompenses en attente',
+    );
+  }
   // Random Ban V2 reads the moderators, the bans and the subscriptions with this same broadcaster connection.
   return {
     events,
@@ -208,8 +261,7 @@ const points = await (async () => {
 // Stopping (Studio OFF / closing): chat retries in memory are dropped explicitly, never persisted.
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
   process.on(signal, () => {
-    ingest.close();
-    points?.events.close();
+    for (const stop of consumers) stop();
     process.exit(0);
   });
 // Lost stream transitions (Core down when the event came) are repaired from Helix, like the main bot's
@@ -247,6 +299,7 @@ if (status.scopes.includes('user:write:chat')) {
       windowMs: 30_000,
     }),
   });
+  consumers.add(() => output.stop());
   console.log(
     `[lab-chat] output executor ready (${env.LAB_CHAT_OUTPUT_RATE} msg / 30 s); Core decides « Sortie chat réelle »`,
   );
@@ -259,7 +312,7 @@ if (status.scopes.includes('user:write:chat')) {
 // points rule; Studio's dry runs). It always tells Core what its tokens allow; it times out only with LeCroupier_'s
 // moderator:manage:banned_users, and searches only with the broadcaster's moderation:read + channel:read:subscriptions.
 {
-  const bh = points?.helix ?? null;
+  const bh = broadcaster?.helix ?? null;
   const rbChannel = env.LAB_ALERTS_CHANNEL_ID ?? env.LAB_CHAT_CHANNEL_ID;
   const randomBan = createRandomBanExecutor({
     core: labCall,
@@ -268,7 +321,7 @@ if (status.scopes.includes('user:write:chat')) {
     executorId: `lab-chat-${status.userId}`,
     login: status.login ?? 'LeCroupier_',
     botScopes: status.scopes,
-    broadcasterScopes: points?.scopes ?? null,
+    broadcasterScopes: broadcaster?.scopes ?? null,
     twitch: {
       chattersPage: async (after) => {
         const p = await helix.getChattersPage(
@@ -309,20 +362,9 @@ if (status.scopes.includes('user:write:chat')) {
     },
     journal: fileRbJournal(app.LAB_RANDOM_BAN_JOURNAL_FILE),
   });
+  consumers.add(() => randomBan.stop());
   console.log(
     `[random-ban] exécuteur prêt — recherche : ${randomBan.ready.canSearch ? 'oui' : 'non'}, timeout : ${randomBan.ready.canTimeout ? 'oui' : 'non'}${randomBan.ready.missing.length ? ` (manque : ${randomBan.ready.missing.join(', ')})` : ''}`,
   );
   void randomBan.run();
 }
-// Hourly token validation (required by Twitch).
-setInterval(
-  () => {
-    auth.validate().catch((error) => {
-      console.error(
-        `[lab-chat] token validation failed${error instanceof AuthError ? ` (${error.code})` : ''}`,
-      );
-      if (auth.status().state === 'failed') process.exit(EXIT_AUTH);
-    });
-  },
-  60 * 60 * 1000,
-);
