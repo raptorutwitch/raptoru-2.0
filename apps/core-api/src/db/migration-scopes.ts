@@ -32,6 +32,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261025130000_channel_points.sql',
   // Random Ban V2 (M1.1), production schema (same as the Lab file).
   '20261026130000_random_ban.sql',
+  // Roue du Sub: spins and pending gains (same as the Lab file).
+  '20261027130000_sub_wheel.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -76,6 +78,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261025120000_channel_points_lab.sql',
   // Random Ban V2 (M1.1): requests, target, sanction, refund owed, animation.
   '20261026120000_random_ban_lab.sql',
+  // Roue du Sub: spins (one per sub / resub / Prime), pending gains, switch OFF by default.
+  '20261027120000_sub_wheel_lab.sql',
 ]);
 
 /**

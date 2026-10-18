@@ -5,6 +5,7 @@ import {
 } from '@raptoru/schemas';
 import { AlertError, type AlertsService } from '../alerts/service.js';
 import { ALERT_VARIANTS } from '../alerts/variants.js';
+import type { SubWheelService } from '../sub-wheel/service.js';
 import { HttpError, parse, type Route } from './server.js';
 
 // Twitch alerts V1 — the routes of the ONE alerts implementation, served twice with the same sub-paths:
@@ -28,6 +29,8 @@ export function alertsRoutes(
   alerts: AlertsService,
   /** Production: the Studio installation routes for this channel; absent: the Lab routes. */
   production?: { channelId: string },
+  /** Roue du Sub: a Twitch sub / resub also asks for its wheel (idempotent, OFF by default: recorded « ignored »). */
+  subWheel?: SubWheelService,
 ): Route[] {
   const base = production ? '/v1/studio/alerts' : '/v1/lab/alerts';
   const auth = production
@@ -69,7 +72,11 @@ export function alertsRoutes(
         channel(event.channel_id);
         if (production && event.source === 'twitch')
           throw new HttpError(403, { error: 'twitch_events_from_bot_only' });
-        return alerts.receive(event);
+        const received = await alerts.receive(event);
+        // A redelivery (duplicate) asks again: the same spin (and a spin missed by a failed first reception is made).
+        if (subWheel)
+          await subWheel.fromAlert(event, received.alert?.alert_id ?? null);
+        return received;
       },
     },
     {

@@ -1,5 +1,6 @@
 import { AlertsService } from './alerts/service.js';
 import { RandomBanService } from './random-ban/service.js';
+import { SubWheelService } from './sub-wheel/service.js';
 import { ChannelPointsService } from './channel-points/service.js';
 import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
 import type { TwitchViewerCatalog } from './bonk-lab/twitch-viewer.js';
@@ -41,6 +42,8 @@ export interface Core {
   channelPoints: ChannelPointsService;
   /** Random Ban V2 (same service as the Lab Core; triggered by the channel points rule). */
   randomBan: RandomBanService;
+  /** Roue du Sub (fed by the alerts reception; OFF by default). */
+  subWheel: SubWheelService;
 }
 
 export function createCore(
@@ -72,5 +75,6 @@ export function createCore(
     alerts: new AlertsService(db, clock),
     channelPoints: new ChannelPointsService(db, clock, soundLab, randomBan),
     randomBan,
+    subWheel: new SubWheelService(db, clock),
   };
 }

@@ -5,8 +5,10 @@
 de raptoru_, indépendamment des flags de demande de scopes. Aucune autorisation réelle ni sanction réelle n'a été
 effectuée pendant ce développement ; la validation de Random Ban reste distincte et à faire avec Antoni.
 
-**Statut : DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ (ni OBS, ni Twitch) / NON DÉPLOYÉ — 18/10/2026.**
-Aucun timeout réel n'a été fait. Le test réel attend deux réautorisations Twitch (§ 6) et l'accord d'Antoni.
+**Statut : DÉVELOPPEMENT TERMINÉ / TESTS AUTOMATISÉS RÉUSSIS / VALIDÉ EN RÉEL PAR ANTONI (18/10/2026) / NON DÉPLOYÉ.**
+Après la réautorisation groupée (`TWITCH_OAUTH.md`), vraie redemption « Ban aléatoire » (trace Lab : 18/10 15:28 UTC,
+acheteur VieweruMobilu tiré lui-même → **CSC**, abonné → timeout **3 min** confirmé par Twitch via LeCroupier_,
+animation CSC affichée, aucun remboursement dû). Les sections ci-dessous gardent l'historique du développement.
 
 Reprise du « Ban aléatoire » de SAMMI (boutons ID56 « RB PDC », ID74 « RB Jetons », ID63 « Random Anim Ban ») selon les
 décisions d'Antoni du 18/10/2026 : même esprit, même rendu, sans les bricolages SAMMI.

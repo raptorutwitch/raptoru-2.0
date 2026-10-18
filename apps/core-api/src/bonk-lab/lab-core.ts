@@ -24,6 +24,8 @@ import { channelPointsRoutes } from '../http/channel-points-routes.js';
 import { ChannelPointsService } from '../channel-points/service.js';
 import { randomBanRoutes } from '../http/random-ban-routes.js';
 import { RandomBanService } from '../random-ban/service.js';
+import { subWheelRoutes } from '../http/sub-wheel-routes.js';
+import { SubWheelService } from '../sub-wheel/service.js';
 import { AlertsService } from '../alerts/service.js';
 import { MiniGamesService } from '../mini-games/service.js';
 import { twitchAppLoginLookup } from '../mini-games/twitch-login.js';
@@ -115,6 +117,8 @@ export function createLabCore({
     twitch ? twitchAppLoginLookup(twitch) : null,
   );
   const randomBan = new RandomBanService(db, systemClock);
+  const alertsService = new AlertsService(db, systemClock);
+  const subWheel = new SubWheelService(db, systemClock);
   const routes = [
     ...bonkLabRoutes(bonk, viewers),
     // Soundboard V2 Lab: same isolated Lab Core process and database.
@@ -137,7 +141,9 @@ export function createLabCore({
     ...wordGameRoutes(wordGame),
     ...miniGamesRoutes(miniGames),
     // Twitch alerts V1 (A1): normalized events, durable queue, claim / ACK (no economy).
-    ...alertsRoutes(new AlertsService(db, systemClock)),
+    ...alertsRoutes(alertsService, undefined, subWheel),
+    // Roue du Sub: fed by the alerts reception above; state, switch (OFF), tests, animations, reconciliation.
+    ...subWheelRoutes(subWheel, alertsService),
     // Points de chaîne V1: redemptions (Lab chat adapter), rules, OBS jobs (Studio); sounds through this Soundboard.
     ...channelPointsRoutes(
       new ChannelPointsService(db, systemClock, sound, randomBan),

@@ -60,7 +60,10 @@ Twitch** avec saisie textuelle après activation des automatisations : texte du 
 filtre shader de « overlay cam shushu » activé 10 s ; `!fx` en jetons non migré ; § 11) ; **Couleur Cam validé de bout en bout en Lab
 par Antoni** (18/10/2026, `8e37c35` : 26 préréglages SAMMI, filtre « Raptoru — Couleur Cam » sur « Overlay Shushu »
 créé par Antoni, « Groupe 2 » supprimé, transitions fluides de 2 s, couleur conservée ; **vraie récompense Twitch**
-« emeraude » exécutée, SAMMI fermé ; non déployé, § 12). **Random Ban V2 (M1.1) développé, non validé**
+« emeraude » exécutée, SAMMI fermé ; non déployé, § 12). **Roue du Sub migrée techniquement** (18/10/2026, `docs/SUB_WHEEL.md` : roue historique
+copiée sur le lecteur d'effets, une roue par sub / resub / Prime, tirage et gain enregistrés par Core après l'alerte ;
+**interrupteur OFF**, non validée dans OBS, gains « en attente d'attribution » sans aucun crédit — raccordement
+économique à décider). **Random Ban V2 (M1.1) validé en réel par Antoni le 18/10** (vraie redemption, timeout 3 min confirmé, animation CSC ; `docs/RANDOM_BAN_V2.md`). Historique du développement :
 (18/10/2026, `docs/RANDOM_BAN_V2.md` : tirage uniforme parmi les chatters qui suivent la chaîne, timeout confirmé par
 LeCroupier\_ avant l'animation historique — 9 variantes + CSC + flop — sur le lecteur d'effets ; aucun timeout réel
 fait : LeCroupier\_ n'a pas `moderator:manage:banned_users` et raptoru\_ pas `moderation:read`, réautorisation à

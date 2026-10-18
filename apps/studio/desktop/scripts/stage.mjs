@@ -81,6 +81,7 @@ const runtimeFiles = [
   'apps/studio/server/alerts-player/engine.js',
   'apps/studio/server/effects-player/player.html',
   'apps/studio/server/effects-player/player.js',
+  'apps/studio/server/effects-player/wheel.js',
   'apps/studio/web/dist/index.html',
   'apps/studio/desktop/static/status.html',
   'apps/twitch-extension/extension/panel.html',
@@ -108,6 +109,7 @@ const runtimeFiles = [
   'supabase/migrations/20261023120000_alerts_lab_families.sql',
   'supabase/migrations/20261025120000_channel_points_lab.sql',
   'supabase/migrations/20261026120000_random_ban_lab.sql',
+  'supabase/migrations/20261027120000_sub_wheel_lab.sql',
   // Jeu des mots word bank, read by the Lab Core from src/ (like the migrations).
   'apps/core-api/src/word-game/words-fr.txt',
 ];

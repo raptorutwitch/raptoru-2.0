@@ -58,6 +58,7 @@ export const LAB_MIGRATIONS = [
   '20261023120000_alerts_lab_families.sql',
   '20261025120000_channel_points_lab.sql',
   '20261026120000_random_ban_lab.sql',
+  '20261027120000_sub_wheel_lab.sql',
 ];
 
 export type ServiceState =

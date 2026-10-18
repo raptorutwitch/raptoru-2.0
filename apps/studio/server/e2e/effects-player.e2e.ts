@@ -412,7 +412,7 @@ test.describe('Effects player — stale OBS page (BRB fix)', () => {
     const cam = await png(page, 1920, 1080, '#a03050');
     // A copy of the page files, changed below like a Studio update would.
     const dir = await mkdtemp(join(tmpdir(), 'effects-page-'));
-    for (const f of ['player.html', 'player.js'])
+    for (const f of ['player.html', 'player.js', 'wheel.js'])
       await writeFile(
         join(dir, f),
         await (
@@ -561,6 +561,102 @@ test.describe('Effects player — Random Ban V2 layers (as in OBS)', () => {
       expect(await (await flop).end).toEqual({ event: 'completed' });
       expect(Date.now() - t2).toBeGreaterThan(2400);
       expect(await page.$$eval('#stage .rb-flop', (l) => l.length)).toBe(0);
+    } finally {
+      await close();
+      await s.close();
+    }
+  });
+});
+
+test.describe('Effects player — Roue du Sub (as in OBS)', () => {
+  test('legacy wheel: banner, segments of the months, lands on the recorded segment, « +N jetons », slides out; a mismatched amount never shows', async () => {
+    const s = await studio(undefined, undefined, {
+      'Incrémentation Son.mp3': wav(1500),
+      'Fin casino son.mp3': wav(600),
+    });
+    const { page, close } = await obsLike();
+    try {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.goto(s.player.url);
+      await connected(s.player, true);
+      const layout = [
+        { val: 500, mult: 1 },
+        { val: 750, mult: 1 },
+        { val: 1000, mult: 1 },
+        { val: 1500, mult: 2 },
+        { val: 2000, mult: 1 },
+        { val: 3000, mult: 1 },
+        { val: 3000, mult: 2 },
+        { val: 5000, mult: 1 },
+        { val: 7500, mult: 1 },
+        { val: 10000, mult: 1 },
+        { val: 15000, mult: 1 },
+        { val: 2000, mult: 3 },
+      ];
+      const texts: string[] = [];
+      const t0 = Date.now();
+      const { end } = await s.player.play({
+        kind: 'wheel',
+        spin: {
+          name: 'Viewer',
+          type: 'resub',
+          tier: 2,
+          months: 14,
+          layout,
+          segment: 3,
+          amount: 6000,
+        },
+      });
+      await page.waitForTimeout(500);
+      const banner = await page.$eval('#wheelContainer', (c) => ({
+        pseudo: c.querySelector('#wheelPseudo')!.textContent,
+        month: c.querySelector('#wheelMonth')!.textContent,
+        tier: c.querySelector('#wheelTier')!.textContent,
+        segments: c.querySelectorAll('#wheelSvg path').length,
+        hub: (c.querySelector('#wheelHubMultHtml') as SVGTextElement)
+          .textContent,
+      }));
+      // 12 segments + one outer band per multiplied segment (×2, ×2, ×3), as the legacy SVG draws them.
+      expect(banner).toEqual({
+        pseudo: 'Viewer',
+        month: '14',
+        tier: 'T2',
+        segments: 15,
+        hub: '×2',
+      });
+      const poll = setInterval(() => {
+        void page
+          .$eval('#wheelResult', (r) => r.textContent ?? '')
+          .then((t) => t && texts.push(t))
+          .catch(() => {});
+      }, 100);
+      expect(await end).toEqual({ event: 'completed' });
+      clearInterval(poll);
+      expect(Date.now() - t0).toBeGreaterThan(4000);
+      expect(texts).toContain('+3000');
+      expect(texts).toContain('+6000 jetons');
+      // The pointer sits on the recorded segment: the rotation lands mid-segment 3 (of 12).
+      const rot = await page.$eval('#wheelSvg', (w) =>
+        Number(
+          /rotate\(([-\d.]+)deg\)/.exec((w as SVGElement).style.transform)?.[1],
+        ),
+      );
+      expect((((rot % 360) + 360) % 360).toFixed(2)).toBe(
+        ((360 - (3 * 30 + 15)) % 360).toFixed(2),
+      );
+      const { end: bad } = await s.player.play({
+        kind: 'wheel',
+        spin: {
+          name: 'X',
+          type: 'resub',
+          tier: 1,
+          months: 14,
+          layout,
+          segment: 3,
+          amount: 999,
+        },
+      });
+      expect(await bad).toEqual({ event: 'failed', error: 'playback_error' });
     } finally {
       await close();
       await s.close();

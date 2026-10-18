@@ -14,7 +14,8 @@
 // - ban (Random Ban V2): the legacy ban layer (Alerte_system.html « jouerAlerte » ban_*): the video (its own sound, mirror
 //   variants), the phrase with both names shown at show_at / hidden at hide_at (slide 0.3 s); ends at the video's end or
 //   duration + 800 ms (the legacy watchdog), whichever first;
-// - flop (Random Ban V2): the trumpet and « X a flop cheh ! » (the legacy OBS text source: fade in, 2 s, fade out).
+// - flop (Random Ban V2): the trumpet and « X a flop cheh ! » (the legacy OBS text source: fade in, 2 s, fade out);
+// - wheel (Roue du Sub): the legacy wheel (wheel.js), showing the spin Core recorded; done once it slid out.
 //
 // In OBS the page may play sound without a click. In a normal browser it shows « Activer le son » and takes no effect
 // until sound is allowed (Studio then reports the player as muted instead of handing effects to a silent page).
@@ -386,6 +387,29 @@ function flopElement(effect) {
   };
 }
 
+/** The legacy wheel: a stand-in element for the play cycle (started at once, done when the wheel slid out). */
+function wheelElement(effect) {
+  const el = document.createElement('div');
+  // The legacy wheel lasts well under this (slide, 2–5 s spin, counter, reveal): the end guard of play().
+  el.duration = 30;
+  el.pause = () => {};
+  el.load = () => {};
+  el.play = () => {
+    el.dispatchEvent(new Event('playing'));
+    // Loaded only for a wheel: the other effects never depend on it.
+    import('./wheel.js')
+      .then(({ playWheel }) =>
+        playWheel(stage, effect.wheel.spin, effect.wheel.sounds),
+      )
+      .then(
+        () => el.dispatchEvent(new Event('effect-done')),
+        () => el.dispatchEvent(new Event('error')),
+      );
+    return Promise.resolve();
+  };
+  return { el, doneEvent: 'effect-done', release() {} };
+}
+
 function audioElement(effect) {
   const el = new Audio(effect.url);
   el.volume = clamp(effect.volume);
@@ -409,8 +433,12 @@ async function play(effect) {
     Array.isArray(effect.ban?.phrases) &&
     effect.ban.phrases.length > 0;
   const flop = effect.kind === 'flop' && typeof effect.ban?.text === 'string';
+  const wheel =
+    effect.kind === 'wheel' &&
+    Array.isArray(effect.wheel?.spin?.layout) &&
+    MEDIA_URL.test(effect.wheel?.sounds?.fin ?? '');
   if (
-    (effect.kind !== 'sound' && !video && !wbrb && !ban && !flop) ||
+    (effect.kind !== 'sound' && !video && !wbrb && !ban && !flop && !wheel) ||
     !MEDIA_URL.test(effect.url)
   ) {
     await report(effect, 'failed', 'invalid_effect');
@@ -422,9 +450,11 @@ async function play(effect) {
       ? banElement(effect)
       : flop
         ? flopElement(effect)
-        : video
-          ? videoElement(effect)
-          : audioElement(effect);
+        : wheel
+          ? wheelElement(effect)
+          : video
+            ? videoElement(effect)
+            : audioElement(effect);
   const el = media.el;
   let started = false;
   let endGuard = null;

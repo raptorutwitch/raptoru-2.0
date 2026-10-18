@@ -13,6 +13,7 @@ import { InteractionError, Interactions } from '../interactions/creepy.js';
 import { ColorCam } from '../interactions/color-cam.js';
 import { FxCam } from '../interactions/fx-cam.js';
 import { RandomBanRuntime } from '../random-ban/runtime.js';
+import { SubWheelRuntime } from '../sub-wheel/runtime.js';
 import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 
 // Points de chaîne V1 in Studio (docs/CHANNEL_POINTS_V1.md). Core decides (master switch, rules, dedup, history);
@@ -57,6 +58,8 @@ export class ChannelPointsRuntime {
   readonly colorCam: ColorCam;
   /** Random Ban V2: its animations (Core + the Twitch executor decide and time out). */
   readonly randomBan: RandomBanRuntime;
+  /** Roue du Sub: its animations (Core decides and records the spins). */
+  readonly subWheel: SubWheelRuntime;
 
   private constructor(
     private readonly d: ChannelPointsRuntimeDeps,
@@ -66,6 +69,12 @@ export class ChannelPointsRuntime {
     this.brb = new Brb({ obs, effects: d.effects ?? null });
     this.fxCam = new FxCam({ obs });
     this.colorCam = new ColorCam({ obs });
+    this.subWheel = new SubWheelRuntime({
+      core: d.core,
+      environment: d.environment,
+      channelId: d.channelId,
+      effects: d.effects ?? null,
+    });
     this.randomBan = new RandomBanRuntime({
       core: d.core,
       environment: d.environment,
@@ -91,6 +100,7 @@ export class ChannelPointsRuntime {
   start() {
     this.obs.start();
     this.randomBan.start();
+    this.subWheel.start();
     const loop = async () => {
       if (this.stopped) return;
       let worked = false;
@@ -114,6 +124,7 @@ export class ChannelPointsRuntime {
     if (this.timer) clearTimeout(this.timer);
     this.obs.stop();
     this.randomBan.stop();
+    this.subWheel.stop();
   }
 
   /** One job if Core has one: started, actions in order, per-action results, completed. Returns true if one ran. */
@@ -221,7 +232,9 @@ export class ChannelPointsRuntime {
     if (this.d.effects && (await this.d.effects.handle(req, res, url)))
       return true;
     const rb = url.pathname.startsWith('/api/random-ban');
-    if (!url.pathname.startsWith('/api/channel-points') && !rb) return false;
+    const sw = url.pathname.startsWith('/api/sub-wheel');
+    if (!url.pathname.startsWith('/api/channel-points') && !rb && !sw)
+      return false;
     const reply = (status: number, body: unknown) => {
       res.writeHead(status, {
         'content-type': 'application/json',
@@ -239,7 +252,16 @@ export class ChannelPointsRuntime {
       return true;
     }
     try {
-      if (rb)
+      if (sw)
+        reply(
+          200,
+          await this.subWheel.api(
+            req.method ?? 'GET',
+            url.pathname.slice('/api/sub-wheel'.length),
+            () => this.body(req),
+          ),
+        );
+      else if (rb)
         reply(
           200,
           await this.randomBan.api(

@@ -13,6 +13,7 @@ import {
   RANDOM_BAN_PHRASES,
   RANDOM_BAN_VIDEO_VOLUME,
   type RandomBanAnimationId,
+  SUB_WHEEL_MEDIA,
 } from '@raptoru/schemas';
 import type { AlertMediaStore } from '../alerts/media-store.js';
 
@@ -62,7 +63,7 @@ type Presentation = {
 
 interface Delivery {
   delivery_id: string;
-  kind: 'sound' | 'video' | 'wbrb' | 'ban' | 'flop';
+  kind: 'sound' | 'video' | 'wbrb' | 'ban' | 'flop' | 'wheel';
   /** Catalogue id (the page groups the plays of one video for its ducking). */
   effect_id: string;
   label: string;
@@ -74,6 +75,8 @@ interface Delivery {
   images: { screen: string; cam: string } | null;
   /** Random Ban: what the page shows (the ban layer, or the flop text). */
   ban: Record<string, unknown> | null;
+  /** Roue du Sub: the recorded spin (result decided by Core) and the wheel sounds. */
+  wheel: Record<string, unknown> | null;
   player: string | null;
   started: boolean;
   onStart: (ok: true | EffectError) => void;
@@ -84,6 +87,8 @@ interface Delivery {
 const PLAYER_FILES: Record<string, string> = {
   'player.html': 'text/html; charset=utf-8',
   'player.js': 'text/javascript; charset=utf-8',
+  // Roue du Sub: the legacy wheel (module imported by player.js; part of the page version).
+  'wheel.js': 'text/javascript; charset=utf-8',
 };
 const MEDIA_TYPES: Record<string, string> = {
   '.ogg': 'audio/ogg',
@@ -117,6 +122,12 @@ const CATALOGUE: {
     file: m.file,
   })),
   ...RANDOM_BAN_MEDIA.map((m) => ({
+    kind: 'interaction' as const,
+    id: m.id,
+    label: m.label,
+    file: m.file,
+  })),
+  ...SUB_WHEEL_MEDIA.map((m) => ({
     kind: 'interaction' as const,
     id: m.id,
     label: m.label,
@@ -228,11 +239,13 @@ export class EffectsPlayer {
 
   /** Media of the native interactions, imported or not. */
   interactionMedia() {
-    return [...INTERACTION_MEDIA, ...RANDOM_BAN_MEDIA].map((m) => ({
-      id: m.id,
-      label: m.label,
-      available: this.d.media.path(m.file) !== null,
-    }));
+    return [...INTERACTION_MEDIA, ...RANDOM_BAN_MEDIA, ...SUB_WHEEL_MEDIA].map(
+      (m) => ({
+        id: m.id,
+        label: m.label,
+        available: this.d.media.path(m.file) !== null,
+      }),
+    );
   }
 
   /** The video catalogue with each video's availability in Studio's storage. */
@@ -260,7 +273,19 @@ export class EffectsPlayer {
           trigger: string;
           banned: string;
         }
-      | { kind: 'flop'; trigger: string },
+      | { kind: 'flop'; trigger: string }
+      | {
+          kind: 'wheel';
+          spin: {
+            name: string;
+            type: 'sub' | 'resub';
+            tier: 1 | 2 | 3;
+            months: number;
+            layout: { val: number; mult: number }[];
+            segment: number;
+            amount: number;
+          };
+        },
   ) {
     const anim =
       effect.kind === 'ban'
@@ -274,11 +299,19 @@ export class EffectsPlayer {
           ? CATALOGUE.find((c) => c.id === anim!.media)
           : effect.kind === 'flop'
             ? CATALOGUE.find((c) => c.id === RANDOM_BAN_FLOP.media)
-            : CATALOGUE.find(
-                (c) => c.kind === effect.kind && c.id === effect.id,
-              );
+            : effect.kind === 'wheel'
+              ? CATALOGUE.find((c) => c.id === 'sw-incr')
+              : CATALOGUE.find(
+                  (c) => c.kind === effect.kind && c.id === effect.id,
+                );
     if (!item) throw new EffectError('effect_unknown');
     if (!this.d.media.path(item.file))
+      throw new EffectError('effect_media_missing');
+    // The wheel needs its two sounds.
+    if (
+      effect.kind === 'wheel' &&
+      SUB_WHEEL_MEDIA.some((m) => !this.d.media.path(m.file))
+    )
       throw new EffectError('effect_media_missing');
     const video = EFFECT_VIDEOS.find((v) => v.id === item.id);
     const presentation: Presentation | null =
@@ -327,6 +360,13 @@ export class EffectsPlayer {
               scale_y: RANDOM_BAN_FLOP.scaleY,
             }
           : null;
+    const wheel: Delivery['wheel'] =
+      effect.kind === 'wheel'
+        ? {
+            spin: effect.spin,
+            sounds: { incr: 'media/sw-incr', fin: 'media/sw-fin' },
+          }
+        : null;
     let end!: Promise<EffectEnd>;
     const started = new Promise<true | EffectError>((onStart) => {
       end = new Promise<EffectEnd>((onEnd) => {
@@ -344,10 +384,13 @@ export class EffectsPlayer {
                 ? RANDOM_BAN_VIDEO_VOLUME
                 : effect.kind === 'flop'
                   ? RANDOM_BAN_FLOP.volume
-                  : Math.min(100, Math.max(0, effect.volume)) / 100,
+                  : effect.kind === 'wheel'
+                    ? 1
+                    : Math.min(100, Math.max(0, effect.volume)) / 100,
           presentation,
           images,
           ban,
+          wheel,
           player: null,
           started: false,
           onStart,
@@ -448,6 +491,7 @@ export class EffectsPlayer {
             }
           : {}),
         ...(x.ban ? { ban: x.ban } : {}),
+        ...(x.wheel ? { wheel: x.wheel } : {}),
       });
     }
     return out;

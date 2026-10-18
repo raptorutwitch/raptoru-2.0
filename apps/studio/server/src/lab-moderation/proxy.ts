@@ -30,6 +30,8 @@ const PREFIXES = [
   '/v1/lab/channel-points/',
   // Random Ban V2: state, Studio tests, the animations (claim / report).
   '/v1/lab/random-ban/',
+  // Roue du Sub: state, switch, tests, animations, reconciliation of the pending gains.
+  '/v1/lab/sub-wheel/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

@@ -71,7 +71,7 @@ fusionner / remplacer. « Twitch » = état de la récompense sur Twitch (ON / O
 | Arrêteuh (1500) | OFF | SAMMI ID17 (son) | son « Karma — Arrêteuh » importé, pas de règle | **C** | règle si la récompense revient |
 | Test Lab (100) | ON | — (récompense de test d'Antoni) | scène « Waiting screen » ; vraie redemption validée 17/10 | **B** | supprimer de Twitch après le cutover |
 | Hello (100) | OFF | — | son Soundboard, règle ON (tests Studio) | **C** | décision : garder ? |
-| Ban aléatoire (3000) | ON | SAMMI ID56 « RB PDC » (timeout, animation, son) | **Random Ban V2 développé** (18/10, `docs/RANDOM_BAN_V2.md`) : tirage, timeout LeCroupier\_, animations historiques ; non validé | **C** | Antoni : réautoriser LeCroupier\_ (`moderator:manage:banned_users`) et raptoru\_ (`moderation:read`), puis animation dans OBS, tirage à blanc, test réel contrôlé |
+| Ban aléatoire (3000) | ON | SAMMI ID56 « RB PDC » (timeout, animation, son) | **Random Ban V2 validé en réel** (18/10, `docs/RANDOM_BAN_V2.md` : vraie redemption, timeout confirmé par LeCroupier\_, animation CSC dans OBS) | **B** | cutover (bouton SAMMI ID56 à couper) |
 | Choisi la prochaine musique ! (1000) | ON | SAMMI Spotify → `sammi-bridge` 127.0.0.1:9567 | rien | **E** | lot « Spotify » |
 | Skip la musique (2000) | OFF | SAMMI ID50 → 9567 | rien | **E** | lot « Spotify » (ou supprimer) |
 | TTS (1000), Soundboard (1000) | ON | **aucun bouton SAMMI** : probablement l'Extension / EBS legacy (non prouvé) | TTS V2 / Soundboard V2 (Extension) | **D** | vérifier qui les traite ; fusion avec l'Extension au cutover |
@@ -93,7 +93,7 @@ interrupteur des automatisations **OFF** au 18/10 (12:15).
 | Domaine | Production aujourd'hui | Raptoru 2.0 | Cat. |
 | --- | --- | --- | --- |
 | Alertes follow / sub / gifts / bits / raid / don | SAMMI (ID_FOLLOW, ID1, ID39, ID_SUBGIFT_TARGETED, ID_BITS_ALERT) → source « Alerte Twitch » + `alertes_server.js` (port 3001, tourne) ; dons StreamElements | Alertes V1 : rendu, files, calibrages **validés OBS** ; vrais événements en TEST ; bot de production non raccordé | **D** |
-| Roue des subs (crédit de Jetons) | SAMMI ID1 → StreamElements | rien (RET-ECO-007, économie) | **E** |
+| Roue des subs (crédit de Jetons) | SAMMI ID1 → StreamElements | **Roue du Sub migrée techniquement** (18/10, `docs/SUB_WHEEL.md`) : roue historique sur le lecteur d'effets, tirage et gain enregistrés par Core ; **OFF**, non validée OBS ; gains « en attente d'attribution » (économie à raccorder) | **D** |
 | Soundboard, TTS, Bonk (Extension) | Extension publiée → EBS `raptoru.fr/api` → déclencheurs SAMMI (`RAPTORU_EXT_SOUNDBOARD_V2`, `RAPTORU_EXT_TTS_V2`, `RAPTORU_EXT_BONK_V3`) | V2 validés Lab + staging (07/10), Bonk VNext validé Lab | **D** |
 | `!tts` (jetons), `!bonk` (jetons) | SAMMI → StreamElements | via l'Extension seulement ; paiement réel non branché | **E** (économie) |
 | Tombola (`!join`, tirage, paiement) | SAMMI + EBS legacy + StreamElements | Tombola V2 validée Lab + staging | **D** |

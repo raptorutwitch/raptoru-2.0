@@ -11,6 +11,7 @@ import {
   EFFECT_VIDEOS,
   INTERACTION_MEDIA,
   RANDOM_BAN_MEDIA,
+  SUB_WHEEL_MEDIA,
 } from '@raptoru/schemas';
 import { AlertMediaStore } from '../alerts/media-store.js';
 import { paths } from '../test-lab/local-env.js';
@@ -40,6 +41,11 @@ const entries = [
   ...RANDOM_BAN_MEDIA.map((m) => ({
     name: m.file,
     from: join(m.from === 'downloads' ? downloadsFrom : videosFrom, m.file),
+  })),
+  // Roue du Sub: the two mp3 of the legacy wheel (same overlay folder as Alerte_system.html).
+  ...SUB_WHEEL_MEDIA.map((m) => ({
+    name: m.file,
+    from: join(videosFrom, m.file),
   })),
 ];
 console.table(await store.import(entries));

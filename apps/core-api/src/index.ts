@@ -79,6 +79,8 @@ createApp({
   channelPoints: core.channelPoints,
   // Random Ban V2: the paired Studio (state, tests, animations) and the bot (Twitch executor).
   randomBan: core.randomBan,
+  // Roue du Sub: OFF by default; gains recorded, never credited automatically.
+  subWheel: core.subWheel,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
   db,

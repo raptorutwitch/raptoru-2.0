@@ -12,6 +12,7 @@ import {
   statusView,
 } from './channel-points-view.js';
 import { mountRandomBan } from './random-ban.js';
+import { mountSubWheel } from './sub-wheel.js';
 
 // Points de chaîne V1 — Studio tab (docs/CHANNEL_POINTS_V1.md). Twitch rewards (left), the local rule of the selected
 // reward (right: ordered actions, typed fields, suggestions read from OBS), the history (below). The master switch is
@@ -73,11 +74,13 @@ export function mountChannelPoints(root: HTMLElement) {
     </div>
     <h2>Historique</h2><div data-role="history"></div>
     <h2>Random Ban</h2><div data-role="random-ban"></div>
+    <h2>Roue du Sub</h2><div data-role="sub-wheel"></div>
     <datalist id="cp-scenes"></datalist><datalist id="cp-sources"></datalist><datalist id="cp-filters"></datalist>
   </section>`;
   const $ = (role: string) =>
     root.querySelector<HTMLElement>(`[data-role="${role}"]`)!;
   const randomBan = mountRandomBan($('random-ban'));
+  const subWheel = mountSubWheel($('sub-wheel'));
 
   const reward = () => state?.rewards.find((r) => r.id === selected) ?? null;
   /** The saved rule reads the viewer's text (FX Cam, Couleur Cam): the suggestions of its test field, else null. */
@@ -432,9 +435,11 @@ export function mountChannelPoints(root: HTMLElement) {
       if (!visible) return;
       void load();
       void randomBan.load();
+      void subWheel.load();
       timer = window.setInterval(() => {
         void load();
         void randomBan.load();
+        void subWheel.load();
       }, 3000);
     },
   };

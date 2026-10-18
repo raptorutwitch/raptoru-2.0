@@ -46,6 +46,8 @@ import { alertsRoutes } from './alerts-routes.js';
 import { channelPointsRoutes } from './channel-points-routes.js';
 import { randomBanRoutes } from './random-ban-routes.js';
 import type { RandomBanService } from '../random-ban/service.js';
+import { subWheelRoutes } from './sub-wheel-routes.js';
+import type { SubWheelService } from '../sub-wheel/service.js';
 import type { ChannelPointsService } from '../channel-points/service.js';
 import type { AlertsService } from '../alerts/service.js';
 import {
@@ -105,6 +107,8 @@ export interface AppDeps {
   channelPoints?: ChannelPointsService;
   /** Random Ban V2: /v1/studio/random-ban/* and /v1/bot/random-ban/* (same conditions as the channel points). */
   randomBan?: RandomBanService;
+  /** Roue du Sub: /v1/studio/sub-wheel/* and the wheel side of the alerts reception (same conditions as alerts). */
+  subWheel?: SubWheelService;
   /** Readiness probe (GET /ready): the database answers. */
   db?: Pick<Db, 'query'>;
   /**
@@ -198,6 +202,7 @@ function routes({
   alerts,
   channelPoints,
   randomBan,
+  subWheel,
   db,
   labRoutes = true,
   ext,
@@ -212,7 +217,10 @@ function routes({
         )
       : []),
     ...(studioInstallations && alerts && cockpit?.channelId
-      ? alertsRoutes(alerts, { channelId: cockpit.channelId })
+      ? alertsRoutes(alerts, { channelId: cockpit.channelId }, subWheel)
+      : []),
+    ...(studioInstallations && alerts && subWheel && cockpit?.channelId
+      ? subWheelRoutes(subWheel, alerts, { channelId: cockpit.channelId })
       : []),
     ...(studioInstallations && channelPoints && cockpit?.channelId
       ? channelPointsRoutes(channelPoints, { channelId: cockpit.channelId })

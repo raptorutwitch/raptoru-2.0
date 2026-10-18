@@ -896,7 +896,7 @@ récompenses doivent être recréées par l'app Raptoru (`channel:manage:redempt
 (`RANDOM_BAN_V2.md`) : migration `20261026130000_random_ban.sql` avec le Core de production ; l'exécuteur Twitch
 (timeouts) ne tourne aujourd'hui que dans l'adaptateur du Lab — le raccorder au bot de production (routes
 `/v1/bot/random-ban` prêtes) ; droits `moderator:manage:banned_users` (LeCroupier\_) et `moderation:read`
-(raptoru\_) ; couper les boutons SAMMI ID56 (récompense) et, au cutover économique, ID74 (`!rb`).
+(raptoru\_) ; couper les boutons SAMMI ID56 (récompense) et, au cutover économique, ID74 (`!rb`). Roue du Sub (`SUB_WHEEL.md`) : migration `20261027130000_sub_wheel.sql` ; bouton SAMMI ID1 désactivé **avant** l'interrupteur Raptoru ; gains « en attente » **rapprochés** (crédits manuels / StreamElements) avant tout adaptateur économique, jamais crédités automatiquement.
 
 1. **Autorisation** (faite le 17/10/2026 pour le Lab) : `CHANNEL_POINTS_EVENTS=true` puis `twitch:auth -- --broadcaster` (raptoru\_, lecture seule
    `channel:read:redemptions`) ; aucun droit de gestion (Twitch ne laisse gérer que les récompenses créées par l'app).
