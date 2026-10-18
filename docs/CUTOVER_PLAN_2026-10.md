@@ -879,7 +879,9 @@ Détail (niveaux de preuve, fichiers, routes, schéma, modes) : `TWITCH_ALERTS_P
 Statut : **développement terminé, validations fonctionnelles Lab réussies (17/10/2026), prêt pour la préparation du
 cutover, non déployé** ; SAMMI exécute les récompenses de production. Détail : `CHANNEL_POINTS_V1.md`. Sons d'effet
 (lecteur d'effets P0.1, validé dans OBS le 17/10/2026, `EFFECTS_PLAYER.md`) : la source navigateur du lecteur d'effets
-ajoutée par Antoni fait partie de la collection à conserver au cutover.
+ajoutée par Antoni fait partie de la collection à conserver au cutover. FX Cam (`EFFECTS_PLAYER.md` § 11) : désactiver le
+bouton SAMMI « FX CAM » (ID12) ; le minuteur « FX JANITOR » (ID26) peut rester (il n'agit que sur ses compteurs) ; la
+commande `!fx` en jetons (ID19, StreamElements) reste à SAMMI jusqu'à la migration de l'économie.
 
 1. **Autorisation** (faite le 17/10/2026 pour le Lab) : `CHANNEL_POINTS_EVENTS=true` puis `twitch:auth -- --broadcaster` (raptoru\_, lecture seule
    `channel:read:redemptions`) ; aucun droit de gestion (Twitch ne laisse gérer que les récompenses créées par l'app).

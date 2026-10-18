@@ -31,7 +31,11 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 const RewardId = z.string().regex(/^[A-Za-z0-9-]{1,128}$/);
-const TestRequest = z.strictObject({ reward_id: RewardId });
+const TestRequest = z.strictObject({
+  reward_id: RewardId,
+  /** The viewer's text to simulate (FX Cam: the effect name). */
+  user_input: z.string().max(500).optional(),
+});
 
 export function channelPointsRoutes(
   cp: ChannelPointsService,
@@ -94,7 +98,7 @@ export function channelPointsRoutes(
       handle: ({ params, body }) =>
         mapped(async () => {
           const ch = channel(params[0]!);
-          const { reward_id } = parse(TestRequest, body);
+          const { reward_id, user_input } = parse(TestRequest, body);
           const reward = (await cp.rewards(ch)).find((r) => r.id === reward_id);
           if (!reward) throw new CpError(404, 'unknown_reward');
           return cp.receive({
@@ -103,6 +107,7 @@ export function channelPointsRoutes(
             redemption_id: `test-${randomUUID()}`,
             reward: { id: reward.id, title: reward.title, cost: reward.cost },
             user: { id: ch, login: 'studio', display_name: 'Test Studio' },
+            ...(user_input ? { user_input } : {}),
             redeemed_at: new Date().toISOString(),
           });
         }),

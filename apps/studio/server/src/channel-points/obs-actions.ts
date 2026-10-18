@@ -115,6 +115,11 @@ export class ObsActions {
     return String(r.currentProgramSceneName ?? r.sceneName ?? '');
   }
 
+  /** Whether a source's filter is enabled now (native interactions: FX Cam). */
+  async filterEnabled(source: string, filter: string) {
+    return this.read(this.connected(), { kind: 'filter', source, filter });
+  }
+
   /** Restarts a media input from its beginning (native interactions). */
   async restartMedia(input: string) {
     await this.connected()

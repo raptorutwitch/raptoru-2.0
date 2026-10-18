@@ -99,11 +99,11 @@ lecteur OBS, sa modération) · OBS : tâche reprise par **Studio** (seul à par
 | ------------------------------------------------------------ | -------------------------------------- | ----------------------------------------------------------------------------- |
 | Eren cri, Tiens bon !, Arrêteuh, Bzez, Skyzz, Seigneur Percé | joue un fichier son local              | **son** — à condition d'ajouter ces sons à la banque du Soundboard (non fait) |
 | Creepy                                                       | source OBS « Prowler Effect » + son    | **source temporaire + son**                                                   |
-| Be Right Back                                                | scène + coupe micro / musique          | **scène** (couper le son : plus tard)                                         |
+| Be Right Back                                                | scène + coupe micro / musique          | **interaction native BRB** (validée OBS 18/10, `EFFECTS_PLAYER.md` § 10)      |
 | Couleur Overlay                                              | affiche une couleur, masque les autres | **sources** (jusqu'à 5 actions ; à valider)                                   |
 | ntm                                                          | requête OBS websocket                  | à identifier (probablement source / filtre)                                   |
 | Couleur Cam                                                  | règle la teinte d'un filtre            | plus tard (valeurs de filtre)                                                 |
-| FX cam                                                       | service local 127.0.0.1:17371 + OBS    | plus tard (service inconnu)                                                   |
+| FX cam                                                       | filtre shader OBS 10 s (+ bridge mort) | **interaction native FX Cam** (non validée OBS, `EFFECTS_PLAYER.md` § 11)     |
 | Cash-In                                                      | conversion en jetons (StreamElements)  | plus tard (Wallet)                                                            |
 | Skip la musique, Choisi la prochaine musique !               | Spotify (`sammi-bridge`, 9567)         | plus tard (Spotify)                                                           |
 | Ban aléatoire                                                | timeout d'un viewer au hasard          | plus tard (modération ludique)                                                |

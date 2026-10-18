@@ -1,6 +1,8 @@
 // Points de chaîne V1 — Studio tab, pure part (tested): readable statuses, reward list, history. Every Twitch text
 // (reward titles, viewer names, inputs) is untrusted and escaped. No JSON, no ids shown.
 
+import { FX_CAM } from '@raptoru/schemas';
+
 export type CpActionView =
   | { type: 'sound'; sound_id: string }
   | { type: 'effect_sound'; sound_id: string; volume: number }
@@ -20,11 +22,16 @@ export type CpActionView =
       duration_ms?: number;
     }
   | { type: 'obs_scene'; scene: string; duration_ms?: number }
-  | { type: 'interaction'; interaction: 'creepy' | 'brb' };
+  | {
+      type: 'interaction';
+      interaction: 'creepy' | 'brb' | 'fx_cam';
+      /** fx_cam: the effect Core resolved from the viewer's text. */
+      effect?: string;
+    };
 
 /** The native interactions (written in Studio's code: nothing to configure but the reward). */
 export const INTERACTIONS: Record<
-  'creepy' | 'brb',
+  'creepy' | 'brb' | 'fx_cam',
   { label: string; description: string }
 > = {
   creepy: {
@@ -36,6 +43,10 @@ export const INTERACTIONS: Record<
     label: 'BRB',
     description:
       'Comme SAMMI : capture de l’écran puis de la caméra, animation « We’ll be right back » par-dessus, micro et « Musique Isolée » coupés 6 s puis rétablis. Seulement depuis Dessin, Fullscreen ou PS5 ; un seul BRB à la fois ; nécessite le lecteur d’effets.',
+  },
+  fx_cam: {
+    label: 'FX Cam',
+    description: `Comme SAMMI : le viewer écrit le nom d’un effet ; son filtre OBS (shader) sur « ${FX_CAM.source} » est activé ${FX_CAM.durationMs / 1000} s puis désactivé. Effets reconnus (majuscules et espaces ignorés) : ${FX_CAM.effects.join(', ')}. Seulement depuis Dessin ou Fullscreen ; le même effet déjà actif est refusé, des effets différents se cumulent.`,
   },
 };
 
@@ -151,6 +162,7 @@ const ERRORS: Record<string, string> = {
   playback_error: 'erreur pendant la lecture',
   start_timeout: 'lecture non démarrée',
   creepy_no_sound: 'Creepy exécuté sans son (lecteur d’effets indisponible)',
+  fx_cam_unknown: `effet inconnu (effets : ${FX_CAM.effects.join(', ')}) — aucun remboursement possible : récompense créée par SAMMI`,
 };
 const PROGRESS = {
   queued: 'en attente du lecteur Soundboard',
@@ -188,7 +200,9 @@ export function actionLabel(
         ? `Passer sur la scène « ${a.scene} »${seconds(a.duration_ms)}, puis revenir`
         : `Passer sur la scène « ${a.scene} »`;
     case 'interaction':
-      return `Interaction « ${INTERACTIONS[a.interaction]?.label ?? a.interaction} »`;
+      return a.interaction === 'fx_cam' && a.effect
+        ? `FX Cam « ${a.effect} »`
+        : `Interaction « ${INTERACTIONS[a.interaction]?.label ?? a.interaction} »`;
   }
 }
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { EffectSoundId, EffectVideoId, EffectVolume } from './effects.js';
+import { FxCamEffectId } from './fx-cam.js';
 import { SoundLabSoundId } from './sound-lab.js';
 
 // Points de chaîne V1 (17/10/2026) — Twitch channel points custom rewards → Core rules → typed, allow-listed actions.
@@ -17,7 +18,7 @@ const ObsName = z.string().trim().min(1).max(256);
 const DurationMs = z.number().int().min(500).max(600_000);
 
 /** The native interactions Studio knows (each one fully written in code). */
-export const CpInteractionId = z.enum(['creepy', 'brb']);
+export const CpInteractionId = z.enum(['creepy', 'brb', 'fx_cam']);
 export type CpInteractionId = z.infer<typeof CpInteractionId>;
 
 /** The allow-list of V1 actions. Nothing else can ever be executed (no script, no system command). */
@@ -64,11 +65,14 @@ export const CpAction = z.discriminatedUnion('type', [
   }),
   /**
    * A native interaction, written in Studio's code with its legacy parameters (P0.2): nothing to assemble. `creepy`:
-   * the SAMMI « Creepy » reward (docs/EFFECTS_PLAYER.md § 9); `brb`: « Be Right Back » (§ 10).
+   * the SAMMI « Creepy » reward (docs/EFFECTS_PLAYER.md § 9); `brb`: « Be Right Back » (§ 10); `fx_cam`: « FX cam »
+   * (§ 11).
    */
   z.strictObject({
     type: z.literal('interaction'),
     interaction: CpInteractionId,
+    /** fx_cam only: set by Core from the viewer's text at reception (a rule's value is overwritten). */
+    effect: FxCamEffectId.optional(),
   }),
 ]);
 export type CpAction = z.infer<typeof CpAction>;

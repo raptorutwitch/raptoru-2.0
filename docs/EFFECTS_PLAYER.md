@@ -230,7 +230,11 @@ comparer avec le bouton SAMMI.
 
 ## 10. BRB dans Raptoru (P0.2 C3)
 
-**Statut : DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS.**
+**Statut : BRB — DÉVELOPPEMENT TERMINÉ / TESTS AUTOMATISÉS RÉUSSIS / VALIDATION FONCTIONNELLE OBS RÉUSSIE / NON
+DÉPLOYÉ** (code `72062a3` + correctif `31d82ef`). Validé manuellement par Antoni dans son vrai OBS le 18/10/2026,
+après actualisation de la source du lecteur d'effets : fonctionnel. Réserve non bloquante : **légère latence ressentie
+au démarrage**, à examiner lors de l'audit global (interaction volontairement non modifiée). Pas encore de vraie
+récompense Twitch (automatisations OFF).
 
 Interaction native **« BRB »** (règle `{ type: 'interaction', interaction: 'brb' }` : « Interaction native » → « BRB »).
 Code : `apps/studio/server/src/interactions/brb.ts`.
@@ -288,3 +292,101 @@ SAMMI (cadrage des captures, timing, son).
 - **Manipulation unique** : actualiser une fois la source navigateur du lecteur d'effets dans OBS (clic droit ›
   Actualiser, ou Propriétés › « Actualiser le cache de la page actuelle »). Ensuite, chaque mise à jour de Studio est
   prise automatiquement.
+
+## 11. FX Cam dans Raptoru (P0.2 C4)
+
+**Statut : FX CAM — DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS / NON DÉPLOYÉ.**
+
+Interaction native **« FX Cam »** (règle `{ type: 'interaction', interaction: 'fx_cam' }` : « Interaction native » →
+« FX Cam » ; rien d'autre à régler). Code : `packages/schemas/src/fx-cam.ts` (liste et lecture du texte),
+`apps/core-api/src/channel-points/service.ts` (résolution à la réception), `apps/studio/server/src/interactions/fx-cam.ts`.
+
+### Ce que fait SAMMI (lecture seule du 18/10/2026)
+
+- Récompense Twitch **« FX cam »** (500 points, saisie obligatoire, invite « Effets dispo : prison, bighead, pixel,
+  drunk, glitch, rage », id `8f0be3cc-d1be-4038-b8e6-851bf8b48b86`) → bouton **ID12 « FX CAM »** (deck « Points de
+  chaine », en file). Le bouton « ID12ancien » a toutes ses commandes désactivées.
+- Texte : variable `message` de la récompense → minuscules → espaces autour retirés → cherché tel quel dans
+  `|prison|bighead|pixel|drunk|glitch|rage|`. Aucun alias.
+- Scène : seulement « Scène Dessin » ou « Scène Fullscreen » ; sinon remboursement + « Y'a pas de cam là... ».
+- Inconnu : remboursement + « Effet inconnu. Effets dispo : prison, bighead, pixel, drunk, glitch, rage ».
+- Même effet déjà actif (son compteur > 0) : remboursement + « Cet effet est déjà actif, tes points t'ont été
+  remboursés ! ». **Effets différents cumulables** (un compteur par effet).
+- Sinon : compteur de l'effet à 100, filtre `<effet>` activé sur **« overlay cam shushu »** (une scène : ses filtres),
+  récompense validée (FULFILLED). Pour `rage` seulement : `GET http://127.0.0.1:17371/shushu?expression=rage`.
+- Fin : bouton **ID26 « FX JANITOR »** (minuteur 100 ms) décrémente chaque compteur et désactive le filtre quand il
+  atteint 1 → **≈ 10 s** (100 × 100 ms ; un minuteur SAMMI peut être un peu plus lent). Aucun son, aucun overlay.
+- **Bridge Shushu (port 17371)** : petit serveur (`shushu_bridge_server_v3.js`) qui ne fait que mettre des commandes en
+  file pour une page qui viendrait les lire. La page réellement chargée dans OBS
+  (`Overlay de Cam/shushu_overlay_obs_v3.html`) **ne l'interroge pas** (aucune requête réseau), et rien n'écoutait sur
+  17371 le 18/10. Le seul effet de cet appel était donc nul : **non repris** (aucune dépendance réelle).
+- Filtres OBS (obs-shaderfilter, code en ligne, tous désactivés au repos) et animation propre à chaque shader sur
+  `elapsed_time_enable` (remis à 0 à chaque activation), entrée / maintien / sortie :
+
+  | Effet   | Entrée | Maintien | Sortie | Fin    |
+  | ------- | ------ | -------- | ------ | ------ |
+  | prison  | 0,75 s | 8 s      | 0,6 s  | 9,35 s |
+  | bighead | 0,45 s | 8 s      | 0,45 s | 8,9 s  |
+  | pixel   | 0,35 s | 8 s      | 0,45 s | 8,8 s  |
+  | drunk   | 0,45 s | 8 s      | 0,55 s | 9 s    |
+  | glitch  | 0,18 s | 8 s      | 0,35 s | 8,53 s |
+  | rage    | 0,25 s | 8 s      | 0,45 s | 8,7 s  |
+
+  Après sa fin, chaque shader rend la caméra intacte. « mute », « Votekick Zoom », « Votekick Mute » (autres modules)
+  ne font **pas** partie de FX Cam.
+
+### Dans Raptoru
+
+- **Parcours du texte** : EventSub `user_input` → bot (`channel-points-events.ts`, texte brut ≤ 500) → Core
+  `receive` : la redemption (dédoublonnée par son id Twitch) garde le texte brut pour l'historique ; l'action est figée
+  avec l'effet résolu (`resolveFxCam` : minuscules, **tous** les espaces retirés — « Big Head » = bighead) → job Studio
+  avec **seulement l'identifiant** de l'effet (jamais le texte du viewer) → `FxCam` → `SetSourceFilterEnabled`.
+  Chaque redemption a sa propre action figée : plusieurs demandes simultanées ne se mélangent pas.
+- **Inconnu / vide / autre filtre** (« mute », « Votekick Zoom », « pixel|drunk »…) : refusé **par Core**, rien n'est envoyé
+  à Studio (historique : « effet inconnu (effets : …) — aucun remboursement possible : récompense créée par SAMMI »).
+  Seul un nom de la liste peut cibler un filtre ; aucun code ni nom de filtre ne vient du viewer.
+- **Activation** : filtre activé `FX_CAM.durationMs` = **10 s** (comme SAMMI) par l'action temporaire `obs_filter`
+  existante (mécanisme de retour `obs-reverts.json`) : désactivé à la fin **seulement s'il est encore actif** (une
+  désactivation manuelle est conservée), après un redémarrage de Studio ou au retour d'OBS. Toutes les animations de
+  sortie sont finies avant (≤ 9,35 s) : rien n'est coupé.
+- **Concurrence** : comme SAMMI — même effet en cours refusé tout de suite (« FX « rage » déjà actif ») ; effet déjà
+  actif dans OBS (allumé à la main, ou resté actif pendant un redémarrage de Studio) refusé sans le toucher ; effets
+  différents cumulés, chacun s'arrête à sa propre fin.
+- **Scène** : « Scène Dessin » ou « Scène Fullscreen » ; sinon rien (« FX Cam refusé : pas de caméra sur la scène … »).
+- **Erreurs lisibles** : OBS non connecté, filtre introuvable (« le filtre « rage » de « overlay cam shushu » introuvable
+  dans OBS »), OBS perdu pendant l'effet (« joué ; filtre désactivé au retour d'OBS »).
+- **Ajouter un effet** : créer le filtre dans OBS sur « overlay cam shushu », puis ajouter son nom à `FX_CAM.effects`.
+
+Écarts avec SAMMI :
+
+- **Remboursements et messages chat** (inconnu, déjà actif, mauvaise scène) : impossibles tant que la récompense
+  appartient à SAMMI — même règle que BRB (§ 10) ; refus enregistrés avec leur raison.
+- Appel au bridge Shushu non repris (sans effet aujourd'hui, voir ci-dessus).
+- Durée : 10 s exactes (SAMMI ≈ 10 s, selon la cadence de son minuteur).
+- Espaces internes ignorés (SAMMI refusait « big head ») ; « pixel|drunk » refusé (SAMMI l'aurait accepté puis activé
+  un filtre inexistant).
+
+### Commande chat `!fx` (jetons) — non migrée
+
+SAMMI bouton **ID19 « FX CAM (jetons) »** : `!fx` seul → « Pour jouer un effet cam : !fx [effet] pour 2500 jetons. FX :
+… » ; `!fx <effet>` → même liste et mêmes compteurs que la récompense (mais **sans condition de scène** et sans le
+bridge) ; déjà actif → « aucun jeton retiré » ; solde lu puis **2500 jetons débités via l'API points StreamElements**
+(bouton « API_SE ») ; erreur → effet annulé. C'est l'économie historique : **non migrée** (aucun solde touché, aucun
+paiement parallèle, aucun jeton consommé en test). Branchement prévu, sans nouvelle implémentation d'effet : la commande
+(Commands V2 / Core) appellera `resolveFxCam`, débitera 2500 jetons par le Wallet Core (écriture idempotente, au
+cutover économique), puis mettra en file **le même job Studio** `{ interaction: 'fx_cam', effect }` ; le refus
+« déjà actif » devra alors rembourser le débit (ou vérifier avant de débiter). À décider à ce moment-là : garder ou
+non l'absence de condition de scène de SAMMI.
+
+### Validation manuelle (avec accord, Lab)
+
+1. `npm run studio` ; OBS connecté dans Studio.
+2. Onglet « Points de chaîne » → « FX cam » → « + Ajouter une action » → « Interaction native » → « FX Cam » →
+   « Enregistrer ».
+3. Sur « Scène Fullscreen » (ou Dessin) : champ « avec le texte » = `rage` → « Tester » → le shader rage sur la caméra
+   (entrée, ~8 s, sortie), filtre « rage » désactivé ~10 s après dans les filtres de « overlay cam shushu » ;
+   historique « Exécutée ✓ FX Cam « rage » ».
+4. `RAGE` → même résultat ; `feu` → « effet inconnu », rien dans OBS ; `rage` deux fois rapprochées → la 2ᵉ
+   « déjà actif » ; `rage` puis `pixel` → les deux cumulés.
+5. Depuis « Just Chatting » : rien (« FX Cam refusé »).
+6. Comparer avec la récompense SAMMI (durée, rendu).

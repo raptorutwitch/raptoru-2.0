@@ -207,6 +207,46 @@ describe('Points de chaîne views', () => {
     expect(actionLabel({ type: 'interaction', interaction: 'creepy' })).toBe(
       'Interaction « Creepy »',
     );
+    // FX Cam: the effect Core resolved from the viewer's text; the viewer's text itself escaped; unknown readable.
+    expect(actionLabel({ type: 'interaction', interaction: 'fx_cam' })).toBe(
+      'Interaction « FX Cam »',
+    );
+    const fx = historyView({
+      ...base,
+      recent: [
+        {
+          source: 'twitch',
+          redemption_id: 'r1',
+          reward: { title: 'FX cam', cost: 500 },
+          user: { display_name: 'Viewer' },
+          user_input: ' RAGE ',
+          received_at: '2026-10-18T10:00:00.000Z',
+          status: 'done',
+          reason: null,
+          actions: [
+            { type: 'interaction', interaction: 'fx_cam', effect: 'rage' },
+          ],
+          results: [{ index: 0, status: 'done' }],
+        },
+        {
+          source: 'twitch',
+          redemption_id: 'r2',
+          reward: { title: 'FX cam', cost: 500 },
+          user: { display_name: 'Viewer' },
+          user_input: '<b>feu</b>',
+          received_at: '2026-10-18T10:00:01.000Z',
+          status: 'failed',
+          reason: null,
+          actions: [{ type: 'interaction', interaction: 'fx_cam' }],
+          results: [{ index: 0, status: 'failed', error: 'fx_cam_unknown' }],
+        },
+      ],
+    });
+    expect(fx).toContain('✓ FX Cam « rage »');
+    expect(fx).toContain('« &lt;b&gt;feu&lt;/b&gt; »');
+    expect(fx).toContain(
+      '✗ Interaction « FX Cam » — effet inconnu (effets : prison, bighead, pixel, drunk, glitch, rage)',
+    );
     expect(
       actionLabel({
         type: 'obs_scene',

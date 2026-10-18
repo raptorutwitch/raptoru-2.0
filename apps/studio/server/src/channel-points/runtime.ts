@@ -10,6 +10,7 @@ import {
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
 import { Brb } from '../interactions/brb.js';
 import { InteractionError, Interactions } from '../interactions/creepy.js';
+import { FxCam } from '../interactions/fx-cam.js';
 import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 
 // Points de chaîne V1 in Studio (docs/CHANNEL_POINTS_V1.md). Core decides (master switch, rules, dedup, history);
@@ -50,6 +51,7 @@ export class ChannelPointsRuntime {
   /** Native interactions (Creepy…): on this runtime's OBS executor and effects player. */
   readonly interactions: Interactions;
   readonly brb: Brb;
+  readonly fxCam: FxCam;
 
   private constructor(
     private readonly d: ChannelPointsRuntimeDeps,
@@ -57,6 +59,7 @@ export class ChannelPointsRuntime {
   ) {
     this.interactions = new Interactions({ obs, effects: d.effects ?? null });
     this.brb = new Brb({ obs, effects: d.effects ?? null });
+    this.fxCam = new FxCam({ obs });
   }
 
   static async create(d: ChannelPointsRuntimeDeps) {
@@ -146,7 +149,9 @@ export class ChannelPointsRuntime {
           const { end } =
             action.interaction === 'brb'
               ? this.brb.start()
-              : this.interactions.start(action.interaction);
+              : action.interaction === 'fx_cam'
+                ? this.fxCam.start(action.effect)
+                : this.interactions.start(action.interaction);
           ends.push({ index, end });
           results.push({ index, ok: true, playing: true });
           continue;

@@ -9,6 +9,7 @@ import {
   type CpRedemptionStatus,
   type CpRewardsSync,
   type CpRuleInput,
+  resolveFxCam,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
@@ -136,6 +137,20 @@ function overall(results: Result[]): CpRedemptionStatus {
   const ok = results.filter((r) => r.status === 'done').length;
   if (ok === results.length) return 'done';
   return ok === 0 ? 'failed' : 'partial';
+}
+
+/**
+ * FX Cam (docs/EFFECTS_PLAYER.md § 11): the effect the viewer typed, resolved against the allowed list at reception
+ * (none: the action fails here, nothing reaches Studio). Only the resolved id travels: never the viewer's text.
+ */
+function withViewerText(a: CpAction, text: string | undefined): CpAction {
+  if (a.type !== 'interaction' || a.interaction !== 'fx_cam') return a;
+  const effect = resolveFxCam(text);
+  return {
+    type: a.type,
+    interaction: a.interaction,
+    ...(effect ? { effect } : {}),
+  };
 }
 
 /** Actions run by Studio (OBS, effects player); Soundboard sounds are admitted by Core itself. */
@@ -344,15 +359,19 @@ export class ChannelPointsService {
       // Actions frozen at reception (a later edit of the rule never changes this redemption).
       const actions = reason
         ? []
-        : rule!.actions.map((a) => CpActionSchema.parse(a));
-      const results: Result[] = actions.map((a, index) => ({
-        index,
-        type: a.type,
-        status: 'pending',
-      }));
+        : rule!.actions.map((a) =>
+            withViewerText(CpActionSchema.parse(a), e.user_input),
+          );
+      const results: Result[] = actions.map((a, index) =>
+        a.type === 'interaction' && a.interaction === 'fx_cam' && !a.effect
+          ? { index, type: a.type, status: 'failed', error: 'fx_cam_unknown' }
+          : { index, type: a.type, status: 'pending' },
+      );
       const obs = actions
         .map((action, index) => ({ index, action }))
-        .filter((x) => obsAction(x.action));
+        .filter(
+          (x) => obsAction(x.action) && results[x.index]!.status === 'pending',
+        );
       const jobId = obs.length ? randomUUID() : null;
       await q.query(
         `insert into cp_redemptions (channel_id, source, redemption_id, reward_id, reward_title, reward_cost, user_id,
@@ -372,7 +391,7 @@ export class ChannelPointsService {
           e.twitch_status ?? null,
           new Date(e.redeemed_at),
           now,
-          reason ? 'ignored' : 'pending',
+          reason ? 'ignored' : overall(results),
           reason,
           JSON.stringify(actions),
           JSON.stringify(results),

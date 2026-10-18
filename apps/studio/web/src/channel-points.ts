@@ -1,3 +1,4 @@
+import { FX_CAM } from '@raptoru/schemas';
 import {
   actionLabel,
   type CpActionView,
@@ -49,6 +50,8 @@ export function mountChannelPoints(root: HTMLElement) {
   let selected: string | null = null;
   let draft: { enabled: boolean; actions: CpActionView[] } | null = null;
   let message = '';
+  /** « Tester » of an FX Cam reward: the text a viewer would type. */
+  let testInput: string = FX_CAM.effects.at(-1)!;
   let lists: { scenes: string[]; sources: string[]; filters: string[] } = {
     scenes: [],
     sources: [],
@@ -74,6 +77,13 @@ export function mountChannelPoints(root: HTMLElement) {
     root.querySelector<HTMLElement>(`[data-role="${role}"]`)!;
 
   const reward = () => state?.rewards.find((r) => r.id === selected) ?? null;
+  /** The saved rule runs FX Cam (its test takes a viewer text). */
+  const fxCam = (r: CpState['rewards'][number]) =>
+    Boolean(
+      r.rule?.actions.some(
+        (a) => a.type === 'interaction' && a.interaction === 'fx_cam',
+      ),
+    );
 
   const fillLists = () => {
     for (const [id, values] of [
@@ -186,6 +196,12 @@ export function mountChannelPoints(root: HTMLElement) {
         <button type="button" data-act="add"${draft.actions.length >= 5 ? ' disabled' : ''}>+ Ajouter une action</button>
         <button type="button" class="cp-primary" data-act="save">Enregistrer</button>
         <button type="button" data-act="test"${r.rule ? '' : ' disabled'} title="Exécute la règle enregistrée pour de vrai (OBS / Soundboard)">Tester</button>
+        ${
+          fxCam(r)
+            ? `<label class="cp-inline">avec le texte <input data-f="test-input" list="cp-fx-effects" size="10" value="${esc(testInput)}" title="Ce qu’un viewer écrirait (effet inconnu possible)"/></label>
+        <datalist id="cp-fx-effects">${FX_CAM.effects.map((x) => `<option value="${x}"></option>`).join('')}</datalist>`
+            : ''
+        }
       </div>
       <p class="cp-muted" data-role="message">${esc(message)}</p>
       ${r.rule ? `<p class="cp-muted">Enregistré : ${r.rule.actions.map((a) => esc(actionLabel(a, state?.sounds, effectItems(state?.effects)))).join(' → ')}</p>` : ''}`;
@@ -221,8 +237,9 @@ export function mountChannelPoints(root: HTMLElement) {
     }
     // The editor keeps its draft while the list refreshes.
     const editing =
-      root.contains(document.activeElement) &&
-      root.querySelector('.cp-actions')?.contains(document.activeElement);
+      (root.contains(document.activeElement) &&
+        root.querySelector('.cp-actions')?.contains(document.activeElement)) ||
+      document.activeElement?.getAttribute('data-f') === 'test-input';
     if (editing) {
       $('status').innerHTML = statusView(state, error);
       $('history').innerHTML = state ? historyView(state) : '';
@@ -336,7 +353,11 @@ export function mountChannelPoints(root: HTMLElement) {
         )
       )
         return;
-      void post('/test', { reward_id: selected }).then(
+      const r = reward();
+      void post('/test', {
+        reward_id: selected,
+        ...(r && fxCam(r) ? { user_input: testInput } : {}),
+      }).then(
         async () => {
           message = 'Test envoyé : voir l’historique.';
           await load();
@@ -351,9 +372,14 @@ export function mountChannelPoints(root: HTMLElement) {
     renderEditor();
   });
 
+  root.addEventListener('input', (ev) => {
+    const t = ev.target as HTMLInputElement;
+    if (t.dataset.f === 'test-input') testInput = t.value.slice(0, 500);
+  });
+
   root.addEventListener('change', (ev) => {
     const t = ev.target as HTMLInputElement;
-    if (!draft) return;
+    if (!draft || t.dataset.f === 'test-input') return;
     if (t.dataset.f === 'rule-enabled') {
       draft.enabled = t.checked;
       return;
