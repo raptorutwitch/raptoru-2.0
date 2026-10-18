@@ -1,4 +1,4 @@
-/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, clearTimeout, setInterval, AbortSignal, requestAnimationFrame, cancelAnimationFrame, performance, Event */
+/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, clearTimeout, setInterval, AbortSignal, requestAnimationFrame, cancelAnimationFrame, performance, Event, sessionStorage */
 
 // Raptoru effects player (docs/EFFECTS_PLAYER.md) — ONE OBS browser source (1920×1080). Every effect handed by Studio
 // plays at once (effects overlap; Studio caps how many) and reports started → completed / failed / unknown. Nothing is
@@ -25,6 +25,44 @@ let playing = 0;
 let audioEnabled = false;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Stale page (BRB fix, 18/10/2026): Studio answers with the version of the files it serves and hands this page nothing
+ * while it differs. The page then waits until its effects are over and reloads (same URL, token kept; files served
+ * no-store). One reload per new version: if it still comes back old (a cache), it keeps its code (stale_ok) instead of
+ * reloading in a loop.
+ */
+const VERSION =
+  document.querySelector('meta[name="effects-player-version"]')?.content ?? '';
+const RELOAD_KEY = 'effects-player-reloaded-to';
+let staleOk = false;
+let reloading = false;
+const triedReload = (version) => {
+  try {
+    return sessionStorage.getItem(RELOAD_KEY) === version;
+  } catch {
+    return true; // no storage: no guard against a loop, so no automatic reload
+  }
+};
+async function reloadWhenIdle(version) {
+  reloading = true;
+  while (playing > 0 || reports > 0) await sleep(250);
+  try {
+    sessionStorage.setItem(RELOAD_KEY, version);
+  } catch {
+    staleOk = true;
+    reloading = false;
+    return;
+  }
+  location.reload();
+}
+/** A version answer from Studio: reload once if it differs. */
+function checkVersion(version) {
+  if (!version || version === VERSION || staleOk || reloading) return;
+  if (triedReload(version)) staleOk = true;
+  else void reloadWhenIdle(version);
+}
+let reports = 0;
+
 /** Started, end never signalled: released after its duration plus this margin (Studio waits longer). */
 const END_MARGIN_MS = 15_000;
 const START_TIMEOUT_MS = 5000;
@@ -43,8 +81,23 @@ async function call(path, data) {
   if (!response.ok) throw new Error('player_request_failed');
   return response.json();
 }
-const heartbeat = () => call('heartbeat', { audio: audioEnabled });
+const heartbeat = async () => {
+  const reply = await call('heartbeat', {
+    audio: audioEnabled,
+    version: VERSION,
+    stale_ok: staleOk,
+  });
+  checkVersion(reply?.version);
+};
 async function report(effect, event, error) {
+  reports += 1;
+  try {
+    await sendReport(effect, event, error);
+  } finally {
+    reports -= 1;
+  }
+}
+async function sendReport(effect, event, error) {
   // Retry only the report, never the effect.
   for (let n = 0; n < 10; n++) {
     try {
@@ -316,7 +369,11 @@ while (true) {
   try {
     // A silent page takes nothing: Studio sees it muted and refuses the effect with a readable reason.
     if (audioEnabled) {
-      const { effects } = await call('next', {});
+      const { effects, version } = await call('next', {
+        version: VERSION,
+        stale_ok: staleOk,
+      });
+      checkVersion(version);
       // Not awaited: effects overlap; the next ones are fetched right away.
       for (const effect of effects ?? []) void play(effect);
     }

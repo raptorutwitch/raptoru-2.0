@@ -40,7 +40,10 @@ function wav(ms: number) {
   return b;
 }
 
-async function studio(video?: Buffer) {
+async function studio(
+  video?: Buffer,
+  playerDir = join(here, '..', 'effects-player'),
+) {
   const dir = await mkdtemp(join(tmpdir(), 'effects-e2e-'));
   const src = join(dir, 'src');
   await (await import('node:fs/promises')).mkdir(src);
@@ -76,7 +79,7 @@ async function studio(video?: Buffer) {
     dir,
     origin,
     media,
-    playerDir: join(here, '..', 'effects-player'),
+    playerDir,
   });
   return {
     player,
@@ -391,6 +394,48 @@ test.describe('Effects player — BRB layer (as in OBS)', () => {
     } finally {
       await close();
       await s.close();
+    }
+  });
+});
+
+test.describe('Effects player — stale OBS page (BRB fix)', () => {
+  test('the files change while the OBS page runs: it gets nothing, reloads itself once idle, then accepts the real BRB payload', async () => {
+    const { page, close } = await obsLike();
+    await page.goto('about:blank');
+    const video = await recordWebm(page, 1500);
+    const screen = await png(page, 1920, 1080, '#3050a0');
+    const cam = await png(page, 1920, 1080, '#a03050');
+    // A copy of the page files, changed below like a Studio update would.
+    const dir = await mkdtemp(join(tmpdir(), 'effects-page-'));
+    for (const f of ['player.html', 'player.js'])
+      await writeFile(
+        join(dir, f),
+        await (
+          await import('node:fs/promises')
+        ).readFile(join(here, '..', 'effects-player', f)),
+      );
+    const s = await studio(video, dir);
+    try {
+      await page.goto(s.player.url);
+      await connected(s.player, true);
+      expect(s.player.status().current).toBe(true);
+      const loads: number[] = [];
+      page.on('load', () => loads.push(Date.now()));
+      // « Studio update »: the served files are new; the page still runs the old ones.
+      await (
+        await import('node:fs/promises')
+      ).appendFile(join(dir, 'player.js'), '\n// update\n');
+      await expect.poll(() => loads.length, { timeout: 10_000 }).toBe(1);
+      await expect.poll(() => s.player.status().current).toBe(true);
+      // The real payload, from the server to its acceptance by player.js: started, played, ended.
+      const { end } = await s.player.play({ kind: 'wbrb', screen, cam });
+      expect(await page.$$eval('#stage .wbrb', (l) => l.length)).toBe(1);
+      expect(await end).toEqual({ event: 'completed' });
+      expect(loads).toHaveLength(1); // one reload, no loop
+    } finally {
+      await close();
+      await s.close();
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });

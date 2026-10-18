@@ -269,3 +269,22 @@ Interaction native « BRB » → Enregistrer ; depuis « Scène Fullscreen » (o
 l'écran, caméra qui descend, vidéo BRB, micro et « Musique Isolée » coupés ~6 s puis rétablis (mixeur OBS) ; depuis
 « Just Chatting » : rien (historique « BRB refusé ») ; deux Tester rapprochés : le 2ᵉ refusé ; comparer avec le bouton
 SAMMI (cadrage des captures, timing, son).
+
+### Correctif du 18/10/2026 — `invalid_effect` au premier test réel de BRB
+
+- **Cause racine (prouvée)** : la source OBS du lecteur d'effets exécutait encore le `player.js` chargé **avant** BRB
+  (versions NTM / Creepy). Studio avait redémarré avec le nouveau code, mais une source navigateur OBS ne recharge pas sa
+  page quand Studio redémarre : elle continuait d'interroger le nouveau serveur avec l'ancien script, qui ne connaît
+  pas `kind: 'wbrb'` et répond `invalid_effect` avant toute lecture. Rejoué le 18/10 : même serveur, même payload BRB →
+  ancienne page `invalid_effect`, page actuelle `started`. Le payload, le média et le serveur étaient corrects.
+- **« 9 médias »** : c'est le bon compte (7 sons, la vidéo NTM, la vidéo BRB), tous présents et identiques aux
+  originaux ; l'annonce « 10 / 10 » du compte rendu BRB était une erreur de calcul.
+- **Correctif** (mécanisme des Alertes repris tel quel) : la page porte la version de ses fichiers (empreinte de
+  `player.html` + `player.js`, injectée quand elle est servie) dans chaque appel ; Studio ne remet rien à une page d'une
+  autre version, qui se recharge seule dès qu'elle n'a plus d'effet en cours (une seule fois par version, sinon elle
+  garde son code) ; une page sans version (antérieure à ce correctif, comme celle chargée aujourd'hui dans OBS) est
+  refusée avec « lecteur d'effets à recharger » au lieu de `invalid_effect`, et l'onglet affiche « Lecteur d'effets : à
+  recharger ».
+- **Manipulation unique** : actualiser une fois la source navigateur du lecteur d'effets dans OBS (clic droit ›
+  Actualiser, ou Propriétés › « Actualiser le cache de la page actuelle »). Ensuite, chaque mise à jour de Studio est
+  prise automatiquement.

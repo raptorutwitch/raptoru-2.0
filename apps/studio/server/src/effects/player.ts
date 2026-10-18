@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -14,7 +14,12 @@ import type { AlertMediaStore } from '../alerts/media-store.js';
 // page (OBS browser source), outside the Soundboard: no queue, no price, no cooldown, effects overlap. Effect sounds
 // (EFFECT_SOUNDS) and full-frame effect videos with their legacy presentation (EFFECT_VIDEOS, P0.2), media in Studio's
 // storage. BRB (P0.2): the legacy « We'll be right back » layer over two instant OBS captures (screen, camera) held in
-// memory only, served to the page under an unguessable id for the effect's lifetime and dropped at its end. Studio hands each effect to the page that asks
+// memory only, served to the page under an unguessable id for the effect's lifetime and dropped at its end.
+// Stale page (BRB fix, 18/10/2026): an OBS browser source keeps the files it loaded while Studio restarts with new ones
+// (a page from before BRB answered « invalid_effect » to a BRB). The page carries the version of its files (a hash of
+// player.html + player.js, injected when served) in every call; Studio hands nothing to a page of another version — the
+// page reloads itself once idle (alerts player's rule: one reload per version, then it keeps its code: stale_ok) — and a
+// page without a version (older than this check) gets « lecteur d'effets à recharger ». Studio hands each effect to the page that asks
 // first (never two pages), waits for its `started`, then follows its end. Nothing is ever replayed: an effect not taken
 // by a page within PICKUP_MS fails (player absent); one started whose end never comes is « unknown »; the hand-overs
 // live in memory only (a Studio restart drops them).
@@ -103,6 +108,7 @@ const CATALOGUE: {
   })),
 ];
 const CAPTURE = /^capture\/([0-9a-f-]{36})$/;
+const VERSION_MARK = '%PLAYER_VERSION%';
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self'; frame-ancestors 'self'";
 
@@ -122,7 +128,14 @@ export class EffectsPlayer {
   private readonly deliveries = new Map<string, Delivery>();
   /** Captures of the effects in progress (PNG, memory only). */
   private readonly captures = new Map<string, Buffer>();
-  private page: { player: string; at: number; audio: boolean } | null = null;
+  private page: {
+    player: string;
+    at: number;
+    audio: boolean;
+    /** Runs the files Studio serves now (or reloaded in vain: keeps its code). */
+    current: boolean;
+  } | null = null;
+  private served: { at: number; version: string } | null = null;
 
   private constructor(
     private readonly d: EffectsPlayerDeps,
@@ -165,8 +178,26 @@ export class EffectsPlayer {
       url: this.url,
       connected,
       audio: connected && this.page!.audio,
+      /** The OBS page runs the current files (false: it must reload). */
+      current: connected && this.page!.current,
       playing: [...this.deliveries.values()].filter((x) => x.started).length,
     };
+  }
+
+  /** Version of the page: a hash of its two files on disk (read at most once a second). */
+  async playerVersion() {
+    if (this.served && this.now() - this.served.at < 1000)
+      return this.served.version;
+    const h = createHash('sha256');
+    for (const f of Object.keys(PLAYER_FILES)) {
+      try {
+        h.update(await readFile(join(this.d.playerDir, f)));
+      } catch {
+        h.update(`missing:${f}`);
+      }
+    }
+    this.served = { at: this.now(), version: h.digest('hex').slice(0, 16) };
+    return this.served.version;
   }
 
   /** The catalogue with each sound's availability in Studio's storage. */
@@ -227,6 +258,7 @@ export class EffectsPlayer {
     const page = this.status();
     if (!page.connected) throw new EffectError('effects_player_offline');
     if (!page.audio) throw new EffectError('effects_player_muted');
+    if (!page.current) throw new EffectError('effects_player_outdated');
     if (this.deliveries.size >= this.rules.maxActive)
       throw new EffectError('effects_busy');
     let images: Delivery['images'] = null;
@@ -383,7 +415,14 @@ export class EffectsPlayer {
         'cache-control': 'no-store',
         'content-security-policy': CSP,
       });
-      res.end(await readFile(join(this.d.playerDir, name)));
+      let data = await readFile(join(this.d.playerDir, name));
+      if (name === 'player.html')
+        data = Buffer.from(
+          data
+            .toString('utf8')
+            .replace(VERSION_MARK, await this.playerVersion()),
+        );
+      res.end(data);
       return true;
     }
     const capture = CAPTURE.exec(name);
@@ -444,12 +483,20 @@ export class EffectsPlayer {
       reply(400, { error: 'invalid_player' });
       return true;
     }
+    const version = await this.playerVersion();
+    const current = body.version === version || body.stale_ok === true;
     if (name === 'player/heartbeat') {
-      this.page = { player, at: this.now(), audio: body.audio === true };
-      reply(200, { ok: true });
+      this.page = {
+        player,
+        at: this.now(),
+        audio: body.audio === true,
+        current,
+      };
+      reply(200, { ok: true, version });
     } else if (name === 'player/next') {
       if (this.page?.player === player) this.page.at = this.now();
-      reply(200, { effects: this.take(player) });
+      // A page of another version gets nothing (it reloads once idle).
+      reply(200, { effects: current ? this.take(player) : [], version });
     } else if (name === 'player/report') {
       this.report(player, body);
       reply(200, { ok: true });

@@ -81,6 +81,8 @@ export interface CpState {
     url: string;
     connected: boolean;
     audio: boolean;
+    /** The OBS page runs the current files (absent: older Studio). */
+    current?: boolean;
     playing: number;
     sounds: EffectSoundView[];
     videos: EffectSoundView[];
@@ -139,6 +141,8 @@ const ERRORS: Record<string, string> = {
   execution_unknown: 'exécution non confirmée',
   effects_player_offline: 'lecteur d’effets non ouvert (source OBS absente)',
   effects_player_muted: 'lecteur d’effets ouvert mais son bloqué',
+  effects_player_outdated:
+    'lecteur d’effets à recharger (ancienne version dans OBS : clic droit sur la source › Actualiser)',
   effects_player_unavailable: 'lecteur d’effets indisponible dans ce Studio',
   effects_busy: 'trop d’effets en même temps',
   effect_media_missing: 'fichier du son non importé dans Studio',
@@ -201,6 +205,12 @@ function effectsChip(e: CpState['effects']) {
       'Ajoute la source navigateur du lecteur d’effets dans OBS (URL dans « Lecteur d’effets »).',
     );
   if (!e.audio) return chip('warn', 'Lecteur d’effets : son bloqué');
+  if (e.current === false)
+    return chip(
+      'warn',
+      'Lecteur d’effets : à recharger',
+      'La source OBS du lecteur exécute une ancienne version : clic droit sur la source › Actualiser (elle se recharge seule ensuite).',
+    );
   return chip(
     'on',
     e.playing

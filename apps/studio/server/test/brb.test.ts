@@ -309,10 +309,16 @@ async function realPlayer() {
           'content-type': 'application/json',
           'x-effects-token': token,
         },
-        body: JSON.stringify({ player: pageId, ...body }),
+        body: JSON.stringify({
+          player: pageId,
+          version: await p!.playerVersion(),
+          ...body,
+        }),
       })
     ).json()) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  await call('heartbeat', { audio: true });
+  // The real page carries the version of the files it runs.
+  const version = await p.playerVersion();
+  await call('heartbeat', { audio: true, version });
   return { p, origin, call };
 }
 

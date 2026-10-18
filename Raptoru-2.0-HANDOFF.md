@@ -41,7 +41,8 @@ cours : P0.2 — **NTM validé dans OBS par Antoni** (17/10/2026, `e0fc606`, ren
 validé dans OBS par Antoni** (18/10/2026, `ac48842` : interaction native, scène temporaire avec retour sûr,
 `docs/EFFECTS_PLAYER.md` § 9) ; **BRB développé** (interaction native : captures OBS
 instantanées en mémoire, couche « We'll be right back » reprise dans le lecteur d'effets, micro + « Musique Isolée »
-coupés 6 s avec retour sûr ; **non validé dans OBS**, § 10).
+coupés 6 s avec retour sûr ; **non validé dans OBS**, § 10 ; 1er test réel : `invalid_effect` = page OBS du lecteur
+restée sur l'ancien script, corrigé par la version de page + rechargement automatique — actualiser la source une fois).
 
 **POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ (17/10/2026)**. Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
 LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS

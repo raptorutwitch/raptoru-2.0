@@ -66,18 +66,35 @@ async function serve(
   return origin;
 }
 
-/** A simulated player page (what player.js does over HTTP). */
-function page(origin: string, token: string, id = randomUUID()) {
+/** A simulated player page (what player.js does over HTTP), running the files Studio serves unless `version` says otherwise. */
+function page(
+  origin: string,
+  token: string,
+  id = randomUUID(),
+  version?: string,
+) {
+  let v = version ?? '';
   const call = async (path: string, body: object = {}) => {
     const res = await fetch(`${origin}/effects/player/${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-effects-token': token },
-      body: JSON.stringify({ player: id, ...body }),
+      body: JSON.stringify({ player: id, version: v, ...body }),
     });
     return { status: res.status, body: (await res.json()) as any }; // eslint-disable-line @typescript-eslint/no-explicit-any
   };
   return {
-    heartbeat: (audio = true) => call('heartbeat', { audio }),
+    heartbeat: async (audio = true) => {
+      // The real page gets its version from player.html: here from Studio's answer (unless forced).
+      const first = await call('heartbeat', { audio });
+      if (
+        version !== undefined ||
+        !first.body.version ||
+        first.body.version === v
+      )
+        return first;
+      v = first.body.version;
+      return call('heartbeat', { audio });
+    },
     next: async () =>
       (await call('next')).body.effects as {
         delivery_id: string;
@@ -235,6 +252,36 @@ describe('Effects player', () => {
       token,
     );
     expect(again.status().playing).toBe(0);
+  });
+});
+
+describe('Effects player — stale OBS page (BRB fix)', () => {
+  it('a page without the current version gets nothing and Studio says « à recharger » (never invalid_effect); current / stale_ok pages play', async () => {
+    const { p, origin, token } = await player();
+    // The OBS page loaded before an update (older code: no version in its calls).
+    const old = page(origin, token, randomUUID(), '');
+    await old.heartbeat();
+    expect(p.status()).toMatchObject({
+      connected: true,
+      audio: true,
+      current: false,
+    });
+    await expect(
+      p.play({ kind: 'sound', id: 'eren-scream', volume: 100 }),
+    ).rejects.toThrow('effects_player_outdated');
+    expect(await old.next()).toEqual([]);
+    // The served page carries the version it runs; Studio answers the current one.
+    const html = await (await fetch(`${origin}/effects/player.html`)).text();
+    const version =
+      /name="effects-player-version" content="([a-f0-9]{16})"/.exec(html)?.[1];
+    expect(version).toBe(await p.playerVersion());
+    const fresh = page(origin, token, randomUUID(), version);
+    expect((await fresh.heartbeat()).body.version).toBe(version);
+    expect(p.status().current).toBe(true);
+    const playing = p.play({ kind: 'sound', id: 'eren-scream', volume: 100 });
+    const [x] = await taken(fresh);
+    await fresh.report(x!.delivery_id, 'started');
+    await playing;
   });
 });
 
