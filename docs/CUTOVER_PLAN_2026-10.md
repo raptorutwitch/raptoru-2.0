@@ -883,7 +883,10 @@ ajoutée par Antoni fait partie de la collection à conserver au cutover. FX Cam
 bouton SAMMI « FX CAM » (ID12) ; le minuteur « FX JANITOR » (ID26) peut rester (il n'agit que sur ses compteurs) ; la
 commande `!fx` en jetons (ID19, StreamElements) reste à SAMMI jusqu'à la migration de l'économie. Couleur Cam (§ 12) :
 filtre « Raptoru — Couleur Cam » sur « Overlay Shushu » à conserver, filtre couleur de « Groupe 2 » masqué, bouton SAMMI
-ID45 désactivé ; pas de variante en jetons.
+ID45 désactivé ; pas de variante en jetons. **Double exécution** (18/10/2026) : tant que SAMMI est lancé, une
+récompense dont la règle Raptoru est active est traitée deux fois — couper le bouton SAMMI **avant** d'activer
+l'interrupteur. **D7** (nouvelle décision, `Raptoru-2.0-ETAT-PROJET.md` § 0.0.7) : pour rembourser comme SAMMI, les
+récompenses doivent être recréées par l'app Raptoru (`channel:manage:redemptions`).
 
 1. **Autorisation** (faite le 17/10/2026 pour le Lab) : `CHANNEL_POINTS_EVENTS=true` puis `twitch:auth -- --broadcaster` (raptoru\_, lecture seule
    `channel:read:redemptions`) ; aucun droit de gestion (Twitch ne laisse gérer que les récompenses créées par l'app).

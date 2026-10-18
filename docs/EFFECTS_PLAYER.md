@@ -398,7 +398,12 @@ non l'absence de condition de scène de SAMMI.
 
 ## 12. Couleur Cam dans Raptoru (P0.2 C5)
 
-**Statut : COULEUR CAM — DÉVELOPPÉ / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉ DANS OBS / NON DÉPLOYÉ.**
+**Statut : COULEUR CAM — DÉVELOPPEMENT TERMINÉ / TESTS AUTOMATISÉS RÉUSSIS / RENDU VALIDÉ DANS OBS / VRAIE RÉCOMPENSE
+TWITCH À CONFIRMER / NON DÉPLOYÉ** (code `8e37c35`). Validé visuellement par Antoni le 18/10/2026 dans son vrai OBS
+(par « Tester ») : couleurs testées correctes, transitions fluides ; filtre « Raptoru — Couleur Cam » créé sur
+« Overlay Shushu » et **« Groupe 2 » retiré d'OBS** par Antoni. Base Lab au 18/10 : 10 tests Studio, **aucune** vraie
+redemption « Couleur Cam ». Conséquence : le bouton SAMMI ID45 anime désormais un filtre absent (une redemption
+servie par SAMMI en live ne fait plus rien) — décision dans `Raptoru-2.0-ETAT-PROJET.md` § 0.0.7.
 
 Interaction native **« Couleur Cam »** (règle `{ type: 'interaction', interaction: 'color_cam' }`). Code :
 `packages/schemas/src/color-cam.ts` (26 préréglages, lecture du texte), `apps/core-api/src/channel-points/service.ts`

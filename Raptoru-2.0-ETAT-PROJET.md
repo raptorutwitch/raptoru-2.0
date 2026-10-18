@@ -2,7 +2,8 @@
 
 **Vue d'ensemble principale du projet** : où en est tout Raptoru 2.0, ce qui est validé, où chaque brique tourne
 (local / staging / Hosted Test / release / production), ce qui reste, les priorités, les bloquants et les dettes.
-Mis à jour le **16/10/2026** (vérifié sur Git, le code et les tests du jour).
+Mis à jour le **18/10/2026** : § 0.0 (point d'avancement SAMMI → Raptoru, roadmap des migrations) est la référence
+centrale ; le reste du § 0 date du 16/10/2026 sauf les lignes marquées « 18/10 ».
 
 Répartition des documents (une seule source de vérité par sujet) :
 
@@ -20,7 +21,156 @@ Répartition des documents (une seule source de vérité par sujet) :
 
 ---
 
-# 0. État courant — 16/10/2026
+# 0. État courant — 18/10/2026
+
+## 0.0 Point d'avancement SAMMI → Raptoru (18/10/2026) — référence centrale
+
+Vérifié le 18/10/2026 sur : base Lab (`cp_rewards`, `cp_rules`, `cp_redemptions`), decks SAMMI
+(`SAMMI.2022.5.3.x64/json/decks_data.json`, 16/10 21:24, lecture seule), collection OBS active, processus et ports de
+la machine, Git (HEAD `8e37c35`). Remplace les inventaires partiels précédents (audit SAMMI du 17/10, § 0.5b, tableau
+§ 7 de `docs/CHANNEL_POINTS_V1.md`). **Rien de Raptoru 2.0 n'est en production** : tout ce qui suit est Lab (Studio
+source + Core Lab + adaptateur Twitch Lab), sauf mention « staging ».
+
+### 0.0.1 Résumé
+
+- **Migré et validé dans le vrai OBS (Lab)** : lecteur d'effets + sons d'effet, NTM, Creepy, BRB, FX Cam, Couleur Cam
+  (rendu) ; alertes Twitch (rendu, files) ; plus, depuis début octobre, Bonk VNext, Soundboard, TTS, Tombola,
+  Modération, Commands, Jeu des mots, Roulette / Slot, Duel.
+- **Validé par une vraie redemption Twitch** (Points de chaîne, automatisations ON) : « Test Lab » (scène, 17/10),
+  **FX Cam** (« drunk », 18/10 09:21) ; trace d'une vraie redemption **Creepy** exécutée (18/10 09:21:12, non commentée
+  par Antoni).
+- **Toujours 100 % SAMMI en production** : tout (le stream réel n'utilise aucune brique Raptoru 2.0). Fonctions **sans
+  équivalent Raptoru** : modération ludique (Ban aléatoire, Votekick, Caution), Spotify, Level Up Wizebot, commandes
+  viewer avec son, 24H / crédits, banque, cash-in, roue des subs, `!fx` / `!rb` / `!tts` / `!bonk` en jetons.
+- **Restant avant de pouvoir couper SAMMI** : 3 lots fonctionnels (modération ludique, Spotify, petits restes), l'audit
+  technique global, puis le cutover (Core + bot de production, Studio publié, Extension publiée, économie).
+
+### 0.0.2 Points de chaîne — 37 récompenses (liste Twitch synchronisée en Lab)
+
+Catégories : **A** validé dans OBS (Tester Studio) · **B** validé par une vraie redemption · **C** développé, non testé
+en réel · **D** partiellement migré · **E** encore exclusivement SAMMI (ou autre outil legacy) · **F** à supprimer /
+fusionner / remplacer. « Twitch » = état de la récompense sur Twitch (ON / OFF).
+
+| Récompense (coût) | Twitch | Production aujourd'hui | Raptoru (Lab) | Cat. | Prochaine action |
+| --- | --- | --- | --- | --- | --- |
+| FX cam (500) | ON | SAMMI ID12 + minuteur ID26 | interaction `fx_cam`, règle ON ; vraie redemption validée | **B** | cutover ; `!fx` jetons avec l'économie |
+| Creepy (700) | ON | SAMMI ID28 | interaction `creepy`, règle ON ; validé OBS ; 1 vraie redemption exécutée (trace) | **A** (+ trace B) | confirmer en réel |
+| Be Right Back (1500) | ON | SAMMI ID48 | interaction `brb`, règle ON ; validé OBS (latence au départ, réserve) | **A** | vraie redemption ; latence → audit global |
+| ntm (2000) | ON | SAMMI ID18 | vidéo d'effet, règle ON ; validé OBS | **A** | vraie redemption |
+| Eren cri (1500) | ON | SAMMI ID15 (son) | son d'effet, règle ON ; validé OBS | **A** | vraie redemption |
+| Couleur Cam (100) | ON | SAMMI ID45 — **cible « Groupe 2 » supprimée d'OBS** (voir risques) | interaction `color_cam`, règle ON ; rendu validé OBS ; **0 vraie redemption** | **A** (Twitch à confirmer) | vraie redemption `rouge` |
+| Tiens bon ! (500), Bzez (1500), Skyzz (1000 → « Glory holes »), Seigneur Percé (1500 → « Quoicoubaka bibou ») | ON | SAMMI ID16 / 22 / 23 / 24 (sons) | sons importés dans le catalogue du lecteur d'effets ; **aucune règle saisie** | **C** | saisir 4 règles « Son d'effet » + Tester (config, pas de code) |
+| Arrêteuh (1500) | OFF | SAMMI ID17 (son) | son « Karma — Arrêteuh » importé, pas de règle | **C** | règle si la récompense revient |
+| Test Lab (100) | ON | — (récompense de test d'Antoni) | scène « Waiting screen » ; vraie redemption validée 17/10 | **B** | supprimer de Twitch après le cutover |
+| Hello (100) | OFF | — | son Soundboard, règle ON (tests Studio) | **C** | décision : garder ? |
+| Ban aléatoire (3000) | ON | SAMMI ID56 « RB PDC » (timeout, animation, son) | rien | **E** | lot « modération ludique » |
+| Choisi la prochaine musique ! (1000) | ON | SAMMI Spotify → `sammi-bridge` 127.0.0.1:9567 | rien | **E** | lot « Spotify » |
+| Skip la musique (2000) | OFF | SAMMI ID50 → 9567 | rien | **E** | lot « Spotify » (ou supprimer) |
+| TTS (1000), Soundboard (1000) | ON | **aucun bouton SAMMI** : probablement l'Extension / EBS legacy (non prouvé) | TTS V2 / Soundboard V2 (Extension) | **D** | vérifier qui les traite ; fusion avec l'Extension au cutover |
+| Emote only (10000) | ON | **aucun bouton SAMMI** ; Wizebot selon l'inventaire du 26/09 (non revérifié) | rien | **E** | peut rester Wizebot ; décision |
+| Led couleur (250) | ON | **aucun bouton SAMMI trouvé** : traitement inconnu (StreamDock / Neewer ?) | rien | **E ?** | Antoni : qui l'exécute ? |
+| Couleur Overlay (250) | OFF | SAMMI deck « Overlay Color » ID160 (encore actif) | rien | **F ?** | décision : supprimer ou fusionner avec Couleur Cam |
+| Couleur overlay Cam (100) | OFF | ancien bouton ID102 (deck inactif) | remplacée par Couleur Cam | **F** | supprimer de Twitch |
+| Cash-In (1) | OFF | SAMMI `!cashin` + redemption (StreamElements) | rien | **E** (économie) | décision au cutover économique |
+| Je t'offre le sub / le ubereat / Jeu offert | ON / OFF / OFF | manuel (aucun bouton) | — | hors périmètre | — |
+| Wasted, Boop!, Ohlala, 200 IQ, Dance Fortnite, Musique refusée, Fais moi écouter ta musique !, Ban forcé, Lever le ban, Counter Ban 1 / 5 | OFF | aucun bouton SAMMI actif | — | **F ?** | décision : nettoyer sur Twitch |
+| Lucky Wheel, Blrt Tells a Dad Joke | absentes de Twitch | decks « Lucky Wheel » (`!spin` encore actif) et « Deck 1 » | — | **F** | désactiver les decks au cutover |
+
+Limites : Raptoru ne peut **ni valider ni rembourser** ces récompenses (créées par SAMMI / Twitch, pas par l'app
+Raptoru) — les refus (mauvaise scène, couleur inconnue, déjà actif) sont enregistrés mais non remboursés ;
+interrupteur des automatisations **OFF** au 18/10 (12:15).
+
+### 0.0.3 Le reste du stream (hors Points de chaîne)
+
+| Domaine | Production aujourd'hui | Raptoru 2.0 | Cat. |
+| --- | --- | --- | --- |
+| Alertes follow / sub / gifts / bits / raid / don | SAMMI (ID_FOLLOW, ID1, ID39, ID_SUBGIFT_TARGETED, ID_BITS_ALERT) → source « Alerte Twitch » + `alertes_server.js` (port 3001, tourne) ; dons StreamElements | Alertes V1 : rendu, files, calibrages **validés OBS** ; vrais événements en TEST ; bot de production non raccordé | **D** |
+| Roue des subs (crédit de Jetons) | SAMMI ID1 → StreamElements | rien (RET-ECO-007, économie) | **E** |
+| Soundboard, TTS, Bonk (Extension) | Extension publiée → EBS `raptoru.fr/api` → déclencheurs SAMMI (`RAPTORU_EXT_SOUNDBOARD_V2`, `RAPTORU_EXT_TTS_V2`, `RAPTORU_EXT_BONK_V3`) | V2 validés Lab + staging (07/10), Bonk VNext validé Lab | **D** |
+| `!tts` (jetons), `!bonk` (jetons) | SAMMI → StreamElements | via l'Extension seulement ; paiement réel non branché | **E** (économie) |
+| Tombola (`!join`, tirage, paiement) | SAMMI + EBS legacy + StreamElements | Tombola V2 validée Lab + staging | **D** |
+| Jeu des mots | deck SAMMI | V1 validé en vrai chat (Wallet Lab) | **D** |
+| Roulette, Slot, Duel | StreamElements | V1 validés (Wallet Lab) | **D** |
+| `!daily`, `!streak`, StartStream | SAMMI → `raptoru.fr` (EBS legacy) + StreamElements | Daily / streak Core (drapeaux OFF, import legacy prévu) ; état du live par Twitch | **D** |
+| Votekick (`!votekick`, `!kick`, `!save`, `!userid`), Caution (`!caution`, `oui` / `non`), Unmute secours | SAMMI (timeouts Twitch, filtres OBS « Votekick Zoom / Mute » sur « overlay cam shushu », sons ; Caution en jetons) | rien | **E** |
+| Ban aléatoire en jetons (`!rb`) + animation de ban | SAMMI ID74 / ID63 (StreamElements) | rien | **E** |
+| Spotify (`!song`, `!songqueue`, `!mysong`, `!songskip`, `!songcancel`, `!songremove`) | SAMMI → `sammi-bridge` 9567 | rien | **E** |
+| Level Up Wizebot (son) | SAMMI (message de Wizebot) → 9567 | rien | **E** |
+| Commandes viewer avec son (`!sniper`, `!groslot` d'Aouh, salut d'Aouh) | SAMMI | Commands V2 : réponses chat seulement (aucune action son) | **E** |
+| 24H / crédits (`!code`, `!credits`, `!echange`, `!reset`, crédits sur sub / gift), « Barre de reset » (gifts) | SAMMI + StreamElements | rien (crédits = décision D2) | **E** (économie) |
+| Banque (`!banque`, `!depot`, `!retrait`), `!blacklist` / `!whitelist` | SAMMI → StreamElements | rien | **E** (économie) |
+| Overlay Shushu (expressions aléatoires) | page `shushu_overlay_obs_v3.html` (autonome ; bouton SAMMI ID666 entièrement désactivé) | rien à migrer (la page tourne seule) | — |
+| « Detective Filtre » (raccourci clavier) | SAMMI ID70 (filtre OBS) | rien | **F ?** (raccourci OBS natif) |
+| Emote only, modération Wizebot | Wizebot | — | hors SAMMI |
+
+### 0.0.4 Dépendances historiques
+
+| Dépendance | État au 18/10 | Statut |
+| --- | --- | --- |
+| SAMMI Core + decks actifs (Deck Principal, Points de chaine, 24H, Overlay Color, Lucky Wheel, OBS Audio Monitoring, Deck 1, SPOTIFY_ULTIMATE, Jeu des mots) | **non lancé au moment du relevé** (lancé pour le live) | **indispensable** jusqu'au cutover |
+| StreamElements (Jetons, Roulette / Slot / Duel, dons, loyalty) | cloud | **indispensable** jusqu'au cutover économique |
+| EBS legacy `raptoru.fr/api` (Coolify) + Extension publiée + Supabase | production | **indispensable** jusqu'au cutover |
+| Wizebot (Emote only, level up) | cloud | indispensable (Emote only peut rester externe) |
+| `sammi-bridge` (9567 : Spotify, level up) | lancé avec SAMMI (non vu au relevé) | indispensable jusqu'au lot Spotify |
+| `alertes_server.js` (3001, « Alerte Twitch ») | **tourne** (depuis le 15/10) | temporaire jusqu'au cutover des alertes |
+| Bridge Shushu (17371) | non lancé ; la page Shushu ne l'écoute pas | **inutile** (prouvé) |
+| « Groupe 2 » (OBS) | **supprimé par Antoni** | remplacé par « Raptoru — Couleur Cam » ; SAMMI ID45 le cible encore |
+| Boutons SAMMI morts (ID12ancien, ID19ancien, ID45_SYNCH, ID666, ID102, exemples OBSAM) | inactifs | **inutiles** |
+| Lucky Wheel, Dad Joke | récompenses absentes de Twitch | probablement inutiles (à confirmer : `!spin`) |
+| Ne pas supprimer avant le cutover | SAMMI, StreamElements, EBS legacy, Extension publiée, `sammi-bridge`, `alertes_server.js`, filtres « Votekick » / « mute » de « overlay cam shushu » | **dangereux à supprimer** |
+
+### 0.0.5 Économie
+
+Prêt (Lab, tests) : Wallet Core multi-monnaie idempotent, `EconomyPort` (débit + admission atomiques) utilisé par Jeu
+des mots, Roulette / Slot, Duel, gains Tombola ; Daily / Loyalty (drapeaux OFF) ; import legacy Daily prévu. Non fait :
+D1 (soldes StreamElements au point de coupure, import), D2 (crédits / Points de chaîne), lecteurs qui n'acceptent que
+`simulated`, toutes les commandes payantes legacy (`!fx`, `!rb`, `!tts`, `!bonk`, Caution, banque, cash-in, 24H,
+roue des subs), audit des données (`docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md`, non suivi). **Aucun solde migré.**
+
+### 0.0.6 Roadmap des migrations (proposée le 18/10/2026, à valider par Antoni)
+
+| Lot | Objectif | Fonctions | Complexité | Dépendances | Critère de validation | Pourquoi ici |
+| --- | --- | --- | --- | --- | --- | --- |
+| **M0 — Finir les Points de chaîne simples** | plus aucune récompense « simple » chez SAMMI | 4 règles « Son d'effet » (Tiens bon !, Bzez, Skyzz, Seigneur Percé), vraie redemption Couleur Cam, décisions Couleur Overlay / Led couleur / récompenses OFF | faible (configuration, aucun code) | aucune | vraie redemption de chaque récompense jouée par Studio | gratuit, ferme la catégorie « effets » |
+| **M1 — Modération ludique** | Ban aléatoire + Votekick sans SAMMI | Ban aléatoire (récompense), Votekick (`!votekick`, `!kick`, `!save`), animation de ban, filtres OBS « Votekick Zoom / Mute », restauration (ex-« Unmute secours ») ; `!rb` et Caution (jetons) → lot économie | élevée | droit Twitch de timeout pour le compte qui agit (à décider), liste des chatters (déjà lue), lecteur d'effets, retour sûr OBS | vraie redemption « Ban aléatoire » + un vrai votekick en Lab, timeouts réels levés | fonction signature, 100 % SAMMI, réutilise effets / interactions |
+| **M2 — Spotify** | file musicale sans `sammi-bridge` | récompense « Choisi la prochaine musique ! », `!song`, `!songqueue`, `!mysong`, `!songskip`, `!songcancel`, `!songremove`, Level Up Wizebot (même bridge) | moyenne à élevée | compte Spotify (OAuth), remboursement impossible sur une récompense SAMMI (décision D7) | demande réelle ajoutée à la file, `!song` correct, annulation | dernier gros bloc non économique |
+| **M3 — Petits restes** | vider les decks SAMMI non économiques | commandes viewer avec son (`!sniper`, `!groslot`, salut d'Aouh : action « son » typée dans Commands V2), « Detective Filtre », Couleur Overlay si gardée | faible à moyenne | Commands V2 | chaque commande en vrai chat | regroupe des petites choses similaires |
+| **AUDIT — audit technique global** | revue transversale avant cutover | dont latence BRB, coexistence des sources OBS, charge, reprise après coupure | moyenne | M0–M3 | rapport + correctifs | demandé après les migrations, avant cutover |
+| **CUTOVER — technique** | faire tourner Raptoru en production | Core de production + migrations (alertes, Points de chaîne), bot de production (alertes + Points de chaîne, un seul consommateur EventSub), Studio publié, Extension publiée, décision D7 | élevée | accord d'Antoni à chaque étape | bascule récompense par récompense, retour arrière testé | — |
+| **ÉCONOMIE — en dernier** | remplacer StreamElements | D1 / D2, import des soldes, commandes payantes (`!fx`, `!rb`, `!tts`, `!bonk`, Caution, banque, cash-in, 24H, roue des subs, `!blacklist`), Roulette / Slot / Duel / Jeu des mots / Tombola en réel | élevée | audit des données, gel court | soldes contrôlés après import | demandé en dernier |
+
+Prochaine migration recommandée : **M1 — Modération ludique** (après M0, qui n'est que de la configuration).
+
+### 0.0.7 Risques et points ouverts
+
+1. **Couleur Cam en production cassée côté SAMMI** : « Groupe 2 » n'existe plus, le bouton SAMMI ID45 anime un filtre
+   absent → pendant un live servi par SAMMI, une redemption « Couleur Cam » ne fait rien et n'est pas remboursée.
+   Décision d'Antoni : désactiver la récompense en live, la faire servir par Raptoru (Studio Lab + automatisations ON
+   pour cette seule règle), ou recréer temporairement le filtre attendu par SAMMI.
+2. **Double exécution** : automatisations Raptoru ON + SAMMI lancé = les deux traitent la même redemption (FX Cam, BRB,
+   Creepy…). Règle : en Lab, ne garder ON que des récompenses dont le bouton SAMMI est coupé, ou SAMMI fermé ; au
+   cutover, bouton SAMMI désactivé **avant** l'interrupteur.
+3. **D7 (nouvelle décision)** : rembourser exige des récompenses créées par l'app Raptoru (recréation sur Twitch,
+   droit `channel:manage:redemptions`) — nécessaire pour la parité « remboursé » de BRB, FX Cam, Couleur Cam, Spotify.
+4. Processus résiduels : `alerts-dbg.mts` d'une ancienne session (port 3379, depuis le 16/10) tourne encore — à arrêter
+   par Antoni s'il ne sert plus.
+5. Non prouvé : qui traite les récompenses TTS, Soundboard, Emote only, Led couleur ; le comportement de SAMMI en live
+   (non lancé pendant le relevé) ; `!spin` encore utilisé ou non.
+
+### 0.0.8 Environnements (relevé du 18/10/2026, 12:15)
+
+- **Production** : legacy uniquement (SAMMI au live, StreamElements, Wizebot, EBS `raptoru.fr/api`, Extension publiée).
+  Bot Raptoru de production **non démarré** (`TWITCH_ENABLED=false`).
+- **Lab (cette machine)** : `npm run studio` (Electron, serveur Studio **4100**, Core Lab **4301**, base
+  `raptoru_bonk_lab`), adaptateur Twitch Lab `lab-chat-main` (réception des Points de chaîne, alertes TEST, chat) ;
+  OBS (obs-websocket **4455**) ; `alertes_server.js` legacy **3001**. SAMMI Core non lancé au relevé.
+- **Staging** : Core `c7f20de` (14/10) + Hosted Test ; rien de postérieur (ni Bonk VNext, ni jeux, ni alertes, ni Points
+  de chaîne, ni effets).
+- **Studio publié** : 0.1.5 (30/09). **62 commits locaux** non poussés depuis `c7f20de`.
+- Conditions minimales d'un cutover sûr : § 0.7 + plan `docs/CUTOVER_PLAN_2026-10.md` (dont § 13 alertes, § 14 Points
+  de chaîne) ; une fonction à la fois, bouton SAMMI coupé avant activation Raptoru, retour arrière = interrupteur OFF +
+  bouton SAMMI rallumé.
+
 
 ## 0.1 Git et environnements (vérifiés le 16/10/2026)
 
@@ -93,10 +243,10 @@ tout environnement livré : les deux colonnes se lisent séparément.
 | **Duel V1** | parité StreamElements (`!duel <pseudo> [mise]`, `!accept` / `!deny` / `!cancelduel`, 2 min, 50/50, mise max 100 000 ramenée, transfert perdant → gagnant via `EconomyPort.transfer`, idempotence, concurrence), même module et interrupteur que Roulette / Slot — `2bf4fc8` | **VALIDÉ** en Lab le 16/10/2026 (Simulation + vrai chat avec de vrais comptes : défi, refus d'un second défi, acceptation, résultat) ; réserves : annonce réelle LeCroupier\_ et variation des deux soldes non revérifiées dans ce scénario | **local uniquement** ; production = StreamElements | cutover économique (P1-001 lot 2, P1-007) | observer une fois l'annonce réelle et les soldes ; détail : [`docs/DUEL_PARITY.md`](docs/DUEL_PARITY.md) |
 | **Studio — Simulation** | panneau rapide « Simulation » (barre du haut : live simulé, ingestion, sortie réelle, mini-jeux, confirmations) `73f0235` ; onglet **Simulation** (chat Lab déplacé depuis Tombola, chat simulé universel : messages reçus gardés en mémoire par Core + vraies réponses `cmd_steps`, statuts honnêtes) `42efc87` | **VALIDÉ** par Antoni le 16/10/2026 | **local uniquement** (pas dans une release) | — | — |
 | **Commands V2** | A0 → F : modèle, admission, file, onglet Studio, Extension (modération + public) | **VALIDÉ LOCAL** (Lab) | **local uniquement** — migrations Commands jamais au staging | hors cutover (décision) ; dettes mineures (`COMMANDS_V2_STATUS.md`) | — |
-| **Points de chaîne** | aucun raccordement V2 (le legacy EBS gère les redemptions) | — | **BLOQUÉ** (P1-010) ; production = legacy | décision D2 (modèle de redemption) | en dernier dans l'ordre du cutover |
+| **Points de chaîne** (18/10) | V1 : réception EventSub (bot) → Core (règles, dédoublonnage, interrupteur OFF) → Studio (OBS, lecteur d'effets, interactions natives Creepy / BRB / FX Cam / Couleur Cam) ; lecture seule (ni validation ni remboursement) | **VALIDÉ LOCAL** 17/10 ; effets validés OBS 17–18/10 ; vraies redemptions : Test Lab, FX Cam | **local uniquement** ; production = SAMMI | Core + bot de production (P1-010), D2 économie, D7 remboursements | § 0.0.2 |
 | **Activity / overlays** | overlays existants : Bonk, lecteur TTS, overlay Tombola, lecteur Soundboard ; historique / classement de l'Extension | overlays validés avec leurs modules | comme leurs modules | — | — |
 | **Alertes Twitch** (follow, sub, gifts, bits, raid, don) | A0–A2 puis 17/10 : files par famille, calibrage persistant, rechargement des sources OBS périmées, réception Twitch réelle (adaptateur Lab) et dons StreamElements (Astro), **module officiel préparé** (schéma et routes de production `/v1/studio/alerts`, runtime Studio multi-profil, ACTIVE jamais repris au démarrage) — `13507bf` … `97761a0` + passe production | **validé par Antoni** : animations, calibrages, files simultanées dans OBS, vrai follow en TEST, connexion StreamElements ; le reste : tests auto | **local uniquement** ; production = SAMMI / StreamElements legacy | bot Twitch de production non raccordé aux alertes ; Core de production non déployé (migration `20261024120000_alerts.sql` non appliquée) ; vrai don, sous-types Twitch réels, bascule OBS, stabilité en live non validés | décider la réception Twitch de production ; détail, checklist OBS et retour arrière : [`docs/TWITCH_ALERTS_PARITY_2026-10.md`](docs/TWITCH_ALERTS_PARITY_2026-10.md) § 22 |
-| **Intégration OBS** | obs-websocket **lecture seule** : sources Bonk, reconnexion auto + mot de passe chiffré (`safeStorage`), capture de scène, cible Auto | **VALIDÉ LOCAL** (Lots 0–3) | **local** ; Studio 0.1.5 n'a que la connexion manuelle | aucun contrôle de scène (FX / Creepy / BRB) : **NON COMMENCÉ** | — |
+| **Intégration OBS** | obs-websocket **lecture seule** : sources Bonk, reconnexion auto + mot de passe chiffré (`safeStorage`), capture de scène, cible Auto | **VALIDÉ LOCAL** (Lots 0–3) | **local** ; Studio 0.1.5 n'a que la connexion manuelle | contrôle OBS par les Points de chaîne (18/10) : scène / source / filtre temporaires avec retour sûr, captures, coupures audio, réglages de filtre — **VALIDÉ LOCAL** (§ 0.0) | — |
 | **Transport Studio ↔ Core** (P1-019) | identité d'installation, HTTPS, protocole, profils, cockpit Production | **VALIDÉ STAGING** (06–07/10) | **STAGING** | rate limiting, coupures réseau réelles, cockpit incomplet (Commands…), URL en constante de build | `wrong_channel` réel au prochain déploiement |
 | **Frontière viewer** `/v1/ext` (P1-006) | JWT d'Extension vérifié par le Core, acteur du JWT, rate limit, CORS, idempotence | **VALIDÉ STAGING** (live 07/10, paiement simulé) | **STAGING** | vrai secret d'Extension, publication, capacité | au cutover |
 | **Déploiement / updater / release** | Coolify manuel ; updater Studio validé (0.1.0 → 0.1.1) ; `npm run studio:release` | pipeline validé | Core : **STAGING** ; Studio : **RELEASED 0.1.5** | ordre Core → Studio ; signature Windows (P3-001) avant diffusion large | prochain déploiement coordonné (0.6 D) |
@@ -170,7 +320,8 @@ migration Lab du Lot 5 sur le staging et un **nouveau ZIP Extension** (chargeur,
 lecteurs non simulés) → P1-006 (vrai secret, capacité) → parcours vertical § 7 (Bonk payé en Jetons de test sur le
 staging) → P1-007 frontière production → P1-010 Points de chaîne → cutover économique unique.
 
-**E. Migration fonctionnelle restante** (inventaire § 13, ordre indicatif ; stratégie : finir la migration du legacy
+**E. Migration fonctionnelle restante** — **remplacé le 18/10/2026 par la roadmap § 0.0.6** (M0 → M3, audit, cutover,
+économie). Ancien texte, pour mémoire (inventaire § 13, ordre indicatif ; stratégie : finir la migration du legacy
 retenu avant les gros reworks) : ~~Jeu des mots~~ (migré, 16/10/2026) → ~~Roulette et Slot~~ (migrés, 16/10/2026)
 → ~~Duel~~ (migré en Lab, 16/10/2026) → ~~alertes Twitch~~ (Alertes V1 clôturé le 17/10/2026 : prêt pour le
 cutover, non déployé, § 23 du doc alertes) → Oracle (RET-GAME-004) → instrumentation stats /
@@ -227,6 +378,9 @@ modules un par un ; legacy coupé ensuite.
 - Moment du déploiement coordonné et de la prochaine release Studio.
 
 ## 0.10 Prochaine étape recommandée
+
+**18/10/2026** : voir § 0.0.6 — M0 (configuration des Points de chaîne simples) puis **M1 modération ludique** ; décision
+urgente § 0.0.7 point 1 (Couleur Cam servie par SAMMI cassée en live). Texte du 17/10 ci-dessous pour mémoire.
 
 **Alertes V1 clôturées (17/10/2026)** : développement terminé, prêt pour le cutover, non déployé (checklist :
 `docs/CUTOVER_PLAN_2026-10.md` § 13). **Priorité « zéro SAMMI »** (audit SAMMI du 17/10/2026 : au moins 29 groupes de

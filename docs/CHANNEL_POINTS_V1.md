@@ -95,20 +95,23 @@ lecteur OBS, sa modération) · OBS : tâche reprise par **Studio** (seul à par
 
 ## 7. Récompenses SAMMI relevées (decks actifs, lecture seule du 17/10/2026)
 
-| Récompense (déclencheur SAMMI)                               | Ce que fait SAMMI                      | Couverture V1                                                                  |
-| ------------------------------------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------ |
-| Eren cri, Tiens bon !, Arrêteuh, Bzez, Skyzz, Seigneur Percé | joue un fichier son local              | **son** — à condition d'ajouter ces sons à la banque du Soundboard (non fait)  |
-| Creepy                                                       | source OBS « Prowler Effect » + son    | **source temporaire + son**                                                    |
-| Be Right Back                                                | scène + coupe micro / musique          | **interaction native BRB** (validée OBS 18/10, `EFFECTS_PLAYER.md` § 10)       |
-| Couleur Overlay                                              | affiche une couleur, masque les autres | **sources** (jusqu'à 5 actions ; à valider)                                    |
-| ntm                                                          | requête OBS websocket                  | à identifier (probablement source / filtre)                                    |
-| Couleur Cam                                                  | anime le filtre couleur du cadre       | **interaction native Couleur Cam** (non validée OBS, `EFFECTS_PLAYER.md` § 12) |
-| FX cam                                                       | filtre shader OBS 10 s (+ bridge mort) | **interaction native FX Cam** (validée OBS + vraie récompense 18/10, § 11)     |
-| Cash-In                                                      | conversion en jetons (StreamElements)  | plus tard (Wallet)                                                             |
-| Skip la musique, Choisi la prochaine musique !               | Spotify (`sammi-bridge`, 9567)         | plus tard (Spotify)                                                            |
-| Ban aléatoire                                                | timeout d'un viewer au hasard          | plus tard (modération ludique)                                                 |
-| Lucky Wheel                                                  | extension SAMMI tierce                 | décision (reconstruire ou abandonner)                                          |
-| Blrt Tells a Dad Joke                                        | blague HTTP dans le chat               | décision                                                                       |
+| Récompense (déclencheur SAMMI)                               | Ce que fait SAMMI                      | Couverture V1                                                                                     |
+| ------------------------------------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Eren cri, Tiens bon !, Arrêteuh, Bzez, Skyzz, Seigneur Percé | joue un fichier son local              | **son d'effet** (lecteur d'effets) : sons importés ; règle saisie pour Eren cri seulement (18/10) |
+| Creepy                                                       | source OBS « Prowler Effect » + son    | **interaction native Creepy** (validée OBS 18/10, § 9 de `EFFECTS_PLAYER.md`)                     |
+| Be Right Back                                                | scène + coupe micro / musique          | **interaction native BRB** (validée OBS 18/10, `EFFECTS_PLAYER.md` § 10)                          |
+| Couleur Overlay                                              | affiche une couleur, masque les autres | **sources** (jusqu'à 5 actions ; à valider)                                                       |
+| ntm                                                          | requête OBS websocket                  | **vidéo d'effet** (validée OBS 17/10, `EFFECTS_PLAYER.md` § 8)                                    |
+| Couleur Cam                                                  | anime le filtre couleur du cadre       | **interaction native Couleur Cam** (non validée OBS, `EFFECTS_PLAYER.md` § 12)                    |
+| FX cam                                                       | filtre shader OBS 10 s (+ bridge mort) | **interaction native FX Cam** (validée OBS + vraie récompense 18/10, § 11)                        |
+| Cash-In                                                      | conversion en jetons (StreamElements)  | plus tard (Wallet)                                                                                |
+| Skip la musique, Choisi la prochaine musique !               | Spotify (`sammi-bridge`, 9567)         | plus tard (Spotify)                                                                               |
+| Ban aléatoire                                                | timeout d'un viewer au hasard          | plus tard (modération ludique)                                                                    |
+| Lucky Wheel                                                  | extension SAMMI tierce                 | décision (reconstruire ou abandonner)                                                             |
+| Blrt Tells a Dad Joke                                        | blague HTTP dans le chat               | décision                                                                                          |
+
+Inventaire complet et à jour (37 récompenses, catégories A–F, prochaine action) : `Raptoru-2.0-ETAT-PROJET.md` § 0.0.2
+(18/10/2026) — ce tableau-ci n'est plus tenu.
 
 ## 8. Avant le cutover
 

@@ -1,10 +1,15 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
-## État courant — 17/10/2026 : Points de chaîne V1 clôturé (validé en Lab, non déployé) · Alertes V1 clôturé · checkpoint global du 16/10 (lire en premier)
+## État courant — 18/10/2026 : migrations SAMMI P0 terminées en Lab · point d'avancement et roadmap centralisés
 
-**Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`**, HEAD **`000148b`** (correctif son
-des Points de chaîne) + le commit docs de clôture des Points de chaîne. Tout ce qui suit `c7f20de` est **local, non poussé** ; `main` = `origin/main` =
-`d2b61ef`.
+**Point d'avancement complet (ce qui est migré, validé, encore SAMMI, à décider) et roadmap des migrations :
+`Raptoru-2.0-ETAT-PROJET.md` § 0.0** — lire en premier. Prochaine étape proposée : M0 (configuration des Points de
+chaîne simples) puis M1 modération ludique ; décision urgente : Couleur Cam servie par SAMMI est cassée en live
+(« Groupe 2 » supprimé, § 0.0.7).
+
+**Git** (vérifier `git status` / `git log`) : branche **`feat/compact-video-port`**, HEAD **`8e37c35`** (Couleur Cam) +
+le commit docs du point d'avancement du 18/10. 62 commits après `c7f20de`, **locaux, non poussés** ; `main` =
+`origin/main` = `d2b61ef`.
 Deux rapports **non suivis**, à laisser hors des commits sauf décision d'Antoni :
 `docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md` (audit des données historiques) et
 `docs/RAPTORU_2_0_GLOBAL_CHECKPOINT_2026-10-16.md` (point d'étape de pilotage).
@@ -39,14 +44,15 @@ chaîne (`effect_sound`, même circuit de jobs Studio). 6 sons SAMMI importés p
 Percé, Bzez, Skyzz, Arrêteuh ; volumes SAMMI). Source OBS ajoutée et testée par Antoni (`docs/EFFECTS_PLAYER.md`). En
 cours : P0.2 — **NTM validé dans OBS par Antoni** (17/10/2026, `e0fc606`, rendu identique à SAMMI) ; **Creepy
 validé dans OBS par Antoni** (18/10/2026, `ac48842` : interaction native, scène temporaire avec retour sûr,
-`docs/EFFECTS_PLAYER.md` § 9) ; **BRB validé dans OBS par Antoni** (18/10/2026, `72062a3` + correctif `31d82ef` :
+`docs/EFFECTS_PLAYER.md` § 9 ; une vraie redemption exécutée le 18/10) ; **BRB validé dans OBS par Antoni** (18/10/2026, `72062a3` + correctif `31d82ef` :
 captures OBS instantanées en mémoire, couche « We'll be right back » dans le lecteur d'effets, micro + « Musique
 Isolée » coupés 6 s avec retour sûr ; réserve non bloquante : légère latence au démarrage, à voir à l'audit global ;
 § 10) ; **FX Cam validé dans OBS par Antoni** (18/10/2026, `2957148`, y compris par une **vraie récompense
 Twitch** avec saisie textuelle après activation des automatisations : texte du viewer résolu par Core sur 6 effets,
-filtre shader de « overlay cam shushu » activé 10 s ; `!fx` en jetons non migré ; § 11) ; **Couleur Cam développé**
-(interaction native : 26 préréglages SAMMI, filtre dédié « Raptoru — Couleur Cam » sur « Overlay Shushu » à créer par
-Antoni, transition 2 s In/Out, la couleur reste ; **non validé dans OBS**, § 12).
+filtre shader de « overlay cam shushu » activé 10 s ; `!fx` en jetons non migré ; § 11) ; **Couleur Cam : rendu validé dans OBS
+par Antoni** (18/10/2026, `8e37c35` : 26 préréglages SAMMI, filtre « Raptoru — Couleur Cam » sur « Overlay Shushu »
+créé par Antoni, « Groupe 2 » supprimé, transitions fluides de 2 s, couleur conservée ; **vraie récompense Twitch de
+bout en bout encore à confirmer**, § 12).
 
 **POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ (17/10/2026)**. Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
 LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS
