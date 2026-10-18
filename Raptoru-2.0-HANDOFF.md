@@ -49,10 +49,10 @@ captures OBS instantanées en mémoire, couche « We'll be right back » dans le
 Isolée » coupés 6 s avec retour sûr ; réserve non bloquante : légère latence au démarrage, à voir à l'audit global ;
 § 10) ; **FX Cam validé dans OBS par Antoni** (18/10/2026, `2957148`, y compris par une **vraie récompense
 Twitch** avec saisie textuelle après activation des automatisations : texte du viewer résolu par Core sur 6 effets,
-filtre shader de « overlay cam shushu » activé 10 s ; `!fx` en jetons non migré ; § 11) ; **Couleur Cam : rendu validé dans OBS
+filtre shader de « overlay cam shushu » activé 10 s ; `!fx` en jetons non migré ; § 11) ; **Couleur Cam validé de bout en bout en Lab
 par Antoni** (18/10/2026, `8e37c35` : 26 préréglages SAMMI, filtre « Raptoru — Couleur Cam » sur « Overlay Shushu »
-créé par Antoni, « Groupe 2 » supprimé, transitions fluides de 2 s, couleur conservée ; **vraie récompense Twitch de
-bout en bout encore à confirmer**, § 12).
+créé par Antoni, « Groupe 2 » supprimé, transitions fluides de 2 s, couleur conservée ; **vraie récompense Twitch**
+« emeraude » exécutée, SAMMI fermé ; non déployé, § 12).
 
 **POINTS DE CHAÎNE V1 — DÉVELOPPEMENT TERMINÉ / VALIDATIONS FONCTIONNELLES LAB RÉUSSIES / PRÊT POUR LA PRÉPARATION DU CUTOVER / NON DÉPLOYÉ (17/10/2026)**. Validé par Antoni en Lab (17/10/2026) : 36 récompenses Twitch synchronisées ; vraie redemption reçue (compte
 LeCroupier\_) ; récompense ignorée quand les automatisations sont OFF ; exécution réelle Twitch → Core → Studio → OBS
