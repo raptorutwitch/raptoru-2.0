@@ -30,8 +30,9 @@ const qs = (url: URL, keys: string[]) => {
   return s ? `?${s}` : '';
 };
 
-export function commandsApi(core: LabCoreCall) {
-  const base = `/v1/lab/commands/${LAB_CHANNEL_ID}`;
+/** `channelId`: the Lab channel, or the main Core's channel through the production cockpit (lot 8). */
+export function commandsApi(core: LabCoreCall, channelId = LAB_CHANNEL_ID) {
+  const base = `/v1/lab/commands/${channelId}`;
   const actor = STUDIO_ACTOR;
   /** The page's call → Core's answer (errors keep Core's status and body, e.g. 409 version_conflict). */
   return async function call(
@@ -105,8 +106,8 @@ export function commandsApi(core: LabCoreCall) {
 }
 
 /** HTTP face of the relay: Studio header required, JSON body (32 KB at most). */
-export function commandsRelay(core: LabCoreCall) {
-  const call = commandsApi(core);
+export function commandsRelay(core: LabCoreCall, channelId = LAB_CHANNEL_ID) {
+  const call = commandsApi(core, channelId);
   return async function handle(
     req: IncomingMessage,
     res: ServerResponse,

@@ -10,7 +10,10 @@ import {
   type SystemCommandDef,
 } from '../src/commands/service.js';
 import type { Db } from '../src/db/db.js';
-import { selectMigrations } from '../src/db/migration-scopes.js';
+import {
+  MIGRATION_SCOPES,
+  selectMigrations,
+} from '../src/db/migration-scopes.js';
 import { commandsRoutes } from '../src/http/commands-routes.js';
 import { HttpError } from '../src/http/server.js';
 import type { Actor } from '../src/lab-moderation/store.js';
@@ -82,14 +85,18 @@ describe('Commands V2 — persistence and migration', () => {
     expect((await svc.list(CH, STUDIO)).commands).toEqual([]);
   });
 
-  it('the commands_v2 migration is Lab only (never on the production path)', () => {
+  // Lot 8: the main Core hosts Commands V2 — the file stays a Lab migration, named in MAIN_CORE_LAB_MIGRATIONS.
+  it('the commands_v2 migration: Lab, and on the production path through the main Core list only', () => {
     const files = [
       '20261010120000_raffle_round_labels.sql',
       '20261011120000_commands_v2.sql',
     ];
-    expect(selectMigrations(files, 'prod')).not.toContain(
+    expect(selectMigrations(files, 'prod')).toContain(
       '20261011120000_commands_v2.sql',
     );
+    expect(
+      selectMigrations(files, 'prod', { ...MIGRATION_SCOPES, mainCore: [] }),
+    ).not.toContain('20261011120000_commands_v2.sql');
     expect(selectMigrations(files, 'lab')).toContain(
       '20261011120000_commands_v2.sql',
     );

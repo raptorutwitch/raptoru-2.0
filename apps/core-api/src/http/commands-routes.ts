@@ -43,7 +43,7 @@ const StepStatusParam = z
   .optional();
 const BASE = String.raw`^\/v1\/lab\/commands\/([^/]+)`;
 
-async function mapped<T>(fn: () => Promise<T>): Promise<T> {
+export async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (error) {

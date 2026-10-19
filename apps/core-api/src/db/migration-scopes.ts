@@ -13,6 +13,11 @@
 // historical Lab files therefore stay in the production selection (LEGACY_LAB_IN_PROD, frozen, never
 // extended): the production path behaves exactly as before for them. Any Lab migration added after
 // this boundary goes to LAB_MIGRATIONS only.
+//
+// Lot 8 (19/10/2026): the main Core hosts the chat games and the viewer frontier, which need some post-boundary
+// Lab files. They stay classified Lab (their content and order unchanged) and are named, explicitly and closed, in
+// MAIN_CORE_LAB_MIGRATIONS: the production migrator applies them too. A database already migrated (prod or
+// staging) gets only the ones it does not hold yet — by name, the migrator never re-runs a recorded file.
 
 export type MigrationScope = 'prod' | 'lab' | 'all' | 'staging';
 
@@ -116,6 +121,31 @@ export const LEGACY_LAB_IN_PROD: readonly string[] = Object.freeze([
  * linking of the viewer frontier). Explicit and closed: never Commands V2 or any other Lab file;
  * never part of the production scope.
  */
+/**
+ * Post-boundary Lab files the main Core needs (lot 8), applied by the production migrator, in name order with the
+ * rest. Explicit and closed: each one is a table / column a service of the main Core reads. Never the Lab's own
+ * alerts, channel points, Random Ban or Roue du Sub files (the production schema has its own).
+ */
+export const MAIN_CORE_LAB_MIGRATIONS: readonly string[] = Object.freeze([
+  // Commands V2 (chat answers as durable steps; Jeu des mots and mini-games answer through cmd_steps).
+  '20261011120000_commands_v2.sql',
+  '20261012120000_commands_v2_invocations.sql',
+  '20261013120000_commands_v2_steps.sql',
+  '20261014120000_commands_v2_categories.sql',
+  // The four of the staging Core: moderation idempotency, Tombola stream sessions, Bonk viewer OAuth, Bonk salves.
+  '20261015120000_lab_moderation_idempotency.sql',
+  '20261016130000_lab_stream_session_twitch_id.sql',
+  '20261017120000_bonk_lab_viewer_oauth.sql',
+  '20261018120000_bonk_lab_volleys.sql',
+  // Jeu des mots, Roulette / Slot, Duel.
+  '20261019120000_cmd_steps_word_game.sql',
+  '20261019130000_word_game_lab.sql',
+  '20261020120000_mini_games_lab.sql',
+  '20261021120000_mini_game_duels_lab.sql',
+  // The Lab wallet's ledger kind of « Accorder des crédits » (the main Core in Lab mode).
+  '20261030120000_lab_ledger_channel_points.sql',
+]);
+
 export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261015120000_lab_moderation_idempotency.sql',
   '20261016130000_lab_stream_session_twitch_id.sql',
@@ -128,6 +158,8 @@ export interface MigrationScopes {
   prod: readonly string[];
   lab: readonly string[];
   legacyLabInProd: readonly string[];
+  /** Post-boundary Lab files the production selection applies too (the main Core's needs, lot 8). */
+  mainCore?: readonly string[];
   /** Lab files added to the production selection for the staging Core only. */
   stagingExtra?: readonly string[];
 }
@@ -136,6 +168,7 @@ export const MIGRATION_SCOPES: MigrationScopes = Object.freeze({
   prod: PROD_MIGRATIONS,
   lab: LAB_MIGRATIONS,
   legacyLabInProd: LEGACY_LAB_IN_PROD,
+  mainCore: MAIN_CORE_LAB_MIGRATIONS,
   stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
 });
 
@@ -171,7 +204,15 @@ export function selectMigrations(
         `unclassified migration ${f}: add it to PROD_MIGRATIONS or LAB_MIGRATIONS (src/db/migration-scopes.ts)`,
       );
   }
-  const legacy = new Set(scopes.legacyLabInProd);
+  const legacy = new Set([
+    ...scopes.legacyLabInProd,
+    ...(scopes.mainCore ?? []),
+  ]);
+  for (const f of scopes.mainCore ?? [])
+    if (!lab.has(f))
+      throw new MigrationScopeError(
+        `${f} is listed for the main Core but not as a Lab migration`,
+      );
   const stagingExtra = new Set(scopes.stagingExtra ?? []);
   for (const f of stagingExtra)
     if (!lab.has(f))

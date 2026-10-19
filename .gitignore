@@ -21,6 +21,9 @@ dist/
 # Channel points redemptions not yet answered by Core (bot and Lab adapter outboxes, local runtime data)
 .channel-points-outbox.json*
 .lab-channel-points-outbox.json*
+# Main Core chat games and real alerts (production bot, lot 8): alerts outbox, chat answers journal
+.alerts-outbox.json*
+.chat-games-journal.json*
 # Commands V2 Lab chat sends journal (bot executor, local runtime data)
 .lab-chat-journal.json*
 # Random Ban V2 timeouts journal (bot executor, local runtime data)

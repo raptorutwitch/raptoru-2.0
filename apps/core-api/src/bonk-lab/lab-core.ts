@@ -13,11 +13,6 @@ import { LabModerationService } from '../lab-moderation/service.js';
 import { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
 import { HttpError } from '../http/server.js';
 import { commandsRoutes } from '../http/commands-routes.js';
-import { CommandsService } from '../commands/service.js';
-import {
-  raffleReservedWords,
-  withMiniGameWords,
-} from '../commands/reserved.js';
 import { miniGamesRoutes } from '../http/mini-games-routes.js';
 import { alertsRoutes } from '../http/alerts-routes.js';
 import { channelPointsRoutes } from '../http/channel-points-routes.js';
@@ -27,15 +22,12 @@ import { RandomBanService } from '../random-ban/service.js';
 import { subWheelRoutes } from '../http/sub-wheel-routes.js';
 import { SubWheelService } from '../sub-wheel/service.js';
 import { AlertsService } from '../alerts/service.js';
-import { MiniGamesService } from '../mini-games/service.js';
-import { twitchAppLoginLookup } from '../mini-games/twitch-login.js';
-import { CommandsAdmission } from '../commands/admission.js';
-import { CommandSteps } from '../commands/steps.js';
+import { createChatGames } from '../lab-chat/games.js';
+import type { WordGameService } from '../word-game/service.js';
 import {
   serveWordGameEvents,
   wordGameRoutes,
 } from '../http/word-game-routes.js';
-import { WordGameService } from '../word-game/service.js';
 import type { Clock } from '../clock.js';
 import { dbReady, type Db } from '../db/db.js';
 import { labEconomy, type EconomyPort } from '../economy/economy.js';
@@ -110,34 +102,18 @@ export function createLabCore({
     broadcasterOf,
     economy,
   );
-  // Commands V2 (Lab): Tombola's chat words stay Tombola's (reserved, read through its own configuration
-  // reader). Admission (phase B) records; accepted answers become durable steps (phase C), handed to the
-  // Lab Twitch adapter only while « Sortie chat réelle » is ON (OFF by default).
-  // Roulette / Slot words are the mini-games' too (StreamElements aliases included).
-  const reserved = withMiniGameWords(raffleReservedWords(raffle));
-  const commands = new CommandsService(db, systemClock, { reserved });
-  const admission = new CommandsAdmission(db, systemClock, {
-    reserved,
-    broadcasterOf,
-  });
-  const steps = new CommandSteps(db, systemClock);
-  // Jeu des mots V1: reads the whole chat (plainText), answers through cmd_steps (origin word_game).
-  const wordGame = new WordGameService(
-    db,
-    systemClock,
-    undefined,
-    undefined,
-    economy,
-  );
-  // Roulette and Slot V1: chat commands only, Lab wallet, answers through cmd_steps (origin mini_game).
-  // Duel V1: the target's Twitch ID by exact login (Helix, the Lab app credentials of the Tombola avatars).
-  const miniGames = new MiniGamesService(
-    db,
-    systemClock,
-    undefined,
-    twitch ? twitchAppLoginLookup(twitch) : null,
-    economy,
-  );
+  // Commands V2, Jeu des mots, Roulette / Slot / Duel: the ONE assembly of the chat games (lab-chat/games.ts).
+  // Commands V2 answers become durable steps, handed to the Lab Twitch adapter only while « Sortie chat réelle » is
+  // ON (OFF by default); Duel finds its target by login with the Lab app credentials of the Tombola avatars.
+  const { commands, admission, steps, wordGame, miniGames, chatModules } =
+    createChatGames({
+      db,
+      clock: systemClock,
+      economy,
+      raffle,
+      broadcasterOf,
+      twitch,
+    });
   const randomBan = new RandomBanService(db, systemClock);
   const alertsService = new AlertsService(db, systemClock);
   // Gains credited only when the runtime economy is the canonical Wallet (never with the Lab wallet).
@@ -162,12 +138,8 @@ export function createLabCore({
       ),
       tts,
       raffle,
-      [
-        { name: 'commands', chat: (m) => admission.chat(m) },
-        { name: 'word_game', plainText: true, chat: (m) => wordGame.chat(m) },
-        // Whole chat: the simulator identities it learns are the Duel targets of the Simulation tab.
-        { name: 'mini_games', plainText: true, chat: (m) => miniGames.chat(m) },
-      ],
+      // Whole chat for the Jeu des mots and the mini-games (the simulator identities are the Duel targets).
+      chatModules,
     ),
     ...wordGameRoutes(wordGame),
     ...miniGamesRoutes(miniGames),

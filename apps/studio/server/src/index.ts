@@ -997,8 +997,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     labApi,
     raffle,
     labChat,
-    // Commands V2: Lab only (no chat 2.0 in Production).
-    labCore && labProfile ? commandsRelay(labCore) : null,
+    // Commands V2: the Lab Core, or the main Core through the production cockpit (lot 8: it hosts the chat games).
+    labCore ? commandsRelay(labCore, cockpitChannel) : null,
     {
       plan,
       runtimeDir: paths.runtimeDir,
@@ -1013,7 +1013,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       },
     },
     wordGame,
-    labCore && labProfile ? miniGamesRelay(labCore) : null,
+    labCore ? miniGamesRelay(labCore, cockpitChannel) : null,
     alerts,
     points,
     twitchConnections,

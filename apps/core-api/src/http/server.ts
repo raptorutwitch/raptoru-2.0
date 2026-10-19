@@ -68,6 +68,9 @@ import {
 import type { ExtFacade } from '../ext/ext-facade.js';
 import { RateLimiter, type BucketRule } from '../ext/rate-limit.js';
 import { extRoutes } from './ext-routes.js';
+import { botChatRoutes } from './bot-chat-routes.js';
+import type { ChatGames } from '../lab-chat/games.js';
+import type { LabChatRouter } from '../lab-chat/router.js';
 import type { LabCall } from '../ext/lab-internal.js';
 import { studioCockpitRoutes } from './studio-cockpit-routes.js';
 import { studioAdminRoutes } from './studio-admin-routes.js';
@@ -130,6 +133,11 @@ export interface AppDeps {
   };
   /** Studio cockpit over the installation credential (ASTRA-P1-019): needs studioInstallations. */
   cockpit?: { core: LabCall; channelId: string };
+  /**
+   * Chat games of the main Core (lot 8): /v1/bot/chat, /v1/bot/stream, /v1/bot/commands/<channel>/steps/* for the
+   * production bot (bot secret), the cockpit's channel only.
+   */
+  chatIngress?: { router: LabChatRouter; games: ChatGames };
 }
 
 type Auth = 'public' | 'bot' | 'studio' | 'studio_installation' | 'extension';
@@ -207,6 +215,7 @@ function routes({
   labRoutes = true,
   ext,
   cockpit,
+  chatIngress,
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
@@ -231,6 +240,9 @@ function routes({
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
     ...(studioInstallations && cockpit
       ? studioCockpitRoutes(cockpit.core, cockpit.channelId)
+      : []),
+    ...(chatIngress && cockpit?.channelId
+      ? botChatRoutes(chatIngress.router, chatIngress.games, cockpit.channelId)
       : []),
     ...(ext ? extRoutes(ext.facade) : []),
     ...loyaltyRoutes(loyalty),

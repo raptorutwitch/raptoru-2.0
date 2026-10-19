@@ -12,7 +12,8 @@ import { HttpError, parse, type Route } from './server.js';
 // - Lab Core: /v1/lab/alerts/* (Studio secret, Lab database);
 // - production Core (17/10/2026, § 22): /v1/studio/alerts/* behind a Studio installation credential (like the Bonk /
 //   Soundboard / TTS transport), for the Core's single channel only; a Studio may post simulated or external
-//   (StreamElements) events, never « twitch » ones (those come from the bot).
+//   (StreamElements) events, never « twitch » ones: those come from the production bot (bot secret) on
+//   /v1/bot/alerts/events (lot 8), the same contract as the Lab adapter's /v1/lab/alerts/events.
 // Normalized events in (Twitch adapter, StreamElements, simulator), supervision, claim and ACK (Studio).
 
 async function mapped<T>(fn: () => Promise<T>): Promise<T> {
@@ -112,5 +113,29 @@ export function alertsRoutes(
           return alerts.ack(params[0]!, parse(AlertAckRequest, body));
         }),
     },
+    // Production: the real Twitch events, from the bot only (durable outbox there, deduplicated here by their id).
+    ...(production
+      ? [
+          {
+            method: 'POST' as const,
+            pattern: /^\/v1\/bot\/alerts\/events$/,
+            auth: 'bot' as const,
+            handle: async ({ body }: { body: unknown }) => {
+              const event = parse(AlertEventInput, body);
+              channel(event.channel_id);
+              if (event.source !== 'twitch')
+                throw new HttpError(400, { error: 'twitch_source_required' });
+              const received = await mapped(() => alerts.receive(event));
+              // A redelivery asks again: the same spin (and a spin missed by a failed first reception is made).
+              if (subWheel)
+                await subWheel.fromAlert(
+                  event,
+                  received.alert?.alert_id ?? null,
+                );
+              return received;
+            },
+          },
+        ]
+      : []),
   ];
 }

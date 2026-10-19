@@ -8,7 +8,10 @@ import {
 } from './channel-points-events.js';
 import { createCoreClient } from './core-client.js';
 import { createBroadcasterEvents } from './loyalty-events.js';
-import { fileOutbox } from './loyalty-outbox.js';
+import { fileOutbox, memoryOutbox } from './loyalty-outbox.js';
+import { createCoreChatBridge } from './core-chat-bridge.js';
+import type { AlertOutboxEvent } from './lab-alerts-ingest.js';
+import { fileJournal } from './lab-chat-output.js';
 import { createBotRuntime } from './runtime.js';
 import { fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { superviseTwitchAuth } from './twitch/auth-supervision.js';
@@ -39,10 +42,17 @@ const auth = new TwitchAuth({
   store: fileTokenStore(config.TWITCH_TOKEN_FILE),
   requiredScopes: requiredScopes({
     ...config,
-    // This entry point does not run the Lab adapters or Random Ban executor.
-    LAB_CHAT_INGEST: 'false',
-    LAB_CHAT_OUTPUT: 'false',
-    LAB_ALERTS_FOLLOW: 'false',
+    // This entry point does not run the Lab adapters or Random Ban executor; the main Core's chat games and alerts
+    // (lot 8) need the same capabilities as the Lab adapter's.
+    LAB_CHAT_INGEST:
+      config.CHAT_GAMES === 'true' || config.ALERTS_MODE !== 'off'
+        ? 'true'
+        : 'false',
+    LAB_CHAT_OUTPUT:
+      config.CHAT_GAMES === 'true' && config.CHAT_GAMES_OUTPUT === 'true'
+        ? 'true'
+        : 'false',
+    LAB_ALERTS_FOLLOW: config.ALERTS_FOLLOW,
     RANDOM_BAN: 'false',
   }),
   expectedUserId: TWITCH_OAUTH_PROFILES.bot.expectedUserId,
@@ -74,8 +84,97 @@ const runtime = createBotRuntime({
 });
 
 consumers.add(() => runtime.presence?.stop());
+// Lot 8: chat games and real alerts of the main Core, on this same connection (core-chat-bridge.ts). Both OFF by
+// default: nothing more is subscribed or forwarded.
+const coreHelix = createHelix({
+  clientId: config.TWITCH_CLIENT_ID,
+  getAccessToken: () => auth.getAccessToken(),
+  handleUnauthorized: (rejected) => auth.handleUnauthorized(rejected),
+});
+const coreCall = async (path: string, body: unknown) => {
+  const res = await fetch(new URL(path, config.CORE_API_URL), {
+    method: 'POST',
+    redirect: 'error',
+    headers: {
+      authorization: `Bearer ${config.BOT_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(5000),
+  });
+  return { status: res.status, body: (await res.json()) as unknown };
+};
+const bridge =
+  config.CHAT_GAMES === 'true' || config.ALERTS_MODE !== 'off'
+    ? createCoreChatBridge({
+        post: async (path, body) => {
+          const r = await coreCall(path, body);
+          // The Lab adapter's error shape: its retry rules (transient 5xx / 408 / 429) apply unchanged.
+          if (r.status < 200 || r.status >= 300)
+            throw new Error(`lab_core_${r.status}`);
+          return r.body;
+        },
+        call: coreCall,
+        channelId: config.TWITCH_BROADCASTER_ID,
+        broadcasterId: config.TWITCH_BROADCASTER_ID,
+        tokenUserId: status.userId!,
+        scopes: status.scopes,
+        games: config.CHAT_GAMES === 'true',
+        alertsMode: config.ALERTS_MODE,
+        alertsOutbox:
+          config.ALERTS_MODE === 'active'
+            ? fileOutbox<AlertOutboxEvent>(config.ALERTS_OUTBOX_FILE)
+            : memoryOutbox<AlertOutboxEvent>(),
+        runtimeChat:
+          config.DAILY_CHAT_COMMANDS === 'true' ||
+          config.LOYALTY_CHAT_COMMANDS === 'true',
+        subscribe: (type, condition, sessionId, version) =>
+          coreHelix.subscribe(type, condition, sessionId, version),
+        getStream: () => coreHelix.getStream(config.TWITCH_BROADCASTER_ID),
+        ...(config.CHAT_GAMES_OUTPUT === 'true' &&
+        status.scopes.includes('user:write:chat')
+          ? {
+              output: {
+                send: {
+                  chat: (text: string, replyTo: string | null) =>
+                    coreHelix.sendChat(
+                      config.TWITCH_BROADCASTER_ID,
+                      status.userId!,
+                      text,
+                      replyTo,
+                    ),
+                  announce: (text: string) =>
+                    coreHelix.sendAnnouncement(
+                      config.TWITCH_BROADCASTER_ID,
+                      status.userId!,
+                      text,
+                    ),
+                },
+                journal: fileJournal(config.CHAT_GAMES_JOURNAL_FILE),
+                ratePer30s: config.CHAT_GAMES_OUTPUT_RATE,
+              },
+            }
+          : {}),
+      })
+    : null;
+if (bridge) {
+  consumers.add(() => bridge.close());
+  void bridge.resumePending(); // alerts a previous run could not deliver to Core
+  void bridge.run();
+  console.log(
+    `[twitch-bot] main Core: chat games ${config.CHAT_GAMES}, alerts ${config.ALERTS_MODE}, chat answers ${config.CHAT_GAMES_OUTPUT}`,
+  );
+}
 const botSocket = runEventSub({
   ...runtime.eventSub,
+  async subscribe(sessionId) {
+    await runtime.eventSub.subscribe(sessionId);
+    await bridge?.subscribe(sessionId);
+  },
+  async notification(type, event, messageId, timestamp) {
+    await runtime.eventSub.notification(type, event, messageId, timestamp);
+    await bridge?.notification(type, event, messageId, timestamp);
+  },
   revocation: (_type, reason) => authorizationLost('LeCroupier_', reason),
 });
 consumers.add(() => botSocket.stop());
@@ -93,6 +192,12 @@ const syncLoop = async () => {
   await runtime.streams
     .sync()
     .catch((error) => console.error('[twitch-bot] stream sync failed', error));
+  // Chat games: a stream transition the main Core did not receive is sent again (Tombola stream sessions).
+  await bridge
+    ?.reconcileStream()
+    .catch((error) =>
+      console.error('[twitch-bot] chat games stream repair failed', error),
+    );
   setTimeout(syncLoop, config.STREAM_SYNC_INTERVAL_MS);
 };
 await syncLoop();

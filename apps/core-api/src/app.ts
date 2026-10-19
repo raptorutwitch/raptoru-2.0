@@ -12,6 +12,8 @@ import { DailyCredits, type CreditProvider } from './daily/credits.js';
 import { DailyService } from './daily/daily-service.js';
 import type { Db } from './db/db.js';
 import { type EconomyPort, labEconomy } from './economy/economy.js';
+import { type ChatGames, createChatGames } from './lab-chat/games.js';
+import type { LoginLookup } from './mini-games/twitch-login.js';
 import {
   LoyaltyEngine,
   SHADOW_MODES,
@@ -50,6 +52,8 @@ export interface Core {
    * moderation): the Lab test wallet unless the process passes the canonical Wallet (economy/activation.ts).
    */
   economy: EconomyPort;
+  /** Commands V2, Jeu des mots, Roulette / Slot / Duel: the same assembly as the Lab Core (lab-chat/games.ts). */
+  chat: ChatGames;
 }
 
 export function createCore(
@@ -59,12 +63,27 @@ export function createCore(
   loyaltyModes: LoyaltyModes = SHADOW_MODES,
   twitchViewers: TwitchViewerCatalog | null = null,
   economy: EconomyPort = labEconomy,
+  /** The channel this Core serves: its broadcaster (streamer of the chat modules) and the Twitch app (Duel logins). */
+  channel: {
+    broadcasterId?: string | null;
+    twitchApp?: { clientId: string; clientSecret: string } | null;
+    /** Duel targets by login without Twitch (tests). */
+    loginLookup?: LoginLookup | null;
+  } = {},
 ): Core {
+  const broadcasterOf = () => channel.broadcasterId ?? null;
   const credits = new DailyCredits(db, provider);
   const wallet = createWalletModule(db, clock);
   const loyalty = new LoyaltyEngine(db, clock, wallet.wallet, loyaltyModes);
   const soundLab = new SoundLabService(db, clock, undefined, economy);
   const randomBan = new RandomBanService(db, clock);
+  const raffleLab = new RaffleLabService(
+    db,
+    clock,
+    undefined,
+    broadcasterOf,
+    economy,
+  );
   return {
     credits,
     daily: new DailyService(db, clock, credits),
@@ -77,7 +96,7 @@ export function createCore(
     twitchViewers,
     soundLab,
     ttsLab: new TtsLabService(db, clock, undefined, undefined, economy),
-    raffleLab: new RaffleLabService(db, clock, undefined, undefined, economy),
+    raffleLab,
     studioInstallations: new StudioInstallations(db, clock),
     alerts: new AlertsService(db, clock),
     channelPoints: new ChannelPointsService(
@@ -90,5 +109,14 @@ export function createCore(
     randomBan,
     subWheel: new SubWheelService(db, clock, undefined, economy),
     economy,
+    chat: createChatGames({
+      db,
+      clock,
+      economy,
+      raffle: raffleLab,
+      broadcasterOf,
+      twitch: channel.twitchApp ?? null,
+      loginLookup: channel.loginLookup ?? null,
+    }),
   };
 }

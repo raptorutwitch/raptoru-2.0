@@ -3,12 +3,13 @@ import { LAB_CHANNEL_ID, type LabCoreCall } from '../lab-moderation/proxy.js';
 
 // Roulette and Slot V1 in Studio (docs/ROULETTE_SLOT_PARITY.md). Core decides and stores everything; this
 // relay only maps the « Simulation de stream » panel's two calls to the Lab Core: the switch « Mini-jeux »
-// and its state (with the last plays). Lab profile only.
+// and its state (with the last plays). Lab profile, and the production cockpit of the main Core (lot 8).
 
 const MAX_BODY = 1024;
 
-export function miniGamesRelay(core: LabCoreCall) {
-  const base = `/v1/lab/mini-games/${LAB_CHANNEL_ID}`;
+/** `channelId`: the Lab channel, or the main Core's channel through the production cockpit (lot 8). */
+export function miniGamesRelay(core: LabCoreCall, channelId = LAB_CHANNEL_ID) {
+  const base = `/v1/lab/mini-games/${channelId}`;
   return async function handle(
     req: IncomingMessage,
     res: ServerResponse,

@@ -95,7 +95,7 @@ export interface ProductionRuntimes {
   /**
    * The streamer's cockpit (Moderation V2, Tombola, test wallet, TTS rules) on the same Core, over
    * the installation credential: the Lab routes the cockpit speaks, relayed by Core under
-   * /v1/studio/cockpit. Never the Lab chat nor Commands V2 (off in Production).
+   * /v1/studio/cockpit. Never the Lab chat; Commands V2 and the mini-games switch since lot 8 (the main Core hosts the chat games).
    */
   cockpit: LabCoreCall;
   /** Twitch alerts V1 (§ 22): the installation client for /v1/studio/alerts (same alerts runtime as the Lab). */

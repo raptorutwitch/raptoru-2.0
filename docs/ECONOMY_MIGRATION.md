@@ -566,9 +566,57 @@ importés, activation **refusée** faute d'import des crédits, puis — simulat
 20 plus gros soldes lus à l'identique par l'Extension, 215 opérations concurrentes sur deux Core (65 dépenses,
 47 transferts acceptés ; refus = Jetons insuffisants, file Bonk pleine), rejeux sans effet, 16 / 16 contrôles.
 
-**Restent ouverts avant le cutover** : lecture réelle des crédits historiques ; Jeu des mots, Roulette / Slot / Duel
-et Commandes V2 hébergés seulement par le Lab Core (le Core principal n'a ni leurs tables ni l'entrée chat / sortie chat
-du bot de production) ; alertes Twitch réelles (subs → Roue du Sub) reçues seulement par l'adaptateur Lab (le Core
-principal n'accepte des alertes que de Studio, en simulation) ; le Core principal a besoin des extras « staging »
-(idempotence de la modération, salves Bonk…) que le périmètre prod n'inclut pas (règle « jamais étendu » à revoir) ;
-release Studio ; arrêt des écrivains externes (StreamElements, SAMMI) au gel.
+**Restent ouverts avant le cutover** (mis à jour au lot 8, § 16 : jeux du chat, alertes réelles et périmètre des migrations résolus) : lecture réelle des crédits historiques ; release Studio ; arrêt des écrivains externes (StreamElements, SAMMI) au gel.
+
+## 16. Core unifié : jeux du chat et alertes Twitch réelles (phase 2 lot 8, 20/10/2026)
+
+**Jeux du chat dans le Core principal.** Une seule composition, `lab-chat/games.ts` (`createChatGames`), utilisée par le
+Lab Core (`bonk-lab/lab-core.ts`, comportement inchangé) et par `createCore` : Commandes V2 (admission, réponses en
+étapes durables), Jeu des mots, Roulette / Slot / Duel, avec l'économie du runtime (portefeuille Lab ou Wallet
+canonique). Le routeur unique du chat (`chatRouter` : Tombola d'abord, puis les jeux) est celui du Lab.
+
+| Porte (Core principal)                                         | Auth                | Contrat (identique au Lab)                                        |
+| -------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------- |
+| `POST /v1/bot/chat`                                            | secret du bot       | `LabChatMessage` ; `source: twitch` seulement, chaîne du Core     |
+| `POST /v1/bot/stream`                                          | secret du bot       | `LabStreamEvent` (sessions Tombola / Jeu des mots)                |
+| `POST /v1/bot/commands/<chaîne>/steps/claim` · `/<step>/ack`   | secret du bot       | réponses du chat (exécuteur du bot)                               |
+| `POST /v1/bot/alerts/events`                                   | secret du bot       | `AlertEventInput` `source: twitch` → file d'alertes + Roue du Sub |
+| `/v1/studio/cockpit/commands/…`, `word-game/…`, `mini-games/…` | installation Studio | configuration (jamais le chat simulé, jamais claim / ACK)         |
+
+Le simulateur de chat de Studio n'atteint jamais le Core principal (un message simulé déplacerait de vrais Jetons en
+canonique). Le Jeu des mots tourne (cycle 5–15 min) dans le processus du Core principal comme dans le Lab Core.
+`CORE_ECONOMY_MODULES` inclut `word_game` et `mini_games` (déjà prouvés au lot 1) ; Commandes V2 ne déplace aucun Jeton.
+
+**Bot de production** (`twitch-bot/src/core-chat-bridge.ts`) : les modules de l'adaptateur Lab réutilisés tels quels
+(ingestion du chat, ingestion des alertes avec outbox durable, exécuteur de sortie chat), seul le préfixe change
+(`/v1/lab/…` → `/v1/bot/…`). Sur la connexion EventSub existante de LeCroupier_ : `channel.chat.message` une seule fois
+(par le runtime ou le pont), `channel.chat.notification` (sub, resub, sub offert, raid…), cheers, `channel.follow`
+(avec `moderator:read:followers`). Drapeaux, **tous OFF par défaut** : `CHAT_GAMES`, `CHAT_GAMES_OUTPUT` (et
+« Sortie chat réelle » du Core, OFF), `ALERTS_MODE` off / test / active, `ALERTS_FOLLOW`. Fichiers git-ignorés :
+`.alerts-outbox.json`, `.chat-games-journal.json`.
+
+**Un sub, deux récompenses possibles, chacune une fois** : la Roue du Sub vient de l'alerte (id du message de chat
+Twitch), Loyalty de l'événement EventSub `channel.subscribe` (son id) ; chacune dédupliquée par son id, l'heure
+Twitch transmise pour la coupure StreamElements.
+
+**Migrations** : `MAIN_CORE_LAB_MIGRATIONS` (13 fichiers, restés classés Lab, contenu et ordre inchangés) entre dans
+la sélection prod : Commandes V2 (4), les quatre « staging » (idempotence de la modération, `twitch_stream_id` des
+sessions, OAuth viewer du Bonk, salves Bonk), Jeu des mots (2), mini-jeux et Duel (2), type de ledger Lab
+`channel_points`. Le périmètre staging devient égal au périmètre prod. Une base existante reçoit seulement les fichiers
+qu'elle n'a pas (par nom ; une base staging ne rejoue jamais les quatre) ; chaque fichier dans sa transaction ; les
+contraintes de `lab_wallet_ledger` sont seulement élargies. Prouvé sur PostgreSQL jetable : base vierge (38), base
+prod existante avec données (13 ajoutés, données intactes), base staging (9 ajoutés), installation interrompue reprise.
+Environnements réels : la base du Core staging (Coolify) a les quatre extras d'après la doc ; aucune base réelle n'a été
+touchée ni lue.
+
+**Prouvé** (`economy-lot8.integration.test.ts`, PostgreSQL réel, deux Core + un Core en panne) : roulette, slot, Bonk ;
+Duel accepté pendant une dépense Soundboard ; gain Jeu des mots pendant un gain de Tombola ; sub → alerte + Roue +
+Loyalty, une fois chacun ; tous les événements rejoués quatre fois sur deux Core (aucune opération nouvelle) ; Core en
+panne pendant un jeu (rien gardé, message renvoyé payé une fois) ; même message pris par deux Core (un effet) ;
+ledger = soldes ; portefeuille Lab jamais touché. Pont bot → Core réel en HTTP (`bot-core-bridge.test.ts`) : Core
+arrêté, alerte gardée puis livrée une fois au redémarrage. Lancement réel de `src/index.ts` (canonique, base jetable) :
+routes du bot à 200, message simulé refusé, `/v1/lab/chat` absent.
+
+**Restent** : Studio, profil production — le son OBS des gains du Jeu des mots arrive par un flux d'événements que le
+cockpit ne relaie pas (écran Jeu des mots encore Lab seulement ; Commandes V2 et l'interrupteur mini-jeux passent par le
+cockpit) ; l'état « événements Twitch réels » des alertes n'est pas affiché pour le bot de production ; release Studio.

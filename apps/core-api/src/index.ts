@@ -67,6 +67,17 @@ const core = createCore(
   },
   publicTwitchViewers(db, systemClock, config),
   economy,
+  {
+    // The streamer of the chat modules (Tombola, Commands V2, games) and the Twitch app (Duel targets by login).
+    broadcasterId: config.TWITCH_CHANNEL_ID ?? null,
+    twitchApp:
+      config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
+        ? {
+            clientId: config.TWITCH_APP_CLIENT_ID,
+            clientSecret: config.TWITCH_APP_CLIENT_SECRET,
+          }
+        : null,
+  },
 );
 
 const interrupted = await core.credits.recoverInterrupted();

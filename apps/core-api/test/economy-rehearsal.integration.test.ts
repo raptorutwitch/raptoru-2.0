@@ -8,12 +8,8 @@
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { RaffleCommand, type LabActor } from '@raptoru/schemas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createCore, type Core } from '../src/app.js';
-import type { CoreConfig } from '../src/config.js';
-import { WalletCreditProvider } from '../src/daily/credits.js';
 import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
 import {
@@ -21,11 +17,7 @@ import {
   EconomyActivationError,
   selectEconomy,
 } from '../src/economy/activation.js';
-import { createPublicFrontier } from '../src/ext/public-frontier.js';
-import { signExtensionJwt } from '../src/ext/twitch-jwt.js';
-import { createApp } from '../src/http/server.js';
 import { DEFAULT_RAFFLE_CONFIG } from '../src/raffle-lab/rules.js';
-import { sha256, STUDIO_PROTOCOL_HEADER } from '../src/studio/installations.js';
 import { convertLegacyCredits } from '../src/wallet/legacy-credits-to-opening.js';
 import {
   applyOpeningImport,
@@ -35,6 +27,7 @@ import {
 } from '../src/wallet/opening-import.js';
 import { WalletService } from '../src/wallet/wallet-service.js';
 import { FakeClock } from './helpers.js';
+import { bootMainCore, playersReady } from './main-core.js';
 import { LOCK_WAIT_MS, lockDestructiveSuite } from './pg-exclusive.js';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -42,7 +35,6 @@ const isLocal =
   !!url && /@(localhost|127\.0\.0\.1)[:/][^/]*\/[^/?]*test/.test(url);
 const CH = '83603689';
 const SECRET = randomBytes(32);
-const BOT = 'bot-rehearsal-secret-0123456789';
 const ALICE = { twitchUserId: '5001', login: 'alice', displayName: 'Alice' };
 const BOB = { twitchUserId: '5002', login: 'bob', displayName: 'Bob' };
 const CAROL = '5003'; // never in any source: a blank wallet
@@ -101,123 +93,10 @@ describe.skipIf(!isLocal)(
                where t.twitch_user_id = w.twitch_user_id and t.currency_id = w.currency_id)`),
       ).toBe(0);
 
-    /** One main Core process as src/index.ts assembles it, on its own pool. */
-    async function boot(db: Db) {
-      const economy = await selectEconomy({
-        mode: 'canonical',
-        q: db,
-        wallet: new WalletService(db),
-        modules: CORE_ECONOMY_MODULES,
-      });
-      const core = createCore(
-        db,
-        clock,
-        new WalletCreditProvider(db),
-        { preview: false, passiveCredits: true, eventCredits: true },
-        null,
-        economy,
-      );
-      const frontier = createPublicFrontier(core, db, clock, {
-        TWITCH_CHANNEL_ID: CH,
-        TWITCH_CHANNEL_LOGIN: 'raptoru_',
-        TWITCH_EXTENSION_SECRET: SECRET.toString('base64'),
-        CORE_ENVIRONMENT: 'staging',
-      } as CoreConfig)!;
-      const server = createApp({
-        labRoutes: false,
-        ...frontier.deps,
-        daily: core.daily,
-        streams: core.streams,
-        presence: core.presence,
-        wallet: core.wallet,
-        loyalty: core.loyalty,
-        bonkLab: core.bonkLab,
-        soundLab: core.soundLab,
-        ttsLab: core.ttsLab,
-        studioInstallations: core.studioInstallations,
-        alerts: core.alerts,
-        channelPoints: core.channelPoints,
-        randomBan: core.randomBan,
-        subWheel: core.subWheel,
-        botSecret: BOT,
-        studioSecret: 'studio-rehearsal-secret-0123456789',
-        db,
-      });
-      await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-      servers.push(server);
-      const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-      const send = async (
-        path: string,
-        body: unknown,
-        headers: Record<string, string>,
-      ) => {
-        const res = await fetch(base + path, {
-          method: body === undefined ? 'GET' : 'POST',
-          headers: { 'content-type': 'application/json', ...headers },
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
-        const text = await res.text();
-        return {
-          status: res.status,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely read JSON answers
-          body: (text ? JSON.parse(text) : null) as any,
-        };
-      };
-      const bot = (path: string, body: unknown) =>
-        send(path, body, { authorization: `Bearer ${BOT}` });
-      const jwt = (userId: string, role = 'viewer') =>
-        signExtensionJwt(
-          {
-            exp: Math.floor(Date.now() / 1000) + 600,
-            opaque_user_id: `U${userId}`,
-            channel_id: CH,
-            role,
-            user_id: userId,
-          },
-          SECRET,
-        );
-      const ext = (
-        userId: string,
-        path: string,
-        body?: unknown,
-        key: string = randomUUID(),
-        role = 'viewer',
-      ) =>
-        send(`/v1/ext${path}`, body, {
-          authorization: `Bearer ${jwt(userId, role)}`,
-          origin: 'https://abcdef123.ext-twitch.tv',
-          ...(body === undefined ? {} : { 'idempotency-key': key }),
-        });
-      // A paired Studio (installation credential).
-      const id = randomUUID();
-      const secret = randomBytes(32).toString('base64url');
-      await core.studioInstallations.register(
-        `${id}.${sha256(secret)}`,
-        'PC répétition',
-      );
-      const studio = (path: string, body?: unknown) =>
-        send(path, body, {
-          authorization: `Bearer rsi_${id}.${secret}`,
-          [STUDIO_PROTOCOL_HEADER]: '1',
-        });
-      return { core, bot, ext, studio };
-    }
-    const ready = async (core: Core) => {
-      await core.bonkLab.heartbeat({
-        studio_instance_id: 'studio-1',
-        obs: 'connected',
-        source_ready: true,
-        overlay_ready: true,
-      });
-      await core.soundLab.heartbeat({
-        studio_instance_id: 'studio-1',
-        player_ready: true,
-      });
-      await core.ttsLab.heartbeat({
-        studio_instance_id: 'studio-1',
-        player_ready: true,
-      });
-    };
+    /** One main Core process as src/index.ts assembles it, on its own pool (test/main-core.ts). */
+    const boot = (db: Db) =>
+      bootMainCore(db, clock, { extensionSecret: SECRET, servers });
+    const ready = playersReady;
 
     it('opening → activation → every module on one Wallet → replays, restart, concurrency → ledger = balances', async () => {
       // --- 0. Before any import, the canonical economy refuses to start.

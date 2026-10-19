@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { TWITCH_OAUTH_PROFILES, type TwitchOAuthRole } from '@raptoru/schemas';
 import { z } from 'zod';
+import { ALERTS_MODES } from './lab-alerts-ingest.js';
 
 const Flag = z.enum(['true', 'false']).default('false');
 
@@ -150,6 +151,23 @@ const TwitchApp = z.object({
 const Env = TwitchApp.extend({
   CORE_API_URL: z.url(),
   BOT_SECRET: z.string().min(16),
+  // Lot 8 — chat games of the main Core: every chat message and the stream state go to /v1/bot/chat and
+  // /v1/bot/stream (Tombola, Commands V2, Jeu des mots, Roulette / Slot / Duel). Reading only (user:read:chat).
+  CHAT_GAMES: Flag,
+  // Their chat answers, sent by LeCroupier_ only while Core's « Sortie chat réelle » is ON (OFF by default in Core).
+  // Needs user:write:chat and moderator:manage:announcements.
+  CHAT_GAMES_OUTPUT: Flag,
+  CHAT_GAMES_OUTPUT_RATE: z.coerce.number().int().min(1).max(100).default(20),
+  CHAT_GAMES_JOURNAL_FILE: z
+    .string()
+    .min(1)
+    .default('.chat-games-journal.json'),
+  // Real Twitch alerts (subs, resubs, gifts, raids, cheers, follows) → /v1/bot/alerts/events: off (default) /
+  // test (logged, never sent) / active (durable outbox, then Core: alert queue + Roue du Sub).
+  ALERTS_MODE: z.enum(ALERTS_MODES).default('off'),
+  // Follows: moderator:read:followers on LeCroupier_'s token (channel.follow v2).
+  ALERTS_FOLLOW: Flag,
+  ALERTS_OUTBOX_FILE: z.string().min(1).default('.alerts-outbox.json'),
   STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
 });
 

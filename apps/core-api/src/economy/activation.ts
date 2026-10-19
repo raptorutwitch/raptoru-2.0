@@ -40,10 +40,12 @@ export const CANONICAL_READY: Readonly<Record<string, true | string>> = {
 
 /**
  * The paying modules the main Core (src/index.ts) hosts; Daily, Loyalty and the chat wallet commands write the
- * canonical Wallet natively (no port). Roulette / Slot / Duel and Jeu des mots are still hosted by the Lab Core only
- * (docs/ECONOMY_MIGRATION.md § 15).
+ * canonical Wallet natively (no port); Commands V2 moves no money (text answers only).
  */
 export const CORE_ECONOMY_MODULES = [
+  // Lot 8: the chat games, hosted by the main Core too (lab-chat/games.ts, /v1/bot/chat).
+  'word_game',
+  'mini_games',
   'bonk',
   'soundboard',
   'tts',

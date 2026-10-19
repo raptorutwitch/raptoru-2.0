@@ -15,6 +15,8 @@ import { DEFAULT_MIGRATIONS_DIR, migrate } from '../src/db/migrate.js';
 import {
   LAB_MIGRATIONS,
   LEGACY_LAB_IN_PROD,
+  MAIN_CORE_LAB_MIGRATIONS,
+  STAGING_EXTRA_LAB_MIGRATIONS,
   MIGRATION_SCOPES,
   MigrationScopeError,
   PROD_MIGRATIONS,
@@ -92,13 +94,21 @@ describe('Lab / prod migration boundary', () => {
     expect(selectMigrations(existing, 'prod')).toEqual(existing);
   });
 
-  it('prod path: never a Lab migration added after the boundary', async () => {
+  it('prod path: a post-boundary Lab migration only when the main Core list names it (lot 8)', async () => {
     const files = await sqlFiles();
     const prod = selectMigrations(files, 'prod');
     for (const f of LAB_MIGRATIONS.filter(
       (x) => !LEGACY_LAB_IN_PROD.includes(x),
     ))
-      expect(prod, f).not.toContain(f);
+      expect(prod.includes(f), f).toBe(MAIN_CORE_LAB_MIGRATIONS.includes(f));
+    // Never the Lab's own alerts / channel points / Random Ban / Roue du Sub schema (production has its own).
+    for (const f of [
+      '20261022120000_alerts_lab.sql',
+      '20261025120000_channel_points_lab.sql',
+      '20261026120000_random_ban_lab.sql',
+      '20261027120000_sub_wheel_lab.sql',
+    ])
+      expect(prod).not.toContain(f);
     // Rule check with a future Lab migration (the boundary does not depend on today's list).
     const future: MigrationScopes = {
       ...MIGRATION_SCOPES,
@@ -215,47 +225,53 @@ describe('Lab / prod migration boundary', () => {
   });
 });
 
-describe('staging scope (staging Core only)', () => {
-  it('= the production selection + exactly the four explicit Lab extras (never Commands V2)', async () => {
+describe('main Core scope (lot 8): blank, existing and upgraded databases', () => {
+  const OLD_PROD: MigrationScopes = { ...MIGRATION_SCOPES, mainCore: [] };
+  it('prod = the production files + the explicit main Core Lab list; staging adds nothing more', async () => {
     const files = await readdir(DEFAULT_MIGRATIONS_DIR);
     const prod = selectMigrations(files, 'prod');
-    const staging = selectMigrations(files, 'staging');
-    expect(staging.filter((f) => !prod.includes(f))).toEqual([
-      '20261015120000_lab_moderation_idempotency.sql',
-      '20261016130000_lab_stream_session_twitch_id.sql',
-      '20261017120000_bonk_lab_viewer_oauth.sql',
-      '20261018120000_bonk_lab_volleys.sql',
+    const old = selectMigrations(files, 'prod', OLD_PROD);
+    expect(old.length).toBe(25);
+    expect(prod.filter((f) => !old.includes(f))).toEqual([
+      ...MAIN_CORE_LAB_MIGRATIONS,
     ]);
-    expect(staging.some((f) => f.includes('commands_v2'))).toBe(false);
-    expect(prod.length).toBe(25); // + alerts (§ 22), channel points, Random Ban, sub wheel, opening import (+ its sources), credit currencies
+    expect(selectMigrations(files, 'staging')).toEqual(prod);
+    // Name order kept: the main Core files interleave with the production ones by date.
+    expect(prod).toEqual([...prod].sort());
   });
 
-  it('on a database already migrated in prod: applies the four extras only, once', async () => {
+  it('a blank database: everything once; again: nothing', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod')).length).toBe(25);
-    expect(await migrate(db, 'staging')).toEqual([
-      '20261015120000_lab_moderation_idempotency.sql',
-      '20261016130000_lab_stream_session_twitch_id.sql',
-      '20261017120000_bonk_lab_viewer_oauth.sql',
-      '20261018120000_bonk_lab_volleys.sql',
-    ]);
-    expect(await migrate(db, 'staging')).toEqual([]);
-    expect(
-      (
-        await db.query(
-          "select 1 from information_schema.columns where table_name = 'lab_stream_sessions' and column_name = 'twitch_stream_id'",
-        )
-      ).length,
-    ).toBe(1);
-    expect(
-      (
-        await db.query(
-          "select 1 from pg_tables where tablename = 'lab_moderation_requests'",
-        )
-      ).length,
-    ).toBe(1);
-    expect(
-      await db.query("select 1 from pg_tables where tablename like 'cmd_%'"),
-    ).toEqual([]);
+    expect((await migrate(db, 'prod')).length).toBe(38);
+    expect(await migrate(db, 'prod')).toEqual([]);
+    for (const t of ['cmd_steps', 'word_game_words', 'mini_game_duels'])
+      expect(
+        (await db.query('select 1 from pg_tables where tablename = $1', [t]))
+          .length,
+        t,
+      ).toBe(1);
+  });
+
+  it('a database migrated by the previous production selection: only the main Core files, once', async () => {
+    const db = createPgliteDb(new PGlite());
+    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(25);
+    expect(await migrate(db, 'prod')).toEqual([...MAIN_CORE_LAB_MIGRATIONS]);
+    expect(await migrate(db, 'prod')).toEqual([]);
+  });
+
+  it('a staging database (the four extras already there): the others only, never the four again', async () => {
+    const db = createPgliteDb(new PGlite());
+    const OLD_STAGING: MigrationScopes = {
+      ...OLD_PROD,
+      stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
+    };
+    expect((await migrate(db, 'staging', undefined, OLD_STAGING)).length).toBe(
+      29,
+    );
+    expect(await migrate(db, 'prod')).toEqual(
+      MAIN_CORE_LAB_MIGRATIONS.filter(
+        (f) => !STAGING_EXTRA_LAB_MIGRATIONS.includes(f),
+      ),
+    );
   });
 });
