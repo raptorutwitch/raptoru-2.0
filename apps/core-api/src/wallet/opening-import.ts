@@ -26,6 +26,14 @@ export const OpeningSnapshot = z.strictObject({
     accounts: z.number().int().min(0),
     total: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   }),
+  // Where the decisions come from (selection manifest fingerprint, policy): bound to the file by its sha256.
+  provenance: z
+    .strictObject({
+      manifest_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+      manifest_generated_at: z.iso.datetime({ offset: true }),
+      policy: z.string().min(1).max(1000),
+    })
+    .optional(),
   rows: z.array(
     z.strictObject({
       // A real Twitch user id: no « 0 », no leading zero.

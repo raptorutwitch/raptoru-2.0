@@ -330,3 +330,21 @@ connexions : crédit en vol contre import, crédit pendant l'import, deux import
 **Reste ouvert (hors de ce lot)** : générer ce fichier depuis le manifeste de sélection validé (et refaire le snapshot
 au gel) ; validateur bloquant de l'exporteur StreamElements (B4) ; gel et capture des événements (B5) ; raccordement des
 modules au Wallet canonique (B6) ; service de réserve (I4).
+
+## 11. Convertisseur sélection → fichier d'ouverture (phase 1B, 19/10/2026)
+
+`npm run wallet:opening-from-selection -w @raptoru/core-api -- <manifeste.json> <export-brut.json> --import-id=<id>
+[--out=<ouverture.json>]` (`src/wallet/selection-to-opening.ts`). Pur et reproductible : aucune base touchée, mêmes
+entrées → mêmes octets ; sans `--out`, validation seule ; n'écrase jamais un fichier existant. Aucun solde ni pseudo
+codé en dur : tout vient du manifeste.
+
+- Une ligne par Twitch ID destinataire ; comptes repris et rattachés regroupés dans `sources` ; exclus dans `excluded`
+  (motif = décision + règle) ; empreinte de l'export brut dans `source_snapshot`, empreinte du manifeste et politique
+  dans `provenance` (liées au registre par le sha256 du fichier).
+- Refus : manifeste non validé, incomplet ou avec problème, compte sans décision ; export brut différent (compte absent
+  ou en trop, solde différent, passes différentes, autre date) ; compte en double ; destination absente, rattachement
+  non vérifié ou sans cible, Twitch ID cible ≠ destination, compte cible non repris ou d'une autre destination, deux
+  pseudos pour un Twitch ID ; importé + exclu ≠ total.
+- Tests `wallet-selection-to-opening` (5, données fictives) : conversion, import puis contrôle, refus.
+- 19/10 : le manifeste réel (13 h 59) est refusé pour la seule raison `wenou` (Twitch ID cible 37006561 ≠ `wenuyr`
+  172305417) ; l'export brut correspond par ailleurs exactement (2 886 comptes, 41 021 548 Jetons).
