@@ -67,7 +67,19 @@ export interface ExtConfig {
   channelLogin: string;
   /** Shown to the extension (`environment`): 'staging' until the cutover. */
   environment: string;
+  /**
+   * The Core's economy is the canonical Wallet (economy/activation.ts): payments are real, never announced as a
+   * simulation. Absent / false: the Lab test wallet, everything says « simulated ».
+   */
+  wallet?: boolean;
 }
+
+/** Module descriptions when the payment is real (the canonical Wallet): what pays, never a price. */
+const REAL_DESCRIPTION: Record<string, string> = {
+  tts: 'TTS · payé en Jetons ou en Crédits TTS.',
+  soundboard: 'Soundboard · payé en Jetons ou en Crédits Soundboard.',
+  bonk: 'Bonk · payé en Jetons.',
+};
 
 interface Viewer extends TwitchName {
   id: string;
@@ -157,6 +169,14 @@ export class ExtFacade {
     /** Twitch viewers (Bonk emotes): linking and personal catalogs; null = off. */
     private readonly twitch: TwitchViewerCatalog | null = null,
   ) {}
+
+  /** Real payment (canonical Wallet) or the Lab test wallet's simulation. */
+  private get real() {
+    return this.config.wallet === true;
+  }
+  private get paymentMode() {
+    return this.real ? 'wallet' : 'simulated';
+  }
 
   private get C() {
     return this.config.channelId;
@@ -373,8 +393,8 @@ export class ExtFacade {
             : ttsConfig.module_state,
           rules: ttsConfig.rules,
           viewer: ttsViewer,
-          test_mode: true,
-          payment_mode: 'simulated',
+          test_mode: !this.real,
+          payment_mode: this.paymentMode,
         }
       : null;
 
@@ -412,13 +432,17 @@ export class ExtFacade {
         })),
       },
       { ...MODULE_PRESENTATION.bonk, emote_catalog: { groups: [] } },
-      {
-        ...MODULE_PRESENTATION.raffle_join,
-        raffle_v2: true,
-        ...(raffleV2?.live_name ? { label: raffleV2.live_name } : {}),
-        ...(raffleV2?.live_open ? { open_label: raffleV2.live_open } : {}),
-      },
-    ];
+    ].map((m) =>
+      this.real && REAL_DESCRIPTION[String(m.id)]
+        ? { ...m, description: REAL_DESCRIPTION[String(m.id)] }
+        : m,
+    );
+    modules.push({
+      ...MODULE_PRESENTATION.raffle_join,
+      raffle_v2: true,
+      ...(raffleV2?.live_name ? { label: raffleV2.live_name } : {}),
+      ...(raffleV2?.live_open ? { open_label: raffleV2.live_open } : {}),
+    });
 
     const ttsPaused = moduleState('tts') === 'paused';
     const ttsModeration = (canModerate: boolean) => ({
@@ -451,9 +475,9 @@ export class ExtFacade {
 
     return {
       demo_mode: false,
-      test_mode: true,
+      test_mode: !this.real,
       environment: this.config.environment,
-      payment_mode: 'simulated',
+      payment_mode: this.paymentMode,
       moderation_v2: true,
       commands_public: false,
       role: who.caller.role === 'external' ? 'viewer' : who.caller.role,
@@ -627,9 +651,9 @@ export class ExtFacade {
         module_id: module,
         reference_id: i.interaction_id,
         interaction: i,
-        charged: false,
-        test_mode: true,
-        payment_mode: 'simulated',
+        charged: this.real,
+        test_mode: !this.real,
+        payment_mode: this.paymentMode,
         cost: i.simulated_cost,
         ...extra,
       });
@@ -675,9 +699,9 @@ export class ExtFacade {
               volley_id: out.volley_id,
               interactions: out.interactions,
               replayed: out.replayed,
-              charged: false,
-              test_mode: true,
-              payment_mode: 'simulated',
+              charged: this.real,
+              test_mode: !this.real,
+              payment_mode: this.paymentMode,
               cost: out.interactions.reduce(
                 (sum, i) => sum + Number(i.simulated_cost),
                 0,

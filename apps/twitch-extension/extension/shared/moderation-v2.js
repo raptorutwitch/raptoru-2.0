@@ -43,6 +43,8 @@ const P = {
 const ic = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
+/** A credits balance: null = currency unavailable (never shown as a fictitious 0). */
+const credit = (n) => (n === null || n === undefined ? '—' : fmt(n));
 const MODS = {
   tts: { label: 'TTS', c: 'var(--m-tts)', unit: 'demande', units: 'demandes' },
   soundboard: { label: 'Soundboard', short: 'Sons', c: 'var(--m-soundboard)', unit: 'son', units: 'sons' },
@@ -750,7 +752,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   }
 
   const balance = (w) =>
-    `<div class="vh__bal"><b class="cost tnum">${fmt(w?.tokens)} J</b><span class="vh__cr"><b class="cost cost--credit tnum">${fmt(w?.credits_tts)} cr</b> TTS · <b class="cost cost--credit tnum">${fmt(w?.credits_soundboard)} cr</b> Sons</span></div>`;
+    `<div class="vh__bal"><b class="cost tnum">${fmt(w?.tokens)} J</b><span class="vh__cr"><b class="cost cost--credit tnum">${credit(w?.credits_tts)} cr</b> TTS · <b class="cost cost--credit tnum">${credit(w?.credits_soundboard)} cr</b> Sons</span></div>`;
   function viewerView(id) {
     const v = cards.get(id);
     const name = v?.display_name ?? nameOf(id);
@@ -1343,7 +1345,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     const v = cards.get(vid);
     if (!v) return '<div class="empty">Chargement…</div>';
     const adm = (v.wallet_ledger ?? []).filter((e) => ['admin', 'lab_tools'].includes(e.operation_type));
-    return `<div class="wal wal--3"><div><small>Jetons</small><b class="cost tnum">${fmt(v.wallet?.tokens)} J</b></div><div><small>Crédits TTS</small><b class="cost cost--credit tnum">${fmt(v.wallet?.credits_tts)} cr</b></div><div><small>Crédits Sons</small><b class="cost cost--credit tnum">${fmt(v.wallet?.credits_soundboard)} cr</b></div></div>
+    return `<div class="wal wal--3"><div><small>Jetons</small><b class="cost tnum">${fmt(v.wallet?.tokens)} J</b></div><div><small>Crédits TTS</small><b class="cost cost--credit tnum">${credit(v.wallet?.credits_tts)} cr</b></div><div><small>Crédits Sons</small><b class="cost cost--credit tnum">${credit(v.wallet?.credits_soundboard)} cr</b></div></div>
       ${has('wallet') ? `<div class="vact"><button class="btn" data-act="wallet-dialog" data-v="${esc(vid)}" data-sign="1">+ Créditer</button><button class="btn" data-act="wallet-dialog" data-v="${esc(vid)}" data-sign="-1">− Débiter</button></div>` : `<p class="lock">${ic('lock')} Réservé à la permission « Admin Wallet ».</p>`}
       ${adm.length ? sec('Ajustements') + `<div class="rows">${adm.map((e) => jLine(e)).join('')}</div>` : ''}<p class="fine">Wallet de test du Lab · jamais l’économie réelle.</p>`;
   }

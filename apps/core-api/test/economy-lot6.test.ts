@@ -304,6 +304,8 @@ describe('activation preflight (one economy at a time)', () => {
     const core = await setup({ provider: new DeferredWalletCreditProvider() });
     expect((await economyPreflight(core.db)).blocking).toEqual([
       "aucun import d'ouverture appliqué à la monnaie principale",
+      "aucun import d'ouverture appliqué à credits_tts (crédits historiques à reprendre, vide si aucun)",
+      "aucun import d'ouverture appliqué à credits_soundboard (crédits historiques à reprendre, vide si aucun)",
     ]);
     // A real sub during the previous economy: a pending wheel gain (nothing credited by the Lab / pre-cutover runtime).
     const wheel = new SubWheelService(core.db, core.clock, () => 0);
@@ -323,6 +325,13 @@ describe('activation preflight (one economy at a time)', () => {
     await claimAt(core, viewer('1001', 'Alice'), paris('2026-09-24', 21));
     core.clock.set(paris('2026-09-25', 12));
     await importOpening(core, core.clock.now().toISOString());
+    // The historical credits: none in this source (empty imports, recorded).
+    for (const c of ['credits_tts', 'credits_soundboard'])
+      await core.db.query(
+        `insert into wallet_imports (id, currency_id, source, cutoff, snapshot_sha256, accounts, total)
+         values ($1, $2, 'test', now(), $3, 0, 0)`,
+        [`legacy-${c}`, c, 'b'.repeat(64)],
+      );
     const p = await economyPreflight(core.db);
     expect(p.blocking).toEqual([
       expect.stringMatching(/1 gain\(s\) de la Roue du Sub d'avant la bascule/),

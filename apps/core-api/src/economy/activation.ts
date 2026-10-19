@@ -38,6 +38,24 @@ export const CANONICAL_READY: Readonly<Record<string, true | string>> = {
   moderation_wallet: true,
 };
 
+/**
+ * The paying modules the main Core (src/index.ts) hosts; Daily, Loyalty and the chat wallet commands write the
+ * canonical Wallet natively (no port). Roulette / Slot / Duel and Jeu des mots are still hosted by the Lab Core only
+ * (docs/ECONOMY_MIGRATION.md § 15).
+ */
+export const CORE_ECONOMY_MODULES = [
+  'bonk',
+  'soundboard',
+  'tts',
+  'raffle',
+  'sub_wheel',
+  'channel_points',
+  'moderation_wallet',
+] as const;
+
+/** Every currency the canonical economy needs (the Jetons are the primary one, `main`). */
+const CREDIT_CURRENCIES = ['credits_tts', 'credits_soundboard'] as const;
+
 export class EconomyActivationError extends Error {
   constructor(readonly reasons: string[]) {
     super(`canonical economy refused: ${reasons.join('; ')}`);
@@ -54,6 +72,8 @@ export interface EconomyPreflight {
   pending: {
     dailyCredits: { count: number; amount: number };
     loyaltyRewards: { count: number; amount: number };
+    /** Tombola winners not paid yet (pending / failed): paid at most once by their retry. */
+    rafflePayouts: { count: number; amount: number };
   };
 }
 
@@ -79,6 +99,26 @@ export async function economyPreflight(
   )[0]?.cutoff;
   if (!cutoff)
     blocking.push("aucun import d'ouverture appliqué à la monnaie principale");
+  // The three currencies, installed and active; the historical credits kept (decision of 19/10/2026): one opening
+  // import per credits currency — an empty one when the source holds none, never a silent absence.
+  const currencies = await q
+    .query<{ id: string; is_primary: boolean; active: boolean }>(
+      'select id, is_primary, active from currencies',
+    )
+    .catch(() => []);
+  if (!currencies.some((c) => c.is_primary && c.active))
+    blocking.push('monnaie principale (Jetons) absente ou inactive');
+  for (const id of CREDIT_CURRENCIES) {
+    if (!currencies.some((c) => c.id === id && c.active))
+      blocking.push(`monnaie ${id} absente ou inactive`);
+    const imported = await q
+      .query('select 1 from wallet_imports where currency_id = $1', [id])
+      .catch(() => []);
+    if (!imported.length)
+      blocking.push(
+        `aucun import d'ouverture appliqué à ${id} (crédits historiques à reprendre, vide si aucun)`,
+      );
+  }
   // Wheel gains of the previous economy (paid by SAMMI / StreamElements or not): reconciled by hand first, never paid
   // automatically by this one (docs/SUB_WHEEL.md § 3).
   const wheel = await total(
@@ -104,6 +144,10 @@ export async function economyPreflight(
         q,
         "select count(*) as n, sum(amount) as s from loyalty_rewards where status = 'pending'",
       ),
+      rafflePayouts: await total(
+        q,
+        "select count(*) as n, sum(amount) as s from lab_raffle_winners where payout_status in ('pending', 'failed')",
+      ),
     },
   };
 }
@@ -126,4 +170,32 @@ export async function selectEconomy(opts: {
   reasons.push(...(await economyPreflight(opts.q)).blocking);
   if (reasons.length) throw new EconomyActivationError(reasons);
   return coreWalletEconomy(opts.wallet);
+}
+
+/**
+ * The Core's own flags, read together (src/index.ts refuses to start on any problem): two economies at once — a flow
+ * crediting the canonical Wallet while the modules still pay on the Lab test wallet — or a canonical Core with no
+ * channel to serve.
+ */
+export function economyConfigProblems(c: {
+  ECONOMY_MODE: EconomyMode;
+  DAILY_WALLET_CREDITS: 'true' | 'false';
+  LOYALTY_PASSIVE_CREDITS: 'true' | 'false';
+  LOYALTY_EVENT_CREDITS: 'true' | 'false';
+  TWITCH_CHANNEL_ID?: string | undefined;
+}): string[] {
+  const problems: string[] = [];
+  if (c.ECONOMY_MODE === 'lab')
+    for (const flag of [
+      'DAILY_WALLET_CREDITS',
+      'LOYALTY_PASSIVE_CREDITS',
+      'LOYALTY_EVENT_CREDITS',
+    ] as const)
+      if (c[flag] === 'true')
+        problems.push(
+          `${flag}=true crédite le Wallet canonique alors que les modules restent sur le portefeuille Lab (ECONOMY_MODE=lab)`,
+        );
+  if (c.ECONOMY_MODE === 'canonical' && !c.TWITCH_CHANNEL_ID)
+    problems.push('ECONOMY_MODE=canonical sans TWITCH_CHANNEL_ID');
+  return problems;
 }

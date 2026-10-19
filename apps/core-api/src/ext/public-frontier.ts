@@ -69,6 +69,8 @@ export function createPublicFrontier(
     core.soundLab,
     core.bonkLab,
     core.raffleLab,
+    // The same economy as every module of this Core (balances, activity, adjustments).
+    core.economy,
   );
   const call = internalLabCall([
     ...bonkLabRoutes(core.bonkLab),
@@ -94,6 +96,7 @@ export function createPublicFrontier(
       channelId,
       channelLogin: config.TWITCH_CHANNEL_LOGIN,
       environment: config.CORE_ENVIRONMENT,
+      wallet: core.economy.mode === 'canonical',
     },
     core.twitchViewers,
   );

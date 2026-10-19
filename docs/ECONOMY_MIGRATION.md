@@ -496,3 +496,79 @@ modération (ajustement tracé). Décision à Antoni.
 **Restent ouverts** : récompenses Twitch à associer et nombres de crédits (configuration Antoni) ; recensement des
 crédits SAMMI en cours ; crédits déjà dépensés lors d'une annulation (« à rapprocher » : la règle de reprise est à
 décider) ; release Studio (éditeur de règles, adaptateur Lab) non faite.
+
+## 15. Intégration globale du Wallet canonique (phase 2 lot 7, 19/10/2026)
+
+**Les Core présents**
+
+| Runtime                                   | Lancé par                                                  | Base                           | Modules économiques                                                                                                                          | Économie                                                                    |
+| ----------------------------------------- | ---------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **Core principal** (`src/index.ts`)       | Coolify (staging aujourd'hui)                              | schéma prod (+ extras staging) | Daily, Presence, Loyalty, `!solde` / `!give` / `!wallet`, Bonk, TTS, Soundboard, Tombola, Roue du Sub, Points de chaîne, modération (façade) | **`ECONOMY_MODE`** : `lab` (défaut) ou `canonical` (refusé sans conditions) |
+| Lab Core (`bonk-lab/lab-core.ts`)         | Studio (runtime local), `bonk-lab.mjs`                     | base Lab dédiée                | les mêmes modules + Jeu des mots, Roulette / Slot / Duel, Commandes V2                                                                       | portefeuille Lab (option `economy` jamais passée par un lanceur)            |
+| Bot de production (`twitch-bot/index.ts`) | —                                                          | aucune                         | transmet au Core principal : chat (Daily, wallet), Loyalty, Points de chaîne, Random Ban                                                     | —                                                                           |
+| Adaptateur chat Lab (`lab-chat-main.ts`)  | Studio                                                     | aucune                         | transmet au Lab Core : chat, alertes (Roue du Sub), Points de chaîne                                                                         | —                                                                           |
+| Façade Extension (`/v1/ext`)              | Core principal (`ext/public-frontier.ts`)                  | celle du Core principal        | soldes, Bonk, TTS, Soundboard, Tombola, modération V2                                                                                        | celle du Core principal (`payment_mode: wallet` en canonique)               |
+| Services Studio                           | Studio ↔ Lab Core (secret) / Core principal (installation) | —                              | configuration (règles, prix, interrupteurs), cockpit                                                                                         | —                                                                           |
+
+**Core définitif = Core principal.** `createCore(…, economy)` passe le même port à Bonk, Soundboard, TTS, Tombola,
+Roue du Sub, Points de chaîne, et la façade à la modération (`core.economy`). `src/index.ts` choisit ce port au
+démarrage : `ECONOMY_MODE=lab` (défaut, inchangé) ou `canonical`, accepté seulement par `selectEconomy`
+(`CORE_ECONOMY_MODULES`). Daily, Loyalty et les commandes wallet du chat écrivent déjà le Wallet canonique (sans port).
+En canonique, la façade annonce un paiement réel (`payment_mode: 'wallet'`, `test_mode: false`, `charged: true`) et
+plus « Jetons de test ».
+
+**Activation refusée (code 1, rien n'écoute) tant que** : aucun import d'ouverture des Jetons ; une des trois monnaies
+absente ou inactive ; **aucun import d'ouverture pour `credits_tts` ou `credits_soundboard`** (décision du 19/10 :
+soldes historiques conservés — un import vide si la source n'en contient pas, jamais une absence silencieuse) ; un
+module du Core non prouvé ; un gain de Roue du Sub d'avant la bascule non rapproché. Configuration refusée au
+démarrage : un flux qui crédite le Wallet canonique (`DAILY_WALLET_CREDITS`, `LOYALTY_PASSIVE_CREDITS`,
+`LOYALTY_EVENT_CREDITS`) pendant que les modules restent sur le portefeuille Lab (deux économies) ; canonique sans
+`TWITCH_CHANNEL_ID`. `economyPreflight` liste aussi ce qui attend : crédits Daily, récompenses Loyalty, gains Tombola
+non payés. Essayé le 19/10 : démarrage réel de `src/index.ts` refusé sur base vide, refusé avec `DAILY_WALLET_CREDITS`
+en mode Lab, accepté sur la base répétée.
+
+**Crédits : trois objets séparés.** (1) Acquisition — l'action de règle « Accorder des crédits » (lot 4) reprend le
+modèle legacy (récompense TTS → 1 crédit, récompense Soundboard → pack de 3) avec un nombre configurable ; aucune
+règle n'est créée. (2) Stockage — monnaies du Wallet. (3) Dépense — Extension, TTS / Soundboard, depuis le solde, sans
+redemption Twitch (les identifiants « credit-… » de la façade ne sont que des libellés). L'annulation Twitch (lot 4) ne
+touche **que l'attribution** : jamais une interaction déjà payée (test « spending is independent of Twitch ») ; les
+remboursements internes (échec, expiration, modération) restent dans la monnaie d'origine. Question ouverte :
+garder ou non la reprise des crédits d'une redemption annulée (le legacy faisait expirer les redemptions non
+consommées en 6 h et les remboursait sur Twitch ; aujourd'hui les crédits n'expirent pas).
+
+**Crédits historiques — source réelle** : la table `ext_channel_point_redemptions` de l'ancienne base Supabase de
+l'extension (`CANONICAL_WORKSPACE/extension/db` 001 et 006) : `credit_remaining` par redemption, `reward_key` `tts` /
+`sound`, `expires_at` (365 jours pour les crédits historiques SAMMI, 6 h pour les récompenses gérées). **Non lue** :
+seul accès = une clé service-role non autorisée pour cette mission. `credits.ini` de SAMMI (144 soldes) : sens non
+établi (audit legacy D05), **exclu** tant qu'il n'est pas qualifié. Les crédits fictifs du Lab ne sont jamais une
+source (format refusé). Outil prêt : `npm run wallet:credits-from-legacy -- <export.json> --import-prefix=<id>
+[--out-dir=…]` → un fichier d'ouverture par monnaie, puis `wallet:opening-import` (plan → apply → verify) comme les
+Jetons. Lecture à faire par Antoni (après drainage, rien en vol), au format attendu :
+
+```sql
+select redemption_id, reward_key, twitch_user_id, login, status, expires_at, credit_units, credit_remaining,
+       credit_in_flight from ext_channel_point_redemptions order by redemption_id;
+-- declared : count(*) et sum(credit_remaining) group by reward_key, dans la même lecture
+```
+
+Refus : crédit en vol (`claimed`, `cancel_pending`, `credit_in_flight`), `reward_key` inconnue, identité non
+numérique, doublon, total ou nombre de lignes différent du déclaré. Un crédit est repris s'il est `available` et non
+expiré à la coupure ; les autres sont listés exclus avec leur raison. Plusieurs logins pour un même Twitch ID : le plus
+récent (l'ID est la clé).
+
+**Répétitions (19/10)** — (1) `test/economy-rehearsal.integration.test.ts` (PostgreSQL réel, deux Core, HTTP) :
+ouverture Jetons + crédits, activation, soldes Extension, Bonk / TTS / Soundboard en Jetons et en crédits, Tombola
+(inscriptions Extension), Roue du Sub, `!give`, ajustement de modération en crédits, Daily, Loyalty (dont un événement
+d'avant la coupure exclu), redemption « crédits », rejeu de tous les événements sur les deux Core (aucune opération
+nouvelle), concurrence (même intention Bonk sur deux Core = un débit), ledger = soldes, Lab jamais touché.
+(2) Données réelles (`_migration-exports/repetition-lot7-2026-10-19`, base jetable) : 543 portefeuilles / 39 336 444 J
+importés, activation **refusée** faute d'import des crédits, puis — simulation seulement — imports de crédits vides :
+20 plus gros soldes lus à l'identique par l'Extension, 215 opérations concurrentes sur deux Core (65 dépenses,
+47 transferts acceptés ; refus = Jetons insuffisants, file Bonk pleine), rejeux sans effet, 16 / 16 contrôles.
+
+**Restent ouverts avant le cutover** : lecture réelle des crédits historiques ; Jeu des mots, Roulette / Slot / Duel
+et Commandes V2 hébergés seulement par le Lab Core (le Core principal n'a ni leurs tables ni l'entrée chat / sortie chat
+du bot de production) ; alertes Twitch réelles (subs → Roue du Sub) reçues seulement par l'adaptateur Lab (le Core
+principal n'accepte des alertes que de Studio, en simulation) ; le Core principal a besoin des extras « staging »
+(idempotence de la modération, salves Bonk…) que le périmètre prod n'inclut pas (règle « jamais étendu » à revoir) ;
+release Studio ; arrêt des écrivains externes (StreamElements, SAMMI) au gel.

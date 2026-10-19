@@ -342,10 +342,11 @@ describe('activation (one decision point, never automatic)', () => {
         modules: ['word_game', 'mini_games'],
       }),
     ).rejects.toThrow(/aucun import d'ouverture/);
-    await db.query(
-      `insert into wallet_imports (id, currency_id, source, cutoff, snapshot_sha256, accounts, total) values ('se-x', 'main', 'test', now(), $1, 0, 0)`,
-      ['a'.repeat(64)],
-    );
+    for (const c of ['main', 'credits_tts', 'credits_soundboard'])
+      await db.query(
+        `insert into wallet_imports (id, currency_id, source, cutoff, snapshot_sha256, accounts, total) values ($1, $2, 'test', now(), $3, 0, 0)`,
+        [`import-${c}`, c, 'a'.repeat(64)],
+      );
     expect(
       await selectEconomy({
         mode: 'canonical',

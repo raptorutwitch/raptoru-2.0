@@ -10,6 +10,9 @@ const Env = z
     DAILY_CREDIT_PROVIDER: z.enum(['dev-fake']).default('dev-fake'),
     /** Daily claims credited into the Core Wallet. Off: claims are real, zero Wallet write. */
     DAILY_WALLET_CREDITS: z.enum(['true', 'false']).default('false'),
+    // Economy of the paying modules: the Lab test wallet (default) or the canonical Wallet. Canonical is refused at
+    // start unless economy/activation.ts selectEconomy accepts it (opening imports applied, modules proven…).
+    ECONOMY_MODE: z.enum(['lab', 'canonical']).default('lab'),
     // Loyalty Engine. Preview computes and stores rewards without any Wallet write. The two credit
     // flags are the only way to write Jetons from loyalty rewards: never enable them before cutover.
     LOYALTY_PREVIEW: z.enum(['true', 'false']).default('false'),

@@ -11,6 +11,7 @@ import type { Clock } from './clock.js';
 import { DailyCredits, type CreditProvider } from './daily/credits.js';
 import { DailyService } from './daily/daily-service.js';
 import type { Db } from './db/db.js';
+import { type EconomyPort, labEconomy } from './economy/economy.js';
 import {
   LoyaltyEngine,
   SHADOW_MODES,
@@ -44,6 +45,11 @@ export interface Core {
   randomBan: RandomBanService;
   /** Roue du Sub (fed by the alerts reception; OFF by default). */
   subWheel: SubWheelService;
+  /**
+   * Economy of every paying module of this Core (Bonk, Soundboard, TTS, Tombola, Roue du Sub, Points de chaîne,
+   * moderation): the Lab test wallet unless the process passes the canonical Wallet (economy/activation.ts).
+   */
+  economy: EconomyPort;
 }
 
 export function createCore(
@@ -52,11 +58,12 @@ export function createCore(
   provider: CreditProvider,
   loyaltyModes: LoyaltyModes = SHADOW_MODES,
   twitchViewers: TwitchViewerCatalog | null = null,
+  economy: EconomyPort = labEconomy,
 ): Core {
   const credits = new DailyCredits(db, provider);
   const wallet = createWalletModule(db, clock);
   const loyalty = new LoyaltyEngine(db, clock, wallet.wallet, loyaltyModes);
-  const soundLab = new SoundLabService(db, clock);
+  const soundLab = new SoundLabService(db, clock, undefined, economy);
   const randomBan = new RandomBanService(db, clock);
   return {
     credits,
@@ -66,15 +73,22 @@ export function createCore(
     wallet,
     loyalty,
     // The Bonk accepts a Twitch emote only from the viewer's own catalog (none: Twitch emotes off).
-    bonkLab: new BonkLabService(db, clock, twitchViewers),
+    bonkLab: new BonkLabService(db, clock, twitchViewers, null, economy),
     twitchViewers,
     soundLab,
-    ttsLab: new TtsLabService(db, clock),
-    raffleLab: new RaffleLabService(db, clock),
+    ttsLab: new TtsLabService(db, clock, undefined, undefined, economy),
+    raffleLab: new RaffleLabService(db, clock, undefined, undefined, economy),
     studioInstallations: new StudioInstallations(db, clock),
     alerts: new AlertsService(db, clock),
-    channelPoints: new ChannelPointsService(db, clock, soundLab, randomBan),
+    channelPoints: new ChannelPointsService(
+      db,
+      clock,
+      soundLab,
+      randomBan,
+      economy,
+    ),
     randomBan,
-    subWheel: new SubWheelService(db, clock),
+    subWheel: new SubWheelService(db, clock, undefined, economy),
+    economy,
   };
 }

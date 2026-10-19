@@ -304,6 +304,43 @@ describe('credits granted by a channel points reward (canonical Wallet)', () => 
 });
 
 describe('TTS and Soundboard paid in credits (canonical Wallet)', () => {
+  it('spending is independent of Twitch: a cancellation after a TTS paid in those credits never touches the TTS', async () => {
+    const f = await fixture();
+    const e = f.redemption();
+    await f.cp.receive(e);
+    const { interaction } = await f.tts.admit({
+      ...f.base,
+      idempotency_key: 'tts-indep',
+      text: 'Déjà payé',
+      payment_method: 'credits',
+    });
+    const cost = interaction.simulated_cost;
+    await f.cp.update({
+      channel_id: CH,
+      source: 'twitch',
+      redemption_id: e.redemption_id,
+      reward_id: REWARD,
+      user_id: V.id,
+      twitch_status: 'canceled',
+    });
+    // The interaction keeps its state and its payment: no refund, no cancellation, nothing queued removed.
+    const after = await f.tts.get(interaction.interaction_id);
+    expect(after.status).toBe(interaction.status);
+    expect(after.refund_status).toBe('none');
+    expect(
+      (
+        await f.port.interactionMovements(f.core.db, interaction.interaction_id)
+      ).map((m) => m.kind),
+    ).toEqual(['debit']);
+    // Only what was still held is taken back from the grant (never below 0).
+    expect((await f.balances()).credits_tts).toBe(0);
+    expect(
+      (await f.cp.state(CH)).recent.find(
+        (r) => r.redemption_id === e.redemption_id,
+      )!.results[0],
+    ).toMatchObject({ granted: 3, reversed: 3 - cost });
+  });
+
   it('TTS: Crédits TTS debited, Jetons untouched; moderation cancel refunds the credits once, never in Jetons', async () => {
     const f = await fixture();
     await f.cp.receive(f.redemption());

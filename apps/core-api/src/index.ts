@@ -8,13 +8,48 @@ import {
 } from './daily/credits.js';
 import { createPgDb, SERVER_DB_LIMITS } from './db/db.js';
 import {
+  CORE_ECONOMY_MODULES,
+  EconomyActivationError,
+  economyConfigProblems,
+  selectEconomy,
+} from './economy/activation.js';
+import { type EconomyPort, labEconomy } from './economy/economy.js';
+import { WalletService } from './wallet/wallet-service.js';
+import {
   createPublicFrontier,
   publicTwitchViewers,
 } from './ext/public-frontier.js';
 import { createApp } from './http/server.js';
 
 const config = loadConfig();
+const problems = economyConfigProblems(config);
+if (problems.length) {
+  console.error(
+    `[core-api] configuration économique refusée : ${problems.join(' ; ')}`,
+  );
+  process.exit(1);
+}
 const db = createPgDb(config.DATABASE_URL, SERVER_DB_LIMITS);
+// The economy of every paying module: the Lab test wallet unless ECONOMY_MODE=canonical, which starts only when the
+// activation accepts it (opening imports, currencies, modules proven, nothing of the previous economy to reconcile).
+let economy: EconomyPort = labEconomy;
+if (config.ECONOMY_MODE === 'canonical') {
+  try {
+    economy = await selectEconomy({
+      mode: 'canonical',
+      q: db,
+      wallet: new WalletService(db),
+      modules: CORE_ECONOMY_MODULES,
+    });
+  } catch (e) {
+    if (!(e instanceof EconomyActivationError)) throw e;
+    console.error(
+      `[core-api] économie canonique refusée : ${e.reasons.join(' ; ')}`,
+    );
+    await db.close();
+    process.exit(1);
+  }
+}
 // Daily credits: Core Wallet only with the explicit flag; otherwise no Wallet write at all — the credits stay pending
 // for the Core Wallet (never « credited » without money, Astra B5) and are paid once when the flag is turned on.
 const dailyProvider: CreditProvider =
@@ -31,6 +66,7 @@ const core = createCore(
     eventCredits: config.LOYALTY_EVENT_CREDITS === 'true',
   },
   publicTwitchViewers(db, systemClock, config),
+  economy,
 );
 
 const interrupted = await core.credits.recoverInterrupted();
@@ -57,7 +93,7 @@ const retryCredits = async () => {
 setTimeout(retryCredits, CREDIT_RETRY_MS);
 
 // Viewer frontier (/v1/ext/*, Twitch JWT) and Studio cockpit: only when the channel is configured.
-// Payment stays simulated (Lab test wallet): nothing here moves real Jetons or Channel Points.
+// Payment: the economy chosen above (Lab test wallet by default: nothing here moves real Jetons or Channel Points).
 const frontier = createPublicFrontier(core, db, systemClock, config);
 frontier?.start();
 
@@ -90,6 +126,6 @@ createApp({
     `[core-api] listening on :${config.PORT} (daily credits: ${dailyProvider.name}${dailyProvider.deferred ? ' off — pending, nothing sent' : ''}, loyalty preview ${config.LOYALTY_PREVIEW}, passive credits ${config.LOYALTY_PASSIVE_CREDITS}, event credits ${config.LOYALTY_EVENT_CREDITS})`,
   );
   console.log(
-    `[core-api] channel ${config.TWITCH_CHANNEL_ID ?? 'none'} · viewer frontier /v1/ext ${frontier?.deps.ext ? 'ON' : 'OFF'} · Studio cockpit ${frontier ? 'ON' : 'OFF'} · Twitch names ${config.TWITCH_APP_CLIENT_ID ? 'ON' : 'OFF'} · Twitch emotes linking ${core.twitchViewers?.canLink ? 'ON' : 'OFF'} · payment simulated (${config.CORE_ENVIRONMENT})`,
+    `[core-api] channel ${config.TWITCH_CHANNEL_ID ?? 'none'} · viewer frontier /v1/ext ${frontier?.deps.ext ? 'ON' : 'OFF'} · Studio cockpit ${frontier ? 'ON' : 'OFF'} · Twitch names ${config.TWITCH_APP_CLIENT_ID ? 'ON' : 'OFF'} · Twitch emotes linking ${core.twitchViewers?.canLink ? 'ON' : 'OFF'} · economy ${economy.mode}${economy.mode === 'lab' ? ' (payment simulated)' : ''} (${config.CORE_ENVIRONMENT})`,
   );
 });
