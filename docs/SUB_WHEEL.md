@@ -1,7 +1,7 @@
 # Roue du Sub
 
 **Statut (18/10/2026) : migration technique DÉVELOPPÉE / TESTS AUTOMATISÉS RÉUSSIS / rendu OBS et test complet simulé VALIDÉS par Antoni (19/10/2026) /
-DÉSACTIVÉE (interrupteur OFF) / gains NON RACCORDÉS à une économie / NON DÉPLOYÉE.** En live, SAMMI garde la roue
+DÉSACTIVÉE (interrupteur OFF) / gains raccordés au Wallet canonique (19/10, local, jamais activé — § 3) / NON DÉPLOYÉE.** En live, SAMMI garde la roue
 tant qu'Antoni n'a pas validé le rendu et décidé du raccordement économique.
 
 ## 1. Fonctionnement historique (SAMMI + `Alerte_system.html`, lecture seule)
@@ -48,13 +48,18 @@ tant qu'Antoni n'a pas validé le rendu et décidé du raccordement économique.
   montant, date, statut, identifiant unique (`spin_id`). Statuts : **en attente** · **crédité** (par un adaptateur,
   avec sa référence) · **crédité à la main** (note obligatoire) · **annulé** (note obligatoire) · **test** (jamais
   attribuable).
-- **Aucun crédit automatique**, ni maintenant ni au cutover : un gain en attente n'est crédité que par un appel
-  explicite. Avant tout raccordement : rapprocher chaque gain en attente des crédits faits à la main ou par
-  StreamElements entre-temps (le marquer « crédité à la main » ou « annulé »).
-- **Raccordement prévu** (sans toucher à la roue) : `WheelAwardPort` — un adaptateur transitoire StreamElements ou le
-  Wallet canonique — reçoit `{ key: 'sub_wheel:<spin_id>', viewer, amount }` (clé d'idempotence : jamais deux
-  crédits) ; `SubWheelService.attribute()` ne marque « crédité » qu'après sa confirmation. Aucun adaptateur n'est
-  branché aujourd'hui.
+- **Crédit automatique sur le Wallet canonique seulement** (décision d'Antoni, 19/10/2026, phase 2 lot 5) : quand
+  le runtime a choisi le Wallet canonique, le gain d'une roue décidée à partir de là est crédité **dans la même
+  transaction** que la roue (clé `move:sub_wheel:<spin_id>`) — redélivrance, redémarrage, réponse perdue ou deux Core
+  ne créditent jamais deux fois. Crédit refusé (Jetons indisponibles) ou viewer sans Twitch ID : le gain reste « en
+  attente » avec sa raison, jamais « crédité » sans mouvement. Gain nul : « crédité » sans mouvement.
+- **Jamais de crédit automatique d'un gain en attente d'avant** (époque StreamElements) : le rapprocher (« annulé »),
+  ou le payer par un appel explicite `award(spin_id)` (même clé, ligne verrouillée).
+- **Règlement manuel** : sur le Wallet canonique, « crédité à la main » est refusé (`manual_settlement_disabled`) — un
+  seul chemin de paiement ; « annulé » reste possible tant que le gain est en attente ; un gain crédité répond
+  `already_awarded`. Hors Wallet canonique (Lab, production actuelle) : rien n'est crédité par Raptoru, le
+  rapprochement manuel est inchangé. `WheelAwardPort` / `attribute()` (jamais branchés) sont remplacés par le port
+  économique.
 
 ## 4. Studio
 

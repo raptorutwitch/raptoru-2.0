@@ -11,15 +11,20 @@ import {
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import type { EconomyPort } from '../economy/economy.js';
+import { LabWalletError } from '../lab-moderation/store.js';
+import { CurrencyCreditError } from '../raffle-lab/currencies.js';
 
 // Roue du Sub (docs/SUB_WHEEL.md) — the ONE implementation (Lab Core, production Core). Core decides: one wheel per
 // admissible event (a sub, a resub or a Prime, never a gift) — the dedup key is the alert event (EventSub chat
 // notification id: a redelivery is the same event); the segment is drawn here (crypto, uniform, the legacy layout of
 // the months) and the gain computed and recorded ONCE, before any animation. Studio only shows that result. A failed
 // animation never draws again nor changes the gain.
-// Gains: recorded « pending », never credited automatically — not at the start, not at the cutover. An economy adapter
-// (WheelAwardPort: a StreamElements transition adapter or the canonical Wallet) credits one pending gain on an
-// explicit call, with the spin id as idempotency key; a gain settled by hand is marked « manual » (reconciliation).
+// Gains (Phase 2 lot 5): recorded « pending ». With the canonical Wallet as the runtime's economy, a gain decided by a
+// spin admitted from then on is credited in the SAME transaction as the spin (key move:sub_wheel:<spin id>: a
+// redelivered event, a replay, two Cores never pay twice; a refused credit stays « pending » with its reason). A gain
+// pending from before (the StreamElements era) is never credited automatically: reconciled by hand, or paid by an
+// explicit award(). With any other economy nothing is credited (SAMMI / StreamElements keep paying the live wheel).
 // The switch is OFF by default: a real sub is then recorded « ignored » (nothing drawn, nothing owed).
 
 export class SwError extends Error {
@@ -29,16 +34,6 @@ export class SwError extends Error {
   ) {
     super(code);
   }
-}
-
-/** The economy adapter (none wired yet): credits a gain once, keyed by the spin. */
-export interface WheelAwardPort {
-  award(a: {
-    key: string;
-    channel_id: string;
-    viewer: { id: string | null; login: string | null; name: string };
-    amount: number;
-  }): Promise<{ ref: string }>;
 }
 
 interface Row {
@@ -101,7 +96,65 @@ export class SubWheelService {
     private readonly clock: Clock,
     /** Tests only: a deterministic draw (default: crypto). */
     private readonly draw: (n: number) => number = (n) => randomInt(n),
+    /** The runtime's economy: gains are credited only when it is the canonical Wallet. */
+    private readonly economy: EconomyPort | null = null,
   ) {}
+
+  private get canonical() {
+    return this.economy?.mode === 'canonical';
+  }
+
+  /**
+   * Credits a pending gain of a LOCKED spin row, in the caller's transaction. Zero → awarded without any movement;
+   * no Twitch ID → stays pending (beneficiary unknown); a refused credit → stays pending with its reason (strict: the
+   * refusal is the caller's error instead). Never marked awarded without the Wallet movement.
+   */
+  private async credit(q: Queryable, r: Row, strict: boolean): Promise<Row> {
+    const now = this.now();
+    const mark = async (
+      status: SwAwardStatus,
+      ref: string | null,
+      note: string | null,
+    ) => {
+      await q.query(
+        `update sw_spins set award_status = $2, award_ref = $3, award_note = $4, award_updated_at = $5, updated_at = $5
+         where spin_id = $1`,
+        [r.spin_id, status, ref, note, now],
+      );
+      return (
+        await q.query<Row>('select * from sw_spins where spin_id = $1', [
+          r.spin_id,
+        ])
+      )[0]!;
+    };
+    const amount = Number(r.amount);
+    if (amount === 0)
+      return mark('awarded', null, 'gain nul : aucun mouvement');
+    if (!r.viewer_id) {
+      if (strict) throw new SwError(409, 'beneficiary_unknown');
+      return mark('pending', null, 'bénéficiaire sans Twitch ID : à régler');
+    }
+    await q.query('savepoint sub_wheel_credit');
+    try {
+      const { ledgerId } = await this.economy!.move(q, now, {
+        channelId: r.channel_id,
+        viewerId: r.viewer_id,
+        currency: 'tokens',
+        amount,
+        kind: 'sub_wheel',
+        key: r.spin_id,
+        moduleId: 'sub_wheel',
+      });
+      await q.query('release savepoint sub_wheel_credit');
+      return mark('awarded', `wallet_transactions:${ledgerId}`, null);
+    } catch (e) {
+      await q.query('rollback to savepoint sub_wheel_credit');
+      if (!(e instanceof LabWalletError || e instanceof CurrencyCreditError))
+        throw e;
+      if (strict) throw new SwError(409, 'credit_refused');
+      return mark('pending', null, `crédit refusé : ${e.code}`.slice(0, 200));
+    }
+  }
 
   private now() {
     return this.clock.now();
@@ -149,11 +202,11 @@ export class SubWheelService {
     const segment = s.enabled
       ? this.draw(subWheelLayout(s.months).length)
       : null;
-    await q.query(
+    const created = await q.query(
       `insert into sw_spins (spin_id, channel_id, source, event_key, alert_id, type, viewer_id, viewer_login,
          viewer_name, tier, months, status, reason, segment, amount, award_status, created_at, updated_at)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)
-       on conflict (channel_id, event_key) do nothing`,
+       on conflict (channel_id, event_key) do nothing returning spin_id`,
       [
         randomUUID(),
         s.channel_id,
@@ -174,12 +227,17 @@ export class SubWheelService {
         now,
       ],
     );
-    return (
+    const row = (
       await q.query<Row>(
-        'select * from sw_spins where channel_id = $1 and event_key = $2',
+        'select * from sw_spins where channel_id = $1 and event_key = $2 for update',
         [s.channel_id, s.event_key.slice(0, 200)],
       )
     )[0]!;
+    // A gain decided now, on the canonical Wallet: credited with the spin (one transaction). A redelivered event finds
+    // the existing spin and pays nothing more.
+    return created.length && row.award_status === 'pending' && this.canonical
+      ? this.credit(q, row, false)
+      : row;
   }
 
   /**
@@ -192,23 +250,27 @@ export class SubWheelService {
       return null;
     if (!e.actor) return null;
     const enabled = (await this.settings(e.channel_id)).enabled;
+    const type = e.type;
+    const actor = e.actor;
     return spinView(
-      await this.admit(this.db, {
-        channel_id: e.channel_id,
-        source: 'twitch',
-        event_key: `alert:${e.source}:${e.source_event_id}`,
-        alert_id: alertId,
-        type: e.type,
-        viewer: {
-          id: e.actor.id ?? null,
-          login: e.actor.login ?? null,
-          name: e.actor.display_name,
-        },
-        tier: tierOf(e.tier),
-        // A new sub is the viewer's first month; a resub carries its cumulative months.
-        months: e.type === 'sub' ? 1 : Math.max(1, e.months ?? 1),
-        enabled,
-      }),
+      await this.db.tx((q) =>
+        this.admit(q, {
+          channel_id: e.channel_id,
+          source: 'twitch',
+          event_key: `alert:${e.source}:${e.source_event_id}`,
+          alert_id: alertId,
+          type,
+          viewer: {
+            id: actor.id ?? null,
+            login: actor.login ?? null,
+            name: actor.display_name,
+          },
+          tier: tierOf(e.tier),
+          // A new sub is the viewer's first month; a resub carries its cumulative months.
+          months: type === 'sub' ? 1 : Math.max(1, e.months ?? 1),
+          enabled,
+        }),
+      ),
     );
   }
 
@@ -345,8 +407,13 @@ export class SubWheelService {
         )
       )[0];
       if (!r) throw new SwError(404, 'spin_not_found');
+      if (r.award_status === 'awarded')
+        throw new SwError(409, 'already_awarded');
       if (r.award_status !== 'pending')
         throw new SwError(409, 'award_not_pending');
+      // On the canonical Wallet a gain is paid by award() only: « credited by hand » would be a second, unlinked path.
+      if (u.status === 'manual' && this.canonical)
+        throw new SwError(409, 'manual_settlement_disabled');
       await q.query(
         `update sw_spins set award_status = $2, award_note = $3, award_updated_at = $4, updated_at = $4
          where spin_id = $1`,
@@ -363,36 +430,26 @@ export class SubWheelService {
   }
 
   /**
-   * Credits ONE pending gain through an economy adapter (wired later: never called by the wheel itself). The spin id is
-   * the adapter's idempotency key; the gain is marked awarded only once the adapter confirmed.
+   * Pays ONE pending gain on the canonical Wallet (retry of a refused credit, or a gain from before the switch that the
+   * team decides to pay): the spin row locked, the same key as the automatic credit, the status changed only with the
+   * movement. Already awarded → 409 already_awarded (never a second credit).
    */
-  async attribute(spinId: string, port: WheelAwardPort) {
-    const r = (
-      await this.db.query<Row>('select * from sw_spins where spin_id = $1', [
-        spinId,
-      ])
-    )[0];
-    if (!r) throw new SwError(404, 'spin_not_found');
-    if (r.award_status !== 'pending')
-      throw new SwError(409, 'award_not_pending');
-    const { ref } = await port.award({
-      key: `sub_wheel:${r.spin_id}`,
-      channel_id: r.channel_id,
-      viewer: { id: r.viewer_id, login: r.viewer_login, name: r.viewer_name },
-      amount: Number(r.amount),
+  async award(spinId: string) {
+    if (!this.canonical) throw new SwError(409, 'economy_not_canonical');
+    return this.db.tx(async (q) => {
+      const r = (
+        await q.query<Row>(
+          'select * from sw_spins where spin_id = $1 for update',
+          [spinId],
+        )
+      )[0];
+      if (!r) throw new SwError(404, 'spin_not_found');
+      if (r.award_status === 'awarded')
+        throw new SwError(409, 'already_awarded');
+      if (r.award_status !== 'pending')
+        throw new SwError(409, 'award_not_pending');
+      return spinView(await this.credit(q, r, true));
     });
-    await this.db.query(
-      `update sw_spins set award_status = 'awarded', award_ref = $2, award_updated_at = $3, updated_at = $3
-       where spin_id = $1 and award_status = 'pending'`,
-      [spinId, ref.slice(0, 200), this.now()],
-    );
-    return spinView(
-      (
-        await this.db.query<Row>('select * from sw_spins where spin_id = $1', [
-          spinId,
-        ])
-      )[0]!,
-    );
   }
 
   async state(channelId: string) {

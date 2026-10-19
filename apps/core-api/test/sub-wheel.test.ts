@@ -245,7 +245,7 @@ describe('Roue du Sub — tests and gains', () => {
     ).rejects.toMatchObject({ code: 'award_not_pending' });
   });
 
-  it('a pending gain: marked credited by hand or cancelled (noted), or credited ONCE by an economy adapter', async () => {
+  it('a pending gain: marked credited by hand or cancelled (noted); nothing credited by Raptoru outside the canonical Wallet', async () => {
     const { receive, wheel } = await fixture(() => 4);
     await wheel.setEnabled(CH, true);
     const a = await receive(event());
@@ -263,34 +263,14 @@ describe('Roue du Sub — tests and gains', () => {
       status: 'cancelled',
       note: 'doublon',
     });
-    const keys: string[] = [];
-    let fail = true;
-    const port = {
-      award: async (x: { key: string; amount: number }) => {
-        keys.push(`${x.key}=${x.amount}`);
-        if (fail) throw new Error('adapter down');
-        return { ref: 'wallet-op-1' };
-      },
-    };
-    await expect(wheel.attribute(c.spin!.spin_id, port)).rejects.toThrow(
-      'adapter down',
-    );
+    // Outside the canonical Wallet (Lab, today's production): Raptoru credits nothing, the gain stays pending.
+    await expect(wheel.award(c.spin!.spin_id)).rejects.toMatchObject({
+      code: 'economy_not_canonical',
+    });
     expect((await wheel.state(CH)).pending_awards.count).toBe(1);
-    fail = false;
-    expect(await wheel.attribute(c.spin!.spin_id, port)).toMatchObject({
-      award: { status: 'awarded', ref: 'wallet-op-1' },
-    });
-    await expect(wheel.attribute(c.spin!.spin_id, port)).rejects.toMatchObject({
-      code: 'award_not_pending',
-    });
-    await expect(wheel.attribute(a.spin!.spin_id, port)).rejects.toMatchObject({
-      code: 'award_not_pending',
-    });
-    // The same idempotency key both times: an adapter that saw the first call never credits twice.
-    expect(keys).toEqual([
-      `sub_wheel:${c.spin!.spin_id}=1000`,
-      `sub_wheel:${c.spin!.spin_id}=1000`,
-    ]);
+    await expect(
+      wheel.settleByHand(a.spin!.spin_id, { status: 'cancelled', note: 'x' }),
+    ).rejects.toMatchObject({ code: 'award_not_pending' });
   });
 });
 

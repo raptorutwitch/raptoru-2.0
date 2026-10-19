@@ -397,5 +397,13 @@ est refusé à la configuration et à l'ouverture (rien d'annoncé, jamais conve
 après crédit, Jetons indisponibles (échec visible, relance payée une fois) ; PostgreSQL : même tirage pris par deux Core,
 gagnant payé pendant des dépenses Bonk, même relance depuis deux Core. `CANONICAL_READY` : Tombola prête.
 
-**Suite proposée** : lot 4 crédits (après D2) ; lot 5 Roue du Sub (I3) ; lot 6 modération, commandes chat, gel Daily / Loyalty
+**Lot 5 (fait)** : Roue du Sub — en canonique, le gain d'une roue décidée est crédité dans la transaction de la roue
+(clé `move:sub_wheel:<spin_id>`, ligne verrouillée), refus = « en attente » avec sa raison, gain d'avant jamais payé
+automatiquement (`award()` explicite), « crédité à la main » fermé en canonique, annulation et `award()` sérialisés sur
+la même ligne (course I3 fermée). Rien n'est crédité avec le portefeuille Lab. Prouvé : portefeuille vierge,
+redélivrance et redémarrage, panne avant commit, réponse perdue, Jetons indisponibles puis `award()`, viewer sans
+Twitch ID, gain d'avant, règlement manuel, gain nul, tests Studio et cadeaux ; PostgreSQL : même sub sur deux Core,
+`award()` ×2 contre annulation, gain pendant des dépenses Bonk et un gain Tombola. `CANONICAL_READY` : Roue prête.
+
+**Suite proposée** : lot 4 crédits (après D2) ; lot 6 modération, commandes chat, gel Daily / Loyalty
 (B5) ; lot 7 hébergement des modules par un Core au schéma Wallet et activation au cutover.

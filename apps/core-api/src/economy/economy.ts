@@ -50,7 +50,8 @@ export interface EconomyMovement {
   currency: string;
   /** Signed: a credit when positive, a debit when negative (never below 0). */
   amount: number;
-  kind: 'word_game' | 'mini_game' | 'raffle_win';
+  /** `sub_wheel`: canonical Wallet only (the Lab ledger has no such kind; the wheel never credits the Lab wallet). */
+  kind: 'word_game' | 'mini_game' | 'raffle_win' | 'sub_wheel';
   /** Ledger reason: the module's idempotency key (unique per kind where the module requires it). */
   key?: string | null;
   moduleId?: string | null;

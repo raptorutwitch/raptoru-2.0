@@ -27,6 +27,9 @@ export const CANONICAL_READY: Readonly<Record<string, true | string>> = {
   // A round in credits or another Lab currency is refused at configuration and opening (D2: credits are never a
   // Tombola reward, never converted) — refused explicitly, not a missing path.
   raffle: true,
+  // Phase 2 lot 5: a gain decided on canonical is credited with its spin, once (same row lock for award / cancel);
+  // « credited by hand » closed on canonical; gains pending from before never paid automatically.
+  sub_wheel: true,
   // Moderation's Lab wallet tools (manual adjustment, test balances) are refused on canonical (lot 6).
   moderation_wallet:
     'ajustement manuel et portefeuille de test refusés en canonique (à raccorder à WalletService.adminAdjust)',

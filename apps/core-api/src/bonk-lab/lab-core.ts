@@ -62,7 +62,7 @@ export interface LabCoreOptions {
   /** The Lab channel's real Twitch broadcaster id (BONK_LAB_CHANNEL_TWITCH_ID), or ''. */
   channelTwitchId?: string;
   /**
-   * Economy of every module of this runtime (Bonk, Soundboard, TTS, Tombola, moderation, Jeu des mots, mini-games). The Lab
+   * Economy of every module of this runtime (Bonk, Soundboard, TTS, Tombola, Roue du Sub, moderation, Jeu des mots, mini-games). The Lab
    * test wallet unless a caller passes the result of economy/activation.ts selectEconomy (the launcher never does before
    * the cutover; the activation refuses a runtime whose modules are not all proven).
    */
@@ -140,7 +140,8 @@ export function createLabCore({
   );
   const randomBan = new RandomBanService(db, systemClock);
   const alertsService = new AlertsService(db, systemClock);
-  const subWheel = new SubWheelService(db, systemClock);
+  // Gains credited only when the runtime economy is the canonical Wallet (never with the Lab wallet).
+  const subWheel = new SubWheelService(db, systemClock, undefined, economy);
   const routes = [
     ...bonkLabRoutes(bonk, viewers),
     // Soundboard V2 Lab: same isolated Lab Core process and database.
