@@ -434,7 +434,17 @@ tout module non prouvé (`CANONICAL_READY` : Soundboard / TTS bloqués par leurs
 l'activation reste un geste explicite du cutover (lot 7). Les rapprochements se font sur le ledger canonique (sources,
 clés, références) et le registre `wallet_import_sources`.
 
-**Restent ouverts** : capture durable des alertes avant admission (réception Lab en mémoire, Astra B5) ; barèmes
-(passif 50 / 6 min chez Raptoru contre 10 chez StreamElements, bonus) ; crédits TTS / Soundboard (lot 4) ;
-`!wallet remove` / `set` peuvent créer une dette (monnaie `main` : `allow_negative_admin = true`, règle existante) ;
+**Événements Twitch durables (19/10/2026)** : Loyalty — outbox fichier du bot (écrite avant l'envoi, retirée après la
+réponse du Core, reprise au démarrage, refus bornés) ; alertes du Lab (et donc gains de la Roue du Sub) — même outbox
+(`.lab-alerts-outbox.json`) au lieu des nouvelles tentatives en mémoire abandonnées après 90 s. Chaque événement garde son
+id Twitch (idempotence du Core) et son heure Twitch (`occurred_at` / `occurredAt`, nanosecondes acceptées) ; un sub ou
+un événement Loyalty antérieur au cutoff reçu après l'import n'est jamais payé automatiquement (Roue : « en attente,
+avant la bascule : à rapprocher » ; Loyalty : « exclu »). Limite Twitch : un événement émis pendant qu'aucune session
+WebSocket n'est ouverte n'est jamais reçu (Twitch ne rejoue pas une session perdue). Messages du chat (Jeu des mots,
+mini-jeux) : politique décidée inchangée (ASTRA-P1-002, 15 s en mémoire) — aucun Jeton n'a bougé tant que le message
+n'est pas admis.
+
+**Restent ouverts** : barèmes (passif 50 / 6 min chez Raptoru contre 10 chez StreamElements, bonus) ; crédits TTS /
+Soundboard (lot 4) ; `!wallet remove` / `set` peuvent créer une dette (monnaie `main` : `allow_negative_admin = true`,
+règle existante) ; affichage d'une alerte reçue très en retard (aucune règle d'âge dans la file des alertes : à décider) ;
 hébergement et activation au cutover (lot 7).

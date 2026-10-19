@@ -819,6 +819,29 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
 }
 
 /**
+ * The economic cutover boundary: whether a Twitch event happened at or before the cutoff of the applied opening import
+ * of the currency (the primary one by default). Such an event was paid by the previous economy (StreamElements / SAMMI:
+ * its balance is in the opening) — never paid again, whenever it reaches Core (late delivery, outbox resumed).
+ */
+export async function occurredBeforeCutover(
+  q: Queryable,
+  occurredAt: string,
+  currencyId?: string,
+): Promise<boolean> {
+  const cutoff = (
+    await q.query<{ cutoff: Date }>(
+      currencyId
+        ? 'select cutoff from wallet_imports where currency_id = $1'
+        : 'select i.cutoff from wallet_imports i join currencies c on c.id = i.currency_id where c.is_primary',
+      currencyId ? [currencyId] : [],
+    )
+  )[0]?.cutoff;
+  return (
+    !!cutoff && new Date(occurredAt).getTime() <= new Date(cutoff).getTime()
+  );
+}
+
+/**
  * Automatic refunds (expired before being claimed, failed before being shown): an economic refusal
  * (e.g. an inactive currency of the canonical Wallet) never blocks the queue of the channel. Undone
  * alone (savepoint): the item keeps refund_status 'none' — refundable later by moderation — and

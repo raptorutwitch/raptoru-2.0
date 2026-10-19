@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { TWITCH_OAUTH_PROFILES, missingTwitchScopes } from '@raptoru/schemas';
 import { loadTwitchAppConfig } from './config.js';
@@ -6,7 +7,12 @@ import {
   canReadChannelPoints,
   createChannelPointsEvents,
 } from './channel-points-events.js';
-import { ALERTS_MODES, createLabAlertsIngest } from './lab-alerts-ingest.js';
+import {
+  ALERTS_MODES,
+  type AlertOutboxEvent,
+  createLabAlertsIngest,
+} from './lab-alerts-ingest.js';
+import { fileOutbox, memoryOutbox } from './loyalty-outbox.js';
 import { createLabChatIngest } from './lab-chat-ingest.js';
 import {
   createLabChatOutput,
@@ -51,6 +57,13 @@ const Env = z.object({
     .optional(),
   /** Helix stream-state repair period (same setting and default as the main bot). */
   STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
+  /** Alerts received from Twitch and not yet answered by the Lab Core (durable, resumed at start). */
+  LAB_ALERTS_OUTBOX_FILE: z
+    .string()
+    .min(1)
+    .default(
+      fileURLToPath(new URL('../.lab-alerts-outbox.json', import.meta.url)),
+    ),
 });
 
 /** Unusable Twitch token: Studio's supervision shows it and does not restart (EXIT_AUTH in ingress.ts). */
@@ -131,7 +144,14 @@ const alerts = createLabAlertsIngest({
   tokenUserId: status.userId!,
   scopes: status.scopes,
   lab,
+  // ACTIVE only: written before it is sent, removed once the Lab Core answered (a sub is also a wheel gain).
+  outbox:
+    env.LAB_ALERTS_MODE === 'active'
+      ? fileOutbox<AlertOutboxEvent>(env.LAB_ALERTS_OUTBOX_FILE)
+      : memoryOutbox<AlertOutboxEvent>(),
 });
+// What a previous run received and the Lab Core never answered: sent again (same ids, Core deduplicates).
+void alerts.resumePending();
 const ingest = createLabChatIngest({
   lab,
   labChannelId: env.LAB_CHAT_CHANNEL_ID,

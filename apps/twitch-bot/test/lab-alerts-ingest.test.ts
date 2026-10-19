@@ -1,9 +1,13 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  ALERT_RETRY_TTL_MS,
+  type AlertOutboxEvent,
   type AlertsMode,
   createLabAlertsIngest,
 } from '../src/lab-alerts-ingest.js';
+import { fileOutbox, type Outbox } from '../src/loyalty-outbox.js';
 import { createLabChatIngest } from '../src/lab-chat-ingest.js';
 import { createEventSubRouter } from '../src/twitch/eventsub.js';
 import {
@@ -23,7 +27,11 @@ afterEach(() => {
 
 function setup(
   mode: AlertsMode,
-  o: { scopes?: string[]; fail?: (path: string) => Error | null } = {},
+  o: {
+    scopes?: string[];
+    fail?: (path: string) => Error | null;
+    outbox?: Outbox<AlertOutboxEvent>;
+  } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
   const subs: { type: string; version?: string; condition: unknown }[] = [];
@@ -43,6 +51,7 @@ function setup(
     scopes: o.scopes ?? ['user:read:chat'],
     lab,
     log,
+    outbox: o.outbox,
   });
   const ingest = createLabChatIngest({
     lab,
@@ -285,7 +294,7 @@ describe('Lab alerts ingestion — resilience', () => {
     expect(s.logs.join('\n')).toContain('raid GrosRaideur (n-raid-1) → queued');
   });
 
-  it('Core refusing (4xx) is not retried; Core down longer than the TTL: dropped with a log line; stop drops the rest', async () => {
+  it('Core refusing (4xx): not retried, kept in the refusal journal (bounded), never silently dropped', async () => {
     vi.useFakeTimers();
     const refused = setup('active', {
       fail: (p) =>
@@ -293,23 +302,115 @@ describe('Lab alerts ingestion — resilience', () => {
     });
     await refused.deliver('channel.chat.notification', EVENTS.sub, 's1');
     expect(refused.alerts.pendingRetries()).toBe(0);
-    expect(refused.logs.join('\n')).toContain('perdu (Core : lab_core_400)');
-    const down = setup('active', {
-      fail: (p) =>
-        p === '/v1/lab/alerts/events' ? new Error('lab_core_503') : null,
+    expect(refused.alerts.pending()).toBe(0);
+    expect(refused.logs.join('\n')).toContain(
+      'refusée par Core (lab_core_400)',
+    );
+  });
+});
+
+describe('durable delivery (19/10/2026): an alert taken in is never lost', () => {
+  const file = () =>
+    join(mkdtempSync(join(tmpdir(), 'lab-alerts-')), 'outbox.json');
+  const stored = (path: string) =>
+    JSON.parse(readFileSync(path, 'utf8')) as {
+      pending: {
+        event: { eventId: string; body: Record<string, unknown> };
+        receivedAt: string;
+      }[];
+      rejected: unknown[];
+    };
+
+  it('written BEFORE it is sent, with its Twitch id and the Twitch time; removed once Core answered', async () => {
+    const path = file();
+    let seenOnDisk: number | null = null;
+    const s = setup('active', {
+      outbox: fileOutbox<AlertOutboxEvent>(path),
+      fail: (p) => {
+        if (p === '/v1/lab/alerts/events')
+          seenOnDisk = stored(path).pending.length;
+        return null;
+      },
     });
-    await down.deliver('channel.chat.notification', EVENTS.sub, 's2');
-    await vi.advanceTimersByTimeAsync(ALERT_RETRY_TTL_MS + 60_000);
-    expect(down.alerts.pendingRetries()).toBe(0);
-    expect(down.logs.join('\n')).toContain('perdu (Core : lab_core_503)');
-    const stopping = setup('active', {
+    await s.deliver('channel.chat.notification', EVENTS.sub, 'm1');
+    expect(seenOnDisk).toBe(1);
+    expect(s.alertPosts()[0]).toMatchObject({
+      occurred_at: '2026-10-17T20:00:00.000000000Z',
+    });
+    expect(stored(path).pending).toEqual([]);
+  });
+
+  it('adapter stopped right after reception (Core down): kept on disk; the restarted adapter sends it once', async () => {
+    vi.useFakeTimers();
+    const path = file();
+    const first = setup('active', {
+      outbox: fileOutbox<AlertOutboxEvent>(path),
       fail: (p) =>
         p === '/v1/lab/alerts/events' ? new Error('fetch failed') : null,
     });
-    await stopping.deliver('channel.chat.notification', EVENTS.sub, 's3');
-    stopping.ingest.close();
-    expect(stopping.alerts.pendingRetries()).toBe(0);
-    expect(stopping.logs.join('\n')).toContain('abandonnée');
+    await first.deliver('channel.chat.notification', EVENTS.sub, 'm1');
+    await first.deliver('channel.chat.notification', EVENTS.resub, 'm2');
+    first.ingest.close();
+    expect(first.logs.join('\n')).toContain('2 alerte(s) en attente gardée(s)');
+    expect(stored(path).pending.map((e) => e.receivedAt)).toEqual([
+      '2026-10-17T20:00:00.000000000Z',
+      '2026-10-17T20:00:00.000000000Z',
+    ]);
+    // Restart: a new adapter on the same file, Core back.
+    const again = setup('active', {
+      outbox: fileOutbox<AlertOutboxEvent>(path),
+    });
+    await again.alerts.resumePending();
+    expect(again.alertPosts()).toHaveLength(2);
+    expect(stored(path).pending).toEqual([]);
+    await again.alerts.resumePending();
+    expect(again.alertPosts()).toHaveLength(2);
+  });
+
+  it('Core down far longer than before (10 min): kept and retried with the SAME id, delivered once it is back', async () => {
+    vi.useFakeTimers();
+    let down = true;
+    const s = setup('active', {
+      fail: (p) =>
+        down && p === '/v1/lab/alerts/events'
+          ? new Error('lab_core_503')
+          : null,
+    });
+    await s.deliver('channel.chat.notification', EVENTS.sub, 'm1');
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(s.alerts.pending()).toBe(1);
+    expect(s.alertPosts()).toHaveLength(0);
+    down = false;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(s.alertPosts()).toHaveLength(1);
+    expect(s.alerts.pending()).toBe(0);
+  });
+
+  it('Core applied it but the answer was lost: resent with the same id (Core deduplicates), then removed', async () => {
+    vi.useFakeTimers();
+    let lose = true;
+    const s = setup('active', {
+      fail: (p) => {
+        if (p !== '/v1/lab/alerts/events' || !lose) return null;
+        lose = false;
+        return new Error('fetch failed'); // the request reached Core, the answer did not come back
+      },
+    });
+    await s.deliver('channel.chat.notification', EVENTS.raid, 'r1');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.alertPosts().map((e) => e.source_event_id)).toEqual(['n-raid-1']);
+    expect(s.alerts.pending()).toBe(0);
+  });
+
+  it('the same Twitch event twice, and many events at once: one stored entry each, every one delivered once', async () => {
+    const path = file();
+    const s = setup('active', { outbox: fileOutbox<AlertOutboxEvent>(path) });
+    await Promise.all(all(s));
+    await s.deliver('channel.chat.notification', EVENTS.sub, 'm1');
+    const ids = s.alertPosts().map((e) => e.source_event_id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.length).toBeGreaterThanOrEqual(7);
+    expect(stored(path).pending).toEqual([]);
   });
 });
 

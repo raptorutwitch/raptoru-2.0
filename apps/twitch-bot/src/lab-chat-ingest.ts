@@ -158,7 +158,7 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
           );
         }
     },
-    async notification(type, event, messageId) {
+    async notification(type, event, messageId, timestamp) {
       try {
         if (type === 'stream.online')
           await stream('online', String(event.id ?? ''));
@@ -167,9 +167,10 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
           type === 'channel.chat.notification' ||
           type === 'channel.follow'
         )
-          await d.alerts?.handle(type, event, messageId);
+          await d.alerts?.handle(type, event, messageId, timestamp);
         else if (type === 'channel.chat.message') {
-          if (event.cheer) await d.alerts?.handle(type, event, messageId);
+          if (event.cheer)
+            await d.alerts?.handle(type, event, messageId, timestamp);
           if (String(event.chatter_user_id) === d.tokenUserId) return;
           const text = String(
             (event.message as { text?: unknown } | undefined)?.text ?? '',

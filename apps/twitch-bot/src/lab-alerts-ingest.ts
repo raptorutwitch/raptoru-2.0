@@ -1,5 +1,10 @@
 import { normalizeAlertEvent } from './alert-events.js';
 import { type LabCorePost, transient } from './lab-chat-ingest.js';
+import {
+  memoryOutbox,
+  type Outbox,
+  type OutboxEntry,
+} from './loyalty-outbox.js';
 
 // Twitch alerts — real events (17/10/2026, Lab). An input adapter on the Lab chat adapter's EventSub connection (the
 // ONE Twitch connection of the Lab, LeCroupier_'s token): no second connection, token or process. Studio's mode,
@@ -9,8 +14,12 @@ import { type LabCorePost, transient } from './lab-chat-ingest.js';
 //   queued, nothing can be displayed;
 // - active: sent to the Lab Core (POST /v1/lab/alerts/events): deduplicated there by the Twitch id, variant drawn
 //   once, queued in its family; it plays in the OBS source connected to Studio Lab.
-// Delivery to Core: retried in memory with the SAME id (Core deduplicates), dropped after 90 s or when the adapter
-// stops. Not durable: Twitch itself does not replay the events of a lost WebSocket session either.
+// Delivery to Core (19/10/2026, durable): an alert received from Twitch is written to the outbox file BEFORE it is sent
+// and removed only once Core answered (queued, replayed or refused) — a restart of the adapter or a Core down for a
+// long time never loses it (a sub also decides a Roue du Sub gain). Resent with the SAME id (Core deduplicates); the
+// Twitch time of the message travels as occurred_at. A refusal (4xx) is kept, bounded, for traceability. What cannot
+// be guaranteed: an event Twitch sends while no WebSocket session is open is never received (Twitch does not replay a
+// lost WebSocket session).
 
 export const ALERTS_MODES = ['off', 'test', 'active'] as const;
 export type AlertsMode = (typeof ALERTS_MODES)[number];
@@ -18,8 +27,16 @@ export type AlertsMode = (typeof ALERTS_MODES)[number];
 /** Scope a moderator token needs for channel.follow v2 (not held by LeCroupier_'s token on 17/10/2026). */
 export const FOLLOW_SCOPE = 'moderator:read:followers';
 
+/** Backoff between two sends of a pending alert (the last delay repeats: kept until Core answers). */
 export const ALERT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 15_000, 30_000];
-export const ALERT_RETRY_TTL_MS = 90_000;
+
+/** One alert waiting for Core, as stored in the outbox. */
+export interface AlertOutboxEvent {
+  /** The Twitch id of the alert (source_event_id). */
+  eventId: string;
+  body: Record<string, unknown>;
+  label: string;
+}
 
 export interface LabAlertsIngestDeps {
   mode: AlertsMode;
@@ -30,6 +47,8 @@ export interface LabAlertsIngestDeps {
   tokenUserId: string;
   scopes: string[];
   lab: LabCorePost;
+  /** Durable outbox (the Lab adapter: a JSON file); in memory by default (tests). */
+  outbox?: Outbox<AlertOutboxEvent>;
   log?: (...args: unknown[]) => void;
   now?: () => number;
 }
@@ -37,38 +56,49 @@ export interface LabAlertsIngestDeps {
 export function createLabAlertsIngest(d: LabAlertsIngestDeps) {
   const log = d.log ?? console.log;
   const now = d.now ?? Date.now;
-  const retries = new Set<ReturnType<typeof setTimeout>>();
+  const outbox = d.outbox ?? memoryOutbox<AlertOutboxEvent>();
+  const retries = new Map<string, ReturnType<typeof setTimeout>>();
+  const sending = new Set<string>();
 
-  /** One alert event to Core; transient failures are retried in the background (never blocks EventSub). */
-  const forward = async (event: Record<string, unknown>, label: string) => {
-    const receivedAt = now();
-    let attempt = 0;
-    const send = async (): Promise<void> => {
-      try {
-        const out = (await d.lab('/v1/lab/alerts/events', event)) as {
-          outcome?: string;
-        };
-        log(`[lab-alerts] ${label} → ${out.outcome ?? '?'}`);
-      } catch (error) {
-        const reason = (error as Error).message;
-        const delay = ALERT_RETRY_DELAYS_MS[attempt];
-        if (
-          !transient(error) ||
-          delay === undefined ||
-          now() + delay - receivedAt > ALERT_RETRY_TTL_MS
-        ) {
-          log(`[lab-alerts] ${label} perdu (Core : ${reason})`);
-          return;
-        }
-        attempt += 1;
-        const timer = setTimeout(() => {
-          retries.delete(timer);
-          void send();
-        }, delay);
-        retries.add(timer);
+  /** One send of a stored alert; a transient failure schedules the next one (never blocks EventSub). */
+  const attempt = async (
+    entry: OutboxEntry<AlertOutboxEvent>,
+    n: number,
+  ): Promise<void> => {
+    const { eventId, body, label } = entry.event;
+    try {
+      const out = (await d.lab('/v1/lab/alerts/events', body)) as {
+        outcome?: string;
+      };
+      outbox.remove(eventId);
+      sending.delete(eventId);
+      log(`[lab-alerts] ${label} → ${out.outcome ?? '?'}`);
+    } catch (error) {
+      const reason = (error as Error).message;
+      if (!transient(error)) {
+        outbox.reject(entry, reason, new Date(now()));
+        sending.delete(eventId);
+        log(
+          `[lab-alerts] ${label} refusée par Core (${reason}), gardée dans le journal des refus`,
+        );
+        return;
       }
-    };
-    await send();
+      const delay =
+        ALERT_RETRY_DELAYS_MS[Math.min(n, ALERT_RETRY_DELAYS_MS.length - 1)]!;
+      log(
+        `[lab-alerts] ${label} : Core indisponible (${reason}), gardée, nouvel essai dans ${delay / 1000} s`,
+      );
+      const timer = setTimeout(() => {
+        retries.delete(eventId);
+        void attempt(entry, n + 1);
+      }, delay);
+      retries.set(eventId, timer);
+    }
+  };
+  const send = async (entry: OutboxEntry<AlertOutboxEvent>) => {
+    if (sending.has(entry.event.eventId)) return;
+    sending.add(entry.event.eventId);
+    await attempt(entry, 0);
   };
 
   return {
@@ -109,8 +139,11 @@ export function createLabAlertsIngest(d: LabAlertsIngestDeps) {
       type: string,
       event: Record<string, unknown>,
       messageId: string,
+      /** Twitch time of the EventSub message (metadata.message_timestamp). */
+      timestamp?: string,
     ) {
       if (d.mode === 'off') return;
+      let entry: OutboxEntry<AlertOutboxEvent>;
       try {
         const out = normalizeAlertEvent(type, event, messageId);
         if (!out) return;
@@ -120,17 +153,47 @@ export function createLabAlertsIngest(d: LabAlertsIngestDeps) {
           log(`[lab-alerts] TEST, non admis : ${label}`);
           return;
         }
-        await forward({ channel_id: d.channelId, ...out }, label);
+        const occurredAt = out.occurred_at ?? timestamp;
+        entry = {
+          event: {
+            eventId: out.source_event_id,
+            body: {
+              channel_id: d.channelId,
+              ...out,
+              ...(occurredAt ? { occurred_at: occurredAt } : {}),
+            },
+            label,
+          },
+          receivedAt: timestamp ?? new Date(now()).toISOString(),
+          session: 'lab',
+        };
       } catch (error) {
         log(`[lab-alerts] ${type} ignoré`, (error as Error).message);
+        return;
       }
+      // Durable BEFORE it is sent (an unwritable outbox throws: the alert is not taken in silently).
+      outbox.add(entry);
+      await send(entry);
+    },
+    /** At start: sends what a previous run left unanswered (same ids: Core deduplicates). */
+    async resumePending() {
+      if (d.mode !== 'active') return;
+      const left = outbox.pending();
+      if (left.length)
+        log(`[lab-alerts] reprise de ${left.length} alerte(s) en attente`);
+      for (const entry of left) await send(entry);
     },
     pendingRetries: () => retries.size,
+    pending: () => outbox.pending().length,
     close() {
-      if (retries.size)
-        log(`[lab-alerts] ${retries.size} alerte(s) en attente abandonnée(s)`);
-      for (const t of retries) clearTimeout(t);
+      const kept = outbox.pending().length;
+      if (kept)
+        log(
+          `[lab-alerts] ${kept} alerte(s) en attente gardée(s) pour la reprise`,
+        );
+      for (const t of retries.values()) clearTimeout(t);
       retries.clear();
+      sending.clear();
     },
   };
 }

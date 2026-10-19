@@ -8,6 +8,7 @@ import type {
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import { occurredBeforeCutover } from '../economy/economy.js';
 import type {
   PresenceListener,
   ValidatedPresence,
@@ -73,23 +74,6 @@ interface NewReward {
   amount: number | null;
   status: RewardStatus;
   breakdown: unknown;
-}
-
-/** Whether the event happened at or before the cutoff of the applied opening import of the currency. */
-async function occurredBeforeCutover(
-  q: Queryable,
-  currencyId: string,
-  occurredAt: string,
-) {
-  const cutoff = (
-    await q.query<{ cutoff: Date }>(
-      'select cutoff from wallet_imports where currency_id = $1',
-      [currencyId],
-    )
-  )[0]?.cutoff;
-  return (
-    !!cutoff && new Date(occurredAt).getTime() <= new Date(cutoff).getTime()
-  );
 }
 
 const hash = (v: unknown) =>
@@ -295,7 +279,7 @@ export class LoyaltyEngine {
       const beforeCutover =
         mode === 'credit' &&
         !!event.occurredAt &&
-        (await occurredBeforeCutover(q, config.currencyId, event.occurredAt));
+        (await occurredBeforeCutover(q, event.occurredAt, config.currencyId));
       const r = await insertReward(q, {
         key: reward.key,
         hashPayload: reward.hashPayload,

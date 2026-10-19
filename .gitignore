@@ -16,6 +16,8 @@ dist/
 
 # Loyalty events not yet delivered to Core (bot outbox, local runtime data)
 .loyalty-outbox.json*
+# Twitch alerts not yet answered by the Lab Core (Lab adapter outbox, local runtime data)
+.lab-alerts-outbox.json*
 # Commands V2 Lab chat sends journal (bot executor, local runtime data)
 .lab-chat-journal.json*
 # Random Ban V2 timeouts journal (bot executor, local runtime data)

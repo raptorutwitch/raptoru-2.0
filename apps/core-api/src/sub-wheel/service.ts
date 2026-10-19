@@ -11,7 +11,7 @@ import {
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
-import type { EconomyPort } from '../economy/economy.js';
+import { type EconomyPort, occurredBeforeCutover } from '../economy/economy.js';
 import { LabWalletError } from '../lab-moderation/store.js';
 import { CurrencyCreditError } from '../raffle-lab/currencies.js';
 
@@ -196,6 +196,8 @@ export class SubWheelService {
       tier: 1 | 2 | 3;
       months: number;
       enabled: boolean;
+      /** Twitch time of the event (cutover boundary). */
+      occurred_at?: string;
     },
   ) {
     const now = this.now();
@@ -235,9 +237,21 @@ export class SubWheelService {
     )[0]!;
     // A gain decided now, on the canonical Wallet: credited with the spin (one transaction). A redelivered event finds
     // the existing spin and pays nothing more.
-    return created.length && row.award_status === 'pending' && this.canonical
-      ? this.credit(q, row, false)
-      : row;
+    if (!created.length || row.award_status !== 'pending' || !this.canonical)
+      return row;
+    // A sub of the previous economy reaching Core late (outbox resumed after the cutover): never paid here.
+    if (s.occurred_at && (await occurredBeforeCutover(q, s.occurred_at))) {
+      await q.query(
+        `update sw_spins set award_note = $2, award_updated_at = $3, updated_at = $3 where spin_id = $1`,
+        [row.spin_id, 'avant la bascule : à rapprocher', now],
+      );
+      return (
+        await q.query<Row>('select * from sw_spins where spin_id = $1', [
+          row.spin_id,
+        ])
+      )[0]!;
+    }
+    return this.credit(q, row, false);
   }
 
   /**
@@ -269,6 +283,7 @@ export class SubWheelService {
           // A new sub is the viewer's first month; a resub carries its cumulative months.
           months: type === 'sub' ? 1 : Math.max(1, e.months ?? 1),
           enabled,
+          occurred_at: e.occurred_at,
         }),
       ),
     );

@@ -277,6 +277,29 @@ describe('Roue du Sub on the canonical Wallet', () => {
     expect(await count(f.core.db, 'wallet_transactions')).toBe(0);
   });
 
+  it('cutover boundary: a sub that happened before the cutoff but reaches Core after it (outbox resumed) is never paid automatically', async () => {
+    const f = await canonical();
+    await f.core.db.query(
+      `insert into wallet_imports (id, currency_id, source, cutoff, snapshot_sha256, accounts, total)
+       values ('se-test', 'main', 'streamelements', '2026-10-19T19:00:00Z', $1, 0, 0)`,
+      ['a'.repeat(64)],
+    );
+    // EventSub nanosecond timestamps, as Twitch sends them.
+    const old = (await f.receive(
+      event({ occurred_at: '2026-10-19T18:59:59.999999999Z' }),
+    ))!;
+    expect(old.award).toMatchObject({
+      status: 'pending',
+      note: 'avant la bascule : à rapprocher',
+    });
+    expect(await f.credits()).toBe(0);
+    const late = event({ occurred_at: '2026-10-19T19:00:00.001000000Z' });
+    expect((await f.receive(late))!.award.status).toBe('awarded');
+    await f.receive(late); // redelivered: nothing more
+    expect(await f.credits()).toBe(1);
+    expect(await f.tokens()).toBe(GAIN);
+  });
+
   it('the switch OFF: a real sub is still « ignored », nothing owed, nothing credited', async () => {
     const f = await canonical();
     await f.wheel.setEnabled(CH, false);
