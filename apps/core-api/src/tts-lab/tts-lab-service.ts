@@ -1297,11 +1297,12 @@ export class TtsLabService {
   /** TTS rows for the moderation cockpit: current, waiting (with position / wait) and recent. */
   async moderationQueue(channelId: string) {
     const q0 = await this.queue(channelId);
-    const debits = await this.db.query<{ interaction_id: string }>(
-      `select interaction_id from lab_wallet_ledger where channel_id = $1 and kind = 'debit' and module_id = 'tts' and created_at > now() - interval '2 days'`,
-      [channelId],
+    const paid = await this.economy.debitedInteractions(
+      this.db,
+      channelId,
+      'tts',
+      2,
     );
-    const paid = new Set(debits.map((d) => d.interaction_id));
     const view = (i: TtsLabInteraction) => ({
       ...i,
       paid: paid.has(i.interaction_id),

@@ -17,12 +17,17 @@ export type EconomyMode = 'lab' | 'canonical';
 export const CANONICAL_READY: Readonly<Record<string, true | string>> = {
   word_game: true,
   mini_games: true, // Roulette, Slot, Duel
-  bonk: 'historique et remboursements de modération lus dans lab_wallet_ledger',
+  // Phase 2 lot 2: debits (single, salves), automatic and moderation refunds, moderation reads — all on the port.
+  bonk: true,
+  // Jetons proven end to end; the credits payment (D2: secondary currency, not migrated) is refused on canonical.
   soundboard:
-    'crédits Soundboard (décision D2) et historique lus dans lab_wallet_ledger',
-  tts: 'crédits TTS (décision D2), état des remboursements lu dans lab_wallet_ledger',
+    'paiement en crédits Soundboard refusé en canonique (crédits non migrés, D2)',
+  tts: 'paiement en crédits TTS refusé en canonique (crédits non migrés, D2)',
   raffle:
     'déduplication des gains lue dans lab_wallet_ledger ; monnaies de tirage autres que les Jetons',
+  // Moderation's Lab wallet tools (manual adjustment, test balances) are refused on canonical (lot 6).
+  moderation_wallet:
+    'ajustement manuel et portefeuille de test refusés en canonique (à raccorder à WalletService.adminAdjust)',
 };
 
 export class EconomyActivationError extends Error {

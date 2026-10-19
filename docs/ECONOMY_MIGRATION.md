@@ -377,6 +377,17 @@ clé obligatoire, rejeu = même résultat sans second paiement, crédits jamais 
 module) ; Jeu des mots, Roulette / Slot, Duel prouvés sur le Wallet canonique (PGlite) et en concurrence réelle avec le
 Bonk sur un même portefeuille (PostgreSQL, deux connexions). Core Lab : option `economy` (Lab par défaut, inchangé).
 
-**Suite proposée** : lot 2 Bonk / Soundboard / TTS en Jetons (lectures `lab_wallet_ledger` derrière le port) ; lot 3
+**Lot 2 (fait)** : le port porte aussi les lectures (`balances`, `interactionMovements`, `debitedInteractions`,
+`ledger`) ; Bonk, Soundboard, TTS et la modération Lab ne lisent plus `lab_wallet_ledger` / `lab_wallets` en
+direct (file TTS « payée », fiche viewer, détail d'une interaction, « Activité Jetons », solde de l'Extension). En
+canonique : crédits `null` (jamais 0), ajustement manuel et portefeuille de test refusés
+(`canonical_wallet_tools_not_wired`). Core Lab : la même `economy` pour tous ses modules (Lab par défaut). Prouvé
+en canonique : salves (tout ou rien), remboursements automatiques (expiration, échec avant lecture) et de modération
+(annulation, pause « annuler et rembourser ») une seule fois, y compris après redémarrage et depuis deux Core à la fois
+(PostgreSQL) ; trois modules dépensant en même temps sur un portefeuille trop court. `CANONICAL_READY` : Bonk prêt ;
+Soundboard et TTS bloqués par leurs crédits (D2 : monnaie secondaire distincte, gagnée seulement par des récompenses
+de points de chaîne, jamais convertie ; paramétrage reporté) ; outils de portefeuille de la modération bloqués.
+
+**Suite proposée** : lot 3
 Tombola ; lot 4 crédits (après D2) ; lot 5 Roue du Sub (I3) ; lot 6 modération, commandes chat, gel Daily / Loyalty
 (B5) ; lot 7 hébergement des modules par un Core au schéma Wallet et activation au cutover.

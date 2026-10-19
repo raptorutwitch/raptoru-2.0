@@ -6,6 +6,7 @@ import type {
 import { createHash } from 'node:crypto';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import { labEconomy, type EconomyPort } from '../economy/economy.js';
 import type { BonkLabService } from '../bonk-lab/bonk-lab-service.js';
 import type { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
@@ -28,7 +29,6 @@ import {
   LabForbiddenError,
   permissionsFor,
   personalCooldownMs,
-  readWallet,
   restrictions,
   setBlock,
   touchStaff,
@@ -135,7 +135,18 @@ export class LabModerationService {
     private readonly sound: SoundLabService,
     private readonly bonk: BonkLabService,
     private readonly raffle: RaffleLabService,
+    /** Balances, movements and ledger of the economy the modules use (the Lab test wallet by default). */
+    private readonly economy: EconomyPort = labEconomy,
   ) {}
+
+  /** The Lab test wallet tools (manual adjustment, test balances) only exist on the Lab ledger. */
+  private labWalletOnly() {
+    if (this.economy.mode !== 'lab')
+      throw new LabModerationError(
+        'canonical_wallet_tools_not_wired',
+        'the Lab wallet tools do not act on the canonical Wallet',
+      );
+  }
 
   /** Effective role, D4 grants and permissions of the caller (the staff seen joins the team). */
   async whoami(channelId: string, actor: Actor) {
@@ -514,6 +525,7 @@ export class LabModerationService {
           return { ok: true };
         }
         case 'wallet_adjust': {
+          this.labWalletOnly();
           const out = await adminAdjust(q, now, {
             channelId,
             viewerId: cmd.viewer_id,
@@ -815,7 +827,7 @@ export class LabModerationService {
     const since = this.streamStart(now);
     const [wallet, restr, dir, role, activity, today, notes, ledger, history] =
       await Promise.all([
-        readWallet(this.db, channelId, viewerId),
+        this.economy.balances(this.db, channelId, viewerId),
         restrictions(this.db, channelId, viewerId, now),
         this.db.query<{
           display_name: string;
@@ -991,12 +1003,7 @@ export class LabModerationService {
         [channelId, id],
       )
     ).map((a) => ({ ...a, created_at: new Date(a.created_at).toISOString() }));
-    const movements = (
-      await this.db.query<{ id: string; kind: string; amount: string }>(
-        `select id, kind, currency, amount, created_at from lab_wallet_ledger where interaction_id = $1 order by id`,
-        [id],
-      )
-    ).map((m) => ({ ...m, id: Number(m.id), amount: Number(m.amount) }));
+    const movements = await this.economy.interactionMovements(this.db, id);
     return {
       ...base,
       ...(extra[0] ?? {}),
@@ -1020,31 +1027,23 @@ export class LabModerationService {
     } = {},
   ) {
     const limit = Math.min(200, Math.max(1, f.limit ?? 60));
-    const rows = await this.db.query<{
-      id: string;
-      viewer_id: string;
-      display_name: string | null;
-      kind: string;
-      currency: string;
-      amount: string;
-      module_id: string | null;
-      interaction_id: string | null;
-      raffle_id: string | null;
-      actor: string;
-      reason: string | null;
-      created_at: Date;
-      refunded_by: string | null;
-      refund_of: string | null;
-    }>(
-      `select l.id, l.viewer_id, v.display_name, l.kind, l.currency, l.amount, l.module_id, l.interaction_id, l.raffle_id,
-         l.actor, l.reason, l.created_at,
-         case when l.kind = 'debit' then (select r.id from lab_wallet_ledger r where r.kind = 'refund' and r.interaction_id = l.interaction_id) end as refunded_by,
-         case when l.kind = 'refund' then (select d.id from lab_wallet_ledger d where d.kind = 'debit' and d.interaction_id = l.interaction_id) end as refund_of
-       from lab_wallet_ledger l left join lab_viewers v on v.channel_id = l.channel_id and v.viewer_id = l.viewer_id
-       where l.channel_id = $1 and ($2::text is null or l.viewer_id = $2) and ($3::bigint is null or l.id < $3)
-       order by l.id desc limit $4`,
-      [channelId, f.viewer ?? null, f.before ?? null, limit + 1],
+    const page = await this.economy.ledger(this.db, channelId, {
+      viewer: f.viewer ?? null,
+      before: f.before ?? null,
+      limit: limit + 1,
+    });
+    const names = new Map(
+      (
+        await this.db.query<{ viewer_id: string; display_name: string }>(
+          'select viewer_id, display_name from lab_viewers where channel_id = $1 and viewer_id = any($2::text[])',
+          [channelId, [...new Set(page.map((r) => r.viewer_id))]],
+        )
+      ).map((v) => [v.viewer_id, v.display_name]),
     );
+    const rows = page.map((r) => ({
+      ...r,
+      display_name: names.get(r.viewer_id) ?? null,
+    }));
     const all = rows.slice(0, limit).map((r) => {
       const type = operationType(r.kind, r.module_id);
       const t = LEDGER_TYPES[type] ?? {
@@ -1070,8 +1069,8 @@ export class LabModerationService {
         actor: r.actor,
         reason: r.reason,
         created_at: new Date(r.created_at).toISOString(),
-        refunded_by: r.refunded_by === null ? null : Number(r.refunded_by),
-        refund_of: r.refund_of === null ? null : Number(r.refund_of),
+        refunded_by: r.refunded_by,
+        refund_of: r.refund_of,
       };
     });
     const items = f.auto
@@ -1183,10 +1182,11 @@ export class LabModerationService {
   // --- Lab test wallet (Studio Dev/Lab only) ------------------------------------------------------------------------
 
   async wallet(channelId: string, viewerId: string) {
-    return readWallet(this.db, channelId, viewerId);
+    return this.economy.balances(this.db, channelId, viewerId);
   }
 
   async editWallet(channelId: string, req: LabWalletRequest) {
+    this.labWalletOnly();
     if (req.actor.via !== 'studio')
       throw new LabModerationError(
         'studio_only',

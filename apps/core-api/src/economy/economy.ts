@@ -4,6 +4,7 @@ import {
   debit as labDebit,
   LabWalletError,
   lockWallet,
+  readWallet,
   refundDebit as labRefundDebit,
   type LabModule,
   type WalletCurrency,
@@ -62,7 +63,64 @@ export interface EconomyHold {
   maxBalance: number;
 }
 
+/** One row of the economy's ledger, in the shape of D4 « Activité Jetons » (whatever the source). */
+export interface EconomyLedgerRow {
+  id: number;
+  viewer_id: string;
+  kind: string;
+  currency: string;
+  amount: number;
+  module_id: string | null;
+  interaction_id: string | null;
+  raffle_id: string | null;
+  actor: string;
+  reason: string | null;
+  created_at: Date;
+  refunded_by: number | null;
+  refund_of: number | null;
+}
+
+/** Balances shown to the viewer and to moderation. A currency the economy does not hold is null (never 0). */
+export interface EconomyBalances {
+  tokens: number;
+  credits_tts: number | null;
+  credits_soundboard: number | null;
+}
+
 export interface EconomyPort {
+  /** Which ledger this is: tools that only exist on one side check it. */
+  readonly mode: 'lab' | 'canonical';
+  balances(
+    q: Queryable,
+    channelId: string,
+    viewerId: string,
+  ): Promise<EconomyBalances>;
+  /** The debit and refund of one interaction, in order. */
+  interactionMovements(
+    q: Queryable,
+    interactionId: string,
+  ): Promise<
+    {
+      id: number;
+      kind: string;
+      currency: string;
+      amount: number;
+      created_at: Date;
+    }[]
+  >;
+  /** Interactions of a module actually debited in the last days (moderation « payée »). */
+  debitedInteractions(
+    q: Queryable,
+    channelId: string,
+    module: LabModule,
+    withinDays: number,
+  ): Promise<Set<string>>;
+  /** Ledger page, newest first (`before` = id cursor), at most `limit` rows. */
+  ledger(
+    q: Queryable,
+    channelId: string,
+    f: { viewer: string | null; before: number | null; limit: number },
+  ): Promise<EconomyLedgerRow[]>;
   /** Inside the admission transaction. Throws when refused (nothing of the admission is kept). */
   debit(q: Queryable, now: Date, d: EconomyDebit): Promise<void>;
   /**
@@ -196,6 +254,67 @@ async function labMove(q: Queryable, now: Date, m: EconomyMovement) {
 }
 
 export const labEconomy: EconomyPort = {
+  mode: 'lab',
+  balances: (q, channelId, viewerId) => readWallet(q, channelId, viewerId),
+  async interactionMovements(q, interactionId) {
+    return (
+      await q.query<{
+        id: string;
+        kind: string;
+        currency: string;
+        amount: string;
+        created_at: Date;
+      }>(
+        'select id, kind, currency, amount, created_at from lab_wallet_ledger where interaction_id = $1 order by id',
+        [interactionId],
+      )
+    ).map((m) => ({ ...m, id: Number(m.id), amount: Number(m.amount) }));
+  },
+  async debitedInteractions(q, channelId, module, withinDays) {
+    return new Set(
+      (
+        await q.query<{ interaction_id: string }>(
+          `select interaction_id from lab_wallet_ledger where channel_id = $1 and kind = 'debit' and module_id = $2
+           and created_at > now() - make_interval(days => $3)`,
+          [channelId, module, withinDays],
+        )
+      ).map((d) => d.interaction_id),
+    );
+  },
+  async ledger(q, channelId, f) {
+    return (
+      await q.query<{
+        id: string;
+        viewer_id: string;
+        kind: string;
+        currency: string;
+        amount: string;
+        module_id: string | null;
+        interaction_id: string | null;
+        raffle_id: string | null;
+        actor: string;
+        reason: string | null;
+        created_at: Date;
+        refunded_by: string | null;
+        refund_of: string | null;
+      }>(
+        `select l.id, l.viewer_id, l.kind, l.currency, l.amount, l.module_id, l.interaction_id, l.raffle_id, l.actor,
+           l.reason, l.created_at,
+           case when l.kind = 'debit' then (select r.id from lab_wallet_ledger r where r.kind = 'refund' and r.interaction_id = l.interaction_id) end as refunded_by,
+           case when l.kind = 'refund' then (select d.id from lab_wallet_ledger d where d.kind = 'debit' and d.interaction_id = l.interaction_id) end as refund_of
+         from lab_wallet_ledger l
+         where l.channel_id = $1 and ($2::text is null or l.viewer_id = $2) and ($3::bigint is null or l.id < $3)
+         order by l.id desc limit $4`,
+        [channelId, f.viewer, f.before, f.limit],
+      )
+    ).map((r) => ({
+      ...r,
+      id: Number(r.id),
+      amount: Number(r.amount),
+      refunded_by: r.refunded_by === null ? null : Number(r.refunded_by),
+      refund_of: r.refund_of === null ? null : Number(r.refund_of),
+    }));
+  },
   debit: (q, now, d) =>
     labDebit(q, now, {
       channelId: d.channelId,
@@ -273,8 +392,140 @@ async function ledgerRow(q: Queryable, operationId: number, viewerId: string) {
   );
 }
 
+/** Canonical ledger rows (primary currency) with the idempotency key of their operation. */
+async function canonicalRows(
+  q: Queryable,
+  where: string,
+  params: unknown[],
+  tail = 'order by t.id',
+) {
+  return q.query<{
+    id: number;
+    twitch_user_id: string;
+    amount: number;
+    kind: string;
+    source: string;
+    reference: string | null;
+    actor: string | null;
+    reason: string | null;
+    created_at: Date;
+    key: string;
+  }>(
+    `select t.id, t.twitch_user_id, t.amount, t.kind, t.source, t.reference, t.actor, t.reason, t.created_at,
+       o.idempotency_key as key
+     from wallet_transactions t join wallet_operations o on o.id = t.operation_id
+     join currencies c on c.id = t.currency_id and c.is_primary
+     where ${where} ${tail}`,
+    params,
+  );
+}
+const INTERACTION_KEY = /^interaction:(.+):(debit|refund)$/;
+const interactionKeys = (id: string) => [
+  debitKey(id),
+  `interaction:${id}:refund`,
+];
+
 export function coreWalletEconomy(wallet: WalletService): EconomyPort {
   return {
+    mode: 'canonical',
+    async balances(q, _channelId, viewerId) {
+      const w = (
+        await q.query<{ balance: number }>(
+          'select w.balance from wallets w join currencies c on c.id = w.currency_id and c.is_primary where w.twitch_user_id = $1',
+          [viewerId],
+        )
+      )[0];
+      // Credits are not held by the Core Wallet (D2: secondary currencies, not migrated yet): null, never 0.
+      return {
+        tokens: Number(w?.balance ?? 0),
+        credits_tts: null,
+        credits_soundboard: null,
+      };
+    },
+
+    async interactionMovements(q, interactionId) {
+      return (
+        await canonicalRows(q, 'o.idempotency_key = any($1::text[])', [
+          interactionKeys(interactionId),
+        ])
+      ).map((r) => ({
+        id: Number(r.id),
+        kind: INTERACTION_KEY.exec(r.key)![2]!,
+        currency: 'tokens',
+        amount: Number(r.amount),
+        created_at: r.created_at,
+      }));
+    },
+
+    async debitedInteractions(q, _channelId, module, withinDays) {
+      return new Set(
+        (
+          await canonicalRows(
+            q,
+            `o.idempotency_key like 'interaction:%:debit' and t.source = $1
+             and t.created_at > now() - make_interval(days => $2)`,
+            [module, withinDays],
+          )
+        ).map((r) => r.reference!),
+      );
+    },
+
+    async ledger(q, _channelId, f) {
+      const rows = await canonicalRows(
+        q,
+        '($1::text is null or t.twitch_user_id = $1) and ($2::bigint is null or t.id < $2)',
+        [f.viewer, f.before],
+        `order by t.id desc limit ${Math.max(1, Math.trunc(f.limit))}`,
+      );
+      // Interaction debit ↔ refund links, and the module of a refund (its debit's).
+      const ids = [
+        ...new Set(rows.flatMap((r) => INTERACTION_KEY.exec(r.key)?.[1] ?? [])),
+      ];
+      const links = ids.length
+        ? await canonicalRows(q, 'o.idempotency_key = any($1::text[])', [
+            ids.flatMap(interactionKeys),
+          ])
+        : [];
+      const leg = (id: string, k: string) =>
+        links.find((l) => l.key === `interaction:${id}:${k}`);
+      return rows.map((r) => {
+        const m = INTERACTION_KEY.exec(r.key);
+        const interaction = m?.[1] ?? null;
+        const debitRow = interaction ? leg(interaction, 'debit') : undefined;
+        const refundRow = interaction ? leg(interaction, 'refund') : undefined;
+        const kind = m
+          ? m[2]!
+          : r.kind.startsWith('admin_')
+            ? 'admin'
+            : r.key.startsWith('move:')
+              ? r.source === 'raffle'
+                ? 'raffle_win'
+                : r.source
+              : r.kind;
+        return {
+          id: Number(r.id),
+          viewer_id: r.twitch_user_id,
+          kind,
+          currency: 'tokens',
+          amount: Number(r.amount),
+          module_id: m
+            ? (debitRow?.source ?? null)
+            : r.source === 'raffle'
+              ? 'raffle'
+              : null,
+          interaction_id: interaction,
+          raffle_id: null,
+          actor: r.actor ?? 'system',
+          reason: r.reason,
+          created_at: r.created_at,
+          refunded_by:
+            m?.[2] === 'debit' && refundRow ? Number(refundRow.id) : null,
+          refund_of:
+            m?.[2] === 'refund' && debitRow ? Number(debitRow.id) : null,
+        };
+      });
+    },
+
     async hold(q, _now, _channelId, viewerIds, currency) {
       const id = await canonicalCurrency(q, currency);
       const balances = await wallet.lockIn(q, viewerIds.map(byId), id);

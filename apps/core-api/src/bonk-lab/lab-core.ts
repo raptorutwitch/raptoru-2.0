@@ -62,8 +62,9 @@ export interface LabCoreOptions {
   /** The Lab channel's real Twitch broadcaster id (BONK_LAB_CHANNEL_TWITCH_ID), or ''. */
   channelTwitchId?: string;
   /**
-   * Economy of the modules proven on the canonical Wallet (Jeu des mots, mini-games). The Lab test wallet unless a
-   * caller passes the result of economy/activation.ts selectEconomy (the launcher never does before the cutover).
+   * Economy of every module of this runtime (Bonk, Soundboard, TTS, moderation, Jeu des mots, mini-games). The Lab
+   * test wallet unless a caller passes the result of economy/activation.ts selectEconomy (the launcher never does before
+   * the cutover; the activation refuses a runtime whose modules are not all proven).
    */
   economy?: EconomyPort;
 }
@@ -89,9 +90,15 @@ export function createLabCore({
   const thirdParty = /^\d+$/.test(channelTwitchId)
     ? new ThirdPartyEmotes(channelTwitchId, systemClock)
     : null;
-  const bonk = new BonkLabService(db, systemClock, viewers, thirdParty);
-  const sound = new SoundLabService(db, systemClock);
-  const tts = new TtsLabService(db, systemClock);
+  const bonk = new BonkLabService(
+    db,
+    systemClock,
+    viewers,
+    thirdParty,
+    economy,
+  );
+  const sound = new SoundLabService(db, systemClock, undefined, economy);
+  const tts = new TtsLabService(db, systemClock, undefined, undefined, economy);
   // The Lab channel's real Twitch broadcaster (the launcher's channel): the streamer of every Lab chat
   // module (Commands V2, Tombola) — lab-chat/broadcaster.ts.
   const broadcasterOf = () =>
@@ -142,7 +149,15 @@ export function createLabCore({
     // Moderation V2 + Lab test wallet + TTS configuration: Lab Core only (never the production Core).
     // Tombola V2 (minimal, needed by the D4 console) lives in the same Lab Core.
     ...labModerationRoutes(
-      new LabModerationService(db, systemClock, tts, sound, bonk, raffle),
+      new LabModerationService(
+        db,
+        systemClock,
+        tts,
+        sound,
+        bonk,
+        raffle,
+        economy,
+      ),
       tts,
       raffle,
       [
