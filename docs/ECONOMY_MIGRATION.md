@@ -87,6 +87,7 @@ lectures sans nouveau jeton ; il permet aussi d'écrire : l'outil d'export ne fe
 [--apply=<id>|--verify]` : essai à blanc par défaut ; application en une transaction (tout ou rien) ; refus listés
   (doublon d'ID, dette, monnaie, portefeuille déjà mouvementé, autre import) ; contrôle compte par compte (ouverture =
   snapshot, aucune ouverture hors snapshot, solde = ledger, totaux) valable même après la reprise des mouvements.
+- **Renforcé le 19/10/2026 (§ 10)** : format, contrôle sous verrou et vérification ont changé depuis ce lot.
 - Tests `wallet-opening-import` (7) : plan sans écriture, application exacte, rejeu → « déjà appliqué », autre
   snapshot refusé, portefeuille mouvementé / dette / doublon refusés sans rien écrire, panne au milieu → rien gardé
   puis réimport propre, seconde ouverture refusée par la base, contrôle après dépense et anomalies détectées.
@@ -233,7 +234,7 @@ invalides. Aucune attribution, aucun import.
   le changement de pseudo ne déplace pas le solde.
 - **Doubles comptes : fusionnables sans ambiguïté** : pour chacun, un seul ID, des périodes successives sans
   chevauchement (ancien pseudo puis nouveau). Dans le fichier d'ouverture, une ligne par ID (somme des deux, les deux
-  pseudos dans `source_ref`) ; la base refuse toute seconde ouverture du même portefeuille.
+  comptes dans `sources`, cf. § 10) ; la base refuse toute seconde ouverture du même portefeuille.
 - **Noms invalides** : un seul morceau du nom à 150 000 existe sur Twitch, compte qui ne suit pas la chaîne ; rien pour
   6 000. Probablement des saisies manuelles.
 - **Archives SAMMI locales** : elles ne contiennent que des pseudos (pas d'ID) ; elles datent l'activité d'un pseudo,
@@ -293,3 +294,39 @@ donnée SE accessible ne permet de le lever.
 l'accord d'Antoni et de faible valeur : un essai limité avec une commande réservée aux modérateurs sur 3 à 5 pseudos
 connus (renommé, introuvable, confirmé), pour savoir quel titulaire elle renvoie — sans pouvoir l'étendre à tous les
 comptes.
+
+## 10. Import d'ouverture renforcé (phase technique 1, 19/10/2026)
+
+Correctifs des constats de l'audit contradictoire d'Astra sur l'import (B3, I1, I2) et préparation des rattachements /
+exclusions de la sélection. Local et tests uniquement : aucun solde réel lu ni importé.
+
+**Format du fichier d'ouverture (strict, tout champ inconnu refusé)** :
+
+- `source_snapshot` : empreinte sha256 du snapshot StreamElements brut, nombre de comptes et total qu'il contenait.
+- `rows` : une ligne par Twitch ID (`^[1-9]\d{0,31}$`, jamais « 0 »), `login` Twitch, `balance`, et `sources` — chaque
+  compte StreamElements versé sur ce Twitch ID (plusieurs pour un rattachement). `balance` = somme des `sources`.
+- `excluded` : comptes sources non repris (`source_ref`, `balance`, `reason`) ; jamais un portefeuille, jamais le ledger.
+- Refus (essai à blanc comme application) : compte source en double (deux Twitch ID, ou importé et exclu), ligne ≠ somme
+  de ses sources, comptes ou total importés + exclus ≠ snapshot source, Twitch ID en double, dette, monnaie, autre import.
+
+**Application (une transaction)** : registre → **verrou de chaque portefeuille cible** (ordre stable, celui de toute
+opération Wallet, `WalletService.lockPristineIn`) et refus si solde ≠ 0 ou ligne de ledger **sous ce verrou** → une
+ouverture par ligne positive → chaque compte source enregistré (`wallet_import_sources`, migration
+`20261029130000`, append-only : importé vers son Twitch ID, ou exclu) → **contrôle complet avant commit** (tout écart :
+rien n'est validé). Un crédit validé avant le verrou fait refuser l'import ; un crédit arrivé pendant attend le commit
+et s'ajoute après l'ouverture, qui reste exacte.
+
+**Contrôle (`--verify`, valable à tout moment)** : le registre contient CE fichier (ID, sha256, source, cutoff, totaux,
+empreinte et totaux du snapshot source), chaque compte source est enregistré une fois avec son sort, chaque ouverture a
+son montant et ses références, aucune ouverture hors fichier, chaque portefeuille de la monnaie = son ledger,
+ouvertures + exclus = total du snapshot source. Sans import, ou pour un autre fichier : jamais « ok ».
+
+**Reprise** : une panne avant le commit ne laisse rien ; une réponse perdue après le commit se résout en relançant le
+même fichier (« déjà appliqué », puis contrôle) — jamais un second paiement, jamais un autre lot pour lever le doute.
+
+**Tests** : `wallet-opening-import` (14, PGlite) et `wallet-opening-import.integration` (4, PostgreSQL réel, deux
+connexions : crédit en vol contre import, crédit pendant l'import, deux imports simultanés, panne et rollback).
+
+**Reste ouvert (hors de ce lot)** : générer ce fichier depuis le manifeste de sélection validé (et refaire le snapshot
+au gel) ; validateur bloquant de l'exporteur StreamElements (B4) ; gel et capture des événements (B5) ; raccordement des
+modules au Wallet canonique (B6) ; service de réserve (I4).

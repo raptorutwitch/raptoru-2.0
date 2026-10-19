@@ -178,6 +178,47 @@ export class WalletService {
     );
   }
 
+  /**
+   * Opening import (economic cutover), inside the caller's transaction: creates the viewer and wallet rows if
+   * missing, locks every target wallet in a stable order — the same lock as any operation — and returns those that
+   * are not pristine (balance ≠ 0 or any ledger row). Called before the opening credits: a movement committed before
+   * the lock is seen here and refuses the import; one that comes later waits for the import's commit (Astra B3, I2).
+   */
+  async lockPristineIn(
+    q: Queryable,
+    viewers: Viewer[],
+    currencyId: string,
+  ): Promise<{ twitchUserId: string; balance: number; ledgerRows: number }[]> {
+    await ensureViewerRows(q, viewers);
+    const ids = [...new Set(viewers.map((v) => v.twitchUserId))].sort();
+    for (const id of ids)
+      await q.query(
+        'insert into wallets (twitch_user_id, currency_id) values ($1, $2) on conflict do nothing',
+        [id, currencyId],
+      );
+    const locked = await q.query<{ twitch_user_id: string; balance: number }>(
+      `select twitch_user_id, balance from wallets where currency_id = $1 and twitch_user_id = any($2::text[])
+       order by twitch_user_id for update`,
+      [currencyId, ids],
+    );
+    const ledger = new Map(
+      (
+        await q.query<{ twitch_user_id: string; n: number }>(
+          `select twitch_user_id, count(*)::int as n from wallet_transactions
+           where currency_id = $1 and twitch_user_id = any($2::text[]) group by twitch_user_id`,
+          [currencyId, ids],
+        )
+      ).map((r) => [r.twitch_user_id, Number(r.n)]),
+    );
+    return locked
+      .map((r) => ({
+        twitchUserId: r.twitch_user_id,
+        balance: Number(r.balance),
+        ledgerRows: ledger.get(r.twitch_user_id) ?? 0,
+      }))
+      .filter((w) => w.balance !== 0 || w.ledgerRows > 0);
+  }
+
   /** Purchases: never below 0, refused while in debt. */
   async spend(input: SpendInput): Promise<WalletOperationResult> {
     return this.spendWith(null, input);

@@ -2,7 +2,8 @@
 //   npm run wallet:opening-import -w @raptoru/core-api -- <snapshot.json>                 (plan)
 //   npm run wallet:opening-import -w @raptoru/core-api -- <snapshot.json> --apply=<id>    (apply: the import id typed again)
 //   npm run wallet:opening-import -w @raptoru/core-api -- <snapshot.json> --verify        (control, any time after)
-// Exit code 1 when blocked or when the verification finds any difference.
+// Exit code 1 when blocked or when the verification finds any difference. An apply runs the full verification
+// before its commit: a refused or failed apply has written nothing; re-running the same file is always safe.
 import { readFile } from 'node:fs/promises';
 import { createPgDb } from '../db/db.js';
 import {
@@ -27,7 +28,7 @@ const db = createPgDb(coreUrl);
 let failed: boolean;
 try {
   if (verify) {
-    const v = await verifyOpeningImport(db, snapshot);
+    const v = await verifyOpeningImport(db, snapshot, sha256);
     console.log(JSON.stringify(v, null, 2));
     failed = !v.ok;
   } else if (applyArg) {
@@ -36,7 +37,7 @@ try {
         `--apply must repeat the import id: --apply=${snapshot.import_id}`,
       );
     const plan = await applyOpeningImport(db, snapshot, sha256);
-    const v = await verifyOpeningImport(db, snapshot);
+    const v = await verifyOpeningImport(db, snapshot, sha256);
     console.log(
       JSON.stringify({ mode: 'apply', sha256, plan, verification: v }, null, 2),
     );

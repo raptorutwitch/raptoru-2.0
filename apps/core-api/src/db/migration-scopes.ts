@@ -36,6 +36,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261027130000_sub_wheel.sql',
   // Opening balances (economic cutover): one import per currency, one opening per wallet.
   '20261028130000_wallet_opening_import.sql',
+  // Opening balances: every source account recorded once (imported into one wallet, or excluded).
+  '20261029130000_wallet_opening_import_sources.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
