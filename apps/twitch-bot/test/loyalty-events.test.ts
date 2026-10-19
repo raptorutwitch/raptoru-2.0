@@ -255,6 +255,8 @@ describe('broadcaster EventSub wiring', () => {
       eventId: 'msg-9',
       viewer: aouh,
       bits: 100,
+      // The Twitch time of the message: Core places the event on its side of the economic cutover.
+      occurredAt: T(2),
     });
   });
 });

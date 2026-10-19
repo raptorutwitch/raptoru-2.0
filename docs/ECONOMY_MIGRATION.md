@@ -405,5 +405,36 @@ redélivrance et redémarrage, panne avant commit, réponse perdue, Jetons indis
 Twitch ID, gain d'avant, règlement manuel, gain nul, tests Studio et cadeaux ; PostgreSQL : même sub sur deux Core,
 `award()` ×2 contre annulation, gain pendant des dépenses Bonk et un gain Tombola. `CANONICAL_READY` : Roue prête.
 
-**Suite proposée** : lot 4 crédits (après D2) ; lot 6 modération, commandes chat, gel Daily / Loyalty
-(B5) ; lot 7 hébergement des modules par un Core au schéma Wallet et activation au cutover.
+**Lot 6 (fait)** : modération « Créditer / Débiter » par le port (`adjust` → `WalletService.adminAdjustIn`, dans la
+transaction de l'action : borné à 0 — un débit ne rend jamais négatif —, dédupliqué par la clé de l'action, audité,
+permissions inchangées) ; l'outil « portefeuille de test » reste Lab seulement. `!solde` / `!give` / `!wallet` :
+déjà canoniques (clé = id du message Twitch). Daily crédits OFF : crédit « en attente » pour le Wallet canonique, rien
+envoyé, payé une fois à l'activation (B5 corrigé). Loyalty : `occurredAt` (heure Twitch) transmis par le bot ; en
+mode crédit, un événement antérieur au cutoff de l'import est « exclu » (déjà payé par StreamElements).
+`economyPreflight` + `selectEconomy`. `CANONICAL_READY` : outils de portefeuille de la modération prêts.
+
+**Suite proposée** : lot 4 crédits (après D2) ; lot 7 hébergement des modules par un Core au schéma Wallet et activation au cutover.
+
+## 13. Gel et bascule : qui crédite des Jetons, et comment le vérifier (phase 2 lot 6, 19/10/2026)
+
+| Écrivain de Jetons                                                                      | Aujourd'hui                                                                        | Au gel / à la bascule                                                         |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| StreamElements (fidélité : 10 / 6 min, bonus follow 500, sub 2 200, don 600, cheer 750) | **seul écrivain réel**                                                             | arrêt manuel par Antoni ; snapshot sous gel = cutoff de l'import              |
+| SAMMI (Roue du Sub, commandes payantes, jeux, crédits SE)                               | production                                                                         | decks à couper au gel (hors Raptoru)                                          |
+| Site / Supabase legacy (Tombola, Daily legacy, pics)                                    | lecture seule pour la migration                                                    | vérifier l'arrêt de tout écrivain avant le snapshot                           |
+| Bot Raptoru : événements Loyalty (outbox), `!daily`, `!solde` / `!give` / `!wallet`     | drapeaux OFF                                                                       | activés seulement après l'import ; l'heure Twitch accompagne chaque événement |
+| Core Daily                                                                              | `DAILY_WALLET_CREDITS=false` : crédits « en attente » (`core-wallet`), rien envoyé | activé → chaque crédit payé une fois (clé `daily-claim:<id>`)                 |
+| Core Loyalty / présence                                                                 | `LOYALTY_PREVIEW` / `_PASSIVE_CREDITS` / `_EVENT_CREDITS` OFF                      | aperçus jamais payables ; événement antérieur au cutoff « exclu »             |
+| Modules (Bonk, Soundboard, TTS, Tombola, jeux, Jeu des mots, Roue, modération)          | portefeuille Lab fictif (12 000 / viewer)                                          | `selectEconomy('canonical')` : un seul port pour tous les modules du runtime  |
+
+**Garanties en place** : frontière = `wallet_imports.cutoff` (registre de l'import, lié au fichier et au snapshot) ;
+`economyPreflight` (lecture seule) bloque sans import et tant qu'un gain de Roue du Sub d'avant la bascule n'est pas
+rapproché, et liste ce qui attend (crédits Daily, récompenses Loyalty en attente) ; `selectEconomy` refuse en plus
+tout module non prouvé (`CANONICAL_READY` : Soundboard / TTS bloqués par leurs crédits). Aucun lanceur ne l'appelle :
+l'activation reste un geste explicite du cutover (lot 7). Les rapprochements se font sur le ledger canonique (sources,
+clés, références) et le registre `wallet_import_sources`.
+
+**Restent ouverts** : capture durable des alertes avant admission (réception Lab en mémoire, Astra B5) ; barèmes
+(passif 50 / 6 min chez Raptoru contre 10 chez StreamElements, bonus) ; crédits TTS / Soundboard (lot 4) ;
+`!wallet remove` / `set` peuvent créer une dette (monnaie `main` : `allow_negative_admin = true`, règle existante) ;
+hébergement et activation au cutover (lot 7).

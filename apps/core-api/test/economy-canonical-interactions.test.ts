@@ -358,20 +358,9 @@ describe('moderation reads and tools on the canonical Wallet', () => {
     ]);
   });
 
-  it('Lab-only wallet tools (manual adjustment, test balances) are refused on the canonical Wallet: nothing moves', async () => {
+  it('the Lab test-wallet tool (set the fictitious balances) is refused on the canonical Wallet: nothing moves', async () => {
     const f = await canonical();
     await f.fund(500);
-    expect(
-      await code(
-        f.act({
-          action: 'wallet_adjust',
-          viewer_id: V.id,
-          currency: 'tokens',
-          delta: 100,
-          reason: 'test',
-        }),
-      ),
-    ).toBe('canonical_wallet_tools_not_wired');
     expect(
       await code(
         f.s.mod.editWallet(CH, {

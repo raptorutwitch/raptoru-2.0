@@ -26,10 +26,15 @@ export type CreditResult =
 export interface CreditProvider {
   readonly name: string;
   readonly idempotent?: boolean;
+  /**
+   * Nothing is sent while the Wallet credits are off (freeze, before the cutover): the credits stay « pending » for the
+   * provider they will be paid by — never « credited » without a Wallet movement (Astra B5).
+   */
+  readonly deferred?: boolean;
   credit(request: CreditRequest): Promise<CreditResult>;
 }
 
-/** Dev/test provider: moves no real money, writes nothing in the Wallet (preview/shadow). */
+/** Test double: records the requests, moves no money. Never used by a Core process (see DeferredWalletCreditProvider). */
 export class DevFakeCreditProvider implements CreditProvider {
   readonly name = 'dev-fake';
   readonly credited: CreditRequest[] = [];
@@ -37,6 +42,21 @@ export class DevFakeCreditProvider implements CreditProvider {
   async credit(request: CreditRequest) {
     this.credited.push(request);
     return { status: 'credited' as const };
+  }
+}
+
+/**
+ * Daily credits off (DAILY_WALLET_CREDITS=false, freeze): a claim keeps its credit « pending » for the Core Wallet
+ * (same provider name, same idempotency key `daily-claim:<id>`); nothing is sent, nothing is said « credited ».
+ * Turning the Wallet credits on later pays each of them once (WalletCreditProvider).
+ */
+export class DeferredWalletCreditProvider implements CreditProvider {
+  readonly name = 'core-wallet';
+  readonly idempotent = true;
+  readonly deferred = true;
+
+  credit(): Promise<CreditResult> {
+    throw new Error('Daily Wallet credits are off: nothing is sent');
   }
 }
 
@@ -102,6 +122,7 @@ export class DailyCredits {
    * Idempotent provider: resent (a replay if it was applied). Otherwise: flagged 'unknown'.
    */
   async recoverInterrupted(): Promise<number> {
+    if (this.provider.deferred) return 0;
     const rows = await this.db.query(
       `update daily_credits set status = $2, last_error = 'interrupted while sending', updated_at = now()
        where status = 'sending' and provider = $1 returning claim_id`,
@@ -133,6 +154,7 @@ export class DailyCredits {
    * Core start) and stops this run.
    */
   async processPending(): Promise<void> {
+    if (this.provider.deferred) return; // credits off: they wait, untouched
     for (;;) {
       const row = (
         await this.db.query<CreditRow>(

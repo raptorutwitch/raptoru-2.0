@@ -30,15 +30,79 @@ export const CANONICAL_READY: Readonly<Record<string, true | string>> = {
   // Phase 2 lot 5: a gain decided on canonical is credited with its spin, once (same row lock for award / cancel);
   // « credited by hand » closed on canonical; gains pending from before never paid automatically.
   sub_wheel: true,
-  // Moderation's Lab wallet tools (manual adjustment, test balances) are refused on canonical (lot 6).
-  moderation_wallet:
-    'ajustement manuel et portefeuille de test refusés en canonique (à raccorder à WalletService.adminAdjust)',
+  // Phase 2 lot 6: « Créditer » / « Débiter » through WalletService.adminAdjustIn (bounded at 0, deduplicated by the
+  // action key, audited); the Lab test-wallet tool (set / reset the fictitious balances) is refused on canonical.
+  moderation_wallet: true,
 };
 
 export class EconomyActivationError extends Error {
   constructor(readonly reasons: string[]) {
     super(`canonical economy refused: ${reasons.join('; ')}`);
   }
+}
+
+/** What the economic cutover still has to settle, read-only (docs/ECONOMY_MIGRATION.md § 13). */
+export interface EconomyPreflight {
+  /** Blocking: the canonical economy cannot start. */
+  blocking: string[];
+  /** The boundary between the previous economy and this one: the cutoff of the applied opening import. */
+  cutoff: string | null;
+  /** Waiting, paid at most once when their flow is switched on (same keys). */
+  pending: {
+    dailyCredits: { count: number; amount: number };
+    loyaltyRewards: { count: number; amount: number };
+  };
+}
+
+const total = async (q: Queryable, sql: string, params: unknown[] = []) => {
+  const r = (
+    await q
+      .query<{ n: string | number; s: string | number | null }>(sql, params)
+      .catch(() => [])
+  )[0];
+  return { count: Number(r?.n ?? 0), amount: Number(r?.s ?? 0) };
+};
+
+export async function economyPreflight(
+  q: Queryable,
+): Promise<EconomyPreflight> {
+  const blocking: string[] = [];
+  const cutoff = (
+    await q
+      .query<{ cutoff: Date }>(
+        'select i.cutoff from wallet_imports i join currencies c on c.id = i.currency_id where c.is_primary',
+      )
+      .catch(() => [])
+  )[0]?.cutoff;
+  if (!cutoff)
+    blocking.push("aucun import d'ouverture appliqué à la monnaie principale");
+  // Wheel gains of the previous economy (paid by SAMMI / StreamElements or not): reconciled by hand first, never paid
+  // automatically by this one (docs/SUB_WHEEL.md § 3).
+  const wheel = await total(
+    q,
+    `select count(*) as n, sum(amount) as s from sw_spins where source = 'twitch' and award_status = 'pending'
+     and ($1::timestamptz is null or created_at <= $1)`,
+    [cutoff ?? null],
+  );
+  if (wheel.count)
+    blocking.push(
+      `${wheel.count} gain(s) de la Roue du Sub d'avant la bascule à rapprocher (${wheel.amount} Jetons)`,
+    );
+  return {
+    blocking,
+    cutoff: cutoff ? new Date(cutoff).toISOString() : null,
+    pending: {
+      dailyCredits: await total(
+        q,
+        `select count(*) as n, sum(amount) as s from daily_credits where provider = 'core-wallet'
+         and status in ('pending', 'sending')`,
+      ),
+      loyaltyRewards: await total(
+        q,
+        "select count(*) as n, sum(amount) as s from loyalty_rewards where status = 'pending'",
+      ),
+    },
+  };
 }
 
 export async function selectEconomy(opts: {
@@ -54,14 +118,9 @@ export async function selectEconomy(opts: {
     const r = CANONICAL_READY[m];
     if (r !== true) reasons.push(`${m} : ${r ?? 'module inconnu'}`);
   }
-  // The real balances must already be in this Wallet: one applied opening import of the primary currency.
-  const imported = await opts.q
-    .query<{ id: string }>(
-      `select i.id from wallet_imports i join currencies c on c.id = i.currency_id where c.is_primary`,
-    )
-    .catch(() => []);
-  if (!imported.length)
-    reasons.push("aucun import d'ouverture appliqué à la monnaie principale");
+  // The real balances must already be in this Wallet (one applied opening import), and nothing of the previous
+  // economy left to reconcile.
+  reasons.push(...(await economyPreflight(opts.q)).blocking);
   if (reasons.length) throw new EconomyActivationError(reasons);
   return coreWalletEconomy(opts.wallet);
 }

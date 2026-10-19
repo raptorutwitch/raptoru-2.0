@@ -2,7 +2,7 @@ import { createCore } from './app.js';
 import { systemClock } from './clock.js';
 import { loadConfig } from './config.js';
 import {
-  DevFakeCreditProvider,
+  DeferredWalletCreditProvider,
   type CreditProvider,
   WalletCreditProvider,
 } from './daily/credits.js';
@@ -15,11 +15,12 @@ import { createApp } from './http/server.js';
 
 const config = loadConfig();
 const db = createPgDb(config.DATABASE_URL, SERVER_DB_LIMITS);
-// Daily credits: Core Wallet only with the explicit flag; otherwise no Wallet write at all.
+// Daily credits: Core Wallet only with the explicit flag; otherwise no Wallet write at all — the credits stay pending
+// for the Core Wallet (never « credited » without money, Astra B5) and are paid once when the flag is turned on.
 const dailyProvider: CreditProvider =
   config.DAILY_WALLET_CREDITS === 'true'
     ? new WalletCreditProvider(db)
-    : new DevFakeCreditProvider();
+    : new DeferredWalletCreditProvider();
 const core = createCore(
   db,
   systemClock,
@@ -86,7 +87,7 @@ createApp({
   db,
 }).listen(config.PORT, () => {
   console.log(
-    `[core-api] listening on :${config.PORT} (daily credits: ${dailyProvider.name}, loyalty preview ${config.LOYALTY_PREVIEW}, passive credits ${config.LOYALTY_PASSIVE_CREDITS}, event credits ${config.LOYALTY_EVENT_CREDITS})`,
+    `[core-api] listening on :${config.PORT} (daily credits: ${dailyProvider.name}${dailyProvider.deferred ? ' off — pending, nothing sent' : ''}, loyalty preview ${config.LOYALTY_PREVIEW}, passive credits ${config.LOYALTY_PASSIVE_CREDITS}, event credits ${config.LOYALTY_EVENT_CREDITS})`,
   );
   console.log(
     `[core-api] channel ${config.TWITCH_CHANNEL_ID ?? 'none'} · viewer frontier /v1/ext ${frontier?.deps.ext ? 'ON' : 'OFF'} · Studio cockpit ${frontier ? 'ON' : 'OFF'} · Twitch names ${config.TWITCH_APP_CLIENT_ID ? 'ON' : 'OFF'} · Twitch emotes linking ${core.twitchViewers?.canLink ? 'ON' : 'OFF'} · payment simulated (${config.CORE_ENVIRONMENT})`,

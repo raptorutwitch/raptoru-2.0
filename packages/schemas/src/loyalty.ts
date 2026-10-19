@@ -72,12 +72,18 @@ export type LoyaltyConfig = z.infer<typeof LoyaltyConfig>;
 // --- events forwarded by twitch-bot (or a future tip provider) --------------------------------
 
 const EventId = z.string().min(1).max(128);
+/**
+ * Twitch time of the event (EventSub metadata.message_timestamp). Decides on which side of the economic cutover the
+ * event falls (an event before the opening snapshot was paid by the previous economy). Not part of the event identity.
+ */
+const OccurredAt = z.iso.datetime({ offset: true }).optional();
 
 export const LoyaltyEvent = z.discriminatedUnion('type', [
   /** New subscription (channel.subscribe). Gift recipients arrive with isGift=true. */
   z.object({
     type: z.literal('sub'),
     eventId: EventId,
+    occurredAt: OccurredAt,
     viewer: Viewer,
     tier: SubTier,
     isGift: z.boolean(),
@@ -86,6 +92,7 @@ export const LoyaltyEvent = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('resub'),
     eventId: EventId,
+    occurredAt: OccurredAt,
     viewer: Viewer,
     tier: SubTier,
   }),
@@ -93,6 +100,7 @@ export const LoyaltyEvent = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('subgift'),
     eventId: EventId,
+    occurredAt: OccurredAt,
     gifter: Viewer.nullable(),
     tier: SubTier,
     count: z.number().int().min(1).max(1000),
@@ -100,19 +108,27 @@ export const LoyaltyEvent = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('subscription_end'),
     eventId: EventId,
+    occurredAt: OccurredAt,
     viewer: Viewer,
   }),
   z.object({
     type: z.literal('bits'),
     eventId: EventId,
+    occurredAt: OccurredAt,
     viewer: Viewer.nullable(),
     bits: z.number().int().min(1),
   }),
-  z.object({ type: z.literal('follow'), eventId: EventId, viewer: Viewer }),
+  z.object({
+    type: z.literal('follow'),
+    eventId: EventId,
+    occurredAt: OccurredAt,
+    viewer: Viewer,
+  }),
   /** Contract only: no tip provider is connected yet. */
   z.object({
     type: z.literal('tip'),
     eventId: EventId,
+    occurredAt: OccurredAt,
     viewer: Viewer.nullable(),
     amountCents: z.number().int().min(1),
     currency: z.literal('EUR'),

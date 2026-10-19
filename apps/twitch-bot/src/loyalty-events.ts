@@ -200,7 +200,11 @@ export function createBroadcasterEvents(deps: {
     const { event } = entry;
     const ref = `${event.type} ${event.eventId}`;
     try {
-      const res = await deps.core.loyaltyEvent(event);
+      // The Twitch time travels with the event: Core decides on which side of the economic cutover it falls.
+      const res = await deps.core.loyaltyEvent({
+        ...event,
+        occurredAt: entry.receivedAt,
+      });
       deps.outbox.remove(event.eventId);
       sending.delete(event.eventId);
       log(

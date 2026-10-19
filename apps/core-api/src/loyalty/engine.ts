@@ -75,6 +75,23 @@ interface NewReward {
   breakdown: unknown;
 }
 
+/** Whether the event happened at or before the cutoff of the applied opening import of the currency. */
+async function occurredBeforeCutover(
+  q: Queryable,
+  currencyId: string,
+  occurredAt: string,
+) {
+  const cutoff = (
+    await q.query<{ cutoff: Date }>(
+      'select cutoff from wallet_imports where currency_id = $1',
+      [currencyId],
+    )
+  )[0]?.cutoff;
+  return (
+    !!cutoff && new Date(occurredAt).getTime() <= new Date(cutoff).getTime()
+  );
+}
+
 const hash = (v: unknown) =>
   createHash('sha256').update(JSON.stringify(v)).digest('hex');
 
@@ -273,6 +290,12 @@ export class LoyaltyEngine {
       if ('skip' in reward) return skipped(reward.skip);
 
       await ensureViewers(q, [reward.viewer]);
+      // Cutover boundary (Astra B5): an event that happened before the opening snapshot of the currency was paid by
+      // the previous economy (its balance is in the opening) — recorded, never paid again here.
+      const beforeCutover =
+        mode === 'credit' &&
+        !!event.occurredAt &&
+        (await occurredBeforeCutover(q, config.currencyId, event.occurredAt));
       const r = await insertReward(q, {
         key: reward.key,
         hashPayload: reward.hashPayload,
@@ -281,15 +304,24 @@ export class LoyaltyEngine {
         streamId: null,
         currencyId: config.currencyId,
         amount: reward.amount,
-        status: mode === 'credit' ? 'pending' : 'preview',
-        breakdown: { ...reward.breakdown, mode, eventId: event.eventId },
+        status: beforeCutover
+          ? 'excluded'
+          : mode === 'credit'
+            ? 'pending'
+            : 'preview',
+        breakdown: {
+          ...reward.breakdown,
+          mode,
+          eventId: event.eventId,
+          ...(beforeCutover ? { excluded: 'before_cutover' } : {}),
+        },
       });
       return {
         rewardId: r.id,
         status: r.status,
         amount: r.amount,
         replayed: r.replayed,
-        reason: null,
+        reason: r.status === 'excluded' ? 'before_cutover' : null,
       };
     });
 
@@ -368,7 +400,9 @@ export class LoyaltyEngine {
     viewer: Viewer,
     breakdown: { source: string; final: number; [detail: string]: unknown },
   ) {
+    // The Twitch time is not the event's identity (a redelivery may carry another one).
     const { eventId, type, ...payload } = e;
+    delete payload.occurredAt;
     return {
       key: `twitch:${type}:${eventId}`,
       hashPayload: payload,

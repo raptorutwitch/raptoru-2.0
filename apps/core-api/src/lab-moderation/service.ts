@@ -3,7 +3,7 @@ import type {
   LabModerationRequest,
   LabWalletRequest,
 } from '@raptoru/schemas';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import { labEconomy, type EconomyPort } from '../economy/economy.js';
@@ -15,7 +15,6 @@ import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import {
   access,
   actorName,
-  adminAdjust,
   allowed,
   anyModuleState,
   assertAccess,
@@ -140,12 +139,12 @@ export class LabModerationService {
     private readonly economy: EconomyPort = labEconomy,
   ) {}
 
-  /** The Lab test wallet tools (manual adjustment, test balances) only exist on the Lab ledger. */
+  /** The Lab test-wallet tool (set / reset the fictitious balances) only exists on the Lab ledger. */
   private labWalletOnly() {
     if (this.economy.mode !== 'lab')
       throw new LabModerationError(
         'canonical_wallet_tools_not_wired',
-        'the Lab wallet tools do not act on the canonical Wallet',
+        'the Lab test-wallet tool does not act on the canonical Wallet',
       );
   }
 
@@ -526,14 +525,15 @@ export class LabModerationService {
           return { ok: true };
         }
         case 'wallet_adjust': {
-          this.labWalletOnly();
-          const out = await adminAdjust(q, now, {
+          const out = await this.economy.adjust(q, now, {
             channelId,
             viewerId: cmd.viewer_id,
             currency: cmd.currency,
             delta: cmd.delta,
             actor: actorName(actor),
             reason,
+            // The action's Idempotency-Key (P1-009): a replay applies nothing more, on the canonical Wallet too.
+            key: `moderation:${channelId}:${req.idempotency_key ?? randomUUID()}`,
           });
           if (out.applied === 0)
             throw new LabModerationError(
@@ -547,16 +547,16 @@ export class LabModerationService {
             action: 'wallet_adjust',
             viewerId: cmd.viewer_id,
             reason,
-            before: { [cmd.currency]: out.before[cmd.currency] },
+            before: { [cmd.currency]: out.before },
             after: {
-              [cmd.currency]: out.after[cmd.currency],
+              [cmd.currency]: out.after,
               applied: out.applied,
               ledger_id: out.ledgerId,
             },
           });
           return {
             ok: true,
-            wallet: out.after,
+            wallet: out.wallet,
             applied: out.applied,
             ledger_id: out.ledgerId,
           };

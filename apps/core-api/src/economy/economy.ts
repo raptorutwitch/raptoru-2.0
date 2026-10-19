@@ -3,6 +3,7 @@ import type { Queryable } from '../db/db.js';
 import {
   debit as labDebit,
   LabWalletError,
+  adminAdjust as labAdminAdjust,
   lockWallet,
   readWallet,
   refundDebit as labRefundDebit,
@@ -134,6 +135,30 @@ export interface EconomyPort {
       created_at: Date;
     }[]
   >;
+  /**
+   * Moderation « Créditer » / « Débiter » (D4), inside the caller's transaction: the delta bounded so the balance stays
+   * within [0, cap] (a debit never makes it negative), recorded with its actor and reason. `applied` = 0 when nothing
+   * could move. `key` makes a replayed action apply nothing more (canonical Wallet).
+   */
+  adjust(
+    q: Queryable,
+    now: Date,
+    a: {
+      channelId: string;
+      viewerId: string;
+      currency: WalletCurrency;
+      delta: number;
+      actor: string;
+      reason: string | null;
+      key: string;
+    },
+  ): Promise<{
+    before: number;
+    after: number;
+    applied: number;
+    ledgerId: number | null;
+    wallet: EconomyBalances;
+  }>;
   /** Ledger page, newest first (`before` = id cursor), at most `limit` rows. */
   ledger(
     q: Queryable,
@@ -274,6 +299,16 @@ async function labMove(q: Queryable, now: Date, m: EconomyMovement) {
 
 export const labEconomy: EconomyPort = {
   mode: 'lab',
+  async adjust(q, now, a) {
+    const out = await labAdminAdjust(q, now, a);
+    return {
+      before: out.before[a.currency],
+      after: out.after[a.currency],
+      applied: out.applied,
+      ledgerId: out.ledgerId,
+      wallet: out.after,
+    };
+  },
   // The Lab keeps its own rules (registered and available, checked by the module): nothing more here.
   acceptsCurrency: async () => true,
   async raffleWins(q, raffleId) {
@@ -463,6 +498,53 @@ const interactionKeys = (id: string) => [
 export function coreWalletEconomy(wallet: WalletService): EconomyPort {
   return {
     mode: 'canonical',
+    async adjust(q, _now, a) {
+      const currencyId = await canonicalCurrency(q, a.currency);
+      const before = (
+        await wallet.lockIn(q, [byId(a.viewerId)], currencyId)
+      ).get(a.viewerId)!;
+      // The Lab rule: a debit takes at most what is there (never below 0), a credit at most up to the cap.
+      const applied =
+        a.delta < 0
+          ? Math.max(a.delta, -Math.max(before, 0))
+          : Math.min(a.delta, MAX_AMOUNT - before);
+      const balances = (after: number) => ({
+        tokens: after,
+        credits_tts: null,
+        credits_soundboard: null,
+      });
+      if (applied === 0)
+        return {
+          before,
+          after: before,
+          applied: 0,
+          ledgerId: null,
+          wallet: balances(before),
+        };
+      const r = await wallet.adminAdjustIn(q, {
+        key: a.key,
+        actor: a.actor,
+        target: byId(a.viewerId),
+        op: applied > 0 ? 'add' : 'remove',
+        amount: Math.abs(applied),
+        reason: a.reason ?? undefined,
+        currencyId,
+      });
+      if (r.status !== 'applied')
+        throw new LabWalletError('economy_unavailable', {
+          reason: r.rejection,
+        });
+      const after = r.balances.find(
+        (b) => b.twitchUserId === a.viewerId,
+      )!.balance;
+      return {
+        before: after - applied,
+        after,
+        applied,
+        ledgerId: await ledgerRow(q, r.operationId, a.viewerId),
+        wallet: balances(after),
+      };
+    },
     async acceptsCurrency(q, currency) {
       if (currency !== 'tokens') return false;
       return (await findCurrency(q))?.active === true;

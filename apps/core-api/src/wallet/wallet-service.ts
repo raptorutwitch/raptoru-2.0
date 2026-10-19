@@ -102,6 +102,16 @@ export interface CreditInput {
   currencyId?: string;
 }
 
+export interface AdminAdjustInput {
+  key: string;
+  actor: string;
+  target: Viewer;
+  op: AdminOp;
+  amount: number;
+  reason?: string;
+  currencyId?: string;
+}
+
 export interface TransferInput {
   key: string;
   from: Viewer;
@@ -379,15 +389,22 @@ export class WalletService {
    * Owner/Supermod corrections. `set` never overwrites: it writes the difference as an
    * adjustment. Removal/set below 0 only when the currency allows administrative debt.
    */
-  async adminAdjust(input: {
-    key: string;
-    actor: string;
-    target: Viewer;
-    op: AdminOp;
-    amount: number;
-    reason?: string;
-    currencyId?: string;
-  }): Promise<WalletOperationResult> {
+  async adminAdjust(input: AdminAdjustInput): Promise<WalletOperationResult> {
+    return this.adminAdjustWith(null, input);
+  }
+
+  /** The same adjustment inside the caller's transaction (a moderation action and its money commit together). */
+  async adminAdjustIn(
+    q: Queryable,
+    input: AdminAdjustInput,
+  ): Promise<WalletOperationResult> {
+    return this.adminAdjustWith(q, input);
+  }
+
+  private async adminAdjustWith(
+    q: Queryable | null,
+    input: AdminAdjustInput,
+  ): Promise<WalletOperationResult> {
     const id = input.target.twitchUserId;
     if (input.op !== 'set') positiveAmount(input.amount);
     else if (
@@ -396,7 +413,8 @@ export class WalletService {
     ) {
       throw new WalletInputError('target balance must be an integer');
     }
-    return this.execute(
+    return this.run(
+      q,
       input.key,
       `admin:${input.op}`,
       { v: id, amount: input.amount, c: input.currencyId ?? null },
