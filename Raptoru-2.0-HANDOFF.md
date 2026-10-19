@@ -62,8 +62,10 @@ par Antoni** (18/10/2026, `8e37c35` : 26 préréglages SAMMI, filtre « Raptoru 
 créé par Antoni, « Groupe 2 » supprimé, transitions fluides de 2 s, couleur conservée ; **vraie récompense Twitch**
 « emeraude » exécutée, SAMMI fermé ; non déployé, § 12). **Roue du Sub migrée techniquement** (18/10/2026, `docs/SUB_WHEEL.md` : roue historique
 copiée sur le lecteur d'effets, une roue par sub / resub / Prime, tirage et gain enregistrés par Core après l'alerte ;
-**interrupteur OFF**, non validée dans OBS, gains « en attente d'attribution » sans aucun crédit — raccordement
-économique à décider). **Random Ban V2 (M1.1) validé en réel par Antoni le 18/10** (vraie redemption, timeout 3 min confirmé, animation CSC ; `docs/RANDOM_BAN_V2.md`). Historique du développement :
+**interrupteur OFF**, rendu OBS et test complet simulé **validés par Antoni le 19/10**, gains « en attente d'attribution »
+sans aucun crédit — raccordement économique à décider). **Migration économique** (19/10, préparation seulement) :
+`docs/ECONOMY_MIGRATION.md` (état réel, stratégie, décisions E1–E5, critères de bascule) ; import d'ouverture unique prêt
+(`npm run wallet:opening-import`), aucun solde lu ni importé. **Random Ban V2 (M1.1) validé en réel par Antoni le 18/10** (vraie redemption, timeout 3 min confirmé, animation CSC ; `docs/RANDOM_BAN_V2.md`). Historique du développement :
 (18/10/2026, `docs/RANDOM_BAN_V2.md` : tirage uniforme parmi les chatters qui suivent la chaîne, timeout confirmé par
 LeCroupier\_ avant l'animation historique — 9 variantes + CSC + flop — sur le lecteur d'effets ; aucun timeout réel
 fait : LeCroupier\_ n'a pas `moderator:manage:banned_users` et raptoru\_ pas `moderation:read`, réautorisation à

@@ -1,6 +1,6 @@
 # Roue du Sub
 
-**Statut (18/10/2026) : migration technique DÉVELOPPÉE / TESTS AUTOMATISÉS RÉUSSIS / NON VALIDÉE dans OBS /
+**Statut (18/10/2026) : migration technique DÉVELOPPÉE / TESTS AUTOMATISÉS RÉUSSIS / rendu OBS et test complet simulé VALIDÉS par Antoni (19/10/2026) /
 DÉSACTIVÉE (interrupteur OFF) / gains NON RACCORDÉS à une économie / NON DÉPLOYÉE.** En live, SAMMI garde la roue
 tant qu'Antoni n'a pas validé le rendu et décidé du raccordement économique.
 
@@ -70,7 +70,9 @@ la main… » / « Annuler… » sur les gains en attente.
 2. Section Roue du Sub → « Tester l'animation » avec T1 / 1 mois, T2 / 14 mois, T3 / 22 mois : comparer à la roue
    SAMMI (position en bas à droite, bandeau, couleurs, rotation, sons, compteur, « +N jetons »).
 3. « Test complet simulé » : l'alerte de sub joue d'abord (onglet Alertes, source des alertes), la roue ensuite.
-4. Plus tard (décision économique) : interrupteur ON, vrai sub, puis attribution du gain.
+4. Plus tard (décision économique, `docs/ECONOMY_MIGRATION.md`) : interrupteur ON, vrai sub, puis attribution du gain.
+
+Étapes 1 à 3 validées par Antoni le 19/10/2026.
 
 ## 6. Ce qui reste chez SAMMI
 

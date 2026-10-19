@@ -93,7 +93,7 @@ interrupteur des automatisations **OFF** au 18/10 (12:15).
 | Domaine | Production aujourd'hui | Raptoru 2.0 | Cat. |
 | --- | --- | --- | --- |
 | Alertes follow / sub / gifts / bits / raid / don | SAMMI (ID_FOLLOW, ID1, ID39, ID_SUBGIFT_TARGETED, ID_BITS_ALERT) → source « Alerte Twitch » + `alertes_server.js` (port 3001, tourne) ; dons StreamElements | Alertes V1 : rendu, files, calibrages **validés OBS** ; vrais événements en TEST ; bot de production non raccordé | **D** |
-| Roue des subs (crédit de Jetons) | SAMMI ID1 → StreamElements | **Roue du Sub migrée techniquement** (18/10, `docs/SUB_WHEEL.md`) : roue historique sur le lecteur d'effets, tirage et gain enregistrés par Core ; **OFF**, non validée OBS ; gains « en attente d'attribution » (économie à raccorder) | **D** |
+| Roue des subs (crédit de Jetons) | SAMMI ID1 → StreamElements | **Roue du Sub migrée techniquement** (18/10, `docs/SUB_WHEEL.md`) : roue historique sur le lecteur d'effets, tirage et gain enregistrés par Core ; **OFF** ; **rendu OBS et test complet simulé validés par Antoni (19/10)** ; gains « en attente d'attribution » (économie à raccorder, `docs/ECONOMY_MIGRATION.md`) | **D** |
 | Soundboard, TTS, Bonk (Extension) | Extension publiée → EBS `raptoru.fr/api` → déclencheurs SAMMI (`RAPTORU_EXT_SOUNDBOARD_V2`, `RAPTORU_EXT_TTS_V2`, `RAPTORU_EXT_BONK_V3`) | V2 validés Lab + staging (07/10), Bonk VNext validé Lab | **D** |
 | `!tts` (jetons), `!bonk` (jetons) | SAMMI → StreamElements | via l'Extension seulement ; paiement réel non branché | **E** (économie) |
 | Tombola (`!join`, tirage, paiement) | SAMMI + EBS legacy + StreamElements | Tombola V2 validée Lab + staging | **D** |
@@ -134,6 +134,8 @@ des mots, Roulette / Slot, Duel, gains Tombola ; Daily / Loyalty (drapeaux OFF) 
 D1 (soldes StreamElements au point de coupure, import), D2 (crédits / Points de chaîne), lecteurs qui n'acceptent que
 `simulated`, toutes les commandes payantes legacy (`!fx`, `!rb`, `!tts`, `!bonk`, Caution, banque, cash-in, 24H,
 roue des subs), audit des données (`docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md`, non suivi). **Aucun solde migré.**
+19/10 : état réel, stratégie, décisions E1–E5 et critères de bascule dans **`docs/ECONOMY_MIGRATION.md`** ; import
+d'ouverture unique (barrière en base, essai à blanc, contrôle) prêt et répété sur base jetable avec des comptes fictifs.
 
 ### 0.0.6 Roadmap des migrations (proposée le 18/10/2026, à valider par Antoni)
 

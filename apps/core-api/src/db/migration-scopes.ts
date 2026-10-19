@@ -34,6 +34,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261026130000_random_ban.sql',
   // Roue du Sub: spins and pending gains (same as the Lab file).
   '20261027130000_sub_wheel.sql',
+  // Opening balances (economic cutover): one import per currency, one opening per wallet.
+  '20261028130000_wallet_opening_import.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
