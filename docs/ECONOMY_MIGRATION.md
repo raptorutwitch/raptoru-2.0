@@ -153,3 +153,29 @@ possible). Le risque restant est **l'identité** : 1,2 % des Jetons (193 + 2 com
 aucune preuve que le titulaire actuel d'un pseudo est l'historique. Sources possibles pour les lever : base Supabase
 legacy (`players` : Twitch ID + login, rattachements) — lecture distante **à autoriser** —, archives locales SAMMI,
 réclamation sur preuve.
+
+## 8. Identités : méthode de rapprochement (19/10/2026)
+
+Règle d'Antoni : **le `twitch_user_id` est l'identité canonique ; un compte en quarantaine plutôt qu'au mauvais
+viewer.** `apps/core-api/src/wallet/se-identity.ts` (tests `se-identity`) classe chaque compte SE à partir de trois
+lectures : Twitch maintenant (login → ID), Twitch maintenant par ID (pour les ID de l'historique), et les paires datées
+(ID, pseudo) de l'historique :
+
+| Statut         | Règle                                                                                                                      | Solde                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `confirmed`    | l'historique a vu ce pseudo avec un seul ID, qui est le titulaire actuel                                                   | attribuable                          |
+| `renamed`      | pseudo abandonné ; l'historique nomme un seul titulaire, toujours existant                                                 | attribuable                          |
+| `current_only` | pseudo résolu aujourd'hui, jamais vu dans l'historique                                                                     | **décision** (plausible, non prouvé) |
+| `ambiguous`    | plusieurs titulaires dans l'historique, titulaire historique ≠ actuel (pseudo réattribué), ou titulaire historique disparu | quarantaine                          |
+| `unresolved`   | ni compte actuel ni historique                                                                                             | quarantaine                          |
+| `invalid`      | pas un login Twitch (espace…)                                                                                              | examen à la main                     |
+
+Un même ID derrière deux comptes SE est signalé (deux soldes d'une même personne, ou un mauvais rapprochement).
+
+**Sans la base legacy** (historique = Lab + journal Spotify SAMMI, 216 paires) : 21 comptes `confirmed` (18 839 307
+Jetons, les plus gros), 2 670 `current_only` (21 699 021 Jetons, dont 87 > 10 000), 193 `unresolved` (327 220), 2
+`invalid` (156 000), aucun ID partagé. **La lecture de la base Supabase legacy** (autorisée par Antoni le 19/10, lecture
+seule) apportera les paires de `players`, `player_wallet_peaks` (pseudo SE ↔ ID, la meilleure preuve), `finds`,
+`events`, `credit_events`, `twitch_subscriptions`, `raffle_stats`, `daily_legacy`, `daily_events`,
+`wizebot_snapshots` ; lecteur prêt (API REST de Supabase, GET seulement, pagination avec total exact vérifié, testé sur
+un faux serveur) — **en attente d'un accès** : aucune clé de la base legacy n'existe sur le poste.
