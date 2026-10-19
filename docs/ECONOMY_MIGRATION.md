@@ -211,3 +211,58 @@ recherche sur le poste) ; aucune écriture.
 - Comptes techniques : `raptoru_` (ambigu ci-dessus), `lecroupier_` 174 410 (confirmé), `wizebot` 4 700 (confirmé),
   `streamelements` 3 300 (titulaire actuel seulement).
 - Revue nominative pour Antoni (sur son poste, hors dépôt) : `C:\Users\Antoni\Documents\Raptoru\_migration-exports\se-pilot-2026-10-19\revue-identites.csv`.
+
+### 8.2 Cas incertains approfondis et politique d'attribution proposée (19/10/2026)
+
+Vérifications ajoutées, toutes en lecture seule : lignes legacy du compte `raptoru_`, fiabilité de chaque source
+historique, liste des followers (1 907, avec date) et abonnés actuels (307) de `raptoru_` via le jeton broadcaster déjà
+stocké (utilisé tel quel, jamais renouvelé, fichier inchangé), archives SAMMI locales, recherche Twitch des noms
+invalides. Aucune attribution, aucun import.
+
+**Constats.**
+
+- **`raptoru_`** : l'ID discordant est `0`. Il vient de 3 tests automatiques de l'Extension du 02/09/2026 (« admin-test
+  … smoke-soundboard », montant 0) qui ont aussi créé une ligne `players` fictive. Ce n'est pas un compte Twitch
+  (un ID Twitch est un nombre positif) : la règle ignore désormais ces ID (`se-identity.ts`), et `raptoru_` est confirmé
+  sur 83603689.
+- **Source historique défaillante** : les événements **Bonk** du legacy (Extension et SAMMI) enregistrent souvent l'ID
+  du streamer ou d'un bot avec le pseudo du viewer (848 paires fausses). Ils sont exclus des preuves ; un « renommage »
+  de 1 000 Jetons qui ne reposait que sur eux redevient introuvable. Toutes les autres sources (Jeu des mots, crédits,
+  Daily, Tombola, pics de solde, `players`, relevés Wizebot) : **aucune contradiction** avec Twitch aujourd'hui.
+- **SE garde des comptes séparés par pseudo** : les 3 doubles comptes ont chacun un ancien et un nouveau compte SE ;
+  le changement de pseudo ne déplace pas le solde.
+- **Doubles comptes : fusionnables sans ambiguïté** : pour chacun, un seul ID, des périodes successives sans
+  chevauchement (ancien pseudo puis nouveau). Dans le fichier d'ouverture, une ligne par ID (somme des deux, les deux
+  pseudos dans `source_ref`) ; la base refuse toute seconde ouverture du même portefeuille.
+- **Noms invalides** : un seul morceau du nom à 150 000 existe sur Twitch, compte qui ne suit pas la chaîne ; rien pour
+  6 000. Probablement des saisies manuelles.
+- **Archives SAMMI locales** : elles ne contiennent que des pseudos (pas d'ID) ; elles datent l'activité d'un pseudo,
+  sans prouver qui le détient.
+
+**Bilan (2 886 comptes, 41 021 548 Jetons, chaque compte dans un seul panier, somme conservée).**
+
+| Panier                      | Comptes                              | Jetons                  | Preuve                                                                                                                                                              |
+| --------------------------- | ------------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Attribuable avec preuve** | 497 (→ 494 portefeuilles, 3 fusions) | **38 280 284 (93,3 %)** | même ID vu avec ce pseudo dans l'historique : 159 comptes (37 024 851) par des sources directes, 338 (1 255 433) par les relevés Wizebot datés — dont 14 renommages |
+| **Probable**                | 343                                  | 169 060 (0,4 %)         | titulaire actuel du pseudo qui **suit** la chaîne (202) et / ou y est **abonné** (164), sans trace historique                                                       |
+| **Réservé**                 | 2 042                                | 1 928 910 (4,7 %)       | 1 861 titulaires actuels sans aucun signal (1 600 210, dont 10 > 10 000 = 980 670), 179 introuvables (172 700), 2 noms invalides (156 000)                          |
+| **Comptes techniques**      | 4                                    | 643 294 (1,6 %)         | `raptoru_` 460 884, `lecroupier_` 174 410, `wizebot` 4 700, `streamelements` 3 300                                                                                  |
+
+Essai à blanc du fichier d'ouverture (base vide jetable, supprimée) : prêt, aucun refus, 494 portefeuilles,
+38 280 284 Jetons, **aucune écriture**.
+
+**Politique proposée (simple, sans grosse interface).**
+
+1. **Au cutover** : seuls les comptes **prouvés** sont importés (import d'ouverture unique, doubles fusionnés).
+2. **Tout le reste est réservé, jamais perdu, jamais payé automatiquement** : une ligne par compte SE à la coupure
+   (pseudo, montant, panier, ID candidat **figé à la coupure**, signaux), sans échéance par défaut.
+3. **Réclamation** : le viewer tape `!recuperer` dans le chat (Twitch authentifie son ID). Core enregistre une demande
+   « à valider » seulement si son ID est l'ID candidat figé à la coupure ; pour un introuvable / nom invalide,
+   `!recuperer <ancien pseudo>` enregistre une demande sans correspondance automatique. Antoni valide ou refuse, avec
+   une note (une courte liste dans Studio ou une commande, pas d'interface lourde). Le paiement est un crédit Wallet à
+   clé `legacy-claim:<pseudo SE>` : chaque compte SE est payé au plus une fois.
+4. **Anti-usurpation** : ID figé à la coupure (un pseudo pris après la bascule ne peut rien réclamer) ; aucune
+   validation automatique ; pour les gros montants, une preuve en plus (reconnaissance par Antoni ou les modérateurs) ;
+   chaque décision journalisée. Limite : un compte SE dont le pseudo a été repris **avant** la coupure par un autre
+   viewer reste indiscernable sans l'historique Twitch des pseudos ; c'est déjà le cas aujourd'hui chez SE, qui crédite
+   et débite par pseudo.

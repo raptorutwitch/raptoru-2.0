@@ -44,7 +44,8 @@ export interface SeIdentityRow {
 export function reconcileSeIdentities(i: SeIdentityInput): SeIdentityRow[] {
   const seen = new Map<string, Set<string>>();
   for (const h of i.history) {
-    if (!/^\d{1,32}$/.test(h.id)) continue;
+    // A Twitch user ID is a positive number: « 0 » and the like are test rows (legacy smoke tests used « 0 »).
+    if (!/^[1-9]\d{0,31}$/.test(h.id)) continue;
     const login = h.login.trim().toLowerCase();
     (seen.get(login) ?? seen.set(login, new Set()).get(login)!).add(h.id);
   }

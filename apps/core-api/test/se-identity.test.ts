@@ -55,6 +55,7 @@ describe('SE identity reconciliation', () => {
       h('6', 'eve'),
       h('7', 'frank'),
       h('x', 'carol'),
+      h('0', 'alice'), // a legacy smoke test row: not a Twitch ID
     ],
   });
   const by = Object.fromEntries(rows.map((r) => [r.username, r]));
