@@ -358,10 +358,13 @@ describe('activation (one decision point, never automatic)', () => {
           'raffle',
           'sub_wheel',
           'moderation_wallet',
+          'soundboard',
+          'tts',
+          'channel_points',
         ],
       }),
     ).not.toBe(labEconomy);
-    for (const m of ['soundboard', 'tts', 'inconnu']) {
+    for (const m of ['inconnu']) {
       await expect(
         selectEconomy({
           mode: 'canonical',

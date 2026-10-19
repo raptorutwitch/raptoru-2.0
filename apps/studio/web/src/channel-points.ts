@@ -29,6 +29,7 @@ const TYPES: { id: CpActionView['type']; label: string }[] = [
   { id: 'obs_source', label: 'Afficher / masquer une source OBS' },
   { id: 'obs_filter', label: 'Activer / désactiver un filtre OBS' },
   { id: 'obs_scene', label: 'Changer de scène OBS' },
+  { id: 'credits', label: 'Accorder des crédits (TTS / Soundboard)' },
 ];
 
 const blank = (type: CpActionView['type']): CpActionView =>
@@ -44,7 +45,10 @@ const blank = (type: CpActionView['type']): CpActionView =>
             ? { type, source: '', filter: '', enabled: true }
             : type === 'interaction'
               ? { type, interaction: 'creepy' }
-              : { type, scene: '' };
+              : type === 'credits'
+                ? // No default amount: the streamer sets it (Core refuses 0).
+                  { type, currency: 'credits_tts', amount: 0 }
+                : { type, scene: '' };
 
 export function mountChannelPoints(root: HTMLElement) {
   let state: CpState | null = null;
@@ -186,6 +190,10 @@ export function mountChannelPoints(root: HTMLElement) {
         )
         .join('')}</select>
         <p class="cp-muted">${esc(INTERACTIONS[a.interaction]?.description ?? '')}</p>`;
+    else if (a.type === 'credits')
+      body = `<select data-i="${i}" data-f="currency"><option value="credits_tts"${a.currency === 'credits_tts' ? ' selected' : ''}>Crédits TTS</option><option value="credits_soundboard"${a.currency === 'credits_soundboard' ? ' selected' : ''}>Crédits Soundboard</option></select>
+        <label class="cp-inline">nombre <input type="number" min="1" max="1000" step="1" data-i="${i}" data-f="amount" value="${a.amount || ''}" placeholder="à choisir"/></label>
+        <p class="cp-muted">Crédités une fois par redemption au viewer qui l’a achetée ; repris si Twitch annule la redemption.</p>`;
     else
       body = `${field(i, 'scene', a.scene, 'cp-scenes', 'Scène')}${duration(a.duration_ms)}`;
     return `<li class="cp-action"><span class="cp-step">${i + 1}</span>${type}<div class="cp-fields">${body}</div>
@@ -406,6 +414,7 @@ export function mountChannelPoints(root: HTMLElement) {
     else if (f === 'visible' || f === 'enabled') a[f] = t.value === '1';
     else if (f === 'volume')
       a.volume = Math.min(100, Math.max(0, Math.round(Number(t.value) || 0)));
+    else if (f === 'amount') a.amount = Math.round(Number(t.value) || 0);
     else if (f === 'sound_id' && a.type === 'effect_sound') {
       // A sound chosen: its original volume (SAMMI) by default.
       a.sound_id = t.value;

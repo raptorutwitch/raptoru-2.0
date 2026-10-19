@@ -38,6 +38,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261028130000_wallet_opening_import.sql',
   // Opening balances: every source account recorded once (imported into one wallet, or excluded).
   '20261029130000_wallet_opening_import_sources.sql',
+  // Crédits TTS / Soundboard: secondary currencies of the canonical Wallet (D2).
+  '20261030130000_wallet_credit_currencies.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -84,6 +86,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261026120000_random_ban_lab.sql',
   // Roue du Sub: spins (one per sub / resub / Prime), pending gains, switch OFF by default.
   '20261027120000_sub_wheel_lab.sql',
+  // Points de chaîne « accorder des crédits »: its ledger kind on the Lab test wallet.
+  '20261030120000_lab_ledger_channel_points.sql',
 ]);
 
 /**

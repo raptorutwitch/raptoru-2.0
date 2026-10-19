@@ -1,11 +1,17 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  CP_RETRY_TTL_MS,
   CP_SUBSCRIPTION,
+  CP_UPDATE_SUBSCRIPTION,
+  type CpOutboxEvent,
   canReadChannelPoints,
   createChannelPointsEvents,
   normalizeRedemption,
+  normalizeRedemptionUpdate,
 } from '../src/channel-points-events.js';
+import { fileOutbox, type Outbox } from '../src/loyalty-outbox.js';
 import { broadcasterScopes } from '../src/config.js';
 import { createEventSubRouter } from '../src/twitch/eventsub.js';
 
@@ -92,9 +98,16 @@ describe('normalizeRedemption', () => {
 });
 
 function setup(
-  o: { fail?: () => Error | null; subscribeFails?: boolean } = {},
+  o: {
+    fail?: () => Error | null;
+    subscribeFails?: boolean;
+    outbox?: Outbox<CpOutboxEvent>;
+    /** Core's answer to a status change. */
+    updateOutcome?: () => string;
+  } = {},
 ) {
   const posted: unknown[] = [];
+  const updates: unknown[] = [];
   const rewards: unknown[] = [];
   const subs: { type: string; condition: unknown; version: string }[] = [];
   const logs: string[] = [];
@@ -107,6 +120,13 @@ function setup(
       posted.push(body);
       return { outcome: 'ignored' };
     },
+    postRedemptionUpdate: async (body) => {
+      const err = o.fail?.();
+      if (err) throw err;
+      updates.push(body);
+      return { outcome: o.updateOutcome?.() ?? 'recorded' };
+    },
+    ...(o.outbox ? { outbox: o.outbox } : {}),
     postRewards: async (body) => {
       rewards.push(body);
       return { synced: body.rewards.length };
@@ -134,7 +154,7 @@ function setup(
     },
     log: () => {},
   });
-  return { events, posted, rewards, subs, logs, route };
+  return { events, posted, updates, rewards, subs, logs, route };
 }
 
 describe('channel points events (bot)', () => {
@@ -151,6 +171,11 @@ describe('channel points events (bot)', () => {
     expect(s.subs).toEqual([
       {
         type: 'channel.channel_points_custom_reward_redemption.add',
+        version: '1',
+        condition: { broadcaster_user_id: BROADCASTER },
+      },
+      {
+        type: 'channel.channel_points_custom_reward_redemption.update',
         version: '1',
         condition: { broadcaster_user_id: BROADCASTER },
       },
@@ -187,7 +212,7 @@ describe('channel points events (bot)', () => {
     expect(await s.events.handle('channel.follow', {})).toBe(false);
   });
 
-  it('Core down: retried with the same redemption id, then delivered; 4xx not retried; TTL drop', async () => {
+  it('Core down: retried with the same redemption id, then delivered; 4xx kept in the refusals; never dropped', async () => {
     vi.useFakeTimers();
     let down = true;
     const s = setup({
@@ -207,12 +232,86 @@ describe('channel points events (bot)', () => {
     });
     await refused.events.handle(CP_SUBSCRIPTION.type, EXAMPLE);
     expect(refused.events.pendingRetries()).toBe(0);
-    expect(refused.logs.join('\n')).toContain('perdu');
-    const gone = setup({ fail: () => new Error('lab_core_502') });
-    await gone.events.handle(CP_SUBSCRIPTION.type, EXAMPLE);
-    await vi.advanceTimersByTimeAsync(CP_RETRY_TTL_MS + 60_000);
-    expect(gone.events.pendingRetries()).toBe(0);
-    expect(gone.logs.join('\n')).toContain('perdu');
+    expect(refused.events.pending()).toBe(0);
+    expect(refused.logs.join('\n')).toContain('refusée par Core');
+    // Core down for 10 minutes: kept (a redemption may grant credits), delivered once Core answers.
+    let long = true;
+    const late = setup({
+      fail: () => (long ? new Error('lab_core_502') : null),
+    });
+    await late.events.handle(CP_SUBSCRIPTION.type, EXAMPLE);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(late.events.pending()).toBe(1);
+    expect(late.posted).toHaveLength(0);
+    long = false;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(late.posted).toHaveLength(1);
+    expect(late.events.pending()).toBe(0);
+  });
+
+  it('durable: a redemption Core never answered is resent after a restart, once', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cp-outbox-'));
+    try {
+      const file = join(dir, 'outbox.json');
+      const first = setup({
+        outbox: fileOutbox<CpOutboxEvent>(file),
+        fail: () =>
+          Object.assign(new Error('core-api responded 503'), { status: 503 }),
+      });
+      await first.events.handle(CP_SUBSCRIPTION.type, EXAMPLE);
+      first.events.close();
+      expect(first.logs.join('\n')).toContain('gardée(s) pour la reprise');
+      const second = setup({ outbox: fileOutbox<CpOutboxEvent>(file) });
+      await second.events.resumePending();
+      await second.events.resumePending();
+      expect(second.posted).toEqual([
+        expect.objectContaining({ redemption_id: EXAMPLE.id }),
+      ]);
+      expect(fileOutbox<CpOutboxEvent>(file).pending()).toHaveLength(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('status changes: canceled / fulfilled forwarded; a cancellation waits for its redemption still pending', async () => {
+    vi.useFakeTimers();
+    const update = { ...EXAMPLE, status: 'canceled' };
+    expect(normalizeRedemptionUpdate(update, '900100', BROADCASTER)).toEqual({
+      channel_id: '900100',
+      source: 'twitch',
+      redemption_id: EXAMPLE.id,
+      reward_id: EXAMPLE.reward.id,
+      user_id: '9001',
+      twitch_status: 'canceled',
+    });
+    expect(
+      normalizeRedemptionUpdate(
+        { ...EXAMPLE, status: 'unfulfilled' },
+        '9',
+        BROADCASTER,
+      ),
+    ).toBeNull();
+    // The redemption is waiting for Core (down): Core answers « unknown » to the cancellation until it has it.
+    let addDown = true;
+    const blocked = setup({
+      fail: () =>
+        addDown
+          ? Object.assign(new Error('core-api responded 503'), { status: 503 })
+          : null,
+      updateOutcome: () => (addDown ? 'unknown_redemption' : 'recorded'),
+    });
+    await blocked.events.handle(CP_SUBSCRIPTION.type, EXAMPLE);
+    expect(
+      await blocked.events.handle(CP_UPDATE_SUBSCRIPTION.type, update),
+    ).toBe(true);
+    expect(blocked.events.pending()).toBe(2);
+    addDown = false;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(blocked.posted).toHaveLength(1);
+    expect(blocked.updates).toEqual([
+      expect.objectContaining({ twitch_status: 'canceled' }),
+    ]);
+    expect(blocked.events.pending()).toBe(0);
   });
 });
 

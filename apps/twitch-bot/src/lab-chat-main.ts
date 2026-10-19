@@ -6,6 +6,7 @@ import {
   CP_READ_SCOPE,
   canReadChannelPoints,
   createChannelPointsEvents,
+  type CpOutboxEvent,
 } from './channel-points-events.js';
 import {
   ALERTS_MODES,
@@ -57,6 +58,15 @@ const Env = z.object({
     .optional(),
   /** Helix stream-state repair period (same setting and default as the main bot). */
   STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
+  /** Channel points redemptions not yet answered by the Lab Core (durable, resumed at start). */
+  LAB_CHANNEL_POINTS_OUTBOX_FILE: z
+    .string()
+    .min(1)
+    .default(
+      fileURLToPath(
+        new URL('../.lab-channel-points-outbox.json', import.meta.url),
+      ),
+    ),
   /** Alerts received from Twitch and not yet answered by the Lab Core (durable, resumed at start). */
   LAB_ALERTS_OUTBOX_FILE: z
     .string()
@@ -247,6 +257,9 @@ const broadcaster = await (async () => {
         broadcasterId: app.TWITCH_BROADCASTER_ID,
         postRedemption: (body) =>
           lab('/v1/lab/channel-points/redemptions', body),
+        postRedemptionUpdate: (body) =>
+          lab('/v1/lab/channel-points/redemptions/status', body),
+        outbox: fileOutbox<CpOutboxEvent>(env.LAB_CHANNEL_POINTS_OUTBOX_FILE),
         postRewards: (body) => lab('/v1/lab/channel-points/rewards', body),
         subscribe: (type, condition, sessionId, version) =>
           broadcasterHelix.subscribe(type, condition, sessionId, version),
@@ -256,6 +269,7 @@ const broadcaster = await (async () => {
     : null;
   if (events) {
     consumers.add(() => events.close());
+    void events.resumePending();
     const socket = runEventSub({
       async subscribe(sessionId) {
         await events.subscribe(sessionId);

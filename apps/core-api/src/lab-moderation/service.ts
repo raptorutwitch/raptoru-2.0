@@ -68,6 +68,10 @@ export const LEDGER_TYPES: Record<
   admin: { label: 'Ajustement admin', visible_in_moderation_activity: true },
   raffle_win: { label: 'Tombola', visible_in_moderation_activity: true },
   sub_wheel: { label: 'Roue du Sub', visible_in_moderation_activity: true },
+  channel_points: {
+    label: 'Points de chaîne',
+    visible_in_moderation_activity: true,
+  },
   lab_tools: {
     label: 'Wallet de test (Studio)',
     visible_in_moderation_activity: true,

@@ -19,6 +19,7 @@ import {
   type StreamOnlineRequest,
   type StreamSyncRequest,
   type CpRedemptionInput,
+  type CpRedemptionUpdate,
   type CpRewardsSync,
 } from '@raptoru/schemas';
 import { z } from 'zod';
@@ -43,6 +44,9 @@ export interface CoreClient {
   /** Points de chaîne V1: a redemption (read from Twitch) and the reward list; Core decides everything. */
   channelPointsRedemption(
     body: CpRedemptionInput,
+  ): Promise<{ outcome: string }>;
+  channelPointsRedemptionUpdate(
+    body: CpRedemptionUpdate,
   ): Promise<{ outcome: string }>;
   channelPointsRewards(body: CpRewardsSync): Promise<{ synced: number }>;
 }
@@ -119,6 +123,12 @@ export function createCoreClient(
     channelPointsRedemption: (body) =>
       call(
         '/v1/bot/channel-points/redemptions',
+        body,
+        z.object({ outcome: z.string() }).loose(),
+      ),
+    channelPointsRedemptionUpdate: (body) =>
+      call(
+        '/v1/bot/channel-points/redemptions/status',
         body,
         z.object({ outcome: z.string() }).loose(),
       ),

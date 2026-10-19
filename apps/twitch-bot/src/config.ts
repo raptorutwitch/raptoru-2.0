@@ -87,6 +87,10 @@ export const DEFAULT_LOYALTY_OUTBOX_FILE = fileURLToPath(
   new URL('../.loyalty-outbox.json', import.meta.url),
 );
 
+export const DEFAULT_CHANNEL_POINTS_OUTBOX_FILE = fileURLToPath(
+  new URL('../.channel-points-outbox.json', import.meta.url),
+);
+
 // Twitch application of Raptoru 2.0 (Developer Console, confidential client). Shared by the bot,
 // `twitch:auth` and the preflight.
 const TwitchApp = z.object({
@@ -117,6 +121,11 @@ const TwitchApp = z.object({
   RANDOM_BAN: Flag,
   // Loyalty events not yet answered by Core (survives bot restarts), git-ignored.
   LOYALTY_OUTBOX_FILE: z.string().min(1).default(DEFAULT_LOYALTY_OUTBOX_FILE),
+  // Channel points redemptions not yet answered by Core (survives bot restarts; a redemption may grant credits).
+  CHANNEL_POINTS_OUTBOX_FILE: z
+    .string()
+    .min(1)
+    .default(DEFAULT_CHANNEL_POINTS_OUTBOX_FILE),
   // Shadow presence tracker (Get Chatters, read-only). Needs scope moderator:read:chatters.
   PRESENCE_SHADOW: Flag,
   // Lab chat ingestion (Studio « Ingestion chat Twitch » switch: reads the chat for the Lab modules,

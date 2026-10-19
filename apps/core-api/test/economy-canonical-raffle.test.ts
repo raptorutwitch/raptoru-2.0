@@ -330,8 +330,8 @@ describe('Tombola V2 on the canonical Wallet', () => {
     await f.after(62_000);
     expect(await f.m.wallet(CH, '901261')).toEqual({
       tokens: 20_000,
-      credits_tts: null,
-      credits_soundboard: null,
+      credits_tts: 0,
+      credits_soundboard: 0,
     });
   });
 });

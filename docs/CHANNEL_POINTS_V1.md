@@ -52,7 +52,8 @@ lecteur OBS, sa modération) · OBS : tâche reprise par **Studio** (seul à par
   une source d'une scène, durée facultative), `obs_filter` (activer / désactiver un filtre, durée facultative),
   `obs_scene` (changer de scène), `effect_sound` (son d'effet joué tout de suite par le lecteur d'effets de Studio, hors
   Soundboard, volume réglable — P0.1 du 17/10/2026, `docs/EFFECTS_PLAYER.md`). Aucun script, aucune commande système, aucune
-  autre requête OBS.
+  autre requête OBS. `credits` (19/10/2026) : Crédits TTS ou Soundboard accordés au viewer, nombre fixé par la règle,
+  repris si Twitch annule la redemption (docs/ECONOMY_MIGRATION.md § 14).
 - Actions figées à la réception : modifier une règle ne change jamais une redemption déjà reçue.
 - Extensions prévues (non faites) : FX / Chaos Control, Creepy / NTM / BRB complets (couper le micro…), Spotify,
   Wallet / conversion, mini-jeux, modération ludique — nouveaux types d'action ajoutés à la liste.
@@ -74,7 +75,8 @@ lecteur OBS, sa modération) · OBS : tâche reprise par **Studio** (seul à par
   enregistrées (`<runtimeDir>/channel-points/obs-reverts.json`) et reprises après un redémarrage de Studio quand OBS
   répond ; abandonnées après 1 h. Limite : un élément remis à la main dans l'état posé est indiscernable et sera
   annulé.
-- Bot → Core : renvoi en mémoire avec le même id (90 s), 4xx non renvoyé ; pas de garantie « zéro perte ».
+- Bot → Core : outbox fichier durable depuis le 19/10/2026 (écrite avant l'envoi, reprise au démarrage, même id, 4xx
+  gardé dans le journal des refus) — docs/ECONOMY_MIGRATION.md § 14 ; Twitch ne rejoue pas une session WebSocket perdue.
 - Secrets : jetons Twitch seulement dans le bot ; Studio n'expose que des états (droit présent, adaptateur actif) ;
   rien vers OBS.
 

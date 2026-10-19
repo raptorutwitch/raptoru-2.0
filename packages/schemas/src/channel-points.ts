@@ -84,6 +84,16 @@ export const CpAction = z.discriminatedUnion('type', [
     /** color_cam only: set by Core from the viewer's text at reception (a rule's value is overwritten). */
     color: ColorCamId.optional(),
   }),
+  /**
+   * Crédits TTS or Soundboard granted to the viewer who redeemed (phase 2 lot 4, docs/ECONOMY_MIGRATION.md § 14): the
+   * only way to obtain credits. The amount is set by the rule (no default, no price list in code); credited once per
+   * redemption, taken back if Twitch reports the redemption canceled (its points refunded).
+   */
+  z.strictObject({
+    type: z.literal('credits'),
+    currency: z.enum(['credits_tts', 'credits_soundboard']),
+    amount: z.number().int().min(1).max(1000),
+  }),
 ]);
 export type CpAction = z.infer<typeof CpAction>;
 export const CP_MAX_ACTIONS = 5;
@@ -122,6 +132,20 @@ export const CpRedemptionInput = z.strictObject({
   redeemed_at: z.iso.datetime({ offset: true }),
 });
 export type CpRedemptionInput = z.infer<typeof CpRedemptionInput>;
+
+/**
+ * A redemption's status changed on Twitch (EventSub `channel.channel_points_custom_reward_redemption.update`):
+ * fulfilled or canceled from the reward queue. Canceled = Twitch gave the points back.
+ */
+export const CpRedemptionUpdate = z.strictObject({
+  channel_id: ChannelId,
+  source: z.literal('twitch'),
+  redemption_id: ExternalId,
+  reward_id: ExternalId,
+  user_id: TwitchId,
+  twitch_status: z.enum(['fulfilled', 'canceled']),
+});
+export type CpRedemptionUpdate = z.infer<typeof CpRedemptionUpdate>;
 
 /** The broadcaster's custom rewards as Twitch lists them (Get Custom Reward, read only). */
 export const CpRewardsSync = z.strictObject({

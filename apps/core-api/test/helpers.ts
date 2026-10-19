@@ -71,6 +71,11 @@ export async function createTestDb(): Promise<Db> {
     "insert into currencies (id, singular, plural, is_primary) values ('main', 'Jeton', 'Jetons', true)",
   );
   await db.query(
+    `insert into currencies (id, singular, plural, icon, active, is_primary, transferable, allow_negative_admin) values
+      ('credits_tts', 'Crédit TTS', 'Crédits TTS', 'tts', true, false, false, false),
+      ('credits_soundboard', 'Crédit Soundboard', 'Crédits Soundboard', 'sound', true, false, false, false)`,
+  );
+  await db.query(
     `insert into lab_currencies (currency_id, label, short_label, icon, wallet_column, sort, max_balance) values
       ('tokens', 'Jetons', 'J', 'coin', 'tokens', 0, 1000000000),
       ('credits_tts', 'Crédits TTS', 'cr TTS', 'tts', 'credits_tts', 1, 100000),

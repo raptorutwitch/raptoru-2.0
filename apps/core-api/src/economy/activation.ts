@@ -19,10 +19,13 @@ export const CANONICAL_READY: Readonly<Record<string, true | string>> = {
   mini_games: true, // Roulette, Slot, Duel
   // Phase 2 lot 2: debits (single, salves), automatic and moderation refunds, moderation reads — all on the port.
   bonk: true,
-  // Jetons proven end to end; the credits payment (D2: secondary currency, not migrated) is refused on canonical.
-  soundboard:
-    'paiement en crédits Soundboard refusé en canonique (crédits non migrés, D2)',
-  tts: 'paiement en crédits TTS refusé en canonique (crédits non migrés, D2)',
+  // Phase 2 lot 4: Jetons, Crédits (their own canonical currencies, D2) and channel points proven end to end — debit in
+  // the chosen currency, refund in the same one, once; credits never converted.
+  soundboard: true,
+  tts: true,
+  // Phase 2 lot 4: « Accorder des crédits » once per redemption (in the reception's transaction), taken back if Twitch
+  // cancels it (never below 0).
+  channel_points: true,
   // Phase 2 lot 3: winnings once per winner and round (dedup and history on the port), Jetons rounds (the defaults).
   // A round in credits or another Lab currency is refused at configuration and opening (D2: credits are never a
   // Tombola reward, never converted) — refused explicitly, not a missing path.

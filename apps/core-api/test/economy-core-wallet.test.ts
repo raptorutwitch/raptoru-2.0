@@ -229,7 +229,7 @@ describe('Core Wallet debit + admission in one transaction (ASTRA-P1-001 lot 1)'
     expect(await f.balance()).toBe(1000 - PRICE);
   });
 
-  it('Soundboard and TTS on the same contract: Jetons debited atomically; credits refused (model pending), nothing stored', async () => {
+  it('Soundboard and TTS on the same contract: Jetons debited atomically; no credits → refused (never paid in Jetons), nothing stored', async () => {
     const core = await setup();
     const port = coreWalletEconomy(core.wallet.wallet);
     const sound = new SoundLabService(core.db, core.clock, Math.random, port);
@@ -287,7 +287,7 @@ describe('Core Wallet debit + admission in one transaction (ASTRA-P1-001 lot 1)'
           payment_method: 'credits',
         }),
       ),
-    ).toBe('economy_unavailable');
+    ).toBe('insufficient_credits');
     expect(
       await failure(
         tts.admit({
@@ -299,7 +299,7 @@ describe('Core Wallet debit + admission in one transaction (ASTRA-P1-001 lot 1)'
           payment_method: 'credits',
         }),
       ),
-    ).toBe('economy_unavailable');
+    ).toBe('insufficient_credits');
     expect(await count(core.db, 'sound_lab_interactions')).toBe(before.sound);
     expect(await count(core.db, 'tts_lab_interactions')).toBe(before.tts);
   });

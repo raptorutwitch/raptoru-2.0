@@ -7,6 +7,7 @@ import {
   type CpEffectReport,
   type CpRedemptionInput,
   type CpRedemptionStatus,
+  type CpRedemptionUpdate,
   type CpRewardsSync,
   type CpRuleInput,
   resolveColorCam,
@@ -14,6 +15,7 @@ import {
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
+import { type EconomyPort, labEconomy } from '../economy/economy.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 
@@ -28,6 +30,10 @@ import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 // - effect sounds (P0.1): in the same Studio job; Studio hands them to its effects player and reports them « playing »
 //   once the player started them (the job ends at once: the next redemption may overlap), then their end through
 //   effectReport. No end within CP_RULES.effectEndMs → unknown (never replayed).
+// - credits (phase 2 lot 4): Crédits TTS / Soundboard granted in the reception's own transaction, through the runtime
+//   economy (key cp:<source>:<redemption>:<index>: once per redemption, even redelivered). Granted for a late
+//   redemption too (the viewer's points are spent); a simulation grants nothing. Twitch « canceled » (points given
+//   back) takes them back, never below 0 (docs/ECONOMY_MIGRATION.md § 14).
 // Raptoru never fulfils or cancels a redemption on Twitch (only the app that created a reward may; docs § 2).
 
 export const CP_RULES = {
@@ -63,6 +69,9 @@ type Result = {
   /** Random Ban: its request (docs/RANDOM_BAN_V2.md), followed until it ends; then what happened, in plain French. */
   random_ban_id?: string;
   detail?: string;
+  /** Credits actions: what was granted, and what a Twitch cancellation took back. */
+  granted?: number;
+  reversed?: number;
 };
 
 /** A result update: final (ok / error / unknown) or, for a sound still in the Soundboard, its progress only. */
@@ -223,9 +232,16 @@ function randomBanResult(
   }
 }
 
+/** Credits names as the viewer sees them. */
+const CREDITS_LABEL = {
+  credits_tts: 'Crédits TTS',
+  credits_soundboard: 'Crédits Soundboard',
+} as const;
+
 /** Actions run by Studio (OBS, effects player); Soundboard sounds are admitted by Core itself. */
 const obsAction = (a: CpAction) =>
   a.type !== 'sound' &&
+  a.type !== 'credits' &&
   !(a.type === 'interaction' && a.interaction === 'random_ban');
 
 export class ChannelPointsService {
@@ -236,7 +252,60 @@ export class ChannelPointsService {
     private readonly sound?: SoundLabService,
     /** Random Ban V2: the « random_ban » interaction (absent → it fails explicitly). */
     private readonly randomBan?: RandomBanService,
+    /** Credits actions: the runtime economy (the Lab test wallet unless the launcher passes the canonical one). */
+    private readonly economy: EconomyPort = labEconomy,
   ) {}
+
+  /**
+   * Grants one credits action inside the reception's transaction, alone in a savepoint: a refusal (currency
+   * unavailable, cap) is this action's failure, never the redemption's.
+   */
+  private async grantCredits(
+    q: Queryable,
+    now: Date,
+    e: CpRedemptionInput,
+    index: number,
+    a: Extract<CpAction, { type: 'credits' }>,
+  ): Promise<Result> {
+    const label = CREDITS_LABEL[a.currency];
+    if (e.source === 'simulation')
+      return {
+        index,
+        type: a.type,
+        status: 'done',
+        detail: `simulation : +${a.amount} ${label} (aucun crédit)`,
+      };
+    await q.query('savepoint cp_credits');
+    try {
+      await this.economy.move(q, now, {
+        channelId: e.channel_id,
+        viewerId: e.user.id,
+        currency: a.currency,
+        amount: a.amount,
+        kind: 'channel_points',
+        key: `cp:${e.source}:${e.redemption_id}:${index}`,
+      });
+      await q.query('release savepoint cp_credits');
+      return {
+        index,
+        type: a.type,
+        status: 'done',
+        granted: a.amount,
+        detail: `+${a.amount} ${label}`,
+      };
+    } catch (err) {
+      await q.query('rollback to savepoint cp_credits');
+      const x = err as { code?: string; details?: { reason?: unknown } };
+      return {
+        index,
+        type: a.type,
+        status: 'failed',
+        error: String(
+          x.details?.reason ?? x.code ?? (err as Error).message,
+        ).slice(0, 200),
+      };
+    }
+  }
 
   // --- settings, rewards, rules (Studio configuration) -----------------------------------------------------------
 
@@ -430,18 +499,32 @@ export class ChannelPointsService {
                   CP_RULES.maxAgeMs
               ? 'late'
               : null;
-      // Actions frozen at reception (a later edit of the rule never changes this redemption).
-      const actions = reason
-        ? []
-        : rule!.actions.map((a) =>
-            withViewerText(CpActionSchema.parse(a), e.user_input),
-          );
-      const results: Result[] = actions.map((a, index) => {
+      // Actions frozen at reception (a later edit of the rule never changes this redemption). Late: only its credits
+      // (the points are spent; an OBS effect or a sound minutes later would surprise the stream).
+      const actions =
+        reason && reason !== 'late'
+          ? []
+          : rule!.actions
+              .map((a) => withViewerText(CpActionSchema.parse(a), e.user_input))
+              .filter((a) => !reason || a.type === 'credits');
+      const results: Result[] = [];
+      for (const [index, a] of actions.entries()) {
         const error = unresolved(a);
-        return error
-          ? { index, type: a.type, status: 'failed', error }
-          : { index, type: a.type, status: 'pending' };
-      });
+        results.push(
+          error
+            ? { index, type: a.type, status: 'failed', error }
+            : a.type !== 'credits'
+              ? { index, type: a.type, status: 'pending' }
+              : e.twitch_status === 'canceled'
+                ? {
+                    index,
+                    type: a.type,
+                    status: 'failed',
+                    error: 'canceled_on_twitch',
+                  }
+                : await this.grantCredits(q, now, e, index, a),
+        );
+      }
       const obs = actions
         .map((action, index) => ({ index, action }))
         .filter(
@@ -466,7 +549,7 @@ export class ChannelPointsService {
           e.twitch_status ?? null,
           new Date(e.redeemed_at),
           now,
-          reason ? 'ignored' : overall(results),
+          !actions.length ? 'ignored' : overall(results),
           reason,
           JSON.stringify(actions),
           JSON.stringify(results),
@@ -569,6 +652,77 @@ export class ChannelPointsService {
     }
     const row = await this.redemption(e.channel_id, e.source, e.redemption_id);
     return { outcome: row.status, redemption: redemptionView(row) };
+  }
+
+  /**
+   * Twitch changed a redemption's status (fulfilled / canceled from the reward queue). Recorded; on « canceled » (Twitch
+   * gave the points back) the credits it granted are taken back once, at most what the viewer still holds (never below
+   * 0): the rest is shown « à rapprocher ». Unknown redemption → nothing (no credit was granted for it here).
+   */
+  async update(u: CpRedemptionUpdate) {
+    const now = this.clock.now();
+    return this.db.tx(async (q) => {
+      await q.query(
+        'select 1 from cp_settings where channel_id = $1 for update',
+        [u.channel_id],
+      );
+      const row = (
+        await q.query<RedemptionRow>(
+          'select * from cp_redemptions where channel_id = $1 and source = $2 and redemption_id = $3 for update',
+          [u.channel_id, u.source, u.redemption_id],
+        )
+      )[0];
+      if (!row) return { outcome: 'unknown_redemption' as const };
+      if (row.twitch_status === 'canceled')
+        return { outcome: 'duplicate' as const };
+      const results = [...row.results];
+      if (u.twitch_status === 'canceled')
+        for (const [i, r] of results.entries()) {
+          const a = row.actions[r.index];
+          if (a?.type !== 'credits' || !r.granted || r.reversed !== undefined)
+            continue;
+          const held =
+            (
+              await this.economy.hold(
+                q,
+                now,
+                row.channel_id,
+                [row.user_id],
+                a.currency,
+              )
+            ).balances.get(row.user_id) ?? 0;
+          const back = Math.min(r.granted, held);
+          if (back > 0)
+            await this.economy.move(q, now, {
+              channelId: row.channel_id,
+              viewerId: row.user_id,
+              currency: a.currency,
+              amount: -back,
+              kind: 'channel_points',
+              key: `cp:${row.source}:${row.redemption_id}:${r.index}:reversal`,
+            });
+          const label = CREDITS_LABEL[a.currency];
+          results[i] = {
+            ...r,
+            reversed: back,
+            detail:
+              back === r.granted
+                ? `+${r.granted} ${label}, repris : redemption annulée sur Twitch`
+                : `+${r.granted} ${label}, ${back} repris (annulée sur Twitch) — ${r.granted - back} déjà dépensés : à rapprocher`,
+          };
+        }
+      await q.query(
+        'update cp_redemptions set twitch_status = $4, results = $5 where channel_id = $1 and source = $2 and redemption_id = $3',
+        [
+          u.channel_id,
+          u.source,
+          u.redemption_id,
+          u.twitch_status,
+          JSON.stringify(results),
+        ],
+      );
+      return { outcome: 'recorded' as const };
+    });
   }
 
   private async redemption(

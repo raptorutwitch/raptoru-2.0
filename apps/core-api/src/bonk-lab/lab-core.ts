@@ -177,7 +177,7 @@ export function createLabCore({
     ...subWheelRoutes(subWheel, alertsService),
     // Points de chaîne V1: redemptions (Lab chat adapter), rules, OBS jobs (Studio); sounds through this Soundboard.
     ...channelPointsRoutes(
-      new ChannelPointsService(db, systemClock, sound, randomBan),
+      new ChannelPointsService(db, systemClock, sound, randomBan, economy),
     ),
     // Random Ban V2: Studio (state, tests, animations) and the Lab chat adapter (Twitch executor).
     ...randomBanRoutes(randomBan),

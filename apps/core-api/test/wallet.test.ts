@@ -56,8 +56,11 @@ describe('currencies', () => {
       transferable: false,
       allowNegativeAdmin: false,
     });
+    // Crédits TTS / Soundboard: installed secondary currencies (phase 2 lot 4).
     expect((await core.wallet.currencies.list()).map((c) => c.id)).toEqual([
       'main',
+      'credits_soundboard',
+      'credits_tts',
       'halloween_2026',
     ]);
 

@@ -471,6 +471,28 @@ describe('Points de chaîne — routes', () => {
     expect(
       (await call('/v1/bot/channel-points/redemptions', e, bot)).body.outcome,
     ).toBe('duplicate');
+    // A status change from Twitch (bot only): recorded; another channel refused.
+    const status = {
+      channel_id: CH,
+      source: 'twitch',
+      redemption_id: e.redemption_id,
+      reward_id: REWARD,
+      user_id: e.user.id,
+      twitch_status: 'canceled',
+    };
+    expect(
+      (await call('/v1/bot/channel-points/redemptions/status', status, bot))
+        .body,
+    ).toEqual({ outcome: 'recorded' });
+    expect(
+      (
+        await call(
+          '/v1/bot/channel-points/redemptions/status',
+          { ...status, channel_id: '1' },
+          bot,
+        )
+      ).body.error,
+    ).toBe('wrong_channel');
     // A test from Studio runs even with the switch OFF; the bot cannot post a simulation.
     expect(
       (

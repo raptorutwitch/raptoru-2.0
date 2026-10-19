@@ -22,6 +22,12 @@ export type CpActionView =
       duration_ms?: number;
     }
   | { type: 'obs_scene'; scene: string; duration_ms?: number }
+  /** Crédits TTS / Soundboard granted to the viewer (amount set by the rule, no default). */
+  | {
+      type: 'credits';
+      currency: 'credits_tts' | 'credits_soundboard';
+      amount: number;
+    }
   | {
       type: 'interaction';
       interaction: 'creepy' | 'brb' | 'fx_cam' | 'color_cam' | 'random_ban';
@@ -214,6 +220,8 @@ export function actionLabel(
       return a.duration_ms
         ? `Passer sur la scène « ${a.scene} »${seconds(a.duration_ms)}, puis revenir`
         : `Passer sur la scène « ${a.scene} »`;
+    case 'credits':
+      return `Accorder ${a.amount} ${a.currency === 'credits_tts' ? 'Crédit(s) TTS' : 'Crédit(s) Soundboard'} au viewer`;
     case 'interaction':
       return a.interaction === 'fx_cam' && a.effect
         ? `FX Cam « ${a.effect} »`

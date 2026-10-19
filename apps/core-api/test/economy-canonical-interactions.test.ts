@@ -250,7 +250,7 @@ describe('TTS on the canonical Wallet', () => {
 });
 
 describe('Soundboard on the canonical Wallet', () => {
-  it('Jetons debited; a channel points sound debits nothing; credits refused (never converted to Jetons)', async () => {
+  it('Jetons debited; a channel points sound debits nothing; no credits → refused, never paid in Jetons instead', async () => {
     const f = await canonical();
     await f.fund(10_000);
     const { interaction } = await f.s.sound.admit({
@@ -276,7 +276,7 @@ describe('Soundboard on the canonical Wallet', () => {
           payment_method: 'credits',
         }),
       ),
-    ).toBe('economy_unavailable');
+    ).toBe('insufficient_credits');
     expect(await f.balance()).toBe(10_000 - interaction.simulated_cost);
     await consistent(f.core.db);
   });
@@ -330,8 +330,8 @@ describe('moderation reads and tools on the canonical Wallet', () => {
     const wallet = await f.s.mod.wallet(CH, V.id);
     expect(wallet).toEqual({
       tokens: await f.balance(),
-      credits_tts: null,
-      credits_soundboard: null,
+      credits_tts: 0,
+      credits_soundboard: 0,
     });
     expect((await f.s.mod.viewer(CH, V.id))!.wallet).toEqual(wallet);
     const page = await f.s.mod.ledger(CH, { viewer: V.id, auto: true });

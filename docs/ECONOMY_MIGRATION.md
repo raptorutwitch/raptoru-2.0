@@ -413,7 +413,9 @@ envoyé, payé une fois à l'activation (B5 corrigé). Loyalty : `occurredAt` (h
 mode crédit, un événement antérieur au cutoff de l'import est « exclu » (déjà payé par StreamElements).
 `economyPreflight` + `selectEconomy`. `CANONICAL_READY` : outils de portefeuille de la modération prêts.
 
-**Suite proposée** : lot 4 crédits (après D2) ; lot 7 hébergement des modules par un Core au schéma Wallet et activation au cutover.
+**Lot 4 (fait)** : crédits TTS / Soundboard, voir § 14.
+
+**Suite proposée** : lot 7 hébergement des modules par un Core au schéma Wallet et activation au cutover.
 
 ## 13. Gel et bascule : qui crédite des Jetons, et comment le vérifier (phase 2 lot 6, 19/10/2026)
 
@@ -430,7 +432,7 @@ mode crédit, un événement antérieur au cutoff de l'import est « exclu » (d
 **Garanties en place** : frontière = `wallet_imports.cutoff` (registre de l'import, lié au fichier et au snapshot) ;
 `economyPreflight` (lecture seule) bloque sans import et tant qu'un gain de Roue du Sub d'avant la bascule n'est pas
 rapproché, et liste ce qui attend (crédits Daily, récompenses Loyalty en attente) ; `selectEconomy` refuse en plus
-tout module non prouvé (`CANONICAL_READY` : Soundboard / TTS bloqués par leurs crédits). Aucun lanceur ne l'appelle :
+tout module non prouvé (`CANONICAL_READY` : tous les modules prouvés depuis le lot 4). Aucun lanceur ne l'appelle :
 l'activation reste un geste explicite du cutover (lot 7). Les rapprochements se font sur le ledger canonique (sources,
 clés, références) et le registre `wallet_import_sources`.
 
@@ -445,6 +447,52 @@ mini-jeux) : politique décidée inchangée (ASTRA-P1-002, 15 s en mémoire) —
 n'est pas admis.
 
 **Restent ouverts** : barèmes (passif 50 / 6 min chez Raptoru contre 10 chez StreamElements, bonus) ; crédits TTS /
-Soundboard (lot 4) ; `!wallet remove` / `set` peuvent créer une dette (monnaie `main` : `allow_negative_admin = true`,
+Soundboard : fait (§ 14) ; `!wallet remove` / `set` peuvent créer une dette (monnaie `main` : `allow_negative_admin = true`,
 règle existante) ; affichage d'une alerte reçue très en retard (aucune règle d'âge dans la file des alertes : à décider) ;
 hébergement et activation au cutover (lot 7).
+
+## 14. Crédits TTS et Soundboard (phase 2 lot 4, 19/10/2026)
+
+**Modèle** : deux monnaies secondaires du **même** Wallet canonique (`currencies` : `credits_tts` « Crédits TTS »,
+`credits_soundboard` « Crédits Soundboard » — migration `20261030130000_wallet_credit_currencies.sql`, non
+transférables, jamais négatives). Pas de second Wallet, pas d'échange, aucune conversion en Jetons ni entre elles.
+Aucun crédit créé à l'ouverture (l'import ne touche que la monnaie principale). Un solde est un vrai 0 quand le viewer
+n'a rien ; `null` seulement si la monnaie n'est pas installée ou désactivée (jamais un zéro fictif).
+
+**Obtention — uniquement par une récompense de points de chaîne** : nouvelle action de règle
+`{ type: 'credits', currency, amount }` (Studio : « Accorder des crédits (TTS / Soundboard) »). Le nombre est fixé
+par la règle, **aucune valeur par défaut, aucune règle créée** : rien n'est crédité tant qu'Antoni n'a pas configuré
+une récompense. Exécutée dans la transaction de réception (clé `move:channel_points:cp:<source>:<redemption>:<index>`,
+la redemption Twitch étant déjà unique) : une redemption redélivrée, rejouée par l'outbox ou reçue par deux Core
+donne un seul crédit. Interrupteur Points de chaîne OFF, règle absente / désactivée → rien. Redemption « en retard »
+(> 2 min, reprise après panne) → **seulement** ses crédits (les points sont dépensés ; pas d'effet OBS ni de son
+décalé). Test Studio (simulation) → aucun crédit. Monnaie indisponible → action « échec » visible, redemption gardée.
+
+**Annulation Twitch** : abonnement `channel.channel_points_custom_reward_redemption.update` (même scope
+`channel:read:redemptions`). « canceled » (Twitch a rendu les points) → les crédits accordés sont repris une fois,
+au plus le solde restant (jamais négatif) ; la part déjà dépensée est marquée « à rapprocher » dans l'historique de la
+redemption. « fulfilled » : noté, rien ne bouge. Raptoru ne valide ni n'annule jamais une redemption lui-même.
+
+**Livraison durable (bot et adaptateur Lab)** : chaque redemption / changement de statut est écrit dans une outbox
+fichier avant l'envoi (`.channel-points-outbox.json` du bot, `.lab-channel-points-outbox.json` du Lab, ignorés par
+git), retiré à la réponse du Core, repris au démarrage ; plus d'abandon après 90 s. Une annulation dont la redemption
+attend encore le Core attend derrière elle. Limite Twitch inchangée : rien n'est reçu sans session WebSocket ouverte.
+
+**Dépense** : TTS (`payment_method: 'credits'`) débite des Crédits TTS, le Soundboard des Crédits Soundboard (prix
+en crédits du module, inchangés) ; jamais l'une pour l'autre, jamais des Jetons à la place (`insufficient_credits`).
+Remboursement (échec, expiration, modération) dans la monnaie d'origine, une seule fois. Son payé directement en
+points de chaîne : inchangé (aucun débit). Modération : solde des trois monnaies, ajustement manuel par monnaie
+(borné à 0), activité « Points de chaîne » en crédits. Extension (façade Core `/v1/ext`) : soldes réels des crédits
+(plus de `0` en dur), paiement TTS / Soundboard en crédits accepté (`/actions/redemption`), jamais pour le Bonk.
+
+`CANONICAL_READY` : `tts`, `soundboard` et `channel_points` prêts.
+
+**Crédits Lab historiques** : le portefeuille de test Lab crée 1 Crédit TTS et 3 Crédits Soundboard fictifs par
+viewer (`DEFAULT_LAB_WALLET`) ; ils ne sont ni migrés, ni convertis, ni supprimés. Proposition : rien n'est repris
+au cutover (le Wallet canonique part de 0 crédit) ; les crédits SAMMI éventuellement en cours chez des viewers sont
+à recenser à part par Antoni avant le gel, et seulement s'ils existent réellement, à recréditer à la main par la
+modération (ajustement tracé). Décision à Antoni.
+
+**Restent ouverts** : récompenses Twitch à associer et nombres de crédits (configuration Antoni) ; recensement des
+crédits SAMMI en cours ; crédits déjà dépensés lors d'une annulation (« à rapprocher » : la règle de reprise est à
+décider) ; release Studio (éditeur de règles, adaptateur Lab) non faite.

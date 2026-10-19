@@ -52,7 +52,8 @@ export interface EconomyMovement {
   /** Signed: a credit when positive, a debit when negative (never below 0). */
   amount: number;
   /** `sub_wheel`: canonical Wallet only (the Lab ledger has no such kind; the wheel never credits the Lab wallet). */
-  kind: 'word_game' | 'mini_game' | 'raffle_win' | 'sub_wheel';
+  kind:
+    'word_game' | 'mini_game' | 'raffle_win' | 'sub_wheel' | 'channel_points';
   /** Ledger reason: the module's idempotency key (unique per kind where the module requires it). */
   key?: string | null;
   moduleId?: string | null;
@@ -426,20 +427,62 @@ const debitKey = (interactionId: string) =>
  * The canonical currency behind a module currency. Only the Jetons (`tokens` → the primary currency) exist in the
  * Core Wallet; Lab credits (TTS / Soundboard) and other Tombola currencies are refused, never converted (D2).
  */
+/** The secondary currencies of the canonical Wallet (D2): same ids as the module currencies, never interchangeable. */
+const CREDIT_CURRENCIES: readonly string[] = [
+  'credits_tts',
+  'credits_soundboard',
+];
+
 async function canonicalCurrency(q: Queryable, currency: string) {
-  if (currency !== 'tokens')
+  if (currency !== 'tokens' && !CREDIT_CURRENCIES.includes(currency))
     throw new LabWalletError('economy_unavailable', {
       reason: 'currency_not_supported',
       currency,
     });
-  const c = await findCurrency(q);
-  if (!c?.active)
+  const c = await findCurrency(q, currency === 'tokens' ? undefined : currency);
+  if (!c)
+    throw new LabWalletError('economy_unavailable', {
+      reason: 'currency_not_supported',
+      currency,
+    });
+  if (!c.active)
     throw new LabWalletError('economy_unavailable', {
       reason: 'currency_inactive',
       currency,
     });
   return c.id;
 }
+/**
+ * Balances of the three module currencies on the canonical Wallet. A currency not installed or inactive is null (never
+ * a fictitious 0); a viewer without a wallet row in an available currency has a real 0.
+ */
+async function canonicalBalances(
+  q: Queryable,
+  viewerId: string,
+): Promise<EconomyBalances> {
+  const rows = await q.query<{
+    id: string;
+    is_primary: boolean;
+    active: boolean;
+    balance: number | string | null;
+  }>(
+    `select c.id, c.is_primary, c.active, w.balance from currencies c
+     left join wallets w on w.currency_id = c.id and w.twitch_user_id = $1
+     where c.is_primary or c.id = any($2::text[])`,
+    [viewerId, CREDIT_CURRENCIES],
+  );
+  const of = (r: (typeof rows)[number] | undefined) =>
+    r?.active ? Number(r.balance ?? 0) : null;
+  return {
+    tokens: of(rows.find((r) => r.is_primary)) ?? 0,
+    credits_tts: of(rows.find((r) => r.id === 'credits_tts')),
+    credits_soundboard: of(rows.find((r) => r.id === 'credits_soundboard')),
+  };
+}
+/** A canonical currency id as the module names it (the primary currency is the Jetons, `tokens`). */
+const moduleCurrency = (r: { currency_id: string; is_primary: boolean }) =>
+  (r.is_primary ? 'tokens' : r.currency_id) as WalletCurrency;
+
 /** A viewer the Wallet may not know yet: the Twitch ID is the key, a placeholder never overwrites a real login. */
 const byId = (id: string) => ({ twitchUserId: id, login: id, displayName: id });
 /** The idempotency key of a module movement: its own key, or (Tombola win) its round and winner. */
@@ -480,11 +523,14 @@ async function canonicalRows(
     reason: string | null;
     created_at: Date;
     key: string;
+    currency_id: string;
+    is_primary: boolean;
   }>(
     `select t.id, t.twitch_user_id, t.amount, t.kind, t.source, t.reference, t.actor, t.reason, t.created_at,
-       o.idempotency_key as key
+       o.idempotency_key as key, t.currency_id, c.is_primary
      from wallet_transactions t join wallet_operations o on o.id = t.operation_id
-     join currencies c on c.id = t.currency_id and c.is_primary
+     join currencies c on c.id = t.currency_id
+       and (c.is_primary or c.id in ('credits_tts', 'credits_soundboard'))
      where ${where} ${tail}`,
     params,
   );
@@ -508,18 +554,13 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
         a.delta < 0
           ? Math.max(a.delta, -Math.max(before, 0))
           : Math.min(a.delta, MAX_AMOUNT - before);
-      const balances = (after: number) => ({
-        tokens: after,
-        credits_tts: null,
-        credits_soundboard: null,
-      });
       if (applied === 0)
         return {
           before,
           after: before,
           applied: 0,
           ledgerId: null,
-          wallet: balances(before),
+          wallet: await canonicalBalances(q, a.viewerId),
         };
       const r = await wallet.adminAdjustIn(q, {
         key: a.key,
@@ -542,7 +583,7 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
         after,
         applied,
         ledgerId: await ledgerRow(q, r.operationId, a.viewerId),
-        wallet: balances(after),
+        wallet: await canonicalBalances(q, a.viewerId),
       };
     },
     async acceptsCurrency(q, currency) {
@@ -564,20 +605,7 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
         created_at: r.created_at,
       }));
     },
-    async balances(q, _channelId, viewerId) {
-      const w = (
-        await q.query<{ balance: number }>(
-          'select w.balance from wallets w join currencies c on c.id = w.currency_id and c.is_primary where w.twitch_user_id = $1',
-          [viewerId],
-        )
-      )[0];
-      // Credits are not held by the Core Wallet (D2: secondary currencies, not migrated yet): null, never 0.
-      return {
-        tokens: Number(w?.balance ?? 0),
-        credits_tts: null,
-        credits_soundboard: null,
-      };
-    },
+    balances: (q, _channelId, viewerId) => canonicalBalances(q, viewerId),
 
     async interactionMovements(q, interactionId) {
       return (
@@ -587,7 +615,7 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
       ).map((r) => ({
         id: Number(r.id),
         kind: INTERACTION_KEY.exec(r.key)![2]!,
-        currency: 'tokens',
+        currency: moduleCurrency(r),
         amount: Number(r.amount),
         created_at: r.created_at,
       }));
@@ -642,7 +670,7 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
           id: Number(r.id),
           viewer_id: r.twitch_user_id,
           kind,
-          currency: 'tokens',
+          currency: moduleCurrency(r),
           amount: Number(r.amount),
           module_id: m
             ? (debitRow?.source ?? null)
@@ -752,12 +780,8 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
     },
 
     async debit(q, _now, d) {
-      // Jetons only: the model of TTS / Soundboard credits is a pending product decision (D2).
-      if (d.currency !== 'tokens')
-        throw new LabWalletError('economy_unavailable', {
-          reason: 'currency_not_supported',
-          currency: d.currency,
-        });
+      // The currency the viewer chose (Jetons, Crédits TTS, Crédits Soundboard): debited in it, never another one.
+      const currencyId = await canonicalCurrency(q, d.currency);
       const r = await wallet.spendIn(q, {
         key: debitKey(d.interactionId),
         viewer: {
@@ -769,12 +793,15 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
         amount: d.amount,
         source: d.module,
         reference: d.interactionId,
+        currencyId,
       });
       // Every non-applied outcome aborts the admission (an admitted interaction is always paid).
       if (r.status !== 'applied' || r.replayed)
         throw new LabWalletError(
           r.rejection === 'insufficient_funds' || r.rejection === 'in_debt'
-            ? 'insufficient_tokens'
+            ? d.currency === 'tokens'
+              ? 'insufficient_tokens'
+              : 'insufficient_credits'
             : 'economy_unavailable',
           {
             reason: r.replayed ? 'replayed' : r.rejection,
@@ -813,7 +840,14 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
         throw new LabWalletError('economy_unavailable', {
           reason: r.rejection,
         });
-      return { amount: r.replayed ? 0 : -leg.amount, currency: 'tokens' };
+      // Given back in the currency of the debit (its own operation says which).
+      const primary = (await findCurrency(q))?.id;
+      return {
+        amount: r.replayed ? 0 : -leg.amount,
+        currency: (spent.currencyId === primary
+          ? 'tokens'
+          : spent.currencyId) as WalletCurrency,
+      };
     },
   };
 }

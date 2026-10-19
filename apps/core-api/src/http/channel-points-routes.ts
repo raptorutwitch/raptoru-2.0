@@ -3,6 +3,7 @@ import {
   CpClaimRequest,
   CpEffectReport,
   CpRedemptionInput,
+  CpRedemptionUpdate,
   CpRewardsSync,
   CpRuleInput,
   CpSettingsInput,
@@ -154,6 +155,17 @@ export function channelPointsRoutes(
         if (e.source !== 'twitch')
           throw new HttpError(400, { error: 'twitch_source_required' });
         return cp.receive(e);
+      },
+    },
+    {
+      // Twitch changed a redemption's status (fulfilled / canceled): canceled takes its credits back.
+      method: 'POST',
+      pattern: at(ingestBase, '/redemptions/status'),
+      auth: ingestAuth,
+      handle: ({ body }) => {
+        const u = parse(CpRedemptionUpdate, body);
+        channel(u.channel_id);
+        return cp.update(u);
       },
     },
     {

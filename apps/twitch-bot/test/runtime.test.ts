@@ -14,6 +14,7 @@ const baseConfig: BotConfig = {
   STREAM_SYNC_INTERVAL_MS: 60_000,
   TWITCH_BROADCASTER_TOKEN_FILE: 'unused-broadcaster.json',
   LOYALTY_OUTBOX_FILE: 'unused-outbox.json',
+  CHANNEL_POINTS_OUTBOX_FILE: 'unused-cp-outbox.json',
   DAILY_CHAT_COMMANDS: 'false',
   LOYALTY_TWITCH_EVENTS: 'false',
   LOYALTY_CHAT_COMMANDS: 'false',

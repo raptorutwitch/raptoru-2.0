@@ -55,6 +55,9 @@ describe('Points de chaîne views', () => {
         enabled: false,
       }),
     ).toBe('Désactiver le filtre « Flou » de « Cam »');
+    expect(
+      actionLabel({ type: 'credits', currency: 'credits_tts', amount: 3 }),
+    ).toBe('Accorder 3 Crédit(s) TTS au viewer');
     expect(actionLabel({ type: 'obs_scene', scene: 'BRB' })).toBe(
       'Passer sur la scène « BRB »',
     );

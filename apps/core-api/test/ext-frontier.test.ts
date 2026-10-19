@@ -244,8 +244,12 @@ describe('public Core: viewer frontier /v1/ext', () => {
       viewer_login: 'Viewer 4242',
       channel_id: CHANNEL,
       wallet: { available: 12_000 },
-      pending_actions: [],
-      credits: { tts: 0, soundboard: 0 },
+      // The test wallet's credits as Core holds them (never a fictitious 0), in the extension's shapes.
+      credits: { tts: 1, soundboard: 3 },
+      pending_actions: [
+        { module_id: 'tts' },
+        { module_id: 'soundboard', credits_remaining: 3 },
+      ],
     });
     expect(r.body.modules.map((m: { id: string }) => m.id)).toEqual([
       'tts',
@@ -368,13 +372,28 @@ describe('public Core: viewer frontier /v1/ext', () => {
     );
   });
 
-  it('refuses Channel Points payment and an action without Idempotency-Key', async () => {
-    const { ext, send } = await fixture();
-    const r = await ext('/actions/redemption', viewer(), {
-      module_id: 'tts',
-      redemption_id: 'x',
+  it('credits pay TTS in Crédits TTS only (Jetons untouched); never Bonk; an action needs its Idempotency-Key', async () => {
+    const { core, ext, send } = await fixture();
+    await core.ttsLab.heartbeat({
+      studio_instance_id: 'studio-1',
+      player_ready: true,
     });
-    expect(r.body.error).toBe('unsupported_payment');
+    const jwt = viewer();
+    const r = await ext('/actions/redemption', jwt, {
+      module_id: 'tts',
+      redemption_id: 'credit-tts-1',
+      payload: { text: 'Salut' },
+    });
+    expect(r.status).toBe(200);
+    const s = (await ext('/session', jwt)).body;
+    expect(s.credits).toEqual({ tts: 0, soundboard: 3 });
+    expect(s.wallet.available).toBe(12_000);
+    expect(s.action_receipts[0]).toMatchObject({
+      action: 'tts',
+      currency: 'credits_tts',
+    });
+    const bonkCredits = await ext('/actions/redemption', jwt, bonk());
+    expect(bonkCredits.body.error).toBe('unsupported_payment');
     const noKey = await send('/v1/ext/actions/tokens', {
       body: bonk(),
       headers: { authorization: `Bearer ${viewer()}` },

@@ -308,7 +308,7 @@ export class ObsActions {
       action.type === 'effect_video'
     )
       throw new ObsActionError('action non OBS');
-    if (action.type === 'interaction')
+    if (action.type === 'interaction' || action.type === 'credits')
       throw new ObsActionError('action non OBS');
     const obs = this.connected();
     if (action.type === 'obs_scene' && action.duration_ms)

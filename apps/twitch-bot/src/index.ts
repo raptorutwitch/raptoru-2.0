@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { TWITCH_OAUTH_PROFILES } from '@raptoru/schemas';
 import { broadcasterScopes, loadConfig, requiredScopes } from './config.js';
-import { createChannelPointsEvents } from './channel-points-events.js';
+import {
+  type CpOutboxEvent,
+  createChannelPointsEvents,
+} from './channel-points-events.js';
 import { createCoreClient } from './core-client.js';
 import { createBroadcasterEvents } from './loyalty-events.js';
 import { fileOutbox } from './loyalty-outbox.js';
@@ -159,7 +162,10 @@ if (loyaltyOn || pointsOn) {
           channelId: config.TWITCH_BROADCASTER_ID,
           broadcasterId: config.TWITCH_BROADCASTER_ID,
           postRedemption: (body) => core.channelPointsRedemption(body),
+          postRedemptionUpdate: (body) =>
+            core.channelPointsRedemptionUpdate(body),
           postRewards: (body) => core.channelPointsRewards(body),
+          outbox: fileOutbox<CpOutboxEvent>(config.CHANNEL_POINTS_OUTBOX_FILE),
           subscribe: (type, condition, sessionId, version) =>
             broadcasterHelix.subscribe(type, condition, sessionId, version),
           getCustomRewards: () =>
@@ -167,6 +173,7 @@ if (loyaltyOn || pointsOn) {
         })
       : null;
     events?.resumePending(); // events a previous run could not deliver to Core
+    void points?.resumePending(); // redemptions a previous run could not deliver to Core
     if (points) consumers.add(() => points.close());
     const broadcasterSocket = runEventSub({
       async subscribe(sessionId) {

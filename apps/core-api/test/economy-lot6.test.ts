@@ -92,7 +92,7 @@ describe('moderation « Créditer / Débiter » on the canonical Wallet', () => 
     expect(await adjust(1_000)).toMatchObject({
       ok: true,
       applied: 1_000,
-      wallet: { tokens: 1_000, credits_tts: null },
+      wallet: { tokens: 1_000, credits_tts: 0 },
     });
     expect(await adjust(-300)).toMatchObject({
       applied: -300,
@@ -155,7 +155,7 @@ describe('moderation « Créditer / Débiter » on the canonical Wallet', () => 
   });
 
   it('the same action replayed (lost answer, double click) adjusts once; credits are never converted to Jetons', async () => {
-    const { core, adjust, code } = await moderation();
+    const { core, adjust } = await moderation();
     const key = `adjust-${randomUUID()}`;
     await adjust(250, { key });
     await adjust(250, { key });
@@ -163,9 +163,11 @@ describe('moderation « Créditer / Débiter » on the canonical Wallet', () => 
     expect(
       await count(core.db, "wallet_transactions where source = 'admin'"),
     ).toBe(1);
-    expect(await code(adjust(5, { currency: 'credits_tts' }))).toBe(
-      'economy_unavailable',
-    );
+    // Credits are their own currency: adjusted in it, never converted to Jetons.
+    expect(await adjust(5, { currency: 'credits_tts' })).toMatchObject({
+      applied: 5,
+      wallet: { tokens: 250, credits_tts: 5, credits_soundboard: 0 },
+    });
     expect(await tokens(core)).toBe(250);
   });
 });

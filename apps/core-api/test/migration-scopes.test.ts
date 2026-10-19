@@ -227,12 +227,12 @@ describe('staging scope (staging Core only)', () => {
       '20261018120000_bonk_lab_volleys.sql',
     ]);
     expect(staging.some((f) => f.includes('commands_v2'))).toBe(false);
-    expect(prod.length).toBe(24); // + alerts (§ 22), channel points, Random Ban, sub wheel, opening import (+ its sources) production schemas
+    expect(prod.length).toBe(25); // + alerts (§ 22), channel points, Random Ban, sub wheel, opening import (+ its sources), credit currencies
   });
 
   it('on a database already migrated in prod: applies the four extras only, once', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod')).length).toBe(24);
+    expect((await migrate(db, 'prod')).length).toBe(25);
     expect(await migrate(db, 'staging')).toEqual([
       '20261015120000_lab_moderation_idempotency.sql',
       '20261016130000_lab_stream_session_twitch_id.sql',

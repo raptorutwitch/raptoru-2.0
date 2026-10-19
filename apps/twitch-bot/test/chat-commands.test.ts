@@ -23,6 +23,7 @@ function fakeCore(overrides: Partial<CoreClient> = {}): CoreClient {
     loyaltyEvent: vi.fn(),
     subscriptionSnapshot: vi.fn(),
     channelPointsRedemption: vi.fn(),
+    channelPointsRedemptionUpdate: vi.fn(),
     channelPointsRewards: vi.fn(),
     ...overrides,
   };

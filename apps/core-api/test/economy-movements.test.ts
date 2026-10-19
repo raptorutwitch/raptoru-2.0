@@ -280,11 +280,8 @@ describe('canonical adapter', () => {
       code: 'economy_unavailable',
       details: { reason: 'idempotency_key_required' },
     });
-    for (const currency of [
-      'credits_tts',
-      'credits_soundboard',
-      'unknown_coin',
-    ])
+    // Credits are canonical currencies of their own (D2); anything else is refused, never converted.
+    for (const currency of ['unknown_coin', 'event_coins'])
       await expect(
         db.tx((q) => port().hold(q, NOW, CH, [A], currency)),
       ).rejects.toMatchObject({

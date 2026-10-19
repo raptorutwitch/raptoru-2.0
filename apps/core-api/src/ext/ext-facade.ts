@@ -18,11 +18,45 @@ import type { TwitchName, TwitchNames } from './twitch-names.js';
 // - every decision, price, balance and refusal comes from Core (same services as the Lab), through
 //   the in-process Lab call: nothing is simulated here, no fictitious identity, no local wallet;
 // - payment stays SIMULATED (Lab test wallet, fictitious Jetons): no StreamElements, no Channel Points,
-//   no canonical Wallet. TTS / Soundboard credits (Channel Points in the legacy) are not offered.
+//   no canonical Wallet. TTS / Soundboard credits (phase 2 lot 4: their own currencies, obtained through a channel
+//   points reward) are shown and spent as Core holds them — never a fictitious 0 (null: unavailable).
 // Out of scope here: Twitch personal emotes (viewer OAuth), Commands V2, the legacy moderation paths
 // beyond the TTS controls.
 
 type Json = Record<string, unknown>;
+/** The viewer's balances as Core holds them (a credits currency not available: null). */
+interface LabWallet {
+  tokens: number;
+  credits_tts: number | null;
+  credits_soundboard: number | null;
+}
+
+/**
+ * The extension counts TTS credits as pending TTS redemptions and Soundboard credits as one redemption with
+ * credits_remaining (same shapes as Studio's Lab EBS, values from Core). The ids are labels only: the payment is
+ * always the viewer's balance in Core.
+ */
+function creditActions(w: LabWallet) {
+  const tts = w.credits_tts ?? 0;
+  const sb = w.credits_soundboard ?? 0;
+  return [
+    ...Array.from({ length: Math.min(tts, 200) }, (_, i) => ({
+      redemption_id: `credit-tts-${i + 1}`,
+      module_id: 'tts',
+      reward_key: 'tts',
+    })),
+    ...(sb > 0
+      ? [
+          {
+            redemption_id: 'credit-soundboard',
+            module_id: 'soundboard',
+            reward_key: 'sound',
+            credits_remaining: sb,
+          },
+        ]
+      : []),
+  ];
+}
 export interface ExtReply {
   status: number;
   body: Json;
@@ -161,9 +195,10 @@ export class ExtFacade {
     if (method === 'POST' && path === '/actions/raffle')
       return this.joinRaffle(who, idempotencyKey);
     if (method === 'POST' && path === '/actions/tokens')
-      return this.spend(who, body ?? {}, idempotencyKey);
+      return this.spend(who, body ?? {}, idempotencyKey, 'tokens');
+    // Paid in credits (TTS / Soundboard only): the viewer's balance in the module's own currency, never Jetons.
     if (method === 'POST' && path === '/actions/redemption')
-      return fail(400, 'unsupported_payment');
+      return this.spend(who, body ?? {}, idempotencyKey, 'credits');
     if (path.startsWith('/moderation/')) {
       if (!who.team) return fail(403, 'forbidden');
       if (!who.viewer) return fail(403, 'identity_required');
@@ -295,9 +330,7 @@ export class ExtFacade {
     ] = await Promise.all([
       this.core<Json>(`/v1/lab/moderation/${C}/overview`).catch(() => null),
       v
-        ? this.core<{ tokens: number }>(`/v1/lab/wallet/${C}/${v.id}`).catch(
-            () => null,
-          )
+        ? this.core<LabWallet>(`/v1/lab/wallet/${C}/${v.id}`).catch(() => null)
         : null,
       this.core<{ sounds: Json[] }>(
         `/v1/lab/sound/channels/${C}/catalog`,
@@ -436,8 +469,11 @@ export class ExtFacade {
         v && wallet
           ? { points: wallet.tokens, reserved: 0, available: wallet.tokens }
           : { unavailable: true },
-      credits: { tts: 0, soundboard: 0 },
-      pending_actions: [],
+      credits: {
+        tts: (v && wallet?.credits_tts) ?? null,
+        soundboard: (v && wallet?.credits_soundboard) ?? null,
+      },
+      pending_actions: v && wallet ? creditActions(wallet) : [],
       action_receipts: receipts,
       notifications: [],
       interactions: { available: true, reason: null },
@@ -566,8 +602,15 @@ export class ExtFacade {
     who: Who,
     body: Json,
     key: string | undefined,
+    payment: 'tokens' | 'credits',
   ): Promise<ExtReply> {
     if (!who.viewer) return fail(403, 'identity_required');
+    if (
+      payment === 'credits' &&
+      body.module_id !== 'tts' &&
+      body.module_id !== 'soundboard'
+    )
+      return fail(400, 'unsupported_payment');
     if (!key || key.length < 8 || key.length > 128)
       return fail(400, 'idempotency_key_required');
     const viewer = { id: who.viewer.id, display_name: who.viewer.display_name };
@@ -670,7 +713,7 @@ export class ExtFacade {
             return fail(400, 'invalid_payload');
           const out = await this.core<{ interaction: Json; replayed: boolean }>(
             '/v1/lab/sound/interactions',
-            { ...base, sound_id: payload.sound_id, payment_method: 'tokens' },
+            { ...base, sound_id: payload.sound_id, payment_method: payment },
           );
           if (!out.replayed)
             this.receipt(who.viewer.id, {
@@ -678,7 +721,7 @@ export class ExtFacade {
               action: 'soundboard',
               label: 'Soundboard',
               detail: out.interaction.sound_label ?? payload.sound_id,
-              currency: 'jetons',
+              currency: payment === 'credits' ? 'credits_soundboard' : 'jetons',
               cost: out.interaction.simulated_cost,
               status: out.interaction.status,
               created_at: out.interaction.created_at,
@@ -695,7 +738,7 @@ export class ExtFacade {
           }>('/v1/lab/tts/interactions', {
             ...base,
             text: payload.text,
-            payment_method: 'tokens',
+            payment_method: payment,
           });
           if (!out.replayed)
             this.receipt(who.viewer.id, {
@@ -703,7 +746,7 @@ export class ExtFacade {
               action: 'tts',
               label: 'TTS',
               detail: out.interaction.message,
-              currency: 'jetons',
+              currency: payment === 'credits' ? 'credits_tts' : 'jetons',
               cost: out.interaction.simulated_cost,
               status: 'queued',
               created_at: out.interaction.created_at,
