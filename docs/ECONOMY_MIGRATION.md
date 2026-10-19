@@ -266,3 +266,30 @@ Essai à blanc du fichier d'ouverture (base vide jetable, supprimée) : prêt, a
    chaque décision journalisée. Limite : un compte SE dont le pseudo a été repris **avant** la coupure par un autre
    viewer reste indiscernable sans l'historique Twitch des pseudos ; c'est déjà le cas aujourd'hui chez SE, qui crédite
    et débite par pseudo.
+
+## 9. StreamElements conserve-t-il le Twitch ID des comptes de fidélité ? (19/10/2026)
+
+Enquête : documentation officielle (variables du chatbot, OpenAPI `api-docs`, centre d'aide), code public du tableau de
+bord StreamElements (lecture des fichiers JavaScript servis), une requête GET (`/kappa/v2/bot/{canal}/users`, champs
+seulement), et les données du pilote. Aucune commande créée, aucun message de chat, aucune écriture.
+
+| Constat                                                  | Preuve                                                                                                                                                                                                                                                                                                                                                        | Statut                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| SE **garde un lien interne** compte ↔ utilisateur Twitch | aide officielle « Loyalty: Troubleshooting » : après un changement de pseudo, points et temps de visionnage sont **transférés automatiquement la première fois que le viewer écrit avec son nouveau nom** ; `$(user.twitchid)` = « User's platform user ID », seulement pour les utilisateurs **vus par le bot** dans la chaîne                               | PROUVÉ (doc)                                                      |
+| Ce lien **n'est exposé par aucune API de fidélité**      | OpenAPI officielle : `/points/{canal}/{user}`, `top`, `alltime`, `watchtime`, ajout, mise à jour en masse — tous par `username` ; le tableau de bord SE lui-même ne lit que `username` + montant (même son import / export CSV laisse l'identifiant vide) ; nos réponses réelles : `username`, `points` (+ `pointsAlltime`, `watchtime`, `rank` sur la fiche) | PROUVÉ                                                            |
+| `/bot/{canal}/users` porte des `providerId`…             | 16 entrées : la liste des **utilisateurs à permissions** du bot, pas les comptes de fidélité                                                                                                                                                                                                                                                                  | PROUVÉ (sans valeur pour la migration)                            |
+| `$(user.twitchid X)` à grande échelle                    | uniquement dans une **commande de chat** : créer une commande (modification SE) et poster **un message public par viewer** (≈ 2 400 messages pour les comptes non prouvés), soumis aux délais du bot, sans garantie documentée sur un pseudo abandonné ou repris                                                                                              | **non utilisable** (interdit sans accord, irréaliste, non fiable) |
+| Ce que renverrait `$(user.twitchid)`                     | la doc ne dit pas si elle lit l'utilisateur que le bot a **vu** sous ce pseudo (ancien titulaire) ou le titulaire **actuel** ; aucun moyen de le vérifier sans message public                                                                                                                                                                                 | INCERTAIN                                                         |
+| Comptes créés par erreur                                 | SE crée un compte pour **n'importe quel texte** reçu en ajout de points (nos 2 noms avec espace) ; les 3 doubles comptes montrent que le transfert automatique **n'a pas eu lieu** quand un compte existait déjà sous le nouveau pseudo (créé par un ajout SAMMI)                                                                                             | PROUVÉ (données)                                                  |
+
+**Ce que cela change à notre lecture des données** (sans changer la méthode) : grâce au transfert automatique, un
+viewer actif qui change de pseudo emporte ses points ; un pseudo SE **périmé** est donc celui d'un viewer qui n'a plus
+écrit depuis son changement — exactement nos « renommés » (retrouvés par l'historique) et une partie des
+« introuvables ». Pour les « titulaires actuels sans trace », le risque reste qu'un pseudo libéré ait été repris : aucune
+donnée SE accessible ne permet de le lever.
+
+**Conclusion : la piste ne fournit pas de Twitch ID exploitable.** On garde le rapprochement par l'historique
+(`se-identity.ts`) et la politique « prouvés importés, le reste réservé et réclamable ». Seule option restante, à
+l'accord d'Antoni et de faible valeur : un essai limité avec une commande réservée aux modérateurs sur 3 à 5 pseudos
+connus (renommé, introuvable, confirmé), pour savoir quel titulaire elle renvoie — sans pouvoir l'étendre à tous les
+comptes.
