@@ -10,9 +10,11 @@ import {
 } from '../lab-moderation/store.js';
 import {
   creditCurrency,
+  CurrencyCreditError,
   currency as labCurrency,
 } from '../raffle-lab/currencies.js';
-import type { WalletService } from '../wallet/wallet-service.js';
+import { findCurrency } from '../wallet/currencies.js';
+import { MAX_AMOUNT, type WalletService } from '../wallet/wallet-service.js';
 
 // ASTRA-P1-001 (lot 1): the economic side of an interaction admission, as ONE contract usable inside
 // the admission's own transaction — so the debit and the admission commit or roll back together
@@ -26,8 +28,9 @@ import type { WalletService } from '../wallet/wallet-service.js';
 // Module movements (economy unification, 16/10/2026): the games and rewards decided by Core (Jeu des
 // mots, Roulette / Slot, Duel, Tombola winnings) go through the same port, still inside the caller's
 // transaction: `hold` (lock in a stable order, read balances and cap), `move` (one signed change and its
-// ledger row) and `transfer` (viewer → viewer, sum zero). Lab only for now: the canonical adapter refuses
-// them explicitly until P1-001 lot 2 wires them (never a silent success).
+// ledger row) and `transfer` (viewer → viewer, sum zero). Canonical adapter (Phase 2 lot 1, 19/10/2026): the same
+// three on the Core Wallet, Jetons only, every movement keyed (a replay never pays twice). Which adapter a
+// runtime uses is decided in one place (economy/activation.ts): the Lab wallet everywhere until the cutover.
 
 export interface EconomyDebit {
   channelId: string;
@@ -227,21 +230,138 @@ export const labEconomy: EconomyPort = {
   },
 };
 
-/** Module movements are not wired to the canonical Wallet yet (P1-001 lot 2): explicit refusal. */
-const notWired = (): never => {
-  throw new LabWalletError('economy_unavailable', {
-    reason: 'canonical_not_wired',
-  });
-};
-
 const debitKey = (interactionId: string) =>
   `interaction:${interactionId}:debit`;
 
+/**
+ * The canonical currency behind a module currency. Only the Jetons (`tokens` → the primary currency) exist in the
+ * Core Wallet; Lab credits (TTS / Soundboard) and other Tombola currencies are refused, never converted (D2).
+ */
+async function canonicalCurrency(q: Queryable, currency: string) {
+  if (currency !== 'tokens')
+    throw new LabWalletError('economy_unavailable', {
+      reason: 'currency_not_supported',
+      currency,
+    });
+  const c = await findCurrency(q);
+  if (!c?.active)
+    throw new LabWalletError('economy_unavailable', {
+      reason: 'currency_inactive',
+      currency,
+    });
+  return c.id;
+}
+/** A viewer the Wallet may not know yet: the Twitch ID is the key, a placeholder never overwrites a real login. */
+const byId = (id: string) => ({ twitchUserId: id, login: id, displayName: id });
+/** The idempotency key of a module movement: its own key, or (Tombola win) its round and winner. */
+function movementKey(m: EconomyMovement) {
+  const k = m.key ?? (m.raffleId ? `${m.raffleId}:${m.viewerId}` : null);
+  if (!k)
+    throw new LabWalletError('economy_unavailable', {
+      reason: 'idempotency_key_required',
+    });
+  return `move:${m.kind}:${k}`;
+}
+async function ledgerRow(q: Queryable, operationId: number, viewerId: string) {
+  return Number(
+    (
+      await q.query<{ id: number }>(
+        'select id from wallet_transactions where operation_id = $1 and twitch_user_id = $2 order by id limit 1',
+        [operationId, viewerId],
+      )
+    )[0]!.id,
+  );
+}
+
 export function coreWalletEconomy(wallet: WalletService): EconomyPort {
   return {
-    hold: async () => notWired(),
-    move: async () => notWired(),
-    transfer: async () => notWired(),
+    async hold(q, _now, _channelId, viewerIds, currency) {
+      const id = await canonicalCurrency(q, currency);
+      const balances = await wallet.lockIn(q, viewerIds.map(byId), id);
+      // No balance cap in the Core Wallet: only the per-operation bound.
+      return { balances, maxBalance: MAX_AMOUNT };
+    },
+
+    async move(q, _now, m) {
+      // A gain in an unavailable currency is the modules' CurrencyCreditError, as with the Lab wallet.
+      const currencyId = await canonicalCurrency(q, m.currency).catch((e) => {
+        if (m.amount > 0 && e instanceof LabWalletError)
+          throw new CurrencyCreditError(
+            'currency_unavailable',
+            String(e.details?.reason),
+          );
+        throw e;
+      });
+      if (!Number.isSafeInteger(m.amount) || m.amount === 0)
+        throw new LabWalletError('economy_unavailable', {
+          reason: 'invalid_amount',
+        });
+      const common = {
+        key: movementKey(m),
+        viewer: byId(m.viewerId),
+        amount: Math.abs(m.amount),
+        source: m.moduleId ?? m.kind,
+        reference: m.key ?? m.raffleId ?? undefined,
+        currencyId,
+      };
+      const r =
+        m.amount > 0
+          ? await wallet.creditIn(q, {
+              ...common,
+              kind: 'reward',
+              reason: m.kind,
+            })
+          : await wallet.spendIn(q, common);
+      // A replayed key is the movement already applied: its result again, never a second payment.
+      if (r.status !== 'applied') {
+        if (m.amount > 0)
+          throw new CurrencyCreditError(
+            'currency_unavailable',
+            String(r.rejection),
+          );
+        throw new LabWalletError(
+          r.rejection === 'insufficient_funds' || r.rejection === 'in_debt'
+            ? 'insufficient_tokens'
+            : 'economy_unavailable',
+          {
+            reason: r.rejection,
+            balance: r.balances[0]?.balance ?? null,
+            needed: -m.amount,
+          },
+        );
+      }
+      return {
+        balanceAfter:
+          r.balances.find((b) => b.twitchUserId === m.viewerId)?.balance ?? 0,
+        ledgerId: await ledgerRow(q, r.operationId, m.viewerId),
+      };
+    },
+
+    async transfer(q, _now, t) {
+      const currencyId = await canonicalCurrency(q, t.currency);
+      const r = await wallet.transferIn(q, {
+        key: `move:${t.kind}:${t.keys.from}`,
+        from: byId(t.from),
+        to: byId(t.to),
+        amount: t.amount,
+        source: t.kind,
+        currencyId,
+      });
+      if (r.status !== 'applied')
+        throw new LabWalletError(
+          r.rejection === 'insufficient_funds' || r.rejection === 'in_debt'
+            ? 'insufficient_tokens'
+            : 'economy_unavailable',
+          {
+            reason: r.rejection,
+            balance:
+              r.balances.find((b) => b.twitchUserId === t.from)?.balance ??
+              null,
+            needed: t.amount,
+          },
+        );
+    },
+
     async debit(q, _now, d) {
       // Jetons only: the model of TTS / Soundboard credits is a pending product decision (D2).
       if (d.currency !== 'tokens')

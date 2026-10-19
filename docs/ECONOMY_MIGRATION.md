@@ -348,3 +348,36 @@ codé en dur : tout vient du manifeste.
 - Tests `wallet-selection-to-opening` (5, données fictives) : conversion, import puis contrôle, refus.
 - 19/10 : le manifeste réel (13 h 59) est refusé pour la seule raison `wenou` (Twitch ID cible 37006561 ≠ `wenuyr`
   172305417) ; l'export brut correspond par ailleurs exactement (2 886 comptes, 41 021 548 Jetons).
+
+## 12. Raccordement des modules au Wallet canonique (phase 2, 19/10/2026)
+
+**Port unique** : tous les modules payants passent déjà par `EconomyPort` (`economy/economy.ts`), dans la transaction
+de leur propre décision. Adaptateurs : `labEconomy` (portefeuille Lab fictif, 12 000 Jetons créés par viewer, défaut
+partout) et `coreWalletEconomy` (Wallet canonique, Jetons = monnaie `main`). Un seul point de choix :
+`economy/activation.ts` (`selectEconomy`) — Lab par défaut ; canonique refusé tant qu'aucun import d'ouverture n'est
+appliqué ou qu'un module du runtime n'est pas prouvé (`CANONICAL_READY`). Aucun lanceur ne l'active.
+
+| Module | Mouvements | Monnaie | Rejeu / doublon | Échec après paiement | État canonique |
+| --- | --- | --- | --- | --- | --- |
+| Jeu des mots | un gain par message | Jetons | clé message | tout dans la transaction du message | **raccordé (lot 1)** |
+| Roulette / Slot | mise et gain net par message | Jetons | clé message, cooldown | idem | **raccordé (lot 1)** |
+| Duel | transfert perdant → gagnant à l'acceptation | Jetons | clé du duel | idem | **raccordé (lot 1)** |
+| Bonk (et salves) | débit à l'admission, remboursements auto / modération | Jetons | clé d'admission | remboursement différé (savepoint) | débit/remboursement prouvés ; historique et modération lisent `lab_wallet_ledger` |
+| Soundboard | débit Jetons ou crédits ; points de chaîne payés sur Twitch | Jetons, crédits | clé d'admission | idem | idem + crédits (D2) |
+| TTS | débit Jetons ou crédits, remboursements | Jetons, crédits | clé d'admission | idem | idem + état des remboursements lu dans `lab_wallet_ledger` |
+| Tombola | gains (`raffle_win`) dans la monnaie du tirage | Jetons ou autre | déduplication lue dans `lab_wallet_ledger` | gain « failed » rejouable | à adapter |
+| Roue du Sub | gains « en attente », jamais crédités | Jetons | clé du tour | port non branché (I3) | à concevoir |
+| Points de chaîne, Random Ban | payés en points Twitch | points | redemption Twitch | remboursement Twitch | hors Wallet |
+| Daily | crédit quotidien | Jetons | clé de demande | B5 : fournisseur factice OFF = « crédité » sans argent | canonique derrière `DAILY_WALLET_CREDITS` (OFF) |
+| Présence / Loyalty | gains passifs, bonus d'événements | Jetons | clés d'événement / tick | outbox du bot (B5) | canonique derrière flags (OFF) ; barème à décider |
+| `!solde` / `!give` / `!wallet` | lecture, transfert | Jetons | clé de commande | transaction Wallet | canonique (commandes du bot OFF) |
+| Modération Lab | ajustement manuel | Jetons, crédits | clé d'action (P1-009) | transaction | portefeuille Lab seulement |
+
+**Lot 1 (fait)** : `WalletService.lockIn` / `transferIn` ; `hold` / `move` / `transfer` canoniques (Jetons seulement,
+clé obligatoire, rejeu = même résultat sans second paiement, crédits jamais convertis, monnaie indisponible = refus du
+module) ; Jeu des mots, Roulette / Slot, Duel prouvés sur le Wallet canonique (PGlite) et en concurrence réelle avec le
+Bonk sur un même portefeuille (PostgreSQL, deux connexions). Core Lab : option `economy` (Lab par défaut, inchangé).
+
+**Suite proposée** : lot 2 Bonk / Soundboard / TTS en Jetons (lectures `lab_wallet_ledger` derrière le port) ; lot 3
+Tombola ; lot 4 crédits (après D2) ; lot 5 Roue du Sub (I3) ; lot 6 modération, commandes chat, gel Daily / Loyalty
+(B5) ; lot 7 hébergement des modules par un Core au schéma Wallet et activation au cutover.

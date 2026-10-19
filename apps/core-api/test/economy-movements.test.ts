@@ -6,7 +6,7 @@ import {
   LabWalletError,
 } from '../src/lab-moderation/store.js';
 import { CurrencyCreditError } from '../src/raffle-lab/currencies.js';
-import type { WalletService } from '../src/wallet/wallet-service.js';
+import { WalletService } from '../src/wallet/wallet-service.js';
 import { createTestDb } from './helpers.js';
 
 // Economy unification (16/10/2026): the module movements of EconomyPort (hold / move / transfer) with the REAL
@@ -223,32 +223,121 @@ describe('transfer', () => {
 });
 
 describe('canonical adapter', () => {
-  it('module movements are not wired yet: explicit refusal, never a silent success', async () => {
-    const port = coreWalletEconomy({} as WalletService);
-    for (const call of [
-      () => port.hold(db, NOW, CH, [A], 'tokens'),
-      () =>
-        port.move(db, NOW, {
-          channelId: CH,
-          viewerId: A,
-          currency: 'tokens',
-          amount: 1,
-          kind: 'mini_game',
-        }),
-      () =>
-        port.transfer(db, NOW, {
+  // The same three movements on the Core Wallet (Phase 2 lot 1): Jetons only, always keyed, refusals explicit.
+  const port = () => coreWalletEconomy(new WalletService(db));
+  const cmove = (viewerId: string, amount: number, key: string | null) =>
+    db.tx((q) =>
+      port().move(q, NOW, {
+        channelId: CH,
+        viewerId,
+        currency: 'tokens',
+        amount,
+        kind: 'mini_game',
+        key,
+      }),
+    );
+  const main = async (id: string) =>
+    Number(
+      (
+        await db.query<{ balance: string }>(
+          "select balance from wallets where currency_id = 'main' and twitch_user_id = $1",
+          [id],
+        )
+      )[0]?.balance ?? 0,
+    );
+
+  it('hold locks the Core wallets (created at 0) in a stable order; no balance cap', async () => {
+    const h = await db.tx((q) => port().hold(q, NOW, CH, [B, A, B], 'tokens'));
+    expect([...h.balances.entries()]).toEqual([
+      [A, 0],
+      [B, 0],
+    ]);
+    expect(h.maxBalance).toBe(1_000_000_000_000);
+  });
+
+  it('move: credit then debit exact, with their Core ledger row; a replayed key never pays twice', async () => {
+    const c = await cmove(A, 500, 'k1');
+    expect(c.balanceAfter).toBe(500);
+    expect(await cmove(A, 500, 'k1')).toEqual(c); // same movement: same result, no second credit
+    expect((await cmove(A, -200, 'k2')).balanceAfter).toBe(300);
+    expect(await main(A)).toBe(300);
+    expect(
+      await db.query(
+        'select amount, kind, source, reference from wallet_transactions where twitch_user_id = $1 order by id',
+        [A],
+      ),
+    ).toEqual([
+      { amount: 500, kind: 'reward', source: 'mini_game', reference: 'k1' },
+      { amount: -200, kind: 'spend', source: 'mini_game', reference: 'k2' },
+    ]);
+  });
+
+  it('refusals: insufficient balance, missing key, another currency (credits are never converted)', async () => {
+    await expect(cmove(A, -1, 'k3')).rejects.toMatchObject({
+      code: 'insufficient_tokens',
+    });
+    await expect(cmove(A, 5, null)).rejects.toMatchObject({
+      code: 'economy_unavailable',
+      details: { reason: 'idempotency_key_required' },
+    });
+    for (const currency of [
+      'credits_tts',
+      'credits_soundboard',
+      'unknown_coin',
+    ])
+      await expect(
+        db.tx((q) => port().hold(q, NOW, CH, [A], currency)),
+      ).rejects.toMatchObject({
+        code: 'economy_unavailable',
+        details: { reason: 'currency_not_supported' },
+      });
+    expect(await main(A)).toBe(0);
+  });
+
+  it('an inactive Jeton currency refuses a credit as CurrencyCreditError (the module rolls back)', async () => {
+    await db.query("update currencies set active = false where id = 'main'");
+    await expect(cmove(A, 5, 'k4')).rejects.toBeInstanceOf(CurrencyCreditError);
+    await db.query("update currencies set active = true where id = 'main'");
+  });
+
+  it('transfer: sum zero, sender first refused when short; a replayed key moves nothing more', async () => {
+    await cmove(A, 300, 'fund');
+    const t = (amount: number, key: string) =>
+      db.tx((q) =>
+        port().transfer(q, NOW, {
           channelId: CH,
           from: A,
           to: B,
           currency: 'tokens',
-          amount: 1,
+          amount,
           kind: 'mini_game',
-          keys: { from: 'f', to: 't' },
+          keys: { from: key, to: `${key}:to` },
         }),
-    ])
-      await expect(call()).rejects.toMatchObject({
-        code: 'economy_unavailable',
-        details: { reason: 'canonical_not_wired' },
-      });
+      );
+    await t(100, 'd1');
+    await t(100, 'd1');
+    expect([await main(A), await main(B)]).toEqual([200, 100]);
+    await expect(t(500, 'd2')).rejects.toMatchObject({
+      code: 'insufficient_tokens',
+    });
+    expect([await main(A), await main(B)]).toEqual([200, 100]);
+  });
+
+  it('a business error after the movement rolls the movement back', async () => {
+    await expect(
+      db.tx(async (q) => {
+        await port().move(q, NOW, {
+          channelId: CH,
+          viewerId: A,
+          currency: 'tokens',
+          amount: 50,
+          kind: 'word_game',
+          key: 'x',
+        });
+        throw new Error('module failed after paying');
+      }),
+    ).rejects.toThrow('module failed');
+    expect(await main(A)).toBe(0);
+    expect(await cmove(A, 50, 'x')).toMatchObject({ balanceAfter: 50 }); // the retry pays, once
   });
 });

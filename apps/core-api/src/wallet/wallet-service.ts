@@ -102,6 +102,15 @@ export interface CreditInput {
   currencyId?: string;
 }
 
+export interface TransferInput {
+  key: string;
+  from: Viewer;
+  to: Viewer;
+  amount: number;
+  source: string;
+  currencyId?: string;
+}
+
 export interface SpendInput {
   key: string;
   viewer: Viewer;
@@ -189,6 +198,36 @@ export class WalletService {
     viewers: Viewer[],
     currencyId: string,
   ): Promise<{ twitchUserId: string; balance: number; ledgerRows: number }[]> {
+    const balances = await this.lockIn(q, viewers, currencyId);
+    const ids = [...balances.keys()];
+    const ledger = new Map(
+      (
+        await q.query<{ twitch_user_id: string; n: number }>(
+          `select twitch_user_id, count(*)::int as n from wallet_transactions
+           where currency_id = $1 and twitch_user_id = any($2::text[]) group by twitch_user_id`,
+          [currencyId, ids],
+        )
+      ).map((r) => [r.twitch_user_id, Number(r.n)]),
+    );
+    return [...balances]
+      .map(([twitchUserId, balance]) => ({
+        twitchUserId,
+        balance,
+        ledgerRows: ledger.get(twitchUserId) ?? 0,
+      }))
+      .filter((w) => w.balance !== 0 || w.ledgerRows > 0);
+  }
+
+  /**
+   * Inside the caller's transaction: creates the viewer and wallet rows if missing and locks the wallets in a stable
+   * order (by Twitch ID) — the same lock as any operation, so a module can read balances and decide before moving
+   * money in the same transaction (economy port `hold`). Viewer rows are only created, never rewritten.
+   */
+  async lockIn(
+    q: Queryable,
+    viewers: Viewer[],
+    currencyId: string,
+  ): Promise<Map<string, number>> {
     await ensureViewerRows(q, viewers);
     const ids = [...new Set(viewers.map((v) => v.twitchUserId))].sort();
     for (const id of ids)
@@ -201,22 +240,7 @@ export class WalletService {
        order by twitch_user_id for update`,
       [currencyId, ids],
     );
-    const ledger = new Map(
-      (
-        await q.query<{ twitch_user_id: string; n: number }>(
-          `select twitch_user_id, count(*)::int as n from wallet_transactions
-           where currency_id = $1 and twitch_user_id = any($2::text[]) group by twitch_user_id`,
-          [currencyId, ids],
-        )
-      ).map((r) => [r.twitch_user_id, Number(r.n)]),
-    );
-    return locked
-      .map((r) => ({
-        twitchUserId: r.twitch_user_id,
-        balance: Number(r.balance),
-        ledgerRows: ledger.get(r.twitch_user_id) ?? 0,
-      }))
-      .filter((w) => w.balance !== 0 || w.ledgerRows > 0);
+    return new Map(locked.map((r) => [r.twitch_user_id, Number(r.balance)]));
   }
 
   /** Purchases: never below 0, refused while in debt. */
@@ -307,18 +331,27 @@ export class WalletService {
   }
 
   /** Viewer → viewer, atomic, never below 0, no tax, no daily cap. Emits nothing public. */
-  async transfer(input: {
-    key: string;
-    from: Viewer;
-    to: Viewer;
-    amount: number;
-    source: string;
-    currencyId?: string;
-  }): Promise<WalletOperationResult> {
+  async transfer(input: TransferInput): Promise<WalletOperationResult> {
+    return this.transferWith(null, input);
+  }
+
+  /** The same transfer inside the caller's transaction (a module's result and its money move together). */
+  async transferIn(
+    q: Queryable,
+    input: TransferInput,
+  ): Promise<WalletOperationResult> {
+    return this.transferWith(q, input);
+  }
+
+  private async transferWith(
+    q: Queryable | null,
+    input: TransferInput,
+  ): Promise<WalletOperationResult> {
     const amount = positiveAmount(input.amount);
     const from = input.from.twitchUserId;
     const to = input.to.twitchUserId;
-    return this.execute(
+    return this.run(
+      q,
       input.key,
       'transfer',
       { from, to, amount, c: input.currencyId ?? null },

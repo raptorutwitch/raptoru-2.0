@@ -38,6 +38,7 @@ import {
 import { WordGameService } from '../word-game/service.js';
 import type { Clock } from '../clock.js';
 import { dbReady, type Db } from '../db/db.js';
+import { labEconomy, type EconomyPort } from '../economy/economy.js';
 
 // The Lab Core: its services, routes and HTTP server on a given database. One assembly for the Lab
 // Core process (local-server.ts: env, port, timers) and the end-to-end harness (apps/studio/server/e2e,
@@ -60,6 +61,11 @@ export interface LabCoreOptions {
   twitch?: { clientId: string; clientSecret: string } | null;
   /** The Lab channel's real Twitch broadcaster id (BONK_LAB_CHANNEL_TWITCH_ID), or ''. */
   channelTwitchId?: string;
+  /**
+   * Economy of the modules proven on the canonical Wallet (Jeu des mots, mini-games). The Lab test wallet unless a
+   * caller passes the result of economy/activation.ts selectEconomy (the launcher never does before the cutover).
+   */
+  economy?: EconomyPort;
 }
 
 export function createLabCore({
@@ -68,6 +74,7 @@ export function createLabCore({
   secret,
   twitch,
   channelTwitchId = '',
+  economy = labEconomy,
 }: LabCoreOptions): {
   server: Server;
   raffle: RaffleLabService;
@@ -107,7 +114,13 @@ export function createLabCore({
   });
   const steps = new CommandSteps(db, systemClock);
   // Jeu des mots V1: reads the whole chat (plainText), answers through cmd_steps (origin word_game).
-  const wordGame = new WordGameService(db, systemClock);
+  const wordGame = new WordGameService(
+    db,
+    systemClock,
+    undefined,
+    undefined,
+    economy,
+  );
   // Roulette and Slot V1: chat commands only, Lab wallet, answers through cmd_steps (origin mini_game).
   // Duel V1: the target's Twitch ID by exact login (Helix, the Lab app credentials of the Tombola avatars).
   const miniGames = new MiniGamesService(
@@ -115,6 +128,7 @@ export function createLabCore({
     systemClock,
     undefined,
     twitch ? twitchAppLoginLookup(twitch) : null,
+    economy,
   );
   const randomBan = new RandomBanService(db, systemClock);
   const alertsService = new AlertsService(db, systemClock);
