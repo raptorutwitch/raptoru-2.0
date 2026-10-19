@@ -115,6 +115,24 @@ export interface EconomyPort {
     module: LabModule,
     withinDays: number,
   ): Promise<Set<string>>;
+  /**
+   * Whether this economy can pay a module result in the currency (Tombola rounds): the Lab wallet takes every
+   * registered currency; the Core Wallet only the Jetons (credits and other Lab currencies are never converted).
+   */
+  acceptsCurrency(q: Queryable, currency: string): Promise<boolean>;
+  /** The Tombola winnings of a round already in the ledger (one per winner at most). */
+  raffleWins(
+    q: Queryable,
+    raffleId: string,
+  ): Promise<
+    {
+      id: number;
+      viewer_id: string;
+      amount: number;
+      currency: string;
+      created_at: Date;
+    }[]
+  >;
   /** Ledger page, newest first (`before` = id cursor), at most `limit` rows. */
   ledger(
     q: Queryable,
@@ -255,6 +273,22 @@ async function labMove(q: Queryable, now: Date, m: EconomyMovement) {
 
 export const labEconomy: EconomyPort = {
   mode: 'lab',
+  // The Lab keeps its own rules (registered and available, checked by the module): nothing more here.
+  acceptsCurrency: async () => true,
+  async raffleWins(q, raffleId) {
+    return (
+      await q.query<{
+        id: string;
+        viewer_id: string;
+        amount: string;
+        currency: string;
+        created_at: Date;
+      }>(
+        `select id, viewer_id, amount, currency, created_at from lab_wallet_ledger where raffle_id = $1 and kind = 'raffle_win'`,
+        [raffleId],
+      )
+    ).map((r) => ({ ...r, id: Number(r.id), amount: Number(r.amount) }));
+  },
   balances: (q, channelId, viewerId) => readWallet(q, channelId, viewerId),
   async interactionMovements(q, interactionId) {
     return (
@@ -428,6 +462,25 @@ const interactionKeys = (id: string) => [
 export function coreWalletEconomy(wallet: WalletService): EconomyPort {
   return {
     mode: 'canonical',
+    async acceptsCurrency(q, currency) {
+      if (currency !== 'tokens') return false;
+      return (await findCurrency(q))?.active === true;
+    },
+
+    async raffleWins(q, raffleId) {
+      // The key of a Tombola win: move:raffle_win:<round>:<winner> (movementKey).
+      return (
+        await canonicalRows(q, 'o.idempotency_key like $1', [
+          `move:raffle_win:${raffleId.replace(/[\\%_]/g, '\\$&')}:%`,
+        ])
+      ).map((r) => ({
+        id: Number(r.id),
+        viewer_id: r.twitch_user_id,
+        amount: Number(r.amount),
+        currency: 'tokens',
+        created_at: r.created_at,
+      }));
+    },
     async balances(q, _channelId, viewerId) {
       const w = (
         await q.query<{ balance: number }>(
@@ -514,7 +567,9 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
               ? 'raffle'
               : null,
           interaction_id: interaction,
-          raffle_id: null,
+          raffle_id: r.key.startsWith('move:raffle_win:')
+            ? r.key.slice('move:raffle_win:'.length, r.key.lastIndexOf(':'))
+            : null,
           actor: r.actor ?? 'system',
           reason: r.reason,
           created_at: r.created_at,

@@ -221,7 +221,7 @@ export class RaffleLabService {
     private readonly random: () => number = Math.random,
     /** The channel's real Twitch broadcaster (chat cancel by the streamer): see lab-chat/broadcaster.ts. */
     private readonly broadcasterOf?: BroadcasterOf,
-    /** Winnings (Lab wallet by default; the canonical Wallet once P1-001 lot 2 wires it). */
+    /** Winnings (Lab wallet by default; the canonical Wallet, Jetons only, when the runtime selects it). */
     private readonly economy: EconomyPort = labEconomy,
   ) {}
 
@@ -925,12 +925,9 @@ export class RaffleLabService {
     )[0];
     if (!w || w.payout_status === 'paid' || w.payout_status === 'none')
       return w;
-    const already = (
-      await q.query<{ id: number }>(
-        `select id from lab_wallet_ledger where raffle_id = $1 and viewer_id = $2 and kind = 'raffle_win'`,
-        [raffleId, viewerId],
-      )
-    )[0];
+    const already = (await this.economy.raffleWins(q, raffleId)).find(
+      (l) => l.viewer_id === viewerId,
+    );
     if (already) {
       await q.query(
         `update lab_raffle_winners set payout_status = 'paid', ledger_id = $3, failure = null where raffle_id = $1 and viewer_id = $2`,
@@ -1499,7 +1496,11 @@ export class RaffleLabService {
           cmd.config.super.currency_id,
         ]) {
           const c = await currency(q, id);
-          if (!c || !c.available)
+          if (
+            !c ||
+            !c.available ||
+            !(await this.economy.acceptsCurrency(q, id))
+          )
             throw new RaffleLabError409(
               'invalid_config',
               `currency ${id} is not available`,
@@ -1694,7 +1695,11 @@ export class RaffleLabService {
           : c.currency_id;
     if (currencyId) {
       const cur = await currency(q, currencyId);
-      if (!cur || !cur.available)
+      if (
+        !cur ||
+        !cur.available ||
+        !(await this.economy.acceptsCurrency(q, currencyId))
+      )
         throw new RaffleLabError409(
           'currency_unavailable',
           `currency ${currencyId} is not available`,
@@ -2283,16 +2288,7 @@ export class RaffleLabService {
       );
       const winners = await this.winnerRows(q, [raffleId]);
       const ledger = winners.length
-        ? await q.query<{
-            id: number;
-            viewer_id: string;
-            amount: string | number;
-            currency: string;
-            created_at: Date;
-          }>(
-            `select id, viewer_id, amount, currency, created_at from lab_wallet_ledger where raffle_id = $1 and kind = 'raffle_win'`,
-            [raffleId],
-          )
+        ? await this.economy.raffleWins(q, raffleId)
         : [];
       const trail = await q.query<{
         created_at: Date;

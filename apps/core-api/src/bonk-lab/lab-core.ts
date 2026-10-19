@@ -62,7 +62,7 @@ export interface LabCoreOptions {
   /** The Lab channel's real Twitch broadcaster id (BONK_LAB_CHANNEL_TWITCH_ID), or ''. */
   channelTwitchId?: string;
   /**
-   * Economy of every module of this runtime (Bonk, Soundboard, TTS, moderation, Jeu des mots, mini-games). The Lab
+   * Economy of every module of this runtime (Bonk, Soundboard, TTS, Tombola, moderation, Jeu des mots, mini-games). The Lab
    * test wallet unless a caller passes the result of economy/activation.ts selectEconomy (the launcher never does before
    * the cutover; the activation refuses a runtime whose modules are not all proven).
    */
@@ -108,6 +108,7 @@ export function createLabCore({
     systemClock,
     Math.random,
     broadcasterOf,
+    economy,
   );
   // Commands V2 (Lab): Tombola's chat words stay Tombola's (reserved, read through its own configuration
   // reader). Admission (phase B) records; accepted answers become durable steps (phase C), handed to the

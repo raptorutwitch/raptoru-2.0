@@ -351,16 +351,10 @@ describe('activation (one decision point, never automatic)', () => {
         mode: 'canonical',
         q: db,
         wallet,
-        modules: ['word_game', 'mini_games', 'bonk'],
+        modules: ['word_game', 'mini_games', 'bonk', 'raffle'],
       }),
     ).not.toBe(labEconomy);
-    for (const m of [
-      'soundboard',
-      'tts',
-      'raffle',
-      'moderation_wallet',
-      'inconnu',
-    ]) {
+    for (const m of ['soundboard', 'tts', 'moderation_wallet', 'inconnu']) {
       await expect(
         selectEconomy({
           mode: 'canonical',

@@ -23,8 +23,10 @@ export const CANONICAL_READY: Readonly<Record<string, true | string>> = {
   soundboard:
     'paiement en crédits Soundboard refusé en canonique (crédits non migrés, D2)',
   tts: 'paiement en crédits TTS refusé en canonique (crédits non migrés, D2)',
-  raffle:
-    'déduplication des gains lue dans lab_wallet_ledger ; monnaies de tirage autres que les Jetons',
+  // Phase 2 lot 3: winnings once per winner and round (dedup and history on the port), Jetons rounds (the defaults).
+  // A round in credits or another Lab currency is refused at configuration and opening (D2: credits are never a
+  // Tombola reward, never converted) — refused explicitly, not a missing path.
+  raffle: true,
   // Moderation's Lab wallet tools (manual adjustment, test balances) are refused on canonical (lot 6).
   moderation_wallet:
     'ajustement manuel et portefeuille de test refusés en canonique (à raccorder à WalletService.adminAdjust)',

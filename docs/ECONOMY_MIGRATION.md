@@ -388,6 +388,14 @@ en canonique : salves (tout ou rien), remboursements automatiques (expiration, �
 Soundboard et TTS bloqués par leurs crédits (D2 : monnaie secondaire distincte, gagnée seulement par des récompenses
 de points de chaîne, jamais convertie ; paramétrage reporté) ; outils de portefeuille de la modération bloqués.
 
-**Suite proposée** : lot 3
-Tombola ; lot 4 crédits (après D2) ; lot 5 Roue du Sub (I3) ; lot 6 modération, commandes chat, gel Daily / Loyalty
+**Lot 3 (fait)** : Tombola V2 — un seul mouvement économique, le gain (inscriptions gratuites). L'anti-doublon de
+`pay()` et l'historique d'un tirage lisent les gains par le port (`raffleWins`) ; en canonique, la clé
+`move:raffle_win:<tirage>:<gagnant>` rend tout rejeu (ticks, redémarrage, `retry_payout`, réponse perdue) sans second
+crédit. `acceptsCurrency` : en canonique, seuls les Jetons ; un tirage en crédits TTS / Soundboard ou autre monnaie Lab
+est refusé à la configuration et à l'ouverture (rien d'annoncé, jamais converti ; règles Lab inchangées). Prouvé : tirage
+à plusieurs gagnants vers des portefeuilles vierges, sans participant, panne avant crédit (rien gardé), réponse perdue
+après crédit, Jetons indisponibles (échec visible, relance payée une fois) ; PostgreSQL : même tirage pris par deux Core,
+gagnant payé pendant des dépenses Bonk, même relance depuis deux Core. `CANONICAL_READY` : Tombola prête.
+
+**Suite proposée** : lot 4 crédits (après D2) ; lot 5 Roue du Sub (I3) ; lot 6 modération, commandes chat, gel Daily / Loyalty
 (B5) ; lot 7 hébergement des modules par un Core au schéma Wallet et activation au cutover.
