@@ -178,4 +178,36 @@ Jetons, les plus gros), 2 670 `current_only` (21 699 021 Jetons, dont 87 > 10 00
 seule) apportera les paires de `players`, `player_wallet_peaks` (pseudo SE ↔ ID, la meilleure preuve), `finds`,
 `events`, `credit_events`, `twitch_subscriptions`, `raffle_stats`, `daily_legacy`, `daily_events`,
 `wizebot_snapshots` ; lecteur prêt (API REST de Supabase, GET seulement, pagination avec total exact vérifié, testé sur
-un faux serveur) — **en attente d'un accès** : aucune clé de la base legacy n'existe sur le poste.
+un faux serveur) — lu le 19/10 (§ 8.1).
+
+### 8.1 Avec la base Supabase legacy (19/10/2026, lecture seule autorisée par Antoni)
+
+Projet vérifié avant extraction (`supabase.raptoru.fr`, `raptoru_` présent dans `players`, les 200 derniers pseudos de
+`player_wallet_peaks` tous présents chez SE). API REST, **GET uniquement**, 10 tables lues en entier (total exact vérifié
+à chaque table) en 32 s : 269 019 paires (ID, pseudo) datées. La clé n'a été ni affichée ni copiée (vérifié par
+recherche sur le poste) ; aucune écriture.
+
+| Statut                                                               | Comptes | Jetons     | Part   |
+| -------------------------------------------------------------------- | ------- | ---------- | ------ |
+| `confirmed`                                                          | 485     | 38 304 874 | 93,4 % |
+| `renamed` (pseudo abandonné, titulaire historique unique retrouvé)   | 15      | 155 520    | 0,4 %  |
+| `current_only` (titulaire actuel du pseudo, aucune trace historique) | 2 205   | 1 772 570  | 4,3 %  |
+| `unresolved`                                                         | 178     | 171 700    | 0,4 %  |
+| `ambiguous`                                                          | 1       | 460 884    | 1,1 %  |
+| `invalid` (nom avec espace)                                          | 2       | 156 000    | 0,4 %  |
+
+- **Qualité des preuves** : 162 comptes confirmés / renommés (37 204 961 Jetons, 90,7 % du total) le sont par des
+  sources de première main (Jeu des mots, crédits, événements, Daily, Tombola, pics de solde, `players`) ; 338 (1 255 433
+  Jetons) seulement par les relevés Wizebot (rattachement du collecteur legacy, à l'époque du relevé).
+- **Le seul cas ambigu est `raptoru_`** (compte du streamer) : son ID partout de juin à octobre 2026 dans 8 sources, plus
+  une seule trace du 02/09/2026 (`players` + `events`) sous un autre ID — probablement une donnée de test.
+- **Pseudos réattribués détectés : aucun** (aucun pseudo dont le titulaire historique diffère du titulaire actuel).
+  **Renommages retrouvés : 15**, dont le plus gros compte jusque-là introuvable (115 190).
+- **3 viewers ont deux comptes SE** (ancien et nouveau pseudo, même ID) : 2 530 + 120, 740 + 460, 590 + 20.
+- `current_only` : 11 comptes > 10 000 (le plus gros 300 000 ; comptes Twitch créés entre 2012 et 2020, sauf un de
+  2026), 126 entre 1 000 et 10 000 (275 390), 2 068 ≤ 1 000 (505 610). La date de création Twitch ne prouve rien : un
+  compte ancien peut avoir pris un pseudo libéré.
+- `unresolved` : 178 comptes, les plus gros 37 460, 19 050, 18 000 ; 160 ≤ 1 000.
+- Comptes techniques : `raptoru_` (ambigu ci-dessus), `lecroupier_` 174 410 (confirmé), `wizebot` 4 700 (confirmé),
+  `streamelements` 3 300 (titulaire actuel seulement).
+- Revue nominative pour Antoni (sur son poste, hors dépôt) : `C:\Users\Antoni\Documents\Raptoru\_migration-exports\se-pilot-2026-10-19\revue-identites.csv`.
