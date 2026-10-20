@@ -103,13 +103,13 @@ describe('Studio profile boot plan', () => {
       startLabCore: false,
     });
     expect(plan.production!.config).toMatchObject({
-      origin: 'https://core-staging.raptoru.fr',
+      origin: 'https://core.raptoru.fr',
       channelId: '83603689',
-      label: 'Staging',
+      label: 'Production',
       ca: undefined,
     });
     expect(plan.production!.installation.binding).toEqual({
-      coreOrigin: 'https://core-staging.raptoru.fr',
+      coreOrigin: 'https://core.raptoru.fr',
       caSha256: null,
     });
   });
