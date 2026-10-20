@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { WordGameAction } from '@raptoru/schemas';
 import { WordGameError, type WordGameService } from '../word-game/service.js';
-import { HttpError, parse, type Route } from './server.js';
+import { HttpError, parse, type Route, STREAMED } from './server.js';
 
 // Jeu des mots V1 (Lab) — Studio routes (docs/WORD_GAME_PARITY.md § 14). Registered by the Lab Core only
 // (Bearer secret, Lab database); never by the production or public Core. Viewers play in the chat only.
@@ -53,7 +53,18 @@ export function serveWordGameEvents(
 ): boolean {
   const m = EVENTS.exec(url.pathname);
   if (!m || req.method !== 'GET') return false;
-  const channelId = m[1]!;
+  streamWins(game, m[1]!, res);
+  return true;
+}
+
+/** Keeps an idle stream open through reverse proxies (a comment line: ignored by Studio). */
+export const EVENTS_KEEPALIVE_MS = 25_000;
+
+function streamWins(
+  game: WordGameService,
+  channelId: string,
+  res: ServerResponse,
+) {
   res.writeHead(200, {
     'content-type': 'text/event-stream; charset=utf-8',
     'cache-control': 'no-store',
@@ -64,6 +75,34 @@ export function serveWordGameEvents(
     if (w.channel_id === channelId)
       res.write(`event: win\ndata: ${JSON.stringify(w)}\n\n`);
   });
-  res.on('close', off);
-  return true;
+  const keepalive = setInterval(
+    () => res.write(': ping\n\n'),
+    EVENTS_KEEPALIVE_MS,
+  );
+  res.on('close', () => {
+    off();
+    clearInterval(keepalive);
+  });
+}
+
+/**
+ * Lot 9 — the same stream for Studio's production profile (installation credential, the Core's channel only): the
+ * main Core's committed wins reach Studio, which relays them to its local OBS sound source. Live only, like the Lab:
+ * a (re)connection never replays a win, a win is emitted once (never for a replayed message).
+ */
+export function wordGameCockpitEvents(
+  game: WordGameService,
+  channelId: string,
+): Route {
+  return {
+    method: 'GET',
+    pattern: /^\/v1\/studio\/cockpit\/word-game\/(\d{1,32})\/events$/,
+    auth: 'studio_installation',
+    handle: async ({ params, res }) => {
+      if (params[0] !== channelId)
+        throw new HttpError(403, { error: 'wrong_channel' });
+      streamWins(game, channelId, res!);
+      return STREAMED;
+    },
+  };
 }

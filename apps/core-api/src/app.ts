@@ -69,6 +69,8 @@ export function createCore(
     twitchApp?: { clientId: string; clientSecret: string } | null;
     /** Duel targets by login without Twitch (tests). */
     loginLookup?: LoginLookup | null;
+    /** Lot 9: alerts older than this are recorded, not animated (null / absent: off). */
+    alertsMaxAgeMs?: number | null;
   } = {},
 ): Core {
   const broadcasterOf = () => channel.broadcasterId ?? null;
@@ -98,7 +100,12 @@ export function createCore(
     ttsLab: new TtsLabService(db, clock, undefined, undefined, economy),
     raffleLab,
     studioInstallations: new StudioInstallations(db, clock),
-    alerts: new AlertsService(db, clock),
+    alerts: new AlertsService(
+      db,
+      clock,
+      undefined,
+      channel.alertsMaxAgeMs ?? null,
+    ),
     channelPoints: new ChannelPointsService(
       db,
       clock,

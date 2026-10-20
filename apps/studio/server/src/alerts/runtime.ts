@@ -104,6 +104,8 @@ export interface AlertsRuntimeDeps {
  * in TEST until chosen again (§ 22).
  */
 export const TWITCH_MODES = ['off', 'test', 'active'] as const;
+/** The production bot reports every minute: older than this, its reception is shown as « sans nouvelles ». */
+export const BOT_REPORT_STALE_MS = 3 * 60_000;
 export type TwitchMode = (typeof TWITCH_MODES)[number];
 
 export class AlertsRuntime {
@@ -269,7 +271,19 @@ export class AlertsRuntime {
       });
     }
     if (req.method === 'GET' && p === '/twitch')
-      return reply(200, this.twitchView());
+      return reply(
+        200,
+        this.d.environment === 'production'
+          ? await this.productionTwitchView()
+          : this.twitchView(),
+      );
+    // Lot 9: in Production the real events come from the production bot; its mode is its ALERTS_MODE (on the bot).
+    if (
+      req.method === 'POST' &&
+      p === '/twitch' &&
+      this.d.environment === 'production'
+    )
+      return reply(409, { error: 'set_on_production_bot' });
     if (req.method === 'POST' && p === '/twitch') {
       const mode = (await this.body(req)).mode as TwitchMode;
       if (!TWITCH_MODES.includes(mode))
@@ -305,6 +319,39 @@ export class AlertsRuntime {
       return reply(200, await this.d.core(`${this.base}/events`, event));
     }
     reply(404, { error: 'not_found' });
+  }
+
+  /**
+   * Lot 9 — Production profile: what the production bot last reported to the main Core (mode, subscriptions, outbox)
+   * and the last real Twitch event Core received. Read only: Studio never subscribes to EventSub itself.
+   */
+  private async productionTwitchView() {
+    const r = await this.d.core<{
+      bot: {
+        mode: TwitchMode;
+        subscriptions: string[];
+        refused: string[];
+        pending: number;
+        reported_at: string;
+        age_ms: number;
+      } | null;
+      last_twitch_event_at: string | null;
+      max_age_ms: number | null;
+    }>(`${this.base}/${this.d.channelId}/reception`);
+    return {
+      mode: r.bot?.mode ?? 'off',
+      environment: 'production' as const,
+      available: true,
+      managed_by: 'production_bot' as const,
+      bot: r.bot,
+      last_twitch_event_at: r.last_twitch_event_at,
+      max_age_ms: r.max_age_ms,
+      resumed_from_active: false,
+      ingestion_enabled: r.bot !== null,
+      ingestion_running: r.bot !== null && r.bot.age_ms < BOT_REPORT_STALE_MS,
+      token_login: null,
+      follow_scope: r.bot?.subscriptions.includes('channel.follow') ?? false,
+    };
   }
 
   private twitchView() {

@@ -130,3 +130,46 @@ describe('Dons StreamElements views', () => {
     ).toContain('se rechargera seule');
   });
 });
+
+describe('real Twitch alerts, Production profile (lot 9): the production bot reception, read only', () => {
+  const base = {
+    mode: 'active',
+    environment: 'production',
+    available: true,
+    managed_by: 'production_bot',
+    ingestion_enabled: true,
+    ingestion_running: true,
+    token_login: null,
+    follow_scope: false,
+    last_twitch_event_at: null,
+    max_age_ms: null,
+  };
+  const bot = {
+    mode: 'active',
+    subscriptions: ['channel.chat.notification'],
+    refused: ['<b>channel.follow</b>'],
+    pending: 2,
+    reported_at: '2026-10-20T20:00:00.000Z',
+    age_ms: 10_000,
+  };
+  it('active, inactive, unavailable and silent are explicit; names escaped; freshness said', () => {
+    const active = twitchStatusView({ ...base, bot }, null);
+    expect(active).toContain('Réception active');
+    expect(active).toContain('pas depuis Studio');
+    expect(active).toContain('&lt;b&gt;channel.follow&lt;/b&gt;');
+    expect(active).toContain('2 alerte(s) en attente');
+    expect(active).toContain('Fraîcheur des animations : désactivée');
+    expect(
+      twitchStatusView({ ...base, bot: { ...bot, mode: 'off' } }, null),
+    ).toContain('Réception inactive');
+    expect(twitchStatusView({ ...base, bot: null }, null)).toContain(
+      'Indisponible : aucun rapport du bot de production',
+    );
+    expect(
+      twitchStatusView({ ...base, bot: { ...bot, age_ms: 600_000 } }, null),
+    ).toContain('sans nouvelles depuis 10 min');
+    expect(
+      twitchStatusView({ ...base, bot, max_age_ms: 120_000 }, null),
+    ).toContain('Fraîcheur des animations : 120 s');
+  });
+});

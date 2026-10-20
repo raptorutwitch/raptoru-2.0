@@ -157,8 +157,18 @@ const bridge =
           : {}),
       })
     : null;
+// Lot 9: the alerts reception for Studio (mode, subscriptions, outbox), every minute and after each (re)connection.
+// Best effort: a Core without the route (older) or unreachable changes nothing here.
+const reportReception = () =>
+  bridge
+    ? coreCall('/v1/bot/alerts/status', bridge.receptionReport()).catch(
+        () => undefined,
+      )
+    : Promise.resolve(undefined);
 if (bridge) {
   consumers.add(() => bridge.close());
+  const reception = setInterval(() => void reportReception(), 60_000);
+  consumers.add(() => clearInterval(reception));
   void bridge.resumePending(); // alerts a previous run could not deliver to Core
   void bridge.run();
   console.log(
@@ -170,6 +180,7 @@ const botSocket = runEventSub({
   async subscribe(sessionId) {
     await runtime.eventSub.subscribe(sessionId);
     await bridge?.subscribe(sessionId);
+    void reportReception();
   },
   async notification(type, event, messageId, timestamp) {
     await runtime.eventSub.notification(type, event, messageId, timestamp);

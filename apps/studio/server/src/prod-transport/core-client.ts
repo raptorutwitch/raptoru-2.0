@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Agent, request } from 'node:https';
+import { Readable } from 'node:stream';
 import type { CoreCall } from '../bonk-lab/worker.js';
 import type { StudioInstallation } from './installation.js';
 
@@ -40,6 +41,11 @@ export class StudioTransportError extends Error {
   }
 }
 
+/** The JSON client, plus the server-sent events streams of the same Core (lot 9). */
+export type ProdCoreCall = CoreCall & {
+  events: (path: string, signal: AbortSignal) => Promise<Response>;
+};
+
 /** Certificate / TLS failures (Node `CERT_*`, `ERR_TLS_*`, `ERR_SSL_*`…): « tls_rejected », not « unreachable ». */
 const TLS_CODE = /CERT|SSL|TLS/;
 
@@ -53,7 +59,7 @@ export function prodCoreClient(options: {
   ca?: string | Buffer;
   timeoutMs?: number;
   protocolVersion?: number;
-}): CoreCall {
+}): ProdCoreCall {
   const base = new URL(options.url);
   if (
     base.protocol !== 'https:' ||
@@ -78,7 +84,58 @@ export function prodCoreClient(options: {
   const timeoutMs = options.timeoutMs ?? 5000;
   const version = String(options.protocolVersion ?? STUDIO_PROTOCOL_VERSION);
 
-  return <T>(
+  const headers = () => ({
+    authorization: options.installation.authorization(),
+    [PROTOCOL_HEADER]: version,
+  });
+
+  /**
+   * Lot 9: a server-sent events stream (Jeu des mots wins), same credential, Core and certificate checks. Only the
+   * connection is bounded by the deadline; the stream then stays open until Core ends it or `signal` aborts.
+   */
+  const events = (path: string, signal: AbortSignal) =>
+    new Promise<Response>((resolve, reject) => {
+      if (!path.startsWith('/v1/studio/'))
+        return reject(new Error('studio_route_required'));
+      const req = request(new URL(path, base), {
+        method: 'GET',
+        agent,
+        signal,
+        headers: { ...headers(), accept: 'text/event-stream' },
+      });
+      const deadline = setTimeout(() => {
+        req.destroy();
+        reject(new StudioTransportError('core_unreachable', 'core timeout'));
+      }, timeoutMs);
+      req.on('error', (e: NodeJS.ErrnoException) => {
+        clearTimeout(deadline);
+        reject(
+          new StudioTransportError(
+            TLS_CODE.test(e.code ?? '') ? 'tls_rejected' : 'core_unreachable',
+            `Core events unavailable (${e.code ?? e.name})`,
+          ),
+        );
+      });
+      req.on('response', (res) => {
+        clearTimeout(deadline);
+        const status = res.statusCode ?? 0;
+        if (status !== 200) {
+          res.resume();
+          req.destroy();
+          return reject(
+            new StudioTransportError(
+              status >= 300 && status < 400 ? 'redirect_refused' : 'core_error',
+              `Core events refused (${status})`,
+              status,
+            ),
+          );
+        }
+        resolve(new Response(Readable.toWeb(res) as ReadableStream));
+      });
+      req.end();
+    });
+
+  const call = <T>(
     path: string,
     body?: unknown,
     callOptions: { timeoutMs?: number } = {},
@@ -224,4 +281,5 @@ export function prodCoreClient(options: {
       req.end(payload);
     });
   };
+  return Object.assign(call, { events });
 }

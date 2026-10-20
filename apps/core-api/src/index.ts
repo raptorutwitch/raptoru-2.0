@@ -77,6 +77,9 @@ const core = createCore(
             clientSecret: config.TWITCH_APP_CLIENT_SECRET,
           }
         : null,
+    alertsMaxAgeMs: config.ALERTS_MAX_AGE_SECONDS
+      ? config.ALERTS_MAX_AGE_SECONDS * 1000
+      : null,
   },
 );
 

@@ -2,6 +2,7 @@ import {
   AlertAckRequest,
   AlertClaimRequest,
   AlertEventInput,
+  AlertReceptionReport,
 } from '@raptoru/schemas';
 import { AlertError, type AlertsService } from '../alerts/service.js';
 import { ALERT_VARIANTS } from '../alerts/variants.js';
@@ -34,6 +35,7 @@ export function alertsRoutes(
   subWheel?: SubWheelService,
 ): Route[] {
   const base = production ? '/v1/studio/alerts' : '/v1/lab/alerts';
+  let reception: (AlertReceptionReport & { reported_at: string }) | null = null;
   const auth = production
     ? ('studio_installation' as const)
     : ('studio' as const);
@@ -76,7 +78,11 @@ export function alertsRoutes(
         const received = await alerts.receive(event);
         // A redelivery (duplicate) asks again: the same spin (and a spin missed by a failed first reception is made).
         if (subWheel)
-          await subWheel.fromAlert(event, received.alert?.alert_id ?? null);
+          await subWheel.fromAlert(
+            event,
+            received.alert?.alert_id ?? null,
+            alerts.isStale(event),
+          );
         return received;
       },
     },
@@ -131,8 +137,44 @@ export function alertsRoutes(
                 await subWheel.fromAlert(
                   event,
                   received.alert?.alert_id ?? null,
+                  alerts.isStale(event),
                 );
               return received;
+            },
+          },
+          {
+            // Lot 9: the bot's reception (mode, subscriptions, outbox), kept in memory: Studio shows it.
+            method: 'POST' as const,
+            pattern: /^\/v1\/bot\/alerts\/status$/,
+            auth: 'bot' as const,
+            handle: async ({ body }: { body: unknown }) => {
+              const report = parse(AlertReceptionReport, body);
+              channel(report.channel_id);
+              reception = {
+                ...report,
+                reported_at: alerts.now().toISOString(),
+              };
+              return { ok: true };
+            },
+          },
+          {
+            method: 'GET' as const,
+            pattern: at('/(\\d{1,32})/reception'),
+            auth,
+            handle: async ({ params }: { params: string[] }) => {
+              const id = channel(params[0]!);
+              return {
+                channel_id: id,
+                /** Null: no report since this Core started (bot stopped, alerts and games OFF, or an older bot). */
+                bot: reception && {
+                  ...reception,
+                  // Core's clock (Studio's may differ): reports come every minute while the bot runs.
+                  age_ms:
+                    alerts.now().getTime() - Date.parse(reception.reported_at),
+                },
+                last_twitch_event_at: await alerts.lastReceived(id, 'twitch'),
+                max_age_ms: alerts.maxAgeMs,
+              };
             },
           },
         ]

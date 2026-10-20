@@ -4,11 +4,15 @@ import type { IncomingMessage } from 'node:http';
 import { basename } from 'node:path';
 import { BonkRuntime } from '../bonk-lab/runtime.js';
 import type { CoreCall } from '../bonk-lab/worker.js';
-import type { LabCoreCall } from '../lab-moderation/proxy.js';
+import type { LabCoreCall, LabCoreEvents } from '../lab-moderation/proxy.js';
 import { buildInfo } from '../build-info.js';
 import { SoundRuntime } from '../sound-lab/runtime.js';
 import { TtsRuntime } from '../tts-lab/runtime.js';
-import { prodCoreClient, StudioTransportError } from './core-client.js';
+import {
+  type ProdCoreCall,
+  prodCoreClient,
+  StudioTransportError,
+} from './core-client.js';
 import { loadInstallation } from './installation.js';
 import {
   productionConfig,
@@ -100,6 +104,8 @@ export interface ProductionRuntimes {
   cockpit: LabCoreCall;
   /** Twitch alerts V1 (§ 22): the installation client for /v1/studio/alerts (same alerts runtime as the Lab). */
   alertsCore: LabCoreCall;
+  /** Lot 9: the Jeu des mots wins stream of the cockpit (the same Studio runtime and OBS sound source as the Lab). */
+  cockpitEvents: LabCoreEvents;
 }
 
 /** `/v1/lab/<rest>` of the Studio cockpit → `/v1/studio/cockpit/<rest>` on the Production Core. */
@@ -117,6 +123,17 @@ export function cockpitClient(core: CoreCall): LabCoreCall {
       options,
     );
   };
+}
+
+/** `/v1/lab/word-game/<channel>/events` → the same stream under /v1/studio/cockpit on the Production Core. */
+export function cockpitEvents(core: ProdCoreCall): LabCoreEvents {
+  return (path, signal) =>
+    /^\/v1\/lab\/word-game\/\d{1,32}\/events$/.test(path)
+      ? core.events(
+          `/v1/studio/cockpit/${path.slice('/v1/lab/'.length)}`,
+          signal,
+        )
+      : Promise.reject(new Error('lab_route_required'));
 }
 
 /** Production runtimes (never the Lab Core, never the Lab journals or the Lab environment). */
@@ -148,6 +165,7 @@ export async function createProductionRuntimes(
     tts: await TtsRuntime.create(origin, wiring('tts')),
     cockpit: cockpitClient(core),
     alertsCore: core,
+    cockpitEvents: cockpitEvents(core),
   };
 }
 

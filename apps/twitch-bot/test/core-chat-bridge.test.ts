@@ -93,6 +93,23 @@ const chat = (id: string, text: string) => ({
 });
 
 describe('production bot → main Core (chat games, real alerts)', () => {
+  it('lot 9: the reception report names the mode, the subscriptions made / refused and the outbox', async () => {
+    const t = setup({ alerts: 'active', scopes: ['user:read:chat'] });
+    expect(t.bridge.receptionReport()).toEqual({
+      channel_id: BROADCASTER,
+      mode: 'active',
+      subscriptions: [],
+      refused: [],
+      pending: 0,
+    });
+    await t.bridge.subscribe('s1');
+    expect(t.bridge.receptionReport()).toMatchObject({
+      subscriptions: ['channel.chat.notification'],
+      refused: [],
+    });
+    t.bridge.close();
+  });
+
   it('the Lab paths become the bot doors', () => {
     expect(botPath('/v1/lab/chat')).toBe('/v1/bot/chat');
     expect(botPath('/v1/lab/commands/1/steps/claim')).toBe(

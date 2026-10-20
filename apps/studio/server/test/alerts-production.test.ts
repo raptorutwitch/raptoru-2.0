@@ -165,10 +165,11 @@ describe('alerts in the Production profile', () => {
       failure: { message?: string } | null;
     }[];
     expect(recent.map((r) => r.status)).toEqual(['failed', 'failed']);
-    // Twitch real events are not available in this profile (production bot not wired yet).
+    // Real Twitch events come from the production bot (lot 9): its reception, read only (no report here).
     expect(await api('/api/alerts/twitch')).toMatchObject({
       environment: 'production',
-      available: false,
+      managed_by: 'production_bot',
+      bot: null,
     });
     expect(await api('/api/alerts/se')).toMatchObject({
       environment: 'production',

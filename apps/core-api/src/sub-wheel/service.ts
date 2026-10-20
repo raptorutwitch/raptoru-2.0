@@ -259,7 +259,12 @@ export class SubWheelService {
    * never spin (historical rule). Idempotent: a redelivered event is the same spin (also repairs a spin missed when
    * the first reception failed after the alert was committed).
    */
-  async fromAlert(e: AlertEventInput, alertId: string | null) {
+  async fromAlert(
+    e: AlertEventInput,
+    alertId: string | null,
+    /** Lot 9: the alert is too old to animate (freshness filter): the gain stays, the wheel is not shown. */
+    stale = false,
+  ) {
     if (e.source !== 'twitch' || (e.type !== 'sub' && e.type !== 'resub'))
       return null;
     if (!e.actor) return null;
@@ -267,8 +272,8 @@ export class SubWheelService {
     const type = e.type;
     const actor = e.actor;
     return spinView(
-      await this.db.tx((q) =>
-        this.admit(q, {
+      await this.db.tx(async (q) => {
+        const row = await this.admit(q, {
           channel_id: e.channel_id,
           source: 'twitch',
           event_key: `alert:${e.source}:${e.source_event_id}`,
@@ -284,8 +289,16 @@ export class SubWheelService {
           months: type === 'sub' ? 1 : Math.max(1, e.months ?? 1),
           enabled,
           occurred_at: e.occurred_at,
-        }),
-      ),
+        });
+        if (!stale || row.status !== 'queued') return row;
+        return (
+          await q.query<Row>(
+            `update sw_spins set status = 'skipped', reason = 'too_late', updated_at = $2
+             where spin_id = $1 returning *`,
+            [row.spin_id, this.now()],
+          )
+        )[0]!;
+      }),
     );
   }
 

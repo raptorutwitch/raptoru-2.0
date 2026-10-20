@@ -779,27 +779,27 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         ),
       })
     : null;
-  // Jeu des mots V1 (Lab profile only: the production cockpit has no Jeu des mots routes).
-  const wordGame =
-    labCore && labProfile
-      ? await WordGameRuntime.create({
-          channelId: cockpitChannel,
-          core: labCore,
-          events: localLabCoreEvents(
-            labCoreUrl!,
-            process.env.BONK_LAB_SECRET ?? '',
-          ),
-          origin: `http://${host}:${port}`,
-          dir: join(paths.runtimeDir, 'word-game'),
-          playerDir: join(
-            REPO_ROOT,
-            'apps',
-            'studio',
-            'server',
-            'word-game-player',
-          ),
-        })
-      : null;
+  // Jeu des mots V1, both profiles (lot 9): the Lab Core, or the main Core through the cockpit (state, actions and
+  // its wins stream). Same OBS sound source and token in both profiles (the OBS URL does not change at the cutover).
+  const wordGame = labCore
+    ? await WordGameRuntime.create({
+        channelId: cockpitChannel,
+        core: labCore,
+        environment: production ? 'production' : 'lab',
+        events: production
+          ? production.cockpitEvents
+          : localLabCoreEvents(labCoreUrl!, process.env.BONK_LAB_SECRET ?? ''),
+        origin: `http://${host}:${port}`,
+        dir: join(paths.runtimeDir, 'word-game'),
+        playerDir: join(
+          REPO_ROOT,
+          'apps',
+          'studio',
+          'server',
+          'word-game-player',
+        ),
+      })
+    : null;
   // Twitch alerts V1 (§ 22): ONE runtime, on the Core of the profile — the Lab Core, or the paired production Core
   // (/v1/studio/alerts). Media, calibration and the OBS source token are shared by both profiles (runtimeDir/alerts:
   // the OBS URL does not change at the cutover); the StreamElements mode and journal are per profile.
@@ -834,7 +834,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           dir: join(paths.runtimeDir, 'alerts'),
           se: se ?? undefined,
           // Real Twitch events ride on the Lab chat adapter (created below): its state, and a restart on a new mode.
-          // Production profile: the production bot is not wired to the alerts yet (§ 22), nothing here.
+          // Production profile (lot 9): the production bot's reception, reported to the main Core (read only).
           twitch:
             alertsEnv === 'production'
               ? undefined

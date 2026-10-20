@@ -808,3 +808,12 @@ aucune alerte en double, source OBS stable).
 `alerts-prod-migration`, `migration-scopes`), Studio server (`alerts-*`, `alerts-production`, `alerts-twitch-chain`,
 `alerts-se*` ; `--maxWorkers=4` sur ce PC), Bot (`alert-events`, `lab-alerts-ingest`), Desktop (`se-credentials`),
 Playwright `e2e/alerts.e2e.ts`.
+
+## 23. Bot de production raccordé ; réception et fraîcheur dans Studio (lots 8–9, 20/10/2026, local, non déployé)
+
+Le blocage « Twitch : non raccordé » du § 22 est levé côté code : le bot de production transmet les vraies alertes au
+Core principal (`POST /v1/bot/alerts/events`, outbox durable, drapeau `ALERTS_MODE` OFF par défaut, lot 8) et rapporte sa
+réception (`POST /v1/bot/alerts/status`, lot 9). En profil Production, « Événements Twitch réels » affiche ce rapport en
+lecture seule (actif / test / inactif / indisponible / sans nouvelles) ; Studio ne crée aucun abonnement. Fraîcheur des
+animations : `ALERTS_MAX_AGE_SECONDS` sur le Core, désactivée par défaut. Détails et preuves : `docs/ECONOMY_MIGRATION.md`
+§§ 16–17. À ajouter aux vérifications du cutover : `lot9-main-core` (Studio), `economy-lot9.integration` (Core, PG).

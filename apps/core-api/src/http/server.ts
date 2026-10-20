@@ -73,6 +73,7 @@ import type { ChatGames } from '../lab-chat/games.js';
 import type { LabChatRouter } from '../lab-chat/router.js';
 import type { LabCall } from '../ext/lab-internal.js';
 import { studioCockpitRoutes } from './studio-cockpit-routes.js';
+import { wordGameCockpitEvents } from './word-game-routes.js';
 import { studioAdminRoutes } from './studio-admin-routes.js';
 
 export interface AppDeps {
@@ -156,8 +157,13 @@ export interface Route {
     idempotencyKey?: string;
     body: unknown;
     url: URL;
+    /** The raw response, for a route that streams (it then returns STREAMED). */
+    res?: ServerResponse;
   }) => Promise<unknown>;
 }
+
+/** Returned by a route that answered on `res` itself (server-sent events). */
+export const STREAMED = Symbol('streamed');
 
 export class HttpError extends Error {
   constructor(
@@ -238,6 +244,10 @@ function routes({
       ? randomBanRoutes(randomBan, { channelId: cockpit.channelId })
       : []),
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
+    // Lot 9: the Jeu des mots wins for Studio's local OBS sound (before the cockpit's catch-all GET).
+    ...(studioInstallations && cockpit && chatIngress
+      ? [wordGameCockpitEvents(chatIngress.games.wordGame, cockpit.channelId)]
+      : []),
     ...(studioInstallations && cockpit
       ? studioCockpitRoutes(cockpit.core, cockpit.channelId)
       : []),
@@ -580,19 +590,16 @@ export function createHandler(deps: AppDeps): RequestListener {
       }
       const params = route.pattern.exec(url.pathname)!.slice(1);
       const body = req.method === 'POST' ? await readJson(req) : undefined;
-      send(
+      const out = await route.handle({
+        params,
+        body,
+        url,
+        installation,
+        caller,
+        idempotencyKey,
         res,
-        200,
-        await route.handle({
-          params,
-          body,
-          url,
-          installation,
-          caller,
-          idempotencyKey,
-        }),
-        cors,
-      );
+      });
+      if (out !== STREAMED) send(res, 200, out, cors);
     } catch (error) {
       if (error instanceof WalletInputError) {
         send(

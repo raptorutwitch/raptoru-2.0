@@ -9,6 +9,8 @@ import type { LabCoreCall, LabCoreEvents } from '../lab-moderation/proxy.js';
 // a page with no visual that plays ShuffleWordsSong.ogg once per winning message. Wins are PUSHED, never
 // polled: Core's committed wins stream (server-sent events) is relayed to the connected OBS sources
 // (token-protected) while at least one is connected. Live only: nothing is buffered or replayed.
+// Lot 9: the same runtime in the Production profile, on the main Core (cockpit routes and its wins stream over the
+// installation credential); OBS stays local to Studio, the hosted Core never reaches it.
 
 /** Delays between reconnections to Core's stream while an OBS source listens (the last one repeats). */
 export const EVENTS_RETRY_MS = [1000, 2000, 5000, 10_000];
@@ -32,6 +34,8 @@ export interface WordGameRuntimeDeps {
   dir: string;
   /** The OBS source files (apps/studio/server/word-game-player). */
   playerDir: string;
+  /** Which Core runs the game (lot 9): the Lab Core, or the main Core through the production cockpit. */
+  environment?: 'lab' | 'production';
 }
 
 export class WordGameRuntime {
@@ -122,6 +126,7 @@ export class WordGameRuntime {
       return reply(200, {
         ...(await this.d.core<Record<string, unknown>>(`${base}/state`)),
         player_url: this.playerUrl,
+        environment: this.d.environment ?? 'lab',
       });
     if (req.method === 'POST' && p === '/actions') {
       let raw = '';

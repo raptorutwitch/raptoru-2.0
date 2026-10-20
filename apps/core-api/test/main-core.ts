@@ -32,6 +32,8 @@ export async function bootMainCore(
     servers: Server[];
     /** Duel targets by login without Twitch. */
     loginLookup?: LoginLookup;
+    /** Lot 9: alerts freshness (ALERTS_MAX_AGE_SECONDS × 1000). */
+    alertsMaxAgeMs?: number;
   },
 ) {
   const CH = MAIN_CORE_CHANNEL;
@@ -48,7 +50,11 @@ export async function bootMainCore(
     { preview: false, passiveCredits: true, eventCredits: true },
     null,
     economy,
-    { broadcasterId: CH, loginLookup: o.loginLookup ?? null },
+    {
+      broadcasterId: CH,
+      loginLookup: o.loginLookup ?? null,
+      alertsMaxAgeMs: o.alertsMaxAgeMs ?? null,
+    },
   );
   const frontier = createPublicFrontier(core, db, clock, {
     TWITCH_CHANNEL_ID: CH,
@@ -128,12 +134,13 @@ export async function bootMainCore(
     `${id}.${sha256(secret)}`,
     'PC répétition',
   );
+  const studioHeaders = {
+    authorization: `Bearer rsi_${id}.${secret}`,
+    [STUDIO_PROTOCOL_HEADER]: '1',
+  };
   const studio = (path: string, body?: unknown) =>
-    send(path, body, {
-      authorization: `Bearer rsi_${id}.${secret}`,
-      [STUDIO_PROTOCOL_HEADER]: '1',
-    });
-  return { core, bot, ext, studio, frontier };
+    send(path, body, studioHeaders);
+  return { core, bot, ext, studio, frontier, base, studioHeaders };
 }
 
 /** Studio's players ready (Bonk overlay, Soundboard, TTS). */

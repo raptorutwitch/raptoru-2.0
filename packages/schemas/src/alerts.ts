@@ -104,6 +104,21 @@ export type AlertStatus =
 export type AlertEventOutcome =
   'queued' | 'duplicate' | 'absorbed' | 'below_threshold';
 
+/**
+ * Lot 9: the production bot's alerts reception, reported to the main Core (at each EventSub (re)connection and every
+ * minute) so Studio can show it. Its mode is the bot's ALERTS_MODE (set on the bot, never from Studio).
+ */
+export const AlertReceptionReport = z.strictObject({
+  channel_id: z.string().regex(/^\d{1,32}$/),
+  mode: z.enum(['off', 'test', 'active']),
+  /** EventSub alert subscriptions created on the bot's last connection / refused by Twitch. */
+  subscriptions: z.array(z.string().max(64)).max(10),
+  refused: z.array(z.string().max(64)).max(10),
+  /** Alerts kept in the bot's outbox, not yet acknowledged by Core. */
+  pending: z.number().int().min(0).max(1_000_000),
+});
+export type AlertReceptionReport = z.infer<typeof AlertReceptionReport>;
+
 export const AlertClaimRequest = z.strictObject({
   consumer_id: z.string().min(1).max(64),
 });

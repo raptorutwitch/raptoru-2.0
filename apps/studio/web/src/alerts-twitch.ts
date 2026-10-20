@@ -15,6 +15,66 @@ export interface TwitchState {
   /** Real Twitch events can reach this profile (Lab chat adapter; the production bot is not wired yet). */
   available?: boolean;
   resumed_from_active?: boolean;
+  /** Lot 9 — Production profile: the production bot's mode (ALERTS_MODE, set on the bot), read only. */
+  managed_by?: 'production_bot';
+  bot?: {
+    mode: 'off' | 'test' | 'active';
+    subscriptions: string[];
+    refused: string[];
+    pending: number;
+    reported_at: string;
+    age_ms: number;
+  } | null;
+  last_twitch_event_at?: string | null;
+  max_age_ms?: number | null;
+}
+
+const clock = (iso: string) =>
+  new Date(iso).toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+/** Production profile: the bot's last report to the main Core (pure, tested). */
+export function productionStatusView(s: TwitchState) {
+  const b = s.bot;
+  const fresh =
+    s.max_age_ms == null
+      ? '<p class="al-hint">Fraîcheur des animations : désactivée (toutes les alertes sont jouées, même en retard).</p>'
+      : `<p class="al-hint">Fraîcheur des animations : ${Math.round(s.max_age_ms / 1000)} s (plus ancienne : gardée dans l’historique, non jouée ; les gains restent versés).</p>`;
+  const last = s.last_twitch_event_at
+    ? `<p class="al-hint">Dernier événement Twitch réel reçu par le Core : ${esc(clock(s.last_twitch_event_at))}.</p>`
+    : '<p class="al-hint">Aucun événement Twitch réel reçu par le Core.</p>';
+  if (!b)
+    return `<p class="al-error">Indisponible : aucun rapport du bot de production depuis le démarrage du Core (bot arrêté, alertes et jeux du chat OFF, ou bot non mis à jour).</p>${last}${fresh}`;
+  const stale = b.age_ms > 3 * 60_000;
+  const state = stale
+    ? `<p class="al-error">Bot de production sans nouvelles depuis ${Math.round(b.age_ms / 60_000)} min (dernier rapport ${esc(clock(b.reported_at))}).</p>`
+    : b.mode === 'active'
+      ? '<p class="al-ok">Réception active : les vrais événements sont mis en file et joués par la source OBS de ce Studio.</p>'
+      : b.mode === 'test'
+        ? '<p class="al-hint">Réception en TEST : événements reçus et journalisés par le bot, jamais mis en file.</p>'
+        : '<p class="al-hint">Réception inactive (OFF sur le bot de production) : aucun événement Twitch réel n’arrive.</p>';
+  return [
+    state,
+    '<p class="al-hint">Mode réglé sur le bot de production (ALERTS_MODE), pas depuis Studio.</p>',
+    b.subscriptions.length
+      ? `<p class="al-hint">Abonnements : ${esc(b.subscriptions.join(', '))}.</p>`
+      : '',
+    b.refused.length
+      ? `<p class="al-error">Refusés par Twitch : ${esc(b.refused.join(', '))}.</p>`
+      : '',
+    b.subscriptions.includes('channel.follow')
+      ? '<p class="al-hint">Follows : reçus.</p>'
+      : '<p class="al-hint">Follows : non reçus (droit moderator:read:followers absent ou refusé).</p>',
+    b.pending
+      ? `<p class="al-error">${b.pending} alerte(s) en attente dans le bot (Core injoignable ?) : renvoyées automatiquement, jamais en double.</p>`
+      : '',
+    last,
+    fresh,
+  ].join('');
 }
 
 /** The ACTIVE button names the Core it really feeds. */
@@ -52,6 +112,7 @@ const esc = (s: string) =>
 export function twitchStatusView(s: TwitchState | null, error: string | null) {
   if (error) return `<p class="al-error">${esc(error)}</p>`;
   if (!s) return '<p class="al-hint">Chargement…</p>';
+  if (s.managed_by === 'production_bot') return productionStatusView(s);
   if (s.available === false)
     return '<p class="al-error">Indisponible dans ce profil : le bot Twitch de production n’est pas encore raccordé aux alertes (aucun événement Twitch réel n’arrive ici).</p>';
   const lines = [
@@ -86,7 +147,10 @@ export function mountTwitchMode(host: HTMLElement) {
       b.classList.toggle('primary', on);
       if (b.dataset.mode === 'active')
         b.textContent = activeLabel(state?.environment);
-      b.disabled = state?.available === false && b.dataset.mode !== 'off';
+      // Production profile: the bot's mode is shown, never changed from here.
+      b.disabled =
+        state?.managed_by === 'production_bot' ||
+        (state?.available === false && b.dataset.mode !== 'off');
       b.setAttribute('aria-pressed', String(on));
     }
     host.querySelector('[data-role="twitch-hint"]')!.textContent =

@@ -31,6 +31,9 @@ const Env = z
       .optional(),
     // Shown to the extension; payment stays simulated whatever this says (Lab test wallet).
     CORE_ENVIRONMENT: z.enum(['staging']).default('staging'),
+    // Lot 9: freshness of the alerts' animation (seconds since the Twitch event). Absent = off (no value chosen yet):
+    // every alert is animated whatever its delay. Never touches a gain (Roue du Sub, Loyalty).
+    ALERTS_MAX_AGE_SECONDS: z.coerce.number().int().positive().optional(),
     // Twitch app (client credentials, read-only Get Users): viewer names and Tombola avatars. Optional.
     TWITCH_APP_CLIENT_ID: z.string().min(1).optional(),
     TWITCH_APP_CLIENT_SECRET: z.string().min(1).optional(),

@@ -432,3 +432,50 @@ describe('isolation', () => {
     ).toMatchObject({ outcome: 'queued' });
   });
 });
+
+describe('freshness of the animation (lot 9, OFF by default)', () => {
+  const old = (minutes: number) =>
+    new Date(clock.now().getTime() - minutes * 60_000).toISOString();
+
+  it('OFF (default): an event received 10 min late is queued as before', async () => {
+    const r = await alerts.receive(ev({ occurred_at: old(10) }));
+    expect(r).toMatchObject({ outcome: 'queued', alert: { status: 'queued' } });
+    expect((await alerts.state(CH)).max_age_ms).toBeNull();
+  });
+
+  it('ON: a late event is recorded, never animated; a fresh one is queued; a waiting one goes stale', async () => {
+    const fresh = new AlertsService(db, clock, () => 0, 120_000);
+    const late = await fresh.receive(
+      ev({ source_event_id: 'late', occurred_at: old(10) }),
+    );
+    expect(late.alert).toMatchObject({
+      status: 'expired',
+      failure: { code: 'stale' },
+    });
+    // Redelivered: still one event, still not animated.
+    expect(
+      (
+        await fresh.receive(
+          ev({ source_event_id: 'late', occurred_at: old(10) }),
+        )
+      ).outcome,
+    ).toBe('duplicate');
+    // No Twitch time (simulation without occurred_at): never stale.
+    await fresh.receive(ev({ source_event_id: 'sim' }));
+    const ok = await fresh.receive(
+      ev({ source_event_id: 'ok', occurred_at: old(1) }),
+    );
+    expect(ok.alert!.status).toBe('queued');
+    expect(await fresh.claim(CH, 'obs')).not.toBeNull();
+    // 3 min later (Studio gone): the claimed-never-started one and the waiting one are too old to start now.
+    clock.advance(3 * 60_000);
+    const state = await fresh.state(CH);
+    expect(state.queued).toHaveLength(0);
+    expect(
+      state.recent.filter(
+        (r) => (r.failure as { code?: string } | null)?.code === 'stale',
+      ),
+    ).toHaveLength(3);
+    expect(await count('alert_events')).toBe(3);
+  });
+});

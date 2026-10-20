@@ -102,6 +102,9 @@ export function createCoreChatBridge(d: CoreChatBridgeDeps) {
         })
       : null;
   const alertsOn = d.alertsMode !== 'off';
+  // Lot 9: the alert subscriptions of the last (re)connection, for the reception report Studio shows.
+  let subscribed: string[] = [];
+  let refused: string[] = [];
 
   return {
     /** Added to the runtime's subscriptions on every (re)connection. */
@@ -113,11 +116,15 @@ export function createCoreChatBridge(d: CoreChatBridgeDeps) {
           sessionId,
         );
       // An alert source refused (missing scope, not moderator) never takes the chat down with it.
+      subscribed = [];
+      refused = [];
       for (const s of alerts.subscriptions())
         try {
           await d.subscribe(s.type, s.condition, sessionId, s.version);
+          subscribed.push(s.type);
           log(`[alerts] abonnement ${s.type} créé`);
         } catch (error) {
+          refused.push(s.type);
           log(`[alerts] abonnement ${s.type} refusé`, (error as Error).message);
         }
       if (ingest)
@@ -154,6 +161,14 @@ export function createCoreChatBridge(d: CoreChatBridgeDeps) {
     reconcileStream: () => ingest?.reconcileStream() ?? Promise.resolve(false),
     run: () => output?.run(),
     alertsPending: () => alerts.pending(),
+    /** Lot 9: the alerts reception, reported to the main Core (POST /v1/bot/alerts/status) for Studio. */
+    receptionReport: () => ({
+      channel_id: d.channelId,
+      mode: d.alertsMode,
+      subscriptions: subscribed,
+      refused,
+      pending: alerts.pending(),
+    }),
     close() {
       output?.stop();
       if (ingest) ingest.close();

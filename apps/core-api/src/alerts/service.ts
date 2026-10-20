@@ -25,6 +25,9 @@ import type { AlertVariant } from './variants.js';
 // - one alert in flight per channel AND family (unique index, 17/10/2026): follow, subscription (sub + gifts), bits,
 //   raid and donation play side by side; inside a family strictly first in, first out (arrival order; the legacy
 //   priority is kept on the row for information but no longer lets a later alert overtake an earlier one).
+// - freshness (lot 9, OFF unless maxAgeMs is set — no value chosen yet): an event whose Twitch time is older than
+//   maxAgeMs at reception, or an alert still waiting maxAgeMs after it, is recorded « expired » (failure « stale »),
+//   never animated. Only the animation is dropped: the Roue du Sub gain and Loyalty never depend on it.
 // Alerts never touch the wallet, the loyalty engine or any other economy.
 
 export const ALERT_RULES = {
@@ -34,6 +37,11 @@ export const ALERT_RULES = {
   defaultPlayMs: 10_000,
   maxAttempts: 3,
 } as const;
+
+const STALE_FAILURE = JSON.stringify({
+  code: 'stale',
+  message: 'older than the freshness limit: recorded, not animated',
+});
 
 export class AlertError extends Error {
   constructor(
@@ -106,7 +114,33 @@ export class AlertsService {
     private readonly db: Db,
     private readonly clock: Clock,
     private readonly rng: Rng = Math.random,
+    /** Freshness of the animation (null: off). */
+    readonly maxAgeMs: number | null = null,
   ) {}
+
+  now() {
+    return this.clock.now();
+  }
+
+  /** Too old to animate (Twitch time, when the source gives it). */
+  isStale(e: Pick<AlertEventInput, 'occurred_at'>) {
+    return (
+      this.maxAgeMs !== null &&
+      !!e.occurred_at &&
+      this.clock.now().getTime() - Date.parse(e.occurred_at) > this.maxAgeMs
+    );
+  }
+
+  /** Last event received from a source (Studio: « dernier événement Twitch réel »). */
+  async lastReceived(channelId: string, source: AlertEventInput['source']) {
+    const r = (
+      await this.db.query<{ at: Date | null }>(
+        'select max(received_at) as at from alert_events where channel_id = $1 and source = $2',
+        [channelId, source],
+      )
+    )[0];
+    return r?.at ? new Date(r.at).toISOString() : null;
+  }
 
   /** One normalized event: deduplicated, decided (variant drawn once), queued when it makes an alert. */
   async receive(e: AlertEventInput): Promise<{
@@ -145,10 +179,12 @@ export class AlertsService {
       }
       if (decision.outcome !== 'queued') return { outcome, alert: null };
       const alertId = randomUUID();
+      // Too old (outbox resumed after a long outage): kept in the history, never animated.
+      const stale = this.isStale(e);
       await q.query(
         `insert into alert_items (alert_id, channel_id, type, family, variant_id, variant, data, priority, status,
-           created_at)
-         values ($1, $2, $3, $9, $4, $5, $6, $7, 'queued', $8)`,
+           created_at, ended_at, failure)
+         values ($1, $2, $3, $9, $4, $5, $6, $7, $10, $8, $11, $12)`,
         [
           alertId,
           e.channel_id,
@@ -159,6 +195,9 @@ export class AlertsService {
           decision.variant.priority,
           now,
           alertFamilyOf(e.type),
+          stale ? 'expired' : 'queued',
+          stale ? now : null,
+          stale ? STALE_FAILURE : null,
         ],
       );
       await q.query(
@@ -184,6 +223,7 @@ export class AlertsService {
     );
     return {
       channel_id: channelId,
+      max_age_ms: this.maxAgeMs,
       in_flight: rows.filter((r) => r.status !== 'queued').map(alertView),
       queued: rows.filter((r) => r.status === 'queued').map(alertView),
       recent: recent.map(alertView),
@@ -320,6 +360,18 @@ export class AlertsService {
        where channel_id = $1 and status = 'claimed' and lease_expires_at < $2`,
       [channelId, now],
     );
+    // Freshness (lot 9): waiting too long — never started, so nothing was seen — is no longer animated.
+    if (this.maxAgeMs !== null)
+      await q.query(
+        `update alert_items set status = 'expired', ended_at = $2, failure = $4
+         where channel_id = $1 and status = 'queued' and created_at < $3`,
+        [
+          channelId,
+          now,
+          new Date(now.getTime() - this.maxAgeMs),
+          STALE_FAILURE,
+        ],
+      );
   }
 
   private async byId(q: Queryable, id: string) {

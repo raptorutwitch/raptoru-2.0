@@ -619,4 +619,55 @@ routes du bot à 200, message simulé refusé, `/v1/lab/chat` absent.
 
 **Restent** : Studio, profil production — le son OBS des gains du Jeu des mots arrive par un flux d'événements que le
 cockpit ne relaie pas (écran Jeu des mots encore Lab seulement ; Commandes V2 et l'interrupteur mini-jeux passent par le
-cockpit) ; l'état « événements Twitch réels » des alertes n'est pas affiché pour le bot de production ; release Studio.
+cockpit) ; l'état « événements Twitch réels » des alertes n'est pas affiché pour le bot de production ; release Studio. Les deux premiers points sont résolus au lot 9 (§ 17).
+
+## 17. Studio pilote le Core principal : Jeu des mots et alertes réelles (phase 2 lot 9, 20/10/2026)
+
+**Jeu des mots dans les deux profils de Studio, mêmes écran et runtime** (`studio/server/src/word-game/runtime.ts`). Profil
+Lab : le Lab Core (portefeuille de test), inchangé. Profil Production : le Core principal par le cockpit (état, Arrêter /
+Reprendre, Nouveau mot ; routes du lot 8) et, nouveau, son flux des gains :
+
+| Porte (Core principal)                             | Auth                | Rôle                                                             |
+| -------------------------------------------------- | ------------------- | ---------------------------------------------------------------- |
+| `GET /v1/studio/cockpit/word-game/<chaîne>/events` | installation Studio | gains validés (server-sent events), chaîne du Core seulement     |
+| `POST /v1/bot/alerts/status`                       | secret du bot       | rapport de réception du bot (mode, abonnements, outbox)          |
+| `GET /v1/studio/alerts/<chaîne>/reception`         | installation Studio | dernier rapport du bot, dernier événement Twitch réel, fraîcheur |
+
+Chaîne complète : gain validé par le Core principal (une seule fois : jamais pour un message rejoué) → flux du cockpit →
+Studio (client HTTPS de l'installation, `prodCoreClient(...).events`) → source navigateur OBS locale de Studio (même URL et
+jeton dans les deux profils). Le Core hébergé ne contacte jamais OBS. Flux « en direct » comme au Lab : une coupure ne
+rejoue rien (pas de double son ; un gain pendant la coupure est payé, son son est perdu) ; Studio se reconnecte seul
+(1, 2, 5, 10 s) ; la source OBS ignore un identifiant déjà joué. Le Core envoie un commentaire toutes les 25 s (proxy).
+Écran : pastille « Core principal » ou « Core Lab · portefeuille de test ». Les seuls réglages existants sont
+Arrêter / Reprendre et Nouveau mot (gains et règles inchangés). Limite connue : un seul processus Core principal (le flux
+des gains est en mémoire du processus qui valide).
+
+**Alertes réelles en profil Production** : même onglet, même file (`/v1/studio/alerts`, § 22 des alertes). « Événements
+Twitch réels » devient la réception du bot de production, en lecture seule : son mode `ALERTS_MODE` (réglé sur le bot,
+jamais depuis Studio : `POST /api/alerts/twitch` → 409), abonnements créés / refusés, alertes en attente dans son outbox,
+dernier rapport (« sans nouvelles » après 3 min), dernier événement Twitch réel reçu par le Core. Aucun rapport :
+« Indisponible ». Le bot envoie ce rapport à chaque (re)connexion EventSub et chaque minute (au mieux ; un Core ancien
+l'ignore). Studio ne crée aucun abonnement EventSub. Aperçu, test simulé, variantes et placement : inchangés (un test
+simulé ne fait jamais tourner la Roue ni payer quoi que ce soit).
+
+**Alertes anciennes : animation séparée de l'économie.** Politiques existantes : Points de chaîne 2 min (au-delà :
+crédits seulement, pas d'effet), Random Ban 2 min, Roue du Sub 10 min en file (animation sautée, gain gardé), alertes :
+aucune. Ajout : `ALERTS_MAX_AGE_SECONDS` (Core), **absent = désactivé** (aucune valeur choisie). Activé : une alerte dont
+l'heure Twitch dépasse la limite à la réception, ou qui attend plus que la limite dans la file, est enregistrée
+`expired` (cause `stale`) dans l'historique, jamais animée ; sa Roue du Sub est `skipped / too_late`, son gain versé une
+fois ; Loyalty (événement EventSub séparé) n'en dépend pas. Une alerte sans heure Twitch (simulation) n'est jamais
+périmée. Aucune migration (statut `expired` existant).
+
+**Prouvé** : `economy-lot9.integration.test.ts` (PostgreSQL réel, deux Core, runtime Jeu des mots de Studio) — Arrêter /
+Reprendre / Nouveau mot ; bonne réponse livrée 3 fois en même temps : un gain, un son ; rejouée sur les deux Core :
+rien ; coupure du flux : gain pendant la coupure payé sans son, reconnexion seule, son suivant une fois ; sub resté
+10 min dans l'outbox livré deux fois sur deux Core avec son Loyalty : alerte `stale`, Roue sautée, un gain Roue, un gain
+Loyalty, jamais remis à OBS ; sub récent animé ; portes refusées (sans credential, autre chaîne, secret du bot, chat Lab) ;
+ledger = soldes, portefeuille Lab intact. `lot9-main-core.test.ts` (Studio, transport HTTPS réel) — profil Lab sur un vrai
+Lab Core (gain sur le portefeuille de test, Wallet canonique intact) ; profil Production : panneau, son, coupure et
+redémarrage du Core, message simulé refusé ; réception du bot affichée, mode non modifiable, sub reçu 3 fois → une alerte
+montrée une fois, Studio ne peut pas se faire passer pour Twitch. Lancement réel de `dist/index.js` (canonique,
+fraîcheur 120 s, base jetable) : portes à 401 / 409 attendus, alerte de 10 min `expired · stale`, récente en file.
+
+**Restent** : release Studio (branche `main` exigée par `studio:release`) ; choix d'une durée de fraîcheur ; activation
+des drapeaux du bot au cutover ; lecture réelle des crédits historiques ; gel de StreamElements / SAMMI.

@@ -8,6 +8,8 @@ import type { WordGameState } from '@raptoru/schemas';
 export type WordGamePanel =
   | (WordGameState & {
       player_url?: string;
+      /** Which Core runs the game (lot 9): Lab Core (test wallet) or the main Core. */
+      environment?: 'lab' | 'production';
       /** Local time (ms) when this state was read: the ages go on between two polls. */
       fetched_at?: number;
     })
@@ -64,7 +66,7 @@ export function wordGameView(
   if (!s)
     return `<section class="wg"><p class="wg-muted">Chargement…</p></section>`;
   if (!('live' in s))
-    return `<section class="wg"><h1>Jeu des mots</h1><p class="wg-muted">Indisponible : Core Lab non démarré (profil Lab uniquement).</p></section>`;
+    return `<section class="wg"><h1>Jeu des mots</h1><p class="wg-muted">Indisponible : aucun Core connecté (Core Lab non démarré, ou profil Production non connecté).</p></section>`;
   const off = !s.live || busy;
   const status = s.live
     ? `<span class="wg-chip wg-chip--live">En live</span><span class="wg-chip ${s.stopped ? 'wg-chip--stop' : 'wg-chip--on'}">${s.stopped ? 'Arrêté' : 'Actif'}</span>`
@@ -97,7 +99,7 @@ export function wordGameView(
     ? `<p class="wg-muted wg-obs">Son OBS (source navigateur) : <code>${esc(s.player_url)}</code> <button type="button" class="wg-btn wg-btn--ghost" data-action="copy">Copier</button></p>`
     : '';
   return `<section class="wg">
-    <div class="wg-head"><h1>Jeu des mots</h1><div class="wg-status">${status}</div></div>
+    <div class="wg-head"><h1>Jeu des mots</h1><div class="wg-status">${status}${s.environment === 'production' ? '<span class="wg-chip wg-chip--on">Core principal</span>' : '<span class="wg-chip wg-chip--off">Core Lab · portefeuille de test</span>'}</div></div>
     <div class="wg-actions">
       <button type="button" class="wg-btn" data-action="${s.stopped ? 'start' : 'stop'}" ${off ? 'disabled' : ''}>${s.stopped ? 'Reprendre' : 'Arrêter'}</button>
       <button type="button" class="wg-btn wg-btn--primary" data-action="new_word" ${off ? 'disabled' : ''}>Nouveau mot</button>
