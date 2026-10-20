@@ -50,6 +50,8 @@ RUN npm ci --omit=dev --workspace @raptoru/schemas --workspace @raptoru/core-api
 COPY --from=build /app/packages/schemas/dist packages/schemas/dist
 COPY --from=build /app/apps/core-api/dist apps/core-api/dist
 COPY supabase/migrations supabase/migrations
+# Jeu des mots word bank, read at its src/ path from dist/ (src/word-game/bank.ts).
+COPY apps/core-api/src/word-game/words-fr.txt apps/core-api/src/word-game/words-fr.txt
 USER node
 EXPOSE 3000
 # Readiness (database reachable), the same probe Coolify uses.
