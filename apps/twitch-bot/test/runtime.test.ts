@@ -22,6 +22,7 @@ const baseConfig: BotConfig = {
   ALERTS_MODE: 'off',
   ALERTS_FOLLOW: 'false',
   ALERTS_OUTBOX_FILE: 'unused-alerts-outbox.json',
+  RANDOM_BAN_JOURNAL_FILE: 'unused-random-ban-journal.json',
   DAILY_CHAT_COMMANDS: 'false',
   LOYALTY_TWITCH_EVENTS: 'false',
   LOYALTY_CHAT_COMMANDS: 'false',

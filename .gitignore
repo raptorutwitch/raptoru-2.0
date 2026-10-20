@@ -28,6 +28,7 @@ dist/
 .lab-chat-journal.json*
 # Random Ban V2 timeouts journal (bot executor, local runtime data)
 .lab-random-ban-journal.json*
+.random-ban-journal.json*
 
 # Studio packaging output
 apps/studio/desktop/stage/

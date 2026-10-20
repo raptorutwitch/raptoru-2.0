@@ -168,6 +168,12 @@ const Env = TwitchApp.extend({
   // Follows: moderator:read:followers on LeCroupier_'s token (channel.follow v2).
   ALERTS_FOLLOW: Flag,
   ALERTS_OUTBOX_FILE: z.string().min(1).default('.alerts-outbox.json'),
+  // Random Ban V2 on the main Core (RANDOM_BAN=true): timeouts about to be sent / sent, until Core knows their outcome.
+  // Separate from the Lab adapter's journal (its requests belong to the Lab Core).
+  RANDOM_BAN_JOURNAL_FILE: z
+    .string()
+    .min(1)
+    .default('.random-ban-journal.json'),
   STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
 });
 

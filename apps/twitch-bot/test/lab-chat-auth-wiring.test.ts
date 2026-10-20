@@ -27,7 +27,12 @@ afterEach(() => {
 async function boot(
   broadcasterScopes: string[],
   botScopes = ['user:read:chat'],
-  options: { invalidBroadcaster?: boolean; main?: boolean } = {},
+  options: {
+    invalidBroadcaster?: boolean;
+    main?: boolean;
+    randomBan?: 'true' | 'false';
+    points?: 'true' | 'false';
+  } = {},
 ) {
   vi.useFakeTimers();
   vi.resetModules();
@@ -63,9 +68,10 @@ async function boot(
       LAB_CHAT_INGEST: 'true',
       LAB_CHAT_OUTPUT: 'true',
       LAB_ALERTS_FOLLOW: 'true',
-      RANDOM_BAN: 'true',
+      RANDOM_BAN: options.randomBan ?? 'true',
+      RANDOM_BAN_JOURNAL_FILE: 'mock-main-rb',
       LOYALTY_TWITCH_EVENTS: 'false',
-      CHANNEL_POINTS_EVENTS: 'true',
+      CHANNEL_POINTS_EVENTS: options.points ?? 'true',
       CORE_API_URL: 'http://127.0.0.1:4301',
       BOT_SECRET: 'mock-bot-secret',
       STREAM_SYNC_INTERVAL_MS: 60_000,
@@ -184,6 +190,7 @@ async function boot(
   vi.doMock('../src/random-ban-executor.js', () => ({
     createRandomBanExecutor,
     fileRbJournal: vi.fn(),
+    helixRbTwitch: vi.fn(() => ({})),
     RB_SCOPES: {
       broadcaster: ['moderation:read', 'channel:read:subscriptions'],
     },
@@ -285,7 +292,15 @@ describe('Bot account and capability wiring (no real Twitch or token files)', ()
       'channel:read:redemptions',
     ]);
     expect(s.sockets).toHaveLength(2);
-    expect(s.createRandomBanExecutor).not.toHaveBeenCalled();
+    // RANDOM_BAN=true: the Lab executor, on the main Core's bot routes, with the broadcaster's reads.
+    expect(s.createRandomBanExecutor).toHaveBeenCalledTimes(1);
+    expect(s.createRandomBanExecutor.mock.calls[0]![0]).toMatchObject({
+      base: '/v1/bot/random-ban',
+      channelId: TWITCH_OAUTH_PROFILES.broadcaster.expectedUserId,
+      executorId: `bot-${TWITCH_OAUTH_PROFILES.bot.expectedUserId}`,
+      broadcasterScopes: ['channel:manage:redemptions'],
+    });
+    expect(s.randomBan.run).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(TOKEN_VALIDATION_INTERVAL_MS);
     expect(s.accounts.every((a) => a.validate.mock.calls.length === 1)).toBe(
       true,
@@ -297,6 +312,7 @@ describe('Bot account and capability wiring (no real Twitch or token files)', ()
       s.sockets.every((socket) => socket.stop.mock.calls.length === 1),
     ).toBe(true);
     expect(s.runtime.presence.stop).toHaveBeenCalledTimes(1);
+    expect(s.randomBan.stop).toHaveBeenCalledTimes(1);
   });
 
   it('an invalid broadcaster at main bot startup leaves chat and presence running', async () => {
@@ -309,6 +325,31 @@ describe('Bot account and capability wiring (no real Twitch or token files)', ()
     expect(s.sockets[0]!.stop).not.toHaveBeenCalled();
     expect(s.runtime.presence.stop).not.toHaveBeenCalled();
     expect(process.exit).not.toHaveBeenCalled();
+    // Random Ban stays available to Core, which refuses its searches (no broadcaster reads).
+    expect(s.createRandomBanExecutor.mock.calls[0]![0]).toMatchObject({
+      broadcasterScopes: null,
+    });
+  });
+
+  it('the main bot with RANDOM_BAN=false runs no executor and opens no broadcaster connection for it', async () => {
+    const s = await boot([], ['user:read:chat'], {
+      main: true,
+      randomBan: 'false',
+    });
+    expect(s.createRandomBanExecutor).not.toHaveBeenCalled();
+  });
+
+  it('the main bot with Random Ban alone: broadcaster reads, no broadcaster EventSub socket', async () => {
+    const s = await boot(
+      ['moderation:read', 'channel:read:subscriptions'],
+      ['user:read:chat'],
+      { main: true, points: 'false' },
+    );
+    expect(s.sockets).toHaveLength(1);
+    expect(s.createRandomBanExecutor.mock.calls[0]![0]).toMatchObject({
+      base: '/v1/bot/random-ban',
+      broadcasterScopes: ['moderation:read', 'channel:read:subscriptions'],
+    });
   });
 
   it('a durable broadcaster failure closes both consumers and optional executors', async () => {

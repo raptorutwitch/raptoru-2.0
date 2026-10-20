@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createRandomBanExecutor,
+  helixRbTwitch,
   memoryRbJournal,
   RbReadError,
   type RbTwitch,
@@ -8,7 +9,7 @@ import {
   searchTarget,
   timeoutOnce,
 } from '../src/random-ban-executor.js';
-import { HelixError } from '../src/twitch/helix.js';
+import { type Helix, HelixError } from '../src/twitch/helix.js';
 
 // Random Ban V2 — the Twitch executor (docs/RANDOM_BAN_V2.md) against a SIMULATED Twitch (no real call, no real
 // timeout): eligibility (lurkers, follow, moderators, broadcaster, bans / timeouts, VIP, buyer), uniform draw, read
@@ -449,5 +450,83 @@ describe('Random Ban — executor', () => {
     });
     expect(twitch.calls.ban).toEqual([]);
     expect(journal.entries()).toEqual([]);
+  });
+});
+
+describe('Random Ban — production bot (main Core)', () => {
+  it('dry run on /v1/bot/random-ban: claim and target only, never a timeout', async () => {
+    const core = fakeCore({ mode: 'dry_run' });
+    const twitch = fakeTwitch({ chatters: [u('5')], follows: ['5'] });
+    const ex = createRandomBanExecutor({
+      core: core.core,
+      base: '/v1/bot/random-ban',
+      channelId: BROADCASTER,
+      broadcasterId: BROADCASTER,
+      executorId: 'bot-1239040922',
+      login: 'lecroupier_',
+      botScopes: [
+        'moderator:read:chatters',
+        'moderator:read:followers',
+        'moderator:manage:banned_users',
+      ],
+      broadcasterScopes: ['moderation:read', 'channel:read:subscriptions'],
+      twitch,
+      journal: memoryRbJournal(),
+      pause,
+      now: () => NOW,
+      log: () => {},
+    });
+    expect(await ex.tick()).toBe('worked');
+    expect(core.calls.map((c) => c.path)).toEqual([
+      `/v1/bot/random-ban/${BROADCASTER}/claim`,
+      '/v1/bot/random-ban/requests/11111111-1111-4111-8111-111111111111/target',
+    ]);
+    expect(twitch.calls.ban).toEqual([]);
+  });
+
+  it('Helix adapter: bot reads + timeout as LeCroupier_, moderation reads with the broadcaster token (absent: refused)', async () => {
+    const calls: unknown[][] = [];
+    const rec =
+      (name: string, out: unknown) =>
+      async (...args: unknown[]) => {
+        calls.push([name, ...args]);
+        return out;
+      };
+    const bot = {
+      getChattersPage: rec('chatters', {
+        chatters: [
+          { twitchUserId: '5', login: 'lurker', displayName: 'Lurker' },
+        ],
+        cursor: null,
+      }),
+      isFollower: rec('follows', true),
+      timeoutUser: rec('timeout', undefined),
+    } as unknown as Helix;
+    const broadcaster = {
+      getModeratorIds: rec('mods', ['7']),
+      getBans: rec('bans', []),
+      getSubscriberIds: rec('subs', ['5']),
+    } as unknown as Helix;
+    const t = helixRbTwitch(bot, broadcaster, BROADCASTER, '1239040922');
+    expect(await t.chattersPage(null)).toEqual({
+      chatters: [u('5', 'Lurker')],
+      cursor: null,
+    });
+    expect(await t.moderators(['5', '7'])).toEqual(['7']);
+    expect(await t.subscribers(['5'])).toEqual(['5']);
+    await t.ban('5', 300, 'r');
+    expect(calls).toContainEqual(['chatters', BROADCASTER, '1239040922', null]);
+    expect(calls).toContainEqual([
+      'timeout',
+      BROADCASTER,
+      '1239040922',
+      '5',
+      300,
+      'r',
+    ]);
+    const without = helixRbTwitch(bot, null, BROADCASTER, '1239040922');
+    await expect(without.bans(['5'])).rejects.toThrow(
+      'broadcaster_token_absent',
+    );
   });
 });

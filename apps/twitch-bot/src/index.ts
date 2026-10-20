@@ -12,11 +12,16 @@ import { fileOutbox, memoryOutbox } from './loyalty-outbox.js';
 import { createCoreChatBridge } from './core-chat-bridge.js';
 import type { AlertOutboxEvent } from './lab-alerts-ingest.js';
 import { fileJournal } from './lab-chat-output.js';
+import {
+  createRandomBanExecutor,
+  fileRbJournal,
+  helixRbTwitch,
+} from './random-ban-executor.js';
 import { createBotRuntime } from './runtime.js';
 import { fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { superviseTwitchAuth } from './twitch/auth-supervision.js';
 import { runEventSub } from './twitch/eventsub.js';
-import { createHelix } from './twitch/helix.js';
+import { createHelix, type Helix } from './twitch/helix.js';
 
 // Safety switch: the bot only connects to Twitch when explicitly enabled. Chat commands and the
 // presence tracker are separate opt-ins (see config.ts).
@@ -42,8 +47,9 @@ const auth = new TwitchAuth({
   store: fileTokenStore(config.TWITCH_TOKEN_FILE),
   requiredScopes: requiredScopes({
     ...config,
-    // This entry point does not run the Lab adapters or Random Ban executor; the main Core's chat games and alerts
-    // (lot 8) need the same capabilities as the Lab adapter's.
+    // This entry point does not run the Lab adapters; the main Core's chat games and alerts (lot 8) need the same
+    // capabilities as the Lab adapter's. Random Ban's rights are never required at startup: its executor tells Core
+    // what is missing (Core refuses what cannot be served) instead of stopping the bot.
     LAB_CHAT_INGEST:
       config.CHAT_GAMES === 'true' || config.ALERTS_MODE !== 'off'
         ? 'true'
@@ -219,13 +225,17 @@ await syncLoop();
 // redemptions, both opt-in. One connection for both; each module keeps its own subscriptions and checks.
 const loyaltyOn = config.LOYALTY_TWITCH_EVENTS === 'true';
 const pointsOn = config.CHANNEL_POINTS_EVENTS === 'true';
-if (loyaltyOn || pointsOn) {
+// Random Ban V2 (RANDOM_BAN): the executor reads the moderators, the bans and the subscriptions with the broadcaster's
+// Helix; it needs no broadcaster EventSub connection.
+const randomBanOn = config.RANDOM_BAN === 'true';
+let rbBroadcaster: { helix: Helix; scopes: string[] } | null = null;
+if (loyaltyOn || pointsOn || randomBanOn) {
   let broadcasterReady = false;
   const broadcasterAuth = new TwitchAuth({
     clientId: config.TWITCH_CLIENT_ID,
     clientSecret: config.TWITCH_CLIENT_SECRET,
     store: fileTokenStore(config.TWITCH_BROADCASTER_TOKEN_FILE),
-    // Random Ban is not wired in this production entry point; do not require its scopes here.
+    // Random Ban's rights are checked by its executor (told to Core), never required here.
     requiredScopes: broadcasterScopes({ ...config, RANDOM_BAN: 'false' }),
     expectedUserId: TWITCH_OAUTH_PROFILES.broadcaster.expectedUserId,
     onFailure: (code) => {
@@ -255,6 +265,10 @@ if (loyaltyOn || pointsOn) {
       },
     );
     consumers.add(() => broadcasterValidation.stop());
+    rbBroadcaster = {
+      helix: broadcasterHelix,
+      scopes: broadcasterAuth.status().scopes,
+    };
     const core = createCoreClient(config.CORE_API_URL, config.BOT_SECRET);
     const events = loyaltyOn
       ? createBroadcasterEvents({
@@ -291,23 +305,31 @@ if (loyaltyOn || pointsOn) {
     events?.resumePending(); // events a previous run could not deliver to Core
     void points?.resumePending(); // redemptions a previous run could not deliver to Core
     if (points) consumers.add(() => points.close());
-    const broadcasterSocket = runEventSub({
-      async subscribe(sessionId) {
-        if (events) await events.eventSub.subscribe(sessionId);
-        if (points) {
-          await points.subscribe(sessionId);
-          void points.syncRewards();
-        }
-      },
-      async notification(type, event, messageId, timestamp) {
-        if (points && (await points.handle(type, event))) return;
-        if (events)
-          await events.eventSub.notification(type, event, messageId, timestamp);
-      },
-      log: events?.eventSub.log,
-      revocation: (_type, reason) => authorizationLost('raptoru_', reason),
-    });
-    consumers.add(() => broadcasterSocket.stop());
+    // Random Ban alone subscribes to nothing: no socket (Twitch closes an unused one).
+    if (events || points) {
+      const broadcasterSocket = runEventSub({
+        async subscribe(sessionId) {
+          if (events) await events.eventSub.subscribe(sessionId);
+          if (points) {
+            await points.subscribe(sessionId);
+            void points.syncRewards();
+          }
+        },
+        async notification(type, event, messageId, timestamp) {
+          if (points && (await points.handle(type, event))) return;
+          if (events)
+            await events.eventSub.notification(
+              type,
+              event,
+              messageId,
+              timestamp,
+            );
+        },
+        log: events?.eventSub.log,
+        revocation: (_type, reason) => authorizationLost('raptoru_', reason),
+      });
+      consumers.add(() => broadcasterSocket.stop());
+    }
     if (events) {
       // Tier reconciliation: full snapshot at startup, then every 6 hours (chained, never overlapping).
       const snapshotLoop = async () => {
@@ -317,13 +339,43 @@ if (loyaltyOn || pointsOn) {
       await snapshotLoop();
     }
     console.log(
-      `[twitch-bot] broadcaster events on: ${[loyaltyOn ? 'loyalty (subs, gifts, cheers, follows)' : '', pointsOn ? 'Points de chaîne (read only)' : ''].filter(Boolean).join(' + ')}`,
+      `[twitch-bot] broadcaster events on: ${[loyaltyOn ? 'loyalty (subs, gifts, cheers, follows)' : '', pointsOn ? 'Points de chaîne (read only)' : '', randomBanOn ? 'Random Ban reads' : ''].filter(Boolean).join(' + ')}`,
     );
   } catch (error) {
     console.error(
       `[twitch-bot] broadcaster events OFF: ${(error as Error).message}`,
     );
   }
+}
+
+// Random Ban V2 (docs/RANDOM_BAN_V2.md, RANDOM_BAN=true): the Twitch executor of the requests the main Core queues
+// (channel points rule, Studio's dry runs), the same as the Lab adapter's, on /v1/bot/random-ban with the bot secret.
+// Core serializes (one Random Ban at a time per channel); without the broadcaster token it cannot search and says so.
+if (randomBanOn) {
+  const rb = rbBroadcaster;
+  const randomBan = createRandomBanExecutor({
+    core: coreCall,
+    base: '/v1/bot/random-ban',
+    channelId: config.TWITCH_BROADCASTER_ID,
+    broadcasterId: config.TWITCH_BROADCASTER_ID,
+    // Stable across restarts: a journaled timeout is reported with the same executor id.
+    executorId: `bot-${status.userId}`,
+    login: status.login ?? 'LeCroupier_',
+    botScopes: status.scopes,
+    broadcasterScopes: rb?.scopes ?? null,
+    twitch: helixRbTwitch(
+      coreHelix,
+      rb?.helix ?? null,
+      config.TWITCH_BROADCASTER_ID,
+      status.userId!,
+    ),
+    journal: fileRbJournal(config.RANDOM_BAN_JOURNAL_FILE),
+  });
+  consumers.add(() => randomBan.stop());
+  console.log(
+    `[random-ban] exécuteur prêt (Core principal) — recherche : ${randomBan.ready.canSearch ? 'oui' : 'non'}, timeout : ${randomBan.ready.canTimeout ? 'oui' : 'non'}${randomBan.ready.missing.length ? ` (manque : ${randomBan.ready.missing.join(', ')})` : ''}`,
+  );
+  void randomBan.run();
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

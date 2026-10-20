@@ -1,10 +1,11 @@
 import { randomInt } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { HelixError } from './twitch/helix.js';
+import { type Helix, HelixError } from './twitch/helix.js';
 
-// Random Ban V2 — the Twitch executor (docs/RANDOM_BAN_V2.md). Runs in the Lab chat adapter (LeCroupier_'s token for
-// the chatters, the follows and the timeout; the broadcaster's token for the moderators, the bans and the
-// subscriptions), never in the production bot (not wired there yet). Core decides and records; this executor:
+// Random Ban V2 — the Twitch executor (docs/RANDOM_BAN_V2.md). Runs in the Lab chat adapter (Lab Core,
+// /v1/lab/random-ban) and in the production bot when RANDOM_BAN=true (main Core, /v1/bot/random-ban) — LeCroupier_'s
+// token for the chatters, the follows and the timeout; the broadcaster's token for the moderators, the bans and the
+// subscriptions. Core decides and records; this executor:
 // 1. claims ONE request (Core serializes: one Random Ban at a time);
 // 2. searches a target with Twitch reads only — the chatters Twitch lists (lurkers included), minus the broadcaster,
 //    the moderators and the banned / timed out (bulk reads, 100 ids per call), shuffled with crypto, then the first
@@ -326,9 +327,42 @@ export function fileRbJournal(path: string): RbJournal {
 
 // --- executor -------------------------------------------------------------------------------------------------------
 
+/** The Helix calls of the executor: LeCroupier_'s Helix, the broadcaster's for its reads (null: no search possible). */
+export function helixRbTwitch(
+  bot: Helix,
+  broadcaster: Helix | null,
+  broadcasterId: string,
+  botUserId: string,
+): RbTwitch {
+  const b = () =>
+    broadcaster ?? Promise.reject(new Error('broadcaster_token_absent'));
+  return {
+    chattersPage: async (after) => {
+      const p = await bot.getChattersPage(broadcasterId, botUserId, after);
+      return {
+        chatters: p.chatters.map((c) => ({
+          id: c.twitchUserId,
+          login: c.login,
+          name: c.displayName,
+        })),
+        cursor: p.cursor,
+      };
+    },
+    moderators: async (ids) => (await b()).getModeratorIds(broadcasterId, ids),
+    bans: async (ids) => (await b()).getBans(broadcasterId, ids),
+    follows: (id) => bot.isFollower(broadcasterId, id),
+    subscribers: async (ids) =>
+      (await b()).getSubscriberIds(broadcasterId, ids),
+    ban: (id, duration, reason) =>
+      bot.timeoutUser(broadcasterId, botUserId, id, duration, reason),
+  };
+}
+
 export interface RandomBanExecutorDeps {
-  /** POST to Core (base already chosen: Lab /v1/lab/random-ban); throws only when Core could not be reached. */
+  /** POST to Core under `base`; throws only when Core could not be reached. */
   core(path: string, body: unknown): Promise<{ status: number; body: unknown }>;
+  /** Core routes: '/v1/lab/random-ban' (Lab Core, default) or '/v1/bot/random-ban' (main Core, bot secret). */
+  base?: '/v1/lab/random-ban' | '/v1/bot/random-ban';
   channelId: string;
   broadcasterId: string;
   executorId: string;
@@ -347,7 +381,7 @@ export interface RandomBanExecutorDeps {
 export function createRandomBanExecutor(d: RandomBanExecutorDeps) {
   const now = d.now ?? Date.now;
   const log = d.log ?? console.log;
-  const base = '/v1/lab/random-ban';
+  const base = d.base ?? '/v1/lab/random-ban';
   const missing = [
     ...RB_SCOPES.bot
       .filter((s) => !d.botScopes.includes(s))
