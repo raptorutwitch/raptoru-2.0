@@ -100,13 +100,17 @@ export const DailyLeaderboard = z.object({
 });
 export type DailyLeaderboard = z.infer<typeof DailyLeaderboard>;
 
-/** Streamer-editable Daily configuration. Reward = min(max, base + perStreak × (streak − 1)). */
+/**
+ * Streamer-editable Daily configuration. Reward = steps[min(streak, steps.length) − 1] when `steps` is set (the legacy
+ * raptoru.fr table), otherwise min(max, base + perStreak × (streak − 1)). A stored config without steps keeps its curve.
+ */
 export const DailyConfig = z.object({
   reward: z
     .object({
       base: z.number().int().min(0),
       perStreak: z.number().int().min(0),
       max: z.number().int().min(0),
+      steps: z.array(z.number().int().min(0)).min(1).max(100).optional(),
     })
     .refine((r) => r.max >= r.base, { message: 'max must be >= base' }),
 });

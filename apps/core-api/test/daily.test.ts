@@ -86,7 +86,7 @@ describe('Daily claim', () => {
       const live = await streamOn(core, day);
       const res = await claimAt(core, alice, paris(day, 21));
       expect(res.status.currentStreak).toBe(i + 1);
-      expect(res.reward).toBe([500, 650, 800][i]);
+      expect(res.reward).toBe([500, 700, 900][i]);
       await live.end();
     }
     const res = await core.daily.streak(alice);
@@ -536,7 +536,7 @@ describe('read contract', () => {
     await claimAt(core, alice, paris('2026-09-24', 21));
     expect(await core.daily.status(alice.twitchUserId)).toMatchObject({
       claimedCurrentStreamDay: true,
-      nextReward: 650,
+      nextReward: 700,
       lastClaim: {
         streamDay: '2026-09-24',
         reward: 500,

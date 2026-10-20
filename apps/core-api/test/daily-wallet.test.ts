@@ -80,7 +80,7 @@ describe('Daily → Wallet: modes', () => {
         streak: 1,
         streakBefore: 0,
         base: 500,
-        perStreak: 150,
+        steps: [500, 700, 900, 1100, 1300, 1500, 1600, 1700, 1850, 2000],
         max: 2000,
         bonus: 0,
         capped: false,

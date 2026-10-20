@@ -1,9 +1,12 @@
 import { DailyConfig } from '@raptoru/schemas';
 import type { Queryable } from '../db/db.js';
 
-// 500, 650, 800 … +150 per consecutive stream, capped at 2000 from the 11th stream.
+// The legacy raptoru.fr table (api/sammi/daily.js DAILY_REWARD_STEPS), kept as is: 2000 from the 10th stream.
+export const LEGACY_DAILY_STEPS = [
+  500, 700, 900, 1100, 1300, 1500, 1600, 1700, 1850, 2000,
+];
 export const DEFAULT_DAILY_CONFIG: DailyConfig = {
-  reward: { base: 500, perStreak: 150, max: 2000 },
+  reward: { base: 500, perStreak: 0, max: 2000, steps: LEGACY_DAILY_STEPS },
 };
 
 export function rewardForStreak(streak: number, config: DailyConfig): number {
@@ -12,7 +15,19 @@ export function rewardForStreak(streak: number, config: DailyConfig): number {
 
 /** Reward calculation as stored with each claim (frozen: a later config never changes it). */
 export function dailyRewardBreakdown(streak: number, config: DailyConfig) {
-  const { base, perStreak, max } = config.reward;
+  const { base, perStreak, max, steps } = config.reward;
+  if (steps) {
+    const final = steps[Math.min(Math.max(1, streak), steps.length) - 1]!;
+    return {
+      streak,
+      base: steps[0]!,
+      steps,
+      max: steps.at(-1)!,
+      bonus: final - steps[0]!,
+      capped: streak > steps.length,
+      final,
+    };
+  }
   const uncapped = base + perStreak * (Math.max(1, streak) - 1);
   const final = Math.min(max, uncapped);
   return {

@@ -1,3 +1,4 @@
+import { DailyConfig } from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_DAILY_CONFIG, rewardForStreak } from '../src/daily/config.js';
 import { effectiveStreak, streakAfterClaim } from '../src/daily/streak.js';
@@ -41,12 +42,26 @@ describe('streak rules', () => {
 });
 
 describe('default reward curve', () => {
-  it('starts at 500, grows by 150 per consecutive stream and caps at 2000', () => {
-    const rewards = Array.from({ length: 13 }, (_, i) =>
+  it('is the legacy raptoru.fr table: 500 … 1850, then 2000 from the 10th stream', () => {
+    const rewards = Array.from({ length: 12 }, (_, i) =>
       rewardForStreak(i + 1, DEFAULT_DAILY_CONFIG),
     );
     expect(rewards).toEqual([
-      500, 650, 800, 950, 1100, 1250, 1400, 1550, 1700, 1850, 2000, 2000, 2000,
+      500, 700, 900, 1100, 1300, 1500, 1600, 1700, 1850, 2000, 2000, 2000,
+    ]);
+    expect(rewardForStreak(227, DEFAULT_DAILY_CONFIG)).toBe(2000);
+    expect(rewardForStreak(0, DEFAULT_DAILY_CONFIG)).toBe(500);
+    expect(DailyConfig.parse(DEFAULT_DAILY_CONFIG)).toEqual(
+      DEFAULT_DAILY_CONFIG,
+    );
+  });
+
+  it('a stored config without steps keeps its linear curve', () => {
+    const stored = DailyConfig.parse({
+      reward: { base: 1000, perStreak: 150, max: 2000 },
+    });
+    expect([1, 2, 3, 8].map((s) => rewardForStreak(s, stored))).toEqual([
+      1000, 1150, 1300, 2000,
     ]);
   });
 });
