@@ -1,5 +1,7 @@
 // Hosted Test package of the extension for the STAGING Core (never the production upload):
 //   npm run build:staging -w @raptoru/twitch-extension
+// With --production (npm run build:production): the same package for the production Core (core.raptoru.fr), no
+// environment (no badge), written as raptoru-live-PRODUCTION-<sha>.zip — the version submitted to Twitch review.
 // - the same extension/ files as the production package (what is tested is what is uploaded later),
 //   except shared/runtime-config.js, generated here: apiBase = the staging Core's viewer frontier,
 //   environment 'staging' (a « STAGING · test » badge on every surface), build id = source commit;
@@ -25,11 +27,16 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
+import process from 'node:process';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32 } from 'node:zlib';
 
-const STAGING_API = 'https://core-staging.raptoru.fr/v1/ext';
+const PRODUCTION = process.argv.includes('--production');
+const STAGING_API = PRODUCTION
+  ? 'https://core.raptoru.fr/v1/ext'
+  : 'https://core-staging.raptoru.fr/v1/ext';
+const LABEL = PRODUCTION ? 'PRODUCTION' : 'STAGING';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const src = join(root, 'extension');
@@ -46,7 +53,7 @@ if (dirty)
     'extension/ has uncommitted changes: commit first (the build id must name its source)',
   );
 const builtAt = new Date().toISOString();
-const buildId = `staging-${sha}-${builtAt.slice(0, 10)}`;
+const buildId = `${LABEL.toLowerCase()}-${sha}-${builtAt.slice(0, 10)}`;
 
 const files = (dir) =>
   readdirSync(dir).flatMap((name) => {
@@ -101,12 +108,10 @@ for (const [from, n] of mentions)
     );
 writeFileSync(
   join(out, 'shared', 'runtime-config.js'),
-  `// Configuration publique du build STAGING (Hosted Test) — Core staging, paiement simulé. Aucun secret.
-// Généré par scripts/build-staging.mjs : jamais le build Production.
+  `// Configuration publique du build ${LABEL} (scripts/build-staging.mjs). Aucun secret.
 export const RUNTIME = Object.freeze({
   mode: 'connected',
-  environment: 'staging',
-  apiBase: ${JSON.stringify(STAGING_API)},
+${PRODUCTION ? '' : "  environment: 'staging',\n"}  apiBase: ${JSON.stringify(STAGING_API)},
   siteUrl: '',
   buildId: ${JSON.stringify(buildId)},
 });
@@ -121,14 +126,14 @@ const textual = /\.(js|mjs|html|css|json|txt|svg|md)$/i;
 for (const file of packaged)
   if (textual.test(file) && LEGACY.test(readFileSync(file, 'utf8')))
     throw new Error(
-      `legacy URL found in ${relative(out, file)}: refusing the staging package`,
+      `legacy URL found in ${relative(out, file)}: refusing the ${LABEL} package`,
     );
 const runtime = readFileSync(join(out, 'shared', 'runtime-config.js'), 'utf8');
 if (
   !runtime.includes(STAGING_API) ||
-  !runtime.includes("environment: 'staging'")
+  runtime.includes("environment: 'staging'") === PRODUCTION
 )
-  throw new Error('staging runtime config missing');
+  throw new Error(`${LABEL} runtime config missing`);
 
 // Minimal ZIP writer (STORED entries like the packages Twitch accepted, fixed timestamp): files at the
 // archive root, forward slashes, every name checked.
@@ -185,7 +190,9 @@ end.writeUInt32LE(offset, 16);
 const zip = Buffer.concat([...locals, central, end]);
 
 mkdirSync(releaseDir, { recursive: true });
-const zipName = `raptoru-live-STAGING-hosted-test-${sha}.zip`;
+const zipName = PRODUCTION
+  ? `raptoru-live-PRODUCTION-${sha}.zip`
+  : `raptoru-live-STAGING-hosted-test-${sha}.zip`;
 writeFileSync(join(releaseDir, zipName), zip);
 rmSync(out, { recursive: true, force: true });
 const zipSha256 = createHash('sha256').update(zip).digest('hex');
@@ -195,11 +202,13 @@ writeFileSync(
 );
 console.log(
   [
-    `twitch-extension STAGING: ${packaged.length} files, ${(zip.length / 1024 / 1024).toFixed(1)} MB`,
+    `twitch-extension ${LABEL}: ${packaged.length} files, ${(zip.length / 1024 / 1024).toFixed(1)} MB`,
     `  apiBase  ${STAGING_API}`,
     `  buildId  ${buildId}`,
     `  zip      ${join(releaseDir, zipName)}`,
     `  sha256   ${zipSha256}`,
-    '  → Hosted Test only. Never the production upload.',
+    PRODUCTION
+      ? '  → production version: upload, Hosted Test, then submit for review.'
+      : '  → Hosted Test only. Never the production upload.',
   ].join('\n'),
 );
