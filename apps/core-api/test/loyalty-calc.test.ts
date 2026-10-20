@@ -10,15 +10,15 @@ import {
 import { DEFAULT_LOYALTY_CONFIG as C } from '../src/loyalty/config.js';
 
 describe('passive reward', () => {
-  it('50 per 6 minutes × tier multiplier; 6 hours = 60 ticks', () => {
+  it('10 per 6 minutes, 20 for a subscriber of any tier (never 10 + 20); 6 hours = 60 ticks', () => {
     const tick = (tier: 'none' | 't1' | 't2' | 't3') =>
       passiveReward(C, tier, null, false).final!;
     expect([tick('none'), tick('t1'), tick('t2'), tick('t3')]).toEqual([
-      50, 100, 125, 200,
+      10, 20, 20, 20,
     ]);
     expect(
       [tick('none'), tick('t1'), tick('t2'), tick('t3')].map((t) => t * 60),
-    ).toEqual([3000, 6000, 7500, 12000]);
+    ).toEqual([600, 1200, 1200, 1200]);
   });
 
   it('the personal override replaces the tier multiplier (T1 ×2 with override ×3 → ×3)', () => {
@@ -26,14 +26,14 @@ describe('passive reward', () => {
       tierMultiplier: 2,
       personalOverride: 3,
       effectiveMultiplier: 3,
-      final: 150,
+      final: 30,
     });
   });
 
   it('rounds up any fraction, never down', () => {
     expect(roundUp(125.1)).toBe(126);
     expect(roundUp(50 * 2.2)).toBe(110); // float noise ignored
-    expect(passiveReward(C, 'none', 2.502, false).final).toBe(126);
+    expect(passiveReward(C, 'none', 2.502, false).final).toBe(26);
   });
 
   it('excluded viewers get 0; an unknown tier is never guessed', () => {
@@ -44,10 +44,10 @@ describe('passive reward', () => {
     expect(passiveReward(C, 'unknown', null, false)).toMatchObject({
       final: null,
       tierMultiplier: null,
-      candidates: { none: 50, t1: 100, t2: 125, t3: 200 },
+      candidates: { none: 10, t1: 20, t2: 20, t3: 20 },
     });
     // A personal override does not depend on the tier.
-    expect(passiveReward(C, 'unknown', 3, false).final).toBe(150);
+    expect(passiveReward(C, 'unknown', 3, false).final).toBe(30);
   });
 });
 

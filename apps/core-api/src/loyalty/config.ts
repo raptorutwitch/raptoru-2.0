@@ -1,13 +1,14 @@
 import { LoyaltyConfig } from '@raptoru/schemas';
 import type { Queryable } from '../db/db.js';
 
-// Starting values (placeholders, editable without code: stored config wins).
+// Defaults (editable without code: stored config wins). Passive decided by Antoni on 20/10/2026: 10 Jetons / 6 min,
+// 20 for a subscriber of any tier (replaces the 10, never added); event bonuses below unchanged.
 export const DEFAULT_LOYALTY_CONFIG: LoyaltyConfig = {
   currencyId: 'main',
   passive: {
     intervalMinutes: 6,
-    baseAmount: 50,
-    tierMultipliers: { none: 1, t1: 2, t2: 2.5, t3: 4 },
+    baseAmount: 10,
+    tierMultipliers: { none: 1, t1: 2, t2: 2, t3: 2 },
   },
   sub: { t1: 2000, t2: 4000, t3: 10000 },
   subgift: {

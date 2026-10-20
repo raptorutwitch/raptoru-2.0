@@ -39,3 +39,5 @@ apps/twitch-extension/release/
 
 # Private economic / nominative exports (never committed)
 Backkup/
+# Production bot logs (local runtime data)
+apps/twitch-bot/logs/

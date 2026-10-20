@@ -115,14 +115,14 @@ describe('passive: Presence → Loyalty', () => {
       expect.objectContaining({
         twitch_user_id: '2001',
         status: 'preview',
-        amount: 125,
+        amount: 20,
         breakdown: expect.objectContaining({
           source: 'passive_watch',
-          base: 50,
+          base: 10,
           tier: 't2',
-          tierMultiplier: 2.5,
+          tierMultiplier: 2,
           personalOverride: null,
-          final: 125,
+          final: 20,
           tick: 1,
           mode: 'preview',
         }),
@@ -130,7 +130,7 @@ describe('passive: Presence → Loyalty', () => {
       expect.objectContaining({
         twitch_user_id: '2002',
         status: 'preview',
-        amount: 50,
+        amount: 10,
         breakdown: expect.objectContaining({ tier: 'none', tierMultiplier: 1 }),
       }),
     ]);
@@ -147,7 +147,7 @@ describe('passive: Presence → Loyalty', () => {
     await cycle(core, 30, ['2001']); // gap too long: nothing
     expect(await count(core.db, 'loyalty_rewards')).toBe(0);
     await cycle(core, 32, ['2001']); // +2 → 6 validated minutes in total
-    expect((await rewards(core)).map((r) => r.amount)).toEqual([50]);
+    expect((await rewards(core)).map((r) => r.amount)).toEqual([10]);
   });
 
   it('a replayed cycle or a restarted Core never pays a tick twice', async () => {
@@ -182,12 +182,12 @@ describe('passive: Presence → Loyalty', () => {
     const rows = await rewards(core);
     expect(rows.map((r) => [r.twitch_user_id, r.status, r.amount])).toEqual([
       ['2001', 'tier_unknown', null],
-      ['2002', 'preview', 150],
+      ['2002', 'preview', 30],
       // 2003 is excluded: no tick at all.
     ]);
     expect(rows[0]!.breakdown).toMatchObject({
       tier: 'unknown',
-      candidates: { none: 50, t1: 100, t2: 125, t3: 200 },
+      candidates: { none: 10, t1: 20, t2: 20, t3: 20 },
     });
 
     // A stale snapshot is not a proof of non-subscription.
@@ -214,8 +214,8 @@ describe('passive: Presence → Loyalty', () => {
     await watch(core, 8, 12, ['2001']);
     const rows = await rewards(core);
     expect(rows.map((r) => [r.amount, r.breakdown.tierMultiplier])).toEqual([
-      [125, 2.5],
-      [150, 3],
+      [20, 2],
+      [30, 3],
     ]);
   });
 
@@ -229,10 +229,10 @@ describe('passive: Presence → Loyalty', () => {
     await snapshot(credit, [{ viewer: aouh, tier: 't3' }]);
     await watch(credit, 0, 12, ['2001']);
     expect((await rewards(credit)).map((r) => [r.status, r.amount])).toEqual([
-      ['credited', 200],
-      ['credited', 200],
+      ['credited', 20],
+      ['credited', 20],
     ]);
-    expect((await credit.wallet.wallet.getWallet('2001'))!.balance).toBe(400);
+    expect((await credit.wallet.wallet.getWallet('2001'))!.balance).toBe(40);
     expect(await credit.loyalty.processPending()).toBe(0); // nothing left, nothing paid twice
     expect(await count(credit.db, 'wallet_transactions')).toBe(2);
   });
@@ -423,7 +423,7 @@ describe('report', () => {
     expect(report.totals).toMatchObject({
       viewers: 2,
       ticks: 4,
-      passiveJetons: 350,
+      passiveJetons: 60,
       tierUnknownTicks: 0,
     });
     expect(
@@ -436,8 +436,8 @@ describe('report', () => {
         v.jetons,
       ]),
     ).toEqual([
-      ['aouh', 12, 2, 't2', 2.5, 250],
-      ['bea', 12, 2, 'none', 1, 100],
+      ['aouh', 12, 2, 't2', 2, 40],
+      ['bea', 12, 2, 'none', 1, 20],
     ]);
   });
 });
@@ -507,8 +507,8 @@ describe('system accounts excluded from passive gains', () => {
     expect(
       (await rewards(core)).map((r) => [r.twitch_user_id, r.status, r.amount]),
     ).toEqual([
-      ['83603689', 'preview', 200],
-      ['83603689', 'preview', 200],
+      ['83603689', 'preview', 20],
+      ['83603689', 'preview', 20],
     ]);
     const progress = await core.db.query<{ twitch_user_id: string }>(
       'select twitch_user_id from loyalty_passive_progress',
