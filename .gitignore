@@ -36,3 +36,6 @@ apps/studio/desktop/release/
 apps/twitch-extension/release/
 # Browser E2E results (Playwright traces / screenshots of failures)
 .e2e-results/
+
+# Private economic / nominative exports (never committed)
+Backkup/
