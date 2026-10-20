@@ -159,6 +159,8 @@ describe.skipIf(!isLocal)(
           rows: legacyRows,
         }),
         importPrefix: 'rehearsal-credits',
+        // Lot 10: these synthetic credits expire in 2027 in the legacy rules; kept as plain balances (decision).
+        expiry: 'permanent',
       });
       files.push(...legacy.snapshots.map((s) => s.text));
       for (const text of files) {

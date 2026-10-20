@@ -543,7 +543,7 @@ seul accès = une clé service-role non autorisée pour cette mission. `credits.
 établi (audit legacy D05), **exclu** tant qu'il n'est pas qualifié. Les crédits fictifs du Lab ne sont jamais une
 source (format refusé). Outil prêt : `npm run wallet:credits-from-legacy -- <export.json> --import-prefix=<id>
 [--out-dir=…]` → un fichier d'ouverture par monnaie, puis `wallet:opening-import` (plan → apply → verify) comme les
-Jetons. Lecture à faire par Antoni (après drainage, rien en vol), au format attendu :
+Jetons. Lecture à faire par Antoni (après drainage, rien en vol) ; requête complète depuis le lot 10 : `src/wallet/legacy-credits-export.sql` (§ 18). Forme initiale :
 
 ```sql
 select redemption_id, reward_key, twitch_user_id, login, status, expires_at, credit_units, credit_remaining,
@@ -671,3 +671,95 @@ fraîcheur 120 s, base jetable) : portes à 401 / 409 attendus, alerte de 10 min
 
 **Restent** : release Studio (branche `main` exigée par `studio:release`) ; choix d'une durée de fraîcheur ; activation
 des drapeaux du bot au cutover ; lecture réelle des crédits historiques ; gel de StreamElements / SAMMI.
+
+## 18. Crédits historiques TTS / Soundboard : inventaire, décision d'expiration, gel (phase 2 lot 10, 20/10/2026)
+
+**A. Observé (code et schéma de l'ancienne extension, `CANONICAL_WORKSPACE/extension`, lecture seule).** La vérité des
+crédits est la table `ext_channel_point_redemptions` : une ligne par « pack ». Pas de table de soldes séparée ; le solde
+affiché par l'ancienne extension est recalculé à chaque lecture : `sum(credit_remaining)` des lignes `available` non
+expirées, par Twitch ID et `reward_key`.
+
+| Source d'une ligne                                                                       | Unités                                               | Expiration (`expires_at`)                            |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
+| Redemption Twitch d'une récompense gérée par l'app                                       | TTS 1, Soundboard `rewardCreditUnits` (3 par défaut) | rachat + 6 h                                         |
+| Redemption d'une récompense créée au tableau de bord                                     | idem                                                 | rachat + 365 j (`TWITCH_HISTORICAL_CREDIT_TTL_DAYS`) |
+| Crédit Soundboard accordé par la modération (`moderation-credit:…`, source `moderation`) | montant accordé                                      | 9999-12-31 (jamais) ; `login` = Twitch ID            |
+| Test du Lab de l'ancienne extension (`lab-…`, `reward_id` `lab:…`, coût 0)               | 1                                                    | + 6 h, **fictif**                                    |
+
+Cycle : `available` → `claimed` (crédits réservés : `credit_claim_cost`, `credit_in_flight = 1`) → `fulfilled`, ou
+retour `available` s'il reste des crédits dans le pack ; échec / bail expiré → crédits rendus ; 3 échecs d'une
+récompense gérée → `canceled` (points rendus sur Twitch) ou `cancel_pending` (remboursement Twitch à réconcilier) ;
+`ext_expire_redemptions` passe en `expired`. Les dépenses de la modération consomment les packs les plus anciens.
+Plusieurs packs d'un viewer ont chacun leur expiration. Clé : le Twitch ID d'EventSub (jamais un pseudo).
+
+**B. Inconnu / inaccessible.** Les montants réels : la base de l'ancienne extension n'est lisible qu'avec la clé
+service-role (`_migration-exports/legacy-supabase.env`), **non utilisée** (pas d'autorisation pour ce lot). Inconnus
+donc : nombre de viewers, totaux, crédits en vol, crédits Bonk, ancienneté des packs, part qui expire en 6 h ou en
+365 j. Aucun export local de cette table (recherche dans `_migration-exports`, sauvegardes, worktrees). Hors de cette
+table : `SAMMI/data/credits.ini` (145 comptes **par pseudo**, 3 068 crédits, 1 719 transactions, encore écrit le
+19/10) est une autre monnaie SAMMI (gagnée par subs / gifts, dépensée en « Random screamer », `!buy`, `!code`), pas
+des crédits TTS / Soundboard : non reprise ici.
+
+**C. Préparé (aucun solde réel).** Lecture : `apps/core-api/src/wallet/legacy-credits-export.sql` (un seul `select`
+dans une transaction `read only` `repeatable read`, lignes et totaux déclarés du même instantané, aucune fonction
+appelée ; heure de gel à renseigner). Outil du lot 7 complété (même importeur d'ouverture que les Jetons) :
+
+- `npm run wallet:credits-from-legacy -w @raptoru/core-api -- <export.json> --inventory --out-dir=<dossier hors dépôt>` :
+  comptages publics (par état : utilisable, en vol, consommé, expiré, annulé, Lab ; crédits consommés ; échéances des
+  crédits utilisables ; crédits de modération ; Twitch ID invalides, Twitch ID à plusieurs logins, login sur plusieurs
+  ID) et la liste nominative **seulement** dans `inventory-private-<sha>.json` du dossier donné ;
+- `… --import-prefix=<id> [--expiry=permanent] --out-dir=<dossier>` : un fichier d'ouverture `credits_tts`, un
+  `credits_soundboard`, puis `wallet:opening-import` (plan → apply → verify, une fois).
+
+Règles : solde = `credit_remaining` des lignes `available` non expirées à l'heure de gel, par Twitch ID ; chaque pack
+gardé comme source (`ext-redemption:<id>`) ; exclus avec leur raison : expiré, `canceled`, `fulfilled`, Lab de test ;
+refusés : crédit en vol (`claimed`, `cancel_pending`, `credit_in_flight`), crédit Bonk utilisable, autre `reward_key`
+utilisable, Twitch ID non numérique, doublon, totaux ≠ déclarés, export antérieur au gel, et toute expiration finie
+sans décision. Login affiché : le plus récent qui n'est pas un Twitch ID (un don de modération n'écrase jamais le
+pseudo).
+
+**D. Décisions.**
+
+1. **Expiration** (bloque l'import, rien d'autre) : le Wallet n'a pas d'échéance ; importer un pack qui expirerait
+   (6 h ou 365 j) le rend permanent. Options : (a) solde permanent, `--expiry=permanent` — **recommandé**, conforme à
+   « chaque viewer retrouve son solde », prolonge au plus les packs 365 j et les packs 6 h encore ouverts au gel ;
+   (b) des échéances dans le Wallet (lots datés + débit d'expiration) — nouvelle fonction du Wallet, à concevoir ;
+   (c) ne rien reprendre qui expire avant une date choisie — perd des soldes légitimes. Les crédits de modération
+   (sans échéance) ne demandent aucune décision.
+2. **Crédits Bonk** encore utilisables au gel : pas de monnaie canonique ; à laisser consommer / expirer avant le gel,
+   ou à décider.
+3. **`credits.ini` SAMMI** : monnaie distincte, indexée par pseudo (résolution en Twitch ID nécessaire) : reprise,
+   archivage ou abandon à décider.
+4. **Lecture réelle** : autoriser la clé service-role pour ce seul `select`, ou exécution par Antoni (éditeur SQL du
+   projet Supabase, en propriétaire) avec dépôt du JSON dans `_migration-exports`.
+
+**E. Répétition** (`test/economy-lot10.integration.test.ts`, PostgreSQL réel jetable, **lignes synthétiques** : elles
+prouvent les outils, jamais les montants historiques). Copie de la table legacy, export par la vraie requête en
+transaction lecture seule ; inventaire (13 lignes : en vol, Lab, annulé, expiré, renommage détectés) ; conversion
+refusée pour le crédit en vol, puis drainé (règle legacy : il reste 1 crédit → `available`), refusée sans décision
+d'expiration, acceptée avec `permanent` ; import Jetons + crédits ; import TTS interrompu (connexion perdue) → rien
+gardé, repris une fois ; import Soundboard lancé sur deux connexions à la fois → appliqué une fois ; rejeu
+`already_applied`, vérification OK ; soldes exacts par Twitch ID (renommage = un portefeuille, packs multiples,
+partiellement consommés, don de modération) ; Lab, annulé, expiré jamais importés ; deux Core canoniques : l'Extension
+affiche les crédits ; son payé en crédits puis échec avant lecture → remboursé une fois (échec signalé deux fois) ;
+TTS payé en crédits ; ledger = soldes, aucun négatif, portefeuille Lab intact, table legacy seulement lue. Commande
+réelle essayée dans ses trois modes sur un export synthétique (scratchpad).
+
+**F. Procédure du jour du gel** (chaque étape après ta validation) :
+
+1. Fixer l'heure de gel H (hors live). Annoncer la fin des crédits de l'ancienne extension.
+2. Couper les écrivains : récompenses TTS / Soundboard / Bonk de l'ancienne extension en pause sur Twitch (plus de
+   nouvelles redemptions), puis EBS de l'ancienne extension arrêté ou en maintenance (plus de consommation ni de crédit
+   de modération) ; actions TTS / Soundboard de SAMMI coupées.
+3. Drainer : la requête de contrôle (fin du fichier SQL) ne doit plus rien renvoyer (`claimed`, `cancel_pending`,
+   `credit_in_flight`) ; un `cancel_pending` se règle d'abord sur Twitch (remboursement confirmé).
+4. Exporter avec H, déposer le JSON hors dépôt ; `--inventory` ; comparer à l'inventaire préparatoire (écarts expliqués
+   par les consommations et expirations depuis).
+5. Convertir avec la décision d'expiration retenue ; relire les exclus et les totaux.
+6. `wallet:opening-import` plan → apply → verify, **une fois** par monnaie, sur le Core canonique (même procédure que
+   les Jetons, § 15) ; contrôler les soldes par Twitch ID et par monnaie contre la liste privée.
+7. Reprise (activation canonique, Extension 2.0) seulement après ces contrôles. L'ancienne table reste intacte (retour
+   arrière en lecture).
+
+**Restent avant le cutover** : lecture réelle (autorisation ou exécution par Antoni) ; décisions D1 à D3 ; puis celles
+des §§ 15–17.
