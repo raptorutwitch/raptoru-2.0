@@ -76,6 +76,9 @@ interface NewReward {
   breakdown: unknown;
 }
 
+/** A sub and a resub of the same viewer this close (Twitch times, either order) are one renewal (sameRenewal). */
+export const RENEWAL_WINDOW_MS = 10 * 60 * 1000;
+
 const hash = (v: unknown) =>
   createHash('sha256').update(JSON.stringify(v)).digest('hex');
 
@@ -274,12 +277,33 @@ export class LoyaltyEngine {
       if ('skip' in reward) return skipped(reward.skip);
 
       await ensureViewers(q, [reward.viewer]);
+      // A redelivered event is answered from its stored row (insertReward): never paired again.
+      const stored = (
+        await q.query<{ breakdown: { excluded?: string } | null }>(
+          'select breakdown from loyalty_rewards where idempotency_key = $1',
+          [reward.key],
+        )
+      )[0];
       // Cutover boundary (Astra B5): an event that happened before the opening snapshot of the currency was paid by
       // the previous economy (its balance is in the opening) — recorded, never paid again here.
       const beforeCutover =
+        !stored &&
         mode === 'credit' &&
         !!event.occurredAt &&
         (await occurredBeforeCutover(q, event.occurredAt, config.currencyId));
+      // One reward per renewal: a non-gift sub and a resub of the same viewer ≤ 10 min apart (Twitch times) are one.
+      const pair =
+        !stored && !beforeCutover && reward.amount !== null
+          ? await this.sameRenewal(q, event, reward.viewer.twitchUserId)
+          : null;
+      const complement = pair
+        ? Math.max(0, reward.amount! - (pair.amount ?? 0))
+        : 0;
+      const excludedAs = beforeCutover
+        ? 'before_cutover'
+        : pair && complement === 0
+          ? 'same_renewal'
+          : null;
       const r = await insertReward(q, {
         key: reward.key,
         hashPayload: reward.hashPayload,
@@ -287,8 +311,9 @@ export class LoyaltyEngine {
         viewerId: reward.viewer.twitchUserId,
         streamId: null,
         currencyId: config.currencyId,
-        amount: reward.amount,
-        status: beforeCutover
+        // A paired event pays only what its higher tier adds (A2); excluded, it keeps its own amount for the record.
+        amount: pair && complement > 0 ? complement : reward.amount,
+        status: excludedAs
           ? 'excluded'
           : mode === 'credit'
             ? 'pending'
@@ -297,7 +322,22 @@ export class LoyaltyEngine {
           ...reward.breakdown,
           mode,
           eventId: event.eventId,
-          ...(beforeCutover ? { excluded: 'before_cutover' } : {}),
+          ...(event.occurredAt ? { occurredAt: event.occurredAt } : {}),
+          ...(excludedAs ? { excluded: excludedAs } : {}),
+          ...(pair
+            ? {
+                pairedWith: pair.id,
+                ...(complement > 0
+                  ? {
+                      complement: {
+                        full: reward.amount,
+                        alreadyPaid: pair.amount ?? 0,
+                        paid: complement,
+                      },
+                    }
+                  : {}),
+              }
+            : {}),
         },
       });
       return {
@@ -305,13 +345,64 @@ export class LoyaltyEngine {
         status: r.status,
         amount: r.amount,
         replayed: r.replayed,
-        reason: r.status === 'excluded' ? 'before_cutover' : null,
+        reason:
+          r.status === 'excluded'
+            ? (stored?.breakdown?.excluded ?? excludedAs ?? 'before_cutover')
+            : pair && complement > 0
+              ? 'same_renewal_complement'
+              : null,
       };
     });
 
     if (response.status === 'pending' && !response.replayed)
       await this.processPending();
     return response;
+  }
+
+  /**
+   * One reward per renewal (decision A2, post-live audit § 14.2): a manual re-subscription (Prime, lapsed sub) reaches us
+   * as channel.subscribe AND channel.subscription.message — two Twitch events, two ids. They are the same renewal when
+   * they concern the same viewer, are of opposite kinds (a non-gift sub and a resub; gifts never reach this point) and
+   * their Twitch times are ≤ RENEWAL_WINDOW_MS apart, in either order. Distinct renewals are a billing month apart, so
+   * the window never merges two of them; a share made later than the window still pays twice (surplus, never a loss).
+   *
+   * Strict on purpose:
+   * - only rows carrying their Twitch time (breakdown.occurredAt) are candidates — no fallback on created_at, which is a
+   *   processing time (a replay hours later would look simultaneous);
+   * - one to one: a candidate already paired, or itself the paired half of another renewal, is never taken again;
+   * - serialized per viewer (transaction-scoped advisory lock): two events of the same renewal processed in parallel
+   *   cannot both see each other unpaired;
+   * - rejected / tier_unknown rows paid nothing and pair with nothing.
+   */
+  private async sameRenewal(
+    q: Queryable,
+    event: LoyaltyEvent,
+    viewerId: string,
+  ): Promise<{ id: number; amount: number | null } | null> {
+    if (event.type !== 'sub' && event.type !== 'resub') return null;
+    if (event.type === 'sub' && event.isGift) return null;
+    if (!event.occurredAt) return null;
+    await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+      `loyalty-renewal:${viewerId}`,
+    ]);
+    const other = event.type === 'sub' ? 'resub' : 'sub';
+    return (
+      (
+        await q.query<{ id: number; amount: number | null }>(
+          `select c.id, c.amount from loyalty_rewards c
+           where c.twitch_user_id = $1 and c.source = $2
+             and c.status in ('pending', 'credited', 'preview', 'excluded')
+             and c.breakdown ? 'occurredAt' and not (c.breakdown ? 'pairedWith')
+             and abs(extract(epoch from ((c.breakdown->>'occurredAt')::timestamptz - $3::timestamptz))) * 1000 <= $4
+             and not exists (
+               select 1 from loyalty_rewards p
+               where p.twitch_user_id = c.twitch_user_id and p.breakdown->>'pairedWith' = c.id::text)
+           order by abs(extract(epoch from ((c.breakdown->>'occurredAt')::timestamptz - $3::timestamptz))), c.id
+           limit 1`,
+          [viewerId, other, event.occurredAt, RENEWAL_WINDOW_MS],
+        )
+      )[0] ?? null
+    );
   }
 
   private eventReward(
