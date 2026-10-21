@@ -453,6 +453,82 @@ describe('Random Ban — from the channel points rule', () => {
   });
 });
 
+describe('Random Ban — the redemption follows the result without Studio (live of 21/10)', () => {
+  it('confirmed → the redemption is done at the executor report, no Studio read; another pending one is untouched', async () => {
+    const { core, rb } = await fixture();
+    const cp = new ChannelPointsService(core.db, core.clock, core.soundLab, rb);
+    await cp.syncRewards({
+      channel_id: CH,
+      rewards: [
+        {
+          id: 'reward-rb',
+          title: 'Ban aléatoire',
+          cost: 3000,
+          is_enabled: true,
+        },
+      ],
+    });
+    await cp.saveRule(CH, 'reward-rb', {
+      enabled: true,
+      actions: [{ type: 'interaction', interaction: 'random_ban' }],
+    });
+    await cp.setEnabled(CH, true, 'test');
+    const redeem = () =>
+      cp.receive({
+        channel_id: CH,
+        source: 'twitch' as const,
+        redemption_id: randomUUID(),
+        reward: { id: 'reward-rb', title: 'Ban aléatoire', cost: 3000 },
+        user: { id: BUYER.id, login: BUYER.login, display_name: BUYER.name },
+        twitch_status: 'unfulfilled' as const,
+        redeemed_at: core.clock.now().toISOString(),
+      });
+    const first = await redeem();
+    const second = await redeem(); // queued behind the first: stays pending
+    const row = async (rid: string) =>
+      (
+        await core.db.query<{
+          status: string;
+          twitch_status: string;
+          results: { status: string; detail?: string }[];
+        }>(
+          'select status, twitch_status, results from cp_redemptions where redemption_id = $1',
+          [rid],
+        )
+      )[0]!;
+    const c = await rb.claim(CH, EXEC);
+    await rb.target(c.request!.request_id, {
+      executor_id: EXEC.executor_id,
+      attempt_id: c.request!.attempt_id,
+      target: TARGET,
+      is_sub: false,
+      stats: STATS,
+    });
+    const report = {
+      executor_id: EXEC.executor_id,
+      attempt_id: c.request!.attempt_id,
+      event: 'confirmed' as const,
+    };
+    expect((await rb.result(c.request!.request_id, report)).status).toBe(
+      'confirmed',
+    );
+    // No cp.state() / cp.claim(): the redemption is final from the report alone. Twitch's status is untouched
+    // (SAMMI's reward: Raptoru never fulfils it).
+    expect(await row(first.redemption.redemption_id!)).toMatchObject({
+      status: 'done',
+      twitch_status: 'unfulfilled',
+      results: [{ status: 'done', detail: 'Target en timeout 5 min' }],
+    });
+    expect(await row(second.redemption.redemption_id!)).toMatchObject({
+      status: 'pending',
+      results: [{ status: 'pending' }],
+    });
+    // The same report again (answer lost): idempotent, still done once.
+    await rb.result(c.request!.request_id, report);
+    expect((await row(first.redemption.redemption_id!)).status).toBe('done');
+  });
+});
+
 describe('Random Ban migrations', () => {
   const fresh = () =>
     createPgliteDb(

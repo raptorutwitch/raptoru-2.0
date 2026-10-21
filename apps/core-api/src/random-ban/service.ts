@@ -455,7 +455,7 @@ export class RandomBanService {
 
   /** The outcome (idempotent: a final result stays; only an « uncertain » can still be settled by the executor). */
   async result(id: string, o: RbResultReport) {
-    return this.db.tx(async (q) => {
+    const { view, channelId } = await this.db.tx(async (q) => {
       const r = await this.row(q, id, true);
       this.current(r, o.executor_id, o.attempt_id);
       const now = this.now();
@@ -506,8 +506,25 @@ export class RandomBanService {
           lease_expires_at: null,
           ended_at: now,
         });
-      return rbView(await this.row(q, id));
+      return { view: rbView(await this.row(q, id)), channelId: r.channel_id };
     });
+    // After the commit: the channel points redemption follows its result now, not at Studio's next read (live of
+    // 21/10: 6 confirmed Random Bans left « pending »). Its failure never fails the executor's report.
+    for (const fn of this.settledListeners)
+      await fn(channelId, id).catch((e) =>
+        console.error('[random-ban] redemption settle failed', id, e),
+      );
+    return view;
+  }
+
+  private readonly settledListeners: ((
+    channelId: string,
+    requestId: string,
+  ) => Promise<void>)[] = [];
+
+  /** Channel points: told after each executor result (outside its transaction). */
+  onResult(fn: (channelId: string, requestId: string) => Promise<void>) {
+    this.settledListeners.push(fn);
   }
 
   // --- the animation (Studio's effects player) -------------------------------------------------------------------

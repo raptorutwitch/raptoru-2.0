@@ -254,7 +254,11 @@ export class ChannelPointsService {
     private readonly randomBan?: RandomBanService,
     /** Credits actions: the runtime economy (the Lab test wallet unless the launcher passes the canonical one). */
     private readonly economy: EconomyPort = labEconomy,
-  ) {}
+  ) {
+    randomBan?.onResult((channelId, requestId) =>
+      this.settleRandomBans(channelId, requestId),
+    );
+  }
 
   /**
    * Grants one credits action inside the reception's transaction, alone in a savepoint: a refusal (currency
@@ -1081,17 +1085,26 @@ export class ChannelPointsService {
     });
   }
 
-  /** Random Ban actions follow their request until it ends (Random Ban's own history holds the details). */
-  private async settleRandomBans(channelId: string) {
+  /**
+   * Random Ban actions follow their request until it ends (Random Ban's own history holds the details): at each
+   * Studio read, and for one request as soon as the executor reports its result.
+   */
+  private async settleRandomBans(channelId: string, requestId?: string) {
     if (!this.randomBan) return;
     const rows = await this.db.query<RedemptionRow>(
       `select * from cp_redemptions where channel_id = $1 and status = 'pending'
-         and results::text like '%random_ban_id%' order by received_at desc limit 50`,
-      [channelId],
+         and results::text like '%random_ban_id%' and ($2::text is null or results @> $3::jsonb)
+         order by received_at desc limit 50`,
+      [
+        channelId,
+        requestId ?? null,
+        JSON.stringify([{ random_ban_id: requestId ?? '' }]),
+      ],
     );
     for (const row of rows)
       for (const r of row.results) {
         if (r.status !== 'pending' || !r.random_ban_id) continue;
+        if (requestId && r.random_ban_id !== requestId) continue;
         const rb = await this.randomBan.outcome(r.random_ban_id);
         const update = rb && randomBanResult(r.index, rb);
         if (update)
