@@ -1,4 +1,5 @@
 import { AlertsService } from './alerts/service.js';
+import { BotInstanceService } from './bot-instance/service.js';
 import { RandomBanService } from './random-ban/service.js';
 import { SubWheelService } from './sub-wheel/service.js';
 import { ChannelPointsService } from './channel-points/service.js';
@@ -47,6 +48,8 @@ export interface Core {
   randomBan: RandomBanService;
   /** Roue du Sub (fed by the alerts reception; OFF by default). */
   subWheel: SubWheelService;
+  /** Single active production bot (lease + the health Studio shows). */
+  botInstances: BotInstanceService;
   /**
    * Economy of every paying module of this Core (Bonk, Soundboard, TTS, Tombola, Roue du Sub, Points de chaîne,
    * moderation): the Lab test wallet unless the process passes the canonical Wallet (economy/activation.ts).
@@ -115,6 +118,7 @@ export function createCore(
     ),
     randomBan,
     subWheel: new SubWheelService(db, clock, undefined, economy),
+    botInstances: new BotInstanceService(db, clock),
     economy,
     chat: createChatGames({
       db,

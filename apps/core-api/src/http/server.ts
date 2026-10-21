@@ -7,6 +7,7 @@ import {
   type ServerResponse,
 } from 'node:http';
 import {
+  BOT_INSTANCE_HEADER,
   DailyClaimRequest,
   PresenceLeaseRequest,
   PresenceObservationRequest,
@@ -75,6 +76,8 @@ import type { LabCall } from '../ext/lab-internal.js';
 import { studioCockpitRoutes } from './studio-cockpit-routes.js';
 import { wordGameCockpitEvents } from './word-game-routes.js';
 import { studioAdminRoutes } from './studio-admin-routes.js';
+import { botInstanceRoutes } from './bot-instance-routes.js';
+import type { BotInstanceService } from '../bot-instance/service.js';
 
 export interface AppDeps {
   daily: DailyService;
@@ -113,6 +116,8 @@ export interface AppDeps {
   randomBan?: RandomBanService;
   /** Roue du Sub: /v1/studio/sub-wheel/* and the wheel side of the alerts reception (same conditions as alerts). */
   subWheel?: SubWheelService;
+  /** Single active production bot: /v1/bot/instance/* (bot) and, with studioInstallations, GET /v1/studio/status/bot. */
+  botInstances?: BotInstanceService;
   /** Readiness probe (GET /ready): the database answers. */
   db?: Pick<Db, 'query'>;
   /**
@@ -217,6 +222,7 @@ function routes({
   channelPoints,
   randomBan,
   subWheel,
+  botInstances,
   db,
   labRoutes = true,
   ext,
@@ -244,6 +250,9 @@ function routes({
       ? randomBanRoutes(randomBan, { channelId: cockpit.channelId })
       : []),
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
+    ...(botInstances
+      ? botInstanceRoutes(botInstances, !!studioInstallations)
+      : []),
     // Lot 9: the Jeu des mots wins for Studio's local OBS sound (before the cockpit's catch-all GET).
     ...(studioInstallations && cockpit && chatIngress
       ? [wordGameCockpitEvents(chatIngress.games.wordGame, cockpit.channelId)]
@@ -533,6 +542,23 @@ export function createHandler(deps: AppDeps): RequestListener {
         !secretMatches(req.headers.authorization, deps.botSecret)
       ) {
         throw new HttpError(401, { error: 'unauthorized' });
+      }
+      // Single active bot: with a live lease, the bot routes answer its holder only (the lease routes themselves are how
+      // an instance gets or frees it). A fenced instance gets 409 and stops at its next renewal.
+      if (
+        route.auth === 'bot' &&
+        deps.botInstances &&
+        !url.pathname.startsWith('/v1/bot/instance/')
+      ) {
+        const named = req.headers[BOT_INSTANCE_HEADER];
+        const w = await deps.botInstances.writer(
+          typeof named === 'string' ? named : undefined,
+        );
+        if (!w.allowed)
+          throw new HttpError(409, {
+            error: 'not_lease_holder',
+            holder: w.holder,
+          });
       }
       if (
         route.auth === 'studio' &&

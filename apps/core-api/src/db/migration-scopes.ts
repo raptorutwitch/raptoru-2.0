@@ -45,6 +45,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261029130000_wallet_opening_import_sources.sql',
   // Crédits TTS / Soundboard: secondary currencies of the canonical Wallet (D2).
   '20261030130000_wallet_credit_currencies.sql',
+  // Single active production bot: the lease and the health Studio shows (plan post-live lot 1).
+  '20261031130000_bot_instance.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */

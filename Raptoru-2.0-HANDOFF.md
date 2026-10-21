@@ -1,5 +1,16 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
+## État courant — 21/10/2026 : Production en service depuis le live du 20/10 · bot vers le VPS (lots 1–2 locaux)
+
+- **Production :**
+  - bascule faite le 20/10 : Core `core.raptoru.fr`, économie canonique, imports appliqués ;
+  - procédure et références : `docs/HANDOFF_MIGRATION_2026-10-20.md`, non suivi par git ;
+  - le bot tourne encore sur le PC (`run-production.ps1`).
+- **Audit du premier live :** `docs/POST_LIVE_AUDIT_2026-10-20.md`. Le § 14 contient les preuves attachées aux décisions.
+- **Plan et décisions A1–A9 d'Antoni (définitives) :** `docs/PLAN_POST_LIVE_2026-10-21.md`. Priorité absolue : un bot autonome sur le VPS, et sur le PC seulement Studio et OBS.
+- **Lots 1 et 2** (bail d'instance unique dans le Core, bot autonome en conteneur) : **implémentés, testés en local et commités sur `main` (local, non poussé), non déployés**. L'audit et `docs/HANDOFF_MIGRATION_2026-10-20.md` restent volontairement hors git (données de viewers et références privées), sauf décision d'Antoni. L'état, les tests et la procédure de validation sont au § 4 du plan. **Déployer le Core avant le bot.**
+- **Interdits sans accord explicite d'Antoni :** déploiement, écriture en base Production, tour de Wenuyr, seconde instance du bot Production, modification des permissions d'Aouh (voulues, A9).
+
 ## État courant — 18/10/2026 : migrations SAMMI P0 terminées en Lab · point d'avancement et roadmap centralisés
 
 **OAuth Twitch — correctifs locaux après l'audit de `9fae46e` (18/10/2026).** Profils stables approuvés : six scopes

@@ -45,7 +45,22 @@ async function boot(
   vi.spyOn(process, 'exit').mockImplementation(() => {
     throw new Error('process stopped');
   });
-  const requests = vi.fn(async () => Response.json({ outcome: 'ignored' }));
+  // The main bot first asks the Core for the single-instance lease (granted here), then everything else.
+  const requests = vi.fn(async (url: string | URL) =>
+    String(url).endsWith('/v1/bot/instance/lease')
+      ? Response.json({
+          granted: true,
+          holder: {
+            instanceId: 'pc-test',
+            host: 'pc',
+            since: '2026-10-21T10:00:00.000Z',
+            expiresAt: '2026-10-21T10:00:45.000Z',
+          },
+          ttlSeconds: 45,
+          renewSeconds: 15,
+        })
+      : Response.json({ outcome: 'ignored' }),
+  );
   vi.stubGlobal('fetch', requests);
 
   const config = {
@@ -75,6 +90,7 @@ async function boot(
       CORE_API_URL: 'http://127.0.0.1:4301',
       BOT_SECRET: 'mock-bot-secret',
       STREAM_SYNC_INTERVAL_MS: 60_000,
+      BOT_HOST: 'pc',
     }),
   }));
 
@@ -148,7 +164,7 @@ async function boot(
   }[] = [];
   vi.doMock('../src/twitch/eventsub.js', () => ({
     runEventSub: (handlers: EventSubHandlers) => {
-      const client = { handlers, stop: vi.fn() };
+      const client = { handlers, stop: vi.fn(), connected: () => true };
       sockets.push(client);
       return client;
     },
@@ -305,14 +321,74 @@ describe('Bot account and capability wiring (no real Twitch or token files)', ()
     expect(s.accounts.every((a) => a.validate.mock.calls.length === 1)).toBe(
       true,
     );
-    expect(() => s.accounts[1]!.options.onFailure!('wrong_account')).toThrow(
-      'process stopped',
-    );
+    // The main bot frees its single-instance lease before exiting: consumers stop at once, exit 78 after the release.
+    vi.mocked(process.exit).mockImplementation(() => undefined as never);
+    s.accounts[1]!.options.onFailure!('wrong_account');
     expect(
       s.sockets.every((socket) => socket.stop.mock.calls.length === 1),
     ).toBe(true);
     expect(s.runtime.presence.stop).toHaveBeenCalledTimes(1);
     expect(s.randomBan.stop).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(
+      s.requests.mock.calls.some((c) =>
+        String(c[0]).endsWith('/v1/bot/instance/release'),
+      ),
+    ).toBe(true);
+    expect(process.exit).toHaveBeenCalledWith(78);
+  });
+
+  it('the main bot names its instance on every Core call and stays up while its lease is renewed', async () => {
+    const s = await boot(
+      ['channel:manage:redemptions'],
+      ['user:read:chat', 'user:write:chat'],
+      { main: true },
+    );
+    await vi.advanceTimersByTimeAsync(5 * 60_000); // 20 renewals, every one granted
+    expect(process.exit).not.toHaveBeenCalled();
+    const calls = s.requests.mock.calls as unknown as [
+      string | URL,
+      RequestInit,
+    ][];
+    const core = calls.filter(([url]) =>
+      String(url).startsWith('http://127.0.0.1:4301/v1/bot/'),
+    );
+    expect(
+      core.filter(([url]) => String(url).endsWith('/v1/bot/instance/lease'))
+        .length,
+    ).toBeGreaterThan(15);
+    expect(core.length).toBeGreaterThan(0);
+    for (const [, init] of core)
+      expect(
+        (init.headers as Record<string, string>)['x-raptoru-bot-instance'],
+      ).toMatch(/^pc-/);
+  });
+
+  it('Core unreachable for longer than the fence: the main bot stops everything itself (exit 75) before its lease can be given away', async () => {
+    const s = await boot(
+      ['channel:manage:redemptions'],
+      ['user:read:chat', 'user:write:chat'],
+      { main: true },
+    );
+    vi.mocked(process.exit).mockImplementation(() => undefined as never);
+    s.requests.mockImplementation(async () => {
+      throw new Error('network down');
+    });
+    await vi.advanceTimersByTimeAsync(34_000);
+    expect(process.exit).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2_000); // 36 s after the last granted request, < 45 s
+    expect(process.exit).toHaveBeenCalledWith(75);
+    expect(
+      s.sockets.every((socket) => socket.stop.mock.calls.length === 1),
+    ).toBe(true);
+    expect(s.runtime.presence.stop).toHaveBeenCalledTimes(1);
+    expect(s.randomBan.stop).toHaveBeenCalledTimes(1);
+    // Fenced, not released: the lease is not provably its own any more.
+    expect(
+      s.requests.mock.calls.some((c) =>
+        String(c[0]).endsWith('/v1/bot/instance/release'),
+      ),
+    ).toBe(false);
   });
 
   it('an invalid broadcaster at main bot startup leaves chat and presence running', async () => {

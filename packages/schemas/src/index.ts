@@ -19,3 +19,4 @@ export * from './color-cam.js';
 export * from './random-ban.js';
 export * from './twitch-oauth.js';
 export * from './sub-wheel.js';
+export * from './bot-instance.js';

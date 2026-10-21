@@ -175,6 +175,21 @@ const Env = TwitchApp.extend({
     .min(1)
     .default('.random-ban-journal.json'),
   STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
+  // Single active production bot (instance-lease.ts): where this instance runs, shown by Studio (« vps », « pc »).
+  BOT_HOST: z
+    .string()
+    .regex(/^[a-z0-9-]{1,32}$/)
+    .default('pc'),
+  // Stable id of this instance (default: host, machine name and process id; a container keeps its name and pid 1).
+  BOT_INSTANCE_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+    .optional(),
+  // Container health check: a file rewritten each time the Core answers the lease (Dockerfile HEALTHCHECK).
+  BOT_ALIVE_FILE: z.string().min(1).optional(),
+  // DEVELOPMENT ONLY: a Core without the lease API (404) lets the bot start without single-instance protection.
+  // Refused unless CORE_API_URL is a local Core (loadConfig): a production bot never starts unprotected.
+  BOT_LEASE_OPTIONAL: Flag,
 });
 
 export type TwitchAppConfig = z.infer<typeof TwitchApp>;
@@ -193,8 +208,18 @@ function parse<T>(
   return result.data;
 }
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): BotConfig {
-  return distinctTokenPaths(parse(Env, env, 'twitch-bot'));
+  const config = distinctTokenPaths(parse(Env, env, 'twitch-bot'));
+  if (
+    config.BOT_LEASE_OPTIONAL === 'true' &&
+    !LOCAL_HOSTS.has(new URL(config.CORE_API_URL).hostname)
+  )
+    throw new Error(
+      'invalid twitch-bot environment: BOT_LEASE_OPTIONAL is for a local development Core only',
+    );
+  return config;
 }
 
 export function loadTwitchAppConfig(

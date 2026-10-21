@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
-import { TWITCH_OAUTH_PROFILES } from '@raptoru/schemas';
+import { BOT_INSTANCE_HEADER, TWITCH_OAUTH_PROFILES } from '@raptoru/schemas';
 import { broadcasterScopes, loadConfig, requiredScopes } from './config.js';
 import {
   type CpOutboxEvent,
@@ -17,6 +18,8 @@ import {
   fileRbJournal,
   helixRbTwitch,
 } from './random-ban-executor.js';
+import { botFlags, createInstanceLease } from './instance-lease.js';
+import { installConsole } from './log.js';
 import { createBotRuntime } from './runtime.js';
 import { fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { superviseTwitchAuth } from './twitch/auth-supervision.js';
@@ -33,14 +36,126 @@ if (process.env.TWITCH_ENABLED !== 'true') {
 }
 
 const config = loadConfig();
+// Persistent logs (plan post-live lot 2): UTC time + level on every line, configured secrets and token shapes masked.
+installConsole([config.BOT_SECRET, config.TWITCH_CLIENT_SECRET]);
 const consumers = new Set<() => void>();
-function authorizationLost(account: string, reason: string): never {
+
+// Single active production bot (instance-lease.ts): nothing touches Twitch — not even a token refresh — before this
+// instance holds the Core's lease. Without it: standby (logged), retried every 15 s.
+const startedAt = new Date().toISOString();
+const instanceId = (
+  config.BOT_INSTANCE_ID ??
+  `${config.BOT_HOST}-${hostname()}-${process.pid}`.replace(
+    /[^A-Za-z0-9._:-]/g,
+    '-',
+  )
+).slice(0, 128);
+// Every Core call names this instance: with a live lease, the Core refuses the bot routes to a non-holder.
+const botHeaders = { [BOT_INSTANCE_HEADER]: instanceId };
+const health: {
+  bot: { connected(): boolean } | null;
+  broadcaster: { connected(): boolean } | null;
+  broadcasterToken: boolean | null;
+} = { bot: null, broadcaster: null, broadcasterToken: null };
+const probe = (read: () => boolean | null): boolean | null => {
+  try {
+    return read();
+  } catch {
+    return null;
+  }
+};
+const lease = createInstanceLease({
+  call: async (path, body) => {
+    const res = await fetch(new URL(path, config.CORE_API_URL), {
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        authorization: `Bearer ${config.BOT_SECRET}`,
+        'content-type': 'application/json',
+        ...botHeaders,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
+    });
+    return {
+      status: res.status,
+      body: (await res.json().catch(() => null)) as unknown,
+    };
+  },
+  // Container health check (Dockerfile): touched each time the Core answers the lease, holder or standby.
+  ...(config.BOT_ALIVE_FILE
+    ? {
+        alive: () =>
+          void writeFile(
+            config.BOT_ALIVE_FILE!,
+            new Date().toISOString(),
+          ).catch(() => {}),
+      }
+    : {}),
+  instanceId,
+  // Development only (config.ts refuses it outside a local Core): a Core without the lease API lets the bot start.
+  optional: config.BOT_LEASE_OPTIONAL === 'true',
+  report: () => ({
+    host: config.BOT_HOST,
+    version: (
+      process.env.SOURCE_COMMIT ||
+      process.env.BOT_VERSION ||
+      'dev'
+    ).slice(0, 64),
+    startedAt,
+    // A failing probe reads « unknown » (null): reporting health must never cost the lease (the renewal would fail and
+    // the instance stop itself).
+    health: {
+      eventSubBot: probe(() => health.bot?.connected() ?? false),
+      eventSubBroadcaster: probe(() =>
+        health.broadcaster ? health.broadcaster.connected() : null,
+      ),
+      broadcasterToken: health.broadcasterToken,
+    },
+    flags: botFlags(config),
+  }),
+});
+
+/**
+ * Stops every consumer at once, frees the lease (≤ 3 s), then exits with `code`. Every caller awaits the SAME stop,
+ * which never hands back control: code after `await shutdown(…)` never runs (as with the former synchronous exit).
+ */
+let exiting: Promise<never> | null = null;
+function shutdown(code: number, release = true): Promise<never> {
+  exiting ??= (async () => {
+    for (const stop of consumers) stop();
+    if (release) await lease.release();
+    process.exit(code);
+  })() as Promise<never>;
+  return exiting;
+}
+function authorizationLost(account: string, reason: string): void {
   console.error(
     `[twitch-bot] ${account}: ${reason}; consumers stopped, reauthorization required`,
   );
-  for (const stop of consumers) stop();
-  process.exit(78);
+  void shutdown(78);
 }
+for (const signal of ['SIGINT', 'SIGTERM'] as const)
+  process.on(signal, () => {
+    console.log(`[twitch-bot] ${signal}: clean stop, lease released`);
+    void shutdown(0);
+  });
+
+console.log(
+  `[twitch-bot] instance ${instanceId} (${config.BOT_HOST}): waiting for the lease before connecting to Twitch`,
+);
+await lease.acquire();
+// Another instance named holder: this one stops at once (no release: the lease is not its own) and exits 75; the
+// supervisor (Docker / run-production.ps1) restarts it, in standby.
+lease.keep((reason) => {
+  console.error(
+    reason.kind === 'lost'
+      ? `[instance] bail perdu au profit de ${reason.holder.instanceId} (${reason.holder.host}) : arrêt immédiat de cette instance`
+      : '[instance] bail non renouvelé à temps (Core injoignable ?) : arrêt de sécurité avant son expiration — une autre instance pourra le prendre',
+  );
+  void shutdown(75, false);
+});
+consumers.add(() => lease.stop());
 const auth = new TwitchAuth({
   clientId: config.TWITCH_CLIENT_ID,
   clientSecret: config.TWITCH_CLIENT_SECRET,
@@ -70,7 +185,7 @@ try {
   console.error(
     `[twitch-bot] Twitch auth unusable: ${(error as Error).message}`,
   );
-  process.exit(1);
+  await shutdown(1);
 }
 const status = auth.status();
 console.log(
@@ -85,7 +200,12 @@ const runtime = createBotRuntime({
     getAccessToken: () => auth.getAccessToken(),
     handleUnauthorized: (rejected) => auth.handleUnauthorized(rejected),
   }),
-  core: createCoreClient(config.CORE_API_URL, config.BOT_SECRET),
+  core: createCoreClient(
+    config.CORE_API_URL,
+    config.BOT_SECRET,
+    fetch,
+    botHeaders,
+  ),
   workerId: `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`,
 });
 
@@ -104,6 +224,7 @@ const coreCall = async (path: string, body: unknown) => {
     headers: {
       authorization: `Bearer ${config.BOT_SECRET}`,
       'content-type': 'application/json',
+      ...botHeaders,
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(5000),
@@ -195,6 +316,7 @@ const botSocket = runEventSub({
   revocation: (_type, reason) => authorizationLost('LeCroupier_', reason),
 });
 consumers.add(() => botSocket.stop());
+health.bot = botSocket;
 const botValidation = superviseTwitchAuth(
   auth,
   (reason) => authorizationLost('LeCroupier_', reason),
@@ -251,6 +373,7 @@ if (loyaltyOn || pointsOn || randomBanOn) {
       );
     }
     broadcasterReady = true;
+    health.broadcasterToken = true;
     const broadcasterHelix = createHelix({
       clientId: config.TWITCH_CLIENT_ID,
       getAccessToken: () => broadcasterAuth.getAccessToken(),
@@ -269,7 +392,12 @@ if (loyaltyOn || pointsOn || randomBanOn) {
       helix: broadcasterHelix,
       scopes: broadcasterAuth.status().scopes,
     };
-    const core = createCoreClient(config.CORE_API_URL, config.BOT_SECRET);
+    const core = createCoreClient(
+      config.CORE_API_URL,
+      config.BOT_SECRET,
+      fetch,
+      botHeaders,
+    );
     const events = loyaltyOn
       ? createBroadcasterEvents({
           core,
@@ -329,6 +457,7 @@ if (loyaltyOn || pointsOn || randomBanOn) {
         revocation: (_type, reason) => authorizationLost('raptoru_', reason),
       });
       consumers.add(() => broadcasterSocket.stop());
+      health.broadcaster = broadcasterSocket;
     }
     if (events) {
       // Tier reconciliation: full snapshot at startup, then every 6 hours (chained, never overlapping).
@@ -342,6 +471,7 @@ if (loyaltyOn || pointsOn || randomBanOn) {
       `[twitch-bot] broadcaster events on: ${[loyaltyOn ? 'loyalty (subs, gifts, cheers, follows)' : '', pointsOn ? 'Points de chaîne (read only)' : '', randomBanOn ? 'Random Ban reads' : ''].filter(Boolean).join(' + ')}`,
     );
   } catch (error) {
+    health.broadcasterToken = broadcasterReady;
     console.error(
       `[twitch-bot] broadcaster events OFF: ${(error as Error).message}`,
     );
@@ -376,11 +506,4 @@ if (randomBanOn) {
     `[random-ban] exécuteur prêt (Core principal) — recherche : ${randomBan.ready.canSearch ? 'oui' : 'non'}, timeout : ${randomBan.ready.canTimeout ? 'oui' : 'non'}${randomBan.ready.missing.length ? ` (manque : ${randomBan.ready.missing.join(', ')})` : ''}`,
   );
   void randomBan.run();
-}
-
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    for (const stop of consumers) stop();
-    process.exit(0);
-  });
 }

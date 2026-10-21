@@ -180,4 +180,30 @@ describe('EventSub lifecycle', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(FakeSocket.opened).toHaveLength(1);
   });
+
+  it('connected(): only between a welcome and the close; a server reconnect keeps it; stop clears it', async () => {
+    const { client } = setup();
+    const first = FakeSocket.opened[0]!;
+    expect(client.connected()).toBe(false);
+    await first.onmessage!({ data: welcome('w1') });
+    expect(client.connected()).toBe(true);
+
+    await first.onmessage!({
+      data: frame('r1', 'session_reconnect', {
+        session: { reconnect_url: 'wss://next' },
+      }),
+    });
+    const second = FakeSocket.opened[1]!;
+    await second.onmessage!({ data: welcome('w2') }); // closes the first one
+    expect(first.close).toHaveBeenCalled();
+    expect(client.connected()).toBe(true);
+
+    second.close(); // unexpected close: reconnecting
+    expect(client.connected()).toBe(false);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await FakeSocket.opened[2]!.onmessage!({ data: welcome('w3') });
+    expect(client.connected()).toBe(true);
+    client.stop();
+    expect(client.connected()).toBe(false);
+  });
 });

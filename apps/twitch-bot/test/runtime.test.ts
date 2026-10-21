@@ -12,6 +12,8 @@ const baseConfig: BotConfig = {
   TWITCH_TOKEN_FILE: 'unused.json',
   TWITCH_BROADCASTER_ID: '100',
   STREAM_SYNC_INTERVAL_MS: 60_000,
+  BOT_HOST: 'pc',
+  BOT_LEASE_OPTIONAL: 'false',
   TWITCH_BROADCASTER_TOKEN_FILE: 'unused-broadcaster.json',
   LOYALTY_OUTBOX_FILE: 'unused-outbox.json',
   CHANNEL_POINTS_OUTBOX_FILE: 'unused-cp-outbox.json',

@@ -11,6 +11,9 @@
 **/.runtime*
 **/.lab-chat-journal*.json
 **/.loyalty-outbox*.json
+# Bot runtime state (outboxes, journals, health file): never in an image (the bot keeps them on /data).
+**/.*-outbox*.json
+**/.*-journal*.json
 **/*.log
 .git
 .turbo

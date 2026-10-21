@@ -65,6 +65,8 @@ export function createCoreClient(
   baseUrl: string,
   secret: string,
   fetchImpl: typeof fetch = fetch,
+  /** Sent on every call (the bot instance header of the single-instance lease). */
+  extraHeaders: Record<string, string> = {},
 ): CoreClient {
   async function call<T>(
     path: string,
@@ -77,6 +79,7 @@ export function createCoreClient(
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${secret}`,
+          ...extraHeaders,
         },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(5000),

@@ -132,6 +132,8 @@ createApp({
   randomBan: core.randomBan,
   // Roue du Sub: OFF by default; gains recorded, never credited automatically.
   subWheel: core.subWheel,
+  // Single active production bot: the lease (bot) and its health for the paired Studio.
+  botInstances: core.botInstances,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
   db,

@@ -96,9 +96,16 @@ export function createEventSubRouter(
   };
 }
 
-/** Keeps one EventSub session alive forever. Any unexpected close reconnects from scratch. */
-export function runEventSub(handlers: EventSubHandlers): { stop(): void } {
+/**
+ * Keeps one EventSub session alive forever. Any unexpected close reconnects from scratch. `connected()`: a session is
+ * welcomed and open (the health the bot reports to Core).
+ */
+export function runEventSub(handlers: EventSubHandlers): {
+  stop(): void;
+  connected(): boolean;
+} {
   let stopped = false;
+  let welcomed: WebSocket | null = null;
   const sockets = new Set<WebSocket>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   function stop() {
@@ -141,6 +148,7 @@ export function runEventSub(handlers: EventSubHandlers): { stop(): void } {
         const result = await route(String(ev.data), fresh);
         if (stopped) return;
         if (result.kind === 'welcome') {
+          welcomed = socket;
           previous?.close();
           keepaliveSeconds = result.keepaliveSeconds;
         }
@@ -159,6 +167,7 @@ export function runEventSub(handlers: EventSubHandlers): { stop(): void } {
       clearTimeout(watchdog);
       if (watchdog) timers.delete(watchdog);
       sockets.delete(socket);
+      if (welcomed === socket) welcomed = null;
       if (stopped || replaced) return;
       log('[eventsub] connection closed, reconnecting in 5s');
       const timer = setTimeout(() => {
@@ -170,5 +179,5 @@ export function runEventSub(handlers: EventSubHandlers): { stop(): void } {
   };
 
   connect(EVENTSUB_URL, true);
-  return { stop };
+  return { stop, connected: () => !stopped && welcomed !== null };
 }
