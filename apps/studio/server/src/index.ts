@@ -59,6 +59,8 @@ import {
   twitchTokenFiles,
 } from './test-lab/local-env.js';
 import { createTestLab, type TestLab } from './test-lab/test-lab.js';
+import { botStatusProvider } from './control-center/bot.js';
+import { ControlCenter } from './control-center/model.js';
 import {
   createLocalRuntime,
   portFree,
@@ -366,6 +368,8 @@ export function createStudioServer(
   points: ChannelPointsRuntime | null = null,
   /** Account diagnostics are passive; authorization is an explicit, guarded user action. */
   twitchConnections: TwitchConnections | null = null,
+  /** Centre de contrôle (lot 3): one status per module, the bot first. */
+  control: ControlCenter | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -395,6 +399,7 @@ export function createStudioServer(
           return send(res, 403, { error: 'forbidden' });
         return send(res, 409, { error: 'twitch_authorization_in_progress' });
       }
+      if (control && (await control.handle(req, res, url))) return;
       if (bonk && (await bonk.handle(req, res, url))) return;
       if (sound && (await sound.handle(req, res, url))) return;
       if (url.pathname === '/api/sound-lab/status' && !sound)
@@ -1017,6 +1022,10 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     alerts,
     points,
     twitchConnections,
+    // Centre de contrôle: the Production bot through the paired Studio's Core client (Lab profile: not followed).
+    new ControlCenter(`http://${host}:${port}`, [
+      botStatusProvider(production?.alertsCore ?? null),
+    ]),
   );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(

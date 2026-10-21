@@ -502,3 +502,29 @@ Tests existants mis à jour, sans changer leur intention :
 - type-check : 8/8 ; build : 8/8 ;
 - Studio serveur, lancé par Turbo : 1 test instable sous charge à chaque passage, jamais le même (`alerts-twitch-chain`, `brb`), qui passe 3 fois sur 3 seul. Un passage a aussi vu un processus de test Vitest s'arrêter avec le code **`0xC0000409`** (3221226505). C'est le plantage Windows connu du projet, et le même code que le bot le 20/10 : un indice pour le lot 8 (Node v24.15 sur ce PC), pas une preuve ;
 - Studio n'utilise pas le code modifié (le Core Lab a son propre serveur). Les 14 fichiers Studio qui utilisent le serveur de Production passent (144 tests).
+
+---
+
+## 5. Avancement — lot 3 (21/10/2026 : commité et poussé ; Studio non publié)
+
+- **Centre de contrôle Studio :** architecture et règles dans `docs/CONTROL_CENTER.md`.
+  - modèle `ModuleStatus` et registre de fournisseurs : `apps/studio/server/src/control-center/model.ts` ;
+  - route locale `GET /api/control/status` ;
+  - rendu unique `apps/studio/web/src/control-center.ts` et `control-center.css` ;
+  - carte « Centre de contrôle » en tête de l'accueil Studio.
+- **Premier module, LeCroupier\_ (bot) :** `apps/studio/server/src/control-center/bot.ts`.
+  - **États :** Actif, Connexion, Erreur, Déconnecté, En attente, Arrêté, Non suivi, Inconnu ;
+  - **Informations :** où il tourne (VPS Contabo ou PC), connexions Twitch (chat de LeCroupier_ ; subs, bits et points de raptoru_), autorisation de raptoru_, dernier
+    signal, depuis quand, fonctions, version, instances en attente ;
+  - les durées suivent l'horloge du Core ;
+  - un conseil adapté au VPS ou au PC.
+- **Core (même déploiement que les lots 1–2) :** `GET /v1/studio/status/bot` ajoute `lastSeen`, la dernière instance vue, pour afficher « Arrêté à HH:MM ».
+- **Tests :**
+  - `apps/studio/server/test/control-center.test.ts` (20) : chaque état, horloge du Core, fournisseur en panne ou bloqué, sécurité de la route ;
+  - `prod-bot-status.test.ts` : de bout en bout sur un vrai Core HTTPS avec identifiant d'installation ;
+  - Core : `bot-instance.test.ts` (+1) ;
+  - Studio serveur, 56 fichiers : 55 passent ; le 56ᵉ, `creepy`, est instable sous charge et passe 3 fois sur 3 seul, comme `brb` au lot 2 ;
+  - Core 839, bot 230 ; lint, type-check et build propres.
+- **Validation de l'interface :** page de démonstration locale avec les 7 états, rendus par le vrai code et les vrais styles. Elle ne lit aucune donnée réelle.
+- **Reporté :** démarrage de Studio avec Windows (A7), en lot 3 bis.
+- **Procédure du lot 4 :** `docs/BOT_VPS_CUTOVER.md`, préparée et **non exécutée**.

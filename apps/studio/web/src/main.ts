@@ -2,6 +2,7 @@ import './style.css';
 import './extension-lab.css';
 import './sound-config.css';
 import './studio-home.css';
+import './control-center.css';
 import './moderation.css';
 import './tombola.css';
 import './commands.css';

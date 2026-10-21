@@ -2,6 +2,7 @@
 // OBS, players), module access and Dev/Lab tools. Talks only to the local Studio server; no secret.
 
 import { mountBonkLab } from './bonk-lab.js';
+import { mountControlCenter } from './control-center.js';
 import { mountSoundLab } from './sound-lab.js';
 import { mountStudioProfile } from './studio-profile.js';
 import { mountTtsLab } from './tts-lab.js';
@@ -88,6 +89,7 @@ export function mountStudioHome(root: HTMLElement) {
       <p>Runtime local du stream : Studio démarre et surveille lui-même ce dont Hub, Bonk, Soundboard et TTS ont besoin. Aucun terminal, aucun <code>npm run bonk:lab</code>.</p>
     </div></section>
     <div class="grid home-grid">
+      <article class="card wide" data-slot="control"></article>
       <article class="card" data-slot="profile"></article>
       <article class="card wide" data-slot="players" hidden>
         <h2>Lecteurs Production</h2>
@@ -140,6 +142,7 @@ export function mountStudioHome(root: HTMLElement) {
     document.querySelector<HTMLElement>('.topbar-safety'),
   );
   const twitchConnections = mountTwitchConnections(slot('twitch-connections'));
+  const control = mountControlCenter(slot('control'));
   let visible = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let logSeq = 0;
@@ -294,6 +297,7 @@ export function mountStudioHome(root: HTMLElement) {
       visible = v;
       clearTimeout(timer);
       twitchConnections.setVisible(v);
+      control.setVisible(v);
       showPlayers(v && production);
       if (v) void loop();
     },

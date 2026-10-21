@@ -129,12 +129,20 @@ export class BotInstanceService {
   async writer(
     instanceId: string | undefined,
   ): Promise<{ allowed: true } | { allowed: false; holder: string }> {
-    const lease = (
-      await this.db.query<LeaseRow>(
-        'select instance_id, acquired_at, expires_at from bot_lease where channel = $1',
-        [CHANNEL],
-      )
-    )[0];
+    let lease: LeaseRow | undefined;
+    try {
+      lease = (
+        await this.db.query<LeaseRow>(
+          'select instance_id, acquired_at, expires_at from bot_lease where channel = $1',
+          [CHANNEL],
+        )
+      )[0];
+    } catch (e) {
+      // Deploy window: this code runs before its migration (applied from the new container). No table = no lease
+      // yet = nobody to protect: today's bot keeps working instead of getting 500 on every route.
+      if ((e as { code?: string }).code === '42P01') return { allowed: true };
+      throw e;
+    }
     if (
       !lease ||
       lease.expires_at <= this.clock.now() ||
@@ -193,6 +201,15 @@ export class BotInstanceService {
               flags: holder.flags,
             }
           : null,
+      lastSeen: rows[0]
+        ? {
+            instanceId: rows[0].instance_id,
+            host: rows[0].host,
+            version: rows[0].version,
+            state: rows[0].state,
+            lastSeenAt: iso(rows[0].last_seen_at),
+          }
+        : null,
       standby: rows
         .filter(
           (r) =>

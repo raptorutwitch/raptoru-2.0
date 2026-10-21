@@ -131,6 +131,24 @@ describe('bot lease (BotInstanceService)', () => {
     const s = await core.botInstances.status();
     expect(s.state).toBe('stale');
     expect(s.active).toBeNull();
+    // Still known: Studio says « arrêté proprement à … » rather than « aucun bot ».
+    expect(s.lastSeen).toMatchObject({
+      instanceId: 'vps-1',
+      host: 'vps',
+      state: 'released',
+    });
+  });
+
+  it('lastSeen: none before any bot; then the most recent instance', async () => {
+    const core = await setup();
+    expect((await core.botInstances.status()).lastSeen).toBeNull();
+    await core.botInstances.lease(req('pc-1'));
+    core.clock.advance(1_000);
+    await core.botInstances.lease(req('vps-1')); // refused: standby, but seen last
+    expect((await core.botInstances.status()).lastSeen).toMatchObject({
+      instanceId: 'vps-1',
+      state: 'standby',
+    });
   });
 });
 
@@ -245,5 +263,15 @@ describe('bot lease routes', () => {
     // Released: open again.
     await call('/v1/bot/instance/release', bot, { instanceId: 'pc-1' });
     expect((await sync()).status).toBe(200);
+  });
+
+  it('deploy window (code deployed before its migration): no bot_lease table → bot routes still served', async () => {
+    const { core, call, bot } = await fixture();
+    await core.db.query('drop table bot_lease');
+    const r = await call('/v1/bot/stream/sync', bot, { live: null });
+    expect(r.status).toBe(200);
+    expect(
+      (await call('/v1/bot/stream/sync', bot, { live: null }, 'pc-1')).status,
+    ).toBe(200);
   });
 });

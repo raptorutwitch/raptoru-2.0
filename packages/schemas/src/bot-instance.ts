@@ -72,6 +72,16 @@ export const BotStatus = z.object({
       flags: BotFlags,
     })
     .nullable(),
+  /** The most recently seen instance, whatever its state (a clean stop keeps « stopped at … » visible). */
+  lastSeen: z
+    .object({
+      instanceId: z.string(),
+      host: z.string(),
+      version: z.string(),
+      state: z.enum(['active', 'standby', 'released']),
+      lastSeenAt: z.iso.datetime({ offset: true }),
+    })
+    .nullable(),
   /** Other instances refused recently (waiting for the lease): normally none. */
   standby: z.array(
     z.object({

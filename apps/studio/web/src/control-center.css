@@ -1,0 +1,78 @@
+/* Centre de contrôle (lot 3): one tile per module, same DA as the Studio cards (style.css tokens). */
+.cc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.cc-tile {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.cc-tile.cc-ok {
+  border-left-color: var(--ok);
+}
+.cc-tile.cc-warn {
+  border-left-color: var(--warn);
+}
+.cc-tile.cc-error {
+  border-left-color: var(--ko);
+}
+.cc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cc-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.cc-summary {
+  margin: 6px 0 8px;
+}
+.cc-facts {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+.cc-fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px dashed var(--line);
+  padding-top: 4px;
+}
+.cc-fact span {
+  color: var(--muted);
+}
+.cc-fact b {
+  font-weight: 500;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.cc-fact.cc-ok b {
+  color: var(--ok);
+}
+.cc-fact.cc-warn b {
+  color: var(--warn);
+}
+.cc-fact.cc-error b {
+  color: var(--ko);
+}
+.cc-hint {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+.cc-tile.cc-error .cc-hint {
+  background: color-mix(in srgb, var(--ko) 12%, transparent);
+}
+.cc-updated {
+  margin: 6px 0 0;
+  font-size: 11px;
+}

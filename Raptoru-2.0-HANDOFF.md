@@ -9,6 +9,7 @@
 - **Audit du premier live :** `docs/POST_LIVE_AUDIT_2026-10-20.md`. Le § 14 contient les preuves attachées aux décisions.
 - **Plan et décisions A1–A9 d'Antoni (définitives) :** `docs/PLAN_POST_LIVE_2026-10-21.md`. Priorité absolue : un bot autonome sur le VPS, et sur le PC seulement Studio et OBS.
 - **Lots 1 et 2** (bail d'instance unique dans le Core, bot autonome en conteneur) : **implémentés, testés en local et commités sur `main` (local, non poussé), non déployés**. L'audit et `docs/HANDOFF_MIGRATION_2026-10-20.md` restent volontairement hors git (données de viewers et références privées), sauf décision d'Antoni. L'état, les tests et la procédure de validation sont au § 4 du plan. **Déployer le Core avant le bot.**
+- **Lot 3** (Centre de contrôle Studio, statut du bot) : commité et poussé ; **Studio non publié** (0.1.7 à publier après validation d'Antoni) ; architecture `docs/CONTROL_CENTER.md`. **Lot 4** : procédure d'exécution `docs/BOT_VPS_CUTOVER.md` (étapes numérotées, en cours avec Antoni) ; protection serveur tolérante à la fenêtre déploiement → migration 39.
 - **Interdits sans accord explicite d'Antoni :** déploiement, écriture en base Production, tour de Wenuyr, seconde instance du bot Production, modification des permissions d'Aouh (voulues, A9).
 
 ## État courant — 18/10/2026 : migrations SAMMI P0 terminées en Lab · point d'avancement et roadmap centralisés
