@@ -94,7 +94,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   // Roue du Sub: spins (one per sub / resub / Prime), pending gains, switch OFF by default.
   '20261027120000_sub_wheel_lab.sql',
   // Points de chaîne « accorder des crédits »: its ledger kind on the Lab test wallet.
-  '20261030120000_lab_ledger_channel_points.sql',
+  '20261030120000_lab_ledger_channel_points.sql', // Winner announcements (Tombola, Roue du Sub): cmd_steps origins raffle / sub_wheel.
+  '20261031140000_cmd_steps_win_announcements_lab.sql',
 ]);
 
 /**
@@ -145,7 +146,8 @@ export const MAIN_CORE_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261020120000_mini_games_lab.sql',
   '20261021120000_mini_game_duels_lab.sql',
   // The Lab wallet's ledger kind of « Accorder des crédits » (the main Core in Lab mode).
-  '20261030120000_lab_ledger_channel_points.sql',
+  '20261030120000_lab_ledger_channel_points.sql', // Winner announcements in chat (Tombola, Roue du Sub): cmd_steps origins raffle / sub_wheel.
+  '20261031140000_cmd_steps_win_announcements_lab.sql',
 ]);
 
 export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([

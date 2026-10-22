@@ -10,6 +10,7 @@ import {
   type SwTestRequest,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
+import { insertAnnouncement } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
 import { type EconomyPort, occurredBeforeCutover } from '../economy/economy.js';
 import { LabWalletError } from '../lab-moderation/store.js';
@@ -90,6 +91,9 @@ export const spinView = (r: Row) => ({
 const tierOf = (t: AlertEventInput['tier']): 1 | 2 | 3 =>
   t === '2000' ? 2 : t === '3000' ? 3 : 1;
 
+/** The chat announcement waits this long after the end of the animation (the result is seen on stream first). */
+export const SW_ANNOUNCE_DELAY_MS = 8_000;
+
 export class SubWheelService {
   constructor(
     private readonly db: Db,
@@ -154,6 +158,37 @@ export class SubWheelService {
       if (strict) throw new SwError(409, 'credit_refused');
       return mark('pending', null, `crédit refusé : ${e.code}`.slice(0, 200));
     }
+  }
+
+  /**
+   * The winner announcement in chat (« 🎡 Roue du Sub : @Pseudo gagne X Jetons ! »), on LeCroupier_'s durable queue,
+   * once per spin (its key): only a real Twitch sub whose gain is credited and whose wheel was SHOWN — sent
+   * SW_ANNOUNCE_DELAY_MS after the end of the animation (or at once when the credit comes later). Tests, simulations,
+   * zero gains, unpaid gains and failed animations: nothing.
+   */
+  private async announce(q: Queryable, r: Row, delayMs: number) {
+    const amount = Number(r.amount);
+    if (
+      r.source !== 'twitch' ||
+      r.status !== 'shown' ||
+      r.award_status !== 'awarded' ||
+      !(amount > 0)
+    )
+      return;
+    const n = amount.toLocaleString('fr-FR').replace(/\s/g, ' ');
+    await insertAnnouncement(q, {
+      channelId: r.channel_id,
+      now: this.now(),
+      origin: 'sub_wheel',
+      drafts: [
+        {
+          idempotencyKey: `sub_wheel:win:${r.spin_id}`,
+          mode: 'normal',
+          text: `🎡 Roue du Sub : @${r.viewer_name} gagne ${n} ${amount >= 2 ? 'Jetons' : 'Jeton'} !`,
+          delayMs,
+        },
+      ],
+    });
   }
 
   private now() {
@@ -418,6 +453,7 @@ export class SubWheelService {
           this.now(),
         ],
       );
+      await this.announce(q, { ...r, status }, SW_ANNOUNCE_DELAY_MS);
       return { status };
     });
   }
@@ -476,7 +512,10 @@ export class SubWheelService {
         throw new SwError(409, 'already_awarded');
       if (r.award_status !== 'pending')
         throw new SwError(409, 'award_not_pending');
-      return spinView(await this.credit(q, r, true));
+      const paid = await this.credit(q, r, true);
+      // Wheel already shown, gain paid only now: announced at once.
+      await this.announce(q, paid, 0);
+      return spinView(paid);
     });
   }
 

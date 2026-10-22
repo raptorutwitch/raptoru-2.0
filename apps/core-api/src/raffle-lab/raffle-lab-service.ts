@@ -10,6 +10,7 @@ import {
   type RaffleStreamEvent,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
+import { insertAnnouncement } from '../commands/steps.js';
 import {
   latestChannelSession,
   liveChannelSession,
@@ -882,6 +883,14 @@ export class RaffleLabService {
       overlay_end_at: overlayEnd,
       viewer_idle_at: at(viewerResult, d.extension_idle_return_s * 1000),
     });
+    // Chat: the PAID winners, when the viewers see the result (never before the reveal on stream).
+    await this.announceWinners(
+      q,
+      r.raffle_id,
+      r.channel_id,
+      when,
+      viewerResult,
+    );
     const winners = await this.winnerRows(q, [r.raffle_id]);
     await audit(q, when, {
       channelId: r.channel_id,
@@ -901,6 +910,45 @@ export class RaffleLabService {
           payout: w.payout_status,
         })),
       },
+    });
+  }
+
+  /**
+   * « 🎉 Tombola : @Pseudo gagne X Jetons ! » on LeCroupier_'s durable chat queue, one message per PAID winner (its
+   * real amount and currency), once per winner and round (its key: a retry or a replay writes nothing more). Unpaid
+   * (failed) and giveaway winners: nothing until / unless paid.
+   */
+  private async announceWinners(
+    q: Queryable,
+    raffleId: string,
+    channelId: string,
+    now: Date,
+    sendAt: Date,
+    viewerId?: string,
+  ) {
+    const paid = await q.query<WinnerRow>(
+      `select * from lab_raffle_winners where raffle_id = $1 and payout_status = 'paid' and ($2::text is null or viewer_id = $2)
+       order by position`,
+      [raffleId, viewerId ?? null],
+    );
+    if (!paid.length) return;
+    const label = new Map<string, string>();
+    for (const w of paid)
+      if (!label.has(w.currency_id!))
+        label.set(
+          w.currency_id!,
+          (await currency(q, w.currency_id!))?.label ?? w.currency_id!,
+        );
+    await insertAnnouncement(q, {
+      channelId,
+      now,
+      origin: 'raffle',
+      drafts: paid.map((w) => ({
+        idempotencyKey: `raffle:win:${raffleId}:${w.viewer_id}`,
+        mode: 'normal' as const,
+        text: `🎉 Tombola : @${w.viewer_display_name} gagne ${Number(w.amount).toLocaleString('fr-FR').replace(/\s/g, ' ')} ${label.get(w.currency_id!)} !`,
+        delayMs: Math.max(0, sendAt.getTime() - now.getTime()),
+      })),
     });
   }
 
@@ -1457,6 +1505,21 @@ export class RaffleLabService {
             'nothing to pay (giveaway)',
           );
         await this.pay(q, cmd.raffle_id, channelId, cmd.viewer_id, now);
+        // Paid now: announced (at once, or at the reveal if it is still to come); never twice (one key per winner).
+        const shownAt = (
+          await q.query<{ viewer_result_at: Date | null }>(
+            'select viewer_result_at from lab_raffles where raffle_id = $1',
+            [cmd.raffle_id],
+          )
+        )[0]?.viewer_result_at;
+        await this.announceWinners(
+          q,
+          cmd.raffle_id,
+          channelId,
+          now,
+          shownAt && new Date(shownAt) > now ? new Date(shownAt) : now,
+          cmd.viewer_id,
+        );
         const after = (await this.winnerRows(q, [cmd.raffle_id])).find(
           (x) => x.viewer_id === cmd.viewer_id,
         )!;

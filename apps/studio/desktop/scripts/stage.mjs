@@ -111,6 +111,7 @@ const runtimeFiles = [
   'supabase/migrations/20261026120000_random_ban_lab.sql',
   'supabase/migrations/20261027120000_sub_wheel_lab.sql',
   'supabase/migrations/20261030120000_lab_ledger_channel_points.sql',
+  'supabase/migrations/20261031140000_cmd_steps_win_announcements_lab.sql',
   // Jeu des mots word bank, read by the Lab Core from src/ (like the migrations).
   'apps/core-api/src/word-game/words-fr.txt',
 ];

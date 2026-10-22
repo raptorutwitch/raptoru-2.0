@@ -124,7 +124,14 @@ export function draftSteps(r: Rendered): StepDraft[] {
 }
 
 /** Who wrote the step: a Commands V2 invocation, or the Jeu des mots (no invocation). */
-export type StepOrigin = 'commands' | 'word_game' | 'mini_game';
+export type StepOrigin =
+  'commands' | 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel';
+
+/**
+ * Winner announcements (Tombola, Roue du Sub): independent messages scheduled for later (the reveal, the end of the
+ * animation + 8 s). Not yet due, they never hold the queue: the messages behind them pass first.
+ */
+export const SCHEDULED_ORIGINS: readonly StepOrigin[] = ['raffle', 'sub_wheel'];
 
 interface StepRow {
   step_id: string;
@@ -247,8 +254,11 @@ export async function insertWordGameSteps(
     now: Date;
     ttlMs?: number;
     drafts: WordGameStepDraft[];
-    /** Who writes (no invocation): the Jeu des mots by default, or the mini-games (Roulette / Slot). */
-    origin?: 'word_game' | 'mini_game';
+    /**
+     * Who writes (no invocation): the Jeu des mots by default, the mini-games (Roulette / Slot), or a winner
+     * announcement (Tombola, Roue du Sub).
+     */
+    origin?: 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel';
   },
 ) {
   const ttlMs = s.ttlMs ?? STEP_RULES.ttlMs;
@@ -283,6 +293,33 @@ export async function insertWordGameSteps(
     written += rows.length;
   }
   return written;
+}
+
+/**
+ * A winner announcement (Tombola, Roue du Sub) inside the caller's transaction, alone in a savepoint: refused (e.g. a
+ * database without the origins raffle / sub_wheel yet — the Core deployed before its migration), it is skipped and
+ * logged, never the draw, payout or animation it follows.
+ */
+export async function insertAnnouncement(
+  q: Queryable,
+  s: Parameters<typeof insertWordGameSteps>[1] & {
+    origin: 'raffle' | 'sub_wheel';
+  },
+) {
+  await q.query('savepoint win_announcement');
+  try {
+    const written = await insertWordGameSteps(q, s);
+    await q.query('release savepoint win_announcement');
+    return written;
+  } catch (e) {
+    await q.query('rollback to savepoint win_announcement');
+    console.error(
+      `[${s.origin}] announcement skipped`,
+      s.drafts.map((d) => d.idempotencyKey),
+      e,
+    );
+    return 0;
+  }
 }
 
 /** The executor polls every second while idle: silent for longer than this = absent. */
@@ -379,8 +416,9 @@ export class CommandSteps {
       const next = (
         await q.query<StepRow>(
           `select * from cmd_steps where channel_id = $1 and status = 'queued'
+             and not (origin = any($2::text[]) and available_at > $3)
            order by seq_global limit 1 for update skip locked`,
-          [channelId],
+          [channelId, SCHEDULED_ORIGINS, now],
         )
       )[0];
       if (!next) return { step: null, reason: 'empty' as const };
