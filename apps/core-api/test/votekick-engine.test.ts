@@ -261,6 +261,24 @@ describe('Votekick: verdicts and sanctions', () => {
     await l.engine.tick();
     expect(l.mute.log).toEqual([`start ${id} 80s`, `end ${id} expired`]);
   });
+
+  it('OBS unreachable when the broadcaster loses: said in chat, no mute recorded, the next vote works', async () => {
+    const l = lab();
+    l.ports.mute.start = async () => {
+      throw new Error('obs_offline');
+    };
+    await l.say(A!, '!votekick raptoru_');
+    for (const u of [C, D, E]) await l.say(u!, '!kick');
+    await l.endVote();
+    expect(l.chat.at(-1)).toBe(
+      'Mute du streamer impossible pour le moment (OBS).',
+    );
+    expect(l.engine.state().mute).toBeNull();
+    expect(l.engine.history[0]!.applied).toBeNull();
+    l.clock.advance(VOTEKICK.resultMs);
+    await l.engine.tick();
+    expect(await l.say(F!, '!votekick viewer2')).toBe('opened');
+  });
 });
 
 describe('Caution', () => {

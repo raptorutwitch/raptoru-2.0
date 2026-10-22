@@ -180,7 +180,8 @@ export class VotekickEngine {
     if (this.mute && now >= this.mute.endsAt) {
       const id = this.mute.id;
       this.mute = null;
-      await this.p.mute.end(id, 'expired');
+      // A failed order is not retried here: Studio's controller ends a due mute alone (watchdog).
+      await this.p.mute.end(id, 'expired').catch(() => {});
     }
   }
 
@@ -335,9 +336,14 @@ export class VotekickEngine {
       muteSeconds = broadcasterMuteSeconds(verdict.durationS);
       sanction = 'obs_mute';
       const id = `mute:${v.session}`;
-      this.mute = { id, endsAt: this.p.now() + muteSeconds * 1000 };
-      await this.p.mute.start(id, muteSeconds);
-      applied = 'muted';
+      try {
+        await this.p.mute.start(id, muteSeconds);
+        this.mute = { id, endsAt: this.p.now() + muteSeconds * 1000 };
+        applied = 'muted';
+      } catch {
+        // OBS unreachable: no mute to quote nor to end (Studio's controller never started it).
+        await this.p.say('Mute du streamer impossible pour le moment (OBS).');
+      }
     } else if (punished) {
       sanction = 'twitch_timeout';
       applied = await this.p.twitch
@@ -559,7 +565,8 @@ export class VotekickEngine {
     if (q.kind === 'mute') {
       const m = this.mute;
       this.mute = null;
-      if (m) await this.p.mute.end(m.id, 'caution');
+      // Paid: the mute is over for Core; Studio's controller restores OBS (alone if this order is lost).
+      if (m) await this.p.mute.end(m.id, 'caution').catch(() => {});
       await this.p.say(freed);
       return 'released';
     }
