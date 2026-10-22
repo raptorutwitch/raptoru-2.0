@@ -9,8 +9,8 @@ import { describe, expect, it } from 'vitest';
 // Votekick V2 rules = the SAMMI deck (VK_FINISH, VK_MUTE_BROADCASTER, CAUTION_START), one case per branch.
 // `kick` includes the initiator's automatic KICK (SAMMI `vk_yes` starts at 1).
 
-const heads = () => 0 as const; // the target loses the coin flip
-const tails = () => 1 as const; // the initiator loses it
+const heads = (): 0 | 1 => 0; // the target loses the coin flip
+const tails = (): 0 | 1 => 1; // the initiator loses it
 const v = (kick: number, save: number, targetSaved = false, coin = heads) =>
   votekickVerdict({ kick, save, targetSaved }, coin);
 
