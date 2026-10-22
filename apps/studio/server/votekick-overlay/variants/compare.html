@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Votekick — comparateur de variantes</title>
+    <!--
+      Votekick V2 — variant comparator (docs/VOTEKICK_V2.md § Variantes). Every overlay is shown as an OBS browser
+      source on a simulated 1920 × 1080 stream (the live layout of 22/10: camera top left, chat column left), at its
+      planned size and place, and ALL receive the same events (same votes, same timer). V1 and the reference V2 keep
+      the real OBS transform of the « votekick » source (pos 651,580 · crop 170/243/164/180 · scale 0.956).
+      Modes: 1:1 one at a time, 1:1 stacked, or a mosaic at half size (labelled). « Pixels physiques » cancels the
+      browser / Windows zoom so 1 OBS pixel = 1 screen pixel. Footprint = the bounding box of what is drawn, measured
+      in canvas pixels. Local only (preview-server.mjs), never OBS.
+    -->
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0910;
+        --panel: #15111c;
+        --line: #2a2236;
+        --text: #f1edf7;
+        --muted: #a79fb6;
+        --gold: #f6c945;
+        font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .bar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        background: rgba(11, 9, 16, 0.96);
+        border-bottom: 1px solid var(--line);
+      }
+      .bar + .bar {
+        top: 47px;
+      }
+      .bar .lbl {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        margin: 0 4px 0 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .bar .lbl:first-child {
+        margin-left: 0;
+      }
+      button,
+      select {
+        font:
+          600 13px Inter,
+          'Segoe UI',
+          system-ui,
+          sans-serif;
+        color: var(--text);
+        background: #221b2d;
+        border: 1px solid #3a3049;
+        border-radius: 8px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #2f253d;
+      }
+      button.on {
+        border-color: var(--gold);
+        background: #3a2f1a;
+      }
+      label.chk {
+        font-size: 13px;
+        display: flex;
+        gap: 5px;
+        align-items: center;
+        color: var(--muted);
+        margin-right: 6px;
+      }
+      .sep {
+        width: 1px;
+        height: 24px;
+        background: var(--line);
+        margin: 0 4px;
+      }
+      #info {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      #board {
+        padding: 14px;
+      }
+      .item {
+        margin-bottom: 18px;
+      }
+      .item h3 {
+        margin: 0 0 6px;
+        font-size: 15px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: baseline;
+      }
+      .item h3 small {
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .item h3 .fp {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--gold);
+      }
+      .viewport {
+        overflow: auto;
+      }
+      .canvas {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        border-radius: 4px;
+        outline: 1px solid var(--line);
+        transform-origin: 0 0;
+      }
+      .mosaic {
+        display: grid;
+        grid-template-columns: repeat(2, 960px);
+        gap: 16px;
+      }
+      .mosaic .viewport {
+        width: 960px;
+        height: 540px;
+        overflow: hidden;
+      }
+      .mosaic .canvas {
+        transform: scale(0.5);
+      }
+      .src {
+        position: absolute;
+        overflow: hidden;
+      }
+      .src iframe {
+        position: absolute;
+        left: 0;
+        top: 0;
+        border: 0;
+        background: transparent;
+        transform-origin: 0 0;
+      }
+      .src.frame {
+        outline: 2px dashed rgba(143, 227, 255, 0.7);
+      }
+      .fpbox {
+        position: absolute;
+        border: 2px solid rgba(246, 201, 69, 0.95);
+        background: rgba(246, 201, 69, 0.08);
+        pointer-events: none;
+        display: none;
+      }
+      .show-fp .fpbox {
+        display: block;
+      }
+
+      /* --- Simulated stream ------------------------------------------------------------------------------------ */
+      .scene {
+        position: absolute;
+        inset: 0;
+      }
+      .bg-game {
+        background:
+          radial-gradient(
+            40% 30% at 70% 30%,
+            rgba(255, 240, 180, 0.35),
+            transparent 70%
+          ),
+          repeating-linear-gradient(
+            30deg,
+            rgba(0, 0, 0, 0.06) 0 2px,
+            transparent 2px 64px
+          ),
+          repeating-linear-gradient(
+            -30deg,
+            rgba(0, 0, 0, 0.06) 0 2px,
+            transparent 2px 64px
+          ),
+          linear-gradient(
+            180deg,
+            #8fc1d9 0,
+            #bcdbe0 26%,
+            #8fb35c 27%,
+            #6f9a43 60%,
+            #557a33 100%
+          );
+      }
+      .bg-game .hud {
+        position: absolute;
+        left: 760px;
+        right: 220px;
+        bottom: 0;
+        height: 104px;
+        border-radius: 14px 14px 0 0;
+        background:
+          repeating-linear-gradient(
+            90deg,
+            transparent 0 8px,
+            rgba(255, 255, 255, 0.08) 8px 70px
+          ),
+          linear-gradient(180deg, #4a3b2a, #2b2118);
+        box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+      }
+      .bg-game .hud::before {
+        content: '';
+        position: absolute;
+        left: 20px;
+        right: 20px;
+        top: 18px;
+        height: 62px;
+        background: repeating-linear-gradient(
+          90deg,
+          #c7883c 0 54px,
+          transparent 54px 62px
+        );
+        opacity: 0.6;
+        border-radius: 6px;
+      }
+      .bg-dark {
+        background:
+          radial-gradient(
+            20% 20% at 30% 60%,
+            rgba(255, 140, 60, 0.45),
+            transparent 70%
+          ),
+          radial-gradient(
+            18% 18% at 78% 40%,
+            rgba(90, 160, 255, 0.35),
+            transparent 70%
+          ),
+          linear-gradient(180deg, #14101c, #1d1626 60%, #0b0a10);
+      }
+      .bg-busy {
+        background: repeating-conic-gradient(
+            from 10deg,
+            #ff4d5e 0 10deg,
+            #2fe08a 0 20deg,
+            #f6c945 0 30deg,
+            #3a7bff 0 40deg,
+            #fff 0 50deg,
+            #111 0 60deg
+          )
+          50% 50% / 240px 240px;
+      }
+      .bg-snow {
+        background:
+          radial-gradient(30% 25% at 60% 40%, #fff, transparent 70%),
+          linear-gradient(180deg, #e9f1f7, #f7fbff 50%, #dfe8ee);
+      }
+      .bg-empty {
+        background: repeating-conic-gradient(#2a2a2a 0 25%, #333 0 50%) 0 0 /
+          40px 40px;
+      }
+      .cam {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 564px;
+        height: 318px;
+        background:
+          radial-gradient(16% 26% at 50% 46%, #e3ae8a 0 60%, transparent 61%),
+          radial-gradient(34% 34% at 50% 104%, #2f4673 0 70%, transparent 71%),
+          linear-gradient(180deg, #3f3152, #1f1829);
+        border-radius: 0 0 18px 0;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      }
+      .chat {
+        position: absolute;
+        left: 16px;
+        top: 411px;
+        width: 709px;
+        height: 669px;
+        padding: 18px 20px;
+        background: linear-gradient(
+          180deg,
+          rgba(10, 8, 14, 0),
+          rgba(10, 8, 14, 0.55) 15%
+        );
+        font:
+          600 22px/1.5 'Segoe UI',
+          system-ui,
+          sans-serif;
+        color: #fff;
+        text-shadow: 0 1px 3px #000;
+        overflow: hidden;
+      }
+      .chat b {
+        color: #8fd3ff;
+      }
+      .no-stream .cam,
+      .no-stream .chat {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar" id="bar1">
+      <span class="lbl">Vote</span>
+      <button data-a="open60">Ouvrir 60 s</button>
+      <button data-a="open15">Ouvrir 15 s</button>
+      <button data-a="kick">+1 KICK</button>
+      <button data-a="save">+1 SAVE</button>
+      <button data-a="switch">Changement d'avis</button>
+      <button data-a="burst">Rafale ×25</button>
+      <button data-a="auto">Vote animé</button>
+      <span class="sep"></span>
+      <span class="lbl">Verdict</span>
+      <button data-a="r:target_timeout">Condamné</button>
+      <button data-a="r:target_timeout_perfect">Perfect</button>
+      <button data-a="r:backfire">Backfire</button>
+      <button data-a="r:coinflip_target">Pile/face cible</button>
+      <button data-a="r:coinflip_initiator">Pile/face init.</button>
+      <button data-a="r:broadcaster_muted">Mute streamer</button>
+      <button data-a="r:no_timeout">Sauvé</button>
+      <button data-a="r:no_quorum">Annulé</button>
+      <span class="sep"></span>
+      <button data-a="clear">Clear</button>
+      <button data-a="cycle">Apparition / disparition ×3</button>
+    </div>
+    <div class="bar" id="bar2">
+      <span class="lbl">Afficher</span>
+      <span id="picks"></span>
+      <span class="sep"></span>
+      <span class="lbl">Mode</span>
+      <select id="mode">
+        <option value="tabs">1:1 — une à la fois</option>
+        <option value="stack">1:1 — toutes empilées</option>
+        <option value="mosaic">Mosaïque (réduite ×0,5)</option>
+      </select>
+      <label class="chk"
+        ><input type="checkbox" id="phys" /> pixels physiques</label
+      >
+      <span class="lbl">Fond</span>
+      <select id="bg">
+        <option value="bg-game">Jeu clair</option>
+        <option value="bg-dark">Jeu sombre</option>
+        <option value="bg-busy">Très chargé</option>
+        <option value="bg-snow">Très clair</option>
+        <option value="bg-empty">Vide</option>
+      </select>
+      <label class="chk"
+        ><input type="checkbox" id="stream" checked /> cam + chat</label
+      >
+      <label class="chk"><input type="checkbox" id="fp" /> zone occupée</label>
+      <label class="chk"
+        ><input type="checkbox" id="frames" /> cadre source OBS</label
+      >
+      <label class="chk"><input type="checkbox" id="long" /> pseudo long</label>
+      <label class="chk"
+        ><input type="checkbox" id="avatar" checked /> avatar</label
+      >
+      <span id="info"></span>
+    </div>
+    <div id="board"></div>
+
+    <script>
+      (() => {
+        'use strict';
+        const $ = (id) => document.getElementById(id);
+        // OBS sources: iframe size and place on the 1920 × 1080 canvas (crop + scale for the real « votekick » source).
+        const LEGACY_T = {
+          x: 651,
+          y: 580,
+          sx: 0.95625,
+          sy: 0.95486,
+          crop: [170, 243, 164, 180],
+        };
+        const SOURCES = [
+          {
+            id: 'V1',
+            name: 'V1 — original (SAMMI)',
+            note: 'source réelle 1000×1000, recadrée',
+            url: '../legacy/votekick-overlay.html?vk=standby',
+            w: 1000,
+            h: 1000,
+            ...LEGACY_T,
+            measure: '#card',
+          },
+          {
+            id: 'V2',
+            name: 'V2 — référence (panneau)',
+            note: 'même source que V1',
+            url: '../votekick.html?vk=standby',
+            w: 1000,
+            h: 1000,
+            ...LEGACY_T,
+            measure: '#card',
+          },
+          {
+            id: 'A',
+            name: 'A — Flottant',
+            note: 'source 760×560 · bas centre',
+            url: 'variants.html?v=A&embed',
+            w: 760,
+            h: 560,
+            x: 580,
+            y: 500,
+          },
+          {
+            id: 'B',
+            name: 'B — Médaillon',
+            note: 'source 520×520 · bas droite',
+            url: 'variants.html?v=B&embed',
+            w: 520,
+            h: 520,
+            x: 1370,
+            y: 540,
+          },
+          {
+            id: 'C',
+            name: 'C — Bandeau',
+            note: 'source 960×150 · haut centre',
+            url: 'variants.html?v=C&embed',
+            w: 960,
+            h: 150,
+            x: 600,
+            y: 14,
+          },
+          {
+            id: 'D',
+            name: 'D — Balance',
+            note: 'source 760×560 · bas centre',
+            url: 'variants.html?v=D&embed',
+            w: 760,
+            h: 560,
+            x: 580,
+            y: 500,
+          },
+        ];
+        const CHAT = [
+          ['Vieweru', 'mdrrr le votekick'],
+          ['Kaelis', '!kick'],
+          ['Mirabelle', '!save'],
+          ['Torvald', 'il a rien fait 😭'],
+          ['LeCroupier_', 'Votekick lancé contre VieweruMobilu'],
+          ['Nyx', '!kick'],
+          ['Ploum', 'gg'],
+          ['Sora', '!save'],
+          ['Bricoleur', 'PERFECT incoming'],
+          ['Zed', '!kick'],
+          ['Eloa', 'le chat est sans pitié'],
+          ['Raptor_fan', '!save !save'],
+        ];
+        const shown = new Set(['V1', 'V2', 'A', 'B', 'C', 'D']);
+        let active = 'A';
+        const frames = new Map();
+
+        function canvasFor(s) {
+          const c = document.createElement('div');
+          c.className = `canvas ${$('fp').checked ? 'show-fp' : ''}`;
+          const scene = document.createElement('div');
+          scene.className = `scene ${$('bg').value}${$('stream').checked ? '' : ' no-stream'}`;
+          scene.innerHTML = `<div class="hud"></div><div class="cam"></div><div class="chat">${CHAT.map(([u, m]) => `<div><b>${u}</b> : ${m}</div>`).join('')}</div>`;
+          if (!scene.classList.contains('bg-game'))
+            scene.querySelector('.hud').remove();
+          c.append(scene);
+          const box = document.createElement('div');
+          box.className = `src${$('frames').checked ? ' frame' : ''}`;
+          const iframe = document.createElement('iframe');
+          iframe.src = s.url;
+          iframe.width = s.w;
+          iframe.height = s.h;
+          iframe.title = s.name;
+          if (s.crop) {
+            const [l, t, r, b] = s.crop;
+            box.style.left = `${s.x}px`;
+            box.style.top = `${s.y}px`;
+            box.style.width = `${(s.w - l - r) * s.sx}px`;
+            box.style.height = `${(s.h - t - b) * s.sy}px`;
+            iframe.style.transform = `translate(${-l * s.sx}px, ${-t * s.sy}px) scale(${s.sx}, ${s.sy})`;
+          } else {
+            box.style.left = `${s.x}px`;
+            box.style.top = `${s.y}px`;
+            box.style.width = `${s.w}px`;
+            box.style.height = `${s.h}px`;
+          }
+          box.append(iframe);
+          c.append(box);
+          const fp = document.createElement('div');
+          fp.className = 'fpbox';
+          c.append(fp);
+          frames.set(s.id, { s, iframe, box, fp, label: null });
+          return c;
+        }
+
+        function render() {
+          frames.clear();
+          const board = $('board');
+          board.textContent = '';
+          const mode = $('mode').value;
+          const list = SOURCES.filter((s) =>
+            mode === 'tabs' ? s.id === active : shown.has(s.id),
+          );
+          const wrap = document.createElement('div');
+          if (mode === 'mosaic') wrap.className = 'mosaic';
+          for (const s of list) {
+            const item = document.createElement('div');
+            item.className = 'item';
+            item.innerHTML = `<h3>${s.name} <small>${s.note}${mode === 'mosaic' ? ' · affichage réduit ×0,5' : ' · taille réelle'}</small><span class="fp" data-fp="${s.id}"></span></h3>`;
+            const vp = document.createElement('div');
+            vp.className = 'viewport';
+            const c = canvasFor(s);
+            if ($('phys').checked && mode !== 'mosaic')
+              c.style.zoom = String(1 / devicePixelRatio);
+            vp.append(c);
+            item.append(vp);
+            frames.get(s.id).label = item.querySelector('.fp');
+            wrap.append(item);
+          }
+          board.append(wrap);
+          // Re-send the current vote to the new frames once they loaded (same state everywhere).
+          let pending = list.length;
+          for (const f of frames.values())
+            f.iframe.addEventListener('load', () => {
+              if (--pending === 0) replay();
+            });
+          $('info').textContent =
+            `devicePixelRatio ${devicePixelRatio}${devicePixelRatio !== 1 && !$('phys').checked ? ' — cocher « pixels physiques » pour 1 px OBS = 1 px écran' : ''}`;
+        }
+
+        function buildPicks() {
+          const p = $('picks');
+          p.textContent = '';
+          for (const s of SOURCES) {
+            const b = document.createElement('button');
+            b.textContent = s.id;
+            b.title = s.name;
+            const on =
+              $('mode').value === 'tabs' ? s.id === active : shown.has(s.id);
+            b.classList.toggle('on', on);
+            b.addEventListener('click', () => {
+              if ($('mode').value === 'tabs') active = s.id;
+              else if (shown.has(s.id)) shown.delete(s.id);
+              else shown.add(s.id);
+              buildPicks();
+              render();
+            });
+            p.append(b);
+          }
+        }
+
+        // --- One event bus for every overlay ---------------------------------------------------------------------
+        let seq = 0;
+        let n = 0;
+        const vote = {
+          session: '',
+          kick: 1,
+          save: 0,
+          ends: 0,
+          voteMs: 60000,
+          result: null,
+          open: false,
+        };
+        const AVATAR =
+          'data:image/svg+xml;utf8,' +
+          encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6a4bd8"/><stop offset="1" stop-color="#e2557a"/></linearGradient></defs><rect width="100" height="100" fill="url(#g)"/><circle cx="50" cy="40" r="18" fill="#ffd9b8"/><path d="M18 100c4-22 18-32 32-32s28 10 32 32z" fill="#1f2a4d"/><path d="M30 34c2-14 38-18 40 2-8-6-30-8-40-2z" fill="#3a2414"/></svg>',
+          );
+        const target = () =>
+          $('long').checked ? 'xX_LeGrandDestructeurDu69_Xx' : 'VieweruMobilu';
+        function send(e) {
+          const event = { ...e, seq: ++seq };
+          for (const f of frames.values()) {
+            const w = f.iframe.contentWindow;
+            if (!w?.CustomEvent) continue;
+            if (event.action !== 'clear') {
+              // V1 restarts its local timer from its own `dur` (60): tell it the vote length.
+              w.VKV?.setVoteMs(vote.voteMs);
+            }
+            w.dispatchEvent(
+              new w.CustomEvent('votekick_update', { detail: event }),
+            );
+          }
+          setTimeout(measureAll, event.action === 'result' ? 1600 : 650);
+        }
+        function liveEvent(action) {
+          return {
+            action,
+            session: vote.session,
+            target: target(),
+            initiator: 'LeCroupier_',
+            avatar: $('avatar').checked ? AVATAR : '',
+            yes: vote.kick,
+            no: vote.save,
+            ends: vote.ends,
+          };
+        }
+        function open(sec) {
+          vote.session = `cmp-${Date.now()}-${++n}`;
+          vote.kick = 1;
+          vote.save = 0;
+          vote.voteMs = sec * 1000;
+          vote.ends = Date.now() + vote.voteMs;
+          vote.result = null;
+          vote.open = true;
+          send(liveEvent('live'));
+        }
+        function ensureOpen() {
+          if (!vote.open) open(60);
+        }
+        const update = () => send(liveEvent('update'));
+        function result(outcome) {
+          ensureOpen();
+          const presets = {
+            target_timeout: [6, 3, 11, 0],
+            target_timeout_perfect: [8, 0, 26, 0],
+            backfire: [1, 7, 22, 0],
+            coinflip_target: [4, 4, 8, 0],
+            coinflip_initiator: [4, 4, 8, 0],
+            broadcaster_muted: [6, 0, 22, 110],
+            no_timeout: [2, 6, 0, 0],
+            no_quorum: [1, 1, 0, 0],
+          };
+          const [k, s, minutes, mute] = presets[outcome];
+          vote.kick = k;
+          vote.save = s;
+          vote.open = false;
+          vote.result = { outcome, minutes, mute };
+          send({
+            ...liveEvent('result'),
+            outcome,
+            minutes,
+            mute_seconds: mute,
+            punished: outcome === 'broadcaster_muted' ? 'raptoru_' : undefined,
+            target: outcome === 'broadcaster_muted' ? 'raptoru_' : target(),
+          });
+        }
+        function replay() {
+          if (vote.open) send(liveEvent('live'));
+        }
+        let auto = [];
+        function stopAuto() {
+          for (const t of auto) clearTimeout(t);
+          auto = [];
+        }
+        const ACTIONS = {
+          open60: () => open(60),
+          open15: () => open(15),
+          kick: () => (ensureOpen(), vote.kick++, update()),
+          save: () => (ensureOpen(), vote.save++, update()),
+          switch: () => {
+            ensureOpen();
+            if (vote.kick > 1) {
+              vote.kick--;
+              vote.save++;
+            } else if (vote.save > 0) {
+              vote.save--;
+              vote.kick++;
+            }
+            update();
+          },
+          burst: () => {
+            ensureOpen();
+            for (let i = 0; i < 25; i++) {
+              if (Math.random() < 0.55) vote.kick++;
+              else vote.save++;
+              update();
+            }
+          },
+          auto: () => {
+            stopAuto();
+            open(20);
+            for (let i = 1; i <= 16; i++)
+              auto.push(
+                setTimeout(() => {
+                  if (Math.random() < 0.6) vote.kick++;
+                  else vote.save++;
+                  update();
+                }, i * 1100),
+              );
+          },
+          clear: () => {
+            stopAuto();
+            vote.open = false;
+            send({ action: 'clear' });
+          },
+          cycle: () => {
+            stopAuto();
+            for (let i = 0; i < 3; i++) {
+              auto.push(setTimeout(() => open(60), i * 3400));
+              auto.push(setTimeout(() => ACTIONS.clear(), i * 3400 + 2300));
+            }
+          },
+        };
+        for (const b of document.querySelectorAll('[data-a]'))
+          b.addEventListener('click', () => {
+            const a = b.dataset.a;
+            if (a.startsWith('r:')) {
+              stopAuto();
+              result(a.slice(2));
+            } else ACTIONS[a]();
+          });
+
+        // --- Footprint: the box of what is drawn, in canvas pixels ----------------------------------------------
+        /** Drawn: not hidden, not fully transparent (a spark that faded out does not count). */
+        const drawn = (e) => {
+          const st = e.ownerDocument.defaultView.getComputedStyle(e);
+          return (
+            st.visibility !== 'hidden' &&
+            st.display !== 'none' &&
+            parseFloat(st.opacity) > 0.01
+          );
+        };
+        function measure(f) {
+          const doc = f.iframe.contentDocument;
+          if (!doc) return null;
+          let r = null;
+          const add = (b) => {
+            if (b.width < 2 || b.height < 2) return;
+            r = r
+              ? {
+                  l: Math.min(r.l, b.left),
+                  t: Math.min(r.t, b.top),
+                  r: Math.max(r.r, b.right),
+                  b: Math.max(r.b, b.bottom),
+                }
+              : { l: b.left, t: b.top, r: b.right, b: b.bottom };
+          };
+          if (f.s.measure) {
+            const stage = doc.getElementById('stage');
+            const visible = stage && getComputedStyle(stage).opacity !== '0';
+            if (!visible) return null;
+            const card = doc.querySelector(f.s.measure);
+            for (const e of card.querySelectorAll('*')) {
+              if (e.closest('[hidden]') || !drawn(e)) continue;
+              add(e.getBoundingClientRect());
+            }
+            // A card with a frame (V2 always, V1 at its verdict) counts whole.
+            if (parseFloat(getComputedStyle(card).borderTopWidth) > 0)
+              add(card.getBoundingClientRect());
+          } else {
+            const root = doc.getElementById('root');
+            if (!root || getComputedStyle(root).opacity === '0') return null;
+            for (const e of root.querySelectorAll('*')) {
+              if (e.classList.contains('halo') || !drawn(e)) continue;
+              add(e.getBoundingClientRect());
+            }
+          }
+          if (!r) return null;
+          const s = f.s;
+          const sx = s.sx ?? 1;
+          const sy = s.sy ?? 1;
+          const [cl, ct] = s.crop ?? [0, 0];
+          let x0 = s.x + (r.l - cl) * sx;
+          let y0 = s.y + (r.t - ct) * sy;
+          let x1 = s.x + (r.r - cl) * sx;
+          let y1 = s.y + (r.b - ct) * sy;
+          x0 = Math.max(0, x0);
+          y0 = Math.max(0, y0);
+          x1 = Math.min(1920, x1);
+          y1 = Math.min(1080, y1);
+          return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+        }
+        function measureAll() {
+          for (const f of frames.values()) {
+            const m = measure(f);
+            if (!m) {
+              f.fp.style.width = '0';
+              if (f.label) f.label.textContent = '';
+              continue;
+            }
+            Object.assign(f.fp.style, {
+              left: `${m.x}px`,
+              top: `${m.y}px`,
+              width: `${m.w}px`,
+              height: `${m.h}px`,
+            });
+            const pct = ((m.w * m.h) / (1920 * 1080)) * 100;
+            if (f.label)
+              f.label.textContent = `${vote.open ? 'Pendant le vote' : 'Verdict'} : ${Math.round(m.w)} × ${Math.round(m.h)} px · ${pct.toFixed(1).replace('.', ',')} % de l'écran`;
+          }
+        }
+
+        for (const id of ['mode', 'phys', 'bg', 'stream', 'fp', 'frames'])
+          $(id).addEventListener('change', () => {
+            buildPicks();
+            render();
+          });
+        for (const id of ['long', 'avatar'])
+          // A new name / picture = a new vote (an update of the same vote only moves the numbers).
+          $(id).addEventListener('change', () => open(vote.voteMs / 1000));
+        buildPicks();
+        render();
+        setTimeout(() => open(60), 900);
+      })();
+    </script>
+  </body>
+</html>

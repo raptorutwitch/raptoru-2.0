@@ -1,0 +1,1687 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Votekick — variantes</title>
+    <!--
+      Votekick V2 — UX explorations (docs/VOTEKICK_V2.md § Variantes). ONE page, four live compositions chosen by
+      ?v=A|B|C|D, all sharing ../model.js (events, late / repeated events, timer) and the V2 verdict screens. Same
+      `votekick_update` contract as votekick.html (the reference V2, unchanged) and the legacy page. Exploration only:
+      nothing here is wired to OBS.
+        A  Flottant  — no panel: avatar + timer ring, name, a thin KICK / SAVE arc; a soft shadow instead of a card.
+        B  Médaillon — everything around the avatar: the outer ring IS the vote split, an inner ring the timer.
+        C  Bandeau   — a slim premium strip, the centre of the screen stays free.
+        D  Balance   — the scales of justice: the beam tilts with the vote, the pans hold the counts.
+      Each layout sizes its own OBS source (see SOURCES); transforms and opacity only; one animation loop while live.
+    -->
+    <style>
+      :root {
+        --gold-1: #fff0a8;
+        --gold-2: #f6c945;
+        --gold-3: #c9861a;
+        --kick: #ff4d5e;
+        --kick-deep: #b3122a;
+        --save: #2fe08a;
+        --save-deep: #0f8a4f;
+        --ink: #fff;
+        --muted: #d4cee0;
+        --tone: 246, 201, 69;
+        --ease-out: cubic-bezier(0.22, 0.8, 0.25, 1);
+        --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+        /* Legibility without a panel: a tight dark halo around light text. */
+        --halo:
+          0 0 2px rgba(0, 0, 0, 0.9), 0 1px 3px rgba(0, 0, 0, 0.8),
+          0 2px 12px rgba(0, 0, 0, 0.55);
+        color-scheme: dark;
+        font-family:
+          Inter,
+          'Segoe UI',
+          system-ui,
+          -apple-system,
+          Roboto,
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        color: var(--ink);
+      }
+      body.solo {
+        background: linear-gradient(
+          180deg,
+          #3d6b8f,
+          #8fb6c9 55%,
+          #6b8f4a 56%,
+          #3f5a2c
+        );
+      }
+      .stage {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+      }
+      #root {
+        position: relative;
+      }
+      .live,
+      .verdict {
+        position: relative;
+      }
+      .tnum {
+        font-variant-numeric: tabular-nums;
+      }
+      .gold-text {
+        background: linear-gradient(
+          180deg,
+          var(--gold-1),
+          var(--gold-2) 55%,
+          var(--gold-3)
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .avatar {
+        position: absolute;
+        border-radius: 50%;
+        overflow: hidden;
+        background: linear-gradient(140deg, #3b2c5a, #1b1426);
+        display: grid;
+        place-items: center;
+        box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.45);
+      }
+      .avatar img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .avatar .initial {
+        font-weight: 900;
+        color: rgba(255, 255, 255, 0.88);
+      }
+      svg.ring {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+        overflow: visible;
+      }
+      svg.ring circle {
+        fill: none;
+      }
+      .urgent .t-arc {
+        stroke: var(--kick) !important;
+      }
+      .urgent .secs {
+        color: #ffd2d6;
+      }
+
+      /* ====================================================================================================== */
+      /* A — Flottant                                                                                           */
+      /* ====================================================================================================== */
+      .A .live {
+        width: 380px;
+        height: 400px;
+      }
+      .A .halo {
+        /* the shadow that replaces the card: soft, no edge */
+        position: absolute;
+        inset: -40px -60px -30px;
+        background: radial-gradient(
+          closest-side,
+          rgba(8, 5, 14, 0.62),
+          rgba(8, 5, 14, 0.35) 55%,
+          transparent
+        );
+      }
+      .A .kicker {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-weight: 900;
+        font-size: 20px;
+        letter-spacing: 0.32em;
+        text-indent: 0.32em;
+        text-transform: uppercase;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+      }
+      .A .portrait {
+        position: absolute;
+        top: 40px;
+        left: 50%;
+        width: 150px;
+        height: 150px;
+        margin-left: -75px;
+      }
+      .A .portrait .avatar {
+        inset: 12px;
+      }
+      .A .portrait .avatar .initial {
+        font-size: 52px;
+      }
+      .A svg.ring circle {
+        stroke-width: 5;
+      }
+      .A .t-track {
+        stroke: rgba(255, 255, 255, 0.16);
+      }
+      .A .t-arc {
+        stroke: var(--gold-2);
+        stroke-linecap: round;
+        transition: stroke 0.3s ease;
+      }
+      .A .secs {
+        position: absolute;
+        left: 50%;
+        bottom: -14px;
+        transform: translateX(-50%);
+        min-width: 50px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: rgba(12, 9, 18, 0.92);
+        border: 2px solid var(--gold-2);
+        font-weight: 900;
+        font-size: 21px;
+        text-align: center;
+        transition: border-color 0.3s;
+      }
+      .A .urgent .secs {
+        border-color: var(--kick);
+      }
+      .A .name {
+        position: absolute;
+        top: 218px;
+        left: -30px;
+        right: -30px;
+        text-align: center;
+        font-weight: 900;
+        font-size: 34px;
+        line-height: 1.1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-shadow: var(--halo);
+      }
+      .A .gauge {
+        position: absolute;
+        top: 270px;
+        left: 30px;
+        width: 320px;
+        height: 110px;
+      }
+      .A .gauge svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .A .gauge path {
+        fill: none;
+        stroke-width: 10;
+        stroke-linecap: round;
+        transition: stroke-dasharray 0.45s var(--ease-out);
+      }
+      .A .gauge .g-track {
+        stroke: rgba(255, 255, 255, 0.14);
+      }
+      .A .gauge .g-k {
+        stroke: var(--kick);
+      }
+      .A .gauge .g-s {
+        stroke: var(--save);
+      }
+      .A .count {
+        position: absolute;
+        top: 2px;
+        font-weight: 900;
+        line-height: 1;
+        text-shadow: var(--halo);
+      }
+      .A .count b {
+        display: block;
+        font-size: 34px;
+      }
+      .A .count span {
+        display: block;
+        font-size: 12px;
+        letter-spacing: 0.22em;
+        margin-top: 4px;
+        opacity: 0.95;
+      }
+      .A .count.k {
+        left: -8px;
+        color: var(--kick);
+        text-align: left;
+      }
+      .A .count.s {
+        right: -8px;
+        color: var(--save);
+        text-align: right;
+      }
+      .A .total {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 86px;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--muted);
+        text-shadow: var(--halo);
+      }
+
+      /* ====================================================================================================== */
+      /* B — Médaillon                                                                                          */
+      /* ====================================================================================================== */
+      .B .live {
+        width: 260px;
+        height: 250px;
+      }
+      .B .medal {
+        position: absolute;
+        top: 22px;
+        left: 50%;
+        width: 168px;
+        height: 168px;
+        margin-left: -84px;
+      }
+      .B .medal::before {
+        content: '';
+        position: absolute;
+        inset: -14px;
+        border-radius: 50%;
+        background: radial-gradient(
+          closest-side,
+          rgba(8, 5, 14, 0.55),
+          transparent
+        );
+      }
+      .B .medal .avatar {
+        inset: 24px;
+      }
+      .B .medal .avatar .initial {
+        font-size: 46px;
+      }
+      .B .v-ring circle {
+        stroke-width: 11;
+        transition:
+          stroke-dasharray 0.45s var(--ease-out),
+          stroke-dashoffset 0.45s var(--ease-out);
+      }
+      .B .v-bg {
+        stroke: rgba(255, 255, 255, 0.14);
+      }
+      .B .v-k {
+        stroke: var(--kick);
+      }
+      .B .v-s {
+        stroke: var(--save);
+      }
+      .B .t-ring circle {
+        stroke-width: 3;
+      }
+      .B .t-track {
+        stroke: rgba(0, 0, 0, 0.35);
+      }
+      .B .t-arc {
+        stroke: var(--gold-1);
+        stroke-linecap: round;
+      }
+      .B .secs {
+        position: absolute;
+        top: -14px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 2px 10px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, var(--gold-1), var(--gold-2));
+        color: #1d1405;
+        font-weight: 900;
+        font-size: 17px;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+      }
+      .B .urgent .secs {
+        background: linear-gradient(180deg, #ff9aa4, var(--kick));
+        color: #fff;
+      }
+      .B .pill {
+        position: absolute;
+        top: 62px;
+        min-width: 42px;
+        padding: 6px 9px 7px;
+        border-radius: 12px;
+        font-weight: 900;
+        font-size: 24px;
+        line-height: 1;
+        text-align: center;
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      }
+      .B .pill small {
+        display: block;
+        font-size: 9px;
+        letter-spacing: 0.2em;
+        margin-top: 3px;
+        opacity: 0.9;
+      }
+      .B .pill.k {
+        left: -30px;
+        background: linear-gradient(180deg, var(--kick), var(--kick-deep));
+      }
+      .B .pill.s {
+        right: -30px;
+        background: linear-gradient(180deg, var(--save), var(--save-deep));
+      }
+      .B .tag {
+        position: absolute;
+        top: 202px;
+        left: -30px;
+        right: -30px;
+        display: flex;
+        justify-content: center;
+      }
+      .B .tag span {
+        max-width: 100%;
+        padding: 5px 14px 6px;
+        border-radius: 999px;
+        background: rgba(12, 9, 18, 0.88);
+        border: 1px solid rgba(246, 201, 69, 0.55);
+        font-weight: 900;
+        font-size: 20px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .B .tag span em {
+        font-style: normal;
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        margin-right: 8px;
+        vertical-align: 2px;
+      }
+
+      /* ====================================================================================================== */
+      /* C — Bandeau                                                                                            */
+      /* ====================================================================================================== */
+      .C .live {
+        width: 860px;
+        height: 76px;
+      }
+      .C .strip {
+        position: absolute;
+        inset: 6px 0;
+        border-radius: 999px;
+        background: linear-gradient(
+          90deg,
+          rgba(12, 9, 18, 0),
+          rgba(12, 9, 18, 0.86) 9%,
+          rgba(12, 9, 18, 0.86) 91%,
+          rgba(12, 9, 18, 0)
+        );
+      }
+      .C .strip::after {
+        /* gold hairline on top */
+        content: '';
+        position: absolute;
+        left: 12%;
+        right: 12%;
+        top: 0;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(246, 201, 69, 0.85),
+          transparent
+        );
+      }
+      .C .row {
+        position: absolute;
+        inset: 0 70px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .C .portrait {
+        position: relative;
+        flex: none;
+        width: 60px;
+        height: 60px;
+      }
+      .C .portrait .avatar {
+        inset: 6px;
+      }
+      .C .portrait .avatar .initial {
+        font-size: 22px;
+      }
+      .C svg.ring circle {
+        stroke-width: 6;
+      }
+      .C .t-track {
+        stroke: rgba(255, 255, 255, 0.15);
+      }
+      .C .t-arc {
+        stroke: var(--gold-2);
+        stroke-linecap: round;
+      }
+      .C .who {
+        flex: 0 1 220px;
+        min-width: 0;
+        line-height: 1.05;
+      }
+      .C .who small {
+        display: block;
+        font-weight: 900;
+        font-size: 11px;
+        letter-spacing: 0.3em;
+      }
+      .C .who b {
+        display: block;
+        font-weight: 900;
+        font-size: 24px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .C .tug {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .C .n {
+        flex: none;
+        width: 44px;
+        font-weight: 900;
+        font-size: 28px;
+        text-align: center;
+        line-height: 1;
+      }
+      .C .n small {
+        display: block;
+        font-size: 9px;
+        letter-spacing: 0.2em;
+        margin-top: 2px;
+      }
+      .C .n.k {
+        color: var(--kick);
+      }
+      .C .n.s {
+        color: var(--save);
+      }
+      .C .bar {
+        position: relative;
+        flex: 1;
+        height: 10px;
+      }
+      .C .bar .track {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .C .bar i {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+        transition: transform 0.45s var(--ease-out);
+      }
+      .C .bar .k {
+        left: 0;
+        transform-origin: left;
+        background: linear-gradient(90deg, var(--kick-deep), var(--kick));
+      }
+      .C .bar .s {
+        right: 0;
+        transform-origin: right;
+        background: linear-gradient(270deg, var(--save-deep), var(--save));
+      }
+      .C .knob {
+        position: absolute;
+        top: 5px;
+        left: 0;
+        transition: transform 0.45s var(--ease-out);
+      }
+      .C .knob::before {
+        content: '';
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        left: -7px;
+        top: -7px;
+        background: var(--gold-2);
+        border: 2px solid #120e1b;
+        border-radius: 3px;
+        transform: rotate(45deg);
+      }
+      .C .secs {
+        flex: none;
+        width: 58px;
+        text-align: right;
+        font-weight: 900;
+        font-size: 30px;
+        line-height: 1;
+      }
+      .C .secs small {
+        font-size: 14px;
+        margin-left: 1px;
+        opacity: 0.8;
+      }
+      .C .urgent .secs {
+        color: var(--kick);
+      }
+
+      /* ====================================================================================================== */
+      /* D — Balance                                                                                            */
+      /* ====================================================================================================== */
+      .D .live {
+        width: 520px;
+        height: 330px;
+      }
+      .D .name {
+        position: absolute;
+        top: 0;
+        left: -20px;
+        right: -20px;
+        text-align: center;
+        font-weight: 900;
+        font-size: 28px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-shadow: var(--halo);
+      }
+      .D .pivot {
+        position: absolute;
+        top: 42px;
+        left: 50%;
+        width: 104px;
+        height: 104px;
+        margin-left: -52px;
+        z-index: 2;
+      }
+      .D .pivot .avatar {
+        inset: 9px;
+        box-shadow:
+          inset 0 0 0 2px rgba(0, 0, 0, 0.45),
+          0 6px 16px rgba(0, 0, 0, 0.55);
+      }
+      .D .pivot .avatar .initial {
+        font-size: 34px;
+      }
+      .D svg.ring circle {
+        stroke-width: 5;
+      }
+      .D .t-track {
+        stroke: rgba(0, 0, 0, 0.4);
+      }
+      .D .t-arc {
+        stroke: var(--gold-2);
+        stroke-linecap: round;
+      }
+      .D .secs {
+        position: absolute;
+        left: 50%;
+        bottom: -12px;
+        transform: translateX(-50%);
+        padding: 1px 9px;
+        border-radius: 999px;
+        background: rgba(12, 9, 18, 0.92);
+        border: 2px solid var(--gold-2);
+        font-weight: 900;
+        font-size: 17px;
+      }
+      .D .urgent .secs {
+        border-color: var(--kick);
+      }
+      .D .post {
+        position: absolute;
+        top: 120px;
+        left: 50%;
+        width: 6px;
+        height: 150px;
+        margin-left: -3px;
+        border-radius: 3px;
+        background: linear-gradient(
+          90deg,
+          var(--gold-3),
+          var(--gold-1),
+          var(--gold-3)
+        );
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+      }
+      .D .foot {
+        position: absolute;
+        top: 266px;
+        left: 50%;
+        width: 120px;
+        height: 12px;
+        margin-left: -60px;
+        border-radius: 6px 6px 3px 3px;
+        background: linear-gradient(180deg, var(--gold-2), var(--gold-3));
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+      }
+      .D .beam {
+        position: absolute;
+        top: 132px;
+        left: 50%;
+        width: 440px;
+        height: 0;
+        margin-left: -220px;
+        transform: rotate(var(--tilt, 0deg));
+        transition: transform 0.9s cubic-bezier(0.3, 1.7, 0.5, 1);
+      }
+      .D .beam::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: -3px;
+        height: 6px;
+        border-radius: 3px;
+        background: linear-gradient(
+          180deg,
+          var(--gold-1),
+          var(--gold-2) 60%,
+          var(--gold-3)
+        );
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+      }
+      .D .hang {
+        position: absolute;
+        top: 0;
+        width: 0;
+        height: 0;
+        transform: rotate(calc(var(--tilt, 0deg) * -1));
+        transition: transform 0.9s cubic-bezier(0.3, 1.7, 0.5, 1);
+      }
+      .D .hang.k {
+        left: 22px;
+      }
+      .D .hang.s {
+        right: 22px;
+      }
+      .D .hang .strings {
+        position: absolute;
+        left: -40px;
+        top: 0;
+        width: 80px;
+        height: 70px;
+      }
+      .D .pan {
+        position: absolute;
+        top: 64px;
+        left: -54px;
+        width: 108px;
+        height: 54px;
+        border-radius: 0 0 60px 60px;
+        display: grid;
+        place-items: center;
+        font-weight: 900;
+        font-size: 28px;
+        line-height: 1;
+        color: #fff;
+        box-shadow:
+          inset 0 3px 0 rgba(255, 255, 255, 0.35),
+          0 6px 14px rgba(0, 0, 0, 0.5);
+      }
+      .D .pan small {
+        display: block;
+        font-size: 9px;
+        letter-spacing: 0.22em;
+        margin-top: 2px;
+        text-align: center;
+      }
+      .D .hang.k .pan {
+        background: linear-gradient(180deg, var(--kick), var(--kick-deep));
+      }
+      .D .hang.s .pan {
+        background: linear-gradient(180deg, var(--save), var(--save-deep));
+      }
+
+      /* ====================================================================================================== */
+      /* Verdicts (V2 direction, kept) — vertical card for A / B / D, horizontal strip for C                     */
+      /* ====================================================================================================== */
+      .verdict {
+        --tone: 246, 201, 69;
+        text-align: center;
+      }
+      .verdict[data-tone='kick'] {
+        --tone: 255, 77, 94;
+      }
+      .verdict[data-tone='save'] {
+        --tone: 47, 224, 138;
+      }
+      .verdict[data-tone='void'] {
+        --tone: 230, 226, 238;
+      }
+      .vcard {
+        position: relative;
+        width: var(--vw, 470px);
+        padding: 22px 26px 22px;
+        border-radius: 26px;
+        background:
+          radial-gradient(
+            120% 70% at 50% 0%,
+            rgba(var(--tone), 0.18),
+            transparent 60%
+          ),
+          linear-gradient(160deg, rgba(28, 20, 42, 0.92), rgba(14, 10, 22, 0.9));
+        border: 1px solid rgba(var(--tone), 0.5);
+        box-shadow:
+          0 18px 46px rgba(0, 0, 0, 0.5),
+          0 0 26px rgba(var(--tone), 0.45);
+      }
+      .vtitle {
+        font-weight: 900;
+        font-size: 26px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .vicon {
+        position: relative;
+        width: 108px;
+        height: 108px;
+        margin: 10px auto 2px;
+        display: grid;
+        place-items: center;
+      }
+      .vicon .face {
+        width: 96px;
+        height: 96px;
+        border-radius: 50%;
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(140deg, #3b2c5a, #1b1426);
+        box-shadow:
+          0 0 0 4px rgba(var(--tone), 0.9),
+          0 10px 24px rgba(0, 0, 0, 0.5);
+        position: relative;
+      }
+      .vicon .face img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .vicon .face .initial {
+        font-size: 44px;
+        font-weight: 900;
+      }
+      .stamp {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 5px 14px 7px;
+        border: 4px solid rgb(var(--tone));
+        border-radius: 11px;
+        color: rgb(var(--tone));
+        font-weight: 900;
+        font-size: 32px;
+        line-height: 1;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        transform: rotate(-4deg);
+        background: rgba(var(--tone), 0.08);
+      }
+      .verdict[data-tone='gold'] .stamp {
+        color: transparent;
+        background: linear-gradient(
+          180deg,
+          var(--gold-1),
+          var(--gold-2) 55%,
+          var(--gold-3)
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        border-color: var(--gold-2);
+      }
+      .vwho {
+        margin-top: 12px;
+        font-weight: 900;
+        font-size: 30px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .vdetail {
+        margin-top: 4px;
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .vscore {
+        margin-top: 10px;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+      .vscore .k {
+        color: var(--kick);
+      }
+      .vscore .s {
+        color: var(--save);
+      }
+      .badge {
+        position: absolute;
+        top: -2px;
+        right: -18px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-weight: 900;
+        font-size: 19px;
+        background: var(--gold-2);
+        color: #1a1206;
+        box-shadow: 0 5px 14px rgba(0, 0, 0, 0.5);
+      }
+      .coin {
+        width: 96px;
+        height: 96px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-weight: 900;
+        font-size: 21px;
+        letter-spacing: 0.08em;
+        border: 5px solid var(--gold-2);
+        box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.35);
+        background: radial-gradient(circle at 35% 30%, #fff1b0, var(--gold-3));
+        color: #3a2606;
+      }
+      .coin.k {
+        background: radial-gradient(
+          circle at 35% 30%,
+          #ff8a96,
+          var(--kick-deep)
+        );
+        color: #fff;
+      }
+      .coin.s {
+        background: radial-gradient(
+          circle at 35% 30%,
+          #7dffbf,
+          var(--save-deep)
+        );
+        color: #fff;
+      }
+      .mic {
+        width: 82px;
+        height: 82px;
+      }
+      .sparks i {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 7px;
+        height: 7px;
+        border-radius: 2px;
+        background: var(--gold-1);
+        opacity: 0;
+      }
+      /* C: the verdict stays a strip (the centre of the screen stays free). */
+      .C .vcard {
+        width: 860px;
+        height: 104px;
+        padding: 0 40px 0 26px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        text-align: left;
+      }
+      .C .vtitle {
+        display: none;
+      }
+      .C .vicon {
+        flex: none;
+        width: 84px;
+        height: 84px;
+        margin: 0;
+      }
+      .C .vicon .face,
+      .C .coin {
+        width: 74px;
+        height: 74px;
+      }
+      .C .coin {
+        font-size: 15px;
+      }
+      .C .mic {
+        width: 64px;
+        height: 64px;
+      }
+      .C .vmid {
+        flex: 1;
+        min-width: 0;
+      }
+      .C .stamp {
+        margin: 0;
+        font-size: 22px;
+        padding: 3px 10px 5px;
+        border-width: 3px;
+      }
+      .C .vwho {
+        margin-top: 4px;
+        font-size: 26px;
+      }
+      .C .vside {
+        flex: none;
+        text-align: right;
+      }
+      .C .vdetail {
+        margin: 0;
+        font-size: 20px;
+        color: #fff;
+      }
+      .C .vscore {
+        margin-top: 4px;
+      }
+      .C .badge {
+        top: -6px;
+        right: -10px;
+      }
+
+      /* ====================================================================================================== */
+      /* Motion                                                                                                 */
+      /* ====================================================================================================== */
+      #root {
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      #root.in {
+        opacity: 1;
+      }
+      #root.out {
+        opacity: 0;
+        transition: opacity 0.35s ease;
+      }
+      .enter .e1,
+      .enter .e2,
+      .enter .e3,
+      .enter .e4 {
+        animation: rise 0.5s var(--ease-out) both;
+      }
+      .enter .e2 {
+        animation-delay: 0.08s;
+      }
+      .enter .e3 {
+        animation-delay: 0.16s;
+      }
+      .enter .e4 {
+        animation-delay: 0.24s;
+      }
+      .enter .pop {
+        animation: pop 0.55s var(--ease-back) both;
+      }
+      .A.enter .gauge {
+        animation: unfold 0.7s 0.18s var(--ease-out) both;
+      }
+      .B.enter .pill.k {
+        animation: fromRight 0.5s 0.3s var(--ease-back) both;
+      }
+      .B.enter .pill.s {
+        animation: fromLeft 0.5s 0.3s var(--ease-back) both;
+      }
+      .C.enter .strip {
+        animation: widen 0.55s var(--ease-out) both;
+      }
+      .C.enter .row > * {
+        animation: rise 0.45s var(--ease-out) both;
+      }
+      .C.enter .row > :nth-child(2) {
+        animation-delay: 0.12s;
+      }
+      .C.enter .row > :nth-child(3) {
+        animation-delay: 0.2s;
+      }
+      .C.enter .row > :nth-child(4) {
+        animation-delay: 0.26s;
+      }
+      .D.enter .beam {
+        animation: swing 1s 0.15s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+      }
+      .D.enter .post,
+      .D.enter .foot {
+        animation: rise 0.45s var(--ease-out) both;
+      }
+      .verdict.in > .vcard {
+        animation: pop 0.45s var(--ease-back) both;
+      }
+      .verdict.in .stamp {
+        animation: stamp 0.46s 0.15s var(--ease-back) both;
+      }
+      .verdict.in .vwho,
+      .verdict.in .vdetail,
+      .verdict.in .vscore {
+        animation: rise 0.4s 0.25s var(--ease-out) both;
+      }
+      .verdict.in .badge {
+        animation: pop 0.5s 0.55s var(--ease-back) both;
+      }
+      .verdict.in.fx-coin .coin {
+        animation: flip 1.25s var(--ease-out) both;
+      }
+      .verdict.in.fx-coin .stamp {
+        animation-delay: 1.15s;
+      }
+      .verdict.in.fx-coin .vwho,
+      .verdict.in.fx-coin .vdetail,
+      .verdict.in.fx-coin .vscore {
+        animation-delay: 1.3s;
+      }
+      .verdict.in.fx-backfire > .vcard {
+        animation:
+          pop 0.45s var(--ease-back) both,
+          shake 0.5s 0.5s ease-in-out;
+      }
+      .verdict.in.fx-mute .mic {
+        animation: mic 0.9s 0.3s ease-in-out 3 both;
+      }
+      .verdict.in.fx-perfect .sparks i {
+        animation: spark 0.9s 0.35s var(--ease-out) both;
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+      }
+      @keyframes pop {
+        from {
+          opacity: 0;
+          transform: scale(0.8);
+        }
+      }
+      @keyframes unfold {
+        from {
+          opacity: 0;
+          transform: scaleX(0.2);
+        }
+      }
+      @keyframes widen {
+        from {
+          opacity: 0;
+          transform: scaleX(0.25);
+        }
+      }
+      @keyframes fromRight {
+        from {
+          opacity: 0;
+          transform: translateX(40px) scale(0.6);
+        }
+      }
+      @keyframes fromLeft {
+        from {
+          opacity: 0;
+          transform: translateX(-40px) scale(0.6);
+        }
+      }
+      @keyframes swing {
+        from {
+          opacity: 0;
+          transform: rotate(-16deg) translateY(-12px);
+        }
+      }
+      @keyframes stamp {
+        0% {
+          opacity: 0;
+          transform: rotate(-4deg) scale(1.9);
+        }
+        60% {
+          opacity: 1;
+          transform: rotate(-4deg) scale(0.94);
+        }
+        100% {
+          opacity: 1;
+          transform: rotate(-4deg) scale(1);
+        }
+      }
+      @keyframes flip {
+        0% {
+          transform: translateY(30px) rotateY(0deg) scale(0.6);
+          opacity: 0;
+        }
+        20% {
+          opacity: 1;
+        }
+        55% {
+          transform: translateY(-26px) rotateY(1080deg) scale(1.05);
+        }
+        100% {
+          transform: none;
+          opacity: 1;
+        }
+      }
+      @keyframes shake {
+        20% {
+          transform: translateX(-8px) rotate(-0.6deg);
+        }
+        40% {
+          transform: translateX(7px) rotate(0.5deg);
+        }
+        60% {
+          transform: translateX(-4px);
+        }
+        80% {
+          transform: translateX(2px);
+        }
+      }
+      @keyframes mic {
+        50% {
+          transform: scale(1.12);
+        }
+      }
+      @keyframes spark {
+        0% {
+          opacity: 1;
+          transform: translate(-50%, -50%) rotate(var(--a)) translateY(0)
+            scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: translate(-50%, -50%) rotate(var(--a)) translateY(-110px)
+            scale(0.4);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <div id="root"></div>
+    </main>
+    <script src="../model.js"></script>
+    <script>
+      (() => {
+        'use strict';
+        const M = globalThis.VotekickModel;
+        const params = new URLSearchParams(location.search);
+        const V = ['A', 'B', 'C', 'D'].includes(params.get('v'))
+          ? params.get('v')
+          : 'A';
+        const root = document.getElementById('root');
+        const reduced =
+          window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ===
+          true;
+        const RESULT_HIDE_MS = 6500;
+        const NS = 'http://www.w3.org/2000/svg';
+
+        let state = M.createState();
+        let voteMs = M.VOTE_MS;
+        const timers = new Set();
+        let raf = 0;
+        const later = (fn, ms) => {
+          const t = setTimeout(() => {
+            timers.delete(t);
+            fn();
+          }, ms);
+          timers.add(t);
+        };
+        const cancelAll = () => {
+          for (const t of timers) clearTimeout(t);
+          timers.clear();
+          cancelAnimationFrame(raf);
+          raf = 0;
+        };
+        const el = (tag, cls, html) => {
+          const e = document.createElement(tag);
+          if (cls) e.className = cls;
+          if (html !== undefined) e.innerHTML = html;
+          return e;
+        };
+        const esc = (s) =>
+          String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+        function avatarInto(box, url, name) {
+          box.textContent = '';
+          const fallback = el('span', 'initial');
+          fallback.textContent = (name || '?').slice(0, 1).toUpperCase();
+          box.appendChild(fallback);
+          if (!url) return;
+          const img = new Image();
+          img.alt = '';
+          img.onload = () => fallback.isConnected && fallback.replaceWith(img);
+          img.src = url;
+        }
+        function bump(node) {
+          if (reduced || !node?.animate) return;
+          node.animate(
+            [
+              { transform: 'scale(1)' },
+              { transform: 'scale(1.3)' },
+              { transform: 'scale(1)' },
+            ],
+            { duration: 320, easing: 'cubic-bezier(.34,1.56,.64,1)' },
+          );
+        }
+        /** A timer ring (track + arc) in a viewBox of 100: returns the arc and its circumference. */
+        function ring(r, cls = 'ring t-ring') {
+          const svg = document.createElementNS(NS, 'svg');
+          svg.setAttribute('class', cls);
+          svg.setAttribute('viewBox', '0 0 100 100');
+          svg.innerHTML = `<circle class="t-track" cx="50" cy="50" r="${r}"></circle><circle class="t-arc" cx="50" cy="50" r="${r}"></circle>`;
+          const arc = svg.querySelector('.t-arc');
+          const c = 2 * Math.PI * r;
+          arc.style.strokeDasharray = String(c);
+          return { svg, arc, c };
+        }
+
+        // --- The four live layouts: build(), counts(kick, save, share), clock(timer) -------------------------
+        const LAYOUTS = {
+          A: {
+            build(s) {
+              const live = el('div', 'live');
+              live.append(el('div', 'halo'));
+              live.append(el('div', 'kicker gold-text e1', 'Votekick'));
+              const p = el('div', 'portrait pop');
+              const r = ring(46);
+              p.append(r.svg, el('div', 'avatar'), el('div', 'secs tnum'));
+              live.append(p, el('div', 'name e2'));
+              const g = el('div', 'gauge');
+              g.innerHTML = `<svg viewBox="0 0 320 110"><path class="g-track" d="M20 20 A200 200 0 0 0 300 20"/><path class="g-k" d="M20 20 A200 200 0 0 0 300 20"/><path class="g-s" d="M300 20 A200 200 0 0 1 20 20"/></svg>
+                <div class="count k e3"><b class="tnum">0</b><span>KICK</span></div>
+                <div class="count s e3"><b class="tnum">0</b><span>SAVE</span></div>
+                <div class="total e4"></div>`;
+              live.append(g);
+              this.r = r;
+              this.p = p;
+              avatarInto(p.querySelector('.avatar'), s.avatar, s.target);
+              live.querySelector('.name').textContent = `@${s.target}`;
+              this.len = 0;
+              this.g = g;
+              return live;
+            },
+            counts(k, sv, share) {
+              const kp = this.g.querySelector('.g-k');
+              const sp = this.g.querySelector('.g-s');
+              this.len ||= kp.getTotalLength();
+              const L = this.len;
+              kp.style.strokeDasharray = `${L * share} ${L}`;
+              sp.style.strokeDasharray = `${L * (1 - share)} ${L}`;
+              const t = k + sv;
+              this.g.querySelector('.total').textContent =
+                `${t} vote${t > 1 ? 's' : ''}`;
+              return [
+                this.g.querySelector('.k b'),
+                this.g.querySelector('.s b'),
+              ];
+            },
+            clock(t) {
+              this.r.arc.style.strokeDashoffset = String(
+                this.r.c * (1 - t.fraction),
+              );
+              return [this.p.querySelector('.secs'), this.p];
+            },
+          },
+          B: {
+            build(s) {
+              const live = el('div', 'live');
+              const m = el('div', 'medal pop');
+              const vr = document.createElementNS(NS, 'svg');
+              vr.setAttribute('class', 'ring v-ring');
+              vr.setAttribute('viewBox', '0 0 100 100');
+              vr.innerHTML =
+                '<circle class="v-bg" cx="50" cy="50" r="44"/><circle class="v-k" cx="50" cy="50" r="44"/><circle class="v-s" cx="50" cy="50" r="44"/>';
+              const tr = ring(36.5);
+              m.append(vr, tr.svg, el('div', 'avatar'), el('div', 'secs tnum'));
+              m.append(
+                el(
+                  'div',
+                  'pill k',
+                  '<span class="tnum">0</span><small>KICK</small>',
+                ),
+                el(
+                  'div',
+                  'pill s',
+                  '<span class="tnum">0</span><small>SAVE</small>',
+                ),
+              );
+              live.append(m);
+              const tag = el(
+                'div',
+                'tag e2',
+                '<span><em class="gold-text">VOTEKICK</em></span>',
+              );
+              tag.firstChild.append(document.createTextNode(`@${s.target}`));
+              live.append(tag);
+              avatarInto(m.querySelector('.avatar'), s.avatar, s.target);
+              this.m = m;
+              this.tr = tr;
+              this.C = 2 * Math.PI * 44;
+              return live;
+            },
+            counts(k, sv, share) {
+              const C = this.C;
+              const gap = k && sv ? 3 : 0; // a small gap between the two colours
+              const kl = Math.max(0, C * share - gap);
+              const sl = Math.max(0, C * (1 - share) - gap);
+              const vk = this.m.querySelector('.v-k');
+              const vs = this.m.querySelector('.v-s');
+              vk.style.strokeDasharray = `${kl} ${C}`;
+              vs.style.strokeDasharray = `${sl} ${C}`;
+              vs.style.strokeDashoffset = String(-(C * share));
+              vk.style.opacity = k ? '1' : '0';
+              vs.style.opacity = sv ? '1' : '0';
+              return [
+                this.m.querySelector('.pill.k span'),
+                this.m.querySelector('.pill.s span'),
+              ];
+            },
+            clock(t) {
+              this.tr.arc.style.strokeDashoffset = String(
+                this.tr.c * (1 - t.fraction),
+              );
+              return [this.m.querySelector('.secs'), this.m];
+            },
+          },
+          C: {
+            build(s) {
+              const live = el('div', 'live');
+              live.append(el('div', 'strip'));
+              const row = el('div', 'row');
+              const p = el('div', 'portrait');
+              const r = ring(44);
+              p.append(r.svg, el('div', 'avatar'));
+              const who = el(
+                'div',
+                'who',
+                '<small class="gold-text">VOTEKICK</small><b></b>',
+              );
+              who.querySelector('b').textContent = `@${s.target}`;
+              const tug = el(
+                'div',
+                'tug',
+                `<div class="n k"><span class="tnum">0</span><small>KICK</small></div>
+                <div class="bar"><div class="track"><i class="k"></i><i class="s"></i></div><span class="knob"></span></div>
+                <div class="n s"><span class="tnum">0</span><small>SAVE</small></div>`,
+              );
+              const secs = el(
+                'div',
+                'secs tnum',
+                '<span>60</span><small>s</small>',
+              );
+              row.append(p, who, tug, secs);
+              live.append(row);
+              avatarInto(p.querySelector('.avatar'), s.avatar, s.target);
+              this.r = r;
+              this.row = row;
+              return live;
+            },
+            counts(k, sv, share) {
+              this.row.querySelector('.bar .k').style.transform =
+                `scaleX(${share})`;
+              this.row.querySelector('.bar .s').style.transform =
+                `scaleX(${1 - share})`;
+              const w = this.row.querySelector('.bar').clientWidth;
+              this.row.querySelector('.knob').style.transform =
+                `translateX(${share * w}px)`;
+              return [
+                this.row.querySelector('.n.k span'),
+                this.row.querySelector('.n.s span'),
+              ];
+            },
+            clock(t) {
+              this.r.arc.style.strokeDashoffset = String(
+                this.r.c * (1 - t.fraction),
+              );
+              return [this.row.querySelector('.secs span'), this.row];
+            },
+          },
+          D: {
+            build(s) {
+              const live = el('div', 'live');
+              const name = el('div', 'name e1');
+              name.textContent = `@${s.target}`;
+              const pv = el('div', 'pivot pop');
+              const r = ring(45);
+              pv.append(r.svg, el('div', 'avatar'), el('div', 'secs tnum'));
+              const beam = el('div', 'beam');
+              const strings =
+                '<svg class="strings" viewBox="0 0 80 70"><path d="M40 0 L6 66 M40 0 L74 66" stroke="#f6c945" stroke-width="1.6" fill="none" opacity=".85"/></svg>';
+              beam.append(
+                el(
+                  'div',
+                  'hang k',
+                  `${strings}<div class="pan"><div><span class="tnum">0</span><small>KICK</small></div></div>`,
+                ),
+                el(
+                  'div',
+                  'hang s',
+                  `${strings}<div class="pan"><div><span class="tnum">0</span><small>SAVE</small></div></div>`,
+                ),
+              );
+              live.append(name, el('div', 'post'), el('div', 'foot'), beam, pv);
+              avatarInto(pv.querySelector('.avatar'), s.avatar, s.target);
+              this.r = r;
+              this.pv = pv;
+              this.live = live;
+              return live;
+            },
+            counts(k, sv) {
+              const total = k + sv;
+              // The heavier side goes down: more KICK → the left pan lower.
+              const tilt = total ? ((sv - k) / total) * 14 : 0;
+              this.live.style.setProperty('--tilt', `${tilt.toFixed(2)}deg`);
+              return [
+                this.live.querySelector('.hang.k .pan span'),
+                this.live.querySelector('.hang.s .pan span'),
+              ];
+            },
+            clock(t) {
+              this.r.arc.style.strokeDashoffset = String(
+                this.r.c * (1 - t.fraction),
+              );
+              return [this.pv.querySelector('.secs'), this.pv];
+            },
+          },
+        };
+        const L = LAYOUTS[V];
+        document.body.classList.add(V);
+        if (!params.has('embed')) document.body.classList.add('solo');
+
+        // --- Rendering -------------------------------------------------------------------------------------------
+        let shown = { kick: -1, save: -1 };
+        let numbers = [null, null];
+        function renderCounts() {
+          const share = M.kickShare(state.kick, state.save);
+          numbers = L.counts(state.kick, state.save, share);
+          const [kn, sn] = numbers;
+          if (state.kick !== shown.kick) {
+            kn.textContent = String(state.kick);
+            if (shown.kick >= 0) bump(kn.closest('.pill,.pan,.count,.n') || kn);
+          }
+          if (state.save !== shown.save) {
+            sn.textContent = String(state.save);
+            if (shown.save >= 0) bump(sn.closest('.pill,.pan,.count,.n') || sn);
+          }
+          shown = { kick: state.kick, save: state.save };
+        }
+        let lastSecond = -1;
+        let lastUrgent = null;
+        function frame() {
+          const t = M.timer(state.ends, Date.now(), voteMs);
+          const [secs, holder] = L.clock(t);
+          if (t.seconds !== lastSecond) {
+            lastSecond = t.seconds;
+            secs.textContent = String(t.seconds);
+            if (t.urgent) bump(secs);
+          }
+          if (t.urgent !== lastUrgent) {
+            lastUrgent = t.urgent;
+            holder.classList.toggle('urgent', t.urgent);
+            root.classList.toggle('urgent', t.urgent);
+          }
+          raf = t.over ? 0 : requestAnimationFrame(frame);
+        }
+        function show() {
+          root.classList.remove('out');
+          root.classList.add('in');
+        }
+        function openLive() {
+          cancelAll();
+          root.textContent = '';
+          root.className = '';
+          root.appendChild(L.build(state));
+          shown = { kick: -1, save: -1 };
+          lastSecond = -1;
+          lastUrgent = null;
+          renderCounts();
+          if (!reduced) {
+            document.body.classList.add('enter');
+            later(() => document.body.classList.remove('enter'), 1300);
+          }
+          void root.offsetWidth;
+          show();
+          raf = requestAnimationFrame(frame);
+        }
+        function verdictView() {
+          const v = M.verdict(state);
+          const wrap = el('div', `verdict fx-${v.fx}`);
+          wrap.dataset.tone = v.tone;
+          const card = el('div', 'vcard');
+          const icon = el('div', 'vicon');
+          if (v.fx === 'coin') {
+            const coin = el('div', 'coin', '?');
+            icon.append(coin);
+            const land = () => {
+              coin.classList.add(v.coinSide === 'kick' ? 'k' : 's');
+              coin.textContent = v.coinSide === 'kick' ? 'KICK' : 'SAVE';
+            };
+            if (reduced) land();
+            else later(land, 1100);
+          } else if (v.fx === 'mute') {
+            icon.innerHTML =
+              '<svg class="mic" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/><path stroke="#ff4d5e" stroke-width="2.6" stroke-linecap="round" d="M4 3l16 18"/></svg>';
+          } else {
+            const face = el('div', 'face');
+            avatarInto(
+              face,
+              v.fx === 'backfire' ? '' : state.avatar,
+              v.fx === 'backfire' ? state.initiator : state.target,
+            );
+            icon.append(face);
+            if (v.fx === 'perfect') {
+              const sparks = el('div', 'sparks');
+              for (let i = 0; i < 10; i++) {
+                const s = el('i');
+                s.style.setProperty('--a', `${i * 36}deg`);
+                sparks.append(s);
+              }
+              icon.append(sparks);
+            }
+          }
+          if (v.badge) icon.append(el('span', 'badge', esc(v.badge)));
+          const stamp = el('span', 'stamp');
+          stamp.textContent = v.stamp;
+          const who = el('div', 'vwho');
+          who.textContent = v.who;
+          const detail = el('div', 'vdetail');
+          detail.textContent = v.detail;
+          const score = el(
+            'div',
+            'vscore',
+            `<span class="k">KICK ${state.kick}</span> · <span class="s">SAVE ${state.save}</span>`,
+          );
+          if (V === 'C') {
+            const mid = el('div', 'vmid');
+            mid.append(stamp, who);
+            const side = el('div', 'vside');
+            side.append(detail, score);
+            card.append(icon, mid, side);
+          } else {
+            card.append(
+              el('div', 'vtitle gold-text', 'Votekick'),
+              icon,
+              el('div'),
+              who,
+              detail,
+              score,
+            );
+            card.children[2].append(stamp);
+          }
+          wrap.append(card);
+          return wrap;
+        }
+        function showVerdict() {
+          cancelAll();
+          root.textContent = '';
+          root.className = '';
+          const view = verdictView();
+          root.appendChild(view);
+          void root.offsetWidth;
+          if (!reduced) view.classList.add('in');
+          show();
+          later(hide, RESULT_HIDE_MS);
+        }
+        function hide() {
+          cancelAll();
+          root.classList.remove('in');
+          root.classList.add('out');
+        }
+        function apply(event) {
+          const out = M.reduce(state, event, Date.now());
+          state = out.state;
+          if (out.effect === 'open') openLive();
+          else if (out.effect === 'update') renderCounts();
+          else if (out.effect === 'result') showVerdict();
+          else if (out.effect === 'clear') hide();
+          return out.effect;
+        }
+        window.addEventListener('votekick_update', (e) =>
+          apply(e.detail || {}),
+        );
+        window.VKV = { apply, setVoteMs: (ms) => (voteMs = ms) };
+
+        // Opened alone (no `embed`): a short self-running demo, to look at one variant.
+        if (!params.has('embed')) {
+          let k = 1;
+          let s = 0;
+          const session = 'solo';
+          apply({
+            action: 'live',
+            session,
+            seq: 1,
+            target: 'VieweruMobilu',
+            initiator: 'LeCroupier_',
+            yes: 1,
+            no: 0,
+            ends: Date.now() + 60000,
+          });
+          let seq = 1;
+          const tick = setInterval(() => {
+            if (Math.random() < 0.6) k++;
+            else s++;
+            apply({ action: 'update', session, seq: ++seq, yes: k, no: s });
+            if (k + s > 14) clearInterval(tick);
+          }, 900);
+        }
+      })();
+    </script>
+  </body>
+</html>
