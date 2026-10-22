@@ -19,6 +19,16 @@ export function raffleReservedWords(
   };
 }
 
+/** Chat interactions of the paid modules (docs/CHAT_COMMANDS.md): `!tts` belongs to the TTS, never to Commands V2. */
+export function withInteractionWords(base: ReservedWords): ReservedWords {
+  return async (q, channelId) => [
+    ...(await base(q, channelId)),
+    { word: 'tts', module: 'TTS' },
+    { word: 'rb', module: 'Random Ban' },
+    { word: 'fxcam', module: 'FX Cam' },
+  ];
+}
+
 /** Roulette / Slot / Duel words (StreamElements aliases included) on top of another module's reserved words. */
 export function withMiniGameWords(base: ReservedWords): ReservedWords {
   return async (q, channelId) => [

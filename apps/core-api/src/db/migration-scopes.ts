@@ -96,6 +96,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   // Points de chaîne « accorder des crédits »: its ledger kind on the Lab test wallet.
   '20261030120000_lab_ledger_channel_points.sql', // Winner announcements (Tombola, Roue du Sub): cmd_steps origins raffle / sub_wheel.
   '20261031140000_cmd_steps_win_announcements_lab.sql',
+  // !fxcam from the chat: cp_redemptions also accepts the source « chat » (Lab and main Core).
+  '20261104120000_cp_redemptions_chat_source_lab.sql',
 ]);
 
 /**
@@ -148,6 +150,8 @@ export const MAIN_CORE_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   // The Lab wallet's ledger kind of « Accorder des crédits » (the main Core in Lab mode).
   '20261030120000_lab_ledger_channel_points.sql', // Winner announcements in chat (Tombola, Roue du Sub): cmd_steps origins raffle / sub_wheel.
   '20261031140000_cmd_steps_win_announcements_lab.sql',
+  // !fxcam from the chat: cp_redemptions also accepts the source « chat » (Lab and main Core).
+  '20261104120000_cp_redemptions_chat_source_lab.sql',
 ]);
 
 export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([

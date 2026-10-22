@@ -18,6 +18,17 @@ export const walletMessages = {
       ? `@${name} — dette actuelle : ${formatAmount(balance, c)}.`
       : `@${name} — tu as ${formatAmount(balance, c)}.`,
 
+  /** `!solde @Pseudo`: someone else's balance, answered to whoever asked. */
+  balanceOf: (
+    requesterName: string,
+    targetName: string,
+    balance: number,
+    c: Currency,
+  ) =>
+    balance < 0
+      ? `@${requesterName} — dette actuelle de @${targetName} : ${formatAmount(balance, c)}.`
+      : `@${requesterName} — @${targetName} a ${formatAmount(balance, c)}.`,
+
   transfer: (
     from: { id: string; name: string },
     toName: string,

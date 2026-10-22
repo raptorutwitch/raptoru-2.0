@@ -82,6 +82,14 @@ export function createCore(
   const loyalty = new LoyaltyEngine(db, clock, wallet.wallet, loyaltyModes);
   const soundLab = new SoundLabService(db, clock, undefined, economy);
   const randomBan = new RandomBanService(db, clock);
+  const ttsLab = new TtsLabService(db, clock, undefined, undefined, economy);
+  const channelPoints = new ChannelPointsService(
+    db,
+    clock,
+    soundLab,
+    randomBan,
+    economy,
+  );
   const raffleLab = new RaffleLabService(
     db,
     clock,
@@ -100,7 +108,7 @@ export function createCore(
     bonkLab: new BonkLabService(db, clock, twitchViewers, null, economy),
     twitchViewers,
     soundLab,
-    ttsLab: new TtsLabService(db, clock, undefined, undefined, economy),
+    ttsLab,
     raffleLab,
     studioInstallations: new StudioInstallations(db, clock),
     alerts: new AlertsService(
@@ -109,13 +117,7 @@ export function createCore(
       undefined,
       channel.alertsMaxAgeMs ?? null,
     ),
-    channelPoints: new ChannelPointsService(
-      db,
-      clock,
-      soundLab,
-      randomBan,
-      economy,
-    ),
+    channelPoints,
     randomBan,
     subWheel: new SubWheelService(db, clock, undefined, economy),
     botInstances: new BotInstanceService(db, clock),
@@ -124,6 +126,9 @@ export function createCore(
       db,
       clock,
       economy,
+      tts: ttsLab,
+      randomBan,
+      channelPoints,
       raffle: raffleLab,
       broadcasterOf,
       twitch: channel.twitchApp ?? null,

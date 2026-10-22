@@ -80,7 +80,10 @@ export type AdminOp = z.infer<typeof AdminOp>;
 // --- bot (chat transport) ------------------------------------------------------------------------
 
 export const WalletBalanceRequest = z.object({
+  /** Whose wallet is read. */
   viewer: Viewer,
+  /** Who typed the command, when it is someone else's wallet (`!solde @Pseudo`): the reply is addressed to them. */
+  requester: Viewer.optional(),
   currencyId: CurrencyId.optional(),
 });
 export type WalletBalanceRequest = z.infer<typeof WalletBalanceRequest>;

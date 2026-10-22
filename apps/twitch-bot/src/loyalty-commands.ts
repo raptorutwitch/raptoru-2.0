@@ -3,9 +3,12 @@ import type { CoreClient } from './core-client.js';
 
 // Loyalty chat commands: parse the chat syntax and resolve the target's Twitch identity, then
 // forward a structured intent to Core, which decides and returns the reply. No wallet logic here.
+// Chat command convention (docs/CHAT_COMMANDS.md): a pseudo is accepted with or without @ (same Twitch account),
+// and a command acts only on its documented syntax — nothing before it, no extra word after it.
 
 export type LoyaltyCommand =
-  | { kind: 'balance' }
+  /** `target`: login (lowercase) of someone else's wallet; absent = the author's own. */
+  | { kind: 'balance'; target?: string }
   | { kind: 'give'; target: string; amount: number }
   | {
       kind: 'admin';
@@ -23,11 +26,18 @@ const LOGIN = /^@?([a-z0-9_]{3,25})$/i;
 const USAGE_GIVE = 'usage : !give @pseudo montant';
 const USAGE_ADMIN = 'usage : !wallet add|remove|set @pseudo montant [motif]';
 
-/** Accepts `!give @Pseudo 500` and `!give 500 @Pseudo`. */
+/**
+ * Accepts `!give @Pseudo 500` and `!give 500 @Pseudo`. `!solde` is strict: `!solde`, `!solde Pseudo` or
+ * `!solde @Pseudo` only (case ignored); any other form (extra words, a lone `@`) is not a command at all.
+ */
 export function parseLoyaltyCommand(text: string): LoyaltyCommand | null {
   const [head, ...args] = text.trim().split(/\s+/);
   const command = head?.toLowerCase() ?? '';
-  if (BALANCE.has(command)) return { kind: 'balance' };
+  if (BALANCE.has(command)) {
+    if (!args.length) return { kind: 'balance' };
+    const login = args.length === 1 ? LOGIN.exec(args[0]!) : null;
+    return login ? { kind: 'balance', target: login[1]!.toLowerCase() } : null;
+  }
 
   if (GIVE.has(command)) {
     const amountToken = args.find(
@@ -104,18 +114,33 @@ export async function handleLoyaltyMessage(
   if (command.kind === 'usage') return deps.say(`@${name} — ${command.text}`);
 
   try {
-    if (command.kind === 'balance') {
+    if (command.kind === 'balance' && !command.target) {
       return await deps.say(
         (await deps.core.walletBalance({ viewer: message.chatter })).message,
       );
     }
-    const target =
-      message.mentions.find((m) => m.login.toLowerCase() === command.target) ??
-      (await deps.lookupLogin(command.target));
+    const login = command.target!;
+    // The real @mention (EventSub fragment) first; otherwise Twitch by login, kept only if it is that exact login.
+    const found =
+      message.mentions.find((m) => m.login.toLowerCase() === login) ??
+      (await deps.lookupLogin(login));
+    const target = found?.login.toLowerCase() === login ? found : null;
+    // Never someone else's wallet (nor the author's) when the account is not resolved.
     if (!target)
+      return await deps.say(`@${name} — viewer « ${login} » introuvable.`);
+
+    if (command.kind === 'balance') {
+      const own = target.twitchUserId === message.chatter.twitchUserId;
       return await deps.say(
-        `@${name} — viewer « ${command.target} » introuvable.`,
+        (
+          await deps.core.walletBalance(
+            own
+              ? { viewer: message.chatter }
+              : { viewer: target, requester: message.chatter },
+          )
+        ).message,
       );
+    }
 
     const reply =
       command.kind === 'give'

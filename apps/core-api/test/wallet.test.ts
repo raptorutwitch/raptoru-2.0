@@ -74,6 +74,29 @@ describe('currencies', () => {
     );
   });
 
+  it('!solde @Pseudo: the target’s balance, answered to whoever asked; asking for oneself = own reply', async () => {
+    const core = await setup();
+    const bob = { twitchUserId: '9002', login: 'bob', displayName: 'Bob' };
+    await give(core, alice, 300);
+    await give(core, bob, 4500);
+    expect(
+      (await core.wallet.chat.balance({ viewer: bob, requester: alice }))
+        .message,
+    ).toBe('@Alice — @Bob a 4 500 Jetons.');
+    expect(
+      (await core.wallet.chat.balance({ viewer: alice, requester: bob }))
+        .message,
+    ).toBe('@Bob — @Alice a 300 Jetons.');
+    expect(
+      (await core.wallet.chat.balance({ viewer: alice, requester: alice }))
+        .message,
+    ).toBe('@Alice — tu as 300 Jetons.');
+    // Read-only: no balance changed.
+    expect((await core.wallet.chat.balance({ viewer: bob })).message).toBe(
+      '@Bob — tu as 4 500 Jetons.',
+    );
+  });
+
   it('switching the primary currency keeps a single primary', async () => {
     const core = await setup();
     await core.wallet.currencies.create({

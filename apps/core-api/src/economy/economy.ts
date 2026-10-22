@@ -8,6 +8,7 @@ import {
   readWallet,
   refundDebit as labRefundDebit,
   type LabModule,
+  type PaidModule,
   type WalletCurrency,
 } from '../lab-moderation/store.js';
 import {
@@ -39,7 +40,7 @@ export interface EconomyDebit {
   viewer: { id: string; display_name: string };
   currency: WalletCurrency;
   amount: number;
-  module: LabModule;
+  module: PaidModule;
   interactionId: string;
 }
 

@@ -19,23 +19,35 @@ export class WalletChat {
     private readonly staff: StaffService,
   ) {}
 
-  /** Read-only. */
+  /** Read-only. `requester` (someone else asking, `!solde @Pseudo`) only changes who the reply is addressed to. */
   async balance({
     viewer,
+    requester,
     currencyId,
   }: WalletBalanceRequest): Promise<WalletChatResponse> {
+    const other =
+      requester && requester.twitchUserId !== viewer.twitchUserId
+        ? requester
+        : null;
     const view = await this.wallet.getWallet(viewer.twitchUserId, currencyId);
     if (!view || !view.currency.active)
       return {
-        message: `@${viewer.displayName} — monnaie indisponible.`,
+        message: `@${(other ?? viewer).displayName} — monnaie indisponible.`,
         result: null,
       };
     return {
-      message: walletMessages.balance(
-        viewer.displayName,
-        view.balance,
-        view.currency,
-      ),
+      message: other
+        ? walletMessages.balanceOf(
+            other.displayName,
+            viewer.displayName,
+            view.balance,
+            view.currency,
+          )
+        : walletMessages.balance(
+            viewer.displayName,
+            view.balance,
+            view.currency,
+          ),
       result: null,
     };
   }

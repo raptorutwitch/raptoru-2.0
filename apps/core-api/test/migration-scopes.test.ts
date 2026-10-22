@@ -242,7 +242,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a blank database: everything once; again: nothing', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod')).length).toBe(40);
+    expect((await migrate(db, 'prod')).length).toBe(41);
     expect(await migrate(db, 'prod')).toEqual([]);
     for (const t of ['cmd_steps', 'word_game_words', 'mini_game_duels'])
       expect(
@@ -252,15 +252,16 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       ).toBe(1);
   });
 
-  it('the production database of 22/10 (39 files): the winner announcements file only, once', async () => {
+  it('the production database of 22/10 (39 files): the winner announcements then the chat source files only, once', async () => {
     const db = createPgliteDb(new PGlite());
     const NEW = '20261031140000_cmd_steps_win_announcements_lab.sql';
+    const CHAT = '20261104120000_cp_redemptions_chat_source_lab.sql';
     const before = {
       ...MIGRATION_SCOPES,
-      mainCore: MAIN_CORE_LAB_MIGRATIONS.filter((f) => f !== NEW),
+      mainCore: MAIN_CORE_LAB_MIGRATIONS.filter((f) => f !== NEW && f !== CHAT),
     };
     expect((await migrate(db, 'prod', undefined, before)).length).toBe(39);
-    expect(await migrate(db, 'prod')).toEqual([NEW]);
+    expect(await migrate(db, 'prod')).toEqual([NEW, CHAT]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
 

@@ -5,6 +5,8 @@ import type { Queryable } from '../db/db.js';
 // and its refund are atomic). Lab database only.
 
 export type LabModule = 'tts' | 'soundboard' | 'bonk' | 'raffle';
+/** What a debit pays for: a module, or an interaction bought from the chat (chat-interactions/prices.ts). */
+export type PaidModule = LabModule | 'random_ban' | 'fx_cam';
 export type ModuleState = 'active' | 'paused' | 'disabled';
 export type LabRole = 'broadcaster' | 'supermod' | 'moderator' | 'viewer';
 export type WalletCurrency = 'tokens' | 'credits_tts' | 'credits_soundboard';
@@ -656,7 +658,7 @@ export async function debit(
     viewerId: string;
     currency: WalletCurrency;
     amount: number;
-    module: LabModule;
+    module: PaidModule;
     interactionId: string;
   },
 ) {

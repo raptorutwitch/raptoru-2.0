@@ -2,6 +2,7 @@ import type { Clock } from '../clock.js';
 import { CommandsAdmission } from '../commands/admission.js';
 import {
   raffleReservedWords,
+  withInteractionWords,
   withMiniGameWords,
 } from '../commands/reserved.js';
 import { CommandsService } from '../commands/service.js';
@@ -14,6 +15,16 @@ import {
   twitchAppLoginLookup,
 } from '../mini-games/twitch-login.js';
 import type { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
+import { TtsChat } from '../tts-lab/chat.js';
+import {
+  type ChatPrices,
+  defaultChatPrices,
+} from '../chat-interactions/prices.js';
+import { RandomBanChat } from '../chat-interactions/random-ban-chat.js';
+import { FxCamChat } from '../chat-interactions/fx-cam-chat.js';
+import type { ChannelPointsService } from '../channel-points/service.js';
+import type { RandomBanService } from '../random-ban/service.js';
+import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import { WordGameService } from '../word-game/service.js';
 import { LabChatRouter, type LabChatModule } from './router.js';
 
@@ -32,9 +43,20 @@ export function createChatGames(o: {
   twitch?: { clientId: string; clientSecret: string } | null;
   /** Replaces the Helix lookup of the Duel target (tests: never a call to Twitch). */
   loginLookup?: LoginLookup | null;
+  /** The TTS of this Core: `!tts <message>` in the chat buys the extension's TTS (absent: no chat TTS). */
+  tts?: TtsLabService | null;
+  /** The Random Ban of this Core: `!rb` in the chat pays it in Jetons (absent: no chat Random Ban). */
+  randomBan?: RandomBanService | null;
+  /** The channel points engine of this Core: `!fxcam <effet>` pays its FX Cam in Jetons (absent: no chat FX Cam). */
+  channelPoints?: ChannelPointsService | null;
+  /** Prices of the chat interactions (default: the validated ones, chat-interactions/prices.ts). */
+  chatPrices?: ChatPrices;
 }) {
-  // Tombola's chat words stay Tombola's (reserved); Roulette / Slot words are the mini-games' (StreamElements aliases).
-  const reserved = withMiniGameWords(raffleReservedWords(o.raffle));
+  // Tombola's chat words stay Tombola's (reserved); Roulette / Slot words are the mini-games' (StreamElements aliases);
+  // `!tts` is the TTS's.
+  const reserved = withInteractionWords(
+    withMiniGameWords(raffleReservedWords(o.raffle)),
+  );
   const commands = new CommandsService(o.db, o.clock, { reserved });
   const admission = new CommandsAdmission(o.db, o.clock, {
     reserved,
@@ -61,7 +83,45 @@ export function createChatGames(o: {
     // Whole chat: the identities it learns are the Duel targets.
     { name: 'mini_games', plainText: true, chat: (m) => miniGames.chat(m) },
   ];
-  return { commands, admission, steps, wordGame, miniGames, chatModules };
+  if (o.tts) {
+    const ttsChat = new TtsChat(o.db, o.clock, o.tts);
+    chatModules.push({ name: 'tts', chat: (m) => ttsChat.chat(m) });
+  }
+  const randomBanChat = o.randomBan
+    ? new RandomBanChat(
+        o.db,
+        o.clock,
+        o.randomBan,
+        o.economy,
+        o.chatPrices ?? defaultChatPrices,
+      )
+    : null;
+  if (randomBanChat)
+    chatModules.push({
+      name: 'random_ban',
+      chat: (m) => randomBanChat.chat(m),
+    });
+  const fxCamChat = o.channelPoints
+    ? new FxCamChat(
+        o.db,
+        o.clock,
+        o.channelPoints,
+        o.economy,
+        o.chatPrices ?? defaultChatPrices,
+      )
+    : null;
+  if (fxCamChat)
+    chatModules.push({ name: 'fx_cam', chat: (m) => fxCamChat.chat(m) });
+  return {
+    commands,
+    admission,
+    steps,
+    wordGame,
+    miniGames,
+    chatModules,
+    randomBanChat,
+    fxCamChat,
+  };
 }
 export type ChatGames = ReturnType<typeof createChatGames>;
 

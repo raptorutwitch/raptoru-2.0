@@ -105,6 +105,14 @@ export function createLabCore({
   // Commands V2, Jeu des mots, Roulette / Slot / Duel: the ONE assembly of the chat games (lab-chat/games.ts).
   // Commands V2 answers become durable steps, handed to the Lab Twitch adapter only while « Sortie chat réelle » is
   // ON (OFF by default); Duel finds its target by login with the Lab app credentials of the Tombola avatars.
+  const randomBan = new RandomBanService(db, systemClock);
+  const channelPoints = new ChannelPointsService(
+    db,
+    systemClock,
+    sound,
+    randomBan,
+    economy,
+  );
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
       db,
@@ -113,8 +121,10 @@ export function createLabCore({
       raffle,
       broadcasterOf,
       twitch,
+      tts,
+      randomBan,
+      channelPoints,
     });
-  const randomBan = new RandomBanService(db, systemClock);
   const alertsService = new AlertsService(db, systemClock);
   // Gains credited only when the runtime economy is the canonical Wallet (never with the Lab wallet).
   const subWheel = new SubWheelService(db, systemClock, undefined, economy);
@@ -148,9 +158,7 @@ export function createLabCore({
     // Roue du Sub: fed by the alerts reception above; state, switch (OFF), tests, animations, reconciliation.
     ...subWheelRoutes(subWheel, alertsService),
     // Points de chaîne V1: redemptions (Lab chat adapter), rules, OBS jobs (Studio); sounds through this Soundboard.
-    ...channelPointsRoutes(
-      new ChannelPointsService(db, systemClock, sound, randomBan, economy),
-    ),
+    ...channelPointsRoutes(channelPoints),
     // Random Ban V2: Studio (state, tests, animations) and the Lab chat adapter (Twitch executor).
     ...randomBanRoutes(randomBan),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.

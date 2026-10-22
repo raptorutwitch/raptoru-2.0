@@ -184,12 +184,30 @@ export class RandomBanService {
     },
     q: Queryable = this.db,
   ) {
+    return (await this.requestIfNew(r, q)).request;
+  }
+
+  /**
+   * `request`, telling whether this call created it (`!rb` pays only for a new one). A concurrent insert of the same
+   * trigger waits for the first transaction, then finds it: `created` is true for exactly one caller.
+   */
+  async requestIfNew(
+    r: {
+      channel_id: string;
+      source: 'channel_points' | 'chat' | 'test';
+      source_ref: string;
+      mode: 'real' | 'dry_run';
+      buyer: RbTwitchUser;
+    },
+    q: Queryable = this.db,
+  ) {
     const now = this.now();
-    await q.query(
+    const inserted = await q.query(
       `insert into rb_requests (request_id, channel_id, source, source_ref, mode, buyer_id, buyer_login, buyer_name,
          status, created_at, updated_at)
        values ($1, $2, $3, $4, $5, $6, $7, $8, 'queued', $9, $9)
-       on conflict (channel_id, source, source_ref) do nothing`,
+       on conflict (channel_id, source, source_ref) do nothing
+       returning request_id`,
       [
         randomUUID(),
         r.channel_id,
@@ -202,13 +220,33 @@ export class RandomBanService {
         now,
       ],
     );
-    return rbView(
+    const request = rbView(
       (
         await q.query<Row>(
           'select * from rb_requests where channel_id = $1 and source = $2 and source_ref = $3',
           [r.channel_id, r.source, r.source_ref.slice(0, 200)],
         )
       )[0]!,
+    );
+    return { request, created: inserted.length > 0 };
+  }
+
+  /** The Twitch executor told Core recently that it can search and time out (memory: this Core only). */
+  executorReady(channelId: string) {
+    const e = this.executors.get(channelId);
+    return (
+      !!e &&
+      this.now().getTime() - e.at < 15_000 &&
+      e.can_search &&
+      e.can_timeout
+    );
+  }
+
+  /** Paid from the chat and refunded in Jetons: nothing is owed for this request any more. */
+  async markRefunded(q: Queryable, requestId: string) {
+    await q.query(
+      `update rb_requests set refund = 'none', updated_at = $2 where request_id = $1 and refund = 'needed'`,
+      [requestId, this.now()],
     );
   }
 
@@ -265,6 +303,9 @@ export class RandomBanService {
 
   // --- the Twitch executor ---------------------------------------------------------------------------------------
 
+  /** Requests ended outside `result` (sweep, claim refusal): told to the listeners after their commit. */
+  private ended: string[] = [];
+
   /** Requests and animations left behind: decided once, never replayed. */
   private async sweep(q: Queryable, channelId: string) {
     const now = this.now();
@@ -279,14 +320,16 @@ export class RandomBanService {
       if (
         r.status === 'queued' &&
         now.getTime() - new Date(r.created_at).getTime() > RANDOM_BAN.pickupMs
-      )
+      ) {
         await this.set(q, r.request_id, {
           status: 'failed',
           error: 'executor_absent',
           refund: r.mode === 'real' ? 'needed' : 'none',
           ended_at: now,
         });
-      else if (r.status === 'searching' && leaseOver)
+        this.ended.push(r.request_id);
+      } else if (r.status === 'searching' && leaseOver) {
+        if (r.attempts >= RANDOM_BAN.maxAttempts) this.ended.push(r.request_id);
         // Nothing was sent (the target is told to Core before any timeout): safe to offer again, a few times.
         await this.set(
           q,
@@ -306,7 +349,7 @@ export class RandomBanService {
                 ended_at: now,
               },
         );
-      else if (r.status === 'timeout_requested' && leaseOver)
+      } else if (r.status === 'timeout_requested' && leaseOver) {
         // The timeout may have been sent: never again, the refund waits for a check.
         await this.set(q, r.request_id, {
           status: 'uncertain',
@@ -315,6 +358,8 @@ export class RandomBanService {
           lease_expires_at: null,
           ended_at: now,
         });
+        this.ended.push(r.request_id);
+      }
       if (
         r.animation_status === 'playing' &&
         r.animation_lease_expires_at &&
@@ -345,7 +390,7 @@ export class RandomBanService {
       missing: c.missing,
       at: this.now().getTime(),
     });
-    return this.db.tx(async (q) => {
+    const out = await this.db.tx(async (q) => {
       await this.lock(q, channelId);
       await this.sweep(q, channelId);
       const busy = await q.query(
@@ -375,6 +420,7 @@ export class RandomBanService {
           refund: r.mode === 'real' ? 'needed' : 'none',
           ended_at: this.now(),
         });
+        this.ended.push(r.request_id);
         return { request: null, reason: 'refused' };
       }
       const attempt = randomUUID();
@@ -396,6 +442,18 @@ export class RandomBanService {
         },
       };
     });
+    await this.tellEnded(channelId);
+    return out;
+  }
+
+  /** After a commit: every request the sweep or a claim ended is told to the listeners (refunds, history). */
+  private async tellEnded(channelId: string) {
+    const ids = this.ended.splice(0);
+    for (const id of ids)
+      for (const fn of this.settledListeners)
+        await fn(channelId, id).catch((e) =>
+          console.error('[random-ban] settle failed', id, e),
+        );
   }
 
   private current(r: Row, executorId: string, attemptId: string) {
@@ -531,7 +589,7 @@ export class RandomBanService {
 
   /** The next animation to show (one at a time, in order); never one already handed out. */
   async claimAnimation(channelId: string, consumerId: string) {
-    return this.db.tx(async (q) => {
+    const out = await this.db.tx(async (q) => {
       await this.lock(q, channelId);
       await this.sweep(q, channelId);
       const playing = await q.query(
@@ -563,6 +621,8 @@ export class RandomBanService {
         },
       };
     });
+    await this.tellEnded(channelId);
+    return out;
   }
 
   async reportAnimation(id: string, a: RbAnimationReport) {
@@ -601,6 +661,7 @@ export class RandomBanService {
       await this.lock(q, channelId);
       await this.sweep(q, channelId);
     });
+    await this.tellEnded(channelId);
     const recent = await this.db.query<Row>(
       'select * from rb_requests where channel_id = $1 order by created_at desc limit 15',
       [channelId],

@@ -11,6 +11,7 @@ import {
   type CpRewardsSync,
   type CpRuleInput,
   resolveColorCam,
+  type FxCamEffectId,
   resolveFxCam,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
@@ -245,6 +246,11 @@ const obsAction = (a: CpAction) =>
   !(a.type === 'interaction' && a.interaction === 'random_ban');
 
 export class ChannelPointsService {
+  /** When Studio last asked for a job, per channel (memory: a status, not a record). */
+  private readonly studioSeen = new Map<string, number>();
+  private readonly changedListeners: ((channelId: string) => Promise<void>)[] =
+    [];
+
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
@@ -876,13 +882,15 @@ export class ChannelPointsService {
    * effect action still pending; a late or repeated report changes nothing (the first final result stays).
    */
   async effectReport(jobId: string, r: CpEffectReport) {
-    return this.db.tx(async (q) => {
+    let channel: string | null = null;
+    const out = await this.db.tx(async (q) => {
       const job = (
         await q.query<JobRow>('select * from cp_jobs where job_id = $1', [
           jobId,
         ])
       )[0];
       if (!job) throw new CpError(404, 'job_not_found');
+      channel = job.channel_id;
       if (job.consumer_id !== r.consumer_id)
         throw new CpError(409, 'not_current_attempt');
       const action = job.actions.find((x) => x.index === r.index);
@@ -920,6 +928,8 @@ export class ChannelPointsService {
       );
       return { status: 'recorded' as const };
     });
+    if (channel) await this.tellChanged(channel);
+    return out;
   }
 
   // --- OBS jobs (Studio) ------------------------------------------------------------------------------------------
@@ -964,11 +974,118 @@ export class ChannelPointsService {
     }
   }
 
+  /** Studio asked for a job within the last 15 s: an OBS action bought now will be run (memory: this Core only). */
+  studioReady(channelId: string) {
+    const at = this.studioSeen.get(channelId);
+    return at !== undefined && this.clock.now().getTime() - at < 15_000;
+  }
+
+  /** Told after each Studio report or claim (outside its transaction): the chat purchases follow their result. */
+  onChanged(fn: (channelId: string) => Promise<void>) {
+    this.changedListeners.push(fn);
+  }
+
+  private async tellChanged(channelId: string) {
+    for (const fn of this.changedListeners)
+      await fn(channelId).catch((e) =>
+        console.error('[channel-points] chat settle failed', channelId, e),
+      );
+  }
+
+  /**
+   * `!fxcam <effet>` paid in Jetons from the chat (chat-interactions/fx-cam-chat.ts), in the CALLER's transaction (its
+   * debit commits or rolls back with it): recorded like a redemption of the FX Cam reward — source « chat », the
+   * Twitch message id as redemption id — with the same action and Studio job, so the same engine runs and follows it.
+   * Refused when the channel points automations are OFF or no enabled rule offers FX Cam (the interaction is not on);
+   * `created` false: this message is already recorded (nothing new, nothing to pay).
+   */
+  async admitChatFxCam(
+    q: Queryable,
+    p: {
+      channel_id: string;
+      message_id: string;
+      user: { id: string; login: string; display_name: string };
+      effect: FxCamEffectId;
+    },
+  ): Promise<
+    | { refused: 'unavailable' }
+    | { refused?: undefined; created: boolean; jobId: string }
+  > {
+    const now = this.clock.now();
+    await q.query(
+      `insert into cp_settings (channel_id, enabled, updated_at) values ($1, false, $2)
+       on conflict (channel_id) do nothing`,
+      [p.channel_id, now],
+    );
+    // Same channel lock as a reception: chat purchases and redemptions are serialized.
+    const settings = (
+      await q.query<{ enabled: boolean }>(
+        'select enabled from cp_settings where channel_id = $1 for update',
+        [p.channel_id],
+      )
+    )[0]!;
+    const prior = (
+      await q.query<{ job_id: string }>(
+        `select job_id from cp_redemptions where channel_id = $1 and source = 'chat' and redemption_id = $2`,
+        [p.channel_id, p.message_id],
+      )
+    )[0];
+    if (prior) return { created: false, jobId: prior.job_id };
+    const rule = (
+      await q.query<{ reward_id: string; title: string | null }>(
+        `select r.reward_id, w.title from cp_rules r
+           left join cp_rewards w on w.channel_id = r.channel_id and w.reward_id = r.reward_id
+         where r.channel_id = $1 and r.enabled and r.actions @> '[{"type":"interaction","interaction":"fx_cam"}]'
+         order by r.reward_id limit 1`,
+        [p.channel_id],
+      )
+    )[0];
+    if (!settings.enabled || !rule) return { refused: 'unavailable' };
+    const action: CpAction = {
+      type: 'interaction',
+      interaction: 'fx_cam',
+      effect: p.effect,
+    };
+    const jobId = randomUUID();
+    await q.query(
+      `insert into cp_redemptions (channel_id, source, redemption_id, reward_id, reward_title, reward_cost, user_id,
+         user_login, user_name, user_input, twitch_status, redeemed_at, received_at, status, reason, actions, results,
+         job_id) values ($1, 'chat', $2, $3, $4, 0, $5, $6, $7, $8, null, $9, $9, 'pending', null, $10, $11, $12)`,
+      [
+        p.channel_id,
+        p.message_id,
+        rule.reward_id,
+        `!fxcam (chat) · ${rule.title ?? 'FX Cam'}`.slice(0, 200),
+        p.user.id,
+        p.user.login,
+        p.user.display_name,
+        p.effect,
+        now,
+        JSON.stringify([action]),
+        JSON.stringify([{ index: 0, type: action.type, status: 'pending' }]),
+        jobId,
+      ],
+    );
+    await q.query(
+      `insert into cp_jobs (job_id, channel_id, source, redemption_id, actions, status, created_at)
+       values ($1, $2, 'chat', $3, $4, 'queued', $5)`,
+      [
+        jobId,
+        p.channel_id,
+        p.message_id,
+        JSON.stringify([{ index: 0, action }]),
+        now,
+      ],
+    );
+    return { created: true, jobId };
+  }
+
   /** The next OBS job for this Studio (one in flight per channel), or null. */
   async claim(channelId: string, consumerId: string) {
+    this.studioSeen.set(channelId, this.clock.now().getTime());
     await this.settleSounds(channelId);
     await this.settleEffects(channelId);
-    return this.db.tx(async (q) => {
+    const out = await this.db.tx(async (q) => {
       await q.query(
         `insert into cp_settings (channel_id, enabled, updated_at) values ($1, false, $2)
          on conflict (channel_id) do nothing`,
@@ -1020,11 +1137,14 @@ export class ChannelPointsService {
         },
       };
     });
+    await this.tellChanged(channelId);
+    return out;
   }
 
   /** Studio's report for its attempt (idempotent; a late report after the job ended is refused with 409). */
   async ack(jobId: string, a: CpAckRequest) {
-    return this.db.tx(async (q) => {
+    let channel: string | null = null;
+    const out = await this.db.tx(async (q) => {
       const head = (
         await q.query<{ channel_id: string }>(
           'select channel_id from cp_jobs where job_id = $1',
@@ -1032,6 +1152,7 @@ export class ChannelPointsService {
         )
       )[0];
       if (!head) throw new CpError(404, 'job_not_found');
+      channel = head.channel_id;
       await q.query(
         'select 1 from cp_settings where channel_id = $1 for update',
         [head.channel_id],
@@ -1083,6 +1204,8 @@ export class ChannelPointsService {
       );
       return { status: final };
     });
+    if (channel) await this.tellChanged(channel);
+    return out;
   }
 
   /**
