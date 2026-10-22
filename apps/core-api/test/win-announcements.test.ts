@@ -9,7 +9,10 @@ import {
 import { describe, expect, it } from 'vitest';
 import { CommandSteps, insertWordGameSteps } from '../src/commands/steps.js';
 import { coreWalletEconomy } from '../src/economy/economy.js';
-import { RaffleLabService } from '../src/raffle-lab/raffle-lab-service.js';
+import {
+  RAFFLE_ANNOUNCE_DELAY_MS,
+  RaffleLabService,
+} from '../src/raffle-lab/raffle-lab-service.js';
 import { DEFAULT_RAFFLE_CONFIG } from '../src/raffle-lab/rules.js';
 import {
   SW_ANNOUNCE_DELAY_MS,
@@ -178,7 +181,7 @@ describe('Tombola — winner announcements', () => {
     return { core, raffle, act, join, after };
   }
 
-  it('each paid winner announced with its real share, at the reveal, once whatever the replays', async () => {
+  it('each paid winner announced with its real share, 6 s after the end of the reveal animation, once whatever the replays', async () => {
     const f = await fixture();
     await f.act({
       action: 'config',
@@ -192,12 +195,12 @@ describe('Tombola — winner announcements', () => {
     await f.after(62_000); // inscriptions closed: drawn and paid
     const card = await f.raffle.round(CH, raffleId);
     expect(card.winners).toHaveLength(2);
-    const result = (
-      await f.core.db.query<{ viewer_result_at: Date }>(
-        'select viewer_result_at from lab_raffles where raffle_id = $1',
+    const revealEnd = (
+      await f.core.db.query<{ reveal_end_at: Date }>(
+        'select reveal_end_at from lab_raffles where raffle_id = $1',
         [raffleId],
       )
-    )[0]!.viewer_result_at;
+    )[0]!.reveal_end_at;
     const s = await steps(f.core.db, 'raffle');
     expect(s.map((x) => x.params.text).sort()).toEqual(
       card.winners
@@ -206,8 +209,10 @@ describe('Tombola — winner announcements', () => {
     );
     for (const x of s) {
       expect(x.params.mode).toBe('normal');
+      // End of the reveal animation + 6 s: the draw and the credits were not delayed (paid above).
+      expect(RAFFLE_ANNOUNCE_DELAY_MS).toBe(6_000);
       expect(new Date(x.available_at).getTime()).toBe(
-        new Date(result).getTime(),
+        new Date(revealEnd).getTime() + 6_000,
       );
       expect(new Date(x.available_at).getTime()).toBeGreaterThan(
         f.core.clock.now().getTime(),

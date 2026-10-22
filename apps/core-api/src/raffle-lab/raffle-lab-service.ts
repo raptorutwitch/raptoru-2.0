@@ -214,6 +214,9 @@ function roundLabels(r: RaffleRow): RaffleConfig['labels'] {
   };
 }
 
+/** The chat announcement of the winners waits this long after the end of the reveal animation (no spoiler). */
+export const RAFFLE_ANNOUNCE_DELAY_MS = 6_000;
+
 export class RaffleLabService {
   constructor(
     private readonly db: Db,
@@ -883,13 +886,13 @@ export class RaffleLabService {
       overlay_end_at: overlayEnd,
       viewer_idle_at: at(viewerResult, d.extension_idle_return_s * 1000),
     });
-    // Chat: the PAID winners, when the viewers see the result (never before the reveal on stream).
+    // Chat: the PAID winners, RAFFLE_ANNOUNCE_DELAY_MS after the end of the reveal animation (never a spoiler).
     await this.announceWinners(
       q,
       r.raffle_id,
       r.channel_id,
       when,
-      viewerResult,
+      at(revealEnd, RAFFLE_ANNOUNCE_DELAY_MS),
     );
     const winners = await this.winnerRows(q, [r.raffle_id]);
     await audit(q, when, {
@@ -1505,19 +1508,21 @@ export class RaffleLabService {
             'nothing to pay (giveaway)',
           );
         await this.pay(q, cmd.raffle_id, channelId, cmd.viewer_id, now);
-        // Paid now: announced (at once, or at the reveal if it is still to come); never twice (one key per winner).
-        const shownAt = (
-          await q.query<{ viewer_result_at: Date | null }>(
-            'select viewer_result_at from lab_raffles where raffle_id = $1',
+        // Paid now: announced at once, or end of reveal + delay if still to come; never twice (one key per winner).
+        const revealEnd = (
+          await q.query<{ reveal_end_at: Date | null }>(
+            'select reveal_end_at from lab_raffles where raffle_id = $1',
             [cmd.raffle_id],
           )
-        )[0]?.viewer_result_at;
+        )[0]?.reveal_end_at;
+        const shownAt =
+          revealEnd && at(new Date(revealEnd), RAFFLE_ANNOUNCE_DELAY_MS);
         await this.announceWinners(
           q,
           cmd.raffle_id,
           channelId,
           now,
-          shownAt && new Date(shownAt) > now ? new Date(shownAt) : now,
+          shownAt && shownAt > now ? shownAt : now,
           cmd.viewer_id,
         );
         const after = (await this.winnerRows(q, [cmd.raffle_id])).find(
