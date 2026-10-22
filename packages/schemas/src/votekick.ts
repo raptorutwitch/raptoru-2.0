@@ -153,6 +153,8 @@ export interface VotekickOverlayEvent {
   no?: number;
   ends?: number;
   outcome?: VotekickOutcome | 'broadcaster_muted';
+  /** V2: who is sanctioned (the broadcaster muted may be the initiator after a Backfire). */
+  punished?: string;
   minutes?: number;
   mute_seconds?: number;
 }

@@ -262,6 +262,21 @@ describe('Votekick: verdicts and sanctions', () => {
     expect(l.mute.log).toEqual([`start ${id} 80s`, `end ${id} expired`]);
   });
 
+  it('the broadcaster starts a vote and gets a Backfire: muted himself, named on the overlay', async () => {
+    const l = lab();
+    await l.say(BROADCASTER, '!votekick viewer2');
+    await l.say(C!, '!save');
+    await l.say(D!, '!save'); // 1 KICK vs 2 SAVE → Backfire 10 min → 50 s of mute
+    await l.endVote();
+    expect(l.twitch.timeouts).toEqual([]);
+    expect(l.overlay.at(-1)).toMatchObject({
+      outcome: 'broadcaster_muted',
+      target: 'viewer2',
+      punished: 'raptoru_',
+      mute_seconds: 50,
+    });
+  });
+
   it('OBS unreachable when the broadcaster loses: said in chat, no mute recorded, the next vote works', async () => {
     const l = lab();
     l.ports.mute.start = async () => {

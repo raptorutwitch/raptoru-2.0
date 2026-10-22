@@ -1,0 +1,1220 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Votekick</title>
+    <!--
+      Votekick V2 overlay (docs/VOTEKICK_V2.md § Overlay). OBS browser source 1000 × 1000, opened as file:// or served
+      by Studio. Same contract as the legacy page (legacy/votekick-overlay.html, kept for rollback): the
+      `votekick_update` event (obs-browser emit_event) or URL parameters ?vk=live|result|clear|standby&target=…; no
+      `vk` parameter = demo mode with every scenario. Logic: model.js (tested). Only transforms and opacity animate;
+      one animation loop runs while a vote is live and stops at the verdict / clear; every delayed step belongs to the
+      current screen and is cancelled when it changes.
+    -->
+    <style>
+      :root {
+        --gold-1: #fff0a8;
+        --gold-2: #f6c945;
+        --gold-3: #c9861a;
+        --kick: #ff4d5e;
+        --kick-deep: #b3122a;
+        --save: #2fe08a;
+        --save-deep: #0f8a4f;
+        --ink: #fff;
+        --muted: #c9c3d6;
+        --panel: rgba(14, 10, 22, 0.86);
+        --tone: 246, 201, 69;
+        --ease-out: cubic-bezier(0.22, 0.8, 0.25, 1);
+        --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+        color-scheme: dark;
+        font-family:
+          Inter,
+          'Segoe UI',
+          system-ui,
+          -apple-system,
+          Roboto,
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      body.demo {
+        background:
+          radial-gradient(60% 50% at 30% 20%, #3a2a55 0, transparent 70%),
+          radial-gradient(50% 40% at 80% 85%, #4a1b2a 0, transparent 70%),
+          #0d0a14;
+      }
+      body.demo.bg-check {
+        background: repeating-conic-gradient(#d9d9d9 0 25%, #f4f4f4 0 50%) 0 0 /
+          40px 40px;
+      }
+      body.demo.bg-scene {
+        background: linear-gradient(
+          180deg,
+          #3d6b8f,
+          #8fb6c9 55%,
+          #6b8f4a 56%,
+          #3f5a2c
+        );
+      }
+
+      .stage {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        pointer-events: none;
+        opacity: 0;
+        transform: translateY(-14px) scale(0.97);
+        transition:
+          opacity 0.22s ease,
+          transform 0.22s var(--ease-out);
+      }
+      .stage.in {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* --- Card ---------------------------------------------------------------------------------------- */
+      .card {
+        position: relative;
+        width: min(560px, 94vw);
+        padding: 26px 34px 30px;
+        border-radius: 28px;
+        color: var(--ink);
+        text-align: center;
+        background:
+          radial-gradient(
+            120% 70% at 50% 0%,
+            rgba(var(--tone), 0.16),
+            transparent 60%
+          ),
+          linear-gradient(160deg, rgba(28, 20, 42, 0.9), var(--panel));
+        border: 1px solid rgba(var(--tone), 0.45);
+        box-shadow:
+          0 24px 60px rgba(0, 0, 0, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        isolation: isolate;
+      }
+      /* Glow on its own layer: only its opacity changes (cheap in OBS). */
+      .card::before {
+        content: '';
+        position: absolute;
+        inset: -2px;
+        border-radius: inherit;
+        z-index: -1;
+        box-shadow:
+          0 0 26px rgba(var(--tone), 0.55),
+          0 0 70px rgba(var(--tone), 0.28);
+        opacity: 0.35;
+        transition: opacity 0.4s ease;
+      }
+      .card[data-phase='result']::before {
+        opacity: 1;
+      }
+      .card[data-tone='kick'] {
+        --tone: 255, 77, 94;
+      }
+      .card[data-tone='save'] {
+        --tone: 47, 224, 138;
+      }
+      .card[data-tone='void'] {
+        --tone: 230, 226, 238;
+      }
+      .card[data-tone='gold'] {
+        --tone: 246, 201, 69;
+      }
+
+      .title {
+        margin: 0;
+        font-weight: 900;
+        font-size: 46px;
+        line-height: 0.9;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        background: linear-gradient(
+          180deg,
+          var(--gold-1),
+          var(--gold-2) 55%,
+          var(--gold-3)
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        text-shadow: none;
+        position: relative;
+      }
+      .title::after {
+        /* one shine sweep at the intro */
+        content: '';
+        position: absolute;
+        inset: -6px -10px;
+        background: linear-gradient(
+          100deg,
+          transparent 35%,
+          rgba(255, 255, 255, 0.55) 50%,
+          transparent 65%
+        );
+        mix-blend-mode: overlay;
+        transform: translateX(-120%);
+        opacity: 0;
+      }
+      .card.enter .title::after {
+        animation: shine 0.9s 0.25s var(--ease-out) both;
+      }
+      .by {
+        margin: 8px 0 0;
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--muted);
+        letter-spacing: 0.01em;
+      }
+      .by b {
+        color: var(--ink);
+        font-weight: 800;
+      }
+
+      /* --- Live -------------------------------------------------------------------------------------------- */
+      .portrait {
+        position: relative;
+        width: 196px;
+        height: 196px;
+        margin: 20px auto 0;
+      }
+      .ring {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+      }
+      .ring circle {
+        fill: none;
+        stroke-width: 7;
+      }
+      .ring .track {
+        stroke: rgba(255, 255, 255, 0.12);
+      }
+      .ring .arc {
+        stroke: var(--gold-2);
+        stroke-linecap: round;
+        transition: stroke 0.3s ease;
+      }
+      .portrait.urgent .ring .arc {
+        stroke: var(--kick);
+      }
+      .avatar {
+        position: absolute;
+        inset: 16px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: linear-gradient(140deg, #3b2c5a, #1b1426);
+        box-shadow:
+          inset 0 0 0 2px rgba(0, 0, 0, 0.45),
+          0 10px 26px rgba(0, 0, 0, 0.5);
+        display: grid;
+        place-items: center;
+      }
+      .avatar img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .avatar .initial {
+        font-weight: 900;
+        font-size: 64px;
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .chip {
+        position: absolute;
+        left: 50%;
+        bottom: -22px;
+        transform: translateX(-50%);
+        min-width: 70px;
+        height: 54px;
+        padding: 0 12px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: #120e1b;
+        border: 3px solid var(--gold-2);
+        font-weight: 900;
+        font-size: 30px;
+        font-variant-numeric: tabular-nums;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6);
+        transition: border-color 0.3s ease;
+      }
+      .portrait.urgent .chip {
+        border-color: var(--kick);
+      }
+      .portrait.urgent .chip span {
+        animation: tick 1s ease-in-out infinite;
+        display: inline-block;
+      }
+
+      .name {
+        margin-top: 38px;
+        font-weight: 900;
+        font-size: 40px;
+        line-height: 1.05;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+      }
+
+      .duel {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: end;
+        margin-top: 18px;
+      }
+      .side {
+        display: flex;
+        flex-direction: column;
+        line-height: 1;
+      }
+      .side.kick {
+        align-items: flex-start;
+        color: var(--kick);
+      }
+      .side.save {
+        align-items: flex-end;
+        color: var(--save);
+      }
+      .side .lbl {
+        font-weight: 900;
+        font-size: 20px;
+        letter-spacing: 0.14em;
+      }
+      .side .num {
+        font-weight: 900;
+        font-size: 52px;
+        font-variant-numeric: tabular-nums;
+        margin-top: 2px;
+        display: inline-block;
+        text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+      }
+      .side .pct {
+        font-size: 15px;
+        font-weight: 700;
+        opacity: 0.85;
+        margin-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .total {
+        align-self: center;
+        padding: 6px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(246, 201, 69, 0.55);
+        background: rgba(18, 14, 26, 0.8);
+        color: #f7eccb;
+        font-weight: 800;
+        font-size: 17px;
+        white-space: nowrap;
+      }
+
+      .bar {
+        position: relative;
+        height: 18px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+      }
+      .bar i {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+        transition: transform 0.45s var(--ease-out);
+      }
+      .bar .k {
+        left: 0;
+        transform-origin: left;
+        background: linear-gradient(90deg, var(--kick-deep), var(--kick));
+      }
+      .bar .s {
+        right: 0;
+        transform-origin: right;
+        background: linear-gradient(270deg, var(--save-deep), var(--save));
+      }
+      .knob {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 0;
+        height: 0;
+        transition: transform 0.45s var(--ease-out);
+      }
+      .knob::before {
+        content: '';
+        position: absolute;
+        width: 22px;
+        height: 22px;
+        left: -11px;
+        top: -11px;
+        background: var(--gold-2);
+        border: 3px solid #120e1b;
+        transform: rotate(45deg);
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+      }
+      .bar-wrap {
+        position: relative;
+        margin-top: 14px;
+      }
+      .bar-wrap .knob {
+        top: 9px;
+      }
+      .hint {
+        margin-top: 14px;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+      }
+      .hint b.k {
+        color: var(--kick);
+      }
+      .hint b.s {
+        color: var(--save);
+      }
+
+      /* --- Verdict ----------------------------------------------------------------------------------------- */
+      .verdict {
+        position: relative;
+        padding: 6px 0 2px;
+      }
+      .verdict .icon {
+        width: 128px;
+        height: 128px;
+        margin: 6px auto 4px;
+        position: relative;
+        display: grid;
+        place-items: center;
+      }
+      .verdict .icon img {
+        width: 112px;
+        height: 112px;
+        border-radius: 50%;
+        object-fit: cover;
+        box-shadow:
+          0 0 0 4px rgba(var(--tone), 0.9),
+          0 12px 30px rgba(0, 0, 0, 0.55);
+      }
+      .verdict .icon .initial {
+        width: 112px;
+        height: 112px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-weight: 900;
+        font-size: 54px;
+        background: linear-gradient(140deg, #3b2c5a, #1b1426);
+        box-shadow: 0 0 0 4px rgba(var(--tone), 0.9);
+      }
+      .verdict .stamp {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 6px 18px 8px;
+        border: 4px solid rgb(var(--tone));
+        border-radius: 12px;
+        color: rgb(var(--tone));
+        font-weight: 900;
+        font-size: 40px;
+        line-height: 1;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        transform: rotate(-4deg);
+        background: rgba(var(--tone), 0.08);
+      }
+      .card[data-tone='gold'] .verdict .stamp {
+        color: transparent;
+        background:
+          linear-gradient(
+              180deg,
+              var(--gold-1),
+              var(--gold-2) 55%,
+              var(--gold-3)
+            )
+            text,
+          rgba(246, 201, 69, 0.08);
+        -webkit-background-clip: text;
+        background-clip: text;
+        border-color: var(--gold-2);
+      }
+      .verdict .who {
+        margin-top: 16px;
+        font-weight: 900;
+        font-size: 36px;
+        line-height: 1.1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .verdict .detail {
+        margin-top: 6px;
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .verdict .score {
+        margin-top: 14px;
+        font-size: 16px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+      .verdict .score .k {
+        color: var(--kick);
+      }
+      .verdict .score .s {
+        color: var(--save);
+      }
+      .badge {
+        position: absolute;
+        top: 2px;
+        right: calc(50% - 92px);
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-weight: 900;
+        font-size: 22px;
+        background: var(--gold-2);
+        color: #1a1206;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+      }
+      .coin {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 112px;
+        height: 112px;
+        transform-style: preserve-3d;
+      }
+      .coin span {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-weight: 900;
+        font-size: 24px;
+        letter-spacing: 0.08em;
+        border: 5px solid var(--gold-2);
+        box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.35);
+        background: radial-gradient(circle at 35% 30%, #fff1b0, var(--gold-3));
+        color: #3a2606;
+      }
+      /* The face is set when the coin lands (no 3D back face to rely on). */
+      .coin.k span {
+        background: radial-gradient(
+          circle at 35% 30%,
+          #ff8a96,
+          var(--kick-deep)
+        );
+        color: #fff;
+      }
+      .coin.s span {
+        background: radial-gradient(
+          circle at 35% 30%,
+          #7dffbf,
+          var(--save-deep)
+        );
+        color: #fff;
+      }
+      .mic {
+        width: 92px;
+        height: 92px;
+      }
+      .sparks i {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        background: var(--gold-1);
+        opacity: 0;
+      }
+
+      /* --- Motion ------------------------------------------------------------------------------------------ */
+      .card.enter .title,
+      .card.enter .by,
+      .card.enter .portrait,
+      .card.enter .name,
+      .card.enter .duel,
+      .card.enter .bar-wrap,
+      .card.enter .hint {
+        animation: rise 0.42s var(--ease-out) both;
+      }
+      .card.enter .by {
+        animation-delay: 0.05s;
+      }
+      .card.enter .portrait {
+        animation-name: pop;
+        animation-delay: 0.08s;
+      }
+      .card.enter .name {
+        animation-delay: 0.14s;
+      }
+      .card.enter .duel {
+        animation-delay: 0.19s;
+      }
+      .card.enter .bar-wrap {
+        animation-delay: 0.23s;
+      }
+      .card.enter .hint {
+        animation-delay: 0.27s;
+      }
+      .card.verdict-in .verdict > * {
+        animation: rise 0.4s var(--ease-out) both;
+      }
+      .card.verdict-in .verdict .stamp {
+        animation: stamp 0.46s 0.12s var(--ease-back) both;
+      }
+      .card.verdict-in .verdict .who {
+        animation-delay: 0.22s;
+      }
+      .card.verdict-in .verdict .detail {
+        animation-delay: 0.28s;
+      }
+      .card.verdict-in .verdict .score {
+        animation-delay: 0.34s;
+      }
+      .card.verdict-in .badge {
+        animation: pop 0.5s 0.5s var(--ease-back) both;
+      }
+      .card.fx-coin.verdict-in .coin {
+        animation: flip 1.3s var(--ease-out) both;
+      }
+      .card.fx-coin.verdict-in .verdict .stamp {
+        animation-delay: 1.2s;
+      }
+      .card.fx-coin.verdict-in .verdict .who {
+        animation-delay: 1.32s;
+      }
+      .card.fx-coin.verdict-in .verdict .detail,
+      .card.fx-coin.verdict-in .verdict .score {
+        animation-delay: 1.4s;
+      }
+      .card.fx-backfire.verdict-in {
+        animation: shake 0.5s 0.5s ease-in-out both;
+      }
+      .card.fx-mute.verdict-in .mic {
+        animation: mic 0.9s 0.3s ease-in-out 3 both;
+      }
+      .card.fx-perfect.verdict-in .sparks i {
+        animation: spark 0.9s var(--ease-out) both;
+      }
+      .card.flash::before {
+        animation: flash 0.5s ease-out;
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(14px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes pop {
+        from {
+          opacity: 0;
+          transform: scale(0.82);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes stamp {
+        0% {
+          opacity: 0;
+          transform: rotate(-4deg) scale(1.9);
+        }
+        60% {
+          opacity: 1;
+          transform: rotate(-4deg) scale(0.94);
+        }
+        100% {
+          opacity: 1;
+          transform: rotate(-4deg) scale(1);
+        }
+      }
+      @keyframes shine {
+        0% {
+          opacity: 1;
+          transform: translateX(-120%);
+        }
+        100% {
+          opacity: 1;
+          transform: translateX(120%);
+        }
+      }
+      @keyframes tick {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        15% {
+          transform: scale(1.18);
+        }
+      }
+      @keyframes flip {
+        0% {
+          transform: translateY(40px) rotateY(0deg) scale(0.6);
+          opacity: 0;
+        }
+        20% {
+          opacity: 1;
+        }
+        55% {
+          transform: translateY(-34px) rotateY(1080deg) scale(1.05);
+        }
+        100% {
+          transform: translateY(0) rotateY(1440deg) scale(1);
+          opacity: 1;
+        }
+      }
+      @keyframes shake {
+        0%,
+        100% {
+          transform: translateX(0);
+        }
+        20% {
+          transform: translateX(-9px) rotate(-0.6deg);
+        }
+        40% {
+          transform: translateX(8px) rotate(0.5deg);
+        }
+        60% {
+          transform: translateX(-5px);
+        }
+        80% {
+          transform: translateX(3px);
+        }
+      }
+      @keyframes mic {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.12);
+        }
+      }
+      @keyframes spark {
+        0% {
+          opacity: 1;
+          transform: translate(-50%, -50%) rotate(var(--a)) translateY(0)
+            scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: translate(-50%, -50%) rotate(var(--a)) translateY(-120px)
+            scale(0.4);
+        }
+      }
+      @keyframes flash {
+        0% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0.35;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .stage,
+        .bar i,
+        .knob,
+        .card *,
+        .card::before {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+
+      /* --- Demo panel (never shown when driven by SAMMI / Raptoru) ------------------------------------------ */
+      #demo {
+        position: fixed;
+        left: 50%;
+        bottom: 12px;
+        transform: translateX(-50%);
+        z-index: 10;
+        width: min(980px, 98vw);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: center;
+        padding: 10px;
+        border-radius: 14px;
+        background: rgba(0, 0, 0, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        font:
+          600 13px Inter,
+          'Segoe UI',
+          system-ui,
+          sans-serif;
+        color: #fff;
+      }
+      #demo button {
+        font: inherit;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.09);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 8px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      #demo button:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      #demo .sep {
+        width: 1px;
+        background: rgba(255, 255, 255, 0.25);
+        margin: 0 4px;
+      }
+      #demo b {
+        opacity: 0.65;
+        align-self: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="stage" class="stage" aria-live="polite">
+      <section id="card" class="card" data-phase="live" data-tone="gold">
+        <h1 class="title">Votekick</h1>
+        <p class="by" id="by">lancé par <b id="initiator">@?</b></p>
+
+        <div id="live">
+          <div class="portrait" id="portrait">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="track" cx="60" cy="60" r="55"></circle>
+              <circle class="arc" id="arc" cx="60" cy="60" r="55"></circle>
+            </svg>
+            <div class="avatar" id="avatar"></div>
+            <div class="chip"><span id="seconds">60</span></div>
+          </div>
+          <div class="name" id="target">@?</div>
+          <div class="duel">
+            <div class="side kick">
+              <span class="lbl">KICK</span><b class="num" id="kick">0</b
+              ><span class="pct" id="kickPct">50 %</span>
+            </div>
+            <div class="total" id="total">0 vote</div>
+            <div class="side save">
+              <span class="lbl">SAVE</span><b class="num" id="save">0</b
+              ><span class="pct" id="savePct">50 %</span>
+            </div>
+          </div>
+          <div class="bar-wrap">
+            <div class="bar">
+              <i class="k" id="barK"></i><i class="s" id="barS"></i>
+            </div>
+            <span class="knob" id="knob"></span>
+          </div>
+          <div class="hint">
+            Tape <b class="k">!kick</b> ou <b class="s">!save</b>
+          </div>
+        </div>
+
+        <div id="verdict" class="verdict" hidden>
+          <div class="icon" id="vIcon"></div>
+          <span class="badge" id="vBadge" hidden></span>
+          <div><span class="stamp" id="vStamp"></span></div>
+          <div class="who" id="vWho"></div>
+          <div class="detail" id="vDetail"></div>
+          <div class="score" id="vScore"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="model.js"></script>
+    <script>
+      (() => {
+        'use strict';
+        const M = window.VotekickModel;
+        const $ = (id) => document.getElementById(id);
+        const stage = $('stage');
+        const card = $('card');
+        const params = new URLSearchParams(location.search);
+        const reduced =
+          window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ===
+          true;
+        const RESULT_HIDE_MS = 6500; // legacy page: the verdict hides itself; SAMMI's clear comes at 7 s
+        const RING = 2 * Math.PI * 55;
+        $('arc').style.strokeDasharray = String(RING);
+
+        let state = M.createState();
+        let voteMs = M.VOTE_MS;
+        // Delayed steps of the current screen only: a new screen cancels them all.
+        const timers = new Set();
+        let raf = 0;
+        const later = (fn, ms) => {
+          const t = setTimeout(() => {
+            timers.delete(t);
+            fn();
+          }, ms);
+          timers.add(t);
+        };
+        const cancelAll = () => {
+          for (const t of timers) clearTimeout(t);
+          timers.clear();
+          cancelAnimationFrame(raf);
+          raf = 0;
+        };
+
+        // --- Rendering -----------------------------------------------------------------------------------------
+        const initial = (name) => (name || '?').slice(0, 1).toUpperCase();
+        function avatarInto(el, url, name) {
+          el.textContent = '';
+          const fallback = document.createElement('span');
+          fallback.className = 'initial';
+          fallback.textContent = initial(name);
+          el.appendChild(fallback);
+          if (!url) return;
+          const img = new Image();
+          img.alt = '';
+          img.onload = () => {
+            if (fallback.isConnected) fallback.replaceWith(img);
+          };
+          img.src = url;
+        }
+        /** Long names shrink to fit one line (measured once per screen, never per frame). */
+        function fit(el, max, min) {
+          el.style.fontSize = `${max}px`;
+          let size = max;
+          while (el.scrollWidth > el.clientWidth && size > min) {
+            size -= 2;
+            el.style.fontSize = `${size}px`;
+          }
+        }
+        function bump(el) {
+          if (reduced || !el.animate) return;
+          el.animate(
+            [
+              { transform: 'scale(1)' },
+              { transform: 'scale(1.28)' },
+              { transform: 'scale(1)' },
+            ],
+            { duration: 320, easing: 'cubic-bezier(.34,1.56,.64,1)' },
+          );
+        }
+        let shown = { kick: -1, save: -1 };
+        function renderCounts() {
+          const { kick, save } = state;
+          const share = M.kickShare(kick, save);
+          if (kick !== shown.kick) {
+            $('kick').textContent = String(kick);
+            if (shown.kick >= 0) bump($('kick'));
+          }
+          if (save !== shown.save) {
+            $('save').textContent = String(save);
+            if (shown.save >= 0) bump($('save'));
+          }
+          shown = { kick, save };
+          const total = kick + save;
+          $('total').textContent = `${total} vote${total > 1 ? 's' : ''}`;
+          const kp = total ? Math.round(share * 100) : 50;
+          $('kickPct').textContent = `${kp} %`;
+          $('savePct').textContent = `${100 - kp} %`;
+          $('barK').style.transform = `scaleX(${share})`;
+          $('barS').style.transform = `scaleX(${1 - share})`;
+          const w = $('barK').parentElement.clientWidth;
+          $('knob').style.transform = `translateX(${share * w}px)`;
+        }
+        let lastSecond = -1;
+        let lastUrgent = null;
+        function frame() {
+          const t = M.timer(state.ends, Date.now(), voteMs);
+          $('arc').style.strokeDashoffset = String(RING * (1 - t.fraction));
+          if (t.seconds !== lastSecond) {
+            lastSecond = t.seconds;
+            $('seconds').textContent = String(t.seconds);
+          }
+          if (t.urgent !== lastUrgent) {
+            lastUrgent = t.urgent;
+            $('portrait').classList.toggle('urgent', t.urgent);
+          }
+          raf = t.over ? 0 : requestAnimationFrame(frame);
+        }
+        function showLive(fresh) {
+          if (fresh) {
+            cancelAll();
+            card.dataset.phase = 'live';
+            card.dataset.tone = 'gold';
+            card.className = 'card';
+            $('verdict').hidden = true;
+            $('live').hidden = false;
+            $('by').hidden = false;
+            $('initiator').textContent = `@${state.initiator || '?'}`;
+            $('target').textContent = `@${state.target || '?'}`;
+            avatarInto($('avatar'), state.avatar, state.target);
+            shown = { kick: -1, save: -1 };
+            lastSecond = -1;
+            lastUrgent = null;
+            stage.classList.add('in');
+            requestAnimationFrame(() => fit($('target'), 40, 22));
+            if (!reduced) {
+              void card.offsetWidth;
+              card.classList.add('enter');
+              later(() => card.classList.remove('enter'), 900);
+            }
+          }
+          renderCounts();
+          if (!raf) raf = requestAnimationFrame(frame);
+        }
+        function showVerdict() {
+          cancelAll();
+          const v = M.verdict(state);
+          card.dataset.phase = 'result';
+          card.dataset.tone = v.tone;
+          card.className = `card fx-${v.fx}`;
+          $('live').hidden = true;
+          $('by').hidden = true;
+          $('verdict').hidden = false;
+          const icon = $('vIcon');
+          icon.textContent = '';
+          if (v.fx === 'coin') {
+            const coin = document.createElement('div');
+            coin.className = 'coin';
+            coin.innerHTML = '<span>?</span>';
+            icon.appendChild(coin);
+            // Lands on the loser's side: KICK = the target loses, SAVE = the initiator.
+            const land = () => {
+              coin.classList.add(v.coinSide === 'kick' ? 'k' : 's');
+              coin.firstChild.textContent =
+                v.coinSide === 'kick' ? 'KICK' : 'SAVE';
+            };
+            if (reduced) land();
+            else later(land, 1150);
+          } else if (v.fx === 'mute') {
+            icon.innerHTML =
+              '<svg class="mic" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/><path stroke="#ff4d5e" stroke-width="2.6" stroke-linecap="round" d="M4 3l16 18"/></svg>';
+          } else {
+            const face = document.createElement('div');
+            const who = v.fx === 'backfire' ? state.initiator : state.target;
+            // Only the target's picture is known; the initiator gets his initial.
+            avatarInto(face, v.fx === 'backfire' ? '' : state.avatar, who);
+            icon.appendChild(face);
+            if (v.fx === 'perfect') {
+              const sparks = document.createElement('div');
+              sparks.className = 'sparks';
+              for (let i = 0; i < 10; i++) {
+                const s = document.createElement('i');
+                s.style.setProperty('--a', `${i * 36}deg`);
+                s.style.animationDelay = `${0.35 + (i % 3) * 0.05}s`;
+                sparks.appendChild(s);
+              }
+              icon.appendChild(sparks);
+            }
+          }
+          $('vStamp').textContent = v.stamp;
+          $('vWho').textContent = v.who;
+          $('vDetail').textContent = v.detail;
+          $('vScore').innerHTML =
+            `<span class="k">KICK ${state.kick}</span> · <span class="s">SAVE ${state.save}</span>`;
+          $('vBadge').hidden = !v.badge;
+          $('vBadge').textContent = v.badge || '';
+          stage.classList.add('in');
+          requestAnimationFrame(() => fit($('vWho'), 36, 20));
+          if (!reduced) {
+            void card.offsetWidth;
+            card.classList.add('verdict-in', 'flash');
+          }
+          later(hide, RESULT_HIDE_MS);
+        }
+        function hide() {
+          cancelAll();
+          stage.classList.remove('in');
+        }
+
+        // --- Events --------------------------------------------------------------------------------------------
+        function apply(event) {
+          const out = M.reduce(state, event, Date.now());
+          state = out.state;
+          if (out.effect === 'open') showLive(true);
+          else if (out.effect === 'update') showLive(false);
+          else if (out.effect === 'result') showVerdict();
+          else if (out.effect === 'clear') hide();
+          return out.effect;
+        }
+        window.addEventListener('votekick_update', (e) =>
+          apply(e.detail || {}),
+        );
+        window.addEventListener('resize', () => {
+          if (state.phase === 'live') renderCounts();
+        });
+
+        // URL parameters (legacy SAMMI mode).
+        const vk = params.get('vk');
+        if (vk && vk !== 'clear' && vk !== 'standby') {
+          const dur = Number(params.get('dur')) || 60;
+          voteMs = dur * 1000;
+          apply({
+            action: vk === 'result' ? 'result' : 'live',
+            session: params.get('session') || 'url',
+            target: params.get('target') || '?',
+            initiator: params.get('initiator') || '?',
+            avatar: params.get('avatar') || '',
+            yes: params.get('yes'),
+            no: params.get('no'),
+            ends: Number(params.get('ends')) || Date.now() + voteMs,
+            outcome: params.get('outcome'),
+            minutes: params.get('minutes'),
+            mute_seconds: params.get('mute_seconds'),
+          });
+        }
+
+        // --- Demo (no `vk` parameter) ---------------------------------------------------------------------------
+        const demo = {
+          n: 0,
+          seq: 0,
+          kick: 1,
+          save: 0,
+          session: '',
+          send(e) {
+            return apply({ ...e, seq: ++this.seq });
+          },
+          open(dur = 60) {
+            voteMs = dur * 1000;
+            this.session = `demo-${++this.n}`;
+            this.kick = 1;
+            this.save = 0;
+            return this.send({
+              action: 'live',
+              session: this.session,
+              target: params.get('target') || 'VieweruMobilu',
+              initiator: 'LeCroupier_',
+              avatar: params.get('avatar') || '',
+              yes: 1,
+              no: 0,
+              ends: Date.now() + voteMs,
+            });
+          },
+          vote(side, n = 1) {
+            if (state.phase !== 'live') this.open();
+            if (side === 'kick') this.kick += n;
+            else this.save += n;
+            return this.send({
+              action: 'update',
+              session: this.session,
+              yes: this.kick,
+              no: this.save,
+            });
+          },
+          burst() {
+            // 20 simultaneous votes: one render per event, no animation restarted.
+            for (let i = 0; i < 20; i++)
+              this.vote(Math.random() < 0.6 ? 'kick' : 'save');
+          },
+          result(outcome, kick, save, minutes, mute = 0) {
+            if (state.phase !== 'live') this.open();
+            this.kick = kick;
+            this.save = save;
+            return this.send({
+              action: 'result',
+              session: this.session,
+              yes: kick,
+              no: save,
+              outcome,
+              minutes,
+              mute_seconds: mute,
+            });
+          },
+          late() {
+            // An old session's update after its verdict: must be ignored.
+            const old = this.session;
+            this.result('target_timeout', 6, 2, 9);
+            return apply({
+              action: 'update',
+              session: old,
+              seq: 1,
+              yes: 99,
+              no: 0,
+            });
+          },
+          clear() {
+            return this.send({ action: 'clear' });
+          },
+        };
+        window.VK = demo;
+
+        if (!vk && params.get('demo') !== '0') {
+          document.body.classList.add('demo');
+          const bar = document.createElement('div');
+          bar.id = 'demo';
+          const scenarios = [
+            ['Ouvrir 60 s', () => demo.open(60)],
+            ['Ouvrir 12 s', () => demo.open(12)],
+            ['+1 KICK', () => demo.vote('kick')],
+            ['+1 SAVE', () => demo.vote('save')],
+            ['Rafale ×20', () => demo.burst()],
+            ['|'],
+            ['Condamné', () => demo.result('target_timeout', 6, 3, 11)],
+            ['Perfect', () => demo.result('target_timeout_perfect', 8, 0, 26)],
+            ['Backfire', () => demo.result('backfire', 1, 7, 22)],
+            ['Pile/face cible', () => demo.result('coinflip_target', 4, 4, 8)],
+            [
+              'Pile/face initiateur',
+              () => demo.result('coinflip_initiator', 4, 4, 8),
+            ],
+            [
+              'Mute streamer',
+              () => demo.result('broadcaster_muted', 6, 0, 22, 110),
+            ],
+            ['Sauvé', () => demo.result('no_timeout', 2, 6, 0)],
+            ['Annulé', () => demo.result('no_quorum', 1, 1, 0)],
+            ['|'],
+            ['Événement en retard', () => demo.late()],
+            ['Clear', () => demo.clear()],
+            [
+              'Fond',
+              () => {
+                const c = document.body.classList;
+                if (c.contains('bg-check')) {
+                  c.remove('bg-check');
+                  c.add('bg-scene');
+                } else if (c.contains('bg-scene')) c.remove('bg-scene');
+                else c.add('bg-check');
+              },
+            ],
+          ];
+          for (const [label, fn] of scenarios) {
+            if (label === '|') {
+              const s = document.createElement('span');
+              s.className = 'sep';
+              bar.appendChild(s);
+              continue;
+            }
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.addEventListener('click', fn);
+            bar.appendChild(b);
+          }
+          document.body.appendChild(bar);
+          demo.open(60);
+        }
+      })();
+    </script>
+  </body>
+</html>

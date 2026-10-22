@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Votekick</title>
+<style>
+:root{
+  color-scheme:dark; font-family:Inter,system-ui,sans-serif;
+  /* Détourage discret : halo clair minimal + micro-ombre sombre, sans stroke. */
+  --vk-text-main:
+    0 0 1px rgba(255,255,255,.18),
+    1px 0 1px rgba(0,0,0,.52),
+    -1px 0 1px rgba(0,0,0,.52),
+    0 1px 1px rgba(0,0,0,.64),
+    0 -1px 1px rgba(0,0,0,.42),
+    0 2px 5px rgba(0,0,0,.28);
+  --vk-text-secondary:
+    0 0 1px rgba(255,255,255,.10),
+    0 1px 1px rgba(0,0,0,.60),
+    0 2px 4px rgba(0,0,0,.22);
+}
+*{ box-sizing:border-box }
+[hidden]{ display:none!important }
+html,body{ margin:0; width:100%; height:100%; overflow:hidden; background:transparent }
+/* Mode test (fichier ouvert sans params SAMMI) : fond sombre pour VOIR l'overlay transparent. */
+body.test{ background:#0c0a12 }
+
+/* --- Apparition / disparition : slide rapide (~0.16s) --- */
+.stage{
+  height:100%; display:grid; place-items:center; padding:24px;
+  opacity:0; transform:translateY(-16px) scale(.985);
+  transition:opacity .16s ease, transform .16s ease;
+}
+.stage.show{ opacity:1; transform:none }
+.stage.instant{ opacity:1; transform:none; transition:none }
+
+/* --- Conteneur (PLUS de cadre : pas de fond, pas de bordure) --- */
+.card{
+  position:relative;
+  width:min(520px,92vw); padding:12px 24px 10px;
+  color:#fff; text-align:center;
+  transition:background .3s ease, box-shadow .3s ease, border-color .3s ease;
+}
+.card > *{ position:relative; z-index:1 }
+
+/* Le CADRE revient UNIQUEMENT pour le résultat : fond translucide teinté par l'issue,
+   fine bordure dorée, glow coloré (rouge / vert / blanc). L'annonce du vote reste sans cadre. */
+.card.framed{
+  padding:26px 40px 30px; border-radius:30px;
+  border:1px solid rgba(245,200,80,.42);
+  background:
+    radial-gradient(120% 100% at 50% 38%, rgba(var(--res,246,242,234),.22), transparent 68%),
+    linear-gradient(150deg,rgba(22,17,32,.92),rgba(9,6,16,.93));
+  box-shadow:0 18px 52px #000c,
+    0 0 12px rgba(var(--res,246,242,234),.68),
+    0 0 38px rgba(var(--res,246,242,234),.42);
+}
+
+/* 1. Titre doré (légèrement réduit au profit du pseudo) */
+.title{
+  text-transform:uppercase; letter-spacing:.03em; line-height:.95;
+  font-weight:900; font-size:clamp(2.1rem,6.6vw,2.85rem);
+  background:linear-gradient(180deg,#ffe887,#f4c23a 55%,#d99a1f);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  filter:
+    drop-shadow(0 0 1px rgba(255,255,255,.18))
+    drop-shadow(1px 0 1px rgba(0,0,0,.52))
+    drop-shadow(-1px 0 1px rgba(0,0,0,.52))
+    drop-shadow(0 1px 1px rgba(0,0,0,.64))
+    drop-shadow(0 -1px 1px rgba(0,0,0,.42))
+    drop-shadow(0 2px 5px rgba(0,0,0,.28));
+}
+/* 2. Login de la cible, seul, gros et gras (agrandi) */
+.targetName{
+  margin-top:11px; font-weight:900; font-size:clamp(1.72rem,5vw,2.3rem);
+  color:#fff; overflow-wrap:anywhere; line-height:1.05; text-shadow:var(--vk-text-main);
+}
+
+/* 3. PP + anneau timer */
+.pp-wrap{ position:relative; width:min(188px,50vw); aspect-ratio:1; margin:20px auto 0 }
+.ring{ position:absolute; inset:0; width:100%; height:100% }
+.ring .ring-track{ fill:none; stroke:#ffffff22; stroke-width:6 }
+.ring .ring-arc{ fill:none; stroke:#f4c23a; stroke-width:6; stroke-linecap:round;
+  transform:rotate(-90deg); transform-origin:50% 50%;
+  filter:drop-shadow(0 0 5px rgba(244,194,58,.6)); transition:stroke-dashoffset .3s linear }
+.pp{ position:absolute; inset:15px; border-radius:50%; overflow:hidden; background:#1b1926;
+  box-shadow:inset 0 0 0 2px #0007, 0 6px 22px #0009 }
+.pp img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none }
+.pp-fallback{ position:absolute; inset:0; display:grid; place-items:center; background:#20202c }
+.pp-fallback svg{ width:64%; height:64%; opacity:.9 }
+/* Badge secondes : plus gros et un peu plus bas -> plus à cheval et plus visible. */
+.sec-badge{
+  position:absolute; left:50%; bottom:-28px; transform:translateX(-50%); z-index:3;
+  min-width:74px; height:74px; padding:0 10px; border-radius:999px;
+  display:grid; place-items:center;
+  background:#12101a; border:3px solid #f4c23a;
+  font-weight:900; font-size:2.1rem; color:#fff; box-shadow:0 8px 20px #000c;
+}
+.pp-wrap.urgent{ animation:vkPulse .9s ease-in-out infinite }
+
+/* 4. KICK / total / SAVE + demi-cercle de répartition */
+.balance{ position:relative; margin-top:10px; padding-bottom:66px }
+.bal-row{ display:flex; justify-content:space-between; align-items:center; gap:10px }
+.lbl{ display:flex; flex-direction:column; align-items:center; line-height:1.05; text-shadow:var(--vk-text-main) }
+.lbl span{ font-weight:900; font-size:clamp(1.15rem,3.6vw,1.5rem) }
+.lbl b{ font-weight:900; font-size:clamp(1.95rem,5.2vw,2.5rem); margin-top:1px }
+.c-kick{ color:#ff5c6c } .c-save{ color:#4fe08c }
+.tot-pill{
+  align-self:center; transform:translateY(31px); padding:5px 15px; border-radius:999px; white-space:nowrap;
+  background:#12101acc; border:1px solid rgba(245,200,80,.6);
+  color:#f7eccb; font-weight:900; font-size:1.55rem; box-shadow:0 5px 16px #000b;
+  text-shadow:var(--vk-text-main);
+}
+.arc{ position:absolute; left:0; right:0; bottom:0; width:100%; height:70px; display:block }
+.arc .a-red,.arc .a-green{
+  fill:none; stroke-width:18; stroke-linecap:round;
+  transition:opacity .16s ease,filter .24s ease;
+}
+.arc .a-red{ stroke:#ff4d5f }
+.arc .a-green{ stroke:#37e08a }
+.arc .a-dot{
+  fill:#f4c23a; stroke:#12101a; stroke-width:3;
+  filter:drop-shadow(0 2px 4px #000b);
+}
+.arc.full-kick .a-red{ animation:vkArcGlowRed 1.05s ease-in-out infinite }
+.arc.full-save .a-green{ animation:vkArcGlowGreen 1.05s ease-in-out infinite }
+@keyframes vkArcGlowRed{
+  0%,100%{ filter:drop-shadow(0 0 2px rgba(255,77,95,.28)) }
+  50%{ filter:drop-shadow(0 0 9px rgba(255,77,95,.9)) }
+}
+@keyframes vkArcGlowGreen{
+  0%,100%{ filter:drop-shadow(0 0 2px rgba(55,224,138,.28)) }
+  50%{ filter:drop-shadow(0 0 9px rgba(55,224,138,.9)) }
+}
+
+/* --- Résultat (logique/couleurs inchangées) --- */
+.result{ font-weight:1000; padding:24px 0 8px; line-height:1.12 }
+.result .big{ display:block; font-size:clamp(1.8rem,5vw,2.4rem); overflow-wrap:anywhere; text-shadow:var(--vk-text-main) }
+.result .min{ display:block; font-size:1.3rem; margin-top:10px; opacity:.95; font-weight:800; text-shadow:var(--vk-text-secondary) }
+.result.kick{ color:#ff5c73 }   /* condamné / retour de bâton = rouge */
+.result.saved{ color:#7ef0ad }  /* sauvé (save gagne) = vert clair */
+.result.void{ color:#f6f2ea }   /* annulé / égalité = blanc neutre */
+.result.coinflip .big::before{ content:'🪙'; display:inline-block; margin-right:.35em; animation:vkCoinFlip .55s cubic-bezier(.2,.75,.25,1) both }
+
+/* --- Animations légères --- */
+.card.flash{ animation:vkPop .28s ease-out }
+.card.shake{ animation:vkShake .36s ease-in-out }
+@keyframes vkPop{ 0%{transform:scale(.92)} 55%{transform:scale(1.045)} 100%{transform:scale(1)} }
+@keyframes vkShake{ 0%,100%{transform:translateX(0)} 18%{transform:translateX(-5px)} 36%{transform:translateX(5px)} 54%{transform:translateX(-4px)} 72%{transform:translateX(3px)} 88%{transform:translateX(-2px)} }
+@keyframes vkPulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+@keyframes vkCoinFlip{ 0%{opacity:0;transform:translateY(15px) rotateY(0) scale(.7)} 70%{opacity:1;transform:translateY(-3px) rotateY(540deg) scale(1.08)} 100%{opacity:1;transform:none} }
+
+/* Intro courte, jouee une seule fois par session. */
+.card.intro .title{ animation:vkIntroSlide .28s cubic-bezier(.22,.8,.25,1) both }
+.card.intro .targetName{ animation:vkIntroSlide .28s .055s cubic-bezier(.22,.8,.25,1) both }
+.card.intro .pp-wrap{ animation:vkIntroPortrait .34s .09s cubic-bezier(.22,.8,.25,1) both }
+.card.intro .c-kick,.card.intro .c-save{ animation:vkIntroUp .27s .17s cubic-bezier(.22,.8,.25,1) both }
+.card.intro .arc{ animation:vkIntroUp .25s .235s cubic-bezier(.22,.8,.25,1) both }
+.card.intro .tot-pill{ animation:vkIntroTotal .25s .235s cubic-bezier(.22,.8,.25,1) both }
+@keyframes vkIntroSlide{ from{opacity:0;transform:translateY(-18px)} to{opacity:1;transform:none} }
+@keyframes vkIntroPortrait{ from{opacity:0;transform:scale(1.14)} to{opacity:1;transform:scale(1)} }
+@keyframes vkIntroUp{ from{opacity:0;transform:translateY(15px)} to{opacity:1;transform:none} }
+@keyframes vkIntroTotal{ from{opacity:0;transform:translateY(49px)} to{opacity:1;transform:translateY(31px)} }
+
+@media (prefers-reduced-motion:reduce){
+  .stage,.card.intro .title,.card.intro .targetName,.card.intro .pp-wrap,
+  .card.intro .c-kick,.card.intro .c-save,.card.intro .arc,.card.intro .tot-pill,
+  .card.flash,.card.shake,.pp-wrap.urgent{ animation:none!important; transition:none!important }
+}
+
+/* --- Grille de mesure (mode test uniquement) --- */
+#vkgrid{
+  position:fixed; top:0; left:0; right:0; bottom:0; width:100%; height:100%;
+  z-index:97; pointer-events:none; display:none;
+}
+#vkgrid.on{ display:block }
+#vkgrid svg{ position:absolute; top:0; left:0; width:100%; height:100% }
+#vkgrid .axis{ position:absolute; color:#8fe3ff; font:700 11px/1 ui-monospace,Menlo,monospace; text-shadow:0 1px 3px #000,0 0 2px #000 }
+#vkgrid .vkguide{ position:absolute; background:#37e08a; opacity:.65 }
+#vkgrid .vkguide.h{ left:0; right:0; height:1px }
+#vkgrid .vkguide.v{ top:0; bottom:0; width:1px }
+#vkcoord{ position:fixed; z-index:100; pointer-events:none; display:none;
+  padding:3px 7px; border-radius:6px; background:#000c; color:#8fffdd;
+  font:700 12px ui-monospace,Menlo,monospace }
+
+/* --- Panneau de test (jamais affiché quand piloté par SAMMI) --- */
+#testbar{
+  position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center;
+  padding:10px 12px; border-radius:14px; background:#000000aa; border:1px solid #ffffff22;
+  font:600 13px Inter,sans-serif; color:#fff; z-index:99; backdrop-filter:blur(6px); max-width:96vw;
+}
+#testbar button,#testbar input{ font:inherit; color:#fff; border:1px solid #ffffff33; background:#ffffff14; border-radius:8px; padding:6px 10px; cursor:pointer }
+#testbar button:hover{ background:#ffffff28 }
+#testbar input{ cursor:text }
+#testbar input.num{ width:52px; text-align:center }
+#testbar input.url{ width:150px }
+#testbar .sep{ width:1px; height:22px; background:#ffffff33; margin:0 2px }
+#testbar b{ opacity:.6; font-weight:700 }
+</style></head>
+<body>
+<main id="stage" class="stage" aria-live="polite">
+  <section class="card" id="card">
+    <div class="title">Votekick</div>
+
+    <div id="live">
+      <div class="targetName" id="target">login</div>
+
+      <div id="ppWrap" class="pp-wrap">
+        <svg class="ring" viewBox="0 0 120 120">
+          <circle class="ring-track" cx="60" cy="60" r="54"></circle>
+          <circle id="ringArc" class="ring-arc" cx="60" cy="60" r="54"></circle>
+        </svg>
+        <div class="pp">
+          <img id="avatar" alt="">
+          <div id="ppFallback" class="pp-fallback">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4a4658" d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-5.33 0-9 2.67-9 6v1a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-1c0-3.33-3.67-6-9-6Z"></path></svg>
+          </div>
+        </div>
+        <div class="sec-badge"><span id="seconds">60</span></div>
+      </div>
+
+      <div class="balance">
+        <div class="bal-row">
+          <div class="lbl c-kick"><span>KICK</span><b id="kickN">0</b></div>
+          <div class="tot-pill"><span id="total">0 vote</span></div>
+          <div class="lbl c-save"><span>SAVE</span><b id="saveN">0</b></div>
+        </div>
+        <svg class="arc" viewBox="0 0 340 90" preserveAspectRatio="xMidYMid meet">
+          <path id="arcRed" class="a-red" d="M20 26 A250 250 0 0 0 320 26"></path>
+          <path id="arcGreen" class="a-green" d="M20 26 A250 250 0 0 0 320 26"></path>
+          <polygon id="arcDot" class="a-dot" points="0,-19 9.5,0 0,19 -9.5,0" transform="translate(170 76)"></polygon>
+        </svg>
+      </div>
+    </div>
+
+    <div id="result" class="result" hidden></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const params = new URLSearchParams(location.search);
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage'), card = $('card'), live = $('live'), result = $('result');
+
+  // ---------- Mode ----------
+  // SAMMI passe toujours ?vk=... . Ouvrir le fichier "nu" (sans vk) => mode TEST.
+  const hasVk = params.has('vk');
+  let mode = params.get('vk') || (hasVk ? 'clear' : 'test');
+  let session = params.get('session') || 'default';
+  const DEFAULT_DURATION = 60;
+  let INTRO_KEY = 'votekick_intro_' + session;
+  let BALANCE_KEY = 'votekick_balance_' + session;
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  // Grille de mesure (mode test / ?grid=1) — déclarées ici pour éviter la TDZ (buildGrid est appelé plus tôt).
+  let _grid = null, _coord = null;
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  // ---------- État ----------
+  const state = {
+    target: params.get('target') || '?',
+    initiator: params.get('initiator') || '?', // sanctionné en cas de retour de bâton
+    avatar: params.get('avatar') || '',
+    kick: Math.max(0, Number(params.get('yes')) || 0), // yes = KICK (compat SAMMI)
+    save: Math.max(0, Number(params.get('no')) || 0),  // no  = SAVE
+    duration: Math.max(5, Number(params.get('dur')) || DEFAULT_DURATION),
+    ends: 0,
+    ticking: null,
+  };
+
+  const esc = (v) => (v === null || v === undefined || v === '') ? '?' : String(v);
+  const noAt = (v) => esc(v).replace(/^@/, '');
+  const at = (v) => '@' + noAt(v);
+  function setSession(value) {
+    session = value || 'default';
+    INTRO_KEY = 'votekick_intro_' + session;
+    BALANCE_KEY = 'votekick_balance_' + session;
+  }
+
+  // Couleurs de résultat (rouge / vert / blanc).
+  const RED = [255, 92, 115], GREEN = [126, 240, 173], WHITE = [246, 242, 234];
+
+  // ---------- Avatar (avec fallback élégant) ----------
+  function setAvatar(url) {
+    const img = $('avatar'), fb = $('ppFallback');
+    state.avatar = url || '';
+    if (!state.avatar) { img.removeAttribute('src'); img.style.display = 'none'; fb.style.display = 'grid'; return; }
+    img.onload = () => { img.style.display = 'block'; fb.style.display = 'none'; };
+    img.onerror = () => { img.style.display = 'none'; fb.style.display = 'grid'; };
+    fb.style.display = 'grid'; img.style.display = 'none';
+    img.src = state.avatar;
+  }
+
+  // ---------- Demi-cercle de répartition ----------
+  let arcLen = 0, balanceFrame = 0, balanceFrac = 0.5;
+  function ensureArcLen() { if (!arcLen) { try { arcLen = $('arcRed').getTotalLength(); } catch (_) { arcLen = 0; } } return arcLen; }
+  function applyBalance(frac) {
+    const L = ensureArcLen(); if (!L) return;
+    frac = Math.max(0, Math.min(1, Number(frac) || 0));
+    const redLen = L * frac;
+    const red = $('arcRed'), green = $('arcGreen'), dot = $('arcDot');
+    const arc = red.closest('.arc');
+    red.style.strokeDasharray = redLen + ' ' + L;
+    green.style.strokeDasharray = (L - redLen) + ' ' + L;
+    green.style.strokeDashoffset = -redLen;
+
+    // Une longueur nulle avec stroke-linecap:round laisse sinon un petit point.
+    red.style.opacity = frac <= 0.0001 ? '0' : '1';
+    green.style.opacity = frac >= 0.9999 ? '0' : '1';
+
+    // Le séparateur reste perpendiculaire à la tangente locale du demi-cercle.
+    try {
+      const p = red.getPointAtLength(redLen);
+      const delta = Math.min(1.2, L / 100);
+      const before = red.getPointAtLength(Math.max(0, redLen - delta));
+      const after = red.getPointAtLength(Math.min(L, redLen + delta));
+      const angle = Math.atan2(after.y - before.y, after.x - before.x) * 180 / Math.PI;
+      dot.setAttribute('transform', 'translate(' + p.x + ' ' + p.y + ') rotate(' + angle + ')');
+    } catch (_) {}
+
+    // Glow doux uniquement lorsqu'un camp possède réellement 100 % des votes.
+    if (arc) {
+      arc.classList.toggle('full-kick', frac >= 0.9999);
+      arc.classList.toggle('full-save', frac <= 0.0001);
+    }
+    balanceFrac = frac;
+  }
+  function balanceEase(x) {
+    const x1=.22, y1=.8, x2=.25, y2=1;
+    const curve = (t,a,b) => 3*(1-t)*(1-t)*t*a + 3*(1-t)*t*t*b + t*t*t;
+    const slope = (t,a,b) => 3*(1-t)*(1-t)*a + 6*(1-t)*t*(b-a) + 3*t*t*(1-b);
+    let t=x;
+    for(let i=0;i<5;i++){ const d=slope(t,x1,x2); if(Math.abs(d)<1e-5) break; t=Math.max(0,Math.min(1,t-(curve(t,x1,x2)-x)/d)); }
+    return curve(t,y1,y2);
+  }
+  function animateBalance(from, to, duration = 200) {
+    cancelAnimationFrame(balanceFrame);
+    from = Math.max(0, Math.min(1, Number(from)));
+    to = Math.max(0, Math.min(1, Number(to)));
+    if (reducedMotion || !Number.isFinite(from) || Math.abs(to-from)<0.0001) { applyBalance(to); return; }
+    const started = performance.now();
+    const step = (now) => {
+      const progress = Math.min(1, (now-started)/duration);
+      applyBalance(from + (to-from)*balanceEase(progress));
+      if(progress<1) balanceFrame=requestAnimationFrame(step);
+    };
+    balanceFrame=requestAnimationFrame(step);
+  }
+  function renderBalance(kick, save, animate = true, storedFrom = null) {
+    const total = kick + save;
+    const target = total ? kick / total : 0.5;
+    const from = Number.isFinite(storedFrom) ? storedFrom : balanceFrac;
+    if (animate) animateBalance(from, target); else applyBalance(target);
+    try { localStorage.setItem(BALANCE_KEY, String(target)); } catch (_) {}
+  }
+
+  // ---------- Rendu live ----------
+  function renderLive({ animate = true, storedFrom = null } = {}) {
+    $('target').textContent = noAt(state.target);
+    $('kickN').textContent = state.kick;
+    $('saveN').textContent = state.save;
+    const total = state.kick + state.save;
+    $('total').textContent = total + (total > 1 ? ' votes' : ' vote');
+    renderBalance(state.kick, state.save, animate, storedFrom);
+  }
+
+  function playIntroOnce(force = false) {
+    let alreadyShown = false;
+    try { alreadyShown = localStorage.getItem(INTRO_KEY) === '1'; } catch (_) {}
+    if (!force && alreadyShown) { stage.classList.add('instant'); return; }
+    if (reducedMotion) { try { localStorage.setItem(INTRO_KEY,'1'); } catch (_) {} return; }
+    card.classList.add('intro');
+    try { localStorage.setItem(INTRO_KEY,'1'); } catch (_) {}
+    setTimeout(() => card.classList.remove('intro'), 560);
+  }
+
+  // ---------- Timer (anneau doré autour de la PP, indépendant des votes) ----------
+  const RING_C = 2 * Math.PI * 54;
+  $('ringArc').style.strokeDasharray = RING_C;
+  function computeEnds() {
+    const key = 'votekick_ends_' + session;
+    const provided = Number(params.get('ends')) || 0;
+    state.ends = provided || Number(localStorage.getItem(key)) || (Date.now() + state.duration * 1000);
+    if (provided) localStorage.setItem(key, String(state.ends));
+  }
+  function startTick() {
+    clearTimeout(state.ticking);
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((state.ends - Date.now()) / 1000));
+      $('seconds').textContent = left;
+      const frac = Math.min(state.duration, left) / state.duration;
+      $('ringArc').style.strokeDashoffset = RING_C * (1 - frac); // se vide dans le sens horaire
+      $('ppWrap').classList.toggle('urgent', left > 0 && left <= 10); // pulse dans les 10 dernières s
+      if (left > 0) state.ticking = setTimeout(tick, 250);
+      else $('ppWrap').classList.remove('urgent');
+    };
+    tick();
+  }
+
+  // ---------- Rendu résultat ----------
+  function formatMuteDuration(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    if (mins && secs) return mins + ' min ' + secs + ' s';
+    if (mins) return mins + ' min';
+    return secs + ' s';
+  }
+
+  function renderResult(outcome, minutes, muteSeconds = 0) {
+    clearTimeout(state.ticking);
+    live.hidden = true; result.hidden = false;
+    $('ppWrap').classList.remove('urgent');
+    const m = Number(minutes) || 0;
+    let cls, big, sub = '', rgb;
+    if (outcome === 'broadcaster_muted')       { cls = 'kick'; rgb = RED; big = at(state.target) + ' réduit au silence'; sub = 'Mute · ' + formatMuteDuration(muteSeconds); }
+    else if (outcome === 'target_timeout_perfect') { cls = 'kick'; rgb = RED; big = at(state.target) + ' condamné'; sub = 'Perfect · ' + m + ' min'; }
+    else if (outcome === 'target_timeout')     { cls = 'kick'; rgb = RED; big = at(state.target) + ' condamné'; sub = m + ' min'; }
+    else if (outcome === 'backfire')           { cls = 'kick'; rgb = RED; big = at(state.initiator) + ' — retour de bâton'; sub = m + ' min'; }
+    else if (outcome === 'coinflip_target')    { cls = 'kick coinflip'; rgb = RED; big = at(state.target) + ' perd le pile ou face'; sub = m + ' min'; }
+    else if (outcome === 'coinflip_initiator') { cls = 'kick coinflip'; rgb = RED; big = at(state.initiator) + ' perd le pile ou face'; sub = m + ' min'; }
+    else if (outcome === 'no_quorum')          { cls = 'void'; rgb = WHITE; big = 'Annulé'; }
+    else if (outcome === 'no_timeout') { // personne timeout : sauvé (save gagne) ou égalité
+      if (state.save > state.kick) { cls = 'saved'; rgb = GREEN; big = at(state.target) + ' sauvé'; }
+      else { cls = 'void'; rgb = WHITE; big = 'Égalité'; }
+    }
+    else { cls = 'void'; rgb = WHITE; big = 'Annulé'; } // secours
+
+    result.className = 'result ' + cls;
+    result.innerHTML = '<span class="big">' + big + '</span>' + (sub ? '<span class="min">' + sub + '</span>' : '');
+
+    // Cadre + fond coloré du résultat (rouge / vert / blanc), et pseudo auto-ajusté.
+    card.style.setProperty('--res', rgb.join(','));
+    card.classList.add('framed');
+    requestAnimationFrame(fitBig);
+
+    // Flash au verdict (pop) ; micro-secousse pour le retour de bâton.
+    card.classList.remove('flash', 'shake');
+    void card.offsetWidth;
+    card.classList.add(outcome === 'backfire' ? 'shake' : 'flash');
+  }
+
+  // ---------- Show / hide ----------
+  function show() { requestAnimationFrame(() => stage.classList.add('show')); }
+  function hide() {
+    // `instant` force opacity:1. Il doit partir avec `show`, sinon le verdict
+    // reste affiché malgré l'événement clear envoyé par SAMMI.
+    stage.classList.remove('show', 'instant');
+  }
+  function backToLive() { result.hidden = true; live.hidden = false; card.classList.remove('framed'); }
+
+  // ---------- SAMMI -> OBS Browser (sans rechargement de la source) ----------
+  // SAMMI émet cet événement via CallVendorRequest / obs-browser / emit_event.
+  function applySammiEvent(payload = {}) {
+    const action = String(payload.action || '').toLowerCase();
+    if (action === 'clear') {
+      clearTimeout(state.ticking);
+      hide();
+      return;
+    }
+
+    if (payload.session) setSession(payload.session);
+    if (payload.target !== undefined) state.target = payload.target;
+    if (payload.initiator !== undefined) state.initiator = payload.initiator;
+    if (payload.avatar !== undefined) setAvatar(payload.avatar);
+    if (payload.yes !== undefined) state.kick = Math.max(0, Number(payload.yes) || 0);
+    if (payload.no !== undefined) state.save = Math.max(0, Number(payload.no) || 0);
+
+    if (action === 'result') {
+      mode = 'result';
+      renderResult(payload.outcome, payload.minutes, payload.mute_seconds);
+      show();
+      setTimeout(hide, 6500);
+      return;
+    }
+
+    if (action === 'live' || action === 'open' || action === 'update') {
+      mode = 'live';
+      backToLive();
+      const incomingEnds = Number(payload.ends) || 0;
+      if (incomingEnds) {
+        state.ends = incomingEnds;
+        try { localStorage.setItem('votekick_ends_' + session, String(state.ends)); } catch (_) {}
+      } else if (!state.ends) {
+        state.ends = Date.now() + state.duration * 1000;
+      }
+      renderLive({ animate: true });
+      startTick();
+      playIntroOnce(false);
+      show();
+    }
+  }
+
+  window.addEventListener('votekick_update', (event) => {
+    applySammiEvent(event.detail || {});
+  });
+
+  // Réduit la taille du pseudo du résultat jusqu'à ce que "XXXX condamné" tienne sur une ligne.
+  function fitBig() {
+    const el = result.querySelector('.big');
+    if (!el) return;
+    el.style.whiteSpace = 'nowrap';
+    el.style.fontSize = ''; // repart de la taille CSS par défaut
+    let size = parseFloat(getComputedStyle(el).fontSize) || 38;
+    let guard = 60;
+    while (el.scrollWidth > el.clientWidth && size > 16 && guard-- > 0) {
+      size -= 1.5; el.style.fontSize = size + 'px';
+    }
+    if (el.scrollWidth > el.clientWidth) el.style.whiteSpace = 'normal'; // dernier recours : retour à la ligne
+  }
+
+  // ---------- Boot selon le mode ----------
+  function boot() {
+    if (mode === 'result') {
+      renderResult(params.get('outcome'), params.get('minutes'));
+      show();
+      setTimeout(hide, 6500);
+    } else {
+      setAvatar(state.avatar);
+      let previous = NaN;
+      try { const saved = localStorage.getItem(BALANCE_KEY); previous = saved === null ? NaN : Number(saved); } catch (_) {}
+      if (!Number.isFinite(previous)) previous = 0.5;
+      applyBalance(previous);
+      renderLive({ animate:true, storedFrom:previous });
+      computeEnds();
+      startTick();
+      playIntroOnce(false);
+      show();
+    }
+  }
+
+  // ====================================================================
+  //  MODE TEST — piloter l'anim au navigateur (console + boutons).
+  //  Rien de tout ça ne s'affiche quand SAMMI passe ?vk=... .
+  // ====================================================================
+  const VK = {
+    open({ target = 'testviewer', avatar = '', dur = 20 } = {}) {
+      mode = 'open'; backToLive();
+      state.target = target; state.kick = 0; state.save = 0; state.duration = dur;
+      state.ends = Date.now() + dur * 1000;
+      balanceFrac = 0.5; applyBalance(.5);
+      setAvatar(avatar); renderLive({animate:false}); startTick();
+      stage.classList.remove('instant'); playIntroOnce(true); show();
+      return 'vote en cours (' + dur + 's)';
+    },
+    vote(side = 'kick', n = 1) {
+      if (String(side).toLowerCase().startsWith('s')) state.save += n; else state.kick += n;
+      renderLive(); return { kick: state.kick, save: state.save };
+    },
+    setTimer(sec) { state.duration = Math.max(1, sec); state.ends = Date.now() + sec * 1000; startTick(); return sec + 's'; },
+    result(outcome = 'target_timeout', minutes = 20) { mode = 'result'; renderResult(outcome, minutes); show(); return outcome; },
+    clear() { hide(); return 'clear'; },
+    demo({ dur = 12, target = 'testviewer', avatar = '' } = {}) {
+      this.open({ target, avatar, dur });
+      clearInterval(this._demo);
+      this._demo = setInterval(() => {
+        if (Date.now() >= state.ends) {
+          clearInterval(this._demo);
+          const t = state.kick + state.save;
+          let out = 'no_quorum', min = 0;
+          if (t >= 3) {
+            if (state.kick > state.save) {
+              const base = Math.min(30, Math.max(10, 5 + state.kick));
+              if (state.save === 0) { out = 'target_timeout_perfect'; min = 2 * base; } // Perfect = durée × 2
+              else { out = 'target_timeout'; min = base; }
+            } else if (state.kick === 0 && state.save >= 3) {
+              out = 'backfire'; min = 2 * Math.min(30, Math.max(10, 5 + state.save));
+            } else {
+              out = 'no_timeout'; // save >= kick : sauvé ou égalité (renderResult tranche)
+            }
+          }
+          setTimeout(() => this.result(out, min), 400);
+          return;
+        }
+        this.vote(Math.random() < 0.6 ? 'kick' : 'save', 1);
+      }, 750);
+      return 'démo lancée (' + dur + 's)';
+    },
+    help() {
+      console.log('%cVotekick — mode test', 'font-weight:900;font-size:14px');
+      console.log('VK.open({target:"viewerumobilu", avatar:"URL", dur:20})');
+      console.log('VK.vote("kick"|"save", n)          → ajoute des votes');
+      console.log('VK.setTimer(sec)                   → change le timer');
+      console.log('VK.result("target_timeout"|"target_timeout_perfect"|"backfire"|"coinflip_target"|"coinflip_initiator"|"no_quorum"|"no_timeout", minutes)');
+      console.log('VK.demo({dur:12, avatar:"URL"})    → simulation auto');
+      console.log('VK.clear()                         → cache');
+      return '↑ commandes dispo';
+    },
+  };
+  window.VK = VK;
+
+  if (mode === 'test') {
+    document.body.classList.add('test');
+    buildTestBar();
+    buildGrid();
+    VK.help();
+    VK.open({ dur: 20 });
+    return;
+  }
+
+  if (mode === 'clear' || mode === 'standby') hide();
+  else boot();
+
+  // Grille de mesure hors mode test : uniquement si on la demande explicitement (?grid=1).
+  // Jamais visible dans SAMMI sans ce paramètre.
+  if (mode !== 'test' && params.get('grid') === '1') buildGrid();
+
+  // Petite barre de boutons pour tester sans la console.
+  function buildTestBar() {
+    const bar = document.createElement('div');
+    bar.id = 'testbar';
+    bar.innerHTML = `
+      <b>TEST</b>
+      <button data-a="k">+1 KICK</button>
+      <button data-a="s">+1 SAVE</button>
+      <span class="sep"></span>
+      <b>durée</b><input id="tDur" class="num" type="number" value="20" min="3">
+      <input id="tAvatar" class="url" type="text" placeholder="avatar URL (option)">
+      <button data-a="open">Ouvrir</button>
+      <button data-a="demo">Démo auto</button>
+      <span class="sep"></span>
+      <button data-a="r-perfect">Perfect</button>
+      <button data-a="r-kick">Condamné</button>
+      <button data-a="r-back">Backfire</button>
+      <button data-a="r-save">Sauvé</button>
+      <button data-a="r-void">Annulé</button>
+      <button data-a="clear">Clear</button>
+      <span class="sep"></span>
+      <button data-a="grid">Grille</button>`;
+    document.body.appendChild(bar);
+    bar.addEventListener('click', (e) => {
+      const a = e.target.getAttribute('data-a'); if (!a) return;
+      const dur = Number($('tDur').value) || 20;
+      const avatar = $('tAvatar').value.trim();
+      if (a === 'k') VK.vote('kick');
+      else if (a === 's') VK.vote('save');
+      else if (a === 'open') VK.open({ dur, avatar });
+      else if (a === 'demo') VK.demo({ dur, avatar });
+      else if (a === 'r-perfect') { state.kick = 8; state.save = 0; VK.result('target_timeout_perfect', 26); }
+      else if (a === 'r-kick') { state.kick = 6; state.save = 3; VK.result('target_timeout', 11); }
+      else if (a === 'r-back') { state.kick = 0; state.save = 7; VK.result('backfire', 24); }
+      else if (a === 'r-save') { state.kick = 2; state.save = 6; VK.result('no_timeout', 0); }
+      else if (a === 'r-void') { state.kick = 1; state.save = 1; VK.result('no_quorum', 0); }
+      else if (a === 'clear') VK.clear();
+      else if (a === 'grid') toggleGrid();
+    });
+  }
+
+  // Grille de mesure + règle + crosshair (mode test) : pour dire "descend de X px".
+  function buildGrid() {
+    _grid = document.createElement('div'); _grid.id = 'vkgrid';
+    const svg = document.createElementNS(SVGNS, 'svg');
+    _grid.appendChild(svg);
+    const hL = document.createElement('div'); hL.className = 'vkguide h';
+    const vL = document.createElement('div'); vL.className = 'vkguide v';
+    _grid.appendChild(hL); _grid.appendChild(vL);
+    document.body.appendChild(_grid);
+    _coord = document.createElement('div'); _coord.id = 'vkcoord'; document.body.appendChild(_coord);
+
+    const line = (x1, y1, x2, y2, stroke) => {
+      const l = document.createElementNS(SVGNS, 'line');
+      l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+      l.setAttribute('stroke', stroke); l.setAttribute('stroke-width', '1'); l.setAttribute('shape-rendering', 'crispEdges');
+      svg.appendChild(l);
+    };
+    const draw = () => {
+      const W = window.innerWidth, H = window.innerHeight;
+      svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      _grid.querySelectorAll('.axis').forEach((n) => n.remove());
+      const minor = 'rgba(255,255,255,.14)', major = 'rgba(120,200,255,.7)';
+      for (let x = 0; x <= W; x += 10) line(x, 0, x, H, x % 50 ? minor : major);
+      for (let y = 0; y <= H; y += 10) line(0, y, W, y, y % 50 ? minor : major);
+      for (let x = 0; x <= W; x += 50) { const s = document.createElement('div'); s.className = 'axis'; s.style.left = (x + 3) + 'px'; s.style.top = '2px'; s.textContent = x; _grid.appendChild(s); }
+      for (let y = 50; y <= H; y += 50) { const s = document.createElement('div'); s.className = 'axis'; s.style.top = (y + 2) + 'px'; s.style.left = '3px'; s.textContent = y; _grid.appendChild(s); }
+    };
+    draw(); window.addEventListener('resize', draw);
+    if (params.get('grid') === '1') _grid.classList.add('on'); // pratique : ouvre déjà avec la grille
+
+    document.addEventListener('mousemove', (e) => {
+      if (!_grid.classList.contains('on')) return;
+      hL.style.top = e.clientY + 'px'; vL.style.left = e.clientX + 'px';
+      _coord.style.display = 'block';
+      _coord.style.left = Math.min(window.innerWidth - 96, e.clientX + 12) + 'px';
+      _coord.style.top = (e.clientY + 14) + 'px';
+      _coord.textContent = 'x ' + e.clientX + '  ·  y ' + e.clientY;
+    });
+    window.addEventListener('keydown', (e) => { if ((e.key || '').toLowerCase() === 'g') toggleGrid(); });
+  }
+  function toggleGrid() {
+    if (!_grid) return;
+    _grid.classList.toggle('on');
+    if (!_grid.classList.contains('on')) _coord.style.display = 'none';
+  }
+})();
+</script>
+</body></html>

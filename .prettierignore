@@ -17,3 +17,6 @@ docs/ASTRA_GLOBAL_AUDIT_2026-10.md
 
 # Legacy alert styles ported as is from Twitch_Alerts.html (docs/TWITCH_ALERTS_PARITY_2026-10.md)
 apps/studio/server/alerts-player/alerts.css
+
+# Legacy Votekick overlay and OBS shaders kept byte for byte for rollback (docs/VOTEKICK_V2.md)
+apps/studio/server/votekick-overlay/legacy/

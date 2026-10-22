@@ -380,6 +380,7 @@ export class VotekickEngine {
       yes: t.kick,
       no: t.save,
       outcome: overlayOutcome,
+      punished: punished?.login ?? '',
       minutes: verdict.minutes,
       mute_seconds: muteSeconds,
     });

@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Votekick — avant / après</title>
+    <!--
+      Local comparison (docs/VOTEKICK_V2.md § Aperçu): the legacy overlay (legacy/votekick-overlay.html, unchanged)
+      and the V2 overlay receive the SAME `votekick_update` events, scenario by scenario; the « Mute lab » replays the
+      end of the broadcaster's mute as SAMMI does it and as V2 does it, on a simulated camera. Served by
+      preview-server.mjs (same origin). Never OBS, never Twitch.
+    -->
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0e0b14;
+        --panel: #17121f;
+        --line: #2c2438;
+        --text: #f1edf7;
+        --muted: #a79fb6;
+        --gold: #f6c945;
+        --kick: #ff4d5e;
+        --save: #2fe08a;
+        font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 18px 24px 8px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+      h1 small {
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 14px;
+        margin-left: 8px;
+      }
+      h2 {
+        font-size: 17px;
+        margin: 26px 24px 10px;
+      }
+      p.note {
+        margin: 4px 24px;
+        color: var(--muted);
+        font-size: 14px;
+        max-width: 1100px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 10px 24px;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: rgba(14, 11, 20, 0.95);
+        border-bottom: 1px solid var(--line);
+      }
+      button {
+        font: 600 13px inherit;
+        font-family: inherit;
+        color: var(--text);
+        background: #241c30;
+        border: 1px solid #3a304a;
+        border-radius: 8px;
+        padding: 7px 11px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #31263f;
+      }
+      button.on {
+        border-color: var(--gold);
+      }
+      .sep {
+        width: 1px;
+        background: var(--line);
+        margin: 0 4px;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        padding: 12px 24px;
+      }
+      .col {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 10px;
+      }
+      .col h3 {
+        margin: 2px 4px 8px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .col h3 b {
+        color: var(--text);
+      }
+      .frame {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1;
+        overflow: hidden;
+        border-radius: 10px;
+      }
+      .frame.bg-dark {
+        background:
+          radial-gradient(60% 50% at 30% 20%, #3a2a55 0, transparent 70%),
+          #0d0a14;
+      }
+      .frame.bg-scene {
+        background: linear-gradient(
+          180deg,
+          #3d6b8f,
+          #8fb6c9 55%,
+          #6b8f4a 56%,
+          #3f5a2c
+        );
+      }
+      .frame.bg-check {
+        background: repeating-conic-gradient(#d9d9d9 0 25%, #f4f4f4 0 50%) 0 0 /
+          32px 32px;
+      }
+      .frame iframe {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1000px;
+        height: 1000px;
+        border: 0;
+        transform-origin: 0 0;
+        background: transparent;
+      }
+      .log {
+        margin-top: 8px;
+        height: 70px;
+        overflow: auto;
+        font:
+          12px ui-monospace,
+          Menlo,
+          Consolas,
+          monospace;
+        color: var(--muted);
+        white-space: pre-wrap;
+      }
+
+      /* Mute lab */
+      .lab {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        padding: 12px 24px 40px;
+      }
+      .cam {
+        position: relative;
+        height: 220px;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #222;
+      }
+      .cam .img {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(22% 30% at 50% 45%, #e8b38f 0 60%, transparent 61%),
+          radial-gradient(40% 30% at 50% 100%, #3b4f7a 0 70%, transparent 71%),
+          linear-gradient(180deg, #4b3a5e, #241b30);
+        transform-origin: 50% 50%;
+      }
+      .cam .tint {
+        position: absolute;
+        inset: 0;
+        background: rgba(217, 26, 31, 0.35);
+        opacity: 0;
+      }
+      .cam .band {
+        position: absolute;
+        left: -10%;
+        right: -10%;
+        top: 42%;
+        height: 44px;
+        transform: rotate(-15deg) scale(1);
+        background: repeating-linear-gradient(
+          45deg,
+          #111 0 14px,
+          #e22 14px 28px
+        );
+        display: grid;
+        place-items: center;
+        font-weight: 900;
+        letter-spacing: 0.3em;
+        color: #fff;
+        text-shadow: 0 2px 4px #000;
+        opacity: 0;
+      }
+      .cam .mic {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+        background: #000a;
+      }
+      .lanes {
+        margin-top: 10px;
+        font-size: 12px;
+      }
+      .lane {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        align-items: center;
+        gap: 8px;
+        margin: 4px 0;
+      }
+      .lane .track {
+        position: relative;
+        height: 14px;
+        background: #221b2c;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .lane .track i {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+      }
+      .verdict-line {
+        margin-top: 8px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .bad {
+        color: var(--kick);
+      }
+      .good {
+        color: var(--save);
+      }
+      label.drift {
+        font-size: 13px;
+        color: var(--muted);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>
+        Votekick — avant / après<small
+          >aperçu local, simulations uniquement</small
+        >
+      </h1>
+    </header>
+    <div class="controls" id="controls"></div>
+    <div class="pair">
+      <div class="col">
+        <h3><b>Avant</b> · legacy/votekick-overlay.html (SAMMI)</h3>
+        <div class="frame bg-dark" id="fLegacy">
+          <iframe
+            id="legacy"
+            src="legacy/votekick-overlay.html?vk=standby"
+            title="Votekick historique"
+          ></iframe>
+        </div>
+        <div class="log" id="logLegacy"></div>
+      </div>
+      <div class="col">
+        <h3><b>Après</b> · votekick.html (V2)</h3>
+        <div class="frame bg-dark" id="fV2">
+          <iframe
+            id="v2"
+            src="votekick.html?vk=standby"
+            title="Votekick V2"
+          ></iframe>
+        </div>
+        <div class="log" id="logV2"></div>
+      </div>
+    </div>
+
+    <h2>Mute lab — fin du mute du streamer (caméra simulée)</h2>
+    <p class="note">
+      Le streamer parle en continu ; la caméra « zoome » avec la voix tant que
+      le drive audio est actif. Rouge = défaut visible : effet qui réagit alors
+      que le bandeau a disparu, ou voix revenue alors que l'effet est encore là.
+      Délai SAMMI : chaque tour de sa boucle dure 1 s + le temps de ses
+      commandes, le bandeau (horloge du shader) finit donc avant le micro —
+      valeur réglable, à mesurer en réel.
+    </p>
+    <div class="controls" id="labControls"></div>
+    <div class="lab">
+      <div class="col" id="labLegacy">
+        <h3><b>SAMMI</b> · VK_MUTE_BROADCASTER / CAUTION_FINISH</h3>
+      </div>
+      <div class="col" id="labV2">
+        <h3><b>V2</b> · MuteController (déterministe)</h3>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        'use strict';
+        const $ = (id) => document.getElementById(id);
+        const frames = { legacy: $('legacy'), v2: $('v2') };
+        const logs = { legacy: $('logLegacy'), v2: $('logV2') };
+
+        // Scale the 1000 × 1000 sources into their frames.
+        function scale() {
+          for (const f of [$('fLegacy'), $('fV2')]) {
+            const s = f.clientWidth / 1000;
+            f.querySelector('iframe').style.transform = `scale(${s})`;
+          }
+        }
+        addEventListener('resize', scale);
+        scale();
+
+        // --- Events to both overlays -----------------------------------------------------------------------------
+        let seq = 0;
+        let n = 0;
+        let session = '';
+        const t0 = performance.now();
+        function send(e, { only } = {}) {
+          const event = { ...e, seq: ++seq };
+          for (const k of only ? [only] : ['legacy', 'v2']) {
+            const w = frames[k].contentWindow;
+            w.dispatchEvent(
+              new w.CustomEvent('votekick_update', { detail: event }),
+            );
+            const t = ((performance.now() - t0) / 1000).toFixed(1);
+            logs[k].textContent =
+              `${t}s ${event.action} ${event.session ?? ''} ${event.outcome ?? ''} K${event.yes ?? '-'} S${event.no ?? '-'}\n${logs[k].textContent}`.slice(
+                0,
+                2000,
+              );
+          }
+        }
+
+        // One scenario at a time: a new one cancels the previous one's steps.
+        let steps = [];
+        function scenario(list) {
+          for (const t of steps) clearTimeout(t);
+          steps = list.map(([ms, fn]) => setTimeout(fn, ms));
+        }
+        function open(dur = 20, extra = {}) {
+          session = `prev-${Date.now()}-${++n}`;
+          send({
+            action: 'live',
+            session,
+            target: 'VieweruMobilu',
+            initiator: 'LeCroupier_',
+            avatar: '',
+            yes: 1,
+            no: 0,
+            ends: Date.now() + dur * 1000,
+            ...extra,
+          });
+          return session;
+        }
+        const update = (yes, no, s = session) =>
+          send({ action: 'update', session: s, yes, no });
+        const result = (outcome, yes, no, minutes, mute = 0, s = session) =>
+          send({
+            action: 'result',
+            session: s,
+            yes,
+            no,
+            outcome,
+            minutes,
+            mute_seconds: mute,
+            target: 'VieweruMobilu',
+            initiator: 'LeCroupier_',
+          });
+        const clear = () => send({ action: 'clear' });
+
+        function verdictScenario(outcome, yes, no, minutes, mute = 0) {
+          return () =>
+            scenario([
+              [0, () => open(8)],
+              [500, () => update(Math.min(yes, 2), Math.min(no, 1))],
+              [1100, () => update(yes, no)],
+              [1800, () => result(outcome, yes, no, minutes, mute)],
+              [1800 + 7000, clear],
+            ]);
+        }
+
+        const SCENARIOS = [
+          [
+            'Vote complet (Condamné)',
+            () => {
+              const s = [[0, () => open(12)]];
+              let k = 1,
+                v = 0;
+              for (let i = 1; i <= 14; i++)
+                s.push([
+                  i * 700,
+                  () => (Math.random() < 0.62 ? k++ : v++, update(k, v)),
+                ]);
+              s.push([
+                12_200,
+                () =>
+                  result(
+                    'target_timeout',
+                    k,
+                    v,
+                    Math.max(
+                      5,
+                      Math.min(30, Math.round(5 + ((k - 2) * 25) / 18)),
+                    ),
+                  ),
+              ]);
+              s.push([19_200, clear]);
+              scenario(s);
+            },
+          ],
+          ['Perfect', verdictScenario('target_timeout_perfect', 8, 0, 26)],
+          ['Backfire', verdictScenario('backfire', 1, 7, 22)],
+          ['Pile/face → cible', verdictScenario('coinflip_target', 4, 4, 8)],
+          [
+            'Pile/face → initiateur',
+            verdictScenario('coinflip_initiator', 4, 4, 8),
+          ],
+          [
+            'Mute streamer',
+            verdictScenario('broadcaster_muted', 6, 0, 22, 110),
+          ],
+          ['Sauvé', verdictScenario('no_timeout', 2, 6, 0)],
+          ['Annulé', verdictScenario('no_quorum', 1, 1, 0)],
+          ['|'],
+          [
+            'Rafale ×25 (votes simultanés)',
+            () => {
+              open(20);
+              let k = 1,
+                v = 0;
+              for (let i = 0; i < 25; i++)
+                (Math.random() < 0.55 ? k++ : v++, update(k, v));
+            },
+          ],
+          [
+            'Nouveau vote pendant le verdict',
+            () =>
+              scenario([
+                [0, () => open(6)],
+                [400, () => update(4, 1)],
+                [900, () => result('target_timeout', 4, 1, 8)],
+                [3000, () => open(20, { target: 'NouvelleCible' })],
+                [3600, () => update(2, 1)],
+                // Legacy: its 6.5 s timer of the first verdict hides the new vote at 7.4 s. V2: kept.
+              ]),
+          ],
+          [
+            'Événement en retard',
+            () => {
+              const old = open(6);
+              scenario([
+                [300, () => update(3, 1, old)],
+                [800, () => result('target_timeout', 3, 1, 6, 0, old)],
+                // The old vote's update delivered late, after its verdict.
+                [
+                  1600,
+                  () =>
+                    send({
+                      action: 'update',
+                      session: old,
+                      yes: 99,
+                      no: 0,
+                      ends: Date.now() + 30000,
+                    }),
+                ],
+              ]);
+            },
+          ],
+          ['Clear', () => scenario([[0, clear]])],
+          ['|'],
+          [
+            'Fond',
+            () => {
+              const order = ['bg-dark', 'bg-scene', 'bg-check'];
+              for (const f of [$('fLegacy'), $('fV2')]) {
+                const i = order.findIndex((c) => f.classList.contains(c));
+                f.classList.remove(order[i]);
+                f.classList.add(order[(i + 1) % order.length]);
+              }
+            },
+          ],
+        ];
+        for (const [label, fn] of SCENARIOS) {
+          if (label === '|') {
+            const s = document.createElement('span');
+            s.className = 'sep';
+            $('controls').appendChild(s);
+            continue;
+          }
+          const b = document.createElement('button');
+          b.textContent = label;
+          b.addEventListener('click', fn);
+          $('controls').appendChild(b);
+        }
+
+        // --- Mute lab ------------------------------------------------------------------------------------------
+        // Simulated items: mic muted, band (shader: visible until its own clock's exit), zoom filter + drive.
+        // Times in ms from the start of the replay; the mute was decided to end at END (Core / SAMMI's plan).
+        const END = 1500;
+        const EXIT = 140; // anim_out_time 0.14 s (the band filter's setting in the 22/10 collection)
+        const REQ = 60; // one OBS request, estimate
+        let drift = 1000;
+
+        /** SAMMI's sequences → a list of [ms, change]. */
+        function legacy(kind) {
+          if (kind === 'caution') {
+            // CAUTION_CONFIRM 68–77: mic, 250 ms, mic, drive off, zoom 1, zoom off, band off (cut, no exit).
+            const t = END;
+            return {
+              bandShaderEnd: Infinity,
+              events: [
+                [t, 'mic_on'],
+                [t + 250 + REQ, 'mic_on'],
+                [t + 250 + 2 * REQ, 'drive_off'],
+                [t + 250 + 3 * REQ, 'zoom_reset'],
+                [t + 250 + 4 * REQ, 'zoom_off'],
+                [t + 250 + 5 * REQ, 'band_off'],
+              ],
+            };
+          }
+          // VK_MUTE_BROADCASTER 16–20: after its loop (late by `drift`): mic, drive off, zoom 1, zoom off, band off.
+          const t = END + drift;
+          return {
+            bandShaderEnd: END, // the shader fades the band at mute_duration on ITS clock
+            events: [
+              [t, 'mic_on'],
+              [t + REQ, 'drive_off'],
+              [t + 2 * REQ, 'zoom_reset'],
+              [t + 3 * REQ, 'zoom_off'],
+              [t + 4 * REQ, 'band_off'],
+            ],
+          };
+        }
+        /** V2: drive off, zoom reset (read back), zoom off, band exit played, then the mic — at END for both. */
+        function v2() {
+          const t = END;
+          return {
+            bandShaderEnd: t + 3 * REQ + REQ, // exit set at the end, plays EXIT ms
+            events: [
+              [t, 'drive_off'],
+              [t + REQ, 'zoom_reset'],
+              [t + 2 * REQ, 'zoom_reset'],
+              [t + 3 * REQ, 'zoom_off'],
+              [t + 4 * REQ + EXIT + 50, 'band_off'],
+              [t + 5 * REQ + EXIT + 50, 'mic_on'],
+            ],
+          };
+        }
+
+        function buildLab(root) {
+          root
+            .querySelectorAll('.cam,.lanes,.verdict-line')
+            .forEach((e) => e.remove());
+          const cam = document.createElement('div');
+          cam.className = 'cam';
+          cam.innerHTML =
+            '<div class="img"></div><div class="tint"></div><div class="band">MUTED · MUTED · MUTED</div><div class="mic"></div>';
+          const lanes = document.createElement('div');
+          lanes.className = 'lanes';
+          for (const [k, label] of [
+            ['mic', 'Micro ouvert'],
+            ['band', 'Bandeau visible'],
+            ['react', 'Caméra réactive'],
+            ['bad', 'Défaut visible'],
+          ]) {
+            lanes.insertAdjacentHTML(
+              'beforeend',
+              `<div class="lane"><span>${label}</span><div class="track" data-k="${k}"></div></div>`,
+            );
+          }
+          const line = document.createElement('div');
+          line.className = 'verdict-line';
+          root.append(cam, lanes, line);
+          return { cam, lanes, line };
+        }
+
+        let labRaf = 0;
+        function runLab(kind) {
+          cancelAnimationFrame(labRaf);
+          const plans = { legacy: legacy(kind), v2: v2() };
+          const views = {
+            legacy: buildLab($('labLegacy')),
+            v2: buildLab($('labV2')),
+          };
+          const total = END + Math.max(drift, 300) + 900;
+          const marks = {
+            legacy: { bad: 0, last: null },
+            v2: { bad: 0, last: null },
+          };
+          const start = performance.now();
+          const stateAt = (plan, t) => {
+            const s = {
+              mic: false,
+              drive: true,
+              zoomOn: true,
+              zoom: 1,
+              bandOn: true,
+            };
+            for (const [at, what] of plan.events) {
+              if (at > t) break;
+              if (what === 'mic_on') s.mic = true;
+              if (what === 'drive_off') s.drive = false;
+              if (what === 'zoom_reset') s.zoom = 1;
+              if (what === 'zoom_off') s.zoomOn = false;
+              if (what === 'band_off') s.bandOn = false;
+            }
+            return s;
+          };
+          const paint = (k, t) => {
+            const plan = plans[k];
+            const v = views[k];
+            const s = stateAt(plan, t);
+            const voice = 0.5 + 0.5 * Math.sin(t / 90) * Math.sin(t / 37);
+            const reacts = s.zoomOn && s.drive;
+            const zoom = reacts ? 1 + voice * 0.12 : s.zoomOn ? s.zoom : 1;
+            const bandOpacity = !s.bandOn
+              ? 0
+              : t < plan.bandShaderEnd
+                ? 1
+                : Math.max(0, 1 - (t - plan.bandShaderEnd) / EXIT);
+            v.cam.querySelector('.img').style.transform = `scale(${zoom})`;
+            v.cam.querySelector('.band').style.opacity = String(bandOpacity);
+            v.cam.querySelector('.tint').style.opacity = String(bandOpacity);
+            v.cam.querySelector('.mic').textContent = s.mic
+              ? '🎙️ voix ON'
+              : '🔇 micro coupé';
+            const bad =
+              (reacts && bandOpacity === 0) ||
+              (s.mic && (reacts || bandOpacity > 0));
+            const x = (t / total) * 100;
+            for (const [lane, on, color] of [
+              ['mic', s.mic, 'var(--save)'],
+              ['band', bandOpacity > 0, '#e22'],
+              ['react', reacts, 'var(--gold)'],
+              ['bad', bad, 'var(--kick)'],
+            ]) {
+              if (!on) continue;
+              const track = v.lanes.querySelector(`[data-k="${lane}"]`);
+              track.insertAdjacentHTML(
+                'beforeend',
+                `<i style="left:${x}%;width:1.2%;background:${color}"></i>`,
+              );
+            }
+            if (bad) marks[k].bad += 16;
+          };
+          const step = (now) => {
+            const t = now - start;
+            paint('legacy', t);
+            paint('v2', t);
+            if (t < total) labRaf = requestAnimationFrame(step);
+            else
+              for (const k of ['legacy', 'v2']) {
+                const ms = Math.round(marks[k].bad / 10) * 10;
+                views[k].line.innerHTML = ms
+                  ? `<span class="bad">≈ ${ms} ms de défaut visible</span>`
+                  : '<span class="good">Aucun défaut : bandeau, caméra et voix finissent ensemble, la voix en dernier.</span>';
+              }
+          };
+          labRaf = requestAnimationFrame(step);
+        }
+        const labButtons = [
+          ['Fin normale du mute', () => runLab('end')],
+          ['Caution payée pendant le mute', () => runLab('caution')],
+        ];
+        for (const [label, fn] of labButtons) {
+          const b = document.createElement('button');
+          b.textContent = label;
+          b.addEventListener('click', fn);
+          $('labControls').appendChild(b);
+        }
+        const d = document.createElement('label');
+        d.className = 'drift';
+        d.innerHTML =
+          'Retard de la boucle SAMMI <input type="range" min="0" max="3000" step="100" value="1000"> <output>1,0 s</output>';
+        d.querySelector('input').addEventListener('input', (e) => {
+          drift = Number(e.target.value);
+          d.querySelector('output').textContent =
+            `${(drift / 1000).toFixed(1).replace('.', ',')} s`;
+        });
+        $('labControls').appendChild(d);
+      })();
+    </script>
+  </body>
+</html>
