@@ -5,8 +5,11 @@
 // Dette UX connue : le défilement reste un peu saccadé ; à reprendre plus tard.
 const SPEED = 45; // px/s pendant l'aller (40 % de la boucle)
 
-/** Mesure le débordement à l'entrée du pointeur / du focus dans un élément `item` de `root`. */
-export function hoverMarquee(root, item, text) {
+/**
+ * Mesure le débordement à l'entrée du pointeur / du focus dans un élément `item` de `root`. `inner` (facultatif) :
+ * sous-élément de `text` qui porte lui-même l'ellipse (Soundboard) et dont on mesure le débordement.
+ */
+export function hoverMarquee(root, item, text, inner = null) {
   const arm = (event) => {
     const host = event.target.closest?.(item);
     const node = host && root.contains(host) ? host.querySelector(text) : null;
@@ -16,11 +19,14 @@ export function hoverMarquee(root, item, text) {
     if (node.dataset.marquee === key) return;
     node.dataset.marquee = key;
     node.classList.remove('rl-marquee');
-    const overflow = node.scrollWidth - node.clientWidth;
+    const box = (inner && node.querySelector(inner)) || node;
+    const overflow = box.scrollWidth - box.clientWidth;
     if (overflow <= 1) return;
     const distance = overflow + 6;
     node.style.setProperty('--mq-d', `${distance}px`);
     node.style.setProperty('--mq-t', `${Math.max(2.8, distance / SPEED / 0.4).toFixed(2)}s`);
+    // Un seul aller (Soundboard) : ~70 px/s, ni trop lent ni brusque.
+    node.style.setProperty('--mq-s', `${Math.min(3, Math.max(0.5, distance / 70)).toFixed(2)}s`);
     node.classList.add('rl-marquee');
   };
   root.addEventListener('pointerover', arm);

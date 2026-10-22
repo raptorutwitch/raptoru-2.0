@@ -214,8 +214,24 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     if (!shown.length) return '<p class="fine">En attente des premières inscriptions…</p>';
     return shown.map((p) => {
       const isMe = me && p.viewer_id === me.viewer_id;
-      return `<div class="row ${isMe ? 'me' : ''}">${avatar(p.display_name, p.avatar_url)}<span class="name">${esc(p.display_name)}${isMe ? ' <span class="muted">(toi)</span>' : ''}</span>${srcPill(p.source)}</div>`;
+      return `<div class="row ${isMe ? 'me' : ''}" data-v="${esc(p.viewer_id)}">${avatar(p.display_name, p.avatar_url)}<span class="name">${esc(p.display_name)}${isMe ? ' <span class="muted">(toi)</span>' : ''}</span>${srcPill(p.source)}</div>`;
     }).join('');
+  }
+  /**
+   * The rows are rewritten at each read while people join (newest first): the row at the top of the viewer's
+   * view stays exactly where it is, so a viewer scrolling down is never pulled back. At the very top, the
+   * newest arrivals stay visible.
+   */
+  function setRows(html) {
+    const list = body.querySelector('[data-slot="rows"]');
+    const scroller = list && win.getComputedStyle(list).overflowY === 'auto' ? list : body;
+    if (!list || scroller.scrollTop <= 0) return setSlot('rows', html);
+    const top = scroller.getBoundingClientRect().top;
+    const anchor = [...list.querySelectorAll('.row[data-v]')].find((r) => r.getBoundingClientRect().bottom > top);
+    const offset = anchor ? anchor.getBoundingClientRect().top - top : 0;
+    setSlot('rows', html);
+    const same = anchor && list.querySelector(`.row[data-v="${win.CSS.escape(anchor.dataset.v)}"]`);
+    if (same) scroller.scrollTop += same.getBoundingClientRect().top - top - offset;
   }
   // Aperçu de l'écran ouvert : 5 participants + « Tout voir » ; profil compact-video (tombola-v2.css pose
   // --tmbx-preview-all: 1 sur la racine) : toute la liste, qui défile seule, et plus de « Tout voir ».
@@ -422,14 +438,14 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       setSlot('count', `${ic('users')}<b>${r.participants}</b> participants`);
       setSlot('split', counts(r));
       setSlot('pcount', `Participants · ${r.participants}`);
-      setSlot('rows', rows(r, previewLimit()));
+      setRows(rows(r, previewLimit()));
       const hero = body.querySelector('.hero');
       hero?.classList.toggle('is-paused', !!r.paused);
       tick();
     } else if (key.startsWith('participants:')) {
       setSlot('pcount', `Participants · ${r.participants}`);
       setSlot('chips', chips());
-      setSlot('rows', rows(r));
+      setRows(rows(r));
     } else if (key === 'history') {
       setSlot('hcount', `Ce stream · ${data?.history?.length ?? 0}`);
       setSlot('hist', historyRows());

@@ -538,6 +538,8 @@ const SOUNDBOARD_HELP_PAGES = Object.freeze([
 export const EMOTE_AUTH_POLL_INTERVAL_MS = 2_000;
 export const EMOTE_AUTH_TIMEOUT_MS = 90_000;
 export const EMOTE_AUTH_POPUP_GRACE_MS = 5_000;
+/** Après une tentative, une autorisation vue plus tard par le serveur est encore confirmée pendant ce délai. */
+const EMOTE_AUTH_LATE_WINDOW_MS = 10 * 60_000;
 const ACTIONS_MODULE = Object.freeze({
   id: 'actions',
   label: 'Actions',
@@ -656,6 +658,28 @@ export function reorderSoundboardVisibleSubset(order, visibleIds, reorderedVisib
   }
   let cursor = 0;
   return base.map((id) => (visibleSet.has(id) ? nextVisible[cursor++] : id));
+}
+
+/** Insertion stricte : l'élément `from` prend la place `to`, seuls ceux d'entre les deux se décalent d'un rang. */
+export function moveSoundboardItem(ids, from, to) {
+  const next = Array.isArray(ids) ? [...ids] : [];
+  if (from < 0 || from >= next.length || to < 0 || to >= next.length || from === to) return next;
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
+/**
+ * Destination d'un glisser, lue sur les positions relevées au début du geste (jamais sur des cartes en
+ * mouvement). Le pointeur doit entrer franchement dans un emplacement (marge de 12 %) pour le choisir ; dans un
+ * interstice ou hors de la grille, la destination courante est gardée : pas d'aller-retour autour d'une frontière.
+ */
+export function soundboardDropSlot(slots, x, y, current) {
+  const hit = (Array.isArray(slots) ? slots : []).findIndex((slot) => (
+    x >= slot.left + slot.width * 0.12 && x <= slot.left + slot.width * 0.88
+    && y >= slot.top + slot.height * 0.12 && y <= slot.top + slot.height * 0.88
+  ));
+  return hit >= 0 ? hit : current;
 }
 
 export function normalizeSoundboardAlias(value, maxLength = SOUNDBOARD_ALIAS_MAX_LENGTH) {
@@ -1169,6 +1193,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let soundboardSearchClose = null;
   let soundboardDeselect = null;
   let soundboardDragCancel = null;
+  // Glisser Soundboard en cours : un nouvel état serveur attend la fin du geste (sinon la grille serait
+  // reconstruite sous le pointeur) et s'affiche juste après.
+  let soundboardDragging = false;
+  let soundboardRenderAfterDrag = false;
   // Compte à rebours des cooldowns Soundboard (mis à jour sur place, sans reconstruire la grille).
   let soundboardCooldownTimer = null;
   let soundboardVolumeHeaderButton = null;
@@ -1247,6 +1275,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let emoteAuthorizationPopup = null;
   let emoteAuthorizationPoller = null;
   let emoteAuthorizationFinishing = false;
+  // Autorisation des emotes vue par le viewer (en cours · autorisé · non confirmé · erreur) : redessinée à chaque
+  // render, elle ne se perd plus quand le panneau se reconstruit pendant que le viewer est dans la fenêtre Twitch.
+  let emoteAuthNotice = null;
+  let emoteAuthNoticeTimer = null;
+  let emoteAuthAttemptAt = 0;
   const drafts = {
     tts: { text: '' },
     soundboard: {
@@ -1527,7 +1560,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         raffle: { ...nextRaffle, joined: true },
       };
     }
+    const wasTwitchConnected = state?.emotes?.twitch_connected === true;
     state = next;
+    // Validation reconnue après la fin de l'attente (fenêtre fermée tôt, retour tardif) : confirmée quand même,
+    // dès que le serveur la voit — jamais avant.
+    if (!wasTwitchConnected && next?.emotes?.twitch_connected === true && !emoteAuthorizationPoller
+      && emoteAuthAttemptAt && Date.now() - emoteAuthAttemptAt < EMOTE_AUTH_LATE_WINDOW_MS) {
+      queueMicrotask(() => void confirmEmoteAuthorization({ refreshed: true }));
+    }
     if (previousKey !== nextKey) {
       emoteCatalogGeneration += 1;
       emoteCatalog = null;
@@ -1553,6 +1593,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       tombolaV2View.update(next);
       return;
     }
+    if (render && !unchanged && soundboardDragging) {
+      soundboardRenderAfterDrag = true;
+      return;
+    }
     if (render && !unchanged) renderPreservingViewport();
   }
 
@@ -1568,6 +1612,44 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function withoutTtsV2(value) {
     if (!value || !Array.isArray(value.modules)) return value;
     return { ...value, modules: value.modules.map((m) => (m.id === 'tts' ? { ...m, tts_v2: null } : m)) };
+  }
+
+  /** `kind` : pending · success · info · error ; null retire le message. */
+  function setEmoteAuthNotice(kind, text = '') {
+    clearTimeout(emoteAuthNoticeTimer);
+    emoteAuthNoticeTimer = null;
+    const notice = kind ? { kind, text } : null;
+    emoteAuthNotice = notice;
+    renderPreservingViewport();
+    if (!notice || kind === 'pending') return;
+    // Le viewer est peut-être encore dans la fenêtre Twitch : le résultat reste jusqu'à son retour sur
+    // l'extension (pointeur ou focus), puis 8 s.
+    const arm = () => {
+      document.removeEventListener('pointermove', arm);
+      document.removeEventListener('focusin', arm);
+      if (emoteAuthNotice !== notice) return;
+      emoteAuthNoticeTimer = setTimeout(() => {
+        if (emoteAuthNotice === notice) setEmoteAuthNotice(null);
+      }, 8_000);
+    };
+    document.addEventListener('pointermove', arm);
+    document.addEventListener('focusin', arm);
+  }
+
+  function emoteAuthNoticeView({ kind, text }) {
+    const box = el('div', `rl-emote-auth rl-emote-auth--${kind}`);
+    box.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    const mark = el('span', 'rl-emote-auth__mark', kind === 'success' ? '✓' : kind === 'error' ? '!' : kind === 'info' ? 'i' : '');
+    mark.setAttribute('aria-hidden', 'true');
+    box.append(mark, el('span', 'rl-emote-auth__text', text));
+    if (kind !== 'pending') {
+      const close = el('button', 'rl-emote-auth__close', '✕');
+      close.type = 'button';
+      close.setAttribute('aria-label', 'Fermer le message');
+      close.addEventListener('click', () => setEmoteAuthNotice(null));
+      box.append(close);
+    }
+    return box;
   }
 
   function closeEmoteAuthorizationPopup() {
@@ -1592,8 +1674,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       closeEmoteAuthorizationPopup();
       emoteAuthorizationStarting = false;
       renderPreservingViewport();
+      emoteAuthAttemptAt = 0;
+      setEmoteAuthNotice('success', 'Emotes Twitch connectées : tes emotes personnelles sont disponibles.');
       await loadEmotes({ force: true });
-      flash(root, 'Emotes Twitch connectées.', 'ok');
       return true;
     } catch {
       // Le polling garde la main si une relecture transitoire échoue.
@@ -1621,7 +1704,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         if (reason === 'success') return;
         emoteAuthorizationStarting = false;
         closeEmoteAuthorizationPopup();
-        renderPreservingViewport();
+        if (reason === 'timeout' || reason === 'popup_closed') {
+          setEmoteAuthNotice('info', 'Autorisation non confirmée. Si tu viens de valider sur Twitch, la confirmation s’affichera ici ; sinon, réessaie.');
+        } else renderPreservingViewport();
       },
     });
     emoteAuthorizationPoller = poller;
@@ -1849,15 +1934,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         || authorizationUrl.hostname !== 'id.twitch.tv'
         || authorizationUrl.pathname !== '/oauth2/authorize'
       ) throw new Error('invalid_oauth_url');
+      emoteAuthAttemptAt = Date.now();
       if (popup) {
         popup.location.replace(authorizationUrl.href);
         startEmoteAuthorizationPolling();
-        flash(node, 'Autorise user:read:emotes dans la fenêtre Twitch, puis reviens ici.', 'ok');
+        setEmoteAuthNotice('pending', 'Autorisation en cours : valide dans la fenêtre Twitch, la confirmation s’affichera ici.');
       } else {
         // Studio answers null too when it opened the system browser: the message covers both cases.
         window.open(authorizationUrl.href, '_blank');
         startEmoteAuthorizationPolling();
-        flash(node, 'Connexion Twitch ouverte dans ton navigateur. Si rien ne s’ouvre, autorise les fenêtres Twitch.', 'ok');
+        setEmoteAuthNotice('pending', 'Connexion Twitch ouverte dans ton navigateur : valide, puis reviens ici. Si rien ne s’ouvre, autorise les fenêtres Twitch.');
       }
     } catch (error) {
       const poller = emoteAuthorizationPoller;
@@ -1866,8 +1952,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       try { popup.close(); } catch { /* fenêtre déjà fermée */ }
       closeEmoteAuthorizationPopup();
       emoteAuthorizationStarting = false;
-      renderPreservingViewport();
-      flash(node, errorLabel(error?.code), 'error');
+      setEmoteAuthNotice('error', `Autorisation Twitch impossible : ${errorLabel(error?.code)}`);
     }
   }
 
@@ -2513,7 +2598,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     grid.setAttribute('role', 'list');
     grid.setAttribute('aria-label', 'Catalogue Soundboard');
     grid.dataset.scrollKey = 'soundboard-grid';
-    hoverMarquee(grid, '.sbx-card', '.sbx-card__name');
+    hoverMarquee(grid, '.sbx-card', '.sbx-card__name', '.sbx-card__label');
 
     const visibleSounds = () => {
       let candidates = sounds.filter((sound) => soundboardSoundMatchesQuery(sound, drafts.soundboard.query, aliases));
@@ -2583,9 +2668,23 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       selectedSound = String(sound.id);
       drafts.soundboard.selectedId = selectedSound;
       setActionState();
+      // La barre d'action grandit à la sélection : la carte choisie reste entièrement visible dans la grille.
+      requestAnimationFrame(() => {
+        const card = grid.querySelector('.sbx-card.is-selected');
+        if (!card) return;
+        const view = grid.getBoundingClientRect();
+        const rect = card.getBoundingClientRect();
+        if (rect.bottom > view.bottom) grid.scrollTop += rect.bottom - view.bottom + 6;
+        else if (rect.top < view.top) grid.scrollTop -= view.top - rect.top + 4;
+      });
     };
 
-    // Réordonnancement personnel (tri « Mon ordre ») : appui long puis glisser, ou Alt+flèches.
+    // Réordonnancement personnel (tri « Mon ordre ») : appui long puis glisser, ou Alt+flèches. Insertion stricte
+    // (moveSoundboardItem) : seules les cartes entre l'origine et la destination se décalent d'une place. Pendant le
+    // geste, aucune carte ne change de place dans le DOM : les positions sont relevées au départ (soundboardDropSlot
+    // les lit, la destination ne dépend donc jamais de cartes en mouvement), la carte suit le pointeur et les autres
+    // glissent en transform. Au lâcher, les mêmes nœuds sont remis dans le nouvel ordre (aucune reconstruction, aucun
+    // flash) et l'ordre est enregistré une seule fois. Échap, pointercancel ou un rendu forcé annulent sans rien écrire.
     let dragPending = null;
     let dragSession = null;
     let dragJustDroppedId = null;
@@ -2609,102 +2708,140 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       if (current.timer !== null) globalThis.clearTimeout?.(current.timer);
       current.detach?.();
     };
-    const positionDraggedItem = (session, event) => {
-      session.item.style.setProperty('--sbx-drag-x', `${(Number(event.clientX) || 0) - session.offsetX}px`);
-      session.item.style.setProperty('--sbx-drag-y', `${(Number(event.clientY) || 0) - session.offsetY}px`);
+    /** Nouvel ordre visible : ordre personnel enregistré, puis les mêmes nœuds remis en place (pas de rendu). */
+    const applyVisibleOrder = (visibleIds, nextIds) => {
+      customOrder = reorderSoundboardVisibleSubset(customOrder, visibleIds, nextIds);
+      writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
+      const byId = new Map([...grid.querySelectorAll('.sbx-card')].map((card) => [String(card.dataset.soundId), card]));
+      grid.append(...nextIds.map((id) => byId.get(id)).filter(Boolean));
     };
-    const moveDragPlaceholder = (session, event) => {
-      const x = Number(event.clientX) || 0;
-      const y = Number(event.clientY) || 0;
-      let target = null;
-      let targetRect = null;
-      let nearest = Number.POSITIVE_INFINITY;
-      for (const candidate of grid.querySelectorAll('.sbx-card')) {
-        const rect = candidate.getBoundingClientRect();
-        const distance = ((rect.left + rect.width / 2) - x) ** 2 + ((rect.top + rect.height / 2) - y) ** 2;
-        if (distance < nearest) {
-          nearest = distance;
-          target = candidate;
-          targetRect = rect;
-        }
+    const layoutDrag = (session) => {
+      const { slots, cards, from } = session;
+      const box = grid.getBoundingClientRect();
+      const x = session.pointerX - box.left;
+      const y = session.pointerY - box.top + grid.scrollTop;
+      // La carte suit le pointeur avec la même prise qu'au départ, y compris quand la grille défile.
+      const origin = slots[from];
+      session.item.style.transform = `translate(${x - session.grabX - origin.left}px, ${y - session.grabY - origin.top}px) scale(1.04)`;
+      const target = soundboardDropSlot(slots, x, y, session.target);
+      if (target === session.target) return;
+      session.target = target;
+      cards.forEach((card, index) => {
+        if (index === from) return;
+        const next = index > from && index <= target ? index - 1 : index < from && index >= target ? index + 1 : index;
+        card.style.transform = next === index
+          ? ''
+          : `translate(${slots[next].left - slots[index].left}px, ${slots[next].top - slots[index].top}px)`;
+      });
+      session.marker.style.transform = `translate(${slots[target].left}px, ${slots[target].top}px)`;
+    };
+    // Bord haut / bas de la grille pendant le glisser : elle défile seule.
+    const autoScroll = (session) => {
+      if (dragSession !== session) return;
+      const box = grid.getBoundingClientRect();
+      const edge = Math.min(36, box.height / 4);
+      const step = session.pointerY < box.top + edge ? -7 : session.pointerY > box.bottom - edge ? 7 : 0;
+      if (step) {
+        const before = grid.scrollTop;
+        grid.scrollTop += step;
+        if (grid.scrollTop !== before) layoutDrag(session);
       }
-      if (!target) {
-        grid.append(session.placeholder);
-        return;
-      }
-      const before = y < targetRect.top + targetRect.height / 2
-        || (Math.abs(y - (targetRect.top + targetRect.height / 2)) < targetRect.height / 2
-          && x < targetRect.left + targetRect.width / 2);
-      const sibling = before ? target : target.nextSibling;
-      if (sibling === session.placeholder) return;
-      if (sibling) grid.insertBefore(session.placeholder, sibling);
-      else grid.append(session.placeholder);
+      session.frame = globalThis.requestAnimationFrame?.(() => autoScroll(session)) ?? null;
+    };
+    const onDragKey = (event) => {
+      if (event.key !== 'Escape' || !dragSession) return;
+      event.preventDefault();
+      event.stopPropagation();
+      finishDrag();
     };
     const finishDrag = ({ commit = false } = {}) => {
       clearDragPending();
       const session = dragSession;
       if (!session) return;
       dragSession = null;
-      session.detach?.();
-      const parent = session.placeholder.parentNode;
-      if (parent && !commit) {
-        const reference = [...grid.querySelectorAll('.sbx-card')][session.visibleIds.indexOf(session.soundId)] ?? null;
-        if (reference) parent.insertBefore(session.placeholder, reference);
-      }
-      if (parent) parent.replaceChild(session.item, session.placeholder);
-      session.item.classList.remove('is-dragging');
-      session.item.style.removeProperty('--sbx-drag-x');
-      session.item.style.removeProperty('--sbx-drag-y');
-      session.item.style.removeProperty('--sbx-drag-w');
-      session.item.style.removeProperty('--sbx-drag-h');
-      grid.classList.remove('is-dragging');
+      soundboardDragging = false;
       soundboardDragCancel = null;
-      if (!commit) return;
-      const reordered = [...grid.querySelectorAll('.sbx-card')].map((item) => String(item.dataset.soundId));
-      customOrder = reorderSoundboardVisibleSubset(customOrder, session.visibleIds, reordered);
-      writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
+      session.detach?.();
+      if (session.frame !== null) globalThis.cancelAnimationFrame?.(session.frame);
+      grid.removeEventListener('scroll', session.onScroll);
+      globalThis.removeEventListener?.('keydown', onDragKey, true);
+      session.marker.remove();
+      const { item, cards, from, target, visibleIds } = session;
+      // Le clic qui suit le lâcher n'est ni une sélection ni une désélection.
       dragJustDroppedId = session.soundId;
-      renderGrid();
       globalThis.setTimeout?.(() => {
         if (dragJustDroppedId === session.soundId) dragJustDroppedId = null;
       }, 0);
+      if (!item.isConnected) return;
+      const dropped = item.getBoundingClientRect();
+      grid.classList.add('is-settling');
+      for (const card of cards) card.style.transform = '';
+      if (commit && target !== from) applyVisibleOrder(visibleIds, moveSoundboardItem(visibleIds, from, target));
+      // La carte part de là où elle a été lâchée et rejoint sa place ; les autres y sont déjà.
+      const landed = item.getBoundingClientRect();
+      item.style.transform = `translate(${dropped.left - landed.left}px, ${dropped.top - landed.top}px)`;
+      void item.offsetWidth;
+      grid.classList.remove('is-settling', 'is-dragging');
+      item.classList.remove('is-dragging');
+      item.style.transform = '';
+      if (soundboardRenderAfterDrag) {
+        soundboardRenderAfterDrag = false;
+        globalThis.setTimeout?.(() => renderPreservingViewport(), 220);
+      }
     };
     const beginDrag = (current) => {
       if (dragPending !== current || dragSession || drafts.soundboard.sort !== 'custom') return;
       current.detach?.();
       dragPending = null;
       const item = current.item;
-      const parent = item?.parentNode;
-      if (!parent) return;
-      const rect = item.getBoundingClientRect();
-      const placeholder = el('div', 'sbx-card-placeholder');
-      placeholder.setAttribute('aria-hidden', 'true');
-      placeholder.style.setProperty('--sbx-drag-h', `${rect.height}px`);
-      const visibleIds = [...grid.querySelectorAll('.sbx-card')].map((candidate) => String(candidate.dataset.soundId));
-      parent.insertBefore(placeholder, item);
-      root.append(item);
-      item.classList.add('is-dragging');
+      const cards = [...grid.querySelectorAll('.sbx-card')];
+      const from = cards.indexOf(item);
+      if (from < 0) return;
+      const box = grid.getBoundingClientRect();
+      const slots = cards.map((card) => {
+        const rect = card.getBoundingClientRect();
+        return { left: rect.left - box.left, top: rect.top - box.top + grid.scrollTop, width: rect.width, height: rect.height };
+      });
+      const marker = el('div', 'sbx-drop-slot');
+      marker.setAttribute('aria-hidden', 'true');
+      marker.style.width = `${slots[from].width}px`;
+      marker.style.height = `${slots[from].height}px`;
+      grid.append(marker);
       grid.classList.add('is-dragging');
-      item.style.setProperty('--sbx-drag-w', `${rect.width}px`);
-      item.style.setProperty('--sbx-drag-h', `${rect.height}px`);
+      item.classList.add('is-dragging');
       const session = {
         item,
-        placeholder,
+        cards,
+        slots,
+        from,
+        target: -1,
+        marker,
         soundId: current.soundId,
         pointerId: current.pointerId,
-        offsetX: current.clientX - rect.left,
-        offsetY: current.clientY - rect.top,
-        visibleIds,
+        grabX: current.clientX - box.left - slots[from].left,
+        grabY: current.clientY - box.top + grid.scrollTop - slots[from].top,
+        pointerX: current.lastX ?? current.clientX,
+        pointerY: current.lastY ?? current.clientY,
+        visibleIds: cards.map((card) => String(card.dataset.soundId)),
         detach: null,
+        frame: null,
+        onScroll: null,
       };
       dragSession = session;
-      positionDraggedItem(session, current);
+      soundboardDragging = true;
+      session.target = from;
+      session.marker.style.transform = `translate(${slots[from].left}px, ${slots[from].top}px)`;
+      session.onScroll = () => layoutDrag(session);
+      grid.addEventListener('scroll', session.onScroll, { passive: true });
+      globalThis.addEventListener?.('keydown', onDragKey, true);
+      layoutDrag(session);
       session.detach = bindGlobalPointerTracking(
         (event) => {
           if (event.pointerId !== session.pointerId) return;
           event.preventDefault?.();
-          positionDraggedItem(session, event);
-          moveDragPlaceholder(session, event);
+          session.pointerX = Number(event.clientX) || 0;
+          session.pointerY = Number(event.clientY) || 0;
+          layoutDrag(session);
         },
         (event) => {
           if (event.pointerId !== session.pointerId) return;
@@ -2715,8 +2852,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           if (event.pointerId === session.pointerId) finishDrag();
         },
       );
+      session.frame = globalThis.requestAnimationFrame?.(() => autoScroll(session)) ?? null;
       soundboardDragCancel = () => finishDrag();
     };
+    // Tactile : une fois le glisser commencé, le doigt déplace la carte, pas la grille (sinon pointercancel).
+    grid.addEventListener('touchmove', (event) => {
+      if (dragSession && event.cancelable) event.preventDefault();
+    }, { passive: false });
     const dragExcludedTarget = (target) => Boolean(target?.closest?.('.sbx-card__play, .sbx-card__fav, .sbx-alias'));
     const startDragPending = (item, soundId, event) => {
       if (drafts.soundboard.sort !== 'custom' || drafts.soundboard.view !== 'all' || dragSession
@@ -2730,6 +2872,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         pointerId,
         clientX: Number(event.clientX) || 0,
         clientY: Number(event.clientY) || 0,
+        lastX: null,
+        lastY: null,
         timer: null,
         detach: null,
       };
@@ -2737,9 +2881,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       current.detach = bindGlobalPointerTracking(
         (moveEvent) => {
           if (moveEvent.pointerId !== pointerId || dragPending !== current) return;
-          const dx = (Number(moveEvent.clientX) || 0) - current.clientX;
-          const dy = (Number(moveEvent.clientY) || 0) - current.clientY;
-          if (Math.hypot(dx, dy) > 10) clearDragPending();
+          current.lastX = Number(moveEvent.clientX) || 0;
+          current.lastY = Number(moveEvent.clientY) || 0;
+          // Bouger avant l'appui long = clic ou défilement, jamais un déplacement.
+          if (Math.hypot(current.lastX - current.clientX, current.lastY - current.clientY) > 10) clearDragPending();
         },
         (upEvent) => {
           if (upEvent.pointerId === pointerId && dragPending === current) clearDragPending();
@@ -2762,13 +2907,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const delta = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : key === 'ArrowUp' ? -columns : columns;
       const target = Math.min(visibleIds.length - 1, Math.max(0, index + delta));
       if (target === index) return false;
-      const reordered = [...visibleIds];
-      [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
-      customOrder = reorderSoundboardVisibleSubset(customOrder, visibleIds, reordered);
-      writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
-      renderGrid();
-      queueMicrotask(() => grid.querySelector(`.sbx-card[data-sound-id="${CSS.escape(String(soundId))}"] .sbx-card__main`)
-        ?.focus({ preventScroll: true }));
+      // Même règle que le glisser : insertion, jamais d'échange.
+      applyVisibleOrder(visibleIds, moveSoundboardItem(visibleIds, index, target));
+      grid.querySelector(`.sbx-card[data-sound-id="${CSS.escape(String(soundId))}"] .sbx-card__main`)
+        ?.focus({ preventScroll: true });
       return true;
     };
 
@@ -2842,7 +2984,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const main = card.querySelector('.sbx-card__main');
       main.disabled = Boolean(unavailable);
       main.setAttribute('aria-pressed', String(selected));
-      main.title = unavailable ? unavailable.hint : aliases[soundId] ? `Nom original : ${sound.label ?? soundId}` : '';
+      main.title = unavailable ? unavailable.hint : aliases[soundId] ? `Nom original : ${sound.label ?? soundId}` : displayLabelFor(sound);
       const meta = card.querySelector('.sbx-card__meta');
       meta.replaceChildren();
       if (unavailable?.kind === 'cooldown') {
@@ -2898,7 +3040,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       });
 
       const text = el('span', 'sbx-card__text');
-      text.append(el('span', 'sbx-card__name', label), el('span', 'sbx-card__meta'));
+      const name = el('span', 'sbx-card__name');
+      // Sous-élément : porte l'ellipse au repos et glisse (transform) au survol en vue compacte.
+      name.append(el('span', 'sbx-card__label', label));
+      text.append(name, el('span', 'sbx-card__meta'));
 
       const fav = el('button', 'sbx-card__fav');
       fav.type = 'button';
@@ -2938,6 +3083,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       });
       card.addEventListener('pointerdown', (event) => startDragPending(card, soundId, event));
       card.addEventListener('contextmenu', (event) => {
+        // Appui long tactile : le menu contextuel ne doit ni ouvrir le nom personnel ni couper le déplacement.
+        if (dragSession || dragPending) {
+          event.preventDefault();
+          return;
+        }
         if (dragExcludedTarget(event.target)) return;
         event.preventDefault();
         openAliasEditor(sound, card, main);
@@ -2972,6 +3122,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     };
 
     grid.addEventListener('click', (event) => {
+      // Clic de fin de glisser (pointeur relâché sur une autre carte) : ni sélection ni désélection globale.
+      if (dragJustDroppedId) {
+        event.stopPropagation();
+        return;
+      }
       if (event.target === grid || event.target?.closest?.('.sbx-empty')) deselectSound();
     });
     search.addEventListener('input', () => {
@@ -3094,7 +3249,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         },
       });
       const eyebrow = barNotice || (!sound
-        ? mod.player_ready === false ? 'Lecteur du Studio hors ligne' : 'Écoute avec ▶, puis choisis'
+        ? mod.player_ready === false ? 'Lecteur du Studio hors ligne' : 'Écoute avec ▶, puis choisis un son'
         : hint || 'Prêt à envoyer');
       barEyebrow.textContent = eyebrow;
       barEyebrow.dataset.tone = barNotice || hint || mod.player_ready === false ? 'warn' : sound ? 'ok' : 'muted';
@@ -5533,6 +5688,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
 
     syncNotificationCenter(state);
+    if (emoteAuthNotice) root.append(emoteAuthNoticeView(emoteAuthNotice));
 
     const experience = resolveExperience(state);
     root.dataset.theme = experience.theme.id;

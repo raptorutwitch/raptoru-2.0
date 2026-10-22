@@ -288,3 +288,98 @@
 .bkt__action { width: 100%; min-height: 31px; }
 .bkt__em { color: #ffc28a; font-weight: 800; }
 @media (prefers-reduced-motion: reduce) { .bkt__hole, .bkc.is-empty .bkc-car::before { transition: none; animation: none; } }
+
+/* Autorisation des emotes Twitch (ui.js, setEmoteAuthNotice) : état visible au-dessus de l'extension,
+   quel que soit l'écran — en cours, autorisé, non confirmé, erreur. Fermable, jamais sous le contenu. */
+.rl-emote-auth {
+  position: fixed;
+  z-index: 60;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  max-width: 460px;
+  align-items: center;
+  gap: 9px;
+  margin: 0 auto;
+  padding: 8px 8px 8px 10px;
+  box-sizing: border-box;
+  border: 1px solid rgba(196, 164, 255, 0.35);
+  border-radius: 12px;
+  background: rgba(22, 16, 38, 0.97);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  color: #e9e1fb;
+  font: 600 12px/1.35 system-ui, sans-serif;
+  animation: rl-emote-auth-in 0.2s ease-out;
+}
+.rl-emote-auth--success {
+  border-color: rgba(94, 230, 160, 0.5);
+}
+.rl-emote-auth--error {
+  border-color: rgba(255, 122, 138, 0.55);
+}
+.rl-emote-auth__mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: #a78bfa;
+  color: #170d2b;
+  font-size: 11px;
+  font-weight: 900;
+}
+.rl-emote-auth--pending .rl-emote-auth__mark {
+  box-sizing: border-box;
+  border: 2px solid rgba(196, 164, 255, 0.35);
+  border-top-color: #c4a4ff;
+  background: none;
+  animation: rl-emote-auth-spin 0.8s linear infinite;
+}
+.rl-emote-auth--success .rl-emote-auth__mark {
+  background: #5ee6a0;
+  color: #06291a;
+}
+.rl-emote-auth--error .rl-emote-auth__mark {
+  background: #ff7a8a;
+  color: #2a0610;
+}
+.rl-emote-auth__text {
+  min-width: 0;
+  flex: 1;
+}
+.rl-emote-auth__close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cfc4e6;
+  font-size: 12px;
+  cursor: pointer;
+}
+.rl-emote-auth__close:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 1px;
+}
+@keyframes rl-emote-auth-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes rl-emote-auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rl-emote-auth,
+  .rl-emote-auth--pending .rl-emote-auth__mark {
+    animation: none;
+  }
+}

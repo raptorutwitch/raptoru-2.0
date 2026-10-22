@@ -42,4 +42,12 @@ describe('currencies in compact surfaces', () => {
     expect(html).toContain('>Cr</span>');
     expect(html).not.toMatch(/Soundboard|Sons/);
   });
+
+  it('Jetons: the wallet coin, named « Jetons », never the abbreviation « Je »', () => {
+    const html = moneyHtml(20000, tokens);
+    expect(html).toContain('20 000&nbsp;');
+    expect(html).toContain('<svg');
+    expect(html).toContain('aria-label="Jetons"');
+    expect(html).not.toMatch(/>Je</);
+  });
 });

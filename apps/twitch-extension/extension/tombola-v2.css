@@ -879,7 +879,7 @@ body.mobile:has(.tmbx) .m-body { height: 100vh; max-height: 100vh; overflow: hid
 }
 
 @media (min-width: 560px) {
-  .tmbx .grid2 { display: grid; grid-template-columns: 250px 1fr; gap: 14px; align-items: start; }
+  .tmbx .grid2 { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: start; }
   .tmbx .grid2 .sec:first-child { margin-top: 0; }
 }
 
@@ -960,6 +960,11 @@ body.mobile:has(.tmbx) .m-body { height: 100vh; max-height: 100vh; overflow: hid
 .tmbx .t-amount .cur-u {
   font-family: var(--t-num);
   font-size: 0.52em;
+}
+/* Jetons = la pièce du wallet : un peu plus grande que l'ancien « Je » pour rester lisible à côté du montant. */
+.tmbx .t-amount .cur-u[data-tone='tokens'] {
+  margin-left: 0.12em;
+  font-size: 0.68em;
 }
 /* Inside rows whose spans are blocks (history, « Dernière »): the amount group stays one inline line. */
 .tmbx .h .w .cur-amt,

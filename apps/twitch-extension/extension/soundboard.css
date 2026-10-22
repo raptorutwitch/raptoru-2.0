@@ -690,25 +690,43 @@ body.component-view .sbx {
   font-size: 13px;
 }
 
-/* Réordonnancement (tri « Mon ordre »). */
-.sbx-card-placeholder {
-  height: var(--sbx-drag-h, 62px);
-  box-sizing: border-box;
-  border: 1.5px dashed rgba(196, 164, 255, 0.45);
-  border-radius: 13px;
-  background: rgba(184, 115, 255, 0.06);
+/* Réordonnancement (tri « Mon ordre ») — ui.js : la carte saisie suit le pointeur, les autres glissent vers
+   leur nouvelle place (transform seulement, la grille ne bouge pas), l'emplacement de destination est en pointillés. */
+.sbx-grid.is-dragging {
+  position: relative;
+  user-select: none;
+}
+.sbx-grid.is-dragging .sbx-card {
+  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.sbx-grid.is-dragging .sbx-card.is-dragging,
+.sbx-grid.is-settling .sbx-card {
+  transition: none;
 }
 .sbx-card.is-dragging {
-  position: fixed;
-  z-index: 1000;
-  top: var(--sbx-drag-y);
-  left: var(--sbx-drag-x);
-  width: var(--sbx-drag-w);
-  height: var(--sbx-drag-h);
+  z-index: 20;
   border-color: rgba(222, 180, 255, 0.8);
   box-shadow: 0 16px 30px rgba(0, 0, 0, 0.5), 0 0 18px rgba(184, 115, 255, 0.35);
+  cursor: grabbing;
   pointer-events: none;
-  transform: rotate(-1.5deg) scale(1.03);
+}
+.sbx-drop-slot {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border: 1.5px dashed rgba(214, 180, 255, 0.7);
+  border-radius: 13px;
+  background: rgba(184, 115, 255, 0.1);
+  pointer-events: none;
+  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sbx-grid.is-dragging .sbx-card,
+  .sbx-drop-slot {
+    transition: none;
+  }
 }
 
 /* Nom personnel (clic droit / Maj+F2). */
@@ -834,6 +852,18 @@ body.component-view .sbx {
 .sbx-bar[data-empty='true'] {
   border-color: rgba(196, 164, 255, 0.14);
   background: linear-gradient(180deg, rgba(40, 30, 66, 0.9), rgba(28, 21, 48, 0.94));
+}
+/* Aucun son choisi : une seule ligne discrète (l'instruction), la place va à la liste. Monnaie, prix
+   et Envoyer reviennent dès qu'un son est sélectionné. */
+.sbx-bar[data-empty='true'] {
+  display: block;
+  padding: 6px 12px;
+  border-radius: 11px;
+  box-shadow: none;
+}
+.sbx-bar[data-empty='true'] > :not(.sbx-bar__sound),
+.sbx-bar[data-empty='true'] .sbx-bar__name {
+  display: none;
 }
 .sbx-bar__sound {
   display: flex;
@@ -1237,75 +1267,81 @@ html body .jdm-module__screen-title:has(> .sbx-vol) {
 }
 
 /* --- Profil compact-video : Video Component 65 % · 3:2 (565×376 mesuré sur Twitch, validé le 14/10/2026) ---
-   Même fenêtre dans hub.css, tts-v2.css, soundboard.css, tombola-v2.css : largeur ≥ 521 px, hauteur 321–400 px.
-   4 colonnes, cartes 42 px, en-tête et paiement compacts ; seule la grille défile. Noms longs : « … » au
+   Même fenêtre dans hub.css, tts-v2.css, tombola-v2.css : largeur ≥ 521 px, hauteur 321–400 px. La Soundboard
+   l'applique à toute fenêtre de 400 px de haut ou moins (petit lecteur, fenêtre flottante, mobile paysage,
+   quelle que soit la largeur) ; « :root body » garde la spécificité de l'ancien « body.component-view ».
+   Cartes 42 px, en-tête et paiement compacts ; seule la grille défile. Noms longs : « … » au
    repos, défilement local au survol / focus seulement (shared/hover-marquee.js) — dette UX : encore un
    peu saccadé, à reprendre. */
-@media (min-width: 521px) and (min-height: 321px) and (max-height: 400px) {
-  body.component-view .sbx-head {
+@media (max-height: 400px) {
+  /* Cartes 108 px mini : 3 colonnes dès ~350 px de large (cas zoom 125–150 %), 4 au-delà de ~460 px. */
+  :root body .sbx {
+    --sbx-min: 108px;
+  }
+  :root body .sbx-head {
     gap: 5px;
   }
-  body.component-view .sbx-search {
+  :root body .sbx-search {
     height: 28px;
     border-radius: 10px;
   }
-  body.component-view .sbx-iconbtn {
+  :root body .sbx-iconbtn {
     width: 28px;
     height: 28px;
     border-radius: 9px;
   }
-  body.component-view .sbx-iconbtn .sbx-icon {
+  :root body .sbx-iconbtn .sbx-icon {
     width: 14px;
     height: 14px;
   }
-  body.component-view .sbx-filters {
+  :root body .sbx-filters {
     padding: 2px;
     border-radius: 9px;
   }
-  body.component-view .sbx-filter {
+  :root body .sbx-filter {
     height: 20px;
     padding: 0 8px;
     border-radius: 7px;
     font-size: 11px;
   }
-  body.component-view .sbx-status {
+  :root body .sbx-status {
     height: 20px;
   }
 
-  body.component-view .sbx-grid {
+  :root body .sbx-grid {
     grid-auto-rows: 42px;
     gap: 5px 6px;
     padding: 3px 4px;
   }
-  body.component-view .sbx-card {
+  :root body .sbx-card {
     border-radius: 11px;
   }
-  body.component-view .sbx-card.is-selected {
+  :root body .sbx-card.is-selected {
     transform: translateY(-1px);
   }
-  body.component-view .sbx-card.is-selected::before {
+  :root body .sbx-card.is-selected::before {
     top: 9px;
     bottom: 9px;
   }
-  body.component-view .sbx-card__play {
+  :root body .sbx-card__play {
     width: 24px;
     height: 24px;
     margin-left: 6px;
     border-radius: 7px;
   }
-  body.component-view .sbx-card__play .sbx-icon {
+  :root body .sbx-card__play .sbx-icon {
     width: 12px;
     height: 12px;
     margin-left: 1px;
   }
-  body.component-view .sbx-card__play .sbx-eq {
+  :root body .sbx-card__play .sbx-eq {
     height: 11px;
   }
-  body.component-view .sbx-card__text {
+  :root body .sbx-card__text {
     gap: 3px;
     margin: 0 6px;
   }
-  body.component-view .sbx-card__name {
+  :root body .sbx-card__name {
     display: block;
     overflow: hidden;
     font-size: 12px;
@@ -1314,51 +1350,121 @@ html body .jdm-module__screen-title:has(> .sbx-vol) {
     white-space: nowrap;
     hyphens: none;
   }
-  body.component-view .sbx-card__meta {
+  :root body .sbx-card__meta {
     padding-right: 18px;
   }
-  body.component-view .sbx-card__fav {
+  :root body .sbx-card__fav {
     top: auto;
     right: 2px;
     bottom: 2px;
     width: 18px;
     height: 18px;
   }
-  body.component-view .sbx-card__fav .sbx-icon {
+  :root body .sbx-card__fav .sbx-icon {
     width: 12px;
     height: 12px;
   }
 
-  body.component-view .sbx-bar {
+  :root body .sbx-bar {
     gap: 8px;
     padding: 4px 5px 4px 10px;
     border-radius: 12px;
   }
-  body.component-view .sbx-bar__eyebrow {
+  :root body .sbx-bar__eyebrow {
     font-size: 9.5px;
   }
-  body.component-view .sbx-bar__name {
+  :root body .sbx-bar__name {
     font-size: 13px;
   }
-  body.component-view .sbx-bar .rl-cswitch {
+  :root body .sbx-bar .rl-cswitch {
     padding: 3px;
   }
-  body.component-view .sbx-bar .rl-cswitch__chip {
+  :root body .sbx-bar .rl-cswitch__chip {
     height: 26px;
   }
-  body.component-view .sbx-price__value {
+  :root body .sbx-price__value {
     font-size: 16px;
   }
-  body.component-view .sbx-send {
+  :root body .sbx-send {
     height: 30px;
     padding: 0 12px 0 14px;
     border-radius: 10px;
     font-size: 12.5px;
   }
-  body.component-view .sbx-card:is(:hover, :focus-within) .sbx-card__name.rl-marquee {
-    text-overflow: clip;
-    animation: rl-marquee var(--mq-t, 4s) ease-in-out infinite;
-    mask-image: linear-gradient(90deg, #000 calc(100% - 10px), transparent);
+  /* Son choisi : barre sur une seule ligne, même en fenêtre étroite (sinon deux lignes). */
+  :root body .sbx-bar:not([data-empty='true']) {
+    grid-template-areas: none;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+  }
+  :root body .sbx-bar > * {
+    grid-area: auto;
+  }
+  /* Nom trop long : « … » au repos (porté par le libellé) ; au survol / focus, un seul aller fluide après 0,3 s
+     (transform : ni mise en page ni animation continue), retour en douceur à la sortie. hover-marquee.js ne
+     pose .rl-marquee que si le nom déborde : sinon rien ne bouge. */
+  :root body .sbx-card__label {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: top;
+    transition: transform 0.25s ease-out;
+  }
+  :root body .sbx-card:is(:hover, :focus-within) .sbx-card__name.rl-marquee {
+    mask-image: linear-gradient(90deg, transparent, #000 6px, #000 calc(100% - 8px), transparent);
+  }
+  :root body .sbx-card:is(:hover, :focus-within) .rl-marquee .sbx-card__label {
+    max-width: none;
+    overflow: visible;
+    transform: translateX(calc(-1 * var(--mq-d, 0px)));
+    transition: transform var(--mq-s, 1s) linear 0.3s;
+  }
+}
+/* Tactile (pas de survol) : la carte choisie déroule son nom ; le nom complet est aussi dans la barre d'envoi. */
+@media (max-height: 400px) and (hover: none) {
+  :root body .sbx-card.is-selected .sbx-card__name.rl-marquee {
+    mask-image: linear-gradient(90deg, transparent, #000 6px, #000 calc(100% - 8px), transparent);
+  }
+  :root body .sbx-card.is-selected .rl-marquee .sbx-card__label {
+    max-width: none;
+    overflow: visible;
+    transform: translateX(calc(-1 * var(--mq-d, 0px)));
+    transition: transform var(--mq-s, 1s) linear 0.3s;
+  }
+}
+/* Fenêtre basse et étroite : la monnaie se réduit à sa pièce (le prix garde son unité, l'infobulle détaille). */
+@media (max-height: 400px) and (max-width: 460px) {
+  :root body .sbx-bar .rl-cswitch__val {
+    display: none;
+  }
+}
+@media (max-height: 400px) and (max-width: 360px) {
+  :root body .sbx-send .sbx-icon {
+    display: none;
+  }
+}
+/* Très basse (320 px ou moins) : recherche et filtres sur une seule ligne quand la largeur le permet. */
+@media (max-height: 320px) {
+  :root body .sbx-head {
+    flex-flow: row wrap;
+  }
+  :root body .sbx-head__row:first-child {
+    flex: 1 1 96px;
+  }
+  /* Les filtres ne se compriment jamais : trop étroit, ils repassent sur leur propre ligne. */
+  :root body .sbx-head__row--filters {
+    flex: none;
+  }
+  :root body .sbx-filter {
+    padding: 0 7px;
+  }
+  :root body .sbx-filter__count {
+    display: none;
+  }
+  /* 3 rangées entières même avec un son choisi (zoom 150 % : 400×288). */
+  :root body .sbx-grid {
+    grid-auto-rows: 40px;
+    row-gap: 4px;
   }
 }
 /* Aller-retour d'un nom trop long (aussi utilisé par tombola-v2.css) : pause, aller, pause, retour. */
@@ -1376,8 +1482,14 @@ html body .jdm-module__screen-title:has(> .sbx-vol) {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  body.component-view .sbx-card .sbx-card__name.rl-marquee {
-    text-overflow: ellipsis;
-    animation: none;
+  /* Mouvement réduit : le nom reste « … » ; le nom complet est dans l'infobulle et la barre d'envoi. */
+  :root body .sbx-card .sbx-card__name.rl-marquee {
+    mask-image: none !important;
+  }
+  :root body .sbx-card .rl-marquee .sbx-card__label {
+    max-width: 100% !important;
+    overflow: hidden !important;
+    transform: none !important;
+    transition: none !important;
   }
 }
