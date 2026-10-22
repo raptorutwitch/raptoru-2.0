@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { admit, PLAYED_MEMORY } from '../word-game-player/model.js';
+import {
+  admit,
+  PLAYED_MEMORY,
+  soundVolume,
+} from '../word-game-player/model.js';
 
 // Jeu des mots V1 — OBS sound source model: one sound per winning message, never a replay
 // (docs/WORD_GAME_PARITY.md § 18). Core pushes committed wins only, live only.
@@ -16,6 +20,28 @@ const receive = (ids, played = []) => {
   }
   return { sounds, played };
 };
+
+describe('sound source: volume of the winning sound', () => {
+  it('the volume sent by Studio (0–1), clamped; none (older Studio) → full volume', () => {
+    expect(
+      [0, 0.5, 1].map((volume) => soundVolume({ message_id: 'x', volume })),
+    ).toEqual([0, 0.5, 1]);
+    expect(soundVolume({ volume: 7 })).toBe(1);
+    expect(soundVolume({ volume: -1 })).toBe(0);
+    expect(soundVolume({ message_id: 'x' })).toBe(1);
+    expect(soundVolume(null)).toBe(1);
+  });
+
+  it('the player applies it to its own Audio only (no other sound, no global volume)', async () => {
+    const src = await readFile(
+      join(import.meta.dirname, '..', 'word-game-player', 'player.js'),
+      'utf8',
+    );
+    expect(src).toMatch(
+      /const audio = new Audio\(SOUND_URL\);\s*audio\.volume = soundVolume\(win\);/,
+    );
+  });
+});
 
 describe('sound source: which events play', () => {
   it('one event → one sound', () => {

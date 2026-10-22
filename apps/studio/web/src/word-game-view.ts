@@ -8,6 +8,8 @@ import type { WordGameState } from '@raptoru/schemas';
 export type WordGamePanel =
   | (WordGameState & {
       player_url?: string;
+      /** Volume of the winning sound, 0–100 % (Studio setting). */
+      sound_volume?: number;
       /** Which Core runs the game (lot 9): Lab Core (test wallet) or the main Core. */
       environment?: 'lab' | 'production';
       /** Local time (ms) when this state was read: the ages go on between two polls. */
@@ -98,6 +100,10 @@ export function wordGameView(
   const player = s.player_url
     ? `<p class="wg-muted wg-obs">Son OBS (source navigateur) : <code>${esc(s.player_url)}</code> <button type="button" class="wg-btn wg-btn--ghost" data-action="copy">Copier</button></p>`
     : '';
+  const volume =
+    typeof s.sound_volume === 'number'
+      ? `<label class="wg-volume">Volume du son de bonne réponse <input type="range" min="0" max="100" step="5" value="${s.sound_volume}" data-volume aria-label="Volume du son de bonne réponse"><output>${s.sound_volume} %</output></label>`
+      : '';
   return `<section class="wg">
     <div class="wg-head"><h1>Jeu des mots</h1><div class="wg-status">${status}${s.environment === 'production' ? '<span class="wg-chip wg-chip--on">Core principal</span>' : '<span class="wg-chip wg-chip--off">Core Lab · portefeuille de test</span>'}</div></div>
     <div class="wg-actions">
@@ -113,6 +119,7 @@ export function wordGameView(
     ${streak}
     <h2>Dernières trouvailles</h2>
     ${recent}
+    ${volume}
     ${player}
   </section>`;
 }

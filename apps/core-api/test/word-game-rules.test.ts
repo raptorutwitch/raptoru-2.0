@@ -11,7 +11,6 @@ import {
   type ActiveWord,
   ageSeconds,
   baseReward,
-  breakerAnnouncementText,
   breakerBonus,
   comboBonus,
   CYCLE_ANNOUNCEMENT,
@@ -20,6 +19,8 @@ import {
   EMPTY_STREAK,
   evaluateMessage,
   findAnnouncementText,
+  formatJetons,
+  ofName,
   isGoldenRoll,
   matchWords,
   motsText,
@@ -496,7 +497,7 @@ describe('chat texts (§ 12)', () => {
       now: at(120),
     });
     expect(findAnnouncementText('Alice', out)).toBe(
-      '@Alice a trouvé le mot "angle" ! +500 jetons',
+      '@Alice a trouvé le mot "angle" ! +500 Jetons',
     );
   });
 
@@ -507,11 +508,11 @@ describe('chat texts (§ 12)', () => {
       now: at(3),
     });
     expect(findAnnouncementText('Alice', out)).toBe(
-      '@Alice a trouvé le mot ⚡angle⚡ ! +6000 jetons 🪙 x4',
+      '@Alice a trouvé le mot ⚡angle⚡ ! +6 000 Jetons 🪙 x4',
     );
   });
 
-  it('find announcement: old word, breaker only', () => {
+  it('find announcement: old word, breaker only — one message, the breaker shown apart', () => {
     const out = outcome({
       message: 'angle',
       active: [word('angle')],
@@ -519,11 +520,10 @@ describe('chat texts (§ 12)', () => {
       chatter: bob,
       streak: streakOf(alice, 3),
     });
+    // 1 000 for the word + 500 breaker = the single credit of 1 500.
+    expect(out.total).toBe(1500);
     expect(findAnnouncementText('Bob', out)).toBe(
-      '@Bob a trouvé le mot ✨angle✨ ! +1500 jetons (💥 +500 breaker)',
-    );
-    expect(breakerAnnouncementText('Bob', out.breaker!)).toBe(
-      '💥 @Bob casse la streak de @Alice (3) ! +500 jetons !',
+      "@Bob a trouvé le mot ✨angle✨ ! +1 000 Jetons et brise la streak de 3 d'Alice 💥 +500 breaker !",
     );
   });
 
@@ -541,7 +541,7 @@ describe('chat texts (§ 12)', () => {
     // angle: 10 s, ×3, golden → 6 000 ; requin: 110 s → 600 ; combo 500 ; breaker 1 000.
     expect(out.total).toBe(8100);
     expect(findAnnouncementText('Bob', out)).toBe(
-      '🔥 @Bob a trouvé 2 mots: ⚡angle⚡, "requin" ! +8100 jetons (⚡ +500 combo💥 +1000 breaker) 🪙 x4 🔥',
+      '🔥 @Bob a trouvé 2 mots: ⚡angle⚡, "requin" ! +7 100 Jetons (⚡ +500 combo) 🪙 x4 et brise la streak de 5 d\'Alice 💥 +1 000 breaker ! 🔥',
     );
   });
 
@@ -552,8 +552,51 @@ describe('chat texts (§ 12)', () => {
       now: at(120),
     });
     expect(findAnnouncementText('Alice', out)).toBe(
-      '🔥 @Alice a trouvé 2 mots: "angle", "requin" ! +1600 jetons (⚡ +500 combo) 🔥',
+      '🔥 @Alice a trouvé 2 mots: "angle", "requin" ! +1 600 Jetons (⚡ +500 combo) 🔥',
     );
+  });
+
+  it('the example of the request: 3 500 for the word, 500 breaker, 4 000 credited', () => {
+    // cravache (8 letters): 800, < 30 s ×3 → 2 400 ; golden would be ×4 — here a plain fast word + combo 0.
+    const out = outcome({
+      message: 'cravache',
+      active: [word('cravache')],
+      now: at(10),
+      chatter: { id: 'e1', displayName: 'Eejyil' },
+      streak: { holderId: 'a1', holderName: 'Aouh', count: 4 },
+    });
+    expect(out.breaker?.bonus).toBe(500);
+    expect(findAnnouncementText('Eejyil', out)).toBe(
+      `@Eejyil a trouvé le mot ⚡cravache⚡ ! +${formatJetons(out.total - 500)} Jetons et brise la streak de 4 d'Aouh 💥 +500 breaker !`,
+    );
+    // Announced amounts = the credited total, never the breaker twice.
+    const shown = findAnnouncementText('Eejyil', out).match(/\+([\d ]+) /g)!;
+    expect(
+      shown.map((x) => Number(x.replace(/[^\d]/g, ''))).reduce((a, b) => a + b),
+    ).toBe(out.total);
+  });
+
+  it("de / d' : vowel or y (any case, accents ignored) → d', otherwise de ; the name is kept as it is", () => {
+    expect(
+      ['Aouh', 'Eejyil', 'Imhotep', 'Yuni', 'oscar', 'uLtra', 'Élodie'].map(
+        ofName,
+      ),
+    ).toEqual([
+      "d'Aouh",
+      "d'Eejyil",
+      "d'Imhotep",
+      "d'Yuni",
+      "d'oscar",
+      "d'uLtra",
+      "d'Élodie",
+    ]);
+    expect(['Raptoru_', 'bob', 'Zed', '_x', '42'].map(ofName)).toEqual([
+      'de Raptoru_',
+      'de bob',
+      'de Zed',
+      'de _x',
+      'de 42',
+    ]);
   });
 
   it('!mots (§ 12.7)', () => {

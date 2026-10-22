@@ -217,20 +217,23 @@ l'ordre était `-> X <-` puis `🪙 X 🪙`.
 
 ### 12.3 Trouvaille (`JeuDesMots` pos 123–126) — mode annonce
 
-- 1 mot : `@X a trouvé le mot {MOTS} ! +{TOTAL} jetons{BONUS}{DORÉ}`
-- plusieurs : `🔥 @X a trouvé {N} mots: {MOTS} ! +{TOTAL} jetons{BONUS}{DORÉ} 🔥`
+**Décision d'Antoni (22/10/2026) : une seule annonce par message gagnant**, breaker compris (l'ancienne annonce
+séparée de casse-série laissait croire à une prime versée deux fois).
+
+- 1 mot : `@X a trouvé le mot {MOTS} ! +{MOTS_J} Jetons{COMBO}{DORÉ}{CASSE}`
+- plusieurs : `🔥 @X a trouvé {N} mots: {MOTS} ! +{MOTS_J} Jetons{COMBO}{DORÉ}{CASSE} 🔥`
 - `{MOTS}` : chaque mot décoré selon § 5 (`⚡mot⚡`, `✨mot✨`, `"mot"`), séparés par `, `, dans l'ordre de détection
   (V1 : du mot actif le plus récent au plus ancien).
-- `{BONUS}` (pos 105–112) :
-  - combo et prime : ` (⚡ +{C} combo💥 +{B} breaker)`
-  - combo seul : ` (⚡ +{C} combo)`
-  - prime seule : ` (💥 +{B} breaker)`
-  - aucun : vide
-- `{DORÉ}` : ` 🪙 x4` si au moins un mot doré, sinon vide.
+- `{MOTS_J}` : Jetons des mots, rapidité, doré et combo compris = total du message − prime breaker ; milliers
+  séparés par une espace (`3 500`).
+- `{COMBO}` : ` (⚡ +{C} combo)` si combo, sinon vide. `{DORÉ}` : ` 🪙 x4` si au moins un mot doré, sinon vide.
+- `{CASSE}` : ` et brise la streak de {N} d'{CASSÉ} 💥 +{B} breaker !` (ou `de {CASSÉ}`), sinon vide.
+  `d'` si le pseudo commence par a, e, i, o, u ou y (casse et accents ignorés), sinon `de` ; pseudo inchangé.
+- `{MOTS_J}` + `{B}` = l'unique crédit Wallet du message (§ 9) : le texte ne crée ni ne double aucun montant.
+  Exemple : `@Eejyil a trouvé le mot ⚡cravache⚡ ! +3 500 Jetons et brise la streak de 4 d'Aouh 💥 +500 breaker !`
+  (4 000 Jetons crédités).
 
-### 12.4 Casse-série (`JeuDesMots` pos 129) — mode annonce
-
-`💥 @{CASSEUR} casse la streak de @{CASSÉ} ({N}) ! +{B} jetons !`
+### 12.4 Casse-série — intégrée à 12.3 depuis le 22/10/2026 (plus d'annonce séparée)
 
 ### 12.5 Annonces de série (`JDM_STREAK_ANNOUNCER` pos 15–46) — mode annonce
 
@@ -249,7 +252,6 @@ Suffixe commun : ` {N} mots d’affilée !`
 | ------------- | ----------------------------------------- |
 | t0            | son (§ 18) ; annonce de trouvaille (12.3) |
 | t0 + 2 000 ms | annonce de série, si due (12.5)           |
-| t0 + 2 100 ms | annonce de casse-série, si due (12.4)     |
 
 ### 12.7 `!mots` — mode annonce
 
@@ -344,6 +346,9 @@ channel-sessions.ts`, ASTRA-P1-007). Elle est ouverte et fermée par l'événeme
 - Aucun événement si le Wallet est refusé (rollback), sur un message rejoué, ni pour `!mots`, `!streakmot` ou
   « Nouveau mot ». La source mémorise les derniers `message_id` joués (aucun double son) ; reconnexion sans rejeu de
   l'historique. Une victoire pendant une coupure peut être ratée : accepté pour la V1.
+- **Volume (22/10/2026)** : réglage Studio › Jeu des mots, 0–100 % (pas de 5, 100 % par défaut), enregistré dans le
+  stockage du module (`sound-volume`, à côté du jeton de la source) ; Studio l'ajoute à chaque victoire relayée
+  (`volume` 0–1) et la source OBS l'applique à ce son seulement. Jamais envoyé au Core.
 
 ## 19. Contrat de sortie chat — `cmd_steps` (feu vert d'Antoni, 16/10/2026)
 
@@ -361,7 +366,7 @@ Réutilisation de la file durable existante de Commands V2 ; **aucun deuxième c
 - **Clés d'idempotence dédiées**, uniques et stables :
   - annonce de cycle : `jdm:word:<occurrence_id>:cycle` ;
   - publication : `jdm:word:<occurrence_id>:publish` ;
-  - trouvaille / série / casse-série : `jdm:msg:<message_id>:find` / `:streak` / `:breaker` ;
+  - trouvaille (breaker compris) / série : `jdm:msg:<message_id>:find` / `:streak` ;
   - `!mots` / `!streakmot` : `jdm:cmd:<message_id>`.
 - **Inchangé** : un seul message en cours par chaîne, ordre de file (le message en tête attend son heure d'envoi,
   rien ne le double), attribution sous bail, accusés de réception liés à la tentative, réessais seulement si

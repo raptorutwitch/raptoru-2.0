@@ -312,13 +312,6 @@ export class WordGameService {
         ),
         delayMs: R.STREAK_ANNOUNCE_DELAY_MS,
       });
-    if (out.breaker)
-      drafts.push({
-        idempotencyKey: `jdm:msg:${msg.message_id}:breaker`,
-        mode: 'announce',
-        text: R.breakerAnnouncementText(chatter.displayName, out.breaker),
-        delayMs: R.BREAKER_ANNOUNCE_DELAY_MS,
-      });
     await insertWordGameSteps(q, { channelId: msg.channel_id, now, drafts });
     return true;
   }

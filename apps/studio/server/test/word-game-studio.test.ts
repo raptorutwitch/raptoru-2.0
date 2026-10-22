@@ -251,7 +251,7 @@ describe('OBS sound source', () => {
     await obs.until('tw-2');
     expect(obs.wins()).toEqual(['tw-1', 'tw-2']);
     expect(obs.text()).toContain(
-      `event: win\ndata: ${JSON.stringify({ message_id: 'tw-1', created_at: '2026-10-16T20:01:00.000Z' })}\n\n`,
+      `event: win\ndata: ${JSON.stringify({ message_id: 'tw-1', created_at: '2026-10-16T20:01:00.000Z', volume: 1 })}\n\n`,
     );
     expect(obs.text()).not.toContain(CH);
     expect(s.calls).toEqual([]); // never a read of Core's state
@@ -286,6 +286,52 @@ describe('OBS sound source', () => {
     await obs.until('tw-2');
     expect(obs.wins()).toEqual(['tw-1', 'tw-2']);
     obs.close();
+  });
+
+  it('volume of the winning sound: 100 % by default, 0 / 50 / 100 % saved, sent with the next wins, kept after a restart', async () => {
+    const s = await setup();
+    const state = async () =>
+      (await (await s.studio('/api/word-game/state')).json()).sound_volume;
+    const set = (volume: unknown) =>
+      s.studio('/api/word-game/volume', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ volume }),
+      });
+    expect(await state()).toBe(100);
+    const obs = await listen(s);
+    await until(() => s.upstreams.length === 1);
+    for (const [volume, id] of [
+      [0, 'v-0'],
+      [50, 'v-50'],
+      [100, 'v-100'],
+    ] as const) {
+      expect((await (await set(volume)).json()).sound_volume).toBe(volume);
+      s.upstreams[0]!.push(win(id));
+      await obs.until(id);
+    }
+    const sent = obs
+      .text()
+      .split('\n')
+      .filter((l) => l.startsWith('data: '))
+      .map(
+        (l) => JSON.parse(l.slice(6)) as { message_id: string; volume: number },
+      );
+    expect(sent.map((x) => [x.message_id, x.volume])).toEqual([
+      ['v-0', 0],
+      ['v-50', 0.5],
+      ['v-100', 1],
+    ]);
+    obs.close();
+    // Refused: outside 0–100 or not an integer; the saved value stays.
+    await set(35);
+    for (const bad of [-1, 101, 12.5, '50', null])
+      expect((await set(bad)).status).toBe(400);
+    expect(await state()).toBe(35);
+    // Never sent to Core.
+    expect(s.calls.every((c) => !c.path.includes('volume'))).toBe(true);
+    await s.reload();
+    expect(await state()).toBe(35);
   });
 
   it('the source URL (token) survives a Studio restart', async () => {

@@ -37,6 +37,17 @@ const button = (html, action) =>
     `<button[^>]*data-action="${action}"([^>]*)>([^<]*)</button>`,
   ).exec(html);
 
+describe('panel view: volume of the winning sound', () => {
+  it('a 0–100 % slider with the saved value; absent when Studio sends none', () => {
+    const html = wordGameView(state({ sound_volume: 40 }), NOW);
+    expect(html).toMatch(
+      /<input type="range" min="0" max="100" step="5" value="40" data-volume/,
+    );
+    expect(html).toContain('<output>40 %</output>');
+    expect(wordGameView(state(), NOW)).not.toContain('data-volume');
+  });
+});
+
 describe('panel view', () => {
   it('loading and unavailable (no Lab Core / Production profile)', () => {
     expect(wordGameView(null, NOW)).toContain('Chargement');

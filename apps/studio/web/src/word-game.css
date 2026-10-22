@@ -129,3 +129,18 @@
   font-size: 12px;
   word-break: break-all;
 }
+.wg-volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+  font-size: 13px;
+}
+.wg-volume input {
+  width: 180px;
+  accent-color: var(--accent, #a855f7);
+}
+.wg-volume output {
+  min-width: 3.5em;
+  font-variant-numeric: tabular-nums;
+}

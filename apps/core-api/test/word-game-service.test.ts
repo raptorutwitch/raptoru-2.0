@@ -424,7 +424,7 @@ describe('a winning message (§§ 4–10, 12, 21, 22)', () => {
       [
         'jdm:msg:tw-a:find',
         'announce',
-        '@Alice a trouvé le mot "angle" ! +500 jetons',
+        '@Alice a trouvé le mot "angle" ! +500 Jetons',
       ],
     ]);
     expect(await channelRow()).toMatchObject({
@@ -445,7 +445,7 @@ describe('a winning message (§§ 4–10, 12, 21, 22)', () => {
     expect((await texts())[0]).toEqual([
       'announce',
       // Newest word first (§ 12.3): angle (10 s) before requin (200 s).
-      '🔥 @Alice a trouvé 2 mots: ⚡angle⚡, "requin" ! +2600 jetons (⚡ +500 combo) 🔥',
+      '🔥 @Alice a trouvé 2 mots: ⚡angle⚡, "requin" ! +2 600 Jetons (⚡ +500 combo) 🔥',
     ]);
     expect((await channelRow())!.streak_count).toBe(2);
   });
@@ -502,7 +502,7 @@ describe('a winning message (§§ 4–10, 12, 21, 22)', () => {
     expect(streak.available_at.getTime() - clock.now().getTime()).toBe(2000);
   });
 
-  it('breaker: another viewer breaks a streak of 3 → +500 in the same credit, announced 2.1 s later', async () => {
+  it('breaker: another viewer breaks a streak of 3 → +500 in the same credit, ONE announcement', async () => {
     const s = await live();
     for (const w of ['angle', 'requin', 'tournis', 'rouble'])
       await addWord(s, w);
@@ -527,15 +527,18 @@ describe('a winning message (§§ 4–10, 12, 21, 22)', () => {
     ).toEqual([
       [
         'jdm:msg:tw-break:find',
-        '@Bob a trouvé le mot "rouble" ! +1100 jetons (💥 +500 breaker)',
+        '@Bob a trouvé le mot "rouble" ! +600 Jetons et brise la streak de 3 d\'Alice 💥 +500 breaker !',
         0,
       ],
-      [
-        'jdm:msg:tw-break:breaker',
-        '💥 @Bob casse la streak de @Alice (3) ! +500 jetons !',
-        2100,
-      ],
     ]);
+    // The same message delivered again: no second credit, no second announcement.
+    await game.chat(msg('rouble', BOB, 'tw-break'));
+    expect(await gain(BOB.id)).toBe(600 + 500);
+    expect(
+      (await steps()).filter((x) =>
+        x.idempotency_key.startsWith('jdm:msg:tw-break'),
+      ),
+    ).toHaveLength(1);
     expect(
       await db.query(
         'select broken_viewer_id, broken_count, breaker from word_game_messages where message_id = $1',

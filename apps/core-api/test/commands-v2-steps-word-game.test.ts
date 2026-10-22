@@ -153,7 +153,7 @@ describe('word_game steps on the durable chat queue', () => {
       {
         idempotencyKey: 'jdm:msg:tw-x:find',
         mode: 'announce',
-        text: '@V a trouvé le mot "angle" ! +500 jetons',
+        text: '@V a trouvé le mot "angle" ! +500 Jetons',
       },
       publish(),
     ]);
@@ -169,7 +169,7 @@ describe('word_game steps on the durable chat queue', () => {
       ['commands', { mode: 'normal', text: 'Câlin !', reply_to: null }],
       [
         'word_game',
-        { mode: 'announce', text: '@V a trouvé le mot "angle" ! +500 jetons' },
+        { mode: 'announce', text: '@V a trouvé le mot "angle" ! +500 Jetons' },
       ],
       ['word_game', { mode: 'normal', text: '-> elgan <-' }],
       ['commands', { mode: 'normal', text: 'Câlin !', reply_to: null }],

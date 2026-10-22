@@ -44,7 +44,6 @@ export const MAX_REWARD_LENGTH = 30;
 export const WORD_INTERVAL_MS = { min: 300_000, max: 900_000 };
 export const CYCLE_TO_WORD_MS = 500;
 export const STREAK_ANNOUNCE_DELAY_MS = 2_000;
-export const BREAKER_ANNOUNCE_DELAY_MS = 2_100;
 export const MOTS_COOLDOWN_MS = 1_000;
 
 // --- draw (§§ 6, 13, 16) -----------------------------------------------------------------------------
@@ -361,7 +360,19 @@ export function decorateWord(word: string, tier: SpeedTier): string {
   return `"${word}"`;
 }
 
-/** § 12.3 */
+/** « 3 500 » : thousands separated by a plain space (as the other chat announcements). */
+export const formatJetons = (n: number) =>
+  n.toLocaleString('fr-FR').replace(/\s/g, ' ');
+
+/** « d'Aouh », « de Raptoru_ » : d' before a vowel or y (accents ignored, any case), the name kept as it is. */
+export function ofName(name: string): string {
+  return /^[aeiouy]/i.test(name.normalize('NFD')) ? `d'${name}` : `de ${name}`;
+}
+
+/**
+ * § 12.3 — ONE announcement per winning message. The words' Jetons (speed, golden and combo included) and the
+ * breaker are shown apart; together they are exactly the message's single Wallet credit (`outcome.total`).
+ */
 export function findAnnouncementText(
   name: string,
   outcome: MessageOutcome,
@@ -369,29 +380,21 @@ export function findAnnouncementText(
   const words = outcome.finds
     .map((f) => decorateWord(f.word, f.tier))
     .join(', ');
-  const breaker = outcome.breaker?.bonus ?? 0;
-  const bonus =
-    outcome.combo && breaker
-      ? ` (⚡ +${outcome.combo} combo💥 +${breaker} breaker)`
-      : outcome.combo
-        ? ` (⚡ +${outcome.combo} combo)`
-        : breaker
-          ? ` (💥 +${breaker} breaker)`
-          : '';
+  const b = outcome.breaker;
+  const wordsJetons = outcome.total - (b?.bonus ?? 0);
+  const combo = outcome.combo
+    ? ` (⚡ +${formatJetons(outcome.combo)} combo)`
+    : '';
   const golden = outcome.finds.some((f) => f.golden)
     ? ` 🪙 x${GOLDEN_WORD_MULTIPLIER}`
     : '';
+  const breaker = b
+    ? ` et brise la streak de ${b.brokenCount} ${ofName(b.brokenName)} 💥 +${formatJetons(b.bonus)} breaker !`
+    : '';
+  const gain = `+${formatJetons(wordsJetons)} Jetons${combo}${golden}${breaker}`;
   return outcome.finds.length === 1
-    ? `@${name} a trouvé le mot ${words} ! +${outcome.total} jetons${bonus}${golden}`
-    : `🔥 @${name} a trouvé ${outcome.finds.length} mots: ${words} ! +${outcome.total} jetons${bonus}${golden} 🔥`;
-}
-
-/** § 12.4 */
-export function breakerAnnouncementText(
-  breakerName: string,
-  b: Breaker,
-): string {
-  return `💥 @${breakerName} casse la streak de @${b.brokenName} (${b.brokenCount}) ! +${b.bonus} jetons !`;
+    ? `@${name} a trouvé le mot ${words} ! ${gain}`
+    : `🔥 @${name} a trouvé ${outcome.finds.length} mots: ${words} ! ${gain} 🔥`;
 }
 
 /** § 12.7 — the shuffled forms of the active words, newest first. */

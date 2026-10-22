@@ -12,6 +12,9 @@ import type { LabCoreCall, LabCoreEvents } from '../lab-moderation/proxy.js';
 // Lot 9: the same runtime in the Production profile, on the main Core (cockpit routes and its wins stream over the
 // installation credential); OBS stays local to Studio, the hosted Core never reaches it.
 
+/** Volume of the winning sound (%), until the streamer sets one. */
+export const DEFAULT_SOUND_VOLUME = 100;
+
 /** Delays between reconnections to Core's stream while an OBS source listens (the last one repeats). */
 export const EVENTS_RETRY_MS = [1000, 2000, 5000, 10_000];
 
@@ -49,6 +52,8 @@ export class WordGameRuntime {
   private constructor(
     private readonly d: WordGameRuntimeDeps,
     private readonly token: string,
+    /** Volume of the winning sound, 0–100 % (Studio storage, file `sound-volume`): sent with every win. */
+    private volume: number,
   ) {}
 
   static async create(d: WordGameRuntimeDeps) {
@@ -64,7 +69,17 @@ export class WordGameRuntime {
       token = randomBytes(16).toString('hex');
       await writeFile(tokenFile, token);
     }
-    return new WordGameRuntime(d, token);
+    let volume = DEFAULT_SOUND_VOLUME;
+    try {
+      const stored = Number(
+        (await readFile(join(d.dir, 'sound-volume'), 'utf8')).trim(),
+      );
+      if (Number.isInteger(stored) && stored >= 0 && stored <= 100)
+        volume = stored;
+    } catch {
+      /* never set: 100 % */
+    }
+    return new WordGameRuntime(d, token, volume);
   }
 
   /** The OBS browser source (sound only). */
@@ -126,8 +141,28 @@ export class WordGameRuntime {
       return reply(200, {
         ...(await this.d.core<Record<string, unknown>>(`${base}/state`)),
         player_url: this.playerUrl,
+        sound_volume: this.volume,
         environment: this.d.environment ?? 'lab',
       });
+    // Volume of the winning sound (Studio only, never sent to Core): applies to the next wins.
+    if (req.method === 'POST' && p === '/volume') {
+      let raw = '';
+      for await (const chunk of req) {
+        raw += String(chunk);
+        if (raw.length > MAX_BODY)
+          return reply(413, { error: 'body_too_large' });
+      }
+      const volume = (JSON.parse(raw || '{}') as { volume?: unknown }).volume;
+      if (
+        !Number.isInteger(volume) ||
+        (volume as number) < 0 ||
+        (volume as number) > 100
+      )
+        return reply(400, { error: 'invalid_volume' });
+      await writeFile(join(this.d.dir, 'sound-volume'), String(volume));
+      this.volume = volume as number;
+      return reply(200, { sound_volume: this.volume });
+    }
     if (req.method === 'POST' && p === '/actions') {
       let raw = '';
       for await (const chunk of req) {
@@ -237,7 +272,7 @@ export class WordGameRuntime {
     }, delay);
   }
 
-  /** One Core event → every connected source (the win's id and time only). */
+  /** One Core event → every connected source (the win's id and time, and the sound's volume). */
   private relay(block: string) {
     if (!/^event: win$/m.test(block)) return;
     let win: {
@@ -255,7 +290,7 @@ export class WordGameRuntime {
       typeof win.message_id !== 'string'
     )
       return;
-    const out = `event: win\ndata: ${JSON.stringify({ message_id: win.message_id, created_at: String(win.created_at ?? '') })}\n\n`;
+    const out = `event: win\ndata: ${JSON.stringify({ message_id: win.message_id, created_at: String(win.created_at ?? ''), volume: this.volume / 100 })}\n\n`;
     for (const client of this.clients) client.write(out);
   }
 }

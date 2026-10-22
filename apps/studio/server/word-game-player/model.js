@@ -7,6 +7,12 @@
 /** Message ids remembered as played (a duplicate delivery never plays twice, even after a reload). */
 export const PLAYED_MEMORY = 50;
 
+/** Volume (0–1) of the winning sound, sent by Studio with each win; an older Studio sends none: full volume. */
+export function soundVolume(win) {
+  const v = Number(win?.volume);
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+}
+
 /**
  * One received win event against the ids already played: whether to play it, and the ids to remember
  * (the last PLAYED_MEMORY ones).
