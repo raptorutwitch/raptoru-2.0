@@ -6,7 +6,9 @@
 # bot), the durable outboxes and the journals — the env paths below point there.
 # Only one instance acts at a time (Core lease): a second container waits in standby, it never connects to Twitch.
 
-FROM node:22-bookworm-slim AS build
+# Exact Node release (not the floating 22 tag): a cached base image could keep an older Node. 22.23.4 = Node.js
+# security release of 21/10/2026 (Brotli decoder CVE-2026-111497, TLS / DNS fixes). Change it deliberately.
+FROM node:22.23.4-bookworm-slim AS build
 WORKDIR /app
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
@@ -28,7 +30,7 @@ COPY apps/twitch-bot/tsconfig.json apps/twitch-bot/tsconfig.build.json apps/twit
 COPY apps/twitch-bot/src apps/twitch-bot/src
 RUN npm run build -w @raptoru/schemas && npm run build -w @raptoru/twitch-bot
 
-FROM node:22-bookworm-slim
+FROM node:22.23.4-bookworm-slim
 WORKDIR /app
 # Coolify passes the deployed commit as SOURCE_COMMIT: shown by Studio as the bot's version.
 ARG SOURCE_COMMIT=dev

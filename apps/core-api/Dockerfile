@@ -8,7 +8,9 @@
 
 # Every workspace manifest is copied: npm ci checks the whole lockfile even when installing two
 # workspaces. Only @raptoru/schemas and @raptoru/core-api are installed and built.
-FROM node:22-bookworm-slim AS build
+# Exact Node release (not the floating 22 tag): a cached base image could keep an older Node. 22.23.4 = Node.js
+# security release of 21/10/2026 (Brotli decoder CVE-2026-111497, TLS / DNS fixes). Change it deliberately.
+FROM node:22.23.4-bookworm-slim AS build
 WORKDIR /app
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
@@ -30,7 +32,7 @@ COPY apps/core-api/tsconfig.json apps/core-api/tsconfig.build.json apps/core-api
 COPY apps/core-api/src apps/core-api/src
 RUN npm run build -w @raptoru/schemas && npm run build -w @raptoru/core-api
 
-FROM node:22-bookworm-slim
+FROM node:22.23.4-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
