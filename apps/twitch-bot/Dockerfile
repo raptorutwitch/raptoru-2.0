@@ -45,6 +45,8 @@ ENV NODE_ENV=production \
     ALERTS_OUTBOX_FILE=/data/.alerts-outbox.json \
     CHAT_GAMES_JOURNAL_FILE=/data/.chat-games-journal.json \
     RANDOM_BAN_JOURNAL_FILE=/data/.random-ban-journal.json \
+    CAUTION_JOURNAL_FILE=/data/.caution-journal.json \
+    VOTEKICK_JOURNAL_FILE=/data/.votekick-journal.json \
     npm_config_audit=false \
     npm_config_fund=false
 COPY package.json package-lock.json ./
