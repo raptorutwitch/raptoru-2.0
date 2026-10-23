@@ -2,7 +2,9 @@
 
 **Statut (22/10/2026) : DÉVELOPPÉ EN ISOLATION (worktree `feat/votekick-v2`, commits locaux) / TESTS AUTOMATISÉS
 RÉUSSIS / NON RACCORDÉ AU CORE NI À STUDIO / NON VALIDÉ PAR ANTONI / RIEN DÉPLOYÉ.** Développé pendant un live :
-aucune action sur OBS, Twitch, SAMMI, StreamElements ni la Production. SAMMI reste le Votekick en service.
+aucune action sur OBS, Twitch, SAMMI, StreamElements ni la Production. **SAMMI a été débranché volontairement à la
+bascule du 20/10** (décision de migration) : aucun Votekick n'existe aujourd'hui en Production ; c'est une fonction
+historique **à reprendre** ici. SAMMI ne doit jamais être réactivé (ses boutons visaient les points StreamElements gelés).
 
 Reprise des boutons SAMMI du deck « Points de chaine » (`decks_data.json`, lu le 22/10/2026) : `VK_START`, `VK_VOTE`,
 `VK_FINISH`, `VK_MUTE_BROADCASTER`, `VK_SEND_STATS`, `VK_RESET`, `CAUTION_START`, `CAUTION_CONFIRM`,

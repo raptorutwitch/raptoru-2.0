@@ -2,8 +2,10 @@
 
 **Statut (23/10/2026) : DÉVELOPPÉE (Core + bot + Studio), TESTS AUTOMATISÉS RÉUSSIS (dont PostgreSQL réel et la chaîne
 complète Core ↔ bot sur Twitch simulé) / NON VALIDÉE PAR ANTONI / NON DÉPLOYÉE / OFF PAR DÉFAUT EN PRODUCTION.**
-Branche locale `feat/votekick-v2` (worktree isolé). SAMMI reste la Caution en service : tant qu'il répond à
-`!caution`, `CAUTION_CHAT` (Core) et `CAUTION` (bot) doivent rester à `false` en Production.
+Branche locale `feat/votekick-v2` (worktree isolé). **SAMMI a été débranché volontairement à la bascule du 20/10**
+(décision de migration) : aucune Caution n'existe aujourd'hui en Production, ni SAMMI ni Raptoru ; c'est une fonction
+historique **à reprendre** ici. SAMMI ne doit jamais être réactivé (ses boutons débiteraient les points StreamElements
+gelés). `CAUTION_CHAT` (Core) et `CAUTION` (bot) restent à `false` jusqu'à l'activation décidée par Antoni.
 
 Reprise des boutons SAMMI `CAUTION_START`, `CAUTION_CONFIRM`, `CAUTION_FINISH`, `CAUTION_RESET`, `ID7` (deck « Points
 de chaine », lu le 22/10/2026).
@@ -105,10 +107,10 @@ confirmed → rechecking → releasing → released`, ou `refused / cancelled / 
 2. Sauvegarde Production → déploiement Core (avec la migration `20261105130000_caution.sql`) **flag OFF**
    (`CAUTION_CHAT=false`) → contrôles `/health`, `/ready`, migration présente.
 3. Déploiement bot **flag OFF** (`CAUTION=false`).
-4. Bascule (hors live) : désactiver dans SAMMI les boutons `CAUTION_START` / `CAUTION_CONFIRM` / `ID7`, puis
-   `CAUTION=true` (bot) et `CAUTION_CHAT=true` (Core), redémarrer ; Studio : section Caution « prête ».
+4. Activation (hors live) : `CAUTION=true` (bot) et `CAUTION_CHAT=true` (Core), redémarrer ; Studio : section
+   Caution « prête ». Rien à couper côté SAMMI (débranché depuis le 20/10, à laisser éteint).
 5. Premier test réel avec un compte de test ; surveiller la colonne « Jetons » (aucune ligne « à vérifier »).
-6. Retour arrière : flags à `false` (le code reste, la table aussi) ; réactiver les boutons SAMMI.
+6. Retour arrière : flags à `false` (le code reste, la table aussi). **Jamais** de retour à SAMMI.
 
 Prérequis : économie canonique en Production (sinon la Caution de Production débiterait le Wallet de test du Core) ;
 droits Twitch LeCroupier\_ `moderator:manage:banned_users` et raptoru\_ `moderation:read` (accordés pour Random Ban).
@@ -119,4 +121,5 @@ droits Twitch LeCroupier\_ `moderator:manage:banned_users` et raptoru\_ `moderat
    SAMMI) — déjà le comportement codé.
 2. **Timeout prolongé après le devis : nouveau devis** (rien n'est débité, relancer `!caution`) — déjà codé.
 3. **Activation en Production avec la bascule économique** (Jetons sur le Wallet Raptoru) : d'ici là, déployée
-   mais OFF (`CAUTION_CHAT=false`, `CAUTION=false`), SAMMI garde la Caution. Prochaine étape : validation Lab (§ 7.1).
+   mais OFF (`CAUTION_CHAT=false`, `CAUTION=false`). Révision du 23/10 : SAMMI est débranché depuis la bascule, aucune
+   Caution n'est active en attendant. Prochaine étape : validation Lab (§ 7.1).
