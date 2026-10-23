@@ -7,11 +7,16 @@
 //                                           → DRY-RUN (prints the plan and the API calls it would make)
 //   node scripts/coolify-deploy.mjs deploy  <app> <sha> --go [...]           → the real deployment
 //   --redeploy: rebuild the commit already deployed (restart with a fresh image)
+//   --migrations-preapplied: the range's migrations were applied by hand beforehand — the new Core's container checks
+//                            them on the real database, then its migrator records them (coolify-verify-migrations.mjs)
 //
 // Rules: one application per call, an exact 40-character SHA that exists on origin/<the app's branch>; never the bot
 // when the Core is deployed; a migration only with --migrations-approved AND a database backup < 60 min, run once by
 // the deployment's post-deployment command (restored afterwards); a rollback is an explicit deploy of an older SHA
-// (--rollback), migrations never reverted. The token is read from a file outside the repository and never printed.
+// (--rollback), migrations never reverted; the bot only once the Core runs the target commit (or a later one). Any
+// migration path needs the deployment log, i.e. a token with Coolify's « read:sensitive » permission (without it
+// Coolify hides the log, and reports « finished » even when the post-deployment command failed). The token is read
+// from a file outside the repository and never printed.
 
 import { execFileSync } from 'node:child_process';
 import console from 'node:console';
@@ -20,6 +25,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { verifierCommand } from './coolify-verify-migrations.mjs';
 
 const { fetch, AbortSignal } = globalThis;
 const HOME = join(homedir(), '.raptoru');
@@ -52,6 +58,7 @@ const APPS = {
     health: ['https://core.raptoru.fr/health', 'https://core.raptoru.fr/ready'],
     database: '4jaqdyvzlelgwkyvuxhjy4mr',
     migrate: 'node apps/core-api/dist/scripts/migrate.js',
+    scope: 'prod',
     // Files whose change may need the BOT redeployed too (never done here: reported).
     botPaths: ['apps/twitch-bot/', 'packages/schemas/'],
   },
@@ -65,6 +72,7 @@ const APPS = {
     database: 'q4doguxsgguj31vgbejud1tz',
     migrate:
       'MIGRATION_SCOPE=staging node apps/core-api/dist/scripts/migrate.js',
+    scope: 'staging',
     botPaths: [],
   },
   bot: {
@@ -74,6 +82,8 @@ const APPS = {
     database: null,
     migrate: null,
     botPaths: [],
+    // Its range's migrations are the Core's: deployed only once the Core runs this commit or a later one.
+    after: 'core',
   },
 };
 
@@ -257,6 +267,18 @@ async function plan(key, sha, opts) {
     }
   }
   const problems = [];
+  if (app.after) {
+    const first = APPS[app.after];
+    const ahead = (await deployments(first, 10)).find(
+      (d) => d.status === 'finished',
+    )?.commit;
+    p.coreMigrations = p.migrations;
+    p.migrations = [];
+    if (!ahead || !(ahead === sha || isAncestor(sha, ahead)))
+      problems.push(
+        `${first.name} doit d'abord tourner sur ${sha.slice(0, 12)} ou après (actuellement ${ahead?.slice(0, 12) ?? 'inconnu'})`,
+      );
+  }
   if (p.busy) problems.push(`un déploiement est déjà en cours : ${p.busy}`);
   if (p.direction === 'identique' && !opts.redeploy)
     problems.push(
@@ -268,21 +290,27 @@ async function plan(key, sha, opts) {
     problems.push('commit plus ancien que le déployé : ajouter --rollback');
   if (p.migrations.length && !app.migrate)
     problems.push('migrations sur une application sans migrateur');
-  if (p.migrations.length && !opts.migrationsApproved)
+  if (opts.migrationsApproved && opts.migrationsPreapplied)
+    problems.push("--migrations-approved et --migrations-preapplied s'excluent");
+  const approved = opts.migrationsApproved || opts.migrationsPreapplied;
+  if (p.migrations.length && !approved)
     problems.push(
-      `migration(s) à appliquer : ${p.migrations.join(', ')} — autorisation spécifique requise (--migrations-approved)`,
+      `migration(s) à appliquer : ${p.migrations.join(', ')} — autorisation spécifique requise (--migrations-approved, ou --migrations-preapplied si elles ont déjà été appliquées à la main)`,
     );
-  if (p.migrations.length && opts.migrationsApproved) {
+  if (p.migrations.length && approved) {
     // Coolify marks a deployment « finished » even when its post-deployment command fails (checked on 4.4.7): the
-    // migration is verified only through the deployment log, which the token must be allowed to read.
-    const detail = recent[0]
-      ? await api('GET', `/deployments/${recent[0].deployment_uuid}`).catch(
-          () => null,
-        )
-      : null;
+    // migrator's / verifier's result is read only from the deployment log, which Coolify hides from a token without
+    // « read:sensitive » (the field is then absent, or the call refused).
+    let detail = null;
+    let refused = null;
+    if (recent[0])
+      detail = await api(
+        'GET',
+        `/deployments/${recent[0].deployment_uuid}`,
+      ).catch((e) => ((refused = e.message), null));
     if (!detail || !('logs' in detail))
       problems.push(
-        `journal des déploiements illisible avec ce jeton : migration non vérifiable — la lancer à la main (Coolify → ${app.name} → Terminal : ${app.migrate}) ou utiliser un jeton avec lecture des journaux`,
+        `preuve indispensable inaccessible : journal des déploiements illisible (${refused ?? (recent[0] ? 'champ logs masqué' : 'aucun déploiement à lire')}) — le jeton Coolify n'a pas la permission « read:sensitive » : la sortie du ${opts.migrationsPreapplied ? 'vérificateur' : 'migrateur'} ne pourrait pas être contrôlée. Créer dans Coolify (Keys & Tokens) un jeton read + write + deploy + read:sensitive, l'enregistrer dans ~/.raptoru/coolify-token.txt, puis relancer`,
       );
     const backup = await lastBackup(app);
     p.backup = backup;
@@ -346,6 +374,10 @@ function printPlan(p) {
   );
   if (p.backup)
     out(`Sauvegarde   : ${p.backup.created_at} (${p.backup.size} octets)`);
+  if (p.coreMigrations?.length)
+    out(
+      `Migrations : celles du Core dans la plage (${p.coreMigrations.join(', ')}) — portées par le Core, déployé avant`,
+    );
   if (p.bot.length)
     out(
       `⚠ Bot        : fichiers lus par le bot modifiés (le bot n'est PAS redéployé ici) :\n  ${p.bot.join('\n  ')}`,
@@ -375,16 +407,19 @@ async function deploy(key, sha, opts) {
   printPlan(p);
   if (p.problems.length) throw blocked(p.problems.join(' ; '));
   const migrate = p.migrations.length > 0;
+  const verify = migrate && opts.migrationsPreapplied;
   // Tests only (staging): a harmless post-deployment command to check its execution and its output in the log.
-  const postCommand = migrate
-    ? app.migrate
-    : key !== 'core'
+  const postCommand = verify
+    ? verifierCommand(p.migrations, app.scope)
+    : migrate
+      ? app.migrate
+      : key !== 'core'
       ? (process.env.COOLIFY_TEST_POST_COMMAND ?? null)
       : null;
   const calls = [
     ...(postCommand
       ? [
-          `PATCH /applications/${app.uuid} {post_deployment_command: "${postCommand}"}`,
+          `PATCH /applications/${app.uuid} {post_deployment_command: "${verify ? `<vérificateur des migrations préappliquées : ${p.migrations.join(', ')}, ${postCommand.length} caractères>` : postCommand}"} (relu ensuite)`,
         ]
       : []),
     `PATCH /applications/${app.uuid} {git_commit_sha: "${sha}"}`,
@@ -407,10 +442,17 @@ async function deploy(key, sha, opts) {
   const t0 = Date.now();
   let dep;
   try {
-    if (postCommand)
+    if (postCommand) {
       await api('PATCH', `/applications/${app.uuid}`, {
         post_deployment_command: postCommand,
       });
+      // Read back before anything else changes: a command Coolify cut or refused never runs.
+      const saved = await api('GET', `/applications/${app.uuid}`);
+      if (saved.post_deployment_command !== postCommand)
+        throw blocked(
+          `commande post-déploiement non enregistrée telle quelle par Coolify (${String(saved.post_deployment_command ?? '').length}/${postCommand.length} caractères) : rien déployé`,
+        );
+    }
     await api('PATCH', `/applications/${app.uuid}`, { git_commit_sha: sha });
     const check = await api('GET', `/applications/${app.uuid}`);
     if (check.git_commit_sha !== sha)
@@ -468,7 +510,29 @@ async function deploy(key, sha, opts) {
         ),
       )
       .slice(-6);
-    if (
+    if (verify) {
+      const line = logs.find((l) => l.startsWith('RAPTORU-MIGRATIONS '));
+      let r = null;
+      try {
+        r = line && JSON.parse(line.slice('RAPTORU-MIGRATIONS '.length));
+      } catch {
+        /* reported below */
+      }
+      migrationOut = r
+        ? [
+            `déjà enregistrées : ${r.recorded.join(', ') || '—'}`,
+            `conformes sur la base : ${r.conforming.join(', ') || '—'}`,
+            `enregistrées par le migrateur : ${r.applied.join(', ') || '—'}`,
+            ...r.problems.map((x) => `✗ ${x}`),
+          ]
+        : migrationOut;
+      if (!r)
+        problems.push(
+          "résultat du vérificateur absent du journal du déploiement : rien n'est prouvé",
+        );
+      else if (!r.ok)
+        problems.push(`migrations préappliquées NON conformes : ${r.problems.join(' ; ')}`);
+    } else if (
       migrate &&
       !migrationOut.some((l) => /applied:|already up to date/.test(l))
     )
@@ -524,6 +588,7 @@ async function deploy(key, sha, opts) {
     result,
     deployment: dep.deployment_uuid,
     migrations: p.migrations,
+    ...(verify ? { mode: 'preapplied' } : {}),
   });
   return result;
 }
@@ -564,6 +629,7 @@ const opts = {
   go: rest.includes('--go'),
   rollback: rest.includes('--rollback'),
   migrationsApproved: rest.includes('--migrations-approved'),
+  migrationsPreapplied: rest.includes('--migrations-preapplied'),
   redeploy: rest.includes('--redeploy'),
 };
 try {
@@ -579,7 +645,7 @@ try {
   } else if (cmd === 'deploy') await deploy(key, sha, opts);
   else {
     out(
-      'usage : status <app> | plan <app> <sha> | deploy <app> <sha> [--go] [--rollback] [--migrations-approved]',
+      'usage : status <app> | plan <app> <sha> | deploy <app> <sha> [--go] [--rollback] [--migrations-approved | --migrations-preapplied] [--redeploy]',
     );
     process.exitCode = 2;
   }
