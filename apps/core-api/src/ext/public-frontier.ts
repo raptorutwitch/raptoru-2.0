@@ -140,6 +140,7 @@ export function createPublicFrontier(
           .finally(() => (ticking = false));
       }, 250);
       const avatars = new AvatarCache(db, clock, app);
+      core.votekick.attachAvatars(avatars);
       const avatarTick = setInterval(() => {
         avatars
           .refresh()

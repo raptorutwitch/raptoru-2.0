@@ -18,6 +18,7 @@ import type { CautionMutes } from '../caution/service.js';
 import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
+import { avatarUrls } from '../raffle-lab/avatars.js';
 import {
   assertNotGloballyPaused,
   GlobalPauseError,
@@ -149,6 +150,18 @@ export class VotekickService implements CautionMutes {
     /** 0 = the target loses the coin flip, 1 = the initiator (tests inject it). */
     private readonly coin: () => 0 | 1 = () => randomInt(2) as 0 | 1,
   ) {}
+
+  /** The Twitch profile pictures (the Tombola's cache, lab_viewer_avatars): the target's picture for the overlay. */
+  private avatars: { ensure(ids: string[]): Promise<unknown> } | null = null;
+  attachAvatars(cache: { ensure(ids: string[]): Promise<unknown> }) {
+    this.avatars = cache;
+  }
+
+  /** The cached picture of a Twitch user, '' when unknown (the overlay shows its fallback). */
+  private async avatar(id: string | null) {
+    if (!id) return '';
+    return (await avatarUrls(this.db, [id])).get(id) ?? '';
+  }
 
   private now() {
     return this.clock.now();
@@ -465,6 +478,8 @@ export class VotekickService implements CautionMutes {
       lease_expires_at: null,
       seq: r.seq + 1,
     });
+    // The target's picture for the overlay: fetched aside (never delays or fails the vote), read by overlay().
+    if (r.mode === 'real') void this.avatars?.ensure([t.id]).catch(() => {});
     await q.query(
       `insert into votekick_cooldowns (channel_id, initiator_id, until_at) values ($1, $2, $3)
        on conflict (channel_id, initiator_id) do update set until_at = excluded.until_at`,
@@ -881,7 +896,7 @@ export class VotekickService implements CautionMutes {
         seq: open.seq,
         target: open.target_login ?? open.target_input,
         initiator: open.initiator_login,
-        avatar: '',
+        avatar: await this.avatar(open.target_id),
         yes:
           (VOTEKICK.initiatorKicks ? 1 : 0) +
           b.filter((x) => x.choice === 'kick').length,
@@ -908,7 +923,7 @@ export class VotekickService implements CautionMutes {
         seq: last.seq,
         target: last.target_login ?? last.target_input,
         initiator: last.initiator_login,
-        avatar: '',
+        avatar: await this.avatar(last.target_id),
         yes: last.kick ?? 0,
         no: last.save ?? 0,
         outcome: muted

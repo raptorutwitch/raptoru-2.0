@@ -74,15 +74,48 @@ export class AvatarCache {
       )
     ).map((r) => r.viewer_id);
     if (!due.length) return 0;
+    await this.fetchAndStore(due, now);
+    return due.length;
+  }
+
+  /**
+   * The pictures of these viewers (Votekick: the target), fetched now unless already known and fresh (same TTLs as
+   * the Tombola's refresh). Errors are stored, never thrown: a caller may fire and forget.
+   */
+  async ensure(ids: string[]): Promise<void> {
+    if (!this.lookup || !ids.length) return;
+    const now = this.clock.now();
+    const known = await this.db.query<{
+      viewer_id: string;
+      status: string;
+      fetched_at: Date;
+    }>(
+      `select viewer_id, status, fetched_at from lab_viewer_avatars where viewer_id = any($1::text[])`,
+      [ids],
+    );
+    const fresh = new Set(
+      known
+        .filter(
+          (r) =>
+            now.getTime() - new Date(r.fetched_at).getTime() <
+            (r.status === 'ok' ? OK_TTL_MS : RETRY_MS),
+        )
+        .map((r) => r.viewer_id),
+    );
+    const due = [...new Set(ids)].filter((id) => !fresh.has(id)).slice(0, 100);
+    if (due.length) await this.fetchAndStore(due, now);
+  }
+
+  private async fetchAndStore(due: string[], now: Date) {
     let found: { id: string; profile_image_url: string }[];
     try {
-      found = await this.lookup(due);
+      found = await this.lookup!(due);
     } catch {
       await this.store(
         due.map((id) => ({ id, url: null, status: 'error' })),
         now,
       );
-      return due.length;
+      return;
     }
     const byId = new Map(found.map((u) => [u.id, u.profile_image_url]));
     await this.store(
@@ -94,7 +127,6 @@ export class AvatarCache {
       }),
       now,
     );
-    return due.length;
   }
 
   private async store(

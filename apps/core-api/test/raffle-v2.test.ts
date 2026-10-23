@@ -1004,6 +1004,48 @@ describe('Tombola V2 read models', () => {
     });
   });
 
+  it('Twitch pictures on demand (Votekick): fetched once, a known picture or a recent failure not asked again, retried after 1 h', async () => {
+    const { after, core } = await lab();
+    const calls: string[][] = [];
+    let fail = false;
+    const cache = new AvatarCache(core.db, core.clock, async (ids) => {
+      calls.push(ids);
+      if (fail) throw new Error('twitch down');
+      return ids.map((id) => ({
+        id,
+        profile_image_url:
+          id === '900361'
+            ? 'https://static-cdn.jtvnw.net/user-default-pictures/b.png'
+            : '',
+      }));
+    });
+    await cache.ensure(['900361', '900362', '900361']);
+    expect(calls).toEqual([['900361', '900362']]);
+    await cache.ensure(['900361', '900362']); // ok (24 h) and missing (1 h): both known
+    expect(calls).toHaveLength(1);
+    fail = true;
+    await after(3_601_000);
+    await cache.ensure(['900362']); // the missing one is asked again, Twitch fails: stored, not thrown
+    expect(calls).toHaveLength(2);
+    await cache.ensure(['900362']);
+    expect(calls).toHaveLength(2);
+    await cache.ensure([]);
+    expect(
+      (
+        await core.db.query<{ viewer_id: string; url: string | null; status: string }>(
+          'select viewer_id, url, status from lab_viewer_avatars order by viewer_id',
+        )
+      ).map((r) => `${r.viewer_id}:${r.status}:${r.url ?? ''}`),
+    ).toEqual([
+      '900361:ok:https://static-cdn.jtvnw.net/user-default-pictures/b.png',
+      '900362:error:',
+    ]);
+    expect(
+      await new AvatarCache(core.db, core.clock, null).ensure(['900363']),
+    ).toBeUndefined(); // no Twitch app: nothing asked, nothing stored
+    expect(calls).toHaveLength(2);
+  });
+
   it('Twitch pictures (ASTRA-P2-005): one refresh at a time; a stuck Twitch call ends at its budget', async () => {
     const { config, act, joinExt, core } = await lab();
     await config();

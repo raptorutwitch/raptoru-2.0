@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { CautionService } from '../src/caution/service.js';
 import { labEconomy } from '../src/economy/economy.js';
 import { editWallet } from '../src/lab-moderation/store.js';
+import { AvatarCache } from '../src/raffle-lab/avatars.js';
 import { VotekickService } from '../src/votekick/service.js';
 import { setup } from './helpers.js';
 
@@ -132,6 +133,52 @@ describe('Votekick: opening a vote', () => {
     });
     expect((await l.say(V3, '!votekick viewer4')).outcome).toBe('busy');
     expect((await l.replies()).at(-1)).toBe('Un Votekick est déjà en cours.');
+  });
+
+  it('the target’s Twitch picture reaches the overlay (live, then the verdict) once fetched aside; none → empty', async () => {
+    const l = await lab();
+    const PIC = `https://static-cdn.jtvnw.net/jtv_user_pictures/${TARGET.id}-profile_image-300x300.png`;
+    const looked: string[][] = [];
+    const cache = new AvatarCache(l.core.db, l.core.clock, async (ids) => {
+      looked.push(ids);
+      return ids.map((id) => ({
+        id,
+        profile_image_url: id === TARGET.id ? PIC : '',
+      }));
+    });
+    const pending: Promise<unknown>[] = [];
+    l.vk.attachAvatars({
+      ensure: (ids) => {
+        const p = cache.ensure(ids);
+        pending.push(p);
+        return p;
+      },
+    });
+    expect(await l.opened()).toEqual({ outcome: 'opened' });
+    await Promise.all(pending); // fired aside at the opening, never awaited by the vote
+    expect(looked).toEqual([[TARGET.id]]);
+    expect(await l.vk.overlay(CH)).toMatchObject({
+      action: 'live',
+      target: 'viewer2',
+      avatar: PIC,
+    });
+    await l.say(V3, '!kick');
+    await l.say(V4, '!kick');
+    await l.end();
+    expect(await l.vk.overlay(CH)).toMatchObject({
+      action: 'result',
+      avatar: PIC,
+    });
+    // Known and fresh: not looked up again. A viewer Twitch has no picture for: '' (the overlay's fallback).
+    l.core.clock.advance(2 * 3600_000);
+    expect(await l.opened(V5)).toEqual({ outcome: 'opened' });
+    await Promise.all(pending);
+    expect(looked).toEqual([[TARGET.id], [V5.id]]);
+    expect(await l.vk.overlay(CH)).toMatchObject({
+      action: 'live',
+      target: 'viewer5',
+      avatar: '',
+    });
   });
 
   it('refusals: unknown target, moderator, self (same id), Twitch / moderators unreadable', async () => {

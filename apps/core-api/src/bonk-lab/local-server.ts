@@ -38,6 +38,7 @@ const avatars = new AvatarCache(
     ? twitchAppUserLookup({ clientId, clientSecret })
     : null,
 );
+votekick.attachAvatars(avatars);
 let ticking = false;
 const raffleTick = setInterval(() => {
   if (ticking) return;
