@@ -246,7 +246,9 @@ body.test{ background:#0c0a12 }
   // ---------- Mode ----------
   // SAMMI passe toujours ?vk=... . Ouvrir le fichier "nu" (sans vk) => mode TEST.
   const hasVk = params.has('vk');
-  let mode = params.get('vk') || (hasVk ? 'clear' : 'test');
+  // ?studio : source OBS servie par Studio (Votekick V2), jamais le mode test.
+  const studio = params.has('studio');
+  let mode = params.get('vk') || (hasVk || studio ? 'clear' : 'test');
   let session = params.get('session') || 'default';
   const DEFAULT_DURATION = 60;
   let INTRO_KEY = 'votekick_intro_' + session;
@@ -600,6 +602,22 @@ body.test{ background:#0c0a12 }
 
   if (mode === 'clear' || mode === 'standby') hide();
   else boot();
+
+  // Votekick V2 : le vote en cours vient de Studio (/votekick/event, même contrat que l'événement SAMMI).
+  if (studio) {
+    let last = '';
+    const poll = async () => {
+      try {
+        const r = await fetch('/votekick/event', { cache: 'no-store' });
+        if (r.ok) {
+          const text = await r.text();
+          if (text !== last) { last = text; applySammiEvent(JSON.parse(text)); }
+        }
+      } catch (_) { /* Studio redémarre : on garde l'écran, on réessaie */ }
+      setTimeout(poll, 300);
+    };
+    poll();
+  }
 
   // Grille de mesure hors mode test : uniquement si on la demande explicitement (?grid=1).
   // Jamais visible dans SAMMI sans ce paramètre.
