@@ -196,7 +196,7 @@ describe('Votekick in Studio: the overlay', () => {
       .then((handled) => ({ handled, ...out }));
   }
 
-  it('serves Core’s event, the variant D page in studio mode, and nothing outside the folder', async () => {
+  it('serves Core’s event, the legacy page (studio mode) at /overlay.html and the 23/10 alias, nothing else of the folder', async () => {
     const s = await studio();
     s.core.overlay = { action: 'live', session: 'v1', seq: 3, yes: 2, no: 1 };
     await s.rt.tick();
@@ -206,10 +206,16 @@ describe('Votekick in Studio: the overlay', () => {
         seq: 3,
       },
     );
-    const page = await get(s.rt, '/votekick/variants/variants.html?v=D&studio');
+    const page = await get(s.rt, '/votekick/overlay.html?studio');
     expect(page.status).toBe(200);
     expect(page.body).toContain("params.has('studio')");
-    expect((await get(s.rt, '/votekick/model.js')).status).toBe(200);
+    expect(page.body).toContain('applySammiEvent(JSON.parse(text))'); // the legacy design fed by Studio
+    expect(page.body).not.toContain('variants'); // never the exploration page (variant D)
+    // The OBS source created on 23/10 keeps working: same page.
+    const alias = await get(s.rt, '/votekick/variants/variants.html?v=D&studio');
+    expect(alias.status).toBe(200);
+    expect(alias.body).toBe(page.body);
+    expect((await get(s.rt, '/votekick/model.js')).status).toBe(404);
     expect(await get(s.rt, '/votekick/../../package.json')).toMatchObject({
       handled: false, // normalised to /package.json: never served from here
     });

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { extname, join, normalize } from 'node:path';
+import { join, normalize } from 'node:path';
 import type { VotekickOverlayEvent } from '@raptoru/schemas';
 import type { MuteController } from './mute-controller.js';
 
@@ -9,8 +9,8 @@ import type { MuteController } from './mute-controller.js';
 // - the broadcaster's mute in OBS (MuteController: snapshot, mic « Micro » cut first and restored last, restored on
 //   any failure) — started once per mute id and reported (started / failed), ended when Core ends it (time or a paid
 //   caution) and reported; a mute Core forgets is ended by the controller's watchdog;
-// - the overlay's event, served to the OBS browser source (votekick-overlay/variants/variants.html?v=D&studio,
-//   provisional variant D) at /votekick/event.
+// - the overlay's event, served to the OBS browser source (/votekick/overlay.html?studio — the legacy SAMMI design,
+//   votekick-overlay/legacy/votekick-overlay.html) at /votekick/event.
 // Studio never decides a verdict, a timeout or a payment.
 
 type CoreCall = <T>(path: string, body?: unknown) => Promise<T>;
@@ -184,17 +184,19 @@ export class VotekickRuntime {
       );
       return true;
     }
-    // Overlay files only (model.js, variants/variants.html), never outside the folder.
+    // The overlay page only, never anything else of the folder. Decided 23/10 (live): the page served is the legacy
+    // SAMMI design (legacy/votekick-overlay.html, fed by /votekick/event with ?studio); the exploration variants are
+    // never served. /votekick/variants/variants.html stays an alias: the OBS source « Votekick (V2) » of 23/10 uses it.
     const rel = normalize(url.pathname.slice('/votekick/'.length));
-    if (!/^(model\.js|variants[\\/]variants\.html)$/.test(rel)) {
+    if (!/^(overlay\.html|variants[\\/]variants\.html)$/.test(rel)) {
       send(404, 'application/json', '{"error":"not_found"}');
       return true;
     }
     try {
       send(
         200,
-        TYPES[extname(rel)]!,
-        await readFile(join(this.d.overlayDir, rel)),
+        TYPES['.html']!,
+        await readFile(join(this.d.overlayDir, 'legacy', 'votekick-overlay.html')),
       );
     } catch {
       send(404, 'application/json', '{"error":"not_found"}');

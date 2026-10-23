@@ -71,6 +71,21 @@ describe('MUTED: the historical end (SAMMI) vs the V2 end', () => {
   });
 });
 
+describe('MUTED V2: the audio drive', () => {
+  it('re-armed (its settings re-sent, unchanged) right before it is enabled: a drive pasted while OBS runs reads the voice', async () => {
+    const l = await lab();
+    const before = { ...l.obs.filters.get('Micro (Obsolète)|Votekick Zoom Drive')!.settings };
+    await l.mute.muteStart('mute:s1', 50);
+    const r = l.obs.requests;
+    const armed = r.indexOf('SetSourceFilterSettings Micro (Obsolète) / Votekick Zoom Drive');
+    const on = r.indexOf('SetSourceFilterEnabled Micro (Obsolète) / Votekick Zoom Drive');
+    expect(armed).toBeGreaterThan(-1);
+    expect(on).toBe(armed + 1);
+    expect(l.obs.filters.get('Micro (Obsolète)|Votekick Zoom Drive')!.settings).toEqual(before);
+    expect(l.obs.filters.get('Micro (Obsolète)|Votekick Zoom Drive')!.enabled).toBe(true);
+  });
+});
+
 describe('MUTED V2: determinism', () => {
   it('a late or repeated end of an old mute does nothing; a second start only moves the end', async () => {
     const l = await lab();

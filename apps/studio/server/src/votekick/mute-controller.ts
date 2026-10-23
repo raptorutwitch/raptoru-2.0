@@ -185,6 +185,17 @@ export class MuteController {
           true,
         );
         this.active.bandAt = this.now();
+        // Move Transition (3.1.1): « Audio Move » attaches its audio meter to its input only in its update / load.
+        // A drive filter pasted while OBS runs reads nothing until OBS restarts (live of 23/10: no zoom). Its
+        // settings re-sent unchanged run that update now, so the drive reads the voice whatever its history.
+        await obs.request('SetSourceFilterSettings', {
+          sourceName: this.cfg.driveInput,
+          filterName: this.cfg.driveFilter,
+          filterSettings: (
+            await this.filter(obs, this.cfg.driveInput, this.cfg.driveFilter)
+          ).settings,
+          overlay: true,
+        });
         await this.setFilter(
           obs,
           this.cfg.driveInput,
