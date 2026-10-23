@@ -12,6 +12,7 @@ const mockedModules = [
   '../src/lab-chat-ingest.js',
   '../src/lab-chat-output.js',
   '../src/random-ban-executor.js',
+  '../src/caution-executor.js',
   '../src/runtime.js',
 ];
 
@@ -211,6 +212,21 @@ async function boot(
       broadcaster: ['moderation:read', 'channel:read:subscriptions'],
     },
   }));
+  // Caution's executor polls Core like Random Ban's (to report its rights): isolated the same way.
+  const caution = {
+    ready: { canRead: false, canRelease: false, missing: [] },
+    run: vi.fn(async () => {}),
+    stop: vi.fn(),
+  };
+  const createCautionExecutor = vi.fn((deps: unknown) => {
+    void deps;
+    return caution;
+  });
+  vi.doMock('../src/caution-executor.js', () => ({
+    createCautionExecutor,
+    fileCautionJournal: vi.fn(),
+    helixCautionTwitch: vi.fn(() => ({})),
+  }));
   if (options.main) await import('../src/index.js');
   else await import('../src/lab-chat-main.js');
   return {
@@ -219,6 +235,7 @@ async function boot(
     helix,
     requests,
     createRandomBanExecutor,
+    createCautionExecutor,
     ingest,
     output,
     randomBan,
@@ -270,6 +287,10 @@ describe('Bot account and capability wiring (no real Twitch or token files)', ()
     expect(s.accounts).toHaveLength(1);
     expect(s.sockets).toHaveLength(1);
     expect(s.createRandomBanExecutor.mock.calls[0]![0]).toMatchObject({
+      broadcasterScopes: null,
+    });
+    // The Lab adapter always runs Caution's executor; without the broadcaster token it says it cannot read.
+    expect(s.createCautionExecutor.mock.calls[0]![0]).toMatchObject({
       broadcasterScopes: null,
     });
     expect(s.requests).not.toHaveBeenCalled();
@@ -413,6 +434,8 @@ describe('Bot account and capability wiring (no real Twitch or token files)', ()
       randomBan: 'false',
     });
     expect(s.createRandomBanExecutor).not.toHaveBeenCalled();
+    // CAUTION unset (OFF by default: SAMMI still answers !caution): no Caution executor either.
+    expect(s.createCautionExecutor).not.toHaveBeenCalled();
   });
 
   it('the main bot with Random Ban alone: broadcaster reads, no broadcaster EventSub socket', async () => {
