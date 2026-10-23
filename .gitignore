@@ -29,6 +29,9 @@ dist/
 # Random Ban V2 timeouts journal (bot executor, local runtime data)
 .lab-random-ban-journal.json*
 .random-ban-journal.json*
+# Caution releases journal (bot executor, local runtime data)
+.lab-caution-journal.json*
+.caution-journal.json*
 
 # Studio packaging output
 apps/studio/desktop/stage/

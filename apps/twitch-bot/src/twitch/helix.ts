@@ -37,7 +37,7 @@ export interface ChattersPage {
 
 export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
   async function request(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'DELETE',
     path: string,
     body?: unknown,
     signal?: AbortSignal,
@@ -361,6 +361,23 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       await request('POST', `/moderation/bans?${qs}`, {
         data: { user_id: userId, duration: durationS, reason },
       });
+    },
+
+    /**
+     * Unban User: lifts a ban or a timeout (Caution). LeCroupier_'s token, moderator:manage:banned_users. 204 when
+     * lifted; 400 when the user is not banned (any more).
+     */
+    async unbanUser(
+      broadcasterId: string,
+      moderatorId: string,
+      userId: string,
+    ) {
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        moderator_id: moderatorId,
+        user_id: userId,
+      });
+      await request('DELETE', `/moderation/bans?${qs}`);
     },
 
     async subscribe(

@@ -25,6 +25,11 @@ import {
   fileRbJournal,
   RB_SCOPES,
 } from './random-ban-executor.js';
+import {
+  createCautionExecutor,
+  fileCautionJournal,
+  helixCautionTwitch,
+} from './caution-executor.js';
 import { fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { superviseTwitchAuth } from './twitch/auth-supervision.js';
 import { runEventSub } from './twitch/eventsub.js';
@@ -401,4 +406,31 @@ if (status.scopes.includes('user:write:chat')) {
     `[random-ban] exécuteur prêt — recherche : ${randomBan.ready.canSearch ? 'oui' : 'non'}, timeout : ${randomBan.ready.canTimeout ? 'oui' : 'non'}${randomBan.ready.missing.length ? ` (manque : ${randomBan.ready.missing.join(', ')})` : ''}`,
   );
   void randomBan.run();
+}
+// Caution (docs/CAUTION.md): the Twitch executor of the Lab Core's cautions — the lookup and the unban with
+// LeCroupier_'s token, the list of bans with the broadcaster's. A Studio simulator message is a dry run (Core never
+// hands it a release).
+{
+  const cautionChannel = env.LAB_ALERTS_CHANNEL_ID ?? env.LAB_CHAT_CHANNEL_ID;
+  const caution = createCautionExecutor({
+    core: labCall,
+    channelId: cautionChannel,
+    broadcasterId: app.TWITCH_BROADCASTER_ID,
+    executorId: `lab-chat-${status.userId}`,
+    login: status.login ?? 'LeCroupier_',
+    botScopes: status.scopes,
+    broadcasterScopes: broadcaster?.scopes ?? null,
+    twitch: helixCautionTwitch(
+      helix,
+      broadcaster?.helix ?? null,
+      app.TWITCH_BROADCASTER_ID,
+      status.userId!,
+    ),
+    journal: fileCautionJournal(app.LAB_CAUTION_JOURNAL_FILE),
+  });
+  consumers.add(() => caution.stop());
+  console.log(
+    `[caution] exécuteur prêt — lecture : ${caution.ready.canRead ? 'oui' : 'non'}, levée : ${caution.ready.canRelease ? 'oui' : 'non'}${caution.ready.missing.length ? ` (manque : ${caution.ready.missing.join(', ')})` : ''}`,
+  );
+  void caution.run();
 }

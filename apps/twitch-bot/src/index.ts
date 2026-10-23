@@ -18,6 +18,11 @@ import {
   fileRbJournal,
   helixRbTwitch,
 } from './random-ban-executor.js';
+import {
+  createCautionExecutor,
+  fileCautionJournal,
+  helixCautionTwitch,
+} from './caution-executor.js';
 import { botFlags, createInstanceLease } from './instance-lease.js';
 import { installConsole } from './log.js';
 import { createBotRuntime } from './runtime.js';
@@ -350,8 +355,10 @@ const pointsOn = config.CHANNEL_POINTS_EVENTS === 'true';
 // Random Ban V2 (RANDOM_BAN): the executor reads the moderators, the bans and the subscriptions with the broadcaster's
 // Helix; it needs no broadcaster EventSub connection.
 const randomBanOn = config.RANDOM_BAN === 'true';
+// Caution (CAUTION): the list of bans with the broadcaster's Helix too (no EventSub connection).
+const cautionOn = config.CAUTION === 'true';
 let rbBroadcaster: { helix: Helix; scopes: string[] } | null = null;
-if (loyaltyOn || pointsOn || randomBanOn) {
+if (loyaltyOn || pointsOn || randomBanOn || cautionOn) {
   let broadcasterReady = false;
   const broadcasterAuth = new TwitchAuth({
     clientId: config.TWITCH_CLIENT_ID,
@@ -506,4 +513,33 @@ if (randomBanOn) {
     `[random-ban] exécuteur prêt (Core principal) — recherche : ${randomBan.ready.canSearch ? 'oui' : 'non'}, timeout : ${randomBan.ready.canTimeout ? 'oui' : 'non'}${randomBan.ready.missing.length ? ` (manque : ${randomBan.ready.missing.join(', ')})` : ''}`,
   );
   void randomBan.run();
+}
+
+// Caution (docs/CAUTION.md, CAUTION=true): the Twitch executor of the main Core's cautions, on /v1/bot/caution with the
+// bot secret. Core debits only after this executor's fresh read; it unbans only once Core said « proceed ».
+if (cautionOn) {
+  const bh = rbBroadcaster;
+  const caution = createCautionExecutor({
+    core: coreCall,
+    base: '/v1/bot/caution',
+    channelId: config.TWITCH_BROADCASTER_ID,
+    broadcasterId: config.TWITCH_BROADCASTER_ID,
+    // Stable across restarts: a journaled release is reported with the same executor id.
+    executorId: `bot-${status.userId}`,
+    login: status.login ?? 'LeCroupier_',
+    botScopes: status.scopes,
+    broadcasterScopes: bh?.scopes ?? null,
+    twitch: helixCautionTwitch(
+      coreHelix,
+      bh?.helix ?? null,
+      config.TWITCH_BROADCASTER_ID,
+      status.userId!,
+    ),
+    journal: fileCautionJournal(config.CAUTION_JOURNAL_FILE),
+  });
+  consumers.add(() => caution.stop());
+  console.log(
+    `[caution] exécuteur prêt (Core principal) — lecture : ${caution.ready.canRead ? 'oui' : 'non'}, levée : ${caution.ready.canRelease ? 'oui' : 'non'}${caution.ready.missing.length ? ` (manque : ${caution.ready.missing.join(', ')})` : ''}`,
+  );
+  void caution.run();
 }
