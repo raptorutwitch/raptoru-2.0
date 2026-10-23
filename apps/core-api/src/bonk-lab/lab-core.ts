@@ -18,6 +18,8 @@ import { alertsRoutes } from '../http/alerts-routes.js';
 import { channelPointsRoutes } from '../http/channel-points-routes.js';
 import { ChannelPointsService } from '../channel-points/service.js';
 import { randomBanRoutes } from '../http/random-ban-routes.js';
+import { cautionRoutes } from '../http/caution-routes.js';
+import { CautionService } from '../caution/service.js';
 import { RandomBanService } from '../random-ban/service.js';
 import { subWheelRoutes } from '../http/sub-wheel-routes.js';
 import { SubWheelService } from '../sub-wheel/service.js';
@@ -106,6 +108,7 @@ export function createLabCore({
   // Commands V2 answers become durable steps, handed to the Lab Twitch adapter only while « Sortie chat réelle » is
   // ON (OFF by default); Duel finds its target by login with the Lab app credentials of the Tombola avatars.
   const randomBan = new RandomBanService(db, systemClock);
+  const caution = new CautionService(db, systemClock, economy, broadcasterOf);
   const channelPoints = new ChannelPointsService(
     db,
     systemClock,
@@ -124,6 +127,7 @@ export function createLabCore({
       tts,
       randomBan,
       channelPoints,
+      caution,
     });
   const alertsService = new AlertsService(db, systemClock);
   // Gains credited only when the runtime economy is the canonical Wallet (never with the Lab wallet).
@@ -161,6 +165,8 @@ export function createLabCore({
     ...channelPointsRoutes(channelPoints),
     // Random Ban V2: Studio (state, tests, animations) and the Lab chat adapter (Twitch executor).
     ...randomBanRoutes(randomBan),
+    // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
+    ...cautionRoutes(caution),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
   ];

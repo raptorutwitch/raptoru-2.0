@@ -107,6 +107,7 @@ describe('Lab / prod migration boundary', () => {
       '20261025120000_channel_points_lab.sql',
       '20261026120000_random_ban_lab.sql',
       '20261027120000_sub_wheel_lab.sql',
+      '20261105120000_caution_lab.sql',
     ])
       expect(prod).not.toContain(f);
     // Rule check with a future Lab migration (the boundary does not depend on today's list).
@@ -231,7 +232,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
     const files = await readdir(DEFAULT_MIGRATIONS_DIR);
     const prod = selectMigrations(files, 'prod');
     const old = selectMigrations(files, 'prod', OLD_PROD);
-    expect(old.length).toBe(26);
+    expect(old.length).toBe(27);
     expect(prod.filter((f) => !old.includes(f))).toEqual([
       ...MAIN_CORE_LAB_MIGRATIONS,
     ]);
@@ -242,7 +243,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a blank database: everything once; again: nothing', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod')).length).toBe(41);
+    expect((await migrate(db, 'prod')).length).toBe(42);
     expect(await migrate(db, 'prod')).toEqual([]);
     for (const t of ['cmd_steps', 'word_game_words', 'mini_game_duels'])
       expect(
@@ -252,22 +253,40 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       ).toBe(1);
   });
 
-  it('the production database of 22/10 (39 files): the winner announcements then the chat source files only, once', async () => {
+  const CAUTION = '20261105130000_caution.sql';
+  // Before Caution: its file not in the production selection (classified Lab here, so the folder stays valid).
+  const withoutCaution = PROD_MIGRATIONS.filter((f) => f !== CAUTION);
+  const labWithCaution = [...LAB_MIGRATIONS, CAUTION];
+  it('the production database of 22/10 (39 files): the winner announcements, the chat source, then Caution, once', async () => {
     const db = createPgliteDb(new PGlite());
     const NEW = '20261031140000_cmd_steps_win_announcements_lab.sql';
     const CHAT = '20261104120000_cp_redemptions_chat_source_lab.sql';
     const before = {
       ...MIGRATION_SCOPES,
+      prod: withoutCaution,
+      lab: labWithCaution,
       mainCore: MAIN_CORE_LAB_MIGRATIONS.filter((f) => f !== NEW && f !== CHAT),
     };
     expect((await migrate(db, 'prod', undefined, before)).length).toBe(39);
-    expect(await migrate(db, 'prod')).toEqual([NEW, CHAT]);
+    expect(await migrate(db, 'prod')).toEqual([NEW, CHAT, CAUTION]);
+    expect(await migrate(db, 'prod')).toEqual([]);
+  });
+
+  it('the production database of 23/10 (41 files, FX Cam applied): Caution only, once', async () => {
+    const db = createPgliteDb(new PGlite());
+    const before = {
+      ...MIGRATION_SCOPES,
+      prod: withoutCaution,
+      lab: labWithCaution,
+    };
+    expect((await migrate(db, 'prod', undefined, before)).length).toBe(41);
+    expect(await migrate(db, 'prod')).toEqual([CAUTION]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
 
   it('a database migrated by the previous production selection: only the main Core files, once', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(26);
+    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(27);
     expect(await migrate(db, 'prod')).toEqual([...MAIN_CORE_LAB_MIGRATIONS]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
@@ -279,7 +298,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
     };
     expect((await migrate(db, 'staging', undefined, OLD_STAGING)).length).toBe(
-      30,
+      31,
     );
     expect(await migrate(db, 'prod')).toEqual(
       MAIN_CORE_LAB_MIGRATIONS.filter(

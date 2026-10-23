@@ -1,6 +1,7 @@
 import { AlertsService } from './alerts/service.js';
 import { BotInstanceService } from './bot-instance/service.js';
 import { RandomBanService } from './random-ban/service.js';
+import { CautionService } from './caution/service.js';
 import { SubWheelService } from './sub-wheel/service.js';
 import { ChannelPointsService } from './channel-points/service.js';
 import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
@@ -46,6 +47,8 @@ export interface Core {
   channelPoints: ChannelPointsService;
   /** Random Ban V2 (same service as the Lab Core; triggered by the channel points rule). */
   randomBan: RandomBanService;
+  /** Caution: the requests and the executor's routes always; `!caution` in the chat only with `cautionChat`. */
+  caution: CautionService;
   /** Roue du Sub (fed by the alerts reception; OFF by default). */
   subWheel: SubWheelService;
   /** Single active production bot (lease + the health Studio shows). */
@@ -74,6 +77,8 @@ export function createCore(
     loginLookup?: LoginLookup | null;
     /** Lot 9: alerts older than this are recorded, not animated (null / absent: off). */
     alertsMaxAgeMs?: number | null;
+    /** `!caution` answered in the chat (main Core: CAUTION_CHAT=true; SAMMI still answers it until the cutover). */
+    cautionChat?: boolean;
   } = {},
 ): Core {
   const broadcasterOf = () => channel.broadcasterId ?? null;
@@ -82,6 +87,7 @@ export function createCore(
   const loyalty = new LoyaltyEngine(db, clock, wallet.wallet, loyaltyModes);
   const soundLab = new SoundLabService(db, clock, undefined, economy);
   const randomBan = new RandomBanService(db, clock);
+  const caution = new CautionService(db, clock, economy, broadcasterOf);
   const ttsLab = new TtsLabService(db, clock, undefined, undefined, economy);
   const channelPoints = new ChannelPointsService(
     db,
@@ -119,6 +125,7 @@ export function createCore(
     ),
     channelPoints,
     randomBan,
+    caution,
     subWheel: new SubWheelService(db, clock, undefined, economy),
     botInstances: new BotInstanceService(db, clock),
     economy,
@@ -129,6 +136,7 @@ export function createCore(
       tts: ttsLab,
       randomBan,
       channelPoints,
+      caution: channel.cautionChat ? caution : null,
       raffle: raffleLab,
       broadcasterOf,
       twitch: channel.twitchApp ?? null,

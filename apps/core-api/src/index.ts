@@ -77,6 +77,7 @@ const core = createCore(
             clientSecret: config.TWITCH_APP_CLIENT_SECRET,
           }
         : null,
+    cautionChat: config.CAUTION_CHAT === 'true',
     alertsMaxAgeMs: config.ALERTS_MAX_AGE_SECONDS
       ? config.ALERTS_MAX_AGE_SECONDS * 1000
       : null,
@@ -130,6 +131,8 @@ createApp({
   channelPoints: core.channelPoints,
   // Random Ban V2: the paired Studio (state, tests, animations) and the bot (Twitch executor).
   randomBan: core.randomBan,
+  // Caution: the paired Studio (state) and the bot (Twitch executor); `!caution` itself only with CAUTION_CHAT=true.
+  caution: core.caution,
   // Roue du Sub: OFF by default; gains recorded, never credited automatically.
   subWheel: core.subWheel,
   // Single active production bot: the lease (bot) and its health for the paired Studio.

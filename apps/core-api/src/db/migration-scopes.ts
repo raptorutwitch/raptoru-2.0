@@ -47,6 +47,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261030130000_wallet_credit_currencies.sql',
   // Single active production bot: the lease and the health Studio shows (plan post-live lot 1).
   '20261031130000_bot_instance.sql',
+  // Caution (`!caution`): one row per request, the quote, the debit and the release (same as the Lab file).
+  '20261105130000_caution.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -98,6 +100,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261031140000_cmd_steps_win_announcements_lab.sql',
   // !fxcam from the chat: cp_redemptions also accepts the source « chat » (Lab and main Core).
   '20261104120000_cp_redemptions_chat_source_lab.sql',
+  // Caution (`!caution`), Lab schema.
+  '20261105120000_caution_lab.sql',
 ]);
 
 /**

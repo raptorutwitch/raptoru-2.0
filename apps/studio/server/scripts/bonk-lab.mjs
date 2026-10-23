@@ -86,6 +86,7 @@ try {
     '20261030120000_lab_ledger_channel_points.sql',
     '20261031140000_cmd_steps_win_announcements_lab.sql',
     '20261104120000_cp_redemptions_chat_source_lab.sql',
+    '20261105120000_caution_lab.sql',
   ]) {
     if (
       (

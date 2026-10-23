@@ -37,6 +37,9 @@ const Env = z
     // Twitch app (client credentials, read-only Get Users): viewer names and Tombola avatars. Optional.
     TWITCH_APP_CLIENT_ID: z.string().min(1).optional(),
     TWITCH_APP_CLIENT_SECRET: z.string().min(1).optional(),
+    // Caution (docs/CAUTION.md): `!caution` / `oui` / `non` answered by this Core. OFF until the cutover: SAMMI still
+    // answers `!caution` in production (both on = two quotes, two debits).
+    CAUTION_CHAT: z.enum(['true', 'false']).default('false'),
     // Bonk Twitch emotes on /v1/ext: the HTTPS OAuth redirect registered on that same Twitch app
     // (…/v1/ext/emotes/oauth/callback). Absent = no linking. Needs the app and EXT_TOKEN_KEY.
     EXT_TWITCH_REDIRECT_URI: z
