@@ -233,7 +233,13 @@ export class ChannelPointsRuntime {
       return true;
     const rb = url.pathname.startsWith('/api/random-ban');
     const sw = url.pathname.startsWith('/api/sub-wheel');
-    if (!url.pathname.startsWith('/api/channel-points') && !rb && !sw)
+    const caution = url.pathname === '/api/caution/state';
+    if (
+      !url.pathname.startsWith('/api/channel-points') &&
+      !rb &&
+      !sw &&
+      !caution
+    )
       return false;
     const reply = (status: number, body: unknown) => {
       res.writeHead(status, {
@@ -252,7 +258,15 @@ export class ChannelPointsRuntime {
       return true;
     }
     try {
-      if (sw)
+      if (caution)
+        // Caution: read only (docs/CAUTION.md); the money moves only through the chat.
+        reply(
+          200,
+          await this.d.core(
+            `${this.d.environment === 'production' ? '/v1/studio/caution' : '/v1/lab/caution'}/${this.d.channelId}/state`,
+          ),
+        );
+      else if (sw)
         reply(
           200,
           await this.subWheel.api(

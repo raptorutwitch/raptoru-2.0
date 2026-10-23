@@ -12,6 +12,7 @@ import {
   statusView,
 } from './channel-points-view.js';
 import { mountRandomBan } from './random-ban.js';
+import { mountCaution } from './caution.js';
 import { mountSubWheel } from './sub-wheel.js';
 
 // Points de chaîne V1 — Studio tab (docs/CHANNEL_POINTS_V1.md). Twitch rewards (left), the local rule of the selected
@@ -78,12 +79,14 @@ export function mountChannelPoints(root: HTMLElement) {
     </div>
     <h2>Historique</h2><div data-role="history"></div>
     <h2>Random Ban</h2><div data-role="random-ban"></div>
+    <h2>Caution</h2><div data-role="caution"></div>
     <h2>Roue du Sub</h2><div data-role="sub-wheel"></div>
     <datalist id="cp-scenes"></datalist><datalist id="cp-sources"></datalist><datalist id="cp-filters"></datalist>
   </section>`;
   const $ = (role: string) =>
     root.querySelector<HTMLElement>(`[data-role="${role}"]`)!;
   const randomBan = mountRandomBan($('random-ban'));
+  const caution = mountCaution($('caution'));
   const subWheel = mountSubWheel($('sub-wheel'));
 
   const reward = () => state?.rewards.find((r) => r.id === selected) ?? null;
@@ -444,10 +447,12 @@ export function mountChannelPoints(root: HTMLElement) {
       if (!visible) return;
       void load();
       void randomBan.load();
+      void caution.load();
       void subWheel.load();
       timer = window.setInterval(() => {
         void load();
         void randomBan.load();
+        void caution.load();
         void subWheel.load();
       }, 3000);
     },
