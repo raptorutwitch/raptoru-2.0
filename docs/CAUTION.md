@@ -113,8 +113,10 @@ confirmed → rechecking → releasing → released`, ou `refused / cancelled / 
 Prérequis : économie canonique en Production (sinon la Caution de Production débiterait le Wallet de test du Core) ;
 droits Twitch LeCroupier\_ `moderator:manage:banned_users` et raptoru\_ `moderation:read` (accordés pour Random Ban).
 
-## 8. À décider / valider par Antoni
+## 8. Décisions d'Antoni (23/10/2026)
 
-1. Les timeouts donnés **à la main par la modération** restent-ils rachetables (comportement SAMMI) ?
-2. Timeout prolongé après le devis : nouveau devis (V2) plutôt que l'ancien prix (SAMMI) — à confirmer.
-3. Ordre d'activation vis-à-vis de l'économie canonique.
+1. **Tous les timeouts actifs restent rachetables**, y compris ceux posés à la main par la modération (comportement
+   SAMMI) — déjà le comportement codé.
+2. **Timeout prolongé après le devis : nouveau devis** (rien n'est débité, relancer `!caution`) — déjà codé.
+3. **Activation en Production avec la bascule économique** (Jetons sur le Wallet Raptoru) : d'ici là, déployée
+   mais OFF (`CAUTION_CHAT=false`, `CAUTION=false`), SAMMI garde la Caution. Prochaine étape : validation Lab (§ 7.1).
