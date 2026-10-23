@@ -11,6 +11,7 @@ import { CommandSteps, insertWordGameSteps } from '../src/commands/steps.js';
 import { coreWalletEconomy } from '../src/economy/economy.js';
 import {
   RAFFLE_ANNOUNCE_DELAY_MS,
+  raffleWinnersMessages,
   RaffleLabService,
 } from '../src/raffle-lab/raffle-lab-service.js';
 import { DEFAULT_RAFFLE_CONFIG } from '../src/raffle-lab/rules.js';
@@ -145,6 +146,26 @@ describe('Roue du Sub V1 — winner announcement', () => {
   });
 });
 
+describe('Tombola — the grouped winners message', () => {
+  it('one message for several winners; split at the Twitch limit, never a name cut or lost', () => {
+    expect(raffleWinnersMessages('10 000 Jetons', ['A', 'B', 'C'])).toEqual([
+      'Tombola terminée ! Félicitations aux gagnants qui remportent 10 000 Jetons chacun : A, B, C !',
+    ]);
+    expect(raffleWinnersMessages('5 Jetons', ['Solo'])).toEqual([
+      'Tombola terminée ! Félicitations au gagnant qui remporte 5 Jetons : Solo !',
+    ]);
+    const names = Array.from({ length: 40 }, (_, i) => `Viewer_Pseudo_${String(i).padStart(2, '0')}`);
+    const msgs = raffleWinnersMessages('1 000 Jetons', names);
+    expect(msgs.length).toBeGreaterThan(1);
+    for (const m of msgs) {
+      expect(m.length).toBeLessThanOrEqual(500);
+      expect(m).toMatch(/^Tombola terminée ! Félicitations aux gagnants qui remportent 1 000 Jetons chacun : .+ !$/);
+    }
+    const back = msgs.flatMap((m) => m.replace(/^.* chacun : /, '').replace(/ !$/, '').split(', '));
+    expect(back).toEqual(names);
+  });
+});
+
 describe('Tombola — winner announcements', () => {
   const studio: LabActor = { id: 'antoni', role: 'broadcaster', via: 'studio' };
   const QUIET: Partial<RaffleConfig> = {
@@ -181,7 +202,7 @@ describe('Tombola — winner announcements', () => {
     return { core, raffle, act, join, after };
   }
 
-  it('each paid winner announced with its real share, 6 s after the end of the reveal animation, once whatever the replays', async () => {
+  it('the paid winners announced together with their real share, 6 s after the end of the reveal animation, once whatever the replays', async () => {
     const f = await fixture();
     await f.act({
       action: 'config',
@@ -202,11 +223,9 @@ describe('Tombola — winner announcements', () => {
       )
     )[0]!.reveal_end_at;
     const s = await steps(f.core.db, 'raffle');
-    expect(s.map((x) => x.params.text).sort()).toEqual(
-      card.winners
-        .map((w) => `🎉 Tombola : @${w.display_name} gagne 10 000 Jetons !`)
-        .sort(),
-    );
+    expect(s.map((x) => x.params.text)).toEqual([
+      `Tombola terminée ! Félicitations aux gagnants qui remportent 10 000 Jetons chacun : ${card.winners.map((w) => w.display_name).join(', ')} !`,
+    ]);
     for (const x of s) {
       expect(x.params.mode).toBe('normal');
       // End of the reveal animation + 6 s: the draw and the credits were not delayed (paid above).
@@ -228,7 +247,7 @@ describe('Tombola — winner announcements', () => {
         viewer_id: card.winners[0]!.viewer_id,
       })
       .catch(() => null);
-    expect(await steps(f.core.db, 'raffle')).toHaveLength(2);
+    expect(await steps(f.core.db, 'raffle')).toHaveLength(1);
   });
 
   it('a failed payout is not announced; announced once when the retry pays it', async () => {
@@ -254,7 +273,9 @@ describe('Tombola — winner announcements', () => {
     await f.act({ action: 'retry_payout', raffle_id, viewer_id: '9401' });
     const s = await steps(f.core.db, 'raffle');
     expect(s).toHaveLength(1);
-    expect(s[0]!.params.text).toBe('🎉 Tombola : @V9401 gagne 20 000 Jetons !');
+    expect(s[0]!.params.text).toBe(
+      'Tombola terminée ! Félicitations au gagnant qui remporte 20 000 Jetons : V9401 !',
+    );
     expect(new Date(s[0]!.available_at).getTime()).toBe(
       f.core.clock.now().getTime(),
     );

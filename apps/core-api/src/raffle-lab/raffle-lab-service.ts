@@ -217,6 +217,28 @@ function roundLabels(r: RaffleRow): RaffleConfig['labels'] {
 /** The chat announcement of the winners waits this long after the end of the reveal animation (no spoiler). */
 export const RAFFLE_ANNOUNCE_DELAY_MS = 6_000;
 
+/** Twitch's chat message limit (characters). */
+const TWITCH_CHAT_MAX = 500;
+
+/**
+ * The end-of-Tombola message for the winners of one prize: « Tombola terminée ! Félicitations aux gagnants qui
+ * remportent 10 000 Jetons chacun : A, B, C ! » (one winner: the singular). Too long for one Twitch message → several
+ * messages with the same opening, names never cut.
+ */
+export function raffleWinnersMessages(prize: string, names: string[]) {
+  const text = (list: string[]) =>
+    names.length === 1
+      ? `Tombola terminée ! Félicitations au gagnant qui remporte ${prize} : ${list[0]} !`
+      : `Tombola terminée ! Félicitations aux gagnants qui remportent ${prize} chacun : ${list.join(', ')} !`;
+  const out: string[][] = [];
+  for (const name of names) {
+    const cur = out.at(-1);
+    if (cur && text([...cur, name]).length <= TWITCH_CHAT_MAX) cur.push(name);
+    else out.push([name]);
+  }
+  return out.map(text);
+}
+
 export class RaffleLabService {
   constructor(
     private readonly db: Db,
@@ -917,9 +939,10 @@ export class RaffleLabService {
   }
 
   /**
-   * « 🎉 Tombola : @Pseudo gagne X Jetons ! » on LeCroupier_'s durable chat queue, one message per PAID winner (its
-   * real amount and currency), once per winner and round (its key: a retry or a replay writes nothing more). Unpaid
-   * (failed) and giveaway winners: nothing until / unless paid.
+   * The PAID winners on LeCroupier_'s durable chat queue, grouped: « Tombola terminée ! Félicitations aux gagnants qui
+   * remportent X Jetons chacun : A, B ! » — one message per amount and currency (their real share), split only when it
+   * would exceed Twitch's limit (never a name cut). Once per round (draw: one key per message) or per winner (a payout
+   * retried later: its own key). Unpaid (failed) and giveaway winners: nothing until / unless paid.
    */
   private async announceWinners(
     q: Queryable,
@@ -942,14 +965,29 @@ export class RaffleLabService {
           w.currency_id!,
           (await currency(q, w.currency_id!))?.label ?? w.currency_id!,
         );
+    const groups = new Map<string, { prize: string; names: string[] }>();
+    for (const w of paid) {
+      const key = `${w.currency_id}:${Number(w.amount)}`;
+      if (!groups.has(key))
+        groups.set(key, {
+          prize: `${Number(w.amount).toLocaleString('fr-FR').replace(/\s/g, ' ')} ${label.get(w.currency_id!)}`,
+          names: [],
+        });
+      groups.get(key)!.names.push(w.viewer_display_name);
+    }
+    const texts = [...groups.values()].flatMap((g) =>
+      raffleWinnersMessages(g.prize, g.names),
+    );
     await insertAnnouncement(q, {
       channelId,
       now,
       origin: 'raffle',
-      drafts: paid.map((w) => ({
-        idempotencyKey: `raffle:win:${raffleId}:${w.viewer_id}`,
+      drafts: texts.map((text, i) => ({
+        idempotencyKey: viewerId
+          ? `raffle:win:${raffleId}:${viewerId}`
+          : `raffle:wins:${raffleId}:${i}`,
         mode: 'normal' as const,
-        text: `🎉 Tombola : @${w.viewer_display_name} gagne ${Number(w.amount).toLocaleString('fr-FR').replace(/\s/g, ' ')} ${label.get(w.currency_id!)} !`,
+        text,
         delayMs: Math.max(0, sendAt.getTime() - now.getTime()),
       })),
     });

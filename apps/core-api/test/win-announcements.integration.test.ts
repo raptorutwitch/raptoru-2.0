@@ -187,7 +187,7 @@ describe.skipIf(!isLocal)('winner announcements, real Postgres', () => {
     );
   });
 
-  it('a Tombola drawn by two Cores ticking at once: one announcement per paid winner', async () => {
+  it('a Tombola drawn by two Cores ticking at once: one grouped announcement of the paid winners', async () => {
     const raffle = (db: Db) =>
       new RaffleLabService(
         db,
@@ -229,13 +229,15 @@ describe.skipIf(!isLocal)('winner announcements, real Postgres', () => {
       3,
     );
     expect(await count("wallet_transactions where source = 'raffle'")).toBe(3);
-    expect(await count("cmd_steps where origin = 'raffle'")).toBe(3);
+    expect(await count("cmd_steps where origin = 'raffle'")).toBe(1);
     const texts = (
       await a.query<{ text: string }>(
         "select params->>'text' as text from cmd_steps where origin = 'raffle'",
       )
     ).map((x) => x.text);
-    for (const t of texts)
-      expect(t).toMatch(/^🎉 Tombola : @V93\d\d gagne 10 000 Jetons !$/);
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toMatch(
+      /^Tombola terminée ! Félicitations aux gagnants qui remportent 10 000 Jetons chacun : V93\d\d, V93\d\d, V93\d\d !$/,
+    );
   });
 });
