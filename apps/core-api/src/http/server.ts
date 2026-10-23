@@ -48,6 +48,8 @@ import { channelPointsRoutes } from './channel-points-routes.js';
 import { randomBanRoutes } from './random-ban-routes.js';
 import { cautionRoutes } from './caution-routes.js';
 import type { CautionService } from '../caution/service.js';
+import { votekickRoutes } from './votekick-routes.js';
+import type { VotekickService } from '../votekick/service.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import { subWheelRoutes } from './sub-wheel-routes.js';
 import type { SubWheelService } from '../sub-wheel/service.js';
@@ -118,6 +120,8 @@ export interface AppDeps {
   randomBan?: RandomBanService;
   /** Caution: /v1/studio/caution/{channel}/state and /v1/bot/caution/* (same conditions as Random Ban). */
   caution?: CautionService;
+  /** Votekick V2: /v1/studio/votekick/{channel}/* and /v1/bot/votekick/* (same conditions as Caution). */
+  votekick?: VotekickService;
   /** Roue du Sub: /v1/studio/sub-wheel/* and the wheel side of the alerts reception (same conditions as alerts). */
   subWheel?: SubWheelService;
   /** Single active production bot: /v1/bot/instance/* (bot) and, with studioInstallations, GET /v1/studio/status/bot. */
@@ -226,6 +230,7 @@ function routes({
   channelPoints,
   randomBan,
   caution,
+  votekick,
   subWheel,
   botInstances,
   db,
@@ -256,6 +261,9 @@ function routes({
       : []),
     ...(studioInstallations && caution && cockpit?.channelId
       ? cautionRoutes(caution, { channelId: cockpit.channelId })
+      : []),
+    ...(studioInstallations && votekick && cockpit?.channelId
+      ? votekickRoutes(votekick, { channelId: cockpit.channelId })
       : []),
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
     ...(botInstances

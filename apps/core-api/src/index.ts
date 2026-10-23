@@ -78,6 +78,7 @@ const core = createCore(
           }
         : null,
     cautionChat: config.CAUTION_CHAT === 'true',
+    votekickChat: config.VOTEKICK_CHAT === 'true',
     alertsMaxAgeMs: config.ALERTS_MAX_AGE_SECONDS
       ? config.ALERTS_MAX_AGE_SECONDS * 1000
       : null,
@@ -133,6 +134,8 @@ createApp({
   randomBan: core.randomBan,
   // Caution: the paired Studio (state) and the bot (Twitch executor); `!caution` itself only with CAUTION_CHAT=true.
   caution: core.caution,
+  // Votekick V2: the paired Studio (state, overlay, mute) and the bot (Twitch executor); chat only with VOTEKICK_CHAT.
+  votekick: core.votekick,
   // Roue du Sub: OFF by default; gains recorded, never credited automatically.
   subWheel: core.subWheel,
   // Single active production bot: the lease (bot) and its health for the paired Studio.

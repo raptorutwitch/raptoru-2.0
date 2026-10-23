@@ -204,6 +204,8 @@ const FLAG_NAMES = [
   'CHAT_GAMES_OUTPUT',
   'ALERTS_FOLLOW',
   'RANDOM_BAN',
+  'CAUTION',
+  'VOTEKICK',
 ] as const;
 
 /** What Studio shows of the configuration: on / off per feature and the alerts mode, never a value or a path. */

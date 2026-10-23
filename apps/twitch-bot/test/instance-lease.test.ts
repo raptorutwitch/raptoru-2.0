@@ -356,6 +356,8 @@ describe('instance lease (bot side)', () => {
         CHAT_GAMES_OUTPUT: 'false',
         ALERTS_FOLLOW: 'true',
         RANDOM_BAN: 'true',
+        CAUTION: 'false',
+        VOTEKICK: 'true',
         ALERTS_MODE: 'active',
       }),
     ).toEqual({
@@ -368,6 +370,8 @@ describe('instance lease (bot side)', () => {
       CHAT_GAMES_OUTPUT: false,
       ALERTS_FOLLOW: true,
       RANDOM_BAN: true,
+      CAUTION: false,
+      VOTEKICK: true,
       ALERTS_MODE: 'active',
     });
   });

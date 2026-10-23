@@ -1658,8 +1658,28 @@
         );
         window.VKV = { apply, setVoteMs: (ms) => (voteMs = ms) };
 
-        // Opened alone (no `embed`): a short self-running demo, to look at one variant.
-        if (!params.has('embed')) {
+        // OBS source served by Studio (`?studio`): the live vote from Studio (/votekick/event, polled), never the demo.
+        if (params.has('studio')) {
+          let last = '';
+          const poll = async () => {
+            try {
+              const r = await fetch('/votekick/event', { cache: 'no-store' });
+              if (r.ok) {
+                const text = await r.text();
+                if (text !== last) {
+                  last = text;
+                  apply(JSON.parse(text));
+                }
+              }
+            } catch {
+              /* Studio restarting: keep the last screen, poll again */
+            }
+            setTimeout(() => void poll(), 300);
+          };
+          void poll();
+        }
+        // Opened alone (no `embed`, not from Studio): a short self-running demo, to look at one variant.
+        else if (!params.has('embed')) {
           let k = 1;
           let s = 0;
           const session = 'solo';

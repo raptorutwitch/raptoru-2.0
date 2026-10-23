@@ -151,6 +151,10 @@ const TwitchApp = z.object({
     .string()
     .min(1)
     .default('.lab-caution-journal.json'),
+  LAB_VOTEKICK_JOURNAL_FILE: z
+    .string()
+    .min(1)
+    .default('.lab-votekick-journal.json'),
 });
 
 const Env = TwitchApp.extend({
@@ -184,6 +188,11 @@ const Env = TwitchApp.extend({
   // Core (LeCroupier_ moderator:manage:banned_users, broadcaster moderation:read).
   CAUTION: Flag,
   CAUTION_JOURNAL_FILE: z.string().min(1).default('.caution-journal.json'),
+  // Votekick V2 (docs/VOTEKICK_V2.md, VOTEKICK=true): the Twitch executor of the main Core's votes (lookup, moderators,
+  // the verdict's timeout). OFF by default. Rights never required at startup: the executor tells Core
+  // (LeCroupier_ moderator:manage:banned_users, broadcaster moderation:read).
+  VOTEKICK: Flag,
+  VOTEKICK_JOURNAL_FILE: z.string().min(1).default('.votekick-journal.json'),
   STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
   // Single active production bot (instance-lease.ts): where this instance runs, shown by Studio (« vps », « pc »).
   BOT_HOST: z

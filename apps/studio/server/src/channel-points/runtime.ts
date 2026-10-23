@@ -14,6 +14,11 @@ import { ColorCam } from '../interactions/color-cam.js';
 import { FxCam } from '../interactions/fx-cam.js';
 import { RandomBanRuntime } from '../random-ban/runtime.js';
 import { SubWheelRuntime } from '../sub-wheel/runtime.js';
+import {
+  MuteController,
+  RAPTORU_MUTE_FX,
+} from '../votekick/mute-controller.js';
+import { VotekickRuntime } from '../votekick/runtime.js';
 import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 
 // Points de chaîne V1 in Studio (docs/CHANNEL_POINTS_V1.md). Core decides (master switch, rules, dedup, history);
@@ -44,6 +49,8 @@ export interface ChannelPointsRuntimeDeps {
     profile_note?: string;
   };
   pollMs?: number;
+  /** Votekick V2: the overlay files (apps/studio/server/votekick-overlay); absent: no Votekick in this Studio. */
+  votekickOverlayDir?: string;
 }
 
 export class ChannelPointsRuntime {
@@ -64,6 +71,8 @@ export class ChannelPointsRuntime {
   private constructor(
     private readonly d: ChannelPointsRuntimeDeps,
     readonly obs: ObsActions,
+    /** Votekick V2: the broadcaster's mute in OBS (same OBS connection) and the overlay's live event. */
+    readonly votekick: VotekickRuntime | null = null,
   ) {
     this.interactions = new Interactions({ obs, effects: d.effects ?? null });
     this.brb = new Brb({ obs, effects: d.effects ?? null });
@@ -87,6 +96,24 @@ export class ChannelPointsRuntime {
     return new ChannelPointsRuntime(
       d,
       await ObsActions.open(join(d.dir, 'obs-reverts.json'), d.obs),
+      d.votekickOverlayDir
+        ? new VotekickRuntime({
+            core: d.core,
+            base:
+              d.environment === 'production'
+                ? '/v1/studio/votekick'
+                : '/v1/lab/votekick',
+            channelId: d.channelId,
+            // The mute in progress survives a Studio restart (restored at the next start when due).
+            mute: await MuteController.open(
+              join(d.dir, 'votekick-mute.json'),
+              d.obs,
+              RAPTORU_MUTE_FX,
+            ),
+            overlayDir: d.votekickOverlayDir,
+            log: (line) => console.log(line),
+          })
+        : null,
     );
   }
 
@@ -99,6 +126,7 @@ export class ChannelPointsRuntime {
   /** Starts with Studio: the job loop and the pending reverts (nothing happens without a job). */
   start() {
     this.obs.start();
+    this.votekick?.start();
     this.randomBan.start();
     this.subWheel.start();
     const loop = async () => {
@@ -123,6 +151,7 @@ export class ChannelPointsRuntime {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.obs.stop();
+    this.votekick?.stop();
     this.randomBan.stop();
     this.subWheel.stop();
   }
@@ -230,6 +259,8 @@ export class ChannelPointsRuntime {
     url: URL,
   ): Promise<boolean> {
     if (this.d.effects && (await this.d.effects.handle(req, res, url)))
+      return true;
+    if (this.votekick && (await this.votekick.handle(req, res, url)))
       return true;
     const rb = url.pathname.startsWith('/api/random-ban');
     const sw = url.pathname.startsWith('/api/sub-wheel');

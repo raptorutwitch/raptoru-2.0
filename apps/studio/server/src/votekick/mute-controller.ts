@@ -42,6 +42,19 @@ export const SAMMI_MUTE_FX: MuteFxConfig = {
   driveFilter: 'Votekick Zoom Drive',
 };
 
+/**
+ * Raptoru's OBS names (decided 23/10: the live mic is « Micro », never « Micro (Obsolète) »; the active collection
+ * « Twitch Dofus » carries « Votekick Zoom Drive » on « Micro »). Used by Studio.
+ */
+export const RAPTORU_MUTE_FX: MuteFxConfig = {
+  micInput: 'Micro',
+  camSource: 'overlay cam shushu',
+  zoomFilter: 'Votekick Zoom',
+  bandFilter: 'Votekick Mute',
+  driveInput: 'Micro',
+  driveFilter: 'Votekick Zoom Drive',
+};
+
 /** The band's exit when its filter does not say (the shader's default anim_out_time). */
 const DEFAULT_EXIT_MS = 450;
 /** Core ends the mute on time; this ends it alone if Core never does. */
@@ -155,18 +168,37 @@ export class MuteController {
         ending: null,
       };
       await this.save(); // before any change: a crash from here is restored at the next start
-      await this.setMic(obs, true);
-      await this.setZoom(obs, 1);
-      await this.setFilter(obs, this.cfg.camSource, this.cfg.zoomFilter, true);
-      await this.setBand(obs, { mute_duration: seconds, manual_time: -1 });
-      await this.setFilter(obs, this.cfg.camSource, this.cfg.bandFilter, true);
-      this.active.bandAt = this.now();
-      await this.setFilter(
-        obs,
-        this.cfg.driveInput,
-        this.cfg.driveFilter,
-        true,
-      );
+      try {
+        await this.setMic(obs, true);
+        await this.setZoom(obs, 1);
+        await this.setFilter(
+          obs,
+          this.cfg.camSource,
+          this.cfg.zoomFilter,
+          true,
+        );
+        await this.setBand(obs, { mute_duration: seconds, manual_time: -1 });
+        await this.setFilter(
+          obs,
+          this.cfg.camSource,
+          this.cfg.bandFilter,
+          true,
+        );
+        this.active.bandAt = this.now();
+        await this.setFilter(
+          obs,
+          this.cfg.driveInput,
+          this.cfg.driveFilter,
+          true,
+        );
+      } catch (e) {
+        // OBS refused a step half way: everything back to the snapshot NOW (the mic never stays cut); a restore OBS
+        // cannot finish is replayed by tick(). The caller reports the mute as failed.
+        this.active.ending = 'watchdog';
+        await this.save();
+        await this.restore();
+        throw e;
+      }
       await this.save();
     });
   }

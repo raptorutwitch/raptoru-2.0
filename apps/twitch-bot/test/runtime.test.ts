@@ -27,6 +27,8 @@ const baseConfig: BotConfig = {
   RANDOM_BAN_JOURNAL_FILE: 'unused-random-ban-journal.json',
   CAUTION: 'false',
   CAUTION_JOURNAL_FILE: 'unused-caution-journal.json',
+  VOTEKICK: 'false',
+  VOTEKICK_JOURNAL_FILE: 'unused-votekick-journal.json',
   DAILY_CHAT_COMMANDS: 'false',
   LOYALTY_TWITCH_EVENTS: 'false',
   LOYALTY_CHAT_COMMANDS: 'false',
@@ -39,6 +41,7 @@ const baseConfig: BotConfig = {
   LAB_CHAT_JOURNAL_FILE: '.lab-chat-journal.json',
   LAB_RANDOM_BAN_JOURNAL_FILE: '.lab-random-ban-journal.json',
   LAB_CAUTION_JOURNAL_FILE: '.lab-caution-journal.json',
+  LAB_VOTEKICK_JOURNAL_FILE: '.lab-votekick-journal.json',
 };
 
 let messageSeq = 0;

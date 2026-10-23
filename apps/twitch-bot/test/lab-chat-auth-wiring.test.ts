@@ -13,6 +13,7 @@ const mockedModules = [
   '../src/lab-chat-output.js',
   '../src/random-ban-executor.js',
   '../src/caution-executor.js',
+  '../src/votekick-executor.js',
   '../src/runtime.js',
 ];
 
@@ -226,6 +227,19 @@ async function boot(
     createCautionExecutor,
     fileCautionJournal: vi.fn(),
     helixCautionTwitch: vi.fn(() => ({})),
+  }));
+  // Votekick's executor polls Core the same way: isolated too.
+  const createVotekickExecutor = vi.fn((deps: unknown) => {
+    void deps;
+    return {
+      ready: { canRead: false, canTimeout: false, missing: [] },
+      run: vi.fn(async () => {}),
+      stop: vi.fn(),
+    };
+  });
+  vi.doMock('../src/votekick-executor.js', () => ({
+    createVotekickExecutor,
+    helixVotekickTwitch: vi.fn(() => ({})),
   }));
   if (options.main) await import('../src/index.js');
   else await import('../src/lab-chat-main.js');

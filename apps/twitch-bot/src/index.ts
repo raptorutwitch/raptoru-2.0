@@ -23,6 +23,11 @@ import {
   fileCautionJournal,
   helixCautionTwitch,
 } from './caution-executor.js';
+import {
+  createVotekickExecutor,
+  helixVotekickTwitch,
+} from './votekick-executor.js';
+import { fileRbJournal as fileVotekickJournal } from './random-ban-executor.js';
 import { botFlags, createInstanceLease } from './instance-lease.js';
 import { installConsole } from './log.js';
 import { createBotRuntime } from './runtime.js';
@@ -357,8 +362,10 @@ const pointsOn = config.CHANNEL_POINTS_EVENTS === 'true';
 const randomBanOn = config.RANDOM_BAN === 'true';
 // Caution (CAUTION): the list of bans with the broadcaster's Helix too (no EventSub connection).
 const cautionOn = config.CAUTION === 'true';
+// Votekick V2 (VOTEKICK): the moderators and the bans with the broadcaster's Helix too (no EventSub connection).
+const votekickOn = config.VOTEKICK === 'true';
 let rbBroadcaster: { helix: Helix; scopes: string[] } | null = null;
-if (loyaltyOn || pointsOn || randomBanOn || cautionOn) {
+if (loyaltyOn || pointsOn || randomBanOn || cautionOn || votekickOn) {
   let broadcasterReady = false;
   const broadcasterAuth = new TwitchAuth({
     clientId: config.TWITCH_CLIENT_ID,
@@ -542,4 +549,33 @@ if (cautionOn) {
     `[caution] exécuteur prêt (Core principal) — lecture : ${caution.ready.canRead ? 'oui' : 'non'}, levée : ${caution.ready.canRelease ? 'oui' : 'non'}${caution.ready.missing.length ? ` (manque : ${caution.ready.missing.join(', ')})` : ''}`,
   );
   void caution.run();
+}
+
+// Votekick V2 (docs/VOTEKICK_V2.md, VOTEKICK=true): the Twitch executor of the main Core's votes, on /v1/bot/votekick with
+// the bot secret. It reads the target and the moderators; it times out only the user Core names, once (journal first).
+if (votekickOn) {
+  const bh = rbBroadcaster;
+  const votekick = createVotekickExecutor({
+    core: coreCall,
+    base: '/v1/bot/votekick',
+    channelId: config.TWITCH_BROADCASTER_ID,
+    broadcasterId: config.TWITCH_BROADCASTER_ID,
+    // Stable across restarts: a journaled timeout is reported with the same executor id.
+    executorId: `bot-${status.userId}`,
+    login: status.login ?? 'LeCroupier_',
+    botScopes: status.scopes,
+    broadcasterScopes: bh?.scopes ?? null,
+    twitch: helixVotekickTwitch(
+      coreHelix,
+      bh?.helix ?? null,
+      config.TWITCH_BROADCASTER_ID,
+      status.userId!,
+    ),
+    journal: fileVotekickJournal(config.VOTEKICK_JOURNAL_FILE),
+  });
+  consumers.add(() => votekick.stop());
+  console.log(
+    `[votekick] exécuteur prêt (Core principal) — lecture : ${votekick.ready.canRead ? 'oui' : 'non'}, timeout : ${votekick.ready.canTimeout ? 'oui' : 'non'}${votekick.ready.missing.length ? ` (manque : ${votekick.ready.missing.join(', ')})` : ''}`,
+  );
+  void votekick.run();
 }

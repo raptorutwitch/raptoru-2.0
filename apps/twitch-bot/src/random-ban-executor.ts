@@ -181,7 +181,7 @@ export type TimeoutOutcome =
 
 /** Is the target in timeout now (Twitch's list of bans)? null: Twitch could not tell. */
 async function inTimeout(
-  twitch: RbTwitch,
+  twitch: Pick<RbTwitch, 'bans'>,
   targetId: string,
   now: () => number,
 ) {
@@ -199,7 +199,7 @@ async function inTimeout(
 
 /** The ambiguous case: Twitch's list decides; unreadable → uncertain (never sent again). */
 async function settle(
-  twitch: RbTwitch,
+  twitch: Pick<RbTwitch, 'bans'>,
   targetId: string,
   why: string,
   now: () => number,
@@ -219,7 +219,8 @@ async function settle(
 
 /** Ban User once (a timeout: a duration is always given). 409 / 429 / request never sent: retried (nothing applied). */
 export async function timeoutOnce(o: {
-  twitch: RbTwitch;
+  /** Only the ban and the list of bans (Votekick reuses it). */
+  twitch: Pick<RbTwitch, 'ban' | 'bans'>;
   target: string;
   durationS: number;
   reason: string;

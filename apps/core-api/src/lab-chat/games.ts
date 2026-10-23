@@ -24,6 +24,7 @@ import { RandomBanChat } from '../chat-interactions/random-ban-chat.js';
 import { FxCamChat } from '../chat-interactions/fx-cam-chat.js';
 import type { ChannelPointsService } from '../channel-points/service.js';
 import type { CautionService } from '../caution/service.js';
+import type { VotekickService } from '../votekick/service.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import { WordGameService } from '../word-game/service.js';
@@ -54,6 +55,8 @@ export function createChatGames(o: {
   chatPrices?: ChatPrices;
   /** `!caution pseudo` + `oui` / `non` (absent: no chat Caution — the main Core only with CAUTION_CHAT=true). */
   caution?: CautionService | null;
+  /** `!votekick pseudo`, `!kick`, `!save` (absent: no Votekick — the main Core only with VOTEKICK_CHAT=true). */
+  votekick?: VotekickService | null;
 }) {
   // Tombola's chat words stay Tombola's (reserved); Roulette / Slot words are the mini-games' (StreamElements aliases);
   // `!tts` is the TTS's.
@@ -123,6 +126,9 @@ export function createChatGames(o: {
       plainText: true,
       chat: (m) => caution.chat(m),
     });
+  const votekick = o.votekick ?? null;
+  if (votekick)
+    chatModules.push({ name: 'votekick', chat: (m) => votekick.chat(m) });
   return {
     commands,
     admission,

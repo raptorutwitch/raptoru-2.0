@@ -47,6 +47,8 @@ const copies = [
   'apps/studio/server/alerts-player',
   // Effects player OBS source (effect media live in Studio's storage, never in the package).
   'apps/studio/server/effects-player',
+  // Votekick V2 overlay (OBS source served by Studio: variants/variants.html?v=D&studio).
+  'apps/studio/server/votekick-overlay',
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
@@ -114,6 +116,7 @@ const runtimeFiles = [
   'supabase/migrations/20261031140000_cmd_steps_win_announcements_lab.sql',
   'supabase/migrations/20261104120000_cp_redemptions_chat_source_lab.sql',
   'supabase/migrations/20261105120000_caution_lab.sql',
+  'supabase/migrations/20261106120000_votekick_lab.sql',
   // Jeu des mots word bank, read by the Lab Core from src/ (like the migrations).
   'apps/core-api/src/word-game/words-fr.txt',
 ];

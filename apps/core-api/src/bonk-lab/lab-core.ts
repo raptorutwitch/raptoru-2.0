@@ -20,6 +20,8 @@ import { ChannelPointsService } from '../channel-points/service.js';
 import { randomBanRoutes } from '../http/random-ban-routes.js';
 import { cautionRoutes } from '../http/caution-routes.js';
 import { CautionService } from '../caution/service.js';
+import { votekickRoutes } from '../http/votekick-routes.js';
+import { VotekickService } from '../votekick/service.js';
 import { RandomBanService } from '../random-ban/service.js';
 import { subWheelRoutes } from '../http/sub-wheel-routes.js';
 import { SubWheelService } from '../sub-wheel/service.js';
@@ -74,6 +76,7 @@ export function createLabCore({
   server: Server;
   raffle: RaffleLabService;
   wordGame: WordGameService;
+  votekick: VotekickService;
 } {
   if (secret.length < 32) throw new Error('bonk_secret_required');
   // Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
@@ -108,7 +111,14 @@ export function createLabCore({
   // Commands V2 answers become durable steps, handed to the Lab Twitch adapter only while « Sortie chat réelle » is
   // ON (OFF by default); Duel finds its target by login with the Lab app credentials of the Tombola avatars.
   const randomBan = new RandomBanService(db, systemClock);
-  const caution = new CautionService(db, systemClock, economy, broadcasterOf);
+  const votekick = new VotekickService(db, systemClock, broadcasterOf);
+  const caution = new CautionService(
+    db,
+    systemClock,
+    economy,
+    broadcasterOf,
+    votekick,
+  );
   const channelPoints = new ChannelPointsService(
     db,
     systemClock,
@@ -128,6 +138,7 @@ export function createLabCore({
       randomBan,
       channelPoints,
       caution,
+      votekick,
     });
   const alertsService = new AlertsService(db, systemClock);
   // Gains credited only when the runtime economy is the canonical Wallet (never with the Lab wallet).
@@ -167,6 +178,8 @@ export function createLabCore({
     ...randomBanRoutes(randomBan),
     // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
     ...cautionRoutes(caution),
+    // Votekick V2: Studio (state, overlay, mute) and the Lab chat adapter (Twitch executor); `!votekick` in the Lab chat.
+    ...votekickRoutes(votekick),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
   ];
@@ -220,5 +233,5 @@ export function createLabCore({
       send(500, { error: 'bonk_core_error' });
     }
   });
-  return { server, raffle, wordGame };
+  return { server, raffle, wordGame, votekick };
 }

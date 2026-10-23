@@ -16,7 +16,7 @@ if (secret.length < 32) throw new Error('bonk_secret_required');
 const db = createPgDb(url.href, SERVER_DB_LIMITS);
 const clientId = process.env.BONK_LAB_TWITCH_CLIENT_ID ?? '';
 const clientSecret = process.env.BONK_LAB_TWITCH_CLIENT_SECRET ?? '';
-const { server, raffle, wordGame } = createLabCore({
+const { server, raffle, wordGame, votekick } = createLabCore({
   db,
   clock: systemClock,
   secret,
@@ -57,6 +57,14 @@ const wordGameTick = setInterval(() => {
     .catch((e) => console.error('[bonk-lab-core] jeu des mots tick failed', e))
     .finally(() => (wordTicking = false));
 }, 1000);
+// Votekick V2: the vote's end, the leases and the broadcaster's mute (every 500 ms; never two at a time inside).
+const votekickTick = setInterval(() => {
+  votekick
+    .tick()
+    .catch((e: unknown) =>
+      console.error('[bonk-lab-core] votekick tick failed', e),
+    );
+}, 500);
 const avatarTick = setInterval(() => {
   avatars
     .refresh()
@@ -64,6 +72,7 @@ const avatarTick = setInterval(() => {
 }, 5000);
 const stop = () => {
   clearInterval(raffleTick);
+  clearInterval(votekickTick);
   clearInterval(wordGameTick);
   clearInterval(avatarTick);
   server.close(() => void db.close().then(() => process.exit(0)));

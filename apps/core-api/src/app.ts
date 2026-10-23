@@ -2,6 +2,7 @@ import { AlertsService } from './alerts/service.js';
 import { BotInstanceService } from './bot-instance/service.js';
 import { RandomBanService } from './random-ban/service.js';
 import { CautionService } from './caution/service.js';
+import { VotekickService } from './votekick/service.js';
 import { SubWheelService } from './sub-wheel/service.js';
 import { ChannelPointsService } from './channel-points/service.js';
 import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
@@ -49,6 +50,8 @@ export interface Core {
   randomBan: RandomBanService;
   /** Caution: the requests and the executor's routes always; `!caution` in the chat only with `cautionChat`. */
   caution: CautionService;
+  /** Votekick V2: votes and the broadcaster's mute always; `!votekick` / `!kick` / `!save` in the chat only with votekickChat. */
+  votekick: VotekickService;
   /** Roue du Sub (fed by the alerts reception; OFF by default). */
   subWheel: SubWheelService;
   /** Single active production bot (lease + the health Studio shows). */
@@ -79,6 +82,8 @@ export function createCore(
     alertsMaxAgeMs?: number | null;
     /** `!caution` answered in the chat (main Core: CAUTION_CHAT=true; SAMMI still answers it until the cutover). */
     cautionChat?: boolean;
+    /** `!votekick` / `!kick` / `!save` answered in the chat (main Core: VOTEKICK_CHAT=true). */
+    votekickChat?: boolean;
   } = {},
 ): Core {
   const broadcasterOf = () => channel.broadcasterId ?? null;
@@ -87,7 +92,15 @@ export function createCore(
   const loyalty = new LoyaltyEngine(db, clock, wallet.wallet, loyaltyModes);
   const soundLab = new SoundLabService(db, clock, undefined, economy);
   const randomBan = new RandomBanService(db, clock);
-  const caution = new CautionService(db, clock, economy, broadcasterOf);
+  const votekick = new VotekickService(db, clock, broadcasterOf);
+  // The broadcaster's caution lifts his Votekick mute.
+  const caution = new CautionService(
+    db,
+    clock,
+    economy,
+    broadcasterOf,
+    votekick,
+  );
   const ttsLab = new TtsLabService(db, clock, undefined, undefined, economy);
   const channelPoints = new ChannelPointsService(
     db,
@@ -126,6 +139,7 @@ export function createCore(
     channelPoints,
     randomBan,
     caution,
+    votekick,
     subWheel: new SubWheelService(db, clock, undefined, economy),
     botInstances: new BotInstanceService(db, clock),
     economy,
@@ -137,6 +151,7 @@ export function createCore(
       randomBan,
       channelPoints,
       caution: channel.cautionChat ? caution : null,
+      votekick: channel.votekickChat ? votekick : null,
       raffle: raffleLab,
       broadcasterOf,
       twitch: channel.twitchApp ?? null,

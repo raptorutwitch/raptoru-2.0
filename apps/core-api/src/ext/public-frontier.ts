@@ -178,7 +178,16 @@ export function createPublicFrontier(
           )
           .finally(() => (wordTicking = false));
       }, 1000);
+      // Votekick V2: the vote's end, the leases and the broadcaster's mute (every 500 ms; never two at a time inside).
+      const votekickTick = setInterval(() => {
+        core.votekick
+          .tick()
+          .catch((e: Error) =>
+            console.error('[core-api] votekick tick failed', e.message),
+          );
+      }, 500);
       return () => {
+        clearInterval(votekickTick);
         clearInterval(wordGameTick);
         clearInterval(raffleTick);
         clearInterval(avatarTick);

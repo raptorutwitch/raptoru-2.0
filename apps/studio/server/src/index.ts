@@ -955,6 +955,13 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
               'effects-player',
             ),
           }),
+          votekickOverlayDir: join(
+            REPO_ROOT,
+            'apps',
+            'studio',
+            'server',
+            'votekick-overlay',
+          ),
           twitch: () => ({
             scope: hasTwitchScope(
               readTokenSummary(broadcasterTokenFile).scopes,

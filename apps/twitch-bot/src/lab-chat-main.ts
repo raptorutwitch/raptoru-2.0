@@ -30,6 +30,10 @@ import {
   fileCautionJournal,
   helixCautionTwitch,
 } from './caution-executor.js';
+import {
+  createVotekickExecutor,
+  helixVotekickTwitch,
+} from './votekick-executor.js';
 import { fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { superviseTwitchAuth } from './twitch/auth-supervision.js';
 import { runEventSub } from './twitch/eventsub.js';
@@ -433,4 +437,31 @@ if (status.scopes.includes('user:write:chat')) {
     `[caution] exécuteur prêt — lecture : ${caution.ready.canRead ? 'oui' : 'non'}, levée : ${caution.ready.canRelease ? 'oui' : 'non'}${caution.ready.missing.length ? ` (manque : ${caution.ready.missing.join(', ')})` : ''}`,
   );
   void caution.run();
+}
+// Votekick V2 (docs/VOTEKICK_V2.md): the Twitch executor of the Lab Core's votes — the lookup and the timeout with
+// LeCroupier_'s token, the moderators with the broadcaster's. A Studio simulator vote is a dry run (Core never hands it
+// a timeout).
+{
+  const votekickChannel = env.LAB_ALERTS_CHANNEL_ID ?? env.LAB_CHAT_CHANNEL_ID;
+  const votekick = createVotekickExecutor({
+    core: labCall,
+    channelId: votekickChannel,
+    broadcasterId: app.TWITCH_BROADCASTER_ID,
+    executorId: `lab-chat-${status.userId}`,
+    login: status.login ?? 'LeCroupier_',
+    botScopes: status.scopes,
+    broadcasterScopes: broadcaster?.scopes ?? null,
+    twitch: helixVotekickTwitch(
+      helix,
+      broadcaster?.helix ?? null,
+      app.TWITCH_BROADCASTER_ID,
+      status.userId!,
+    ),
+    journal: fileRbJournal(app.LAB_VOTEKICK_JOURNAL_FILE),
+  });
+  consumers.add(() => votekick.stop());
+  console.log(
+    `[votekick] exécuteur prêt — lecture : ${votekick.ready.canRead ? 'oui' : 'non'}, timeout : ${votekick.ready.canTimeout ? 'oui' : 'non'}${votekick.ready.missing.length ? ` (manque : ${votekick.ready.missing.join(', ')})` : ''}`,
+  );
+  void votekick.run();
 }

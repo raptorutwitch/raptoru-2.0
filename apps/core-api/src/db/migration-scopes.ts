@@ -49,6 +49,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261031130000_bot_instance.sql',
   // Caution (`!caution`): one row per request, the quote, the debit and the release (same as the Lab file).
   '20261105130000_caution.sql',
+  // Votekick V2: votes, ballots, cooldowns and the broadcaster's mute (same as the Lab file).
+  '20261106130000_votekick.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -102,6 +104,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261104120000_cp_redemptions_chat_source_lab.sql',
   // Caution (`!caution`), Lab schema.
   '20261105120000_caution_lab.sql',
+  // Votekick V2, Lab schema.
+  '20261106120000_votekick_lab.sql',
 ]);
 
 /**
