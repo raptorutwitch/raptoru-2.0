@@ -73,6 +73,7 @@ async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
   const reservationsFile =
     opts.reservationsFile ??
     join(await mkdtemp(join(tmpdir(), 'sp-res-')), 'r.json');
+  const logs: string[] = [];
   const rt = await SpotifyRuntime.open({
     core: call as never,
     environment: 'lab',
@@ -83,12 +84,14 @@ async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
     reservationsFile,
     now,
     sleep,
+    log: (line) => logs.push(line),
   });
   const job = (j: SpotifyJob) => {
     core.answer = { ...core.answer, jobs: [j] };
   };
   return {
     rt,
+    logs,
     sim,
     api,
     core,
@@ -244,6 +247,31 @@ describe('Spotify runtime (Studio)', () => {
     expect(await h.rt.api('POST', '/refresh', async () => ({}))).toEqual({
       read: true,
     });
+  });
+
+  it('timing lines in the Studio log: each song job step, and the auto-skip (playback progress when read, delays)', async () => {
+    const h = await harness();
+    h.sim.queueAnswer = 200;
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    const job = h.logs.find((l) => l.includes('[spotify] demande'));
+    expect(job).toMatch(
+      /→ queued : Core \(prise\) \d+ ms · recherche \d+ ms · titre \(durée\) \d+ ms · appareils \d+ ms · ajout \(réponse non 204\) \d+ ms · relecture \(\+250 ms d'attente\) \d+ ms · Core \(rapport\) \d+ ms · total \d+ ms/,
+    );
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, `spotify:track:${NUMB.id}`, true)],
+      watch: true,
+    };
+    await h.rt.once();
+    await h.rt.api('POST', '/sim/near-end', async () => ({}));
+    for (let i = 0; i < 12 && h.core.autoSkips.length === 0; i++) {
+      h.clock.t += 300;
+      await h.rt.once();
+    }
+    expect(h.logs.find((l) => l.includes('auto-skip'))).toMatch(
+      /SKIPPED · lu à \d+ ms du début \(suivi (rapide|normal)\) · décision \+\d+ ms après la lecture · skip envoyé \+\d+ ms · réponse Spotify \d+ ms/,
+    );
   });
 
   it('no watch: Spotify is never read (only the sync to Core)', async () => {

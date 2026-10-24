@@ -130,6 +130,11 @@ export class SpotifyRuntime {
   /** One reading due at this instant (after a skip), watched or not; 0 = none. */
   private readAt = 0;
   private lastManualRead = 0;
+  /** Timing of the song job in progress (Studio log only: where the seconds go). */
+  private marks: [string, number][] = [];
+  private mark(label: string) {
+    this.marks.push([label, this.now()]);
+  }
   /** Last playback reading (sent to Core with the next sync if not yet sent). */
   private reading: {
     playback: SpotifyPlayback;
@@ -392,15 +397,17 @@ export class SpotifyRuntime {
       (q) => q.track_uri === p.track!.uri && q.state !== 'PLAYING',
     );
     if (!first?.auto_skip || this.reservations.has(first.request_id)) return;
+    const detectedAt = this.now();
     const r: Reservation = {
       request_id: first.request_id,
-      at: new Date(this.now()).toISOString(),
+      at: new Date(detectedAt).toISOString(),
       result: null,
       reported: false,
     };
     this.reservations.set(r.request_id, r);
     await this.saveReservations();
     let result: Reservation['result'];
+    const sentAt = this.now();
     try {
       await this.d.api.next(raw?.device?.id ?? null);
       result = 'SKIPPED';
@@ -425,10 +432,15 @@ export class SpotifyRuntime {
     }
     r.result = result;
     if (result === 'SKIPPED') this.readAt = this.now() + AFTER_SKIP_READ_MS;
+    const fast = this.fastUntil > 0;
     this.fastUntil = 0;
     this.nextPollAt = this.now() + SKIP_READBACK_MS;
     await this.saveReservations();
-    this.d.log?.(`[spotify] auto-skip ${r.request_id}: ${result}`);
+    // Where the time went: the track had played `progress` ms when Spotify was read; the reading reached this
+    // decision `seen` ms later; the skip was sent `wait` ms after the decision and Spotify answered in `answer` ms.
+    this.d.log?.(
+      `[spotify] auto-skip ${r.request_id}: ${result} · lu à ${p.progress_ms ?? '?'} ms du début (suivi ${fast ? 'rapide' : 'normal'}) · décision +${detectedAt - Date.parse(p.observed_at)} ms après la lecture · skip envoyé +${sentAt - detectedAt} ms · réponse Spotify ${this.now() - sentAt} ms`,
+    );
     await this.reportPending();
   }
 
@@ -455,6 +467,7 @@ export class SpotifyRuntime {
 
   private async run(job: SpotifyJob) {
     const attempt_id = randomUUID();
+    this.marks = [['début', this.now()]];
     try {
       await this.d.core(`${this.base}/jobs/${job.job_id}/start`, {
         attempt_id,
@@ -462,6 +475,7 @@ export class SpotifyRuntime {
     } catch {
       return; // taken / unknown: never run twice
     }
+    this.mark('Core (prise)');
     let report: SpotifyJobReport;
     if (job.kind === 'song_request')
       report = {
@@ -480,6 +494,16 @@ export class SpotifyRuntime {
     for (let n = 0; n < 5; n++) {
       try {
         await this.d.core(`${this.base}/jobs/${job.job_id}/report`, report);
+        if (report.kind === 'song_request') {
+          this.mark('Core (rapport)');
+          const steps = this.marks
+            .slice(1)
+            .map(([l, t], i) => `${l} ${t - this.marks[i]![1]} ms`)
+            .join(' · ');
+          this.d.log?.(
+            `[spotify] demande ${job.kind === 'song_request' ? job.request_id : job.job_id} → ${report.outcome}${report.reason ? ` (${report.reason})` : ''} : ${steps} · total ${this.now() - this.marks[0]![1]} ms`,
+          );
+        }
         return;
       } catch (e) {
         if ((e as { status?: number }).status) return;
@@ -511,11 +535,13 @@ export class SpotifyRuntime {
       let chosen: Candidate | null;
       if (job.reference.kind === 'exact') {
         chosen = await this.d.api.track(job.reference.track_id);
+        this.mark('titre (lien)');
         if (!chosen) return { outcome: 'refused', reason: 'NOT_FOUND' };
       } else {
         const items = (await this.d.api.search(job.reference.query)).filter(
           (c) => VALID_ID.test(c.id ?? ''),
         );
+        this.mark('recherche');
         const s = selectCandidate(job.reference.query, items, {
           minScore: SPOTIFY_RULES.minScore,
           minMargin: SPOTIFY_RULES.minMargin,
@@ -534,6 +560,7 @@ export class SpotifyRuntime {
           return { outcome: 'refused', reason: s.status, ...extra };
         chosen =
           (await this.d.api.track(s.top.candidate.id)) ?? s.top.candidate;
+        this.mark('titre (durée)');
       }
       const track = toTrack(chosen);
       if (!track)
@@ -541,22 +568,25 @@ export class SpotifyRuntime {
       if (track.duration_ms > job.max_duration_ms)
         return { outcome: 'refused', reason: 'TOO_LONG', track, ...extra };
       const device = pickDevice(await this.d.api.devices(true));
+      this.mark('appareils');
       if (!device)
         return { outcome: 'refused', reason: 'NO_DEVICE', track, ...extra };
       try {
         await this.d.api.addToQueue(track.uri, device.id);
+        this.mark('ajout');
         return { outcome: 'queued', track, confirmation: 'http_204', ...extra };
       } catch (e) {
         if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
+        this.mark('ajout (réponse non 204)');
         // No clear answer: read the queue back (historical 250/500/750/1000 ms), never resend.
         for (const ms of QUEUE_READBACK_MS) {
           await this.sleep(ms);
           try {
-            if (
-              (await this.d.api.queue(true)).some((c) =>
-                sameTrack(c, track.uri),
-              )
-            )
+            const present = (await this.d.api.queue(true)).some((c) =>
+              sameTrack(c, track.uri),
+            );
+            this.mark(`relecture (+${ms} ms d'attente)`);
+            if (present)
               return {
                 outcome: 'queued',
                 track,
