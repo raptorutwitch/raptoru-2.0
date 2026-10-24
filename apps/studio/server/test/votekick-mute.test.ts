@@ -51,7 +51,7 @@ describe('MUTED: the historical end (SAMMI) vs the V2 end', () => {
     expect(seen.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('V2: drive cut, zoom reset (late write reset again), band exit, mic LAST — no reaction after the unmute', async () => {
+  it('V2: drive cut, zoom reset (late write reset again), zoom and band off together, mic LAST — no reaction after the unmute', async () => {
     const l = await lab();
     await l.mute.muteStart('mute:s1', 50);
     expect(l.obs.inputs.get('Micro (Obsolète)')!.muted).toBe(true);
@@ -64,7 +64,7 @@ describe('MUTED: the historical end (SAMMI) vs the V2 end', () => {
     const steps = l.obs.frames.map((f) => f.step);
     const unmute = steps.lastIndexOf('micro rétabli');
     expect(unmute).toBe(steps.length - 1); // the voice is the very last change
-    // The band played its exit from now (20 s in + 0.14 s), not cut.
+    // The band's saved duration was written back after it was disabled.
     expect(steps).toContain('Votekick Mute réglé');
     expect(l.obs.zoomFilter.settings.zoom).toBe(1);
     expect(l.obs.filters.get('overlay cam shushu|prison')!.enabled).toBe(false);
@@ -72,17 +72,56 @@ describe('MUTED: the historical end (SAMMI) vs the V2 end', () => {
 });
 
 describe('MUTED V2: the audio drive', () => {
-  it('re-armed (its settings re-sent, unchanged) right before it is enabled: a drive pasted while OBS runs reads the voice', async () => {
+  it('the drive’s settings and the zoom’s other settings are never written; drive enabled last', async () => {
     const l = await lab();
-    const before = { ...l.obs.filters.get('Micro (Obsolète)|Votekick Zoom Drive')!.settings };
+    const drive = { ...l.obs.driveFilter.settings };
+    l.obs.zoomFilter.settings.zoom_max = 1.08;
     await l.mute.muteStart('mute:s1', 50);
     const r = l.obs.requests;
-    const armed = r.indexOf('SetSourceFilterSettings Micro (Obsolète) / Votekick Zoom Drive');
-    const on = r.indexOf('SetSourceFilterEnabled Micro (Obsolète) / Votekick Zoom Drive');
-    expect(armed).toBeGreaterThan(-1);
-    expect(on).toBe(armed + 1);
-    expect(l.obs.filters.get('Micro (Obsolète)|Votekick Zoom Drive')!.settings).toEqual(before);
-    expect(l.obs.filters.get('Micro (Obsolète)|Votekick Zoom Drive')!.enabled).toBe(true);
+    expect(
+      r.some(
+        (x) =>
+          x ===
+          'SetSourceFilterSettings Micro (Obsolète) / Votekick Zoom Drive',
+      ),
+    ).toBe(false);
+    expect(r.filter((x) => x.startsWith('Set')).at(-1)).toBe(
+      'SetSourceFilterEnabled Micro (Obsolète) / Votekick Zoom Drive',
+    );
+    await l.mute.muteEnd('mute:s1', 'expired');
+    expect(l.obs.driveFilter.settings).toEqual(drive);
+    expect(l.obs.zoomFilter.settings.zoom_max).toBe(1.08);
+  });
+
+  it('end: zoom and band disabled together, no exit animation; mic last; always back to REST even if left on before', async () => {
+    const l = await lab();
+    // OBS left « live » by a manual test: drive and zoom on before the vote.
+    l.obs.driveFilter.enabled = true;
+    l.obs.zoomFilter.enabled = true;
+    const bandDuration = l.obs.bandFilter.settings.mute_duration;
+    await l.mute.muteStart('mute:s1', 50);
+    l.clock.advance(20_000);
+    const from = l.obs.requests.length;
+    expect(await l.mute.muteEnd('mute:s1', 'caution')).toEqual({
+      id: 'mute:s1',
+      ok: true,
+      mismatches: [],
+    });
+    const sets = l.obs.requests.slice(from).filter((x) => x.startsWith('Set'));
+    const zoomOff = sets.indexOf(
+      'SetSourceFilterEnabled overlay cam shushu / Votekick Zoom',
+    );
+    expect(sets[zoomOff + 1]).toBe(
+      'SetSourceFilterEnabled overlay cam shushu / Votekick Mute',
+    );
+    expect(sets.at(-1)).toBe('SetInputMute Micro (Obsolète)');
+    expect(l.clock.now()).toBe(1_000_000 + 20_000); // no wait for an exit animation
+    expect(l.obs.driveFilter.enabled).toBe(false);
+    expect(l.obs.zoomFilter.enabled).toBe(false);
+    expect(l.obs.zoomFilter.settings.zoom).toBe(1);
+    expect(l.obs.bandFilter.enabled).toBe(false);
+    expect(l.obs.bandFilter.settings.mute_duration).toBe(bandDuration);
+    expect(l.obs.reactionsAfterUnmute()).toEqual([]);
   });
 });
 

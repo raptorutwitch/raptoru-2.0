@@ -12,13 +12,14 @@ import type { ObsLike } from '../channel-points/obs-actions.js';
 // Here, ONE deterministic sequence per mute, keyed by the mute id (a late or repeated order of an old mute does
 // nothing):
 //   start: snapshot of the 4 items it owns → saved to disk → mic muted first (no voice leaks) → zoom reset → zoom,
-//          band (mute_duration = the mute) and drive enabled;
-//   end:   drive cut → zoom reset (read back: a late write of the drive is reset again) and disabled → the band's exit
-//          played now (mute_duration = elapsed + exit) then disabled → the mic unmuted LAST → each item back to its
-//          snapshot, read back, retried once.
-// Only the 4 items it owns are touched (the mic input, the drive filter, the zoom filter, the band filter); a mic
-// that was muted before the vote stays muted. A watchdog ends a mute Core never ended (Core down); a Studio restart
-// ends a due mute when OBS answers again. OBS absent at the end: retried until it answers.
+//          band (mute_duration = the mute) and drive enabled (the drive's own settings are never written);
+//   end:   drive cut → zoom reset (read back: a late write of the drive is reset again) → zoom AND band disabled
+//          together (no animation left on screen) → the band's saved mute_duration back → the mic unmuted LAST →
+//          read back, retried once.
+// After a mute the effect is always at REST — drive, zoom and band disabled, zoom 1 — whatever it was before (decided
+// 24/10: a drive left enabled after a test must not keep moving the camera); the mic gets back its own state (muted
+// before the vote: stays muted). Only these 4 items are touched. A watchdog ends a mute Core never ended (Core down);
+// a Studio restart ends a due mute when OBS answers again. OBS absent at the end: retried until it answers.
 
 export interface MuteFxConfig {
   /** The audio input muted. SAMMI: « Micro (Obsolète) » — hidden in every scene in the 22/10 collection: to check. */
@@ -55,8 +56,6 @@ export const RAPTORU_MUTE_FX: MuteFxConfig = {
   driveFilter: 'Votekick Zoom Drive',
 };
 
-/** The band's exit when its filter does not say (the shader's default anim_out_time). */
-const DEFAULT_EXIT_MS = 450;
 /** Core ends the mute on time; this ends it alone if Core never does. */
 export const MUTE_WATCHDOG_MS = 5_000;
 
@@ -185,17 +184,6 @@ export class MuteController {
           true,
         );
         this.active.bandAt = this.now();
-        // Move Transition (3.1.1): « Audio Move » attaches its audio meter to its input only in its update / load.
-        // A drive filter pasted while OBS runs reads nothing until OBS restarts (live of 23/10: no zoom). Its
-        // settings re-sent unchanged run that update now, so the drive reads the voice whatever its history.
-        await obs.request('SetSourceFilterSettings', {
-          sourceName: this.cfg.driveInput,
-          filterName: this.cfg.driveFilter,
-          filterSettings: (
-            await this.filter(obs, this.cfg.driveInput, this.cfg.driveFilter)
-          ).settings,
-          overlay: true,
-        });
         await this.setFilter(
           obs,
           this.cfg.driveInput,
@@ -250,33 +238,13 @@ export class MuteController {
       );
       await this.setZoom(obs, 1);
       if ((await this.zoomValue(obs)) !== 1) await this.setZoom(obs, 1);
+      // 3. Zoom and band disabled at the same moment (no animation left), the band's saved duration back.
       await this.setFilter(obs, this.cfg.camSource, this.cfg.zoomFilter, false);
-      // 3. The band plays its exit now (its shader clock started at bandAt), then is disabled.
-      const band = await this.filter(
-        obs,
-        this.cfg.camSource,
-        this.cfg.bandFilter,
-      );
-      if (band.enabled) {
-        const exitMs =
-          Number(band.settings.anim_out_time) > 0
-            ? Number(band.settings.anim_out_time) * 1000
-            : DEFAULT_EXIT_MS;
-        const elapsedS = (this.now() - a.bandAt) / 1000;
-        await this.setBand(obs, {
-          mute_duration: Math.max(0.01, elapsedS + exitMs / 1000),
-        });
-        await this.sleep(exitMs + 50);
-        await this.setFilter(
-          obs,
-          this.cfg.camSource,
-          this.cfg.bandFilter,
-          false,
-        );
-      }
+      await this.setFilter(obs, this.cfg.camSource, this.cfg.bandFilter, false);
+      await this.setBand(obs, { mute_duration: s.bandDuration });
       // 4. The voice comes back last, only if it was live before the vote.
       if (!s.micMuted) await this.setMic(obs, false);
-      // 5. Each item to its snapshot, read back, retried once.
+      // 5. Rest state and the mic's own state, read back, retried once.
       const mismatches = await this.verify(obs, s, true);
       const report = { id: a.id, ok: mismatches.length === 0, mismatches };
       this.reports.unshift(report);
@@ -296,31 +264,17 @@ export class MuteController {
   ): Promise<string[]> {
     const now = await this.snapshot(obs);
     const wrong: string[] = [];
-    if (now.driveEnabled !== s.driveEnabled) wrong.push('drive');
-    if (now.zoomEnabled !== s.zoomEnabled) wrong.push('zoom');
-    if (now.zoom !== s.zoom) wrong.push('zoom_value');
-    if (now.bandEnabled !== s.bandEnabled) wrong.push('band');
+    if (now.driveEnabled) wrong.push('drive');
+    if (now.zoomEnabled) wrong.push('zoom');
+    if (now.zoom !== 1) wrong.push('zoom_value');
+    if (now.bandEnabled) wrong.push('band');
+    if (now.bandDuration !== s.bandDuration) wrong.push('band_duration');
     if (now.micMuted !== s.micMuted) wrong.push('mic');
     if (!wrong.length || !retry) return wrong;
-    await this.setFilter(
-      obs,
-      this.cfg.driveInput,
-      this.cfg.driveFilter,
-      s.driveEnabled,
-    );
-    await this.setZoom(obs, s.zoom);
-    await this.setFilter(
-      obs,
-      this.cfg.camSource,
-      this.cfg.zoomFilter,
-      s.zoomEnabled,
-    );
-    await this.setFilter(
-      obs,
-      this.cfg.camSource,
-      this.cfg.bandFilter,
-      s.bandEnabled,
-    );
+    await this.setFilter(obs, this.cfg.driveInput, this.cfg.driveFilter, false);
+    await this.setZoom(obs, 1);
+    await this.setFilter(obs, this.cfg.camSource, this.cfg.zoomFilter, false);
+    await this.setFilter(obs, this.cfg.camSource, this.cfg.bandFilter, false);
     await this.setBand(obs, { mute_duration: s.bandDuration });
     await this.setMic(obs, s.micMuted);
     return this.verify(obs, s, false);
