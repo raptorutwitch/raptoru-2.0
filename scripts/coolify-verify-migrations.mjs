@@ -11,7 +11,9 @@
 // - not recorded → conformity on the real database, inside a transaction always rolled back: the file is replayed
 //   into a scratch schema (search_path raptoru_verify, public), each object it creates must exist in public with the
 //   same definition (columns, types, defaults, NOT NULL, constraints, indexes), and the replay must change nothing in
-//   public. Then only the Core's migrator runs; it must apply exactly those files, recorded with their checksum.
+//   public. A file made only of ALTER TABLE statements (e.g. a widened check constraint) creates nothing: it conforms
+//   when its replay changes nothing in public (its effect is already there; missing, the replay would change it).
+//   Then only the Core's migrator runs; it must apply exactly those files, recorded with their checksum.
 // A file of the migrator's scope that is neither recorded nor expected stops everything before any write.
 
 export async function verifyMigrations({
@@ -57,6 +59,13 @@ export async function verifyMigrations({
       ]),
     );
   };
+  const alterOnly = (sql) =>
+    sql
+      .replace(/--[^\n]*/g, "")
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .every((s) => /^alter\s+table\s/i.test(s));
   const conformity = async (sql) => {
     const rollback = {};
     try {
@@ -70,7 +79,8 @@ export async function verifyMigrations({
         const fresh = await describe(q, "raptoru_verify");
         const after = await describe(q, "public");
         const diff = [];
-        if (!fresh.size) diff.push("ne crée aucun objet vérifiable");
+        if (!fresh.size && !alterOnly(sql))
+          diff.push("ne crée aucun objet vérifiable");
         for (const [name, def] of fresh) {
           const real = before.get(name);
           if (!real) diff.push(`${name} absent`);

@@ -16,6 +16,8 @@ const ROOT = process.env.RAPTORU_CORE_ROOT ?? 'C:/Users/Antoni/Documents/rs-vk';
 const pg = createRequire(join(ROOT, 'apps/core-api/package.json'))('pg');
 const CAUTION = '20261105130000_caution.sql';
 const VOTEKICK = '20261106130000_votekick.sql';
+// Spotify V2 (24/10): a file made only of ALTER TABLE (cmd_steps origin widened to « music »).
+const MUSIC = '20261108140000_cmd_steps_music_lab.sql';
 const NAME = `raptoru-verify-test-${process.pid}`;
 const PORT = 55_000 + (process.pid % 1000);
 const base = `postgres://raptoru:test@127.0.0.1:${PORT}`;
@@ -26,11 +28,16 @@ const beforeDir = join(tmp, 'before');
 cpSync(allDir, beforeDir, { recursive: true });
 rmSync(join(beforeDir, CAUTION));
 rmSync(join(beforeDir, VOTEKICK));
+// The database as Production had it before the Spotify GO's second file: everything but the music origin.
+const hasMusic = readdirSync(allDir).includes(MUSIC);
+const beforeMusicDir = join(tmp, 'before-music');
+cpSync(allDir, beforeMusicDir, { recursive: true });
+rmSync(join(beforeMusicDir, MUSIC), { force: true });
 
 const sql = (f) => readFileSync(join(allDir, f), 'utf8');
 let n = 0;
 
-async function database() {
+async function database(dir = beforeDir) {
   const name = `s${++n}`;
   const admin = new pg.Client(`${base}/postgres`);
   await admin.connect();
@@ -40,7 +47,7 @@ async function database() {
   const env = { ...process.env, DATABASE_URL: url };
   execFileSync('node', ['apps/core-api/dist/scripts/migrate.js'], {
     cwd: ROOT,
-    env: { ...env, MIGRATIONS_DIR: beforeDir },
+    env: { ...env, MIGRATIONS_DIR: dir },
   });
   const c = new pg.Client(url);
   await c.connect();
@@ -66,7 +73,8 @@ const recorded = async (db) =>
 const tables = async (db) =>
   (
     await db.rows(
-      "select table_name from information_schema.tables where table_schema = 'public' and (table_name like 'votekick%' or table_name like 'caution%') order by 1",
+      // The two files' tables (votekick_settings, 24/10, comes from a later file already in the « before » database).
+      "select table_name from information_schema.tables where table_schema = 'public' and (table_name like 'votekick%' or table_name like 'caution%') and table_name <> 'votekick_settings' order by 1",
     )
   ).map((r) => r.table_name);
 
@@ -192,6 +200,21 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
     assert.deepEqual(r.applied, []);
     assert.ok(!(await recorded(db)).includes(CAUTION));
     assert.deepEqual(await tables(db), ['caution_requests']);
+    await db.close();
+  });
+
+  it('an ALTER-only file (cmd_steps origin « music »): refused while missing, conforming once applied by hand', { skip: !hasMusic }, async () => {
+    const db = await database(beforeMusicDir);
+    const missing = db.verify([MUSIC]);
+    assert.equal(missing.ok, false);
+    assert.match(missing.problems.join(), /modifierait public\.cmd_steps/);
+    assert.ok(!(await recorded(db)).includes(MUSIC));
+    await db.exec(sql(MUSIC));
+    const r = db.verify([MUSIC]);
+    assert.equal(r.ok, true, JSON.stringify(r.problems));
+    assert.deepEqual(r.conforming, [MUSIC]);
+    assert.deepEqual(r.applied, [MUSIC]);
+    assert.ok((await recorded(db)).includes(MUSIC));
     await db.close();
   });
 
