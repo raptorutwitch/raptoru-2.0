@@ -1,4 +1,4 @@
-import { HISTORICAL } from './spotify-panels.js';
+import { HISTORICAL, REWARD_TITLE } from './spotify-panels.js';
 import {
   spotifyView,
   type SpState,
@@ -263,16 +263,17 @@ export function mountSpotify(root: HTMLElement) {
     )
       void post('/disconnect', {}, 'Spotify déconnecté.');
     if (act === 'sp-reward') {
-      const cost = Number(field('rw-cost'));
+      const title = field('rw-title') || REWARD_TITLE;
+      const cost = Number(field('rw-cost') || 1500);
       const prompt = field('rw-prompt');
       if (
         confirm(
-          `Créer sur Twitch la récompense « Choisi la prochaine musique ! » ?\n\n• Prix : ${cost} points, texte du viewer obligatoire (« ${prompt} »)\n• Créée par l’application Twitch de Raptoru, avec le compte de la chaîne\n• Seules ses réclamations pourront être remboursées par Raptoru ; l’ancienne récompense (SAMMI) n’est pas touchée\n\nAction réelle sur Twitch.`,
+          `Créer sur Twitch la récompense « ${title} » ?\n\n• Prix : ${cost} points, texte du viewer obligatoire (« ${prompt} »)\n• Créée par l’application Twitch de Raptoru, avec le compte de la chaîne\n• Seules ses réclamations pourront être remboursées par Raptoru ; l’ancienne récompense (SAMMI) n’est pas touchée\n\nAction réelle sur Twitch.`,
         )
       )
         void post(
           '/reward',
-          { cost, prompt },
+          { title, cost, prompt },
           'Création demandée : le bot la fait sur Twitch.',
         );
     }

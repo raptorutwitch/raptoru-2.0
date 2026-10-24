@@ -209,7 +209,8 @@ describe('Studio « Musique » — secondary spaces', () => {
     const html = spotifyView(state(), null, ui({ tab: 'reward' }));
     expect(html).toContain('L’application Twitch de Raptoru');
     expect(html).toContain('channel:manage:redemptions');
-    expect(html).toContain('1 000 points');
+    expect(html).toContain('1 500 points');
+    expect(html).toContain('value="Choisi la prochaine musique"');
     expect(html).toContain('ne valide jamais une réclamation');
     expect(html).toContain('data-act="sp-reward"');
     const made = spotifyView(

@@ -1085,14 +1085,15 @@ describe("Spotify V2 — per-viewer exceptions, chat origin, Raptoru's reward", 
     const route = spotifyRoutes(t.spotify, t.core.cpTwitch).find(
       (r) => String(r.pattern).includes('reward') && r.method === 'POST',
     )!;
+    // Default: Antoni's title (unique on the channel: the SAMMI one ends with « ! ») and price.
     await route.handle({
       params: [CH],
-      body: { prompt: 'Titre + artiste', cost: 1500 },
+      body: { prompt: 'Titre + artiste' },
     } as never);
     expect((await t.actions())[0]).toMatchObject({
       kind: 'reward_create',
       payload: expect.objectContaining({
-        title: 'Choisi la prochaine musique !',
+        title: 'Choisi la prochaine musique',
         cost: 1500,
         is_user_input_required: true,
       }),
@@ -1108,11 +1109,35 @@ describe("Spotify V2 — per-viewer exceptions, chat origin, Raptoru's reward", 
     );
     await t.core.db.query(
       `insert into cp_rewards (channel_id, reward_id, title, cost, source, last_seen_at, managed_by_raptoru)
-       values ($1, 'new-song', 'Choisi la prochaine musique !', 1500, 'twitch_api', now(), true)`,
+       values ($1, 'new-song', 'Choisi la prochaine musique', 1500, 'twitch_api', now(), true)`,
       [CH],
     );
+    for (const title of [undefined, ' choisi la PROCHAINE musique '])
+      await expect(
+        route.handle({
+          params: [CH],
+          body: { prompt: 'x', ...(title ? { title } : {}) },
+        } as never),
+      ).rejects.toMatchObject({
+        status: 409,
+        body: { error: 'reward_exists' },
+      });
+    // Another title (e.g. a future skip reward) stays possible; a title over Twitch's 45 characters is refused.
+    await route.handle({
+      params: [CH],
+      body: { prompt: 'x', title: 'Autre récompense', cost: 2000 },
+    } as never);
+    expect((await t.actions()).at(-1)).toMatchObject({
+      payload: expect.objectContaining({
+        title: 'Autre récompense',
+        cost: 2000,
+      }),
+    });
     await expect(
-      route.handle({ params: [CH], body: { prompt: 'x' } } as never),
-    ).rejects.toMatchObject({ status: 409, body: { error: 'reward_exists' } });
+      route.handle({
+        params: [CH],
+        body: { prompt: 'x', title: 'x'.repeat(46) },
+      } as never),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

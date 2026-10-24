@@ -13,6 +13,9 @@ import {
 // (the historical global settings), Récompense Twitch (what Raptoru's reward is and how claims are handled), Connexion
 // et diagnostic (Spotify account, API budget, Studio's watch) and, in the Lab, the simulator.
 
+/** The title of the reward Raptoru creates (Antoni, 24/10): unique on the channel, unlike the SAMMI one's « … ! ». */
+export const REWARD_TITLE = 'Choisi la prochaine musique';
+
 /** The historical settings (spotify-v2/config.js). */
 export const HISTORICAL = {
   max_pending_per_viewer: 2,
@@ -97,9 +100,12 @@ const ACTION_STATUS: Record<string, string> = {
 };
 
 export function rewardPanel(s: SpState, ui: SpUi) {
-  const song = s.managed_rewards.find(
-    (r) => r.title === 'Choisi la prochaine musique !',
-  );
+  const title = ui.fields['rw-title'] ?? REWARD_TITLE;
+  const same = (a: string) =>
+    a.trim().toLowerCase() === title.trim().toLowerCase();
+  // The song reward Raptoru created (the typed title, else the first one it manages).
+  const song =
+    s.managed_rewards.find((r) => same(r.title)) ?? s.managed_rewards[0];
   const pending = s.twitch_actions.find(
     (a) =>
       a.kind === 'reward_create' &&
@@ -123,8 +129,10 @@ export function rewardPanel(s: SpState, ui: SpUi) {
       <dt>Autorisation</dt><dd>Le bot la crée avec le compte de la chaîne (<code>raptoru_</code>) et le droit Twitch
         <code>channel:manage:redemptions</code>, déjà prévu dans le profil d’autorisation. S’il manque, rien n’est envoyé
         et l’échec s’affiche ci-dessous. L’exécution côté bot est activée par <code>CP_TWITCH_ACTIONS</code> (sur GO).</dd>
-      <dt>Prix et texte</dt><dd>1 000 points (prix historique), texte du viewer obligatoire (titre + artiste ou lien
-        Spotify). Modifiables ci-dessous avant la création, puis directement sur Twitch.</dd>
+      <dt>Titre, prix et texte</dt><dd>« ${esc(REWARD_TITLE)} », 1 500 points (ton choix du 24/10 ; l’ancienne SAMMI
+        coûtait 1 000), texte du viewer obligatoire (titre + artiste ou lien Spotify). Twitch exige un titre unique sur la
+        chaîne : il doit différer de celui de l’ancienne récompense SAMMI (« Choisi la prochaine musique ! »).
+        Modifiables ci-dessous avant la création, puis directement sur Twitch.</dd>
       <dt>Réclamations</dt><dd>Raptoru ne valide jamais une réclamation : une musique acceptée, ajoutée ou jouée reste
         <b>en attente</b> sur Twitch, tu la valides ou la rembourses toi-même. Raptoru rembourse automatiquement
         (une seule fois) un refus ou un échec certain, un <code>!songcancel</code>, un <code>!songremove</code> ou un
@@ -136,10 +144,11 @@ export function rewardPanel(s: SpState, ui: SpUi) {
         ? ''
         : `<div class="sp-form"><h4>Créer la récompense</h4>
       <div class="sp-fields">
-        <label>Prix (points de chaîne)<input type="number" data-f="rw-cost" min="1" max="1000000" value="${val(ui, 'rw-cost', 1000)}"></label>
+        <label class="sp-wide">Titre sur Twitch<input data-f="rw-title" maxlength="45" value="${val(ui, 'rw-title', REWARD_TITLE)}"></label>
+        <label>Prix (points de chaîne)<input type="number" data-f="rw-cost" min="1" max="1000000" value="${val(ui, 'rw-cost', 1500)}"></label>
         <label class="sp-wide">Texte affiché au viewer<input data-f="rw-prompt" maxlength="200" value="${val(ui, 'rw-prompt', 'Titre + artiste, ou lien Spotify')}"></label>
       </div>
-      <div class="cp-buttons"><button type="button" class="primary" data-act="sp-reward" ${pending ? 'disabled' : ''}>Créer « Choisi la prochaine musique ! » sur Twitch</button></div>
+      <div class="cp-buttons"><button type="button" class="primary" data-act="sp-reward" ${pending ? 'disabled' : ''}>Créer la récompense sur Twitch</button></div>
       <p class="cp-muted">Une confirmation est demandée. Action réelle sur ton compte Twitch : à faire seulement lors de la
         mise en service.</p></div>`
     }

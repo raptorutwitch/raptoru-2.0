@@ -207,7 +207,7 @@ function queue(s: SpState) {
             }</div></div>`;
         })
         .join('')
-    : '<p class="sp-empty">Aucune demande en attente. Les viewers demandent avec la récompense « Choisi la prochaine musique ! ».</p>';
+    : '<p class="sp-empty">Aucune demande en attente. Les viewers demandent avec la récompense de demande de musique (espace Récompense Twitch).</p>';
   return `<section><h3>File d’attente${rows.length ? ` (${rows.length})` : ''}</h3>${body}
     <p class="cp-muted">Retirer rembourse la demande (récompense de Raptoru) et la passe automatiquement quand Spotify
       l’atteint. Commandes : <code>!song</code>, <code>!songqueue</code>, <code>!mysong</code>, <code>!songcancel</code> ;

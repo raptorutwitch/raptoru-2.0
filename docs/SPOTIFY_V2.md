@@ -18,7 +18,7 @@ Référence métier : l'ancien service Node « Spotify V2 » du pont SAMMI, en p
 
 Aucun pont SAMMI, aucune seconde source de vérité, aucun polling Spotify ailleurs que dans Studio.
 
-## 2. Demande d'un viewer (récompense « Choisi la prochaine musique ! », 1 000 points, texte obligatoire)
+## 2. Demande d'un viewer (récompense « Choisi la prochaine musique », 1 500 points, texte obligatoire)
 
 Points de chaîne → règle de la récompense → action `interaction: song_request` (nouvelle interaction native).
 
@@ -121,7 +121,9 @@ Section « Musique (Spotify) » de l'onglet Points de chaîne (`apps/studio/web/
 
 - Seule l'application qui a créé une récompense peut valider / annuler ses rédemptions : l'ancienne récompense (créée
   par SAMMI) ne peut pas être remboursée par Raptoru.
-- Raptoru crée une **nouvelle** récompense « Choisi la prochaine musique ! » (1 000 points, texte obligatoire) via le
+- Raptoru crée une **nouvelle** récompense « Choisi la prochaine musique » (1 500 points, texte obligatoire ; titre et
+  prix choisis par Antoni le 24/10, modifiables avant la création ; Twitch exige un titre unique sur la chaîne, l'ancienne
+  SAMMI garde « … ! ») via le
   bot (jeton `raptoru_`, droit `channel:manage:redemptions`, déjà dans le profil approuvé) — **sur GO**.
 - **Statuts de la réclamation (décision d'Antoni, 24/10)** — Raptoru n'envoie jamais FULFILLED, même après une
   lecture complète ; Antoni garde le choix de valider ou de rembourser lui-même depuis Twitch :
@@ -182,7 +184,7 @@ Section « Musique (Spotify) » de l'onglet Points de chaîne (`apps/studio/web/
 Flags (OFF par défaut) : Core `SPOTIFY_CHAT` (les six commandes), bot `CP_TWITCH_ACTIONS` (remboursements CANCELED et
 création de la récompense). Le module a son propre interrupteur dans Studio (`spotify_settings.enabled`, OFF).
 
-Tests : Core `spotify-service.test.ts` (36, dont les statuts de réclamation du § 7, les exceptions par viewer,
+Tests : Core `spotify-service.test.ts` (34, dont les statuts de réclamation du § 7, les exceptions par viewer,
 l'origine `music`, la récompense unique), `spotify.integration.test.ts` (7, PostgreSQL réel : concurrence, idempotence
 des remboursements, aucun envoi après une lecture), `spotify-migration.test.ts` ; Studio `spotify-search.test.ts` (6,
 cas historiques), `spotify-api.test.ts` (8 : espacement, plafond, cache, 429 persisté, 401 / 403 / 5xx, écritures,
@@ -220,7 +222,7 @@ dont 4 écritures, aucun 429.
    accepter dans le navigateur ; le panneau doit afficher le compte et ne pas signaler « pas Premium ».
 5. **Droit Twitch** `channel:manage:redemptions` du jeton `raptoru_` (déjà dans le profil approuvé ; visible dans
    Studio → Connexions Twitch) ; activer `CP_TWITCH_ACTIONS` ; « Créer la récompense Raptoru » dans le panneau
-   (« Choisi la prochaine musique ! », 1 000 points, texte obligatoire). L'ancienne récompense SAMMI n'est pas
+   (« Choisi la prochaine musique », 1 500 points, texte obligatoire). L'ancienne récompense SAMMI n'est pas
    touchée : la mettre en pause est une décision d'Antoni.
 6. Règle de la nouvelle récompense : Interaction native « Demande de musique (Spotify) » ; `SPOTIFY_CHAT=true` ;
    « Activer les demandes ».

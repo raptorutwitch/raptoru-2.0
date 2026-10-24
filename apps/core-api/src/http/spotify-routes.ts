@@ -32,17 +32,20 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** The reward Raptoru creates for the song requests (historical name, cost and mandatory text). */
+/** The reward Raptoru creates for the song requests: Antoni's choice of 24/10 by default (the SAMMI reward keeps
+ *  « Choisi la prochaine musique ! », and Twitch wants a title unique on the channel); mandatory viewer text. */
 const SONG_REWARD = {
-  title: 'Choisi la prochaine musique !',
-  cost: 1000,
+  title: 'Choisi la prochaine musique',
+  cost: 1500,
   is_user_input_required: true,
 } as const;
 const RewardCreate = z.strictObject({
   prompt: z.string().max(200),
-  // Historical price by default; Antoni may set another one before creating it.
+  title: z.string().trim().min(1).max(45).default(SONG_REWARD.title),
   cost: z.number().int().min(1).max(1_000_000).default(SONG_REWARD.cost),
 });
+const sameTitle = (a: string, b: string) =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
 // The Lab chat simulator's identities (numeric ids): the same viewer for !mysong / !songcancel.
 const LabSimulate = z.strictObject({
   viewer_id: z.string().regex(/^\d{1,32}$/),
@@ -236,15 +239,17 @@ export function spotifyRoutes(
         mapped(async () => {
           const id = channel(params[0]!);
           const r = parse(RewardCreate, body);
-          // One « Choisi la prochaine musique ! » owned by Raptoru: never a second one by a double click.
+          // One reward of that title owned by Raptoru: never a second one by a double click (Twitch itself refuses a
+          // title already used on the channel, e.g. by the SAMMI reward: the bot's failure shows in Studio).
           if (
-            (await spotify.managedRewards(id)).some(
-              (m) => m.title === SONG_REWARD.title,
+            (await spotify.managedRewards(id)).some((m) =>
+              sameTitle(m.title, r.title),
             )
           )
             throw new HttpError(409, { error: 'reward_exists' });
           return twitch.createReward(id, {
             ...SONG_REWARD,
+            title: r.title,
             cost: r.cost,
             prompt: r.prompt,
           });
