@@ -23,3 +23,4 @@ export * from './caution.js';
 export * from './twitch-oauth.js';
 export * from './sub-wheel.js';
 export * from './bot-instance.js';
+export * from './spotify.js';

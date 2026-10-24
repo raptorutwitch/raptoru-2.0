@@ -37,7 +37,7 @@ export interface ChattersPage {
 
 export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
   async function request(
-    method: 'GET' | 'POST' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown,
     signal?: AbortSignal,
@@ -291,6 +291,49 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
         is_paused?: boolean;
         is_user_input_required?: boolean;
       }[];
+    },
+
+    /**
+     * Fulfil or cancel (= give the points back) one redemption of a reward created by this app (Spotify V2, docs § 7;
+     * broadcaster token, channel:manage:redemptions). Twitch refuses any other reward.
+     */
+    async updateRedemptionStatus(
+      broadcasterId: string,
+      rewardId: string,
+      redemptionId: string,
+      status: 'FULFILLED' | 'CANCELED',
+    ) {
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        reward_id: rewardId,
+        id: redemptionId,
+      });
+      await request(
+        'PATCH',
+        `/channel_points/custom_rewards/redemptions?${qs}`,
+        { status },
+      );
+    },
+
+    /** Creates a reward owned by this app (Spotify V2: « Choisi la prochaine musique ! »); its id. */
+    async createCustomReward(
+      broadcasterId: string,
+      reward: {
+        title: string;
+        cost: number;
+        prompt: string;
+        is_user_input_required: boolean;
+      },
+    ) {
+      const qs = new URLSearchParams({ broadcaster_id: broadcasterId });
+      const res = await request(
+        'POST',
+        `/channel_points/custom_rewards?${qs}`,
+        reward,
+      );
+      const id = (res.data?.[0] as { id?: string } | undefined)?.id;
+      if (!id) throw new HelixError(502, 'create custom reward: no id');
+      return id;
     },
 
     // --- Random Ban V2 (docs/RANDOM_BAN_V2.md) -------------------------------------------------------------------

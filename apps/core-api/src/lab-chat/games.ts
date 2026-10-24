@@ -25,6 +25,8 @@ import { FxCamChat } from '../chat-interactions/fx-cam-chat.js';
 import type { ChannelPointsService } from '../channel-points/service.js';
 import type { CautionService } from '../caution/service.js';
 import type { VotekickService } from '../votekick/service.js';
+import type { SpotifyService } from '../spotify/service.js';
+import { SpotifyChat } from '../spotify/chat.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import { WordGameService } from '../word-game/service.js';
@@ -57,6 +59,8 @@ export function createChatGames(o: {
   caution?: CautionService | null;
   /** `!votekick pseudo`, `!kick`, `!save` (absent: no Votekick — the main Core only with VOTEKICK_CHAT=true). */
   votekick?: VotekickService | null;
+  /** Spotify V2 chat commands (absent: none — the main Core only with SPOTIFY_CHAT=true). */
+  spotify?: SpotifyService | null;
 }) {
   // Tombola's chat words stay Tombola's (reserved); Roulette / Slot words are the mini-games' (StreamElements aliases);
   // `!tts` is the TTS's.
@@ -129,6 +133,9 @@ export function createChatGames(o: {
   const votekick = o.votekick ?? null;
   if (votekick)
     chatModules.push({ name: 'votekick', chat: (m) => votekick.chat(m) });
+  const spotifyChat = o.spotify ? new SpotifyChat(o.spotify) : null;
+  if (spotifyChat)
+    chatModules.push({ name: 'spotify', chat: (m) => spotifyChat.chat(m) });
   return {
     commands,
     admission,

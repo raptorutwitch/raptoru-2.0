@@ -49,6 +49,9 @@ import { randomBanRoutes } from './random-ban-routes.js';
 import { cautionRoutes } from './caution-routes.js';
 import type { CautionService } from '../caution/service.js';
 import { votekickRoutes } from './votekick-routes.js';
+import { spotifyRoutes } from './spotify-routes.js';
+import type { SpotifyService } from '../spotify/service.js';
+import type { CpTwitchActions } from '../channel-points/twitch-actions.js';
 import type { VotekickService } from '../votekick/service.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import { subWheelRoutes } from './sub-wheel-routes.js';
@@ -122,6 +125,9 @@ export interface AppDeps {
   caution?: CautionService;
   /** Votekick V2: /v1/studio/votekick/{channel}/* and /v1/bot/votekick/* (same conditions as Caution). */
   votekick?: VotekickService;
+  /** Spotify V2: /v1/studio/spotify/{channel}/* and /v1/bot/channel-points/twitch-actions/* (same conditions). */
+  spotify?: SpotifyService;
+  cpTwitch?: CpTwitchActions;
   /** Roue du Sub: /v1/studio/sub-wheel/* and the wheel side of the alerts reception (same conditions as alerts). */
   subWheel?: SubWheelService;
   /** Single active production bot: /v1/bot/instance/* (bot) and, with studioInstallations, GET /v1/studio/status/bot. */
@@ -231,6 +237,8 @@ function routes({
   randomBan,
   caution,
   votekick,
+  spotify,
+  cpTwitch,
   subWheel,
   botInstances,
   db,
@@ -264,6 +272,9 @@ function routes({
       : []),
     ...(studioInstallations && votekick && cockpit?.channelId
       ? votekickRoutes(votekick, { channelId: cockpit.channelId })
+      : []),
+    ...(studioInstallations && spotify && cpTwitch && cockpit?.channelId
+      ? spotifyRoutes(spotify, cpTwitch, { channelId: cockpit.channelId })
       : []),
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
     ...(botInstances

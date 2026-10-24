@@ -39,7 +39,13 @@ export type CpActionView =
 
 /** The native interactions (written in Studio's code: nothing to configure but the reward). */
 export const INTERACTIONS: Record<
-  'creepy' | 'brb' | 'fx_cam' | 'color_cam' | 'random_ban',
+  | 'creepy'
+  | 'brb'
+  | 'fx_cam'
+  | 'color_cam'
+  | 'random_ban'
+  | 'song_request'
+  | 'song_skip',
   { label: string; description: string }
 > = {
   creepy: {
@@ -60,6 +66,16 @@ export const INTERACTIONS: Record<
     label: 'Random Ban',
     description:
       'Ban aléatoire : un chatter présent (lurkers compris) qui suit la chaîne, ni modérateur ni déjà banni, tiré au hasard ; timeout par LeCroupier_ (3 min abonné, 5 min sinon), puis l’animation historique. Aucun éligible : flop. « Tester » fait un tirage à blanc (jamais de timeout). Détails et tests : section Random Ban plus bas.',
+  },
+  song_request: {
+    label: 'Demande de musique (Spotify)',
+    description:
+      'Comme l’ancien Spotify V2 : le viewer écrit un titre + artiste ou un lien Spotify ; Raptoru cherche le titre et l’ajoute à la file Spotify (2 demandes en attente max, 10 min entre deux, 10 min de durée max). Refusée : message dans le chat et remboursement si la récompense est celle de Raptoru. Détails : section Musique plus bas.',
+  },
+  song_skip: {
+    label: 'Passer la musique (Spotify)',
+    description:
+      'Passe la musique en cours sur Spotify (la demande correspondante devient « passée »). Échec : remboursement si la récompense est celle de Raptoru.',
   },
   color_cam: {
     label: 'Couleur Cam',

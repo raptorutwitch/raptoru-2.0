@@ -89,6 +89,7 @@ try {
     '20261105120000_caution_lab.sql',
     '20261106120000_votekick_lab.sql',
     '20261107120000_votekick_settings_lab.sql',
+    '20261108120000_spotify_lab.sql',
   ]) {
     if (
       (

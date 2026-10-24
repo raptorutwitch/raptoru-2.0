@@ -192,6 +192,10 @@ const Env = TwitchApp.extend({
   // the verdict's timeout). OFF by default. Rights never required at startup: the executor tells Core
   // (LeCroupier_ moderator:manage:banned_users, broadcaster moderation:read).
   VOTEKICK: Flag,
+  // Points de chaîne, Twitch side (docs/SPOTIFY_V2.md § 7, CP_TWITCH_ACTIONS=true): fulfil / refund the redemptions of
+  // rewards created by Raptoru and create Raptoru's reward, as the main Core decides (broadcaster token,
+  // channel:manage:redemptions). OFF by default.
+  CP_TWITCH_ACTIONS: Flag,
   VOTEKICK_JOURNAL_FILE: z.string().min(1).default('.votekick-journal.json'),
   STREAM_SYNC_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
   // Single active production bot (instance-lease.ts): where this instance runs, shown by Studio (« vps », « pc »).

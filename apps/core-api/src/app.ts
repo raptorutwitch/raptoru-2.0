@@ -5,6 +5,8 @@ import { CautionService } from './caution/service.js';
 import { VotekickService } from './votekick/service.js';
 import { SubWheelService } from './sub-wheel/service.js';
 import { ChannelPointsService } from './channel-points/service.js';
+import { CpTwitchActions } from './channel-points/twitch-actions.js';
+import { SpotifyService } from './spotify/service.js';
 import { BonkLabService } from './bonk-lab/bonk-lab-service.js';
 import type { TwitchViewerCatalog } from './bonk-lab/twitch-viewer.js';
 import { RaffleLabService } from './raffle-lab/raffle-lab-service.js';
@@ -54,6 +56,10 @@ export interface Core {
   votekick: VotekickService;
   /** Roue du Sub (fed by the alerts reception; OFF by default). */
   subWheel: SubWheelService;
+  /** Spotify V2: song requests (channel points), Studio's jobs; the chat commands only with spotifyChat. */
+  spotify: SpotifyService;
+  /** Twitch-side channel points actions run by the bot (redemption statuses, Raptoru's reward). */
+  cpTwitch: CpTwitchActions;
   /** Single active production bot (lease + the health Studio shows). */
   botInstances: BotInstanceService;
   /**
@@ -84,6 +90,8 @@ export function createCore(
     cautionChat?: boolean;
     /** `!votekick` / `!kick` / `!save` answered in the chat (main Core: VOTEKICK_CHAT=true). */
     votekickChat?: boolean;
+    /** `!song`, `!songqueue`, `!mysong`, `!songcancel`, `!songremove`, `!songskip` (main Core: SPOTIFY_CHAT=true). */
+    spotifyChat?: boolean;
   } = {},
 ): Core {
   const broadcasterOf = () => channel.broadcasterId ?? null;
@@ -102,12 +110,15 @@ export function createCore(
     votekick,
   );
   const ttsLab = new TtsLabService(db, clock, undefined, undefined, economy);
+  const cpTwitch = new CpTwitchActions(db, clock);
+  const spotify = new SpotifyService(db, clock, cpTwitch);
   const channelPoints = new ChannelPointsService(
     db,
     clock,
     soundLab,
     randomBan,
     economy,
+    spotify,
   );
   const raffleLab = new RaffleLabService(
     db,
@@ -141,6 +152,8 @@ export function createCore(
     caution,
     votekick,
     subWheel: new SubWheelService(db, clock, undefined, economy),
+    spotify,
+    cpTwitch,
     botInstances: new BotInstanceService(db, clock),
     economy,
     chat: createChatGames({
@@ -152,6 +165,7 @@ export function createCore(
       channelPoints,
       caution: channel.cautionChat ? caution : null,
       votekick: channel.votekickChat ? votekick : null,
+      spotify: channel.spotifyChat ? spotify : null,
       raffle: raffleLab,
       broadcasterOf,
       twitch: channel.twitchApp ?? null,

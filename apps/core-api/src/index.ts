@@ -79,6 +79,7 @@ const core = createCore(
         : null,
     cautionChat: config.CAUTION_CHAT === 'true',
     votekickChat: config.VOTEKICK_CHAT === 'true',
+    spotifyChat: config.SPOTIFY_CHAT === 'true',
     alertsMaxAgeMs: config.ALERTS_MAX_AGE_SECONDS
       ? config.ALERTS_MAX_AGE_SECONDS * 1000
       : null,
@@ -136,6 +137,9 @@ createApp({
   caution: core.caution,
   // Votekick V2: the paired Studio (state, overlay, mute) and the bot (Twitch executor); chat only with VOTEKICK_CHAT.
   votekick: core.votekick,
+  // Spotify V2: the paired Studio (panel, sync, jobs) and the bot (redemption statuses, Raptoru's reward).
+  spotify: core.spotify,
+  cpTwitch: core.cpTwitch,
   // Roue du Sub: OFF by default; gains recorded, never credited automatically.
   subWheel: core.subWheel,
   // Single active production bot: the lease (bot) and its health for the paired Studio.

@@ -187,7 +187,16 @@ export function createPublicFrontier(
             console.error('[core-api] votekick tick failed', e.message),
           );
       }, 500);
+      // Spotify V2: Studio's leases and absence (song requests refunded when nobody takes them).
+      const spotifyTick = setInterval(() => {
+        core.spotify
+          .tickAll()
+          .catch((e: Error) =>
+            console.error('[core-api] spotify tick failed', e.message),
+          );
+      }, 1000);
       return () => {
+        clearInterval(spotifyTick);
         clearInterval(votekickTick);
         clearInterval(wordGameTick);
         clearInterval(raffleTick);

@@ -25,6 +25,8 @@ export const CpInteractionId = z.enum([
   'fx_cam',
   'color_cam',
   'random_ban',
+  'song_request',
+  'song_skip',
 ]);
 export type CpInteractionId = z.infer<typeof CpInteractionId>;
 
@@ -74,7 +76,8 @@ export const CpAction = z.discriminatedUnion('type', [
    * A native interaction, written in Studio's code with its legacy parameters (P0.2): nothing to assemble. `creepy`:
    * the SAMMI « Creepy » reward (docs/EFFECTS_PLAYER.md § 9); `brb`: « Be Right Back » (§ 10); `fx_cam`: « FX cam »
    * (§ 11); `color_cam`: « Couleur Cam » (§ 12); `random_ban`: « Ban aléatoire » (run by Core and the Twitch executor,
-   * docs/RANDOM_BAN_V2.md — never a Studio OBS job).
+   * docs/RANDOM_BAN_V2.md — never a Studio OBS job); `song_request`: « Choisi la prochaine musique ! » (the viewer's
+   * text is the song; Spotify V2, docs/SPOTIFY_V2.md); `song_skip`: « Skip la musique » (the current song).
    */
   z.strictObject({
     type: z.literal('interaction'),
@@ -212,3 +215,43 @@ export type CpAckRequest = z.infer<typeof CpAckRequest>;
 /** What Core did with a redemption. */
 export type CpRedemptionStatus =
   'ignored' | 'pending' | 'done' | 'partial' | 'failed';
+
+/**
+ * Twitch-side actions on channel points, decided by Core and run ONCE by the bot (the broadcaster's token,
+ * `channel:manage:redemptions`): a redemption's status (FULFILLED; CANCELED = Twitch gives the points back), or the
+ * creation of a reward owned by Raptoru's app (only the app that created a reward may change its redemptions). A Studio
+ * simulation never produces one. docs/SPOTIFY_V2.md § 7.
+ */
+export const CpTwitchAction = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('redemption_status'),
+    action_id: z.uuid(),
+    attempt_id: z.uuid(),
+    reward_id: ExternalId,
+    redemption_id: ExternalId,
+    status: z.enum(['FULFILLED', 'CANCELED']),
+  }),
+  z.strictObject({
+    kind: z.literal('reward_create'),
+    action_id: z.uuid(),
+    attempt_id: z.uuid(),
+    reward: z.strictObject({
+      title: z.string().min(1).max(45),
+      cost: z.number().int().min(1).max(100_000_000),
+      prompt: z.string().max(200),
+      is_user_input_required: z.boolean(),
+    }),
+  }),
+]);
+export type CpTwitchAction = z.infer<typeof CpTwitchAction>;
+
+export const CpTwitchActionReport = z.strictObject({
+  attempt_id: z.uuid(),
+  /** done: Twitch applied it · failed: Twitch refused it (never retried) · unknown: no answer (may have applied). */
+  outcome: z.enum(['done', 'failed', 'unknown']),
+  http_status: z.number().int().min(0).max(999).optional(),
+  error: z.string().max(200).optional(),
+  /** reward_create: the reward Twitch created. */
+  reward_id: ExternalId.optional(),
+});
+export type CpTwitchActionReport = z.infer<typeof CpTwitchActionReport>;

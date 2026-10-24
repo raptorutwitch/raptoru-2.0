@@ -22,6 +22,9 @@ import { cautionRoutes } from '../http/caution-routes.js';
 import { CautionService } from '../caution/service.js';
 import { votekickRoutes } from '../http/votekick-routes.js';
 import { VotekickService } from '../votekick/service.js';
+import { CpTwitchActions } from '../channel-points/twitch-actions.js';
+import { spotifyRoutes } from '../http/spotify-routes.js';
+import { SpotifyService } from '../spotify/service.js';
 import { RandomBanService } from '../random-ban/service.js';
 import { subWheelRoutes } from '../http/sub-wheel-routes.js';
 import { SubWheelService } from '../sub-wheel/service.js';
@@ -77,6 +80,7 @@ export function createLabCore({
   raffle: RaffleLabService;
   wordGame: WordGameService;
   votekick: VotekickService;
+  spotify: SpotifyService;
 } {
   if (secret.length < 32) throw new Error('bonk_secret_required');
   // Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
@@ -119,12 +123,15 @@ export function createLabCore({
     broadcasterOf,
     votekick,
   );
+  const cpTwitch = new CpTwitchActions(db, systemClock);
+  const spotify = new SpotifyService(db, systemClock, cpTwitch);
   const channelPoints = new ChannelPointsService(
     db,
     systemClock,
     sound,
     randomBan,
     economy,
+    spotify,
   );
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
@@ -139,6 +146,7 @@ export function createLabCore({
       channelPoints,
       caution,
       votekick,
+      spotify,
     });
   const alertsService = new AlertsService(db, systemClock);
   // Gains credited only when the runtime economy is the canonical Wallet (never with the Lab wallet).
@@ -180,6 +188,8 @@ export function createLabCore({
     ...cautionRoutes(caution),
     // Votekick V2: Studio (state, overlay, mute) and the Lab chat adapter (Twitch executor); `!votekick` in the Lab chat.
     ...votekickRoutes(votekick),
+    // Spotify V2: Studio (panel, sync, jobs) and the Lab chat adapter (Twitch-side actions); the commands in the Lab chat.
+    ...spotifyRoutes(spotify, cpTwitch),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
   ];
@@ -233,5 +243,5 @@ export function createLabCore({
       send(500, { error: 'bonk_core_error' });
     }
   });
-  return { server, raffle, wordGame, votekick };
+  return { server, raffle, wordGame, votekick, spotify };
 }

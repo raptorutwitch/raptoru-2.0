@@ -19,6 +19,7 @@ import type { Db, Queryable } from '../db/db.js';
 import { type EconomyPort, labEconomy } from '../economy/economy.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
+import type { SpotifyRequestView, SpotifyService } from '../spotify/service.js';
 
 // Points de chaîne V1 (docs/CHANNEL_POINTS_V1.md) — the ONE implementation, served to the Lab Core and to the
 // production Core (same pattern as the alerts). A Twitch redemption (read only) is recorded once (dedup by its Twitch
@@ -69,6 +70,9 @@ type Result = {
   effect_deadline?: string;
   /** Random Ban: its request (docs/RANDOM_BAN_V2.md), followed until it ends; then what happened, in plain French. */
   random_ban_id?: string;
+  /** Spotify V2: the song request (song_request) or the skip job (song_skip) this action follows. */
+  spotify_request_id?: string;
+  spotify_job_id?: string;
   detail?: string;
   /** Credits actions: what was granted, and what a Twitch cancellation took back. */
   granted?: number;
@@ -81,6 +85,8 @@ type ResultUpdate = CpActionResult & {
   progress?: 'queued' | 'playing';
   sound_interaction_id?: string;
   random_ban_id?: string;
+  spotify_request_id?: string;
+  spotify_job_id?: string;
   detail?: string;
 };
 
@@ -243,7 +249,63 @@ const CREDITS_LABEL = {
 const obsAction = (a: CpAction) =>
   a.type !== 'sound' &&
   a.type !== 'credits' &&
-  !(a.type === 'interaction' && a.interaction === 'random_ban');
+  !(
+    a.type === 'interaction' &&
+    (a.interaction === 'random_ban' ||
+      a.interaction === 'song_request' ||
+      a.interaction === 'song_skip')
+  );
+
+const isSongRequest = (a: unknown) =>
+  (a as CpAction).type === 'interaction' &&
+  (a as { interaction?: string }).interaction === 'song_request';
+
+/** A Spotify song request → this action's result (null while Studio searches). The music's later life is in Studio. */
+function songResult(index: number, r: SpotifyRequestView): ResultUpdate | null {
+  const label = r.track
+    ? `${r.track.title} — ${r.track.artists.join(', ')}`
+    : null;
+  const refund =
+    r.twitch_status === 'cancel_requested'
+      ? ' — remboursement demandé à Twitch'
+      : r.twitch_status === 'unmanaged'
+        ? ' — non remboursable (récompense non créée par Raptoru)'
+        : '';
+  switch (r.state) {
+    case 'RECEIVED':
+    case 'SEARCHING':
+      return null;
+    case 'QUEUED':
+    case 'PLAYING':
+    case 'PLAYED':
+    case 'SKIPPED':
+      return {
+        index,
+        ok: true,
+        detail: `${label ?? 'musique'} ajoutée à la file Spotify`,
+      };
+    case 'UNKNOWN':
+      return r.reason === 'QUEUE_RESULT_UNKNOWN' || r.reason === 'STUDIO_LOST'
+        ? {
+            index,
+            ok: false,
+            unknown: true,
+            error:
+              'ajout à la file incertain (à vérifier dans Studio › Musique)',
+          }
+        : {
+            index,
+            ok: true,
+            detail: `${label ?? 'musique'} ajoutée à la file Spotify`,
+          };
+    case 'CANCELED':
+      return { index, ok: false, error: `annulée par le viewer${refund}` };
+    case 'REMOVED_BY_MOD':
+      return { index, ok: false, error: `retirée par la modération${refund}` };
+    default:
+      return { index, ok: false, error: `${r.reason ?? r.state}${refund}` };
+  }
+}
 
 export class ChannelPointsService {
   /** When Studio last asked for a job, per channel (memory: a status, not a record). */
@@ -260,10 +322,13 @@ export class ChannelPointsService {
     private readonly randomBan?: RandomBanService,
     /** Credits actions: the runtime economy (the Lab test wallet unless the launcher passes the canonical one). */
     private readonly economy: EconomyPort = labEconomy,
+    /** Spotify V2: the « song_request » / « song_skip » interactions (absent → they fail explicitly). */
+    private readonly spotify?: SpotifyService,
   ) {
     randomBan?.onResult((channelId, requestId) =>
       this.settleRandomBans(channelId, requestId),
     );
+    spotify?.onResult((channelId, ref) => this.settleSongs(channelId, ref));
   }
 
   /**
@@ -592,6 +657,28 @@ export class ChannelPointsService {
               x.action.type === 'interaction' &&
               x.action.interaction === 'random_ban',
           ),
+        songs: actions
+          .map((action, index) => ({ index, action }))
+          .filter(
+            (x) =>
+              x.action.type === 'interaction' &&
+              (x.action.interaction === 'song_request' ||
+                x.action.interaction === 'song_skip'),
+          ),
+        // A song request the rule did not run (late, automations or rule off): refused, its points given back.
+        songRefusal:
+          reason &&
+          reason !== 'no_rule' &&
+          rule &&
+          rule.actions.findIndex(isSongRequest) >= 0
+            ? {
+                index: rule.actions.findIndex(isSongRequest),
+                refusal:
+                  reason === 'late'
+                    ? ('LATE' as const)
+                    : ('MODULE_DISABLED' as const),
+              }
+            : null,
       };
     });
     if (decided.duplicate)
@@ -660,6 +747,72 @@ export class ChannelPointsService {
       }
       await this.setResults(e.channel_id, e.source, e.redemption_id, [update]);
     }
+    // Spotify V2: a song request (the viewer's text) or a skip, run by Core and Studio (docs/SPOTIFY_V2.md).
+    const viewer = {
+      id: e.user.id,
+      login: e.user.login,
+      name: e.user.display_name,
+    };
+    for (const { index, action } of decided.songs) {
+      try {
+        if (!this.spotify) throw new Error('spotify_unavailable');
+        if (
+          (action as { interaction: string }).interaction === 'song_request'
+        ) {
+          const { request } = await this.spotify.admit({
+            channel_id: e.channel_id,
+            source: e.source,
+            source_ref: `${e.source}:${e.redemption_id}:${index}`,
+            reward_id: e.reward.id,
+            redemption_id: e.redemption_id,
+            viewer,
+            user_input: e.user_input ?? null,
+          });
+          await this.setResults(e.channel_id, e.source, e.redemption_id, [
+            {
+              index,
+              ok: false,
+              progress: 'queued',
+              spotify_request_id: request.request_id,
+            },
+          ]);
+          const done = songResult(index, request);
+          if (done)
+            await this.setResults(e.channel_id, e.source, e.redemption_id, [
+              done,
+            ]);
+        } else {
+          const { job_id } = await this.spotify.rewardSkip({
+            channel_id: e.channel_id,
+            source: e.source,
+            reward_id: e.reward.id,
+            redemption_id: e.redemption_id,
+            viewer,
+          });
+          await this.setResults(e.channel_id, e.source, e.redemption_id, [
+            { index, ok: false, progress: 'queued', spotify_job_id: job_id },
+          ]);
+          await this.settleSongs(e.channel_id, { job_id });
+        }
+      } catch (err) {
+        await this.setResults(e.channel_id, e.source, e.redemption_id, [
+          { index, ok: false, error: (err as Error).message },
+        ]);
+      }
+    }
+    if (decided.songRefusal && this.spotify)
+      await this.spotify
+        .admit({
+          channel_id: e.channel_id,
+          source: e.source,
+          source_ref: `${e.source}:${e.redemption_id}:${decided.songRefusal.index}`,
+          reward_id: e.reward.id,
+          redemption_id: e.redemption_id,
+          viewer,
+          user_input: e.user_input ?? null,
+          refusal: decided.songRefusal.refusal,
+        })
+        .catch(() => {});
     const row = await this.redemption(e.channel_id, e.source, e.redemption_id);
     return { outcome: row.status, redemption: redemptionView(row) };
   }
@@ -783,6 +936,10 @@ export class ChannelPointsService {
             ? { sound_interaction_id: n.sound_interaction_id }
             : {}),
           ...(n.random_ban_id ? { random_ban_id: n.random_ban_id } : {}),
+          ...(n.spotify_request_id
+            ? { spotify_request_id: n.spotify_request_id }
+            : {}),
+          ...(n.spotify_job_id ? { spotify_job_id: n.spotify_job_id } : {}),
         };
       return n.unknown
         ? { ...r, status: 'unknown' as const, error: n.error }
@@ -795,6 +952,10 @@ export class ChannelPointsService {
                 ? { sound_interaction_id: r.sound_interaction_id }
                 : {}),
               ...(r.random_ban_id ? { random_ban_id: r.random_ban_id } : {}),
+              ...(r.spotify_request_id
+                ? { spotify_request_id: r.spotify_request_id }
+                : {}),
+              ...(r.spotify_job_id ? { spotify_job_id: r.spotify_job_id } : {}),
               ...(n.detail ? { detail: n.detail } : {}),
             }
           : { ...r, status: 'failed' as const, error: n.error ?? 'failed' };
@@ -1237,11 +1398,67 @@ export class ChannelPointsService {
       }
   }
 
+  /** Song requests and skips (Spotify V2) → their action's result. */
+  private async settleSongs(
+    channelId: string,
+    ref?: { request_id?: string; job_id?: string },
+  ) {
+    if (!this.spotify) return;
+    const rows = await this.db.query<RedemptionRow>(
+      `select * from cp_redemptions where channel_id = $1 and status = 'pending'
+         and (results::text like '%spotify_request_id%' or results::text like '%spotify_job_id%')
+       order by received_at desc limit 50`,
+      [channelId],
+    );
+    for (const row of rows)
+      for (const r of row.results) {
+        if (r.status !== 'pending') continue;
+        if (
+          r.spotify_request_id &&
+          (!ref?.request_id || ref.request_id === r.spotify_request_id)
+        ) {
+          const out = await this.spotify.outcome(r.spotify_request_id);
+          const update = out && songResult(r.index, out);
+          if (update)
+            await this.setResults(channelId, row.source, row.redemption_id, [
+              update,
+            ]);
+        } else if (
+          r.spotify_job_id &&
+          (!ref?.job_id || ref.job_id === r.spotify_job_id)
+        ) {
+          const out = await this.spotify.jobOutcome(r.spotify_job_id);
+          if (!out || out.status === 'queued' || out.status === 'running')
+            continue;
+          const outcome = out.result?.outcome;
+          const update: ResultUpdate =
+            outcome === 'skipped'
+              ? { index: r.index, ok: true, detail: 'musique passée' }
+              : outcome === 'failed'
+                ? {
+                    index: r.index,
+                    ok: false,
+                    error: out.result?.reason ?? 'échec',
+                  }
+                : {
+                    index: r.index,
+                    ok: false,
+                    unknown: true,
+                    error: 'passage incertain',
+                  };
+          await this.setResults(channelId, row.source, row.redemption_id, [
+            update,
+          ]);
+        }
+      }
+  }
+
   /** The Studio tab: switch, rewards with their rule, recent redemptions, jobs in flight, Soundboard sounds. */
   async state(channelId: string) {
     await this.settleSounds(channelId);
     await this.settleEffects(channelId);
     await this.settleRandomBans(channelId);
+    await this.settleSongs(channelId);
     const recent = await this.db.query<RedemptionRow>(
       'select * from cp_redemptions where channel_id = $1 order by received_at desc limit 30',
       [channelId],

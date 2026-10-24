@@ -14,6 +14,7 @@ import { ColorCam } from '../interactions/color-cam.js';
 import { FxCam } from '../interactions/fx-cam.js';
 import { SOUND_MAX_BYTES } from '../raffle-lab/runtime.js';
 import { RandomBanRuntime } from '../random-ban/runtime.js';
+import { SpotifyRuntime } from '../spotify/runtime.js';
 import { SubWheelRuntime } from '../sub-wheel/runtime.js';
 import {
   MuteController,
@@ -53,6 +54,8 @@ export interface ChannelPointsRuntimeDeps {
   pollMs?: number;
   /** Votekick V2: the overlay files (apps/studio/server/votekick-overlay); absent: no Votekick in this Studio. */
   votekickOverlayDir?: string;
+  /** Spotify V2: its storage; absent: no Spotify in this Studio. */
+  spotifyDir?: string;
 }
 
 export class ChannelPointsRuntime {
@@ -75,6 +78,8 @@ export class ChannelPointsRuntime {
     readonly obs: ObsActions,
     /** Votekick V2: the broadcaster's mute in OBS (same OBS connection) and the overlay's live event. */
     readonly votekick: VotekickRuntime | null = null,
+    /** Spotify V2: Studio is the only Spotify caller (docs/SPOTIFY_V2.md). */
+    readonly spotify: SpotifyRuntime | null = null,
   ) {
     this.interactions = new Interactions({ obs, effects: d.effects ?? null });
     this.brb = new Brb({ obs, effects: d.effects ?? null });
@@ -122,6 +127,16 @@ export class ChannelPointsRuntime {
             log: (line) => console.log(line),
           })
         : null,
+      d.spotifyDir
+        ? await SpotifyRuntime.forProfile({
+            core: d.core,
+            environment: d.environment,
+            channelId: d.channelId,
+            dir: d.spotifyDir,
+            origin: d.origin,
+            log: (line) => console.log(line),
+          })
+        : null,
     );
   }
 
@@ -135,6 +150,7 @@ export class ChannelPointsRuntime {
   start() {
     this.obs.start();
     this.votekick?.start();
+    this.spotify?.start();
     this.randomBan.start();
     this.subWheel.start();
     const loop = async () => {
@@ -160,6 +176,7 @@ export class ChannelPointsRuntime {
     if (this.timer) clearTimeout(this.timer);
     this.obs.stop();
     this.votekick?.stop();
+    this.spotify?.stop();
     this.randomBan.stop();
     this.subWheel.stop();
   }
@@ -270,13 +287,17 @@ export class ChannelPointsRuntime {
       return true;
     if (this.votekick && (await this.votekick.handle(req, res, url)))
       return true;
+    if (this.spotify && (await this.spotify.handle(req, res, url))) return true;
     const rb = url.pathname.startsWith('/api/random-ban');
+    const sp =
+      url.pathname.startsWith('/api/spotify/') && Boolean(this.spotify);
     const sw = url.pathname.startsWith('/api/sub-wheel');
     const caution = url.pathname === '/api/caution/state';
     const vk = /^\/api\/votekick\/(settings|sounds)$/.test(url.pathname);
     if (
       !url.pathname.startsWith('/api/channel-points') &&
       !rb &&
+      !sp &&
       !sw &&
       !caution &&
       !vk
@@ -334,6 +355,15 @@ export class ChannelPointsRuntime {
           await this.subWheel.api(
             req.method ?? 'GET',
             url.pathname.slice('/api/sub-wheel'.length),
+            () => this.body(req),
+          ),
+        );
+      else if (sp)
+        reply(
+          200,
+          await this.spotify!.api(
+            req.method ?? 'GET',
+            url.pathname.slice('/api/spotify'.length),
             () => this.body(req),
           ),
         );

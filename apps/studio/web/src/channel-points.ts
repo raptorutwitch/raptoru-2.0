@@ -15,6 +15,7 @@ import { mountRandomBan } from './random-ban.js';
 import { mountCaution } from './caution.js';
 import { mountVotekickConfig } from './votekick-config.js';
 import { mountSubWheel } from './sub-wheel.js';
+import { mountSpotify } from './spotify.js';
 
 // Points de chaîne V1 — Studio tab (docs/CHANNEL_POINTS_V1.md). Twitch rewards (left), the local rule of the selected
 // reward (right: ordered actions, typed fields, suggestions read from OBS), the history (below). The master switch is
@@ -79,6 +80,7 @@ export function mountChannelPoints(root: HTMLElement) {
       <div><h2>Actions de la récompense</h2><div data-role="editor"></div></div>
     </div>
     <h2>Historique</h2><div data-role="history"></div>
+    <h2>Musique (Spotify)</h2><div data-role="spotify"></div>
     <h2>Random Ban</h2><div data-role="random-ban"></div>
     <h2>Caution</h2><div data-role="caution"></div>
     <h2>Votekick</h2><div data-role="votekick"></div>
@@ -88,6 +90,7 @@ export function mountChannelPoints(root: HTMLElement) {
   const $ = (role: string) =>
     root.querySelector<HTMLElement>(`[data-role="${role}"]`)!;
   const randomBan = mountRandomBan($('random-ban'));
+  const spotify = mountSpotify($('spotify'));
   const caution = mountCaution($('caution'));
   // Settings form: loaded when the tab opens, never in the 3 s refresh (it would erase what is being typed).
   const votekick = mountVotekickConfig($('votekick'));
@@ -451,12 +454,14 @@ export function mountChannelPoints(root: HTMLElement) {
       if (!visible) return;
       void load();
       void randomBan.load();
+      void spotify.load();
       void caution.load();
       void votekick.load();
       void subWheel.load();
       timer = window.setInterval(() => {
         void load();
         void randomBan.load();
+        void spotify.load();
         void caution.load();
         void subWheel.load();
       }, 3000);

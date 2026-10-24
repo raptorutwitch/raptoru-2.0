@@ -53,6 +53,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261106130000_votekick.sql',
   // Votekick V2 settings (the vote's length set from Studio; same as the Lab file).
   '20261107130000_votekick_settings.sql',
+  // Spotify V2: requests, Studio jobs, Twitch-side channel points actions (same as the Lab file).
+  '20261108130000_spotify.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -110,6 +112,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261106120000_votekick_lab.sql',
   // Votekick V2 settings, Lab schema.
   '20261107120000_votekick_settings_lab.sql',
+  // Spotify V2, Lab schema.
+  '20261108120000_spotify_lab.sql',
 ]);
 
 /**

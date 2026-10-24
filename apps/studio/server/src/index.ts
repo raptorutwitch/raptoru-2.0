@@ -964,6 +964,11 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
             'server',
             'votekick-overlay',
           ),
+          // Spotify V2: the Lab plays on the simulator; Production on the broadcaster's account (panel « Musique »).
+          spotifyDir:
+            alertsEnv === 'lab'
+              ? join(paths.runtimeDir, 'spotify-lab')
+              : join(paths.runtimeDir, 'production', 'spotify'),
           twitch: () => ({
             scope: hasTwitchScope(
               readTokenSummary(broadcasterTokenFile).scopes,

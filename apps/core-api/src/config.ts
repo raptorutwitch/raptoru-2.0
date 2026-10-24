@@ -42,6 +42,9 @@ const Env = z
     CAUTION_CHAT: z.enum(['true', 'false']).default('false'),
     // Votekick V2 (docs/VOTEKICK_V2.md): `!votekick` / `!kick` / `!save` answered by this Core. OFF by default.
     VOTEKICK_CHAT: z.enum(['true', 'false']).default('false'),
+    // Spotify V2 (docs/SPOTIFY_V2.md): `!song`, `!songqueue`, `!mysong`, `!songcancel`, `!songremove`, `!songskip`
+    // answered by this Core. OFF by default (the song requests themselves follow the channel points rule).
+    SPOTIFY_CHAT: z.enum(['true', 'false']).default('false'),
     // Bonk Twitch emotes on /v1/ext: the HTTPS OAuth redirect registered on that same Twitch app
     // (…/v1/ext/emotes/oauth/callback). Absent = no linking. Needs the app and EXT_TOKEN_KEY.
     EXT_TWITCH_REDIRECT_URI: z

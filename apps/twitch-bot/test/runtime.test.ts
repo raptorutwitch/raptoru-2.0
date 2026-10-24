@@ -28,6 +28,7 @@ const baseConfig: BotConfig = {
   CAUTION: 'false',
   CAUTION_JOURNAL_FILE: 'unused-caution-journal.json',
   VOTEKICK: 'false',
+  CP_TWITCH_ACTIONS: 'false',
   VOTEKICK_JOURNAL_FILE: 'unused-votekick-journal.json',
   DAILY_CHAT_COMMANDS: 'false',
   LOYALTY_TWITCH_EVENTS: 'false',

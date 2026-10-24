@@ -23,6 +23,7 @@ import {
   fileCautionJournal,
   helixCautionTwitch,
 } from './caution-executor.js';
+import { createCpTwitchActionsExecutor } from './cp-twitch-actions-executor.js';
 import {
   createVotekickExecutor,
   helixVotekickTwitch,
@@ -364,8 +365,17 @@ const randomBanOn = config.RANDOM_BAN === 'true';
 const cautionOn = config.CAUTION === 'true';
 // Votekick V2 (VOTEKICK): the moderators and the bans with the broadcaster's Helix too (no EventSub connection).
 const votekickOn = config.VOTEKICK === 'true';
+// Points de chaîne Twitch side (CP_TWITCH_ACTIONS): redemption statuses and Raptoru's reward, broadcaster's Helix.
+const cpActionsOn = config.CP_TWITCH_ACTIONS === 'true';
 let rbBroadcaster: { helix: Helix; scopes: string[] } | null = null;
-if (loyaltyOn || pointsOn || randomBanOn || cautionOn || votekickOn) {
+if (
+  loyaltyOn ||
+  pointsOn ||
+  randomBanOn ||
+  cautionOn ||
+  votekickOn ||
+  cpActionsOn
+) {
   let broadcasterReady = false;
   const broadcasterAuth = new TwitchAuth({
     clientId: config.TWITCH_CLIENT_ID,
@@ -578,4 +588,35 @@ if (votekickOn) {
     `[votekick] exécuteur prêt (Core principal) — lecture : ${votekick.ready.canRead ? 'oui' : 'non'}, timeout : ${votekick.ready.canTimeout ? 'oui' : 'non'}${votekick.ready.missing.length ? ` (manque : ${votekick.ready.missing.join(', ')})` : ''}`,
   );
   void votekick.run();
+}
+
+// Points de chaîne, Twitch side (docs/SPOTIFY_V2.md § 7, CP_TWITCH_ACTIONS=true): the redemption statuses (refunds) and
+// Raptoru's reward, decided by the main Core, run once here with the broadcaster's token.
+if (cpActionsOn) {
+  const bh = rbBroadcaster;
+  const broadcasterId = config.TWITCH_BROADCASTER_ID;
+  const cpActions = createCpTwitchActionsExecutor({
+    core: coreCall,
+    base: '/v1/bot/channel-points/twitch-actions',
+    channelId: broadcasterId,
+    scopes: bh?.scopes ?? null,
+    twitch: bh
+      ? {
+          updateRedemptionStatus: (rewardId, redemptionId, s) =>
+            bh.helix.updateRedemptionStatus(
+              broadcasterId,
+              rewardId,
+              redemptionId,
+              s,
+            ),
+          createCustomReward: (reward) =>
+            bh.helix.createCustomReward(broadcasterId, reward),
+        }
+      : null,
+  });
+  consumers.add(() => cpActions.stop());
+  console.log(
+    `[cp-twitch] exécuteur prêt (Core principal) — gestion des récompenses : ${cpActions.ready.canManage ? 'oui' : 'non (droit channel:manage:redemptions absent)'}`,
+  );
+  void cpActions.run();
 }

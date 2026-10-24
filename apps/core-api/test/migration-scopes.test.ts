@@ -110,6 +110,7 @@ describe('Lab / prod migration boundary', () => {
       '20261105120000_caution_lab.sql',
       '20261106120000_votekick_lab.sql',
       '20261107120000_votekick_settings_lab.sql',
+      '20261108120000_spotify_lab.sql',
     ])
       expect(prod).not.toContain(f);
     // Rule check with a future Lab migration (the boundary does not depend on today's list).
@@ -234,7 +235,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
     const files = await readdir(DEFAULT_MIGRATIONS_DIR);
     const prod = selectMigrations(files, 'prod');
     const old = selectMigrations(files, 'prod', OLD_PROD);
-    expect(old.length).toBe(29);
+    expect(old.length).toBe(30);
     expect(prod.filter((f) => !old.includes(f))).toEqual([
       ...MAIN_CORE_LAB_MIGRATIONS,
     ]);
@@ -245,7 +246,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a blank database: everything once; again: nothing', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod')).length).toBe(44);
+    expect((await migrate(db, 'prod')).length).toBe(45);
     expect(await migrate(db, 'prod')).toEqual([]);
     for (const t of ['cmd_steps', 'word_game_words', 'mini_game_duels'])
       expect(
@@ -258,12 +259,19 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
   const CAUTION = '20261105130000_caution.sql';
   const VOTEKICK = '20261106130000_votekick.sql';
   const SETTINGS = '20261107130000_votekick_settings.sql';
+  const SPOTIFY = '20261108130000_spotify.sql';
   // Before Caution and Votekick: their files not in the production selection (classified Lab here, so the folder
   // stays valid).
   const withoutCaution = PROD_MIGRATIONS.filter(
-    (f) => f !== CAUTION && f !== VOTEKICK && f !== SETTINGS,
+    (f) => f !== CAUTION && f !== VOTEKICK && f !== SETTINGS && f !== SPOTIFY,
   );
-  const labWithCaution = [...LAB_MIGRATIONS, CAUTION, VOTEKICK, SETTINGS];
+  const labWithCaution = [
+    ...LAB_MIGRATIONS,
+    CAUTION,
+    VOTEKICK,
+    SETTINGS,
+    SPOTIFY,
+  ];
   it('the production database of 22/10 (39 files): the winner announcements, the chat source, then Caution, once', async () => {
     const db = createPgliteDb(new PGlite());
     const NEW = '20261031140000_cmd_steps_win_announcements_lab.sql';
@@ -281,6 +289,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       CAUTION,
       VOTEKICK,
       SETTINGS,
+      SPOTIFY,
     ]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
@@ -293,25 +302,42 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       lab: labWithCaution,
     };
     expect((await migrate(db, 'prod', undefined, before)).length).toBe(41);
-    expect(await migrate(db, 'prod')).toEqual([CAUTION, VOTEKICK, SETTINGS]);
+    expect(await migrate(db, 'prod')).toEqual([
+      CAUTION,
+      VOTEKICK,
+      SETTINGS,
+      SPOTIFY,
+    ]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
 
-  it('the production database of 24/10 (Caution and Votekick applied, 43 files): votekick_settings only, once', async () => {
+  it('the production database of 24/10 morning (Caution and Votekick applied, 43 files): votekick_settings then Spotify, once', async () => {
     const db = createPgliteDb(new PGlite());
     const before = {
       ...MIGRATION_SCOPES,
-      prod: PROD_MIGRATIONS.filter((f) => f !== SETTINGS),
-      lab: [...LAB_MIGRATIONS, SETTINGS],
+      prod: PROD_MIGRATIONS.filter((f) => f !== SETTINGS && f !== SPOTIFY),
+      lab: [...LAB_MIGRATIONS, SETTINGS, SPOTIFY],
     };
     expect((await migrate(db, 'prod', undefined, before)).length).toBe(43);
-    expect(await migrate(db, 'prod')).toEqual([SETTINGS]);
+    expect(await migrate(db, 'prod')).toEqual([SETTINGS, SPOTIFY]);
+    expect(await migrate(db, 'prod')).toEqual([]);
+  });
+
+  it('the production database of 24/10 evening (votekick_settings applied, 44 files): Spotify only, once', async () => {
+    const db = createPgliteDb(new PGlite());
+    const before = {
+      ...MIGRATION_SCOPES,
+      prod: PROD_MIGRATIONS.filter((f) => f !== SPOTIFY),
+      lab: [...LAB_MIGRATIONS, SPOTIFY],
+    };
+    expect((await migrate(db, 'prod', undefined, before)).length).toBe(44);
+    expect(await migrate(db, 'prod')).toEqual([SPOTIFY]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
 
   it('a database migrated by the previous production selection: only the main Core files, once', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(29);
+    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(30);
     expect(await migrate(db, 'prod')).toEqual([...MAIN_CORE_LAB_MIGRATIONS]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
@@ -323,7 +349,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
     };
     expect((await migrate(db, 'staging', undefined, OLD_STAGING)).length).toBe(
-      33,
+      34,
     );
     expect(await migrate(db, 'prod')).toEqual(
       MAIN_CORE_LAB_MIGRATIONS.filter(

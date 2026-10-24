@@ -16,7 +16,7 @@ if (secret.length < 32) throw new Error('bonk_secret_required');
 const db = createPgDb(url.href, SERVER_DB_LIMITS);
 const clientId = process.env.BONK_LAB_TWITCH_CLIENT_ID ?? '';
 const clientSecret = process.env.BONK_LAB_TWITCH_CLIENT_SECRET ?? '';
-const { server, raffle, wordGame, votekick } = createLabCore({
+const { server, raffle, wordGame, votekick, spotify } = createLabCore({
   db,
   clock: systemClock,
   secret,
@@ -66,6 +66,14 @@ const votekickTick = setInterval(() => {
       console.error('[bonk-lab-core] votekick tick failed', e),
     );
 }, 500);
+// Spotify V2: Studio's leases and absence (every second).
+const spotifyTick = setInterval(() => {
+  spotify
+    .tickAll()
+    .catch((e: unknown) =>
+      console.error('[bonk-lab-core] spotify tick failed', e),
+    );
+}, 1000);
 const avatarTick = setInterval(() => {
   avatars
     .refresh()
@@ -74,6 +82,7 @@ const avatarTick = setInterval(() => {
 const stop = () => {
   clearInterval(raffleTick);
   clearInterval(votekickTick);
+  clearInterval(spotifyTick);
   clearInterval(wordGameTick);
   clearInterval(avatarTick);
   server.close(() => void db.close().then(() => process.exit(0)));

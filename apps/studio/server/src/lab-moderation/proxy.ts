@@ -36,6 +36,8 @@ const PREFIXES = [
   '/v1/lab/votekick/',
   // Roue du Sub: state, switch, tests, animations, reconciliation of the pending gains.
   '/v1/lab/sub-wheel/',
+  // Spotify V2: Studio's sync, jobs and reports, the panel (state, settings, moderation).
+  '/v1/lab/spotify/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

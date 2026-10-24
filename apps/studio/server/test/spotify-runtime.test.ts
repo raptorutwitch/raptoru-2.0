@@ -1,0 +1,316 @@
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type {
+  SpotifyJob,
+  SpotifyQueueEntry,
+  SpotifySyncAnswer,
+} from '@raptoru/schemas';
+import { describe, expect, it } from 'vitest';
+import { SpotifyApi } from '../src/spotify/api.js';
+import { simulatedAuth } from '../src/spotify/oauth.js';
+import { SpotifyRuntime } from '../src/spotify/runtime.js';
+import { SIM_CATALOG, SpotifySim } from '../src/spotify/sim.js';
+
+// Spotify V2 in Studio against the Lab simulator and a scripted Core: jobs (search → queue, read-back, refusals,
+// skip), the watch (Spotify read only when Core says so), the FIFO auto-skip (once, reserved, survives a restart).
+
+const NUMB = SIM_CATALOG.find((t) => t.name === 'Numb')!;
+const BRIGHT = SIM_CATALOG.find((t) => t.name === 'Mr. Brightside')!;
+// eslint-friendly loose views of what Studio sent.
+type Body = Record<string, unknown> & { candidates?: { id: string }[] };
+type Sync = { status: { limited_until: string | null }; playback?: unknown };
+const id = (n: number) =>
+  `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
+  const clock = { t: opts.t0 ?? 1_000_000 };
+  const now = () => clock.t;
+  const sleep = async (ms: number) => void (clock.t += ms);
+  const sim = new SpotifySim(now);
+  const api = new SpotifyApi({
+    auth: simulatedAuth,
+    stateFile: join(await mkdtemp(join(tmpdir(), 'sp-rt-')), 'l.json'),
+    fetch: sim.fetch,
+    now,
+    sleep,
+    random: () => 0,
+  });
+  const core = {
+    answer: {
+      enabled: true,
+      jobs: [],
+      queue: [],
+      current_request_id: null,
+      watch: false,
+    } as SpotifySyncAnswer,
+    syncs: [] as Sync[],
+    reports: [] as { job: string; body: Body }[],
+    autoSkips: [] as Body[],
+    started: new Set<string>(),
+  };
+  const call = async (path: string, body?: unknown): Promise<unknown> => {
+    if (path.endsWith('/studio')) {
+      core.syncs.push(body as Sync);
+      const a = core.answer;
+      core.answer = { ...a, jobs: [] }; // jobs handed once
+      return a;
+    }
+    const start = /\/jobs\/([0-9a-f-]+)\/start$/.exec(path);
+    if (start) {
+      if (core.started.has(start[1]!))
+        throw Object.assign(new Error('job_taken'), { status: 409 });
+      core.started.add(start[1]!);
+      return {};
+    }
+    const rep = /\/jobs\/([0-9a-f-]+)\/report$/.exec(path);
+    if (rep)
+      return void core.reports.push({ job: rep[1]!, body: body as Body });
+    if (path.endsWith('/auto-skips'))
+      return void core.autoSkips.push(body as Body);
+    throw new Error(`unexpected ${path}`);
+  };
+  const reservationsFile =
+    opts.reservationsFile ??
+    join(await mkdtemp(join(tmpdir(), 'sp-res-')), 'r.json');
+  const rt = await SpotifyRuntime.open({
+    core: call as never,
+    environment: 'lab',
+    channelId: '1',
+    api,
+    auth: simulatedAuth,
+    sim,
+    reservationsFile,
+    now,
+    sleep,
+  });
+  const job = (j: SpotifyJob) => {
+    core.answer = { ...core.answer, jobs: [j] };
+  };
+  return {
+    rt,
+    sim,
+    api,
+    core,
+    clock,
+    job,
+    reservationsFile,
+    report: () => core.reports.at(-1)?.body,
+  };
+}
+
+const songJob = (n: number, query: string, max = 600_000): SpotifyJob => ({
+  kind: 'song_request',
+  job_id: id(n),
+  request_id: id(100 + n),
+  reference: { kind: 'search', query },
+  max_duration_ms: max,
+});
+const entry = (
+  n: number,
+  uri: string,
+  auto_skip = false,
+  state: SpotifyQueueEntry['state'] = 'QUEUED',
+): SpotifyQueueEntry => ({
+  request_id: id(100 + n),
+  track_uri: uri,
+  state: auto_skip ? 'CANCELED' : state,
+  auto_skip,
+  queued_at: new Date(0).toISOString(),
+});
+
+describe('Spotify runtime (Studio)', () => {
+  it('a request: search, score, duration, device, queue (204) — candidates and confidence reported', async () => {
+    const h = await harness();
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      kind: 'song_request',
+      outcome: 'queued',
+      confirmation: 'http_204',
+      track: {
+        id: NUMB.id,
+        uri: `spotify:track:${NUMB.id}`,
+        title: 'Numb',
+        artists: ['Linkin Park'],
+        duration_ms: 185_000,
+      },
+    });
+    expect(h.report()!.candidates![0]!.id).toBe(NUMB.id);
+    expect(h.sim.view().queue).toEqual(['Numb']);
+    // Never run twice: the same job handed again is refused by Core's start.
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    expect(h.core.reports).toHaveLength(1);
+    expect(h.sim.view().queue).toEqual(['Numb']);
+  });
+
+  it('refusals: ambiguous, not found, too long, no device — nothing queued', async () => {
+    const h = await harness();
+    const cases: [string, string, () => void][] = [
+      ['numb', 'AMBIGUOUS', () => {}],
+      ['zzzz qqqq', 'NOT_FOUND', () => {}],
+      ['long test track raptoru fixtures', 'TOO_LONG', () => {}],
+      [
+        'mr brightside the killers',
+        'NO_DEVICE',
+        () => void (h.sim.deviceActive = false),
+      ],
+    ];
+    let n = 1;
+    for (const [q, reason, before] of cases) {
+      before();
+      h.job(songJob(n++, q));
+      await h.rt.once();
+      expect(h.report(), q).toMatchObject({ outcome: 'refused', reason });
+    }
+    expect(h.sim.view().queue).toEqual([]);
+  });
+
+  it('an exact link to an unknown track: NOT_FOUND', async () => {
+    const h = await harness();
+    h.job({
+      ...songJob(1, 'x'),
+      reference: { kind: 'exact', track_id: 'Z'.repeat(22) },
+    } as SpotifyJob);
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'refused',
+      reason: 'NOT_FOUND',
+    });
+  });
+
+  it('Spotify answers 200 (maybe sent): the queue is read back → queued by read-back; a 500 not found → unknown', async () => {
+    const h = await harness();
+    h.sim.queueAnswer = 200;
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'queued',
+      confirmation: 'queue_readback',
+    });
+    h.sim.queueAnswer = 500;
+    h.job(songJob(2, 'mr brightside the killers'));
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'unknown',
+      reason: 'QUEUE_RESULT_UNKNOWN',
+    });
+    // Never resent: only Numb reached the queue.
+    expect(h.sim.view().queue).toEqual(['Numb']);
+  });
+
+  it('skip job: one next, the skipped track reported', async () => {
+    const h = await harness();
+    h.job({ kind: 'skip', job_id: id(9), request_id: null });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      kind: 'skip',
+      outcome: 'skipped',
+      skipped_track: { title: 'Lofi Stream Beat' },
+    });
+    expect(h.sim.view().current).toContain('Chill Loop');
+  });
+
+  it('no watch: Spotify is never read (only the sync to Core)', async () => {
+    const h = await harness();
+    for (let i = 0; i < 5; i++) await h.rt.once();
+    expect(h.sim.calls).toEqual([]);
+    expect(h.core.syncs).toHaveLength(5);
+    expect(h.core.syncs[0]!.status).toMatchObject({
+      auth: 'ok',
+      limited_until: null,
+    });
+  });
+
+  it('a canceled request reaching playback is skipped once (FIFO), reported, never twice — even after a restart', async () => {
+    const h = await harness();
+    const uri = `spotify:track:${NUMB.id}`;
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    // Viewer canceled it: Core lists it as a tombstone, watch on.
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, uri, true)],
+      watch: true,
+    };
+    await h.rt.once(); // reads the playlist track (no skip)
+    await h.rt.api('POST', '/sim/near-end', async () => ({}));
+    for (let i = 0; i < 12 && h.core.autoSkips.length === 0; i++) {
+      h.clock.t += 300;
+      await h.rt.once();
+    }
+    expect(h.core.autoSkips).toEqual([
+      expect.objectContaining({ request_id: id(101), result: 'SKIPPED' }),
+    ]);
+    expect(h.sim.calls.filter((c) => c === 'POST me/player/next')).toHaveLength(
+      1,
+    );
+    expect(h.sim.view().current).not.toContain('Numb');
+    // A restarted Studio with Core still listing it (report not yet applied): no second skip.
+    const again = await harness({ reservationsFile: h.reservationsFile });
+    again.core.answer = {
+      ...again.core.answer,
+      queue: [entry(1, uri, true)],
+      watch: true,
+    };
+    again.sim.queueAnswer = 204;
+    await again.rt.once();
+    expect(
+      again.sim.calls.filter((c) => c === 'POST me/player/next'),
+    ).toHaveLength(0);
+  });
+
+  it('FIFO: the same track queued twice, the FIRST one live and the second canceled → no skip', async () => {
+    const h = await harness();
+    const uri = `spotify:track:${NUMB.id}`;
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, uri), entry(2, uri, true)],
+      watch: true,
+    };
+    await h.rt.once();
+    await h.rt.api('POST', '/sim/near-end', async () => ({}));
+    for (let i = 0; i < 10; i++) {
+      h.clock.t += 300;
+      await h.rt.once();
+    }
+    expect(h.sim.view().current).toContain('Numb');
+    expect(h.sim.calls).not.toContain('POST me/player/next');
+    expect(h.core.autoSkips).toEqual([]);
+    // Core then attributes it (PLAYING): a later reading of that same occurrence never skips it.
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, uri, false, 'PLAYING'), entry(2, uri, true)],
+      current_request_id: id(101),
+    };
+    for (let i = 0; i < 5; i++) {
+      h.clock.t += 3_000;
+      await h.rt.once();
+    }
+    expect(h.sim.calls).not.toContain('POST me/player/next');
+  });
+
+  it('a 429 while watching: the sync still reaches Core with « limité jusqu’à », no further Spotify call', async () => {
+    const h = await harness();
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, `spotify:track:${BRIGHT.id}`)],
+      watch: true,
+    };
+    await h.rt.once();
+    h.sim.rateLimit(60);
+    h.clock.t += 3_000;
+    await h.rt.once();
+    const calls = h.sim.calls.length;
+    expect(h.core.syncs.at(-1)!.status.limited_until).not.toBeNull();
+    for (let i = 0; i < 10; i++) {
+      h.clock.t += 2_500;
+      await h.rt.once();
+    }
+    expect(h.sim.calls.length).toBe(calls);
+    expect(h.core.syncs.at(-1)!.status.limited_until).not.toBeNull();
+  });
+});

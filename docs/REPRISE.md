@@ -1,6 +1,7 @@
 # Reprise — point d'entrée
 
-Mis à jour : **24/10/2026 ~13:40** (consolidation documentaire poussée, sauvegardes faites). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **24/10/2026 ~15:00** (chantier Spotify V2 développé et testé en Lab, non commité ; consolidation
+documentaire poussée, sauvegardes faites). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -60,6 +61,7 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 | `C:\Users\Antoni\Documents\rs-vk`                                                                     | clone de build Studio (patch `sup-wt` appliqué + `stash@{0}`), dossier `GO/` (runbook, SQL)                                        | ne pas nettoyer                                                                                                                                            |
 | `…\scratchpad\{chat,wg,solde,node}-wt`                                                                | restes de lots déjà intégrés                                                                                                       | à revérifier avant tout retrait                                                                                                                            |
 | `C:\Users\Antoni\Documents\raptoru-docs` (`docs/consolidation`)                                       | documentation, = `origin/main`                                                                                                     | poussé                                                                                                                                                     |
+| `C:\Users\Antoni\Documents\raptoru-spotify` (`feat/spotify-v2`, depuis `95c20a6`)                     | **Spotify V2** complet (Core, Studio, bot, panneau, simulateur) ; [SPOTIFY_V2.md](SPOTIFY_V2.md)                                   | **non commité** ; tests verts ; mise en service § 12 sur GO                                                                                                |
 
 `scratchpad` = `C:\Users\Antoni\AppData\Local\Temp\claude\C--Users-Antoni-Documents-Raptoru-2-0\c435dbde-5dd7-4b54-8561-68eabf04712a\scratchpad`
 (**dossier temporaire Windows ; l'Assistant de stockage y supprime des fichiers** : instantané du 24/10 dans
@@ -90,6 +92,8 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 - Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
   copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
 - Commiter `sup-wt` ; pousser `80f3525` (script de déploiement) ; redéployer le bot sur ≥ `cf21c4b`.
+- Spotify V2 : commit de `feat/spotify-v2`, puis les étapes de [SPOTIFY_V2.md](SPOTIFY_V2.md) § 12 (redirection
+  Spotify, migration, déploiements, connexion du compte, création de la récompense, flags, test réel).
 - Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
   en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).
