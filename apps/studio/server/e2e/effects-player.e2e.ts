@@ -85,6 +85,8 @@ async function studio(
     origin,
     media,
     playerDir,
+    // Sounds imported from Studio (Votekick launch sound).
+    uploadsDir: join(dir, 'uploads'),
   });
   return {
     player,
@@ -136,6 +138,34 @@ test.describe('Effects player — as in OBS (sound allowed without a click)', ()
       expect(await a.end).toEqual({ event: 'completed' });
       expect(await b.end).toEqual({ event: 'completed' });
       expect(s.player.status().playing).toBe(0);
+    } finally {
+      await close();
+      await s.close();
+    }
+  });
+
+  test('a sound imported from Studio (upload:<sha256>.wav, the Votekick launch sound): played to its end, never « invalid_effect »', async () => {
+    const s = await studio();
+    const { page, close } = await obsLike();
+    try {
+      await page.goto(s.player.url);
+      await connected(s.player, true);
+      const up = await s.player.importSound(wav(700), 'Lancement votekick.wav');
+      expect(up.id).toMatch(/^upload:[a-f0-9]{64}\.wav$/);
+      const played = await s.player.play({
+        kind: 'sound',
+        id: up.id,
+        volume: 80,
+      });
+      expect(await played.end).toEqual({ event: 'completed' });
+      // Served only under that exact form: a path or another extension is refused by Studio.
+      for (const bad of [
+        'upload:../../secret.wav',
+        `upload:${'a'.repeat(64)}.exe`,
+      ])
+        await expect(
+          s.player.play({ kind: 'sound', id: bad, volume: 80 }),
+        ).rejects.toThrow();
     } finally {
       await close();
       await s.close();

@@ -145,7 +145,10 @@ async function unlock(fromClick) {
 // OBS: allowed at once. A normal browser: needs the click.
 enable.addEventListener('click', () => void unlock(true));
 
-const MEDIA_URL = /^media\/[a-z0-9][a-z0-9-]{0,47}$/;
+// A catalogue media, or a sound imported from Studio: exactly Studio's own form `upload:<sha256>.<mp3|wav|ogg>`
+// (src/effects/player.ts UPLOAD) — never a path, never another extension.
+const MEDIA_URL =
+  /^media\/(?:[a-z0-9][a-z0-9-]{0,47}|upload:[a-f0-9]{64}\.(?:mp3|wav|ogg))$/;
 const CAPTURE_URL = /^capture\/[0-9a-f-]{36}$/;
 const clamp = (v) => Math.min(1, Math.max(0, Number(v) || 0));
 
