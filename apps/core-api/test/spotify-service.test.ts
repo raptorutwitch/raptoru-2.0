@@ -7,6 +7,7 @@ import type {
   SpotifyTrack,
 } from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
+import { spotifyRoutes } from '../src/http/spotify-routes.js';
 import { SpotifyChat } from '../src/spotify/chat.js';
 import { setup } from './helpers.js';
 
@@ -972,5 +973,146 @@ describe('Spotify V2 — Studio leases and absence', () => {
       '@Viewer1 → Spotify est momentanément indisponible.',
       '@Viewer2 → Spotify nécessite une nouvelle autorisation.',
     ]);
+  });
+});
+
+describe("Spotify V2 — per-viewer exceptions, chat origin, Raptoru's reward", () => {
+  it("a viewer's exception replaces the global limits for them only; back to the global values when removed", async () => {
+    const t = await lab();
+    await t.sync();
+    await t.spotify.saveOverride(
+      CH,
+      {
+        viewer_login: 'viewer1',
+        max_pending_per_viewer: 3,
+        viewer_cooldown_seconds: 0,
+      },
+      'test',
+    );
+    // viewer1: no cooldown, 3 pending; viewer2 keeps the global 10 min cooldown.
+    for (const input of ['a', 'b', 'c', 'd']) {
+      await t.redeem(1, input);
+      if (input !== 'd')
+        await t.studio('queued', track(input.charCodeAt(0) - 96));
+    }
+    await t.redeem(2, 'x');
+    await t.studio('queued', track(9));
+    await t.redeem(2, 'y');
+    expect((await t.requests()).map((r) => [r.viewer_id, r.state])).toEqual([
+      ['9001', 'QUEUED'],
+      ['9001', 'QUEUED'],
+      ['9001', 'QUEUED'],
+      ['9001', 'VIEWER_LIMIT'],
+      ['9002', 'QUEUED'],
+      ['9002', 'VIEWER_COOLDOWN'],
+    ]);
+    // Only the cooldown overridden: the pending limit follows the global 2.
+    expect(
+      await t.spotify.saveOverride(
+        CH,
+        {
+          viewer_login: 'viewer1',
+          max_pending_per_viewer: null,
+          viewer_cooldown_seconds: 0,
+        },
+        'test',
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        viewer_login: 'viewer1',
+        max_pending_per_viewer: null,
+        viewer_cooldown_seconds: 0,
+      }),
+    ]);
+    // Both null: the exception is removed.
+    expect(
+      await t.spotify.saveOverride(
+        CH,
+        {
+          viewer_login: 'viewer1',
+          max_pending_per_viewer: null,
+          viewer_cooldown_seconds: null,
+        },
+        'test',
+      ),
+    ).toEqual([]);
+    await t.redeem(1, 'e');
+    expect((await t.requests()).at(-1)).toMatchObject({
+      state: 'VIEWER_COOLDOWN',
+    });
+    expect((await t.spotify.state(CH)).overrides).toEqual([]);
+  });
+
+  it('the override route: login normalized (@, case), invalid values refused', async () => {
+    const t = await lab();
+    const route = spotifyRoutes(t.spotify, t.core.cpTwitch).find((r) =>
+      String(r.pattern).includes('overrides'),
+    )!;
+    const out = (await route.handle({
+      params: [CH],
+      body: {
+        viewer_login: '@Viewer7',
+        max_pending_per_viewer: 5,
+        viewer_cooldown_seconds: null,
+      },
+    } as never)) as { overrides: { viewer_login: string }[] };
+    expect(out.overrides.map((o) => o.viewer_login)).toEqual(['viewer7']);
+    await expect(
+      route.handle({
+        params: [CH],
+        body: {
+          viewer_login: 'viewer7',
+          max_pending_per_viewer: 50,
+          viewer_cooldown_seconds: null,
+        },
+      } as never),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('the music answers have their own origin in the chat queue', async () => {
+    const t = await lab();
+    await t.sync();
+    await t.redeem(1, 'a');
+    await t.studio('queued', track(1));
+    const origins = await t.core.db.query<{ origin: string }>(
+      `select distinct origin from cmd_steps where idempotency_key like 'spotify:%'`,
+    );
+    expect(origins).toEqual([{ origin: 'music' }]);
+  });
+
+  it("Raptoru's reward: price chosen before creation; never a second one once it exists", async () => {
+    const t = await lab();
+    const route = spotifyRoutes(t.spotify, t.core.cpTwitch).find(
+      (r) => String(r.pattern).includes('reward') && r.method === 'POST',
+    )!;
+    await route.handle({
+      params: [CH],
+      body: { prompt: 'Titre + artiste', cost: 1500 },
+    } as never);
+    expect((await t.actions())[0]).toMatchObject({
+      kind: 'reward_create',
+      payload: expect.objectContaining({
+        title: 'Choisi la prochaine musique !',
+        cost: 1500,
+        is_user_input_required: true,
+      }),
+    });
+    // While it is being created: refused.
+    await expect(
+      route.handle({ params: [CH], body: { prompt: 'x' } } as never),
+    ).rejects.toMatchObject({ status: 409 });
+    // Once it exists (managed by Raptoru): refused too.
+    await t.core.db.query(
+      `update cp_twitch_actions set status = 'done' where channel_id = $1`,
+      [CH],
+    );
+    await t.core.db.query(
+      `insert into cp_rewards (channel_id, reward_id, title, cost, source, last_seen_at, managed_by_raptoru)
+       values ($1, 'new-song', 'Choisi la prochaine musique !', 1500, 'twitch_api', now(), true)`,
+      [CH],
+    );
+    await expect(
+      route.handle({ params: [CH], body: { prompt: 'x' } } as never),
+    ).rejects.toMatchObject({ status: 409, body: { error: 'reward_exists' } });
   });
 });

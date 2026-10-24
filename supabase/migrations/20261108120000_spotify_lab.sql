@@ -117,3 +117,16 @@ create index if not exists cp_twitch_actions_status_idx on cp_twitch_actions (ch
 
 -- A reward created by Raptoru's app (only those can be fulfilled / refunded by Raptoru).
 alter table cp_rewards add column if not exists managed_by_raptoru boolean not null default false;
+
+-- Per-viewer exceptions to the global limits (Studio › Musique › Viewers): by Twitch login; a null field follows the
+-- global setting; removing the row goes back to the global settings.
+create table if not exists spotify_viewer_overrides (
+  channel_id text not null,
+  viewer_login text not null check (viewer_login ~ '^[a-z0-9_]{1,25}$'),
+  max_pending_per_viewer integer check (max_pending_per_viewer between 1 and 10),
+  viewer_cooldown_seconds integer check (viewer_cooldown_seconds between 0 and 3600),
+  updated_at timestamptz not null,
+  updated_by text,
+  primary key (channel_id, viewer_login),
+  check (max_pending_per_viewer is not null or viewer_cooldown_seconds is not null)
+);

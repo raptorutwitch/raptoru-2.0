@@ -11,6 +11,7 @@ import './bonk-target.css';
 import './simulation.css';
 import './alerts.css';
 import './channel-points.css';
+import './spotify.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
 import { mountSoundConfig } from './sound-config.js';

@@ -119,6 +119,7 @@ const runtimeFiles = [
   'supabase/migrations/20261106120000_votekick_lab.sql',
   'supabase/migrations/20261107120000_votekick_settings_lab.sql',
   'supabase/migrations/20261108120000_spotify_lab.sql',
+  'supabase/migrations/20261108140000_cmd_steps_music_lab.sql',
   // Jeu des mots word bank, read by the Lab Core from src/ (like the migrations).
   'apps/core-api/src/word-game/words-fr.txt',
 ];

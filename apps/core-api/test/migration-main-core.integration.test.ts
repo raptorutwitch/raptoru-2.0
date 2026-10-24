@@ -38,7 +38,7 @@ describe.skipIf(!isLocal)('main Core migrations, real Postgres', () => {
     );
 
   it('blank: the whole production selection once; again: nothing', async () => {
-    expect((await migrate(db, 'prod')).length).toBe(45);
+    expect((await migrate(db, 'prod')).length).toBe(46);
     expect(await migrate(db, 'prod')).toEqual([]);
     expect(
       await n(
@@ -101,6 +101,6 @@ describe.skipIf(!isLocal)('main Core migrations, real Postgres', () => {
     );
     // A failing file never stays half applied: one transaction per file.
     const recorded = await n('schema_migrations');
-    expect(recorded).toBe(45);
+    expect(recorded).toBe(46);
   });
 });

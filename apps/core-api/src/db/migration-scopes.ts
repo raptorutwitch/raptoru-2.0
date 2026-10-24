@@ -114,6 +114,7 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261107120000_votekick_settings_lab.sql',
   // Spotify V2, Lab schema.
   '20261108120000_spotify_lab.sql',
+  '20261108140000_cmd_steps_music_lab.sql',
 ]);
 
 /**
@@ -168,6 +169,8 @@ export const MAIN_CORE_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261031140000_cmd_steps_win_announcements_lab.sql',
   // !fxcam from the chat: cp_redemptions also accepts the source « chat » (Lab and main Core).
   '20261104120000_cp_redemptions_chat_source_lab.sql',
+  // Spotify V2: the music answers' own origin in cmd_steps (shown « Musique »).
+  '20261108140000_cmd_steps_music_lab.sql',
 ]);
 
 export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([

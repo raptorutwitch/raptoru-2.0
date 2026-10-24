@@ -16,7 +16,8 @@ export interface ChatIn {
 
 export interface StepOut {
   step_id: string;
-  origin?: 'commands' | 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel';
+  origin?:
+    'commands' | 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel' | 'music';
   kind: string;
   status: string;
   params: { mode?: string; text?: string };
@@ -76,6 +77,7 @@ const ORIGIN_FR: Record<string, string> = {
   mini_game: 'Mini-jeux',
   raffle: 'Tombola',
   sub_wheel: 'Roue du Sub',
+  music: 'Musique',
 };
 
 /**

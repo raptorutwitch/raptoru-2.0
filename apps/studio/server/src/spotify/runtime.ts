@@ -45,6 +45,10 @@ const QUEUE_READBACK_MS = [250, 500, 750, 1_000];
 /** Same track again from its start (Core's rule): a new occurrence. */
 const RESTART_PROGRESS_MS = 5_000;
 const SKIP_READBACK_MS = 250;
+/** After a skip, one reading this much later (even with nothing left to watch): the panel never keeps the old track. */
+const AFTER_SKIP_READ_MS = 1_000;
+/** « Actualiser » in the panel: at most one reading per this delay (the API budget stays Studio's). */
+const MANUAL_REFRESH_MS = 5_000;
 
 type Auth = SpotifyAuth | typeof simulatedAuth;
 
@@ -123,6 +127,9 @@ export class SpotifyRuntime {
   private readonly sleep: (ms: number) => Promise<void>;
   /** Last answer from Core (jobs, logical queue, attributed request, watch). */
   answer: SpotifySyncAnswer | null = null;
+  /** One reading due at this instant (after a skip), watched or not; 0 = none. */
+  private readAt = 0;
+  private lastManualRead = 0;
   /** Last playback reading (sent to Core with the next sync if not yet sent). */
   private reading: {
     playback: SpotifyPlayback;
@@ -233,6 +240,15 @@ export class SpotifyRuntime {
     if (this.watching() && this.now() >= this.nextPollAt)
       // A failed reading (429, network…) never blocks the sync: Core must still see Studio and its state.
       await this.poll(false).catch((e: Error) => (this.lastError = e.message));
+    else if (
+      this.readAt &&
+      this.now() >= this.readAt &&
+      this.d.auth.view().auth === 'ok' &&
+      !this.d.api.limited()
+    ) {
+      this.readAt = 0;
+      await this.poll(true).catch((e: Error) => (this.lastError = e.message));
+    }
     this.answer = await this.sync();
     if (this.reading?.sent)
       await this.autoSkip(this.reading.playback, this.reading.raw);
@@ -408,6 +424,7 @@ export class SpotifyRuntime {
       } else result = 'FAILED';
     }
     r.result = result;
+    if (result === 'SKIPPED') this.readAt = this.now() + AFTER_SKIP_READ_MS;
     this.fastUntil = 0;
     this.nextPollAt = this.now() + SKIP_READBACK_MS;
     await this.saveReservations();
@@ -583,6 +600,7 @@ export class SpotifyRuntime {
         };
       try {
         await this.d.api.next(device.id);
+        this.readAt = this.now() + AFTER_SKIP_READ_MS;
         return { outcome: 'skipped', skipped_track: before };
       } catch (e) {
         if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
@@ -674,6 +692,10 @@ export class SpotifyRuntime {
             ? Math.max(0, this.nextPollAt - this.now())
             : null,
           fast_lane: this.fastUntil > this.now(),
+          refresh_in_ms: Math.max(
+            0,
+            this.lastManualRead + MANUAL_REFRESH_MS - this.now(),
+          ),
           reservations: [...this.reservations.values()],
         },
         sim: this.d.sim?.view() ?? null,
@@ -687,6 +709,22 @@ export class SpotifyRuntime {
       return this.d.core(`${this.base}/actions`, await body());
     if (path === '/reward')
       return this.d.core(`${this.base}/reward`, await body());
+    if (path === '/overrides')
+      return this.d.core(`${this.base}/overrides`, await body());
+    if (path === '/refresh') {
+      // « Actualiser » : one reading now (cache shared), at most every 5 s, never while Spotify limits us.
+      if (this.d.auth.view().auth !== 'ok')
+        throw Object.assign(new Error('spotify_not_connected'), {
+          status: 409,
+        });
+      if (this.d.api.limited())
+        throw Object.assign(new Error('rate_limited'), { status: 409 });
+      if (this.now() - this.lastManualRead < MANUAL_REFRESH_MS)
+        return { read: false };
+      this.lastManualRead = this.now();
+      await this.poll(false);
+      return { read: true };
+    }
     // Lab: a viewer's request without Twitch (the Lab Core only has this route).
     if (path === '/simulate' && this.d.sim)
       return this.d.core(`${this.base}/simulate`, await body());

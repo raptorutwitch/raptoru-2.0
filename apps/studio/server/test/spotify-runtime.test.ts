@@ -212,6 +212,40 @@ describe('Spotify runtime (Studio)', () => {
     expect(h.sim.view().current).toContain('Chill Loop');
   });
 
+  it('after a skip, one reading even with nothing left to watch; « Actualiser » at most every 5 s', async () => {
+    const h = await harness();
+    h.job({ kind: 'skip', job_id: id(9), request_id: null });
+    await h.rt.once();
+    const reads = () => h.sim.calls.filter((c) => c === 'GET me/player').length;
+    const before = reads();
+    h.clock.t += 1_100;
+    await h.rt.once();
+    expect(reads()).toBe(before + 1);
+    // The reading reached Core with the next sync.
+    h.clock.t += 1_000;
+    await h.rt.once();
+    expect(
+      h.core.syncs.at(-1)!.playback ?? h.core.syncs.at(-2)!.playback,
+    ).toBeTruthy();
+    for (let i = 0; i < 5; i++) {
+      h.clock.t += 1_000;
+      await h.rt.once();
+    }
+    expect(reads()).toBe(before + 1);
+    // Panel « Actualiser »: one reading, then throttled for 5 s.
+    h.clock.t += 2_000;
+    expect(await h.rt.api('POST', '/refresh', async () => ({}))).toEqual({
+      read: true,
+    });
+    expect(await h.rt.api('POST', '/refresh', async () => ({}))).toEqual({
+      read: false,
+    });
+    h.clock.t += 5_000;
+    expect(await h.rt.api('POST', '/refresh', async () => ({}))).toEqual({
+      read: true,
+    });
+  });
+
   it('no watch: Spotify is never read (only the sync to Core)', async () => {
     const h = await harness();
     for (let i = 0; i < 5; i++) await h.rt.once();

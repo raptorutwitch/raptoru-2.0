@@ -1,0 +1,323 @@
+/* Spotify V2 — « Musique (Spotify) » section of the Points de chaîne tab. Studio's tokens (style.css); chips, tables
+   and small buttons come from channel-points.css (cp-*), the sub-tabs mirror Commands V2's. */
+
+.sp {
+  display: grid;
+  gap: 12px;
+}
+.sp h3 {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sp h4 {
+  margin: 16px 0 6px;
+  font-size: 13px;
+}
+.sp code {
+  font-size: 12px;
+}
+
+/* Opening of the requests + alerts */
+.sp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+}
+.sp-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sp-open small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.sp-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.sp-open--on .sp-dot {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(47, 191, 113, 0.2);
+}
+.sp-open--warn .sp-dot {
+  background: var(--warn);
+}
+.sp-open--warn b {
+  color: var(--warn);
+}
+.sp-alerts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sp-alert {
+  padding: 4px 10px;
+  border-color: var(--warn);
+  background: transparent;
+  color: var(--warn);
+  font-size: 12px;
+}
+
+/* Sub-tabs */
+.sp-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.sp-tabs button {
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.sp-tabs button.on {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+.sp-tabs em {
+  margin-left: 5px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--text);
+  font-size: 11px;
+  font-style: normal;
+}
+
+/* Now playing */
+.sp-now {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: var(--card);
+}
+.sp-now--stale,
+.sp-now--empty {
+  border-left-color: var(--line);
+}
+.sp-now__label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sp-now__main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
+.sp-now__title {
+  font-size: 20px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.sp-now--stale .sp-now__title {
+  color: var(--muted);
+}
+.sp-now__artist {
+  color: var(--muted);
+  font-size: 14px;
+}
+.sp-now__by {
+  margin-top: 6px;
+  font-size: 14px;
+}
+.sp-now__by b {
+  color: var(--accent);
+}
+.sp-bar {
+  height: 4px;
+  margin-top: 12px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.sp-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.sp-now--stale .sp-bar span {
+  background: var(--muted);
+}
+.sp-times {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.sp-fresh {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.sp-fresh--stale {
+  color: var(--warn);
+}
+.sp-fresh button {
+  margin-left: 6px;
+}
+.sp-live {
+  color: var(--ok);
+}
+
+/* Queue / to verify rows */
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.sp-pos {
+  width: 22px;
+  color: var(--muted);
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sp-row__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sp-row__main b {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.sp-row__main small {
+  color: var(--muted);
+}
+.sp-row__act {
+  display: flex;
+  gap: 6px;
+}
+.sp-verify {
+  padding: 4px 12px 10px;
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+}
+.sp-verify h3 {
+  color: var(--warn);
+}
+.sp-empty {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.sp-more summary {
+  margin-top: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Secondary spaces */
+.sp-note {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.sp-note--ok {
+  border-color: var(--ok);
+}
+.sp-note--warn {
+  border-color: var(--warn);
+}
+.sp-facts {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 8px 14px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.sp-facts dt {
+  color: var(--muted);
+  font-weight: 600;
+}
+.sp-facts dd {
+  margin: 0;
+}
+.sp-form {
+  margin-top: 14px;
+  padding: 4px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+}
+.sp-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.sp-fields label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.sp-fields input,
+.sp-fields select {
+  min-width: 140px;
+}
+.sp-wide {
+  flex: 1 1 260px;
+}
+.sp-settings {
+  display: grid;
+  gap: 10px;
+}
+.sp-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.sp-setting span {
+  display: grid;
+  gap: 2px;
+}
+.sp-setting input {
+  width: 80px;
+}
+.sp-right {
+  text-align: right;
+  white-space: nowrap;
+}
+.sp-message {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+@media (max-width: 800px) {
+  .sp-facts {
+    grid-template-columns: 1fr;
+  }
+}

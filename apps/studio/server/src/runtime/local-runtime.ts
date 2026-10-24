@@ -66,6 +66,7 @@ export const LAB_MIGRATIONS = [
   '20261106120000_votekick_lab.sql',
   '20261107120000_votekick_settings_lab.sql',
   '20261108120000_spotify_lab.sql',
+  '20261108140000_cmd_steps_music_lab.sql',
 ];
 
 export type ServiceState =

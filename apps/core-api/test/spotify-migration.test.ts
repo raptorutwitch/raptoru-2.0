@@ -23,6 +23,8 @@ const TABLES = [
   'spotify_jobs',
   'cp_twitch_actions',
   'cp_rewards',
+  'spotify_viewer_overrides',
+  'cmd_steps',
 ];
 const schema = async (db: ReturnType<typeof fresh>) => ({
   columns: await db.query(

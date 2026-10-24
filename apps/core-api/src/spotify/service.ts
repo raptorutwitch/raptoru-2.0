@@ -11,6 +11,7 @@ import {
   type SpotifySettingsUpdate,
   type SpotifyStudioStatus,
   type SpotifyStudioSync,
+  type SpotifyViewerOverrideUpdate,
   type SpotifySyncAnswer,
   type SpotifyTrack,
 } from '@raptoru/schemas';
@@ -60,6 +61,14 @@ export interface SpotifySettings {
   max_duration_seconds: number;
   cancel_grace_seconds: number;
   updated_at: string | null;
+}
+
+interface OverrideRow {
+  viewer_login: string;
+  max_pending_per_viewer: number | null;
+  viewer_cooldown_seconds: number | null;
+  updated_at: Date;
+  updated_by: string | null;
 }
 
 interface SettingsRow {
@@ -249,6 +258,87 @@ export class SpotifyService {
     };
   }
 
+  /** The limits that apply to this viewer: their exception (Studio › Viewers) where set, else the global setting. */
+  private async limitsFor(
+    q: Queryable,
+    channelId: string,
+    login: string,
+    settings: Pick<
+      SettingsRow,
+      'max_pending_per_viewer' | 'viewer_cooldown_seconds'
+    >,
+  ) {
+    const o = (
+      await q.query<OverrideRow>(
+        'select * from spotify_viewer_overrides where channel_id = $1 and viewer_login = $2',
+        [channelId, login.toLowerCase()],
+      )
+    )[0];
+    return {
+      max_pending_per_viewer:
+        o?.max_pending_per_viewer ?? settings.max_pending_per_viewer,
+      viewer_cooldown_seconds:
+        o?.viewer_cooldown_seconds ?? settings.viewer_cooldown_seconds,
+    };
+  }
+
+  /** The rewards Raptoru's app created on this channel (only those can be refunded by Raptoru). */
+  managedRewards(channelId: string) {
+    return this.db.query<{ reward_id: string; title: string; cost: number }>(
+      'select reward_id, title, cost from cp_rewards where channel_id = $1 and managed_by_raptoru order by title',
+      [channelId],
+    );
+  }
+
+  async overrides(channelId: string) {
+    const rows = await this.db.query<OverrideRow>(
+      'select * from spotify_viewer_overrides where channel_id = $1 order by viewer_login',
+      [channelId],
+    );
+    return rows.map((o) => ({
+      viewer_login: o.viewer_login,
+      max_pending_per_viewer: o.max_pending_per_viewer,
+      viewer_cooldown_seconds: o.viewer_cooldown_seconds,
+      updated_at: iso(new Date(o.updated_at)),
+      updated_by: o.updated_by,
+    }));
+  }
+
+  /** Sets a viewer's exception; both fields null = back to the global settings (row removed). */
+  async saveOverride(
+    channelId: string,
+    u: SpotifyViewerOverrideUpdate,
+    by: string,
+  ) {
+    await this.db.tx(async (q) => {
+      await this.lock(q, channelId);
+      if (
+        u.max_pending_per_viewer === null &&
+        u.viewer_cooldown_seconds === null
+      )
+        await q.query(
+          'delete from spotify_viewer_overrides where channel_id = $1 and viewer_login = $2',
+          [channelId, u.viewer_login],
+        );
+      else
+        await q.query(
+          `insert into spotify_viewer_overrides (channel_id, viewer_login, max_pending_per_viewer,
+             viewer_cooldown_seconds, updated_at, updated_by) values ($1, $2, $3, $4, $5, $6)
+           on conflict (channel_id, viewer_login) do update set max_pending_per_viewer = $3,
+             viewer_cooldown_seconds = $4, updated_at = $5, updated_by = $6`,
+          [
+            channelId,
+            u.viewer_login,
+            u.max_pending_per_viewer,
+            u.viewer_cooldown_seconds,
+            this.clock.now(),
+            by,
+          ],
+        );
+    });
+    return this.overrides(channelId);
+  }
+
   async settings(channelId: string): Promise<SpotifySettings> {
     const s = (
       await this.db.query<SettingsRow>(
@@ -298,7 +388,7 @@ export class SpotifyService {
     return insertWordGameSteps(q, {
       channelId,
       now: this.clock.now(),
-      origin: 'mini_game',
+      origin: 'music',
       drafts: [
         {
           idempotencyKey: key.slice(0, 200),
@@ -511,7 +601,13 @@ export class SpotifyService {
            and received_at > $4 and state in ('RECEIVED', 'SEARCHING', 'QUEUED', 'UNKNOWN')`,
         [e.channel_id, e.viewer.id, id, this.recentCut()],
       );
-      const cooldownMs = settings.viewer_cooldown_seconds * 1000;
+      const limits = await this.limitsFor(
+        q,
+        e.channel_id,
+        e.viewer.login,
+        settings,
+      );
+      const cooldownMs = limits.viewer_cooldown_seconds * 1000;
       // The last request still waiting to play (QUEUED: since its queuing) — or one being searched (since its
       // reception: the historical service handled one request of a viewer at a time, the next one saw it QUEUED).
       const since = mine
@@ -539,7 +635,7 @@ export class SpotifyService {
           r.state === 'QUEUED' ||
           isUncertainAddition(r),
       ).length;
-      if (pending >= settings.max_pending_per_viewer) {
+      if (pending >= limits.max_pending_per_viewer) {
         await refuse('VIEWER_LIMIT');
         return { row, duplicate: false };
       }
@@ -1719,6 +1815,7 @@ export class SpotifyService {
         .filter((r) => isUncertainAddition(r) && r.twitch_status === null)
         .map(requestView),
       recent: recent.map(requestView),
+      overrides: await this.overrides(channelId),
       twitch_actions: actions,
       managed_rewards: managed,
     };

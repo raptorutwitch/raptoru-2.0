@@ -30,6 +30,9 @@ Points de chaîne → règle de la récompense → action `interaction: song_req
    (équivalent de la sérialisation par viewer de l'ancien service).
 4. **Demandes en attente** : au plus 2 par viewer (en file, en traitement, ou au résultat incertain mais prouvé en file ;
    la musique en cours ne compte pas).
+   **Exceptions par viewer** (Studio › Viewers, par pseudo Twitch) : un nombre de demandes en attente et / ou un délai
+   propres à un viewer remplacent les valeurs globales pour lui seul ; une case vide suit la valeur globale ; « Revenir
+   aux valeurs globales » supprime l'exception. Durée maximale et délai d'annulation restent globaux.
 5. **Référence** : lien `open.spotify.com/…/track/<id>` (y compris `intl-xx`), `spotify:track:<id>`, ou texte libre.
    Album, playlist, épisode, autre site → `INVALID_REFERENCE` ; vide → `INVALID_INPUT`.
 6. **Recherche** (Studio) : `GET /search?type=track&limit=10` puis score historique déterministe
@@ -94,10 +97,25 @@ Historique : 86 réponses 429 le 05/09 et un blocage de ~12 h (`Retry-After: 43 
 
 ## 6. Studio — panneau « Musique »
 
-Connexion Spotify (appareil actif, compte, reconnexion), état (prêt / limité jusqu'à… / déconnecté / Spotify fermé),
-musique en cours et demandeur, file logique, historique (refus, annulations, incertains), actions de modération
-(retirer, passer), réglages (activation, 2 demandes, cooldown 10 min, durée 10 min, délai d'annulation 10 s),
-récompense liée et état des remboursements.
+Section « Musique (Spotify) » de l'onglet Points de chaîne (`apps/studio/web/src/spotify*.ts`, `spotify.css`) :
+
+- **En tête** : demandes ouvertes / fermées / ouvertes mais refusées (avec la raison) et le bouton pour les ouvrir ou
+  fermer ; les problèmes (Spotify non connecté, limité, Studio non vu, erreur) en alertes qui mènent au diagnostic.
+- **Lecture** (espace principal) : le morceau en cours, son demandeur (« Hors demandes » sinon), sa progression et
+  « Passer la musique » ; les demandes « à vérifier » (Rembourser / Garder) ; la file d'attente avec « Retirer » ; les
+  dernières demandes (historique complet repliable).
+- **Viewers** : exceptions individuelles (§ 2.4). **Réglages** : les quatre réglages historiques, expliqués, et
+  « Revenir aux valeurs historiques ». **Récompense Twitch** : propriétaire API, autorisation, prix, gestion des
+  réclamations (§ 7), création (prix modifiable, une seule fois), dernières actions Twitch. **Connexion et
+  diagnostic** : compte Spotify (Production) ou simulateur (Lab), appareil, limitation, appels / min, suivi de la
+  lecture. **Simulateur (Lab)** : demandes simulées et événements Spotify.
+- **Lecture périmée** : Studio ne lit Spotify que lorsqu'il y a quelque chose à suivre (§ 5). Le panneau dit « Suivi en
+  direct · lu il y a N s » ou « Lecture non suivie · dernière lecture à … (il y a …) » (au-delà de 35 s, le plus long
+  intervalle de suivi) sans jamais faire avancer une vieille lecture. Après chaque passage, Studio relit une fois la
+  lecture ; « Actualiser » fait une lecture à la demande (au plus toutes les 5 s, jamais pendant une limitation).
+- Les réponses du chat musical ont leur propre origine dans la file d'envoi (`cmd_steps.origin = 'music'`, « Musique »
+  dans l'onglet Simulation).
+- Pas de gestionnaire global des récompenses Twitch ici (chantier transversal ultérieur).
 
 ## 7. Récompense Twitch et remboursements
 
@@ -153,29 +171,31 @@ récompense liée et état des remboursements.
 
 ## 10. Implémentation
 
-| Couche  | Fichiers                                                                                                                                                                                                                                                                            |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Schémas | `packages/schemas/src/spotify.ts` (règles, contrats Core ↔ Studio) ; interactions `song_request` / `song_skip` et actions Twitch dans `channel-points.ts`                                                                                                                           |
-| Base    | `supabase/migrations/20261108130000_spotify.sql` (Production) = `20261108120000_spotify_lab.sql` (Lab) : `spotify_settings`, `spotify_studio`, `spotify_requests`, `spotify_jobs`, `cp_twitch_actions`, colonne `cp_rewards.managed_by_raptoru`                                     |
-| Core    | `apps/core-api/src/spotify/` (`service.ts` admission, file logique, cycle de vie, remboursements ; `chat.ts` commandes ; `messages.ts` textes ; `reference.ts`) ; `channel-points/twitch-actions.ts` ; `http/spotify-routes.ts`                                                     |
-| Studio  | `apps/studio/server/src/spotify/` (`search.ts` score historique ; `api.ts` gestionnaire unique des appels ; `oauth.ts` PKCE + DPAPI ; `runtime.ts` synchro, tâches, surveillance, passage automatique, routes du panneau ; `sim.ts` simulateur) ; `apps/studio/web/src/spotify*.ts` |
-| Bot     | `apps/twitch-bot/src/cp-twitch-actions-executor.ts` (statut des rédemptions, création de la récompense ; une seule tentative) ; `twitch/helix.ts`                                                                                                                                   |
+| Couche  | Fichiers                                                                                                                                                                                                                                                                                                                                                       |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schémas | `packages/schemas/src/spotify.ts` (règles, contrats Core ↔ Studio) ; interactions `song_request` / `song_skip` et actions Twitch dans `channel-points.ts`                                                                                                                                                                                                      |
+| Base    | `supabase/migrations/20261108130000_spotify.sql` (Production) = `20261108120000_spotify_lab.sql` (Lab) : `spotify_settings`, `spotify_studio`, `spotify_requests`, `spotify_jobs`, `cp_twitch_actions`, `spotify_viewer_overrides`, colonne `cp_rewards.managed_by_raptoru` ; `20261108140000_cmd_steps_music_lab.sql` (origine `music`, Lab + Core principal) |
+| Core    | `apps/core-api/src/spotify/` (`service.ts` admission, file logique, cycle de vie, remboursements ; `chat.ts` commandes ; `messages.ts` textes ; `reference.ts`) ; `channel-points/twitch-actions.ts` ; `http/spotify-routes.ts`                                                                                                                                |
+| Studio  | `apps/studio/server/src/spotify/` (`search.ts` score historique ; `api.ts` gestionnaire unique des appels ; `oauth.ts` PKCE + DPAPI ; `runtime.ts` synchro, tâches, surveillance, passage automatique, routes du panneau ; `sim.ts` simulateur) ; `apps/studio/web/src/spotify*.ts`                                                                            |
+| Bot     | `apps/twitch-bot/src/cp-twitch-actions-executor.ts` (statut des rédemptions, création de la récompense ; une seule tentative) ; `twitch/helix.ts`                                                                                                                                                                                                              |
 
 Flags (OFF par défaut) : Core `SPOTIFY_CHAT` (les six commandes), bot `CP_TWITCH_ACTIONS` (remboursements CANCELED et
 création de la récompense). Le module a son propre interrupteur dans Studio (`spotify_settings.enabled`, OFF).
 
-Tests : Core `spotify-service.test.ts` (32, dont les statuts de réclamation du § 7), `spotify.integration.test.ts` (7,
-PostgreSQL réel : concurrence, idempotence des remboursements, aucun envoi après une lecture), `spotify-migration.test.ts` ; Studio `spotify-search.test.ts` (6, cas historiques), `spotify-api.test.ts`
-(8 : espacement, plafond, cache, 429 persisté, 401 / 403 / 5xx, écritures, OAuth), `spotify-runtime.test.ts` (9 :
-tâches, relectures, FIFO, passage unique après redémarrage, 429), `spotify-view.test.ts` (5) ; bot
-`cp-twitch-actions-executor.test.ts` (5).
+Tests : Core `spotify-service.test.ts` (36, dont les statuts de réclamation du § 7, les exceptions par viewer,
+l'origine `music`, la récompense unique), `spotify.integration.test.ts` (7, PostgreSQL réel : concurrence, idempotence
+des remboursements, aucun envoi après une lecture), `spotify-migration.test.ts` ; Studio `spotify-search.test.ts` (6,
+cas historiques), `spotify-api.test.ts` (8 : espacement, plafond, cache, 429 persisté, 401 / 403 / 5xx, écritures,
+OAuth), `spotify-runtime.test.ts` (10 : tâches, relectures, FIFO, passage unique après redémarrage, 429, lecture après
+un passage, « Actualiser » limité), `spotify-view.test.ts` (10) ; bot `cp-twitch-actions-executor.test.ts` (5).
 
 ## 11. Tester dans le Lab
 
 Profil Lab de Studio : Spotify est **toujours simulé** (`sim.ts` : jamais le compte ni la file réels). Points de
-chaîne → section « Musique (Spotify) » : « Activer les demandes », puis « Simuler une demande » (viewers = identités du
-simulateur de chat : `lab_viewer` 900101, `lab_modo` 900102, `raptoru_lab` 900100) et les boutons du simulateur (fin
-du titre, titre hors demandes, appareil coupé, 429 pendant 30 s, réponse 200 / 500 au prochain ajout). Les commandes se
+chaîne → section « Musique (Spotify) » : « Ouvrir les demandes », puis espace « Simulateur (Lab) » : « Simuler une
+demande » (viewers = identités du simulateur de chat : `lab_viewer` 900101, `lab_modo` 900102, `raptoru_lab` 900100)
+et les événements Spotify (fin du titre, titre hors demandes, appareil coupé, 429 pendant 30 s, réponse 200 / 500 au
+prochain ajout). Les commandes se
 testent dans le chat simulé (onglet Simulation) avec les mêmes identités.
 
 Parcours vérifié le 24/10 sur un Lab isolé (Core Lab + PostgreSQL + Studio + simulateur, base jetable, scripts
@@ -192,8 +212,10 @@ dont 4 écritures, aucun 429.
 2. **Tableau de bord Spotify** (Antoni) : application Raptoru → ajouter la redirection
    `http://127.0.0.1:4100/api/spotify/oauth/callback` ; noter le Client ID. Vérifier que le compte du stream est
    Premium et inscrit parmi les utilisateurs de l'application (mode développement : 5 au maximum).
-3. **Migration Production** `20261108130000_spotify.sql` (additive : nouvelles tables + une colonne de `cp_rewards`),
-   puis **déploiement Core** (flags OFF) et **bot** (`CP_TWITCH_ACTIONS` OFF).
+3. **Migrations Production** `20261108130000_spotify.sql` (additive : nouvelles tables, une colonne de `cp_rewards`)
+   et `20261108140000_cmd_steps_music_lab.sql` (contrainte d'origine de `cmd_steps` élargie à `music`, toutes les
+   origines existantes restent valides ; liste du Core principal comme `20261031140000`), puis **déploiement Core**
+   (flags OFF) et **bot** (`CP_TWITCH_ACTIONS` OFF).
 4. **Studio** : build installé ; profil Production → Points de chaîne → Musique : Client ID, « Connecter Spotify »,
    accepter dans le navigateur ; le panneau doit afficher le compte et ne pas signaler « pas Premium ».
 5. **Droit Twitch** `channel:manage:redemptions` du jeton `raptoru_` (déjà dans le profil approuvé ; visible dans

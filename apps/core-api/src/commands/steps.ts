@@ -125,7 +125,7 @@ export function draftSteps(r: Rendered): StepDraft[] {
 
 /** Who wrote the step: a Commands V2 invocation, or the Jeu des mots (no invocation). */
 export type StepOrigin =
-  'commands' | 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel';
+  'commands' | 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel' | 'music';
 
 /**
  * Winner announcements (Tombola, Roue du Sub): independent messages scheduled for later (the reveal, the end of the
@@ -258,7 +258,7 @@ export async function insertWordGameSteps(
      * Who writes (no invocation): the Jeu des mots by default, the mini-games (Roulette / Slot), or a winner
      * announcement (Tombola, Roue du Sub).
      */
-    origin?: 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel';
+    origin?: 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel' | 'music';
   },
 ) {
   const ttlMs = s.ttlMs ?? STEP_RULES.ttlMs;

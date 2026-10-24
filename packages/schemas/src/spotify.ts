@@ -52,6 +52,22 @@ export const SpotifyTrack = z.strictObject({
 });
 export type SpotifyTrack = z.infer<typeof SpotifyTrack>;
 
+/** A per-viewer exception to the global limits (Studio › Musique › Viewers). Null = the global setting; both null
+ *  = back to the global settings (the exception is removed). */
+export const SpotifyViewerOverrideUpdate = z.strictObject({
+  viewer_login: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .transform((s) => s.replace(/^@/, ''))
+    .pipe(z.string().regex(/^[a-z0-9_]{1,25}$/)),
+  max_pending_per_viewer: z.number().int().min(1).max(10).nullable(),
+  viewer_cooldown_seconds: z.number().int().min(0).max(3_600).nullable(),
+});
+export type SpotifyViewerOverrideUpdate = z.infer<
+  typeof SpotifyViewerOverrideUpdate
+>;
+
 /** Request states (historical names, spotify-v2/constants.js). */
 export const SpotifyRequestState = z.enum([
   'RECEIVED',
