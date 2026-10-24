@@ -57,7 +57,7 @@ describe('MUTED: the historical end (SAMMI) vs the V2 end', () => {
     const l = await lab();
     await l.mute.muteStart('mute:s1', 50);
     expect(l.obs.inputs.get('Micro (Obsolète)')!.muted).toBe(true);
-    expect(l.obs.bandFilter.settings.mute_duration).toBe(50);
+    expect(l.obs.bandFilter.settings.mute_duration).toBe(0); // no clock of its own: Studio ends it
     l.obs.voice(0.8);
     l.clock.advance(20_000);
     const report = await l.mute.muteEnd('mute:s1', 'caution');
@@ -202,6 +202,104 @@ describe('MUTED V2: the zoom is never written as an integer (Audio Move truncati
     expect(obs.driveFilter.settings).toEqual({ base_value: 1, factor: 0.8 });
     expect(obs.zoomFilter.settings.zoom_max).toBe(1.101);
     expect(obs.inputs.get('Micro')!.muted).toBe(false);
+  });
+});
+
+describe('MUTED V2: the band has no clock of its own (one clock: Studio)', () => {
+  /** The band writes during the mute, and the order of the end's steps. */
+  const watch = (obs: SimObs) => {
+    const bandWrites: unknown[] = [];
+    const real = obs.request.bind(obs);
+    obs.request = async (type, d) => {
+      const data = d as {
+        filterName?: string;
+        filterSettings?: { mute_duration?: unknown };
+      };
+      if (
+        type === 'SetSourceFilterSettings' &&
+        data.filterName === 'Votekick Mute'
+      )
+        bandWrites.push(data.filterSettings?.mute_duration);
+      return real(type, d);
+    };
+    return bandWrites;
+  };
+  const endSteps = (obs: SimObs, from: number) =>
+    obs.requests.slice(from).filter((x) => x.startsWith('Set'));
+
+  it('normal end: mute_duration 0 for the whole mute, zoom and band off together, 110 back, mic last', async () => {
+    const l = await lab();
+    const writes = watch(l.obs);
+    await l.mute.muteStart('mute:n', 30);
+    expect(l.obs.bandFilter.enabled).toBe(true);
+    expect(l.obs.bandFilter.settings.mute_duration).toBe(0);
+    l.clock.advance(30_000);
+    const from = l.obs.requests.length;
+    expect(await l.mute.muteEnd('mute:n', 'expired')).toMatchObject({
+      ok: true,
+    });
+    const steps = endSteps(l.obs, from);
+    const zoomOff = steps.indexOf(
+      'SetSourceFilterEnabled overlay cam shushu / Votekick Zoom',
+    );
+    expect(steps[zoomOff + 1]).toBe(
+      'SetSourceFilterEnabled overlay cam shushu / Votekick Mute',
+    );
+    expect(steps.at(-1)).toBe('SetInputMute Micro (Obsolète)');
+    expect(writes).toEqual([0, 110]); // 0 at the start, its own value back at the end: nothing in between
+    expect(l.obs.bandFilter.settings.mute_duration).toBe(110);
+  });
+
+  it('extension (a second mute while one runs): no duration written to the band, it stays 0 until Studio ends it', async () => {
+    const l = await lab();
+    const writes = watch(l.obs);
+    await l.mute.muteStart('mute:a', 30);
+    l.clock.advance(20_000);
+    await l.mute.muteStart('mute:b', 60);
+    expect(writes).toEqual([0]);
+    expect(l.obs.bandFilter.settings.mute_duration).toBe(0);
+    expect(l.mute.current?.endsAt).toBe(l.clock.now() + 60_000);
+    l.clock.advance(60_000);
+    expect(await l.mute.muteEnd('mute:a', 'expired')).toMatchObject({
+      ok: true,
+    });
+    expect(writes).toEqual([0, 110]);
+    expect(l.obs.bandFilter.enabled).toBe(false);
+  });
+
+  it('caution (early end): both effects off together at once, back to the initial state', async () => {
+    const l = await lab();
+    const before = {
+      mic: l.obs.inputs.get('Micro (Obsolète)')!.muted,
+      band: { ...l.obs.bandFilter.settings },
+      zoomMax: l.obs.zoomFilter.settings.zoom_max,
+      drive: { ...l.obs.driveFilter.settings },
+    };
+    await l.mute.muteStart('mute:c', 60);
+    l.obs.voice(0.6);
+    l.clock.advance(5_000);
+    const from = l.obs.requests.length;
+    expect(await l.mute.muteEnd('mute:c', 'caution')).toMatchObject({
+      ok: true,
+    });
+    const steps = endSteps(l.obs, from);
+    const zoomOff = steps.indexOf(
+      'SetSourceFilterEnabled overlay cam shushu / Votekick Zoom',
+    );
+    expect(steps[zoomOff + 1]).toBe(
+      'SetSourceFilterEnabled overlay cam shushu / Votekick Mute',
+    );
+    expect(l.obs.inputs.get('Micro (Obsolète)')!.muted).toBe(before.mic);
+    expect(l.obs.bandFilter.settings).toEqual(before.band);
+    expect(l.obs.zoomFilter.settings.zoom_max).toBe(before.zoomMax);
+    expect(l.obs.driveFilter.settings).toEqual(before.drive);
+    expect([
+      l.obs.driveFilter.enabled,
+      l.obs.zoomFilter.enabled,
+      l.obs.bandFilter.enabled,
+    ]).toEqual([false, false, false]);
+    expect(l.obs.zoomFilter.settings.zoom).toBe(REST_ZOOM);
+    expect(l.obs.reactionsAfterUnmute()).toEqual([]);
   });
 });
 

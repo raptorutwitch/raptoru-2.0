@@ -12,7 +12,9 @@ import type { ObsLike } from '../channel-points/obs-actions.js';
 // Here, ONE deterministic sequence per mute, keyed by the mute id (a late or repeated order of an old mute does
 // nothing):
 //   start: snapshot of the 4 items it owns → saved to disk → mic muted first (no voice leaks) → zoom reset → zoom,
-//          band (mute_duration = the mute) and drive enabled (the drive's own settings are never written);
+//          band and drive enabled (the drive's own settings are never written). The band's mute_duration is 0
+//          (« unlimited » for its shader): ONE clock, Studio's — with the mute's length the shader faded the band
+//          out by itself before Core's end reached Studio (0.3–1.2 s of zoom without band, 24/10);
 //   end:   drive cut → zoom reset (read back: a late write of the drive is reset again) → zoom AND band disabled
 //          together (no animation left on screen) → the band's saved mute_duration back → the mic unmuted LAST →
 //          read back, retried once.
@@ -153,13 +155,11 @@ export class MuteController {
       const now = this.now();
       if (this.active && !this.active.ending) {
         if (this.active.id !== id) {
+          // Only the watchdog's end moves: the band has no end of its own (mute_duration 0).
           this.active.endsAt = Math.max(
             this.active.endsAt,
             now + seconds * 1000,
           );
-          await this.setBand(obs, {
-            mute_duration: (this.active.endsAt - this.active.bandAt) / 1000,
-          });
           await this.save();
         }
         return;
@@ -184,7 +184,7 @@ export class MuteController {
           this.cfg.zoomFilter,
           true,
         );
-        await this.setBand(obs, { mute_duration: seconds, manual_time: -1 });
+        await this.setBand(obs, { mute_duration: 0, manual_time: -1 });
         await this.setFilter(
           obs,
           this.cfg.camSource,
