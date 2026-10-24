@@ -251,6 +251,14 @@ body.test{ background:#0c0a12 }
   let mode = params.get('vk') || (hasVk || studio ? 'clear' : 'test');
   let session = params.get('session') || 'default';
   const DEFAULT_DURATION = 60;
+  // <votekick-local-ends> (lu par apps/studio/server/test/votekick-legacy-overlay.test.js)
+  // La fin du vote dans l'horloge de CE PC. `ends` vient de l'horloge du Core : un PC en retard de quelques secondes
+  // (24/10 : −2,2 s, « Temps Windows » arrêté) affichait 62–63 à l'ouverture. Jamais plus que la durée du vote.
+  function localEnds(serverEnds, now, durationMs) {
+    return now + Math.min(Math.max(0, serverEnds - now), durationMs);
+  }
+  // </votekick-local-ends>
+  let endsAnchor = ''; // « session:ends » déjà converti : ancré une seule fois par vote, pas à chaque mise à jour
   let INTRO_KEY = 'votekick_intro_' + session;
   let BALANCE_KEY = 'votekick_balance_' + session;
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
@@ -481,7 +489,10 @@ body.test{ background:#0c0a12 }
       backToLive();
       const incomingEnds = Number(payload.ends) || 0;
       if (incomingEnds) {
-        state.ends = incomingEnds;
+        if (endsAnchor !== session + ':' + incomingEnds) {
+          endsAnchor = session + ':' + incomingEnds;
+          state.ends = localEnds(incomingEnds, Date.now(), state.duration * 1000);
+        }
         try { localStorage.setItem('votekick_ends_' + session, String(state.ends)); } catch (_) {}
       } else if (!state.ends) {
         state.ends = Date.now() + state.duration * 1000;
