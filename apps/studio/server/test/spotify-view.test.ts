@@ -226,6 +226,7 @@ describe('Studio « Musique » — secondary spaces', () => {
       ui({ tab: 'reward' }),
     );
     expect(made).toContain('Récompense active');
+    expect(made).toContain('Identifiant Twitch : <code>r</code>');
     expect(made).not.toContain('data-act="sp-reward"');
   });
 

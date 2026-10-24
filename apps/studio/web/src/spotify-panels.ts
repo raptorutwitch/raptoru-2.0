@@ -107,7 +107,8 @@ export function rewardPanel(s: SpState, ui: SpUi) {
   );
   const state = song
     ? `<div class="sp-note sp-note--ok"><b>Récompense active : « ${esc(song.title)} », ${song.cost} points.</b> Créée par
-        l’application Twitch de Raptoru : les refus et annulations sont remboursés automatiquement.</div>`
+        l’application Twitch de Raptoru : les refus et annulations sont remboursés automatiquement.
+        <br><small class="cp-muted">Identifiant Twitch : <code>${esc(song.reward_id)}</code></small></div>`
     : pending
       ? `<div class="sp-note"><b>Création demandée à ${esc(clock(pending.created_at))}</b> : le bot la fait sur Twitch
           (${esc(ACTION_STATUS[pending.status] ?? pending.status)}).</div>`
