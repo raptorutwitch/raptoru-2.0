@@ -1,7 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **24/10/2026 ~15:00** (chantier Spotify V2 développé et testé en Lab, non commité ; consolidation
-documentaire poussée, sauvegardes faites). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **24/10/2026 ~16:05** (Spotify V2 déployé Core + bot, tout OFF ; Studio, OAuth et récompense à venir sur GO). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -28,16 +27,16 @@ depuis le checkout principal.
 
 ## 2. Production (relevé 24/10 ~12:20)
 
-| Élément              | Version                                                                                                                      | Remarque                                                                                   |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Core `raptoru-core`  | **`0f753c1`** (déployé 24/10 09:57 UTC, migration `votekick_settings`)                                                       | `running:healthy`, `/health` `/ready` 200                                                  |
-| Bot `raptoru-bot`    | **`b8bc025`** (23/10)                                                                                                        | `running:healthy`, VPS, bail unique ; image sans `cf21c4b` (chemins `/data` par variables) |
-| `origin/main`        | `0f753c1` + commits documentaires (code identique)                                                                           | Coolify : auto-deploy désactivé                                                            |
-| Studio installé (PC) | **0.1.7-sup.8** (build local, `0f753c1` + patch `sup-wt` non commité)                                                        | dernière release publiée : 0.1.6                                                           |
-| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                          | publication manuelle par Antoni                                                            |
-| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                    | Node non épinglé (décision en attente)                                                     |
-| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT` = true ; bot `CAUTION`, `VOTEKICK` = true                                               | journaux du bot sur `/data`                                                                |
-| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110 | ne pas modifier ces réglages sans GO                                                       |
+| Élément              | Version                                                                                                                      | Remarque                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Core `raptoru-core`  | **`16600de`** (déployé 24/10 15:58 UTC, Spotify V2 OFF ; migrations `spotify` + `cmd_steps_music` préappliquées, vérifiées)  | `running:healthy`, `/health` `/ready` 200 ; retour : `0f753c1`                                |
+| Bot `raptoru-bot`    | **`16600de`** (déployé 24/10 16:01 UTC, inclut `cf21c4b`)                                                                    | `running:healthy`, VPS, bail repris proprement ; `CP_TWITCH_ACTIONS` OFF ; retour : `b8bc025` |
+| `origin/main`        | `16600de` (Spotify V2)                                                                                                       | Coolify : auto-deploy désactivé                                                               |
+| Studio installé (PC) | **0.1.7-sup.8** (build local, `0f753c1` + patch `sup-wt` non commité)                                                        | dernière release publiée : 0.1.6                                                              |
+| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                          | publication manuelle par Antoni                                                               |
+| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                    | Node non épinglé (décision en attente)                                                        |
+| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT` = true ; bot `CAUTION`, `VOTEKICK` = true                                               | journaux du bot sur `/data`                                                                   |
+| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110 | ne pas modifier ces réglages sans GO                                                          |
 
 Fonctions en Production : économie canonique (Wallet, Daily, fidélité, présence), Commands V2 (`cmd_steps`), modération
 D4, Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2, Points de chaîne et effets,
@@ -61,7 +60,7 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 | `C:\Users\Antoni\Documents\rs-vk`                                                                     | clone de build Studio (patch `sup-wt` appliqué + `stash@{0}`), dossier `GO/` (runbook, SQL)                                        | ne pas nettoyer                                                                                                                                            |
 | `…\scratchpad\{chat,wg,solde,node}-wt`                                                                | restes de lots déjà intégrés                                                                                                       | à revérifier avant tout retrait                                                                                                                            |
 | `C:\Users\Antoni\Documents\raptoru-docs` (`docs/consolidation`)                                       | documentation, = `origin/main`                                                                                                     | poussé                                                                                                                                                     |
-| `C:\Users\Antoni\Documents\raptoru-spotify` (`feat/spotify-v2`, depuis `95c20a6`)                     | **Spotify V2** complet (Core, Studio, bot, panneau, simulateur) ; [SPOTIFY_V2.md](SPOTIFY_V2.md)                                   | **non commité** ; tests verts ; mise en service § 12 sur GO                                                                                                |
+| `C:\Users\Antoni\Documents\raptoru-spotify` (`feat/spotify-v2` = `origin/main` `16600de`)             | **Spotify V2** ; mise en service : `Documents\raptoru-spotify-GO\RUNBOOK_SPOTIFY_V2.md`                                            | étapes 1–5 faites le 24/10 ; suivantes : Studio sup.9, OAuth, récompense, test (chacune sur GO)                                                            |
 
 `scratchpad` = `C:\Users\Antoni\AppData\Local\Temp\claude\C--Users-Antoni-Documents-Raptoru-2-0\c435dbde-5dd7-4b54-8561-68eabf04712a\scratchpad`
 (**dossier temporaire Windows ; l'Assistant de stockage y supprime des fichiers** : instantané du 24/10 dans
