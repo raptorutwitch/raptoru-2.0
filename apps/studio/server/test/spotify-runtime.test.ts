@@ -148,6 +148,36 @@ describe('Spotify runtime (Studio)', () => {
     expect(h.sim.view().queue).toEqual(['Numb']);
   });
 
+  it('a request costs 2 Spotify calls when Spotify answers 204 (search, add): no duration re-read, no device list', async () => {
+    const h = await harness();
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'queued',
+      confirmation: 'http_204',
+    });
+    expect(h.sim.calls).toEqual(['GET search', 'POST me/player/queue']);
+    // An exact link still reads the track (its only source of title and duration).
+    h.job({
+      ...songJob(2, 'x'),
+      reference: { kind: 'exact', track_id: BRIGHT.id },
+    } as SpotifyJob);
+    await h.rt.once();
+    expect(h.sim.calls.slice(2)).toEqual([
+      `GET tracks/${BRIGHT.id}`,
+      'POST me/player/queue',
+    ]);
+    // No active device: Spotify refuses the add (404) — a certain refusal, nothing queued.
+    h.sim.deviceActive = false;
+    h.job(songJob(3, 'shape of you ed sheeran'));
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'refused',
+      reason: 'NO_DEVICE',
+    });
+    expect(h.sim.view().queue).toEqual(['Numb', 'Mr. Brightside']);
+  });
+
   it('refusals: ambiguous, not found, too long, no device — nothing queued', async () => {
     const h = await harness();
     const cases: [string, string, () => void][] = [
@@ -256,7 +286,7 @@ describe('Spotify runtime (Studio)', () => {
     await h.rt.once();
     const job = h.logs.find((l) => l.includes('[spotify] demande'));
     expect(job).toMatch(
-      /→ queued : Core \(prise\) \d+ ms · recherche \d+ ms · titre \(durée\) \d+ ms · appareils \d+ ms · ajout \(réponse non 204\) \d+ ms · relecture \(\+250 ms d'attente\) \d+ ms · Core \(rapport\) \d+ ms · total \d+ ms/,
+      /→ queued : Core \(prise\) \d+ ms · recherche \d+ ms · ajout \(réponse non 204\) \d+ ms · relecture \(\+250 ms d'attente\) \d+ ms · Core \(rapport\) \d+ ms · total \d+ ms/,
     );
     h.core.answer = {
       ...h.core.answer,

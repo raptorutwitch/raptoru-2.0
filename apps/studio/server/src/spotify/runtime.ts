@@ -29,6 +29,8 @@ import { SpotifySim } from './sim.js';
 // queue's order (FIFO), reserved locally before the skip is sent (never two skips for one request), then reported.
 
 const SYNC_MS = 1_000;
+/** Requests open: Core's jobs are picked up every 0.5 s (decision 25/10: the job waited 0.5 s on average at 1 s). */
+const SYNC_OPEN_MS = 500;
 /** Module off: Studio still says it is there (Core's admission wants it seen within 15 s once switched on). */
 const IDLE_SYNC_MS = 5_000;
 const POLL = {
@@ -262,8 +264,8 @@ export class SpotifyRuntime {
     if (!this.answer.watch) this.fastUntil = 0;
     if (!this.answer.enabled) return IDLE_SYNC_MS;
     return this.watching()
-      ? Math.max(0, Math.min(SYNC_MS, this.nextPollAt - this.now()))
-      : SYNC_MS;
+      ? Math.max(0, Math.min(SYNC_OPEN_MS, this.nextPollAt - this.now()))
+      : SYNC_OPEN_MS;
   }
 
   /** Spotify is read only when Core says there is something to watch (a request queued / playing, a tombstone). */
@@ -558,24 +560,26 @@ export class SpotifyRuntime {
         if (s.status === 'MATCHED') extra.confidence = s.confidence;
         if (s.status !== 'MATCHED')
           return { outcome: 'refused', reason: s.status, ...extra };
-        chosen =
-          (await this.d.api.track(s.top.candidate.id)) ?? s.top.candidate;
-        this.mark('titre (durée)');
+        // The search result is a full track object (duration included): read it again only if it lacks one.
+        chosen = Number.isInteger(s.top.candidate.duration_ms)
+          ? s.top.candidate
+          : ((await this.d.api.track(s.top.candidate.id)) ?? s.top.candidate);
+        if (chosen !== s.top.candidate) this.mark('titre (durée)');
       }
       const track = toTrack(chosen);
       if (!track)
         return { outcome: 'refused', reason: 'SPOTIFY_UNAVAILABLE', ...extra };
       if (track.duration_ms > job.max_duration_ms)
         return { outcome: 'refused', reason: 'TOO_LONG', track, ...extra };
-      const device = pickDevice(await this.d.api.devices(true));
-      this.mark('appareils');
-      if (!device)
-        return { outcome: 'refused', reason: 'NO_DEVICE', track, ...extra };
       try {
-        await this.d.api.addToQueue(track.uri, device.id);
+        // Without device_id Spotify queues on the active device (the one the historical service picked); with none
+        // active it answers 404 « no active device », a certain refusal (nothing was queued).
+        await this.d.api.addToQueue(track.uri, null);
         this.mark('ajout');
         return { outcome: 'queued', track, confirmation: 'http_204', ...extra };
       } catch (e) {
+        if (e instanceof SpotifyApiError && !e.maybeSent && e.status === 404)
+          return { outcome: 'refused', reason: 'NO_DEVICE', track, ...extra };
         if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
         this.mark('ajout (réponse non 204)');
         // No clear answer: read the queue back (historical 250/500/750/1000 ms), never resend.
