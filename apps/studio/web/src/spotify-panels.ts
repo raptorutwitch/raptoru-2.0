@@ -6,6 +6,7 @@ import {
   clock,
   esc,
   minutes,
+  trackLabel,
   val,
 } from './spotify-ui.js';
 
@@ -188,6 +189,7 @@ export function techPanel(s: SpState, ui: SpUi) {
   const n = a.counters ?? {};
   const p = s.studio?.playback;
   const fact = (k: string, v: string) => `<dt>${k}</dt><dd>${v}</dd>`;
+  const refresh = `<button type="button" class="cp-ghost" data-act="sp-refresh" ${a.limited_until || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''} title="Une lecture de Spotify maintenant (au plus toutes les 5 s)">Actualiser</button>`;
   return `<h4>Compte Spotify</h4>${account}
     <h4>Diagnostic</h4>
     <dl class="sp-facts">
@@ -197,7 +199,7 @@ export function techPanel(s: SpState, ui: SpUi) {
       ${fact('Erreurs réseau', a.backoff_until ? `pause jusqu’à ${esc(clock(a.backoff_until))}` : 'aucune')}
       ${fact('Appels Spotify', `${a.calls_last_minute} dans la dernière minute${a.rate_high ? ' — <b>au-dessus du seuil d’alerte (60)</b>' : ''} · plafond 90 / min · ${n.calls ?? 0} depuis le démarrage (${n.writes ?? 0} ajouts / passages, ${n.cache_hits ?? 0} lectures évitées par le cache)`)}
       ${fact('Suivi de la lecture', s.local.fast_lane ? 'rapide (passage d’une demande annulée)' : s.local.watching ? `actif${s.local.next_poll_in_ms != null ? ` · prochaine lecture dans ${Math.ceil(s.local.next_poll_in_ms / 1000)} s` : ''}` : 'en pause : rien à suivre (aucune demande en file, en cours ou à passer)')}
-      ${fact('Dernière lecture', p ? esc(`${clock(p.observed_at)} (${ago(ui.now - Date.parse(p.observed_at))})`) : 'aucune')}
+      ${fact('Dernière lecture', `${p ? esc(`${clock(p.observed_at)} (${ago(ui.now - Date.parse(p.observed_at))}) · ${p.track ? `${trackLabel(p.track)}${p.is_playing ? '' : ' (en pause)'}` : 'rien ne joue'}`) : 'aucune'} ${refresh}`)}
       ${fact('Erreur Studio', s.local.error ? `<span class="cp-error">${esc(s.local.error)}</span>` : 'aucune')}
     </dl>`;
 }

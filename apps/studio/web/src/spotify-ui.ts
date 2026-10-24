@@ -46,6 +46,26 @@ export interface SpOverride {
   updated_at: string;
 }
 
+/** A requester of the queue and their limits, as the admission applies them (Core state; absent before 25/10). */
+export interface SpViewerUsage {
+  viewer_id: string;
+  login: string;
+  pending: number;
+  max_pending: number;
+  cooldown_left_ms: number;
+  override: boolean;
+}
+
+/** Today's requests (Europe/Paris day; Core state, absent before 25/10). */
+export interface SpToday {
+  received: number;
+  played: number;
+  refused: number;
+  canceled: number;
+  removed: number;
+  refunded: number;
+}
+
 export interface SpPlayback {
   observed_at: string;
   track: SpTrack | null;
@@ -68,6 +88,8 @@ export interface SpState {
   to_verify: SpRequest[];
   recent: SpRequest[];
   overrides?: SpOverride[];
+  viewers?: SpViewerUsage[];
+  today?: SpToday;
   twitch_actions: {
     kind: string;
     status: string;
@@ -128,8 +150,10 @@ export interface SpUi {
   tab: SpTab;
   fields: Record<string, string>;
   who: SpIdentity[];
-  /** Now, for the « lu il y a » and the progress (passed in: the view stays pure and testable). */
+  /** Now, for the « lu il y a » and the « demandée il y a » (passed in: the view stays pure and testable). */
   now: number;
+  /** Folded parts left open (kept across the 3 s refresh). */
+  open?: Record<string, boolean>;
 }
 
 export const esc = (s: unknown) =>
@@ -145,8 +169,6 @@ export const chip = (cls: string, text: string, title = '') =>
   `<span class="cp-chip cp-chip--${cls}"${title ? ` title="${esc(title)}"` : ''}>${esc(text)}</span>`;
 export const clock = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString('fr-FR') : '';
-export const mmss = (ms: number) =>
-  `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}`;
 export const trackLabel = (t: SpTrack | null) =>
   t ? `${t.title} — ${t.artists.join(', ')}` : '—';
 /** « il y a 12 s », « il y a 3 min », « il y a 2 h ». */

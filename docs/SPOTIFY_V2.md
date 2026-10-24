@@ -106,17 +106,24 @@ Section « Musique (Spotify) » de l'onglet Points de chaîne (`apps/studio/web/
 
 - **En tête** : demandes ouvertes / fermées / ouvertes mais refusées (avec la raison) et le bouton pour les ouvrir ou
   fermer ; les problèmes (Spotify non connecté, limité, Studio non vu, erreur) en alertes qui mènent au diagnostic.
-- **Lecture** (espace principal) : le morceau en cours, son demandeur (« Hors demandes » sinon), sa progression et
-  « Passer la musique » ; les demandes « à vérifier » (Rembourser / Garder) ; la file d'attente avec « Retirer » ; les
-  dernières demandes (historique complet repliable).
+- **File musicale** (espace principal, décision 25/10), centrée sur les demandes des viewers :
+  - une ligne de compteurs : en file, à vérifier, demandes du jour (jouées, refusées, annulées, retirées, remboursées ;
+    journée Europe/Paris) ; « Passer la musique » quand aucune demande ne joue ;
+  - « ▶ titre · @viewer · demandée il y a … [Passer] » seulement quand une **demande** joue (jamais un titre de la
+    playlist, pas de barre de progression) ;
+  - un tableau : #, titre, demandeur, statut (en file / recherche… / à vérifier / ajout non confirmé), quota · délai du
+    demandeur (`en attente/limite · encore N min (exception)`, calculé par le Core avec la même règle que l'admission),
+    actions Retirer / Rembourser / Garder, chacune confirmée ;
+  - « Dernières décisions » repliable (refus et raison, annulations, retraits, remboursements, statut Twitch), qui reste
+    ouverte aux rafraîchissements.
+  - Un Core sans ces données (`viewers`, `today` : avant ce changement) affiche « — ».
 - **Viewers** : exceptions individuelles (§ 2.4). **Réglages** : les quatre réglages historiques, expliqués, et
   « Revenir aux valeurs historiques ». **Récompense Twitch** : propriétaire API, autorisation, prix, gestion des
   réclamations (§ 7), création (prix modifiable, une seule fois), dernières actions Twitch. **Connexion et
   diagnostic** : compte Spotify (Production) ou simulateur (Lab), appareil, limitation, appels / min, suivi de la
-  lecture. **Simulateur (Lab)** : demandes simulées et événements Spotify.
-- **Lecture périmée** : Studio ne lit Spotify que lorsqu'il y a quelque chose à suivre (§ 5). Le panneau dit « Suivi en
-  direct · lu il y a N s » ou « Lecture non suivie · dernière lecture à … (il y a …) » (au-delà de 35 s, le plus long
-  intervalle de suivi) sans jamais faire avancer une vieille lecture. Après chaque passage, Studio relit une fois la
+  lecture, dernière lecture (titre) et « Actualiser ». **Simulateur (Lab)** : demandes simulées et événements Spotify.
+- **Lecture périmée** : Studio ne lit Spotify que lorsqu'il y a quelque chose à suivre (§ 5). Le diagnostic donne
+  l'heure et l'âge de la dernière lecture, sans jamais la faire avancer. Après chaque passage, Studio relit une fois la
   lecture ; « Actualiser » fait une lecture à la demande (au plus toutes les 5 s, jamais pendant une limitation).
 - Les réponses du chat musical ont leur propre origine dans la file d'envoi (`cmd_steps.origin = 'music'`, « Musique »
   dans l'onglet Simulation).

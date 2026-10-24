@@ -17,12 +17,12 @@ import {
   chip,
   clock,
   esc,
-  mmss,
   trackLabel,
 } from './spotify-ui.js';
 
-// Spotify V2 — Studio « Musique (Spotify) » section (pure part, tested; docs/SPOTIFY_V2.md § 6). The main space is the
-// stream's: what plays and who asked for it, the queue and its moderation, the requests to settle, the last requests.
+// Spotify V2 — Studio « Musique (Spotify) » section (pure part, tested; docs/SPOTIFY_V2.md § 6). The main space,
+// « File musicale », is the viewers' requests: the one playing, the queue with each requester's limits, what to settle,
+// their moderation, the last decisions (folded). Spotify's own playback (progress, freshness) is in the diagnostics.
 // Settings, viewers' exceptions, Raptoru's Twitch reward, the Spotify connection and the diagnostics have their own
 // spaces (spotify-panels.ts). Every Twitch / Spotify text is escaped.
 
@@ -33,10 +33,6 @@ export type {
   SpTab,
   SpUi,
 } from './spotify-ui.js';
-
-/** While Studio follows the playback it reads every 1–2.5 s on a request, every 30 s on a track outside the requests:
- *  a reading older than this is « non suivie ». */
-export const LIVE_MS = 35_000;
 
 /** One line telling whether requests come in, and why not. */
 function opening(s: SpState) {
@@ -93,7 +89,7 @@ function alerts(s: SpState) {
 function tabs(s: SpState, ui: SpUi) {
   const waiting = s.queue.length + s.in_progress.length;
   const list: [SpTab, string, string][] = [
-    ['live', 'Lecture', waiting ? String(waiting) : ''],
+    ['live', 'File musicale', waiting ? String(waiting) : ''],
     [
       'viewers',
       'Viewers',
@@ -114,101 +110,99 @@ function tabs(s: SpState, ui: SpUi) {
     .join('')}</nav>`;
 }
 
-/** What plays, who asked for it, how fresh that is. Never extrapolated from an old reading. */
-function nowPlaying(s: SpState, ui: SpUi) {
-  const p = s.studio?.playback ?? null;
-  const age = p ? ui.now - Date.parse(p.observed_at) : Infinity;
-  const live = s.local.watching && age <= LIVE_MS;
-  const refreshDisabled =
-    Boolean(s.api.limited_until) || (s.local.refresh_in_ms ?? 0) > 0;
-  const refresh = `<button type="button" class="cp-ghost" data-act="sp-refresh" ${refreshDisabled ? 'disabled' : ''} title="Une lecture de Spotify maintenant (au plus toutes les 5 s)">Actualiser</button>`;
-  const freshness = !p
-    ? `<p class="sp-fresh sp-fresh--stale">Aucune lecture connue : Studio ne lit Spotify que lorsqu’une demande est en file
-        ou en cours (pour économiser les appels). ${refresh}</p>`
-    : live
-      ? `<p class="sp-fresh"><span class="sp-live">● Suivi en direct</span> · lu ${esc(ago(age))}</p>`
-      : `<p class="sp-fresh sp-fresh--stale"><b>Lecture non suivie</b> · dernière lecture à ${esc(clock(p.observed_at))}
-          (${esc(ago(age))}). ${
-            s.local.watching
-              ? 'Spotify ne répond pas pour l’instant.'
-              : 'Rien à suivre (aucune demande en file ou en cours) : ce titre a pu changer depuis.'
-          } ${refresh}</p>`;
-  if (!p?.track)
-    return `<section class="sp-now sp-now--empty"><div class="sp-now__label">En cours</div>
-        <div class="sp-now__title">${p ? 'Rien ne joue sur Spotify' : 'Lecture inconnue'}</div>${freshness}</section>`;
-  const t = p.track;
-  const mine = s.current && s.current.track?.uri === t.uri ? s.current : null;
-  const progress =
-    p.progress_ms === null
-      ? null
-      : Math.min(
-          t.duration_ms,
-          p.progress_ms + (live && p.is_playing ? age : 0),
-        );
-  const pct = progress === null ? 0 : (progress / t.duration_ms) * 100;
-  return `<section class="sp-now${live ? '' : ' sp-now--stale'}">
-      <div class="sp-now__label">${live ? (p.is_playing ? 'En cours' : 'En pause') : 'Dernier titre lu'}</div>
-      <div class="sp-now__main">
-        <div class="sp-now__text">
-          <div class="sp-now__title">${esc(t.title)}</div>
-          <div class="sp-now__artist">${esc(t.artists.join(', '))}</div>
-          <div class="sp-now__by">${
-            mine
-              ? `Demandé par <b>@${esc(mine.viewer.login)}</b>`
-              : '<span class="cp-muted">Hors demandes (playlist ou lecture manuelle)</span>'
-          }</div>
-        </div>
-        <div class="sp-now__actions"><button type="button" data-act="sp-skip" title="Passe le titre en cours sur Spotify">Passer la musique</button></div>
-      </div>
-      ${
-        progress === null
-          ? ''
-          : `<div class="sp-bar"><span style="width:${pct.toFixed(1)}%"></span></div>
-        <div class="sp-times"><span>${mmss(progress)}</span><span>${mmss(t.duration_ms)}</span></div>`
-      }
-      ${freshness}
-    </section>`;
+const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
+/** « encore 6 min », « encore 40 s ». */
+const left = (ms: number) =>
+  ms >= 60_000
+    ? `encore ${Math.ceil(ms / 60_000)} min`
+    : `encore ${Math.ceil(ms / 1000)} s`;
+
+/** The request playing, with its requester; nothing for a track outside the requests (no progress bar). */
+function playing(s: SpState, ui: SpUi) {
+  const r = s.current;
+  if (!r) return '';
+  return `<section class="sp-playing"><span class="sp-playing__icon" aria-hidden="true">▶</span>
+      <div class="sp-row__main"><b>${esc(trackLabel(r.track))}</b><small>@${esc(r.viewer.login)} · demandée ${esc(ago(ui.now - Date.parse(r.received_at)))}</small></div>
+      <div class="sp-row__act"><button type="button" data-act="sp-skip" title="Passe le titre en cours sur Spotify">Passer</button></div></section>`;
 }
 
-function toVerify(s: SpState) {
-  if (!s.to_verify.length) return '';
-  return `<section class="sp-verify"><h3>À vérifier (${s.to_verify.length})</h3>
-    <p class="cp-muted">Spotify n’a pas confirmé l’ajout. Regarde la file dans Spotify, puis : « Rembourser » rend les
-      points (récompense de Raptoru) ; « Garder » ne change rien sur Twitch (réclamation en attente, à valider ou
-      rembourser depuis Twitch).</p>
-    ${s.to_verify
-      .map(
-        (
-          r,
-        ) => `<div class="sp-row"><div class="sp-row__main"><b>${esc(trackLabel(r.track))}</b><small>@${esc(r.viewer.login)} · ${esc(clock(r.received_at))}</small></div>
-        <div class="sp-row__act"><button type="button" data-act="sp-settle" data-decision="refund" data-id="${esc(r.request_id)}">Rembourser</button>
-        <button type="button" data-act="sp-settle" data-decision="keep" data-id="${esc(r.request_id)}">Garder</button></div></div>`,
-      )
-      .join('')}</section>`;
+/** One line: the queue, what needs a decision, today's requests (« — » while Core does not give them). */
+function counters(s: SpState) {
+  const t = s.today;
+  const detail = t
+    ? [
+        plural(t.played, 'jouée'),
+        plural(t.refused, 'refusée'),
+        plural(t.canceled, 'annulée'),
+        plural(t.removed, 'retirée'),
+        plural(t.refunded, 'remboursée'),
+      ].filter((x) => !x.startsWith('0 '))
+    : [];
+  const today = t
+    ? `${t.received} aujourd’hui${detail.length ? ` (${detail.join(', ')})` : ''}`
+    : 'aujourd’hui : —';
+  // Without a request playing, the skip stays at hand (a track of the playlist).
+  const skip = s.current
+    ? ''
+    : '<button type="button" class="cp-ghost" data-act="sp-skip" title="Passe le titre en cours sur Spotify (même hors demandes)">Passer la musique</button>';
+  return `<div class="sp-counts"><span><b>${s.queue.length} en file</b> · ${s.to_verify.length} à vérifier · ${esc(today)}</span>${skip}</div>`;
 }
 
-function queue(s: SpState) {
-  const rows = [...s.queue, ...s.in_progress];
+/** The requests not played yet: queue order, then those being searched and the uncertain ones outside the queue. */
+function requests(s: SpState) {
+  const usage = new Map((s.viewers ?? []).map((v) => [v.viewer_id, v]));
+  const verify = new Set(s.to_verify.map((r) => r.request_id));
+  const queued = new Set(s.queue.map((r) => r.request_id));
+  const rows: [string, SpRequest][] = [
+    ...s.queue.map((r, i): [string, SpRequest] => [String(i + 1), r]),
+    ...[
+      ...s.in_progress,
+      ...s.to_verify.filter((r) => !queued.has(r.request_id)),
+    ].map((r): [string, SpRequest] => ['·', r]),
+  ];
+  const id = (r: SpRequest) => `data-id="${esc(r.request_id)}"`;
+  const row = ([pos, r]: [string, SpRequest]) => {
+    const searching = r.state === 'RECEIVED' || r.state === 'SEARCHING';
+    const toVerify = verify.has(r.request_id);
+    const status = searching
+      ? chip('off', 'recherche…')
+      : toVerify
+        ? chip('warn', 'à vérifier', 'Spotify n’a pas confirmé l’ajout')
+        : r.state === 'UNKNOWN'
+          ? chip(
+              'warn',
+              'ajout non confirmé',
+              'Gardée : réclamation en attente sur Twitch',
+            )
+          : chip('on', 'en file');
+    const u = usage.get(r.viewer.id);
+    const quota = u
+      ? `${u.pending}/${u.max_pending}${u.cooldown_left_ms > 0 ? ` · ${left(u.cooldown_left_ms)}` : ''}${u.override ? ' (exception)' : ''}`
+      : '—';
+    const acts = [
+      queued.has(r.request_id)
+        ? `<button type="button" data-act="sp-remove" ${id(r)} title="Retire la demande et rembourse le viewer ; si elle est déjà dans la file Spotify, elle sera passée automatiquement">Retirer</button>`
+        : '',
+      toVerify
+        ? `<button type="button" data-act="sp-settle" data-decision="refund" ${id(r)} title="Rend les points (récompense de Raptoru)">Rembourser</button>
+          <button type="button" data-act="sp-settle" data-decision="keep" ${id(r)} title="Rien n’est envoyé à Twitch : réclamation en attente">Garder</button>`
+        : '',
+    ].join('');
+    return `<tr><td class="sp-pos">${pos}</td><td><b>${r.track ? esc(trackLabel(r.track)) : `« ${esc(r.input)} »`}</b></td>
+      <td>@${esc(r.viewer.login)}</td><td>${status}</td><td><small>${esc(quota)}</small></td><td class="sp-row__act">${searching ? '' : acts}</td></tr>`;
+  };
   const body = rows.length
-    ? rows
-        .map((r, i) => {
-          const searching = r.state === 'RECEIVED' || r.state === 'SEARCHING';
-          const tag = searching
-            ? chip('off', 'recherche…')
-            : r.state === 'UNKNOWN'
-              ? chip('warn', 'ajout non confirmé')
-              : '';
-          return `<div class="sp-row"><span class="sp-pos">${i + 1}</span>
-            <div class="sp-row__main"><b>${r.track ? esc(trackLabel(r.track)) : `« ${esc(r.input)} »`}</b><small>@${esc(r.viewer.login)} · ${esc(clock(r.queued_at ?? r.received_at))} ${tag}</small></div>
-            <div class="sp-row__act">${
-              searching
-                ? ''
-                : `<button type="button" data-act="sp-remove" data-id="${esc(r.request_id)}" title="Retire la demande et rembourse le viewer ; si elle est déjà dans la file Spotify, elle sera passée automatiquement">Retirer</button>`
-            }</div></div>`;
-        })
-        .join('')
+    ? `<table class="cp-history sp-queue"><thead><tr><th>#</th><th>Titre</th><th>Demandeur</th><th>Statut</th><th>Quota · délai</th><th></th></tr></thead>
+        <tbody>${rows.map(row).join('')}</tbody></table>`
     : '<p class="sp-empty">Aucune demande en attente. Les viewers demandent avec la récompense de demande de musique (espace Récompense Twitch).</p>';
-  return `<section><h3>File d’attente${rows.length ? ` (${rows.length})` : ''}</h3>${body}
+  return `<section>${body}
+    ${
+      s.to_verify.length
+        ? `<p class="cp-muted">« À vérifier » : Spotify n’a pas confirmé l’ajout. Regarde la file dans Spotify, puis
+            « Rembourser » rend les points (récompense de Raptoru) ; « Garder » ne change rien sur Twitch (réclamation en
+            attente, à valider ou rembourser depuis Twitch).</p>`
+        : ''
+    }
     <p class="cp-muted">Retirer rembourse la demande (récompense de Raptoru) et la passe automatiquement quand Spotify
       l’atteint. Commandes : <code>!song</code>, <code>!songqueue</code>, <code>!mysong</code>, <code>!songcancel</code> ;
       modérateurs : <code>!songremove</code>, <code>!songskip</code>.</p></section>`;
@@ -249,26 +243,21 @@ function resultOf(r: SpRequest) {
   };
 }
 
-function recent(s: SpState) {
+/** Folded: what became of the last requests (refusals and why, cancels, removals, refunds, Twitch status). */
+function decisions(s: SpState, ui: SpUi) {
   if (!s.recent.length) return '';
   const row = (r: SpRequest) => {
     const x = resultOf(r);
     return `<tr class="cp-row--${x.tone}"><td>${esc(clock(r.received_at))}</td><td>${r.source === 'simulation' ? '<i>Lab</i> ' : ''}@${esc(r.viewer.login)}</td>
       <td><small>${esc(r.input)}</small></td><td><b>${esc(x.head)}</b><br><small>${esc(x.detail)}</small></td></tr>`;
   };
-  const head =
-    '<thead><tr><th>Heure</th><th>Viewer</th><th>Demande</th><th>Résultat</th></tr></thead>';
-  return `<section><h3>Dernières demandes</h3>
-    <table class="cp-history">${head}<tbody>${s.recent.slice(0, 6).map(row).join('')}</tbody></table>
-    ${
-      s.recent.length > 6
-        ? `<details class="sp-more"><summary>Historique complet (${s.recent.length})</summary><table class="cp-history">${head}<tbody>${s.recent.slice(6).map(row).join('')}</tbody></table></details>`
-        : ''
-    }</section>`;
+  return `<details class="sp-more" data-fold="decisions"${ui.open?.decisions ? ' open' : ''}><summary>Dernières décisions (${s.recent.length})</summary>
+    <table class="cp-history"><thead><tr><th>Heure</th><th>Viewer</th><th>Demande</th><th>Résultat</th></tr></thead>
+    <tbody>${s.recent.map(row).join('')}</tbody></table></details>`;
 }
 
 function livePanel(s: SpState, ui: SpUi) {
-  return `${nowPlaying(s, ui)}${toVerify(s)}${queue(s)}${recent(s)}`;
+  return `${counters(s)}${playing(s, ui)}${requests(s)}${decisions(s, ui)}`;
 }
 
 /** The whole section. */

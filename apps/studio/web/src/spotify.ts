@@ -118,6 +118,15 @@ export function mountSpotify(root: HTMLElement) {
   };
   root.addEventListener('input', keep);
   root.addEventListener('change', keep);
+  // A folded part left open stays open (« toggle » does not bubble: captured).
+  root.addEventListener(
+    'toggle',
+    (ev) => {
+      const d = ev.target as HTMLDetailsElement;
+      if (d.dataset.fold) (ui.open ??= {})[d.dataset.fold] = d.open;
+    },
+    true,
+  );
 
   root.addEventListener('click', (ev) => {
     const el = (ev.target as HTMLElement).closest<HTMLElement>(
