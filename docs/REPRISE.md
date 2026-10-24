@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **24/10/2026 ~12:45** (consolidation documentaire). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **24/10/2026 ~13:40** (consolidation documentaire poussée, sauvegardes faites). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -9,19 +9,21 @@ SAMMI est **abandonné** (débranché le 20/10). Architecture : [ARCHITECTURE.md
 
 ## 1. Où se trouvent les documents (important)
 
-Le checkout principal est en retard de 33 commits (travail Roue V2 non commité dessus) : **les documents de référence
-à jour vivent dans le worktree `C:\Users\Antoni\Documents\raptoru-docs`** (branche `docs/consolidation` = `origin/main`
+Les documents de référence sont sur **`origin/main`** (poussés le 24/10). Le checkout principal
+`C:\Users\Antoni\Documents\Raptoru 2.0` est en retard (`main` local @ `11ffe3f`, Roue V2 non commitée par-dessus) :
+seuls `CLAUDE.md` et ce fichier (copie non suivie, identique) y sont à jour. Lire les autres dans le worktree
+**`C:\Users\Antoni\Documents\raptoru-docs`** (branche `docs/consolidation` = `origin/main` ; la mettre à jour avec
+`git -C C:\Users\Antoni\Documents\raptoru-docs pull --ff-only origin main`) ou avec `git show origin/main:docs/ROADMAP.md`
+depuis le checkout principal.
 
-- commit documentaire, **non poussée**) tant que ce commit n'est pas intégré à `main`.
-
-| Besoin                                                               | Document (dans `raptoru-docs\docs\` ; liens relatifs valables après intégration) |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Roadmap, état de chaque module, arbitrages                           | [ROADMAP.md](ROADMAP.md)                                                         |
-| Composants, flux, dépendances externes, doc de chaque module         | [ARCHITECTURE.md](ARCHITECTURE.md)                                               |
-| Tests, déploiement, retour arrière, build Studio, vérifications      | [OPERATIONS.md](OPERATIONS.md)                                                   |
-| Sauvegardes, risques de perte, restauration                          | [BACKUPS.md](BACKUPS.md)                                                         |
-| Journal détaillé 21→24/10 (dont chantier Roue V2), anciens documents | [archive/](archive/README.md)                                                    |
-| Règles de travail des agents                                         | `CLAUDE.md` (racine)                                                             |
+| Besoin                                                               | Document (`origin/main`, lisible dans `raptoru-docs\docs\`) |
+| -------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Roadmap, état de chaque module, arbitrages                           | [ROADMAP.md](ROADMAP.md)                                    |
+| Composants, flux, dépendances externes, doc de chaque module         | [ARCHITECTURE.md](ARCHITECTURE.md)                          |
+| Tests, déploiement, retour arrière, build Studio, vérifications      | [OPERATIONS.md](OPERATIONS.md)                              |
+| Sauvegardes, risques de perte, restauration                          | [BACKUPS.md](BACKUPS.md)                                    |
+| Journal détaillé 21→24/10 (dont chantier Roue V2), anciens documents | [archive/](archive/README.md)                               |
+| Règles de travail des agents                                         | `CLAUDE.md` (racine)                                        |
 
 ## 2. Production (relevé 24/10 ~12:20)
 
@@ -29,7 +31,7 @@ Le checkout principal est en retard de 33 commits (travail Roue V2 non commité 
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Core `raptoru-core`  | **`0f753c1`** (déployé 24/10 09:57 UTC, migration `votekick_settings`)                                                       | `running:healthy`, `/health` `/ready` 200                                                  |
 | Bot `raptoru-bot`    | **`b8bc025`** (23/10)                                                                                                        | `running:healthy`, VPS, bail unique ; image sans `cf21c4b` (chemins `/data` par variables) |
-| `origin/main`        | **`0f753c1`**                                                                                                                | Coolify : auto-deploy désactivé                                                            |
+| `origin/main`        | `0f753c1` + commits documentaires (code identique)                                                                           | Coolify : auto-deploy désactivé                                                            |
 | Studio installé (PC) | **0.1.7-sup.8** (build local, `0f753c1` + patch `sup-wt` non commité)                                                        | dernière release publiée : 0.1.6                                                           |
 | Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                          | publication manuelle par Antoni                                                            |
 | Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                    | Node non épinglé (décision en attente)                                                     |
@@ -57,7 +59,7 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 | `C:\Users\Antoni\Documents\raptoru-release` (`chore/coolify-deploy` @ `80f3525`)                      | script de déploiement Coolify                                                                                                      | commit local, **non poussé**, unique copie                                                                                                                 |
 | `C:\Users\Antoni\Documents\rs-vk`                                                                     | clone de build Studio (patch `sup-wt` appliqué + `stash@{0}`), dossier `GO/` (runbook, SQL)                                        | ne pas nettoyer                                                                                                                                            |
 | `…\scratchpad\{chat,wg,solde,node}-wt`                                                                | restes de lots déjà intégrés                                                                                                       | à revérifier avant tout retrait                                                                                                                            |
-| `C:\Users\Antoni\Documents\raptoru-docs` (`docs/consolidation`)                                       | ce commit documentaire                                                                                                             | non poussé                                                                                                                                                 |
+| `C:\Users\Antoni\Documents\raptoru-docs` (`docs/consolidation`)                                       | documentation, = `origin/main`                                                                                                     | poussé                                                                                                                                                     |
 
 `scratchpad` = `C:\Users\Antoni\AppData\Local\Temp\claude\C--Users-Antoni-Documents-Raptoru-2-0\c435dbde-5dd7-4b54-8561-68eabf04712a\scratchpad`
 (**dossier temporaire Windows ; l'Assistant de stockage y supprime des fichiers** : instantané du 24/10 dans
@@ -65,12 +67,14 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 
 ## 5. Risques et blocages connus
 
-1. Données de travail de Studio (jetons, `.env`, `.runtime`) **sans aucune sauvegarde** ([BACKUPS.md](BACKUPS.md) § 1).
-2. Dumps de la base de Production **uniquement sur le VPS** ; restauration démontrée une seule fois (20/10).
+1. Données de travail de Studio (jetons, `.env`, `.runtime`) : **une** sauvegarde vérifiée le 24/10, aucune régulière
+   ([BACKUPS.md](BACKUPS.md) § 1).
+2. Base de Production : copie hors VPS du 24/10 09:56 vérifiée ; les suivantes demandent un téléchargement manuel dans
+   Coolify (pas d'API, pas de SSH, pas de S3) ; restauration démontrée une seule fois (20/10).
 3. Worktrees de travail non commité sous `AppData\Local\Temp` (risque de nettoyage automatique).
 4. Bot : un 409 `not_lease_holder` est traité comme définitif → événements de fidélité perdus pendant une perte de
    bail (P1, préalable à la Roue V2 en Production).
-5. `main` local en retard de 33 commits avec la Roue V2 non commitée par-dessus : l'intégration demande un rebase prudent.
+5. `main` local en retard sur `origin/main` avec la Roue V2 non commitée par-dessus : l'intégration demande un rebase prudent.
 6. Plusieurs documents de module ont encore un en-tête « non déployé » : la roadmap fait foi.
 
 ## 6. Prochaine action
@@ -83,12 +87,11 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 
 ## 7. Actions en attente d'accord d'Antoni
 
-- Pousser `docs/consolidation` (ce commit documentaire) et l'intégrer à `main` ; puis remplacer la copie non suivie
-  `docs/REPRISE.md` du checkout principal par la version suivie (elles sont identiques aujourd'hui).
+- Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
+  copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
 - Commiter `sup-wt` ; pousser `80f3525` (script de déploiement) ; redéployer le bot sur ≥ `cf21c4b`.
-- Mettre à jour le checkout principal sur `origin/main` (rebase de la Roue V2) — à faire avec la reprise de la Roue V2.
-- Sauvegardes : copie hors VPS des dumps (téléchargement régulier ou S3) ; sauvegarde des données de travail de Studio ;
-  nouveau test de restauration en base jetable ; déplacer les worktrees hors de `Temp`.
+- Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
+  en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).
 - Nettoyages proposés (aucun fait) : [BACKUPS.md](BACKUPS.md) § 9.
 
@@ -103,8 +106,8 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 
 ## 9. Procédure de reprise (nouvelle session)
 
-1. Lire ce fichier, puis `git -C "C:\Users\Antoni\Documents\Raptoru 2.0" status` et `git fetch` ; comparer `main`,
-   `origin/main` et la branche `docs/consolidation`.
+1. Lire ce fichier, puis `git -C "C:\Users\Antoni\Documents\Raptoru 2.0" status` et `git fetch` ; mettre à jour
+   `raptoru-docs` (§ 1) pour lire les documents de référence.
 2. Production en lecture seule : `cd C:\Users\Antoni\Documents\raptoru-release` puis
    `node scripts/coolify-deploy.mjs status core` et `… status bot`.
 3. Lire [ROADMAP.md](ROADMAP.md) § 3 (prochain travail, arbitrages), puis le document du module concerné
