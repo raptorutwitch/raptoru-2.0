@@ -28,10 +28,16 @@ async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
   const now = () => clock.t;
   const sleep = async (ms: number) => void (clock.t += ms);
   const sim = new SpotifySim(now);
+  const events: string[] = [];
   const api = new SpotifyApi({
     auth: simulatedAuth,
     stateFile: join(await mkdtemp(join(tmpdir(), 'sp-rt-')), 'l.json'),
-    fetch: sim.fetch,
+    fetch: ((input: URL | string, init?: RequestInit) => {
+      events.push(
+        `spotify ${init?.method ?? 'GET'} ${new URL(String(input)).pathname.replace('/v1/', '')}`,
+      );
+      return sim.fetch(input, init);
+    }) as typeof fetch,
     now,
     sleep,
     random: () => 0,
@@ -48,10 +54,18 @@ async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
     reports: [] as { job: string; body: Body }[],
     autoSkips: [] as Body[],
     started: new Set<string>(),
+    /** Called with each sync's body before Core answers (a change « at the last moment »). */
+    onSync: null as ((body: Sync) => void) | null,
   };
   const call = async (path: string, body?: unknown): Promise<unknown> => {
     if (path.endsWith('/studio')) {
       core.syncs.push(body as Sync);
+      const pb = (body as { playback?: { track?: { title?: string } | null } })
+        .playback;
+      events.push(
+        `core sync${pb ? ` (lecture : ${pb.track?.title ?? 'rien'})` : ''}`,
+      );
+      core.onSync?.(body as Sync);
       const a = core.answer;
       core.answer = { ...a, jobs: [] }; // jobs handed once
       return a;
@@ -66,8 +80,10 @@ async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
     const rep = /\/jobs\/([0-9a-f-]+)\/report$/.exec(path);
     if (rep)
       return void core.reports.push({ job: rep[1]!, body: body as Body });
-    if (path.endsWith('/auto-skips'))
+    if (path.endsWith('/auto-skips')) {
+      events.push('core auto-skip');
       return void core.autoSkips.push(body as Body);
+    }
     throw new Error(`unexpected ${path}`);
   };
   const reservationsFile =
@@ -91,6 +107,7 @@ async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
   };
   return {
     rt,
+    events,
     logs,
     sim,
     api,
@@ -302,6 +319,132 @@ describe('Spotify runtime (Studio)', () => {
     expect(h.logs.find((l) => l.includes('auto-skip'))).toMatch(
       /SKIPPED · lu à \d+ ms du début \(suivi (rapide|normal)\) · décision \+\d+ ms après la lecture · skip envoyé \+\d+ ms · réponse Spotify \d+ ms/,
     );
+  });
+
+  it('a canceled request starting to play: skipped on the fresh reading BEFORE the sync, reported only AFTER Core saw it', async () => {
+    const h = await harness();
+    const uri = `spotify:track:${NUMB.id}`;
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, uri, true)],
+      watch: true,
+    };
+    await h.rt.once();
+    await h.rt.api('POST', '/sim/near-end', async () => ({}));
+    for (let i = 0; i < 12 && h.core.autoSkips.length === 0; i++) {
+      h.clock.t += 300;
+      await h.rt.once();
+    }
+    const e = h.events;
+    const skip = e.indexOf('spotify POST me/player/next');
+    const seen = e.indexOf('core sync (lecture : Numb)');
+    const report = e.indexOf('core auto-skip');
+    expect(skip).toBeGreaterThan(-1);
+    // The skip went out before the sync carrying that reading; the report came after it.
+    expect(skip).toBeLessThan(seen);
+    expect(report).toBeGreaterThan(seen);
+    expect(e.filter((x) => x === 'spotify POST me/player/next')).toHaveLength(
+      1,
+    );
+  });
+
+  it('canceled at the last moment (the last answer did not know it yet): no early decision, skipped right after the sync', async () => {
+    const h = await harness();
+    const uri = `spotify:track:${NUMB.id}`;
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    // Live until the very sync that carries the reading where it starts: then Core says it is canceled.
+    h.core.answer = { ...h.core.answer, queue: [entry(1, uri)], watch: true };
+    h.core.onSync = (body) => {
+      const pb = (body as { playback?: { track?: { uri?: string } | null } })
+        .playback;
+      if (pb?.track?.uri === uri)
+        h.core.answer = { ...h.core.answer, queue: [entry(1, uri, true)] };
+    };
+    await h.rt.once();
+    await h.rt.api('POST', '/sim/near-end', async () => ({}));
+    for (let i = 0; i < 40 && h.core.autoSkips.length === 0; i++) {
+      h.clock.t += 300;
+      await h.rt.once();
+    }
+    const e = h.events;
+    expect(e.indexOf('core sync (lecture : Numb)')).toBeLessThan(
+      e.indexOf('spotify POST me/player/next'),
+    );
+    expect(h.core.autoSkips).toHaveLength(1);
+  });
+
+  it('after a skip, a canceled request next is read fast (~200 ms) and skipped within about a second', async () => {
+    const h = await harness();
+    const uri = `spotify:track:${NUMB.id}`;
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, uri, true)],
+      watch: true,
+    };
+    await h.rt.once();
+    // A moderator skips the track outside the requests: Numb (canceled) starts right away.
+    h.job({ kind: 'skip', job_id: id(9), request_id: null });
+    await h.rt.once();
+    const skippedAt = h.clock.t;
+    for (let i = 0; i < 20 && h.core.autoSkips.length === 0; i++) {
+      h.clock.t += 100;
+      await h.rt.once();
+    }
+    expect(h.core.autoSkips).toHaveLength(1);
+    expect(h.clock.t - skippedAt).toBeLessThanOrEqual(1_500);
+  });
+
+  it('a canceled request next behind a track outside the requests: read at the active pace (2.5 s), not every 30 s', async () => {
+    const h = await harness();
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, `spotify:track:${NUMB.id}`, true)],
+      watch: true,
+    };
+    // 20 s in steps of 1 s: at the active pace (2.5 s, i.e. every 3 s with these steps) ~7 reads; at 30 s, one.
+    for (let i = 0; i < 21; i++) {
+      await h.rt.once();
+      h.clock.t += 1_000;
+    }
+    const reads = h.events.filter((x) => x === 'spotify GET me/player').length;
+    expect(reads).toBeGreaterThanOrEqual(6);
+    expect(reads).toBeLessThanOrEqual(8);
+  });
+
+  it('adds without a clear success never pass as success: 404 no device and 403 refused (nothing queued), 500 unknown', async () => {
+    const h = await harness();
+    h.sim.deviceActive = false;
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'refused',
+      reason: 'NO_DEVICE',
+    });
+    h.sim.deviceActive = true;
+    h.sim.queueAnswer = 403;
+    h.job(songJob(2, 'mr brightside the killers'));
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'refused',
+      reason: 'SPOTIFY_UNAVAILABLE',
+    });
+    h.sim.queueAnswer = 500;
+    h.job(songJob(3, 'shape of you ed sheeran'));
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'unknown',
+      reason: 'QUEUE_RESULT_UNKNOWN',
+    });
+    expect(h.sim.view().queue).toEqual([]);
+    // Nothing was resent: one add per job.
+    expect(
+      h.events.filter((x) => x === 'spotify POST me/player/queue'),
+    ).toHaveLength(3);
   });
 
   it('no watch: Spotify is never read (only the sync to Core)', async () => {

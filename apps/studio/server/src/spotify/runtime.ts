@@ -42,7 +42,11 @@ const POLL = {
   fast: 200,
   fastArm: 3_500,
   fastFor: 5_000,
+  /** After a skip, when the next request is a canceled one: fast reads this long (it is about to play). */
+  afterSkipFor: 3_000,
 } as const;
+/** A Core answer this fresh lets Studio judge a new occurrence before its next sync (the skip goes out sooner). */
+const EARLY_ANSWER_MS = 1_500;
 const QUEUE_READBACK_MS = [250, 500, 750, 1_000];
 /** Same track again from its start (Core's rule): a new occurrence. */
 const RESTART_PROGRESS_MS = 5_000;
@@ -129,6 +133,7 @@ export class SpotifyRuntime {
   private readonly sleep: (ms: number) => Promise<void>;
   /** Last answer from Core (jobs, logical queue, attributed request, watch). */
   answer: SpotifySyncAnswer | null = null;
+  private answerAt = 0;
   /** One reading due at this instant (after a skip), watched or not; 0 = none. */
   private readAt = 0;
   private lastManualRead = 0;
@@ -244,9 +249,13 @@ export class SpotifyRuntime {
 
   /** One cycle: maybe a playback reading, the sync, the auto-skip, the jobs. Returns the delay to the next one. */
   async once(): Promise<number> {
+    let polled = false;
     if (this.watching() && this.now() >= this.nextPollAt)
       // A failed reading (429, network…) never blocks the sync: Core must still see Studio and its state.
-      await this.poll(false).catch((e: Error) => (this.lastError = e.message));
+      polled = await this.poll(false).then(
+        () => true,
+        (e: Error) => ((this.lastError = e.message), false),
+      );
     else if (
       this.readAt &&
       this.now() >= this.readAt &&
@@ -254,9 +263,23 @@ export class SpotifyRuntime {
       !this.d.api.limited()
     ) {
       this.readAt = 0;
-      await this.poll(true).catch((e: Error) => (this.lastError = e.message));
+      polled = await this.poll(true).then(
+        () => true,
+        (e: Error) => ((this.lastError = e.message), false),
+      );
     }
+    // A canceled request starting to play: judged on this fresh reading with the last (fresh) answer, before the
+    // sync — the skip goes out one Core round trip sooner. Only a certain case is decided here; otherwise the
+    // occurrence is judged after the sync, as before.
+    if (
+      polled &&
+      this.reading &&
+      !this.reading.sent &&
+      this.now() - this.answerAt <= EARLY_ANSWER_MS
+    )
+      await this.autoSkip(this.reading.playback, this.reading.raw, true);
     this.answer = await this.sync();
+    this.answerAt = this.now();
     if (this.reading?.sent)
       await this.autoSkip(this.reading.playback, this.reading.raw);
     await this.reportPending();
@@ -373,13 +396,42 @@ export class SpotifyRuntime {
     const known =
       queue.some((q) => q.track_uri === p.track!.uri) ||
       this.answer?.current_request_id;
-    if (known) return POLL.active;
+    // A canceled request next: it may start at any time (a skip by hand in Spotify), read at the active pace.
+    if (known || this.nextTombstone()) return POLL.active;
     return Math.min(POLL.external, remaining - POLL.endingWindow);
   }
 
-  /** A new occurrence (judged once, after Core saw it): the first request of that track in the queue's order (FIFO)
-   *  is a canceled one → skip it. A track already playing is never re-judged (it may be another request's). */
-  private async autoSkip(p: SpotifyPlayback, raw: SpotifyPlaybackRaw | null) {
+  /** The next request of the logical queue, when it is a canceled one not skipped yet (about to be skipped). */
+  private nextTombstone() {
+    const next = (this.answer?.queue ?? []).find(
+      (q) =>
+        q.state !== 'PLAYING' &&
+        q.request_id !== this.answer?.current_request_id &&
+        !this.reservations.has(q.request_id),
+    );
+    return next?.auto_skip ? next : null;
+  }
+
+  /** After a skip: if the next request is a canceled one, read fast for a moment (it is starting now). */
+  private afterSkip() {
+    if (this.nextTombstone() && !this.d.api.limited()) {
+      this.fastUntil = this.now() + POLL.afterSkipFor;
+      this.nextPollAt = Math.min(this.nextPollAt, this.now() + POLL.fast);
+    }
+  }
+
+  /**
+   * A new occurrence: the first request of that track in the queue's order (FIFO) is a canceled one → skip it, once.
+   * A track already playing is never re-judged (it may be another request's).
+   * - after the sync (default): Core judged this same reading first; an occurrence it gave to a live request is kept;
+   * - early (before the sync, fresh answer): decided only when the FIFO first is a canceled one; anything else is left
+   *   to the after-sync judgement. Its report waits for the sync, so Core always sees the reading before the skip.
+   */
+  private async autoSkip(
+    p: SpotifyPlayback,
+    raw: SpotifyPlaybackRaw | null,
+    early = false,
+  ) {
     const occ = this.occurrence;
     if (
       !p.track ||
@@ -389,16 +441,22 @@ export class SpotifyRuntime {
       occ.uri !== p.track.uri
     )
       return;
-    occ.checked = true;
-    // Core judged this same reading first: an occurrence it gave to a live request is never skipped.
-    const current = this.answer.queue.find(
-      (q) => q.request_id === this.answer!.current_request_id,
-    );
-    if (current?.track_uri === p.track.uri) return;
     const first = this.answer.queue.find(
       (q) => q.track_uri === p.track!.uri && q.state !== 'PLAYING',
     );
-    if (!first?.auto_skip || this.reservations.has(first.request_id)) return;
+    if (early) {
+      // Before the sync: only the certain case (the FIFO first of this track is canceled); the rest after the sync.
+      if (!first?.auto_skip || this.reservations.has(first.request_id)) return;
+      occ.checked = true;
+    } else {
+      occ.checked = true;
+      // Core judged this same reading first: an occurrence it gave to a live request is never skipped.
+      const current = this.answer.queue.find(
+        (q) => q.request_id === this.answer!.current_request_id,
+      );
+      if (current?.track_uri === p.track.uri) return;
+      if (!first?.auto_skip || this.reservations.has(first.request_id)) return;
+    }
     const detectedAt = this.now();
     const r: Reservation = {
       request_id: first.request_id,
@@ -437,13 +495,15 @@ export class SpotifyRuntime {
     const fast = this.fastUntil > 0;
     this.fastUntil = 0;
     this.nextPollAt = this.now() + SKIP_READBACK_MS;
+    if (result === 'SKIPPED') this.afterSkip();
     await this.saveReservations();
     // Where the time went: the track had played `progress` ms when Spotify was read; the reading reached this
     // decision `seen` ms later; the skip was sent `wait` ms after the decision and Spotify answered in `answer` ms.
     this.d.log?.(
       `[spotify] auto-skip ${r.request_id}: ${result} · lu à ${p.progress_ms ?? '?'} ms du début (suivi ${fast ? 'rapide' : 'normal'}) · décision +${detectedAt - Date.parse(p.observed_at)} ms après la lecture · skip envoyé +${sentAt - detectedAt} ms · réponse Spotify ${this.now() - sentAt} ms`,
     );
-    await this.reportPending();
+    // Early: reported after the sync (once() reports right after it), never before Core saw this reading.
+    if (!early) await this.reportPending();
   }
 
   private async reportPending() {
@@ -635,6 +695,7 @@ export class SpotifyRuntime {
       try {
         await this.d.api.next(device.id);
         this.readAt = this.now() + AFTER_SKIP_READ_MS;
+        this.afterSkip();
         return { outcome: 'skipped', skipped_track: before };
       } catch (e) {
         if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;

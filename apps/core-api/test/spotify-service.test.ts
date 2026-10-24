@@ -529,6 +529,45 @@ describe('Spotify V2 — refunds on Twitch (only a reward created by Raptoru)', 
     expect(await t.actions()).toEqual([]);
   });
 
+  it('add outcomes from Studio: no device → refused and refunded ONCE (a repeated report changes nothing); unknown → kept, never refunded', async () => {
+    const t = await lab({ managed: true });
+    await t.sync();
+    await t.redeem(1, 'a');
+    const job = await t.studio('refused', track(1), 'NO_DEVICE');
+    expect((await t.requests())[0]).toMatchObject({
+      state: 'FAILED',
+      reason: 'NO_DEVICE',
+      twitch_status: 'cancel_requested',
+    });
+    expect((await t.replies()).at(-1)).toBe(
+      '@Viewer1 → Aucun appareil Spotify actif et disponible n’a été trouvé.',
+    );
+    // The same job reported again (another attempt): refused as stale, no second refund.
+    await expect(
+      t.spotify.reportJob(CH, job.job_id, {
+        kind: 'song_request',
+        attempt_id: randomUUID(),
+        outcome: 'refused',
+        reason: 'NO_DEVICE',
+      }),
+    ).rejects.toMatchObject({ code: 'stale_attempt' });
+    await t.redeem(2, 'b');
+    await t.studio('unknown', track(2));
+    expect((await t.requests())[1]).toMatchObject({
+      state: 'UNKNOWN',
+      reason: 'QUEUE_RESULT_UNKNOWN',
+      twitch_status: null,
+    });
+    const refunds = (await t.actions()).filter(
+      (a) => a.payload.status === 'CANCELED',
+    );
+    expect(refunds).toHaveLength(1);
+    // Never a success line for either.
+    expect(
+      (await t.replies()).some((r) => r.includes('ajouté à la file')),
+    ).toBe(false);
+  });
+
   it('the bot runs each action once: claim, report; an unreported claim is « unknown », never replayed', async () => {
     const t = await lab({ managed: true });
     await t.sync();

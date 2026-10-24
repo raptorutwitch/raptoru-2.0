@@ -68,7 +68,7 @@ export class SpotifySim {
   private readonly userQueue: Candidate[] = [];
   deviceActive = true;
   /** Next POST /me/player/queue answers this (Spotify used to answer 200: « maybe sent »). */
-  queueAnswer: 204 | 200 | 500 = 204;
+  queueAnswer: 204 | 200 | 403 | 500 = 204;
   private limitedUntil = 0;
   readonly calls: string[] = [];
 
@@ -223,6 +223,13 @@ export class SpotifySim {
       const answer = this.queueAnswer;
       this.queueAnswer = 204;
       if (answer === 500) return json(500, { error: { status: 500 } });
+      if (answer === 403)
+        return json(403, {
+          error: {
+            status: 403,
+            message: 'Player command failed: Restriction violated',
+          },
+        });
       this.userQueue.push(t);
       return answer === 204
         ? new Response(null, { status: 204 })
