@@ -58,6 +58,14 @@ export const RAPTORU_MUTE_FX: MuteFxConfig = {
 
 /** Core ends the mute on time; this ends it alone if Core never does. */
 export const MUTE_WATCHDOG_MS = 5_000;
+/**
+ * The zoom at rest, written as a DECIMAL. obs-websocket stores a JSON integer (`1`) as an OBS integer, and Audio Move
+ * then writes `(long long)(base + factor × level)` = 1 forever (Move 3.x, OBS_DATA_NUM_INT): the zoom froze (live of
+ * 23/10, tests A/B of 24/10). JavaScript serialises 1 and 1.0 as `1`, so the rest value is 1.000001 (invisible).
+ */
+export const REST_ZOOM = 1.000001;
+/** A zoom read back is « at rest » within this margin (OBS returns the double it stored). */
+const ZOOM_TOLERANCE = 0.001;
 
 interface Snapshot {
   micMuted: boolean;
@@ -169,7 +177,7 @@ export class MuteController {
       await this.save(); // before any change: a crash from here is restored at the next start
       try {
         await this.setMic(obs, true);
-        await this.setZoom(obs, 1);
+        await this.setZoom(obs, REST_ZOOM);
         await this.setFilter(
           obs,
           this.cfg.camSource,
@@ -236,8 +244,9 @@ export class MuteController {
         this.cfg.driveFilter,
         false,
       );
-      await this.setZoom(obs, 1);
-      if ((await this.zoomValue(obs)) !== 1) await this.setZoom(obs, 1);
+      await this.setZoom(obs, REST_ZOOM);
+      if (Math.abs((await this.zoomValue(obs)) - 1) > ZOOM_TOLERANCE)
+        await this.setZoom(obs, REST_ZOOM);
       // 3. Zoom and band disabled at the same moment (no animation left), the band's saved duration back.
       await this.setFilter(obs, this.cfg.camSource, this.cfg.zoomFilter, false);
       await this.setFilter(obs, this.cfg.camSource, this.cfg.bandFilter, false);
@@ -266,13 +275,13 @@ export class MuteController {
     const wrong: string[] = [];
     if (now.driveEnabled) wrong.push('drive');
     if (now.zoomEnabled) wrong.push('zoom');
-    if (now.zoom !== 1) wrong.push('zoom_value');
+    if (Math.abs(now.zoom - 1) > ZOOM_TOLERANCE) wrong.push('zoom_value');
     if (now.bandEnabled) wrong.push('band');
     if (now.bandDuration !== s.bandDuration) wrong.push('band_duration');
     if (now.micMuted !== s.micMuted) wrong.push('mic');
     if (!wrong.length || !retry) return wrong;
     await this.setFilter(obs, this.cfg.driveInput, this.cfg.driveFilter, false);
-    await this.setZoom(obs, 1);
+    await this.setZoom(obs, REST_ZOOM);
     await this.setFilter(obs, this.cfg.camSource, this.cfg.zoomFilter, false);
     await this.setFilter(obs, this.cfg.camSource, this.cfg.bandFilter, false);
     await this.setBand(obs, { mute_duration: s.bandDuration });

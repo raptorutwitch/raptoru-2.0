@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   MUTE_WATCHDOG_MS,
   MuteController,
+  RAPTORU_MUTE_FX,
+  REST_ZOOM,
   SAMMI_MUTE_FX,
 } from '../src/votekick/mute-controller.js';
 import {
@@ -66,7 +68,7 @@ describe('MUTED: the historical end (SAMMI) vs the V2 end', () => {
     expect(unmute).toBe(steps.length - 1); // the voice is the very last change
     // The band's saved duration was written back after it was disabled.
     expect(steps).toContain('Votekick Mute réglé');
-    expect(l.obs.zoomFilter.settings.zoom).toBe(1);
+    expect(l.obs.zoomFilter.settings.zoom).toBe(REST_ZOOM);
     expect(l.obs.filters.get('overlay cam shushu|prison')!.enabled).toBe(false);
   });
 });
@@ -118,10 +120,88 @@ describe('MUTED V2: the audio drive', () => {
     expect(l.clock.now()).toBe(1_000_000 + 20_000); // no wait for an exit animation
     expect(l.obs.driveFilter.enabled).toBe(false);
     expect(l.obs.zoomFilter.enabled).toBe(false);
-    expect(l.obs.zoomFilter.settings.zoom).toBe(1);
+    expect(l.obs.zoomFilter.settings.zoom).toBe(REST_ZOOM);
     expect(l.obs.bandFilter.enabled).toBe(false);
     expect(l.obs.bandFilter.settings.mute_duration).toBe(bandDuration);
     expect(l.obs.reactionsAfterUnmute()).toEqual([]);
+  });
+});
+
+describe('MUTED V2: the zoom is never written as an integer (Audio Move truncation)', () => {
+  /** Every zoom value Studio sends, as its JSON text (what obs-websocket receives). */
+  const zoomWrites = (obs: SimObs) => {
+    const sent: string[] = [];
+    const real = obs.request.bind(obs);
+    obs.request = async (type, d) => {
+      const z = (d as { filterSettings?: { zoom?: unknown } }).filterSettings
+        ?.zoom;
+      if (type === 'SetSourceFilterSettings' && z !== undefined)
+        sent.push(JSON.stringify(z));
+      return real(type, d);
+    };
+    return sent;
+  };
+
+  it('the 23/10 failure, reproduced: a zoom written as JSON 1 is an OBS integer, the drive then writes 1 forever', async () => {
+    const obs = new SimObs();
+    await obs.request('SetSourceFilterSettings', {
+      sourceName: 'overlay cam shushu',
+      filterName: 'Votekick Zoom',
+      filterSettings: { zoom: 1 },
+      overlay: true,
+    });
+    obs.driveFilter.enabled = true;
+    obs.voice(0.8);
+    expect(obs.zoomIsInteger).toBe(true);
+    expect(obs.zoomFilter.settings.zoom).toBe(1); // frozen: Math.trunc(1.24)
+  });
+
+  it('every zoom written is a decimal; mic muted, the voice moves the zoom and silence brings it back; again after the end', async () => {
+    const l = await lab();
+    const sent = zoomWrites(l.obs);
+    l.obs.zoomFilter.settings.zoom = 1; // whatever OBS held
+    for (const round of [1, 2]) {
+      await l.mute.muteStart(`mute:r${round}`, 30);
+      expect(l.obs.inputs.get('Micro (Obsolète)')!.muted).toBe(true);
+      expect(l.obs.zoomIsInteger).toBe(false);
+      l.obs.voice(0.8);
+      expect(l.obs.zoomFilter.settings.zoom).toBeCloseTo(1.24, 6);
+      l.obs.voice(0);
+      expect(l.obs.zoomFilter.settings.zoom).toBe(1);
+      l.obs.voice(0.4);
+      expect(l.obs.zoomFilter.settings.zoom).toBeCloseTo(1.12, 6);
+      expect(await l.mute.muteEnd(`mute:r${round}`, 'expired')).toMatchObject({
+        ok: true,
+      });
+      expect(l.obs.zoomIsInteger).toBe(false);
+      expect(l.obs.zoomFilter.settings.zoom).toBe(REST_ZOOM);
+    }
+    expect(sent.length).toBeGreaterThanOrEqual(4);
+    for (const text of sent) expect(text).toMatch(/[.e]/); // never `1`: always a JSON decimal
+    expect(Number(sent[0])).toBe(1.000001);
+  });
+
+  it('Raptoru names: the drive on « Micro » only, « Micro (Obsolète) » never touched; drive settings and zoom_max kept', async () => {
+    const obs = new SimObs(RAPTORU_MUTE_FX);
+    obs.driveFilter.settings.factor = 0.8;
+    obs.zoomFilter.settings.zoom_max = 1.101;
+    const dir = await mkdtemp(join(tmpdir(), 'vk-mute-'));
+    dirs.push(dir);
+    const mute = await MuteController.open(
+      join(dir, 'm.json'),
+      () => obs,
+      RAPTORU_MUTE_FX,
+      () => 1_000_000,
+      async () => {},
+    );
+    await mute.muteStart('mute:x', 30);
+    obs.voice(0.5);
+    expect(obs.zoomFilter.settings.zoom).toBeCloseTo(1.15, 6);
+    await mute.muteEnd('mute:x', 'caution');
+    expect(obs.requests.some((r) => r.includes('Obsolète'))).toBe(false);
+    expect(obs.driveFilter.settings).toEqual({ base_value: 1, factor: 0.8 });
+    expect(obs.zoomFilter.settings.zoom_max).toBe(1.101);
+    expect(obs.inputs.get('Micro')!.muted).toBe(false);
   });
 });
 

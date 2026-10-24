@@ -27,6 +27,11 @@ export class SimObs implements ObsLike {
   readonly requests: string[] = [];
   /** A drive write in flight (the audio thread), delivered after the next drive change. */
   private inFlight: number | null = null;
+  /**
+   * Settings OBS stores as INTEGERS: obs-websocket turns a JSON integer (`1`) into obs_data_set_int, a JSON decimal
+   * into obs_data_set_double (src/utils/Json.cpp). Key: `source|filter.setting`.
+   */
+  readonly integerSettings = new Set<string>();
   /** Fails the n-th request from now (OBS leaving mid-way). */
   failAt: number | null = null;
 
@@ -62,11 +67,22 @@ export class SimObs implements ObsLike {
     return f;
   }
 
-  /** The voice at `level` (0..1): the drive, when on, writes the zoom (and keeps one write in flight). */
+  /** Is the zoom stored by OBS as an integer (then Audio Move can only write 1)? */
+  get zoomIsInteger() {
+    return this.integerSettings.has(
+      `${this.k(this.cfg.camSource, this.cfg.zoomFilter)}.zoom`,
+    );
+  }
+
+  /**
+   * The voice at `level` (0..1): the drive, when on, writes the zoom (and keeps one write in flight) — like Move's Audio
+   * Move: an integer setting gets `(long long)value` (OBS_DATA_NUM_INT), so an integer zoom stays 1 whatever the voice.
+   */
   voice(level: number) {
     const drive = this.get(this.cfg.driveInput, this.cfg.driveFilter);
     if (!drive.enabled) return;
-    const z = 1 + level * 0.3;
+    const raw = 1 + level * 0.3;
+    const z = this.zoomIsInteger ? Math.trunc(raw) : raw;
     this.zoomFilter.settings.zoom = z;
     this.inFlight = z;
     this.frame(`voix ${Math.round(level * 100)} %`);
@@ -134,7 +150,16 @@ export class SimObs implements ObsLike {
       }
       case 'SetSourceFilterSettings': {
         const f = this.get(String(data.sourceName), String(data.filterName));
-        Object.assign(f.settings, data.filterSettings as object);
+        // What travels is JSON: its text decides integer vs decimal, as obs-websocket does.
+        const sent = data.filterSettings as Record<string, unknown>;
+        for (const [key, value] of Object.entries(sent)) {
+          const id = `${this.k(String(data.sourceName), String(data.filterName))}.${key}`;
+          // JSON.stringify(1) === '1' (an integer for OBS), JSON.stringify(1.000001) === '1.000001' (a decimal).
+          if (typeof value === 'number' && Number.isInteger(value))
+            this.integerSettings.add(id);
+          else this.integerSettings.delete(id);
+        }
+        Object.assign(f.settings, sent);
         this.frame(`${String(data.filterName)} réglé`);
         return {};
       }
@@ -153,7 +178,8 @@ export class SimObs implements ObsLike {
     for (const f of this.frames) {
       if (f.step === 'micro rétabli') unmutedOnce = true;
       if (!unmutedOnce || f.micMuted) continue;
-      if (f.bandOn || (f.zoomOn && (f.driveOn || f.zoom !== 1))) out.push(f);
+      if (f.bandOn || (f.zoomOn && (f.driveOn || Math.abs(f.zoom - 1) > 0.001)))
+        out.push(f);
     }
     return out;
   }
