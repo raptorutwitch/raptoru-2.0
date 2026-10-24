@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **24/10/2026 ~16:05** (Spotify V2 déployé Core + bot, tout OFF ; Studio, OAuth et récompense à venir sur GO). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **25/10/2026 ~01:45** (Spotify V2 en service depuis le 24/10 : Core + bot `16600de`, Studio sup.9, `SPOTIFY_CHAT` et `CP_TWITCH_ACTIONS` ON, récompense « Choisi la prochaine musique » `e3f58cf1…` ; passe de finitions locale à déployer sur GO). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -91,8 +91,10 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 - Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
   copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
 - Commiter `sup-wt` ; pousser `80f3525` (script de déploiement) ; redéployer le bot sur ≥ `cf21c4b`.
-- Spotify V2 : commit de `feat/spotify-v2`, puis les étapes de [SPOTIFY_V2.md](SPOTIFY_V2.md) § 12 (redirection
-  Spotify, migration, déploiements, connexion du compte, création de la récompense, flags, test réel).
+- Spotify V2 : passe de finitions locale sur `feat/spotify-v2` (`647eb12`…`26bd1df`, non poussée) : `!songcancel <n>`,
+  délai conservé après annulation, latence (2 appels Spotify par demande, Core lu toutes les 0,5 s), skip automatique
+  plus rapide, « File musicale », correctif du son Votekick importé. À déployer sur GO : **Core** + **Studio** (pas de
+  migration, bot inchangé ; ordre indifférent, ajouts compatibles avec `16600de` / sup.9).
 - Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
   en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).
