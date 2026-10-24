@@ -7,7 +7,9 @@ import type { SpotifyService } from './service.js';
 // `!songremove` / `!songskip`: moderators and the broadcaster (decks of 07/09 and 15/09); anyone else: nothing, as the
 // SAMMI trigger never fired for them.
 
-const SIMPLE = /^!(song|songqueue|mysong|songcancel|songskip)$/i;
+const SIMPLE = /^!(song|songqueue|mysong|songskip)$/i;
+/** `!songcancel`, or `!songcancel <n>`: the n-th of the viewer's own requests, as `!mysong` numbers them. */
+const CANCEL = /^!songcancel(?:\s+(\d{1,2}))?$/i;
 const REMOVE = /^!songremove(?:\s+(.+))?$/i;
 
 export class SpotifyChat {
@@ -19,6 +21,16 @@ export class SpotifyChat {
     const mod =
       msg.chatter.role === 'moderator' || msg.chatter.role === 'broadcaster';
     const key = `spotify:msg:${msg.message_id}`;
+    const cancel = text.match(CANCEL);
+    if (cancel)
+      return {
+        outcome: await this.spotify.cancel(
+          msg.channel_id,
+          msg.message_id,
+          viewer,
+          cancel[1] ? Number(cancel[1]) : undefined,
+        ),
+      };
     const remove = text.match(REMOVE);
     if (remove) {
       if (!mod) return { outcome: 'ignored' };
@@ -62,14 +74,6 @@ export class SpotifyChat {
       case 'mysong':
         return {
           outcome: await this.spotify.mySong(
-            msg.channel_id,
-            msg.message_id,
-            viewer,
-          ),
-        };
-      case 'songcancel':
-        return {
-          outcome: await this.spotify.cancel(
             msg.channel_id,
             msg.message_id,
             viewer,

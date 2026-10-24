@@ -684,7 +684,7 @@ describe('Spotify V2 — chat commands (historical texts)', () => {
     }
   }
 
-  it("!songqueue: the next 3 and +N; !mysong: the position of one's next request", async () => {
+  it("!songqueue: the next 3 and +N; !mysong: all of one's requests, numbered (the one playing keeps n°1)", async () => {
     const t = await lab();
     await queueOf(t, 5);
     await t.say(1, '!songqueue');
@@ -694,14 +694,16 @@ describe('Spotify V2 — chat commands (historical texts)', () => {
     const r = await t.replies();
     expect(r.slice(-3)).toEqual([
       '🎶 À suivre : #1 Titre 1 — @viewer1 • #2 Titre 2 — @viewer1 • #3 Titre 3 — @viewer3 • +2',
-      '🎵 @Viewer1, ta prochaine demande Titre 1 — Artiste 1 est #1 dans la file. Tu as 2 demandes en attente.',
+      '🎵 @Viewer1, tes demandes : 1) Titre 1 — Artiste 1 (#1) · 2) Titre 2 — Artiste 2 (#2). Annuler : !songcancel <numéro>.',
       "🎵 @Viewer7, tu n'as aucune musique en attente.",
     ]);
     await t.sync(t.playing(track(1)));
     await t.say(1, '!mysong');
-    expect((await t.replies()).at(-1)).toBe(
-      '🎵 @Viewer1, ta musique est en cours : Titre 1 — Artiste 1',
-    );
+    await t.say(3, '!mysong');
+    expect((await t.replies()).slice(-2)).toEqual([
+      '🎵 @Viewer1, tes demandes : 1) Titre 1 — Artiste 1 (en cours) · 2) Titre 2 — Artiste 2 (#1). Annuler : !songcancel <numéro>.',
+      '🎵 @Viewer3, Titre 3 — Artiste 3 est #2 dans la file.',
+    ]);
   });
 
   it('!song: one playback read by Studio; « demandé par » only for the request Core attributes', async () => {
@@ -723,10 +725,19 @@ describe('Spotify V2 — chat commands (historical texts)', () => {
     ]);
   });
 
-  it("!songcancel: the next request canceled, refunded, left in Spotify's queue to be skipped when it plays", async () => {
+  it("!songcancel: with several requests, the list and nothing canceled; !songcancel <n> cancels that one, refunded, left in Spotify's queue to be skipped", async () => {
     const t = await lab({ managed: true });
     await queueOf(t, 2);
     await t.say(1, '!songcancel');
+    expect((await t.replies()).at(-1)).toBe(
+      '🎵 @Viewer1, tu as plusieurs demandes : 1) Titre 1 — Artiste 1 (#1) · 2) Titre 2 — Artiste 2 (#2). Écris !songcancel <numéro> (ex. !songcancel 1).',
+    );
+    expect((await t.requests()).map((r) => r.state)).toEqual([
+      'QUEUED',
+      'QUEUED',
+    ]);
+    expect(await t.actions()).toEqual([]);
+    await t.say(1, '!songcancel 1');
     expect((await t.replies()).at(-1)).toBe(
       '🎵 @Viewer1, ta demande "Titre 1 — Artiste 1" est annulée et remboursée. Il t’en reste 1.',
     );
@@ -773,8 +784,11 @@ describe('Spotify V2 — chat commands (historical texts)', () => {
     const refunded = async () =>
       (await t.actions()).map((a) => a.payload.redemption_id);
     const [r1, r2, r3, r4] = (await t.requests()).map((r) => r.request_id);
-    // viewer1 cancels their NEXT request (1), not request 2.
+    // viewer1 has two: plain !songcancel cancels nothing; !songcancel 1 cancels request 1 only.
     await t.say(1, '!songcancel');
+    expect(await refunded()).toEqual([]);
+    await t.say(1, '!songcancel 1');
+    await t.say(1, '!songcancel 9');
     expect(await refunded()).toEqual([byId[r1!]]);
     // A moderator removes viewer4's request.
     await t.say(50, '!songremove @viewer4', 'moderator');
@@ -789,13 +803,128 @@ describe('Spotify V2 — chat commands (historical texts)', () => {
       ['QUEUED', null],
       ['REMOVED_BY_MOD', 'cancel_requested'],
     ]);
-    // viewer1's next is now request 2: cancelling it refunds request 2 only.
+    // viewer1 has one left (request 2): plain !songcancel cancels it directly, refunding request 2 only.
     await t.say(1, '!songcancel');
     expect(await refunded()).toEqual([byId[r1!], byId[r4!], byId[r2!]]);
     expect((await t.requests())[2]).toMatchObject({
       request_id: r3,
       twitch_status: null,
     });
+  });
+
+  it("!songcancel <n>: numbers stay put when the first starts playing; never another viewer's request; bad numbers refused", async () => {
+    const t = await lab({ managed: true });
+    await queueOf(t, 3); // viewer1: 1, 2 ; viewer3: 3
+    await t.sync(t.playing(track(1), 30_000)); // viewer1's first plays, past the 10 s grace
+    await t.say(1, '!songcancel 1'); // n°1 is the one playing: too late, nothing else canceled instead
+    await t.say(1, '!songcancel 3');
+    await t.say(1, '!songcancel 2');
+    await t.say(3, '!songcancel 2'); // viewer3 has only one request: never viewer1's second
+    await t.say(1, '!songcancel abc'); // not the command (strict syntax)
+    const r = await t.replies();
+    expect(r.slice(-4)).toEqual([
+      '🎵 @Viewer1, trop tard pour annuler cette demande : la lecture a déjà commencée.',
+      '🎵 @Viewer1, tu n’as pas de demande n°3 (tu en as 2 : !mysong pour la liste).',
+      '🎵 @Viewer1, ta demande "Titre 2 — Artiste 2" est annulée et remboursée.',
+      '🎵 @Viewer3, tu n’as pas de demande n°2 (tu en as 1 : !mysong pour la liste).',
+    ]);
+    expect((await t.requests()).map((x) => [x.viewer_id, x.state])).toEqual([
+      ['9001', 'PLAYING'],
+      ['9001', 'CANCELED'],
+      ['9003', 'QUEUED'],
+    ]);
+    // One refund, for request 2 only, even with the command repeated.
+    await t.say(1, '!songcancel 2');
+    expect(await t.actions()).toHaveLength(1);
+  });
+
+  it('!songcancel with its own song playing within the grace and one more queued: the list, nothing canceled', async () => {
+    const t = await lab();
+    await queueOf(t, 2);
+    await t.sync(t.playing(track(1), 3_000));
+    await t.say(1, '!songcancel');
+    expect((await t.replies()).at(-1)).toBe(
+      '🎵 @Viewer1, tu as plusieurs demandes : 1) Titre 1 — Artiste 1 (en cours) · 2) Titre 2 — Artiste 2 (#1). Écris !songcancel <numéro> (ex. !songcancel 1).',
+    );
+    expect((await t.requests()).map((r) => r.state)).toEqual([
+      'PLAYING',
+      'QUEUED',
+    ]);
+  });
+
+  it('quotas after a cancellation: the place is freed at once, but the cooldown keeps counting (decision 25/10)', async () => {
+    const t = await lab({ managed: true });
+    await t.core.spotify.saveSettings(
+      CH,
+      { max_pending_per_viewer: 1, viewer_cooldown_seconds: 600 },
+      'test',
+    );
+    await t.sync();
+    await t.redeem(1, 'a');
+    await t.studio('queued', track(1));
+    await t.say(1, '!songcancel');
+    // Cooldown still running from the accepted request (refused, refunded), cancelling did not reset it.
+    t.core.clock.advance(60_000);
+    await t.sync();
+    await t.redeem(1, 'b');
+    expect((await t.requests()).at(-1)).toMatchObject({
+      state: 'VIEWER_COOLDOWN',
+    });
+    expect((await t.replies()).at(-1)).toBe(
+      '@Viewer1 → attends encore 9 min avant une nouvelle demande ; récompense remboursée.',
+    );
+    // Once the cooldown is over, the freed place takes a new request (max 1 pending).
+    t.core.clock.advance(540_000);
+    await t.sync();
+    await t.redeem(1, 'c');
+    expect((await t.requests()).at(-1)).toMatchObject({ state: 'RECEIVED' });
+    // Each request refunded at most once: request a (cancel) and request b (cooldown).
+    const refunds = (await t.actions()).filter(
+      (a) => a.payload.status === 'CANCELED',
+    );
+    expect(refunds).toHaveLength(2);
+    expect(new Set(refunds.map((a) => a.payload.redemption_id)).size).toBe(2);
+  });
+
+  it('quotas after a cancellation: with no cooldown, the freed place takes a new request at once', async () => {
+    const t = await lab();
+    await t.core.spotify.saveSettings(
+      CH,
+      { max_pending_per_viewer: 1, viewer_cooldown_seconds: 0 },
+      'test',
+    );
+    await t.sync();
+    await t.redeem(1, 'a');
+    await t.studio('queued', track(1));
+    await t.redeem(1, 'b');
+    expect((await t.requests()).at(-1)).toMatchObject({
+      state: 'VIEWER_LIMIT',
+    });
+    await t.say(1, '!songcancel');
+    await t.redeem(1, 'c');
+    expect((await t.requests()).at(-1)).toMatchObject({ state: 'RECEIVED' });
+  });
+
+  it('a moderator removal frees the place and lifts the cooldown of that request; a song that started playing never brings it back', async () => {
+    const t = await lab();
+    await t.core.spotify.saveSettings(
+      CH,
+      { max_pending_per_viewer: 2, viewer_cooldown_seconds: 600 },
+      'test',
+    );
+    await t.sync();
+    await t.redeem(1, 'a');
+    await t.studio('queued', track(1));
+    await t.say(50, '!songremove @viewer1', 'moderator');
+    await t.redeem(1, 'b');
+    expect((await t.requests()).at(-1)).toMatchObject({ state: 'RECEIVED' });
+    await t.studio('queued', track(2));
+    // Its song plays (cooldown over, historical rule), then the viewer cancels it within the grace: no cooldown back.
+    await t.sync(t.playing(track(2), 2_000));
+    await t.say(1, '!songcancel');
+    expect((await t.requests()).at(-1)).toMatchObject({ state: 'CANCELED' });
+    await t.redeem(1, 'c');
+    expect((await t.requests()).at(-1)).toMatchObject({ state: 'RECEIVED' });
   });
 
   it("!songcancel on one's song playing: within 10 s → canceled and skipped at once; later → too late", async () => {

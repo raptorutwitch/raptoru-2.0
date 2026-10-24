@@ -19,7 +19,7 @@ import type { CpTwitchActions } from '../channel-points/twitch-actions.js';
 import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
-import { MSG } from './messages.js';
+import { MSG, trackLabel } from './messages.js';
 import { parseTrackReference } from './reference.js';
 
 // Spotify V2 — Core side (docs/SPOTIFY_V2.md). The authority on « Choisi la prochaine musique ! »: requests and their
@@ -598,7 +598,7 @@ export class SpotifyService {
       // Historical order: cooldown, then pending (spotify-v2/service.js requestSongLocked).
       const mine = await q.query<RequestRow>(
         `select * from spotify_requests where channel_id = $1 and viewer_id = $2 and request_id <> $3
-           and received_at > $4 and state in ('RECEIVED', 'SEARCHING', 'QUEUED', 'UNKNOWN')`,
+           and received_at > $4 and state in ('RECEIVED', 'SEARCHING', 'QUEUED', 'UNKNOWN', 'CANCELED')`,
         [e.channel_id, e.viewer.id, id, this.recentCut()],
       );
       const limits = await this.limitsFor(
@@ -610,13 +610,20 @@ export class SpotifyService {
       const cooldownMs = limits.viewer_cooldown_seconds * 1000;
       // The last request still waiting to play (QUEUED: since its queuing) — or one being searched (since its
       // reception: the historical service handled one request of a viewer at a time, the next one saw it QUEUED).
+      // Decision of 25/10: a request the viewer canceled himself (`!songcancel`) before it played still counts from
+      // its acceptance — cancelling never resets the cooldown. A moderator's removal does not count (it lifts it).
       const since = mine
         .map((r) =>
           r.state === 'QUEUED' && r.queued_at
             ? ms(r.queued_at)
             : r.state === 'RECEIVED' || r.state === 'SEARCHING'
               ? ms(r.received_at)
-              : null,
+              : r.state === 'CANCELED' &&
+                  r.reason === 'VIEWER_CANCEL' &&
+                  r.queued_at &&
+                  !r.playback_started_at
+                ? ms(r.queued_at)
+                : null,
         )
         .filter((t): t is number => t !== null);
       const last = since.length ? Math.max(...since) : null;
@@ -1407,24 +1414,52 @@ export class SpotifyService {
       const current = rows.find(
         (r) => r.request_id === st?.current_request_id && r.state === 'PLAYING',
       );
+      const entries = this.future(rows);
+      const own = this.ownRequests(rows, st, viewer.id);
       let text: string;
-      if (current && current.viewer_id === viewer.id && current.track)
-        text = MSG.mySongCurrent(viewer.name, current.track);
-      else {
-        const entries = this.future(rows);
-        const mine = entries.filter((r) => r.viewer_id === viewer.id);
-        text = mine.length
-          ? MSG.mySongFuture(
-              viewer.name,
-              mine[0]!.track!,
-              entries.indexOf(mine[0]!) + 1,
-              mine.length,
-            )
-          : MSG.mySongNone(viewer.name);
-      }
+      if (own.length > 1)
+        text = MSG.mySongList(viewer.name, this.numbered(own, entries));
+      else if (own[0] && own[0] === current && own[0].track)
+        text = MSG.mySongCurrent(viewer.name, own[0].track);
+      else if (own[0])
+        text = MSG.mySongFuture(
+          viewer.name,
+          own[0].track!,
+          entries.indexOf(own[0]) + 1,
+          1,
+        );
+      else text = MSG.mySongNone(viewer.name);
       await this.say(q, channelId, `spotify:msg:${messageId}`, text);
       return 'mysong';
     });
+  }
+
+  /**
+   * A viewer's own requests in playback order: the one playing (if it is theirs), then the future ones in the queue's
+   * order. `!mysong` numbers them this way and `!songcancel <n>` takes the n-th: the playing one keeps n°1 while it
+   * plays, so a request starting to play never shifts the numbers under the viewer's command.
+   */
+  private ownRequests(
+    rows: RequestRow[],
+    st: StudioRow | null,
+    viewerId: string,
+  ) {
+    const current = rows.find(
+      (r) =>
+        r.request_id === st?.current_request_id &&
+        r.state === 'PLAYING' &&
+        r.viewer_id === viewerId &&
+        r.track,
+    );
+    const future = this.future(rows).filter((r) => r.viewer_id === viewerId);
+    return current ? [current, ...future] : future;
+  }
+
+  private numbered(own: RequestRow[], entries: RequestRow[]) {
+    return own.map(
+      (r, i) =>
+        `${i + 1}) ${trackLabel(r.track).slice(0, 60)} (${r.state === 'PLAYING' ? 'en cours' : `#${entries.indexOf(r) + 1}`})`,
+    );
   }
 
   /** Playback progress now (estimated from Studio's fresh reading), or null when unknown. */
@@ -1437,11 +1472,17 @@ export class SpotifyService {
     return p.progress_ms + (p.is_playing ? Math.max(0, age) : 0);
   }
 
-  /** `!songcancel` (spotify-v2/moderation.js cancelViewer). */
+  /**
+   * `!songcancel` (spotify-v2/moderation.js cancelViewer), decisions of 25/10: alone, it cancels the viewer's only
+   * cancellable request; with several, it cancels nothing and lists them (`!songcancel <n>`). `!songcancel <n>` takes
+   * the n-th of the viewer's own requests (never another viewer's), numbered as `!mysong` shows them. The one playing
+   * can only be canceled within its first seconds (cancel_grace_seconds), then it is skipped at once.
+   */
   async cancel(
     channelId: string,
     messageId: string,
     viewer: { id: string; name: string },
+    index?: number,
   ) {
     const changed: string[] = [];
     const outcome = await this.db.tx(async (q) => {
@@ -1451,49 +1492,43 @@ export class SpotifyService {
       const key = `spotify:msg:${messageId}`;
       const now = this.clock.now();
       const entries = this.future(rows);
-      const target = entries.find((r) => r.viewer_id === viewer.id);
-      if (target) {
-        const inSpotify = !!target.queued_at; // QUEUED or an uncertain addition proven in the queue
-        const refunded = await this.refundTwitch(q, target);
-        await this.update(q, target.request_id, {
-          state: 'CANCELED',
-          reason: 'VIEWER_CANCEL',
-          canceled_at: now,
-          canceled_by: viewer.id,
-          end_reason: 'VIEWER_CANCEL',
-          ended_at: now,
-          auto_skip: inSpotify,
-        });
-        const remaining = entries.filter(
-          (r) =>
-            r.viewer_id === viewer.id && r.request_id !== target.request_id,
-        ).length;
+      const own = this.ownRequests(rows, st, viewer.id);
+      const graceOk = () => {
+        const progress = this.progressNow(st);
+        return (
+          progress !== null && progress <= settings.cancel_grace_seconds * 1000
+        );
+      };
+      const cancellable = own.filter((r) => r.state !== 'PLAYING' || graceOk());
+      let target: RequestRow | undefined;
+      if (index !== undefined) {
+        target = own[index - 1];
+        if (!target) {
+          await this.say(
+            q,
+            channelId,
+            key,
+            MSG.cancelNoIndex(viewer.name, index, own.length),
+          );
+          return 'songcancel_no_index';
+        }
+      } else if (cancellable.length > 1) {
         await this.say(
           q,
           channelId,
           key,
-          MSG.canceled(viewer.name, target.track!, refunded, remaining),
+          MSG.cancelChoose(viewer.name, this.numbered(own, entries)),
         );
-        changed.push(target.request_id);
-        return 'songcancel';
-      }
-      const current = rows.find((r) => r.request_id === st?.current_request_id);
-      if (
-        current &&
-        current.viewer_id === viewer.id &&
-        current.state === 'PLAYING' &&
-        current.track
-      ) {
-        const progress = this.progressNow(st);
-        if (
-          progress === null ||
-          progress > settings.cancel_grace_seconds * 1000
-        ) {
+        return 'songcancel_choose';
+      } else target = cancellable[0];
+
+      if (target && target.state === 'PLAYING') {
+        if (!graceOk()) {
           await this.say(q, channelId, key, MSG.cancelTooLate(viewer.name));
           return 'songcancel_too_late';
         }
-        const refunded = await this.refundTwitch(q, current);
-        await this.update(q, current.request_id, {
+        const refunded = await this.refundTwitch(q, target);
+        await this.update(q, target.request_id, {
           state: 'CANCELED',
           reason: 'VIEWER_CANCEL',
           canceled_at: now,
@@ -1512,18 +1547,47 @@ export class SpotifyService {
           q,
           channelId,
           'skip',
-          current.request_id,
+          target.request_id,
           { kind: 'cancel_current' },
-          `cancel:${current.request_id}`,
+          `cancel:${target.request_id}`,
         );
         await this.say(
           q,
           channelId,
           key,
-          MSG.canceled(viewer.name, current.track, refunded, null),
+          MSG.canceled(viewer.name, target.track!, refunded, null),
         );
-        changed.push(current.request_id);
+        changed.push(target.request_id);
         return 'songcancel_current';
+      }
+      if (target) {
+        const inSpotify = !!target.queued_at; // QUEUED or an uncertain addition proven in the queue
+        const refunded = await this.refundTwitch(q, target);
+        await this.update(q, target.request_id, {
+          state: 'CANCELED',
+          reason: 'VIEWER_CANCEL',
+          canceled_at: now,
+          canceled_by: viewer.id,
+          end_reason: 'VIEWER_CANCEL',
+          ended_at: now,
+          auto_skip: inSpotify,
+        });
+        const remaining = own.filter(
+          (r) => r.request_id !== target.request_id && r.state !== 'PLAYING',
+        ).length;
+        await this.say(
+          q,
+          channelId,
+          key,
+          MSG.canceled(viewer.name, target.track!, refunded, remaining),
+        );
+        changed.push(target.request_id);
+        return 'songcancel';
+      }
+      // Nothing cancellable: their song playing too long already, or nothing at all.
+      if (own.some((r) => r.state === 'PLAYING')) {
+        await this.say(q, channelId, key, MSG.cancelTooLate(viewer.name));
+        return 'songcancel_too_late';
       }
       const last = (
         await q.query<RequestRow>(

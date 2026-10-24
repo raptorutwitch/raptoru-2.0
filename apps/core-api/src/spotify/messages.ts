@@ -100,6 +100,17 @@ export const MSG = {
   ) =>
     `🎵 ${at(viewer)}, ${count > 1 ? 'ta prochaine demande ' : ''}${trackLabel(t)} est #${position} dans la file.${count > 1 ? ` Tu as ${count} demandes en attente.` : ''}`,
   unidentified: '🎵 Impossible d’identifier le viewer.',
+  /** `!mysong` with several requests: all of them, numbered as `!songcancel <n>` takes them. */
+  mySongList: (viewer: string, items: string[]) =>
+    `🎵 ${at(viewer)}, tes demandes : ${items.join(' · ')}. Annuler : !songcancel <numéro>.`,
+  /** `!songcancel` alone while several can be canceled: nothing canceled, the list and how to choose. */
+  cancelChoose: (viewer: string, items: string[]) =>
+    `🎵 ${at(viewer)}, tu as plusieurs demandes : ${items.join(' · ')}. Écris !songcancel <numéro> (ex. !songcancel 1).`,
+  /** `!songcancel <n>` without such a request. */
+  cancelNoIndex: (viewer: string, n: number, count: number) =>
+    count
+      ? `🎵 ${at(viewer)}, tu n’as pas de demande n°${n} (tu en as ${count} : !mysong pour la liste).`
+      : `🎵 ${at(viewer)}, tu n’as aucune demande annulable.`,
   /** moderation.js `!songcancel`. */
   cancelNone: (viewer: string) =>
     `🎵 ${at(viewer)}, tu n’as aucune demande annulable.`,

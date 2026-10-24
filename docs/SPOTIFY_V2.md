@@ -27,7 +27,10 @@ Points de chaîne → règle de la récompense → action `interaction: song_req
 3. **Cooldown** (10 min) : refusé si la dernière demande du viewer **encore en attente de lecture** a été mise en file
    il y a moins de 10 min. Il tombe dès qu'elle commence à jouer (règle historique : la dernière demande à l'état
    `QUEUED`). Une demande du même viewer en cours de traitement compte comme en file à son instant de réception
-   (équivalent de la sérialisation par viewer de l'ancien service).
+   (équivalent de la sérialisation par viewer de l'ancien service). **Décision du 25/10** : une demande que le viewer
+   a annulée lui-même (`!songcancel`) avant sa lecture compte toujours depuis son acceptation — annuler ne remet jamais
+   le délai à zéro ; un retrait par un modérateur ne compte pas (il lève le délai lié à cette demande). Une annulation
+   libère toujours la place tout de suite (point 4).
 4. **Demandes en attente** : au plus 2 par viewer (en file, en traitement, ou au résultat incertain mais prouvé en file ;
    la musique en cours ne compte pas).
    **Exceptions par viewer** (Studio › Viewers, par pseudo Twitch) : un nombre de demandes en attente et / ou un délai
@@ -38,9 +41,11 @@ Points de chaîne → règle de la récompense → action `interaction: song_req
 6. **Recherche** (Studio) : `GET /search?type=track&limit=10` puis score historique déterministe
    (`0,55 × titre + 0,30 × artiste + 0,15 × global`, bonus de phrase, variantes live/remix…, regroupement des
    enregistrements équivalents) ; < 0,68 → `NOT_FOUND` ; marge < 0,08 ou même titre sans artiste → `AMBIGUOUS`.
-   Le gagnant est relu (`GET /tracks/{id}`) pour sa durée.
+   Le résultat de recherche est un titre complet (durée comprise) : plus de relecture `GET /tracks/{id}` (25/10), sauf
+   s'il manquait sa durée ; un lien exact est toujours lu (`GET /tracks/{id}`).
 7. **Durée** > 10 min → `TOO_LONG`.
-8. **Appareil** : premier appareil Spotify actif et non restreint → sinon `NO_DEVICE`.
+8. **Appareil** : l'ajout vise l'appareil actif de Spotify (sans `device_id`, 25/10 : plus de lecture de la liste des
+   appareils) ; aucun appareil actif → Spotify répond 404, refus certain `NO_DEVICE` (rien n'a été ajouté).
 9. **Ajout** : `POST /me/player/queue`. Toute réponse autre que 204 (Spotify répondait 200) est « incertaine » : la file
    est relue (250, 500, 750, 1 000 ms) ; titre présent → `QUEUED` (confirmé par relecture) ; sinon `UNKNOWN` sans
    nouvelle tentative automatique.
@@ -52,14 +57,14 @@ Twitch : § 7.
 
 ## 3. Commandes chat (réponses par LeCroupier\_)
 
-| Commande                                         | Qui                    | Effet                                                                                                                                                                                                     |
-| ------------------------------------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `!song`                                          | tous                   | titre en cours (lecture fraîche via Studio) ; « demandé par @x » seulement si la demande est identifiée avec certitude                                                                                    |
-| `!songqueue`                                     | tous                   | les 3 prochaines demandes de la file logique, `+N` au-delà                                                                                                                                                |
-| `!mysong`                                        | tous                   | sa demande en cours de lecture, ou la position de sa prochaine demande                                                                                                                                    |
-| `!songcancel`                                    | tous                   | annule sa prochaine demande (remboursée, passée automatiquement si déjà dans la file Spotify) ; sa musique en cours seulement dans les 10 premières secondes (passée tout de suite) ; sinon « trop tard » |
-| `!songremove <position>` / `!songremove @viewer` | modérateurs, diffuseur | retire une demande future (remboursée, passée automatiquement) ; refus si elle joue déjà (« Utilise !songskip. »)                                                                                         |
-| `!songskip`                                      | modérateurs, diffuseur | passe la musique en cours ; la demande correspondante devient `SKIPPED`                                                                                                                                   |
+| Commande                                         | Qui                    | Effet                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `!song`                                          | tous                   | titre en cours (lecture fraîche via Studio) ; « demandé par @x » seulement si la demande est identifiée avec certitude                                                                                                                                                                                                                                           |
+| `!songqueue`                                     | tous                   | les 3 prochaines demandes de la file logique, `+N` au-delà                                                                                                                                                                                                                                                                                                       |
+| `!mysong`                                        | tous                   | une demande : sa musique en cours ou sa position ; plusieurs : toutes, numérotées (celle en cours garde le n°1 pendant sa lecture)                                                                                                                                                                                                                               |
+| `!songcancel` / `!songcancel <n>`                | tous                   | une seule demande annulable : l'annule ; plusieurs : rien n'est annulé, la liste numérotée et `!songcancel <n>` ; `<n>` = la n-ième de ses demandes (jamais celle d'un autre viewer). Remboursée, passée automatiquement si déjà dans la file Spotify ; sa musique en cours seulement dans les 10 premières secondes (passée tout de suite), sinon « trop tard » |
+| `!songremove <position>` / `!songremove @viewer` | modérateurs, diffuseur | retire une demande future (remboursée, passée automatiquement) ; refus si elle joue déjà (« Utilise !songskip. »)                                                                                                                                                                                                                                                |
+| `!songskip`                                      | modérateurs, diffuseur | passe la musique en cours ; la demande correspondante devient `SKIPPED`                                                                                                                                                                                                                                                                                          |
 
 Syntaxe stricte (docs/CHAT_COMMANDS.md) : un mot en trop n'est pas une commande, sauf l'argument documenté de
 `!songremove`. Textes repris à l'identique de l'ancien service (§ 8).
