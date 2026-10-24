@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VOTEKICK_SETTINGS } from './votekick.js';
 
 // Votekick V2 in production (docs/VOTEKICK_V2.md § 9): the rules of votekick.ts run by ONE Core module (Lab Core and
 // main Core), its state in the database. Like Caution / Random Ban, the Twitch executor is the bot (it reads the
@@ -93,3 +94,13 @@ export const VotekickMuteReport = z.strictObject({
   error: z.string().max(300).optional(),
 });
 export type VotekickMuteReport = z.infer<typeof VotekickMuteReport>;
+
+/** Studio's Votekick settings (validated by Core, the authority). Room for the next options, one field each. */
+export const VotekickSettingsUpdate = z.strictObject({
+  vote_seconds: z
+    .number()
+    .int()
+    .min(VOTEKICK_SETTINGS.voteSecondsMin)
+    .max(VOTEKICK_SETTINGS.voteSecondsMax),
+});
+export type VotekickSettingsUpdate = z.infer<typeof VotekickSettingsUpdate>;

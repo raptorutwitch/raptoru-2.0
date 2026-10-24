@@ -1,5 +1,9 @@
 import type { LabChatMessage } from '@raptoru/schemas';
-import { VOTEKICK, VOTEKICK_EXEC } from '@raptoru/schemas';
+import {
+  VOTEKICK,
+  VOTEKICK_EXEC,
+  VotekickSettingsUpdate,
+} from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
 import { CautionService } from '../src/caution/service.js';
 import { labEconomy } from '../src/economy/economy.js';
@@ -114,6 +118,82 @@ async function lab(coin: 0 | 1 = 0) {
     end,
   };
 }
+
+describe('Votekick: settings (Studio) — Core decides the vote’s length', () => {
+  it('defaults (60 s, range 15–300) until saved; saved values read back; bad values refused by the schema', async () => {
+    const l = await lab();
+    expect(await l.vk.settings(CH)).toEqual({
+      vote_seconds: 60,
+      default_vote_seconds: 60,
+      min_vote_seconds: 15,
+      max_vote_seconds: 300,
+      updated_at: null,
+    });
+    const saved = await l.vk.saveSettings(CH, { vote_seconds: 90 }, 'studio');
+    expect(saved).toMatchObject({
+      vote_seconds: 90,
+      updated_at: l.core.clock.now().toISOString(),
+    });
+    expect(await l.vk.settings(CH)).toEqual(saved);
+    expect((await l.vk.settings('999')).vote_seconds).toBe(60); // another channel: its own
+    for (const bad of [14, 301, 30.5, '45', null])
+      expect(
+        VotekickSettingsUpdate.safeParse({ vote_seconds: bad }).success,
+      ).toBe(false);
+    expect(
+      VotekickSettingsUpdate.safeParse({ vote_seconds: 60, extra: 1 }).success,
+    ).toBe(false);
+    for (const ok of [15, 300])
+      expect(
+        VotekickSettingsUpdate.safeParse({ vote_seconds: ok }).success,
+      ).toBe(true);
+  });
+
+  it('a new vote opens with the saved length: ends_at, chat text, overlay dur; votes counted until it, refused at it', async () => {
+    const l = await lab();
+    await l.vk.saveSettings(CH, { vote_seconds: 30 });
+    const t0 = l.core.clock.now().getTime();
+    expect(await l.opened()).toEqual({ outcome: 'opened' });
+    const row = (
+      await l.core.db.query<{ opened_at: Date; ends_at: Date }>(
+        'select opened_at, ends_at from votekick_votes order by created_at desc limit 1',
+      )
+    )[0]!;
+    expect(
+      new Date(row.ends_at).getTime() - new Date(row.opened_at).getTime(),
+    ).toBe(30_000);
+    expect((await l.replies()).at(-1)).toBe(
+      '⚖️ Votekick lancé contre viewer2 par viewer1 ! Votez !kick ou !save pendant 30 secondes',
+    );
+    expect(await l.vk.overlay(CH)).toMatchObject({
+      action: 'live',
+      dur: 30,
+      ends: t0 + 30_000,
+    });
+    l.core.clock.advance(29_999);
+    expect((await l.say(V3, '!kick')).outcome).toBe('counted');
+    l.core.clock.advance(1);
+    expect((await l.say(V4, '!kick')).outcome).toBe('no_vote');
+  });
+
+  it('an open vote keeps the length it opened with; the next one takes the new length', async () => {
+    const l = await lab();
+    expect(await l.opened()).toEqual({ outcome: 'opened' });
+    await l.vk.saveSettings(CH, { vote_seconds: 20 });
+    expect(await l.vk.overlay(CH)).toMatchObject({ action: 'live', dur: 60 });
+    l.core.clock.advance(30_000);
+    expect((await l.say(V3, '!kick')).outcome).toBe('counted'); // 30 s in: still open (its own 60 s)
+    await l.end();
+    expect((await l.vote()).status).toBe('done');
+  });
+
+  it('a Core before its migration (no votekick_settings) still opens 60 s votes', async () => {
+    const l = await lab();
+    await l.core.db.query('drop table votekick_settings');
+    expect(await l.opened()).toEqual({ outcome: 'opened' });
+    expect(await l.vk.overlay(CH)).toMatchObject({ action: 'live', dur: 60 });
+  });
+});
 
 describe('Votekick: opening a vote', () => {
   it('read → open 60 s, announced, cooldown recorded; the overlay shows it live', async () => {

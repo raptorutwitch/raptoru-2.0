@@ -155,6 +155,45 @@ describe.skipIf(!isLocal)('Votekick on a real Postgres (two Cores)', () => {
     clock.advance(VOTEKICK.resultMs);
   });
 
+  it('the vote length set in Studio: saved at once on both Cores (one row), applied to the next vote only', async () => {
+    const t = await twoCores();
+    await Promise.all([
+      t.A.saveSettings(t.channel, { vote_seconds: 40 }, 'studio'),
+      t.B.saveSettings(t.channel, { vote_seconds: 50 }, 'studio'),
+    ]);
+    expect(
+      await t.n(
+        'select count(*) as n from votekick_settings where channel_id = $1',
+        [t.channel],
+      ),
+    ).toBe(1);
+    await t.A.saveSettings(t.channel, { vote_seconds: 30 }, 'studio');
+    expect((await t.B.settings(t.channel)).vote_seconds).toBe(30);
+    const length = async (id: string) =>
+      t.n(
+        'select extract(epoch from (ends_at - opened_at))::int as n from votekick_votes where vote_id = $1',
+        [id],
+      );
+    const vote = await t.open();
+    expect(await length(vote)).toBe(30);
+    // Changed while it is open: the open vote keeps its 30 s.
+    await t.B.saveSettings(t.channel, { vote_seconds: 120 }, 'studio');
+    expect(await length(vote)).toBe(30);
+    expect(
+      await t.n(
+        'select vote_seconds as n from votekick_settings where channel_id = $1',
+        [t.channel],
+      ),
+    ).toBe(120);
+    await expect(
+      a.query('insert into votekick_settings values ($1, 10, now(), null)', [
+        `${t.channel}9`,
+      ]),
+    ).rejects.toThrow(); // the database refuses a length out of 15–300 too
+    clock.advance(30_000 + VOTEKICK.finishGraceMs + VOTEKICK.resultMs);
+    await t.A.tick();
+  });
+
   it('the broadcaster muted: one mute; his Caution end and the mute expiry at once: ended once', async () => {
     const t = await twoCores('40');
     await t.open(u('40'));

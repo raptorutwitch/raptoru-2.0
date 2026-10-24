@@ -3,6 +3,7 @@ import {
   broadcasterMuteSeconds,
   VOTEKICK,
   VOTEKICK_EXEC,
+  VOTEKICK_SETTINGS,
   VOTEKICK_RUNNING,
   votekickVerdict,
   type LabChatMessage,
@@ -10,6 +11,7 @@ import {
   type VotekickClaimRequest,
   type VotekickMuteReport,
   type VotekickOverlayEvent,
+  type VotekickSettingsUpdate,
   type VotekickStatus,
   type VotekickTimeoutReport,
   type VotekickUser,
@@ -165,6 +167,61 @@ export class VotekickService implements CautionMutes {
 
   private now() {
     return this.clock.now();
+  }
+
+  // --- settings (Studio) ------------------------------------------------------------------------------------------
+
+  /** The settings Studio shows: what is saved (or the defaults), with the accepted range. */
+  async settings(channelId: string) {
+    const row = (
+      await this.db.query<{ vote_seconds: number; updated_at: Date }>(
+        'select vote_seconds, updated_at from votekick_settings where channel_id = $1',
+        [channelId],
+      )
+    )[0];
+    return {
+      vote_seconds: row?.vote_seconds ?? VOTEKICK_SETTINGS.voteSecondsDefault,
+      default_vote_seconds: VOTEKICK_SETTINGS.voteSecondsDefault,
+      min_vote_seconds: VOTEKICK_SETTINGS.voteSecondsMin,
+      max_vote_seconds: VOTEKICK_SETTINGS.voteSecondsMax,
+      updated_at: row ? new Date(row.updated_at).toISOString() : null,
+    };
+  }
+
+  /** Saved for the NEXT votes (an open vote keeps its length); the values read back are returned. */
+  async saveSettings(
+    channelId: string,
+    s: VotekickSettingsUpdate,
+    by: string | null = null,
+  ) {
+    await this.db.query(
+      `insert into votekick_settings (channel_id, vote_seconds, updated_at, updated_by) values ($1, $2, $3, $4)
+       on conflict (channel_id) do update set vote_seconds = excluded.vote_seconds,
+         updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+      [channelId, s.vote_seconds, this.now(), by],
+    );
+    return this.settings(channelId);
+  }
+
+  /**
+   * The length of a vote opening now (inside its transaction, alone in a savepoint): a Core running before its
+   * migration (no votekick_settings) still opens 60 s votes, never fails one.
+   */
+  private async voteSeconds(q: Queryable, channelId: string) {
+    await q.query('savepoint votekick_settings');
+    try {
+      const row = (
+        await q.query<{ vote_seconds: number }>(
+          'select vote_seconds from votekick_settings where channel_id = $1',
+          [channelId],
+        )
+      )[0];
+      await q.query('release savepoint votekick_settings');
+      return row?.vote_seconds ?? VOTEKICK_SETTINGS.voteSecondsDefault;
+    } catch {
+      await q.query('rollback to savepoint votekick_settings');
+      return VOTEKICK_SETTINGS.voteSecondsDefault;
+    }
   }
   private ms(ms: number) {
     return new Date(this.now().getTime() + ms);
@@ -471,10 +528,12 @@ export class VotekickService implements CautionMutes {
     } else if (rep.moderator)
       return refuse('moderator', 'Tu ne peux pas cibler un modérateur');
     const opened = this.now();
+    // The length saved in Studio, read now: a later change never moves this vote.
+    const seconds = await this.voteSeconds(q, ch);
     await this.set(q, r.vote_id, {
       status: 'open',
       opened_at: opened,
-      ends_at: new Date(opened.getTime() + VOTEKICK.voteMs),
+      ends_at: new Date(opened.getTime() + seconds * 1000),
       lease_expires_at: null,
       seq: r.seq + 1,
     });
@@ -489,7 +548,7 @@ export class VotekickService implements CautionMutes {
       q,
       ch,
       `${r.vote_id}:open`,
-      `⚖️ Votekick lancé contre ${t.login} par ${r.initiator_login} ! Votez !kick ou !save pendant 60 secondes`,
+      `⚖️ Votekick lancé contre ${t.login} par ${r.initiator_login} ! Votez !kick ou !save pendant ${seconds} secondes`,
       true,
     );
     return { outcome: 'opened' };
@@ -902,6 +961,11 @@ export class VotekickService implements CautionMutes {
           b.filter((x) => x.choice === 'kick').length,
         no: b.filter((x) => x.choice === 'save').length,
         ends: new Date(open.ends_at!).getTime(),
+        dur: Math.round(
+          (new Date(open.ends_at!).getTime() -
+            new Date(open.opened_at!).getTime()) /
+            1000,
+        ),
       };
     }
     const last = (

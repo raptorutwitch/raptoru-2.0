@@ -2,6 +2,7 @@ import {
   VotekickCheckReport,
   VotekickClaimRequest,
   VotekickMuteReport,
+  VotekickSettingsUpdate,
   VotekickTimeoutReport,
 } from '@raptoru/schemas';
 import { VotekickError, type VotekickService } from '../votekick/service.js';
@@ -49,6 +50,24 @@ export function votekickRoutes(
       pattern: at(base, '/(\\d{1,32})/state'),
       auth,
       handle: ({ params }) => votekick.state(channel(params[0]!)),
+    },
+    {
+      // Studio's Votekick settings: read back, and saved for the NEXT votes (validated here: 400 on a bad value).
+      method: 'GET',
+      pattern: at(base, '/(\\d{1,32})/settings'),
+      auth,
+      handle: ({ params }) => votekick.settings(channel(params[0]!)),
+    },
+    {
+      method: 'POST',
+      pattern: at(base, '/(\\d{1,32})/settings'),
+      auth,
+      handle: ({ params, body }) =>
+        votekick.saveSettings(
+          channel(params[0]!),
+          parse(VotekickSettingsUpdate, body),
+          'studio',
+        ),
     },
     {
       method: 'GET',

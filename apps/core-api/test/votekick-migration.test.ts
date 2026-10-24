@@ -20,6 +20,7 @@ const TABLES = [
   'votekick_ballots',
   'votekick_cooldowns',
   'votekick_mutes',
+  'votekick_settings',
 ];
 const schema = async (db: ReturnType<typeof fresh>) => ({
   columns: await db.query(
@@ -78,6 +79,8 @@ describe('Votekick migrations', () => {
       expect.arrayContaining([
         '20261106120000_votekick_lab.sql',
         '20261106130000_votekick.sql',
+        '20261107120000_votekick_settings_lab.sql',
+        '20261107130000_votekick_settings.sql',
       ]),
     );
   });

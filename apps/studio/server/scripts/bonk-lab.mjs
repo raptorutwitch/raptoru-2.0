@@ -88,6 +88,7 @@ try {
     '20261104120000_cp_redemptions_chat_source_lab.sql',
     '20261105120000_caution_lab.sql',
     '20261106120000_votekick_lab.sql',
+    '20261107120000_votekick_settings_lab.sql',
   ]) {
     if (
       (

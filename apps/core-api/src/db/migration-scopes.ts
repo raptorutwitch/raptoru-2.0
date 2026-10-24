@@ -51,6 +51,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261105130000_caution.sql',
   // Votekick V2: votes, ballots, cooldowns and the broadcaster's mute (same as the Lab file).
   '20261106130000_votekick.sql',
+  // Votekick V2 settings (the vote's length set from Studio; same as the Lab file).
+  '20261107130000_votekick_settings.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -106,6 +108,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261105120000_caution_lab.sql',
   // Votekick V2, Lab schema.
   '20261106120000_votekick_lab.sql',
+  // Votekick V2 settings, Lab schema.
+  '20261107120000_votekick_settings_lab.sql',
 ]);
 
 /**

@@ -29,6 +29,16 @@ export const VOTEKICK = {
   saveCommand: '!save',
 } as const;
 
+/**
+ * Votekick settings set from Studio (votekick_settings). Core is the authority: a new vote reads them at its opening,
+ * an open vote keeps what it opened with. Default = the SAMMI rule (VOTEKICK.voteMs).
+ */
+export const VOTEKICK_SETTINGS = {
+  voteSecondsDefault: VOTEKICK.voteMs / 1000,
+  voteSecondsMin: 15,
+  voteSecondsMax: 300,
+} as const;
+
 export const CAUTION = {
   /** CAUTION_START: 1 000 Jetons per started minute still to serve. */
   pricePerMinute: 1_000,
@@ -152,6 +162,8 @@ export interface VotekickOverlayEvent {
   yes?: number;
   no?: number;
   ends?: number;
+  /** V2: the vote's length in seconds (the one it opened with), for the overlay's countdown. */
+  dur?: number;
   outcome?: VotekickOutcome | 'broadcaster_muted';
   /** V2: who is sanctioned (the broadcaster muted may be the initiator after a Backfire). */
   punished?: string;
