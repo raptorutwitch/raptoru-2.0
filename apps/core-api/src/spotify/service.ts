@@ -279,6 +279,67 @@ export class SpotifyService {
         o?.max_pending_per_viewer ?? settings.max_pending_per_viewer,
       viewer_cooldown_seconds:
         o?.viewer_cooldown_seconds ?? settings.viewer_cooldown_seconds,
+      override: !!o,
+    };
+  }
+
+  /**
+   * A viewer's usage of the limits, exactly as the admission applies them (the panel shows the same numbers): their
+   * pending requests, their limit, and the cooldown left before a new request (from the last request still waiting —
+   * or being searched — or canceled by them before it played; decision 25/10).
+   */
+  private async usage(
+    q: Queryable,
+    channelId: string,
+    viewer: { id: string; login: string },
+    settings: Pick<
+      SettingsRow,
+      'max_pending_per_viewer' | 'viewer_cooldown_seconds'
+    >,
+    excludeRequestId: string | null,
+  ) {
+    const mine = await q.query<RequestRow>(
+      `select * from spotify_requests where channel_id = $1 and viewer_id = $2 and request_id <> $3
+         and received_at > $4 and state in ('RECEIVED', 'SEARCHING', 'QUEUED', 'UNKNOWN', 'CANCELED')`,
+      [
+        channelId,
+        viewer.id,
+        excludeRequestId ?? '00000000-0000-0000-0000-000000000000',
+        this.recentCut(),
+      ],
+    );
+    const limits = await this.limitsFor(q, channelId, viewer.login, settings);
+    const cooldownMs = limits.viewer_cooldown_seconds * 1000;
+    const since = mine
+      .map((r) =>
+        r.state === 'QUEUED' && r.queued_at
+          ? ms(r.queued_at)
+          : r.state === 'RECEIVED' || r.state === 'SEARCHING'
+            ? ms(r.received_at)
+            : r.state === 'CANCELED' &&
+                r.reason === 'VIEWER_CANCEL' &&
+                r.queued_at &&
+                !r.playback_started_at
+              ? ms(r.queued_at)
+              : null,
+      )
+      .filter((t): t is number => t !== null);
+    const last = since.length ? Math.max(...since) : null;
+    const left =
+      last === null
+        ? 0
+        : cooldownMs - Math.max(0, this.clock.now().getTime() - last);
+    return {
+      pending: mine.filter(
+        (r) =>
+          r.state === 'RECEIVED' ||
+          r.state === 'SEARCHING' ||
+          r.state === 'QUEUED' ||
+          isUncertainAddition(r),
+      ).length,
+      max_pending: limits.max_pending_per_viewer,
+      cooldown_left_ms: cooldownMs > 0 ? Math.max(0, left) : 0,
+      override: limits.override,
     };
   }
 
@@ -595,54 +656,15 @@ export class SpotifyService {
         await refuse(studioReason);
         return { row, duplicate: false };
       }
-      // Historical order: cooldown, then pending (spotify-v2/service.js requestSongLocked).
-      const mine = await q.query<RequestRow>(
-        `select * from spotify_requests where channel_id = $1 and viewer_id = $2 and request_id <> $3
-           and received_at > $4 and state in ('RECEIVED', 'SEARCHING', 'QUEUED', 'UNKNOWN', 'CANCELED')`,
-        [e.channel_id, e.viewer.id, id, this.recentCut()],
-      );
-      const limits = await this.limitsFor(
-        q,
-        e.channel_id,
-        e.viewer.login,
-        settings,
-      );
-      const cooldownMs = limits.viewer_cooldown_seconds * 1000;
-      // The last request still waiting to play (QUEUED: since its queuing) — or one being searched (since its
-      // reception: the historical service handled one request of a viewer at a time, the next one saw it QUEUED).
-      // Decision of 25/10: a request the viewer canceled himself (`!songcancel`) before it played still counts from
-      // its acceptance — cancelling never resets the cooldown. A moderator's removal does not count (it lifts it).
-      const since = mine
-        .map((r) =>
-          r.state === 'QUEUED' && r.queued_at
-            ? ms(r.queued_at)
-            : r.state === 'RECEIVED' || r.state === 'SEARCHING'
-              ? ms(r.received_at)
-              : r.state === 'CANCELED' &&
-                  r.reason === 'VIEWER_CANCEL' &&
-                  r.queued_at &&
-                  !r.playback_started_at
-                ? ms(r.queued_at)
-                : null,
-        )
-        .filter((t): t is number => t !== null);
-      const last = since.length ? Math.max(...since) : null;
-      const remaining =
-        last === null ? 0 : cooldownMs - Math.max(0, now.getTime() - last);
-      if (cooldownMs > 0 && remaining > 0) {
+      // Historical order: cooldown, then pending (spotify-v2/service.js requestSongLocked). The rule lives in usage().
+      const use = await this.usage(q, e.channel_id, e.viewer, settings, id);
+      if (use.cooldown_left_ms > 0) {
         await refuse('VIEWER_COOLDOWN', (refunded) =>
-          MSG.cooldown(e.viewer.name, remaining, refunded),
+          MSG.cooldown(e.viewer.name, use.cooldown_left_ms, refunded),
         );
         return { row, duplicate: false };
       }
-      const pending = mine.filter(
-        (r) =>
-          r.state === 'RECEIVED' ||
-          r.state === 'SEARCHING' ||
-          r.state === 'QUEUED' ||
-          isUncertainAddition(r),
-      ).length;
-      if (pending >= limits.max_pending_per_viewer) {
+      if (use.pending >= use.max_pending) {
         await refuse('VIEWER_LIMIT');
         return { row, duplicate: false };
       }
@@ -1847,6 +1869,37 @@ export class SpotifyService {
         (r) => r.request_id === st?.current_request_id && r.state === 'PLAYING',
       ) ?? null;
     const actions = await this.twitch.list(channelId, 20);
+    // « File musicale »: each requester of the queue with their limit, pending count, cooldown left, exception.
+    const requesters = new Map<string, { id: string; login: string }>();
+    for (const r of rows)
+      if (
+        isQueuedLike(r) ||
+        r.state === 'PLAYING' ||
+        r.state === 'RECEIVED' ||
+        r.state === 'SEARCHING' ||
+        isUncertainAddition(r)
+      )
+        requesters.set(r.viewer_id, { id: r.viewer_id, login: r.viewer_login });
+    const viewers = [];
+    for (const v of requesters.values())
+      viewers.push({
+        viewer_id: v.id,
+        login: v.login,
+        ...(await this.usage(this.db, channelId, v, settings, null)),
+      });
+    const today = (
+      await this.db.query<Record<string, string>>(
+        `select count(*) as received,
+           count(*) filter (where state in ('PLAYED', 'SKIPPED', 'PLAYING')) as played,
+           count(*) filter (where state in ('FAILED', 'AMBIGUOUS', 'TOO_LONG', 'VIEWER_LIMIT', 'VIEWER_COOLDOWN')) as refused,
+           count(*) filter (where state = 'CANCELED') as canceled,
+           count(*) filter (where state = 'REMOVED_BY_MOD') as removed,
+           count(*) filter (where twitch_status = 'cancel_requested') as refunded
+         from spotify_requests where channel_id = $1
+           and received_at >= (date_trunc('day', $2::timestamptz at time zone 'Europe/Paris') at time zone 'Europe/Paris')`,
+        [channelId, this.clock.now()],
+      )
+    )[0]!;
     const managed = await this.db.query<{
       reward_id: string;
       title: string;
@@ -1880,6 +1933,10 @@ export class SpotifyService {
         .map(requestView),
       recent: recent.map(requestView),
       overrides: await this.overrides(channelId),
+      viewers,
+      today: Object.fromEntries(
+        Object.entries(today).map(([k, v]) => [k, Number(v)]),
+      ),
       twitch_actions: actions,
       managed_rewards: managed,
     };

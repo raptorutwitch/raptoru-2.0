@@ -925,6 +925,56 @@ describe('Spotify V2 — chat commands (historical texts)', () => {
     expect(new Set(refunds.map((a) => a.payload.redemption_id)).size).toBe(2);
   });
 
+  it('« File musicale » data: each requester with pending / limit / cooldown left / exception, and today counters', async () => {
+    const t = await lab({ managed: true });
+    await t.sync();
+    await t.spotify.saveOverride(
+      CH,
+      {
+        viewer_login: 'viewer2',
+        max_pending_per_viewer: 4,
+        viewer_cooldown_seconds: null,
+      },
+      'test',
+    );
+    await t.redeem(1, 'a');
+    await t.studio('queued', track(1));
+    await t.redeem(2, 'b');
+    await t.studio('queued', track(2));
+    await t.redeem(3, 'c');
+    await t.studio('refused', undefined, 'NOT_FOUND');
+    t.core.clock.advance(120_000);
+    const st = await t.spotify.state(CH);
+    expect(
+      st.viewers
+        .map((v) => [
+          v.login,
+          v.pending,
+          v.max_pending,
+          Math.round(v.cooldown_left_ms / 1000),
+          v.override,
+        ])
+        .sort(),
+    ).toEqual([
+      ['viewer1', 1, 2, 480, false],
+      ['viewer2', 1, 4, 480, true],
+    ]);
+    expect(st.today).toMatchObject({
+      received: 3,
+      played: 0,
+      refused: 1,
+      canceled: 0,
+      removed: 0,
+      refunded: 1,
+    });
+    // The panel's numbers are the admission's: viewer1 asking now is refused for 8 min.
+    await t.sync();
+    await t.redeem(1, 'd');
+    expect((await t.replies()).at(-1)).toBe(
+      '@Viewer1 → attends encore 8 min avant une nouvelle demande ; récompense remboursée.',
+    );
+  });
+
   it('quotas after a cancellation: with no cooldown, the freed place takes a new request at once', async () => {
     const t = await lab();
     await t.core.spotify.saveSettings(
