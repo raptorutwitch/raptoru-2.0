@@ -1,5 +1,8 @@
 # Plan de cutover Raptoru 2.0 — préparation (octobre 2026)
 
+> **HISTORIQUE** : le cutover a eu lieu le 20/10/2026 (économie canonique, SAMMI débranché) ; bot sur le VPS depuis le
+> 21/10. État courant : [ROADMAP.md](ROADMAP.md) et [REPRISE.md](REPRISE.md). Laissé ici car référencé par le code.
+
 **Statut :** référence canonique de la phase **préparation du cutover**, ouverte le 05/10/2026.
 **Point de départ vérifié :** `main@9ab0523`, arbre propre (vérifier `git log` avant de se fier à ce SHA).
 **Ce document n'autorise rien.** Aucun cutover, release, `studio:release`, déploiement, migration distante, écriture

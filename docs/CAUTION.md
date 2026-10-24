@@ -1,6 +1,11 @@
 # Caution (`!caution`)
 
-**Statut (23/10/2026) : DÉVELOPPÉE (Core + bot + Studio), TESTS AUTOMATISÉS RÉUSSIS (dont PostgreSQL réel et la chaîne
+> **État au 24/10/2026 (fait foi ; le statut ci-dessous est historique)** : Caution **active en Production** depuis le
+> 23/10 (`CAUTION_CHAT` / `CAUTION` à true), **validée en réel par Antoni le 23/10 19:19**. Incident `53949be1` (18:52,
+> 10 000 Jetons, journal du bot non inscriptible, corrigé) : perte acceptée, pas de remboursement. Suivi global :
+> [ROADMAP.md](ROADMAP.md).
+
+**Statut historique (23/10/2026) : DÉVELOPPÉE (Core + bot + Studio), TESTS AUTOMATISÉS RÉUSSIS (dont PostgreSQL réel et la chaîne
 complète Core ↔ bot sur Twitch simulé) / NON VALIDÉE PAR ANTONI / NON DÉPLOYÉE / OFF PAR DÉFAUT EN PRODUCTION.**
 Branche locale `feat/votekick-v2` (worktree isolé). **SAMMI a été débranché volontairement à la bascule du 20/10**
 (décision de migration) : aucune Caution n'existe aujourd'hui en Production, ni SAMMI ni Raptoru ; c'est une fonction

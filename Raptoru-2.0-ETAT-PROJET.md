@@ -1,5 +1,10 @@
 # Raptoru 2.0 — État du projet et roadmap globale
 
+> **HISTORIQUE — figé au 19/10/2026, avant la bascule du 20/10.** Ne plus l'utiliser comme état courant : roadmap
+> actuelle [docs/ROADMAP.md](docs/ROADMAP.md), reprise [docs/REPRISE.md](docs/REPRISE.md). Reste utile pour le
+> registre des fonctions legacy (§ 0.5b), les récompenses (§ 0.0.2) et l'historique détaillé. Laissé à la racine
+> (référencé par le code et `.prettierignore`).
+
 **Vue d'ensemble principale du projet** : où en est tout Raptoru 2.0, ce qui est validé, où chaque brique tourne
 (local / staging / Hosted Test / release / production), ce qui reste, les priorités, les bloquants et les dettes.
 Mis à jour le **18/10/2026** : § 0.0 (point d'avancement SAMMI → Raptoru, roadmap des migrations) est la référence

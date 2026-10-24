@@ -1,0 +1,115 @@
+# Sauvegardes — inventaire et récupération
+
+Relevé du **24/10/2026 ~12:20** (lecture seule, métadonnées ; aucune sauvegarde téléchargée, restaurée ni supprimée).
+Mettre à jour ce fichier à chaque nouvelle sauvegarde ou suppression. Procédures d'exploitation : [OPERATIONS.md](OPERATIONS.md).
+
+Niveaux de confiance : **A** restauration démontrée · **B** intégrité vérifiée (patch qui s'applique, archive lisible,
+exécution « success ») mais restauration jamais faite · **C** présence seulement · **—** sans objet.
+
+## 1. Ce qui n'est sauvegardé nulle part (risques ouverts)
+
+| Donnée                                                                                                                                                                                                                                                      | Où elle vit                                                                                                                                                                                       | Risque                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Données de travail de Studio installé : jetons Twitch du PC (`apps/twitch-bot/.twitch-tokens*.json`), `.env` Core/bot locaux, `apps/studio/server/.runtime/` (27 Mo : Points de chaîne, effets et sons importés, journal Votekick, profil Production, Lab…) | **dans le checkout principal** `C:\Users\Antoni\Documents\Raptoru 2.0` (Studio installé l'utilise comme `dataRoot`, réglé dans `%APPDATA%\Raptoru Studio\studio.json`) ; fichiers ignorés par Git | aucune copie. Un `git clean -x`, une suppression ou une réinitialisation du checkout les efface. Les « sauvegardes Studio » ci-dessous ne les contiennent **pas**.                                                                                                                                                                      |
+| Base de Production hors du VPS                                                                                                                                                                                                                              | dumps Coolify **sur le même serveur** que la base (pas de S3)                                                                                                                                     | perte du VPS = perte de la base **et** de ses sauvegardes.                                                                                                                                                                                                                                                                              |
+| Restauration régulière de la base                                                                                                                                                                                                                           | —                                                                                                                                                                                                 | démontrée **une seule fois** (20/10 : dump de 13:57 UTC téléchargé et restauré sans erreur dans une base jetable, `HANDOFF_MIGRATION_2026-10-20.md` § 4, document privé) ; jamais refaite depuis. `RAPTORU_POST_MIGRATION_TRUTH_2026-10-23.md` § 7 la note « jamais testée » : contradiction, l'essai du 20/10 fait foi pour le format. |
+
+Propositions (accord d'Antoni requis) : voir [REPRISE.md](REPRISE.md) « Actions en attente d'accord ».
+
+## 2. Base de Production (Coolify)
+
+| Élément        | Valeur                                                                                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Base           | `raptoru-prod-postgres` (`4jaqdyvzlelgwkyvuxhjy4mr`), base `raptoru_prod`                                                                                                                              |
+| Configuration  | `ha3t1pu8q83re2gjvg5wetbu` : quotidienne `0 4 * * *` (04:00 UTC), activée, **stockage local seulement** (`save_s3: false`), rétention **14 copies**                                                    |
+| Exécutions     | 14 conservées, 14 « success », 0 échec ; la plus ancienne 20/10 03:54, la plus récente **24/10 09:56:23 UTC** (2 058 761 octets, « Backup now » avant la migration `votekick_settings`)                |
+| Confiance      | **B** pour les dumps conservés (statut « success » + taille cohérente) ; le **format** est **A** : un dump Coolify (`.dmp`, `pg_dump` custom) du 20/10 a été restauré sans erreur en base jetable      |
+| Copie hors VPS | `C:\Users\Antoni\Downloads\pg-dump-raptoru_prod-1792504648-g91jld9peh73ljhdw6issr2j.dmp` (227 Ko, 20/10) : **seule copie hors VPS**, antérieure à l'import économique (preuve, pas un état utilisable) |
+| Déclencher     | API `PATCH /api/v1/databases/<base>/backups/<config>` `{"backup_now":true}` ou Coolify → base → Backups → Backup now ; le script de déploiement exige une sauvegarde < 60 min avant toute migration    |
+
+Staging (`raptoru-core-staging`) : base distincte, pas d'inventaire de sauvegarde fait.
+
+### Preuves et exports privés de la migration (20/10)
+
+`C:\Users\Antoni\Documents\Raptoru\_migration-exports\` (72 Mo, dernière écriture 23/10) : exports StreamElements et
+legacy, preuves du gel, manifestes d'ouverture, outils de bascule, `production\core.env`, un jeton. **Contient des
+secrets : ne jamais committer ni copier dans le dépôt.** Décrit par `docs/ECONOMY_MIGRATION.md` et par le document privé
+`docs/HANDOFF_MIGRATION_2026-10-20.md` (checkout principal, non suivi, à ne jamais committer).
+
+## 3. Travail non commité (Git)
+
+| Élément                  | Emplacement                                                                                      | Date        | Contenu                                                                                                                                                                                                                                                                                       | Confiance                                                                                                                                            | Remarque                                                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instantané des worktrees | `C:\Users\Antoni\Documents\Sauvegarde Raptoru 2.0\worktrees-2026-10-24\`                         | 24/10 12:15 | pour chacun de `chat-wt`, `sup-wt`, `wg-wt`, `solde-wt`, `node-wt` et du checkout principal (Roue V2) : `<nom>.tracked.patch` (`git diff HEAD --binary`), `<nom>.untracked.txt` + `.tar` (fichiers non suivis, sans `.runtime-*`), `MANIFEST.txt` (commit de base, branche), `SHA256SUMS.txt` | **B** : chaque patch passe `git apply --check` sur son commit de base (index temporaire), archives listées ; toutes les bases sont sur `origin/main` | fait parce que 5 worktrees sont sous `AppData\Local\Temp` et que **l'Assistant de stockage Windows (nettoyage des fichiers temporaires) est activé** |
+| Stash `rs-vk`            | `C:\Users\Antoni\Documents\rs-vk`, `stash@{0}` « sup-wt patch (sup.7 build) on 9563e20 »         | 24/10 11:3x | patch supervision (`sup-wt`) tel qu'utilisé pour sup.7 ; le même patch est aussi appliqué (non commité) dans l'arbre de `rs-vk` (build sup.8)                                                                                                                                                 | **B** (réappliqué avec succès pour sup.8)                                                                                                            | ne pas `git stash drop`                                                                                                                              |
+| Copie du patch sup-wt    | `C:\Users\Antoni\.claude\jobs\01d783c9\tmp\rsvk\sup-patch-on-9563e20.diff`                       | 24/10       | idem                                                                                                                                                                                                                                                                                          | C                                                                                                                                                    | **éphémère** (dossier de job Claude) ; la copie durable est le stash + l'instantané ci-dessus                                                        |
+| Script de déploiement    | worktree `C:\Users\Antoni\Documents\raptoru-release`, branche `chore/coolify-deploy` @ `80f3525` | 23/10       | `scripts/coolify-deploy.mjs` (+ tests)                                                                                                                                                                                                                                                        | C                                                                                                                                                    | **commit local seulement, jamais poussé** : unique copie                                                                                             |
+
+Restaurer un instantané : sur un worktree propre au commit de base du `MANIFEST.txt` : `git apply --index <nom>.tracked.patch`
+puis `tar -xf <nom>.untracked.tar`.
+
+## 4. Studio (profil Electron)
+
+Contenu : profil Chromium/Electron (`%APPDATA%\Raptoru Studio` : `studio.json`, `obs-connection.json`,
+`se-connection.json`, Local Storage, journaux, caches) et `%APPDATA%\@raptoru`. **Pas** les données de travail (§ 1).
+
+| Dossier (`C:\Users\Antoni\Documents\…`)            | Date                        | Taille  | Contenu                                                                                        | Confiance            |
+| -------------------------------------------------- | --------------------------- | ------- | ---------------------------------------------------------------------------------------------- | -------------------- |
+| `studio-backup-2026-10-23-avant-sup3`              | 23/10 18:29                 | 0,5 Mo  | `roaming-raptoru-studio.tar` (sans caches)                                                     | C                    |
+| `studio-backup-2026-10-24-avant-sup4`              | 24/10 01:19                 | 0,5 Mo  | idem                                                                                           | C                    |
+| `backup-2026-10-24-avant-sup5` · `-sup6` · `-sup7` | 24/10 02:53 · 10:01 · 10:32 | ~0,9 Mo | tar Roaming + collection OBS + filtres OBS (avant / après)                                     | C                    |
+| `studio-backup-2026-10-24-avant-sup8`              | 24/10 11:45                 | 129 Mo  | `raptoru-studio.tar` (avec caches ; `Network/Cookies` verrouillé non copié) + `at-raptoru.tar` | C (archives listées) |
+| `Sauvegarde Raptoru 2.0\Raptoru Studio`            | 23/10 12:03                 | 112 Mo  | copie brute du profil Roaming                                                                  | C                    |
+
+Restauration démontrée : aucune (les installations sup.3→sup.8 ont conservé le profil sans y recourir).
+
+## 5. Installateurs Studio
+
+| Version                 | Emplacement                                                                              | Date          | Base                       | Remarque                                                                                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------- | ------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.1.1 → **0.1.6**       | GitHub `raptorutwitch/raptoru-studio-releases` (releases publiques, flux de mise à jour) | 26/09 → 20/10 | —                          | 0.1.6 = dernière release officielle                                                                                                               |
+| 0.1.6                   | `Raptoru 2.0\apps\studio\desktop\release\`                                               | 20/10         | —                          | copie locale                                                                                                                                      |
+| 0.1.7                   | `rs017\apps\studio\desktop\release\`                                                     | 22/10         | `2d80c2a`                  | candidat non publié                                                                                                                               |
+| 0.1.7-sup.2             | `rs-sup\apps\studio\desktop\release\`                                                    | 23/10         | `2d80c2a` + sup-wt         | build local                                                                                                                                       |
+| 0.1.7-sup.3 → **sup.8** | `rs-vk\apps\studio\desktop\release\`                                                     | 23/10 → 24/10 | sup.8 = `0f753c1` + sup-wt | **sup.8 installé** (SHA-256 `9d01aca621e6dfab223e2f3a069a3cbaf8f81ae5c879cfb97797facc359f414c`) ; sommes des précédents dans l'archive de REPRISE |
+
+Retour arrière Studio : réinstaller l'installateur précédent (`/S`), le profil et les données de travail sont conservés
+par l'installateur NSIS. Confiance : A pour l'installation par-dessus (faite 6 fois le 23–24/10), retour arrière jamais fait.
+
+## 6. OBS
+
+| Élément                        | Emplacement                                                                                                     | Date         | Contenu                                                              |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------- |
+| Collection active              | `%APPDATA%\obs-studio\basic\scenes\Twitch_Dofus.codex-backup-20260919-144407.json` (+ `.bak` automatique d'OBS) | 24/10        | **c'est la collection en service malgré son nom** : ne pas supprimer |
+| Anciennes collections / `.bak` | même dossier (`Twitch_Dofus.json*`, `24_Halloween…`)                                                            | 2024–09/2026 | historiques OBS                                                      |
+| Référence zoom fonctionnel     | `Documents\obs-backup-2026-10-24-zoom-reference\`                                                               | 24/10 02:19  | collection + `filters-reference.json`                                |
+| Diagnostic zoom                | `Documents\obs-backup-2026-10-24-zoom\`, `-zoom-works\`                                                         | 24/10        | filtres avant/après ×5, collection                                   |
+| Tests de mute                  | `Documents\obs-backup-2026-10-24-mute-test*` (5 dossiers)                                                       | 24/10        | état avant/après de chaque test (identiques au repos)                |
+| Plugin Move Transition 3.1.1   | `Documents\obs-backup-2026-10-24-move-3.1.1\`                                                                   | 24/10 01:57  | DLL 3.1.1 + config OBS avant la mise à jour 3.2.1                    |
+
+État OBS de référence au repos (24/10 11:50) : « Micro » non muté, « Votekick Zoom Drive » de « Micro » désactivé
+(facteur 0,8), « Votekick Zoom » désactivé (`zoom` 1,000001, `zoom_max` 1,101), « Votekick Mute » désactivé
+(`mute_duration` 110), drive de « Micro (Obsolète) » désactivé. Confiance : C (aucune restauration de collection faite).
+
+## 7. Poste Windows
+
+| Élément       | Emplacement                            | Contenu                                                                                            |
+| ------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Temps Windows | `Documents\backup-2026-10-24-w32time\` | `w32time-before.reg`, `w32time-after.reg`, `sc-qc-before.txt` (avant/après la correction du 24/10) |
+
+## 8. Hors projet (ne pas confondre)
+
+- `Documents\Back up SAMMI\` (05/2026) : exports de decks SAMMI — **SAMMI est abandonné**, référence de comportement
+  historique seulement.
+- `Documents\Save backup\` : sauvegarde de jeu (2022), sans rapport.
+- `Documents\Raptoru 2.0` : à la fois checkout Git principal **et** dossier de données de Studio (§ 1).
+
+## 9. Politique de conservation proposée (non appliquée)
+
+- Garder : la dernière sauvegarde Studio avant chaque installation (aujourd'hui `avant-sup8`), les 2 derniers
+  installateurs installés (sup.7, sup.8) + 0.1.6, la référence OBS `zoom-reference`, l'instantané des worktrees jusqu'au
+  commit ou à l'abandon de chaque chantier.
+- Supprimables après accord : `studio-backup-…-sup3/sup4`, `backup-…-sup5/sup6`, installateurs sup.2→sup.6, dossiers
+  `obs-backup-…-mute-test*` et `-zoom` (diagnostic clos).
+- À créer (accord requis) : copie hors VPS des dumps de Production, sauvegarde régulière des données de travail de
+  Studio (§ 1), test de restauration de la base sur une base jetable.

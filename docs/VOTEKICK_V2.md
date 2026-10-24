@@ -1,6 +1,12 @@
 # Votekick V2 + Caution
 
-**Statut (22/10/2026) : DÉVELOPPÉ EN ISOLATION (worktree `feat/votekick-v2`, commits locaux) / TESTS AUTOMATISÉS
+> **État au 24/10/2026 (fait foi ; le statut du 22/10 ci-dessous est historique)** : Votekick V2 **actif en
+> Production** depuis le 23/10 (flags `VOTEKICK_CHAT` / `VOTEKICK` à true) ; 4 votes au live du 23/10 et un vrai vote
+> hors live le 24/10 (mute du streamer concluant) ; overlay legacy SAMMI servi par Studio ; réglages durée + son de
+> lancement (§ 9) déployés avec le Core `0f753c1`, **non encore validés par Antoni**. Caution : voir
+> [CAUTION.md](CAUTION.md). Suivi global : [ROADMAP.md](ROADMAP.md).
+
+**Statut historique (22/10/2026) : DÉVELOPPÉ EN ISOLATION (worktree `feat/votekick-v2`, commits locaux) / TESTS AUTOMATISÉS
 RÉUSSIS / NON RACCORDÉ AU CORE NI À STUDIO / NON VALIDÉ PAR ANTONI / RIEN DÉPLOYÉ.** Développé pendant un live :
 aucune action sur OBS, Twitch, SAMMI, StreamElements ni la Production. **SAMMI a été débranché volontairement à la
 bascule du 20/10** (décision de migration) : aucun Votekick n'existe aujourd'hui en Production ; c'est une fonction

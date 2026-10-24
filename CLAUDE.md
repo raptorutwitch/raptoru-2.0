@@ -2,17 +2,27 @@
 
 ## Resuming work
 
-- Read `Raptoru-2.0-HANDOFF.md` first (current state, validation matrix, pending decisions, next
-  step), then `Raptoru-2.0-ETAT-PROJET.md` for history and details. Verify `git status` /
-  `git log` yourself before trusting any SHA in a document.
+- Start with `docs/REPRISE.md` (entry point: state, versions, work in progress, next action) and
+  `git status`. Reference documents: `docs/ROADMAP.md` (every module's state, arbitrations),
+  `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md`, `docs/BACKUPS.md`; until the `docs/consolidation`
+  commit is merged into `main` they live in the worktree `C:\Users\Antoni\Documents\raptoru-docs`
+  (see REPRISE § 1). `Raptoru-2.0-HANDOFF.md` and `Raptoru-2.0-ETAT-PROJET.md` are frozen history:
+  open them only for the section a task needs. Verify `git status` / `git log` yourself before
+  trusting any SHA in a document.
+- Keep `docs/REPRISE.md` current and short at each milestone and before stopping (precise enough to
+  resume after an interruption); dated details go to a journal under `docs/archive/`. Do not redo an
+  analysis it records unless the code changed since.
 - A validated prototype in `prototypes/` is a specification, not an inspiration: never drop,
   simplify or replace one of its elements silently; show a missing backend as such.
 - "Validated" means tested manually by Antoni — never call automated tests or E2E a validation.
 - Commands V2 (A0 → F done, validated): current state and rules are in `docs/COMMANDS_V2_STATUS.md`.
 - Audit consolidation: `docs/ASTRA_GLOBAL_AUDIT_2026-10.md` is the register (status, proof and commit of every finding).
-- Current phase (since 2026-10-05): cutover preparation. Reference: `docs/CUTOVER_PLAN_2026-10.md`. No agent deploys,
-  releases, migrates a remote database, changes Twitch / SAMMI / StreamElements or cuts over without Antoni's explicit
-  validation of that step.
+- Current phase: Production live since the 2026-10-20 cutover (Core + bot on Coolify/VPS, Studio on
+  the PC; SAMMI abandoned, never re-enable it). No agent pushes, deploys, releases, migrates a remote
+  database, changes flags/variables, restarts a service, installs Studio, touches OBS / Twitch /
+  StreamElements or the Wallet without Antoni's explicit GO for that step.
+- The installed Studio uses this checkout as its data folder (`.env`, Twitch tokens,
+  `apps/studio/server/.runtime`): never `git clean`, `reset --hard` or `checkout .` here.
 
 ## Central files (ASTRA-P1-008, decided 2026-10-04)
 
@@ -26,12 +36,36 @@ Progressive extraction, no big refactor. Baseline at the decision: `apps/twitch-
 - Extract existing code only when it really has to be modified, keeping the validated UX strictly
   identical. No framework migration, no "clean-up" split, no removal of legacy still in use.
 
+## Workflow (decided 2026-10-21)
+
+- Deliver vertical features (Core, routes, Studio/extension, tests) up to a milestone usable in the
+  Lab; do not stop between interdependent sub-lots when the information to continue is available.
+- Take ordinary technical decisions and fix local problems alone. Interrupt Antoni only for an
+  undefined business decision, an unsolvable blocker, an action that could affect Production, or a
+  major risk needing arbitration.
+- The Lab must test features end to end without Twitch, OBS or Production services: explicit,
+  isolated local simulators when external data is needed.
+- During development: typecheck and tests targeted at what changed; no global suite after each small
+  change. Whenever Jetons, rights, access or transactions are touched: concurrency, idempotence and
+  permission tests (real PostgreSQL when locks matter) — never weakened to go faster.
+- Before delivery: relevant global suites and integration, lint, typecheck, build; fix the
+  regressions introduced. Known intermittent failures under load (not regressions; re-run alone):
+  Windows vitest worker crash 0xC0000409, Studio `brb`, `alerts-twitch-chain`, `creepy`,
+  `word-game-service` events stream.
+- Delivery report, concise: what works · what is really incomplete · tests passed / failed ·
+  blocking risks for Production · next priority. Say what was tested in the real UI, what only by
+  automated tests, and what cannot be verified here. No command histories or repeated
+  justifications unless asked. Secondary improvements go to the module's "remaining work" in
+  `docs/ROADMAP.md`, never a blocker.
+
 ## Raptoru Studio releases
 
 - When a slice that impacts Raptoru Studio (see README "Does a change need a Studio release?") is
   finished, tested, and explicitly validated by the user ("c'est bon", "validé", "go"), commit it
   and run `npm run studio:release` right away. No separate permission is needed to bump, package
   and publish Studio.
+- Since 2026-10-21: a lot « validé en local » is not that permission — commit, push and release only
+  when Antoni explicitly asks for them.
 - Never publish a change that has not been validated. Never bump the Studio version by hand.
 - If the release fails, report the failing step and the rollback lines printed by the command
   before doing anything else.

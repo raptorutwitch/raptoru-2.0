@@ -1,5 +1,9 @@
 # Raptoru 2.0 — HANDOFF (à lire en premier)
 
+> **HISTORIQUE — figé au 21/10/2026. Ce n'est plus le point d'entrée** : lire [docs/REPRISE.md](docs/REPRISE.md)
+> (état, versions, prochaine action), puis [docs/ROADMAP.md](docs/ROADMAP.md). Depuis : bot sur le VPS (21/10), Caution
+> et Votekick en Production (23/10), Core `0f753c1` (24/10). Conservé à la racine car de nombreux documents y renvoient.
+
 ## État courant — 21/10/2026 : Production en service depuis le live du 20/10 · bot vers le VPS (lots 1–2 locaux)
 
 - **Production :**

@@ -4,10 +4,24 @@ Self-owned streaming platform for one streamer. Source of truth: `Raptoru Studio
 
 > **Core thinks, Studio controls/displays and talks to OBS, Bot talks to Twitch, Extension/Web talk to viewers.**
 
-Implemented: Daily, Presence, Wallet / Loyalty (Core, dev/test), the Raptoru Studio desktop app and, in the
-**Lab** (local, test only), Bonk, Soundboard, TTS, Tombola, Moderation and Commands V2 with their Extension
-surfaces. `apps/viewer-web` is still a placeholder. Production stays SAMMI + StreamElements until an explicit
-cutover. Current state: `Raptoru-2.0-HANDOFF.md`; audit register: `docs/ASTRA_GLOBAL_AUDIT_2026-10.md`.
+**In production since the 20/10/2026 cutover**: Core on Coolify (`core.raptoru.fr`), bot on the VPS, Raptoru Studio
+on the streamer's PC, Twitch extension. SAMMI is abandoned (unplugged, never to be re-enabled); StreamElements only
+keeps donations and the chat display. `apps/viewer-web` is not started.
+
+Canonical documents (French):
+
+| Document                                       | Content                                                                     |
+| ---------------------------------------------- | --------------------------------------------------------------------------- |
+| [`docs/REPRISE.md`](docs/REPRISE.md)           | **start here**: current state, versions, work in progress, next action      |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md)           | the single roadmap: every module's real state, remaining work, arbitrations |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | components, flows, external dependencies, per-module documents              |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md)     | tests, deployment, rollback, Studio builds, read-only checks                |
+| [`docs/BACKUPS.md`](docs/BACKUPS.md)           | backup inventory, restore confidence, known gaps                            |
+| [`docs/archive/`](docs/archive/README.md)      | historical documents and journals                                           |
+
+Older status documents (`Raptoru-2.0-HANDOFF.md`, `Raptoru-2.0-ETAT-PROJET.md`) are frozen history; the audit register
+is `docs/ASTRA_GLOBAL_AUDIT_2026-10.md`. The module sections further down (Daily, Presence, Wallet, Loyalty) describe
+development commands written before the cutover; their "dev/test only" statuses are outdated (see the roadmap).
 
 ## Apps
 

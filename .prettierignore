@@ -20,3 +20,6 @@ apps/studio/server/alerts-player/alerts.css
 
 # Legacy Votekick overlay and OBS shaders kept byte for byte for rollback (docs/VOTEKICK_V2.md)
 apps/studio/server/votekick-overlay/legacy/
+
+# Archived working journal kept byte for byte (docs/archive/README.md)
+docs/archive/REPRISE_journal_2026-10-21_24.md
