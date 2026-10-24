@@ -49,6 +49,18 @@ describe('legacy overlay: the vote countdown on the local clock', () => {
     expect(localEnds(1_060_000, 1_070_000, VOTE)).toBe(1_070_000);
   });
 
+  it('the length Core applied (`dur`, set in Studio) caps the countdown: a 30 s vote never shows more than 30', () => {
+    const live = page.slice(page.indexOf("action === 'live'"));
+    const durLine = live.indexOf(
+      'state.duration = Math.max(5, Number(payload.dur))',
+    );
+    expect(durLine).toBeGreaterThan(-1);
+    expect(durLine).toBeLessThan(live.indexOf('localEnds(incomingEnds')); // set before the conversion
+    const pcNow = 5_000_000;
+    const ends = localEnds(pcNow + 32_000, pcNow, 30_000); // PC 2 s late on a 30 s vote
+    expect(shown(ends, pcNow)).toBe(30);
+  });
+
   it('anchored once per vote: later updates of the same vote never move the end', () => {
     const live = page.slice(page.indexOf("action === 'live'"));
     expect(live).toMatch(/endsAnchor !== session \+ ':' \+ incomingEnds/);

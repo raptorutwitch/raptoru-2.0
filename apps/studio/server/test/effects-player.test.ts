@@ -452,3 +452,135 @@ describe('Points de chaîne → effects player — chain with the real Lab Core'
     expect(await pg.next()).toEqual([]);
   });
 });
+
+describe('Effects player: a sound imported from Studio (Votekick launch sound)', () => {
+  it('imported by its bytes (content-addressed), played and served like a catalogue sound; anything else refused', async () => {
+    const dir = await tmp();
+    let p: EffectsPlayer | null = null;
+    const origin = await serve((req, res, url) => p!.handle(req, res, url));
+    p = await EffectsPlayer.create({
+      dir,
+      origin,
+      media: await store(dir),
+      playerDir: PLAYER_DIR,
+      uploadsDir: join(dir, 'uploads'),
+    });
+    const mp3 = Buffer.concat([Buffer.from('ID3'), randomBytes(64)]);
+    const up = await p.importSound(mp3, 'lancement\u0007.mp3');
+    expect(up.id).toMatch(/^upload:[a-f0-9]{64}\.mp3$/);
+    expect(up.name).toBe('lancement.mp3'); // control characters dropped
+    expect((await p.importSound(mp3, 'x.mp3')).id).toBe(up.id); // same bytes, same file
+    await expect(
+      p.importSound(Buffer.from('<html>not a sound</html>'), 'x.mp3'),
+    ).rejects.toThrow('unsupported_audio');
+    await expect(p.importSound(Buffer.alloc(0), 'x.mp3')).rejects.toThrow(
+      'empty_file',
+    );
+
+    const res = await fetch(`${origin}/effects/media/${up.id}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('audio/mpeg');
+    expect(Buffer.from(await res.arrayBuffer()).equals(mp3)).toBe(true);
+    // Never a path of the disk: only `upload:<sha256>.<ext>`.
+    for (const bad of [
+      'upload:../../secret.mp3',
+      `upload:${'a'.repeat(64)}.exe`,
+      `upload:${'b'.repeat(64)}.mp3`,
+    ])
+      expect((await fetch(`${origin}/effects/media/${bad}`)).status).not.toBe(
+        200,
+      );
+
+    const pg = page(origin, p.url.split('#')[1]!);
+    await pg.heartbeat();
+    const playing = p.play({ kind: 'sound', id: up.id, volume: 55 });
+    const [got] = await taken(pg);
+    expect([got!.url, got!.volume]).toEqual([`media/${up.id}`, 0.55]);
+    await pg.report(got!.delivery_id, 'started');
+    await playing;
+    await expect(
+      p.play({ kind: 'sound', id: `upload:${'c'.repeat(64)}.mp3`, volume: 50 }),
+    ).rejects.toThrow('effect_unknown');
+  });
+
+  it('through Studio’s HTTP routes: own origin only, the raw file imported, too big refused, settings read', async () => {
+    const dir = await tmp();
+    let rt: ChannelPointsRuntime | null = null;
+    const origin = await serve((req, res, url) => rt!.handle(req, res, url));
+    const core = (async (path: string) => {
+      if (path === `/v1/lab/votekick/${'83603689'}/settings`)
+        return { vote_seconds: 40 };
+      throw Object.assign(new Error('not_found'), { status: 404 });
+    }) as never;
+    rt = await ChannelPointsRuntime.create({
+      core,
+      environment: 'lab',
+      channelId: '83603689',
+      origin,
+      dir,
+      obs: () => null,
+      effects: await EffectsPlayer.create({
+        dir,
+        origin,
+        media: await store(dir),
+        playerDir: PLAYER_DIR,
+        uploadsDir: join(dir, 'uploads'),
+      }),
+      twitch: () => ({ scope: true, adapter_running: true }),
+      votekickOverlayDir: join(import.meta.dirname, '..', 'votekick-overlay'),
+    });
+    const send = (
+      body: Buffer,
+      headers: Record<string, string> = { 'x-raptoru-studio': '1' },
+    ) =>
+      fetch(`${origin}/api/votekick/sounds`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/octet-stream',
+          'x-sound-name': encodeURIComponent('Gong été.wav'),
+          ...headers,
+        },
+        body: new Uint8Array(body),
+      });
+    const wav = Buffer.concat([Buffer.from('RIFF0000WAVE'), randomBytes(32)]);
+    expect((await send(wav, {})).status).toBe(403); // not Studio's page
+    expect(
+      (
+        await send(wav, {
+          'x-raptoru-studio': '1',
+          origin: 'http://evil.example',
+        })
+      ).status,
+    ).toBe(403);
+    const ok = await send(wav);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({
+      id: expect.stringMatching(/^upload:[a-f0-9]{64}\.wav$/),
+      name: 'Gong été.wav',
+    });
+    const big = await send(
+      Buffer.concat([Buffer.from('ID3'), Buffer.alloc(5 * 1024 * 1024)]),
+    );
+    expect(big.status).toBe(413);
+    const bad = await send(Buffer.from('MZ not a sound at all'));
+    expect([bad.status, (await bad.json()).error]).toEqual([
+      400,
+      'unsupported_audio',
+    ]);
+    const settings = await fetch(`${origin}/api/votekick/settings`, {
+      headers: { 'x-raptoru-studio': '1' },
+    });
+    expect(await settings.json()).toMatchObject({
+      available: true,
+      vote_seconds: 40,
+      launch_sound: { enabled: false, sound: null },
+    });
+  });
+
+  it('a Studio without an uploads folder refuses the import', async () => {
+    const { p } = await player();
+    await expect(
+      p.importSound(Buffer.from('ID3 0123456789'), 'x.mp3'),
+    ).rejects.toThrow('uploads_unavailable');
+  });
+});

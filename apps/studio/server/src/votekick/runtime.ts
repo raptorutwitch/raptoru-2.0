@@ -1,7 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, normalize } from 'node:path';
-import type { VotekickOverlayEvent } from '@raptoru/schemas';
+import { VOTEKICK_SETTINGS, type VotekickOverlayEvent } from '@raptoru/schemas';
+import { z } from 'zod';
+import type { EffectsPlayer } from '../effects/player.js';
+import { LaunchSoundConfig, type VotekickLaunchSound } from './launch-sound.js';
 import type { MuteController } from './mute-controller.js';
 
 // Votekick V2 in Studio (docs/VOTEKICK_V2.md § 9): Core holds the vote; Studio follows it every 400 ms
@@ -12,6 +15,8 @@ import type { MuteController } from './mute-controller.js';
 // - the overlay's event, served to the OBS browser source (/votekick/overlay.html?studio — the legacy SAMMI design,
 //   votekick-overlay/legacy/votekick-overlay.html) at /votekick/event.
 // Studio never decides a verdict, a timeout or a payment.
+// Settings (Studio page « Votekick »): the vote length is Core's (applied to the NEXT votes); the launch sound is
+// Studio's (launch-sound.ts), played by the effects player.
 
 type CoreCall = <T>(path: string, body?: unknown) => Promise<T>;
 
@@ -47,6 +52,10 @@ export class VotekickRuntime {
       channelId: string;
       mute: MuteController;
       overlayDir: string;
+      /** The launch sound (absent: none). */
+      sound?: VotekickLaunchSound | null;
+      /** The effects player: its sounds for the launch sound, and sounds imported from Studio. */
+      effects?: EffectsPlayer | null;
       log?: (line: string) => void;
     },
   ) {}
@@ -92,6 +101,7 @@ export class VotekickRuntime {
       return;
     }
     this.event = task.overlay;
+    this.d.sound?.onEvent(task.overlay);
     const m = task.mute;
     if (!m) return;
     const key = `${m.mute_id}:${m.status}`;
@@ -136,6 +146,78 @@ export class VotekickRuntime {
       }
     }
     if (this.handled.size > 200) this.handled.clear();
+  }
+
+  /** The Studio page « Votekick » (/api/votekick/settings|sounds, behind Studio's own-origin check). */
+  async api(
+    method: string,
+    path: string,
+    json: () => Promise<Record<string, unknown>>,
+    upload: () => Promise<{ body: Buffer; name: string }>,
+  ) {
+    if (method === 'GET' && path === '/settings') return this.settings();
+    if (method === 'POST' && path === '/settings') {
+      const body = SettingsPost.safeParse(await json());
+      if (!body.success)
+        throw Object.assign(new Error('invalid_settings'), {
+          status: 400,
+          body: { issues: body.error.issues.map((i) => i.path.join('.')) },
+        });
+      // Both checked above, before any write; then Core (it checks the length too): a refused length saves nothing.
+      if (body.data.launch_sound && !this.d.sound)
+        throw Object.assign(new Error('launch_sound_unavailable'), {
+          status: 503,
+        });
+      if (body.data.vote_seconds !== undefined)
+        await this.d.core(`${this.d.base}/${this.d.channelId}/settings`, {
+          vote_seconds: body.data.vote_seconds,
+        });
+      if (body.data.launch_sound)
+        await this.d.sound!.save(body.data.launch_sound);
+      return this.settings();
+    }
+    if (method === 'POST' && path === '/sounds') {
+      if (!this.d.effects)
+        throw Object.assign(new Error('effects_unavailable'), { status: 503 });
+      const { body, name } = await upload();
+      try {
+        return await this.d.effects.importSound(body, name);
+      } catch (e) {
+        throw Object.assign(e as Error, { status: 400 });
+      }
+    }
+    throw Object.assign(new Error('not_found'), { status: 404 });
+  }
+
+  /** Core's vote length (an older Core without settings: the 60 s default, read only) and the launch sound. */
+  private async settings() {
+    let core: { available: boolean; vote_seconds: number; error?: string };
+    try {
+      const s = await this.d.core<{ vote_seconds: number }>(
+        `${this.d.base}/${this.d.channelId}/settings`,
+      );
+      core = { available: true, vote_seconds: s.vote_seconds };
+    } catch (e) {
+      core = {
+        available: false,
+        vote_seconds: VOTEKICK_SETTINGS.voteSecondsDefault,
+        error:
+          (e as { status?: number }).status === 404
+            ? 'core_outdated'
+            : (e as Error).message,
+      };
+    }
+    return {
+      ...core,
+      limits: {
+        min: VOTEKICK_SETTINGS.voteSecondsMin,
+        max: VOTEKICK_SETTINGS.voteSecondsMax,
+        default: VOTEKICK_SETTINGS.voteSecondsDefault,
+      },
+      launch_sound: this.d.sound?.config ?? null,
+      sounds: this.d.effects?.sounds() ?? [],
+      player: this.d.effects?.status() ?? null,
+    };
   }
 
   /** GET /votekick/event (the overlay), /votekick/** (overlay files), /api/votekick/state (Studio page). */
@@ -196,7 +278,9 @@ export class VotekickRuntime {
       send(
         200,
         TYPES['.html']!,
-        await readFile(join(this.d.overlayDir, 'legacy', 'votekick-overlay.html')),
+        await readFile(
+          join(this.d.overlayDir, 'legacy', 'votekick-overlay.html'),
+        ),
       );
     } catch {
       send(404, 'application/json', '{"error":"not_found"}');
@@ -204,3 +288,13 @@ export class VotekickRuntime {
     return true;
   }
 }
+
+const SettingsPost = z.strictObject({
+  vote_seconds: z
+    .number()
+    .int()
+    .min(VOTEKICK_SETTINGS.voteSecondsMin)
+    .max(VOTEKICK_SETTINGS.voteSecondsMax)
+    .optional(),
+  launch_sound: LaunchSoundConfig.optional(),
+});

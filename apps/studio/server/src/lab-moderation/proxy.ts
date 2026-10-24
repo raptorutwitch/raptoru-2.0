@@ -32,6 +32,8 @@ const PREFIXES = [
   '/v1/lab/random-ban/',
   // Caution: state (read only).
   '/v1/lab/caution/',
+  // Votekick V2: the Studio follow-up (overlay + mute task), mute reports, state, settings.
+  '/v1/lab/votekick/',
   // Roue du Sub: state, switch, tests, animations, reconciliation of the pending gains.
   '/v1/lab/sub-wheel/',
 ];

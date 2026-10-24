@@ -118,7 +118,7 @@ verdict, événement en retard, clear, fonds. « Mute lab » : fin normale et ca
    `moderation:read`), timeout / levée (LeCroupier\_ `moderator:manage:banned_users`), sanctions actives.
 3. Studio : héberger `MuteController` (connexion OBS existante), canal de tâches Core → Studio pour le mute, servir
    l'overlay, section de réglages (noms OBS) et tests « sans timeout ».
-4. Son de lancement (`fears-to-fathom-notification-sound.mp3`, joué par SAMMI hors overlay) : à reprendre.
+4. ~~Son de lancement~~ : fait (§ 9), configurable dans Studio, aucun son par défaut.
 
 ## 8. À valider par Antoni (après le live)
 
@@ -129,3 +129,32 @@ verdict, événement en retard, clear, fonds. « Mute lab » : fin normale et ca
 3. Direction visuelle de l'overlay (aperçu § 6), lisibilité sur la vraie scène, coût GPU dans OBS.
 4. Arrondi : SAMMI (GameMaker) arrondit-il 17,5 à 17 ou 18 (seul le cas de 11 votes est concerné) ?
 5. Garder le cooldown d'une heure même quand le vote finit sans quorum (comportement SAMMI conservé).
+
+## 9. Réglages Studio : durée du vote et son de lancement (24/10)
+
+Studio → onglet « Points de chaîne » → section **Votekick** (`apps/studio/web/src/votekick-config*.ts`).
+
+- **Durée du vote** : 60 s par défaut, 15 à 300 s. Enregistrée **dans le Core** (table `votekick_settings`, une ligne
+  par chaîne, migrations `20261107120000_votekick_settings_lab.sql` / `20261107130000_votekick_settings.sql`), lue à
+  l'**ouverture** de chaque vote : `ends_at`, le message chat « pendant N secondes » et le `dur` de l'overlay. Un vote
+  déjà ouvert garde sa durée. Routes `GET|POST /v1/{lab|studio}/votekick/{ch}/settings` (400 sur une valeur hors
+  bornes ; la base refuse aussi hors 15–300). Core sans la table (pas encore migré) : 60 s, sans erreur. Studio face
+  à un Core qui ne connaît pas la route : champ verrouillé à 60 s avec le message « mise à jour du Core à venir ».
+- **Compte à rebours** : l'overlay legacy prend `dur` puis borne la fin sur l'horloge du PC
+  (`localEnds`, marqueurs `<votekick-local-ends>`) : jamais plus que la durée appliquée (corrige 62–63 au lieu de 60
+  quand le PC retarde).
+- **Son de lancement** (Studio seul, `apps/studio/server/src/votekick/launch-sound.ts`) : activable, un son de la
+  bibliothèque d'effets ou un fichier importé (MP3 / WAV / OGG, 5 Mo max, reconnu par ses octets, stocké
+  `<runtime>/effects/uploads/<sha256>.<ext>`), volume 0–100 %, pré-écoute **locale** (fenêtre Studio, jamais le
+  stream). Réglage dans `<channel-points>/votekick-launch-sound.json`. **Aucun son par défaut.**
+  - Joué par le lecteur d'effets (source OBS « Effets »), **une fois par vote réellement ouvert** (événement overlay
+    `live` du Core : un `!votekick` refusé n'en produit jamais), jamais sur ses mises à jour.
+  - Jamais en retard : le premier suivi après le démarrage de Studio, ou après plus de 5 s sans Core, note le vote
+    sans le jouer (pas de rejeu après une reconnexion ou un redémarrage).
+  - Un son qui ne peut pas être joué (lecteur absent / muet / fichier manquant) est journalisé ; le vote continue.
+- Prévu pour la suite (non configurable aujourd'hui) : cooldowns, durées de sanction : une colonne chacune dans
+  `votekick_settings`, une ligne chacune dans la section.
+
+Procédure SFX : Studio → Points de chaîne → Votekick → cocher « Son au lancement d'un vote » → choisir un son ou
+importer un fichier → régler le volume → « Pré-écouter » → « Enregistrer ». Le chip doit dire « Lecteur d'effets
+prêt » (sinon : la source OBS « Effets » n'est pas chargée ou est muette).

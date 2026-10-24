@@ -487,6 +487,8 @@ body.test{ background:#0c0a12 }
     if (action === 'live' || action === 'open' || action === 'update') {
       mode = 'live';
       backToLive();
+      // Durée réellement appliquée par le Core à ce vote (V2 : `dur`, réglable dans Studio) ; sinon 60 s (SAMMI).
+      if (Number(payload.dur) > 0) state.duration = Math.max(5, Number(payload.dur));
       const incomingEnds = Number(payload.ends) || 0;
       if (incomingEnds) {
         if (endsAnchor !== session + ':' + incomingEnds) {

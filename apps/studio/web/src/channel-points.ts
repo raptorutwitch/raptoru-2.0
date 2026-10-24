@@ -13,6 +13,7 @@ import {
 } from './channel-points-view.js';
 import { mountRandomBan } from './random-ban.js';
 import { mountCaution } from './caution.js';
+import { mountVotekickConfig } from './votekick-config.js';
 import { mountSubWheel } from './sub-wheel.js';
 
 // Points de chaîne V1 — Studio tab (docs/CHANNEL_POINTS_V1.md). Twitch rewards (left), the local rule of the selected
@@ -80,6 +81,7 @@ export function mountChannelPoints(root: HTMLElement) {
     <h2>Historique</h2><div data-role="history"></div>
     <h2>Random Ban</h2><div data-role="random-ban"></div>
     <h2>Caution</h2><div data-role="caution"></div>
+    <h2>Votekick</h2><div data-role="votekick"></div>
     <h2>Roue du Sub</h2><div data-role="sub-wheel"></div>
     <datalist id="cp-scenes"></datalist><datalist id="cp-sources"></datalist><datalist id="cp-filters"></datalist>
   </section>`;
@@ -87,6 +89,8 @@ export function mountChannelPoints(root: HTMLElement) {
     root.querySelector<HTMLElement>(`[data-role="${role}"]`)!;
   const randomBan = mountRandomBan($('random-ban'));
   const caution = mountCaution($('caution'));
+  // Settings form: loaded when the tab opens, never in the 3 s refresh (it would erase what is being typed).
+  const votekick = mountVotekickConfig($('votekick'));
   const subWheel = mountSubWheel($('sub-wheel'));
 
   const reward = () => state?.rewards.find((r) => r.id === selected) ?? null;
@@ -448,6 +452,7 @@ export function mountChannelPoints(root: HTMLElement) {
       void load();
       void randomBan.load();
       void caution.load();
+      void votekick.load();
       void subWheel.load();
       timer = window.setInterval(() => {
         void load();

@@ -12,12 +12,14 @@ import { Brb } from '../interactions/brb.js';
 import { InteractionError, Interactions } from '../interactions/creepy.js';
 import { ColorCam } from '../interactions/color-cam.js';
 import { FxCam } from '../interactions/fx-cam.js';
+import { SOUND_MAX_BYTES } from '../raffle-lab/runtime.js';
 import { RandomBanRuntime } from '../random-ban/runtime.js';
 import { SubWheelRuntime } from '../sub-wheel/runtime.js';
 import {
   MuteController,
   RAPTORU_MUTE_FX,
 } from '../votekick/mute-controller.js';
+import { VotekickLaunchSound } from '../votekick/launch-sound.js';
 import { VotekickRuntime } from '../votekick/runtime.js';
 import { ObsActionError, ObsActions, type ObsLike } from './obs-actions.js';
 
@@ -111,6 +113,12 @@ export class ChannelPointsRuntime {
               RAPTORU_MUTE_FX,
             ),
             overlayDir: d.votekickOverlayDir,
+            sound: await VotekickLaunchSound.open(
+              join(d.dir, 'votekick-launch-sound.json'),
+              d.effects ?? null,
+              (line) => console.log(line),
+            ),
+            effects: d.effects ?? null,
             log: (line) => console.log(line),
           })
         : null,
@@ -265,11 +273,13 @@ export class ChannelPointsRuntime {
     const rb = url.pathname.startsWith('/api/random-ban');
     const sw = url.pathname.startsWith('/api/sub-wheel');
     const caution = url.pathname === '/api/caution/state';
+    const vk = /^\/api\/votekick\/(settings|sounds)$/.test(url.pathname);
     if (
       !url.pathname.startsWith('/api/channel-points') &&
       !rb &&
       !sw &&
-      !caution
+      !caution &&
+      !vk
     )
       return false;
     const reply = (status: number, body: unknown) => {
@@ -297,7 +307,28 @@ export class ChannelPointsRuntime {
             `${this.d.environment === 'production' ? '/v1/studio/caution' : '/v1/lab/caution'}/${this.d.channelId}/state`,
           ),
         );
-      else if (sw)
+      else if (vk) {
+        if (!this.votekick) return (reply(404, { error: 'not_found' }), true);
+        reply(
+          200,
+          await this.votekick.api(
+            req.method ?? 'GET',
+            url.pathname.slice('/api/votekick'.length),
+            () => this.body(req),
+            async () => {
+              let name = 'son';
+              try {
+                name = decodeURIComponent(
+                  String(req.headers['x-sound-name'] ?? 'son'),
+                );
+              } catch {
+                /* keep the default */
+              }
+              return { body: await this.raw(req, SOUND_MAX_BYTES), name };
+            },
+          ),
+        );
+      } else if (sw)
         reply(
           200,
           await this.subWheel.api(
@@ -331,6 +362,18 @@ export class ChannelPointsRuntime {
         });
     }
     return true;
+  }
+
+  private async raw(req: IncomingMessage, max: number) {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length;
+      if (size > max)
+        throw Object.assign(new Error('sound_too_large'), { status: 413 });
+      chunks.push(chunk as Buffer);
+    }
+    return Buffer.concat(chunks);
   }
 
   private async body(req: IncomingMessage) {

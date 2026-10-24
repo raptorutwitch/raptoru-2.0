@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { createReadStream, existsSync } from 'node:fs';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join } from 'node:path';
 import {
@@ -16,6 +16,7 @@ import {
   SUB_WHEEL_MEDIA,
 } from '@raptoru/schemas';
 import type { AlertMediaStore } from '../alerts/media-store.js';
+import { SOUND_MAX_BYTES, soundFormat } from '../raffle-lab/runtime.js';
 
 // Effects player (P0.1, docs/EFFECTS_PLAYER.md) — Studio's native capability to play an effect at once on ONE local
 // page (OBS browser source), outside the Soundboard: no queue, no price, no cooldown, effects overlap. Effect sounds
@@ -93,8 +94,11 @@ const PLAYER_FILES: Record<string, string> = {
 const MEDIA_TYPES: Record<string, string> = {
   '.ogg': 'audio/ogg',
   '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
   '.webm': 'video/webm',
 };
+/** A sound imported in Studio (Votekick launch sound…): `upload:<sha256>.<ext>`, same checks as the Tombola sounds. */
+const UPLOAD = /^upload:([a-f0-9]{64}\.(?:mp3|wav|ogg))$/;
 
 /** One catalogue (sounds and videos share the media route: ids are unique across both). */
 const CATALOGUE: {
@@ -146,6 +150,8 @@ export interface EffectsPlayerDeps {
   /** Effect media (imported copies). */
   media: AlertMediaStore;
   playerDir: string;
+  /** Sounds imported from Studio (content-addressed, never a path of the user's disk); absent: none. */
+  uploadsDir?: string;
   now?: () => number;
   /** Tests only: shorter delays. */
   rules?: Partial<typeof EFFECTS_RULES>;
@@ -237,6 +243,48 @@ export class EffectsPlayer {
     }));
   }
 
+  /** An imported sound (`upload:<sha256>.<ext>`) as a catalogue entry, when its file is there. */
+  private upload(id: string) {
+    const m = UPLOAD.exec(id);
+    if (!m || !this.d.uploadsDir) return null;
+    const path = join(this.d.uploadsDir, m[1]!);
+    return existsSync(path)
+      ? {
+          item: {
+            kind: 'sound' as const,
+            id,
+            label: 'Son importé',
+            file: m[1]!,
+          },
+          path,
+        }
+      : null;
+  }
+
+  /** Imports a sound (format checked by its bytes, 5 MB max): its effect id, for any module that plays sounds. */
+  async importSound(body: Buffer, name: string) {
+    if (!this.d.uploadsDir) throw new EffectError('uploads_unavailable');
+    if (!body.length) throw new EffectError('empty_file');
+    if (body.length > SOUND_MAX_BYTES) throw new EffectError('sound_too_large');
+    const format = soundFormat(body);
+    if (!format) throw new EffectError('unsupported_audio');
+    const file = `${createHash('sha256').update(body).digest('hex')}.${format}`;
+    await mkdir(this.d.uploadsDir, { recursive: true });
+    const path = join(this.d.uploadsDir, file);
+    if (!existsSync(path)) await writeFile(path, body);
+    const clean = [...name]
+      .filter((ch) => ch.charCodeAt(0) >= 32)
+      .join('')
+      .trim()
+      .slice(0, 80);
+    return {
+      id: `upload:${file}`,
+      name: clean || `son.${format}`,
+      format,
+      size_bytes: body.length,
+    };
+  }
+
   /** Media of the native interactions, imported or not. */
   interactionMedia() {
     return [...INTERACTION_MEDIA, ...RANDOM_BAN_MEDIA, ...SUB_WHEEL_MEDIA].map(
@@ -301,11 +349,14 @@ export class EffectsPlayer {
             ? CATALOGUE.find((c) => c.id === RANDOM_BAN_FLOP.media)
             : effect.kind === 'wheel'
               ? CATALOGUE.find((c) => c.id === 'sw-incr')
-              : CATALOGUE.find(
+              : (CATALOGUE.find(
                   (c) => c.kind === effect.kind && c.id === effect.id,
-                );
+                ) ??
+                (effect.kind === 'sound'
+                  ? (this.upload(effect.id)?.item ?? null)
+                  : null));
     if (!item) throw new EffectError('effect_unknown');
-    if (!this.d.media.path(item.file))
+    if (!this.d.media.path(item.file) && !this.upload(item.id))
       throw new EffectError('effect_media_missing');
     // The wheel needs its two sounds.
     if (
@@ -551,8 +602,9 @@ export class EffectsPlayer {
       return true;
     }
     if (req.method === 'GET' && name.startsWith('media/')) {
-      const item = CATALOGUE.find((c) => c.id === name.slice(6));
-      const file = item ? this.d.media.path(item.file) : null;
+      const up = this.upload(name.slice(6));
+      const item = CATALOGUE.find((c) => c.id === name.slice(6)) ?? up?.item;
+      const file = up ? up.path : item ? this.d.media.path(item.file) : null;
       if (!item || !file) {
         reply(404, { error: 'media_missing' });
         return true;

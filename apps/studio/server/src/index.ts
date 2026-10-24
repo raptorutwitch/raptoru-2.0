@@ -954,6 +954,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
               'server',
               'effects-player',
             ),
+            // Sounds imported from Studio (Votekick launch sound): kept across Studio updates.
+            uploadsDir: join(paths.runtimeDir, 'effects', 'uploads'),
           }),
           votekickOverlayDir: join(
             REPO_ROOT,
