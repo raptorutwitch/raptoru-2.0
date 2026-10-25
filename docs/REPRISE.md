@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **25/10/2026 ~03:15** (Spotify V2 / Studio sup.10 **validé par Antoni et clôturé** : Core `36a4cec`, bot `16600de`, Studio **0.1.7-sup.10** ; retour : Core `16600de`, Studio sup.9). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **25/10/2026 ~04:30** (CI/CD en service : `origin/main` `9a06bfd` + PR #2 — [CICD.md](CICD.md) ; Production inchangée : Core `36a4cec`, bot `16600de`, Studio **0.1.7-sup.10** ; retour : Core `16600de`, Studio sup.9).
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -31,7 +31,7 @@ depuis le checkout principal.
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Core `raptoru-core`  | **`36a4cec`** (déployé 25/10 00:01 UTC, finitions Spotify, sans migration)                                                   | `running:healthy`, `/health` `/ready` 200 ; retour : `16600de`                                             |
 | Bot `raptoru-bot`    | **`16600de`** (déployé 24/10 16:01 UTC, inclut `cf21c4b`)                                                                    | `running:healthy`, VPS, bail repris proprement ; `CP_TWITCH_ACTIONS` ON (24/10 16:28) ; retour : `b8bc025` |
-| `origin/main`        | `36a4cec` (finitions Spotify V2)                                                                                             | Coolify : auto-deploy désactivé                                                                            |
+| `origin/main`        | `9a06bfd` (CI/CD, PR #1 ; aucun service redéployé)                                                                           | Coolify : auto-deploy désactivé                                                                            |
 | Studio installé (PC) | **0.1.7-sup.10** (build local, `36a4cec` + patch `sup-wt` non commité ; installé 25/10 00:11 UTC)                            | dernière release publiée : 0.1.6 ; retour : sup.9 (`Documents\raptoru-spotify-GO`)                         |
 | Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                          | publication manuelle par Antoni                                                                            |
 | Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                    | Node non épinglé (décision en attente)                                                                     |

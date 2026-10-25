@@ -169,7 +169,10 @@ if (process.argv[1] && process.argv[1].endsWith('ci-gate.mjs')) {
     sha,
     component,
     git,
-  });
+  }).catch((e) => ({
+    ok: false,
+    reason: `CI non vérifiable : ${e.message} (permission « actions: read » du job ?)`,
+  }));
   console.log(`${r.ok ? '✓' : '✗'} ${r.reason}${r.url ? ` (${r.url})` : ''}`);
   process.exitCode = r.ok ? 0 : 1;
 }

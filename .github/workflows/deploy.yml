@@ -80,7 +80,8 @@ jobs:
         run: node scripts/delivery/authorize.mjs
 
   deploy:
-    name: ${{ inputs.mode }} ${{ inputs.component }}
+    # Nom fixe : un job sauté (autorisation refusée) n'évalue pas d'expression dans son nom.
+    name: déploiement
     needs: authorize
     runs-on: ubuntu-24.04
     timeout-minutes: 75

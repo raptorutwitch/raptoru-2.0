@@ -85,6 +85,17 @@ export function check(root) {
   );
   for (const f of workflows) {
     const text = readFileSync(join(wfDir, f), 'utf8');
+    // A job reading the CI results (deployment / publication gate) needs « actions: read » (else GitHub answers 403).
+    for (const job of text.split(/\n(?= {2}[\w-]+:\n)/).slice(1)) {
+      const name = /^ {2}([\w-]+):/.exec(job)?.[1];
+      if (
+        /(ci-gate|coolify-deploy|status)\.mjs/.test(job) &&
+        !/actions: read/.test(job)
+      )
+        problems.push(
+          `${f}: job « ${name} » reads the CI results without « actions: read »`,
+        );
+    }
     if (/node-version:\s/.test(text))
       problems.push(
         `${f}: use node-version-file: .node-version, not a literal node-version`,
