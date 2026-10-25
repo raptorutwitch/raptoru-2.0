@@ -6,6 +6,7 @@
 // GitHub API with GITHUB_TOKEN (Actions) or the local `gh` login; the token is never printed. No dependency.
 
 import { execFileSync } from 'node:child_process';
+import console from 'node:console';
 import process from 'node:process';
 
 const { fetch, AbortSignal } = globalThis;
@@ -14,6 +15,7 @@ export const REQUIRED = {
   core: ['quality', 'core', 'e2e', 'images'],
   'core-staging': ['quality', 'core', 'e2e', 'images'],
   bot: ['quality', 'bot', 'images'],
+  studio: ['quality', 'studio', 'extension', 'e2e'],
 };
 const DOC = (f) => /^docs\//.test(f) || /\.md$/i.test(f);
 
@@ -137,4 +139,19 @@ export async function ciGate({ repo, sha, component, git, env = process.env }) {
     ok: false,
     reason: `aucune CI réussie pour ${sha.slice(0, 12)} (ni ancêtre documentaire)`,
   };
+}
+
+// CLI (GitHub Actions): node scripts/delivery/ci-gate.mjs <component> <sha> → exit 1 unless the CI proved it.
+if (process.argv[1] && process.argv[1].endsWith('ci-gate.mjs')) {
+  const [component, sha] = process.argv.slice(2);
+  const git = (...args) =>
+    execFileSync('git', args, { encoding: 'utf8' }).trim();
+  const r = await ciGate({
+    repo: process.env.GITHUB_REPOSITORY,
+    sha,
+    component,
+    git,
+  });
+  console.log(`${r.ok ? '✓' : '✗'} ${r.reason}${r.url ? ` (${r.url})` : ''}`);
+  process.exitCode = r.ok ? 0 : 1;
 }

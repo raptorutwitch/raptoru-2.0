@@ -112,4 +112,19 @@ describe('deployment authorisation', () => {
       /DEPLOY bot aaaaaaa/,
     );
   });
+
+  it('Studio: its own confirmation (PUBLISH studio <sha7>) for a public release', async () => {
+    const studio = { INPUT_COMPONENT: 'studio' };
+    assert.match(
+      (await authorize(env(studio), onMain)).join(' | '),
+      /PUBLISH studio aaaaaaa/,
+    );
+    assert.deepEqual(
+      await authorize(
+        env({ ...studio, INPUT_CONFIRM: `PUBLISH studio ${SHA.slice(0, 7)}` }),
+        onMain,
+      ),
+      [],
+    );
+  });
 });

@@ -62,10 +62,11 @@ export async function authorize(env, { isOnMain }) {
     problems.push('SHA attendu : 40 caractères hexadécimaux exacts');
   else if (!isOnMain(sha))
     problems.push(`${sha.slice(0, 12)} n’est pas sur origin/main`);
-  if (!['core', 'bot', 'core+bot'].includes(env.INPUT_COMPONENT))
+  if (!['core', 'bot', 'core+bot', 'studio'].includes(env.INPUT_COMPONENT))
     problems.push(`composant inconnu : ${env.INPUT_COMPONENT}`);
   if (env.INPUT_MODE === 'deploy') {
-    const expected = `DEPLOY ${env.INPUT_COMPONENT} ${sha.slice(0, 7)}`;
+    const verb = env.INPUT_COMPONENT === 'studio' ? 'PUBLISH' : 'DEPLOY';
+    const expected = `${verb} ${env.INPUT_COMPONENT} ${sha.slice(0, 7)}`;
     if ((env.INPUT_CONFIRM ?? '').trim() !== expected)
       problems.push(
         `confirmation attendue pour un déploiement réel : « ${expected} »`,

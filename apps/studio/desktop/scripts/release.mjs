@@ -3,6 +3,16 @@
 //   npm run studio:release              bump patch → check → package → verify → publish → verify public → commit
 //   npm run studio:release -- --dry-run everything except publishing and committing; the version bump is undone
 //
+// GitHub Actions (.github/workflows/studio-release.yml, docs/CICD.md « Publier Studio ») — same checks, two jobs:
+//   --ci --dry-run --out=DIR [--version=x.y.z]   Windows runner: the commit must be on origin/main; the version is the
+//                                                next patch of the latest PUBLIC release (or --version); the Studio
+//                                                server and desktop tests run on Windows (the rest was proven by the
+//                                                CI of that commit); package + verify; the assets, SHA256SUMS.txt,
+//                                                build-info.json and the notes are written to DIR; nothing committed.
+//   --publish-from=DIR [--public]                 publish those verified assets: integrity re-checked, then a DRAFT
+//                                                (invisible to electron-updater); --public makes it public and
+//                                                re-downloads it anonymously. Never builds anything.
+//
 // Never pushes the source repository. Uses the local `gh` authentication (no token is written
 // anywhere). Publishes only 3 assets to the public releases repo: installer, blockmap, latest.yml.
 // The GitHub Release is created as a DRAFT (invisible to electron-updater), checked, then made
@@ -15,6 +25,7 @@ import console from 'node:console';
 import {
   copyFileSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -38,6 +49,15 @@ const SOURCE_BRANCH = 'main';
 const PRODUCT = 'Raptoru Studio';
 
 const DRY_RUN = process.argv.includes('--dry-run');
+const CI = process.argv.includes('--ci');
+const opt = (name) =>
+  process.argv
+    .find((a) => a.startsWith(`--${name}=`))
+    ?.slice(name.length + 3) ?? null;
+const VERSION = opt('version');
+const OUT = opt('out');
+const PUBLISH_FROM = opt('publish-from');
+const MAKE_PUBLIC = process.argv.includes('--public');
 const desktopDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const root = join(desktopDir, '..', '..', '..');
 const releaseDir = join(desktopDir, 'release');
@@ -101,9 +121,23 @@ function preflight() {
     .toLowerCase();
   if (top !== root.replace(/\//g, '\\').replace(/\\$/, '').toLowerCase())
     fail(`not the Raptoru 2.0 repository root (${top})`);
-  const branch = git('branch', '--show-current');
-  if (branch !== SOURCE_BRANCH)
-    fail(`branch is ${branch}, expected ${SOURCE_BRANCH}`);
+  if (CI) {
+    // GitHub Actions checks out the exact commit (detached): it must be on origin/main.
+    try {
+      run('git', [
+        'merge-base',
+        '--is-ancestor',
+        'HEAD',
+        `origin/${SOURCE_BRANCH}`,
+      ]);
+    } catch {
+      fail(`HEAD is not on origin/${SOURCE_BRANCH}`);
+    }
+  } else {
+    const branch = git('branch', '--show-current');
+    if (branch !== SOURCE_BRANCH)
+      fail(`branch is ${branch}, expected ${SOURCE_BRANCH}`);
+  }
   const dirty = git('status', '--porcelain');
   if (dirty) fail(`working tree is dirty:\n${dirty}`);
 
@@ -133,11 +167,40 @@ function preflight() {
 }
 
 // --- 2. version -------------------------------------------------------------------------------------
+const semver = (v) => /^(\d+)\.(\d+)\.(\d+)$/.exec(v)?.slice(1).map(Number);
+const newer = (a, b) => {
+  const [x, y] = [semver(a), semver(b)];
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  return false;
+};
 function nextVersion() {
-  const current = JSON.parse(readFileSync(pkgPath, 'utf8')).version;
+  let current = JSON.parse(readFileSync(pkgPath, 'utf8')).version;
+  if (CI) {
+    // The repository's package.json is not bumped by CI releases: the latest PUBLIC release is the reference.
+    const published = JSON.parse(
+      gh(
+        'release',
+        'list',
+        '-R',
+        repoSlug,
+        '--limit',
+        '100',
+        '--json',
+        'tagName,isDraft',
+      ),
+    )
+      .filter((r) => !r.isDraft && semver(r.tagName.replace(/^v/, '')))
+      .map((r) => r.tagName.replace(/^v/, ''));
+    current = published.reduce((a, b) => (newer(b, a) ? b : a), '0.0.0');
+    if (VERSION) {
+      if (!semver(VERSION)) fail(`--version ${VERSION}: x.y.z expected`);
+      if (!newer(VERSION, current))
+        fail(`--version ${VERSION} is not newer than v${current}`);
+    }
+  }
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(current);
   if (!m) fail(`unsupported version ${current}`);
-  const next = `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
+  const next = VERSION ?? `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
   const releases = JSON.parse(
     gh(
       'release',
@@ -196,6 +259,12 @@ function restoreVersion() {
 
 // --- 3/4. validation and package ----------------------------------------------------------------------
 function validate() {
+  if (CI) {
+    // Linux CI already proved this commit (lint, format, typecheck, every suite, E2E): here, what runs on Windows.
+    run('npm', ['test', '-w', '@raptoru/studio-desktop'], { inherit: true });
+    run('npm', ['test', '-w', '@raptoru/studio-server'], { inherit: true });
+    return;
+  }
   run('npm', ['run', 'check'], { inherit: true });
 }
 
@@ -411,7 +480,11 @@ function stageAssets(version, info) {
   return assets;
 }
 
-function publishDraft(version, assets) {
+function publishDraft(
+  version,
+  assets,
+  { makePublic = true, notes = releaseNotes(version) } = {},
+) {
   const tag = `v${version}`;
   state.draftCreated = true;
   run('gh', [
@@ -426,7 +499,7 @@ function publishDraft(version, assets) {
     '--title',
     `${PRODUCT} ${version}`,
     '--notes',
-    releaseNotes(version),
+    notes,
     ...assets.map((a) => join(state.stagingDir, a)),
   ]);
   const remote = JSON.parse(
@@ -443,8 +516,127 @@ function publishDraft(version, assets) {
     if (a.state && a.state !== 'uploaded')
       fail(`draft asset ${a.name} state ${a.state}`);
   }
+  if (!makePublic) return;
   gh('release', 'edit', tag, '-R', repoSlug, '--draft=false', '--latest');
   state.published = true;
+}
+
+/** CI build: the verified assets, their SHA-256, the build's identity and the notes, for the publish job. */
+function writeOut(version, info, assets) {
+  mkdirSync(OUT, { recursive: true });
+  const sums = [];
+  for (const a of assets) {
+    copyFileSync(join(state.stagingDir, a), join(OUT, a));
+    sums.push(
+      `${createHash('sha256')
+        .update(readFileSync(join(OUT, a)))
+        .digest('hex')}  ${a}`,
+    );
+  }
+  writeFileSync(join(OUT, 'SHA256SUMS.txt'), `${sums.join('\n')}\n`);
+  writeFileSync(join(OUT, 'notes.md'), releaseNotes(version));
+  writeFileSync(
+    join(OUT, 'build-info.json'),
+    `${JSON.stringify(
+      {
+        version,
+        sha: git('rev-parse', 'HEAD'),
+        built_at: new Date().toISOString(),
+        installer: info.exeName,
+        size: info.size,
+        sha512: info.sha512,
+        assets,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+/** CI publish: the Windows job's assets, re-checked byte for byte, as a draft (or public with --public). */
+async function publishFrom() {
+  const info = JSON.parse(
+    readFileSync(join(PUBLISH_FROM, 'build-info.json'), 'utf8'),
+  );
+  const version = info.version;
+  state.version = version;
+  say(`publish ${PRODUCT} ${version} (source ${info.sha.slice(0, 12)})`);
+  await step('preflight (publish target, gh auth, tag free)', () => {
+    gh('auth', 'status');
+    const visibility = gh(
+      'repo',
+      'view',
+      repoSlug,
+      '--json',
+      'visibility',
+      '--jq',
+      '.visibility',
+    );
+    if (visibility !== 'PUBLIC')
+      fail(`${repoSlug} must be public (updates are downloaded anonymously)`);
+    const tags = JSON.parse(
+      gh(
+        'release',
+        'list',
+        '-R',
+        repoSlug,
+        '--limit',
+        '100',
+        '--json',
+        'tagName',
+      ),
+    ).map((r) => r.tagName);
+    if (tags.includes(`v${version}`))
+      fail(`v${version} already exists on ${repoSlug}: resolve it first`);
+  });
+  await step(
+    'integrity of the built assets (SHA-256, latest.yml sha512)',
+    () => {
+      const sums = readFileSync(join(PUBLISH_FROM, 'SHA256SUMS.txt'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => l.split(/\s+/));
+      if (sums.length !== info.assets.length) fail('SHA256SUMS.txt incomplete');
+      for (const [hash, name] of sums)
+        if (
+          createHash('sha256')
+            .update(readFileSync(join(PUBLISH_FROM, name)))
+            .digest('hex') !== hash
+        )
+          fail(`${name}: SHA-256 differs from the build`);
+      const yml = parseLatestYml(
+        readFileSync(join(PUBLISH_FROM, 'latest.yml'), 'utf8'),
+      );
+      const exe = info.assets.find((a) => a.endsWith('.exe'));
+      if (
+        yml.version !== version ||
+        yml.sha512 !== sha('sha512', readFileSync(join(PUBLISH_FROM, exe)))
+      )
+        fail('latest.yml does not describe this installer');
+    },
+  );
+  state.stagingDir = PUBLISH_FROM;
+  state.keepStaging = true;
+  await step(
+    MAKE_PUBLIC
+      ? `publish v${version} as draft, verify, then make it public`
+      : `publish v${version} as a DRAFT (invisible to the installed Studio)`,
+    () =>
+      publishDraft(version, info.assets, {
+        makePublic: MAKE_PUBLIC,
+        notes: readFileSync(join(PUBLISH_FROM, 'notes.md'), 'utf8'),
+      }),
+  );
+  if (MAKE_PUBLIC)
+    await step(
+      'verify public assets (anonymous download, byte-identical, latest = new version)',
+      () => verifyPublic(version, info.assets),
+    );
+  say(
+    MAKE_PUBLIC
+      ? `RELEASE OK — ${PRODUCT} ${version} is live on https://github.com/${repoSlug}/releases/tag/v${version}`
+      : `DRAFT OK — https://github.com/${repoSlug}/releases (v${version}, draft): « Publish release » makes it available to the installed Studio`,
+  );
 }
 
 async function verifyPublic(version, assets) {
@@ -553,6 +745,10 @@ async function main() {
     () => stageAssets(next, info),
   );
 
+  if (OUT)
+    await step(`write the verified assets to ${OUT}`, () =>
+      writeOut(next, info, assets),
+    );
   if (DRY_RUN) {
     await step('dry run: undo version bump', () => restoreVersion());
     if (git('status', '--porcelain'))
@@ -569,9 +765,10 @@ async function main() {
     'verify public assets (anonymous download, byte-identical, latest = new version)',
     () => verifyPublic(next, assets),
   );
-  await step('commit version bump (local only, never pushed)', () =>
-    commitVersion(next),
-  );
+  if (!CI)
+    await step('commit version bump (local only, never pushed)', () =>
+      commitVersion(next),
+    );
   say(
     `RELEASE OK — ${PRODUCT} ${next} is live on https://github.com/${repoSlug}/releases/tag/v${next}`,
   );
@@ -581,7 +778,7 @@ async function main() {
 }
 
 try {
-  await main();
+  await (PUBLISH_FROM ? publishFrom() : main());
 } catch (error) {
   console.error(
     `\n[studio:release] ✗ FAILED at step: ${currentStep}\n${error.message}`,
@@ -597,6 +794,6 @@ try {
   );
   process.exitCode = 1;
 } finally {
-  if (state.stagingDir)
+  if (state.stagingDir && !state.keepStaging)
     rmSync(state.stagingDir, { recursive: true, force: true });
 }
