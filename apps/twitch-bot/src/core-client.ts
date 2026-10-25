@@ -52,10 +52,22 @@ export interface CoreClient {
 }
 
 export class CoreHttpError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    /** The Core's error code when it gave one (e.g. `not_lease_holder`). */
+    readonly code?: string,
+  ) {
     super(`core-api responded ${status}`);
   }
 }
+
+/**
+ * `409 not_lease_holder`: this instance does not hold the bot lease at this moment (a deploy handing over, a lease being
+ * renewed, this instance about to stop). Never a definitive refusal: what it carried is kept and sent again — by this
+ * instance once it holds the lease, or by the next holder from the same outbox. Core deduplicates by event id.
+ */
+export const notLeaseHolder = (error: unknown) =>
+  (error as { code?: unknown } | null)?.code === 'not_lease_holder';
 
 /**
  * Every call is idempotent on the Core side (claims keyed by Twitch message id, presence cycles by cycleId), so a
@@ -84,7 +96,15 @@ export function createCoreClient(
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(5000),
       });
-      if (!res.ok) throw new CoreHttpError(res.status);
+      if (!res.ok) {
+        const out = (await res.json().catch(() => null)) as {
+          error?: unknown;
+        } | null;
+        throw new CoreHttpError(
+          res.status,
+          typeof out?.error === 'string' ? out.error : undefined,
+        );
+      }
       return schema.parse(await res.json());
     };
     try {

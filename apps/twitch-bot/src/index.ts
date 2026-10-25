@@ -36,6 +36,7 @@ import { fileTokenStore, TwitchAuth } from './twitch/auth.js';
 import { superviseTwitchAuth } from './twitch/auth-supervision.js';
 import { runEventSub } from './twitch/eventsub.js';
 import { createHelix, type Helix } from './twitch/helix.js';
+import { coreRefusal } from './lab-chat-ingest.js';
 
 // Safety switch: the bot only connects to Twitch when explicitly enabled. Chat commands and the
 // presence tracker are separate opt-ins (see config.ts).
@@ -247,9 +248,10 @@ const bridge =
     ? createCoreChatBridge({
         post: async (path, body) => {
           const r = await coreCall(path, body);
-          // The Lab adapter's error shape: its retry rules (transient 5xx / 408 / 429) apply unchanged.
+          // The Lab adapter's error shape: its retry rules (transient 5xx / 408 / 429, and 409 not_lease_holder while
+          // the bot lease changes hands) apply unchanged.
           if (r.status < 200 || r.status >= 300)
-            throw new Error(`lab_core_${r.status}`);
+            throw coreRefusal(r.status, r.body);
           return r.body;
         },
         call: coreCall,

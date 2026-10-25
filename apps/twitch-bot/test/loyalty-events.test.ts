@@ -417,6 +417,79 @@ describe('Rewards Twitch V1: durable forwarding and single consumer', () => {
     expect(b.logs.join('\n')).toMatch(/REJECTED by Core: bits m/);
   });
 
+  it('RV2-3 — the bot lease changing hands (409 not_lease_holder): kept and resent with the same id, never rejected', async () => {
+    const loyaltyEvent = vi
+      .fn()
+      .mockRejectedValueOnce(new CoreHttpError(409, 'not_lease_holder'))
+      .mockRejectedValueOnce(new CoreHttpError(409, 'not_lease_holder'))
+      .mockResolvedValueOnce(ok);
+    const b = bot(loyaltyEvent);
+    await b.events.eventSub.subscribe('s1');
+    await b.events.eventSub.notification(
+      'channel.cheer',
+      cheer,
+      'm-lease',
+      T(9),
+    );
+    await tick();
+    expect(b.outbox.pending().map((e) => e.event.eventId)).toEqual(['m-lease']);
+    expect(b.outbox.rejected()).toEqual([]);
+    await b.flush();
+    expect(loyaltyEvent).toHaveBeenCalledTimes(3);
+    for (const [e] of loyaltyEvent.mock.calls)
+      expect(e).toMatchObject({ eventId: 'm-lease', bits: 100 });
+    expect(b.outbox.pending()).toEqual([]);
+    expect(b.outbox.rejected()).toEqual([]);
+    // Any other 409 stays a definitive refusal (e.g. the same id with another payload).
+    const c = bot(
+      vi.fn().mockRejectedValue(new CoreHttpError(409, 'event_conflict')),
+    );
+    await c.events.eventSub.subscribe('s2');
+    await c.events.eventSub.notification('channel.cheer', cheer, 'm-x', T(9));
+    await tick();
+    expect(c.scheduled).toHaveLength(0);
+    expect(c.outbox.rejected()).toHaveLength(1);
+  });
+
+  it('RV2-3 — this instance fenced while Core refused it, then replaced: the next holder resends from the same outbox, ONE event id, never twice', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'raptoru-outbox-'));
+    const file = join(dir, '.loyalty-outbox.json');
+    const fenced = bot(
+      vi.fn().mockRejectedValue(new CoreHttpError(409, 'not_lease_holder')),
+      { outbox: fileOutbox(file) },
+    );
+    await fenced.events.eventSub.subscribe('s1');
+    await fenced.events.eventSub.notification(
+      'channel.cheer',
+      cheer,
+      'gap',
+      T(9),
+    );
+    await tick();
+    await fenced.flush(3); // still refused: kept, never rejected
+    expect(
+      fileOutbox(file)
+        .pending()
+        .map((e) => e.event.eventId),
+    ).toEqual(['gap']);
+    expect(fileOutbox(file).rejected()).toEqual([]);
+    // The fenced process stops (its retries die with it); the new holder starts on the same outbox.
+    const seen = new Map<string, number>();
+    const loyaltyEvent = vi.fn(async (e: { eventId: string }) => {
+      seen.set(e.eventId, (seen.get(e.eventId) ?? 0) + 1);
+      return { ...ok, replayed: seen.get(e.eventId)! > 1 };
+    });
+    const holder = bot(loyaltyEvent, { outbox: fileOutbox(file) });
+    holder.events.resumePending();
+    await tick();
+    holder.events.resumePending(); // a second resume (reconnection): nothing left to send
+    await tick();
+    expect([...seen]).toEqual([['gap', 1]]);
+    expect(fileOutbox(file).pending()).toEqual([]);
+    expect(fileOutbox(file).rejected()).toEqual([]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('bot restart while Core is down: the new process resends what the old one had received', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'raptoru-outbox-'));
     const file = join(dir, '.loyalty-outbox.json');

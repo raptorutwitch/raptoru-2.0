@@ -14,7 +14,7 @@ import {
   createLabAlertsIngest,
 } from './lab-alerts-ingest.js';
 import { fileOutbox, memoryOutbox } from './loyalty-outbox.js';
-import { createLabChatIngest } from './lab-chat-ingest.js';
+import { createLabChatIngest, coreRefusal } from './lab-chat-ingest.js';
 import {
   createLabChatOutput,
   createRateLimiter,
@@ -139,7 +139,7 @@ const lab = async (path: string, body: unknown) => {
     signal: AbortSignal.timeout(5000),
   });
   const out = (await res.json()) as unknown;
-  if (!res.ok) throw new Error(`lab_core_${res.status}`);
+  if (!res.ok) throw coreRefusal(res.status, out);
   return out;
 };
 /** Lab Core call with its HTTP status (the output executor reads 409 answers). */

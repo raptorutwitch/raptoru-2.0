@@ -157,8 +157,8 @@ afterEach(async () => {
   for (const close of closers.splice(0)) await close();
 });
 
-async function fixture() {
-  const core = await setup();
+async function fixture(opts?: Parameters<typeof setup>[0]) {
+  const core = await setup(opts);
   core.clock.set(new Date());
   const server = createApp({
     ...core,
@@ -233,6 +233,43 @@ describe('bot lease routes', () => {
     ]) {
       expect((await call('/v1/bot/instance/lease', bot, bad)).status).toBe(400);
     }
+  });
+
+  it('RV2-3 — a loyalty event refused to the fenced instance (409 not_lease_holder) is credited ONCE by the next holder; resent again: a replay', async () => {
+    // A Core that really credits (loyalty events → rewards), as in production.
+    const { core, call, bot } = await fixture({
+      loyalty: { eventCredits: true },
+    });
+    const event = {
+      type: 'bits',
+      eventId: `ev-${randomUUID()}`,
+      occurredAt: new Date().toISOString(),
+      viewer: { twitchUserId: '9901', login: 'gifter', displayName: 'Gifter' },
+      bits: 100,
+    };
+    const send = (instance: string) =>
+      call('/v1/bot/loyalty/events', bot, event, instance);
+    await call('/v1/bot/instance/lease', bot, req('vps-1'));
+    // pc-1 received it while vps-1 still held the lease: refused, nothing recorded.
+    const refused = await send('pc-1');
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ error: 'not_lease_holder' });
+    expect((await core.db.query('select 1 from loyalty_rewards')).length).toBe(
+      0,
+    );
+    // vps-1 silent (fenced); pc-1 becomes the holder and resends the SAME event from its outbox.
+    core.clock.advance(46_000);
+    await call('/v1/bot/instance/lease', bot, req('pc-1'));
+    const first = await send('pc-1');
+    expect(first.status).toBe(200);
+    expect(first.body.replayed).toBe(false);
+    // A reconnection resends it once more: a replay, never a second reward.
+    const again = await send('pc-1');
+    expect(again.status).toBe(200);
+    expect(again.body.replayed).toBe(true);
+    expect((await core.db.query('select 1 from loyalty_rewards')).length).toBe(
+      1,
+    );
   });
 
   it('server-side fencing: with a live lease, the bot routes answer its holder only', async () => {

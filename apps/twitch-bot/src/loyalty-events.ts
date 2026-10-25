@@ -4,7 +4,11 @@ import type {
   SubTier,
   Viewer,
 } from '@raptoru/schemas';
-import { CoreHttpError, type CoreClient } from './core-client.js';
+import {
+  CoreHttpError,
+  type CoreClient,
+  notLeaseHolder,
+} from './core-client.js';
 import type { LoyaltyOutbox, OutboxEntry } from './loyalty-outbox.js';
 import type { EventSubHandlers } from './twitch/eventsub.js';
 
@@ -201,8 +205,9 @@ export function createBroadcasterEvents(deps: {
   const sending = new Set<string>();
 
   // Core is idempotent per event id, so resending is always safe. A transient failure (Core down
-  // or restarting, 5xx) is retried until Core answers, across bot restarts (outbox). A 4xx is a
-  // definitive refusal (e.g. 409: same event id with another payload), kept in the outbox journal.
+  // or restarting, 5xx, or 409 not_lease_holder: the bot lease is changing hands) is retried until Core answers, across
+  // bot restarts (outbox). Any other 4xx is a definitive refusal (e.g. 409: same event id with another payload), kept
+  // in the outbox journal.
   function send(entry: OutboxEntry): void {
     if (sending.has(entry.event.eventId)) return;
     sending.add(entry.event.eventId);
@@ -225,7 +230,11 @@ export function createBroadcasterEvents(deps: {
       );
     } catch (error) {
       const message = (error as Error).message;
-      if (error instanceof CoreHttpError && error.status < 500) {
+      if (
+        error instanceof CoreHttpError &&
+        error.status < 500 &&
+        !notLeaseHolder(error)
+      ) {
         deps.outbox.reject(entry, message, now());
         sending.delete(event.eventId);
         log(`[loyalty] REJECTED by Core: ${ref} (${message})`);
