@@ -502,6 +502,17 @@ describe('Roue du Sub V2 — R3: permissions and grants', () => {
     expect(
       await count(f.core.db, "lab_moderation_audit where action = 'sw_grant'"),
     ).toBe(1);
+    // Shown: announced in chat like a sub's gain, once (a test or a simulation never is).
+    f.core.clock.set(new Date(f.core.clock.now().getTime() + 12_000));
+    await f.done(right.spin_id);
+    await f.done(right.spin_id);
+    const said = await f.core.db.query<{ params: { text: string } }>(
+      "select params from cmd_steps where origin = 'sub_wheel'",
+    );
+    expect(said).toHaveLength(1);
+    expect(said[0]!.params.text).toMatch(
+      /^🎡 Roue du Sub : @V9501 gagne [\d \u00a0\u202f]+ Jetons !$/,
+    );
   });
 });
 

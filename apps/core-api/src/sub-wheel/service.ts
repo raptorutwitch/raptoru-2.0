@@ -230,14 +230,19 @@ export class SubWheelService {
 
   /**
    * The winner announcement in chat (« 🎡 Roue du Sub : @Pseudo gagne X Jetons ! »), on LeCroupier_'s durable queue,
-   * once per spin (its key): only a real Twitch sub whose gain is credited and whose wheel was SHOWN — sent
-   * SW_ANNOUNCE_DELAY_MS after the end of the animation (or at once when the credit comes later). Tests, simulations,
-   * zero gains, unpaid gains and failed animations: nothing.
+   * once per spin (its key): only a real viewer's spin — a Twitch sub, a spin granted by hand (« Accorder un tour »)
+   * or a reconciled one — whose gain is credited and whose wheel was SHOWN — sent SW_ANNOUNCE_DELAY_MS after the end
+   * of the animation (or at once when the credit comes later). Tests, simulations, zero gains, unpaid gains and failed
+   * animations: nothing.
    */
   private async announce(q: Queryable, r: Row, delayMs: number) {
     const amount = Number(r.amount);
     if (
-      r.source !== 'twitch' ||
+      !(
+        r.source === 'twitch' ||
+        r.source === 'manual' ||
+        r.source === 'reconcile'
+      ) ||
       r.status !== 'shown' ||
       r.award_status !== 'awarded' ||
       !(amount > 0)
