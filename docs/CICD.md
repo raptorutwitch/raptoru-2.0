@@ -114,10 +114,10 @@ En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status
 
 | Nom (secret)                                | Pour                                      | Valeur                                                                                                                     |
 | ------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `COOLIFY_URL`                               | Déployer, État                            | adresse **HTTPS** de Coolify (ex. `https://coolify.raptoru.fr`) — voir la note HTTPS                                       |
-| `COOLIFY_TOKEN`                             | Déployer, État                            | jeton Coolify (Keys & Tokens) : permissions read, write, deploy, **read:sensitive** (journaux des migrations)              |
-| `OPS_TOKEN`                                 | Déployer, État                            | 40 caractères aléatoires ou plus ; **la même valeur** dans la variable `OPS_TOKEN` de l'application Coolify `raptoru-core` |
-| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Déployer (3e source de live, facultative) | une application Twitch dédiée (« Raptoru CI »), sans aucun droit utilisateur                                               |
+| `COOLIFY_URL`                               | Déployer, État                            | **en place** : `https://core-staging.raptoru.fr/_coolify` (voir « HTTPS de Coolify »)                                      |
+| `COOLIFY_TOKEN`                             | Déployer, État                            | **en place** : le jeton Coolify « raptoru-deploy-automation » (read, write, deploy, read:sensitive), copie de `~/.raptoru` |
+| `OPS_TOKEN`                                 | Déployer, État                            | **en place** : la même valeur que la variable `OPS_TOKEN` de `raptoru-core` dans Coolify et que `~/.raptoru/ops-token.txt` |
+| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Déployer (3e source de live, facultative) | absents (inutiles : le Core fournit déjà deux sources) ; sinon une application Twitch dédiée, sans droit utilisateur       |
 | `STUDIO_RELEASES_TOKEN`                     | Studio (draft / public)                   | jeton GitHub « fine-grained » : dépôt `raptoru-studio-releases` uniquement, « Contents: Read and write »                   |
 
 | Nom (variable)                | Valeur                                                                                  |
@@ -125,17 +125,25 @@ En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status
 | `DEPLOY_ACTORS`               | `raptorutwitch` (défaut si absente) — comptes autorisés à déployer / publier            |
 | `COOLIFY_ALLOW_INSECURE_HTTP` | absente. `true` = arbitrage explicite d'envoyer le jeton Coolify en clair (déconseillé) |
 
-**HTTPS de Coolify** : aujourd'hui l'API Coolify n'est joignable qu'en HTTP non chiffré (`62.84.187.170:8000`). Depuis
-GitHub, l'outil refuse d'y envoyer le jeton. Pour l'activer :
+**HTTPS de Coolify (en service depuis le 25/10)** : l'API de Coolify n'était joignable qu'en HTTP non chiffré
+(`62.84.187.170:8000`). Un mini-proxy l'expose désormais en HTTPS :
 
-1. un enregistrement DNS `coolify.raptoru.fr` → `62.84.187.170` ;
-2. Coolify → Settings → Instance's Domain : `https://coolify.raptoru.fr` (certificat Let's Encrypt automatique) ;
-3. le secret `COOLIFY_URL` = `https://coolify.raptoru.fr`.
+- projet Coolify « Raptoru ops », application `coolify-api-https` (nginx) ;
+- il ne transmet que `/api/` vers Coolify (`http://coolify:8080`, réseau interne) ; tout le reste répond 404 ;
+- adresse **provisoire** : `https://core-staging.raptoru.fr/_coolify`. Elle passe par le domaine de staging, qui a déjà
+  un certificat ; le routage de Production n'est pas touché, et le Core de staging garde tous ses autres chemins.
 
-`OPS_TOKEN` : ajouter la variable à `raptoru-core` dans Coolify **avant** de déployer un Core qui la lit (≥ `c8ffc74`). Le
-Core actuel (`36a4cec`) n'a pas `/v1/ops/status` : jusqu'à ce déploiement, le garde-fou de live ne trouve aucune source
-depuis GitHub et bloque. Le **premier** déploiement du Core se fait donc en local, avec OBS comme seconde source, ou
-avec l'arbitrage « une seule source ».
+Pour une adresse dédiée (facultatif, un enregistrement DNS chez OVH) :
+
+1. OVH → Domaines → `raptoru.fr` → Zone DNS → ajouter une entrée A `coolify` → `62.84.187.170` ;
+2. dans Coolify, remplacer le domaine de l'application `coolify-api-https` par `https://coolify.raptoru.fr` et la
+   redéployer (certificat Let's Encrypt automatique) ;
+3. le secret `COOLIFY_URL` devient `https://coolify.raptoru.fr`.
+
+`OPS_TOKEN` : en place depuis le 25/10 (variable de `raptoru-core`, secret GitHub, `~/.raptoru/ops-token.txt`). Le Core
+`34e4120`, déployé le 25/10 en local avec deux sources de live (Twitch Helix et OBS), sert `/v1/ops/status`. Depuis,
+GitHub dispose de deux sources de live sans aucun secret Twitch : la session de stream du Core et Helix interrogé par le
+Core.
 
 ## 6. Jamais pendant un live
 
