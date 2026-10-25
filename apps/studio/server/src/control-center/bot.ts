@@ -31,6 +31,24 @@ const HOSTS: Record<string, string> = {
 };
 const where = (host: string) => HOSTS[host] ?? host;
 
+/**
+ * Incident 22/10 (F1): Studio → Connexions Twitch manages the tokens of THIS PC. A bot on the VPS reads its own copies
+ * (Docker volume): reauthorizing here changes nothing for it, so the hint only sends there when the bot runs here.
+ */
+export function botTwitchHint(
+  host: string,
+  broadcasterTokenLost: boolean,
+  lost: string[] = [],
+) {
+  if (host === 'pc')
+    return broadcasterTokenLost
+      ? 'Le jeton de raptoru_ est inutilisable : reconnecter raptoru_ (Studio → Connexions Twitch), puis redémarrer le bot.'
+      : 'Twitch ne répond pas au bot : vérifier le jeton de LeCroupier_ (Studio → Connexions Twitch) et le journal du bot.';
+  return broadcasterTokenLost
+    ? `Le jeton de raptoru_ du bot (${where(host)}) est inutilisable : il se renouvelle sur le ${where(host)} (procédure docs/BOT_VPS_CUTOVER.md). Les jetons de ce PC ne sont pas utilisés par ce bot.`
+    : `Connexion Twitch perdue${lost.length ? ` (${lost.join(', ')})` : ''} : le bot se reconnecte seul (nouvel essai toutes les 5 s). Si cela dure plus de 2 min : journal du bot (Coolify → raptoru-bot → Logs). Réautoriser sur ce PC ne change rien pour un bot sur le ${where(host)}.`;
+}
+
 const FEATURES: [keyof BotFlags & string, string][] = [
   ['CHAT_GAMES', 'jeux chat'],
   ['CHAT_GAMES_OUTPUT', 'réponses chat'],
@@ -149,10 +167,12 @@ export function describeBot(s: BotStatus, readAt: Date): ModuleStatus {
         state: 'Erreur',
         summary: `Le bot tourne sur le ${where(a.host)} mais une connexion Twitch manque.`,
         facts,
-        hint:
-          a.health.broadcasterToken === false
-            ? 'Le jeton de raptoru_ est inutilisable : reconnecter raptoru_ (Studio → Connexions Twitch), puis redémarrer le bot.'
-            : 'Twitch ne répond pas au bot : vérifier le jeton de LeCroupier_ (Studio → Connexions Twitch) et le journal du bot.',
+        hint: botTwitchHint(a.host, a.health.broadcasterToken === false, [
+          ...(a.health.eventSubBot === false ? ['chat de LeCroupier_'] : []),
+          ...(a.health.eventSubBroadcaster === false
+            ? ['événements de raptoru_']
+            : []),
+        ]),
       };
     if (age > LATE_MS)
       return {

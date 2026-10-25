@@ -80,3 +80,19 @@ export function nextUpdateState(
       return { ...state, status: 'unsupported', message: event.message };
   }
 }
+
+/**
+ * Why this build must not check GitHub, or null. A development run is not packaged; a local test build carries a
+ * prerelease version (0.1.7-sup.2): electron-updater would look for its « sup » channel, which no official release
+ * publishes (error shown in Studio, 23/10). Official versions (x.y.z) check as before.
+ */
+export function updateBlockReason(
+  version: string,
+  packaged: boolean,
+): string | null {
+  if (!packaged)
+    return 'Mise à jour indisponible en développement (app non packagée).';
+  if (version.includes('-'))
+    return `Version de test ${version} : mises à jour automatiques désactivées. Réinstalle une version officielle pour les retrouver.`;
+  return null;
+}

@@ -87,7 +87,8 @@ export function localTtsCoreClient(base: string, secret: string): TtsCoreCall {
 export class TtsWorker {
   private chain: Promise<unknown> = Promise.resolve();
   private player: { id: string; at: number; voices: number } | null = null;
-  private lastHeartbeat = 0;
+  /** Epoch ms of the last heartbeat Core accepted (0 = none yet); read by the supervision. */
+  lastHeartbeat = 0;
   /** Breathing time between two TTS, from Core (the player waits it before asking again). */
   transitionGapMs = 1500;
   moduleState: 'active' | 'paused' | 'disabled' = 'active';

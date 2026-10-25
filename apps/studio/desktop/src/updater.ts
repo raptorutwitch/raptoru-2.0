@@ -4,6 +4,7 @@ import electronUpdaterPkg from 'electron-updater';
 import {
   initialUpdateState,
   nextUpdateState,
+  updateBlockReason,
   type UpdateEvent,
   type UpdateState,
 } from './update-state.js';
@@ -62,12 +63,9 @@ export function setupUpdater(deps: {
   );
 
   const check = async () => {
-    if (!app.isPackaged) {
-      apply({
-        type: 'unsupported',
-        message:
-          'Mise à jour indisponible en développement (app non packagée).',
-      });
+    const blocked = updateBlockReason(app.getVersion(), app.isPackaged);
+    if (blocked) {
+      apply({ type: 'unsupported', message: blocked });
       return;
     }
     try {

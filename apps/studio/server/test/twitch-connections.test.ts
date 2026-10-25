@@ -174,25 +174,88 @@ describe('Studio Twitch connections: passive diagnostics and explicit operations
     },
   );
 
-  it('marks an expired/rejected token without trying POST /token, retaining the file', async () => {
+  it('an expired access token with a refresh token is « renewable », never « refused »; Studio itself never calls POST /token', async () => {
     const f = await fixture();
     await writeFile(
       f.file,
       JSON.stringify({ ...f.token, expiresAt: Date.now() - 1000 }),
     );
     expect(f.service.status().accounts[0]).toMatchObject({
-      state: 'unverified',
+      state: 'renewable',
       stored_expired: true,
     });
     f.fetchMock.mockImplementationOnce(
       async () => new Response('not exposed', { status: 401 }),
     );
-    await f.service.verify('bot');
-    expect(f.service.status().accounts[0]?.state).toBe('invalid_token');
+    // Twitch refuses the access token → the bot's renewal CLI (its TwitchAuth), which here reports a refused refresh.
+    const verifying = f.service.verify('bot');
+    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledTimes(1));
+    expect(f.spawn.mock.calls[0]![1]).toEqual(
+      expect.arrayContaining(['--studio', '--renew']),
+    );
+    f.child.event({ type: 'error', code: 'refresh_rejected', message: 'x' });
+    f.child.emit('close', 1);
+    await verifying;
+    expect(f.service.status().accounts[0]?.state).toBe('refresh_rejected');
     expect(f.fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      f.fetchMock.mock.calls.map((c) => String((c as unknown[])[0])),
+    ).not.toContain('https://id.twitch.tv/oauth2/token');
     expect(JSON.parse(await readFile(f.file, 'utf8')).refreshToken).toBe(
       f.token.refreshToken,
     );
+  });
+
+  it('« Vérifier » renews an expired access token (refresh token still valid): ready again, no reauthorization', async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementationOnce(
+      async () => new Response('{}', { status: 401 }),
+    );
+    const verifying = f.service.verify('bot');
+    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledTimes(1));
+    f.child.event({ type: 'renewed', role: 'bot', refreshed: true });
+    f.child.emit('close', 0);
+    await verifying;
+    const account = f.service.status().accounts[0]!;
+    expect(account.state).toBe('ready');
+    expect(account.renewed_at).not.toBeNull();
+    expect(f.fetchMock).toHaveBeenCalledTimes(2); // refused, then the renewed grant validated
+  });
+
+  it('renewal outcomes: Twitch unreachable stays temporary; free text never reaches the page', async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementationOnce(
+      async () => new Response('{}', { status: 401 }),
+    );
+    const verifying = f.service.verify('bot');
+    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledTimes(1));
+    f.child.event({ type: 'error', code: '<script>secret</script>' });
+    f.child.emit('close', 1);
+    await verifying;
+    expect(f.service.status().accounts[0]?.state).toBe('refresh_failed');
+    const g = await fixture();
+    g.fetchMock.mockImplementationOnce(
+      async () => new Response('{}', { status: 401 }),
+    );
+    const again = g.service.verify('bot');
+    await vi.waitFor(() => expect(g.spawn).toHaveBeenCalledTimes(1));
+    g.child.event({ type: 'error', code: 'twitch_unavailable' });
+    g.child.emit('close', 1);
+    await again;
+    expect(g.service.status().accounts[0]?.state).toBe('twitch_unavailable');
+  });
+
+  it('no refresh token: nothing to renew, the refusal stands (a reauthorization is required)', async () => {
+    const f = await fixture();
+    const { refreshToken: _drop, ...noRefresh } = f.token;
+    void _drop;
+    await writeFile(f.file, JSON.stringify({ ...noRefresh, refreshToken: '' }));
+    f.fetchMock.mockImplementationOnce(
+      async () => new Response('{}', { status: 401 }),
+    );
+    await f.service.verify('bot');
+    expect(f.spawn).not.toHaveBeenCalled();
+    expect(f.service.status().accounts[0]?.state).toBe('invalid_token');
   });
 
   it('reports a network failure safely and does not retry from subsequent GET status', async () => {
@@ -284,7 +347,12 @@ describe('Studio Twitch connections: passive diagnostics and explicit operations
       JSON.stringify({ ...f.token, pendingRefreshToken }),
     );
     const before = await readFile(f.file, 'utf8');
-    await f.service.verify('bot');
+    // Studio hands the half-done rotation to the bot's renewal (its TwitchAuth finishes it); here Twitch is down.
+    const verifying = f.service.verify('bot');
+    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledTimes(1));
+    f.child.event({ type: 'error', code: 'twitch_unavailable' });
+    f.child.emit('close', 1);
+    await verifying;
     const status = f.service.status();
     expect(status.accounts[0]?.state).toBe('pending_validation');
     expect(JSON.stringify(status)).not.toContain(pendingRefreshToken);
@@ -410,5 +478,28 @@ describe('Studio Twitch connections: passive diagnostics and explicit operations
     }
     expect(f.spawn).not.toHaveBeenCalled();
     expect(f.fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('Production profile (incident 22/10, F1): PC tokens are not the production bot’s', () => {
+  it('refuses reauthorization and says why; verification stays available', async () => {
+    const f = await fixture();
+    const service = createTwitchConnections({ ...f.deps, production: true });
+    const status = service.status();
+    expect(status.production).toBe(true);
+    expect(status.authorization_allowed).toBe(false);
+    expect(status.authorization_blocked_reason).toContain('bot de Production');
+    expect(() => service.authorize('bot')).toThrow('production_profile');
+    expect(f.spawn).not.toHaveBeenCalled();
+    await service.verify('bot');
+    expect(service.status().accounts[0]!.state).toBe('ready');
+  });
+
+  it('Lab profile keeps the reauthorization', async () => {
+    const f = await fixture();
+    expect(f.service.status()).toMatchObject({
+      production: false,
+      authorization_allowed: true,
+    });
   });
 });

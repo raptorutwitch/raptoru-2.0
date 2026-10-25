@@ -1,3 +1,5 @@
+import { fetchSupervision, renderHistory } from './supervision-banner.js';
+
 // Centre de contrôle Studio (plan post-live, lot 3). One tile per module, every tile drawn by the SAME renderer from
 // the server's ModuleStatus (apps/studio/server/src/control-center/model.ts): a new module = a new server provider,
 // nothing to add here. Reading only for now; each module is still piloted from its own tab.
@@ -68,9 +70,13 @@ export function mountControlCenter(root: HTMLElement) {
   root.innerHTML = `<h2>Centre de contrôle</h2>
     <p class="muted">État réel des services du live. Lecture seule pour l’instant : chaque module se pilote encore depuis son onglet.</p>
     <div class="cc-grid" data-slot="cc-tiles"><p class="muted">Chargement…</p></div>
-    <p class="cc-updated muted" data-slot="cc-updated"></p>`;
+    <p class="cc-updated muted" data-slot="cc-updated"></p>
+    <h3>Coupures récentes</h3>
+    <p class="muted">Depuis le démarrage de Studio : chaque coupure, même courte, et son retour. Le détail reste dans le journal de Studio (studio-server.log).</p>
+    <div data-slot="cc-history"></div>`;
   const tiles = root.querySelector<HTMLElement>('[data-slot="cc-tiles"]')!;
   const updated = root.querySelector<HTMLElement>('[data-slot="cc-updated"]')!;
+  const history = root.querySelector<HTMLElement>('[data-slot="cc-history"]')!;
   let visible = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -84,6 +90,8 @@ export function mountControlCenter(root: HTMLElement) {
       modules = [UNREACHABLE];
     }
     tiles.innerHTML = modules.map(renderStatusTile).join('');
+    const snap = await fetchSupervision();
+    if (snap) history.innerHTML = renderHistory(snap.history);
     updated.textContent = `Mis à jour à ${new Date().toLocaleTimeString('fr-FR')}`;
   }
   const loop = async () => {

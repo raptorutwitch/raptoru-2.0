@@ -72,7 +72,8 @@ export class BonkWorker {
   private renderer: { id: string; at: number } | null = null;
   private obs = false;
   private source = false;
-  private lastHeartbeat = 0;
+  /** Epoch ms of the last heartbeat Core accepted (0 = none yet); read by the supervision. */
+  lastHeartbeat = 0;
   error: string | null = null;
   private constructor(
     private readonly file: string,

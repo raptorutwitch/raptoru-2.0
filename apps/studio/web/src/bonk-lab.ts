@@ -16,7 +16,7 @@ export function mountBonkLab(
   panel.className = 'xlab-card';
   panel.innerHTML = `${
     options.production
-      ? '<h3>Bonk — overlay OBS (Production)</h3><p>Overlay servi par Studio avec le jeton du profil Production (différent de celui du Lab). Paiement encore simulé.</p>'
+      ? '<h3>Bonk — overlay OBS (Production)</h3><p>Overlay servi par Studio avec le jeton du profil Production (différent de celui du Lab). Paiement réel en Jetons au Wallet Raptoru du Core, remboursé une seule fois si le Bonk n’est pas joué.</p>'
       : '<h3>Bonk OBS Lab</h3><p>Coût simulé, aucun débit ni progression. Impacts autour de la cible réglée ci-dessous, dans une source 1920 × 1080.</p>'
   }
     <p data-bonk="status">Lecture du statut…</p>

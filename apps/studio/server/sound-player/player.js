@@ -1,4 +1,5 @@
-/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, clearTimeout, setInterval, clearInterval, AbortSignal */
+/* global document, location, fetch, crypto, Audio, AudioContext, setTimeout, clearTimeout, setInterval, clearInterval, AbortSignal, localStorage */
+import { readChoice, restoreAudio, writeChoice } from './audio-choice.js';
 
 // Local Soundboard player (Lab). Each sound handed by Studio plays at once in its own audio
 // element (Core decides what may overlap: stack / queue / ignore_if_running) and reports
@@ -11,10 +12,13 @@ const player = crypto.randomUUID();
 const token = location.hash.slice(1);
 const status = document.getElementById('status');
 const enable = document.getElementById('enable');
+const disable = document.getElementById('disable');
 const seen = new Set();
 const active = new Set(); // { audio, base } currently playing
 const stoppers = new Map(); // interaction_id → stop() of a sound handed to this page
 let audioEnabled = false;
+/** Cut on purpose by the streamer (« Couper le son »): reported to Studio, kept across a reload. */
+let audioOff = false;
 let protection = 'light';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -57,7 +61,7 @@ async function call(path, data) {
   return response.json();
 }
 async function heartbeat() {
-  const reply = await call('heartbeat', { audio: audioEnabled });
+  const reply = await call('heartbeat', { audio: audioEnabled, off: audioOff });
   const level = reply?.settings?.volume_protection;
   if (CURVES[level] && level !== protection) {
     protection = level;
@@ -91,21 +95,59 @@ function idle() {
     : 'Prêt · les sons du Soundboard Lab sont joués ici.';
 }
 
-// Browsers only allow audio after a user gesture on the page: this click unlocks it.
+/** True when this page may play audio now (a browser may keep resume() pending without a gesture: bounded). */
+async function unlockAudio() {
+  const context = new AudioContext();
+  try {
+    await Promise.race([context.resume(), sleep(1000)]);
+    return context.state === 'running';
+  } finally {
+    await context.close().catch(() => {});
+  }
+}
+function showAudio(text) {
+  enable.hidden = audioEnabled;
+  disable.hidden = !audioEnabled;
+  if (audioEnabled) idle();
+  else status.textContent = text;
+}
+
+// Browsers only allow audio after a user gesture on the page: this click unlocks it (and is remembered).
 enable.addEventListener('click', async () => {
   try {
-    const context = new AudioContext();
-    await context.resume();
-    audioEnabled = context.state === 'running';
-    await context.close();
+    audioEnabled = await unlockAudio();
   } catch {
     audioEnabled = false;
   }
-  enable.hidden = audioEnabled;
-  if (audioEnabled) idle();
-  else status.textContent = 'Lecture audio refusée par le navigateur.';
+  if (audioEnabled) {
+    audioOff = false;
+    writeChoice(localStorage, 'on');
+  }
+  showAudio('Lecture audio refusée par le navigateur.');
   void heartbeat().catch(() => {});
 });
+// A deliberate cut: no new sound is handed to this page, and a reload does not turn it back on.
+disable.addEventListener('click', () => {
+  audioEnabled = false;
+  audioOff = true;
+  writeChoice(localStorage, 'off');
+  showAudio(
+    'Son coupé volontairement : clique sur « Activer le son » pour le rétablir.',
+  );
+  void heartbeat().catch(() => {});
+});
+
+// Reload (Ctrl+R in Studio) or restart: back to the streamer's last choice.
+const restored = await restoreAudio(readChoice(localStorage), unlockAudio);
+audioEnabled = restored === 'enabled';
+audioOff = restored === 'off';
+showAudio(
+  restored === 'off'
+    ? 'Son coupé volontairement : clique sur « Activer le son » pour le rétablir.'
+    : restored === 'needs_click'
+      ? 'Son activé avant le rechargement, mais le navigateur exige un clic : clique sur « Activer le son ».'
+      : 'Son désactivé : clique pour autoriser la lecture.',
+);
 
 /**
  * End guard (ASTRA-P2-028): a sound that started but never reports its end is released after its
@@ -180,10 +222,11 @@ async function play(i) {
   });
   audio.play().catch((e) => {
     if (e && e.name === 'NotAllowedError') {
+      // Blocked by the browser, not a choice: the remembered 'on' stays, the button asks for a click.
       audioEnabled = false;
-      enable.hidden = false;
-      status.textContent =
-        'Son bloqué par le navigateur : clique sur « Activer le son ».';
+      showAudio(
+        'Son bloqué par le navigateur : clique sur « Activer le son ».',
+      );
     }
   });
   const result = await outcome;

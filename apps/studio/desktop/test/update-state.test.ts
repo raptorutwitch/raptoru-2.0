@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   initialUpdateState,
   nextUpdateState,
+  updateBlockReason,
   type UpdateState,
 } from '../src/update-state.js';
 
@@ -102,5 +103,20 @@ describe('update-state', () => {
     const state = nextUpdateState(stale, { type: 'checking' });
     expect(state.status).toBe('checking');
     expect(state.message).toBeNull();
+  });
+});
+
+describe('updateBlockReason (local test builds, 23/10)', () => {
+  it('official versions check GitHub as before', () => {
+    expect(updateBlockReason('0.1.7', true)).toBeNull();
+    expect(updateBlockReason('0.2.10', true)).toBeNull();
+  });
+  it('a test build (prerelease) never checks: explicit message, no GitHub error', () => {
+    expect(updateBlockReason('0.1.7-sup.2', true)).toContain(
+      'Version de test 0.1.7-sup.2',
+    );
+  });
+  it('development run: unchanged message', () => {
+    expect(updateBlockReason('0.1.6', false)).toContain('non packagée');
   });
 });

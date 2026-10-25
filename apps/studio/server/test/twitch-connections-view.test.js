@@ -135,3 +135,65 @@ describe('Comptes Twitch view: consent only after a deliberate click', () => {
     expect(f.element.innerHTML).not.toContain('href="https://evil.example');
   });
 });
+
+describe('Comptes Twitch view, Production profile (incident 22/10)', () => {
+  it('says these are the PC tokens, unused by the production bot, and offers no reauthorization', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...status(),
+            production: true,
+            authorization_allowed: false,
+            authorization_blocked_reason:
+              'Profil Production : ces jetons sont ceux de ce PC.',
+          }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const f = root();
+    f.view.setVisible(true);
+    await vi.waitFor(() =>
+      expect(f.element.innerHTML).toContain('jetons de ce PC'),
+    );
+    expect(f.element.innerHTML).toContain(
+      'Non utilisés par le bot de Production',
+    );
+    expect(f.element.innerHTML).not.toContain('data-twitch-action="authorize"');
+    expect(f.element.innerHTML).toContain('data-twitch-action="verify"');
+    f.view.setVisible(false);
+  });
+});
+
+describe('Comptes Twitch view: an expired access token is not an alarm (23/10)', () => {
+  it('renewable: no red badge, says it renews itself and that no reauthorization is needed', async () => {
+    const renewable = status();
+    renewable.accounts[0].state = 'renewable';
+    const fetch = vi.fn(async () => new Response(JSON.stringify(renewable)));
+    vi.stubGlobal('fetch', fetch);
+    const f = root();
+    f.view.setVisible(true);
+    await vi.waitFor(() =>
+      expect(f.element.innerHTML).toContain('renouvelable'),
+    );
+    expect(f.element.innerHTML).not.toContain('badge ko');
+    expect(f.element.innerHTML).toContain('Aucune réautorisation');
+    f.view.setVisible(false);
+  });
+
+  it('a refused renewal still asks for a reauthorization (real problem never hidden)', async () => {
+    const refused = status();
+    refused.accounts[0].state = 'refresh_rejected';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(refused))),
+    );
+    const f = root();
+    f.view.setVisible(true);
+    await vi.waitFor(() =>
+      expect(f.element.innerHTML).toContain('Réautorisation nécessaire'),
+    );
+    expect(f.element.innerHTML).toContain('badge ko');
+    f.view.setVisible(false);
+  });
+});
