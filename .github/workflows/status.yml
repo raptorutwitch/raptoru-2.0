@@ -1,0 +1,34 @@
+# État de la livraison (docs/CICD.md « Traçabilité ») : main et sa CI, ce qui tourne réellement sur le Core et le bot
+# (selon Coolify ET selon les services eux-mêmes), retour arrière possible, migrations en attente, Studio publié,
+# live. Lecture seule, à la main (Actions → « État de la livraison » → Run workflow) ; résultat dans le résumé du run.
+name: État de la livraison
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  status:
+    name: état
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: État (lecture seule)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          COOLIFY_ALLOW_INSECURE_HTTP: ${{ vars.COOLIFY_ALLOW_INSECURE_HTTP }}
+          OPS_TOKEN: ${{ secrets.OPS_TOKEN }}
+        run: node scripts/delivery/status.mjs

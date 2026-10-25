@@ -20,6 +20,7 @@ import {
   publicTwitchViewers,
 } from './ext/public-frontier.js';
 import { createApp } from './http/server.js';
+import { helixLive, opsStatus } from './ops/status.js';
 
 const config = loadConfig();
 const problems = economyConfigProblems(config);
@@ -109,6 +110,21 @@ const retryCredits = async () => {
 };
 setTimeout(retryCredits, CREDIT_RETRY_MS);
 
+const startedAt = new Date();
+// One Helix client (its app token cached) for every /v1/ops/status call.
+const liveOnTwitch =
+  config.TWITCH_APP_CLIENT_ID &&
+  config.TWITCH_APP_CLIENT_SECRET &&
+  config.TWITCH_CHANNEL_ID
+    ? helixLive(
+        {
+          clientId: config.TWITCH_APP_CLIENT_ID,
+          clientSecret: config.TWITCH_APP_CLIENT_SECRET,
+        },
+        config.TWITCH_CHANNEL_ID,
+      )
+    : null;
+
 // Viewer frontier (/v1/ext/*, Twitch JWT) and Studio cockpit: only when the channel is configured.
 // Payment: the economy chosen above (Lab test wallet by default: nothing here moves real Jetons or Channel Points).
 const frontier = createPublicFrontier(core, db, systemClock, config);
@@ -144,6 +160,24 @@ createApp({
   subWheel: core.subWheel,
   // Single active production bot: the lease (bot) and its health for the paired Studio.
   botInstances: core.botInstances,
+  // Delivery tooling: commit, live state (stream session + Helix), bot lease, migrations — read-only, OPS_TOKEN only.
+  ops: config.OPS_TOKEN
+    ? {
+        token: config.OPS_TOKEN,
+        status: () =>
+          opsStatus({
+            session: () => core.streams.current(),
+            helix: liveOnTwitch,
+            bot: core.botInstances ? () => core.botInstances!.status() : null,
+            db,
+            commit: /^[0-9a-f]{7,40}$/.test(config.SOURCE_COMMIT ?? '')
+              ? config.SOURCE_COMMIT!
+              : null,
+            startedAt,
+            now: () => systemClock.now(),
+          }),
+      }
+    : undefined,
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
   db,

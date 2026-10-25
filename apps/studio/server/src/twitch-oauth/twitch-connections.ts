@@ -23,6 +23,11 @@ export interface TwitchConnectionsDeps {
   botDir: string;
   envFile: string;
   canAuthorize: () => { ok: boolean; reason?: string };
+  /**
+   * Production profile (incident 22/10, F1): these are THIS PC's token files, which the production bot (VPS) never
+   * reads. Reauthorizing here would change nothing for it: refused, and the page says why. Lab keeps it.
+   */
+  production?: boolean;
   env?: NodeJS.ProcessEnv;
   nodePath?: string;
   fetch?: typeof fetch;
@@ -52,6 +57,8 @@ type Check = {
   code: string;
   info?: ValidatedTwitchTokenInfo;
   expiresAt?: number;
+  /** Set when « Vérifier » renewed the grant (refresh token) instead of asking for a reauthorization. */
+  renewedAt?: string;
 };
 type Flow = {
   role: TwitchOAuthRole;
@@ -64,6 +71,21 @@ type Flow = {
 const ROLES: TwitchOAuthRole[] = ['bot', 'broadcaster'];
 const PREFIX = '/api/twitch-connections';
 const HOUR = 60 * 60_000;
+const RENEW_TIMEOUT = 30_000;
+/** Outcomes of the renewal CLI shown as they are; anything else reads « refresh_failed ». */
+const RENEWAL_CODES = [
+  'refresh_rejected',
+  'invalid_token',
+  'twitch_unavailable',
+  'store_busy',
+  'store_conflict',
+  'invalid_store',
+  'no_token',
+  'wrong_client',
+  'wrong_account',
+  'not_user_token',
+  'invalid_token_info',
+];
 const FLOW_TIMEOUT = 11 * 60_000;
 const FEATURES: Record<TwitchOAuthRole, [string, string][]> = {
   bot: [
@@ -178,6 +200,9 @@ async function bodyRole(req: IncomingMessage): Promise<TwitchOAuthRole> {
   return role;
 }
 
+const PRODUCTION_REASON =
+  'Profil Production : ces jetons sont ceux de ce PC. Le bot de Production (VPS) utilise ses propres copies : les réautoriser ici ne le répare pas. Réautorisation disponible en profil Lab.';
+
 /** A short-lived controller: validated metadata stays in memory and is tied to the exact file content. */
 export class TwitchConnections {
   private checks = new Map<TwitchOAuthRole, Check>();
@@ -207,7 +232,9 @@ export class TwitchConnections {
   }
 
   status() {
-    const authorization = this.d.canAuthorize();
+    const authorization = this.d.production
+      ? { ok: false, reason: PRODUCTION_REASON }
+      : this.d.canAuthorize();
     const pathsConflict = this.tokenPathsConflict();
     const now = this.now();
     return {
@@ -228,6 +255,7 @@ export class TwitchConnections {
           check?.expiresAt !== undefined
             ? check.expiresAt <= now
             : token.expiresAt !== null && Date.parse(token.expiresAt) <= now;
+        const renewable = expired && token.hasRefreshToken;
         const fresh =
           check?.validatedAt !== null &&
           check?.validatedAt !== undefined &&
@@ -238,17 +266,22 @@ export class TwitchConnections {
             ? token.fileState
             : token.pendingValidation
               ? 'pending_validation'
-              : !check
-                ? 'unverified'
-                : check.code !== 'ready' && check.code !== 'missing_scopes'
-                  ? check.code
-                  : expired
-                    ? 'expired'
-                    : !fresh
-                      ? 'unverified'
-                      : missing.length
-                        ? 'missing_scopes'
-                        : 'ready';
+              : // An access token lives ≈ 4 h; with a refresh token it is renewed on use (bot, Lab) or by « Vérifier ».
+                renewable && !check
+                ? 'renewable'
+                : !check
+                  ? 'unverified'
+                  : check.code !== 'ready' && check.code !== 'missing_scopes'
+                    ? check.code
+                    : expired
+                      ? renewable
+                        ? 'renewable'
+                        : 'expired'
+                      : !fresh
+                        ? 'unverified'
+                        : missing.length
+                          ? 'missing_scopes'
+                          : 'ready';
         return {
           role,
           expected: { login: profile.login, user_id: profile.expectedUserId },
@@ -269,6 +302,7 @@ export class TwitchConnections {
           required_scopes: [...profile.scopes],
           missing_scopes: missing,
           checked_at: check?.checkedAt ?? null,
+          renewed_at: check?.renewedAt ?? null,
           validated_at: check?.validatedAt ?? null,
           features: FEATURES[role].map(([label, scope]) => ({
             label,
@@ -286,15 +320,109 @@ export class TwitchConnections {
           : (authorization.reason ??
             'Arrête les consommateurs Twitch avant de réautoriser.'),
       configured: Boolean(this.d.clientId),
+      production: Boolean(this.d.production),
       busy: this.verifying ? 'verify' : this.child ? 'authorize' : null,
       flow: this.flow ? { ...this.flow } : null,
     };
   }
 
+  /**
+   * « Vérifier »: asks Twitch whether the stored access token works (GET /validate, no rewrite). An access token lives
+   * ≈ 4 h: when Twitch refuses it and a refresh token is stored, the grant is renewed through the bot's own TwitchAuth
+   * (`twitch-auth --renew`: shared file lock, rotated refresh token kept, new grant validated before it is saved) —
+   * an expired access token is not a refused authorization (incident 23/10: daily reauthorizations for nothing).
+   * Only a refused renewal asks for a reauthorization.
+   */
   async verify(role: TwitchOAuthRole) {
     if (this.child || this.verifying) throw new Error('busy');
     if (!this.d.clientId) throw new Error('configuration_missing');
     this.verifying = role;
+    try {
+      const first = await this.validateOnce(role);
+      const stored = readToken(this.d.tokenFiles[role]);
+      if (
+        // Refused access token, or a renewal a runtime left half-done (rotated refresh token kept, not yet validated).
+        (first.code === 'invalid_token' || stored.pendingValidation) &&
+        stored.hasRefreshToken &&
+        existsSync(this.renewScript())
+      ) {
+        const outcome = await this.renew(role);
+        if (outcome === 'renewed') {
+          const after = await this.validateOnce(role);
+          after.renewedAt = after.checkedAt;
+        } else
+          this.checks.set(role, {
+            ...first,
+            code: RENEWAL_CODES.includes(outcome) ? outcome : 'refresh_failed',
+          });
+      }
+    } finally {
+      this.verifying = null;
+    }
+  }
+
+  private renewScript() {
+    return join(this.d.botDir, 'dist', 'scripts', 'twitch-auth.js');
+  }
+
+  /** The bot's renewal CLI; only its allowlisted JSON outcome is kept (stderr / free text never reach the page). */
+  private renew(role: TwitchOAuthRole): Promise<string> {
+    return new Promise((done) => {
+      const child = (this.d.spawn ?? nodeSpawn)(
+        this.d.nodePath ?? process.execPath,
+        [
+          `--env-file-if-exists=${this.d.envFile}`,
+          this.renewScript(),
+          '--studio',
+          '--renew',
+          ...(role === 'broadcaster' ? ['--broadcaster'] : []),
+        ],
+        {
+          cwd: this.d.botDir,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            ...this.d.env,
+            TWITCH_CLIENT_ID: this.d.clientId,
+            TWITCH_TOKEN_FILE: this.d.tokenFiles.bot,
+            TWITCH_BROADCASTER_TOKEN_FILE: this.d.tokenFiles.broadcaster,
+          },
+        },
+      );
+      let outcome = 'refresh_failed';
+      let buffer = '';
+      child.stdout?.on('data', (chunk: Buffer | string) => {
+        buffer = (buffer + String(chunk)).slice(-16_384);
+        for (const line of buffer.split('\n')) {
+          try {
+            const e = JSON.parse(line) as Record<string, unknown>;
+            if (e.type === 'renewed' && e.role === role) outcome = 'renewed';
+            else if (e.type === 'error') outcome = String(e.code);
+          } catch {
+            /* partial or non-JSON line */
+          }
+        }
+      });
+      child.stderr?.on('data', () => {});
+      const timer = setTimeout(() => {
+        outcome = 'twitch_unavailable';
+        child.kill();
+      }, RENEW_TIMEOUT);
+      timer.unref?.();
+      child.once('error', () => {
+        clearTimeout(timer);
+        done('refresh_failed');
+      });
+      child.once('close', () => {
+        clearTimeout(timer);
+        done(outcome);
+      });
+    });
+  }
+
+  /** One GET /validate of the stored token: never refreshes, never rewrites the file. */
+  private async validateOnce(role: TwitchOAuthRole): Promise<Check> {
     const token = readToken(this.d.tokenFiles[role]);
     const checkedAt = new Date(this.now()).toISOString();
     const previous = this.checks.get(role);
@@ -309,7 +437,7 @@ export class TwitchConnections {
     try {
       if (!token.accessToken) {
         check.code = 'no_token';
-        return;
+        return check;
       }
       // Deliberately GET /validate only: diagnosing an expired token must not refresh it or rewrite its file.
       const response = await (this.d.fetch ?? fetch)(
@@ -323,7 +451,7 @@ export class TwitchConnections {
       if (!response.ok) {
         check.code =
           response.status === 401 ? 'invalid_token' : 'twitch_unavailable';
-        return;
+        return check;
       }
       const profile = TWITCH_OAUTH_PROFILES[role];
       const info = validateTwitchTokenInfo(await response.json(), {
@@ -344,12 +472,13 @@ export class TwitchConnections {
           : 'twitch_unavailable';
     } finally {
       this.checks.set(role, check);
-      this.verifying = null;
     }
+    return check;
   }
 
   authorize(role: TwitchOAuthRole) {
     if (this.child || this.verifying) throw new Error('busy');
+    if (this.d.production) throw new Error('production_profile');
     if (this.tokenPathsConflict()) throw new Error('token_path_conflict');
     if (!this.d.canAuthorize().ok) throw new Error('consumers_active');
     if (!this.d.clientId) throw new Error('configuration_missing');
@@ -542,6 +671,7 @@ export class TwitchConnections {
         'invalid_request',
         'invalid_role',
         'token_path_conflict',
+        'production_profile',
       ];
       send(res, code === 'busy' || code === 'consumers_active' ? 409 : 400, {
         error: allowed.includes(code) ? code : 'invalid_request',

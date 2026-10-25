@@ -21,6 +21,7 @@ import {
   requestToken,
   sameTokenVersion,
   TokenStoreError,
+  TwitchAuth,
   TWITCH_AUTHORIZE_URL,
   validateAccessToken,
   type TokenStore,
@@ -32,6 +33,13 @@ const TIMEOUT_MS = 5 * 60 * 1000;
 export type TwitchAuthorizationEvent =
   | { type: 'authorization'; url: string; role: TwitchOAuthRole }
   | { type: 'complete'; role: TwitchOAuthRole }
+  | {
+      type: 'renewed';
+      role: TwitchOAuthRole;
+      /** False: the stored access token was still valid, nothing rewritten. */
+      refreshed: boolean;
+      expires_at: string | null;
+    }
   | { type: 'error'; code: string; message: string };
 
 export class TwitchAuthorizationError extends Error {
@@ -304,6 +312,50 @@ export async function runTwitchAuthorization(
   emit({ type: 'complete', role });
 }
 
+/**
+ * Studio « Vérifier » (23/10): the stored grant made usable again WITHOUT a new consent, through the very path the bot
+ * runs at start (TwitchAuth: validate, refresh on 401 or near expiry, rotated refresh token kept, new grant validated
+ * before it is saved, under the file lock every consumer shares). A refused refresh is final: no retry, the caller
+ * asks for a reauthorization. Never logs a token.
+ */
+export async function runTwitchRenewal(options: {
+  role: TwitchOAuthRole;
+  config: TwitchAppConfig;
+  store?: TokenStore;
+  fetch?: typeof fetch;
+  now?: () => number;
+  emit(event: TwitchAuthorizationEvent): void;
+}): Promise<void> {
+  const { role, config } = options;
+  const auth = new TwitchAuth({
+    clientId: config.TWITCH_CLIENT_ID,
+    clientSecret: config.TWITCH_CLIENT_SECRET,
+    expectedUserId: TWITCH_OAUTH_PROFILES[role].expectedUserId,
+    store:
+      options.store ??
+      fileTokenStore(
+        role === 'bot'
+          ? config.TWITCH_TOKEN_FILE
+          : config.TWITCH_BROADCASTER_TOKEN_FILE,
+      ),
+    // Scopes are judged by Studio against the consent profile; this only makes the grant usable.
+    requiredScopes: [],
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+    ...(options.now ? { now: options.now } : {}),
+    log: () => {},
+  });
+  await auth.init();
+  // Valid but about to expire: renewed now rather than left to the next consumer.
+  await auth.getAccessToken();
+  const status = auth.status();
+  options.emit({
+    type: 'renewed',
+    role,
+    refreshed: status.lastRefreshAt !== null,
+    expires_at: status.expiresAt,
+  });
+}
+
 /** Never forward raw system/Twitch/fetch exceptions to stdout. */
 export function authorizationErrorEvent(
   error: unknown,
@@ -336,15 +388,25 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       console.log(event.url);
     } else if (event.type === 'complete')
       console.log('Autorisation Twitch vérifiée et enregistrée.');
+    else if (event.type === 'renewed')
+      console.log(
+        event.refreshed
+          ? 'Jeton Twitch renouvelé.'
+          : 'Jeton Twitch encore valide.',
+      );
     else console.error(event.message);
   };
   try {
-    await runTwitchAuthorization({
-      role: args.includes('--broadcaster') ? 'broadcaster' : 'bot',
-      config: loadTwitchAppConfig(),
-      redirectUri: process.env.TWITCH_REDIRECT_URI,
-      emit,
-    });
+    const role = args.includes('--broadcaster') ? 'broadcaster' : 'bot';
+    if (args.includes('--renew'))
+      await runTwitchRenewal({ role, config: loadTwitchAppConfig(), emit });
+    else
+      await runTwitchAuthorization({
+        role,
+        config: loadTwitchAppConfig(),
+        redirectUri: process.env.TWITCH_REDIRECT_URI,
+        emit,
+      });
   } catch (error) {
     emit(authorizationErrorEvent(error));
     process.exitCode = 1;

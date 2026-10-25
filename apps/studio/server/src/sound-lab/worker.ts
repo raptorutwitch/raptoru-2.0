@@ -89,8 +89,14 @@ export function localSoundCoreClient(
 
 export class SoundWorker {
   private chain: Promise<unknown> = Promise.resolve();
-  private player: { id: string; at: number; audio: boolean } | null = null;
-  private lastHeartbeat = 0;
+  private player: {
+    id: string;
+    at: number;
+    audio: boolean;
+    off: boolean;
+  } | null = null;
+  /** Epoch ms of the last heartbeat Core accepted (0 = none yet); read by the supervision. */
+  lastHeartbeat = 0;
   /** Global Soundboard settings from Core (sent to the player with each heartbeat answer). */
   settings: SoundLabSettings = { volume_protection: 'light' };
   error: string | null = null;
@@ -165,6 +171,12 @@ export class SoundWorker {
     );
   }
   /** A live player page whose audio output has been enabled by a user gesture. */
+  /** A live player page whose sound was cut on purpose (supervision: « off », never an incident). */
+  get cutOnPurpose() {
+    return (
+      !!this.player && this.player.off && Date.now() - this.player.at < 5000
+    );
+  }
   get ready() {
     return (
       !!this.player && this.player.audio && Date.now() - this.player.at < 5000
@@ -189,7 +201,8 @@ export class SoundWorker {
     this.saved = text;
   }
 
-  async playerHeartbeat(id: string, audio: boolean) {
+  /** `off`: the streamer cut the sound on purpose (« Couper le son »), not a lost player. */
+  async playerHeartbeat(id: string, audio: boolean, off = false) {
     return this.exclusive(async () => {
       if (
         this.player &&
@@ -201,7 +214,7 @@ export class SoundWorker {
       for (const e of this.state.entries)
         if (e.sent && e.player !== id && !settled(e))
           e.events.push('execution_unknown');
-      this.player = { id, at: Date.now(), audio };
+      this.player = { id, at: Date.now(), audio, off: off && !audio };
       await this.save();
     });
   }

@@ -65,8 +65,8 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 | Où                                                                                                    | Contenu                                                                                                                            | État                                                                                                                                                       |
 | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0` (`main` @ `11ffe3f`, 33 commits de retard) | **Roue du Sub V2** (41 modifiés + 35 non suivis), correctif « écran gris » de l'extension, `CLAUDE.md` local, documents non suivis | non commité. **C'est aussi le dossier de données de Studio installé** (`.env`, jetons, `.runtime`) : jamais de `git clean`, `reset --hard` ou `checkout .` |
-| `…\scratchpad\sup-wt` (`fix/supervision` @ `2d80c2a`)                                                 | supervision, OAuth du PC, Ctrl+R Soundboard, updater de test                                                                       | non commité, embarqué dans Studio sup.8 à sup.10 (copie : `sup-wt.patch` + `sup-untracked.tar`)                                                            |
-| `C:\Users\Antoni\Documents\raptoru-release` (`chore/coolify-deploy` @ `1f10da3`)                      | script de déploiement Coolify (`ef79a37`, `80f3525`, `1f10da3`)                                                                    | 3 commits locaux **non poussés**, unique copie ; examinés le 25/10 : 4 fichiers neufs, compatibles avec `origin/main`, 21/21 tests                         |
+| `…\scratchpad\sup-wt` (`fix/supervision` @ `2d80c2a`)                                                 | supervision, OAuth du PC, Ctrl+R Soundboard, updater de test                                                                       | **intégré au dépôt** (PR #1, `eb3f05a`, identique au source de sup.10) ; le worktree peut être retiré après la fusion                                      |
+| `C:\Users\Antoni\Documents\raptoru-release` (`chore/coolify-deploy` @ `1f10da3`)                      | script de déploiement Coolify (`ef79a37`, `80f3525`, `1f10da3`)                                                                    | **intégré au dépôt** (PR #1, historique conservé) et étendu (CI, live, vérifications) ; ce worktree n'est plus l'unique copie                              |
 | `C:\Users\Antoni\Documents\rs-vk`                                                                     | clone de build Studio (patch `sup-wt` appliqué + `stash@{0}`), dossier `GO/` (runbook, SQL)                                        | ne pas nettoyer                                                                                                                                            |
 | `…\scratchpad\{chat,wg,solde,node}-wt`                                                                | restes de lots déjà intégrés                                                                                                       | à revérifier avant tout retrait                                                                                                                            |
 | `C:\Users\Antoni\Documents\raptoru-docs` (`docs/consolidation`)                                       | documentation, = `origin/main`                                                                                                     | poussé                                                                                                                                                     |
@@ -100,11 +100,10 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 - Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
   copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
-- Commiter `sup-wt` (embarqué dans sup.8 à sup.10).
-- Outil de déploiement (`raptoru-release`, 3 commits) : verdict du 25/10 « compatible, intégrable » — 4 fichiers neufs
-  sous `scripts/`, aucune collision avec `origin/main`, aucun secret (jeton lu dans `~/.raptoru`, masqué dans les
-  sorties), 21/21 tests sur `origin/main` + ces fichiers. À décider : l'intégrer sur `main` (rebase des 3 commits) ;
-  le test des migrations lit par défaut `C:\Users\Antoni\Documents\rs-vk` (`RAPTORU_CORE_ROOT` pour un autre dossier).
+- **CI/CD** (PR #1, [CICD.md](CICD.md)) : CI GitHub en service ; « Déployer Core / bot » et « Studio — construire /
+  publier » prêts mais inactifs tant que manquent : les secrets (`COOLIFY_URL`, `COOLIFY_TOKEN`, `OPS_TOKEN`,
+  `STUDIO_RELEASES_TOKEN`), Coolify en HTTPS, la variable `OPS_TOKEN` du Core puis le déploiement d'un Core ≥ `c8ffc74`
+  (premier déploiement en local, OBS comme seconde source de live). Détail : CICD.md § 5.
 - Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
   en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).
@@ -123,8 +122,8 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 1. Lire ce fichier, puis `git -C "C:\Users\Antoni\Documents\Raptoru 2.0" status` et `git fetch` ; mettre à jour
    `raptoru-docs` (§ 1) pour lire les documents de référence.
-2. Production en lecture seule : `cd C:\Users\Antoni\Documents\raptoru-release` puis
-   `node scripts/coolify-deploy.mjs status core` et `… status bot`.
+2. Production en lecture seule : Actions → « État de la livraison », ou dans un worktree à jour de `origin/main` :
+   `node scripts/delivery/status.mjs` (ou `node scripts/coolify-deploy.mjs status core` / `… status bot`).
 3. Lire [ROADMAP.md](ROADMAP.md) § 3 (prochain travail, arbitrages), puis le document du module concerné
    ([ARCHITECTURE.md](ARCHITECTURE.md) § 5).
 4. Travailler dans un worktree dédié basé sur `origin/main` (jamais dans le checkout principal, qui porte la Roue V2

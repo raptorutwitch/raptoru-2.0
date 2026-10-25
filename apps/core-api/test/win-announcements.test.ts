@@ -154,14 +154,24 @@ describe('Tombola — the grouped winners message', () => {
     expect(raffleWinnersMessages('5 Jetons', ['Solo'])).toEqual([
       'Tombola terminée ! Félicitations au gagnant qui remporte 5 Jetons : Solo !',
     ]);
-    const names = Array.from({ length: 40 }, (_, i) => `Viewer_Pseudo_${String(i).padStart(2, '0')}`);
+    const names = Array.from(
+      { length: 40 },
+      (_, i) => `Viewer_Pseudo_${String(i).padStart(2, '0')}`,
+    );
     const msgs = raffleWinnersMessages('1 000 Jetons', names);
     expect(msgs.length).toBeGreaterThan(1);
     for (const m of msgs) {
       expect(m.length).toBeLessThanOrEqual(500);
-      expect(m).toMatch(/^Tombola terminée ! Félicitations aux gagnants qui remportent 1 000 Jetons chacun : .+ !$/);
+      expect(m).toMatch(
+        /^Tombola terminée ! Félicitations aux gagnants qui remportent 1 000 Jetons chacun : .+ !$/,
+      );
     }
-    const back = msgs.flatMap((m) => m.replace(/^.* chacun : /, '').replace(/ !$/, '').split(', '));
+    const back = msgs.flatMap((m) =>
+      m
+        .replace(/^.* chacun : /, '')
+        .replace(/ !$/, '')
+        .split(', '),
+    );
     expect(back).toEqual(names);
   });
 });

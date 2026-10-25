@@ -212,7 +212,10 @@ describe('Votekick in Studio: the overlay', () => {
     expect(page.body).toContain('applySammiEvent(JSON.parse(text))'); // the legacy design fed by Studio
     expect(page.body).not.toContain('variants'); // never the exploration page (variant D)
     // The OBS source created on 23/10 keeps working: same page.
-    const alias = await get(s.rt, '/votekick/variants/variants.html?v=D&studio');
+    const alias = await get(
+      s.rt,
+      '/votekick/variants/variants.html?v=D&studio',
+    );
     expect(alias.status).toBe(200);
     expect(alias.body).toBe(page.body);
     expect((await get(s.rt, '/votekick/model.js')).status).toBe(404);

@@ -10,6 +10,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  Notification,
   safeStorage,
   shell,
   type IpcMainInvokeEvent,
@@ -20,6 +21,10 @@ import {
   loadObsConnection,
   saveObsConnection,
 } from './obs-credentials.js';
+import {
+  createIncidentNotifier,
+  type NotifiedIncident,
+} from './incident-notifier.js';
 import { rotatingLog } from './rotating-log.js';
 import {
   forgetSeConnection,
@@ -498,6 +503,38 @@ void app.whenReady().then(async () => {
     } catch (error) {
       serverLog(`[supervisor] ${(error as Error).message}`);
     }
+  }
+  // Live incidents (incident 22/10): one Windows notification per confirmed outage and one per recovery, read from the
+  // Studio server's supervision; a click brings Studio back. Windows ties toasts to the installer's AppUserModelID.
+  if (process.platform === 'win32') app.setAppUserModelId('fr.raptoru.studio');
+  if (Notification.isSupported()) {
+    // Kept until dismissed: a collected Notification loses its click handler (Electron).
+    const shown = new Set<Notification>();
+    const notifier = createIncidentNotifier({
+      read: async () => {
+        const res = await fetch(`${studioUrl}/api/supervision`, {
+          headers: { 'x-raptoru-studio': '1' },
+          signal: AbortSignal.timeout(3000),
+        });
+        return res.ok
+          ? ((await res.json()) as { incidents: NotifiedIncident[] })
+          : null;
+      },
+      notify: ({ title, body }) => {
+        const n = new Notification({ title, body });
+        shown.add(n);
+        n.on('close', () => shown.delete(n));
+        n.on('click', () => {
+          shown.delete(n);
+          if (!win) return;
+          if (win.isMinimized()) win.restore();
+          win.show();
+          win.focus();
+        });
+        n.show();
+      },
+    });
+    setInterval(() => void notifier.poll(), 5000);
   }
   // Silent: only ever surfaces 'available' (renderer shows the button) — never downloads,
   // never installs without the user clicking "Mettre à jour" / "Redémarrer et installer".

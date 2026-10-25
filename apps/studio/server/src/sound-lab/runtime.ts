@@ -77,7 +77,10 @@ export class SoundRuntime {
       return true;
     }
     const file = url.pathname.slice('/sound-lab/'.length);
-    if (req.method === 'GET' && ['player.html', 'player.js'].includes(file)) {
+    if (
+      req.method === 'GET' &&
+      ['player.html', 'player.js', 'audio-choice.js'].includes(file)
+    ) {
       const data = await readFile(
         join(REPO_ROOT, 'apps/studio/server/sound-player', file),
       );
@@ -161,7 +164,11 @@ export class SoundRuntime {
         if (!/^[a-zA-Z0-9-]{1,64}$/.test(player))
           throw new Error('invalid_player');
         if (url.pathname.endsWith('/heartbeat')) {
-          await this.worker.playerHeartbeat(player, body.audio === true);
+          await this.worker.playerHeartbeat(
+            player,
+            body.audio === true,
+            body.off === true,
+          );
           reply(200, { ok: true, settings: this.worker.settings });
         } else if (url.pathname.endsWith('/next'))
           reply(200, {

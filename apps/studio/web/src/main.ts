@@ -25,6 +25,7 @@ import { mountSimulation } from './simulation.js';
 import { mountSimulationTab } from './simulation-tab.js';
 import { mountAlerts } from './alerts-tab.js';
 import { mountChannelPoints } from './channel-points.js';
+import { mountSupervisionBanner } from './supervision-banner.js';
 
 type TabId =
   | 'studio'
@@ -63,6 +64,7 @@ if (app) {
       <div class="update-widget"></div>
       <span class="topbar-safety">Local uniquement · aucun crédit réel</span>
     </header>
+    <div class="sup-banner" hidden></div>
     <main id="tab-studio"></main>
     <main id="tab-moderation" hidden></main>
     <main id="tab-tombola" class="tab-flush" hidden></main>
@@ -74,6 +76,7 @@ if (app) {
     <main id="tab-test-lab" hidden></main>
     <main id="tab-extension-lab" class="tab-full" hidden></main>
     <main id="tab-soundboard" hidden></main>`;
+  mountSupervisionBanner(app.querySelector<HTMLElement>('.sup-banner')!);
   const home = mountStudioHome(app.querySelector<HTMLElement>('#tab-studio')!);
   mountTestLab(app.querySelector<HTMLElement>('#tab-test-lab')!);
   const moderation = mountModeration(

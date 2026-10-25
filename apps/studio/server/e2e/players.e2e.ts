@@ -27,6 +27,7 @@ async function studio(page: Page, kind: 'tts' | 'sound') {
   const queue: unknown[] = [];
   const stops: unknown[] = [];
   const acks: Ack[] = [];
+  const beats: { audio: unknown; off: unknown }[] = [];
   let nextCalls = 0;
   let accepting = 0;
   await page.route(`**${prefix}**`, async (route: Route) => {
@@ -45,13 +46,15 @@ async function studio(page: Page, kind: 'tts' | 'sound') {
     }
     const body = route.request().postDataJSON() as Record<string, unknown>;
     const json = (b: unknown) => route.fulfill({ json: b });
-    if (file === 'player/heartbeat')
+    if (file === 'player/heartbeat') {
+      beats.push({ audio: body.audio, off: body.off });
       return json({
         ok: true,
         transition_gap_ms: 0,
         module_state: 'active',
         settings: { volume_protection: 'light' },
       });
+    }
     if (file === 'player/ack') {
       acks.push({ id: String(body.interaction_id), event: String(body.event) });
       return json({ ok: true });
@@ -82,6 +85,8 @@ async function studio(page: Page, kind: 'tts' | 'sound') {
     events: (id: string) => acks.filter((a) => a.id === id).map((a) => a.event),
     accepting: () => accepting,
     nextCalls: () => nextCalls,
+    /** Last heartbeat the page sent (what Studio reports to Core: audio on, or cut on purpose). */
+    lastBeat: () => beats.at(-1),
   };
 }
 
@@ -309,5 +314,92 @@ test.describe('Soundboard player end guard', () => {
     s.stops.push({ interaction_id: 's3', attempt_id: 'att-s3' });
     await advance(page, 30_000);
     expect(s.events('s3')).toEqual(['started', 'stopped']);
+  });
+});
+
+// --- Soundboard: Ctrl+R in Studio (bug 23/10) -----------------------------------------------------
+
+/** AudioContext fake: `__allowAudio` decides whether resume() reaches 'running' (Electron allows it by default). */
+async function fakeAudioContext(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as Record<string, unknown>;
+    if (w.__allowAudio === undefined)
+      w.__allowAudio = sessionStorage.getItem('__allowAudio') !== 'no';
+    class FakeContext {
+      state = 'suspended';
+      resume() {
+        if (w.__allowAudio) this.state = 'running';
+        return Promise.resolve();
+      }
+      close() {
+        return Promise.resolve();
+      }
+    }
+    w.AudioContext = FakeContext;
+  });
+}
+const beat = async (
+  s: Awaited<ReturnType<typeof studio>>,
+  audio: boolean,
+  off: boolean,
+) => expect.poll(() => s.lastBeat()).toEqual({ audio, off });
+
+test.describe('Soundboard player: the audio choice survives a reload (Ctrl+R)', () => {
+  test('enabled, then reloaded: back on without a click', async ({ page }) => {
+    await fakeAudioContext(page);
+    const s = await studio(page, 'sound');
+    await page.goto('/sound-lab/player.html#tok');
+    await beat(s, false, false);
+    await page.click('#enable');
+    await beat(s, true, false);
+    await page.reload();
+    await beat(s, true, false);
+    await expect(page.locator('#enable')).toBeHidden();
+    await expect(page.locator('#disable')).toBeVisible();
+  });
+
+  test('cut on purpose, then reloaded: stays off (never re-enabled by a reload)', async ({
+    page,
+  }) => {
+    await fakeAudioContext(page);
+    const s = await studio(page, 'sound');
+    await page.goto('/sound-lab/player.html#tok');
+    await page.click('#enable');
+    await beat(s, true, false);
+    await page.click('#disable');
+    await beat(s, false, true);
+    await page.reload();
+    await beat(s, false, true);
+    await expect(page.locator('#enable')).toBeVisible();
+    await expect(page.locator('#status')).toContainText('coupé volontairement');
+    // Re-enabling is a click away, and is remembered again.
+    await page.click('#enable');
+    await page.reload();
+    await beat(s, true, false);
+  });
+
+  test('never enabled: a reload changes nothing (waits for the first click)', async ({
+    page,
+  }) => {
+    await fakeAudioContext(page);
+    const s = await studio(page, 'sound');
+    await page.goto('/sound-lab/player.html#tok');
+    await page.reload();
+    await beat(s, false, false);
+    await expect(page.locator('#enable')).toBeVisible();
+  });
+
+  test('enabled, but the browser refuses audio after the reload: asks for a click, not counted as a cut', async ({
+    page,
+  }) => {
+    await fakeAudioContext(page);
+    const s = await studio(page, 'sound');
+    await page.goto('/sound-lab/player.html#tok');
+    await page.click('#enable');
+    await beat(s, true, false);
+    await page.evaluate(() => sessionStorage.setItem('__allowAudio', 'no'));
+    await page.reload();
+    await beat(s, false, false);
+    await expect(page.locator('#status')).toContainText('exige un clic');
   });
 });

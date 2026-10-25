@@ -36,10 +36,12 @@ Coolify 4.4.7 : `http://62.84.187.170:8000`. Applications : `raptoru-core` `3m7c
 
 ## 3. Déployer le Core ou le bot (Coolify)
 
-Outil : `C:\Users\Antoni\Documents\raptoru-release` (worktree, branche `chore/coolify-deploy` @ `80f3525`, **non
-poussée**), `node scripts/coolify-deploy.mjs` (Node seul, sans dépendance).
+Depuis le 25/10 : le workflow GitHub **« Déployer Core / bot »** (onglet Actions, sans ligne de commande) — mode
+d'emploi, secrets et garde-fous dans [CICD.md](CICD.md). En local, le même outil et les mêmes règles :
+`node scripts/coolify-deploy.mjs` dans un worktree à jour de `origin/main` (Node seul, sans dépendance ; le worktree
+`raptoru-release` n'est plus l'unique copie). Il exige en plus la CI verte du commit sur `main` et l'absence de live.
 
-1. Le SHA cible doit être sur `origin/main` (pousser d'abord, sur GO).
+1. Le SHA cible doit être sur `origin/main` et prouvé par sa CI (pousser d'abord, sur GO).
 2. `node scripts/coolify-deploy.mjs plan core <sha40>` : lecture seule (commit déployé, fichiers, migrations de
    Production sélectionnées, fichiers lus par le bot, dernière sauvegarde) → verdict PRÊT / BLOQUÉ.
 3. Migration présente : sauvegarde de la base < 60 min (« Backup now », [BACKUPS.md](BACKUPS.md) § 2), puis

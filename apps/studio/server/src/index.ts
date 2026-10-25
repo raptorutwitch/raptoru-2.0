@@ -62,6 +62,13 @@ import { createTestLab, type TestLab } from './test-lab/test-lab.js';
 import { botStatusProvider } from './control-center/bot.js';
 import { ControlCenter } from './control-center/model.js';
 import {
+  type InteractionSources,
+  interactionsStatusProvider,
+  readSignals,
+  type Signal,
+} from './supervision/signals.js';
+import { Supervisor } from './supervision/supervisor.js';
+import {
   createLocalRuntime,
   portFree,
   type LocalRuntime,
@@ -370,6 +377,8 @@ export function createStudioServer(
   twitchConnections: TwitchConnections | null = null,
   /** Centre de contrôle (lot 3): one status per module, the bot first. */
   control: ControlCenter | null = null,
+  /** Incidents of the live (incident 22/10): global banner and desktop notifications. */
+  supervision: { handle: Supervisor['handle']; origin: string } | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -400,6 +409,11 @@ export function createStudioServer(
         return send(res, 409, { error: 'twitch_authorization_in_progress' });
       }
       if (control && (await control.handle(req, res, url))) return;
+      if (
+        supervision &&
+        (await supervision.handle(req, res, url, supervision.origin))
+      )
+        return;
       if (bonk && (await bonk.handle(req, res, url))) return;
       if (sound && (await sound.handle(req, res, url))) return;
       if (url.pathname === '/api/sound-lab/status' && !sound)
@@ -995,6 +1009,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     tokenFiles: twitchTokenFiles(),
     botDir: paths.botDir,
     envFile: paths.botEnv,
+    production: !labProfile,
     canAuthorize: () =>
       lab.tokenOperationsBusy || labChat?.status().enabled
         ? {
@@ -1005,6 +1020,52 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         : { ok: true },
   });
   twitchConnectionsRef = twitchConnections;
+  // Supervision (incident 22/10): what would make the Core refuse a viewer, read from the live runtimes.
+  const studioOrigin = `http://${host}:${port}`;
+  const interactionSources = (): InteractionSources => ({
+    link: production?.link ?? null,
+    tts: tts?.worker ?? null,
+    sound: sound?.worker ?? null,
+    bonk: bonk
+      ? {
+          obsConnected: bonk.obs.connected,
+          obsReconnecting: bonk.obs.reconnecting,
+          obsError: bonk.obs.error,
+          sourceReady: bonk.sourceReady,
+          overlayReady: bonk.worker.ready,
+          error: bonk.worker.error,
+          lastHeartbeat: bonk.worker.lastHeartbeat,
+        }
+      : null,
+  });
+  const bot = botStatusProvider(production?.alertsCore ?? null);
+  const control = new ControlCenter(studioOrigin, [
+    bot,
+    interactionsStatusProvider(() =>
+      readSignals(interactionSources(), Date.now()),
+    ),
+  ]);
+  const supervisor = new Supervisor({
+    read: async (): Promise<Signal[]> => {
+      const [b] = await control.statuses();
+      const botSignal: Signal[] =
+        b && b.id === 'bot' && b.level !== 'off'
+          ? [
+              {
+                id: 'bot',
+                label: 'LeCroupier_ (bot)',
+                level: b.level,
+                value: b.state,
+                cause: b.level === 'error' ? b.state : null,
+                action: b.level === 'error' ? 'auto' : null,
+                hint: b.hint ?? b.summary,
+              },
+            ]
+          : [];
+      return [...botSignal, ...readSignals(interactionSources(), Date.now())];
+    },
+    log: (line) => console.log(lab.deps.redact(line)),
+  });
   const httpServer = createStudioServer(
     lab,
     shutdown,
@@ -1036,11 +1097,12 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     alerts,
     points,
     twitchConnections,
-    // Centre de contrôle: the Production bot through the paired Studio's Core client (Lab profile: not followed).
-    new ControlCenter(`http://${host}:${port}`, [
-      botStatusProvider(production?.alertsCore ?? null),
-    ]),
+    // Centre de contrôle: the Production bot through the paired Studio's Core client (Lab profile: not followed), then
+    // the viewer interactions as Studio sees them (supervision/signals.ts).
+    control,
+    { handle: supervisor.handle.bind(supervisor), origin: studioOrigin },
   );
+  supervisor.start();
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(
       `[studio-server] listen failed: ${error.code ?? error.message}`,

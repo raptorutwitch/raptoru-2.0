@@ -1,0 +1,147 @@
+# Raptoru Studio — construire l'installateur Windows et, sur demande, le publier (docs/CICD.md « Publier Studio »).
+# Uniquement à la main (Actions → « Studio — construire / publier » → Run workflow), depuis main :
+# - publish = none   : construit et vérifie l'installateur sur Windows, teste la mise à jour sans perte de données,
+#                      le laisse en artefact (aucune publication) ;
+# - publish = draft  : en plus, brouillon dans raptoru-studio-releases — invisible pour les Studio installés ;
+# - publish = public : en plus, publié (le Studio installé le PROPOSE ; il ne le télécharge jamais seul) — avec la
+#                      confirmation « PUBLISH studio <7 premiers caractères du SHA> ».
+# Installateurs non signés (comme toutes les versions publiées) : electron-updater n'exige pas de signature tant que
+# l'application installée n'en a pas (aucun publisherName) ; SmartScreen avertit à la première installation manuelle.
+name: Studio — construire / publier
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version x.y.z (vide = patch suivant de la dernière release publique)
+        type: string
+        default: ''
+      publish:
+        description: none = artefact seulement ; draft = brouillon invisible ; public = proposé aux Studio installés
+        type: choice
+        options: [none, draft, public]
+        default: none
+      confirm:
+        description: Pour public — écrire « PUBLISH studio <7 premiers caractères du SHA de main> »
+        type: string
+        default: ''
+
+permissions: {}
+
+concurrency:
+  group: studio-release
+  cancel-in-progress: false
+
+env:
+  STUDIO_RELEASES_REPO: raptorutwitch/raptoru-studio-releases
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+  TURBO_TELEMETRY_DISABLED: '1'
+  npm_config_audit: 'false'
+  npm_config_fund: 'false'
+
+jobs:
+  authorize:
+    name: autorisation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Qui, depuis où, quel commit
+        if: inputs.publish != 'none'
+        env:
+          DEPLOY_ACTORS: ${{ vars.DEPLOY_ACTORS || 'raptorutwitch' }}
+          GITHUB_TOKEN: ${{ github.token }}
+          INPUT_COMPONENT: studio
+          INPUT_SHA: ${{ github.sha }}
+          INPUT_MODE: ${{ inputs.publish == 'public' && 'deploy' || 'plan' }}
+          INPUT_CONFIRM: ${{ inputs.confirm }}
+        run: node scripts/delivery/authorize.mjs
+      - name: 'CI de ce commit (Linux : lint, formatage, types, suites, E2E)'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/delivery/ci-gate.mjs studio "$GITHUB_SHA"
+
+  build:
+    name: installateur Windows
+    needs: authorize
+    runs-on: windows-2025
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.info.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Installation (lockfile, Electron compris)
+        run: npm ci
+      - name: Tests Windows, paquet, vérifications (version, sha512, blockmap, secrets)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          args=(--ci --dry-run "--out=$RUNNER_TEMP/studio")
+          [ -n "$VERSION" ] && args+=("--version=$VERSION")
+          node apps/studio/desktop/scripts/release.mjs "${args[@]}"
+      - id: info
+        name: Version construite
+        shell: bash
+        run: echo "version=$(node -p "require(process.env.RUNNER_TEMP + '/studio/build-info.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Mise à jour depuis la dernière release publique — données utilisateur intactes
+        shell: bash
+        run: node apps/studio/desktop/scripts/test-upgrade.mjs "$RUNNER_TEMP/studio"
+      - name: Installateur en artefact (SHA256SUMS.txt, latest.yml, build-info.json)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raptoru-studio-${{ steps.info.outputs.version }}
+          path: ${{ runner.temp }}/studio
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    name: publication (${{ inputs.publish }})
+    needs: build
+    if: inputs.publish != 'none'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write # étiquette studio-v<version> sur le commit source (traçabilité)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: apps/studio/desktop/scripts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: raptoru-studio-${{ needs.build.outputs.version }}
+          path: ${{ runner.temp }}/studio
+      - name: Publication vérifiée (brouillon, puis publique si demandé)
+        env:
+          # Jeton à portée minimale : « Contents: read and write » sur raptoru-studio-releases uniquement.
+          GH_TOKEN: ${{ secrets.STUDIO_RELEASES_TOKEN }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::Secret STUDIO_RELEASES_TOKEN absent (docs/CICD.md « Secrets »)"; exit 1; fi
+          args=("--publish-from=$RUNNER_TEMP/studio")
+          [ "$PUBLISH" = public ] && args+=(--public)
+          node apps/studio/desktop/scripts/release.mjs "${args[@]}"
+      - name: Étiquette studio-v${{ needs.build.outputs.version }} sur le commit source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -X POST -f ref="refs/tags/studio-v$VERSION" -f sha="$GITHUB_SHA" >/dev/null \
+            || echo "::warning::étiquette studio-v$VERSION non créée (déjà présente ?)"
+          echo "Studio $VERSION ($PUBLISH) ← $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

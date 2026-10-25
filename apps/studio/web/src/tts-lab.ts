@@ -61,7 +61,7 @@ export function mountTtsLab(
   panel.className = 'xlab-card';
   panel.innerHTML = `${
     options.production
-      ? '<h3>TTS — source OBS (Production)</h3><p>Core de production → Studio → lecteur OBS (jeton du profil Production). Paiement encore simulé.</p>'
+      ? '<h3>TTS — source OBS (Production)</h3><p>Core de production → Studio → lecteur OBS (jeton du profil Production). Paiement réel au Wallet Raptoru du Core (Jetons ou crédits TTS), remboursé une seule fois si le message n’est jamais lu.</p>'
       : '<h3>TTS V2 Lab</h3><p>Extension → Core → Studio → lecteur OBS. Coût simulé, remboursé si le message n’est jamais lu.</p>'
   }
     <p data-tts="status">Lecture du statut…</p>

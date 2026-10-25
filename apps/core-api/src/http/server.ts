@@ -135,6 +135,11 @@ export interface AppDeps {
   /** Readiness probe (GET /ready): the database answers. */
   db?: Pick<Db, 'query'>;
   /**
+   * Ops status for the delivery tooling (GET /v1/ops/status, docs/CICD.md): read-only, its own token (OPS_TOKEN).
+   * Absent: the route does not exist.
+   */
+  ops?: { token: string; status: () => Promise<unknown> };
+  /**
    * The /v1/lab/* routes (Studio secret, viewer named in the body). Default on for the Lab and the
    * tests; the public Core bootstrap turns them off: nothing Lab is reachable from the Internet.
    */
@@ -160,7 +165,8 @@ export interface AppDeps {
   chatIngress?: { router: LabChatRouter; games: ChatGames };
 }
 
-type Auth = 'public' | 'bot' | 'studio' | 'studio_installation' | 'extension';
+type Auth =
+  'public' | 'bot' | 'studio' | 'studio_installation' | 'extension' | 'ops';
 
 export interface Route {
   method: 'GET' | 'POST';
@@ -242,6 +248,7 @@ function routes({
   subWheel,
   botInstances,
   db,
+  ops,
   labRoutes = true,
   ext,
   cockpit,
@@ -304,6 +311,16 @@ function routes({
       auth: 'public',
       handle: async () => ({ service: 'core-api', status: 'ok' }),
     },
+    ...(ops
+      ? [
+          {
+            method: 'GET' as const,
+            pattern: /^\/v1\/ops\/status$/,
+            auth: 'ops' as const,
+            handle: () => ops.status(),
+          },
+        ]
+      : []),
     // Readiness, distinct from liveness above: 503 while the database does not answer.
     {
       method: 'GET',
@@ -590,6 +607,12 @@ export function createHandler(deps: AppDeps): RequestListener {
       if (
         route.auth === 'studio' &&
         !secretMatches(req.headers.authorization, deps.studioSecret)
+      ) {
+        throw new HttpError(401, { error: 'unauthorized' });
+      }
+      if (
+        route.auth === 'ops' &&
+        !secretMatches(req.headers.authorization, deps.ops?.token ?? '')
       ) {
         throw new HttpError(401, { error: 'unauthorized' });
       }

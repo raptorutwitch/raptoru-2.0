@@ -23,3 +23,7 @@ apps/studio/server/votekick-overlay/legacy/
 
 # Archived working journal kept byte for byte (docs/archive/README.md)
 docs/archive/REPRISE_journal_2026-10-21_24.md
+
+# Shipped as source inside a Coolify post-deployment command (sh -c '…'): no single quote allowed, so never
+# reformatted to the repository's singleQuote style (scripts/coolify-verify-migrations.mjs header).
+scripts/coolify-verify-migrations.mjs

@@ -5,8 +5,14 @@ import { describe, expect, it } from 'vitest';
 // relative default is not writable — the Caution executor journaled nothing, never unbanned and stopped answering
 // Core. Every durable file of the production bot must be set by the image to the writable /data volume.
 
-const config = readFileSync(new URL('../src/config.ts', import.meta.url), 'utf8');
-const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
+const config = readFileSync(
+  new URL('../src/config.ts', import.meta.url),
+  'utf8',
+);
+const dockerfile = readFileSync(
+  new URL('../Dockerfile', import.meta.url),
+  'utf8',
+);
 
 describe('bot image: durable files on /data', () => {
   const keys = [...config.matchAll(/^\s+([A-Z_]+_(?:JOURNAL|OUTBOX)_FILE):/gm)]

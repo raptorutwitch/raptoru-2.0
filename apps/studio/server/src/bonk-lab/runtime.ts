@@ -51,7 +51,8 @@ export class BonkRuntime {
   private previewSeq = 0;
   private loop: WorkerLoop | null = null;
   private lastObsCheck = 0;
-  private sourceReady = false;
+  /** OBS has the Bonk source (read by the supervision). */
+  sourceReady = false;
   private constructor(
     readonly worker: BonkWorker,
     readonly origin: string,

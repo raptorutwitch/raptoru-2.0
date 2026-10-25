@@ -76,3 +76,68 @@
   margin: 6px 0 0;
   font-size: 11px;
 }
+
+/* Supervision (incident 22/10): global banner above every tab + short history in the Centre de contrôle. */
+.sup-banner {
+  border-bottom: 1px solid var(--line);
+}
+.sup-banner-inner {
+  display: grid;
+  gap: 6px;
+  padding: 8px 20px;
+}
+.sup-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  border-left: 4px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.sup-item p {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+}
+.sup-item span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.sup-down {
+  border-left-color: var(--ko);
+  background: color-mix(in srgb, var(--ko) 14%, transparent);
+}
+.sup-down .sup-action {
+  color: var(--ko);
+  font-weight: 600;
+}
+.sup-up {
+  border-left-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+.sup-up button {
+  margin-left: auto;
+}
+.sup-history {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  display: grid;
+  gap: 3px;
+}
+.sup-history time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sup-h-down b,
+.sup-h-confirmed b {
+  color: var(--ko);
+}
+.sup-h-up b {
+  color: var(--ok);
+}
+.sup-h-micro b {
+  color: var(--warn);
+}

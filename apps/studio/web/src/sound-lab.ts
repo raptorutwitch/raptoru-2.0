@@ -9,7 +9,7 @@ export function mountSoundLab(
   panel.className = 'xlab-card';
   panel.innerHTML = `${
     options.production
-      ? '<h3>Soundboard — lecteur (Production)</h3><p>Core de production → Studio → lecteur local (jeton du profil Production). Paiement encore simulé.</p>'
+      ? '<h3>Soundboard — lecteur (Production)</h3><p>Core de production → Studio → lecteur local (jeton du profil Production). Paiement réel au Wallet Raptoru du Core (Jetons ou crédits Soundboard, remboursés une seule fois si le son n’est pas joué) ; les récompenses Points de chaîne sont payées sur Twitch.</p>'
       : '<h3>Soundboard Lab</h3><p>Extension → Core → Studio → lecteur local. Coût simulé, aucun débit ni progression.</p>'
   }
     <p data-sound="status">Lecture du statut…</p>
