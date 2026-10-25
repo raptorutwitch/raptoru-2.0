@@ -17,7 +17,7 @@ Sauvegardes : [BACKUPS.md](BACKUPS.md). Architecture : [ARCHITECTURE.md](ARCHITE
 | Exports privés de la migration                                                        | `C:\Users\Antoni\Documents\Raptoru\_migration-exports\`                          |
 
 Coolify 4.5.0 : API en HTTPS sur `https://coolify.raptoru.fr` (seulement `/api/`, jeton requis — [CICD.md](CICD.md)
-§ 5) ; interface sur `http://62.84.187.170:8000`, puis `https://admin.raptoru.fr` une fois le § 8 appliqué.
+§ 5) ; interface sur `https://dashboard.raptoru.fr` (ports directs fermés depuis Internet : § 8).
 Applications : `raptoru-core` `3m7cputub9wt7nwx2k78cme3`, `raptoru-bot`
 `hdbljqmwoq5364w0ypqmz46p`, `raptoru-core-staging` `leadrn7q8x0efkc9u6nxtdic` ; base `4jaqdyvzlelgwkyvuxhjy4mr`.
 **Auto Deploy désactivé** (vérifié le 24/10) : un push ne déploie rien.
@@ -112,37 +112,34 @@ depuis le dépôt). Détails : `apps/twitch-extension/README.md`.
 
 ## 8. Administration de Coolify (HTTPS, ports)
 
-Constat du 25/10 : l'interface de Coolify est servie en HTTP non chiffré sur `http://62.84.187.170:8000`, et Docker
-publie aussi 6001 (temps réel) et 6002 (terminal web) sur Internet. ufw ne filtre pas les ports publiés par Docker.
-Cible : interface sur `https://admin.raptoru.fr` (Traefik, Let's Encrypt), 8000/6001/6002 fermés depuis Internet.
-L'API reste sur `https://coolify.raptoru.fr`, inchangée (GitHub l'utilise) : Coolify refuse comme adresse d'instance
-un domaine déjà pris par une application, d'où un nom séparé.
+État depuis le 25/10 ~13:50 UTC :
 
-Procédure (Antoni, hors live, ~15 min) :
+- interface : `https://dashboard.raptoru.fr` (Traefik, Let's Encrypt renouvelé automatiquement) ; le temps réel
+  (`/app`) et le terminal web (`/terminal/ws`) passent eux aussi par 443. API : `https://coolify.raptoru.fr` (§ 1) ;
+- 8000 (interface), 6001 (temps réel) et 6002 (terminal) sont **fermés depuis Internet, en IPv4 et IPv6**. Docker les
+  publie toujours, et ufw (qui n'autorise que 22, 80, 443) ne filtre pas les ports publiés par Docker : ils sont fermés
+  par `scripts/vps/coolify-admin-ports.sh`, installé sur le VPS (`/usr/local/sbin/raptoru-coolify-admin-ports`, copie
+  `/root/coolify-admin-ports.sh`) et réappliqué à chaque démarrage de Docker par l'unité
+  `raptoru-coolify-admin-ports.service` ;
+- règles : chaîne `RAPTORU-ADMIN` (iptables et ip6tables), appelée depuis `DOCKER-USER` et `INPUT` : rejet des
+  connexions arrivant par `eth0` vers 8000/6001/6002. 22, 80, 443 et ufw ne changent pas ; le VPS garde son accès
+  local et les conteneurs leurs connexions sortantes ;
+- vérifié le 25/10 : de l'extérieur, 8000/6001/6002 filtrés et 22/80/443 ouverts (IPv4) ; tableau de bord, temps réel
+  et terminal ; API Coolify depuis le PC et depuis GitHub (« État de la livraison », run `40199613634`) ; Core, bot et
+  Studio. IPv6 : aucun point de test externe disponible (PC sans IPv6, aucun enregistrement `AAAA`) ; règles ip6tables
+  posées sur le VPS, effet démontré sur un VPS simulé (Docker 29, réseau IPv6 traduit comme celui de Coolify).
 
-1. OVH → Domaines → `raptoru.fr` → Zone DNS → entrée A `admin` → `62.84.187.170`. Attendre que
-   `nslookup admin.raptoru.fr` donne cette adresse.
-2. Coolify (`http://62.84.187.170:8000`) → Settings → « Domain » de l'instance = `https://admin.raptoru.fr` → Save.
-   Coolify configure Traefik lui-même (certificat, temps réel, terminal). Ouvrir `https://admin.raptoru.fr` : cadenas
-   valide, connexion, une page de déploiement qui se met à jour seule, le terminal d'un conteneur. En cas d'échec :
-   vider le champ et sauver (retour à l'état actuel).
-3. Prouver l'accès de secours avant de fermer : `ssh root@62.84.187.170` répond (sinon : console VNC Contabo). Sans
-   accès SSH ni console, s'arrêter là.
-4. Depuis le PC, dans le dépôt :
+Accès root de secours : la **console VNC de Contabo** (validée par Antoni le 25/10), indépendante du réseau du VPS et
+de son pare-feu. SSH (port 22 ouvert) n'a pas été vérifié depuis le PC (aucune clé). Le terminal du tableau de bord
+n'est pas un secours : il dépend de Coolify, de Traefik et de Docker.
 
-   ```
-   scp scripts/vps/coolify-admin-ports.sh root@62.84.187.170:/root/
-   ssh root@62.84.187.170 "sh /root/coolify-admin-ports.sh --close"
-   ```
+| But (terminal root du VPS)                                                | Commande                                                                                                  |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| État                                                                      | `iptables -S RAPTORU-ADMIN; ip6tables -S RAPTORU-ADMIN; systemctl is-enabled raptoru-coolify-admin-ports` |
+| Rouvrir tout de suite (jusqu'au prochain redémarrage de Docker ou du VPS) | `iptables -F RAPTORU-ADMIN; ip6tables -F RAPTORU-ADMIN`                                                   |
+| Retirer complètement (règles et unité)                                    | `raptoru-coolify-admin-ports --undo`                                                                      |
+| Refermer                                                                  | `sh /root/coolify-admin-ports.sh --close` (refuse si `https://dashboard.raptoru.fr/login` ne répond pas)  |
 
-   Le script ne ferme rien si `https://admin.raptoru.fr/login` ne répond pas 200 en HTTPS valide (`--check` : ce
-   contrôle seul). Il ajoute dans `DOCKER-USER` (IPv4 et IPv6) un rejet de 8000/6001/6002 arrivant par l'interface
-   publique, rien d'autre : 22, 80, 443 et ufw ne sont pas touchés. Une unité systemd
-   (`raptoru-coolify-admin-ports.service`) les remet après un redémarrage.
-
-5. Ensuite, vérification depuis l'extérieur (Claude) : 8000/6001/6002 filtrés, 22/80/443 ouverts, certificat et
-   connexion sur `https://admin.raptoru.fr`, `node scripts/delivery/status.mjs`, Core `/health` `/ready`, bot.
-
-Secours une fois fermé : `ssh -L 8000:127.0.0.1:8000 root@62.84.187.170` puis `http://localhost:8000` (sans passer
-par Traefik). Annuler : `ssh root@62.84.187.170 "/usr/local/sbin/raptoru-coolify-admin-ports --undo"` (ports rouverts
-immédiatement, unité retirée) ; pour l'adresse, vider le champ « Domain ».
+Si le tableau de bord HTTPS est en panne : rouvrir (ligne 2), utiliser `http://62.84.187.170:8000`, puis refermer.
+Mise en place sur un autre serveur : coller le script dans un terminal root, comparer son empreinte SHA-256 à celle du
+dépôt, puis `--close` ; après coup, vérifier les ports depuis l'extérieur.
