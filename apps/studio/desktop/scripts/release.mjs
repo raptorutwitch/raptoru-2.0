@@ -260,7 +260,9 @@ function restoreVersion() {
 // --- 3/4. validation and package ----------------------------------------------------------------------
 function validate() {
   if (CI) {
-    // Linux CI already proved this commit (lint, format, typecheck, every suite, E2E): here, what runs on Windows.
+    // Linux CI already proved this commit (lint, format, typecheck, every suite, E2E): here, what runs on Windows —
+    // built first (the suites import the built workspaces, e.g. @raptoru/schemas).
+    run('npm', ['run', 'build'], { inherit: true });
     run('npm', ['test', '-w', '@raptoru/studio-desktop'], { inherit: true });
     run('npm', ['test', '-w', '@raptoru/studio-server'], { inherit: true });
     return;
@@ -728,7 +730,12 @@ async function main() {
   state.version = next;
   say(`version ${current} → ${next}`);
   await step(`bump to ${next}`, () => bump(next));
-  await step('validation (npm run check)', validate);
+  await step(
+    CI
+      ? 'validation (build, Studio server and desktop suites on Windows)'
+      : 'validation (npm run check)',
+    validate,
+  );
   await step('package (npm run studio:package)', packageStudio);
   const info = await step(
     'verify artifacts (names, version, size, sha512, blockmap, secrets)',
@@ -751,7 +758,8 @@ async function main() {
     );
   if (DRY_RUN) {
     await step('dry run: undo version bump', () => restoreVersion());
-    if (git('status', '--porcelain'))
+    // The version bump must be undone (tracked files); in CI, test leftovers (untracked) do not matter.
+    if (git('status', '--porcelain', ...(CI ? ['--untracked-files=no'] : [])))
       fail('working tree not clean after the dry run');
     say(
       `DRY RUN OK — would publish v${next} to ${repoSlug}: ${assets.join(', ')}`,
