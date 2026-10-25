@@ -70,6 +70,10 @@ Après le déploiement, il vérifie :
 Le résumé du run donne le verdict (`DÉPLOYÉ`, `BLOQUÉ`, `ÉCHEC`) et la commande de retour. L'onglet « Deployments » du
 dépôt garde l'historique.
 
+Validé en réel le 25/10 : Core `0b11cc0` (11:11 UTC) puis bot `0b11cc0` (12:40 UTC, run `40193996344`, `DÉPLOYÉ`).
+Pour le bot : le nouveau conteneur attend le bail ~75 s, le reprend à l'arrêt de l'ancien, recrée ses abonnements
+EventSub (bot et diffuseur) ; coupure Twitch de 1 à 2 s, aucun bot en double, supervision de Studio verte.
+
 ## 3. Publier Studio
 
 Actions → **Studio — construire / publier** → Run workflow :
@@ -144,7 +148,8 @@ En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status
 - toutes les routes de l'API exigent le jeton (401 sinon), sauf `/api/health`, la sonde publique de Coolify, qui ne
   renvoie aucune donnée ;
 - l'adresse provisoire `https://core-staging.raptoru.fr/_coolify` (du 25/10 matin) est retirée ;
-- l'interface de Coolify reste accessible comme avant sur `http://62.84.187.170:8000` (accès direct, non chiffré) ;
+- l'interface de Coolify n'est pas servie ici : son passage en HTTPS (`https://admin.raptoru.fr`) et la fermeture des
+  ports 8000/6001/6002 sont décrits dans [OPERATIONS.md](OPERATIONS.md) § 8 ;
 - les scripts (`coolify-deploy.mjs`, `delivery/status.mjs`) visent `https://coolify.raptoru.fr` par défaut, en local
   comme depuis GitHub.
 
