@@ -17,7 +17,8 @@ Sauvegardes : [BACKUPS.md](BACKUPS.md). Architecture : [ARCHITECTURE.md](ARCHITE
 | Exports privés de la migration                                                        | `C:\Users\Antoni\Documents\Raptoru\_migration-exports\`                          |
 
 Coolify 4.5.0 : API en HTTPS sur `https://coolify.raptoru.fr` (seulement `/api/`, jeton requis — [CICD.md](CICD.md)
-§ 5) ; interface sur `http://62.84.187.170:8000`. Applications : `raptoru-core` `3m7cputub9wt7nwx2k78cme3`, `raptoru-bot`
+§ 5) ; interface sur `http://62.84.187.170:8000`, puis `https://admin.raptoru.fr` une fois le § 8 appliqué.
+Applications : `raptoru-core` `3m7cputub9wt7nwx2k78cme3`, `raptoru-bot`
 `hdbljqmwoq5364w0ypqmz46p`, `raptoru-core-staging` `leadrn7q8x0efkc9u6nxtdic` ; base `4jaqdyvzlelgwkyvuxhjy4mr`.
 **Auto Deploy désactivé** (vérifié le 24/10) : un push ne déploie rien.
 
@@ -108,3 +109,40 @@ Clone de build `C:\Users\Antoni\Documents\rs-vk` (porte le patch `sup-wt` non co
 `npm run build -w @raptoru/twitch-extension` → `dist/` = paquet à téléverser ; publication **manuelle par Antoni**
 dans la console Twitch (Hosted Test puis Release). Version réellement servie : à lire dans la console (non vérifiable
 depuis le dépôt). Détails : `apps/twitch-extension/README.md`.
+
+## 8. Administration de Coolify (HTTPS, ports)
+
+Constat du 25/10 : l'interface de Coolify est servie en HTTP non chiffré sur `http://62.84.187.170:8000`, et Docker
+publie aussi 6001 (temps réel) et 6002 (terminal web) sur Internet. ufw ne filtre pas les ports publiés par Docker.
+Cible : interface sur `https://admin.raptoru.fr` (Traefik, Let's Encrypt), 8000/6001/6002 fermés depuis Internet.
+L'API reste sur `https://coolify.raptoru.fr`, inchangée (GitHub l'utilise) : Coolify refuse comme adresse d'instance
+un domaine déjà pris par une application, d'où un nom séparé.
+
+Procédure (Antoni, hors live, ~15 min) :
+
+1. OVH → Domaines → `raptoru.fr` → Zone DNS → entrée A `admin` → `62.84.187.170`. Attendre que
+   `nslookup admin.raptoru.fr` donne cette adresse.
+2. Coolify (`http://62.84.187.170:8000`) → Settings → « Domain » de l'instance = `https://admin.raptoru.fr` → Save.
+   Coolify configure Traefik lui-même (certificat, temps réel, terminal). Ouvrir `https://admin.raptoru.fr` : cadenas
+   valide, connexion, une page de déploiement qui se met à jour seule, le terminal d'un conteneur. En cas d'échec :
+   vider le champ et sauver (retour à l'état actuel).
+3. Prouver l'accès de secours avant de fermer : `ssh root@62.84.187.170` répond (sinon : console VNC Contabo). Sans
+   accès SSH ni console, s'arrêter là.
+4. Depuis le PC, dans le dépôt :
+
+   ```
+   scp scripts/vps/coolify-admin-ports.sh root@62.84.187.170:/root/
+   ssh root@62.84.187.170 "sh /root/coolify-admin-ports.sh --close"
+   ```
+
+   Le script ne ferme rien si `https://admin.raptoru.fr/login` ne répond pas 200 en HTTPS valide (`--check` : ce
+   contrôle seul). Il ajoute dans `DOCKER-USER` (IPv4 et IPv6) un rejet de 8000/6001/6002 arrivant par l'interface
+   publique, rien d'autre : 22, 80, 443 et ufw ne sont pas touchés. Une unité systemd
+   (`raptoru-coolify-admin-ports.service`) les remet après un redémarrage.
+
+5. Ensuite, vérification depuis l'extérieur (Claude) : 8000/6001/6002 filtrés, 22/80/443 ouverts, certificat et
+   connexion sur `https://admin.raptoru.fr`, `node scripts/delivery/status.mjs`, Core `/health` `/ready`, bot.
+
+Secours une fois fermé : `ssh -L 8000:127.0.0.1:8000 root@62.84.187.170` puis `http://localhost:8000` (sans passer
+par Traefik). Annuler : `ssh root@62.84.187.170 "/usr/local/sbin/raptoru-coolify-admin-ports --undo"` (ports rouverts
+immédiatement, unité retirée) ; pour l'adresse, vider le champ « Domain ».

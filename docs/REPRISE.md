@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **25/10/2026 ~11:45** (CI/CD **en service et validée sur la vraie infrastructure** : déploiement du Core lancé depuis GitHub, publication Studio depuis GitHub testée — [CICD.md](CICD.md) ; Core `0b11cc0`, bot `16600de`, Studio 0.1.7). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **25/10/2026 ~13:00** (CI/CD validée sur la vraie infrastructure : Core **et bot** déployés depuis GitHub, publication Studio depuis GitHub testée — [CICD.md](CICD.md) ; Core `0b11cc0`, bot `0b11cc0`, Studio 0.1.7 ; interface Coolify en HTTPS préparée, à appliquer par Antoni — [OPERATIONS.md](OPERATIONS.md) § 8). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -25,18 +25,18 @@ depuis le checkout principal.
 | Journal détaillé 21→24/10 (dont chantier Roue V2), anciens documents | [archive/](archive/README.md)                               |
 | Règles de travail des agents                                         | `CLAUDE.md` (racine)                                        |
 
-## 2. Production (relevé 25/10 ~03:00)
+## 2. Production (relevé 25/10 ~13:00)
 
-| Élément              | Version                                                                                                                                                                                                                                                          | Remarque                                                                                                   |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Core `raptoru-core`  | **`0b11cc0`** (déployé 25/10 11:11 UTC **depuis GitHub Actions**, sans migration ; sert `/v1/ops/status`)                                                                                                                                                        | `running:healthy`, `/health` `/ready` 200, commit rapporté par le Core ; retour : `34e4120`                |
-| Bot `raptoru-bot`    | **`16600de`** (déployé 24/10 16:01 UTC, inclut `cf21c4b`)                                                                                                                                                                                                        | `running:healthy`, VPS, bail repris proprement ; `CP_TWITCH_ACTIONS` ON (24/10 16:28) ; retour : `b8bc025` |
-| `origin/main`        | CI/CD et documentation (PR #1 à #5) ; « État de la livraison » donne le commit exact                                                                                                                                                                             | Coolify : auto-deploy désactivé                                                                            |
-| Studio installé (PC) | **0.1.7** (construite par GitHub depuis `34e4120`, publiée le 25/10) — installée à 10:07 UTC par erreur pendant le test de mise à jour (installation à la fermeture d'electron-updater, corrigée), Studio relancé à 10:15 : données, Spotify et Votekick intacts | retour : sup.9 (`Documents\raptoru-spotify-GO`)                                                            |
-| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                                                                                                                              | publication manuelle par Antoni                                                                            |
-| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                                                                                                                                        | Node non épinglé (décision en attente)                                                                     |
-| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                                                                                                                              | journaux du bot sur `/data`                                                                                |
-| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                                                                                                                                     | ne pas modifier ces réglages sans GO                                                                       |
+| Élément              | Version                                                                                                                                                                                                                                                          | Remarque                                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Core `raptoru-core`  | **`0b11cc0`** (déployé 25/10 11:11 UTC **depuis GitHub Actions**, sans migration ; sert `/v1/ops/status`)                                                                                                                                                        | `running:healthy`, `/health` `/ready` 200, commit rapporté par le Core ; retour : `34e4120`        |
+| Bot `raptoru-bot`    | **`0b11cc0`** (déployé 25/10 12:40 UTC **depuis GitHub Actions** ; même code d'exécution que `16600de`)                                                                                                                                                          | `running:healthy`, bail repris, aucun bot en attente ; `CP_TWITCH_ACTIONS` ON ; retour : `16600de` |
+| `origin/main`        | CI/CD et documentation (PR #1 à #9) ; « État de la livraison » donne le commit exact                                                                                                                                                                             | Coolify : auto-deploy désactivé                                                                    |
+| Studio installé (PC) | **0.1.7** (construite par GitHub depuis `34e4120`, publiée le 25/10) — installée à 10:07 UTC par erreur pendant le test de mise à jour (installation à la fermeture d'electron-updater, corrigée), Studio relancé à 10:15 : données, Spotify et Votekick intacts | retour : sup.9 (`Documents\raptoru-spotify-GO`)                                                    |
+| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                                                                                                                              | publication manuelle par Antoni                                                                    |
+| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                                                                                                                                        | Node non épinglé (décision en attente)                                                             |
+| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                                                                                                                              | journaux du bot sur `/data`                                                                        |
+| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                                                                                                                                     | ne pas modifier ces réglages sans GO                                                               |
 
 Fonctions en Production : économie canonique (Wallet, Daily, fidélité, présence), Commands V2 (`cmd_steps`), modération
 D4, Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2, Points de chaîne et effets,
@@ -87,6 +87,9 @@ de chacune : [ROADMAP.md](ROADMAP.md).
    bail (P1, préalable à la Roue V2 en Production).
 5. `main` local en retard sur `origin/main` avec la Roue V2 non commitée par-dessus : l'intégration demande un rebase prudent.
 6. Plusieurs documents de module ont encore un en-tête « non déployé » : la roadmap fait foi.
+7. Interface de Coolify en HTTP non chiffré depuis Internet (port 8000, plus 6001 temps réel et 6002 terminal) tant que
+   [OPERATIONS.md](OPERATIONS.md) § 8 n'est pas appliqué. Le PC n'a pas de clé SSH du VPS : l'accès de secours n'a pas
+   pu être vérifié par Claude.
 
 ## 6. Prochaine action
 
@@ -100,10 +103,12 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 - Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
   copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
-- **CI/CD** ([CICD.md](CICD.md)) : chantier clos le 25/10 — CI, déploiement du Core depuis GitHub (11:11 UTC) et
-  publication Studio depuis GitHub (brouillon de test 0.1.8 créé, vérifié, supprimé) validés pour de vrai. Restent :
-  la première vérification réelle d'un déploiement du **bot** (au prochain changement du bot) et, facultatif,
-  l'enregistrement DNS `coolify` chez OVH (CICD.md § 5).
+- **CI/CD** ([CICD.md](CICD.md)) : chantier clos le 25/10 — CI, déploiement du Core (11:11 UTC) et du bot (12:40
+  UTC) depuis GitHub, publication Studio depuis GitHub (brouillon de test 0.1.8 créé, vérifié, supprimé) validés pour
+  de vrai ; API Coolify sur `https://coolify.raptoru.fr`.
+- **Interface Coolify en HTTPS** ([OPERATIONS.md](OPERATIONS.md) § 8), hors live : DNS `admin` chez OVH, champ
+  « Domain » dans Coolify, vérification de l'accès SSH, puis script de fermeture de 8000/6001/6002 ; ensuite Claude
+  vérifie depuis l'extérieur.
 - Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
   en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).
