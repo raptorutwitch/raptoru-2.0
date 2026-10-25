@@ -148,8 +148,8 @@ En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status
 - toutes les routes de l'API exigent le jeton (401 sinon), sauf `/api/health`, la sonde publique de Coolify, qui ne
   renvoie aucune donnée ;
 - l'adresse provisoire `https://core-staging.raptoru.fr/_coolify` (du 25/10 matin) est retirée ;
-- l'interface de Coolify n'est pas servie ici : son passage en HTTPS (`https://admin.raptoru.fr`) et la fermeture des
-  ports 8000/6001/6002 sont décrits dans [OPERATIONS.md](OPERATIONS.md) § 8 ;
+- l'interface de Coolify n'est pas servie ici : elle est sur `https://dashboard.raptoru.fr`, et ses ports directs
+  8000/6001/6002 sont fermés depuis Internet ([OPERATIONS.md](OPERATIONS.md) § 8) ;
 - les scripts (`coolify-deploy.mjs`, `delivery/status.mjs`) visent `https://coolify.raptoru.fr` par défaut, en local
   comme depuis GitHub.
 

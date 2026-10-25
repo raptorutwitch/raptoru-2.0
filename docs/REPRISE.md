@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **25/10/2026 ~13:00** (CI/CD validée sur la vraie infrastructure : Core **et bot** déployés depuis GitHub, publication Studio depuis GitHub testée — [CICD.md](CICD.md) ; Core `0b11cc0`, bot `0b11cc0`, Studio 0.1.7 ; interface Coolify en HTTPS préparée, à appliquer par Antoni — [OPERATIONS.md](OPERATIONS.md) § 8). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **25/10/2026 ~14:00** (chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `0b11cc0`, bot `0b11cc0`, Studio 0.1.7). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -45,6 +45,10 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 ## 3. Dernières livraisons et décisions (24–25/10)
 
+- **Infrastructure — chantier clos le 25/10** : CI/CD en service ([CICD.md](CICD.md)) ; Coolify : tableau de bord
+  `https://dashboard.raptoru.fr`, API `https://coolify.raptoru.fr`, ports 8000/6001/6002 fermés depuis Internet en
+  IPv4 et IPv6 ([OPERATIONS.md](OPERATIONS.md) § 8 : état, secours par la console VNC, retour arrière).
+
 - **Spotify V2 / Studio sup.10 — validé par Antoni en réel le 25/10, chantier clos** ([SPOTIFY_V2.md](SPOTIFY_V2.md)) :
   demandes de musique, remboursements, `!songcancel 1` / `!songcancel 2`, quotas et exceptions par viewer, « File
   musicale », skip automatique d'une demande annulée. **Skip accepté tel quel** : une fraction de seconde peut s'entendre
@@ -87,9 +91,6 @@ de chacune : [ROADMAP.md](ROADMAP.md).
    bail (P1, préalable à la Roue V2 en Production).
 5. `main` local en retard sur `origin/main` avec la Roue V2 non commitée par-dessus : l'intégration demande un rebase prudent.
 6. Plusieurs documents de module ont encore un en-tête « non déployé » : la roadmap fait foi.
-7. Interface de Coolify en HTTP non chiffré depuis Internet (port 8000, plus 6001 temps réel et 6002 terminal) tant que
-   [OPERATIONS.md](OPERATIONS.md) § 8 n'est pas appliqué. Le PC n'a pas de clé SSH du VPS : l'accès de secours n'a pas
-   pu être vérifié par Claude.
 
 ## 6. Prochaine action
 
@@ -106,9 +107,6 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 - **CI/CD** ([CICD.md](CICD.md)) : chantier clos le 25/10 — CI, déploiement du Core (11:11 UTC) et du bot (12:40
   UTC) depuis GitHub, publication Studio depuis GitHub (brouillon de test 0.1.8 créé, vérifié, supprimé) validés pour
   de vrai ; API Coolify sur `https://coolify.raptoru.fr`.
-- **Interface Coolify en HTTPS** ([OPERATIONS.md](OPERATIONS.md) § 8), hors live : DNS `admin` chez OVH, champ
-  « Domain » dans Coolify, vérification de l'accès SSH, puis script de fermeture de 8000/6001/6002 ; ensuite Claude
-  vérifie depuis l'extérieur.
 - Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
   en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).
