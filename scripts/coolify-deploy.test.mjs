@@ -35,7 +35,16 @@ const scopes = (files) =>
   `export const PROD_MIGRATIONS: readonly string[] = Object.freeze([\n${files.map((f) => `  '${f}',`).join('\n')}\n]);\n`;
 // OLD → NEW (adds migration b.sql) → CODE (code only) → DOCS (documentation only) → UNPROVEN (code, no CI).
 let OLD, NEW, CODE, DOCS, UNPROVEN;
-const ALL_JOBS = ['quality', 'core', 'e2e', 'images', 'bot', 'verdict'];
+// As GitHub names them: the matrix job « images » appears once per application.
+const ALL_JOBS = [
+  'quality',
+  'core',
+  'e2e',
+  'images (core-api)',
+  'images (twitch-bot)',
+  'bot',
+  'verdict',
+];
 const REQUIRED_ENVS = {
   [CORE]: [
     'DATABASE_URL',
@@ -116,7 +125,8 @@ const reset = () => {
       quality: 'success',
       core: 'skipped',
       e2e: 'skipped',
-      images: 'skipped',
+      'images (core-api)': 'skipped',
+      'images (twitch-bot)': 'skipped',
       bot: 'skipped',
       verdict: 'success',
     },
@@ -603,6 +613,14 @@ describe('CI gate', () => {
     const r = await run('plan', 'core', CODE);
     assert.equal(verdict(r.out), 'BLOQUÉ');
     assert.match(r.out, /CI : CI de [0-9a-f]{12}/);
+  });
+
+  it('one variant of a matrix job failed (the bot image): BLOQUÉ', async () => {
+    at(CORE, NEW);
+    st.ci[CODE].jobs['images (twitch-bot)'] = 'failure';
+    const r = await run('plan', 'core', CODE);
+    assert.equal(verdict(r.out), 'BLOQUÉ');
+    assert.match(r.out, /CI : .*images/);
   });
 
   it('a documentation-only commit on top of a proven one: accepted (dry-run PRÊT)', async () => {

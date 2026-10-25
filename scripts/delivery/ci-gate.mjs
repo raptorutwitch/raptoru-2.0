@@ -62,13 +62,25 @@ async function runOf(repo, sha, need, tok) {
   const jobs =
     (await gh(`/repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`, tok))
       .jobs ?? [];
+  // A matrix job is named « images (core-api) », « images (twitch-bot) »…: every variant must have succeeded.
+  const variants = (n) =>
+    jobs.filter((j) => j.name === n || j.name.startsWith(`${n} (`));
   const missing = need.filter(
-    (n) => !jobs.some((j) => j.name === n && j.conclusion === 'success'),
+    (n) =>
+      !variants(n).length ||
+      variants(n).some((j) => j.conclusion !== 'success'),
+  );
+  // Failed (not merely skipped) jobs: never accepted, whatever an ancestor proved.
+  const failed = need.flatMap((n) =>
+    variants(n)
+      .filter((j) => !['success', 'skipped'].includes(j.conclusion))
+      .map((j) => `${j.name} ${j.conclusion}`),
   );
   return {
     ok: run.conclusion === 'success' && missing.length === 0,
     run,
     missing,
+    failed,
   };
 }
 
@@ -95,6 +107,12 @@ export async function ciGate({ repo, sha, component, git, env = process.env }) {
     return {
       ok: true,
       reason: `CI réussie sur ${sha.slice(0, 12)} (${need.join(', ')})`,
+      url: own.run.html_url,
+    };
+  if (own?.failed?.length)
+    return {
+      ok: false,
+      reason: `CI de ${sha.slice(0, 12)} en échec : ${own.failed.join(', ')}`,
       url: own.run.html_url,
     };
   if (own && !own.missing.every((m) => need.includes(m)))
