@@ -66,6 +66,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Roue du Sub V2 (RV2-1): the announcement's delay set from Studio, « undelivered » invitations; same content as
   // 20261109160000_sub_wheel_v2_announce_delivery_lab.sql.
   '20261109170000_sub_wheel_v2_announce_delivery.sql',
+  // Roue du Sub V2 (RV2-2): an exceptional new draw linked to the draw it follows; same content as
+  // 20261109180000_sub_wheel_v2_redraw_lab.sql.
+  '20261109190000_sub_wheel_v2_redraw.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -136,6 +139,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261108140000_cmd_steps_music_lab.sql',
   // Roue du Sub V2 (RV2-1): the Lab twin of 20261109170000_sub_wheel_v2_announce_delivery.sql (same content).
   '20261109160000_sub_wheel_v2_announce_delivery_lab.sql',
+  // Roue du Sub V2 (RV2-2): the Lab twin of 20261109190000_sub_wheel_v2_redraw.sql (same content).
+  '20261109180000_sub_wheel_v2_redraw_lab.sql',
 ]);
 
 /**

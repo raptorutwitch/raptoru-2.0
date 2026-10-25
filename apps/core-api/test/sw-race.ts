@@ -35,6 +35,8 @@ export function tampered(
     crashOnCredit?: boolean;
     /** Waits this long before recording a proof (between its lookup and its write). */
     slowProof?: number;
+    /** Awaited before recording a proof (between its lookup and its write): a deterministic interleaving. */
+    beforeProof?: (params: unknown[] | undefined) => Promise<void>;
     /** Replaces a query matching the pattern (a protection removed). */
     replace?: [RegExp, string];
     /** A query matching the pattern fails (a crash at that point). */
@@ -66,6 +68,8 @@ export function tampered(
       };
     if (o.slowProof && /insert into sw_spin_sources/.test(sql))
       await new Promise((r) => setTimeout(r, o.slowProof));
+    if (o.beforeProof && /insert into sw_spin_sources/.test(sql))
+      await o.beforeProof(params);
     if (o.crashOnCredit && /insert into wallet_transactions/.test(sql))
       throw new Error('connection lost');
     if (

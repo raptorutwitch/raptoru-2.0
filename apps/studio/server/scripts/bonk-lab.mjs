@@ -96,6 +96,7 @@ try {
     '20261108120000_spotify_lab.sql',
     '20261108140000_cmd_steps_music_lab.sql',
     '20261109160000_sub_wheel_v2_announce_delivery_lab.sql',
+    '20261109180000_sub_wheel_v2_redraw_lab.sql',
   ]) {
     if (
       (

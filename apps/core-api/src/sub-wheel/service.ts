@@ -9,6 +9,7 @@ import {
   type SwAwardStatus,
   type SwGrantInput,
   type SwMode,
+  type SwRedrawInput,
   type SwReviewDecision,
   type SwStatus,
   type SwTestRequest,
@@ -69,6 +70,8 @@ export class SwError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    /** Readable details for the caller (e.g. how many rights the viewer can still use). */
+    readonly details?: Record<string, unknown>,
   ) {
     super(code);
   }
@@ -109,6 +112,8 @@ interface Row {
   requested_at?: Date | null;
   requested_by?: string | null;
   requested_via?: string | null;
+  /** RV2-2: the draw this exceptional new draw follows (null otherwise). */
+  redraw_of?: string | null;
 }
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
@@ -132,6 +137,8 @@ export const spinView = (r: Row) => ({
   },
   created_at: iso(r.created_at),
   shown_at: iso(r.shown_at),
+  /** RV2-2: an exceptional new draw — the draw it follows. */
+  redraw_of: r.redraw_of ?? null,
   // V2 right (null on V1 rows): its queue, its month and how sure it is.
   right: {
     queue: r.queue ?? null,
@@ -153,6 +160,21 @@ const tierOf = (t: AlertEventInput['tier']): 1 | 2 | 3 =>
 export const SW_ANNOUNCE_DELAY_MS = 8_000;
 /** Bounds of that setting (seconds), as the database checks them. */
 export const SW_ANNOUNCE_DELAY_MAX_S = 60;
+
+/** RV2-2: the viewer's rights it can use now (owed or requested, not « À vérifier »): a grant waits for them. */
+async function usableRights(q: Queryable, channelId: string, viewerId: string) {
+  return Number(
+    (
+      await q.query<{ n: number }>(
+        `select count(*)::int as n from sw_spins s where s.channel_id = $1 and s.viewer_id = $2
+           and s.status in ('owed', 'requested')
+           and not exists (select 1 from sw_spin_reviews v where v.spin_id = s.spin_id
+             and v.status in ('open', 'unresolved'))`,
+        [channelId, viewerId],
+      )
+    )[0]!.n,
+  );
+}
 
 export class SubWheelService {
   constructor(
@@ -1172,7 +1194,9 @@ export class SubWheelService {
   /**
    * « Accorder un tour » (subWheelGrant): a manual right, owed, in the manual queue — drawn only once someone asks
    * (subWheelDraw). Its wheel and tier are the grant's; it claims no subscription month (never a review, never an
-   * estimate's history). The key makes a retried grant the same right.
+   * estimate's history). The key makes a retried grant the same right. RV2-2: never a new right while the viewer can
+   * use one of its own (owed or already requested, not « À vérifier »): those are drawn instead (« Tirer » / « !roue
+   * oui »), refused `rights_available` with their count.
    */
   async grant(channelId: string, actor: Actor, g: SwGrantInput) {
     return this.db.tx(async (q) => {
@@ -1181,6 +1205,19 @@ export class SubWheelService {
       const now = this.now();
       const by = actorName(actor);
       const eventKey = `grant:${g.key}`;
+      const retried = (
+        await q.query<Row>(
+          'select * from sw_spins where channel_id = $1 and event_key = $2',
+          [channelId, eventKey],
+        )
+      )[0];
+      if (retried) {
+        if (retried.viewer_id !== g.viewer.id || retried.source !== 'manual')
+          throw new SwError(409, 'grant_key_reused');
+        return spinView(retried);
+      }
+      const usable = await usableRights(q, channelId, g.viewer.id);
+      if (usable) throw new SwError(409, 'rights_available', { usable });
       const created = (
         await q.query<Row>(
           `insert into sw_spins (spin_id, channel_id, source, event_key, type, viewer_id, viewer_login, viewer_name,
@@ -1238,6 +1275,244 @@ export class SubWheelService {
       });
       return spinView(row);
     });
+  }
+
+  /**
+   * RV2-2 « Relancer un tirage »: an exceptional NEW draw after a real draw (shown or failed), decided by the broadcaster
+   * alone. A new right of its own (source manual, linked by `redraw_of`, its own economic key: paid once), requested at
+   * once — drawn at the next wheel, live or not, whenever the player is there. The Studio key makes a repeated click
+   * the same new draw; one pending new draw per original draw (the row lock here, a unique index in the database);
+   * tests, simulations and pending rights are never re-drawn. Journaled (`sw_redraw`) with the reason.
+   */
+  async redraw(channelId: string, actor: Actor, r: SwRedrawInput) {
+    return this.db.tx(async (q) => {
+      const role = await this.allow(q, channelId, actor, 'subwheel.grant');
+      if (role !== 'broadcaster') throw new SwError(403, 'broadcaster_only');
+      const original = (
+        await q.query<Row>(
+          'select * from sw_spins where spin_id = $1 and channel_id = $2 for update',
+          [r.spin_id, channelId],
+        )
+      )[0];
+      if (!original) throw new SwError(404, 'spin_not_found');
+      const eventKey = `redraw:${r.key}`;
+      const retried = (
+        await q.query<Row>(
+          'select * from sw_spins where channel_id = $1 and event_key = $2',
+          [channelId, eventKey],
+        )
+      )[0];
+      if (retried) {
+        if (retried.redraw_of !== r.spin_id)
+          throw new SwError(409, 'redraw_key_reused');
+        return spinView(retried);
+      }
+      if (
+        !['twitch', 'manual', 'reconcile'].includes(original.source) ||
+        !original.viewer_id
+      )
+        throw new SwError(409, 'not_redrawable');
+      if (original.status !== 'shown' && original.status !== 'failed')
+        throw new SwError(409, 'not_drawn_yet');
+      const pending = (
+        await q.query<{ spin_id: string }>(
+          `select spin_id from sw_spins where redraw_of = $1 and status in ('owed', 'requested', 'queued', 'playing')`,
+          [r.spin_id],
+        )
+      )[0];
+      if (pending)
+        throw new SwError(409, 'redraw_pending', { spin_id: pending.spin_id });
+      await lockViewer(q, channelId, original.viewer_id);
+      const now = this.now();
+      const by = actorName(actor).slice(0, 64);
+      const row = (
+        await q.query<Row>(
+          `insert into sw_spins (spin_id, channel_id, source, event_key, type, viewer_id, viewer_login, viewer_name,
+             tier, months, status, award_status, created_at, updated_at, queue, acquired_at, granted_by, grant_note,
+             requested_at, requested_by, requested_via, redraw_of)
+           values ($1, $2, 'manual', $3, $4, $5, $6, $7, $8, $9, 'requested', 'none', $10, $10, 'manual', $10, $11, $12,
+             $10, $11, 'studio', $13)
+           returning *`,
+          [
+            randomUUID(),
+            channelId,
+            eventKey,
+            original.type,
+            original.viewer_id,
+            original.viewer_login,
+            original.viewer_name,
+            original.tier,
+            original.months,
+            now,
+            by,
+            r.note,
+            r.spin_id,
+          ],
+        )
+      )[0]!;
+      await q.query(
+        `insert into sw_spin_sources (spin_id, channel_id, source, source_event_id, viewer_id, occurred_at, tier,
+           is_gift, received_at)
+         values ($1, $2, 'manual', $3, $4, $5, $6, false, $5)
+         on conflict (channel_id, source, source_event_id) do nothing`,
+        [row.spin_id, channelId, r.key, original.viewer_id, now, original.tier],
+      );
+      await this.audit(q, {
+        channelId,
+        actor: by,
+        role,
+        action: 'sw_redraw',
+        viewerId: original.viewer_id,
+        spinId: row.spin_id,
+        reason: r.note,
+        before: {
+          redraw_of: r.spin_id,
+          status: original.status,
+          amount: original.amount === null ? null : Number(original.amount),
+          award_status: original.award_status,
+        },
+        after: { status: 'requested', queue: 'manual' },
+      });
+      return spinView(row);
+    });
+  }
+
+  /**
+   * RV2-2 Studio « Droits »: viewers found by their pseudo (login or display name), the ones the wheel knows first,
+   * then the ones the channel knows (Daily / presence `viewers`, when the table exists). At most 8.
+   */
+  async searchViewers(channelId: string, query: string) {
+    const q = query.trim().replace(/^@+/, '').toLowerCase();
+    if (q.length < 2) return [];
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const found = new Map<
+      string,
+      { id: string; login: string | null; name: string }
+    >();
+    const wheel = await this.db.query<{
+      viewer_id: string;
+      viewer_login: string | null;
+      viewer_name: string;
+    }>(
+      `select distinct on (viewer_id) viewer_id, viewer_login, viewer_name from sw_spins
+       where channel_id = $1 and viewer_id is not null and source in ('twitch', 'manual', 'reconcile')
+         and (lower(coalesce(viewer_login, '')) like $2 or lower(viewer_name) like $2)
+       order by viewer_id, created_at desc limit 8`,
+      [channelId, like],
+    );
+    for (const w of wheel)
+      found.set(w.viewer_id, {
+        id: w.viewer_id,
+        login: w.viewer_login,
+        name: w.viewer_name,
+      });
+    const known = (
+      await this.db.query<{ ok: boolean }>(
+        "select to_regclass('public.viewers') is not null as ok",
+      )
+    )[0]!.ok;
+    if (known && found.size < 8)
+      for (const v of await this.db.query<{
+        twitch_user_id: string;
+        login: string;
+        display_name: string;
+      }>(
+        `select twitch_user_id, login, display_name from viewers
+         where lower(login) like $1 or lower(display_name) like $1
+         order by (lower(login) = $2) desc, login limit 8`,
+        [like, q],
+      ))
+        if (found.size < 8 && !found.has(v.twitch_user_id))
+          found.set(v.twitch_user_id, {
+            id: v.twitch_user_id,
+            login: v.login,
+            name: v.display_name,
+          });
+    return [...found.values()];
+  }
+
+  /**
+   * RV2-2 Studio « Droits »: one viewer — what it can use now (owed, requested, « À vérifier », on the wheel), its real
+   * draws (gain, credit, exceptional new draws) and the gains credited so far. Tests and simulations are left out.
+   */
+  async viewerAdmin(channelId: string, viewerId: string) {
+    const rows = await this.db.query<Row & { blocked: boolean }>(
+      `select s.*, exists (select 1 from sw_spin_reviews v where v.spin_id = s.spin_id
+           and v.status in ('open', 'unresolved')) as blocked
+       from sw_spins s where s.channel_id = $1 and s.viewer_id = $2 and s.source in ('twitch', 'manual', 'reconcile')
+       order by s.created_at desc limit 500`,
+      [channelId, viewerId],
+    );
+    const known = (
+      await this.db.query<{ ok: boolean }>(
+        "select to_regclass('public.viewers') is not null as ok",
+      )
+    )[0]!.ok;
+    const v = known
+      ? (
+          await this.db.query<{ login: string; display_name: string }>(
+            'select login, display_name from viewers where twitch_user_id = $1',
+            [viewerId],
+          )
+        )[0]
+      : undefined;
+    const last = rows[0];
+    const drawn = rows.filter(
+      (r) => r.status === 'shown' || r.status === 'failed',
+    );
+    const pendingRedraw = new Set(
+      rows
+        .filter(
+          (r) =>
+            r.redraw_of &&
+            ['owed', 'requested', 'queued', 'playing'].includes(r.status),
+        )
+        .map((r) => r.redraw_of!),
+    );
+    const owed = rows.filter((r) => r.status === 'owed' && !r.blocked);
+    const requested = rows.filter(
+      (r) => r.status === 'requested' && !r.blocked,
+    );
+    const sum = (list: Row[]) =>
+      list.reduce((t, r) => t + Number(r.amount ?? 0), 0);
+    return {
+      viewer: {
+        id: viewerId,
+        login: v?.login ?? last?.viewer_login ?? null,
+        name: v?.display_name ?? last?.viewer_name ?? viewerId,
+      },
+      counts: {
+        available: owed.length,
+        requested: requested.length,
+        blocked: rows.filter(
+          (r) => r.blocked && (r.status === 'owed' || r.status === 'requested'),
+        ).length,
+        drawing: rows.filter(
+          (r) => r.status === 'queued' || r.status === 'playing',
+        ).length,
+        draws: drawn.length,
+      },
+      gains: {
+        awarded: sum(drawn.filter((r) => r.award_status === 'awarded')),
+        pending: sum(drawn.filter((r) => r.award_status === 'pending')),
+      },
+      // « Accorder une roue »: only when it has no right of its own to use (grant refuses it otherwise).
+      can_grant: owed.length + requested.length === 0,
+      rights: rows
+        .filter((r) =>
+          ['owed', 'requested', 'queued', 'playing'].includes(r.status),
+        )
+        .reverse()
+        .map((r) => ({
+          ...spinView(r),
+          blocked: r.blocked,
+          requested_via: r.requested_via ?? null,
+        })),
+      draws: drawn.slice(0, 20).map((r) => ({
+        ...spinView(r),
+        redraw_pending: pendingRedraw.has(r.spin_id),
+      })),
+    };
   }
 
   /**

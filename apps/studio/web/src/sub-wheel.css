@@ -148,3 +148,30 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* RV2-2 « Droits »: one viewer, its usable tours, its draws; three actions kept visually apart. */
+.swr-card h4 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.swr-stats {
+  margin: 4px 0;
+  font-size: 13px;
+}
+.swr-hits button small {
+  color: var(--muted);
+}
+.swr-hit--on {
+  border-color: var(--accent);
+}
+.swr-grant-btn:not(:disabled) {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.swr-redraw {
+  border-color: var(--warn);
+  color: var(--warn);
+}

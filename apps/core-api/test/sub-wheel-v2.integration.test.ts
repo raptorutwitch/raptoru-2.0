@@ -32,7 +32,9 @@ const R1 = '20261109130000_sub_wheel_v2.sql';
 const R2 = '20261109140000_sub_wheel_v2_review.sql';
 const R8 = '20261109150000_sub_wheel_v2_viewers.sql';
 const RV21 = '20261109170000_sub_wheel_v2_announce_delivery.sql';
+const RV22 = '20261109190000_sub_wheel_v2_redraw.sql';
 
+const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
   viewer: string,
   over: Partial<AlertEventInput> = {},
@@ -219,21 +221,38 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       await configure('v1', true);
       // The subscribe finds no right, then waits before writing its orphan proof; meanwhile the notice creates the V1
       // right and adopts the orphans present (none yet): without the lock, the orphan written afterwards stays alone.
+      // The order is imposed (a handshake per viewer), never left to timers.
+      const gates = new Map<
+        string,
+        { reached: () => void; release: Promise<void> }
+      >();
       const notices = wheel(tampered(a, { noViewerLock: true }));
       const subscribes = wheel(
-        tampered(b, { noViewerLock: true, slowProof: 300 }),
+        tampered(b, {
+          noViewerLock: true,
+          beforeProof: async (params) => {
+            const g = gates.get(String(params?.[4]));
+            if (!g) return;
+            g.reached();
+            await g.release;
+          },
+        }),
       );
       await Promise.all(
-        viewers(10).flatMap((v) => [
-          subscribes.acquire(proof(v)),
-          (async () => {
-            await new Promise((r) => setTimeout(r, 100));
-            return notices.fromAlert(
-              notice(v, { occurred_at: at(1_000) }),
-              null,
-            );
-          })(),
-        ]),
+        viewers(10).map(async (v) => {
+          let reached!: () => void;
+          let release!: () => void;
+          const looked = new Promise<void>((r) => (reached = r));
+          gates.set(v, {
+            reached,
+            release: new Promise<void>((r) => (release = r)),
+          });
+          const sub = subscribes.acquire(proof(v));
+          await Promise.race([looked, sub]); // it looked and found no right
+          await notices.fromAlert(notice(v, { occurred_at: at(1_000) }), null);
+          release(); // only now its orphan proof is written
+          await sub;
+        }),
       );
       expect(await n('sw_spin_sources where spin_id is null')).toBeGreaterThan(
         0,
@@ -284,24 +303,30 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       await configure('v1', true);
       const [wa, wb] = [wheel(a), wheel(b)];
       let flipping = true;
+      let flipped = 0;
       const flips = (async () => {
         let mode: 'v1' | 'v2_acquire' = 'v2_acquire';
         while (flipping) {
           await wheel(a).setMode(CH, mode, 'test');
+          flipped++;
           mode = mode === 'v1' ? 'v2_acquire' : 'v1';
         }
       })();
-      await Promise.all(
-        viewers(20).flatMap((v) =>
-          [4, 5, 6].flatMap((months) => {
+      // Three waves (months 4, 5, 6), each one started once a NEW switch is done, the switches going on meanwhile:
+      // the modes really change during the notices, whatever the machine's speed.
+      for (const months of [4, 5, 6]) {
+        const next = flipped + 1;
+        while (flipped < next) await new Promise((r) => setTimeout(r, 1));
+        await Promise.all(
+          viewers(20).flatMap((v) => {
             const e = notice(v, {
               months,
               occurred_at: at(months * 3_600_000),
             });
             return [wa.fromAlert(e, null), wb.fromAlert(e, null)];
           }),
-        ),
-      );
+        );
+      }
       flipping = false;
       await flips;
       expect(await n('sw_spins')).toBe(60);
@@ -451,6 +476,75 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
     });
   }
 
+  /** RV2-2: a real draw shown (v2, granted then asked by Studio): the one to re-draw. */
+  const drawn = async (viewer: string) => {
+    const w = wheel(a);
+    await w.setEnabled(CH, true);
+    await w.setMode(CH, 'v2', 'test');
+    const g = await w.grant(CH, STUDIO, {
+      key: randomUUID(),
+      viewer: { id: viewer, name: `V${viewer}` },
+      tier: 1,
+      months: 3,
+      note: 'test',
+    });
+    await w.requestDraw(g.spin_id, STUDIO);
+    const c = await w.claimAnimation(CH, 'obs');
+    await w.reportAnimation(c.spin!.spin_id, {
+      consumer_id: 'obs',
+      event: 'completed',
+    });
+    return c.spin!.spin_id;
+  };
+  const failure = (r: PromiseSettledResult<unknown>) =>
+    r.status === 'rejected'
+      ? ((r.reason as { code?: string }).code ?? String(r.reason))
+      : 'ok';
+
+  for (const round of ROUNDS) {
+    it(`RV2-2 — « Relancer un tirage » on two Cores at once: the same click → ONE new draw; two clicks → ONE, the other waits (round ${round})`, async () => {
+      const o = await drawn('9801');
+      const k = randomUUID();
+      const same = await Promise.all(
+        [a, b].map((db) =>
+          wheel(db).redraw(CH, STUDIO, { key: k, spin_id: o, note: 'x' }),
+        ),
+      );
+      expect(same[0]!.spin_id).toBe(same[1]!.spin_id);
+      expect(await n('sw_spins where redraw_of is not null')).toBe(1);
+      // A second original draw, two different clicks at once: one new draw, the other refused (one pending per draw).
+      const o2 = await drawn('9802');
+      const two = await Promise.allSettled(
+        [a, b].map((db) =>
+          wheel(db).redraw(CH, STUDIO, {
+            key: randomUUID(),
+            spin_id: o2,
+            note: 'x',
+          }),
+        ),
+      );
+      expect(two.map(failure).sort()).toEqual(['ok', 'redraw_pending']);
+      expect(await n(`sw_spins where redraw_of = '${o2}'`)).toBe(1);
+    });
+
+    it(`RV2-2 — « Accorder une roue » twice at once on two Cores (two clicks) for a viewer with no tour: ONE right (round ${round})`, async () => {
+      await wheel(a).setEnabled(CH, true);
+      const both = await Promise.allSettled(
+        [a, b].map((db) =>
+          wheel(db).grant(CH, STUDIO, {
+            key: randomUUID(),
+            viewer: { id: '9803', name: 'V9803' },
+            tier: 1,
+            months: 2,
+            note: 'x',
+          }),
+        ),
+      );
+      expect(both.map(failure).sort()).toEqual(['ok', 'rights_available']);
+      expect(await n("sw_spins where viewer_id = '9803'")).toBe(1);
+    });
+  }
+
   for (const round of ROUNDS) {
     it(`RV2-1 — the end of one wheel reported by two Cores at once: ONE announcement, after the channel delay (round ${round})`, async () => {
       await configure('v1', true);
@@ -482,9 +576,9 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       ...MIGRATION_SCOPES,
       // The R1 / R2 files not shipped yet: classified away from the production selection.
       prod: PROD_MIGRATIONS.filter(
-        (f) => f !== R1 && f !== R2 && f !== R8 && f !== RV21,
+        (f) => f !== R1 && f !== R2 && f !== R8 && f !== RV21 && f !== RV22,
       ),
-      lab: [...MIGRATION_SCOPES.lab, R1, R2, R8, RV21],
+      lab: [...MIGRATION_SCOPES.lab, R1, R2, R8, RV21, RV22],
     };
     expect(await migrate(a, 'prod', undefined, at46)).toHaveLength(46);
     // What production really holds in its chat queue: Tombola announcements and Spotify answers.
@@ -517,7 +611,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
     );
     const spins = await a.query('select * from sw_spins');
     const balances = await a.query('select * from wallets order by 1');
-    expect(await migrate(a, 'prod')).toEqual([R1, R2, R8, RV21]);
+    expect(await migrate(a, 'prod')).toEqual([R1, R2, R8, RV21, RV22]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(
       (

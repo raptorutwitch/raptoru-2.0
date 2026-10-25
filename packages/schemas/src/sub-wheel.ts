@@ -156,6 +156,17 @@ export type SwGrantInput = z.infer<typeof SwGrantInput>;
 /** R9: natural invitations ON / OFF (broadcaster). */
 export const SwInvitationsInput = z.strictObject({ enabled: z.boolean() });
 
+/**
+ * RV2-2 « Relancer un tirage » (the broadcaster, Studio): an exceptional NEW draw after the draw `spin_id`, paid on its
+ * own. `key`: one per confirmation (a repeated click is the same new draw); `note`: why (kept in the history).
+ */
+export const SwRedrawInput = z.strictObject({
+  key: z.uuid(),
+  spin_id: z.uuid(),
+  note: z.string().trim().min(1).max(200),
+});
+export type SwRedrawInput = z.infer<typeof SwRedrawInput>;
+
 /** RV2-1: the winner announcement's delay after the end of the animation, in seconds (broadcaster). */
 export const SwAnnounceDelayInput = z.strictObject({
   seconds: z.number().int().min(0).max(60),

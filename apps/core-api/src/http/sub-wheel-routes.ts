@@ -10,6 +10,7 @@ import {
   SwAwardUpdate,
   SwGrantInput,
   SwModeInput,
+  SwRedrawInput,
   SwReviewResolve,
   SwSettingsInput,
   SwTestRequest,
@@ -50,7 +51,8 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (e) {
-    if (e instanceof SwError) throw new HttpError(e.status, { error: e.code });
+    if (e instanceof SwError)
+      throw new HttpError(e.status, { error: e.code, ...(e.details ?? {}) });
     throw e;
   }
 }
@@ -321,6 +323,37 @@ export function subWheelRoutes(
           wheel.grant(channel(params[0]!), actor, parse(SwGrantInput, rest)),
         );
       },
+    },
+    {
+      // RV2-2 « Relancer un tirage »: an exceptional new draw after a draw (the broadcaster only, journaled).
+      method: 'POST',
+      pattern: at('/(\\d{1,32})/redraw'),
+      auth,
+      handle: ({ params, body, installation }) => {
+        const { actor, rest } = actorAndBody(!!production, installation, body);
+        return mapped(() =>
+          wheel.redraw(channel(params[0]!), actor, parse(SwRedrawInput, rest)),
+        );
+      },
+    },
+    {
+      // RV2-2 Studio « Droits »: viewers by pseudo (?q=, at least 2 characters).
+      method: 'GET',
+      pattern: at('/(\\d{1,32})/admin/viewers'),
+      auth,
+      handle: ({ params, url }) =>
+        wheel.searchViewers(
+          channel(params[0]!),
+          (url.searchParams.get('q') ?? '').slice(0, 64),
+        ),
+    },
+    {
+      // RV2-2 Studio « Droits »: one viewer — usable rights, draws, gains.
+      method: 'GET',
+      pattern: at('/(\\d{1,32})/admin/viewers/(\\d{1,32})'),
+      auth,
+      handle: ({ params }) =>
+        wheel.viewerAdmin(channel(params[0]!), params[1]!),
     },
     {
       // Studio « Tester »: a « test » gain, never attributable. `full`: a simulated sub through the alerts queue first.

@@ -17,6 +17,11 @@ import type { ObsLike } from '../src/channel-points/obs-actions.js';
 import { ChannelPointsRuntime } from '../src/channel-points/runtime.js';
 import type { EffectsPlayer } from '../src/effects/player.js';
 import { localLabCoreClient } from '../src/lab-moderation/proxy.js';
+import {
+  redrawConfirm,
+  rightsTab,
+  type SwViewerAdmin,
+} from '../../web/src/sub-wheel-rights-view.js';
 import { type SwState, subWheelView } from '../../web/src/sub-wheel-view.js';
 
 // Roue du Sub V2, lot R4 — end to end in the Lab: a Twitch sub reaches the REAL Lab Core (alerts route) → its right
@@ -293,6 +298,145 @@ describe('Roue du Sub V2 — R4, Lab end to end (Studio API, real Lab Core, simu
       'sw_grant',
       'sw_draw_request',
     ]);
+  });
+});
+
+describe('Roue du Sub V2 — RV2-2 Studio « Droits » (real Lab Core)', () => {
+  it('search by pseudo → the viewer card; « Accorder » refused while it has a tour; « Lancer » then « Relancer un tirage »: a new draw, paid once more', async () => {
+    const l = await lab(false);
+    await l.api('POST', '/settings', { enabled: true });
+    await l.api('POST', '/mode', { mode: 'v2' });
+    const grant = (key = randomUUID()) =>
+      l.api<{ spin_id: string }>('POST', '/grant', {
+        key,
+        viewer: { id: '9301', login: 'wenuyr', name: 'Wenuyr' },
+        tier: 1,
+        months: 3,
+        note: 'roue promise',
+      });
+    const right = await grant();
+    expect(
+      await l.api<{ id: string; name: string }[]>('POST', '/admin/search', {
+        q: 'wenu',
+      }),
+    ).toEqual([{ id: '9301', login: 'wenuyr', name: 'Wenuyr' }]);
+    const card = () => l.api<SwViewerAdmin>('GET', '/admin/viewers/9301');
+    let v = await card();
+    expect(v).toMatchObject({
+      counts: { available: 1, draws: 0 },
+      can_grant: false,
+    });
+    // Its own tour is to be used: no second right (Core says why, with the count).
+    await expect(grant()).rejects.toMatchObject({ status: 409 });
+    // « Lancer »: drawn at the next wheel.
+    await l.api('POST', `/spins/${right.spin_id}/request`);
+    expect(await l.rt.subWheel.once()).toBe(true);
+    v = await card();
+    expect(v).toMatchObject({
+      counts: { available: 0, draws: 1 },
+      can_grant: true,
+    });
+    const gain = v.gains.awarded;
+    expect(gain).toBeGreaterThan(0);
+    // « Relancer un tirage »: the same click twice is ONE new draw, then drawn and credited once more.
+    const key = randomUUID();
+    const redraw = () =>
+      l.api<{ spin_id: string; redraw_of: string }>('POST', '/redraw', {
+        key,
+        spin_id: right.spin_id,
+        note: 'roue coupée par OBS',
+      });
+    const r = await redraw();
+    expect((await redraw()).spin_id).toBe(r.spin_id);
+    expect(r.redraw_of).toBe(right.spin_id);
+    v = await card();
+    expect(v.draws[0]).toMatchObject({ redraw_pending: true });
+    let html = rightsTab(
+      { query: 'wenu', hits: null, viewer: v, grantOpen: false },
+      true,
+    );
+    expect(html).toContain('relance en attente');
+    expect(await l.rt.subWheel.once()).toBe(true);
+    v = await card();
+    expect(v.counts.draws).toBe(2);
+    expect(v.gains.awarded).toBeGreaterThan(gain);
+    html = rightsTab(
+      { query: 'wenu', hits: null, viewer: v, grantOpen: false },
+      true,
+    );
+    expect(html).toContain('nouveau tirage');
+    expect(html.match(/data-act="swr-redraw"/g)).toHaveLength(2);
+  });
+});
+
+describe('Roue du Sub V2 — RV2-2 « Droits » (pure view)', () => {
+  const viewer = (over: Partial<SwViewerAdmin> = {}): SwViewerAdmin => ({
+    viewer: { id: '9301', login: 'wenuyr', name: 'Wenuyr' },
+    counts: { available: 2, requested: 0, blocked: 0, drawing: 0, draws: 1 },
+    gains: { awarded: 8000, pending: 0 },
+    can_grant: false,
+    rights: [],
+    draws: [],
+    ...over,
+  });
+  it('search results, the counts and gains; three distinct actions; « Accorder » closed while it has tours', () => {
+    let html = rightsTab(
+      {
+        query: 'we',
+        hits: [
+          { id: '9301', login: 'wenuyr', name: 'Wenuyr' },
+          { id: '9302', login: 'weed_<b>', name: 'Weed<b>' },
+        ],
+        viewer: viewer(),
+        grantOpen: false,
+      },
+      true,
+    );
+    expect(html).toContain('data-act="swr-pick" data-id="9302"');
+    expect(html).not.toContain('Weed<b>'); // escaped
+    expect(html).toContain('<b>2</b> disponibles');
+    expect(html).toContain(
+      `<b>${(8000).toLocaleString('fr-FR')}</b> jetons gagnés`,
+    );
+    expect(html).toContain('data-act="swr-catchup"');
+    expect(html).toContain('Rattraper : lancer 2 tours');
+    expect(html).toMatch(/data-act="swr-grant-open" disabled/);
+    expect(html).toContain('2 tours à utiliser d’abord');
+    html = rightsTab(
+      {
+        query: '',
+        hits: [],
+        viewer: viewer({
+          counts: {
+            available: 0,
+            requested: 0,
+            blocked: 0,
+            drawing: 0,
+            draws: 0,
+          },
+          can_grant: true,
+        }),
+        grantOpen: true,
+      },
+      true,
+    );
+    expect(html).toContain('Aucun viewer trouvé');
+    expect(html).not.toContain('swr-catchup');
+    expect(html).toContain('data-role="swr-grant"');
+    expect(html).toContain('Accorder à Wenuyr');
+    expect(
+      rightsTab(
+        { query: '', hits: null, viewer: null, grantOpen: false },
+        false,
+      ),
+    ).toContain('ne gère pas encore');
+  });
+  it('the redraw confirmation says the previous gain and that it is paid on top', () => {
+    const text = redrawConfirm('Wenuyr', '26/10 21:04', 8000, 'awarded');
+    expect(text).toContain(
+      `a rapporté ${(8000).toLocaleString('fr-FR')} jetons (Crédité)`,
+    );
+    expect(text).toContain('payé EN PLUS');
   });
 });
 

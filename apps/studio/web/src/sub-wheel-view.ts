@@ -134,13 +134,16 @@ export interface SwState {
   } | null;
 }
 
-export type SwTab = 'waiting' | 'review' | 'history' | 'settings' | 'lab';
+export type SwTab =
+  'waiting' | 'rights' | 'review' | 'history' | 'settings' | 'lab';
 export interface SwUi {
   tab: SwTab;
   grantOpen: boolean;
+  /** RV2-2: the « Droits » tab, rendered by sub-wheel-rights-view.ts. */
+  rights?: string;
 }
 
-const esc = (s: unknown) =>
+export const esc = (s: unknown) =>
   String(s ?? '').replace(
     /[&<>"']/g,
     (c) =>
@@ -148,10 +151,10 @@ const esc = (s: unknown) =>
         c
       ]!,
   );
-const chip = (cls: 'on' | 'warn' | 'off', text: string) =>
+export const chip = (cls: 'on' | 'warn' | 'off', text: string) =>
   `<span class="cp-chip cp-chip--${cls}">${esc(text)}</span>`;
 const n = (v: number) => v.toLocaleString('fr-FR');
-const time = (iso: string | null | undefined) =>
+export const time = (iso: string | null | undefined) =>
   iso
     ? new Date(iso).toLocaleString('fr-FR', {
         day: '2-digit',
@@ -172,7 +175,7 @@ export const STATUS: Record<SwStatus, string> = {
   requested: 'Tirage demandé',
   merged: 'Fusionnée (doublon)',
 };
-const AWARD: Record<SwSpinView['award']['status'], string> = {
+export const AWARD: Record<SwSpinView['award']['status'], string> = {
   none: '',
   pending: 'Gain en attente d’attribution',
   awarded: 'Crédité',
@@ -521,6 +524,7 @@ export function subWheelView(
   const dups = (s.possible_duplicates ?? []).length;
   const tabs: [SwTab, string][] = [
     ['waiting', `En attente${rights.length ? ` (${rights.length})` : ''}`],
+    ['rights', 'Droits'],
     ['review', `À vérifier${blocked ? ` (${blocked})` : ''}`],
     ['history', 'Historique'],
     ['settings', 'Réglages'],
@@ -529,15 +533,17 @@ export function subWheelView(
       : []),
   ];
   const body =
-    ui.tab === 'review'
-      ? reviewTab(s)
-      : ui.tab === 'history'
-        ? historyTab(s)
-        : ui.tab === 'settings'
-          ? settingsTab(s)
-          : ui.tab === 'lab'
-            ? labTab(s)
-            : waitingTab(s, ui);
+    ui.tab === 'rights'
+      ? (ui.rights ?? '')
+      : ui.tab === 'review'
+        ? reviewTab(s)
+        : ui.tab === 'history'
+          ? historyTab(s)
+          : ui.tab === 'settings'
+            ? settingsTab(s)
+            : ui.tab === 'lab'
+              ? labTab(s)
+              : waitingTab(s, ui);
   return `<div class="cp-status">${s.settings.enabled ? chip('on', 'Roue : ACTIVE') : chip('warn', 'Roue : désactivée')}
       ${chip(mode === 'v2' ? 'on' : 'off', `Mode ${MODE[mode][0]}`)} ${player}
       ${s.waiting ? chip('warn', `${s.waiting} roue(s) à afficher`) : ''}

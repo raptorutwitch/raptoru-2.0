@@ -165,6 +165,16 @@ export class SubWheelRuntime {
       return this.d.core(`${ch}/invitations`, await body());
     if (method === 'POST' && path === '/announce-delay')
       return this.d.core(`${ch}/announce-delay`, await body());
+    // RV2-2 « Droits »: viewers by pseudo, one viewer's rights / draws / gains, the exceptional new draw.
+    if (method === 'POST' && path === '/admin/search') {
+      const q = String((await body()).q ?? '').slice(0, 64);
+      return this.d.core(`${ch}/admin/viewers?q=${encodeURIComponent(q)}`);
+    }
+    const viewer = /^\/admin\/viewers\/(\d{1,32})$/.exec(path);
+    if (method === 'GET' && viewer)
+      return this.d.core(`${ch}/admin/viewers/${viewer[1]}`);
+    if (method === 'POST' && path === '/redraw')
+      return this.d.core(`${ch}/redraw`, await body());
     // Lab simulators only (never relayed by a production Studio): presence readings, Twitch subscriptions, the live.
     if (this.d.environment === 'lab' && method === 'POST') {
       if (path === '/lab/presence')

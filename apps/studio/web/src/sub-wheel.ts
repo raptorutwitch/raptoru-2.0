@@ -1,3 +1,5 @@
+import { mountSubWheelRights } from './sub-wheel-rights.js';
+import { rightsTab } from './sub-wheel-rights-view.js';
 import {
   type SwMode,
   type SwState,
@@ -42,6 +44,10 @@ export function mountSubWheel(root: HTMLElement) {
     const keep = [...root.querySelectorAll<HTMLInputElement>('[data-f]')].map(
       (el) => [el.dataset.f!, el.value] as const,
     );
+    ui.rights =
+      ui.tab === 'rights'
+        ? rightsTab(rightsCtl.ui, !!state && !state.v2_unavailable)
+        : undefined;
     root.innerHTML =
       subWheelView(state, error, ui) +
       (message
@@ -75,6 +81,15 @@ export function mountSubWheel(root: HTMLElement) {
       /[&<>]/g,
       (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!,
     );
+  // RV2-2 « Droits »: its own screen (sub-wheel-rights*.ts); this section only routes its forms and buttons.
+  const rightsCtl = mountSubWheelRights({
+    root,
+    notify: (text) => {
+      message = say(text);
+      render();
+    },
+    render: () => render(),
+  });
 
   const post = async (path: string, body: object, done: string) => {
     if (busy) return false;
@@ -115,6 +130,10 @@ export function mountSubWheel(root: HTMLElement) {
 
   root.addEventListener('submit', (ev) => {
     const role = (ev.target as HTMLElement).dataset.role;
+    if (rightsCtl.submit(role)) {
+      ev.preventDefault();
+      return;
+    }
     if (role === 'sw-sim-viewer' || role === 'sw-sim-event') {
       ev.preventDefault();
       const id = field(role === 'sw-sim-viewer' ? 'sv-id' : 'se-id');
@@ -199,6 +218,7 @@ export function mountSubWheel(root: HTMLElement) {
     );
     const act = target?.dataset.act;
     if (!act || busy) return;
+    if (rightsCtl.click(act, target!)) return;
     if (act === 'sw-tab') {
       ui.tab = (target!.dataset.tab as SwTab) ?? 'waiting';
       message = '';
