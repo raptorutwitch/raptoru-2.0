@@ -1,0 +1,182 @@
+# Déployer le Core et/ou le bot en Production (docs/CICD.md « Déployer Core / bot »).
+# Uniquement à la main (onglet Actions → « Déployer Core / bot » → Run workflow), depuis main :
+# - plan : lecture seule — plan, CI du commit, live, migrations, variables (aucune écriture) ;
+# - deploy : le déploiement réel, avec la confirmation « DEPLOY <composant> <7 premiers caractères du SHA> ».
+# L'outil (scripts/coolify-deploy.mjs) applique les mêmes règles qu'en local : commit prouvé par la CI de main, jamais
+# pendant un live, migrations seulement avec un mode explicite, vérification réelle après coup, retour arrière sûr.
+# Jamais déclenché par un push : aucun déploiement implicite.
+name: Déployer Core / bot
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: Quoi déployer (core+bot = le Core, puis le bot)
+        type: choice
+        options: [core, bot, core+bot]
+        required: true
+      sha:
+        description: Commit exact de main (40 caractères)
+        type: string
+        required: true
+      mode:
+        description: plan = lecture seule ; deploy = déploiement réel
+        type: choice
+        options: [plan, deploy]
+        default: plan
+      migrations:
+        description: Migrations de la plage (none = aucune attendue)
+        type: choice
+        options: [none, preapplied, post-deploy]
+        default: none
+      rollback:
+        description: Revenir à un commit plus ancien (les migrations ne sont jamais annulées)
+        type: boolean
+        default: false
+      auto_rollback:
+        description: En cas d'échec de vérification, revenir au commit précédent (seulement sans migration et hors live)
+        type: boolean
+        default: true
+      allow_single_live_source:
+        description: Arbitrage — accepter « hors live » d'une seule source quand les autres sont inconnues
+        type: boolean
+        default: false
+      confirm:
+        description: Pour deploy — écrire « DEPLOY <composant> <7 premiers caractères du SHA> »
+        type: string
+        default: ''
+
+permissions: {}
+
+concurrency:
+  # Jamais deux déploiements à la fois ; un lancement en attente n'annule pas celui en cours.
+  group: production-deploy
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  authorize:
+    name: autorisation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Qui, depuis où, quel commit
+        env:
+          DEPLOY_ACTORS: ${{ vars.DEPLOY_ACTORS || 'raptorutwitch' }}
+          GITHUB_TOKEN: ${{ github.token }}
+          INPUT_COMPONENT: ${{ inputs.component }}
+          INPUT_SHA: ${{ inputs.sha }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_CONFIRM: ${{ inputs.confirm }}
+        run: node scripts/delivery/authorize.mjs
+
+  deploy:
+    name: ${{ inputs.mode }} ${{ inputs.component }}
+    needs: authorize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: read # la CI du commit (porte de déploiement)
+      deployments: write # traçabilité : onglet « Deployments » du dépôt
+    env:
+      COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      COOLIFY_ALLOW_INSECURE_HTTP: ${{ vars.COOLIFY_ALLOW_INSECURE_HTTP }}
+      OPS_URL: https://core.raptoru.fr/v1/ops/status
+      OPS_TOKEN: ${{ secrets.OPS_TOKEN }}
+      TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+      TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+      TWITCH_CHANNEL_ID: '83603689'
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      COMPONENT: ${{ inputs.component }}
+      SHA: ${{ inputs.sha }}
+      MODE: ${{ inputs.mode }}
+      MIGRATIONS: ${{ inputs.migrations }}
+      ROLLBACK: ${{ inputs.rollback }}
+      AUTO_ROLLBACK: ${{ inputs.auto_rollback }}
+      SINGLE_SOURCE: ${{ inputs.allow_single_live_source }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # Lecture seule : l'outil relit origin/main (git fetch) pour situer le commit.
+          persist-credentials: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Secrets nécessaires (noms seulement)
+        run: |
+          missing=""
+          [ -n "$COOLIFY_URL" ] || missing="$missing COOLIFY_URL"
+          [ -n "$COOLIFY_TOKEN" ] || missing="$missing COOLIFY_TOKEN"
+          [ -n "$OPS_TOKEN" ] || missing="$missing OPS_TOKEN"
+          if [ -n "$missing" ]; then
+            echo "::error::Secrets du dépôt absents :$missing (docs/CICD.md « Secrets »)"
+            exit 1
+          fi
+      - name: Enregistrement GitHub Deployment
+        id: ghdep
+        if: inputs.mode == 'deploy'
+        continue-on-error: true
+        run: |
+          env_name="production-${COMPONENT/+/-}"
+          body=$(jq -n --arg ref "$SHA" --arg env "$env_name" --arg d "$COMPONENT $SHA par $GITHUB_ACTOR" \
+            '{ref: $ref, environment: $env, description: $d, auto_merge: false, production_environment: true, required_contexts: []}')
+          id=$(echo "$body" | gh api "repos/$GITHUB_REPOSITORY/deployments" -X POST --input - --jq .id 2>/dev/null || true)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          [ -n "$id" ] && gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" -X POST -f state=in_progress \
+            -f log_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true
+      - name: ${{ inputs.mode == 'deploy' && 'Déploiement' || 'Plan (lecture seule)' }}
+        env:
+          DELIVERY_SUMMARY_FILE: ${{ runner.temp }}/delivery.jsonl
+          COOLIFY_DEPLOY_JOURNAL: ${{ runner.temp }}/journal.jsonl
+        run: |
+          args=(deploy "$COMPONENT" "$SHA")
+          [ "$MODE" = deploy ] && args+=(--go)
+          [ "$MIGRATIONS" = preapplied ] && args+=(--migrations-preapplied)
+          [ "$MIGRATIONS" = post-deploy ] && args+=(--migrations-approved)
+          [ "$ROLLBACK" = true ] && args+=(--rollback)
+          [ "$AUTO_ROLLBACK" = true ] && args+=(--auto-rollback)
+          [ "$SINGLE_SOURCE" = true ] && args+=(--allow-single-live-source)
+          set -o pipefail
+          node scripts/coolify-deploy.mjs "${args[@]}" | tee "$RUNNER_TEMP/deploy.log"
+      - name: Statut GitHub Deployment
+        if: always() && steps.ghdep.outputs.id != ''
+        env:
+          DEP_ID: ${{ steps.ghdep.outputs.id }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          state=$([ "$OUTCOME" = success ] && echo success || echo failure)
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$DEP_ID/statuses" -X POST -f state="$state" \
+            -f log_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true
+      - name: Résumé
+        if: always()
+        run: |
+          {
+            echo "### $MODE $COMPONENT @ ${SHA:0:12}"
+            echo
+            echo '```'
+            grep -E "^(Application|Déployé|Cible|Migrations|CI|Live|Retour|VERDICT|Vérification|État Coolify|Santé|Problèmes|  )" "$RUNNER_TEMP/deploy.log" 2>/dev/null | head -80 || echo "(pas de journal)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Journal en artefact (sans secret)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deploy-${{ inputs.component }}-${{ inputs.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/deploy.log
+            ${{ runner.temp }}/delivery.jsonl
+          if-no-files-found: ignore
+          retention-days: 90
