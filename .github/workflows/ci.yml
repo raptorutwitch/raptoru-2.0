@@ -1,0 +1,283 @@
+# CI — verdict automatique de chaque branche, Pull Request et commit de main (docs/CICD.md).
+# - Pull Request : seulement les parties touchées (scripts/ci/changes.mjs) ;
+# - push sur main et lancement manuel : tout (sauf un commit purement documentaire), pour que chaque commit
+#   déployable de main ait des résultats complets — le workflow « Déployer » les exige ;
+# - aucun secret, permissions en lecture seule, rien ne touche la Production.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Une Pull Request poussée à nouveau annule son ancienne CI ; sur main chaque commit garde la sienne (preuve de déploiement).
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+  TURBO_TELEMETRY_DISABLED: '1'
+  npm_config_audit: 'false'
+  npm_config_fund: 'false'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.c.outputs.code }}
+      core: ${{ steps.c.outputs.core }}
+      bot: ${{ steps.c.outputs.bot }}
+      studio: ${{ steps.c.outputs.studio }}
+      extension: ${{ steps.c.outputs.extension }}
+      e2e: ${{ steps.c.outputs.e2e }}
+      tooling: ${{ steps.c.outputs.tooling }}
+      images: ${{ steps.c.outputs.images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: c
+        name: Parties touchées
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: node scripts/ci/changes.mjs --event "$EVENT" --base "$BASE" --head "$HEAD"
+
+  quality:
+    name: quality
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Installation (lockfile)
+        run: npm ci
+      - name: Workspaces et manifestes
+        run: node scripts/ci/check-workspaces.mjs
+      - name: Formatage (Prettier)
+        run: npm run format:check
+      - name: Lint (ESLint)
+        if: needs.changes.outputs.code == 'true'
+        run: npm run lint
+      - name: Typecheck
+        if: needs.changes.outputs.code == 'true'
+        run: npm run typecheck
+      - name: Build de tous les workspaces
+        if: needs.changes.outputs.code == 'true'
+        run: npm run build
+
+  core:
+    name: core
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        # Même version majeure que la base de Production (PostgreSQL 17) ; base jetable du runner.
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: raptoru_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # Les tests d'intégration n'acceptent qu'une base locale dont le nom contient « test » (elle est vidée).
+      TEST_DATABASE_URL: postgres://postgres:ci@127.0.0.1:5432/raptoru_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Build des dépendances du Core
+        run: npx turbo run build --filter=@raptoru/core-api...
+      - name: Tests du Core (unitaires + PostgreSQL réel)
+        run: npm test -w @raptoru/core-api
+
+  bot:
+    name: bot
+    needs: changes
+    if: needs.changes.outputs.bot == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Build des dépendances du bot
+        run: npx turbo run build --filter=@raptoru/twitch-bot...
+      - name: Tests du bot
+        run: npm test -w @raptoru/twitch-bot
+
+  studio:
+    name: studio
+    needs: changes
+    if: needs.changes.outputs.studio == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Tests du serveur Studio
+        run: npm test -w @raptoru/studio-server
+      - name: Tests du desktop Studio
+        run: npm test -w @raptoru/studio-desktop
+
+  extension:
+    name: extension
+    needs: changes
+    if: needs.changes.outputs.extension == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Tests de l'extension
+        run: npm test -w @raptoru/twitch-extension
+      - name: Archive de production (vérifiée, jamais publiée ici)
+        run: npm run build:production -w @raptoru/twitch-extension
+      - name: Archive en artefact (à téléverser à la main sur Twitch, après accord)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: extension-production-${{ github.sha }}
+          path: apps/twitch-extension/release/raptoru-live-PRODUCTION-*
+          if-no-files-found: error
+          retention-days: 30
+
+  e2e:
+    name: e2e
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Chromium (Playwright)
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '0'
+        run: npx playwright install --with-deps chromium
+      - name: E2E navigateur (pile Lab isolée, base en mémoire, aucun service réel)
+        run: npm run test:e2e -w @raptoru/studio-server
+      - name: Traces des échecs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results-${{ github.sha }}
+          path: apps/studio/server/.e2e-results
+          retention-days: 14
+
+  tooling:
+    name: tooling
+    needs: changes
+    if: needs.changes.outputs.tooling == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Build du Core (le vérificateur de migrations s'exécute dans son dossier)
+        run: npx turbo run build --filter=@raptoru/core-api...
+      - name: Identité git des dépôts de test
+        run: git config --global user.email ci@raptoru.invalid && git config --global user.name ci
+      - name: Outils de livraison (déploiement, garde-fous, CI) — Coolify, Core, GitHub et PostgreSQL simulés
+        run: node --test scripts/*.test.mjs scripts/ci/*.test.mjs scripts/delivery/*.test.mjs
+      - name: Workflows (actionlint, image épinglée)
+        run: >-
+          docker run --rm -v "$PWD:/repo" -w /repo
+          rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+
+  images:
+    name: images
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [core-api, twitch-bot]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Image Docker de ${{ matrix.app }} (celle que Coolify construit ; jamais poussée)
+        env:
+          APP: ${{ matrix.app }}
+          SHA: ${{ github.sha }}
+        run: docker build -f "apps/$APP/Dockerfile" --build-arg "SOURCE_COMMIT=$SHA" -t "raptoru-$APP:ci" .
+
+  verdict:
+    name: verdict
+    if: always()
+    needs:
+      [changes, quality, core, bot, studio, extension, e2e, tooling, images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci
+      - name: Résultat
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: node scripts/ci/verdict.mjs
