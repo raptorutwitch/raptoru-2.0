@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **25/10/2026 ~10:20** (CI/CD raccordée à la Production : Coolify en HTTPS, `OPS_TOKEN`, Core `34e4120` avec `/v1/ops/status` ; Studio **0.1.7 publié** ; bot `16600de` inchangé — [CICD.md](CICD.md)). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **25/10/2026 ~11:45** (CI/CD **en service et validée sur la vraie infrastructure** : déploiement du Core lancé depuis GitHub, publication Studio depuis GitHub testée — [CICD.md](CICD.md) ; Core `0b11cc0`, bot `16600de`, Studio 0.1.7). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -29,7 +29,7 @@ depuis le checkout principal.
 
 | Élément              | Version                                                                                                                                                                                                                                                          | Remarque                                                                                                   |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Core `raptoru-core`  | **`34e4120`** (déployé 25/10 09:58 UTC en local, sans migration ; sert `/v1/ops/status`)                                                                                                                                                                         | `running:healthy`, `/health` `/ready` 200, commit rapporté par le Core ; retour : `36a4cec`                |
+| Core `raptoru-core`  | **`0b11cc0`** (déployé 25/10 11:11 UTC **depuis GitHub Actions**, sans migration ; sert `/v1/ops/status`)                                                                                                                                                        | `running:healthy`, `/health` `/ready` 200, commit rapporté par le Core ; retour : `34e4120`                |
 | Bot `raptoru-bot`    | **`16600de`** (déployé 24/10 16:01 UTC, inclut `cf21c4b`)                                                                                                                                                                                                        | `running:healthy`, VPS, bail repris proprement ; `CP_TWITCH_ACTIONS` ON (24/10 16:28) ; retour : `b8bc025` |
 | `origin/main`        | CI/CD et documentation (PR #1 à #5) ; « État de la livraison » donne le commit exact                                                                                                                                                                             | Coolify : auto-deploy désactivé                                                                            |
 | Studio installé (PC) | **0.1.7** (construite par GitHub depuis `34e4120`, publiée le 25/10) — installée à 10:07 UTC par erreur pendant le test de mise à jour (installation à la fermeture d'electron-updater, corrigée), Studio relancé à 10:15 : données, Spotify et Votekick intacts | retour : sup.9 (`Documents\raptoru-spotify-GO`)                                                            |
@@ -100,10 +100,10 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 - Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
   copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
-- **CI/CD** ([CICD.md](CICD.md)) : raccordée le 25/10 (Coolify en HTTPS, secrets, `OPS_TOKEN`, Core `34e4120`,
-  Studio 0.1.7 publié). Reste : (1) le premier déploiement **lancé depuis GitHub** — plan validé sur la vraie
-  infrastructure, le lancement réel est à faire par Antoni (Actions → « Déployer Core / bot ») ; (2) le secret
-  `STUDIO_RELEASES_TOKEN` pour publier Studio depuis GitHub ; (3) facultatif : l'enregistrement DNS `coolify` chez OVH.
+- **CI/CD** ([CICD.md](CICD.md)) : chantier clos le 25/10 — CI, déploiement du Core depuis GitHub (11:11 UTC) et
+  publication Studio depuis GitHub (brouillon de test 0.1.8 créé, vérifié, supprimé) validés pour de vrai. Restent :
+  la première vérification réelle d'un déploiement du **bot** (au prochain changement du bot) et, facultatif,
+  l'enregistrement DNS `coolify` chez OVH (CICD.md § 5).
 - Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
   en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).

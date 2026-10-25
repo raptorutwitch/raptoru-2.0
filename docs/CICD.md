@@ -95,9 +95,13 @@ manuelle. Signer demande un certificat (OV/EV, payant) : décision ASTRA-P3-001,
 
 **Version 0.1.7 (25/10)** : construite par ce workflow (`34e4120`, artefact vérifié), mise à jour contrôlée avant
 publication avec electron-updater lui-même (0.1.7 proposée à `0.1.7-sup.10` et à 0.1.6, rien proposé à 0.1.7,
-téléchargement et SHA-512 acceptés), puis publiée : brouillon, publication, re-téléchargement anonyme identique. Tant
-que le secret `STUDIO_RELEASES_TOKEN` manque, la publication se fait depuis le PC sur l'artefact de la CI :
-`node apps/studio/desktop/scripts/release.mjs --publish-from=<dossier de l'artefact> [--public]` (connexion `gh`).
+téléchargement et SHA-512 acceptés), puis publiée : brouillon, publication, re-téléchargement anonyme identique.
+
+**Publication depuis GitHub validée (25/10)** : `publish = draft` a construit 0.1.8 sur Windows, testé la mise à jour
+0.1.7 → 0.1.8 (données intactes), créé le brouillon avec `STUDIO_RELEASES_TOKEN` ; fichiers retéléchargés identiques
+à la construction (SHA-256, SHA-512 de `latest.yml`), brouillon invisible anonymement ; brouillon, étiquette et
+artefact de test supprimés ensuite, 0.1.7 inchangée. Secours sans GitHub : `node apps/studio/desktop/scripts/release.mjs
+--publish-from=<dossier de l'artefact> [--public]` depuis le PC (connexion `gh`).
 
 ## 4. Si un déploiement échoue
 
@@ -118,13 +122,13 @@ En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status
 
 ## 5. Secrets et variables (Settings → Secrets and variables → Actions)
 
-| Nom (secret)                                | Pour                                      | Valeur                                                                                                                     |
-| ------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `COOLIFY_URL`                               | Déployer, État                            | **en place** : `https://core-staging.raptoru.fr/_coolify` (voir « HTTPS de Coolify »)                                      |
-| `COOLIFY_TOKEN`                             | Déployer, État                            | **en place** : le jeton Coolify « raptoru-deploy-automation » (read, write, deploy, read:sensitive), copie de `~/.raptoru` |
-| `OPS_TOKEN`                                 | Déployer, État                            | **en place** : la même valeur que la variable `OPS_TOKEN` de `raptoru-core` dans Coolify et que `~/.raptoru/ops-token.txt` |
-| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Déployer (3e source de live, facultative) | absents (inutiles : le Core fournit déjà deux sources) ; sinon une application Twitch dédiée, sans droit utilisateur       |
-| `STUDIO_RELEASES_TOKEN`                     | Studio (draft / public)                   | jeton GitHub « fine-grained » : dépôt `raptoru-studio-releases` uniquement, « Contents: Read and write »                   |
+| Nom (secret)                                | Pour                                      | Valeur                                                                                                                         |
+| ------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `COOLIFY_URL`                               | Déployer, État                            | **en place** : `https://core-staging.raptoru.fr/_coolify` (voir « HTTPS de Coolify »)                                          |
+| `COOLIFY_TOKEN`                             | Déployer, État                            | **en place** : le jeton Coolify « raptoru-deploy-automation » (read, write, deploy, read:sensitive), copie de `~/.raptoru`     |
+| `OPS_TOKEN`                                 | Déployer, État                            | **en place** : la même valeur que la variable `OPS_TOKEN` de `raptoru-core` dans Coolify et que `~/.raptoru/ops-token.txt`     |
+| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Déployer (3e source de live, facultative) | absents (inutiles : le Core fournit déjà deux sources) ; sinon une application Twitch dédiée, sans droit utilisateur           |
+| `STUDIO_RELEASES_TOKEN`                     | Studio (draft / public)                   | **en place** : jeton « fine-grained », dépôt `raptoru-studio-releases` uniquement, « Contents: Read and write » (à renouveler) |
 
 | Nom (variable)                | Valeur                                                                                  |
 | ----------------------------- | --------------------------------------------------------------------------------------- |
