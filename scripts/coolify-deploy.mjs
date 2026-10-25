@@ -1,22 +1,31 @@
 #!/usr/bin/env node
-// Assisted deployment through the Coolify API (docs/REPRISE.md « Déploiement assisté »). No dependency.
+// Deployment of the Core / the bot through the Coolify API (docs/CICD.md « Déployer Core / bot »). No dependency.
+// Used locally and by the « Déployer » GitHub workflow (.github/workflows/deploy.yml), same rules everywhere.
 //
 //   node scripts/coolify-deploy.mjs status  <app>
 //   node scripts/coolify-deploy.mjs plan    <app> <sha>                      read-only: checks + plan
-//   node scripts/coolify-deploy.mjs deploy  <app> <sha> [--migrations-approved] [--rollback]
-//                                           → DRY-RUN (prints the plan and the API calls it would make)
-//   node scripts/coolify-deploy.mjs deploy  <app> <sha> --go [...]           → the real deployment
-//   --redeploy: rebuild the commit already deployed (restart with a fresh image)
-//   --migrations-preapplied: the range's migrations were applied by hand beforehand — the new Core's container checks
-//                            them on the real database, then its migrator records them (coolify-verify-migrations.mjs)
+//   node scripts/coolify-deploy.mjs deploy  <app> <sha> [options]            → DRY-RUN (plan + the calls it would make)
+//   node scripts/coolify-deploy.mjs deploy  <app> <sha> --go [options]       → the real deployment
+//   <app>: core | bot | core+bot (the Core, then the bot) | core-staging
+//   --rollback               deploy an older commit (migrations are never reverted)
+//   --redeploy               rebuild the commit already deployed
+//   --migrations-approved    the range's migrations are run by the deployment (post-deployment command)
+//   --migrations-preapplied  they were applied by hand beforehand: the new container checks them on the real database,
+//                            then its migrator records them (coolify-verify-migrations.mjs)
+//   --auto-rollback          on a failed verification, redeploy the previous commit — only when the range has no
+//                            migration and the channel is not live
+//   --allow-single-live-source  accept « offline » from one source when the others are unknown (explicit arbitration)
+//   --skip-ci-gate           local emergencies only (refused in GitHub Actions)
 //
-// Rules: one application per call, an exact 40-character SHA that exists on origin/<the app's branch>; never the bot
-// when the Core is deployed; a migration only with --migrations-approved AND a database backup < 60 min, run once by
-// the deployment's post-deployment command (restored afterwards); a rollback is an explicit deploy of an older SHA
-// (--rollback), migrations never reverted; the bot only once the Core runs the target commit (or a later one). Any
-// migration path needs the deployment log, i.e. a token with Coolify's « read:sensitive » permission (without it
-// Coolify hides the log, and reports « finished » even when the post-deployment command failed). The token is read
-// from a file outside the repository and never printed.
+// Before any write: an exact 40-character SHA on origin/<branch>; the CI proved it on main (scripts/delivery/
+// ci-gate.mjs) — unless Coolify's history shows it already ran in Production (a rollback); no deployment in progress;
+// the application's required variables exist (names only, never values); the channel is NOT live (scripts/delivery/
+// live-guard.mjs: checked at planning, right before the first write, and again before the bot of core+bot); a
+// migration only with an explicit mode, a database backup < 60 min and a token able to read the deployment log.
+// After: Coolify's deployment finished on that commit, the application running:healthy, /health and /ready, the Core
+// reporting that commit and the bot holding the lease with that version and Twitch / EventSub up (GET /v1/ops/status),
+// no fatal line in the startup logs. Tokens come from the environment (COOLIFY_TOKEN, OPS_TOKEN) or files under
+// ~/.raptoru, are never printed, and are refused over plain HTTP in GitHub Actions.
 
 import { execFileSync } from 'node:child_process';
 import console from 'node:console';
@@ -26,18 +35,37 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { verifierCommand } from './coolify-verify-migrations.mjs';
+import { ciGate } from './delivery/ci-gate.mjs';
+import {
+  describeSources,
+  liveCheck,
+  opsStatus,
+} from './delivery/live-guard.mjs';
 
 const { fetch, AbortSignal } = globalThis;
 const HOME = join(homedir(), '.raptoru');
+const IN_ACTIONS = process.env.GITHUB_ACTIONS === 'true';
 const COOLIFY = process.env.COOLIFY_URL ?? 'http://62.84.187.170:8000';
+const fileText = (p) =>
+  p && existsSync(p) ? readFileSync(p, 'utf8').trim() : '';
 const TOKEN_FILE =
   process.env.COOLIFY_TOKEN_FILE ??
   [
     join(HOME, 'coolify-token.txt'),
     join(HOME, 'coolify-staging-token.txt'),
   ].find(existsSync);
+const token = process.env.COOLIFY_TOKEN?.trim() || fileText(TOKEN_FILE);
+// Read-only ops status of the Core (live state, commit, bot lease): OPS_TOKEN or ~/.raptoru/ops-token.txt.
+const OPS_ENV = {
+  ...process.env,
+  OPS_URL: process.env.OPS_URL ?? 'https://core.raptoru.fr/v1/ops/status',
+  OPS_TOKEN:
+    process.env.OPS_TOKEN?.trim() || fileText(join(HOME, 'ops-token.txt')),
+  TWITCH_CHANNEL_ID: process.env.TWITCH_CHANNEL_ID ?? '83603689',
+};
 const JOURNAL =
   process.env.COOLIFY_DEPLOY_JOURNAL ?? join(HOME, 'deploy-journal.log');
+const SUMMARY = process.env.DELIVERY_SUMMARY_FILE;
 const POLL_MS = Number(process.env.COOLIFY_POLL_MS ?? 5_000);
 const DEPLOY_TIMEOUT_MS = Number(
   process.env.COOLIFY_DEPLOY_TIMEOUT_MS ?? 20 * 60_000,
@@ -45,6 +73,7 @@ const DEPLOY_TIMEOUT_MS = Number(
 const HEALTH_TIMEOUT_MS = Number(
   process.env.COOLIFY_HEALTH_TIMEOUT_MS ?? 3 * 60_000,
 );
+const BOT_TIMEOUT_MS = Number(process.env.BOT_VERIFY_TIMEOUT_MS ?? 4 * 60_000);
 const BACKUP_MAX_AGE_MS = 60 * 60_000;
 // Tests only: health URLs of a local fake (comma separated).
 const HEALTH_OVERRIDE =
@@ -59,8 +88,15 @@ const APPS = {
     database: '4jaqdyvzlelgwkyvuxhjy4mr',
     migrate: 'node apps/core-api/dist/scripts/migrate.js',
     scope: 'prod',
-    // Files whose change may need the BOT redeployed too (never done here: reported).
+    // Files whose change may need the BOT redeployed too (never done by « core »: reported).
     botPaths: ['apps/twitch-bot/', 'packages/schemas/'],
+    required: [
+      'DATABASE_URL',
+      'BOT_SECRET',
+      'STUDIO_SECRET',
+      'TWITCH_CHANNEL_ID',
+    ],
+    verify: 'core',
   },
   'core-staging': {
     uuid: 'leadrn7q8x0efkc9u6nxtdic',
@@ -74,6 +110,8 @@ const APPS = {
       'MIGRATION_SCOPE=staging node apps/core-api/dist/scripts/migrate.js',
     scope: 'staging',
     botPaths: [],
+    required: ['DATABASE_URL', 'BOT_SECRET', 'STUDIO_SECRET'],
+    verify: null,
   },
   bot: {
     uuid: 'hdbljqmwoq5364w0ypqmz46p',
@@ -82,13 +120,27 @@ const APPS = {
     database: null,
     migrate: null,
     botPaths: [],
+    required: [
+      'CORE_API_URL',
+      'BOT_SECRET',
+      'TWITCH_CLIENT_ID',
+      'TWITCH_CLIENT_SECRET',
+      'TWITCH_BROADCASTER_ID',
+    ],
+    verify: 'bot',
     // Its range's migrations are the Core's: deployed only once the Core runs this commit or a later one.
     after: 'core',
   },
 };
 
-const token = TOKEN_FILE ? readFileSync(TOKEN_FILE, 'utf8').trim() : '';
-const redact = (s) => (token ? String(s).split(token).join('***') : String(s));
+const SECRETS = [
+  token,
+  OPS_ENV.OPS_TOKEN,
+  process.env.TWITCH_CLIENT_SECRET,
+  process.env.GITHUB_TOKEN,
+].filter((s) => s && s.length >= 8);
+const redact = (s) =>
+  SECRETS.reduce((t, x) => t.split(x).join('***'), String(s));
 const out = (...a) => console.log(...a.map(redact));
 class Stop extends Error {
   constructor(verdict, message) {
@@ -100,7 +152,17 @@ const blocked = (m) => new Stop('BLOQUÉ', m);
 
 async function api(method, path, body) {
   if (!token)
-    throw blocked('aucun jeton Coolify (~/.raptoru/coolify-token.txt)');
+    throw blocked(
+      'aucun jeton Coolify (COOLIFY_TOKEN ou ~/.raptoru/coolify-token.txt)',
+    );
+  if (
+    IN_ACTIONS &&
+    !COOLIFY.startsWith('https://') &&
+    process.env.COOLIFY_ALLOW_INSECURE_HTTP !== 'true'
+  )
+    throw blocked(
+      `Coolify en HTTP non chiffré (${COOLIFY}) : le jeton ne part pas en clair depuis GitHub. Mettre Coolify derrière HTTPS (COOLIFY_URL https://…) — ou, arbitrage explicite, la variable COOLIFY_ALLOW_INSECURE_HTTP=true`,
+    );
   const r = await fetch(`${COOLIFY}/api/v1${path}`, {
     method,
     headers: {
@@ -109,6 +171,7 @@ async function api(method, path, body) {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(30_000),
   });
   const text = await r.text();
   let json;
@@ -169,7 +232,7 @@ async function application(key) {
   const app = APPS[key];
   if (!app)
     throw blocked(
-      `application inconnue « ${key} » (${Object.keys(APPS).join(', ')})`,
+      `application inconnue « ${key} » (${Object.keys(APPS).join(', ')}, core+bot)`,
     );
   const a = await api('GET', `/applications/${app.uuid}`);
   if (a?.uuid !== app.uuid || a?.name !== app.name)
@@ -178,6 +241,13 @@ async function application(key) {
     );
   return { app, a };
 }
+
+const repoSlug = () =>
+  process.env.GITHUB_REPOSITORY ??
+  (/github\.com[:/](.+?)(\.git)?$/.exec(
+    git('remote', 'get-url', 'origin'),
+  )?.[1] ||
+    'raptorutwitch/raptoru-2.0');
 
 async function plan(key, sha, opts) {
   if (!/^[0-9a-f]{40}$/.test(sha ?? ''))
@@ -208,6 +278,10 @@ async function plan(key, sha, opts) {
     current,
     target: sha,
     busy: running ? `${running.deployment_uuid} (${running.status})` : null,
+    // Already ran in Production (Coolify's history): the provenance of a rollback target.
+    previouslyDeployed: recent.some(
+      (d) => d.status === 'finished' && d.commit === sha,
+    ),
     direction: !current
       ? 'inconnu'
       : current === sha
@@ -291,11 +365,17 @@ async function plan(key, sha, opts) {
   if (p.migrations.length && !app.migrate)
     problems.push('migrations sur une application sans migrateur');
   if (opts.migrationsApproved && opts.migrationsPreapplied)
-    problems.push("--migrations-approved et --migrations-preapplied s'excluent");
+    problems.push(
+      "--migrations-approved et --migrations-preapplied s'excluent",
+    );
   const approved = opts.migrationsApproved || opts.migrationsPreapplied;
   if (p.migrations.length && !approved)
     problems.push(
       `migration(s) à appliquer : ${p.migrations.join(', ')} — autorisation spécifique requise (--migrations-approved, ou --migrations-preapplied si elles ont déjà été appliquées à la main)`,
+    );
+  if (!p.migrations.length && approved)
+    problems.push(
+      'mode de migration donné mais aucune migration dans la plage : retirer l’option',
     );
   if (p.migrations.length && approved) {
     // Coolify marks a deployment « finished » even when its post-deployment command fails (checked on 4.4.7): the
@@ -310,7 +390,7 @@ async function plan(key, sha, opts) {
       ).catch((e) => ((refused = e.message), null));
     if (!detail || !('logs' in detail))
       problems.push(
-        `preuve indispensable inaccessible : journal des déploiements illisible (${refused ?? (recent[0] ? 'champ logs masqué' : 'aucun déploiement à lire')}) — le jeton Coolify n'a pas la permission « read:sensitive » : la sortie du ${opts.migrationsPreapplied ? 'vérificateur' : 'migrateur'} ne pourrait pas être contrôlée. Créer dans Coolify (Keys & Tokens) un jeton read + write + deploy + read:sensitive, l'enregistrer dans ~/.raptoru/coolify-token.txt, puis relancer`,
+        `preuve indispensable inaccessible : journal des déploiements illisible (${refused ?? (recent[0] ? 'champ logs masqué' : 'aucun déploiement à lire')}) — le jeton Coolify n'a pas la permission « read:sensitive » : la sortie du ${opts.migrationsPreapplied ? 'vérificateur' : 'migrateur'} ne pourrait pas être contrôlée. Créer dans Coolify (Keys & Tokens) un jeton read + write + deploy + read:sensitive, puis relancer`,
       );
     const backup = await lastBackup(app);
     p.backup = backup;
@@ -326,6 +406,48 @@ async function plan(key, sha, opts) {
     problems.push(
       `une commande post-déploiement est déjà configurée dans Coolify (${a.post_deployment_command}) : à vérifier`,
     );
+  // Required variables, by name only (values are never read).
+  const envs = await api('GET', `/applications/${app.uuid}/envs`).catch(
+    () => null,
+  );
+  if (!Array.isArray(envs))
+    problems.push(
+      'variables de l’application illisibles (permission du jeton Coolify)',
+    );
+  else {
+    const names = new Set(envs.filter((e) => !e.is_preview).map((e) => e.key));
+    const missing = app.required.filter((k) => !names.has(k));
+    if (missing.length)
+      problems.push(
+        `variable(s) requise(s) absente(s) dans Coolify : ${missing.join(', ')}`,
+      );
+    p.opsToken = names.has('OPS_TOKEN');
+  }
+  // The CI proved this commit on main — or it already ran in Production (rollback).
+  if (opts.skipCiGate && IN_ACTIONS)
+    problems.push('--skip-ci-gate est refusé dans GitHub Actions');
+  else if (opts.skipCiGate)
+    p.ci = {
+      ok: true,
+      reason: 'CI NON vérifiée (--skip-ci-gate, arbitrage local)',
+    };
+  else if (p.previouslyDeployed)
+    p.ci = {
+      ok: true,
+      reason: `${sha.slice(0, 12)} a déjà tourné en Production (historique Coolify)`,
+    };
+  else {
+    p.ci = await ciGate({ repo: repoSlug(), sha, component: key, git }).catch(
+      (e) => ({
+        ok: false,
+        reason: `CI non vérifiable : ${e.message}`,
+      }),
+    );
+    if (!p.ci.ok) problems.push(`CI : ${p.ci.reason}`);
+  }
+  // Never during a live (checked again right before the first write).
+  p.live = await liveCheck(OPS_ENV, { allowSingle: opts.allowSingle });
+  if (!p.live.ok) problems.push(`live : ${p.live.verdict} — ${p.live.reason}`);
   p.problems = problems;
   return { app, a, p };
 }
@@ -358,6 +480,9 @@ async function lastBackup(app) {
   return ex[0] ? { created_at: ex[0].created_at, size: ex[0].size } : null;
 }
 
+const rollbackCommand = (p) =>
+  `node scripts/coolify-deploy.mjs deploy ${p.key} ${p.current ?? '<sha>'}${p.direction === 'avance' ? ' --rollback' : ''} --go`;
+
 function printPlan(p) {
   out(
     `Application  : ${p.app} (${p.uuid}), branche ${p.branch}, état ${p.status}`,
@@ -386,9 +511,15 @@ function printPlan(p) {
     out(
       `⚠ Rollback   : migration(s) déjà appliquée(s), NON annulée(s) (contraintes / colonnes restent) : ${p.kept.join(', ')}`,
     );
-  out(
-    `Retour       : node scripts/coolify-deploy.mjs deploy ${p.key} ${p.current ?? '<sha>'}${p.direction === 'avance' ? ' --rollback' : ''} --go`,
-  );
+  if (p.ci)
+    out(
+      `CI           : ${p.ci.ok ? 'OK' : 'NON'} — ${p.ci.reason}${p.ci.url ? ` (${p.ci.url})` : ''}`,
+    );
+  if (p.live)
+    out(
+      `Live         : ${p.live.verdict} — ${describeSources(p.live.sources)}`,
+    );
+  out(`Retour       : ${rollbackCommand(p)}`);
 }
 
 function journal(entry) {
@@ -400,6 +531,101 @@ function journal(entry) {
   } catch {
     /* journal optional */
   }
+  if (SUMMARY)
+    try {
+      appendFileSync(
+        SUMMARY,
+        `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`,
+      );
+    } catch {
+      /* summary optional */
+    }
+}
+
+/** After the deployment: the Core reports the commit / the bot holds the lease with it and Twitch up. */
+async function verifyRunning(app, sha, problems, notes) {
+  if (!app.verify) return;
+  if (!OPS_ENV.OPS_TOKEN) {
+    notes.push(
+      'vérification par GET /v1/ops/status impossible (OPS_TOKEN absent) : commit et bail non prouvés',
+    );
+    return;
+  }
+  const until =
+    Date.now() + (app.verify === 'bot' ? BOT_TIMEOUT_MS : HEALTH_TIMEOUT_MS);
+  let last;
+  for (;;) {
+    last = await opsStatus(OPS_ENV);
+    const s = last.status;
+    if (s && app.verify === 'core') {
+      if (s.commit === null) {
+        notes.push(
+          'le Core ne rapporte pas son commit (SOURCE_COMMIT absent) : commit non prouvé',
+        );
+        return;
+      }
+      if (s.commit === sha)
+        return void notes.push(`le Core rapporte ${sha.slice(0, 12)}`);
+    }
+    if (s?.bot && app.verify === 'bot') {
+      const b = s.bot;
+      const fresh =
+        b.last_seen_at && Date.now() - Date.parse(b.last_seen_at) < 60_000;
+      const versionOk =
+        b.version &&
+        (sha.startsWith(b.version) || b.version.startsWith(sha.slice(0, 12)));
+      const h = b.health ?? {};
+      if (
+        b.state === 'active' &&
+        versionOk &&
+        fresh &&
+        h.eventSubBot !== false &&
+        h.eventSubBroadcaster !== false &&
+        h.broadcasterToken !== false
+      )
+        return void notes.push(
+          `bot actif en ${String(b.version).slice(0, 12)} : EventSub bot ${h.eventSubBot}, EventSub diffuseur ${h.eventSubBroadcaster}, jeton diffuseur ${h.broadcasterToken}`,
+        );
+    }
+    if (Date.now() > until) break;
+    await sleep(POLL_MS);
+  }
+  const s = last?.status;
+  problems.push(
+    !s
+      ? `statut ops illisible après le déploiement (${last?.error})`
+      : app.verify === 'core'
+        ? `le Core rapporte le commit ${s.commit ?? 'inconnu'} ≠ ${sha.slice(0, 12)}`
+        : `bot non confirmé : état ${s.bot?.state}, version ${s.bot?.version ?? '—'}, vu ${s.bot?.last_seen_at ?? 'jamais'}, santé ${JSON.stringify(s.bot?.health ?? null)}`,
+  );
+}
+
+/** Startup logs: a fatal line fails the deployment; other error lines are reported. */
+async function scanLogs(app, problems, notes) {
+  const r = await api('GET', `/applications/${app.uuid}/logs?lines=200`).catch(
+    (e) => ({ error: e.message }),
+  );
+  if (r?.error || typeof r?.logs !== 'string') {
+    notes.push(
+      `journaux d'exécution illisibles (${r?.error ?? 'champ logs absent'})`,
+    );
+    return;
+  }
+  const lines = r.logs.split('\n').map((l) => redact(l));
+  const fatal = lines.filter((l) =>
+    /\b(FATAL|uncaughtException|unhandledRejection|UnhandledPromiseRejection)\b|^Error: |npm ERR!/i.test(
+      l,
+    ),
+  );
+  const errors = lines.filter((l) => /\bERROR\b/.test(l) && !fatal.includes(l));
+  if (fatal.length)
+    problems.push(
+      `ligne(s) fatale(s) au démarrage :\n    ${fatal.slice(-5).join('\n    ')}`,
+    );
+  if (errors.length)
+    notes.push(
+      `${errors.length} ligne(s) ERROR dans les journaux récents (dernière : ${errors.at(-1).slice(0, 160)})`,
+    );
 }
 
 async function deploy(key, sha, opts) {
@@ -414,8 +640,8 @@ async function deploy(key, sha, opts) {
     : migrate
       ? app.migrate
       : key !== 'core'
-      ? (process.env.COOLIFY_TEST_POST_COMMAND ?? null)
-      : null;
+        ? (process.env.COOLIFY_TEST_POST_COMMAND ?? null)
+        : null;
   const calls = [
     ...(postCommand
       ? [
@@ -430,17 +656,31 @@ async function deploy(key, sha, opts) {
           `PATCH /applications/${app.uuid} {post_deployment_command: null} (toujours rétabli)`,
         ]
       : []),
-    `GET   ${app.health.join(' , ')}`,
+    `GET   ${app.health.join(' , ') || '(pas d’URL de santé)'} · GET /v1/ops/status · journaux d'exécution`,
   ];
   if (!opts.go) {
     out(
       `\nDRY-RUN — aucun appel d'écriture. Appels prévus :\n  ${calls.join('\n  ')}`,
     );
     out('\nVERDICT : PRÊT (ajouter --go après le GO Production)');
+    journal({
+      app: app.name,
+      from: p.current,
+      to: sha,
+      result: 'PRÊT',
+      dryRun: true,
+    });
     return 'PRÊT';
   }
+  // Last live check, right before the first write.
+  const now = await liveCheck(OPS_ENV, { allowSingle: opts.allowSingle });
+  if (!now.ok)
+    throw blocked(
+      `live juste avant d'écrire : ${now.verdict} — ${now.reason} (${describeSources(now.sources)})`,
+    );
   const t0 = Date.now();
   let dep;
+  let started = false;
   try {
     if (postCommand) {
       await api('PATCH', `/applications/${app.uuid}`, {
@@ -460,17 +700,15 @@ async function deploy(key, sha, opts) {
         'ÉCHEC',
         `SHA non enregistré par Coolify (${check.git_commit_sha})`,
       );
-    const started = await api('POST', '/deploy', {
-      uuid: app.uuid,
-      force: false,
-    });
-    const ds = (started?.deployments ?? []).filter(
+    const res = await api('POST', '/deploy', { uuid: app.uuid, force: false });
+    started = true;
+    const ds = (res?.deployments ?? []).filter(
       (d) => d.resource_uuid === app.uuid || !d.resource_uuid,
     );
     if (ds.length !== 1 || !ds[0].deployment_uuid)
       throw new Stop(
         'ÉCHEC',
-        `réponse de déploiement inattendue : ${JSON.stringify(started).slice(0, 300)}`,
+        `réponse de déploiement inattendue : ${JSON.stringify(res).slice(0, 300)}`,
       );
     const depUuid = ds[0].deployment_uuid;
     out(`\nDéploiement ${depUuid} lancé`);
@@ -488,6 +726,10 @@ async function deploy(key, sha, opts) {
         );
       await sleep(POLL_MS);
     }
+  } catch (e) {
+    if (!started || !(e instanceof Stop)) throw e;
+    dep = { status: 'inconnu', deployment_uuid: null };
+    out(`⚠ ${e.message}`);
   } finally {
     if (postCommand)
       await api('PATCH', `/applications/${app.uuid}`, {
@@ -497,6 +739,7 @@ async function deploy(key, sha, opts) {
       );
   }
   const problems = [];
+  const notes = [];
   if (dep.status !== 'finished') problems.push(`déploiement ${dep.status}`);
   if (dep.commit && dep.commit !== sha)
     problems.push(`commit déployé ${dep.commit} ≠ ${sha}`);
@@ -531,7 +774,9 @@ async function deploy(key, sha, opts) {
           "résultat du vérificateur absent du journal du déploiement : rien n'est prouvé",
         );
       else if (!r.ok)
-        problems.push(`migrations préappliquées NON conformes : ${r.problems.join(' ; ')}`);
+        problems.push(
+          `migrations préappliquées NON conformes : ${r.problems.join(' ; ')}`,
+        );
     } else if (
       migrate &&
       !migrationOut.some((l) => /applied:|already up to date/.test(l))
@@ -549,26 +794,31 @@ async function deploy(key, sha, opts) {
     )
       problems.push('erreur dans la sortie du migrateur (voir le journal)');
   }
-  // Running and healthy, then the public health URLs.
+  // Running and healthy, then the public health URLs, then what the services say of themselves.
   let state;
-  let h;
-  const until = Date.now() + HEALTH_TIMEOUT_MS;
-  for (;;) {
-    state = (await api('GET', `/applications/${app.uuid}`)).status;
-    h = await health(app.health);
-    if (
-      (state === 'running:healthy' || !app.health.length) &&
-      h.every((x) => x.ok)
-    )
-      break;
-    if (Date.now() > until) break;
-    await sleep(POLL_MS);
+  let h = [];
+  if (dep.status === 'finished') {
+    const until = Date.now() + HEALTH_TIMEOUT_MS;
+    for (;;) {
+      state = (await api('GET', `/applications/${app.uuid}`)).status;
+      h = await health(app.health);
+      if (
+        (state === 'running:healthy' || !app.health.length) &&
+        h.every((x) => x.ok)
+      )
+        break;
+      if (Date.now() > until) break;
+      await sleep(POLL_MS);
+    }
+    if (state !== 'running:healthy') problems.push(`état Coolify ${state}`);
+    for (const x of h) if (!x.ok) problems.push(`${x.url} → ${x.text}`);
+    await verifyRunning(app, sha, problems, notes);
+    await scanLogs(app, problems, notes);
   }
-  if (state !== 'running:healthy') problems.push(`état Coolify ${state}`);
-  for (const x of h) if (!x.ok) problems.push(`${x.url} → ${x.text}`);
-  const result = problems.length ? 'ÉCHEC' : 'DÉPLOYÉ';
-  out(`\nÉtat Coolify : ${state}`);
+  let result = problems.length ? 'ÉCHEC' : 'DÉPLOYÉ';
+  out(`\nÉtat Coolify : ${state ?? '—'}`);
   for (const x of h) out(`Santé ${x.ok ? 'OK ' : 'KO '} ${x.url} → ${x.text}`);
+  for (const n of notes) out(`Vérification : ${n}`);
   if (migrationOut)
     out(`Migrateur :\n  ${migrationOut.join('\n  ') || '(rien)'}`);
   if (problems.length) {
@@ -578,9 +828,7 @@ async function deploy(key, sha, opts) {
   out(
     `\nVERDICT : ${result} — ${app.name} @ ${sha.slice(0, 12)} (déploiement ${dep.deployment_uuid ?? '?'}, ${Math.round((Date.now() - t0) / 1000)} s)`,
   );
-  out(
-    `Retour : node scripts/coolify-deploy.mjs deploy ${key} ${p.current}${p.direction === 'avance' ? ' --rollback' : ''} --go`,
-  );
+  out(`Retour : ${rollbackCommand(p)}`);
   journal({
     app: app.name,
     from: p.current,
@@ -589,8 +837,55 @@ async function deploy(key, sha, opts) {
     deployment: dep.deployment_uuid,
     migrations: p.migrations,
     ...(verify ? { mode: 'preapplied' } : {}),
+    problems,
+    notes,
   });
+  if (result === 'ÉCHEC' && opts.autoRollback && !opts.nested)
+    result = await autoRollback(key, p, opts);
   return result;
+}
+
+/** Redeploys the previous commit after a failed verification — only when that is known to be safe. */
+async function autoRollback(key, p, opts) {
+  const why =
+    p.direction !== 'avance' || !p.current
+      ? 'pas de commit précédent connu dont on prolonge l’historique'
+      : p.migrations.length
+        ? `la plage contient des migrations (${p.migrations.join(', ')}) : un retour de code sur un schéma migré n'est pas sûr automatiquement`
+        : null;
+  if (why) {
+    out(
+      `\nRetour arrière automatique NON lancé : ${why}. Décision manuelle : ${rollbackCommand(p)}`,
+    );
+    return 'ÉCHEC';
+  }
+  const l = await liveCheck(OPS_ENV, { allowSingle: opts.allowSingle });
+  if (!l.ok) {
+    out(
+      `\nRetour arrière automatique NON lancé : live ${l.verdict} (${l.reason}). Décision manuelle : ${rollbackCommand(p)}`,
+    );
+    return 'ÉCHEC';
+  }
+  out(
+    `\n=== Retour arrière automatique vers ${p.current.slice(0, 12)} (aucune migration dans la plage, hors live) ===`,
+  );
+  const r = await deploy(key, p.current, {
+    ...opts,
+    rollback: true,
+    redeploy: false,
+    migrationsApproved: false,
+    migrationsPreapplied: false,
+    nested: true,
+  }).catch(
+    (e) => (
+      out(`\nRetour arrière : ${e.verdict ?? 'ÉCHEC'} — ${redact(e.message)}`),
+      'ÉCHEC'
+    ),
+  );
+  out(
+    `\nRetour arrière : ${r === 'DÉPLOYÉ' ? `effectué, ${p.app} est revenu sur ${p.current.slice(0, 12)}` : 'EN ÉCHEC — intervention manuelle'}`,
+  );
+  return r === 'DÉPLOYÉ' ? 'ÉCHEC-RETOUR-OK' : 'ÉCHEC';
 }
 
 function parseLogs(raw) {
@@ -622,6 +917,29 @@ async function status(key) {
     const b = await lastBackup(app);
     out(`  dernière sauvegarde réussie : ${b?.created_at ?? 'aucune'}`);
   }
+  const l = await liveCheck(OPS_ENV);
+  out(`  live : ${l.verdict} — ${describeSources(l.sources)}`);
+  if (l.ops.status) {
+    const s = l.ops.status;
+    out(
+      `  Core rapporte : commit ${s.commit ?? 'inconnu'} · bot ${s.bot?.state ?? '—'} ${s.bot?.version ?? ''}`,
+    );
+  }
+}
+
+/** The bot's plan of core+bot, as if the Core already ran the target (it is deployed first). */
+async function planBotAfterCore(sha, opts) {
+  const { p } = await plan('bot', sha, opts);
+  p.problems = p.problems.filter(
+    (x) => !x.startsWith(`${APPS.core.name} doit d'abord`),
+  );
+  printPlan(p);
+  out(
+    p.problems.length
+      ? `\nVERDICT : BLOQUÉ — ${p.problems.join(' ; ')}`
+      : '\nVERDICT : PRÊT (après le Core)',
+  );
+  return p.problems.length ? 'BLOQUÉ' : 'PRÊT';
 }
 
 const [cmd, key, sha, ...rest] = process.argv.slice(2);
@@ -631,25 +949,74 @@ const opts = {
   migrationsApproved: rest.includes('--migrations-approved'),
   migrationsPreapplied: rest.includes('--migrations-preapplied'),
   redeploy: rest.includes('--redeploy'),
+  autoRollback: rest.includes('--auto-rollback'),
+  allowSingle: rest.includes('--allow-single-live-source'),
+  skipCiGate: rest.includes('--skip-ci-gate'),
 };
+const unknown = rest.filter(
+  (x) =>
+    x.startsWith('--') &&
+    !/^--(go|rollback|migrations-approved|migrations-preapplied|redeploy|auto-rollback|allow-single-live-source|skip-ci-gate)$/.test(
+      x,
+    ),
+);
 try {
+  if (unknown.length)
+    throw blocked(`option(s) inconnue(s) : ${unknown.join(' ')}`);
   if (cmd === 'status') await status(key ?? 'core');
   else if (cmd === 'plan') {
-    const { p } = await plan(key, sha, opts);
+    if (key === 'core+bot') out('=== core ===');
+    const { p } = await plan(key === 'core+bot' ? 'core' : key, sha, opts);
     printPlan(p);
     out(
       p.problems.length
         ? `\nVERDICT : BLOQUÉ — ${p.problems.join(' ; ')}`
         : '\nVERDICT : PRÊT',
     );
-  } else if (cmd === 'deploy') await deploy(key, sha, opts);
-  else {
+    if (p.problems.length) process.exitCode = 1;
+    if (key === 'core+bot') {
+      out('\n=== bot ===');
+      if ((await planBotAfterCore(sha, opts)) !== 'PRÊT') process.exitCode = 1;
+    }
+  } else if (cmd === 'deploy' && key === 'core+bot') {
+    out('=== 1/2 Core ===');
+    const core = await deploy('core', sha, {
+      ...opts,
+      redeploy: opts.redeploy,
+    }).catch((e) => {
+      // A Core already on the target is fine for core+bot: only the bot remains.
+      if (/déjà déployé/.test(e.message) && !/;/.test(e.message))
+        return 'IDENTIQUE';
+      throw e;
+    });
+    if (core !== 'DÉPLOYÉ' && core !== 'IDENTIQUE' && core !== 'PRÊT') {
+      out(
+        `\nVERDICT : ${core} — le bot n'est PAS déployé (le Core n'est pas sur ${sha.slice(0, 12)})`,
+      );
+      process.exitCode = 1;
+    } else if (core === 'PRÊT') {
+      out('\n=== 2/2 bot (plan, après le Core) ===');
+      if ((await planBotAfterCore(sha, opts)) !== 'PRÊT') process.exitCode = 1;
+    } else {
+      out('\n=== 2/2 bot ===');
+      await deploy('bot', sha, opts);
+    }
+  } else if (cmd === 'deploy') {
+    const r = await deploy(key, sha, opts);
+    if (!['DÉPLOYÉ', 'PRÊT'].includes(r)) process.exitCode = 1;
+  } else {
     out(
-      'usage : status <app> | plan <app> <sha> | deploy <app> <sha> [--go] [--rollback] [--migrations-approved | --migrations-preapplied] [--redeploy]',
+      'usage : status <app> | plan <app> <sha> | deploy <app> <sha> [--go] [--rollback] [--migrations-approved | --migrations-preapplied] [--redeploy] [--auto-rollback] [--allow-single-live-source] [--skip-ci-gate]   (app : core | bot | core+bot | core-staging)',
     );
     process.exitCode = 2;
   }
 } catch (e) {
   out(`\nVERDICT : ${e.verdict ?? 'ÉCHEC'} — ${redact(e.message)}`);
+  journal({
+    app: key,
+    to: sha,
+    result: e.verdict ?? 'ÉCHEC',
+    problems: [redact(e.message)],
+  });
   process.exitCode = 1;
 }

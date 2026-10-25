@@ -1,18 +1,30 @@
 // The pre-applied migrations verifier, run exactly as Coolify runs it (sh -c '<command>' in the Core's folder),
 // against a real PostgreSQL 17 (Production's image) in Docker:
 //   node --test scripts/coolify-verify-migrations.test.mjs
-// RAPTORU_CORE_ROOT: a built checkout of the target commit (apps/core-api/dist, node_modules, supabase/migrations).
+// Runs on this repository once built (npm ci, then the Core built: apps/core-api/dist, node_modules,
+// supabase/migrations); RAPTORU_CORE_ROOT points at another built checkout. Needs Docker.
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import process from 'node:process';
+import { setTimeout } from 'node:timers';
+import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { verifierCommand } from './coolify-verify-migrations.mjs';
 
-const ROOT = process.env.RAPTORU_CORE_ROOT ?? 'C:/Users/Antoni/Documents/rs-vk';
+const ROOT =
+  process.env.RAPTORU_CORE_ROOT ??
+  join(dirname(fileURLToPath(import.meta.url)), '..');
 const pg = createRequire(join(ROOT, 'apps/core-api/package.json'))('pg');
 const CAUTION = '20261105130000_caution.sql';
 const VOTEKICK = '20261106130000_votekick.sql';
@@ -62,7 +74,9 @@ async function database(dir = beforeDir) {
         env: { ...env, MIGRATIONS_DIR: allDir },
         encoding: 'utf8',
       });
-      const line = r.stdout.split('\n').find((l) => l.startsWith('RAPTORU-MIGRATIONS '));
+      const line = r.stdout
+        .split('\n')
+        .find((l) => l.startsWith('RAPTORU-MIGRATIONS '));
       assert.ok(line, `no result line:\n${r.stdout}\n${r.stderr}`);
       return { code: r.status, ...JSON.parse(line.slice(19)) };
     },
@@ -80,8 +94,18 @@ const tables = async (db) =>
 
 before(async () => {
   execFileSync('docker', [
-    'run', '-d', '--rm', '--name', NAME, '-e', 'POSTGRES_USER=raptoru', '-e', 'POSTGRES_PASSWORD=test',
-    '-p', `${PORT}:5432`, 'postgres:17-alpine',
+    'run',
+    '-d',
+    '--rm',
+    '--name',
+    NAME,
+    '-e',
+    'POSTGRES_USER=raptoru',
+    '-e',
+    'POSTGRES_PASSWORD=test',
+    '-p',
+    `${PORT}:5432`,
+    'postgres:17-alpine',
   ]);
   for (let i = 0; ; i++) {
     const c = new pg.Client(`${base}/postgres`);
@@ -120,7 +144,9 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
     await db.exec(sql(CAUTION));
     await db.exec(sql(VOTEKICK));
     await db.exec('drop index votekick_one_mute');
-    await db.exec('alter table caution_requests alter column channel_id type varchar(40)');
+    await db.exec(
+      'alter table caution_requests alter column channel_id type varchar(40)',
+    );
     const before = await recorded(db);
     const r = db.verify([CAUTION, VOTEKICK]);
     assert.equal(r.ok, false);
@@ -128,7 +154,11 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
     assert.match(r.problems.join(), /caution_requests différent/);
     assert.deepEqual(await recorded(db), before);
     assert.deepEqual(
-      (await db.rows("select 1 from pg_namespace where nspname = 'raptoru_verify'")).length,
+      (
+        await db.rows(
+          "select 1 from pg_namespace where nspname = 'raptoru_verify'",
+        )
+      ).length,
       0,
     );
     await db.close();
@@ -196,27 +226,34 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
     await db.exec(sql(CAUTION));
     const r = db.verify([CAUTION]);
     assert.equal(r.ok, false);
-    assert.match(r.problems.join(), new RegExp(`${VOTEKICK} non enregistrée et non autorisée`));
+    assert.match(
+      r.problems.join(),
+      new RegExp(`${VOTEKICK} non enregistrée et non autorisée`),
+    );
     assert.deepEqual(r.applied, []);
     assert.ok(!(await recorded(db)).includes(CAUTION));
     assert.deepEqual(await tables(db), ['caution_requests']);
     await db.close();
   });
 
-  it('an ALTER-only file (cmd_steps origin « music »): refused while missing, conforming once applied by hand', { skip: !hasMusic }, async () => {
-    const db = await database(beforeMusicDir);
-    const missing = db.verify([MUSIC]);
-    assert.equal(missing.ok, false);
-    assert.match(missing.problems.join(), /modifierait public\.cmd_steps/);
-    assert.ok(!(await recorded(db)).includes(MUSIC));
-    await db.exec(sql(MUSIC));
-    const r = db.verify([MUSIC]);
-    assert.equal(r.ok, true, JSON.stringify(r.problems));
-    assert.deepEqual(r.conforming, [MUSIC]);
-    assert.deepEqual(r.applied, [MUSIC]);
-    assert.ok((await recorded(db)).includes(MUSIC));
-    await db.close();
-  });
+  it(
+    'an ALTER-only file (cmd_steps origin « music »): refused while missing, conforming once applied by hand',
+    { skip: !hasMusic },
+    async () => {
+      const db = await database(beforeMusicDir);
+      const missing = db.verify([MUSIC]);
+      assert.equal(missing.ok, false);
+      assert.match(missing.problems.join(), /modifierait public\.cmd_steps/);
+      assert.ok(!(await recorded(db)).includes(MUSIC));
+      await db.exec(sql(MUSIC));
+      const r = db.verify([MUSIC]);
+      assert.equal(r.ok, true, JSON.stringify(r.problems));
+      assert.deepEqual(r.conforming, [MUSIC]);
+      assert.deepEqual(r.applied, [MUSIC]);
+      assert.ok((await recorded(db)).includes(MUSIC));
+      await db.close();
+    },
+  );
 
   it('the command is one line without single quote (Coolify: sh -c, newlines flattened)', () => {
     const c = verifierCommand([CAUTION, VOTEKICK], 'prod');
