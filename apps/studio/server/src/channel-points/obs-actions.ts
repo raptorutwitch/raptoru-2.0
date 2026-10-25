@@ -99,10 +99,21 @@ export class ObsActions {
     return obs;
   }
 
-  private async save() {
-    await mkdir(dirname(this.file), { recursive: true });
-    await writeFile(`${this.file}.tmp`, JSON.stringify(this.reverts));
-    await rename(`${this.file}.tmp`, this.file);
+  private saving: Promise<void> = Promise.resolve();
+
+  /**
+   * One write at a time (each writes the reverts as they are at its turn): two changes at the same instant (BRB mutes
+   * « Micro » and « Musique Isolée » together) both renamed the same .tmp — the second rename found nothing and that
+   * mute was reported failed although OBS had done it.
+   */
+  private save() {
+    const write = this.saving.then(async () => {
+      await mkdir(dirname(this.file), { recursive: true });
+      await writeFile(`${this.file}.tmp`, JSON.stringify(this.reverts));
+      await rename(`${this.file}.tmp`, this.file);
+    });
+    this.saving = write.catch(() => {});
+    return write;
   }
 
   /** The program scene now (native interactions: start conditions). */
