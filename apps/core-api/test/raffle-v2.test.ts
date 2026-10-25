@@ -1032,7 +1032,11 @@ describe('Tombola V2 read models', () => {
     await cache.ensure([]);
     expect(
       (
-        await core.db.query<{ viewer_id: string; url: string | null; status: string }>(
+        await core.db.query<{
+          viewer_id: string;
+          url: string | null;
+          status: string;
+        }>(
           'select viewer_id, url, status from lab_viewer_avatars order by viewer_id',
         )
       ).map((r) => `${r.viewer_id}:${r.status}:${r.url ?? ''}`),
