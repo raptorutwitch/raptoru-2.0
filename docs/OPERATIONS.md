@@ -16,7 +16,8 @@ Sauvegardes : [BACKUPS.md](BACKUPS.md). Architecture : [ARCHITECTURE.md](ARCHITE
 | `.env` locaux, jetons Twitch du PC, données Studio                                    | checkout principal (dossier de données de Studio) : [BACKUPS.md](BACKUPS.md) § 1 |
 | Exports privés de la migration                                                        | `C:\Users\Antoni\Documents\Raptoru\_migration-exports\`                          |
 
-Coolify 4.4.7 : `http://62.84.187.170:8000`. Applications : `raptoru-core` `3m7cputub9wt7nwx2k78cme3`, `raptoru-bot`
+Coolify 4.5.0 : API en HTTPS sur `https://coolify.raptoru.fr` (seulement `/api/`, jeton requis — [CICD.md](CICD.md)
+§ 5) ; interface sur `http://62.84.187.170:8000`. Applications : `raptoru-core` `3m7cputub9wt7nwx2k78cme3`, `raptoru-bot`
 `hdbljqmwoq5364w0ypqmz46p`, `raptoru-core-staging` `leadrn7q8x0efkc9u6nxtdic` ; base `4jaqdyvzlelgwkyvuxhjy4mr`.
 **Auto Deploy désactivé** (vérifié le 24/10) : un push ne déploie rien.
 
