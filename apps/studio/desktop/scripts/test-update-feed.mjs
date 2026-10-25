@@ -1,7 +1,7 @@
 // Manual local validation of the auto-update pipeline, without any GitHub Release: points
 // electron-updater at a local "generic" feed (a plain latest.yml + installer file, e.g. served by
 // a static file server) and reports what happened. Never touches GitHub, never installs anything
-// (quitAndInstall is never called here).
+// (quitAndInstall is never called and install-on-quit is off).
 //
 // Must be run with Electron itself, not plain Node (this needs the `app` module):
 //   node -e "process.stdout.write(require('electron'))"   # -> path to electron.exe
@@ -37,6 +37,9 @@ void app.whenReady().then(async () => {
   );
   autoUpdater.forceDevUpdateConfig = true; // this script always runs unpackaged
   autoUpdater.autoDownload = false;
+  // Never install anything: electron-updater's default installs a downloaded update when the app quits — the installer
+  // then replaces the Studio installed on this PC and closes it (happened on 25/10 with UPDATE_TEST_DOWNLOAD=1).
+  autoUpdater.autoInstallOnAppQuit = false;
   if (process.env.UPDATE_TEST_SKIP_SIGNATURE === '1') {
     autoUpdater.verifyUpdateCodeSignature = false;
   }
