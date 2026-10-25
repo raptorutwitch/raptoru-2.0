@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **25/10/2026 ~01:45** (Spotify V2 en service depuis le 24/10 : Core + bot `16600de`, Studio sup.9, `SPOTIFY_CHAT` et `CP_TWITCH_ACTIONS` ON, récompense « Choisi la prochaine musique » `e3f58cf1…` ; passe de finitions locale à déployer sur GO). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **25/10/2026 ~02:20** (Spotify V2 : Core `36a4cec` déployé 25/10 00:01 UTC, bot `16600de` inchangé, Studio **0.1.7-sup.10** installé ; retour : Core `16600de`, Studio sup.9). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -27,16 +27,16 @@ depuis le checkout principal.
 
 ## 2. Production (relevé 24/10 ~12:20)
 
-| Élément              | Version                                                                                                                      | Remarque                                                                                      |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Core `raptoru-core`  | **`16600de`** (déployé 24/10 15:58 UTC, Spotify V2 OFF ; migrations `spotify` + `cmd_steps_music` préappliquées, vérifiées)  | `running:healthy`, `/health` `/ready` 200 ; retour : `0f753c1`                                |
-| Bot `raptoru-bot`    | **`16600de`** (déployé 24/10 16:01 UTC, inclut `cf21c4b`)                                                                    | `running:healthy`, VPS, bail repris proprement ; `CP_TWITCH_ACTIONS` OFF ; retour : `b8bc025` |
-| `origin/main`        | `16600de` (Spotify V2)                                                                                                       | Coolify : auto-deploy désactivé                                                               |
-| Studio installé (PC) | **0.1.7-sup.8** (build local, `0f753c1` + patch `sup-wt` non commité)                                                        | dernière release publiée : 0.1.6                                                              |
-| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                          | publication manuelle par Antoni                                                               |
-| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                    | Node non épinglé (décision en attente)                                                        |
-| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT` = true ; bot `CAUTION`, `VOTEKICK` = true                                               | journaux du bot sur `/data`                                                                   |
-| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110 | ne pas modifier ces réglages sans GO                                                          |
+| Élément              | Version                                                                                                                      | Remarque                                                                                                   |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Core `raptoru-core`  | **`36a4cec`** (déployé 25/10 00:01 UTC, finitions Spotify, sans migration)                                                   | `running:healthy`, `/health` `/ready` 200 ; retour : `16600de`                                             |
+| Bot `raptoru-bot`    | **`16600de`** (déployé 24/10 16:01 UTC, inclut `cf21c4b`)                                                                    | `running:healthy`, VPS, bail repris proprement ; `CP_TWITCH_ACTIONS` ON (24/10 16:28) ; retour : `b8bc025` |
+| `origin/main`        | `36a4cec` (finitions Spotify V2)                                                                                             | Coolify : auto-deploy désactivé                                                                            |
+| Studio installé (PC) | **0.1.7-sup.8** (build local, `0f753c1` + patch `sup-wt` non commité)                                                        | dernière release publiée : 0.1.6                                                                           |
+| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                          | publication manuelle par Antoni                                                                            |
+| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                    | Node non épinglé (décision en attente)                                                                     |
+| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT` = true ; bot `CAUTION`, `VOTEKICK` = true                                               | journaux du bot sur `/data`                                                                                |
+| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110 | ne pas modifier ces réglages sans GO                                                                       |
 
 Fonctions en Production : économie canonique (Wallet, Daily, fidélité, présence), Commands V2 (`cmd_steps`), modération
 D4, Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2, Points de chaîne et effets,
@@ -91,10 +91,10 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 - Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
   copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
 - Commiter `sup-wt` ; pousser `80f3525` (script de déploiement) ; redéployer le bot sur ≥ `cf21c4b`.
-- Spotify V2 : passe de finitions locale sur `feat/spotify-v2` (`647eb12`…`26bd1df`, non poussée) : `!songcancel <n>`,
-  délai conservé après annulation, latence (2 appels Spotify par demande, Core lu toutes les 0,5 s), skip automatique
-  plus rapide, « File musicale », correctif du son Votekick importé. À déployer sur GO : **Core** + **Studio** (pas de
-  migration, bot inchangé ; ordre indifférent, ajouts compatibles avec `16600de` / sup.9).
+- Spotify V2 : finitions déployées le 25/10 (Core `36a4cec`, Studio sup.10 = `36a4cec` + patch supervision ;
+  installateur et SHA-256 dans `Documents
+aptoru-spotify-GO`). Reste : validation manuelle par Antoni (File musicale,
+  `!songcancel <n>`, son Votekick importé au prochain vote, mesures de latence au prochain live).
 - Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
   en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).
