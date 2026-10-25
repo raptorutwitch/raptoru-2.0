@@ -54,6 +54,10 @@ COPY --from=build /app/apps/core-api/dist apps/core-api/dist
 COPY supabase/migrations supabase/migrations
 # Jeu des mots word bank, read at its src/ path from dist/ (src/word-game/bank.ts).
 COPY apps/core-api/src/word-game/words-fr.txt apps/core-api/src/word-game/words-fr.txt
+# Coolify passes the deployed commit as SOURCE_COMMIT (as for the bot): reported by GET /v1/ops/status, checked after
+# each deployment (docs/CICD.md). Last layer: a new commit never invalidates the cached ones above.
+ARG SOURCE_COMMIT=dev
+ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 USER node
 EXPOSE 3000
 # Readiness (database reachable), the same probe Coolify uses.
