@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **25/10/2026 ~02:20** (Spotify V2 : Core `36a4cec` déployé 25/10 00:01 UTC, bot `16600de` inchangé, Studio **0.1.7-sup.10** installé ; retour : Core `16600de`, Studio sup.9). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **25/10/2026 ~03:15** (Spotify V2 / Studio sup.10 **validé par Antoni et clôturé** : Core `36a4cec`, bot `16600de`, Studio **0.1.7-sup.10** ; retour : Core `16600de`, Studio sup.9). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -25,28 +25,38 @@ depuis le checkout principal.
 | Journal détaillé 21→24/10 (dont chantier Roue V2), anciens documents | [archive/](archive/README.md)                               |
 | Règles de travail des agents                                         | `CLAUDE.md` (racine)                                        |
 
-## 2. Production (relevé 24/10 ~12:20)
+## 2. Production (relevé 25/10 ~03:00)
 
 | Élément              | Version                                                                                                                      | Remarque                                                                                                   |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Core `raptoru-core`  | **`36a4cec`** (déployé 25/10 00:01 UTC, finitions Spotify, sans migration)                                                   | `running:healthy`, `/health` `/ready` 200 ; retour : `16600de`                                             |
 | Bot `raptoru-bot`    | **`16600de`** (déployé 24/10 16:01 UTC, inclut `cf21c4b`)                                                                    | `running:healthy`, VPS, bail repris proprement ; `CP_TWITCH_ACTIONS` ON (24/10 16:28) ; retour : `b8bc025` |
 | `origin/main`        | `36a4cec` (finitions Spotify V2)                                                                                             | Coolify : auto-deploy désactivé                                                                            |
-| Studio installé (PC) | **0.1.7-sup.8** (build local, `0f753c1` + patch `sup-wt` non commité)                                                        | dernière release publiée : 0.1.6                                                                           |
+| Studio installé (PC) | **0.1.7-sup.10** (build local, `36a4cec` + patch `sup-wt` non commité ; installé 25/10 00:11 UTC)                            | dernière release publiée : 0.1.6 ; retour : sup.9 (`Documents\raptoru-spotify-GO`)                         |
 | Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                          | publication manuelle par Antoni                                                                            |
 | Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                    | Node non épinglé (décision en attente)                                                                     |
-| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT` = true ; bot `CAUTION`, `VOTEKICK` = true                                               | journaux du bot sur `/data`                                                                                |
+| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true          | journaux du bot sur `/data`                                                                                |
 | OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110 | ne pas modifier ces réglages sans GO                                                                       |
 
 Fonctions en Production : économie canonique (Wallet, Daily, fidélité, présence), Commands V2 (`cmd_steps`), modération
 D4, Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2, Points de chaîne et effets,
-Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacune : [ROADMAP.md](ROADMAP.md).
+Random Ban, Roue du Sub V1, Caution, Votekick V2, **Spotify V2** (demandes de musique sans SAMMI). Niveau de validation
+de chacune : [ROADMAP.md](ROADMAP.md).
 
-## 3. Dernières livraisons et décisions (24/10)
+## 3. Dernières livraisons et décisions (24–25/10)
 
+- **Spotify V2 / Studio sup.10 — validé par Antoni en réel le 25/10, chantier clos** ([SPOTIFY_V2.md](SPOTIFY_V2.md)) :
+  demandes de musique, remboursements, `!songcancel 1` / `!songcancel 2`, quotas et exceptions par viewer, « File
+  musicale », skip automatique d'une demande annulée. **Skip accepté tel quel** : une fraction de seconde peut s'entendre
+  sur un morceau qui démarre aussitôt ; aucune optimisation supplémentaire prévue. Mesures du 25/10 : Studio traite une
+  demande en 0,97–1,56 s (1,9–2,9 s avant) ; skip envoyé 6 ms après la détection. Aucune modification fonctionnelle
+  Spotify ou Votekick sans nouvelle décision d'Antoni.
 - Votekick V2 : mute au repos, zoom en décimal, bandeau synchronisé, compte à rebours 60 (et non 63), **durée de vote
   réglable dans Studio (15–300 s, défaut 60, appliquée par le Core aux nouveaux votes)** et **son de lancement**
-  (désactivé par défaut, joué une fois par vote ouvert). Livré et déployé ; **pas encore validé par Antoni**.
+  (désactivé par défaut, joué une fois par vote ouvert). **Son de lancement importé validé en réel par Antoni le 25/10**
+  (correctif `31e3c0f`, sup.10). Aucune commande d'annulation d'un vote en cours n'existe (ni chat, ni Studio).
+- Soundboard : lecteur rétabli après l'installation de sup.10 (vert en supervision le 25/10) ; son lecteur est un cadre
+  de la fenêtre de Studio, pas une source OBS.
 - Décisions : Audio Move conservé ; micro du streamer = « Micro » ; design legacy SAMMI de l'overlay (variante D
   interdite) ; horloge Windows resynchronisée chaque heure (régularité à confirmer : `w32tm /query /status`).
 
@@ -55,12 +65,12 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 | Où                                                                                                    | Contenu                                                                                                                            | État                                                                                                                                                       |
 | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0` (`main` @ `11ffe3f`, 33 commits de retard) | **Roue du Sub V2** (41 modifiés + 35 non suivis), correctif « écran gris » de l'extension, `CLAUDE.md` local, documents non suivis | non commité. **C'est aussi le dossier de données de Studio installé** (`.env`, jetons, `.runtime`) : jamais de `git clean`, `reset --hard` ou `checkout .` |
-| `…\scratchpad\sup-wt` (`fix/supervision` @ `2d80c2a`)                                                 | supervision, OAuth du PC, Ctrl+R Soundboard, updater de test                                                                       | non commité, embarqué dans Studio sup.8                                                                                                                    |
-| `C:\Users\Antoni\Documents\raptoru-release` (`chore/coolify-deploy` @ `80f3525`)                      | script de déploiement Coolify                                                                                                      | commit local, **non poussé**, unique copie                                                                                                                 |
+| `…\scratchpad\sup-wt` (`fix/supervision` @ `2d80c2a`)                                                 | supervision, OAuth du PC, Ctrl+R Soundboard, updater de test                                                                       | non commité, embarqué dans Studio sup.8 à sup.10 (copie : `sup-wt.patch` + `sup-untracked.tar`)                                                            |
+| `C:\Users\Antoni\Documents\raptoru-release` (`chore/coolify-deploy` @ `1f10da3`)                      | script de déploiement Coolify (`ef79a37`, `80f3525`, `1f10da3`)                                                                    | 3 commits locaux **non poussés**, unique copie ; examinés le 25/10 : 4 fichiers neufs, compatibles avec `origin/main`, 21/21 tests                         |
 | `C:\Users\Antoni\Documents\rs-vk`                                                                     | clone de build Studio (patch `sup-wt` appliqué + `stash@{0}`), dossier `GO/` (runbook, SQL)                                        | ne pas nettoyer                                                                                                                                            |
 | `…\scratchpad\{chat,wg,solde,node}-wt`                                                                | restes de lots déjà intégrés                                                                                                       | à revérifier avant tout retrait                                                                                                                            |
 | `C:\Users\Antoni\Documents\raptoru-docs` (`docs/consolidation`)                                       | documentation, = `origin/main`                                                                                                     | poussé                                                                                                                                                     |
-| `C:\Users\Antoni\Documents\raptoru-spotify` (`feat/spotify-v2` = `origin/main` `16600de`)             | **Spotify V2** ; mise en service : `Documents\raptoru-spotify-GO\RUNBOOK_SPOTIFY_V2.md`                                            | étapes 1–5 faites le 24/10 ; suivantes : Studio sup.9, OAuth, récompense, test (chacune sur GO)                                                            |
+| `C:\Users\Antoni\Documents\raptoru-spotify` (`feat/spotify-v2` = `origin/main`)                       | **Spotify V2** ; installateurs sup.9 / sup.10 et SHA-256 : `Documents\raptoru-spotify-GO\`                                         | livré, validé et **clos** le 25/10 ; rien en attente                                                                                                       |
 
 `scratchpad` = `C:\Users\Antoni\AppData\Local\Temp\claude\C--Users-Antoni-Documents-Raptoru-2-0\c435dbde-5dd7-4b54-8561-68eabf04712a\scratchpad`
 (**dossier temporaire Windows ; l'Assistant de stockage y supprime des fichiers** : instantané du 24/10 dans
@@ -68,8 +78,8 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 
 ## 5. Risques et blocages connus
 
-1. Données de travail de Studio (jetons, `.env`, `.runtime`) : **une** sauvegarde vérifiée le 24/10, aucune régulière
-   ([BACKUPS.md](BACKUPS.md) § 1).
+1. Données de travail de Studio (jetons, `.env`, `.runtime`) : sauvegardes ponctuelles vérifiées (24/10, avant sup.9,
+   avant sup.10 — extraction complète testée le 25/10), aucune régulière ([BACKUPS.md](BACKUPS.md) § 1).
 2. Base de Production : copie hors VPS du 24/10 09:56 vérifiée ; les suivantes demandent un téléchargement manuel dans
    Coolify (pas d'API, pas de SSH, pas de S3) ; restauration démontrée une seule fois (20/10).
 3. Worktrees de travail non commité sous `AppData\Local\Temp` (risque de nettoyage automatique).
@@ -80,8 +90,8 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 
 ## 6. Prochaine action
 
-1. **Antoni valide les réglages Votekick** dans Studio (Points de chaîne → Votekick : durée, son, pré-écoute), puis
-   sur un vrai vote (GO requis pour tout vote réel).
+1. Votekick : le son de lancement est validé (25/10) ; reste à confirmer la durée de vote réglable sur un vrai vote
+   (GO requis pour tout vote réel).
 2. **Trancher l'arbitrage** de [ROADMAP.md](ROADMAP.md) § 3 : Roue du Sub V2 (ordre de REPRISE) ou incident Twitch du
    22/10 + Bonk/DSK (ordre de TRUTH / STATE_AUDIT) ; et confirmer le correctif 409 comme préalable à la Roue V2.
 3. Ensuite seulement : ouvrir le chantier choisi.
@@ -90,11 +100,11 @@ Random Ban, Roue du Sub V1, Caution, Votekick V2. Niveau de validation de chacun
 
 - Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
   copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
-- Commiter `sup-wt` ; pousser `80f3525` (script de déploiement) ; redéployer le bot sur ≥ `cf21c4b`.
-- Spotify V2 : finitions déployées le 25/10 (Core `36a4cec`, Studio sup.10 = `36a4cec` + patch supervision ;
-  installateur et SHA-256 dans `Documents
-aptoru-spotify-GO`). Reste : validation manuelle par Antoni (File musicale,
-  `!songcancel <n>`, son Votekick importé au prochain vote, mesures de latence au prochain live).
+- Commiter `sup-wt` (embarqué dans sup.8 à sup.10).
+- Outil de déploiement (`raptoru-release`, 3 commits) : verdict du 25/10 « compatible, intégrable » — 4 fichiers neufs
+  sous `scripts/`, aucune collision avec `origin/main`, aucun secret (jeton lu dans `~/.raptoru`, masqué dans les
+  sorties), 21/21 tests sur `origin/main` + ces fichiers. À décider : l'intégrer sur `main` (rebase des 3 commits) ;
+  le test des migrations lit par défaut `C:\Users\Antoni\Documents\rs-vk` (`RAPTORU_CORE_ROOT` pour un autre dossier).
 - Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
   en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).

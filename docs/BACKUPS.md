@@ -13,6 +13,22 @@ Dossiers créés dans `C:\Users\Antoni\Documents\Sauvegarde Raptoru 2.0\`, **hor
 Antoni + SYSTEM (héritage NTFS coupé : le dossier `Documents` donne aussi « Modifier » à `CodexSandboxUsers` et à un SID
 inconnu). Ils contiennent des secrets et des données de Production : ne jamais les copier dans un dépôt.
 
+**Restreindre l'accès (procédure corrigée le 25/10)** : sur le **dossier seul**, sans `/T` — les fichiers héritent :
+
+```powershell
+icacls "<dossier>" /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F" "SYSTEM:(OI)(CI)F"
+```
+
+Ne jamais combiner `/inheritance:r` et `/T` : chaque fichier perd ses droits hérités et reste sans aucun accès, même pour
+Antoni (cas des sauvegardes `avant-sup9` et `avant-sup10`, réparé le 25/10 par `icacls "<dossier>\*" /reset /T`).
+Contrôle après chaque sauvegarde : `python studio_backup.py verify` doit relire l'archive (pas seulement la lister).
+
+Sauvegardes avant installation de Studio (accès Antoni + SYSTEM, relues le 25/10) : `studio-data-2026-10-24-avant-sup9`
+(113/113 identiques au manifeste) et `studio-data-2026-10-25-avant-sup10` (115/115, SHA-256 de l'archive
+`086d471ed6b6a8f3ed511e9fedba83dc6eaf58cb983e7f31233acb43f1a9d3bb` ; extraction complète testée dans un dossier vide :
+115/115 identiques), plus les archives du profil `Documents\studio-backup-2026-10-2{4,5}-avant-sup{9,10}\` (lues
+jusqu'au bout).
+
 | Sauvegarde                                                                                                                                                                                             | Contenu                                                                                                                                                                                                                                                                                                        | Vérification                                                                                                                                                             | Confiance                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
 | `studio-data-2026-10-24\studio-data.tar.gz` (27,6 Mo ; SHA-256 de l'archive `be564a666d4daa894dc44c09906980df2081232e4ec3d92e0f90b2304e0ff29b`) + `MANIFEST.json`, `RESTAURER.txt`, `studio_backup.py` | 113 fichiers : `apps/studio/server/.runtime/` entier, `apps/core-api/.env`, `apps/twitch-bot/.env*`, `.twitch-tokens*`, journaux et outbox du bot, `logs/`, `Backkup/`, documents privés, `.claude/settings.local.json`, `%APPDATA%\Raptoru Studio\{studio,obs-connection,se-connection}.json`, `~/.raptoru/*` | archive relue membre par membre : 113/113 identiques au manifeste (taille + SHA-256), 0 source modifiée pendant la copie ; `python studio_backup.py verify` la revérifie | **B** (jamais restaurée)       |

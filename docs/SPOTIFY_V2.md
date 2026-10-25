@@ -1,8 +1,9 @@
 # Spotify V2 — « Choisi la prochaine musique ! » sans SAMMI
 
-État (24/10) : **développé et testé en Lab (simulateur), non commité, non validé** — branche `feat/spotify-v2`, worktree
-`C:\Users\Antoni\Documents\raptoru-spotify`. Rien n'est déployé, aucune récompense Twitch créée, aucun appel réel à
-Spotify. Mise en service : § 12 (chaque étape sur GO). Suivi global : [ROADMAP.md](ROADMAP.md).
+État (25/10) : **en Production, validé en réel par Antoni, chantier clos** — Core `36a4cec`, bot `16600de`, Studio
+0.1.7-sup.10 ; récompense « Choisi la prochaine musique » (1 500 points) créée par Raptoru ; `SPOTIFY_CHAT` et
+`CP_TWITCH_ACTIONS` actifs. Skip automatique accepté tel quel (une fraction de seconde peut s'entendre sur un morceau
+qui démarre aussitôt). Historique de mise en service : § 12. Suivi global : [ROADMAP.md](ROADMAP.md).
 
 Référence métier : l'ancien service Node « Spotify V2 » du pont SAMMI, en production du 25/08 au 18/10/2026
 (`Documents\Raptoru\CANONICAL_WORKSPACE\extension\spotify-v2\`, ses tests, le deck `SPOTIFY_ULTIMATE`, l'historique
