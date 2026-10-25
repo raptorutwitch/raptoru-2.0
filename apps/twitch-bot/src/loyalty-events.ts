@@ -56,8 +56,21 @@ export function normalizeLoyaltyEvent(
       return viewer && tier
         ? { type: 'sub', eventId, viewer, tier, isGift: e.is_gift === true }
         : null;
-    case 'channel.subscription.message':
-      return viewer && tier ? { type: 'resub', eventId, viewer, tier } : null;
+    case 'channel.subscription.message': {
+      // Twitch's cumulative months: the Roue du Sub's certain month (never invented when absent).
+      const months = Number(e.cumulative_months);
+      return viewer && tier
+        ? {
+            type: 'resub',
+            eventId,
+            viewer,
+            tier,
+            ...(Number.isInteger(months) && months >= 1 && months <= 1000
+              ? { cumulativeMonths: months }
+              : {}),
+          }
+        : null;
+    }
     case 'channel.subscription.gift': {
       const count = Number(e.total);
       if (!tier || !Number.isInteger(count) || count < 1) return null;

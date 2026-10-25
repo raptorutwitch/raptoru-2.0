@@ -133,6 +133,11 @@ export function createLabCore({
     economy,
     spotify,
   );
+  // Roue du Sub: the gains pay the runtime's economy — the canonical Wallet, or here the Lab test wallet (test data,
+  // its own ledger kind, one row per spin). The Lab simulators (presence, events) only exist in the Lab database.
+  const subWheel = new SubWheelService(db, systemClock, undefined, economy, {
+    labCredits: true,
+  });
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
       db,
@@ -147,10 +152,9 @@ export function createLabCore({
       caution,
       votekick,
       spotify,
+      subWheel,
     });
   const alertsService = new AlertsService(db, systemClock);
-  // Gains credited only when the runtime economy is the canonical Wallet (never with the Lab wallet).
-  const subWheel = new SubWheelService(db, systemClock, undefined, economy);
   const routes = [
     ...bonkLabRoutes(bonk, viewers),
     // Soundboard V2 Lab: same isolated Lab Core process and database.

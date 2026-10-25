@@ -1,3 +1,4 @@
+import { subWheelExt } from './sub-wheel-ext.js';
 import {
   BONK_LAB_RULES,
   bonkVolleyRules,
@@ -210,6 +211,16 @@ export class ExtFacade {
       if (!caller.userId) return fail(403, 'identity_required');
       return ok(await this.twitch.startAuth(caller.userId));
     }
+    // Roue du Sub V2 (R8): own tours / team actions — the JWT's identity, Core decides (sub-wheel-ext.ts).
+    if (path.startsWith('/sub-wheel/'))
+      return subWheelExt(
+        this.core,
+        this.C,
+        method,
+        path,
+        body,
+        who.viewer ? this.actor(who) : null,
+      );
     if (method === 'GET' && path === '/raffle/state')
       return this.raffleState(who);
     if (method === 'POST' && path === '/actions/raffle')
@@ -480,6 +491,8 @@ export class ExtFacade {
       payment_mode: this.paymentMode,
       moderation_v2: true,
       commands_public: false,
+      // Roue du Sub V2 (R8): hidden while the production wheel is in mode v1 (the routes answer, the Hub shows nothing).
+      sub_wheel: false,
       role: who.caller.role === 'external' ? 'viewer' : who.caller.role,
       channel_id: this.C,
       channel_login: this.config.channelLogin,

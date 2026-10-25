@@ -318,9 +318,23 @@ describe('Roue du Sub — through the Lab Core routes', () => {
     });
     const s = await call(`/v1/lab/sub-wheel/${CH}/state`);
     expect(s.recent).toHaveLength(2);
-    expect(s.pending_awards).toMatchObject({ count: 1 });
+    // The Lab Core credits the Lab test wallet (test data): nothing left to attribute.
+    expect(s.pending_awards).toMatchObject({ count: 0 });
     const al = await call(`/v1/lab/alerts/${CH}/state`);
     expect(al.queued.length).toBe(2);
+    // V2 mode: v2_acquire, then v2 (R3); an unknown mode refused.
+    expect(
+      await call(`/v1/lab/sub-wheel/${CH}/mode`, { mode: 'v2_acquire' }),
+    ).toMatchObject({ mode: 'v2_acquire', enabled: true });
+    expect(
+      await call(`/v1/lab/sub-wheel/${CH}/mode`, { mode: 'v2' }),
+    ).toMatchObject({ mode: 'v2' });
+    expect(
+      (await call(`/v1/lab/sub-wheel/${CH}/mode`, { mode: 'v3' })).error,
+    ).toBeDefined();
+    expect((await call(`/v1/lab/sub-wheel/${CH}/state`)).settings.mode).toBe(
+      'v2',
+    );
   });
 
   it('migrations: production = Lab for the wheel tables', async () => {
@@ -333,14 +347,17 @@ describe('Roue du Sub — through the Lab Core routes', () => {
     const shape = async (d: ReturnType<typeof fresh>) => ({
       cols: await d.query(
         `select table_name, column_name, data_type, is_nullable, column_default from information_schema.columns
-         where table_name in ('sw_settings', 'sw_spins') order by 1, 2`,
+         where table_name in ('sw_settings', 'sw_spins', 'sw_spin_sources', 'sw_recoveries', 'sw_spin_reviews', 'sw_invitations')
+         order by 1, 2`,
       ),
       checks: await d.query(
         `select conrelid::regclass::text as t, conname, pg_get_constraintdef(oid) as def from pg_constraint
-         where conrelid::regclass::text in ('sw_settings', 'sw_spins') order by 1, 2`,
+         where conrelid::regclass::text in ('sw_settings', 'sw_spins', 'sw_spin_sources', 'sw_recoveries', 'sw_invitations',
+           'sw_spin_reviews') order by 1, 2`,
       ),
       idx: await d.query(
-        `select indexname, indexdef from pg_indexes where tablename in ('sw_settings', 'sw_spins') order by 1`,
+        `select indexname, indexdef from pg_indexes where tablename in ('sw_settings', 'sw_spins', 'sw_spin_sources', 'sw_invitations',
+           'sw_recoveries', 'sw_spin_reviews') order by 1`,
       ),
     });
     const prod = fresh();
@@ -352,7 +369,7 @@ describe('Roue du Sub — through the Lab Core routes', () => {
     await migrate(prod, 'prod');
     await migrate(lab, 'lab');
     const p = await shape(prod);
-    expect(p.cols.length).toBe(28);
+    expect(p.cols.length).toBe(90);
     expect(p).toEqual(await shape(lab));
   });
 });

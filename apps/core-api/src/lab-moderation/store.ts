@@ -36,8 +36,8 @@ export const actorName = (a: Actor) =>
 // --- permissions (D4) ------------------------------------------------------------------------------------
 
 /**
- * Permissions granted per moderator: the 6 of D4 + « Gérer la Tombola » (Tombola V2, decision D7).
- * Supermods and the broadcaster have all of them.
+ * Permissions granted per moderator: the 6 of D4 + « Gérer la Tombola » (Tombola V2, decision D7)
+ * + the Roue du Sub V2's « Tirer » / « Accorder un tour » (R-7). Supermods and the broadcaster have all of them.
  */
 export const GRANTS = [
   'wallet',
@@ -47,6 +47,8 @@ export const GRANTS = [
   'sensitive',
   'words',
   'raffle',
+  'subWheelDraw',
+  'subWheelGrant',
 ] as const;
 export type Grant = (typeof GRANTS)[number];
 
@@ -89,6 +91,9 @@ export const PERMISSIONS: Record<
   'raffle.config': 'supermod',
   // Manual entry over an explicit Tombola block: « Sanctions sensibles » (audited).
   'raffle.force': 'sensitive',
+  // Roue du Sub V2 (R-7): ask a draw · grant a right — the broadcaster, supermods, moderators granted it.
+  'subwheel.draw': 'subWheelDraw',
+  'subwheel.grant': 'subWheelGrant',
 };
 const RANK: Record<LabRole, number> = {
   viewer: 0,

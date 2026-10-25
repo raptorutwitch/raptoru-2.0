@@ -114,8 +114,33 @@ export class SubWheelRuntime {
     const ch = `${this.base}/${this.d.channelId}`;
     if (method === 'GET' && path === '/state') {
       const effects = this.d.effects;
+      // V2 (R4): the rights not drawn yet and the « Possible doublon » pairs travel with the state (one refresh).
+      // The V2 reads: a Core without the V2 yet (an older Core, e.g. production before its update) answers 404 —
+      // the V1 section keeps working and says so; any other failure stays an error.
+      const v2 = <T>(path: string) =>
+        this.d.core<T>(path).catch((e: { status?: number }) => {
+          if (e.status === 404) return null;
+          throw e;
+        });
+      const [state, rights, duplicates, detections] = await Promise.all([
+        this.d.core<Record<string, unknown>>(`${ch}/state`),
+        v2<unknown[]>(`${ch}/rights`),
+        v2<unknown[]>(`${ch}/possible-duplicates`),
+        v2<unknown[]>(`${ch}/subscription-detections`),
+      ]);
+      // Lab Core: the simulators' state (presence readings, viewers) travels with it too.
+      const lab =
+        this.d.environment === 'lab' &&
+        (state.settings as { lab?: boolean } | undefined)?.lab
+          ? await this.d.core<unknown>(`${ch}/lab/presence`)
+          : null;
       return {
-        ...(await this.d.core<Record<string, unknown>>(`${ch}/state`)),
+        ...state,
+        v2_unavailable: rights === null,
+        rights: rights ?? [],
+        possible_duplicates: duplicates ?? [],
+        subscription_detections: detections ?? [],
+        lab_sim: lab,
         animations_error: this.lastError,
         effects: effects
           ? {
@@ -131,6 +156,39 @@ export class SubWheelRuntime {
       return this.d.core(`${ch}/settings`, await body());
     if (method === 'POST' && path === '/test')
       return this.d.core(`${ch}/test`, await body());
+    // V2 (R3 / R4): the Core checks the permissions (Studio = the broadcaster) and journals every decision.
+    if (method === 'POST' && path === '/mode')
+      return this.d.core(`${ch}/mode`, await body());
+    if (method === 'POST' && path === '/grant')
+      return this.d.core(`${ch}/grant`, await body());
+    if (method === 'POST' && path === '/invitations')
+      return this.d.core(`${ch}/invitations`, await body());
+    // Lab simulators only (never relayed by a production Studio): presence readings, Twitch subscriptions, the live.
+    if (this.d.environment === 'lab' && method === 'POST') {
+      if (path === '/lab/presence')
+        return this.d.core(`${ch}/lab/presence`, await body());
+      if (path === '/lab/simulate')
+        return this.d.core(`${ch}/lab/simulate`, await body());
+      if (path === '/lab/live') {
+        const on = (await body()).on === true;
+        return this.d.core(`/v1/lab/raffle/${this.d.channelId}/actions`, {
+          actor: { id: 'studio', role: 'broadcaster', via: 'studio' },
+          command: {
+            action: on ? 'stream_start' : 'stream_end',
+            reason: 'Roue du Sub — simulateur Lab',
+          },
+        });
+      }
+    }
+    const request = /^\/spins\/([0-9a-f-]{36})\/request$/.exec(path);
+    if (method === 'POST' && request)
+      return this.d.core(`${this.base}/spins/${request[1]}/request`, {});
+    const review = /^\/reviews\/(\d{1,18})\/resolve$/.exec(path);
+    if (method === 'POST' && review)
+      return this.d.core(
+        `${this.base}/reviews/${review[1]}/resolve`,
+        await body(),
+      );
     const award = /^\/spins\/([0-9a-f-]{36})\/award$/.exec(path);
     if (method === 'POST' && award)
       return this.d.core(`${this.base}/spins/${award[1]}/award`, await body());

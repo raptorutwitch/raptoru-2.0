@@ -64,8 +64,30 @@ export async function endSubscription(
 export async function applySnapshot(
   q: Queryable,
   snapshot: SubscriptionSnapshot,
-): Promise<number> {
+): Promise<{
+  count: number;
+  /** Roue du Sub R7: paid subscribers absent from the known state, when a previous snapshot exists (else none). */
+  added: SubscriptionSnapshot['subscribers'];
+  previousAt: Date | null;
+}> {
   const subs = snapshot.subscribers;
+  const previousAt =
+    (
+      await q.query<{ last_snapshot_at: Date }>(
+        'select last_snapshot_at from loyalty_sub_sync where id = 1',
+      )
+    )[0]?.last_snapshot_at ?? null;
+  const known = new Set(
+    (
+      await q.query<{ id: string }>(
+        'select twitch_user_id as id from viewer_subscriptions where twitch_user_id = any($1::text[])',
+        [subs.map((s) => s.viewer.twitchUserId)],
+      )
+    ).map((r) => r.id),
+  );
+  const added = previousAt
+    ? subs.filter((s) => !s.isGift && !known.has(s.viewer.twitchUserId))
+    : [];
   await ensureViewers(
     q,
     subs.map((s) => s.viewer),
@@ -89,5 +111,5 @@ export async function applySnapshot(
      on conflict (id) do update set last_snapshot_at = excluded.last_snapshot_at, subscriber_count = excluded.subscriber_count`,
     [new Date(snapshot.fetchedAt), subs.length],
   );
-  return subs.length;
+  return { count: subs.length, added, previousAt };
 }

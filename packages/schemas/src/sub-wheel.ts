@@ -108,8 +108,19 @@ export const SwStatus = z.enum([
   /** The animation could not be shown (the gain stays as recorded). */
   'failed',
   'skipped',
+  /** V2 (docs/SUB_WHEEL_V2_PLAN.md): a right acquired, nothing drawn yet (kept until drawn; never expires). */
+  'owed',
+  /** V2: a manual draw asked (subWheelDraw), drawn by the next wheel before the automatic queue. */
+  'requested',
+  /** V2: absorbed by the right of the same certain month (never drawn). */
+  'merged',
 ]);
 export type SwStatus = z.infer<typeof SwStatus>;
+
+/** Who draws: v1 (today) · v2_acquire (rights kept, V1 still draws) · v2 (V2 draws at display: lot R3). Broadcaster only. */
+export const SwMode = z.enum(['v1', 'v2_acquire', 'v2']);
+export type SwMode = z.infer<typeof SwMode>;
+export const SwModeInput = z.strictObject({ mode: SwMode });
 
 /**
  * The gain: pending (owed, never credited yet) · awarded (credited by an economy adapter, its reference) · manual
@@ -126,6 +137,62 @@ export const SwAwardStatus = z.enum([
 export type SwAwardStatus = z.infer<typeof SwAwardStatus>;
 
 export const SwSettingsInput = z.strictObject({ enabled: z.boolean() });
+
+/** « Accorder un tour » (R3, subWheelGrant): a manual right. `key`: the same grant retried is the same right. */
+export const SwGrantInput = z.strictObject({
+  key: z.uuid(),
+  viewer: z.strictObject({
+    id: z.string().regex(/^\d{1,32}$/),
+    login: z.string().max(64).optional(),
+    name: z.string().trim().min(1).max(64),
+  }),
+  tier: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  /** The wheel shown (legacy layout of the months). */
+  months: z.number().int().min(1).max(200),
+  note: z.string().trim().min(1).max(200),
+});
+export type SwGrantInput = z.infer<typeof SwGrantInput>;
+
+/** R9: natural invitations ON / OFF (broadcaster). */
+export const SwInvitationsInput = z.strictObject({ enabled: z.boolean() });
+
+/** Lab simulator (Lab Core only): simulated chatters readings and viewers present / absent. */
+export const SwLabPresenceInput = z.strictObject({
+  readings: z.boolean().optional(),
+  viewers: z
+    .array(
+      z.strictObject({
+        id: z.string().regex(/^\d{1,32}$/),
+        name: z.string().trim().min(1).max(64),
+        present: z.boolean(),
+      }),
+    )
+    .max(50)
+    .optional(),
+});
+
+/**
+ * Lab simulator: a subscription as Twitch announces it — sub (notice + channel.subscribe), resub (notice + message,
+ * cumulative months), prime (notice + channel.subscribe), subscribe alone (an unshared re-sub), message alone.
+ */
+export const SwLabSimulate = z.strictObject({
+  kind: z.enum(['sub', 'resub', 'prime', 'subscribe', 'message']),
+  viewer: z.strictObject({
+    id: z.string().regex(/^\d{1,32}$/),
+    login: z.string().max(64).optional(),
+    name: z.string().trim().min(1).max(64),
+  }),
+  tier: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  months: z.number().int().min(1).max(200).optional(),
+});
+
+/** « À vérifier » (R4): two distinct months · merge the duplicate (never credited) · leave it blocked. Note required. */
+export const SwReviewDecision = z.enum(['distinct', 'merge', 'unresolved']);
+export type SwReviewDecision = z.infer<typeof SwReviewDecision>;
+export const SwReviewResolve = z.strictObject({
+  decision: SwReviewDecision,
+  note: z.string().trim().min(1).max(200),
+});
 
 /** Studio « Tester »: never a real gain. `full`: through the alerts queue (the sub alert then the wheel). */
 export const SwTestRequest = z.strictObject({

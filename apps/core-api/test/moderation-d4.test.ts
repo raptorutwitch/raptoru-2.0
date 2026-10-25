@@ -249,7 +249,7 @@ describe('D4 team & fine permissions (Core-enforced)', () => {
     const { act, code, m } = await lab();
     const s = await m.whoami(CHANNEL, superMod);
     expect(s.role).toBe('supermod');
-    expect(s.grants).toHaveLength(7); // 6 D4 + « Gérer la Tombola »
+    expect(s.grants).toHaveLength(9); // 6 D4 + « Gérer la Tombola » + Roue du Sub « Tirer » / « Accorder »
     expect((await m.whoami(CHANNEL, owner)).role).toBe('broadcaster');
     expect(
       await code(act({ action: 'global_pause', paused: true }, superMod)),
@@ -333,7 +333,7 @@ describe('D4 team & fine permissions (Core-enforced)', () => {
     ]);
     expect(
       members.find((x) => x.viewer_id === superMod.id)!.grants,
-    ).toHaveLength(7);
+    ).toHaveLength(9);
     // Demoted supermod → moderator with the standard moderation (no grant).
     await act({ action: 'set_staff', viewer_id: superMod.id, role: null });
     expect((await m.whoami(CHANNEL, superMod)).role).toBe('moderator');

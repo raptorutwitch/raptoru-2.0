@@ -49,7 +49,18 @@ describe('EventSub → Core loyalty event', () => {
       eventId: 'm2',
       viewer: aouh,
       tier: 't2',
+      // Roue du Sub V2 (R2): Twitch's cumulative months travel with the resub.
+      cumulativeMonths: 7,
     });
+    // Absent or unusable: never invented.
+    for (const cumulative_months of [undefined, null, 0, 'x'])
+      expect(
+        normalizeLoyaltyEvent(
+          'channel.subscription.message',
+          { ...user, tier: '2000', cumulative_months },
+          'm2b',
+        ),
+      ).toEqual({ type: 'resub', eventId: 'm2b', viewer: aouh, tier: 't2' });
     expect(
       normalizeLoyaltyEvent(
         'channel.subscription.gift',

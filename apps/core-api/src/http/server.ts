@@ -298,7 +298,12 @@ function routes({
       ? botChatRoutes(chatIngress.router, chatIngress.games, cockpit.channelId)
       : []),
     ...(ext ? extRoutes(ext.facade) : []),
-    ...loyaltyRoutes(loyalty),
+    ...loyaltyRoutes(
+      loyalty,
+      subWheel && cockpit?.channelId
+        ? { service: subWheel, channelId: cockpit.channelId }
+        : undefined,
+    ),
     ...(labRoutes && bonkLab ? bonkLabRoutes(bonkLab) : []),
     ...(labRoutes && soundLab ? soundLabRoutes(soundLab) : []),
     ...(labRoutes && ttsLab ? ttsLabRoutes(ttsLab) : []),

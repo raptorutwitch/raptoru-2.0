@@ -55,6 +55,14 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261107130000_votekick_settings.sql',
   // Spotify V2: requests, Studio jobs, Twitch-side channel points actions (same as the Lab file).
   '20261108130000_spotify.sql',
+  // Roue du Sub V2 (R1): persistent rights, proofs, modes, recoveries; same content as the Lab file
+  // 20261101120000_sub_wheel_v2_lab.sql (renumbered after the Spotify files: never applied outside the tests).
+  '20261109130000_sub_wheel_v2.sql',
+  // Roue du Sub V2 (R2): rights « À vérifier » (reviews); same content as 20261102120000_sub_wheel_v2_review_lab.sql.
+  '20261109140000_sub_wheel_v2_review.sql',
+  // Roue du Sub V2 (R8–R9): invitations, who asked a draw. Unlike its Lab twin 20261103120000_sub_wheel_v2_viewers_lab.sql,
+  // it leaves cmd_steps' origins alone: sub_wheel is allowed since 20261031140000, and raffle / music must stay.
+  '20261109150000_sub_wheel_v2_viewers.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -104,6 +112,14 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   // Points de chaîne « accorder des crédits »: its ledger kind on the Lab test wallet.
   '20261030120000_lab_ledger_channel_points.sql', // Winner announcements (Tombola, Roue du Sub): cmd_steps origins raffle / sub_wheel.
   '20261031140000_cmd_steps_win_announcements_lab.sql',
+  // Roue du Sub V2 (R1): the Lab twin of 20261109130000_sub_wheel_v2.sql (same content; name kept: applied in the Lab database).
+  '20261101120000_sub_wheel_v2_lab.sql',
+  // Roue du Sub V2 (R2): the Lab twin of 20261109140000_sub_wheel_v2_review.sql (same content; name kept: applied in the Lab database).
+  '20261102120000_sub_wheel_v2_review_lab.sql',
+  // Roue du Sub V2: the Lab's own simulators (presence) and the Lab wallet kind of the wheel's gains (Lab only).
+  '20261103110000_sub_wheel_lab_sim.sql',
+  // Roue du Sub V2 (R8–R9): the Lab twin of 20261109150000_sub_wheel_v2_viewers.sql (name and content kept: applied in the Lab database; its narrow cmd_steps origins are widened again by 20261108140000_cmd_steps_music_lab.sql).
+  '20261103120000_sub_wheel_v2_viewers_lab.sql',
   // !fxcam from the chat: cp_redemptions also accepts the source « chat » (Lab and main Core).
   '20261104120000_cp_redemptions_chat_source_lab.sql',
   // Caution (`!caution`), Lab schema.

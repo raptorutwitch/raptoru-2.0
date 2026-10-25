@@ -10,6 +10,8 @@ import { CommandSteps } from '../commands/steps.js';
 import type { Db } from '../db/db.js';
 import type { EconomyPort } from '../economy/economy.js';
 import { MiniGamesService } from '../mini-games/service.js';
+import { SubWheelChat } from '../sub-wheel/chat.js';
+import type { SubWheelService } from '../sub-wheel/service.js';
 import {
   type LoginLookup,
   twitchAppLoginLookup,
@@ -61,6 +63,8 @@ export function createChatGames(o: {
   votekick?: VotekickService | null;
   /** Spotify V2 chat commands (absent: none — the main Core only with SPOTIFY_CHAT=true). */
   spotify?: SpotifyService | null;
+  /** Roue du Sub V2: « !roue » and the natural invitations (silent while the wheel is in mode v1). */
+  subWheel?: SubWheelService;
 }) {
   // Tombola's chat words stay Tombola's (reserved); Roulette / Slot words are the mini-games' (StreamElements aliases);
   // `!tts` is the TTS's.
@@ -136,6 +140,14 @@ export function createChatGames(o: {
   const spotifyChat = o.spotify ? new SpotifyChat(o.spotify) : null;
   if (spotifyChat)
     chatModules.push({ name: 'spotify', chat: (m) => spotifyChat.chat(m) });
+  if (o.subWheel) {
+    const wheel = new SubWheelChat(o.db, o.clock, o.subWheel);
+    chatModules.push({
+      name: 'sub_wheel',
+      plainText: true,
+      chat: (m) => wheel.chat(m),
+    });
+  }
   return {
     commands,
     admission,

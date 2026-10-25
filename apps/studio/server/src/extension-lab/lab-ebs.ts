@@ -9,6 +9,7 @@ import type { SoundWorker } from '../sound-lab/worker.js';
 import type { TtsWorker } from '../tts-lab/worker.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
 import { commandsFacade } from './commands-facade.js';
+import { subWheelFacade } from './sub-wheel-facade.js';
 
 const BONK_PROVIDERS: readonly BonkLabProvider[] = BonkLabProvider.options;
 import type {
@@ -1156,6 +1157,17 @@ export class LabEbs {
         return this.fail(503, 'commands_unavailable');
       }
     }
+    // Roue du Sub V2 (R8): the viewer's own tours, the team's actions — the caller's verified identity, Core decides.
+    if (this.labCore && path.startsWith('/sub-wheel/')) {
+      const out = await subWheelFacade(this.labCore, LAB_CHANNEL.id)(
+        method,
+        path,
+        body,
+        this.labActor(caller),
+        caller.identityShared,
+      );
+      return { status: out.status, body: out.body as Json };
+    }
     // Commands V2 « Modération › Commandes » (phase E): the caller's verified identity, Core decides.
     if (this.labCore && path.startsWith('/commands/v2/')) {
       const out = await commandsFacade(this.labCore)(
@@ -2051,6 +2063,8 @@ export class LabEbs {
       moderation_v2: Boolean(this.labCore),
       // Commands V2 public list available (« Commandes » in the Hub, every viewer).
       commands_public: Boolean(this.labCore),
+      // Roue du Sub V2 (R8): « Roue du Sub » in the Hub (own tours; the team's part for moderators).
+      sub_wheel: Boolean(this.labCore),
       role: identity.role,
       channel_id: LAB_CHANNEL.id,
       channel_login: LAB_CHANNEL.login,
