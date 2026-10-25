@@ -93,6 +93,12 @@ manuelle. Signer demande un certificat (OV/EV, payant) : décision ASTRA-P3-001,
 
 `npm run studio:release` (local) reste disponible et inchangé.
 
+**Version 0.1.7 (25/10)** : construite par ce workflow (`34e4120`, artefact vérifié), mise à jour contrôlée avant
+publication avec electron-updater lui-même (0.1.7 proposée à `0.1.7-sup.10` et à 0.1.6, rien proposé à 0.1.7,
+téléchargement et SHA-512 acceptés), puis publiée : brouillon, publication, re-téléchargement anonyme identique. Tant
+que le secret `STUDIO_RELEASES_TOKEN` manque, la publication se fait depuis le PC sur l'artefact de la CI :
+`node apps/studio/desktop/scripts/release.mjs --publish-from=<dossier de l'artefact> [--public]` (connexion `gh`).
+
 ## 4. Si un déploiement échoue
 
 1. Lire le résumé du run : la ligne `VERDICT` et la liste « Problèmes ».

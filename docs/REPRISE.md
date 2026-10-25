@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **25/10/2026 ~04:30** (CI/CD en service : `origin/main` `9a06bfd` + PR #2 — [CICD.md](CICD.md) ; Production inchangée : Core `36a4cec`, bot `16600de`, Studio **0.1.7-sup.10** ; retour : Core `16600de`, Studio sup.9).
+Mis à jour : **25/10/2026 ~10:20** (CI/CD raccordée à la Production : Coolify en HTTPS, `OPS_TOKEN`, Core `34e4120` avec `/v1/ops/status` ; Studio **0.1.7 publié** ; bot `16600de` inchangé — [CICD.md](CICD.md)). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -27,16 +27,16 @@ depuis le checkout principal.
 
 ## 2. Production (relevé 25/10 ~03:00)
 
-| Élément              | Version                                                                                                                      | Remarque                                                                                                   |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Core `raptoru-core`  | **`36a4cec`** (déployé 25/10 00:01 UTC, finitions Spotify, sans migration)                                                   | `running:healthy`, `/health` `/ready` 200 ; retour : `16600de`                                             |
-| Bot `raptoru-bot`    | **`16600de`** (déployé 24/10 16:01 UTC, inclut `cf21c4b`)                                                                    | `running:healthy`, VPS, bail repris proprement ; `CP_TWITCH_ACTIONS` ON (24/10 16:28) ; retour : `b8bc025` |
-| `origin/main`        | `9a06bfd` (CI/CD, PR #1 ; aucun service redéployé)                                                                           | Coolify : auto-deploy désactivé                                                                            |
-| Studio installé (PC) | **0.1.7-sup.10** (build local, `36a4cec` + patch `sup-wt` non commité ; installé 25/10 00:11 UTC)                            | dernière release publiée : 0.1.6 ; retour : sup.9 (`Documents\raptoru-spotify-GO`)                         |
-| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                          | publication manuelle par Antoni                                                                            |
-| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                    | Node non épinglé (décision en attente)                                                                     |
-| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true          | journaux du bot sur `/data`                                                                                |
-| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110 | ne pas modifier ces réglages sans GO                                                                       |
+| Élément              | Version                                                                                                                                                | Remarque                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Core `raptoru-core`  | **`34e4120`** (déployé 25/10 09:58 UTC en local, sans migration ; sert `/v1/ops/status`)                                                               | `running:healthy`, `/health` `/ready` 200, commit rapporté par le Core ; retour : `36a4cec`                |
+| Bot `raptoru-bot`    | **`16600de`** (déployé 24/10 16:01 UTC, inclut `cf21c4b`)                                                                                              | `running:healthy`, VPS, bail repris proprement ; `CP_TWITCH_ACTIONS` ON (24/10 16:28) ; retour : `b8bc025` |
+| `origin/main`        | CI/CD et documentation (PR #1 à #5) ; « État de la livraison » donne le commit exact                                                                   | Coolify : auto-deploy désactivé                                                                            |
+| Studio installé (PC) | **0.1.7-sup.10** (build local) ; **0.1.7 publiée** le 25/10 (construite par GitHub depuis `34e4120`) : Studio la propose, rien ne s'installe sans clic | retour : sup.9 (`Documents\raptoru-spotify-GO`)                                                            |
+| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                    | publication manuelle par Antoni                                                                            |
+| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                              | Node non épinglé (décision en attente)                                                                     |
+| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                    | journaux du bot sur `/data`                                                                                |
+| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                           | ne pas modifier ces réglages sans GO                                                                       |
 
 Fonctions en Production : économie canonique (Wallet, Daily, fidélité, présence), Commands V2 (`cmd_steps`), modération
 D4, Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2, Points de chaîne et effets,
@@ -100,10 +100,10 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 - Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
   copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
-- **CI/CD** (PR #1, [CICD.md](CICD.md)) : CI GitHub en service ; « Déployer Core / bot » et « Studio — construire /
-  publier » prêts mais inactifs tant que manquent : les secrets (`COOLIFY_URL`, `COOLIFY_TOKEN`, `OPS_TOKEN`,
-  `STUDIO_RELEASES_TOKEN`), Coolify en HTTPS, la variable `OPS_TOKEN` du Core puis le déploiement d'un Core ≥ `c8ffc74`
-  (premier déploiement en local, OBS comme seconde source de live). Détail : CICD.md § 5.
+- **CI/CD** ([CICD.md](CICD.md)) : raccordée le 25/10 (Coolify en HTTPS, secrets, `OPS_TOKEN`, Core `34e4120`,
+  Studio 0.1.7 publié). Reste : (1) le premier déploiement **lancé depuis GitHub** — plan validé sur la vraie
+  infrastructure, le lancement réel est à faire par Antoni (Actions → « Déployer Core / bot ») ; (2) le secret
+  `STUDIO_RELEASES_TOKEN` pour publier Studio depuis GitHub ; (3) facultatif : l'enregistrement DNS `coolify` chez OVH.
 - Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
   en base jetable ; déplacer les worktrees hors de `Temp`.
 - Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).
