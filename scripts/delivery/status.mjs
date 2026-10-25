@@ -22,7 +22,7 @@ const HOME = join(homedir(), '.raptoru');
 const fileText = (p) => (existsSync(p) ? readFileSync(p, 'utf8').trim() : '');
 const env = {
   ...process.env,
-  COOLIFY_URL: process.env.COOLIFY_URL || 'http://62.84.187.170:8000',
+  COOLIFY_URL: process.env.COOLIFY_URL || 'https://coolify.raptoru.fr',
   COOLIFY_TOKEN:
     process.env.COOLIFY_TOKEN || fileText(join(HOME, 'coolify-token.txt')),
   OPS_URL: process.env.OPS_URL || 'https://core.raptoru.fr/v1/ops/status',

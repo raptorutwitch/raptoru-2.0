@@ -124,7 +124,7 @@ En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status
 
 | Nom (secret)                                | Pour                                      | Valeur                                                                                                                         |
 | ------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `COOLIFY_URL`                               | Déployer, État                            | **en place** : `https://core-staging.raptoru.fr/_coolify` (voir « HTTPS de Coolify »)                                          |
+| `COOLIFY_URL`                               | Déployer, État                            | **en place** : `https://coolify.raptoru.fr` (voir « HTTPS de Coolify »)                                                        |
 | `COOLIFY_TOKEN`                             | Déployer, État                            | **en place** : le jeton Coolify « raptoru-deploy-automation » (read, write, deploy, read:sensitive), copie de `~/.raptoru`     |
 | `OPS_TOKEN`                                 | Déployer, État                            | **en place** : la même valeur que la variable `OPS_TOKEN` de `raptoru-core` dans Coolify et que `~/.raptoru/ops-token.txt`     |
 | `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Déployer (3e source de live, facultative) | absents (inutiles : le Core fournit déjà deux sources) ; sinon une application Twitch dédiée, sans droit utilisateur           |
@@ -135,20 +135,18 @@ En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status
 | `DEPLOY_ACTORS`               | `raptorutwitch` (défaut si absente) — comptes autorisés à déployer / publier            |
 | `COOLIFY_ALLOW_INSECURE_HTTP` | absente. `true` = arbitrage explicite d'envoyer le jeton Coolify en clair (déconseillé) |
 
-**HTTPS de Coolify (en service depuis le 25/10)** : l'API de Coolify n'était joignable qu'en HTTP non chiffré
-(`62.84.187.170:8000`). Un mini-proxy l'expose désormais en HTTPS :
+**HTTPS de Coolify (adresse définitive depuis le 25/10)** : `https://coolify.raptoru.fr` (DNS OVH : A `coolify` →
+`62.84.187.170`), certificat Let's Encrypt renouvelé automatiquement par Traefik.
 
 - projet Coolify « Raptoru ops », application `coolify-api-https` (nginx) ;
-- il ne transmet que `/api/` vers Coolify (`http://coolify:8080`, réseau interne) ; tout le reste répond 404 ;
-- adresse **provisoire** : `https://core-staging.raptoru.fr/_coolify`. Elle passe par le domaine de staging, qui a déjà
-  un certificat ; le routage de Production n'est pas touché, et le Core de staging garde tous ses autres chemins.
-
-Pour une adresse dédiée (facultatif, un enregistrement DNS chez OVH) :
-
-1. OVH → Domaines → `raptoru.fr` → Zone DNS → ajouter une entrée A `coolify` → `62.84.187.170` ;
-2. dans Coolify, remplacer le domaine de l'application `coolify-api-https` par `https://coolify.raptoru.fr` et la
-   redéployer (certificat Let's Encrypt automatique) ;
-3. le secret `COOLIFY_URL` devient `https://coolify.raptoru.fr`.
+- seul `/api/` est transmis à Coolify (`http://coolify:8080`, réseau interne). Le reste répond 404 : l'interface de
+  Coolify n'est pas exposée ici. Le HTTP en clair est redirigé vers HTTPS ;
+- toutes les routes de l'API exigent le jeton (401 sinon), sauf `/api/health`, la sonde publique de Coolify, qui ne
+  renvoie aucune donnée ;
+- l'adresse provisoire `https://core-staging.raptoru.fr/_coolify` (du 25/10 matin) est retirée ;
+- l'interface de Coolify reste accessible comme avant sur `http://62.84.187.170:8000` (accès direct, non chiffré) ;
+- les scripts (`coolify-deploy.mjs`, `delivery/status.mjs`) visent `https://coolify.raptoru.fr` par défaut, en local
+  comme depuis GitHub.
 
 `OPS_TOKEN` : en place depuis le 25/10 (variable de `raptoru-core`, secret GitHub, `~/.raptoru/ops-token.txt`). Le Core
 `34e4120`, déployé le 25/10 en local avec deux sources de live (Twitch Helix et OBS), sert `/v1/ops/status`. Depuis,

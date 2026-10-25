@@ -45,7 +45,7 @@ import {
 const { fetch, AbortSignal } = globalThis;
 const HOME = join(homedir(), '.raptoru');
 const IN_ACTIONS = process.env.GITHUB_ACTIONS === 'true';
-const COOLIFY = process.env.COOLIFY_URL ?? 'http://62.84.187.170:8000';
+const COOLIFY = process.env.COOLIFY_URL ?? 'https://coolify.raptoru.fr';
 const fileText = (p) =>
   p && existsSync(p) ? readFileSync(p, 'utf8').trim() : '';
 const TOKEN_FILE =
