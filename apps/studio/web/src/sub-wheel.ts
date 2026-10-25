@@ -284,6 +284,20 @@ export function mountSubWheel(root: HTMLElement) {
         on ? 'Invitations activées.' : 'Invitations désactivées.',
       );
     }
+    if (act === 'sw-announce-delay') {
+      const raw = field('sw-announce-delay');
+      const seconds = Number(raw);
+      if (!/^\d{1,2}$/.test(raw) || seconds > 60) {
+        message = say('Délai d’annonce : un nombre entier de 0 à 60 secondes.');
+        render();
+        return;
+      }
+      void post(
+        '/announce-delay',
+        { seconds },
+        `Délai d’annonce du gain : ${seconds} s.`,
+      );
+    }
     if (act === 'sw-sim-live' && target)
       void post(
         '/lab/live',

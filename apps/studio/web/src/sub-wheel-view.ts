@@ -106,6 +106,8 @@ export interface SwState {
     enabled: boolean;
     mode?: SwMode;
     invitations_enabled?: boolean;
+    /** Seconds between the end of the wheel and its chat announcement (absent: a Core without the setting). */
+    announce_delay_s?: number;
     /** Lab Core: the simulators exist, the gains pay the Lab test wallet. */
     lab?: boolean;
   };
@@ -426,7 +428,20 @@ function settingsTab(s: SwState) {
         lancer de les lancer (« oui » / « non », ou !roue oui / !roue non). Accepter demande le tirage ; rien n’est
         crédité à la réponse ; refuser ou ne pas répondre ne fait perdre aucun tour.</p>
       <button type="button" data-act="sw-invitations" class="${s.settings.invitations_enabled ? '' : 'cp-primary'}">${s.settings.invitations_enabled ? 'Désactiver les invitations' : 'Activer les invitations'}</button>
-      ${s.settings.invitations_enabled ? chip('on', 'Invitations : actives') : chip('off', 'Invitations : désactivées')}</div>`
+      ${s.settings.invitations_enabled ? chip('on', 'Invitations : actives') : chip('off', 'Invitations : désactivées')}</div>${
+        typeof s.settings.announce_delay_s === 'number'
+          ? `
+    <div class="sw-block"><h3>Annonce du gain <small class="cp-muted">diffuseur uniquement</small></h3>
+      <p class="cp-muted">Une fois la roue arrêtée, LeCroupier_ annonce le gain dans le chat : « 🎡 @Pseudo remporte
+        8 000 jetons à la Roue du Sub ! ». Les viewers voient le stream avec quelques secondes de retard : ce délai évite
+        de dévoiler le gain avant qu’ils voient la roue s’arrêter. S’applique aux roues suivantes.</p>
+      <div class="cp-buttons">
+        <label class="cp-inline">Délai <input data-f="sw-announce-delay" type="number" min="0" max="60" step="1" value="${s.settings.announce_delay_s}" style="width:4em"/> s</label>
+        <button type="button" data-act="sw-announce-delay">Enregistrer</button>
+        ${chip('on', `Actuel : ${s.settings.announce_delay_s} s`)}
+      </div></div>`
+          : ''
+      }`
     }
     <div class="sw-block"><h3>Tests <small class="cp-muted">jamais de gain réel</small></h3>
       <div class="cp-buttons">

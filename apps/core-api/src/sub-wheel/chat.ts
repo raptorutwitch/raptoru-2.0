@@ -10,9 +10,19 @@ import type { SubWheelService } from './service.js';
 // LeCroupier_'s answers ride the durable chat queue (cmd_steps, origin sub_wheel: « Sortie chat », rate limit, anti
 // duplicate), one per Twitch message (its id is the key). The identity is Twitch's (the message), never an argument.
 // Accepting = asking the draws (`requested`, waiting for the viewer's presence): never a segment nor a credit here.
+// An invitation exists only once LeCroupier_ can say it (« Sortie chat » ON), and it is answerable only once its message
+// really reached the chat (its step `succeeded`): still on its way, an answer is ignored; never sent (output turned OFF
+// meanwhile, no executor before its expiry, Twitch refused it) → `undelivered`, never answerable, never re-offered in
+// this live. The tours stay owed either way (« !roue oui » always works).
 
 /** How long an invitation listens to its viewer (🟦 plan: 3 min). */
 export const INVITATION_TTL_MS = 3 * 60_000;
+
+/** The chat queue's key of an invitation's message (the trigger message's id: one invitation per message). */
+export const invitationStepKey = (triggerMessageId: string) =>
+  `sw:msg:${triggerMessageId}:invite`;
+
+export type Delivery = 'delivered' | 'pending' | 'undelivered';
 /** Version of the closed word lists below (any change: the recognition table is re-checked). */
 export const ANSWER_WORDS_VERSION = 1;
 
@@ -208,7 +218,14 @@ export class SubWheelChat {
     const ch = msg.channel_id;
     await lockViewer(q, ch, viewer.id);
     const live = await this.wheel.liveKey(q, ch);
-    const inv = live ? await this.openInvitation(q, ch, live, viewer.id) : null;
+    const open = live
+      ? await this.openInvitation(q, ch, live, viewer.id)
+      : null;
+    // « !roue oui / non » acts by itself; it closes the invitation only if the viewer could have read it.
+    const inv =
+      open && (await this.answerable(q, ch, open)) === 'delivered'
+        ? open
+        : null;
     const c = await this.counts(q, ch, viewer.id);
     if (!arg) {
       const waiting = c.auto + c.manual;
@@ -320,6 +337,13 @@ export class SubWheelChat {
         return { outcome: 'replayed' };
       if (inv.status !== 'offered' && inv.status !== 'clarified')
         return { outcome: 'ignored' };
+      const cls = classifyAnswer(msg.text);
+      if (cls === 'unrelated') return { outcome: 'ignored' };
+      // An answer only to what the viewer could read: the invitation's message must have reached the chat.
+      const delivery = await this.answerable(q, ch, inv);
+      if (delivery === 'pending') return { outcome: 'invitation_pending' };
+      if (delivery === 'undelivered')
+        return { outcome: 'invitation_undelivered' };
       if (now > new Date(inv.expires_at)) {
         await q.query(
           `update sw_invitations set status = 'expired' where id = $1`,
@@ -327,8 +351,6 @@ export class SubWheelChat {
         );
         return { outcome: 'expired' };
       }
-      const cls = classifyAnswer(msg.text);
-      if (cls === 'unrelated') return { outcome: 'ignored' };
       if (cls === 'ambiguous') {
         if (inv.status === 'clarified') return { outcome: 'ignored' };
         await this.answer(
@@ -365,6 +387,9 @@ export class SubWheelChat {
     }
     const c = await this.counts(q, ch, viewer.id);
     if (!c.manual) return { outcome: 'ignored' };
+    // « Sortie chat » OFF: LeCroupier_ cannot say it — nothing is offered, nothing recorded (the next message, once
+    // it is ON, may invite).
+    if (!(await this.chatOutput(q, ch))) return { outcome: 'ignored' };
     const created = await q.query(
       `insert into sw_invitations (channel_id, session_key, viewer_id, status, trigger_message_id, offered_at,
          expires_at, rights_offered)
@@ -396,13 +421,58 @@ export class SubWheelChat {
   ) {
     return (
       (
-        await q.query<{ id: number }>(
-          `select id from sw_invitations where channel_id = $1 and session_key = $2 and viewer_id = $3
-             and status in ('offered', 'clarified') for update`,
+        await q.query<{ id: number; trigger_message_id: string }>(
+          `select id, trigger_message_id from sw_invitations where channel_id = $1 and session_key = $2
+             and viewer_id = $3 and status in ('offered', 'clarified') for update`,
           [ch, live, viewerId],
         )
       )[0] ?? null
     );
+  }
+
+  /** « Sortie chat réelle » of the channel (OFF when never set). */
+  private async chatOutput(q: Queryable, ch: string) {
+    return (
+      (
+        await q.query<{ chat_output: boolean }>(
+          'select chat_output from cmd_channels where channel_id = $1',
+          [ch],
+        )
+      )[0]?.chat_output ?? false
+    );
+  }
+
+  /**
+   * Did the invitation's message reach the chat? `succeeded` → delivered; queued / claimed (before its expiry) or
+   * running → pending; anything else (expired — swept or not —, failed, unknown, cancelled, skipped, absent) →
+   * undelivered, and the invitation becomes `undelivered` (under the caller's lock on it).
+   */
+  private async answerable(
+    q: Queryable,
+    ch: string,
+    inv: { id: number; trigger_message_id: string },
+  ): Promise<Delivery> {
+    const step = (
+      await q.query<{ status: string; expires_at: Date }>(
+        'select status, expires_at from cmd_steps where channel_id = $1 and idempotency_key = $2',
+        [ch, invitationStepKey(inv.trigger_message_id)],
+      )
+    )[0];
+    const now = this.clock.now();
+    let d: Delivery = 'undelivered';
+    if (step?.status === 'succeeded') d = 'delivered';
+    else if (step?.status === 'running') d = 'pending';
+    else if (
+      (step?.status === 'queued' || step?.status === 'claimed') &&
+      new Date(step.expires_at) > now
+    )
+      d = 'pending';
+    if (d === 'undelivered')
+      await q.query(
+        `update sw_invitations set status = 'undelivered' where id = $1 and status in ('offered', 'clarified')`,
+        [inv.id],
+      );
+    return d;
   }
 
   private async answer(

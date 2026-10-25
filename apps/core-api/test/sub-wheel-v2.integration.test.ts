@@ -31,6 +31,7 @@ const ROUNDS = [1, 2, 3];
 const R1 = '20261109130000_sub_wheel_v2.sql';
 const R2 = '20261109140000_sub_wheel_v2_review.sql';
 const R8 = '20261109150000_sub_wheel_v2_viewers.sql';
+const RV21 = '20261109170000_sub_wheel_v2_announce_delivery.sql';
 
 const notice = (
   viewer: string,
@@ -450,13 +451,40 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
     });
   }
 
-  it('the migrations on a database at the production migrations of 25/10 (46): only R1, R2 and R8 applied, V1 rows, balances and chat origins unchanged, again: nothing', async () => {
+  for (const round of ROUNDS) {
+    it(`RV2-1 — the end of one wheel reported by two Cores at once: ONE announcement, after the channel delay (round ${round})`, async () => {
+      await configure('v1', true);
+      await wheel(a).setAnnounceDelay(CH, 10, 'test');
+      await wheel(a).fromAlert(notice('9701'), null);
+      const c = await wheel(a).claimAnimation(CH, 'obs');
+      clock.set(new Date(T0.getTime() + 12_000));
+      const end = clock.now().getTime();
+      const report = { consumer_id: 'obs', event: 'completed' as const };
+      const out = await Promise.all([
+        wheel(a).reportAnimation(c.spin!.spin_id, report),
+        wheel(b).reportAnimation(c.spin!.spin_id, report),
+      ]);
+      expect(out.map((o) => o.status)).toEqual(['shown', 'shown']);
+      const said = await a.query<{ available_at: Date; text: string }>(
+        "select available_at, params->>'text' as text from cmd_steps where origin = 'sub_wheel'",
+      );
+      expect(said).toHaveLength(1);
+      expect(new Date(said[0]!.available_at).getTime()).toBe(end + 10_000);
+      expect(said[0]!.text).toMatch(
+        /^🎡 @V9701 remporte .+ jetons à la Roue du Sub !$/,
+      );
+    });
+  }
+
+  it('the migrations on a database at the production migrations of 25/10 (46): only R1, R2, R8 and RV2-1 applied, V1 rows, balances and chat origins unchanged, again: nothing', async () => {
     await a.query('drop schema public cascade; create schema public;');
     const at46 = {
       ...MIGRATION_SCOPES,
       // The R1 / R2 files not shipped yet: classified away from the production selection.
-      prod: PROD_MIGRATIONS.filter((f) => f !== R1 && f !== R2 && f !== R8),
-      lab: [...MIGRATION_SCOPES.lab, R1, R2, R8],
+      prod: PROD_MIGRATIONS.filter(
+        (f) => f !== R1 && f !== R2 && f !== R8 && f !== RV21,
+      ),
+      lab: [...MIGRATION_SCOPES.lab, R1, R2, R8, RV21],
     };
     expect(await migrate(a, 'prod', undefined, at46)).toHaveLength(46);
     // What production really holds in its chat queue: Tombola announcements and Spotify answers.
@@ -489,7 +517,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
     );
     const spins = await a.query('select * from sw_spins');
     const balances = await a.query('select * from wallets order by 1');
-    expect(await migrate(a, 'prod')).toEqual([R1, R2, R8]);
+    expect(await migrate(a, 'prod')).toEqual([R1, R2, R8, RV21]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(
       (

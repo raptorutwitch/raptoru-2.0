@@ -511,7 +511,7 @@ describe('Roue du Sub V2 — R3: permissions and grants', () => {
     );
     expect(said).toHaveLength(1);
     expect(said[0]!.params.text).toMatch(
-      /^🎡 Roue du Sub : @V9501 gagne [\d \u00a0\u202f]+ Jetons !$/,
+      /^🎡 @V9501 remporte [\d \u00a0\u202f]+ jetons à la Roue du Sub !$/,
     );
   });
 });
@@ -808,5 +808,76 @@ describe('Roue du Sub V2 — R4: « À vérifier » decided, « Possible doublon
       isGift: false,
     });
     expect(await g.wheel.possibleDuplicates(CH)).toEqual([]);
+  });
+});
+
+describe('Roue du Sub V2 — RV2-1: the winner announcements', () => {
+  it('a live sub, a caught-up tour (acquired wheel OFF and off live, drawn later) and a granted one: ONE short announcement each, after the channel delay; replays and tests: nothing more', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.wheel.setAnnounceDelay(CH, 12, 'studio');
+    // Caught up: the wheel OFF and no live when the sub came — kept, owed, manual.
+    await f.wheel.setEnabled(CH, false);
+    const caught = (await f.receive(notice('9601', 0)))!;
+    expect(caught).toMatchObject({
+      status: 'owed',
+      right: { queue: 'manual' },
+    });
+    await f.wheel.setEnabled(CH, true);
+    // A sub in live (automatic queue) and a tour granted from Studio.
+    await f.live('s1', MIN);
+    const sub = (await f.receive(notice('9602', MIN + 1_000)))!;
+    await f.staff('7002', ['subWheelGrant']);
+    const granted = await f.wheel.grant(CH, mod('7002'), {
+      key: randomUUID(),
+      viewer: { id: '9603', name: 'V9603' },
+      tier: 1,
+      months: 3,
+      note: 'tour perdu (test)',
+    });
+    await f.wheel.requestDraw(caught.spin_id, studio);
+    await f.wheel.requestDraw(granted.spin_id, studio);
+    await f.reading(['9602'], MIN + 30_000);
+    f.at0(MIN + 40_000);
+    const ends: Record<string, number> = {};
+    for (let i = 0; i < 3; i++) {
+      const { spin } = await f.claim();
+      expect(spin).not.toBeNull();
+      f.at0(MIN + 60_000 + i * 20_000);
+      ends[spin!.spin_id] = f.core.clock.now().getTime();
+      await f.done(spin!.spin_id);
+      await f.done(spin!.spin_id); // the same end reported again
+    }
+    expect(Object.keys(ends).sort()).toEqual(
+      [caught.spin_id, sub.spin_id, granted.spin_id].sort(),
+    );
+    // A Studio test: never announced.
+    await f.wheel.test(CH, { name: 'Antoni', months: 3 });
+    const t = await f.claim();
+    await f.done(t.spin!.spin_id);
+    const said = await f.core.db.query<{
+      idempotency_key: string;
+      available_at: Date;
+      params: { text: string };
+    }>(
+      "select idempotency_key, available_at, params from cmd_steps where origin = 'sub_wheel' order by idempotency_key",
+    );
+    expect(said).toHaveLength(3);
+    for (const [spinId, end] of Object.entries(ends)) {
+      const one = said.filter(
+        (x) => x.idempotency_key === `sub_wheel:win:${spinId}`,
+      );
+      expect(one).toHaveLength(1);
+      expect(new Date(one[0]!.available_at).getTime()).toBe(end + 12_000);
+    }
+    expect(said.map((x) => x.params.text).sort()).toEqual(
+      ['9601', '9602', '9603'].map((v) =>
+        expect.stringMatching(
+          new RegExp(
+            `^🎡 @V${v} remporte [\\d \\u00a0\\u202f]+ jetons? à la Roue du Sub !$`,
+          ),
+        ),
+      ),
+    );
   });
 });

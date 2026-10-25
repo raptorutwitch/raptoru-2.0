@@ -147,7 +147,71 @@ async function lab() {
     await call(`${sw}/settings`, { enabled: true });
     await call(`${sw}/mode`, { mode: 'v2' });
   };
+  /** « Sortie chat réelle » (Studio, the broadcaster). */
+  const output = (enabled: boolean) =>
+    call(`/v1/lab/commands/${CH}/output`, { actor: studio, enabled });
+  /** The chat executor (the bot) sending every due message: `succeeded` (delivered) or `failed` (Twitch refused). */
+  const deliver = async (event: 'succeeded' | 'failed' = 'succeeded') => {
+    const sent: string[] = [];
+    for (;;) {
+      const { step } = await call<{
+        step: {
+          step_id: string;
+          attempt_id: string;
+          params: { text: string };
+        } | null;
+      }>(`/v1/lab/commands/${CH}/steps/claim`, { executor_id: 'bot-1' });
+      if (!step) return sent;
+      const ack = (e: string, extra = {}) =>
+        call(`/v1/lab/commands/${CH}/steps/${step.step_id}/ack`, {
+          executor_id: 'bot-1',
+          attempt_id: step.attempt_id,
+          event: e,
+          ...extra,
+        });
+      if (event === 'succeeded') {
+        await ack('running');
+        await ack('succeeded');
+      } else
+        await ack('failed', {
+          error: { code: 'twitch_refused', message: 'drop', retryable: false },
+        });
+      sent.push(step.params.text);
+    }
+  };
+  /** `!caution @target` by `payer`, read by the Caution executor: quoted (target timed out 5 min). */
+  const cautionQuote = async (
+    payer: { id: string; name: string },
+    target: { id: string; name: string },
+  ) => {
+    const exec = { executor_id: 'bot-1', login: 'lecroupier_' };
+    const claim = () =>
+      call<{ job: { request_id: string; attempt_id: string } | null }>(
+        `/v1/lab/caution/${CH}/claim`,
+        { ...exec, can_read: true, can_release: true, missing: [] },
+      );
+    await claim(); // the executor is seen
+    await say(payer, `!caution @${target.name}`);
+    const job = (await claim()).job!;
+    await call(`/v1/lab/caution/requests/${job.request_id}/check`, {
+      executor_id: exec.executor_id,
+      attempt_id: job.attempt_id,
+      target: {
+        id: target.id,
+        login: target.name.toLowerCase(),
+        name: target.name,
+      },
+      sanction: {
+        kind: 'timeout',
+        ends_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+      },
+    });
+    return job.request_id;
+  };
   return {
+    output,
+    deliver,
+    cautionQuote,
     db,
     call,
     sw,
@@ -354,6 +418,7 @@ describe('Roue du Sub V2 — natural invitations (R9)', () => {
     });
     await l.playAlerts();
     await l.live(true);
+    await l.output(true);
     return l;
   }
 
@@ -388,6 +453,7 @@ describe('Roue du Sub V2 — natural invitations (R9)', () => {
     const l = await ready();
     await l.call(`${l.sw}/invitations`, { enabled: true });
     await l.say(ana, 'coucou');
+    await l.deliver();
     const id = randomUUID();
     expect(await l.outcome(l.say(ana, 'ouais vas-y !', id))).toBe('accepted');
     expect(await l.outcome(l.say(ana, 'ouais vas-y !', id))).toBe('replayed');
@@ -418,6 +484,7 @@ describe('Roue du Sub V2 — natural invitations (R9)', () => {
     const l = await ready();
     await l.call(`${l.sw}/invitations`, { enabled: true });
     await l.say(ana, 'hello');
+    await l.deliver();
     expect(await l.outcome(l.say(ana, 'oui mais plus tard'))).toBe('clarified');
     expect(await l.outcome(l.say(ana, 'euh ?'))).toBe('none');
     expect(await l.outcome(l.say(ana, 'nan'))).toBe('declined');
@@ -431,6 +498,7 @@ describe('Roue du Sub V2 — natural invitations (R9)', () => {
     const g = await ready();
     await g.call(`${g.sw}/invitations`, { enabled: true });
     await g.say(ana, 'hello');
+    await g.deliver();
     await g.db.query(
       "update sw_invitations set expires_at = now() - interval '1 second'",
     );
@@ -449,6 +517,114 @@ describe('Roue du Sub V2 — natural invitations (R9)', () => {
     expect(await l.outcome(l.say(ana, 'salut'))).toBe('none');
     expect(await l.outcome(l.say(bob, 'salut'))).toBe('none');
     expect(await count(l.db, 'sw_invitations')).toBe(0);
+  });
+
+  it('RV2-1 — « Sortie chat » OFF: nothing offered nor recorded; ON: answerable only once its message reached the chat', async () => {
+    const l = await ready();
+    await l.call(`${l.sw}/invitations`, { enabled: true });
+    await l.output(false);
+    expect(await l.outcome(l.say(ana, 'salut'))).toBe('none');
+    expect(await count(l.db, 'sw_invitations')).toBe(0);
+    expect(await l.replies()).toEqual([]);
+    expect(await l.outcome(l.say(ana, 'oui'))).toBe('none'); // nothing to answer: tours untouched
+    expect(await count(l.db, "sw_spins where status = 'owed'")).toBe(2);
+    // ON: invited, but its message is still on its way — an answer is ignored, nothing consumed.
+    await l.output(true);
+    expect(await l.outcome(l.say(ana, 're'))).toBe('invited');
+    expect(await l.outcome(l.say(ana, 'oui'))).toBe('invitation_pending');
+    expect(await count(l.db, "sw_spins where status = 'owed'")).toBe(2);
+    expect(
+      (
+        await l.db.query<{ status: string }>(
+          'select status from sw_invitations',
+        )
+      )[0]!.status,
+    ).toBe('offered');
+    // Delivered: the next answer accepts (requested, never a credit here).
+    expect(await l.deliver()).toEqual([
+      '@Ana tu as 2 tours de Roue du Sub en attente ! On les lance ? Réponds oui ou non.',
+    ]);
+    expect(await l.outcome(l.say(ana, 'oui'))).toBe('accepted');
+    expect(await count(l.db, "sw_spins where status = 'requested'")).toBe(2);
+  });
+
+  it('RV2-1 — never delivered (output turned OFF, then expired; or Twitch refused it): undelivered, never answerable, tours owed', async () => {
+    for (const lost of ['expired', 'refused'] as const) {
+      const l = await ready();
+      await l.call(`${l.sw}/invitations`, { enabled: true });
+      expect(await l.outcome(l.say(ana, 'salut'))).toBe('invited');
+      if (lost === 'expired') {
+        await l.output(false); // LeCroupier_ silenced before it was sent
+        await l.db.query(
+          "update cmd_steps set expires_at = now() - interval '1 second' where origin = 'sub_wheel'",
+        );
+      } else await l.deliver('failed');
+      expect(await l.outcome(l.say(ana, 'oui'))).toBe('invitation_undelivered');
+      expect(
+        (
+          await l.db.query<{ status: string }>(
+            'select status from sw_invitations',
+          )
+        ).map((r) => r.status),
+        lost,
+      ).toEqual(['undelivered']);
+      // Never answerable afterwards, never offered again in this live; the tours stay owed.
+      await l.output(true);
+      expect(await l.outcome(l.say(ana, 'oui'))).toBe('none');
+      expect(await l.outcome(l.say(ana, 'coucou'))).toBe('none');
+      expect(await count(l.db, 'sw_invitations')).toBe(1);
+      expect(await count(l.db, "sw_spins where status = 'owed'")).toBe(2);
+      // « !roue oui » always works (explicit), and leaves the undelivered invitation as it is.
+      expect(await l.outcome(l.say(ana, '!roue oui'))).toBe('accepted');
+      expect(await count(l.db, "sw_spins where status = 'requested'")).toBe(2);
+      expect(
+        (
+          await l.db.query<{ status: string }>(
+            'select status from sw_invitations',
+          )
+        )[0]!.status,
+      ).toBe('undelivered');
+    }
+  });
+
+  it('RV2-1 — one « oui », one question: a quoted caution takes it, the invitation stays open; the next « oui » accepts it', async () => {
+    const l = await ready();
+    await l.call(`${l.sw}/invitations`, { enabled: true });
+    expect(await l.outcome(l.say(ana, 'salut'))).toBe('invited');
+    await l.deliver();
+    const request = await l.cautionQuote(ana, bob);
+    // Ana has two questions open: the caution's quote (her own `!caution`) and the wheel's invitation.
+    const id = randomUUID();
+    const first = await l.say(ana, 'oui', id);
+    expect(first.handled.map((h) => [h.module, h.outcome])).toEqual([
+      ['caution', 'confirmed'],
+    ]);
+    expect(await count(l.db, "sw_spins where status = 'owed'")).toBe(2);
+    expect(
+      (
+        await l.db.query<{ status: string }>(
+          'select status from sw_invitations',
+        )
+      )[0]!.status,
+    ).toBe('offered');
+    expect(
+      (
+        await l.db.query<{ status: string }>(
+          'select status from caution_requests where request_id = $1',
+          [request],
+        )
+      )[0]!.status,
+    ).toBe('confirmed');
+    // The same Twitch message again (redelivery): still Caution's only, the wheel never sees it.
+    const again = await l.say(ana, 'oui', id);
+    expect(again.handled.map((h) => h.module)).toEqual(['caution']);
+    expect(await count(l.db, "sw_spins where status = 'owed'")).toBe(2);
+    // No caution question left: the next « oui » answers the invitation.
+    const next = await l.say(ana, 'oui');
+    expect(next.handled.map((h) => [h.module, h.outcome])).toEqual([
+      ['sub_wheel', 'accepted'],
+    ]);
+    expect(await count(l.db, "sw_spins where status = 'requested'")).toBe(2);
   });
 });
 

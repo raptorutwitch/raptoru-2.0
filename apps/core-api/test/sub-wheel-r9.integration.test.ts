@@ -85,7 +85,18 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R9, real Postgres', () => {
     const c = await setup({ db: a, clock });
     await c.streams.online({ streamId: 's1', startedAt: T0 });
     await w.setInvitations(CH, true, 'test');
+    // RV2-1: an invitation needs LeCroupier_ to be able to say it (« Sortie chat » ON).
+    await a.query(
+      `insert into cmd_channels (channel_id, chat_output) values ($1, true)
+       on conflict (channel_id) do update set chat_output = true`,
+      [CH],
+    );
   };
+  /** The chat executor delivered every invitation message (RV2-1: answerable only once delivered). */
+  const delivered = () =>
+    a.query(
+      "update cmd_steps set status = 'succeeded', finished_at = updated_at where origin = 'sub_wheel' and status = 'queued'",
+    );
 
   for (const round of [1, 2, 3]) {
     it(`two messages of one viewer at once on two Cores: ONE invitation, ONE message — 20 viewers (round ${round})`, async () => {
@@ -103,6 +114,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R9, real Postgres', () => {
       const vs = viewers(20);
       await ready(vs);
       for (const v of vs) await chat(a).chat(msg(v, 'salut'));
+      await delivered();
       const [ca, cb] = [chat(a), chat(b)];
       await Promise.all(
         vs.flatMap((v) => [

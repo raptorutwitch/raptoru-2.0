@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   LabActor,
   SwAnimationClaim,
+  SwAnnounceDelayInput,
   SwInvitationsInput,
   SwLabPresenceInput,
   SwLabSimulate,
@@ -124,6 +125,20 @@ export function subWheelRoutes(
           channel(params[0]!),
           parse(SwInvitationsInput, body).enabled,
           studioActor(installation).id,
+        ),
+    },
+    {
+      // RV2-1: the winner announcement's delay after the end of the animation (the broadcaster, journaled).
+      method: 'POST',
+      pattern: at('/(\\d{1,32})/announce-delay'),
+      auth,
+      handle: ({ params, body, installation }) =>
+        mapped(() =>
+          wheel.setAnnounceDelay(
+            channel(params[0]!),
+            parse(SwAnnounceDelayInput, body).seconds,
+            studioActor(installation).id,
+          ),
         ),
     },
     {

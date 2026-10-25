@@ -132,6 +132,8 @@ export function createChatGames(o: {
     chatModules.push({
       name: 'caution',
       plainText: true,
+      // First of the answer readers: its quote was asked by the payer itself (30 s, Jetons at stake).
+      answers: true,
       chat: (m) => caution.chat(m),
     });
   const votekick = o.votekick ?? null;
@@ -145,6 +147,8 @@ export function createChatGames(o: {
     chatModules.push({
       name: 'sub_wheel',
       plainText: true,
+      // After Caution: a « oui » Caution took never accepts the invitation too (« !roue oui » always does).
+      answers: true,
       chat: (m) => wheel.chat(m),
     });
   }

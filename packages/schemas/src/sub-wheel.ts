@@ -156,6 +156,11 @@ export type SwGrantInput = z.infer<typeof SwGrantInput>;
 /** R9: natural invitations ON / OFF (broadcaster). */
 export const SwInvitationsInput = z.strictObject({ enabled: z.boolean() });
 
+/** RV2-1: the winner announcement's delay after the end of the animation, in seconds (broadcaster). */
+export const SwAnnounceDelayInput = z.strictObject({
+  seconds: z.number().int().min(0).max(60),
+});
+
 /** Lab simulator (Lab Core only): simulated chatters readings and viewers present / absent. */
 export const SwLabPresenceInput = z.strictObject({
   readings: z.boolean().optional(),

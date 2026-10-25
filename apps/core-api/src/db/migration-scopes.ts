@@ -63,6 +63,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Roue du Sub V2 (R8–R9): invitations, who asked a draw. Unlike its Lab twin 20261103120000_sub_wheel_v2_viewers_lab.sql,
   // it leaves cmd_steps' origins alone: sub_wheel is allowed since 20261031140000, and raffle / music must stay.
   '20261109150000_sub_wheel_v2_viewers.sql',
+  // Roue du Sub V2 (RV2-1): the announcement's delay set from Studio, « undelivered » invitations; same content as
+  // 20261109160000_sub_wheel_v2_announce_delivery_lab.sql.
+  '20261109170000_sub_wheel_v2_announce_delivery.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -131,6 +134,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   // Spotify V2, Lab schema.
   '20261108120000_spotify_lab.sql',
   '20261108140000_cmd_steps_music_lab.sql',
+  // Roue du Sub V2 (RV2-1): the Lab twin of 20261109170000_sub_wheel_v2_announce_delivery.sql (same content).
+  '20261109160000_sub_wheel_v2_announce_delivery_lab.sql',
 ]);
 
 /**

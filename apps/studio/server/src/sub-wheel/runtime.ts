@@ -163,6 +163,8 @@ export class SubWheelRuntime {
       return this.d.core(`${ch}/grant`, await body());
     if (method === 'POST' && path === '/invitations')
       return this.d.core(`${ch}/invitations`, await body());
+    if (method === 'POST' && path === '/announce-delay')
+      return this.d.core(`${ch}/announce-delay`, await body());
     // Lab simulators only (never relayed by a production Studio): presence readings, Twitch subscriptions, the live.
     if (this.d.environment === 'lab' && method === 'POST') {
       if (path === '/lab/presence')

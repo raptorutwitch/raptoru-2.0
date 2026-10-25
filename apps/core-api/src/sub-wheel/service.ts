@@ -146,8 +146,13 @@ export const spinView = (r: Row) => ({
 const tierOf = (t: AlertEventInput['tier']): 1 | 2 | 3 =>
   t === '2000' ? 2 : t === '3000' ? 3 : 1;
 
-/** The chat announcement waits this long after the end of the animation (the result is seen on stream first). */
+/**
+ * The chat announcement waits this long after the end of the animation (the result is seen on stream first): the
+ * channel's setting (`sw_settings.announce_delay_s`, Studio, broadcaster only), this by default.
+ */
 export const SW_ANNOUNCE_DELAY_MS = 8_000;
+/** Bounds of that setting (seconds), as the database checks them. */
+export const SW_ANNOUNCE_DELAY_MAX_S = 60;
 
 export class SubWheelService {
   constructor(
@@ -231,8 +236,8 @@ export class SubWheelService {
   /**
    * The winner announcement in chat (« 🎡 Roue du Sub : @Pseudo gagne X Jetons ! »), on LeCroupier_'s durable queue,
    * once per spin (its key): only a real viewer's spin — a Twitch sub, a spin granted by hand (« Accorder un tour »)
-   * or a reconciled one — whose gain is credited and whose wheel was SHOWN — sent SW_ANNOUNCE_DELAY_MS after the end
-   * of the animation (or at once when the credit comes later). Tests, simulations, zero gains, unpaid gains and failed
+   * or a reconciled one — whose gain is credited and whose wheel was SHOWN — sent the channel's announcement delay after
+   * the end of the animation (or at once when the credit comes later). Tests, simulations, zero gains, unpaid gains and failed
    * animations: nothing.
    */
   private async announce(q: Queryable, r: Row, delayMs: number) {
@@ -257,7 +262,7 @@ export class SubWheelService {
         {
           idempotencyKey: `sub_wheel:win:${r.spin_id}`,
           mode: 'normal',
-          text: `🎡 Roue du Sub : @${r.viewer_name} gagne ${n} ${amount >= 2 ? 'Jetons' : 'Jeton'} !`,
+          text: `🎡 @${r.viewer_name} remporte ${n} ${amount >= 2 ? 'jetons' : 'jeton'} à la Roue du Sub !`,
           delayMs,
         },
       ],
@@ -310,8 +315,9 @@ export class SubWheelService {
         mode: SwMode;
         recovery_enabled: boolean;
         invitations_enabled: boolean;
+        announce_delay_s: number;
       }>(
-        `select enabled, updated_at, mode, recovery_enabled, invitations_enabled from sw_settings
+        `select enabled, updated_at, mode, recovery_enabled, invitations_enabled, announce_delay_s from sw_settings
          where channel_id = $1`,
         [channelId],
       )
@@ -322,6 +328,9 @@ export class SubWheelService {
       mode: r?.mode ?? ('v1' as SwMode),
       recovery_enabled: r?.recovery_enabled ?? false,
       invitations_enabled: r?.invitations_enabled ?? false,
+      announce_delay_s: r
+        ? Number(r.announce_delay_s)
+        : SW_ANNOUNCE_DELAY_MS / 1000,
       // Lab Core: the Lab's simulators exist (presence, events), and the gains pay the Lab test wallet.
       lab: (await this.presenceMode()) === 'lab_sim',
     };
@@ -349,6 +358,46 @@ export class SubWheelService {
         action: 'sw_invitations',
         before: { invitations_enabled: before?.invitations_enabled ?? false },
         after: { invitations_enabled: enabled },
+      });
+    });
+    return this.settings(channelId);
+  }
+
+  /**
+   * The winner announcement's delay after the end of the animation (0–60 s): the broadcaster only (Studio), journaled.
+   * Applies to the wheels ending from now on (an announcement already scheduled keeps its time).
+   */
+  async setAnnounceDelay(channelId: string, seconds: number, actor: string) {
+    if (
+      !Number.isInteger(seconds) ||
+      seconds < 0 ||
+      seconds > SW_ANNOUNCE_DELAY_MAX_S
+    )
+      throw new SwError(400, 'invalid_announce_delay');
+    await this.db.tx(async (q) => {
+      const now = this.now();
+      const before = (
+        await q.query<{ announce_delay_s: number }>(
+          'select announce_delay_s from sw_settings where channel_id = $1 for update',
+          [channelId],
+        )
+      )[0];
+      await q.query(
+        `insert into sw_settings (channel_id, enabled, updated_at, announce_delay_s) values ($1, false, $2, $3)
+         on conflict (channel_id) do update set announce_delay_s = $3, updated_at = $2`,
+        [channelId, now, seconds],
+      );
+      await this.audit(q, {
+        channelId,
+        actor,
+        role: 'broadcaster',
+        action: 'sw_announce_delay',
+        before: {
+          announce_delay_s: before
+            ? Number(before.announce_delay_s)
+            : SW_ANNOUNCE_DELAY_MS / 1000,
+        },
+        after: { announce_delay_s: seconds },
       });
     });
     return this.settings(channelId);
@@ -1575,7 +1624,17 @@ export class SubWheelService {
           this.now(),
         ],
       );
-      await this.announce(q, { ...r, status }, SW_ANNOUNCE_DELAY_MS);
+      const delay = (
+        await q.query<{ announce_delay_s: number }>(
+          'select announce_delay_s from sw_settings where channel_id = $1',
+          [r.channel_id],
+        )
+      )[0];
+      await this.announce(
+        q,
+        { ...r, status },
+        delay ? Number(delay.announce_delay_s) * 1000 : SW_ANNOUNCE_DELAY_MS,
+      );
       return { status };
     });
   }

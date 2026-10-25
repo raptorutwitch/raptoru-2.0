@@ -204,6 +204,28 @@ describe('Roue du Sub V2 — R4, Lab end to end (Studio API, real Lab Core, simu
     expect(tx[0]).toEqual({ n: 1, total: amount });
   });
 
+  it('RV2-1 — « Annonce du gain »: the delay saved from Studio reaches Core (0–60 s) and the section shows it', async () => {
+    const l = await lab(false);
+    expect((await l.state()).settings.announce_delay_s).toBe(8);
+    expect(
+      (
+        await l.api<{ announce_delay_s: number }>('POST', '/announce-delay', {
+          seconds: 20,
+        })
+      ).announce_delay_s,
+    ).toBe(20);
+    await expect(
+      l.api('POST', '/announce-delay', { seconds: 61 }),
+    ).rejects.toThrow();
+    const s = await l.state();
+    expect(s.settings.announce_delay_s).toBe(20);
+    const html = subWheelView(s, null, { tab: 'settings', grantOpen: false });
+    expect(html).toContain('data-f="sw-announce-delay"');
+    expect(html).toContain('value="20"');
+    expect(html).toContain('Actuel : 20 s');
+    expect(html).toContain('remporte');
+  });
+
   it('« Accorder un tour » then « Tirer » from Studio; a tour « À vérifier » decided from Studio (merge: never drawn)', async () => {
     const l = await lab(false);
     await l.api('POST', '/settings', { enabled: true });
