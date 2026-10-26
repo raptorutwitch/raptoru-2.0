@@ -313,9 +313,7 @@ describe('Caution', () => {
     expect(await l.say(D!, 'oui')).toBe('ignored');
     expect(await l.say(D!, '!caution viewer2')).toBe('quote_pending');
     expect(await l.say(C!, 'OUI')).toBe('released');
-    expect(l.chat.at(-1)).toBe(
-      '@viewer3 a libéré viewer2 pour 8 000 jetons !',
-    );
+    expect(l.chat.at(-1)).toBe('@viewer3 a libéré viewer2 pour 8 000 jetons !');
     expect(l.wallet.balances.get(C!.id)).toBe(2_000);
     expect(l.twitch.releases).toEqual(['viewer2']);
   });

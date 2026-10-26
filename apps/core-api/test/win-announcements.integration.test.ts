@@ -237,7 +237,7 @@ describe.skipIf(!isLocal)('winner announcements, real Postgres', () => {
     ).map((x) => x.text);
     expect(texts).toHaveLength(1);
     expect(texts[0]).toMatch(
-      /^Tombola terminée ! Félicitations aux gagnants qui remportent 10 000 Jetons chacun : V93\d\d, V93\d\d, V93\d\d !$/,
+      /^🎉 Félicitations aux gagnants : @V93\d\d - 10 000 jetons · @V93\d\d - 10 000 jetons · @V93\d\d - 10 000 jetons$/,
     );
   });
 });

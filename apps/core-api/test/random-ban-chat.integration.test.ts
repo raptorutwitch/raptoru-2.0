@@ -105,11 +105,12 @@ describe.skipIf(!isLocal)('!rb from the chat on a real Postgres', () => {
       ),
     ).toBe(1);
     expect(await tokens('9001')).toBe(75_000);
+    // No success message (the ban is the answer), and nothing written twice.
     expect(
       await n(
         `select count(*) as n from cmd_steps where idempotency_key = 'rb:msg:tw-dup-1'`,
       ),
-    ).toBe(1);
+    ).toBe(0);
   });
 
   it('two different messages with Jetons for one: one Random Ban, the other refused, never below 0', async () => {
