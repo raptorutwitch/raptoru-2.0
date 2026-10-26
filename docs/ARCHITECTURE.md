@@ -59,23 +59,23 @@ Studio en développement (`npm run studio`), sans Twitch, OBS ni services de Pro
 
 Les documents de module sont référencés par des commentaires du code : **ne pas les déplacer**.
 
-| Module                                | Document                                                                                                                           |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Économie / Wallet / migration SE      | [ECONOMY_MIGRATION.md](ECONOMY_MIGRATION.md)                                                                                       |
-| Commands V2                           | [COMMANDS_V2_STATUS.md](COMMANDS_V2_STATUS.md), [CHAT_COMMANDS.md](CHAT_COMMANDS.md)                                               |
-| Modération D4                         | [moderation-v2-d4-parity.md](moderation-v2-d4-parity.md)                                                                           |
-| Tombola                               | [tombola-v2-parity.md](tombola-v2-parity.md)                                                                                       |
-| Jeu des mots · Roulette / Slot · Duel | [WORD_GAME_PARITY.md](WORD_GAME_PARITY.md) · [ROULETTE_SLOT_PARITY.md](ROULETTE_SLOT_PARITY.md) · [DUEL_PARITY.md](DUEL_PARITY.md) |
-| Bonk                                  | [BONK_VNEXT_AUDIT_2026-10.md](BONK_VNEXT_AUDIT_2026-10.md) (+ provenance [bonk-lab.md](bonk-lab.md))                               |
-| Alertes Twitch                        | [TWITCH_ALERTS_PARITY_2026-10.md](TWITCH_ALERTS_PARITY_2026-10.md)                                                                 |
-| Points de chaîne · lecteur d'effets   | [CHANNEL_POINTS_V1.md](CHANNEL_POINTS_V1.md) · [EFFECTS_PLAYER.md](EFFECTS_PLAYER.md)                                              |
-| Random Ban                            | [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md)                                                                                               |
-| Roue du Sub                           | V1 [SUB_WHEEL.md](SUB_WHEEL.md) ; V2 : `docs/SUB_WHEEL_V2_PLAN.md` (non suivi, checkout principal)                                 |
-| Votekick · Caution                    | [VOTEKICK_V2.md](VOTEKICK_V2.md) · [CAUTION.md](CAUTION.md)                                                                        |
-| Centre de contrôle · bot unique       | [CONTROL_CENTER.md](CONTROL_CENTER.md) · [PLAN_POST_LIVE_2026-10-21.md](PLAN_POST_LIVE_2026-10-21.md) (lots 1–4)                   |
-| Comptes Twitch / OAuth                | [TWITCH_OAUTH.md](TWITCH_OAUTH.md)                                                                                                 |
-| Extension (calibration vidéo)         | [TWITCH_GEOMETRY_CALIBRATION_2026-10.md](TWITCH_GEOMETRY_CALIBRATION_2026-10.md), `apps/twitch-extension/README.md`                |
-| Registre d'audit (historique)         | [ASTRA_GLOBAL_AUDIT_2026-10.md](ASTRA_GLOBAL_AUDIT_2026-10.md)                                                                     |
+| Module                                | Document                                                                                                                                                                                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Économie / Wallet / migration SE      | [ECONOMY_MIGRATION.md](ECONOMY_MIGRATION.md)                                                                                                                                                                 |
+| Commands V2                           | [COMMANDS_V2_STATUS.md](COMMANDS_V2_STATUS.md), [CHAT_COMMANDS.md](CHAT_COMMANDS.md)                                                                                                                         |
+| Modération D4                         | [moderation-v2-d4-parity.md](moderation-v2-d4-parity.md)                                                                                                                                                     |
+| Tombola                               | [tombola-v2-parity.md](tombola-v2-parity.md)                                                                                                                                                                 |
+| Jeu des mots · Roulette / Slot · Duel | [WORD_GAME_PARITY.md](WORD_GAME_PARITY.md) · [ROULETTE_SLOT_PARITY.md](ROULETTE_SLOT_PARITY.md) · [DUEL_PARITY.md](DUEL_PARITY.md)                                                                           |
+| Bonk                                  | [BONK_VNEXT_AUDIT_2026-10.md](BONK_VNEXT_AUDIT_2026-10.md) (+ provenance [bonk-lab.md](bonk-lab.md))                                                                                                         |
+| Alertes Twitch                        | [TWITCH_ALERTS_PARITY_2026-10.md](TWITCH_ALERTS_PARITY_2026-10.md)                                                                                                                                           |
+| Points de chaîne · lecteur d'effets   | [CHANNEL_POINTS_V1.md](CHANNEL_POINTS_V1.md) · [EFFECTS_PLAYER.md](EFFECTS_PLAYER.md)                                                                                                                        |
+| Random Ban                            | [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md)                                                                                                                                                                         |
+| Roue du Sub                           | V2 (en Production) : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) (livraison, états, retour arrière) · [SUB_WHEEL_V2_PLAN.md](SUB_WHEEL_V2_PLAN.md) (conception) ; V1 : [SUB_WHEEL.md](SUB_WHEEL.md) |
+| Votekick · Caution                    | [VOTEKICK_V2.md](VOTEKICK_V2.md) · [CAUTION.md](CAUTION.md)                                                                                                                                                  |
+| Centre de contrôle · bot unique       | [CONTROL_CENTER.md](CONTROL_CENTER.md) · [PLAN_POST_LIVE_2026-10-21.md](PLAN_POST_LIVE_2026-10-21.md) (lots 1–4)                                                                                             |
+| Comptes Twitch / OAuth                | [TWITCH_OAUTH.md](TWITCH_OAUTH.md)                                                                                                                                                                           |
+| Extension (calibration vidéo)         | [TWITCH_GEOMETRY_CALIBRATION_2026-10.md](TWITCH_GEOMETRY_CALIBRATION_2026-10.md), `apps/twitch-extension/README.md`                                                                                          |
+| Registre d'audit (historique)         | [ASTRA_GLOBAL_AUDIT_2026-10.md](ASTRA_GLOBAL_AUDIT_2026-10.md)                                                                                                                                               |
 
 Certains de ces documents ont un en-tête de statut antérieur à la Production (« non déployé ») : l'état qui fait foi
 est celui de [ROADMAP.md](ROADMAP.md).

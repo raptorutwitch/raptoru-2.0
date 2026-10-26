@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **26/10/2026 ~12:15 UTC** (**Roue du Sub V2 en Production, mode `v2` actif** : Core et bot `1df65d1`, Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **26/10/2026** (**Roue du Sub V2 en Production, mode `v2` actif** : Core et bot `1df65d1`, Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -10,7 +10,8 @@ SAMMI est **abandonné** (débranché le 20/10). Architecture : [ARCHITECTURE.md
 ## 1. Où se trouvent les documents (important)
 
 Les documents de référence sont sur **`origin/main`** (poussés le 24/10). Le checkout principal
-`C:\Users\Antoni\Documents\Raptoru 2.0` est en retard (`main` local @ `11ffe3f`, Roue V2 non commitée par-dessus) :
+`C:\Users\Antoni\Documents\Raptoru 2.0` est en retard (`main` local @ `11ffe3f`, avec par-dessus l'ancienne copie non commitée de la Roue V2, remplacée par
+`main`) :
 seuls `CLAUDE.md` et ce fichier (copie non suivie, identique) y sont à jour. Lire les autres dans le worktree
 **`C:\Users\Antoni\Documents\raptoru-docs`** (branche `docs/consolidation` = `origin/main` ; la mettre à jour avec
 `git -C C:\Users\Antoni\Documents\raptoru-docs pull --ff-only origin main`) ou avec `git show origin/main:docs/ROADMAP.md`
@@ -25,27 +26,30 @@ depuis le checkout principal.
 | Journal détaillé 21→24/10 (dont chantier Roue V2), anciens documents | [archive/](archive/README.md)                               |
 | Règles de travail des agents                                         | `CLAUDE.md` (racine)                                        |
 
-## 2. Production (relevé 26/10 ~12:15 UTC)
+## 2. Production (relevé 26/10 ~12:20 UTC)
 
-| Élément              | Version                                                                                                                                                                          | Remarque                                                            |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Core `raptoru-core`  | **`1df65d1`** (déployé 26/10 11:52 UTC depuis GitHub Actions, migrations Roue V2 `preapplied` : 7 fichiers conformes et enregistrés)                                             | `running:healthy`, `/health` `/ready` 200 ; retour : `0b11cc0`      |
-| Bot `raptoru-bot`    | **`1df65d1`** (déployé 26/10 ~11:55 UTC depuis GitHub Actions ; 409 `not_lease_holder` jamais définitif)                                                                         | bail repris, EventSub bot et diffuseur OK ; retour : `0b11cc0`      |
-| `origin/main`        | `1df65d1` = PR #11 (Roue du Sub V2) ; « État de la livraison » donne le commit exact                                                                                             | Coolify : auto-deploy désactivé                                     |
-| Studio installé (PC) | **0.1.8** (construite par GitHub depuis `1df65d1`, publiée le 26/10, installée par Antoni) ; profil copié avant : `Sauvegarde Raptoru 2.0\studio-profile-avant-0.1.8-2026-10-26` | retour : réinstaller 0.1.7 (release publique)                       |
-| Roue du Sub          | **V2 active** (mode `v2`, interrupteur ON) depuis le 26/10 12:12 UTC ; invitations OFF, récupération des doubles crédits OFF                                                     | retour : Studio → Roue du Sub → Réglages → `v1` (aucun droit perdu) |
-| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                                              | publication manuelle par Antoni                                     |
-| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                                                        | Node non épinglé (décision en attente)                              |
-| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                                              | journaux du bot sur `/data`                                         |
-| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                                                     | ne pas modifier ces réglages sans GO                                |
+| Élément              | Version                                                                                                                                                                          | Remarque                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Core `raptoru-core`  | **`1df65d1`** (déployé 26/10 11:52 UTC depuis GitHub Actions, migrations Roue V2 `preapplied` : 7 fichiers conformes et enregistrés)                                             | `running:healthy`, `/health` `/ready` 200 ; retour : `0b11cc0`                   |
+| Bot `raptoru-bot`    | **`1df65d1`** (déployé 26/10 ~11:55 UTC depuis GitHub Actions ; 409 `not_lease_holder` jamais définitif)                                                                         | bail repris, EventSub bot et diffuseur OK ; retour : `0b11cc0`                   |
+| `origin/main`        | PR #11 (`1df65d1`, code de la Roue V2, **déployé**), puis PR #12 et suivantes : documentation seulement                                                                          | Coolify : auto-deploy désactivé                                                  |
+| Studio installé (PC) | **0.1.8** (construite par GitHub depuis `1df65d1`, publiée le 26/10, installée par Antoni) ; profil copié avant : `Sauvegarde Raptoru 2.0\studio-profile-avant-0.1.8-2026-10-26` | retour : réinstaller 0.1.7 (release publique)                                    |
+| Roue du Sub          | **V2 active** (mode `v2`, interrupteur ON) depuis le 26/10 12:12 UTC ; **invitations ON** (activées par Antoni le 26/10 12:20 UTC) ; récupération des doubles crédits OFF        | détails et retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) |
+| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                                              | publication manuelle par Antoni                                                  |
+| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                                                        | Node non épinglé (décision en attente)                                           |
+| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                                              | journaux du bot sur `/data`                                                      |
+| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                                                     | ne pas modifier ces réglages sans GO                                             |
 
 Fonctions en Production : économie canonique (Wallet, Daily, fidélité, présence), Commands V2 (`cmd_steps`), modération
 D4, Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2, Points de chaîne et effets,
-Random Ban, Roue du Sub V1, Caution, Votekick V2, **Spotify V2** (demandes de musique sans SAMMI). Niveau de validation
+Random Ban, **Roue du Sub V2** (26/10), Caution, Votekick V2, **Spotify V2** (demandes de musique sans SAMMI). Niveau de validation
 de chacune : [ROADMAP.md](ROADMAP.md).
 
-## 3. Dernières livraisons et décisions (24–25/10)
+## 3. Dernières livraisons et décisions (24–26/10)
 
+- **Roue du Sub V2 — livrée et active le 26/10** (PR #11 et #12) : droits persistants, tirage à l'affichage, reprise
+  automatique des roues jamais démarrées sans second crédit, « À vérifier » pour les cas ambigus ; invitations ON.
+  Livraison, états, limites, retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md).
 - **Infrastructure — chantier clos le 25/10** : CI/CD en service ([CICD.md](CICD.md)) ; Coolify : tableau de bord
   `https://dashboard.raptoru.fr`, API `https://coolify.raptoru.fr`, ports 8000/6001/6002 fermés depuis Internet en
   IPv4 et IPv6 ([OPERATIONS.md](OPERATIONS.md) § 8 : état, secours par la console VNC, retour arrière).
@@ -67,16 +71,16 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 ## 4. Travaux en cours — ne rien écraser
 
-| Où                                                                                                    | Contenu                                                                                                                                                                                                                                                                                      | État                                                                                                                                                       |
-| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0` (`main` @ `11ffe3f`, 33 commits de retard) | **Roue du Sub V2** (41 modifiés + 35 non suivis), correctif « écran gris » de l'extension, `CLAUDE.md` local, documents non suivis                                                                                                                                                           | non commité. **C'est aussi le dossier de données de Studio installé** (`.env`, jetons, `.runtime`) : jamais de `git clean`, `reset --hard` ou `checkout .` |
-| `…\scratchpad\sup-wt` (`fix/supervision` @ `2d80c2a`)                                                 | supervision, OAuth du PC, Ctrl+R Soundboard, updater de test                                                                                                                                                                                                                                 | **intégré au dépôt** (PR #1, `eb3f05a`, identique au source de sup.10) ; le worktree peut être retiré après la fusion                                      |
-| `C:\Users\Antoni\Documents\raptoru-release` (`chore/coolify-deploy` @ `1f10da3`)                      | script de déploiement Coolify (`ef79a37`, `80f3525`, `1f10da3`)                                                                                                                                                                                                                              | **intégré au dépôt** (PR #1, historique conservé) et étendu (CI, live, vérifications) ; ce worktree n'est plus l'unique copie                              |
-| `C:\Users\Antoni\Documents\rs-vk`                                                                     | clone de build Studio (patch `sup-wt` appliqué + `stash@{0}`), dossier `GO/` (runbook, SQL)                                                                                                                                                                                                  | ne pas nettoyer                                                                                                                                            |
-| `…\scratchpad\{chat,wg,solde,node}-wt`                                                                | restes de lots déjà intégrés                                                                                                                                                                                                                                                                 | à revérifier avant tout retrait                                                                                                                            |
-| `C:\Users\Antoni\Documents\raptoru-roue-v2`                                                           | Roue du Sub V2 : **livrée** (PR #11) ; Lab isolé `lab-v2.cmd` (port 4200, base Docker `raptoru-lab-v2-pg`) ; paquet de livraison `Documents\raptoru-roue-v2-GO\` (SQL, installateur 0.1.8) ; ancien travail : `backup/roue-v2-wip-2026-10-25` + `Sauvegarde Raptoru 2.0\roue-v2-2026-10-25\` | worktree retirable (la copie non commitée du checkout principal est remplacée par `main`)                                                                  |
-| `C:\Users\Antoni\Documents\raptoru-docs` (`docs/consolidation`)                                       | documentation, = `origin/main`                                                                                                                                                                                                                                                               | poussé                                                                                                                                                     |
-| `C:\Users\Antoni\Documents\raptoru-spotify` (`feat/spotify-v2` = `origin/main`)                       | **Spotify V2** ; installateurs sup.9 / sup.10 et SHA-256 : `Documents\raptoru-spotify-GO\`                                                                                                                                                                                                   | livré, validé et **clos** le 25/10 ; rien en attente                                                                                                       |
+| Où                                                                                                           | Contenu                                                                                                                                                                                                                                                                                      | État                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0` (`main` @ `11ffe3f`, en retard sur `origin/main`) | ancienne copie non commitée de la **Roue du Sub V2** (remplacée par `main`, PR #11), correctif « écran gris » de l'extension (**non commité**), documents non suivis ; les deux premiers aussi dans `backup/roue-v2-wip-2026-10-25`                                                          | **C'est aussi le dossier de données de Studio installé** (`.env`, jetons, `.runtime`) : jamais de `git clean`, `reset --hard` ou `checkout .` |
+| `…\scratchpad\sup-wt` (`fix/supervision` @ `2d80c2a`)                                                        | supervision, OAuth du PC, Ctrl+R Soundboard, updater de test                                                                                                                                                                                                                                 | **intégré au dépôt** (PR #1, `eb3f05a`, identique au source de sup.10) ; le worktree peut être retiré après la fusion                         |
+| `C:\Users\Antoni\Documents\raptoru-release` (`chore/coolify-deploy` @ `1f10da3`)                             | script de déploiement Coolify (`ef79a37`, `80f3525`, `1f10da3`)                                                                                                                                                                                                                              | **intégré au dépôt** (PR #1, historique conservé) et étendu (CI, live, vérifications) ; ce worktree n'est plus l'unique copie                 |
+| `C:\Users\Antoni\Documents\rs-vk`                                                                            | clone de build Studio (patch `sup-wt` appliqué + `stash@{0}`), dossier `GO/` (runbook, SQL)                                                                                                                                                                                                  | ne pas nettoyer                                                                                                                               |
+| `…\scratchpad\{chat,wg,solde,node}-wt`                                                                       | restes de lots déjà intégrés                                                                                                                                                                                                                                                                 | à revérifier avant tout retrait                                                                                                               |
+| `C:\Users\Antoni\Documents\raptoru-roue-v2`                                                                  | Roue du Sub V2 : **livrée** (PR #11) ; Lab isolé `lab-v2.cmd` (port 4200, base Docker `raptoru-lab-v2-pg`) ; paquet de livraison `Documents\raptoru-roue-v2-GO\` (SQL, installateur 0.1.8) ; ancien travail : `backup/roue-v2-wip-2026-10-25` + `Sauvegarde Raptoru 2.0\roue-v2-2026-10-25\` | worktree retirable (la copie non commitée du checkout principal est remplacée par `main`)                                                     |
+| `C:\Users\Antoni\Documents\raptoru-docs` (`docs/consolidation`)                                              | documentation, = `origin/main`                                                                                                                                                                                                                                                               | poussé                                                                                                                                        |
+| `C:\Users\Antoni\Documents\raptoru-spotify` (`feat/spotify-v2` = `origin/main`)                              | **Spotify V2** ; installateurs sup.9 / sup.10 et SHA-256 : `Documents\raptoru-spotify-GO\`                                                                                                                                                                                                   | livré, validé et **clos** le 25/10 ; rien en attente                                                                                          |
 
 `scratchpad` = `C:\Users\Antoni\AppData\Local\Temp\claude\C--Users-Antoni-Documents-Raptoru-2-0\c435dbde-5dd7-4b54-8561-68eabf04712a\scratchpad`
 (**dossier temporaire Windows ; l'Assistant de stockage y supprime des fichiers** : instantané du 24/10 dans
@@ -90,21 +94,20 @@ de chacune : [ROADMAP.md](ROADMAP.md).
    Coolify (pas d'API, pas de SSH, pas de S3) ; restauration démontrée une seule fois (20/10).
 3. Worktrees de travail non commité sous `AppData\Local\Temp` (risque de nettoyage automatique).
 4. ~~Bot : 409 `not_lease_holder` définitif~~ : corrigé et déployé le 26/10 (`1df65d1`).
-5. `main` local en retard sur `origin/main` avec la Roue V2 non commitée par-dessus : l'intégration demande un rebase prudent.
+5. Checkout principal en retard sur `origin/main`, avec une copie de la Roue V2 désormais obsolète : sa mise à jour doit
+   préserver les données de Studio et le correctif « écran gris » non commité (jamais de reset ni de clean).
 6. Plusieurs documents de module ont encore un en-tête « non déployé » : la roadmap fait foi.
 
 ## 6. Prochaine action
 
 1. Votekick : le son de lancement est validé (25/10) ; reste à confirmer la durée de vote réglable sur un vrai vote
    (GO requis pour tout vote réel).
-2. **Roue du Sub V2** : en Production (mode `v2`). Au premier live : surveiller Historique et « À vérifier » ; décider
-   des invitations (OFF) ; extension (module Roue du Hub) : publication facultative
-   ([SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7).
+2. **Roue du Sub V2** (livrée, active) : observer le premier live ([SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7, « À observer »).
 3. Arbitrage restant de [ROADMAP.md](ROADMAP.md) § 3 : incident Twitch du 22/10 + Bonk/DSK.
 
 ## 7. Actions en attente d'accord d'Antoni
 
-- Lors de la mise à jour du checkout principal sur `origin/main` (avec la reprise de la Roue V2) : retirer d'abord la
+- Lors de la mise à jour du checkout principal sur `origin/main` (sa copie de la Roue V2 est remplacée par `main`) : retirer d'abord la
   copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
 - **CI/CD** ([CICD.md](CICD.md)) : chantier clos le 25/10 — CI, déploiement du Core (11:11 UTC) et du bot (12:40
   UTC) depuis GitHub, publication Studio depuis GitHub (brouillon de test 0.1.8 créé, vérifié, supprimé) validés pour
@@ -131,7 +134,7 @@ de chacune : [ROADMAP.md](ROADMAP.md).
    `node scripts/delivery/status.mjs` (ou `node scripts/coolify-deploy.mjs status core` / `… status bot`).
 3. Lire [ROADMAP.md](ROADMAP.md) § 3 (prochain travail, arbitrages), puis le document du module concerné
    ([ARCHITECTURE.md](ARCHITECTURE.md) § 5).
-4. Travailler dans un worktree dédié basé sur `origin/main` (jamais dans le checkout principal, qui porte la Roue V2
-   et les données de Studio), sauf pour reprendre la Roue V2 elle-même.
+4. Travailler dans un worktree dédié basé sur `origin/main`, jamais dans le checkout principal (données de Studio,
+   travail non commité).
 5. À chaque étape franchie et avant de s'arrêter : mettre à jour ce fichier (court : état, décisions, prochaine
    action) ; le détail daté va dans un journal sous `archive/`.

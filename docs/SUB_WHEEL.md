@@ -1,6 +1,10 @@
 # Roue du Sub
 
-**Statut (18/10/2026) : migration technique DÉVELOPPÉE / TESTS AUTOMATISÉS RÉUSSIS / rendu OBS et test complet simulé VALIDÉS par Antoni (19/10/2026) /
+**Statut (26/10/2026) : V1 déployée au cutover du 20/10, interrupteur ON depuis le 20/10 ; remplacée en Production
+par la V2 le 26/10 ([SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md)), la V1 restant le mode de retour `v1`.** Ce
+document décrit la V1 (roue, tirage, gains) ; le statut historique du 18/10 suit.
+
+**Statut historique (18/10/2026) : migration technique DÉVELOPPÉE / TESTS AUTOMATISÉS RÉUSSIS / rendu OBS et test complet simulé VALIDÉS par Antoni (19/10/2026) /
 DÉSACTIVÉE (interrupteur OFF) / gains raccordés au Wallet canonique (19/10, local, jamais activé — § 3) / NON DÉPLOYÉE.** En live, SAMMI garde la roue
 tant qu'Antoni n'a pas validé le rendu et décidé du raccordement économique.
 
