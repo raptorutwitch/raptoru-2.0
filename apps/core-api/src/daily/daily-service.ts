@@ -121,12 +121,7 @@ export class DailyService {
     const name = viewer.displayName;
     const message =
       decision.outcome === 'claimed'
-        ? dailyMessages.claimed(
-            name,
-            decision.reward,
-            decision.streakAfter,
-            decision.totalAfter,
-          )
+        ? dailyMessages.claimed(name, decision.reward)
         : decision.outcome === 'already_claimed'
           ? dailyMessages.alreadyClaimed(name)
           : dailyMessages.noActiveStream();

@@ -451,7 +451,7 @@ export class VotekickEngine {
       const remainingS = this.muteRemainingS();
       const price = open('mute', remainingS);
       await this.p.say(
-        `${target.login} est réduit au silence pour encore environ ${remainingS} seconde(s) ! Coût de la caution : ${fmt(price)} jetons. ${payer.login}, réponds oui pour payer ou non pour annuler.`,
+        `${target.login} est réduit au silence encore ${remainingS} ${remainingS > 1 ? 'secondes' : 'seconde'}. Le libérer coûte ${fmt(price)} jetons, @${payer.login}. Oui ou non ?`,
       );
       return 'quoted';
     }
@@ -480,8 +480,9 @@ export class VotekickEngine {
       return 'ended';
     }
     const price = open('timeout', remainingS);
+    const min = Math.ceil(remainingS / 60);
     await this.p.say(
-      `${target.login} est encore timeout pour environ ${Math.ceil(remainingS / 60)} minute(s) ! Coût de la caution : ${fmt(price)} jetons. ${payer.login}, réponds oui pour payer ou non pour annuler.`,
+      `${target.login} est banni encore ${min} ${min > 1 ? 'minutes' : 'minute'}. Le libérer coûte ${fmt(price)} jetons, @${payer.login}. Oui ou non ?`,
     );
     return 'quoted';
   }
@@ -562,7 +563,7 @@ export class VotekickEngine {
 
   /** CAUTION_FINISH: the sanction lifted, checked; refunded once when it surely failed. */
   private async release(q: Quote): Promise<string> {
-    const freed = `${q.payer.login} paie ${fmt(q.price)} jetons : ${q.target.login} est libéré !`;
+    const freed = `@${q.payer.login} a libéré ${q.target.login} pour ${fmt(q.price)} jetons !`;
     if (q.kind === 'mute') {
       const m = this.mute;
       this.mute = null;

@@ -70,7 +70,7 @@ describe('currencies', () => {
     });
     await give(core, alice, 12430);
     expect((await core.wallet.chat.balance({ viewer: alice })).message).toBe(
-      '@Alice — tu as 12 430 Bonbons.',
+      '@Alice - 12 430 Bonbons',
     );
   });
 
@@ -82,18 +82,18 @@ describe('currencies', () => {
     expect(
       (await core.wallet.chat.balance({ viewer: bob, requester: alice }))
         .message,
-    ).toBe('@Alice — @Bob a 4 500 Jetons.');
+    ).toBe('@Alice - @Bob a 4 500 Jetons');
     expect(
       (await core.wallet.chat.balance({ viewer: alice, requester: bob }))
         .message,
-    ).toBe('@Bob — @Alice a 300 Jetons.');
+    ).toBe('@Bob - @Alice a 300 Jetons');
     expect(
       (await core.wallet.chat.balance({ viewer: alice, requester: alice }))
         .message,
-    ).toBe('@Alice — tu as 300 Jetons.');
+    ).toBe('@Alice - 300 Jetons');
     // Read-only: no balance changed.
     expect((await core.wallet.chat.balance({ viewer: bob })).message).toBe(
-      '@Bob — tu as 4 500 Jetons.',
+      '@Bob - 4 500 Jetons',
     );
   });
 
@@ -552,7 +552,7 @@ describe('admin corrections and debt', () => {
       ).rejection,
     ).toBe('in_debt');
     expect((await core.wallet.chat.balance({ viewer: alice })).message).toBe(
-      '@Alice — dette actuelle : 1 100 Jetons.',
+      '@Alice - dette actuelle : 1 100 Jetons',
     );
   });
 

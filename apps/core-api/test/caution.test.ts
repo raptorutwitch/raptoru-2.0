@@ -179,8 +179,8 @@ describe('Caution: the normal payment', () => {
       money: 'debited',
     });
     expect(await l.replies()).toEqual([
-      'viewer2 est encore timeout pour environ 8 minute(s) ! Coût de la caution : 8 000 jetons. viewer1, réponds oui pour payer ou non pour annuler.',
-      'viewer1 paie 8 000 jetons : viewer2 est libéré !',
+      'viewer2 est banni encore 8 minutes. Le libérer coûte 8 000 jetons, @viewer1. Oui ou non ?',
+      '@viewer1 a libéré viewer2 pour 8 000 jetons !',
     ]);
     expect(await l.ledger()).toEqual([{ kind: 'debit', amount: -8000 }]);
   });
@@ -198,7 +198,9 @@ describe('Caution: the normal payment', () => {
     expect(await l.replies()).toEqual([
       'Lève le ban de quelqu’un en payant pour lui - !caution "pseudo"',
       'viewer1, tu ne peux pas payer ta propre caution',
-      expect.stringContaining('Coût de la caution : 8 000 jetons'),
+      expect.stringContaining(
+        'Le libérer coûte 8 000 jetons, @viewer1. Oui ou non ?',
+      ),
       'Caution annulée par viewer1. Aucun jeton débité.',
     ]);
   });
@@ -388,7 +390,7 @@ describe('Caution: concurrency', () => {
     await Promise.all([l.caution.result(id, done), l.caution.result(id, done)]);
     expect(await l.ledger()).toEqual([{ kind: 'debit', amount: -8000 }]);
     expect(
-      (await l.replies()).filter((t) => t.includes('est libéré')),
+      (await l.replies()).filter((t) => t.includes('a libéré')),
     ).toHaveLength(1);
   });
 
@@ -664,7 +666,7 @@ describe('Caution: the broadcaster’s Votekick mute', () => {
       sanction: { kind: 'none' },
     });
     expect((await l.replies()).at(-1)).toBe(
-      'raptoru_ est réduit au silence pour encore environ 65 seconde(s) ! Coût de la caution : 2 000 jetons. viewer3, réponds oui pour payer ou non pour annuler.',
+      'raptoru_ est réduit au silence encore 65 secondes. Le libérer coûte 2 000 jetons, @viewer3. Oui ou non ?',
     );
     expect((await l.say(OTHER, 'oui')).outcome).toBe('released');
     expect(m.ended).toEqual(['mute:vk-1']);

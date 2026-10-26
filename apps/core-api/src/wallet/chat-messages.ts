@@ -15,8 +15,8 @@ const balanceOf = (r: WalletOperationResult, id: string) =>
 export const walletMessages = {
   balance: (name: string, balance: number, c: Currency) =>
     balance < 0
-      ? `@${name} — dette actuelle : ${formatAmount(balance, c)}.`
-      : `@${name} — tu as ${formatAmount(balance, c)}.`,
+      ? `@${name} - dette actuelle : ${formatAmount(balance, c)}`
+      : `@${name} - ${formatAmount(balance, c)}`,
 
   /** `!solde @Pseudo`: someone else's balance, answered to whoever asked. */
   balanceOf: (
@@ -26,8 +26,8 @@ export const walletMessages = {
     c: Currency,
   ) =>
     balance < 0
-      ? `@${requesterName} — dette actuelle de @${targetName} : ${formatAmount(balance, c)}.`
-      : `@${requesterName} — @${targetName} a ${formatAmount(balance, c)}.`,
+      ? `@${requesterName} - dette actuelle de @${targetName} : ${formatAmount(balance, c)}`
+      : `@${requesterName} - @${targetName} a ${formatAmount(balance, c)}`,
 
   transfer: (
     from: { id: string; name: string },
@@ -40,15 +40,15 @@ export const walletMessages = {
       return `✅ @${from.name} → @${toName} : ${formatAmount(amount, c!)} envoyés.`;
     switch (r.rejection) {
       case 'insufficient_funds':
-        return `❌ @${from.name} — solde insuffisant (tu as ${formatAmount(balanceOf(r, from.id), c!)}).`;
+        return `❌ @${from.name} - solde insuffisant (tu as ${formatAmount(balanceOf(r, from.id), c!)}).`;
       case 'in_debt':
-        return `❌ @${from.name} — impossible pendant une dette (${formatAmount(balanceOf(r, from.id), c!)}).`;
+        return `❌ @${from.name} - impossible pendant une dette (${formatAmount(balanceOf(r, from.id), c!)}).`;
       case 'self_transfer':
-        return `❌ @${from.name} — tu ne peux pas te faire un transfert à toi-même.`;
+        return `❌ @${from.name} - tu ne peux pas te faire un transfert à toi-même.`;
       case 'currency_not_transferable':
-        return `❌ @${from.name} — les ${c?.plural ?? 'points'} ne sont pas transférables.`;
+        return `❌ @${from.name} - les ${c?.plural ?? 'points'} ne sont pas transférables.`;
       default:
-        return `❌ @${from.name} — transfert impossible pour le moment.`;
+        return `❌ @${from.name} - transfert impossible pour le moment.`;
     }
   },
 
@@ -62,10 +62,10 @@ export const walletMessages = {
   ) => {
     if (r.status === 'rejected') {
       if (r.rejection === 'no_change')
-        return `ℹ️ @${actorName} — le solde de @${targetName} est déjà à ${formatAmount(balanceOf(r, target), c!)}.`;
+        return `ℹ️ @${actorName} - le solde de @${targetName} est déjà à ${formatAmount(balanceOf(r, target), c!)}.`;
       if (r.rejection === 'negative_not_allowed')
-        return `❌ @${actorName} — cette monnaie n'autorise pas de solde négatif.`;
-      return `❌ @${actorName} — opération refusée (${r.rejection}).`;
+        return `❌ @${actorName} - cette monnaie n'autorise pas de solde négatif.`;
+      return `❌ @${actorName} - opération refusée (${r.rejection}).`;
     }
     const delta = r.amounts[0]?.amount ?? 0;
     const signed = `${delta > 0 ? '+' : '−'}${formatAmount(delta, c!)}`;
@@ -80,5 +80,5 @@ export const walletMessages = {
   },
 
   notAuthorized: (actorName: string) =>
-    `⛔ @${actorName} — commande réservée à l'équipe.`,
+    `⛔ @${actorName} - commande réservée à l'équipe.`,
 };

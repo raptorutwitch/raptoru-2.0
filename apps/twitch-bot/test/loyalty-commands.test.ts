@@ -169,7 +169,7 @@ describe('loyalty command handler', () => {
       d,
     );
     expect(d.say).toHaveBeenLastCalledWith(
-      '@Alice — viewer « ghost » introuvable.',
+      '@Alice - viewer « ghost » introuvable.',
     );
   });
 
@@ -268,7 +268,7 @@ describe('!solde of another viewer', () => {
     const d = await run('!solde pour');
     expect(d.lookupLogin).toHaveBeenCalledWith('pour');
     expect(d.core.walletBalance).not.toHaveBeenCalled();
-    expect(d.say).toHaveBeenCalledWith('@Alice — viewer « pour » introuvable.');
+    expect(d.say).toHaveBeenCalledWith('@Alice - viewer « pour » introuvable.');
   });
 
   it('Twitch answers another login than the one asked: treated as not found', async () => {
@@ -276,7 +276,7 @@ describe('!solde of another viewer', () => {
     d.lookupLogin.mockResolvedValueOnce(carol);
     await run('!solde bob', d);
     expect(d.core.walletBalance).not.toHaveBeenCalled();
-    expect(d.say).toHaveBeenCalledWith('@Alice — viewer « bob » introuvable.');
+    expect(d.say).toHaveBeenCalledWith('@Alice - viewer « bob » introuvable.');
   });
 
   it('Twitch API error: « indisponible », never the author’s balance', async () => {

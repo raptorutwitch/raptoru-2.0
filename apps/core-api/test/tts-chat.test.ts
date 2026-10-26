@@ -103,9 +103,16 @@ describe('!tts in the chat', () => {
     expect(row!.character_id).toBeTruthy();
     expect(await l.tokensOf(alice.id)).toBe(100_000 - 7500);
     expect(await l.tokensOf(bob.id)).toBe(100_000);
-    expect(await l.replies()).toEqual([
-      '@Alice — 🔊 TTS envoyé (7 500 Jetons) · position 1 dans la file.',
-    ]);
+    // Next in line: no success message (the voice is the answer).
+    expect(await l.replies()).toEqual([]);
+  });
+
+  it('a TTS that waits behind another one: one short message with its position (nothing said when it plays next)', async () => {
+    const l = await lab();
+    await l.router.message(msg('!tts premier', alice));
+    await l.router.message(msg('!tts deuxième', bob));
+    expect(await l.replies()).toEqual(['@Bob - TTS en file, position 2.']);
+    expect(await l.tokensOf(bob.id)).toBe(100_000 - 7500);
   });
 
   it('the price follows the length like in the extension (tier 81–150 → 11 250)', async () => {
@@ -124,7 +131,7 @@ describe('!tts in the chat', () => {
     ]);
     expect(await l.interactions()).toBe(1);
     expect(await l.tokensOf(alice.id)).toBe(100_000 - 7500);
-    expect(await l.replies()).toHaveLength(1);
+    expect(await l.replies()).toHaveLength(0);
   });
 
   it('`!tts` alone: the help with the first tier price, free, nothing admitted; at most once per 30 s per viewer', async () => {
@@ -136,7 +143,7 @@ describe('!tts in the chat', () => {
       { module: 'tts', outcome: 'tts_help_throttled' },
     ]);
     expect(await l.replies()).toEqual([
-      '@Alice — Écris ton message après la commande — 7 500 Jetons',
+      '@Alice - Écris ton message après la commande - 7 500 Jetons',
     ]);
     expect(await l.interactions()).toBe(0);
     expect(await l.tokensOf(alice.id)).toBe(100_000);
@@ -165,7 +172,7 @@ describe('!tts in the chat', () => {
     const l = await lab(1200);
     await l.router.message(msg('!tts coucou'));
     expect(await l.replies()).toEqual([
-      '@Alice — Il te faut 7 500 Jetons pour utiliser TTS. Solde : 1 200 Jetons (il te manque 6 300).',
+      '@Alice - Il te faut 7 500 Jetons pour utiliser TTS. Solde : 1 200 Jetons (il te manque 6 300).',
     ]);
     expect(await l.interactions()).toBe(0);
     expect(await l.tokensOf(alice.id)).toBe(1200);
@@ -225,12 +232,12 @@ describe('!tts in the chat', () => {
     await l.router.message(msg('!tts en pause', bob));
     await tts.moderate(CH, { action: 'disable', actor: 'mod' });
     await l.router.message(msg('!tts désactivé', bob));
-    expect((await l.replies()).slice(1)).toEqual([
-      '@Alice — Ton TTS précédent n’est pas encore terminé.',
-      '@Bob — Prochain TTS dans 1 min 30 · rien n’a été débité.',
-      '@Bob — TTS indisponible pour ton compte.',
-      '@Bob — TTS en pause · rien n’a été débité.',
-      '@Bob — TTS désactivé.',
+    expect(await l.replies()).toEqual([
+      '@Alice - Ton TTS précédent n’est pas encore terminé.',
+      '@Bob - Prochain TTS dans 1 min 30 · rien n’a été débité.',
+      '@Bob - TTS indisponible pour ton compte.',
+      '@Bob - TTS en pause · rien n’a été débité.',
+      '@Bob - TTS désactivé.',
     ]);
     await expectNothingPaid();
     expect(await l.tokensOf(bob.id)).toBe(100_000);
@@ -244,7 +251,7 @@ describe('!tts in the chat', () => {
     });
     await l.router.message(msg('!tts coucou'));
     expect(await l.replies()).toEqual([
-      '@Alice — TTS indisponible pour le moment.',
+      '@Alice - TTS indisponible pour le moment.',
     ]);
     expect(await l.interactions()).toBe(0);
     expect(await l.tokensOf(alice.id)).toBe(100_000);
@@ -268,7 +275,7 @@ describe('!tts in the chat', () => {
     expect(await l.tokensOf(alice.id)).toBe(100_000 - 7500);
     if (fromExt.status === 'fulfilled')
       expect(await l.replies()).toEqual([
-        '@Alice — Ton TTS précédent n’est pas encore terminé.',
+        '@Alice - Ton TTS précédent n’est pas encore terminé.',
       ]);
     else expect((fromExt.reason as { code: string }).code).toBe('viewer_busy');
   });

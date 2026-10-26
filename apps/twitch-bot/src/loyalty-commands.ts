@@ -111,7 +111,7 @@ export async function handleLoyaltyMessage(
   const command = parseLoyaltyCommand(message.text);
   if (!command) return;
   const name = message.chatter.displayName;
-  if (command.kind === 'usage') return deps.say(`@${name} — ${command.text}`);
+  if (command.kind === 'usage') return deps.say(`@${name} - ${command.text}`);
 
   try {
     if (command.kind === 'balance' && !command.target) {
@@ -127,7 +127,7 @@ export async function handleLoyaltyMessage(
     const target = found?.login.toLowerCase() === login ? found : null;
     // Never someone else's wallet (nor the author's) when the account is not resolved.
     if (!target)
-      return await deps.say(`@${name} — viewer « ${login} » introuvable.`);
+      return await deps.say(`@${name} - viewer « ${login} » introuvable.`);
 
     if (command.kind === 'balance') {
       const own = target.twitchUserId === message.chatter.twitchUserId;
@@ -162,7 +162,7 @@ export async function handleLoyaltyMessage(
   } catch (error) {
     (deps.log ?? console.error)('[twitch-bot] loyalty command failed', error);
     await deps.say(
-      `⚠️ @${name} — portefeuille momentanément indisponible, réessaie dans un instant.`,
+      `⚠️ @${name} - portefeuille momentanément indisponible, réessaie dans un instant.`,
     );
   }
 }
