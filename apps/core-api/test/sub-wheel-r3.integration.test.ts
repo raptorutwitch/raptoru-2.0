@@ -384,4 +384,52 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R3, real Postgres', () => {
         await n("sw_spins where status = 'merged' and award_status <> 'none'"),
       ).toBe(0);
     });
+  for (const round of ROUNDS)
+    it(`wheels never started, shown again from two players at once and replayed by hand meanwhile: each shown once, never drawn nor credited twice (round ${round})`, async () => {
+      await v2();
+      await live();
+      const vs = viewers(12);
+      for (const [i, v] of vs.entries())
+        await wheel(a).fromAlert(notice(v, i * 1_000), null);
+      await reading(vs, 60_000);
+      clock.set(at(90_000));
+      const [wa, wb] = [wheel(a), wheel(b)];
+      // First pass: every wheel handed to a player that never starts it.
+      for (let k = 0; k < 50; k++) {
+        const got = (
+          await Promise.all([wa, wb].map((w) => w.claimAnimation(CH, 'obs')))
+        ).flatMap((r) => (r.spin ? [r.spin] : []));
+        expect(got.length).toBeLessThanOrEqual(1);
+        if (!got.length) break;
+        await wb.reportAnimation(got[0]!.spin_id, {
+          consumer_id: 'obs',
+          event: 'failed',
+          error: 'effects_player_offline',
+          started: false,
+        });
+      }
+      expect(await n("sw_spins where recovery = 'retry'")).toBe(12);
+      expect(draws).toBe(12);
+      // Due again; meanwhile Studio's « Rejouer l'animation » on half of them, on the other Core.
+      await reading(vs, 100_000);
+      clock.set(at(90_000 + 16_000));
+      const replays = (
+        await a.query<{ spin_id: string }>(
+          "select spin_id from sw_spins where recovery = 'retry' order by seq",
+        )
+      )
+        .filter((_, i) => i % 2)
+        .map((r) => r.spin_id);
+      await Promise.all([
+        drain(wa, wb),
+        ...replays.map((id) =>
+          wb.replayAnimation(id, studio).catch(() => null),
+        ),
+      ]);
+      await drain(wa, wb);
+      expect(await n("sw_spins where status = 'shown'")).toBe(12);
+      expect(await n('sw_spins where recovery is not null')).toBe(0);
+      expect(draws).toBe(12);
+      expect(await credits()).toBe(12);
+    });
 });

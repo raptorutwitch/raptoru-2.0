@@ -335,6 +335,16 @@ export function subWheelRoutes(
       },
     },
     {
+      // « À vérifier » settled: the wheel perhaps seen was seen (nothing drawn nor credited, announced once).
+      method: 'POST',
+      pattern: at(`/spins/${uuid}/confirm-shown`),
+      auth,
+      handle: ({ params, body, installation }) => {
+        const { actor } = actorAndBody(!!production, installation, body);
+        return mapped(() => wheel.confirmShown(params[0]!, actor));
+      },
+    },
+    {
       // RV2-2 « Relancer un tirage »: an exceptional new draw after a draw (the broadcaster only, journaled).
       method: 'POST',
       pattern: at('/(\\d{1,32})/redraw'),

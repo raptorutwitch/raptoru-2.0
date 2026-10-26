@@ -72,6 +72,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Roue du Sub V2 (RV2-4 fix): replaying a draw never shown, without crediting it again; same content as
   // 20261109200000_sub_wheel_v2_replay_lab.sql.
   '20261109210000_sub_wheel_v2_replay.sql',
+  // Roue du Sub V2: what happens to a wheel never shown (shown again automatically, by hand, or « À vérifier »); same
+  // content as 20261109220000_sub_wheel_v2_recovery_lab.sql.
+  '20261109230000_sub_wheel_v2_recovery.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -146,6 +149,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261109180000_sub_wheel_v2_redraw_lab.sql',
   // Roue du Sub V2 (RV2-4 fix): the Lab twin of 20261109210000_sub_wheel_v2_replay.sql (same content).
   '20261109200000_sub_wheel_v2_replay_lab.sql',
+  // Roue du Sub V2: the Lab twin of 20261109230000_sub_wheel_v2_recovery.sql (same content).
+  '20261109220000_sub_wheel_v2_recovery_lab.sql',
 ]);
 
 /**

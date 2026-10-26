@@ -2,7 +2,9 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { BOT_INSTANCE_HEADER, type BotLeaseRequest } from '@raptoru/schemas';
 import { afterEach, describe, expect, it } from 'vitest';
+import { coreWalletEconomy } from '../src/economy/economy.js';
 import { createApp } from '../src/http/server.js';
+import { SubWheelService } from '../src/sub-wheel/service.js';
 import { sha256, STUDIO_PROTOCOL_HEADER } from '../src/studio/installations.js';
 import { setup } from './helpers.js';
 
@@ -157,7 +159,13 @@ afterEach(async () => {
   for (const close of closers.splice(0)) await close();
 });
 
-async function fixture(opts?: Parameters<typeof setup>[0]) {
+async function fixture(
+  opts?: Parameters<typeof setup>[0],
+  /** More of the production wiring (e.g. the Roue du Sub on the loyalty route). */
+  more: (
+    core: Awaited<ReturnType<typeof setup>>,
+  ) => Partial<Parameters<typeof createApp>[0]> = () => ({}),
+) {
   const core = await setup(opts);
   core.clock.set(new Date());
   const server = createApp({
@@ -165,6 +173,7 @@ async function fixture(opts?: Parameters<typeof setup>[0]) {
     labRoutes: false,
     botSecret: 'bot-test-secret',
     studioSecret: 'studio-test-secret',
+    ...more(core),
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   closers.push(() => new Promise((r) => server.close(() => r())));
@@ -270,6 +279,67 @@ describe('bot lease routes', () => {
     expect((await core.db.query('select 1 from loyalty_rewards')).length).toBe(
       1,
     );
+  });
+
+  it('RV2-3 — a Roue du Sub right through a lease change: refused to the fenced instance, then ONE right from the next holder (one wheel, one credit); resent: the same', async () => {
+    const CH = '83603689';
+    let wheel!: SubWheelService;
+    const { core, call, bot } = await fixture(
+      { loyalty: { eventCredits: true } },
+      (c) => {
+        wheel = new SubWheelService(
+          c.db,
+          c.clock,
+          () => 0,
+          coreWalletEconomy(c.wallet.wallet),
+        );
+        return {
+          subWheel: wheel,
+          cockpit: { core: (async () => ({})) as never, channelId: CH },
+        };
+      },
+    );
+    await wheel.setEnabled(CH, true);
+    await wheel.setMode(CH, 'v2', 'studio');
+    const event = {
+      type: 'resub',
+      eventId: `ev-${randomUUID()}`,
+      occurredAt: new Date().toISOString(),
+      viewer: {
+        twitchUserId: '9902',
+        login: 'renewer',
+        displayName: 'Renewer',
+      },
+      tier: 't1',
+      cumulativeMonths: 7,
+    };
+    const send = (instance: string) =>
+      call('/v1/bot/loyalty/events', bot, event, instance);
+    const rights = async () =>
+      (await core.db.query('select 1 from sw_spins')).length;
+    await call('/v1/bot/instance/lease', bot, req('vps-1'));
+    expect((await send('pc-1')).status).toBe(409);
+    expect(await rights()).toBe(0);
+    core.clock.advance(46_000);
+    await call('/v1/bot/instance/lease', bot, req('pc-1'));
+    expect((await send('pc-1')).status).toBe(200);
+    expect((await send('pc-1')).status).toBe(200); // a reconnection resends it
+    expect(await rights()).toBe(1);
+    const [right] = await wheel.rights(CH);
+    await wheel.requestDraw(right!.spin_id, {
+      id: 'studio',
+      role: 'broadcaster',
+      via: 'studio',
+    });
+    const { spin } = await wheel.claimAnimation(CH, 'obs');
+    expect(spin?.spin_id).toBe(right!.spin_id);
+    expect(
+      (
+        await core.db.query(
+          "select 1 from wallet_transactions where source = 'sub_wheel'",
+        )
+      ).length,
+    ).toBe(1);
   });
 
   it('server-side fencing: with a live lease, the bot routes answer its holder only', async () => {

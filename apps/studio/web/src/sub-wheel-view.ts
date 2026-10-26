@@ -35,6 +35,10 @@ export interface SwSpinView {
     note: string | null;
   };
   created_at: string;
+  /** A wheel drawn but not shown: shown again automatically (retry), by hand (manual), « À vérifier » (check). */
+  recovery?: 'retry' | 'manual' | 'check' | null;
+  retries?: number;
+  retry_at?: string | null;
   right?: {
     queue: 'auto' | 'manual' | null;
     sub_month: number | null;
@@ -121,14 +125,19 @@ export interface SwState {
   /** R7: subscriptions active without any event heard — informative, never a tour. */
   subscription_detections?: {
     viewer_id: string;
+    viewer_name?: string | null;
     detected_at: string;
     tier: number;
   }[];
   reviews?: SwReviewView[];
   possible_duplicates?: SwDuplicateView[];
+  /** Wheels drawn but not shown (absent: a Core without the automatic recovery). */
+  recovery?: { retrying: number; to_replay: number; checks: SwSpinView[] };
   animations_error?: string | null;
   /** Why Studio asks no wheel now (the player cannot play it): nothing is drawn meanwhile. */
   animations_waiting?: string | null;
+  /** Lab simulator: the next wheel will be taken by a page that never starts it. */
+  lab_fail_next_start?: boolean;
   effects: {
     connected: boolean;
     current: boolean;
@@ -142,7 +151,6 @@ export type SwTab =
   'waiting' | 'rights' | 'review' | 'history' | 'settings' | 'lab';
 export interface SwUi {
   tab: SwTab;
-  grantOpen: boolean;
   /** RV2-2: the « Droits » tab, rendered by sub-wheel-rights-view.ts. */
   rights?: string;
 }
@@ -179,6 +187,27 @@ export const STATUS: Record<SwStatus, string> = {
   requested: 'Tirage demandé',
   merged: 'Fusionnée (doublon)',
 };
+/** A wheel drawn but not shown: what happens next, in plain words (null: nothing to say). */
+export function recoveryLabel(
+  r: Pick<SwSpinView, 'status' | 'recovery' | 'retry_at'>,
+) {
+  if (r.status !== 'failed') return null;
+  if (r.recovery === 'retry')
+    return `Jamais affichée : nouvel essai automatique à partir de ${time(r.retry_at)}, dès que le lecteur est prêt`;
+  if (r.recovery === 'manual')
+    return 'Jamais affichée : plus d’essai automatique, « Rejouer l’animation » quand le lecteur est prêt';
+  if (r.recovery === 'check')
+    return 'Peut-être vue : à vérifier (rien n’est rejoué tout seul)';
+  return null;
+}
+
+/** Why a wheel « À vérifier » may have been seen. */
+const CHECK_WHY: Record<string, string> = {
+  animation_not_confirmed:
+    'Le lecteur a disparu pendant la roue (Studio fermé, OBS coupé…).',
+  playback_not_confirmed: 'La roue a démarré, sa fin n’a jamais été confirmée.',
+};
+
 export const AWARD: Record<SwSpinView['award']['status'], string> = {
   none: '',
   pending: 'Gain en attente d’attribution',
@@ -265,22 +294,10 @@ function rightsTable(
     }</div>`;
 }
 
-function grantForm() {
-  return `<form class="sw-grant" data-role="sw-grant">
-    <label>Twitch ID <input data-f="g-id" inputmode="numeric" pattern="\\d{1,32}" required size="12"/></label>
-    <label>Pseudo <input data-f="g-name" maxlength="64" required size="14"/></label>
-    <label>Tier <select data-f="g-tier"><option value="1">T1</option><option value="2">T2</option><option value="3">T3</option></select></label>
-    <label>Roue (mois) <input data-f="g-months" type="number" min="1" max="200" value="1" style="width:4.5em"/></label>
-    <label class="sw-grow">Motif <input data-f="g-note" maxlength="200" required placeholder="ex. tour perdu le 20/10"/></label>
-    <button type="submit" class="cp-primary">Accorder</button>
-    <button type="button" data-act="sw-grant-close">Annuler</button>
-  </form>`;
-}
-
 const V2_UNAVAILABLE = `<p class="sw-banner">Le Core connecté ne gère pas encore la Roue du Sub V2 (Core à mettre à jour) :
   seule la V1 est disponible — historique, activation et tests.</p>`;
 
-function waitingTab(s: SwState, ui: SwUi) {
+function waitingTab(s: SwState) {
   if (s.v2_unavailable) return V2_UNAVAILABLE;
   const rights = s.rights ?? [];
   const requested = rights.filter((r) => r.status === 'requested');
@@ -299,10 +316,9 @@ function waitingTab(s: SwState, ui: SwUi) {
       : `<p class="sw-banner">Mode ${esc(MODE[mode][0])} : la V2 ne tire pas encore. Les tours et les demandes attendent le mode V2.</p>`;
   return `${banner}
     <div class="sw-toolbar">
-      <button type="button" data-act="sw-grant-open"${ui.grantOpen ? ' disabled' : ''}>Accorder un tour…</button>
+      <button type="button" data-act="sw-tab" data-tab="rights">Accorder un tour… (par pseudo, onglet Droits)</button>
       <span class="cp-muted">« Tirer » place le tour avant la file automatique : il est tiré à la prochaine roue.</span>
     </div>
-    ${ui.grantOpen ? grantForm() : ''}
     ${rightsTable('Demandes de tirage', 'Aucune demande.', requested, false)}
     ${rightsTable('File automatique', 'Aucun tour en file automatique (subs reçus en live).', auto, true)}
     ${rightsTable('Tours manuels', 'Aucun tour manuel (acquis hors live, accordés).', manual, true)}`;
@@ -349,6 +365,7 @@ function reviewTab(s: SwState) {
       gardés, le tour bloqué n’est tiré par aucun chemin tant qu’une décision n’est pas prise. Une fusion ne crédite
       rien et n’efface rien.</p>
     ${reviews.length ? reviews.map(reviewCard).join('') : '<p class="cp-muted">Aucun tour à vérifier.</p>'}
+    ${checksBlock(s)}
     <div class="sw-block"><h3>Possible doublon <span class="sw-count">${dups.length}</span></h3>
       <p class="cp-muted">Information seulement : rien n’est bloqué ni fusionné. Un mois estimé et un autre tour à moins de
         28 jours d’écart peuvent être le même renouvellement.</p>
@@ -365,17 +382,37 @@ function reviewTab(s: SwState) {
     ${detectionsBlock(s)}`;
 }
 
+/** Wheels drawn and credited that were perhaps seen: never shown again by themselves, the broadcaster decides. */
+function checksBlock(s: SwState) {
+  const c = s.recovery?.checks ?? [];
+  if (!c.length) return '';
+  return `<div class="sw-block"><h3>Animations peut-être vues <span class="sw-count">${c.length}</span></h3>
+      <p class="cp-muted">La roue a démarré sans que sa fin soit confirmée : le viewer l’a peut-être vue. Le gain est déjà
+        décidé (et crédité) ; rien n’est rejoué tout seul. Vue → « Elle a bien été vue » (l’annonce part une fois). Pas
+        vue → « Rejouer l’animation » (le même tirage, rien de re-crédité).</p>
+      <table class="cp-history"><thead><tr><th>Date</th><th>Viewer</th><th>Gain</th><th></th></tr></thead><tbody>${c
+        .map(
+          (
+            r,
+          ) => `<tr><td>${esc(time(r.created_at))}</td><td><b>${esc(r.viewer.name)}</b><br><small>${esc(CHECK_WHY[r.reason ?? ''] ?? `Erreur pendant la roue : ${r.reason ?? 'inconnue'}`)}</small></td>
+        <td>${r.amount === null ? '—' : `${n(r.amount)} jetons`}<br><small>${esc(AWARD[r.award.status])}</small></td>
+        <td class="sw-act"><button type="button" data-act="sw-confirm-shown" data-spin="${esc(r.spin_id)}" data-name="${esc(r.viewer.name)}">Elle a bien été vue</button>
+          <button type="button" class="cp-ghost" data-act="sw-replay" data-spin="${esc(r.spin_id)}" data-name="${esc(r.viewer.name)}" data-amount="${r.amount ?? 0}" data-award="${esc(r.award.status)}">Rejouer l’animation</button></td></tr>`,
+        )
+        .join('')}</tbody></table></div>`;
+}
+
 function detectionsBlock(s: SwState) {
   const d = s.subscription_detections ?? [];
   if (!d.length) return '';
   return `<div class="sw-block"><h3>Abonnements sans événement reçu <span class="sw-count">${d.length}</span></h3>
       <p class="cp-muted">Information seulement : Twitch liste ces abonnés payants, mais aucun événement n’a été reçu
         (interruption du bot ?). Un abonnement actif ne prouve pas un nouveau mois : aucun tour n’est créé. Si un tour est
-        dû, « Accorder un tour » dans « En attente ».</p>
-      <table class="cp-history"><thead><tr><th>Twitch ID</th><th>Tier</th><th>Détecté</th></tr></thead><tbody>${d
+        dû, « Accorder une roue » dans « Droits ».</p>
+      <table class="cp-history"><thead><tr><th>Viewer</th><th>Tier</th><th>Détecté</th></tr></thead><tbody>${d
         .map(
           (x) =>
-            `<tr><td>${esc(x.viewer_id)}</td><td>T${Number(x.tier) || 1}</td><td>${esc(time(x.detected_at))}</td></tr>`,
+            `<tr><td>${x.viewer_name ? `<b>${esc(x.viewer_name)}</b>` : `<small class="cp-muted">pseudo inconnu (Twitch ID ${esc(x.viewer_id)})</small>`}</td><td>T${Number(x.tier) || 1}</td><td>${esc(time(x.detected_at))}</td></tr>`,
         )
         .join('')}</tbody></table></div>`;
 }
@@ -411,7 +448,7 @@ function historyTab(s: SwState) {
       return `<tr class="cp-row--${cls}">
         <td>${esc(time(r.created_at))}</td>
         <td>${r.source === 'twitch' ? '' : r.source === 'manual' ? '<i>Accordé</i> ' : '<i>Test</i> '}${esc(r.viewer.name)}<br><small>${r.type === 'sub' ? 'sub' : 'resub'} · T${r.tier} · ${r.right?.month_source ? monthLabel(r.right) : `${r.months} mois`}</small></td>
-        <td><b>${STATUS[r.status] ?? esc(r.status)}</b><br><small>${result}</small>${r.reason && r.status !== 'ignored' ? `<br><small>${esc(r.reason)}</small>` : ''}</td>
+        <td><b>${STATUS[r.status] ?? esc(r.status)}</b><br><small>${result}</small>${recoveryLabel(r) ? `<br><small class="sw-recovery">${esc(recoveryLabel(r))}</small>` : ''}${r.reason && r.status !== 'ignored' ? `<br><small class="cp-muted">${esc(r.reason)}</small>` : ''}</td>
         <td><small>${esc(award)}${r.award.note ? ` — ${esc(r.award.note)}` : ''}</small>${actions}</td></tr>`;
     })
     .join('');
@@ -500,14 +537,17 @@ function labTab(s: SwState) {
       <button type="button" data-act="sw-sim-readings" data-on="${sim.readings ? '0' : '1'}">${sim.readings ? 'Arrêter les relevés' : 'Démarrer les relevés'}</button>
       ${viewers ? `<table class="cp-history sw-rights"><tbody>${viewers}</tbody></table>` : '<p class="cp-muted">Aucun viewer simulé.</p>'}
       <form class="sw-grant" data-role="sw-sim-viewer">
-        <label>Twitch ID <input data-f="sv-id" inputmode="numeric" required size="10"/></label>
         <label>Pseudo <input data-f="sv-name" maxlength="64" required size="12"/></label>
         <button type="submit">Ajouter présent</button>
       </form></div>
+    <div class="sw-block"><h3>Lecteur (simulé)</h3>
+      <p class="cp-muted">La prochaine roue est prise par un lecteur qui ne la démarre jamais : elle est tirée et
+        créditée, puis remontrée toute seule (le même tirage, rien de re-crédité) après son délai.</p>
+      ${s.lab_fail_next_start ? chip('warn', 'Prochain affichage : échec avant démarrage') : ''}
+      <button type="button" data-act="sw-sim-fail-start" data-on="${s.lab_fail_next_start ? '0' : '1'}">${s.lab_fail_next_start ? 'Annuler l’échec simulé' : 'Faire échouer le prochain affichage'}</button></div>
     <div class="sw-block"><h3>Événement Twitch simulé</h3>
       <form class="sw-grant" data-role="sw-sim-event">
         <label>Type <select data-f="se-kind">${SIMULATE.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
-        <label>Twitch ID <input data-f="se-id" inputmode="numeric" required size="10"/></label>
         <label>Pseudo <input data-f="se-name" maxlength="64" required size="12"/></label>
         <label>Tier <select data-f="se-tier"><option value="1">T1</option><option value="2">T2</option><option value="3">T3</option></select></label>
         <label>Mois cumulés <input data-f="se-months" type="number" min="1" max="200" value="2" style="width:4.5em"/></label>
@@ -518,7 +558,7 @@ function labTab(s: SwState) {
 export function subWheelView(
   s: SwState | null,
   error: string | null,
-  ui: SwUi = { tab: 'waiting', grantOpen: false },
+  ui: SwUi = { tab: 'waiting' },
 ) {
   if (error) return `<p class="cp-error">${esc(error)}</p>`;
   if (!s) return '<p class="cp-muted">Chargement…</p>';
@@ -538,11 +578,12 @@ export function subWheelView(
   const mode = s.settings.mode ?? 'v1';
   const rights = s.rights ?? [];
   const blocked = (s.reviews ?? []).length;
+  const checks = s.recovery?.checks.length ?? 0;
   const dups = (s.possible_duplicates ?? []).length;
   const tabs: [SwTab, string][] = [
     ['waiting', `En attente${rights.length ? ` (${rights.length})` : ''}`],
     ['rights', 'Droits'],
-    ['review', `À vérifier${blocked ? ` (${blocked})` : ''}`],
+    ['review', `À vérifier${blocked + checks ? ` (${blocked + checks})` : ''}`],
     ['history', 'Historique'],
     ['settings', 'Réglages'],
     ...(s.settings.lab
@@ -560,15 +601,18 @@ export function subWheelView(
             ? settingsTab(s)
             : ui.tab === 'lab'
               ? labTab(s)
-              : waitingTab(s, ui);
+              : waitingTab(s);
   return `<div class="cp-status">${s.settings.enabled ? chip('on', 'Roue : ACTIVE') : chip('warn', 'Roue : désactivée')}
       ${chip(mode === 'v2' ? 'on' : 'off', `Mode ${MODE[mode][0]}`)} ${player}
       ${s.waiting ? chip('warn', `${s.waiting} roue(s) à afficher`) : ''}
       ${blocked ? chip('warn', `${blocked} tour(s) à vérifier`) : ''}
+      ${s.recovery?.retrying ? chip('warn', `${s.recovery.retrying} roue(s) jamais affichée(s) : nouvel essai automatique`) : ''}
+      ${s.recovery?.to_replay ? chip('warn', `${s.recovery.to_replay} roue(s) jamais affichée(s) : à rejouer`) : ''}
+      ${checks ? chip('warn', `${checks} animation(s) peut-être vue(s) : à vérifier`) : ''}
       ${dups ? chip('off', `${dups} possible(s) doublon(s)`) : ''}
       ${s.pending_awards.count ? chip('warn', `${s.pending_awards.count} gain(s) à attribuer : ${n(s.pending_awards.total)} jetons`) : ''}
       ${s.animations_error ? chip('warn', 'Animations : Core injoignable') : ''}
-      ${s.animations_waiting && s.animations_waiting !== 'effects_player_offline' && s.animations_waiting !== 'effects_player_unavailable' ? chip('warn', 'Roues en attente du lecteur : rien n’est tiré tant qu’il ne peut pas les jouer') : ''}</div>
+      ${s.animations_waiting === 'effect_media_missing' ? chip('warn', 'Sons de la roue manquants : rien n’est tiré tant qu’ils ne sont pas importés') : s.animations_waiting && s.animations_waiting !== 'effects_player_offline' && s.animations_waiting !== 'effects_player_unavailable' ? chip('warn', 'Roues en attente du lecteur : rien n’est tiré tant qu’il ne peut pas les jouer') : ''}</div>
     ${missing.length ? `<p class="cp-error">Médias non importés : ${esc(missing.map((m) => m.label).join(', '))}</p>` : ''}
     <nav class="sw-tabs" role="tablist">${tabs
       .map(

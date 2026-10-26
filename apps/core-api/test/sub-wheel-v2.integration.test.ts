@@ -34,6 +34,7 @@ const R8 = '20261109150000_sub_wheel_v2_viewers.sql';
 const RV21 = '20261109170000_sub_wheel_v2_announce_delivery.sql';
 const RV22 = '20261109190000_sub_wheel_v2_redraw.sql';
 const RV24 = '20261109210000_sub_wheel_v2_replay.sql';
+const RV25 = '20261109230000_sub_wheel_v2_recovery.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -617,9 +618,10 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== R8 &&
           f !== RV21 &&
           f !== RV22 &&
-          f !== RV24,
+          f !== RV24 &&
+          f !== RV25,
       ),
-      lab: [...MIGRATION_SCOPES.lab, R1, R2, R8, RV21, RV22, RV24],
+      lab: [...MIGRATION_SCOPES.lab, R1, R2, R8, RV21, RV22, RV24, RV25],
     };
     expect(await migrate(a, 'prod', undefined, at46)).toHaveLength(46);
     // What production really holds in its chat queue: Tombola announcements and Spotify answers.
@@ -652,7 +654,15 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
     );
     const spins = await a.query('select * from sw_spins');
     const balances = await a.query('select * from wallets order by 1');
-    expect(await migrate(a, 'prod')).toEqual([R1, R2, R8, RV21, RV22, RV24]);
+    expect(await migrate(a, 'prod')).toEqual([
+      R1,
+      R2,
+      R8,
+      RV21,
+      RV22,
+      RV24,
+      RV25,
+    ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(
       (

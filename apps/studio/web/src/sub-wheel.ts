@@ -25,6 +25,7 @@ const REFUSAL: Record<string, string> = {
   grant_key_reused: 'Ce tour a déjà été accordé à quelqu’un d’autre.',
   not_replayable:
     'Ce tirage ne peut pas être rejoué (déjà affiché, en cours, ou un test).',
+  not_to_check: 'Cette roue n’est pas « à vérifier » (déjà réglée).',
   spin_not_found: 'Tour introuvable.',
   review_not_found: 'Vérification introuvable.',
 };
@@ -40,7 +41,18 @@ export function mountSubWheel(root: HTMLElement) {
   let error: string | null = null;
   let message = '';
   let busy = false;
-  const ui: SwUi = { tab: 'waiting', grantOpen: false };
+  const ui: SwUi = { tab: 'waiting' };
+  /** Lab only: a simulated viewer is named by its pseudo; the same pseudo keeps the same (fake) Twitch ID. */
+  const labViewerId = (name: string) => {
+    const known = state?.lab_sim?.viewers.find(
+      (v) => v.display_name.toLowerCase() === name.toLowerCase(),
+    );
+    if (known) return known.viewer_id;
+    let h = 0x811c9dc5;
+    for (const c of name.toLowerCase())
+      h = Math.imul(h ^ c.codePointAt(0)!, 0x01000193) >>> 0;
+    return `9${String(h).padStart(10, '0')}`;
+  };
 
   const render = () => {
     const keep = [...root.querySelectorAll<HTMLInputElement>('[data-f]')].map(
@@ -138,13 +150,15 @@ export function mountSubWheel(root: HTMLElement) {
     }
     if (role === 'sw-sim-viewer' || role === 'sw-sim-event') {
       ev.preventDefault();
-      const id = field(role === 'sw-sim-viewer' ? 'sv-id' : 'se-id');
-      const name = field(role === 'sw-sim-viewer' ? 'sv-name' : 'se-name');
-      if (!/^\d{1,32}$/.test(id) || !name) {
-        message = 'Twitch ID (chiffres) et pseudo obligatoires.';
+      const name = field(role === 'sw-sim-viewer' ? 'sv-name' : 'se-name')
+        .replace(/^@+/, '')
+        .trim();
+      if (!name) {
+        message = 'Pseudo obligatoire.';
         render();
         return;
       }
+      const id = labViewerId(name);
       if (role === 'sw-sim-viewer')
         void post(
           '/lab/presence',
@@ -167,37 +181,6 @@ export function mountSubWheel(root: HTMLElement) {
         );
       return;
     }
-    if (role !== 'sw-grant') return;
-    ev.preventDefault();
-    const id = field('g-id');
-    const name = field('g-name');
-    const note = field('g-note');
-    const months = Math.max(
-      1,
-      Math.min(200, Math.round(Number(field('g-months')) || 1)),
-    );
-    const tier = Number(field('g-tier') || 1);
-    if (!/^\d{1,32}$/.test(id) || !name || !note) {
-      message = 'Twitch ID (chiffres), pseudo et motif sont obligatoires.';
-      render();
-      return;
-    }
-    if (
-      !confirm(
-        `Accorder un tour à ${name} (T${tier}, roue ${months} mois) ?\n\nUn vrai gain sera tiré quand quelqu’un demandera le tirage.`,
-      )
-    )
-      return;
-    void post(
-      '/grant',
-      { key: crypto.randomUUID(), viewer: { id, name }, tier, months, note },
-      `Tour accordé à ${name} (tours manuels).`,
-    ).then((ok) => {
-      if (ok) {
-        ui.grantOpen = false;
-        render();
-      }
-    });
   });
 
   root.addEventListener('change', (ev) => {
@@ -225,13 +208,6 @@ export function mountSubWheel(root: HTMLElement) {
       ui.tab = (target!.dataset.tab as SwTab) ?? 'waiting';
       message = '';
       render();
-      return;
-    }
-    if (act === 'sw-grant-open' || act === 'sw-grant-close') {
-      ui.grantOpen = act === 'sw-grant-open';
-      render();
-      if (ui.grantOpen)
-        root.querySelector<HTMLInputElement>('[data-f="g-id"]')?.focus();
       return;
     }
     if (act === 'sw-switch' && state) {
@@ -262,6 +238,19 @@ export function mountSubWheel(root: HTMLElement) {
         `/spins/${target.dataset.spin}/request`,
         {},
         'Tirage demandé : il passe à la prochaine roue.',
+      );
+    }
+    if (act === 'sw-confirm-shown' && target?.dataset.spin) {
+      if (
+        !confirm(
+          `La roue de ${target.dataset.name ?? 'ce viewer'} a bien été vue ?\n\nElle passe « Affichée » telle quelle (rien n’est tiré ni crédité) et le gain est annoncé une fois dans le chat.`,
+        )
+      )
+        return;
+      void post(
+        `/spins/${target.dataset.spin}/confirm-shown`,
+        {},
+        'Roue marquée « Affichée ».',
       );
     }
     if (act === 'sw-replay' && target?.dataset.spin) {
@@ -337,6 +326,14 @@ export function mountSubWheel(root: HTMLElement) {
         `Délai d’annonce du gain : ${seconds} s.`,
       );
     }
+    if (act === 'sw-sim-fail-start' && target)
+      void post(
+        '/lab/fail-next-start',
+        { on: target.dataset.on === '1' },
+        target.dataset.on === '1'
+          ? 'La prochaine roue échouera avant de démarrer (simulé).'
+          : 'Échec simulé annulé.',
+      );
     if (act === 'sw-sim-live' && target)
       void post(
         '/lab/live',

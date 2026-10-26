@@ -248,12 +248,11 @@ describe('Roue du Sub — Studio section (pure view)', () => {
     // R4: the rows are in « Historique », the switch in « Réglages ».
     const html = subWheelView(state as never, null, {
       tab: 'history',
-      grantOpen: false,
     });
     expect(html).toContain('Roue : désactivée');
-    expect(
-      subWheelView(state as never, null, { tab: 'settings', grantOpen: false }),
-    ).toContain('Activer la roue');
+    expect(subWheelView(state as never, null, { tab: 'settings' })).toContain(
+      'Activer la roue',
+    );
     expect(html).toContain('1 gain(s) à attribuer : 18');
     expect(html).toContain('Médias non importés : Roue du Sub — fin casino');
     expect(html).toContain('&lt;b&gt;V&lt;/b&gt;');

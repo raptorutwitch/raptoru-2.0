@@ -2,6 +2,7 @@ import {
   AWARD,
   esc,
   monthLabel,
+  recoveryLabel,
   SOURCE,
   STATUS,
   type SwSpinView,
@@ -103,7 +104,7 @@ function drawsTable(v: SwViewerAdmin) {
   return `<table class="cp-history sw-rights"><thead><tr><th>Tirage</th><th>Gain</th><th>Crédit</th><th></th></tr></thead><tbody>${v.draws
     .map((d) => {
       const replay =
-        d.status !== 'shown' && d.amount !== null
+        (d.status === 'failed' || d.status === 'skipped') && d.amount !== null
           ? `<button type="button" class="cp-ghost" data-act="swr-replay" data-spin="${esc(d.spin_id)}" data-amount="${d.amount}" data-award="${esc(d.award.status)}">Rejouer l’animation</button> `
           : '';
       const action =
@@ -112,7 +113,7 @@ function drawsTable(v: SwViewerAdmin) {
           ? '<small class="cp-muted">relance en attente</small>'
           : `<button type="button" class="cp-ghost swr-redraw" data-act="swr-redraw" data-spin="${esc(d.spin_id)}" data-amount="${d.amount ?? ''}" data-award="${esc(d.award.status)}" data-at="${esc(time(d.shown_at ?? d.created_at))}">Relancer un tirage…</button>`);
       return `<tr>
-        <td>${esc(time(d.shown_at ?? d.created_at))}${d.redraw_of ? ' <span class="cp-tag">nouveau tirage</span>' : ''}<br><small>${esc(STATUS[d.status])}</small></td>
+        <td>${esc(time(d.shown_at ?? d.created_at))}${d.redraw_of ? ' <span class="cp-tag">nouveau tirage</span>' : ''}<br><small>${esc(STATUS[d.status])}</small>${recoveryLabel(d) ? `<br><small class="sw-recovery">${esc(recoveryLabel(d))}</small>` : ''}</td>
         <td>${d.amount === null ? '—' : `<b>${n(d.amount)}</b> jetons`}</td>
         <td><small>${esc(AWARD[d.award.status] || '—')}</small></td>
         <td class="sw-act">${action}</td></tr>`;
@@ -144,8 +145,14 @@ function viewerCard(v: SwViewerAdmin, ui: SwRightsUi) {
     ${ui.grantOpen && v.can_grant ? grantForm(v) : ''}
     <h4>Tours à utiliser</h4>${rightsTable(v)}
     <h4>Tirages</h4>${drawsTable(v)}
+    <dl class="swr-legend">
+      <dt>Rattraper</dt><dd>lance ses tours déjà gagnés : aucun nouveau droit, aucun gain en plus.</dd>
+      <dt>Accorder une roue</dt><dd>crée un droit (tour perdu), seulement s’il n’a plus de tour à utiliser.</dd>
+      <dt>Rejouer l’animation</dt><dd>remontre un tirage jamais affiché : le même gain, rien de re-crédité.</dd>
+      <dt>Relancer un tirage</dt><dd>exceptionnel : un nouveau tirage payé EN PLUS, jamais un remplacement.</dd>
+    </dl>
     <p class="cp-muted">Ses tours restent enregistrés, hors live comme sans OBS : il peut aussi les lancer lui-même avec
-      !roue oui pendant un live. « Relancer un tirage » ajoute un tirage payé en plus, jamais un remplacement.</p>
+      !roue oui pendant un live.</p>
   </div>`;
 }
 

@@ -38,6 +38,14 @@ export class SubWheelRuntime {
    * drawn — and credited — by Core when it is CLAIMED: Studio claims only when the player can really play it.
    */
   waiting: string | null = null;
+  /**
+   * The end of a wheel Core did not receive (unreachable, restarting): sent again before anything else is claimed — Core
+   * keeps that wheel « en cours » meanwhile, then « À vérifier »; this report settles it.
+   */
+  private unsent: { spinId: string; body: Record<string, unknown> } | null =
+    null;
+  /** Lab simulator only: the next wheel is taken by a page that never starts it (as `effect_start_timeout`). */
+  private failNextStart = false;
 
   constructor(private readonly d: SubWheelRuntimeDeps) {}
 
@@ -78,11 +86,43 @@ export class SubWheelRuntime {
     if (!fx.connected) return 'effects_player_offline';
     if (!fx.audio) return 'effects_player_muted';
     if (!fx.current) return 'effects_player_outdated';
+    // The wheel's two sounds: without them every wheel would fail the same way.
+    if (
+      this.d
+        .effects!.interactionMedia()
+        .some((m) => m.id.startsWith('sw-') && !m.available)
+    )
+      return 'effect_media_missing';
     return null;
+  }
+
+  /** The end of a wheel to Core: kept and sent again while Core cannot take it; an answer (even a refusal) ends it. */
+  private async report(spinId: string, body: Record<string, unknown>) {
+    const send = (b: Record<string, unknown>) =>
+      this.d.core(`${this.base}/spins/${spinId}/animation`, b);
+    try {
+      await send(body).catch(async (e: { status?: number }) => {
+        // A Core older than « started » refuses the field (400): the same report without it.
+        if (e.status !== 400 || !('started' in body)) throw e;
+        const older = { ...body };
+        delete older.started;
+        await send(older);
+      });
+      this.unsent = null;
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      if (status !== undefined && status < 500) {
+        this.unsent = null; // Core answered (another player had it, unknown wheel…): nothing to send again
+        return;
+      }
+      this.unsent = { spinId, body };
+      throw e;
+    }
   }
 
   /** One recorded spin if Core has one ready AND the player can play it: shown to its end, then reported. */
   async once(): Promise<boolean> {
+    if (this.unsent) await this.report(this.unsent.spinId, this.unsent.body);
     // A connected page whose sound is blocked (a browser tab never clicked), offline or outdated would turn the next
     // right into a paid draw nobody sees: nothing is claimed — the rights wait, undecided.
     this.waiting = this.unplayable();
@@ -94,7 +134,13 @@ export class SubWheelRuntime {
     if (!spin) return false;
     let event: 'completed' | 'failed' | 'unknown' = 'failed';
     let error: string | undefined;
+    // play() resolves once the page STARTED it: before that, nothing was seen nor heard (Core shows it again by itself).
+    let started = false;
     try {
+      if (this.failNextStart) {
+        this.failNextStart = false;
+        throw new EffectError('effect_start_timeout');
+      }
       if (!this.d.effects) throw new EffectError('effects_player_unavailable');
       const { end } = await this.d.effects.play({
         kind: 'wheel',
@@ -108,19 +154,19 @@ export class SubWheelRuntime {
           amount: spin.amount,
         },
       });
+      started = true;
       const r = await end;
       event = r.event;
       error = r.error;
     } catch (e) {
       error = e instanceof EffectError ? e.message : 'erreur inattendue';
     }
-    await this.d
-      .core(`${this.base}/spins/${spin.spin_id}/animation`, {
-        consumer_id: this.consumer,
-        event,
-        ...(error ? { error: error.slice(0, 200) } : {}),
-      })
-      .catch(() => {});
+    await this.report(spin.spin_id, {
+      consumer_id: this.consumer,
+      event,
+      started,
+      ...(error ? { error: error.slice(0, 200) } : {}),
+    });
     return true;
   }
 
@@ -162,6 +208,8 @@ export class SubWheelRuntime {
         lab_sim: lab,
         animations_error: this.lastError,
         animations_waiting: this.waiting,
+        lab_fail_next_start:
+          this.d.environment === 'lab' ? this.failNextStart : undefined,
         effects: effects
           ? {
               ...effects.status(),
@@ -197,6 +245,10 @@ export class SubWheelRuntime {
       return this.d.core(`${ch}/redraw`, await body());
     // Lab simulators only (never relayed by a production Studio): presence readings, Twitch subscriptions, the live.
     if (this.d.environment === 'lab' && method === 'POST') {
+      if (path === '/lab/fail-next-start') {
+        this.failNextStart = (await body()).on !== false;
+        return { on: this.failNextStart };
+      }
       if (path === '/lab/presence')
         return this.d.core(`${ch}/lab/presence`, await body());
       if (path === '/lab/simulate')
@@ -224,6 +276,9 @@ export class SubWheelRuntime {
     const replay = /^\/spins\/([0-9a-f-]{36})\/replay$/.exec(path);
     if (method === 'POST' && replay)
       return this.d.core(`${this.base}/spins/${replay[1]}/replay`, {});
+    const seen = /^\/spins\/([0-9a-f-]{36})\/confirm-shown$/.exec(path);
+    if (method === 'POST' && seen)
+      return this.d.core(`${this.base}/spins/${seen[1]}/confirm-shown`, {});
     const award = /^\/spins\/([0-9a-f-]{36})\/award$/.exec(path);
     if (method === 'POST' && award)
       return this.d.core(`${this.base}/spins/${award[1]}/award`, await body());

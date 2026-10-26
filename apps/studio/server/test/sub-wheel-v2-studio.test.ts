@@ -5,10 +5,9 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
-import { subWheelAmount } from '@raptoru/schemas';
+import { SUB_WHEEL, subWheelAmount } from '@raptoru/schemas';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLabCore } from '../../../core-api/src/bonk-lab/lab-core.js';
-import { systemClock } from '../../../core-api/src/clock.js';
 import { migrate } from '../../../core-api/src/db/migrate.js';
 import { coreWalletEconomy } from '../../../core-api/src/economy/economy.js';
 import { WalletService } from '../../../core-api/src/wallet/wallet-service.js';
@@ -17,6 +16,7 @@ import type { ObsLike } from '../src/channel-points/obs-actions.js';
 import { ChannelPointsRuntime } from '../src/channel-points/runtime.js';
 import { EffectError, type EffectsPlayer } from '../src/effects/player.js';
 import { localLabCoreClient } from '../src/lab-moderation/proxy.js';
+import { SubWheelRuntime } from '../src/sub-wheel/runtime.js';
 import {
   redrawConfirm,
   rightsTab,
@@ -45,9 +45,11 @@ async function lab(canonical: boolean) {
   );
   await migrate(db, canonical ? 'all' : 'lab');
   const secret = randomBytes(32).toString('hex');
+  /** The Lab Core's time: real time, moved forward by the test (a re-show's delay). */
+  const clock = { shift: 0, now: () => new Date(Date.now() + clock.shift) };
   const server: Server = createLabCore({
     db,
-    clock: systemClock,
+    clock,
     secret,
     ...(canonical ? { economy: coreWalletEconomy(new WalletService(db)) } : {}),
   }).server;
@@ -58,10 +60,19 @@ async function lab(canonical: boolean) {
     await db.close();
     await rm(dir, { recursive: true, force: true });
   });
-  const core = localLabCoreClient(
+  const direct = localLabCoreClient(
     `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     secret,
   );
+  /** The network to Core as the test sets it: the end of a wheel lost while `down`. */
+  const net = { down: false, reports: 0 };
+  const core = ((path: string, body?: unknown) => {
+    if (/\/animation$/.test(path)) {
+      net.reports++;
+      if (net.down) return Promise.reject(new TypeError('fetch failed'));
+    }
+    return direct(path, body as never);
+  }) as typeof direct;
   const shown: { spin: { segment: number; amount: number; months: number } }[] =
     [];
   /** The player page as the test sets it: connected, sound allowed, holding / failing the next wheel. */
@@ -71,6 +82,8 @@ async function lab(canonical: boolean) {
     hold: false,
     failNext: null as string | null,
     release: null as (() => void) | null,
+    /** The wheel's sounds imported in Studio. */
+    media: true,
   };
   const effects = {
     status: () => ({
@@ -98,7 +111,12 @@ async function lab(canonical: boolean) {
     handle: async () => false,
     sounds: () => [],
     videos: () => [],
-    interactionMedia: () => [],
+    interactionMedia: () =>
+      ['sw-incr', 'sw-fin'].map((id) => ({
+        id,
+        label: id,
+        available: fx.media,
+      })),
   } as unknown as EffectsPlayer;
   const obs: ObsLike = { connected: true, request: async () => ({}) };
   const rt = await ChannelPointsRuntime.create({
@@ -149,7 +167,7 @@ async function lab(canonical: boolean) {
       occurred_at: iso(0),
       ...over,
     });
-  return { db, core, rt, shown, api, state, playAlerts, sub, fx };
+  return { db, core, rt, shown, api, state, playAlerts, sub, fx, net, clock };
 }
 
 async function chain(canonical: boolean) {
@@ -200,7 +218,7 @@ async function chain(canonical: boolean) {
   await expect(
     l.api('POST', `/spins/${right.spin_id}/request`),
   ).rejects.toMatchObject({ body: { error: 'not_owed' } });
-  html = subWheelView(s, null, { tab: 'history', grantOpen: false });
+  html = subWheelView(s, null, { tab: 'history' });
   expect(html).toContain('Affichée');
   return { l, amount, spinId: right.spin_id };
 }
@@ -243,7 +261,7 @@ describe('Roue du Sub V2 — R4, Lab end to end (Studio API, real Lab Core, simu
     ).rejects.toThrow();
     const s = await l.state();
     expect(s.settings.announce_delay_s).toBe(20);
-    const html = subWheelView(s, null, { tab: 'settings', grantOpen: false });
+    const html = subWheelView(s, null, { tab: 'settings' });
     expect(html).toContain('data-f="sw-announce-delay"');
     expect(html).toContain('value="20"');
     expect(html).toContain('Actuel : 20 s');
@@ -267,7 +285,7 @@ describe('Roue du Sub V2 — R4, Lab end to end (Studio API, real Lab Core, simu
     let s = await l.state();
     expect(s.reviews).toHaveLength(1);
     const review = s.reviews![0]!;
-    let html = subWheelView(s, null, { tab: 'review', grantOpen: false });
+    let html = subWheelView(s, null, { tab: 'review' });
     expect(html).toContain('Tour bloqué');
     expect(html).toContain('Fusionner (doublon)');
     expect(html).toContain('avis de chat');
@@ -304,7 +322,7 @@ describe('Roue du Sub V2 — R4, Lab end to end (Studio API, real Lab Core, simu
     s = await l.state();
     const merged = s.recent.find((r) => r.spin_id === review.suspect.spin_id)!;
     expect(merged).toMatchObject({ status: 'merged', amount: null });
-    html = subWheelView(s, null, { tab: 'history', grantOpen: false });
+    html = subWheelView(s, null, { tab: 'history' });
     expect(html).toContain('Fusionnée (doublon)');
     expect(html).toContain('<i>Accordé</i> Lucky');
     // Every decision journaled (Studio = the broadcaster).
@@ -399,6 +417,7 @@ describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player ca
         actor: { id: '83603689', login: 'raptoru_', display_name: 'raptoru_' },
       });
     await l.api('POST', '/settings', { enabled: true });
+    await l.playAlerts(); // their sub alerts first: a V2 wheel never starts over an alert
     const v = await l.api<SwViewerAdmin>('GET', '/admin/viewers/83603689');
     expect(v.counts.available).toBe(2);
     for (const r of v.rights)
@@ -461,7 +480,6 @@ describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player ca
     );
     let html = subWheelView(await l.state(), null, {
       tab: 'history',
-      grantOpen: false,
     });
     expect(html).toContain('data-act="sw-replay"');
     // Replayed: back in the queue as it is, shown before the next tour; still ONE payment for it.
@@ -485,9 +503,172 @@ describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player ca
     expect(await count(l, "sw_spins where status = 'shown'")).toBe(2);
     html = subWheelView(await l.state(), null, {
       tab: 'history',
-      grantOpen: false,
     });
     expect(html).not.toContain('data-act="sw-replay"');
+  });
+
+  it('autonomous: a wheel the page never started is shown again BY ITSELF after its delay — the same draw, paid once; Studio says when', async () => {
+    const l = await caughtUp();
+    l.fx.failNext = 'effect_start_timeout'; // taken by the page, never started
+    expect(await l.rt.subWheel.once()).toBe(true);
+    let s = await l.state();
+    const failed = s.recent.find((r) => r.status === 'failed')!;
+    expect(failed).toMatchObject({ recovery: 'retry', retries: 0 });
+    expect(s.recovery).toMatchObject({ retrying: 1, to_replay: 0 });
+    let html = subWheelView(s, null, { tab: 'history' });
+    expect(html).toContain('nouvel essai automatique');
+    expect(html).toContain(
+      '1 roue(s) jamais affichée(s) : nouvel essai automatique',
+    );
+    // Not before its delay: the second tour goes first (one at a time).
+    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(await l.rt.subWheel.once()).toBe(false);
+    l.clock.shift = SUB_WHEEL.retryBaseMs + 1_000;
+    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(l.shown.at(-1)).toMatchObject({
+      spin: { amount: failed.amount, segment: failed.segment },
+    });
+    s = await l.state();
+    expect(s.recent.find((r) => r.spin_id === failed.spin_id)).toMatchObject({
+      status: 'shown',
+      recovery: null,
+      retries: 1,
+    });
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      2,
+    );
+    html = subWheelView(s, null, { tab: 'history' });
+    expect(html).not.toContain('nouvel essai automatique');
+  });
+
+  it('Lab simulator « Faire échouer le prochain affichage »: the next wheel never starts, then comes back by itself — Lab only', async () => {
+    const l = await caughtUp();
+    expect(await l.api('POST', '/lab/fail-next-start', { on: true })).toEqual({
+      on: true,
+    });
+    let s = await l.state();
+    expect(s.lab_fail_next_start).toBe(true);
+    expect(subWheelView(s, null, { tab: 'lab' })).toContain(
+      'Prochain affichage : échec avant démarrage',
+    );
+    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(l.shown).toHaveLength(0);
+    s = await l.state();
+    expect(s.lab_fail_next_start).toBe(false);
+    const failed = s.recent.find((r) => r.status === 'failed')!;
+    expect(failed).toMatchObject({
+      reason: 'effect_start_timeout',
+      recovery: 'retry',
+    });
+    expect(await l.rt.subWheel.once()).toBe(true); // the other tour
+    l.clock.shift = SUB_WHEEL.retryBaseMs + 1_000;
+    expect(await l.rt.subWheel.once()).toBe(true); // shown again by itself
+    expect(l.shown.at(-1)).toMatchObject({
+      spin: { amount: failed.amount, segment: failed.segment },
+    });
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      2,
+    );
+  });
+
+  it('Core unreachable when the end is reported: Studio keeps it and sends it again before anything else — « Affichée », never « À vérifier »', async () => {
+    const l = await caughtUp();
+    l.net.down = true;
+    await expect(l.rt.subWheel.once()).rejects.toThrow('fetch failed');
+    expect(l.shown).toHaveLength(1);
+    expect(await count(l, "sw_spins where status = 'playing'")).toBe(1);
+    // Still down: the report is tried again, nothing else is claimed.
+    await expect(l.rt.subWheel.once()).rejects.toThrow('fetch failed');
+    expect(l.shown).toHaveLength(1);
+    l.net.down = false;
+    expect(await l.rt.subWheel.once()).toBe(true); // the report, then the next tour
+    expect(l.shown).toHaveLength(2);
+    expect(await count(l, "sw_spins where status = 'shown'")).toBe(2);
+    expect(await count(l, 'sw_spins where recovery is not null')).toBe(0);
+  });
+
+  it('Core back only after the lease: the late report of the same player settles « À vérifier » — « Affichée »', async () => {
+    const l = await caughtUp();
+    l.net.down = true;
+    await expect(l.rt.subWheel.once()).rejects.toThrow('fetch failed');
+    l.clock.shift = SUB_WHEEL.animationLeaseMs + 1_000;
+    let s = await l.state(); // the sweep: perhaps seen
+    expect(s.recovery?.checks).toHaveLength(1);
+    expect(subWheelView(s, null, { tab: 'review' })).toContain(
+      'Animations peut-être vues',
+    );
+    l.net.down = false;
+    expect(await l.rt.subWheel.once()).toBe(true);
+    s = await l.state();
+    expect(s.recovery?.checks).toHaveLength(0);
+    expect(await count(l, "sw_spins where status = 'shown'")).toBe(2);
+  });
+
+  it('the player page closed (OBS off), then back: nothing claimed meanwhile — the tours wait, undrawn — then both play by themselves', async () => {
+    const l = await caughtUp();
+    l.fx.connected = false;
+    expect(await l.rt.subWheel.once()).toBe(false);
+    expect(l.rt.subWheel.waiting).toBe('effects_player_offline');
+    expect(await count(l, "sw_spins where status = 'requested'")).toBe(2);
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      0,
+    );
+    expect(subWheelView(await l.state(), null)).toContain(
+      'Lecteur d’effets : non ouvert',
+    );
+    l.fx.connected = true;
+    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(l.shown).toHaveLength(2);
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      2,
+    );
+  });
+
+  it('the wheel sounds missing in Studio: nothing claimed (no draw, no credit), said in the section', async () => {
+    const l = await caughtUp();
+    l.fx.media = false;
+    expect(await l.rt.subWheel.once()).toBe(false);
+    expect(l.shown).toHaveLength(0);
+    expect(await count(l, "sw_spins where status = 'requested'")).toBe(2);
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      0,
+    );
+    const s = await l.state();
+    expect(s.animations_waiting).toBe('effect_media_missing');
+    expect(subWheelView(s, null)).toContain('Sons de la roue manquants');
+    l.fx.media = true;
+    expect(await l.rt.subWheel.once()).toBe(true);
+  });
+
+  it('« Elle a bien été vue » from Studio: « Affichée », announced once — a wheel perhaps seen is never shown again by itself', async () => {
+    const l = await caughtUp();
+    l.fx.hold = true;
+    const first = l.rt.subWheel.once();
+    await new Promise((r) => setTimeout(r, 50));
+    // The page started it, then its end never came (closed during the wheel).
+    l.fx.release = null;
+    l.clock.shift = SUB_WHEEL.animationLeaseMs + 1_000;
+    let s = await l.state();
+    const check = s.recovery!.checks[0]!;
+    expect(check).toMatchObject({ reason: 'animation_not_confirmed' });
+    const html = subWheelView(s, null, { tab: 'review' });
+    expect(html).toContain('data-act="sw-confirm-shown"');
+    expect(html).toContain('Le lecteur a disparu pendant la roue');
+    expect(html).toContain('À vérifier (1)');
+    await l.api('POST', `/spins/${check.spin_id}/confirm-shown`);
+    s = await l.state();
+    expect(s.recovery?.checks).toHaveLength(0);
+    expect(s.recent.find((r) => r.spin_id === check.spin_id)).toMatchObject({
+      status: 'shown',
+    });
+    expect(
+      await count(
+        l,
+        `cmd_steps where idempotency_key = 'sub_wheel:win:${check.spin_id}'`,
+      ),
+    ).toBe(1);
+    void first;
   });
 });
 
@@ -632,12 +813,16 @@ describe('Roue du Sub V2 — R4, the Studio section (pure view)', () => {
     expect(html.match(/data-act="sw-draw"/g)).toHaveLength(1);
     expect(html).toContain('À vérifier</span>');
     expect(html).not.toContain('La V2 ne tire pas encore');
+    // « Accorder un tour » is by pseudo, in « Droits »: no Twitch ID form left.
+    expect(html).toContain('data-act="sw-tab" data-tab="rights"');
+    expect(html).not.toContain('Twitch ID');
+    expect(html).not.toContain('data-f="g-id"');
   });
 
   it('outside v2 the section says the V2 does not draw yet; settings: switch and the three modes', () => {
     const v1 = { ...base, settings: { enabled: true, mode: 'v1' as const } };
     expect(subWheelView(v1, null)).toContain('la V2 ne tire pas encore');
-    const html = subWheelView(v1, null, { tab: 'settings', grantOpen: false });
+    const html = subWheelView(v1, null, { tab: 'settings' });
     expect(html).toContain('Désactiver la roue');
     expect(html.match(/name="sw-mode"/g)).toHaveLength(3);
     expect(html).toContain('value="v1" data-act="sw-mode" checked');
@@ -711,7 +896,7 @@ describe('Roue du Sub V2 — R4, the Studio section (pure view)', () => {
           ],
         },
         null,
-        { tab: 'review', grantOpen: false },
+        { tab: 'review' },
       );
     const html = view({});
     expect(html).toContain('&lt;i&gt;W&lt;/i&gt;');
@@ -777,6 +962,52 @@ describe('Roue du Sub — Studio against a Core without the V2 yet (older produc
     });
   };
 
+  it('the end of a wheel to a Core older than « started » (400): sent again without it — the wheel is « Affichée », not lost', async () => {
+    const reports: Record<string, unknown>[] = [];
+    const core = (async (path: string, body?: Record<string, unknown>) => {
+      if (path.endsWith('/animations/claim'))
+        return reports.length
+          ? { spin: null }
+          : {
+              spin: {
+                spin_id: randomUUID(),
+                name: 'V',
+                type: 'resub',
+                tier: 1,
+                months: 3,
+                layout: [],
+                segment: 0,
+                amount: 300,
+              },
+            };
+      if (path.endsWith('/animation')) {
+        if (body && 'started' in body)
+          throw Object.assign(new Error('lab_core_400'), { status: 400 });
+        reports.push(body!);
+        return { status: 'shown' };
+      }
+      throw Object.assign(new Error('not_found'), { status: 404 });
+    }) as never;
+    const effects = {
+      status: () => ({ connected: true, audio: true, current: true }),
+      interactionMedia: () => [],
+      play: async () => ({
+        end: Promise.resolve({ event: 'completed' as const }),
+      }),
+    } as unknown as EffectsPlayer;
+    const rt = new SubWheelRuntime({
+      core,
+      environment: 'production',
+      channelId: '83603689',
+      effects,
+    });
+    expect(await rt.once()).toBe(true);
+    expect(reports).toEqual([
+      { consumer_id: expect.any(String), event: 'completed' },
+    ]);
+    expect(await rt.once()).toBe(false);
+  });
+
   it('the section still opens (no « indisponible : not_found »): V1 history and switch, the V2 said unavailable', async () => {
     const rt = await runtime(olderCore());
     const s = (await rt.subWheel.api(
@@ -791,12 +1022,9 @@ describe('Roue du Sub — Studio against a Core without the V2 yet (older produc
     });
     const waiting = subWheelView(s, null);
     expect(waiting).toContain('ne gère pas encore la Roue du Sub V2');
-    expect(
-      subWheelView(s, null, { tab: 'history', grantOpen: false }),
-    ).toContain('Ancien');
+    expect(subWheelView(s, null, { tab: 'history' })).toContain('Ancien');
     const settings = subWheelView(s, null, {
       tab: 'settings',
-      grantOpen: false,
     });
     expect(settings).toContain('Activer la roue');
     expect(settings).not.toContain('name="sw-mode"');

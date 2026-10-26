@@ -74,6 +74,7 @@ export const LAB_MIGRATIONS = [
   '20261109160000_sub_wheel_v2_announce_delivery_lab.sql',
   '20261109180000_sub_wheel_v2_redraw_lab.sql',
   '20261109200000_sub_wheel_v2_replay_lab.sql',
+  '20261109220000_sub_wheel_v2_recovery_lab.sql',
 ];
 
 export type ServiceState =

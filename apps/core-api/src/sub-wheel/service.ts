@@ -28,11 +28,13 @@ import {
   type SwEvidence,
 } from './rights.js';
 import {
+  alertInFlight,
   autoRights,
   type Candidate,
   type PresenceMode,
   presenceOf,
   requestedRights,
+  retryDue,
 } from './draws.js';
 import {
   flagSameMonth,
@@ -117,7 +119,28 @@ interface Row {
   /** RV2-4: its animation replayed (the same draw, nothing credited again): when, how many times. */
   replayed_at?: Date | null;
   replay_count?: number | null;
+  /** A wheel not shown: shown again automatically (retry, from retry_at), by hand (manual), « À vérifier » (check). */
+  recovery?: Recovery | null;
+  /** Automatic re-shows done (bounded by SUB_WHEEL.retryMax). */
+  retry_count?: number | null;
+  retry_at?: Date | null;
 }
+
+type Recovery = 'retry' | 'manual' | 'check';
+
+/** Player codes that only exist BEFORE a wheel starts (effects/player.ts): nothing was seen nor heard. */
+const NEVER_STARTED = new Set([
+  'effects_player_unavailable',
+  'effects_player_offline',
+  'effects_player_muted',
+  'effects_player_outdated',
+  'effects_busy',
+  'effect_start_timeout',
+  'effect_media_missing',
+  'effect_unknown',
+]);
+/** Never started, but the same wheel would fail the same way (its files): « Rejouer » by hand once fixed. */
+const NOT_RETRYABLE = new Set(['effect_media_missing', 'effect_unknown']);
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
@@ -144,6 +167,10 @@ export const spinView = (r: Row) => ({
   redraw_of: r.redraw_of ?? null,
   /** RV2-4: how many times its animation was replayed (the same gain, never credited again). */
   replays: Number(r.replay_count ?? 0),
+  /** Not shown: shown again automatically (retry, from retry_at), by hand (manual), « À vérifier » (check). */
+  recovery: r.recovery ?? null,
+  retries: Number(r.retry_count ?? 0),
+  retry_at: iso(r.retry_at ?? null),
   // V2 right (null on V1 rows): its queue, its month and how sure it is.
   right: {
     queue: r.queue ?? null,
@@ -1047,8 +1074,9 @@ export class SubWheelService {
   private async sweep(q: Queryable, channelId: string) {
     const now = this.now();
     await q.query(
+      // The player vanished DURING it: perhaps seen — « À vérifier », never shown again automatically.
       `update sw_spins set status = 'failed', reason = 'animation_not_confirmed', animation_lease_expires_at = null,
-         updated_at = $2
+         recovery = 'check', retry_at = null, updated_at = $2
        where channel_id = $1 and status = 'playing' and animation_lease_expires_at < $2`,
       [channelId, now],
     );
@@ -1075,8 +1103,12 @@ export class SubWheelService {
       );
       if (playing.length) return { spin: null };
       const now = this.now();
+      const { mode } = await readMode(q, channelId);
+      // V2: never over an OBS alert (playing, or about to). V1 / v2_acquire keep today's timing.
+      if (mode === 'v2' && (await alertInFlight(q, channelId, now)))
+        return { spin: null };
       // A wheel already decided first (V1 / v2_acquire, drawn before a restart, or replayed — a replay never waits for
-      // its sub alert again), then — mode v2 — the next right.
+      // its sub alert again), then — mode v2 — a wheel never shown that is due again, then the next right.
       const r =
         (
           await q.query<Row>(
@@ -1088,16 +1120,23 @@ export class SubWheelService {
            order by s.seq limit 1 for update`,
             [channelId, new Date(now.getTime() - SUB_WHEEL.afterAlertMaxMs)],
           )
-        )[0] ?? (await this.drawNextRight(q, channelId, now));
+        )[0] ??
+        (await this.retryNext(q, channelId, now)) ??
+        (await this.drawNextRight(q, channelId, now));
       if (!r) return { spin: null };
+      // An automatic re-show counts as an attempt (bounded); its previous failure is left behind.
+      const retry = r.status === 'failed';
       await q.query(
         `update sw_spins set status = 'playing', animation_consumer = $2, animation_lease_expires_at = $3,
-           updated_at = $4 where spin_id = $1`,
+           updated_at = $4, reason = case when $5::boolean then null else reason end,
+           recovery = null, retry_at = null, retry_count = retry_count + case when $5::boolean then 1 else 0 end
+         where spin_id = $1`,
         [
           r.spin_id,
           consumerId,
           new Date(now.getTime() + SUB_WHEEL.animationLeaseMs),
           now,
+          retry,
         ],
       );
       return {
@@ -1113,6 +1152,67 @@ export class SubWheelService {
         },
       };
     });
+  }
+
+  /**
+   * Mode v2, wheel on: a wheel drawn and credited but never shown for sure, due again (draws.ts retryDue: live and the
+   * viewer present, unless the broadcaster or a moderator asked its draw). The SAME draw: nothing drawn nor credited here.
+   */
+  private async retryNext(
+    q: Queryable,
+    channelId: string,
+    now: Date,
+  ): Promise<Row | undefined> {
+    const { mode, enabled } = await readMode(q, channelId);
+    if (mode !== 'v2' || !enabled) return undefined;
+    const due = (
+      await retryDue(q, channelId, now, await this.presenceMode(q))
+    )[0];
+    if (!due) return undefined;
+    return (
+      await q.query<Row>('select * from sw_spins where spin_id = $1', [
+        due.spin_id,
+      ])
+    )[0];
+  }
+
+  /**
+   * What happens to a wheel that did not end « shown » (migration 20261109230000). Never started for sure (Studio says
+   * so, or — an older Studio — an error that only exists before the start): shown again automatically in mode v2, at
+   * most SUB_WHEEL.retryMax times with a growing delay; else, or an error a retry cannot fix, by hand. Started, or
+   * unknown: perhaps seen — « À vérifier », never shown again automatically.
+   */
+  private async recoveryOf(
+    q: Queryable,
+    r: Row,
+    a: SwAnimationReport,
+    reason: string,
+  ): Promise<{ recovery: Recovery; retryAt: Date | null }> {
+    const neverStarted =
+      a.started === false ||
+      (a.started === undefined && NEVER_STARTED.has(reason));
+    if (!neverStarted) return { recovery: 'check', retryAt: null };
+    const done = Number(r.retry_count ?? 0);
+    const mode = (
+      await q.query<{ mode: SwMode }>(
+        'select mode from sw_settings where channel_id = $1',
+        [r.channel_id],
+      )
+    )[0]?.mode;
+    if (
+      NOT_RETRYABLE.has(reason) ||
+      mode !== 'v2' ||
+      done >= SUB_WHEEL.retryMax
+    )
+      return { recovery: 'manual', retryAt: null };
+    const delay = Math.min(
+      SUB_WHEEL.retryBaseMs * 2 ** done,
+      SUB_WHEEL.retryMaxDelayMs,
+    );
+    return {
+      recovery: 'retry',
+      retryAt: new Date(this.now().getTime() + delay),
+    };
   }
 
   /**
@@ -1205,7 +1305,11 @@ export class SubWheelService {
    * use one of its own (owed or already requested, not « À vérifier »): those are drawn instead (« Tirer » / « !roue
    * oui »), refused `rights_available` with their count.
    */
-  async grant(channelId: string, actor: Actor, g: SwGrantInput) {
+  async grant(channelId: string, actor: Actor, input: SwGrantInput) {
+    const g = {
+      ...input,
+      viewer: await this.viewerByPseudo(channelId, input.viewer),
+    };
     return this.db.tx(async (q) => {
       const role = await this.allow(q, channelId, actor, 'subwheel.grant');
       await lockViewer(q, channelId, g.viewer.id);
@@ -1413,7 +1517,8 @@ export class SubWheelService {
       const row = (
         await q.query<Row>(
           `update sw_spins set status = 'queued', reason = null, shown_at = null, animation_consumer = null,
-             animation_lease_expires_at = null, replayed_at = $2, replay_count = replay_count + 1, updated_at = $2
+             animation_lease_expires_at = null, replayed_at = $2, replay_count = replay_count + 1, updated_at = $2,
+             recovery = null, retry_at = null, retry_count = 0
            where spin_id = $1 returning *`,
           [spinId, now],
         )
@@ -1434,6 +1539,96 @@ export class SubWheelService {
       });
       return spinView(row);
     });
+  }
+
+  /**
+   * « À vérifier » settled by the broadcaster: the wheel perhaps seen WAS seen. « Affichée » as it is (nothing drawn nor
+   * credited), announced then, once. Only a wheel « À vérifier »; already shown: the same. « Tirer » permission, journaled.
+   */
+  async confirmShown(spinId: string, actor: Actor) {
+    return this.db.tx(async (q) => {
+      const r = (
+        await q.query<Row>(
+          'select * from sw_spins where spin_id = $1 for update',
+          [spinId],
+        )
+      )[0];
+      if (!r) throw new SwError(404, 'spin_not_found');
+      const role = await this.allow(q, r.channel_id, actor, 'subwheel.draw');
+      if (r.status === 'shown') return spinView(r);
+      if (r.status !== 'failed' || r.recovery !== 'check')
+        throw new SwError(409, 'not_to_check');
+      const now = this.now();
+      const row = (
+        await q.query<Row>(
+          `update sw_spins set status = 'shown', shown_at = $2, recovery = null, retry_at = null, updated_at = $2
+           where spin_id = $1 returning *`,
+          [spinId, now],
+        )
+      )[0]!;
+      await this.audit(q, {
+        channelId: r.channel_id,
+        actor: actorName(actor),
+        role,
+        action: 'sw_confirm_shown',
+        viewerId: r.viewer_id,
+        spinId,
+        before: { status: r.status, reason: r.reason },
+        after: { status: 'shown' },
+      });
+      // Seen earlier: announced now.
+      await this.announce(q, row, 0);
+      return spinView(row);
+    });
+  }
+
+  /**
+   * A viewer named by its pseudo only (the extension's « Accorder un tour »): the ONE viewer the channel knows by that
+   * EXACT login or display name (the wheel's rows, then the channel's `viewers`). None → viewer_unknown; several →
+   * viewer_ambiguous.
+   */
+  private async viewerByPseudo(
+    channelId: string,
+    v: SwGrantInput['viewer'],
+  ): Promise<{ id: string; login?: string; name: string }> {
+    if (v.id) return { ...v, id: v.id };
+    const pseudo = v.name.replace(/^@+/, '').toLowerCase();
+    const same = new Map<
+      string,
+      { id: string; login: string | null; name: string }
+    >();
+    for (const h of await this.db.query<{
+      id: string;
+      login: string | null;
+      name: string;
+    }>(
+      `select distinct on (viewer_id) viewer_id as id, viewer_login as login, viewer_name as name from sw_spins
+       where channel_id = $1 and viewer_id is not null and source in ('twitch', 'manual', 'reconcile')
+         and (lower(coalesce(viewer_login, '')) = $2 or lower(viewer_name) = $2)
+       order by viewer_id, created_at desc`,
+      [channelId, pseudo],
+    ))
+      same.set(h.id, h);
+    const known = (
+      await this.db.query<{ ok: boolean }>(
+        "select to_regclass('public.viewers') is not null as ok",
+      )
+    )[0]!.ok;
+    if (known)
+      for (const h of await this.db.query<{
+        id: string;
+        login: string;
+        name: string;
+      }>(
+        `select twitch_user_id as id, login, display_name as name from viewers
+         where lower(login) = $1 or lower(display_name) = $1`,
+        [pseudo],
+      ))
+        if (!same.has(h.id)) same.set(h.id, h);
+    if (!same.size) throw new SwError(404, 'viewer_unknown');
+    if (same.size > 1) throw new SwError(409, 'viewer_ambiguous');
+    const h = [...same.values()][0]!;
+    return { id: h.id, ...(h.login ? { login: h.login } : {}), name: h.name };
   }
 
   /**
@@ -1916,10 +2111,15 @@ export class SubWheelService {
   async subscriptionDetections(channelId: string) {
     return this.db.query<{
       viewer_id: string;
+      viewer_name: string | null;
       detected_at: Date;
       tier: number;
     }>(
-      `select viewer_id, occurred_at as detected_at, tier from sw_spin_sources
+      // The pseudo the wheel knows for it (its latest tour), when it has one.
+      `select viewer_id, occurred_at as detected_at, tier,
+         (select s.viewer_name from sw_spins s where s.channel_id = src.channel_id and s.viewer_id = src.viewer_id
+          order by s.created_at desc limit 1) as viewer_name
+       from sw_spin_sources src
        where channel_id = $1 and source = 'reconcile' and spin_id is null
          and occurred_at > $2
        order by occurred_at desc limit 50`,
@@ -1943,19 +2143,34 @@ export class SubWheelService {
       if (!r) throw new SwError(404, 'spin_not_found');
       if (r.animation_consumer !== a.consumer_id)
         throw new SwError(409, 'not_current_consumer');
-      if (r.status !== 'playing') return { status: r.status };
+      // The report of the player that had it, arriving after its lease (Core or network down meanwhile): it settles the
+      // « À vérifier » the sweep made of it — seen to its end, or never started. Anything else changes nothing.
+      const late =
+        r.status === 'failed' &&
+        r.recovery === 'check' &&
+        r.reason === 'animation_not_confirmed' &&
+        (a.event === 'completed' || a.started === false);
+      if (r.status !== 'playing' && !late) return { status: r.status };
       const status = a.event === 'completed' ? 'shown' : 'failed';
+      const reason =
+        status === 'shown'
+          ? null
+          : (a.error ?? 'animation_failed').slice(0, 200);
+      const next =
+        reason === null
+          ? { recovery: null, retryAt: null }
+          : await this.recoveryOf(q, r, a, reason);
       await q.query(
         `update sw_spins set status = $2, reason = $3, shown_at = $4, animation_lease_expires_at = null,
-           updated_at = $5 where spin_id = $1`,
+           updated_at = $5, recovery = $6, retry_at = $7 where spin_id = $1`,
         [
           spinId,
           status,
-          status === 'shown'
-            ? null
-            : (a.error ?? 'animation_failed').slice(0, 200),
+          reason,
           status === 'shown' ? this.now() : null,
           this.now(),
+          next.recovery,
+          next.retryAt,
         ],
       );
       const delay = (
@@ -2047,8 +2262,12 @@ export class SubWheelService {
         owed: string | number | null;
         rights_auto: string | number;
         rights_manual: string | number;
+        retrying: string | number;
+        to_replay: string | number;
       }>(
         `select count(*) filter (where status in ('queued', 'playing')) as waiting,
+           count(*) filter (where status = 'failed' and recovery = 'retry') as retrying,
+           count(*) filter (where status = 'failed' and recovery = 'manual') as to_replay,
            count(*) filter (where award_status = 'pending') as pending,
            sum(amount) filter (where award_status = 'pending') as owed,
            count(*) filter (where status in ('owed', 'requested') and queue = 'auto') as rights_auto,
@@ -2068,6 +2287,18 @@ export class SubWheelService {
       rights: {
         auto: Number(counts.rights_auto),
         manual: Number(counts.rights_manual),
+      },
+      // Wheels drawn but not shown: shown again automatically · to replay by hand · « À vérifier » (perhaps seen).
+      recovery: {
+        retrying: Number(counts.retrying),
+        to_replay: Number(counts.to_replay),
+        checks: (
+          await this.db.query<Row>(
+            `select * from sw_spins where channel_id = $1 and status = 'failed' and recovery = 'check'
+             order by updated_at desc limit 50`,
+            [channelId],
+          )
+        ).map(spinView),
       },
       // R2: rights « À vérifier » (blocked), with both rights and their proofs (shown by lot R4).
       reviews: await openReviews(this.db, channelId),

@@ -13,6 +13,9 @@ const ERRORS = {
   needs_review: 'Ce tour est à vérifier par le streamer.',
   not_owed: 'Ce tour n’est plus en attente.',
   grant_key_reused: 'Ce tour a déjà été accordé.',
+  viewer_unknown: 'Pseudo inconnu de la chaîne (il doit avoir déjà été vu : chat, sub…).',
+  viewer_ambiguous: 'Plusieurs viewers portent ce pseudo : demande au streamer (Studio, onglet Droits).',
+  rights_available: 'Ce viewer a encore des tours à utiliser : « Tirer » plutôt qu’accorder.',
 };
 const say = (e) => ERRORS[e?.code ?? e?.message] ?? ERRORS[e?.body?.error] ?? 'Indisponible pour le moment.';
 const month = (r) => {
@@ -120,7 +123,6 @@ export function createSubWheelView({ document, client, team = false }) {
       ${rows ? `<ul class="swx-list">${rows}</ul>` : '<p class="muted">Aucun tour en attente.</p>'}
       <details><summary>Accorder un tour</summary>
         <form data-role="swx-grant">
-          <input data-f="g-id" inputmode="numeric" placeholder="Twitch ID" required>
           <input data-f="g-name" placeholder="Pseudo" required maxlength="64">
           <select data-f="g-tier"><option value="1">T1</option><option value="2">T2</option><option value="3">T3</option></select>
           <input data-f="g-months" type="number" min="1" max="200" value="1" aria-label="Roue (mois)">
@@ -153,8 +155,8 @@ export function createSubWheelView({ document, client, team = false }) {
     if (e.target.dataset.role !== 'swx-grant') return;
     e.preventDefault();
     const f = (k) => node.querySelector(`[data-f="${k}"]`)?.value.trim() ?? '';
-    if (!/^\d{1,32}$/.test(f('g-id')) || !f('g-name') || !f('g-note')) {
-      note = 'Twitch ID, pseudo et motif obligatoires.';
+    if (!f('g-name') || !f('g-note')) {
+      note = 'Pseudo et motif obligatoires.';
       render();
       return;
     }
@@ -162,7 +164,7 @@ export function createSubWheelView({ document, client, team = false }) {
       () =>
         client.subWheelTeamGrant({
           key: crypto.randomUUID(),
-          viewer: { id: f('g-id'), name: f('g-name') },
+          viewer: { name: f('g-name').replace(/^@+/, '') },
           tier: Number(f('g-tier') || 1),
           months: Math.max(1, Math.min(200, Math.round(Number(f('g-months')) || 1))),
           note: f('g-note'),

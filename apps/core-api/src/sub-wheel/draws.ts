@@ -93,6 +93,49 @@ export async function autoRights(
 }
 
 /**
+ * A wheel drawn but never shown for sure, due again (recovery `retry`, its delay over): the SAME draw shown again,
+ * nothing credited again. The caller checked mode v2 and wheel on. Like its draw: a request of the broadcaster or a
+ * moderator needs neither the live nor the presence; otherwise live and the viewer present (it sees its wheel). Oldest
+ * due first.
+ */
+export async function retryDue(
+  q: Queryable,
+  channelId: string,
+  now: Date,
+  mode: PresenceMode,
+) {
+  return q.query<{ spin_id: string }>(
+    `select s.spin_id from sw_spins s
+     where s.channel_id = $1 and s.status = 'failed' and s.recovery = 'retry' and s.retry_at <= $3
+       and ((s.requested_via is not null and not (${VIEWER_REQUEST})) or ${presentSql(mode)})
+     order by s.retry_at, s.seq limit 1
+     for update of s skip locked`,
+    [channelId, new Date(now.getTime() - PRESENCE_FRESH_MS), now],
+  );
+}
+
+/**
+ * An OBS alert playing or about to (taken by the alerts player, or waiting less than SUB_WHEEL.afterAlertMaxMs): a V2
+ * wheel never starts over it. Bounded: a lease ends, a waiting alert stops counting after that delay.
+ */
+export async function alertInFlight(
+  q: Queryable,
+  channelId: string,
+  now: Date,
+) {
+  return (
+    (
+      await q.query(
+        `select 1 from alert_items where channel_id = $1
+           and ((status in ('claimed', 'playing') and lease_expires_at > $2) or (status = 'queued' and created_at > $3))
+         limit 1`,
+        [channelId, now, new Date(now.getTime() - SUB_WHEEL.afterAlertMaxMs)],
+      )
+    ).length > 0
+  );
+}
+
+/**
  * Presence of these viewers (§ 8, three states): present · absent (fresh `ok` readings without them) · unknown (no
  * live, or no `ok` reading for 5 min: never taken for an absence). Lab: the simulator's readings.
  */

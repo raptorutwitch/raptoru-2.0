@@ -72,6 +72,13 @@ export const SUB_WHEEL = {
   /** An animation not shown within this delay is dropped (the gain stays recorded). */
   animationMaxAgeMs: 10 * 60_000,
   animationLeaseMs: 60_000,
+  /**
+   * A wheel never shown for sure (its player never started it) is shown again automatically — the same draw, nothing
+   * credited again — at most this many times, the n-th not before retryBaseMs × 2^(n−1) (capped at retryMaxDelayMs).
+   */
+  retryMax: 5,
+  retryBaseMs: 15_000,
+  retryMaxDelayMs: 5 * 60_000,
 } as const;
 
 /** The gain of a segment (legacy: baseAmt = val × mult; amount = baseAmt × tier coefficient). */
@@ -141,8 +148,12 @@ export const SwSettingsInput = z.strictObject({ enabled: z.boolean() });
 /** « Accorder un tour » (R3, subWheelGrant): a manual right. `key`: the same grant retried is the same right. */
 export const SwGrantInput = z.strictObject({
   key: z.uuid(),
+  /** Without its id: the pseudo is enough when the channel knows exactly one viewer by that login or name. */
   viewer: z.strictObject({
-    id: z.string().regex(/^\d{1,32}$/),
+    id: z
+      .string()
+      .regex(/^\d{1,32}$/)
+      .optional(),
     login: z.string().max(64).optional(),
     name: z.string().trim().min(1).max(64),
   }),
@@ -232,5 +243,10 @@ export const SwAnimationReport = z.strictObject({
   consumer_id: z.string().min(1).max(64),
   event: z.enum(['completed', 'failed', 'unknown']),
   error: z.string().max(200).optional(),
+  /**
+   * Did the player START it? false: never started, nothing seen nor heard (shown again automatically). Absent (a Studio
+   * older than this field): told from the error code.
+   */
+  started: z.boolean().optional(),
 });
 export type SwAnimationReport = z.infer<typeof SwAnimationReport>;

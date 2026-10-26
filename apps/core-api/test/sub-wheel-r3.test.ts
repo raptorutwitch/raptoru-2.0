@@ -3,6 +3,7 @@ import {
   type AlertEventInput,
   type LoyaltyEvent,
   SUB_WHEEL,
+  type SwAnimationReport,
   subWheelAmount,
 } from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
@@ -879,5 +880,466 @@ describe('Roue du Sub V2 — RV2-1: the winner announcements', () => {
         ),
       ),
     );
+  });
+});
+
+describe('Roue du Sub V2 — autonomous recovery of a wheel never shown', () => {
+  /** One live right of a present viewer, claimed: drawn and credited, handed to the player. */
+  async function claimed() {
+    const f = await fixture();
+    await f.v2();
+    await f.live('s1', 0);
+    const r = (await f.receive(notice('9501', 1_000)))!;
+    await f.reading(['9501'], 30_000);
+    f.at0(40_000);
+    const { spin } = await f.claim();
+    expect(spin?.spin_id).toBe(r.spin_id);
+    return { f, spin: spin! };
+  }
+  const row = async (f: Awaited<ReturnType<typeof fixture>>, id: string) =>
+    (
+      await f.core.db.query<{
+        status: string;
+        reason: string | null;
+        recovery: string | null;
+        retry_count: number;
+        retry_at: Date | null;
+        segment: number;
+        amount: string;
+      }>(
+        'select status, reason, recovery, retry_count, retry_at, segment, amount from sw_spins where spin_id = $1',
+        [id],
+      )
+    )[0]!;
+  const report = (
+    f: Awaited<ReturnType<typeof fixture>>,
+    id: string,
+    a: Partial<SwAnimationReport>,
+  ) =>
+    f.wheel.reportAnimation(id, {
+      consumer_id: 'obs',
+      event: 'failed',
+      ...a,
+    });
+  const announced = (f: Awaited<ReturnType<typeof fixture>>, id: string) =>
+    count(
+      f.core.db,
+      `cmd_steps where origin = 'sub_wheel' and idempotency_key = 'sub_wheel:win:${id}'`,
+    );
+  const now = (f: Awaited<ReturnType<typeof fixture>>) =>
+    f.core.clock.now().getTime();
+
+  it('never started (player gone between the claim and the start): the SAME draw shown again automatically after its delay — one draw, one credit, announced once after it was seen', async () => {
+    const { f, spin } = await claimed();
+    await report(f, spin.spin_id, {
+      started: false,
+      error: 'effects_player_offline',
+    });
+    const failed = await row(f, spin.spin_id);
+    expect(failed).toMatchObject({
+      status: 'failed',
+      recovery: 'retry',
+      retry_count: 0,
+    });
+    expect(new Date(failed.retry_at!).getTime()).toBe(
+      now(f) + SUB_WHEEL.retryBaseMs,
+    );
+    expect(await announced(f, spin.spin_id)).toBe(0);
+    // Not before its delay.
+    expect((await f.claim()).spin).toBeNull();
+    f.at0(40_000 + SUB_WHEEL.retryBaseMs);
+    const again = (await f.claim()).spin!;
+    expect(again).toEqual(spin); // same segment, same gain
+    expect(await row(f, spin.spin_id)).toMatchObject({
+      status: 'playing',
+      recovery: null,
+      retry_count: 1,
+      reason: null,
+    });
+    await f.done(spin.spin_id);
+    expect(await f.status(spin.spin_id)).toBe('shown');
+    expect(f.draws()).toBe(1);
+    expect(await f.credits()).toBe(1);
+    expect(await announced(f, spin.spin_id)).toBe(1);
+  });
+
+  it('bounded: growing delays, then by hand after SUB_WHEEL.retryMax re-shows; « Rejouer » starts over — never a second credit', async () => {
+    const { f, spin } = await claimed();
+    const delays: number[] = [];
+    for (let i = 0; i <= SUB_WHEEL.retryMax; i++) {
+      await report(f, spin.spin_id, {
+        started: false,
+        error: 'effect_start_timeout',
+      });
+      const r = await row(f, spin.spin_id);
+      if (i === SUB_WHEEL.retryMax) {
+        expect(r).toMatchObject({ recovery: 'manual', retry_at: null });
+        break;
+      }
+      expect(r.recovery).toBe('retry');
+      delays.push(new Date(r.retry_at!).getTime() - now(f));
+      const due = new Date(r.retry_at!).getTime() - T0.getTime();
+      await f.reading(['9501'], due); // still there
+      f.at0(due);
+      expect((await f.claim()).spin?.spin_id).toBe(spin.spin_id);
+    }
+    expect(delays).toEqual([15_000, 30_000, 60_000, 120_000, 240_000]);
+    // No automatic re-show any more, ever.
+    f.at0(3 * 60 * MIN);
+    await f.reading(['9501'], 3 * 60 * MIN);
+    expect((await f.claim()).spin).toBeNull();
+    // « Rejouer l'animation »: the same draw, the automatic attempts start over.
+    await f.wheel.replayAnimation(spin.spin_id, studio);
+    expect(await row(f, spin.spin_id)).toMatchObject({
+      status: 'queued',
+      recovery: null,
+      retry_count: 0,
+    });
+    expect((await f.claim()).spin).toEqual(spin);
+    expect(f.draws()).toBe(1);
+    expect(await f.credits()).toBe(1);
+  });
+
+  it('only in live, wheel on, mode v2, viewer present: otherwise the wheel waits (kept, never lost) and comes back by itself', async () => {
+    const { f, spin } = await claimed();
+    await report(f, spin.spin_id, {
+      started: false,
+      error: 'effects_player_offline',
+    });
+    const due = 40_000 + SUB_WHEEL.retryBaseMs;
+    // Wheel off: paused.
+    await f.wheel.setEnabled(CH, false);
+    f.at0(due);
+    expect((await f.claim()).spin).toBeNull();
+    await f.wheel.setEnabled(CH, true);
+    // Viewer absent: fresh readings without it (last seen more than 5 min ago).
+    await f.reading([], 7 * MIN);
+    f.at0(7 * MIN + 1_000);
+    expect((await f.claim()).spin).toBeNull();
+    // Live over: nothing automatic, even with the viewer seen again.
+    await f.reading(['9501'], 8 * MIN);
+    await endLive(f.core, at(8 * MIN + 1_000));
+    f.at0(8 * MIN + 2_000);
+    expect((await f.claim()).spin).toBeNull();
+    expect(await row(f, spin.spin_id)).toMatchObject({
+      status: 'failed',
+      recovery: 'retry',
+      retry_count: 0,
+    });
+    // Next live, the viewer there: shown, the same draw.
+    await f.live('s2', DAY);
+    await f.reading(['9501'], DAY + 1_000);
+    f.at0(DAY + 2_000);
+    expect((await f.claim()).spin).toEqual(spin);
+    expect(await f.credits()).toBe(1);
+  });
+
+  it('a request of the broadcaster needs no presence for its re-show (like its draw)', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.wheel.setEnabled(CH, false);
+    const r = (await f.receive(notice('9502', 0)))!; // off live: manual right
+    await f.wheel.setEnabled(CH, true);
+    await f.wheel.requestDraw(r.spin_id, studio);
+    await f.live('s1', MIN);
+    f.at0(MIN + 1_000);
+    const spin = (await f.claim()).spin!;
+    await report(f, spin.spin_id, { started: false, error: 'effects_busy' });
+    f.at0(MIN + 1_000 + SUB_WHEEL.retryBaseMs);
+    expect((await f.claim()).spin?.spin_id).toBe(r.spin_id);
+  });
+
+  it('outside mode v2, or an error a retry cannot fix (the wheel files): by hand at once, nothing automatic', async () => {
+    const { f, spin } = await claimed();
+    await report(f, spin.spin_id, {
+      started: false,
+      error: 'effect_media_missing',
+    });
+    expect(await row(f, spin.spin_id)).toMatchObject({
+      recovery: 'manual',
+      retry_at: null,
+    });
+    // V1 (today's production): a wheel never shown stays as V1 left it — by hand.
+    const v1 = await fixture();
+    await v1.wheel.setEnabled(CH, true);
+    await v1.live('s1', 0);
+    const s = (await v1.receive(notice('9503', 1_000)))!;
+    v1.at0(1_000 + SUB_WHEEL.afterAlertMaxMs);
+    expect((await v1.claim()).spin?.spin_id).toBe(s.spin_id);
+    await report(v1, s.spin_id, {
+      started: false,
+      error: 'effects_player_offline',
+    });
+    expect(await row(v1, s.spin_id)).toMatchObject({
+      status: 'failed',
+      recovery: 'manual',
+    });
+    v1.at0(DAY);
+    expect((await v1.claim()).spin).toBeNull();
+  });
+
+  it('an older Studio (no « started »): told from the error code — a pre-start code is shown again, anything else « À vérifier »', async () => {
+    const { f, spin } = await claimed();
+    await report(f, spin.spin_id, { error: 'effects_player_muted' });
+    expect((await row(f, spin.spin_id)).recovery).toBe('retry');
+    f.at0(40_000 + SUB_WHEEL.retryBaseMs);
+    expect((await f.claim()).spin?.spin_id).toBe(spin.spin_id);
+    await report(f, spin.spin_id, { error: 'playback_error' });
+    expect((await row(f, spin.spin_id)).recovery).toBe('check');
+  });
+
+  it('perhaps seen (started, no confirmed end): « À vérifier », never shown again automatically; « Elle a bien été vue »: shown, announced once — idempotent, journaled, broadcaster / « Tirer » only', async () => {
+    const { f, spin } = await claimed();
+    await f.wheel.reportAnimation(spin.spin_id, {
+      consumer_id: 'obs',
+      event: 'unknown',
+      error: 'playback_not_confirmed',
+      started: true,
+    });
+    expect(await row(f, spin.spin_id)).toMatchObject({
+      status: 'failed',
+      recovery: 'check',
+      retry_at: null,
+    });
+    f.at0(DAY);
+    await f.live('s2', DAY);
+    await f.reading(['9501'], DAY + 1_000);
+    expect((await f.claim()).spin).toBeNull();
+    const state = await f.wheel.state(CH);
+    expect(state.recovery.checks.map((c) => c.spin_id)).toEqual([spin.spin_id]);
+    expect(await f.code(f.wheel.confirmShown(spin.spin_id, mod('7001')))).toBe(
+      'forbidden',
+    );
+    const shown = await f.wheel.confirmShown(spin.spin_id, studio);
+    expect(shown).toMatchObject({ status: 'shown', recovery: null });
+    expect(await f.wheel.confirmShown(spin.spin_id, studio)).toMatchObject({
+      status: 'shown',
+    });
+    expect(await announced(f, spin.spin_id)).toBe(1);
+    expect(
+      await count(
+        f.core.db,
+        "lab_moderation_audit where action = 'sw_confirm_shown'",
+      ),
+    ).toBe(1);
+    expect(await f.credits()).toBe(1);
+    // Only a wheel « À vérifier »: a wheel never shown for sure is replayed, never declared seen.
+    const other = await claimed();
+    await report(other.f, other.spin.spin_id, {
+      started: false,
+      error: 'effects_player_offline',
+    });
+    expect(
+      await other.f.code(
+        other.f.wheel.confirmShown(other.spin.spin_id, studio),
+      ),
+    ).toBe('not_to_check');
+  });
+
+  it('the player vanished during it (lease over): « À vérifier »; its own late report settles it — seen: shown and announced once; another player: refused', async () => {
+    const { f, spin } = await claimed();
+    f.at0(40_000 + SUB_WHEEL.animationLeaseMs + 1);
+    expect((await f.claim()).spin).toBeNull();
+    expect(await row(f, spin.spin_id)).toMatchObject({
+      status: 'failed',
+      reason: 'animation_not_confirmed',
+      recovery: 'check',
+    });
+    expect(
+      await f.code(
+        f.wheel.reportAnimation(spin.spin_id, {
+          consumer_id: 'someone-else',
+          event: 'completed',
+        }),
+      ),
+    ).toBe('not_current_consumer');
+    // A late failure that does not say « never started » leaves it « À vérifier ».
+    await f.wheel.reportAnimation(spin.spin_id, {
+      consumer_id: 'obs',
+      event: 'failed',
+      error: 'playback_error',
+      started: true,
+    });
+    expect((await row(f, spin.spin_id)).recovery).toBe('check');
+    await f.done(spin.spin_id);
+    expect(await row(f, spin.spin_id)).toMatchObject({
+      status: 'shown',
+      recovery: null,
+    });
+    expect(await announced(f, spin.spin_id)).toBe(1);
+    await f.done(spin.spin_id);
+    expect(await announced(f, spin.spin_id)).toBe(1);
+  });
+
+  it('a late « never started » turns « À vérifier » into an automatic re-show', async () => {
+    const { f, spin } = await claimed();
+    f.at0(40_000 + SUB_WHEEL.animationLeaseMs + 1);
+    await f.claim();
+    await report(f, spin.spin_id, {
+      started: false,
+      error: 'effects_player_offline',
+    });
+    expect((await row(f, spin.spin_id)).recovery).toBe('retry');
+  });
+
+  it('never over an OBS alert (playing, or waiting < 20 s): the V2 wheel waits, bounded by the alert lease', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.live('s1', 0);
+    const r = (await f.receive(notice('9501', 1_000)))!;
+    await f.reading(['9501'], 30_000);
+    f.at0(40_000);
+    const alerts = (await import('../src/alerts/service.js')).AlertsService;
+    const a = new alerts(f.core.db, f.core.clock, () => 0);
+    // Another viewer's follow alert arrives: waiting, then taken by the alerts player.
+    const follow = await a.receive({
+      ...notice('9700', 40_000),
+      type: 'follow',
+      months: undefined,
+      tier: undefined,
+    });
+    expect(follow.alert).toBeTruthy();
+    expect((await f.claim()).spin).toBeNull(); // waiting < 20 s
+    const taken = await a.claim(CH, 'alerts-obs');
+    expect(taken?.alert_id).toBe(follow.alert!.alert_id);
+    await a.ack(taken!.alert_id, {
+      consumer_id: 'alerts-obs',
+      attempt_id: taken!.attempt_id!,
+      event: 'started',
+    } as never);
+    f.at0(45_000);
+    expect((await f.claim()).spin).toBeNull(); // playing (within its lease)
+    await a.ack(taken!.alert_id, {
+      consumer_id: 'alerts-obs',
+      attempt_id: taken!.attempt_id!,
+      event: 'completed',
+    } as never);
+    expect((await f.claim()).spin?.spin_id).toBe(r.spin_id);
+  });
+});
+
+describe('Roue du Sub V2 — « Accorder un tour » by pseudo (extension, Studio)', () => {
+  it('the pseudo alone names the ONE viewer the channel knows by that login or name; unknown or ambiguous: refused, nothing created', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.live('s1', 0);
+    await f.receive(notice('9501', 1_000)); // the wheel knows V9501 (login v9501)
+    await f.reading(['9777'], 2_000); // the channel knows v9777 (chatters)
+    const grant = (name: string) =>
+      f.wheel.grant(CH, studio, {
+        key: randomUUID(),
+        viewer: { name },
+        tier: 1,
+        months: 2,
+        note: 'tour perdu (test)',
+      });
+    expect(await grant('@v9777')).toMatchObject({
+      viewer: { id: '9777' },
+      status: 'owed',
+      source: 'manual',
+    });
+    expect(await f.code(grant('V9501'))).toBe('rights_available'); // its own tour first
+    expect(await f.code(grant('personne'))).toBe('viewer_unknown');
+    await f.core.db.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ('9801', 'dup_a', 'Dup'),
+         ('9802', 'dup_b', 'Dup')`,
+    );
+    expect(await f.code(grant('Dup'))).toBe('viewer_ambiguous');
+    // Many similar pseudos (more than a search page): the exact one is still found.
+    for (let i = 0; i < 10; i++)
+      await f.core.db.query(
+        `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $2)`,
+        [`98${10 + i}`, `dup_b${i}`],
+      );
+    expect(await f.code(grant('dup_b'))).toBe('ok'); // its login is unique
+    expect(await count(f.core.db, "sw_spins where source = 'manual'")).toBe(2);
+  });
+});
+
+describe('Roue du Sub V2 — whole journeys', () => {
+  const rows = (f: Awaited<ReturnType<typeof fixture>>) =>
+    count(f.core.db, "sw_spins where status <> 'ignored'");
+  const resubMessage = (viewer: string, ms: number, months: number) =>
+    ({
+      type: 'resub',
+      eventId: randomUUID(),
+      occurredAt: iso(ms),
+      viewer: {
+        twitchUserId: viewer,
+        login: `v${viewer}`,
+        displayName: `V${viewer}`,
+      },
+      tier: 't1',
+      cumulativeMonths: months,
+    }) as LoyaltyEvent;
+
+  it('a resub shared in chat while the wheel is OFF (its message + its chat notice): ONE right, kept; the wheel back ON in live, the viewer there: drawn once, one credit; both events again: nothing more', async () => {
+    const f = await fixture();
+    await f.v2(false);
+    await f.live('s1', 0);
+    const message = resubMessage('9501', 1_000, 7);
+    const chat = notice('9501', 1_500);
+    await f.post(message);
+    const r = (await f.receive(chat))!;
+    expect(await rows(f)).toBe(1);
+    expect(r).toMatchObject({ status: 'owed', right: { sub_month: 7 } });
+    await f.reading(['9501'], 30_000);
+    f.at0(40_000);
+    expect((await f.claim()).spin).toBeNull(); // OFF: paused, kept
+    await f.wheel.setEnabled(CH, true);
+    const { spin } = await f.claim();
+    expect(spin?.spin_id).toBe(r.spin_id);
+    await f.done(spin!.spin_id);
+    await f.post(message);
+    await f.receive(chat);
+    expect(await rows(f)).toBe(1);
+    expect(f.draws()).toBe(1);
+    expect(await f.credits()).toBe(1);
+  });
+
+  it('two rights of the same viewer (two renewals) in the automatic queue: one wheel, then the other — never two at once, two credits', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.live('s1', 0);
+    const a = (await f.receive(notice('9501', 1_000, { months: 7 })))!;
+    f.at0(2 * DAY);
+    await f.live('s2', 2 * DAY);
+    // The next month (a second renewal, its own month): its own right.
+    const b = (await f.receive(notice('9501', 31 * DAY, { months: 8 })))!;
+    expect(b.spin_id).not.toBe(a.spin_id);
+    await f.reading(['9501'], 31 * DAY + 30_000);
+    f.at0(31 * DAY + 40_000);
+    const first = (await f.claim()).spin!;
+    expect(first.spin_id).toBe(a.spin_id);
+    expect((await f.claim()).spin).toBeNull(); // one at a time
+    await f.done(first.spin_id);
+    const second = (await f.claim()).spin!;
+    expect(second.spin_id).toBe(b.spin_id);
+    await f.done(second.spin_id);
+    expect(await f.credits()).toBe(2);
+  });
+
+  it('mode v2: gifts never give a right — a targeted gift, a community gift, its recipients, a gifted sub through the loyalty route', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.live('s1', 0);
+    for (const type of [
+      'gift_targeted',
+      'gift_community',
+      'gift_recipient',
+    ] as const)
+      expect(
+        await f.receive(notice('9501', 1_000, { type, count: 5 } as never)),
+      ).toBeNull();
+    await f.post({
+      type: 'sub',
+      eventId: randomUUID(),
+      occurredAt: iso(2_000),
+      viewer: { twitchUserId: '9502', login: 'v9502', displayName: 'V9502' },
+      tier: 't1',
+      isGift: true,
+    } as LoyaltyEvent);
+    expect(await rows(f)).toBe(0);
+    expect((await f.claim()).spin).toBeNull();
   });
 });
