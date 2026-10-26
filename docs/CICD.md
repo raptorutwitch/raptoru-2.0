@@ -118,6 +118,11 @@ artefact de test supprimés ensuite, 0.1.7 inchangée. Secours sans GitHub : `no
    - sinon, relancer le workflow avec `sha` = le commit précédent (colonne « Précédent » de « État de la livraison »),
      `rollback` coché, `mode = deploy`. Un commit ayant déjà tourné en Production n'a pas besoin de CI.
 4. Une migration n'est jamais annulée automatiquement : un retour de code sur un schéma migré se décide à la main.
+   Faux « ÉCHEC » connu du **bot** (26/10, `d215778`) : sans URL de santé publique, l'outil lit l'état Coolify une seule
+   fois à la fin du déploiement ; si Docker n'a pas encore marqué le conteneur « healthy », il conclut
+   `running:unhealthy` alors que le bot a repris le bail avec EventSub et jetons valides. Le retour arrière automatique
+   a fonctionné ; un second déploiement identique a été `DÉPLOYÉ`. À corriger dans `scripts/coolify-deploy.mjs`
+   (attendre `running:healthy` jusqu'au délai aussi pour le bot).
 5. Diagnostic conservé : artefact `deploy-…` (journal sans secret, 90 jours) et onglet Deployments.
 
 En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status core`, `plan core <sha>`,
