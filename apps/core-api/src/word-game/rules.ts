@@ -289,12 +289,20 @@ export function streakAnnouncement(
   };
 }
 
-/** Variant 1–4, uniform. */
-export function pickVariant(rng: Rng): 1 | 2 | 3 | 4 {
-  return randomInt(rng, 1, 4) as 1 | 2 | 3 | 4;
+/** Phrases per streak tier (§ 12.5): the 4 historical ones first, then 4 more. */
+export const STREAK_VARIANTS = 8;
+
+/**
+ * Variant 1–STREAK_VARIANTS, uniform, never `avoid` (the previous announcement's variant in the same tier): never the
+ * same phrase twice in a row.
+ */
+export function pickVariant(rng: Rng, avoid?: number | null): number {
+  if (!avoid) return randomInt(rng, 1, STREAK_VARIANTS);
+  const v = randomInt(rng, 1, STREAK_VARIANTS - 1);
+  return v >= avoid ? v + 1 : v;
 }
 
-const STREAK_TIERS: [number, [string, string, string, string]][] = [
+const STREAK_TIERS: [number, string[]][] = [
   [
     12,
     [
@@ -302,6 +310,10 @@ const STREAK_TIERS: [number, [string, string, string, string]][] = [
       '👑 @{X} règne sur le Jeu des mots !',
       '👑 @{X} est au SOMMET !',
       '👑 Le royaume des mots appartient à @{X} !',
+      '👑 @{X} écrit sa légende !',
+      '👑 Tout le chat s’incline devant @{X} !',
+      '👑 @{X} entre dans l’histoire du Jeu des mots !',
+      '👑 Personne ne détrône @{X} !',
     ],
   ],
   [
@@ -311,6 +323,10 @@ const STREAK_TIERS: [number, [string, string, string, string]][] = [
       '⚡ @{X} roule sur le jeu !',
       '⚡ @{X} est en pleine DOMINATION !',
       '⚡ Rien n’arrête @{X} !',
+      '⚡ @{X} écrase la concurrence !',
+      '⚡ @{X} est intouchable !',
+      '⚡ Qui va stopper @{X} ?',
+      '⚡ @{X} survole le jeu !',
     ],
   ],
   [
@@ -320,6 +336,10 @@ const STREAK_TIERS: [number, [string, string, string, string]][] = [
       '🔥🔥 @{X} ne s’arrête plus !',
       '🔥🔥 @{X} enchaîne tout !',
       '🔥🔥 Quelle série pour @{X} !',
+      '🔥🔥 @{X} est intenable !',
+      '🔥🔥 Personne ne suit le rythme de @{X} !',
+      '🔥🔥 @{X} met le feu au chat !',
+      '🔥🔥 @{X} ne laisse rien passer !',
     ],
   ],
   [
@@ -329,15 +349,26 @@ const STREAK_TIERS: [number, [string, string, string, string]][] = [
       '🔥 @{X} commence à chauffer !',
       '🔥 @{X} prend feu !',
       '🔥 Ça chauffe pour @{X} !',
+      '🔥 @{X} a trouvé le rythme !',
+      '🔥 Attention, @{X} s’échauffe !',
+      '🔥 @{X} ne lâche rien !',
+      '🔥 @{X} est bien lancé !',
     ],
   ],
 ];
+
+/** The tier of a streak of at least 3 (its first count): the same tier, the same phrases. */
+export function streakTier(count: number): number {
+  const tier = STREAK_TIERS.find(([min]) => count >= min);
+  if (!tier) throw new RangeError('a streak is announced from 3');
+  return tier[0];
+}
 
 /** Text of a streak announcement (§ 12.5), for a streak of at least 3. */
 export function streakAnnouncementText(
   name: string,
   count: number,
-  variant: 1 | 2 | 3 | 4,
+  variant: number,
 ): string {
   const tier = STREAK_TIERS.find(([min]) => count >= min);
   if (!tier) throw new RangeError('a streak is announced from 3');
