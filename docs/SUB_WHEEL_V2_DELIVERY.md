@@ -1,7 +1,6 @@
 # Roue du Sub V2 — livraison en Production
 
-Branche `feat/sub-wheel-v2` (worktree `C:\Users\Antoni\Documents\raptoru-roue-v2`), partie d'`origin/main`
-`3a17c01`, **rien de poussé**. Plan et décisions : [SUB_WHEEL_V2_PLAN.md](SUB_WHEEL_V2_PLAN.md). Règles de déploiement :
+**Livrée le 26/10/2026** (§ 7) : PR #11, `main` `1df65d1`. Plan et décisions : [SUB_WHEEL_V2_PLAN.md](SUB_WHEEL_V2_PLAN.md). Règles de déploiement :
 [CICD.md](CICD.md), [OPERATIONS.md](OPERATIONS.md). Chaque étape ci-dessous demande le **GO explicite d'Antoni**, hors
 live.
 
@@ -101,3 +100,23 @@ active, Simulateur Lab : live démarré, relevés actifs.
    jamais pour un rejeu.
 
 Non vérifiable dans le Lab : OBS réel (source navigateur), Twitch réel, la base et les services de Production.
+
+## 7. Livraison réelle du 26/10/2026
+
+| Étape       | Fait                                                                                                         | Preuve                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Répétition  | paquet SQL + vérificateur réel sur PostgreSQL 17 au schéma de Production du 25/10                            | le vérificateur refusait le paquet (fichiers dépendants) : corrigé (`cd80c15`), test ajouté |
+| CI          | PR #11 puis `main` `1df65d1` : tous les jobs verts                                                           | runs `40262102804`, `40263235893`                                                           |
+| Sauvegardes | Coolify 03:03 et 11:49 UTC (`success`, 2,68 Mo) ; profil Studio copié                                        | `Sauvegarde Raptoru 2.0\studio-profile-avant-0.1.8-2026-10-26`                              |
+| SQL         | paquet `Documents\raptoru-roue-v2-GO\sub_wheel_v2_prod.sql` appliqué par Antoni (terminal Coolify)           | l'ancien Core a continué de répondre                                                        |
+| Core        | `1df65d1`, `preapplied` : 7 fichiers conformes puis enregistrés, 108 s                                       | run `40318004645`, `/health` `/ready` 200                                                   |
+| Bot         | `1df65d1`, 135 s : bail, EventSub bot et diffuseur, jeton diffuseur OK                                       | run `40318386899`                                                                           |
+| Studio      | 0.1.8 publiée (mise à jour 0.1.7 → 0.1.8 vérifiée octet par octet), installée par Antoni, profil Production  | release `v0.1.8`                                                                            |
+| Bascule     | `v1` → `v2_acquire` (12:08 UTC) → `v2` (12:12 UTC), par l'API du Core avec l'identité de Studio (journalisé) | état : interrupteur ON, 7 tirages historiques identiques, 0 droit, 0 gain en attente        |
+
+Non fait, volontairement : aucun tour accordé ni tirage en Production pour tester (aucun crédit fictif) ; invitations
+laissées OFF ; extension non publiée (le module Roue du Hub n'est pas nécessaire : Studio et chat suffisent).
+
+Retour arrière : Studio → Roue du Sub → Réglages → `v1` (immédiat, aucun droit perdu) ; code :
+`deploy core|bot 0b11cc0a98447972264ee1c25115d3baf0b9e74f --rollback` (workflow, `rollback` coché) ; Studio : réinstaller
+0.1.7 ; le schéma reste (additif, vérifié avec l'ancien Core).
