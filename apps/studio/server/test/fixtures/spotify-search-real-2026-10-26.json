@@ -1,0 +1,788 @@
+{
+  "Indochine - J'ai demandé à la lune": [
+    {
+      "id": "2QSAj76Ba6aMFX9RlXdUdO",
+      "uri": "spotify:track:2QSAj76Ba6aMFX9RlXdUdO",
+      "name": "J'ai demandé à la lune",
+      "artists": [
+        {
+          "name": "Indochine"
+        }
+      ],
+      "duration_ms": 209413,
+      "external_ids": {
+        "isrc": "FRZ080104420"
+      },
+      "album": {
+        "name": "Paradize",
+        "album_type": "album",
+        "release_date": "2002-02-28"
+      }
+    },
+    {
+      "id": "6G7Xbn5dDgy3eRKpW7qDnv",
+      "uri": "spotify:track:6G7Xbn5dDgy3eRKpW7qDnv",
+      "name": "J'ai demandé à la lune",
+      "artists": [
+        {
+          "name": "Indochine"
+        }
+      ],
+      "duration_ms": 288693,
+      "external_ids": {
+        "isrc": "FRZ081400231"
+      },
+      "album": {
+        "name": "Black City Tour",
+        "album_type": "album",
+        "release_date": "2014-12-01"
+      }
+    },
+    {
+      "id": "3dgI3RyYktGoAM94LK3DGy",
+      "uri": "spotify:track:3dgI3RyYktGoAM94LK3DGy",
+      "name": "J'ai demandé à la lune",
+      "artists": [
+        {
+          "name": "Indochine"
+        }
+      ],
+      "duration_ms": 209413,
+      "external_ids": {
+        "isrc": "FRZ081100700"
+      },
+      "album": {
+        "name": "Paradize +10 - Edition Deluxe",
+        "album_type": "compilation",
+        "release_date": "2012-02-13"
+      }
+    },
+    {
+      "id": "6ZSqWd1FZuM8tFzGMyL0HW",
+      "uri": "spotify:track:6ZSqWd1FZuM8tFzGMyL0HW",
+      "name": "Éternité",
+      "artists": [
+        {
+          "name": "6YP"
+        }
+      ],
+      "duration_ms": 241818,
+      "external_ids": {
+        "isrc": "QZK6F2449120"
+      },
+      "album": {
+        "name": "Éternité",
+        "album_type": "single",
+        "release_date": "2024-05-10"
+      }
+    },
+    {
+      "id": "3m8mE4zIKlv54V885mTKO8",
+      "uri": "spotify:track:3m8mE4zIKlv54V885mTKO8",
+      "name": "Pégase",
+      "artists": [
+        {
+          "name": "Thomas Fersen"
+        }
+      ],
+      "duration_ms": 216133,
+      "external_ids": {
+        "isrc": "FRZ040500176"
+      },
+      "album": {
+        "name": "Le pavillon des fous",
+        "album_type": "album",
+        "release_date": "2005-10-04"
+      }
+    },
+    {
+      "id": "7jlSV7VE37txK1FJaJmSVU",
+      "uri": "spotify:track:7jlSV7VE37txK1FJaJmSVU",
+      "name": "Casting",
+      "artists": [
+        {
+          "name": "Christophe Maé"
+        }
+      ],
+      "duration_ms": 263800,
+      "external_ids": {
+        "isrc": "FRZ041901624"
+      },
+      "album": {
+        "name": "La vie d'artiste",
+        "album_type": "album",
+        "release_date": "2019-10-25"
+      }
+    },
+    {
+      "id": "0v98JzGs7BLrqC7pwmD0Ak",
+      "uri": "spotify:track:0v98JzGs7BLrqC7pwmD0Ak",
+      "name": "Dernier appel",
+      "artists": [
+        {
+          "name": "Souli"
+        },
+        {
+          "name": "Janahee"
+        }
+      ],
+      "duration_ms": 232806,
+      "external_ids": {
+        "isrc": "FR5R02500073"
+      },
+      "album": {
+        "name": "Cœur",
+        "album_type": "single",
+        "release_date": "2025-02-14"
+      }
+    },
+    {
+      "id": "4VenojgN9OHAwLfHIvKS6R",
+      "uri": "spotify:track:4VenojgN9OHAwLfHIvKS6R",
+      "name": "EMOTICONE",
+      "artists": [
+        {
+          "name": "Yvnnis"
+        }
+      ],
+      "duration_ms": 154721,
+      "external_ids": {
+        "isrc": "FR9W12540793"
+      },
+      "album": {
+        "name": "DND",
+        "album_type": "album",
+        "release_date": "2025-10-10"
+      }
+    },
+    {
+      "id": "1GWJCN6dk0LaMVghoWuxul",
+      "uri": "spotify:track:1GWJCN6dk0LaMVghoWuxul",
+      "name": "SALAIRE",
+      "artists": [
+        {
+          "name": "Temayo"
+        }
+      ],
+      "duration_ms": 183000,
+      "external_ids": {
+        "isrc": "FR9W12147923"
+      },
+      "album": {
+        "name": "RUDE",
+        "album_type": "single",
+        "release_date": "2022-06-24"
+      }
+    },
+    {
+      "id": "5i0EnBg1wvMbUruuyexCt3",
+      "uri": "spotify:track:5i0EnBg1wvMbUruuyexCt3",
+      "name": "Appelez ca comme vous voulez",
+      "artists": [
+        {
+          "name": "Mouloudji"
+        }
+      ],
+      "duration_ms": 186253,
+      "external_ids": {
+        "isrc": "FRUM71402178"
+      },
+      "album": {
+        "name": "Les années Mercury 1956 - 1957",
+        "album_type": "compilation",
+        "release_date": "2014-12-08"
+      }
+    }
+  ],
+  "J'ai demandé à la lune Indochine": [
+    {
+      "id": "2QSAj76Ba6aMFX9RlXdUdO",
+      "uri": "spotify:track:2QSAj76Ba6aMFX9RlXdUdO",
+      "name": "J'ai demandé à la lune",
+      "artists": [
+        {
+          "name": "Indochine"
+        }
+      ],
+      "duration_ms": 209413,
+      "external_ids": {
+        "isrc": "FRZ080104420"
+      },
+      "album": {
+        "name": "Paradize",
+        "album_type": "album",
+        "release_date": "2002-02-28"
+      }
+    },
+    {
+      "id": "6G7Xbn5dDgy3eRKpW7qDnv",
+      "uri": "spotify:track:6G7Xbn5dDgy3eRKpW7qDnv",
+      "name": "J'ai demandé à la lune",
+      "artists": [
+        {
+          "name": "Indochine"
+        }
+      ],
+      "duration_ms": 288693,
+      "external_ids": {
+        "isrc": "FRZ081400231"
+      },
+      "album": {
+        "name": "Black City Tour",
+        "album_type": "album",
+        "release_date": "2014-12-01"
+      }
+    },
+    {
+      "id": "0OBdJ2Oty3gwoh4M15BaXF",
+      "uri": "spotify:track:0OBdJ2Oty3gwoh4M15BaXF",
+      "name": "J'ai demandé à la lune",
+      "artists": [
+        {
+          "name": "Indochine"
+        }
+      ],
+      "duration_ms": 212666,
+      "external_ids": {
+        "isrc": "FRZ080104420"
+      },
+      "album": {
+        "name": "J'ai demandé à la lune",
+        "album_type": "single",
+        "release_date": "2002-03-04"
+      }
+    },
+    {
+      "id": "3dgI3RyYktGoAM94LK3DGy",
+      "uri": "spotify:track:3dgI3RyYktGoAM94LK3DGy",
+      "name": "J'ai demandé à la lune",
+      "artists": [
+        {
+          "name": "Indochine"
+        }
+      ],
+      "duration_ms": 209413,
+      "external_ids": {
+        "isrc": "FRZ081100700"
+      },
+      "album": {
+        "name": "Paradize +10 - Edition Deluxe",
+        "album_type": "compilation",
+        "release_date": "2012-02-13"
+      }
+    },
+    {
+      "id": "3X9XJLwQPWqRnsNaL9z6ss",
+      "uri": "spotify:track:3X9XJLwQPWqRnsNaL9z6ss",
+      "name": "Trois nuits par semaine",
+      "artists": [
+        {
+          "name": "Indochine"
+        }
+      ],
+      "duration_ms": 312533,
+      "external_ids": {
+        "isrc": "FRZ058500180"
+      },
+      "album": {
+        "name": "3",
+        "album_type": "album",
+        "release_date": "1985-12-10"
+      }
+    },
+    {
+      "id": "3m8mE4zIKlv54V885mTKO8",
+      "uri": "spotify:track:3m8mE4zIKlv54V885mTKO8",
+      "name": "Pégase",
+      "artists": [
+        {
+          "name": "Thomas Fersen"
+        }
+      ],
+      "duration_ms": 216133,
+      "external_ids": {
+        "isrc": "FRZ040500176"
+      },
+      "album": {
+        "name": "Le pavillon des fous",
+        "album_type": "album",
+        "release_date": "2005-10-04"
+      }
+    },
+    {
+      "id": "5tZ3DAzHWSnR9G4AdUzfz2",
+      "uri": "spotify:track:5tZ3DAzHWSnR9G4AdUzfz2",
+      "name": "Etoile",
+      "artists": [
+        {
+          "name": "Georgio"
+        },
+        {
+          "name": "Vacra"
+        }
+      ],
+      "duration_ms": 150150,
+      "external_ids": {
+        "isrc": "FR7O52500830"
+      },
+      "album": {
+        "name": "Gloria",
+        "album_type": "album",
+        "release_date": "2025-10-10"
+      }
+    },
+    {
+      "id": "0v98JzGs7BLrqC7pwmD0Ak",
+      "uri": "spotify:track:0v98JzGs7BLrqC7pwmD0Ak",
+      "name": "Dernier appel",
+      "artists": [
+        {
+          "name": "Souli"
+        },
+        {
+          "name": "Janahee"
+        }
+      ],
+      "duration_ms": 232806,
+      "external_ids": {
+        "isrc": "FR5R02500073"
+      },
+      "album": {
+        "name": "Cœur",
+        "album_type": "single",
+        "release_date": "2025-02-14"
+      }
+    },
+    {
+      "id": "5i0EnBg1wvMbUruuyexCt3",
+      "uri": "spotify:track:5i0EnBg1wvMbUruuyexCt3",
+      "name": "Appelez ca comme vous voulez",
+      "artists": [
+        {
+          "name": "Mouloudji"
+        }
+      ],
+      "duration_ms": 186253,
+      "external_ids": {
+        "isrc": "FRUM71402178"
+      },
+      "album": {
+        "name": "Les années Mercury 1956 - 1957",
+        "album_type": "compilation",
+        "release_date": "2014-12-08"
+      }
+    },
+    {
+      "id": "1GWJCN6dk0LaMVghoWuxul",
+      "uri": "spotify:track:1GWJCN6dk0LaMVghoWuxul",
+      "name": "SALAIRE",
+      "artists": [
+        {
+          "name": "Temayo"
+        }
+      ],
+      "duration_ms": 183000,
+      "external_ids": {
+        "isrc": "FR9W12147923"
+      },
+      "album": {
+        "name": "RUDE",
+        "album_type": "single",
+        "release_date": "2022-06-24"
+      }
+    }
+  ],
+  "Dirty Heads - Vacation": [
+    {
+      "id": "1gV4GZAVR9hcxC29J0lDH5",
+      "uri": "spotify:track:1gV4GZAVR9hcxC29J0lDH5",
+      "name": "Vacation",
+      "artists": [
+        {
+          "name": "Dirty Heads"
+        },
+        {
+          "name": "Train"
+        }
+      ],
+      "duration_ms": 212937,
+      "external_ids": {
+        "isrc": "USDPK2100049"
+      },
+      "album": {
+        "name": "Vacation",
+        "album_type": "single",
+        "release_date": "2021-05-28"
+      }
+    },
+    {
+      "id": "6GXtjEpfXTFECdmGChpkUi",
+      "uri": "spotify:track:6GXtjEpfXTFECdmGChpkUi",
+      "name": "Vacation",
+      "artists": [
+        {
+          "name": "Dirty Heads"
+        }
+      ],
+      "duration_ms": 209721,
+      "external_ids": {
+        "isrc": "USDPK1700118"
+      },
+      "album": {
+        "name": "SWIM TEAM (Special Edition)",
+        "album_type": "album",
+        "release_date": "2018-10-19"
+      }
+    },
+    {
+      "id": "02ypv5cnkwTGBCMfhpRT86",
+      "uri": "spotify:track:02ypv5cnkwTGBCMfhpRT86",
+      "name": "Stand Tall",
+      "artists": [
+        {
+          "name": "Dirty Heads"
+        }
+      ],
+      "duration_ms": 191280,
+      "external_ids": {
+        "isrc": "USAL50800077"
+      },
+      "album": {
+        "name": "Any Port in a Storm (Special Edition)",
+        "album_type": "album",
+        "release_date": "2012-09-03"
+      }
+    },
+    {
+      "id": "5ZNT1y7WJaxHELTYSOeXSA",
+      "uri": "spotify:track:5ZNT1y7WJaxHELTYSOeXSA",
+      "name": "Vacation",
+      "artists": [
+        {
+          "name": "Dirty Heads"
+        }
+      ],
+      "duration_ms": 209721,
+      "external_ids": {
+        "isrc": "USDPK1700118"
+      },
+      "album": {
+        "name": "Vacation",
+        "album_type": "single",
+        "release_date": "2017-08-11"
+      }
+    },
+    {
+      "id": "0wUDaeSu6oCzECWaT7pmz8",
+      "uri": "spotify:track:0wUDaeSu6oCzECWaT7pmz8",
+      "name": "Vacation",
+      "artists": [
+        {
+          "name": "Dirty Heads"
+        }
+      ],
+      "duration_ms": 209721,
+      "external_ids": {
+        "isrc": "USDPK1700118"
+      },
+      "album": {
+        "name": "Endless Summer From Better Noise Music",
+        "album_type": "compilation",
+        "release_date": "2020-08-14"
+      }
+    },
+    {
+      "id": "1AZoLkRwhHY5xSL9lGYrlc",
+      "uri": "spotify:track:1AZoLkRwhHY5xSL9lGYrlc",
+      "name": "Elevator Eyes",
+      "artists": [
+        {
+          "name": "Tove Lo"
+        }
+      ],
+      "duration_ms": 178352,
+      "external_ids": {
+        "isrc": "USA2P2335767"
+      },
+      "album": {
+        "name": "Dirt Femme (Extended Cut)",
+        "album_type": "album",
+        "release_date": "2023-08-11"
+      }
+    },
+    {
+      "id": "7Ccu9STX2uK60thDViys38",
+      "uri": "spotify:track:7Ccu9STX2uK60thDViys38",
+      "name": "Vitamin Sea",
+      "artists": [
+        {
+          "name": "Owl City"
+        }
+      ],
+      "duration_ms": 278102,
+      "external_ids": {
+        "isrc": "uscgh2374759"
+      },
+      "album": {
+        "name": "Coco Moon",
+        "album_type": "album",
+        "release_date": "2023-03-24"
+      }
+    },
+    {
+      "id": "0trHOzAhNpGCsGBEu7dOJo",
+      "uri": "spotify:track:0trHOzAhNpGCsGBEu7dOJo",
+      "name": "N.Y. State of Mind",
+      "artists": [
+        {
+          "name": "Nas"
+        }
+      ],
+      "duration_ms": 294081,
+      "external_ids": {
+        "isrc": "USSM10017351"
+      },
+      "album": {
+        "name": "Illmatic",
+        "album_type": "album",
+        "release_date": "1994-04-19"
+      }
+    },
+    {
+      "id": "5GwlXi6YhxFM3wspppMAv5",
+      "uri": "spotify:track:5GwlXi6YhxFM3wspppMAv5",
+      "name": "Family Matters",
+      "artists": [
+        {
+          "name": "Drake"
+        }
+      ],
+      "duration_ms": 456933,
+      "external_ids": {
+        "isrc": "USUG12402985"
+      },
+      "album": {
+        "name": "Family Matters",
+        "album_type": "single",
+        "release_date": "2024-05-03"
+      }
+    },
+    {
+      "id": "1wFFFzJ5EsKbBWZriAcubN",
+      "uri": "spotify:track:1wFFFzJ5EsKbBWZriAcubN",
+      "name": "Family Matters",
+      "artists": [
+        {
+          "name": "Drake"
+        }
+      ],
+      "duration_ms": 456933,
+      "external_ids": {
+        "isrc": "USUG12402984"
+      },
+      "album": {
+        "name": "Family Matters",
+        "album_type": "single",
+        "release_date": "2024-05-03"
+      }
+    }
+  ],
+  "LISA Tarantino": [
+    {
+      "id": "3bgnrHHwyYRtz3ykzAVImy",
+      "uri": "spotify:track:3bgnrHHwyYRtz3ykzAVImy",
+      "name": "Tarantino",
+      "artists": [
+        {
+          "name": "LISA"
+        }
+      ],
+      "duration_ms": 171104,
+      "external_ids": {
+        "isrc": "USRC12601648"
+      },
+      "album": {
+        "name": "PRESS PLAY",
+        "album_type": "single",
+        "release_date": "2026-10-23"
+      }
+    },
+    {
+      "id": "0ME7lptUglaYZoKnWSCJTo",
+      "uri": "spotify:track:0ME7lptUglaYZoKnWSCJTo",
+      "name": "Tarantino",
+      "artists": [
+        {
+          "name": "LISA"
+        }
+      ],
+      "duration_ms": 171104,
+      "external_ids": {
+        "isrc": "USRC12602014"
+      },
+      "album": {
+        "name": "PRESS PLAY",
+        "album_type": "single",
+        "release_date": "2026-10-22"
+      }
+    },
+    {
+      "id": "6So3r1T1UU3abtzYWp83zE",
+      "uri": "spotify:track:6So3r1T1UU3abtzYWp83zE",
+      "name": "Reze Lisa Tarantino",
+      "artists": [
+        {
+          "name": "Reza Rizky"
+        }
+      ],
+      "duration_ms": 298000,
+      "external_ids": {
+        "isrc": "NL9KR2155206"
+      },
+      "album": {
+        "name": "Reze Lisa Tarantino",
+        "album_type": "single",
+        "release_date": "2023"
+      }
+    },
+    {
+      "id": "3MR3qZ0PgHbzznKmOd9j24",
+      "uri": "spotify:track:3MR3qZ0PgHbzznKmOd9j24",
+      "name": "Tarantino",
+      "artists": [
+        {
+          "name": "Bradley Thomas Turner"
+        }
+      ],
+      "duration_ms": 184200,
+      "external_ids": {
+        "isrc": "SGB502391757"
+      },
+      "album": {
+        "name": "Tarantino",
+        "album_type": "single",
+        "release_date": "2023-09-16"
+      }
+    },
+    {
+      "id": "2uAp48pnoRfjPnsMCP8jGv",
+      "uri": "spotify:track:2uAp48pnoRfjPnsMCP8jGv",
+      "name": "Lisa",
+      "artists": [
+        {
+          "name": "Wise Tarantino"
+        }
+      ],
+      "duration_ms": 157054,
+      "external_ids": {
+        "isrc": "QT3F62512328"
+      },
+      "album": {
+        "name": "Picasso of Pain",
+        "album_type": "album",
+        "release_date": "2025-10-03"
+      }
+    },
+    {
+      "id": "66Xn6Uq95Wq9246K4nSHeh",
+      "uri": "spotify:track:66Xn6Uq95Wq9246K4nSHeh",
+      "name": "MONNALISA",
+      "artists": [
+        {
+          "name": "RAPCALLING"
+        },
+        {
+          "name": "Promessa"
+        },
+        {
+          "name": "tarantinothe3rd"
+        }
+      ],
+      "duration_ms": 94090,
+      "external_ids": {
+        "isrc": "ITZRF2400088"
+      },
+      "album": {
+        "name": "Rapcalling 2nd Season",
+        "album_type": "album",
+        "release_date": "2025-10-17"
+      }
+    },
+    {
+      "id": "58rPyyekYr0L3R5OkLJSF1",
+      "uri": "spotify:track:58rPyyekYr0L3R5OkLJSF1",
+      "name": "Lisa",
+      "artists": [
+        {
+          "name": "Dominique Charpentier"
+        }
+      ],
+      "duration_ms": 218181,
+      "external_ids": {
+        "isrc": "QZK6H2516058"
+      },
+      "album": {
+        "name": "Portraits",
+        "album_type": "album",
+        "release_date": "2025-11-28"
+      }
+    },
+    {
+      "id": "65FVAJzjcYRfHnWoCtHmwB",
+      "uri": "spotify:track:65FVAJzjcYRfHnWoCtHmwB",
+      "name": "Frêle et cruelle",
+      "artists": [
+        {
+          "name": "Lisa Pariente"
+        }
+      ],
+      "duration_ms": 159986,
+      "external_ids": {
+        "isrc": "FR6F32602030"
+      },
+      "album": {
+        "name": "Effets Secondaires",
+        "album_type": "album",
+        "release_date": "2026-10-09"
+      }
+    },
+    {
+      "id": "4WhytNQFIaWokpLmUvlo6T",
+      "uri": "spotify:track:4WhytNQFIaWokpLmUvlo6T",
+      "name": "Canta Querida",
+      "artists": [
+        {
+          "name": "LISZA"
+        }
+      ],
+      "duration_ms": 182333,
+      "external_ids": {
+        "isrc": "BEDR12000001"
+      },
+      "album": {
+        "name": "Charango",
+        "album_type": "album",
+        "release_date": "2020-08-14"
+      }
+    },
+    {
+      "id": "3DviKiQbySw6oQLmp6kFMG",
+      "uri": "spotify:track:3DviKiQbySw6oQLmp6kFMG",
+      "name": "Lisa gherardini",
+      "artists": [
+        {
+          "name": "Hös Copperfield"
+        }
+      ],
+      "duration_ms": 214148,
+      "external_ids": {
+        "isrc": "FRX202125195"
+      },
+      "album": {
+        "name": "A l'ombre des lumières",
+        "album_type": "album",
+        "release_date": "2021-06-25"
+      }
+    }
+  ]
+}

@@ -128,6 +128,8 @@ export interface Candidate {
   duration_ms?: number;
   external_ids?: { isrc?: string };
   linked_from?: { id?: string; uri?: string };
+  /** The release it comes from (always returned by the search, 26/10 diagnostic): tells editions apart. */
+  album?: { name?: string; album_type?: string; release_date?: string };
 }
 
 const artistNames = (c: Candidate) =>
@@ -449,6 +451,84 @@ export function confidenceForScore(
   return 'LOW';
 }
 
+/** A request naming a particular version: never decided by the editions' tie-break below. */
+const ASKED_VERSION =
+  /\b(?:live|remix|remixed|acoustic|acoustique|instrumental|karaoke|edit|mix|slowed|sped|version|remaster(?:ed)?|remasteris[eé]e?|unplugged|concert|reprise|cover|demo)\b/;
+/** A live release whose track title says nothing (« Black City Tour »): never preferred unless asked. */
+const LIVE_RELEASE = /\b(?:live|tour|concert|unplugged|en public|olympia)\b/;
+const RELEASE_RANK: Record<string, number> = { album: 0, single: 1 };
+const releaseRank = (c: Candidate) =>
+  RELEASE_RANK[String(c.album?.album_type ?? '')] ?? 2; // compilation / unknown last
+const releaseDate = (c: Candidate) => String(c.album?.release_date ?? '9999');
+const isLiveRelease = (c: Candidate) =>
+  LIVE_RELEASE.test(normalizeText(c.album?.name ?? ''));
+
+/** The edition shown for a group of one recording: album or single before a compilation, then the oldest, then id. */
+function preferredEdition(members: Ranked[]) {
+  const best = Math.max(...members.map((m) => m.score));
+  return members
+    .filter((m) => m.score === best)
+    .sort(
+      (l, r) =>
+        releaseRank(l.candidate) - releaseRank(r.candidate) ||
+        releaseDate(l.candidate).localeCompare(releaseDate(r.candidate)) ||
+        String(l.candidate.id).localeCompare(String(r.candidate.id)),
+    )[0]!;
+}
+
+/**
+ * Editions of ONE song (26/10): several distinct recordings with the same title and artist, the request naming no
+ * version. Decided only when every close contender has that same title, and then deterministically: the exact
+ * requested artists (never a featuring the viewer did not ask for; the one naming the most of them), then not a live release, then album or single
+ * before a compilation, then the oldest release. Different songs (or several left equal) stay ambiguous.
+ */
+function resolveEditions(
+  query: string,
+  distinct: Ranked[],
+  minMargin: number,
+): Ranked | null {
+  const q = normalizeText(query);
+  if (ASKED_VERSION.test(q)) return null;
+  const top = distinct[0]!;
+  if (!(top.artist_context_fit >= STRONG_ROLE_FIT)) return null;
+  const close = distinct.filter((d) => top.score - d.score < minMargin);
+  if (close.length < 2) return null;
+  const title = recordingTitleKey(top.candidate);
+  if (close.some((d) => recordingTitleKey(d.candidate) !== title)) return null;
+  const words = new Set(tokenize(q));
+  let left = close;
+  const keep = (f: (d: Ranked) => boolean) => {
+    const kept = left.filter(f);
+    if (kept.length) left = kept;
+  };
+  keep((d) =>
+    creditedArtistKey(d.candidate)
+      .split(' ')
+      .every((w) => !w || words.has(w)),
+  );
+  // Of those, the one crediting the most of the named artists (a featuring wins only when it is named).
+  const credited = (d: Ranked) =>
+    creditedArtistKey(d.candidate).split(' ').filter(Boolean).length;
+  const most = Math.max(...left.map(credited));
+  keep((d) => credited(d) === most);
+  keep((d) => !isLiveRelease(d.candidate));
+  if (left.length === 1) return left[0]!;
+  const ranked = [...left].sort(
+    (l, r) =>
+      releaseRank(l.candidate) - releaseRank(r.candidate) ||
+      releaseDate(l.candidate).localeCompare(releaseDate(r.candidate)),
+  );
+  const [a, b] = ranked;
+  // Still equal on every rule: no reason to prefer one, the viewer is asked to be precise.
+  if (
+    b &&
+    releaseRank(a!.candidate) === releaseRank(b.candidate) &&
+    releaseDate(a!.candidate) === releaseDate(b.candidate)
+  )
+    return null;
+  return a!;
+}
+
 export function selectCandidate(
   query: string,
   candidates: Candidate[],
@@ -478,6 +558,7 @@ export function selectCandidate(
     if (group) group.members.push(item);
     else groups.push({ representative: item, members: [item] });
   }
+  for (const g of groups) g.representative = preferredEdition(g.members);
   const distinct = groups.map((g) => g.representative);
   const top = distinct[0]!;
   const second = distinct[1];
@@ -499,8 +580,17 @@ export function selectCandidate(
   );
   if (sameBaseTitle.length > 1 && !(top.artist_context_fit >= STRONG_ROLE_FIT))
     return { status: 'AMBIGUOUS' as const, ...base };
-  if (second && margin < (options.minMargin ?? 0.08))
-    return { status: 'AMBIGUOUS' as const, ...base };
+  if (second && margin < (options.minMargin ?? 0.08)) {
+    const edition = resolveEditions(query, distinct, options.minMargin ?? 0.08);
+    if (!edition) return { status: 'AMBIGUOUS' as const, ...base };
+    return {
+      status: 'MATCHED' as const,
+      ...base,
+      top: edition,
+      resolved: 'edition' as const,
+      confidence: confidenceForScore(edition.score, margin),
+    };
+  }
   return {
     status: 'MATCHED' as const,
     ...base,

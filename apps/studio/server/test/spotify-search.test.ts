@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { normalizeText, selectCandidate } from '../src/spotify/search.js';
+import {
+  type Candidate,
+  normalizeText,
+  selectCandidate,
+} from '../src/spotify/search.js';
 
 // The historical search cases (CANONICAL_WORKSPACE/extension/test/spotify-v2.test.js « matching déterministe »,
 // « recherche UX », « regroupe les copies »), unchanged: the port must decide exactly as the service in production did.
@@ -185,5 +190,65 @@ describe('Spotify search (historical port)', () => {
     expect(selectCandidate('nothing like this at all', FIXTURES).status).toBe(
       'NOT_FOUND',
     );
+  });
+});
+
+describe('editions of one song (real Spotify results of 26/10, popularity never returned)', () => {
+  const real = JSON.parse(
+    readFileSync(
+      new URL(
+        './fixtures/spotify-search-real-2026-10-26.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  ) as Record<string, Candidate[]>;
+  const pick = (q: string, items = real[q]!) => {
+    const r = selectCandidate(q, items, { minScore: 0.68, minMargin: 0.08 });
+    if (!('top' in r)) return { status: r.status };
+    return {
+      status: r.status,
+      title: r.top?.candidate.name,
+      artists: r.top?.candidate.artists.map((a) => a.name),
+      release: r.top?.candidate.album?.album_type,
+      album: r.top?.candidate.album?.name,
+    };
+  };
+
+  it('Indochine: the studio recording (album Paradize), never the untitled live one (« Black City Tour »), whatever the order of the words', () => {
+    for (const q of [
+      "Indochine - J'ai demandé à la lune",
+      "J'ai demandé à la lune Indochine",
+    ])
+      expect(pick(q)).toEqual({
+        status: 'MATCHED',
+        title: "J'ai demandé à la lune",
+        artists: ['Indochine'],
+        release: 'album',
+        album: 'Paradize',
+      });
+  });
+
+  it('Dirty Heads: the exact requested artist, never a featuring nobody asked for (« Dirty Heads, Train »)', () => {
+    expect(pick('Dirty Heads - Vacation')).toMatchObject({
+      status: 'MATCHED',
+      artists: ['Dirty Heads'],
+      release: 'album',
+    });
+    // Asked by name, the featuring wins.
+    expect(
+      pick('Dirty Heads Train Vacation', real['Dirty Heads - Vacation']),
+    ).toMatchObject({ status: 'MATCHED', artists: ['Dirty Heads', 'Train'] });
+  });
+
+  it('LISA Tarantino: two different songs nearly tied stay ambiguous (nothing chosen)', () => {
+    expect(pick('LISA Tarantino').status).toBe('AMBIGUOUS');
+  });
+
+  it('a version asked by name is never overridden by the tie-break', () => {
+    const items = real["J'ai demandé à la lune Indochine"]!;
+    expect(
+      pick("J'ai demandé à la lune Indochine live", items).status,
+    ).not.toBe('MATCHED');
   });
 });
