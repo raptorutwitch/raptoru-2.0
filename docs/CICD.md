@@ -123,6 +123,8 @@ artefact de test supprimés ensuite, 0.1.7 inchangée. Secours sans GitHub : `no
    `running:unhealthy` alors que le bot a repris le bail avec EventSub et jetons valides. Le retour arrière automatique
    a fonctionné ; un second déploiement identique a été `DÉPLOYÉ`. À corriger dans `scripts/coolify-deploy.mjs`
    (attendre `running:healthy` jusqu'au délai aussi pour le bot).
+   `BLOQUÉ` du bot « raptoru-core doit d'abord tourner sur … » (26/10, `5e7ebe6`) : déployer `core+bot` sur ce commit
+   (redémarre le Core : GO d'Antoni requis même si son code ne change pas).
 5. Diagnostic conservé : artefact `deploy-…` (journal sans secret, 90 jours) et onglet Deployments.
 
 En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status core`, `plan core <sha>`,
