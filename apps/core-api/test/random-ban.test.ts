@@ -566,5 +566,6 @@ describe('Random Ban migrations', () => {
     await expect(migrate(all, 'all')).resolves.toContain(
       '20261026130000_random_ban.sql',
     );
-  });
+    // Three full migrations in PGlite (WASM): ~22 s on a CI runner, over 30 s when it is loaded.
+  }, 90_000);
 });
