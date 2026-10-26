@@ -8,7 +8,10 @@ import type { Db } from '../src/db/db.js';
 import { miniGamesRoutes } from '../src/http/mini-games-routes.js';
 import { LabChatRouter } from '../src/lab-chat/router.js';
 import { DEFAULT_LAB_WALLET } from '../src/lab-moderation/store.js';
-import { MiniGamesService } from '../src/mini-games/service.js';
+import {
+  MiniGamesService,
+  OFFLINE_NOTICE_MS,
+} from '../src/mini-games/service.js';
 import { createTestDb, FakeClock } from './helpers.js';
 
 // Roulette and Slot V1 — the Core service against docs/ROULETTE_SLOT_PARITY.md § 6: Studio switch, one
@@ -29,7 +32,23 @@ beforeEach(async () => {
   rolls = [];
   // The test decides every draw (0 → win / cherries; 0.9 → loss / lime).
   games = new MiniGamesService(db, clock, () => rolls.shift() ?? 0.9);
+  await goLive();
 });
+
+/** The channel's live session (the chat games' single reader): the games play only while it is open. */
+const SESSION = '00000000-0000-4000-8000-0000000000a1';
+const goLive = () =>
+  db.query(
+    `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by)
+     values ($1, $2, $3, 'simulated', 'test')
+     on conflict (session_id) do update set ended_at = null`,
+    [SESSION, CH, clock.now()],
+  );
+const endLive = () =>
+  db.query(
+    'update lab_stream_sessions set ended_at = $2 where session_id = $1',
+    [SESSION, clock.now()],
+  );
 
 let n = 0;
 const ALICE = { id: '2001', name: 'Alice' };
@@ -368,5 +387,58 @@ describe('integration', () => {
       'smp',
     ])
       expect(words).toContainEqual({ word: w, module: 'Mini-jeux' });
+  });
+});
+
+describe('off live: nothing played, one short answer per viewer per minute', () => {
+  it('Roulette and Slot off live: no bet, no debit, no play; one answer, the next attempts silent; live again: plays', async () => {
+    await on();
+    await endLive();
+    rolls = [0];
+    expect(await games.chat(msg('!roulette 100'))).toEqual({
+      outcome: 'ignored',
+      skipped: 'offline',
+    });
+    expect(await games.chat(msg('!slots 100'))).toEqual({
+      outcome: 'ignored',
+      skipped: 'offline',
+    });
+    expect(await games.chat(msg('!roulette 50', BOB))).toMatchObject({
+      skipped: 'offline',
+    });
+    expect(await count('mini_game_plays')).toBe(0);
+    expect(await count("lab_wallet_ledger where kind = 'mini_game'")).toBe(0);
+    expect(await balance()).toBe(START);
+    expect(await answers()).toEqual([
+      ['mini_game', '@Alice - les mini-jeux sont disponibles pendant le live.'],
+      ['mini_game', '@Bob - les mini-jeux sont disponibles pendant le live.'],
+    ]);
+    // A minute later the same viewer is told again (once).
+    clock.advance(OFFLINE_NOTICE_MS);
+    await games.chat(msg('!roulette 100'));
+    expect(await count('cmd_steps')).toBe(3);
+    // The same Twitch message resent: nothing new.
+    const again = msg('!roulette 100', ALICE, 'tw-resent');
+    clock.advance(OFFLINE_NOTICE_MS);
+    await games.chat(again);
+    games = new MiniGamesService(db, clock, () => rolls.shift() ?? 0.9);
+    await games.chat(again);
+    expect(await count('cmd_steps')).toBe(4);
+    // Back in live: the game plays as before.
+    await goLive();
+    rolls = [0];
+    expect(await games.chat(msg('!roulette 100'))).toMatchObject({
+      outcome: 'mini_game_played',
+    });
+    expect(await count('mini_game_plays')).toBe(1);
+  });
+
+  it('switch OFF and off live: silent (the switch first)', async () => {
+    await endLive();
+    expect(await games.chat(msg('!roulette 100'))).toEqual({
+      outcome: 'ignored',
+      skipped: 'disabled',
+    });
+    expect(await count('cmd_steps')).toBe(0);
   });
 });

@@ -40,6 +40,12 @@ describe.skipIf(!isLocal)(
     beforeEach(async () => {
       await a.query('drop schema public cascade; create schema public;');
       await migrate(a, 'all');
+      // The mini-games play only in live (the chat games' session).
+      await a.query(
+        `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by)
+         values (gen_random_uuid(), $1, now(), 'simulated', 'test')`,
+        [CH],
+      );
     });
     afterAll(async () => {
       for (const db of pools) await db.close();

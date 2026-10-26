@@ -55,6 +55,11 @@ beforeEach(async () => {
   rolls = [];
   games = newGames();
   await games.setEnabled(CH, true);
+  // The mini-games play only in live (the chat games' session).
+  await db.query(
+    `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by) values ($1, $2, $3, 'simulated', 'test')`,
+    [randomUUID(), CH, clock.now()],
+  );
   words = new WordGameService(
     db,
     clock,
@@ -223,6 +228,11 @@ describe('Duel on the canonical Wallet', () => {
 describe('Jeu des mots on the canonical Wallet', () => {
   const live = async () => {
     const id = randomUUID();
+    // This test's own session (the one opened for the mini-games ends first: one open session per channel).
+    await db.query(
+      'update lab_stream_sessions set ended_at = $2 where channel_id = $1 and ended_at is null',
+      [CH, clock.now()],
+    );
     await db.query(
       `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by) values ($1, $2, $3, 'simulated', 'test')`,
       [id, CH, clock.now()],
@@ -298,6 +308,11 @@ describe('several modules on one canonical wallet', () => {
     });
     await games.chat(msg('!roulette 100'));
     const id = randomUUID();
+    // This test's own session (the one opened for the mini-games ends first: one open session per channel).
+    await db.query(
+      'update lab_stream_sessions set ended_at = $2 where channel_id = $1 and ended_at is null',
+      [CH, clock.now()],
+    );
     await db.query(
       `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by) values ($1, $2, $3, 'simulated', 'test')`,
       [id, CH, clock.now()],

@@ -55,7 +55,23 @@ beforeEach(async () => {
     },
   );
   await games.setEnabled(CH, true);
+  await goLive();
 });
+
+/** The channel's live session (the chat games' single reader): the games play only while it is open. */
+const SESSION = '00000000-0000-4000-8000-0000000000a1';
+const goLive = () =>
+  db.query(
+    `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by)
+     values ($1, $2, $3, 'simulated', 'test')
+     on conflict (session_id) do update set ended_at = null`,
+    [SESSION, CH, clock.now()],
+  );
+const endLive = () =>
+  db.query(
+    'update lab_stream_sessions set ended_at = $2 where session_id = $1',
+    [SESSION, clock.now()],
+  );
 
 let n = 0;
 const msg = (
@@ -492,5 +508,37 @@ describe('Commands V2 (16)', () => {
       'slots',
     ])
       expect(words).toContainEqual({ word: w, module: 'Mini-jeux' });
+  });
+});
+
+describe('off live', () => {
+  it('a challenge pending when the live ends cannot be accepted: no token moves, it expires; no new challenge off live; live again: playable', async () => {
+    await setBalance(ALICE, 1000);
+    await setBalance(BOB, 1000);
+    await say('!duel bob 100', ALICE);
+    expect((await duels())[0]!.status).toBe('pending');
+    await endLive();
+    expect(await say('!accept', BOB)).toEqual({
+      outcome: 'ignored',
+      skipped: 'offline',
+    });
+    expect(await say('!duel carl 50', ALICE)).toMatchObject({
+      skipped: 'offline',
+    });
+    expect((await duels())[0]!.status).toBe('pending');
+    expect(await duels()).toHaveLength(1);
+    expect(await ledger()).toEqual([]);
+    expect(await balance(ALICE)).toBe(1000);
+    expect(await balance(BOB)).toBe(1000);
+    expect((await texts()).at(-1)).toBe(
+      '@Alice - les mini-jeux sont disponibles pendant le live.',
+    );
+    // Live again after the challenge expired: a new one plays normally.
+    clock.advance(3 * 60_000);
+    await goLive();
+    expect(await say('!accept', BOB)).toEqual({ outcome: 'ignored' });
+    expect(await say('!duel bob 100', ALICE)).toMatchObject({
+      outcome: 'duel_challenged',
+    });
   });
 });
