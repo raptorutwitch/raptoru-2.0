@@ -186,31 +186,38 @@ describe('Roue du Sub V1 — winner announcement', () => {
   });
 });
 
-describe('Tombola — the grouped winners message', () => {
-  it('one message for several winners; split at the Twitch limit, never a name cut or lost', () => {
-    expect(raffleWinnersMessages('10 000 Jetons', ['A', 'B', 'C'])).toEqual([
-      'Tombola terminée ! Félicitations aux gagnants qui remportent 10 000 Jetons chacun : A, B, C !',
+describe('Tombola — the winners announcement', () => {
+  const w = (name: string, prize = '3 334 jetons') => ({ name, prize });
+  it('one announcement for several winners; the exceptional single winner; the only participant; split at the Twitch limit, never a winner cut or lost', () => {
+    expect(raffleWinnersMessages([w('Alice'), w('Bob'), w('Charlie')])).toEqual(
+      [
+        '🎉 Félicitations aux gagnants : @Alice - 3 334 jetons · @Bob - 3 334 jetons · @Charlie - 3 334 jetons',
+      ],
+    );
+    expect(raffleWinnersMessages([w('Solo', '10 000 jetons')])).toEqual([
+      '🎉 Félicitations au gagnant : @Solo - 10 000 jetons',
     ]);
-    expect(raffleWinnersMessages('5 Jetons', ['Solo'])).toEqual([
-      'Tombola terminée ! Félicitations au gagnant qui remporte 5 Jetons : Solo !',
-    ]);
+    expect(raffleWinnersMessages([w('Solo', '10 000 jetons')], 'full')).toEqual(
+      ['@Solo rafle toute la cagnotte : 10 000 jetons !'],
+    );
+    expect(
+      raffleWinnersMessages([w('Solo', '10 000 jetons')], 'alone'),
+    ).toEqual(['Seul participant, @Solo remporte 10 000 jetons !']);
     const names = Array.from(
       { length: 40 },
       (_, i) => `Viewer_Pseudo_${String(i).padStart(2, '0')}`,
     );
-    const msgs = raffleWinnersMessages('1 000 Jetons', names);
+    const msgs = raffleWinnersMessages(names.map((n) => w(n, '1 000 jetons')));
     expect(msgs.length).toBeGreaterThan(1);
     for (const m of msgs) {
       expect(m.length).toBeLessThanOrEqual(500);
-      expect(m).toMatch(
-        /^Tombola terminée ! Félicitations aux gagnants qui remportent 1 000 Jetons chacun : .+ !$/,
-      );
+      expect(m).toMatch(/^🎉 Félicitations aux gagnants : @.+ - 1 000 jetons$/);
     }
     const back = msgs.flatMap((m) =>
       m
-        .replace(/^.* chacun : /, '')
-        .replace(/ !$/, '')
-        .split(', '),
+        .replace(/^🎉 Félicitations aux gagnants : /, '')
+        .split(' · ')
+        .map((x) => x.replace(/^@/, '').replace(/ - 1 000 jetons$/, '')),
     );
     expect(back).toEqual(names);
   });
@@ -227,13 +234,13 @@ describe('Tombola — winner announcements', () => {
     super: { ...DEFAULT_RAFFLE_CONFIG.super, enabled: false },
   };
   let seq = 0;
-  async function fixture() {
+  async function fixture(random = () => 0.42) {
     const core = await setup();
     core.clock.set(new Date('2026-10-22T20:00:00Z'));
     const raffle = new RaffleLabService(
       core.db,
       core.clock,
-      () => 0.42,
+      random,
       undefined,
       coreWalletEconomy(core.wallet.wallet),
     );
@@ -274,10 +281,10 @@ describe('Tombola — winner announcements', () => {
     )[0]!.reveal_end_at;
     const s = await steps(f.core.db, 'raffle');
     expect(s.map((x) => x.params.text)).toEqual([
-      `Tombola terminée ! Félicitations aux gagnants qui remportent 10 000 Jetons chacun : ${card.winners.map((w) => w.display_name).join(', ')} !`,
+      `🎉 Félicitations aux gagnants : ${card.winners.map((w) => `@${w.display_name} - 10 000 jetons`).join(' · ')}`,
     ]);
     for (const x of s) {
-      expect(x.params.mode).toBe('normal');
+      expect(x.params.mode).toBe('announce');
       // End of the reveal animation + 6 s: the draw and the credits were not delayed (paid above).
       expect(RAFFLE_ANNOUNCE_DELAY_MS).toBe(6_000);
       expect(new Date(x.available_at).getTime()).toBe(
@@ -298,6 +305,44 @@ describe('Tombola — winner announcements', () => {
       })
       .catch(() => null);
     expect(await steps(f.core.db, 'raffle')).toHaveLength(1);
+  });
+
+  it('the only participant wins by forfeit; the exceptional single winner (FULL, 4 participants) takes the whole pool: their own wording, one announcement each', async () => {
+    const alone = await fixture();
+    await alone.act({
+      action: 'config',
+      config: { ...DEFAULT_RAFFLE_CONFIG, ...QUIET },
+    });
+    await alone.act({ action: 'launch' });
+    await alone.join('9501');
+    await alone.after(62_000);
+    expect(
+      (await steps(alone.core.db, 'raffle')).map((x) => [
+        x.params.mode,
+        x.params.text,
+      ]),
+    ).toEqual([
+      ['announce', 'Seul participant, @V9501 remporte 20 000 jetons !'],
+    ]);
+    // random() = 0: the FULL draw (0 < 1 %) — one winner out of four, the whole pool.
+    const full = await fixture(() => 0);
+    await full.act({
+      action: 'config',
+      config: {
+        ...DEFAULT_RAFFLE_CONFIG,
+        ...QUIET,
+        winners_mode: 'auto',
+        full: { enabled: true, chance_pct: 1 },
+      },
+    });
+    await full.act({ action: 'launch' });
+    for (const v of ['9601', '9602', '9603', '9604']) await full.join(v);
+    await full.after(62_000);
+    const s = await steps(full.core.db, 'raffle');
+    expect(s).toHaveLength(1);
+    expect(s[0]!.params.text).toMatch(
+      /^@V960[1-4] rafle toute la cagnotte : 20 000 jetons !$/,
+    );
   });
 
   it('a failed payout is not announced; announced once when the retry pays it', async () => {
@@ -323,8 +368,9 @@ describe('Tombola — winner announcements', () => {
     await f.act({ action: 'retry_payout', raffle_id, viewer_id: '9401' });
     const s = await steps(f.core.db, 'raffle');
     expect(s).toHaveLength(1);
+    // The only participant: the same wording as it would have had at the draw.
     expect(s[0]!.params.text).toBe(
-      'Tombola terminée ! Félicitations au gagnant qui remporte 20 000 Jetons : V9401 !',
+      'Seul participant, @V9401 remporte 20 000 jetons !',
     );
     expect(new Date(s[0]!.available_at).getTime()).toBe(
       f.core.clock.now().getTime(),

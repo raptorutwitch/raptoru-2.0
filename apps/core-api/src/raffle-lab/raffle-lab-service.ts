@@ -46,6 +46,7 @@ import {
 } from './currencies.js';
 import {
   autoWinners,
+  drawWinnerCount,
   DEFAULT_RAFFLE_CONFIG,
   eventTitles,
   idleTitle,
@@ -217,26 +218,48 @@ function roundLabels(r: RaffleRow): RaffleConfig['labels'] {
 /** The chat announcement of the winners waits this long after the end of the reveal animation (no spoiler). */
 export const RAFFLE_ANNOUNCE_DELAY_MS = 6_000;
 
-/** Twitch's chat message limit (characters). */
+/**
+ * When the chat may name the winners, after the end of the reveal: never before the viewers see the result on the
+ * stream (the extension shows it `stream_margin_s` after that end: the chat one second later), at least
+ * RAFFLE_ANNOUNCE_DELAY_MS.
+ */
+export const raffleAnnounceDelayMs = (streamMarginS: number) =>
+  Math.max(RAFFLE_ANNOUNCE_DELAY_MS, streamMarginS * 1000 + 1000);
+
+/** Twitch's chat message (and announcement) limit (characters). */
 const TWITCH_CHAT_MAX = 500;
 
+/** winners: the drawn ones · full: the exceptional single winner (FULL) · alone: the only participant. */
+export type RaffleAnnounceKind = 'winners' | 'full' | 'alone';
+
 /**
- * The end-of-Tombola message for the winners of one prize: « Tombola terminée ! Félicitations aux gagnants qui
- * remportent 10 000 Jetons chacun : A, B, C ! » (one winner: the singular). Too long for one Twitch message → several
- * messages with the same opening, names never cut.
+ * The end-of-Tombola announcement, one Twitch /announce when it fits: « 🎉 Félicitations aux gagnants : @A - 3 334
+ * jetons · @B - 3 334 jetons » (one winner: « au gagnant »); FULL: « @A rafle toute la cagnotte : 10 000 jetons ! »;
+ * the only participant: « Seul participant, @A remporte 10 000 jetons ! ». Too long for one Twitch message → several
+ * with the same opening, in the draw's order, a winner never cut.
  */
-export function raffleWinnersMessages(prize: string, names: string[]) {
-  const text = (list: string[]) =>
-    names.length === 1
-      ? `Tombola terminée ! Félicitations au gagnant qui remporte ${prize} : ${list[0]} !`
-      : `Tombola terminée ! Félicitations aux gagnants qui remportent ${prize} chacun : ${list.join(', ')} !`;
-  const out: string[][] = [];
-  for (const name of names) {
+export function raffleWinnersMessages(
+  winners: { name: string; prize: string }[],
+  kind: RaffleAnnounceKind = 'winners',
+) {
+  const [one] = winners;
+  if (winners.length === 1 && kind === 'alone')
+    return [`Seul participant, @${one!.name} remporte ${one!.prize} !`];
+  if (winners.length === 1 && kind === 'full')
+    return [`@${one!.name} rafle toute la cagnotte : ${one!.prize} !`];
+  const opening =
+    winners.length === 1
+      ? '🎉 Félicitations au gagnant : '
+      : '🎉 Félicitations aux gagnants : ';
+  const out: string[] = [];
+  for (const w of winners) {
+    const item = `@${w.name} - ${w.prize}`;
     const cur = out.at(-1);
-    if (cur && text([...cur, name]).length <= TWITCH_CHAT_MAX) cur.push(name);
-    else out.push([name]);
+    if (cur && `${cur} · ${item}`.length <= TWITCH_CHAT_MAX)
+      out[out.length - 1] = `${cur} · ${item}`;
+    else out.push(`${opening}${item}`);
   }
-  return out.map(text);
+  return out;
 }
 
 export class RaffleLabService {
@@ -832,16 +855,16 @@ export class RaffleLabService {
     const n = entries.length;
     const money = r.kind !== 'giveaway';
     // FULL OSEILLE: decided at the draw only (never announced at the opening), normal rounds only.
-    const full =
-      r.kind === 'normal' &&
-      n > 0 &&
-      s.full.enabled &&
-      this.random() * 100 < s.full.chance_pct;
-    const k = full
-      ? 1
-      : r.winners_mode === 'custom'
-        ? Math.min(s.winners_custom, n)
-        : autoWinners(n, this.random);
+    const { k, full } = drawWinnerCount(
+      {
+        kind: r.kind,
+        participants: n,
+        mode: r.winners_mode,
+        custom: s.winners_custom,
+        full: s.full,
+      },
+      this.random,
+    );
     const pool = [...entries];
     const picked: EntryRow[] = [];
     while (pool.length && picked.length < k)
@@ -908,13 +931,15 @@ export class RaffleLabService {
       overlay_end_at: overlayEnd,
       viewer_idle_at: at(viewerResult, d.extension_idle_return_s * 1000),
     });
-    // Chat: the PAID winners, RAFFLE_ANNOUNCE_DELAY_MS after the end of the reveal animation (never a spoiler).
+    // Chat: the PAID winners, once the viewers saw the result on the stream (never a spoiler).
     await this.announceWinners(
       q,
       r.raffle_id,
       r.channel_id,
       when,
-      at(revealEnd, RAFFLE_ANNOUNCE_DELAY_MS),
+      at(revealEnd, raffleAnnounceDelayMs(d.stream_margin_s)),
+      undefined,
+      n === 1 ? 'alone' : full ? 'full' : 'winners',
     );
     const winners = await this.winnerRows(q, [r.raffle_id]);
     await audit(q, when, {
@@ -939,10 +964,10 @@ export class RaffleLabService {
   }
 
   /**
-   * The PAID winners on LeCroupier_'s durable chat queue, grouped: « Tombola terminée ! Félicitations aux gagnants qui
-   * remportent X Jetons chacun : A, B ! » — one message per amount and currency (their real share), split only when it
-   * would exceed Twitch's limit (never a name cut). Once per round (draw: one key per message) or per winner (a payout
-   * retried later: its own key). Unpaid (failed) and giveaway winners: nothing until / unless paid.
+   * The PAID winners on LeCroupier_'s durable chat queue, as ONE Twitch announcement (raffleWinnersMessages: split only
+   * when it would exceed Twitch's limit, never a winner cut), in the draw's order, each with its share. Once per round
+   * (draw: one key per message) or per winner (a payout retried later: its own key). Unpaid (failed) and giveaway
+   * winners: nothing until / unless paid.
    */
   private async announceWinners(
     q: Queryable,
@@ -951,6 +976,7 @@ export class RaffleLabService {
     now: Date,
     sendAt: Date,
     viewerId?: string,
+    kind: RaffleAnnounceKind = 'winners',
   ) {
     const paid = await q.query<WinnerRow>(
       `select * from lab_raffle_winners where raffle_id = $1 and payout_status = 'paid' and ($2::text is null or viewer_id = $2)
@@ -965,18 +991,17 @@ export class RaffleLabService {
           w.currency_id!,
           (await currency(q, w.currency_id!))?.label ?? w.currency_id!,
         );
-    const groups = new Map<string, { prize: string; names: string[] }>();
-    for (const w of paid) {
-      const key = `${w.currency_id}:${Number(w.amount)}`;
-      if (!groups.has(key))
-        groups.set(key, {
-          prize: `${Number(w.amount).toLocaleString('fr-FR').replace(/\s/g, ' ')} ${label.get(w.currency_id!)}`,
-          names: [],
-        });
-      groups.get(key)!.names.push(w.viewer_display_name);
-    }
-    const texts = [...groups.values()].flatMap((g) =>
-      raffleWinnersMessages(g.prize, g.names),
+    // « 3 334 jetons »: the currency's label as a common noun.
+    const unit = (id: string) => {
+      const l = label.get(id) ?? id;
+      return l.charAt(0).toLowerCase() + l.slice(1);
+    };
+    const texts = raffleWinnersMessages(
+      paid.map((w) => ({
+        name: w.viewer_display_name,
+        prize: `${Number(w.amount).toLocaleString('fr-FR').replace(/\s/g, ' ')} ${unit(w.currency_id!)}`,
+      })),
+      kind,
     );
     await insertAnnouncement(q, {
       channelId,
@@ -986,7 +1011,7 @@ export class RaffleLabService {
         idempotencyKey: viewerId
           ? `raffle:win:${raffleId}:${viewerId}`
           : `raffle:wins:${raffleId}:${i}`,
-        mode: 'normal' as const,
+        mode: 'announce' as const,
         text,
         delayMs: Math.max(0, sendAt.getTime() - now.getTime()),
       })),
@@ -1547,14 +1572,19 @@ export class RaffleLabService {
           );
         await this.pay(q, cmd.raffle_id, channelId, cmd.viewer_id, now);
         // Paid now: announced at once, or end of reveal + delay if still to come; never twice (one key per winner).
-        const revealEnd = (
-          await q.query<{ reveal_end_at: Date | null }>(
-            'select reveal_end_at from lab_raffles where raffle_id = $1',
+        const round = (
+          await q.query<RaffleRow & { reveal_end_at: Date | null }>(
+            'select * from lab_raffles where raffle_id = $1',
             [cmd.raffle_id],
           )
-        )[0]?.reveal_end_at;
+        )[0];
+        const revealEnd = round?.reveal_end_at;
         const shownAt =
-          revealEnd && at(new Date(revealEnd), RAFFLE_ANNOUNCE_DELAY_MS);
+          revealEnd &&
+          at(
+            new Date(revealEnd),
+            raffleAnnounceDelayMs(settingsOf(round).display.stream_margin_s),
+          );
         await this.announceWinners(
           q,
           cmd.raffle_id,
@@ -1562,6 +1592,12 @@ export class RaffleLabService {
           now,
           shownAt && shownAt > now ? shownAt : now,
           cmd.viewer_id,
+          // The same wording as at the draw: the only participant, or the exceptional single winner (FULL).
+          (await this.activeEntries(q, cmd.raffle_id)).length === 1
+            ? 'alone'
+            : round?.is_full
+              ? 'full'
+              : 'winners',
         );
         const after = (await this.winnerRows(q, [cmd.raffle_id])).find(
           (x) => x.viewer_id === cmd.viewer_id,

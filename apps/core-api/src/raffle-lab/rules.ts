@@ -206,8 +206,8 @@ export function randomJackpot(
 }
 
 /**
- * Automatic winners (decision D4): 1–2 participants → 1; 3 → 1 or 2; from 4, round(√n × 0.8) ± 1,
- * at least 1 and never more winners than losers (floor(n / 2)).
+ * Automatic winners (decision D4): 1–2 participants → 1; 3 → 1 or 2; from 4, round(√n × 0.8) ± 1, at least 2 (from 4
+ * participants a single winner is only the exceptional FULL draw) and never more winners than losers (floor(n / 2)).
  */
 export function autoWinners(n: number, random: () => number): number {
   if (n <= 0) return 0;
@@ -215,17 +215,45 @@ export function autoWinners(n: number, random: () => number): number {
   if (n === 3) return random() < 0.5 ? 1 : 2;
   const jitter = Math.floor(random() * 3) - 1;
   return Math.max(
-    1,
+    2,
     Math.min(Math.floor(n / 2), Math.round(Math.sqrt(n) * 0.8) + jitter),
   );
 }
 
-/** Exact split: the remainder goes one unit at a time to the first winners (sum = total, always). */
+/**
+ * How many winners a round draws: FULL OSEILLE first (normal rounds with participants, `full.chance_pct` %: ONE winner
+ * takes everything), else the custom count or autoWinners. The random draws in this order (FULL, then the auto jitter).
+ */
+export function drawWinnerCount(
+  round: {
+    kind: 'normal' | 'super' | 'giveaway';
+    participants: number;
+    mode: 'auto' | 'custom';
+    custom: number;
+    full: { enabled: boolean; chance_pct: number };
+  },
+  random: () => number,
+): { k: number; full: boolean } {
+  const n = round.participants;
+  const full =
+    round.kind === 'normal' &&
+    n > 0 &&
+    round.full.enabled &&
+    random() * 100 < round.full.chance_pct;
+  if (full) return { k: 1, full };
+  return {
+    k:
+      round.mode === 'custom'
+        ? Math.min(round.custom, n)
+        : autoWinners(n, random),
+    full,
+  };
+}
+
+/** The same share for every winner, rounded up (10 000 / 3 → 3 334 each: 10 002 paid in all, never less than the pool). */
 export function split(total: number, k: number): number[] {
   if (k <= 0) return [];
-  const base = Math.floor(total / k);
-  const rest = total - base * k;
-  return Array.from({ length: k }, (_, i) => base + (i < rest ? 1 : 0));
+  return Array.from({ length: k }, () => Math.ceil(total / k));
 }
 
 /**
