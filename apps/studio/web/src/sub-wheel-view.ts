@@ -127,9 +127,13 @@ export interface SwState {
   reviews?: SwReviewView[];
   possible_duplicates?: SwDuplicateView[];
   animations_error?: string | null;
+  /** Why Studio asks no wheel now (the player cannot play it): nothing is drawn meanwhile. */
+  animations_waiting?: string | null;
   effects: {
     connected: boolean;
     current: boolean;
+    /** The page may play sound (OBS: always; a browser tab: after one click in it). */
+    audio?: boolean;
     media: { id: string; label: string; available: boolean }[];
   } | null;
 }
@@ -384,10 +388,18 @@ function historyTab(s: SwState) {
           ? '—'
           : `${n(r.amount)} jetons <small>(segment ${(r.segment ?? 0) + 1})</small>`;
       const award = AWARD[r.award.status];
-      const actions =
-        r.award.status === 'pending'
-          ? ` <button type="button" class="cp-ghost" data-act="sw-manual" data-spin="${esc(r.spin_id)}">Crédité à la main…</button> <button type="button" class="cp-ghost" data-act="sw-cancel" data-spin="${esc(r.spin_id)}">Annuler…</button>`
+      const replay =
+        (r.status === 'failed' || r.status === 'skipped') &&
+        r.amount !== null &&
+        r.source !== 'test' &&
+        r.source !== 'simulation'
+          ? ` <button type="button" class="cp-ghost" data-act="sw-replay" data-spin="${esc(r.spin_id)}" data-name="${esc(r.viewer.name)}" data-amount="${r.amount}" data-award="${esc(r.award.status)}">Rejouer l’animation</button>`
           : '';
+      const actions =
+        replay +
+        (r.award.status === 'pending'
+          ? ` <button type="button" class="cp-ghost" data-act="sw-manual" data-spin="${esc(r.spin_id)}">Crédité à la main…</button> <button type="button" class="cp-ghost" data-act="sw-cancel" data-spin="${esc(r.spin_id)}">Annuler…</button>`
+          : '');
       const cls =
         r.status === 'shown'
           ? 'done'
@@ -515,9 +527,14 @@ export function subWheelView(
     ? chip('warn', 'Lecteur d’effets indisponible')
     : !s.effects.connected
       ? chip('warn', 'Lecteur d’effets : non ouvert')
-      : !s.effects.current
-        ? chip('warn', 'Lecteur d’effets : à recharger')
-        : chip('on', 'Lecteur prêt');
+      : s.effects.audio === false
+        ? chip(
+            'warn',
+            'Lecteur ouvert, son bloqué : clique une fois dans sa page',
+          )
+        : !s.effects.current
+          ? chip('warn', 'Lecteur d’effets : à recharger')
+          : chip('on', 'Lecteur prêt');
   const mode = s.settings.mode ?? 'v1';
   const rights = s.rights ?? [];
   const blocked = (s.reviews ?? []).length;
@@ -550,7 +567,8 @@ export function subWheelView(
       ${blocked ? chip('warn', `${blocked} tour(s) à vérifier`) : ''}
       ${dups ? chip('off', `${dups} possible(s) doublon(s)`) : ''}
       ${s.pending_awards.count ? chip('warn', `${s.pending_awards.count} gain(s) à attribuer : ${n(s.pending_awards.total)} jetons`) : ''}
-      ${s.animations_error ? chip('warn', 'Animations : Core injoignable') : ''}</div>
+      ${s.animations_error ? chip('warn', 'Animations : Core injoignable') : ''}
+      ${s.animations_waiting && s.animations_waiting !== 'effects_player_offline' && s.animations_waiting !== 'effects_player_unavailable' ? chip('warn', 'Roues en attente du lecteur : rien n’est tiré tant qu’il ne peut pas les jouer') : ''}</div>
     ${missing.length ? `<p class="cp-error">Médias non importés : ${esc(missing.map((m) => m.label).join(', '))}</p>` : ''}
     <nav class="sw-tabs" role="tablist">${tabs
       .map(

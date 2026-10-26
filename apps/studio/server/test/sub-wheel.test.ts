@@ -180,19 +180,20 @@ describe('Roue du Sub — Lab chain (real Lab Core, Studio runtime, simulated pl
     ).toHaveLength(2);
   });
 
-  it('no effects player: the wheel is reported not shown, the gain stays recorded (never redrawn)', async () => {
+  it('no effects player: nothing is claimed — the wheel waits in the queue, its gain recorded, never reported « not shown »', async () => {
     const l = await lab(false);
     await l.core(`/v1/lab/sub-wheel/${CH}/settings`, { enabled: true });
     await l.sub();
     await l.playAlert();
-    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(await l.rt.subWheel.once()).toBe(false);
+    expect(await l.rt.subWheel.once()).toBe(false);
+    expect(l.rt.subWheel.waiting).toBe('effects_player_unavailable');
     const r = (await l.state()).recent[0]!;
     expect(r).toMatchObject({
-      status: 'failed',
-      reason: 'effects_player_unavailable',
+      status: 'queued',
+      reason: null,
       award: { status: 'awarded' },
     });
-    expect(await l.rt.subWheel.once()).toBe(false);
   });
 });
 

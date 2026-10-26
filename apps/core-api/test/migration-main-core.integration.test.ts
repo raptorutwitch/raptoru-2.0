@@ -38,7 +38,7 @@ describe.skipIf(!isLocal)('main Core migrations, real Postgres', () => {
     );
 
   it('blank: the whole production selection once; again: nothing', async () => {
-    expect((await migrate(db, 'prod')).length).toBe(51);
+    expect((await migrate(db, 'prod')).length).toBe(52);
     expect(await migrate(db, 'prod')).toEqual([]);
     expect(
       await n(
@@ -48,7 +48,7 @@ describe.skipIf(!isLocal)('main Core migrations, real Postgres', () => {
   });
 
   it('existing production database with data: only the main Core files, data kept, constraints widened', async () => {
-    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(35);
+    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(36);
     // Rows the new files touch: a Lab ledger kind (constraint redefined), a stream session (column added), a Bonk
     // interaction (salve columns added).
     await db.query(
@@ -80,7 +80,7 @@ describe.skipIf(!isLocal)('main Core migrations, real Postgres', () => {
       stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
     };
     expect((await migrate(db, 'staging', undefined, OLD_STAGING)).length).toBe(
-      39,
+      40,
     );
     expect(await migrate(db, 'prod')).toEqual(
       MAIN_CORE_LAB_MIGRATIONS.filter(
@@ -101,6 +101,6 @@ describe.skipIf(!isLocal)('main Core migrations, real Postgres', () => {
     );
     // A failing file never stays half applied: one transaction per file.
     const recorded = await n('schema_migrations');
-    expect(recorded).toBe(51);
+    expect(recorded).toBe(52);
   });
 });

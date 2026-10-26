@@ -325,6 +325,16 @@ export function subWheelRoutes(
       },
     },
     {
+      // RV2-4 « Rejouer l'animation »: a draw never shown back in the queue as it is (nothing credited again).
+      method: 'POST',
+      pattern: at(`/spins/${uuid}/replay`),
+      auth,
+      handle: ({ params, body, installation }) => {
+        const { actor } = actorAndBody(!!production, installation, body);
+        return mapped(() => wheel.replayAnimation(params[0]!, actor));
+      },
+    },
+    {
       // RV2-2 « Relancer un tirage »: an exceptional new draw after a draw (the broadcaster only, journaled).
       method: 'POST',
       pattern: at('/(\\d{1,32})/redraw'),

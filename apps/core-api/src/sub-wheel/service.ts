@@ -114,6 +114,9 @@ interface Row {
   requested_via?: string | null;
   /** RV2-2: the draw this exceptional new draw follows (null otherwise). */
   redraw_of?: string | null;
+  /** RV2-4: its animation replayed (the same draw, nothing credited again): when, how many times. */
+  replayed_at?: Date | null;
+  replay_count?: number | null;
 }
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
@@ -139,6 +142,8 @@ export const spinView = (r: Row) => ({
   shown_at: iso(r.shown_at),
   /** RV2-2: an exceptional new draw — the draw it follows. */
   redraw_of: r.redraw_of ?? null,
+  /** RV2-4: how many times its animation was replayed (the same gain, never credited again). */
+  replays: Number(r.replay_count ?? 0),
   // V2 right (null on V1 rows): its queue, its month and how sure it is.
   right: {
     queue: r.queue ?? null,
@@ -1049,7 +1054,7 @@ export class SubWheelService {
     );
     await q.query(
       `update sw_spins set status = 'skipped', reason = 'too_late', updated_at = $2
-       where channel_id = $1 and status = 'queued' and coalesce(drawn_at, created_at) < $3`,
+       where channel_id = $1 and status = 'queued' and coalesce(replayed_at, drawn_at, created_at) < $3`,
       [channelId, now, new Date(now.getTime() - SUB_WHEEL.animationMaxAgeMs)],
     );
   }
@@ -1070,11 +1075,13 @@ export class SubWheelService {
       );
       if (playing.length) return { spin: null };
       const now = this.now();
-      // A wheel already decided first (V1 / v2_acquire, or drawn before a restart), then — mode v2 — the next right.
+      // A wheel already decided first (V1 / v2_acquire, drawn before a restart, or replayed — a replay never waits for
+      // its sub alert again), then — mode v2 — the next right.
       const r =
         (
           await q.query<Row>(
             `select * from sw_spins s where s.channel_id = $1 and s.status = 'queued' and (s.alert_id is null
+             or s.replayed_at is not null
              or exists (select 1 from alert_items a where a.alert_id = s.alert_id
                and a.status in ('completed', 'failed', 'expired'))
              or s.created_at <= $2)
@@ -1372,6 +1379,58 @@ export class SubWheelService {
           award_status: original.award_status,
         },
         after: { status: 'requested', queue: 'manual' },
+      });
+      return spinView(row);
+    });
+  }
+
+  /**
+   * RV2-4 « Rejouer l'animation »: a real draw decided (segment, gain) but never shown — the player could not play it, or
+   * it was lost — goes back to the queue AS IT IS: same segment, same gain, the credit untouched (nothing is credited
+   * again, a pending gain stays pending). The next wheel shows it; « Affichée » only once the player confirms its end;
+   * announced then, once. « Tirer » permission (Studio = the broadcaster); journaled; already waiting: the same.
+   */
+  async replayAnimation(spinId: string, actor: Actor) {
+    return this.db.tx(async (q) => {
+      const r = (
+        await q.query<Row>(
+          'select * from sw_spins where spin_id = $1 for update',
+          [spinId],
+        )
+      )[0];
+      if (!r) throw new SwError(404, 'spin_not_found');
+      const role = await this.allow(q, r.channel_id, actor, 'subwheel.draw');
+      if (!['twitch', 'manual', 'reconcile'].includes(r.source))
+        throw new SwError(409, 'not_replayable');
+      if (r.status === 'queued') return spinView(r);
+      if (
+        (r.status !== 'failed' && r.status !== 'skipped') ||
+        r.segment === null ||
+        r.amount === null
+      )
+        throw new SwError(409, 'not_replayable');
+      const now = this.now();
+      const row = (
+        await q.query<Row>(
+          `update sw_spins set status = 'queued', reason = null, shown_at = null, animation_consumer = null,
+             animation_lease_expires_at = null, replayed_at = $2, replay_count = replay_count + 1, updated_at = $2
+           where spin_id = $1 returning *`,
+          [spinId, now],
+        )
+      )[0]!;
+      await this.audit(q, {
+        channelId: r.channel_id,
+        actor: actorName(actor),
+        role,
+        action: 'sw_replay',
+        viewerId: r.viewer_id,
+        spinId,
+        before: { status: r.status, reason: r.reason },
+        after: {
+          status: 'queued',
+          amount: Number(r.amount),
+          award_status: r.award_status,
+        },
       });
       return spinView(row);
     });

@@ -33,6 +33,7 @@ const R2 = '20261109140000_sub_wheel_v2_review.sql';
 const R8 = '20261109150000_sub_wheel_v2_viewers.sql';
 const RV21 = '20261109170000_sub_wheel_v2_announce_delivery.sql';
 const RV22 = '20261109190000_sub_wheel_v2_redraw.sql';
+const RV24 = '20261109210000_sub_wheel_v2_replay.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -527,6 +528,40 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       expect(await n(`sw_spins where redraw_of = '${o2}'`)).toBe(1);
     });
 
+    it(`RV2-4 — « Rejouer l’animation » clicked on two Cores at once: ONE replay, nothing credited again (round ${round})`, async () => {
+      const w = wheel(a);
+      await w.setEnabled(CH, true);
+      await w.setMode(CH, 'v2', 'test');
+      const g = await w.grant(CH, STUDIO, {
+        key: randomUUID(),
+        viewer: { id: '9804', name: 'V9804' },
+        tier: 1,
+        months: 3,
+        note: 'x',
+      });
+      await w.requestDraw(g.spin_id, STUDIO);
+      const c = await w.claimAnimation(CH, 'obs');
+      await w.reportAnimation(c.spin!.spin_id, {
+        consumer_id: 'obs',
+        event: 'failed',
+        error: 'effects_player_muted',
+      });
+      const paid = await credits();
+      const both = await Promise.all(
+        [a, b].map((db) => wheel(db).replayAnimation(c.spin!.spin_id, STUDIO)),
+      );
+      expect(both.map((r) => r.status)).toEqual(['queued', 'queued']);
+      expect(
+        await n(
+          `sw_spins where spin_id = '${c.spin!.spin_id}' and replay_count = 1`,
+        ),
+      ).toBe(1);
+      expect(await n("lab_moderation_audit where action = 'sw_replay'")).toBe(
+        1,
+      );
+      expect(await credits()).toBe(paid);
+    });
+
     it(`RV2-2 — « Accorder une roue » twice at once on two Cores (two clicks) for a viewer with no tour: ONE right (round ${round})`, async () => {
       await wheel(a).setEnabled(CH, true);
       const both = await Promise.allSettled(
@@ -576,9 +611,15 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       ...MIGRATION_SCOPES,
       // The R1 / R2 files not shipped yet: classified away from the production selection.
       prod: PROD_MIGRATIONS.filter(
-        (f) => f !== R1 && f !== R2 && f !== R8 && f !== RV21 && f !== RV22,
+        (f) =>
+          f !== R1 &&
+          f !== R2 &&
+          f !== R8 &&
+          f !== RV21 &&
+          f !== RV22 &&
+          f !== RV24,
       ),
-      lab: [...MIGRATION_SCOPES.lab, R1, R2, R8, RV21, RV22],
+      lab: [...MIGRATION_SCOPES.lab, R1, R2, R8, RV21, RV22, RV24],
     };
     expect(await migrate(a, 'prod', undefined, at46)).toHaveLength(46);
     // What production really holds in its chat queue: Tombola announcements and Spotify answers.
@@ -611,7 +652,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
     );
     const spins = await a.query('select * from sw_spins');
     const balances = await a.query('select * from wallets order by 1');
-    expect(await migrate(a, 'prod')).toEqual([R1, R2, R8, RV21, RV22]);
+    expect(await migrate(a, 'prod')).toEqual([R1, R2, R8, RV21, RV22, RV24]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(
       (

@@ -253,3 +253,68 @@ describe('Roue du Sub V2 — RV2-2 Studio « Droits »: search and summary', () 
     });
   });
 });
+
+describe('Roue du Sub V2 — RV2-4 « Rejouer l’animation »', () => {
+  it('a draw never shown goes back AS IT IS: same gain, nothing credited again, shown once, announced once; even 30 min later', async () => {
+    const f = await fixture();
+    const g = await f.grant('9601');
+    await f.wheel.requestDraw(g.spin_id, studio);
+    const { spin } = await f.wheel.claimAnimation(CH, 'obs');
+    await f.wheel.reportAnimation(spin!.spin_id, {
+      consumer_id: 'obs',
+      event: 'failed',
+      error: 'effects_player_muted',
+    });
+    expect(await f.credits()).toBe(1);
+    const before = await f.balance('9601');
+    f.core.clock.advance(30 * 60_000); // long after: never swept « too late » once replayed
+    const q = await f.wheel.replayAnimation(spin!.spin_id, studio);
+    expect(q).toMatchObject({ status: 'queued', replays: 1 });
+    expect((await f.wheel.replayAnimation(spin!.spin_id, studio)).replays).toBe(
+      1,
+    ); // already waiting: the same
+    const again = await f.wheel.claimAnimation(CH, 'obs');
+    expect(again.spin).toMatchObject({
+      spin_id: spin!.spin_id,
+      amount: spin!.amount,
+      segment: spin!.segment,
+    });
+    await f.wheel.reportAnimation(spin!.spin_id, {
+      consumer_id: 'obs',
+      event: 'completed',
+    });
+    expect(await f.credits()).toBe(1);
+    expect(await f.balance('9601')).toBe(before);
+    expect(await count(f.core.db, "cmd_steps where origin = 'sub_wheel'")).toBe(
+      1,
+    );
+    expect(await f.code(f.wheel.replayAnimation(spin!.spin_id, studio))).toBe(
+      'not_replayable',
+    ); // shown: nothing to replay
+    expect(
+      await count(f.core.db, "lab_moderation_audit where action = 'sw_replay'"),
+    ).toBe(1);
+  });
+
+  it('never a test, never a tour not drawn; « Tirer » permission required', async () => {
+    const f = await fixture();
+    await f.wheel.test(CH, { name: 'Antoni', months: 3 });
+    const t = (await f.wheel.claimAnimation(CH, 'obs')).spin!;
+    await f.wheel.reportAnimation(t.spin_id, {
+      consumer_id: 'obs',
+      event: 'failed',
+      error: 'x',
+    });
+    expect(await f.code(f.wheel.replayAnimation(t.spin_id, studio))).toBe(
+      'not_replayable',
+    );
+    const owed = await f.grant('9602');
+    expect(await f.code(f.wheel.replayAnimation(owed.spin_id, studio))).toBe(
+      'not_replayable',
+    );
+    await f.staff('7001', ['subWheelGrant']);
+    expect(
+      await f.code(f.wheel.replayAnimation(owed.spin_id, mod('7001'))),
+    ).toBe('forbidden');
+  });
+});

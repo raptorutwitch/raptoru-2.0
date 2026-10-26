@@ -102,9 +102,15 @@ function drawsTable(v: SwViewerAdmin) {
     return '<p class="cp-muted">Aucun tirage pour l’instant.</p>';
   return `<table class="cp-history sw-rights"><thead><tr><th>Tirage</th><th>Gain</th><th>Crédit</th><th></th></tr></thead><tbody>${v.draws
     .map((d) => {
-      const action = d.redraw_pending
-        ? '<small class="cp-muted">relance en attente</small>'
-        : `<button type="button" class="cp-ghost swr-redraw" data-act="swr-redraw" data-spin="${esc(d.spin_id)}" data-amount="${d.amount ?? ''}" data-award="${esc(d.award.status)}" data-at="${esc(time(d.shown_at ?? d.created_at))}">Relancer un tirage…</button>`;
+      const replay =
+        d.status !== 'shown' && d.amount !== null
+          ? `<button type="button" class="cp-ghost" data-act="swr-replay" data-spin="${esc(d.spin_id)}" data-amount="${d.amount}" data-award="${esc(d.award.status)}">Rejouer l’animation</button> `
+          : '';
+      const action =
+        replay +
+        (d.redraw_pending
+          ? '<small class="cp-muted">relance en attente</small>'
+          : `<button type="button" class="cp-ghost swr-redraw" data-act="swr-redraw" data-spin="${esc(d.spin_id)}" data-amount="${d.amount ?? ''}" data-award="${esc(d.award.status)}" data-at="${esc(time(d.shown_at ?? d.created_at))}">Relancer un tirage…</button>`);
       return `<tr>
         <td>${esc(time(d.shown_at ?? d.created_at))}${d.redraw_of ? ' <span class="cp-tag">nouveau tirage</span>' : ''}<br><small>${esc(STATUS[d.status])}</small></td>
         <td>${d.amount === null ? '—' : `<b>${n(d.amount)}</b> jetons`}</td>
@@ -148,6 +154,11 @@ export function rightsTab(ui: SwRightsUi, v2Available: boolean) {
     return '<p class="sw-banner">Le Core connecté ne gère pas encore les droits de la Roue du Sub V2.</p>';
   return `<div class="sw-block"><h3>Droits d’un viewer <small class="cp-muted">diffuseur</small></h3>${search(ui)}</div>
     ${ui.viewer ? viewerCard(ui.viewer, ui) : ''}`;
+}
+
+/** The replay confirmation: the SAME draw shown again, nothing credited again. */
+export function replayConfirm(name: string, amount: number, award: string) {
+  return `Rejouer l’animation du tirage de ${name} ?\n\nC’est le MÊME tirage : ${n(amount)} jetons, ${(AWARD[award as SwSpinView['award']['status']] || award).toLowerCase()}. Rien n’est re-crédité ; la roue passe à la prochaine place libre du lecteur.`;
 }
 
 /** The redraw confirmation, in plain words (the previous gain, paid on top, never a replacement). */

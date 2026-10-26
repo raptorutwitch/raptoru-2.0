@@ -15,7 +15,7 @@ import { WalletService } from '../../../core-api/src/wallet/wallet-service.js';
 import { createPgliteDb } from '../../../core-api/test/helpers.js';
 import type { ObsLike } from '../src/channel-points/obs-actions.js';
 import { ChannelPointsRuntime } from '../src/channel-points/runtime.js';
-import type { EffectsPlayer } from '../src/effects/player.js';
+import { EffectError, type EffectsPlayer } from '../src/effects/player.js';
 import { localLabCoreClient } from '../src/lab-moderation/proxy.js';
 import {
   redrawConfirm,
@@ -64,17 +64,36 @@ async function lab(canonical: boolean) {
   );
   const shown: { spin: { segment: number; amount: number; months: number } }[] =
     [];
+  /** The player page as the test sets it: connected, sound allowed, holding / failing the next wheel. */
+  const fx = {
+    connected: true,
+    audio: true,
+    hold: false,
+    failNext: null as string | null,
+    release: null as (() => void) | null,
+  };
   const effects = {
     status: () => ({
       url: '',
-      connected: true,
-      audio: true,
-      current: true,
+      connected: fx.connected,
+      audio: fx.connected && fx.audio,
+      current: fx.connected,
       playing: 0,
     }),
     play: async (e: never) => {
+      if (fx.failNext) {
+        const code = fx.failNext;
+        fx.failNext = null;
+        throw new EffectError(code);
+      }
       shown.push(e);
-      return { end: Promise.resolve({ event: 'completed' as const }) };
+      if (!fx.hold)
+        return { end: Promise.resolve({ event: 'completed' as const }) };
+      return {
+        end: new Promise<{ event: 'completed' }>((r) => {
+          fx.release = () => r({ event: 'completed' });
+        }),
+      };
     },
     handle: async () => false,
     sounds: () => [],
@@ -130,7 +149,7 @@ async function lab(canonical: boolean) {
       occurred_at: iso(0),
       ...over,
     });
-  return { db, core, rt, shown, api, state, playAlerts, sub };
+  return { db, core, rt, shown, api, state, playAlerts, sub, fx };
 }
 
 async function chain(canonical: boolean) {
@@ -366,6 +385,109 @@ describe('Roue du Sub V2 — RV2-2 Studio « Droits » (real Lab Core)', () => {
     );
     expect(html).toContain('nouveau tirage');
     expect(html.match(/data-act="swr-redraw"/g)).toHaveLength(2);
+  });
+});
+
+describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player can show it (real Lab Core)', () => {
+  /** Two tours of raptoru_ off live (wheel OFF when they came), then « Rattraper »: both requested. */
+  async function caughtUp() {
+    const l = await lab(false);
+    await l.api('POST', '/mode', { mode: 'v2' });
+    for (const months of [4, 5])
+      await l.sub({
+        months,
+        actor: { id: '83603689', login: 'raptoru_', display_name: 'raptoru_' },
+      });
+    await l.api('POST', '/settings', { enabled: true });
+    const v = await l.api<SwViewerAdmin>('GET', '/admin/viewers/83603689');
+    expect(v.counts.available).toBe(2);
+    for (const r of v.rights)
+      await l.api('POST', `/spins/${r.spin_id}/request`);
+    return l;
+  }
+  const count = async (l: Awaited<ReturnType<typeof lab>>, sql: string) =>
+    Number(
+      (
+        await l.db.query<{ n: number }>(`select count(*)::int as n from ${sql}`)
+      )[0]!.n,
+    );
+
+  it('the Lab bug: a player page open but its sound blocked gets NOTHING claimed — no draw, no credit; then the two tours play one after the other', async () => {
+    const l = await caughtUp();
+    l.fx.audio = false; // a browser tab never clicked: « connected », sound blocked
+    expect(await l.rt.subWheel.once()).toBe(false);
+    expect(await l.rt.subWheel.once()).toBe(false);
+    expect(l.shown).toHaveLength(0);
+    expect(await count(l, "sw_spins where status = 'requested'")).toBe(2);
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      0,
+    );
+    let s = await l.state();
+    expect(s.animations_waiting).toBe('effects_player_muted');
+    let html = subWheelView(s, null);
+    expect(html).toContain('son bloqué');
+    expect(html).not.toContain('Lecteur prêt');
+    // Sound allowed: the first wheel plays; while it plays, nothing else is claimed (never two at once).
+    l.fx.audio = true;
+    l.fx.hold = true;
+    const first = l.rt.subWheel.once();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(l.shown).toHaveLength(1);
+    expect(await l.rt.subWheel.once()).toBe(false);
+    expect(l.shown).toHaveLength(1);
+    l.fx.hold = false;
+    l.fx.release!();
+    expect(await first).toBe(true);
+    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(l.shown).toHaveLength(2);
+    expect(await count(l, "sw_spins where status = 'shown'")).toBe(2);
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      2,
+    );
+    s = await l.state();
+    html = subWheelView(s, null);
+    expect(html).toContain('Lecteur prêt');
+  });
+
+  it('a display that fails AFTER the draw: « Non affichée », paid once; « Rejouer l’animation » shows the SAME draw, nothing credited again', async () => {
+    const l = await caughtUp();
+    l.fx.failNext = 'effects_player_offline'; // the page did not take it in time
+    expect(await l.rt.subWheel.once()).toBe(true);
+    const failed = (await l.state()).recent.find((r) => r.status === 'failed')!;
+    expect(failed).toMatchObject({ reason: 'effects_player_offline' });
+    expect(failed.amount).toBeGreaterThan(0);
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      1,
+    );
+    let html = subWheelView(await l.state(), null, {
+      tab: 'history',
+      grantOpen: false,
+    });
+    expect(html).toContain('data-act="sw-replay"');
+    // Replayed: back in the queue as it is, shown before the next tour; still ONE payment for it.
+    await l.api('POST', `/spins/${failed.spin_id}/replay`);
+    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(l.shown[0]).toMatchObject({
+      spin: { amount: failed.amount, segment: failed.segment },
+    });
+    const replayed = (await l.state()).recent.find(
+      (r) => r.spin_id === failed.spin_id,
+    )!;
+    expect(replayed).toMatchObject({ status: 'shown', replays: 1 });
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      1,
+    );
+    // The second tour next, paid once too: two credits in all.
+    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(await count(l, "lab_wallet_ledger where kind = 'sub_wheel'")).toBe(
+      2,
+    );
+    expect(await count(l, "sw_spins where status = 'shown'")).toBe(2);
+    html = subWheelView(await l.state(), null, {
+      tab: 'history',
+      grantOpen: false,
+    });
+    expect(html).not.toContain('data-act="sw-replay"');
   });
 });
 

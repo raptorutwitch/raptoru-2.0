@@ -369,7 +369,7 @@ describe('Roue du Sub — through the Lab Core routes', () => {
     await migrate(prod, 'prod');
     await migrate(lab, 'lab');
     const p = await shape(prod);
-    expect(p.cols.length).toBe(92); // RV2-1: sw_settings.announce_delay_s; RV2-2: sw_spins.redraw_of
+    expect(p.cols.length).toBe(94); // RV2-1: sw_settings.announce_delay_s; RV2-2: sw_spins.redraw_of; replay: 2
     expect(p).toEqual(await shape(lab));
   });
 });

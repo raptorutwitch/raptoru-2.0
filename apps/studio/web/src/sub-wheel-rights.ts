@@ -1,5 +1,6 @@
 import {
   redrawConfirm,
+  replayConfirm,
   type SwRightsUi,
   type SwViewerAdmin,
   type SwViewerHit,
@@ -30,6 +31,8 @@ const REFUSAL: Record<
   spin_not_found: () => 'Tour introuvable.',
   grant_key_reused: () => 'Action déjà utilisée : recommencez.',
   redraw_key_reused: () => 'Action déjà utilisée : recommencez.',
+  not_replayable: () =>
+    'Ce tirage ne peut pas être rejoué (déjà affiché, en cours, ou un test).',
 };
 
 class Refused extends Error {
@@ -201,6 +204,22 @@ export function mountSubWheelRights(d: RightsDeps) {
             done++;
           }
           return `${done} tour(s) lancé(s) pour ${name()}.`;
+        });
+      } else if (act === 'swr-replay' && target.dataset.spin) {
+        const spin = target.dataset.spin;
+        if (
+          !confirm(
+            replayConfirm(
+              name(),
+              Number(target.dataset.amount),
+              target.dataset.award ?? '',
+            ),
+          )
+        )
+          return true;
+        void run(async () => {
+          await call(`/spins/${spin}/replay`, {});
+          return `Animation remise en file pour ${name()} (aucun crédit en plus).`;
         });
       } else if (act === 'swr-redraw' && target.dataset.spin) {
         const spin = target.dataset.spin;

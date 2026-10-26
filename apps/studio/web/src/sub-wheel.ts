@@ -1,5 +1,5 @@
 import { mountSubWheelRights } from './sub-wheel-rights.js';
-import { rightsTab } from './sub-wheel-rights-view.js';
+import { replayConfirm, rightsTab } from './sub-wheel-rights-view.js';
 import {
   type SwMode,
   type SwState,
@@ -23,6 +23,8 @@ const REFUSAL: Record<string, string> = {
   review_closed: 'Cette vérification a déjà été décidée.',
   not_mergeable: 'Fusion impossible : ce tour a déjà été tiré ou crédité.',
   grant_key_reused: 'Ce tour a déjà été accordé à quelqu’un d’autre.',
+  not_replayable:
+    'Ce tirage ne peut pas être rejoué (déjà affiché, en cours, ou un test).',
   spin_not_found: 'Tour introuvable.',
   review_not_found: 'Vérification introuvable.',
 };
@@ -260,6 +262,23 @@ export function mountSubWheel(root: HTMLElement) {
         `/spins/${target.dataset.spin}/request`,
         {},
         'Tirage demandé : il passe à la prochaine roue.',
+      );
+    }
+    if (act === 'sw-replay' && target?.dataset.spin) {
+      if (
+        !confirm(
+          replayConfirm(
+            target.dataset.name ?? 'ce viewer',
+            Number(target.dataset.amount),
+            target.dataset.award ?? '',
+          ),
+        )
+      )
+        return;
+      void post(
+        `/spins/${target.dataset.spin}/replay`,
+        {},
+        'Animation remise en file (aucun crédit en plus).',
       );
     }
     if (act === 'sw-review' && target?.dataset.review) {

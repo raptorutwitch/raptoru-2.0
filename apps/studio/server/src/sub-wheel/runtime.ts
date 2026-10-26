@@ -33,6 +33,11 @@ export class SubWheelRuntime {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   lastError: string | null = null;
+  /**
+   * Why no wheel is asked from Core right now although the player page exists (null: nothing in the way). A wheel is
+   * drawn — and credited — by Core when it is CLAIMED: Studio claims only when the player can really play it.
+   */
+  waiting: string | null = null;
 
   constructor(private readonly d: SubWheelRuntimeDeps) {}
 
@@ -66,8 +71,22 @@ export class SubWheelRuntime {
     if (this.timer) clearTimeout(this.timer);
   }
 
-  /** One recorded spin if Core has one ready: shown to its end, then reported. */
+  /** Why the player could not play a wheel now (null: it can): checked BEFORE Core decides anything. */
+  private unplayable(): string | null {
+    const fx = this.d.effects?.status();
+    if (!fx) return 'effects_player_unavailable';
+    if (!fx.connected) return 'effects_player_offline';
+    if (!fx.audio) return 'effects_player_muted';
+    if (!fx.current) return 'effects_player_outdated';
+    return null;
+  }
+
+  /** One recorded spin if Core has one ready AND the player can play it: shown to its end, then reported. */
   async once(): Promise<boolean> {
+    // A connected page whose sound is blocked (a browser tab never clicked), offline or outdated would turn the next
+    // right into a paid draw nobody sees: nothing is claimed — the rights wait, undecided.
+    this.waiting = this.unplayable();
+    if (this.waiting) return false;
     const { spin } = await this.d.core<{ spin: Spin | null }>(
       `${this.base}/${this.d.channelId}/animations/claim`,
       { consumer_id: this.consumer },
@@ -142,6 +161,7 @@ export class SubWheelRuntime {
         subscription_detections: detections ?? [],
         lab_sim: lab,
         animations_error: this.lastError,
+        animations_waiting: this.waiting,
         effects: effects
           ? {
               ...effects.status(),
@@ -201,6 +221,9 @@ export class SubWheelRuntime {
         `${this.base}/reviews/${review[1]}/resolve`,
         await body(),
       );
+    const replay = /^\/spins\/([0-9a-f-]{36})\/replay$/.exec(path);
+    if (method === 'POST' && replay)
+      return this.d.core(`${this.base}/spins/${replay[1]}/replay`, {});
     const award = /^\/spins\/([0-9a-f-]{36})\/award$/.exec(path);
     if (method === 'POST' && award)
       return this.d.core(`${this.base}/spins/${award[1]}/award`, await body());
