@@ -1,3 +1,11 @@
+import {
+  addBand,
+  bandProblems,
+  type BandsDraft,
+  MAX_BANDS,
+  parseNumber,
+  removeBand,
+} from './tombola-bands.js';
 import type { RaffleConfig, RaffleSound } from '@raptoru/schemas';
 import { ic } from './tombola-icons.js';
 
@@ -304,6 +312,8 @@ export function mountTombola(root: HTMLElement) {
   let visible = false;
   let status: Status | null = null;
   let cfg: RaffleConfig | null = null;
+  /** The random amount's tiers being edited (null: none): saved together, or dropped (tombola-bands.ts). */
+  let bandsDraft: BandsDraft | null = null;
   let round: Round | null = null;
   let card: Card | null = null;
   let snapAt = 0;
@@ -365,6 +375,28 @@ export function mountTombola(root: HTMLElement) {
       renderSetup();
     }
   };
+  /** « Enregistrer » the tiers: the whole configuration with the draft, validated by Core at once. */
+  const saveBands = async () => {
+    if (!cfg || !bandsDraft || bandProblems(bandsDraft).length) return;
+    const next = structuredClone(cfg);
+    next.random.step = bandsDraft.step;
+    next.random.bands = bandsDraft.bands.map((b) => ({ ...b }));
+    try {
+      await api('/actions', { command: { action: 'config', config: next } });
+      cfg = next;
+      bandsDraft = null;
+      toast('Tranches enregistrées.');
+      await refresh(true);
+    } catch (e) {
+      fail(e); // the draft stays as typed: nothing is lost
+    }
+    renderSetup();
+  };
+  const draftOf = (c: RaffleConfig): BandsDraft =>
+    bandsDraft ?? {
+      step: c.random.step,
+      bands: c.random.bands.map((b) => ({ ...b })),
+    };
   const patch = (fn: (c: RaffleConfig) => void) => {
     if (!cfg) return;
     const next = structuredClone(cfg);
@@ -412,18 +444,31 @@ export function mountTombola(root: HTMLElement) {
   }
   function modeBody(c: RaffleConfig) {
     if (c.amount_mode === 'random') {
-      const bands = c.random.bands;
-      const max = Math.max(...bands.map((b) => b.pct), 1);
+      const draft = draftOf(c);
+      const bands = draft.bands;
+      const max = Math.max(...bands.map((b) => b.pct || 0), 1);
       const under20 = bands
         .filter((b) => b.to <= 20_000)
-        .reduce((a, b) => a + b.pct, 0);
-      return `<div class="inline" style="margin-top:12px"><span class="muted">Tranches (de, à, % des Tombolas)</span><span class="fine">pas de</span><input class="input" style="width:90px" data-cfg="random.step" value="${c.random.step}"></div>
+        .reduce((a, b) => a + (b.pct || 0), 0);
+      const problems = bandsDraft ? bandProblems(bandsDraft) : [];
+      return `<div class="inline" style="margin-top:12px"><span class="muted">Tranches (de, à, % des Tombolas)</span><span class="fine">pas de</span><input class="input" style="width:90px" data-draft="step" value="${draft.step}"></div>
         <div class="bands">${bands
           .map(
             (b, i) =>
-              `<div class="inline"><input class="input" style="width:100px" data-band="${i}.from" value="${b.from}"><span class="muted">→</span><input class="input" style="width:100px" data-band="${i}.to" value="${b.to}"><input class="input" style="width:70px" data-band="${i}.pct" value="${b.pct}"><span class="muted">%</span></div>`,
+              `<div class="inline"><input class="input" style="width:100px" data-band="${i}.from" value="${b.from}"><span class="muted">→</span><input class="input" style="width:100px" data-band="${i}.to" value="${b.to}"><input class="input" style="width:70px" data-band="${i}.pct" value="${b.pct}"><span class="muted">%</span>${bands.length > 1 ? `<button class="cmd-btn" type="button" data-band-del="${i}" title="Supprimer cette tranche">${ic('x')}</button>` : ''}</div>`,
           )
-          .join('')}</div>
+          .join(
+            '',
+          )}${bands.length < MAX_BANDS ? `<button class="cmd-btn" type="button" data-band-add>+ Ajouter une tranche</button>` : ''}</div>
+        ${
+          bandsDraft
+            ? `<div class="bands-draft">${
+                problems.length
+                  ? `<ul class="bands-problems">${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
+                  : '<p class="fine">Modifications prêtes à enregistrer.</p>'
+              }<div class="inline"><button class="t-btn t-btn--primary" type="button" data-bands="save" ${problems.length ? 'disabled' : ''}>Enregistrer</button><button class="t-btn t-btn--ghost" type="button" data-bands="cancel">Annuler</button></div></div>`
+            : ''
+        }
         <div class="dist">${bands
           .map(
             (b) =>
@@ -1219,6 +1264,22 @@ export function mountTombola(root: HTMLElement) {
       );
       return;
     }
+    if ((b = g('[data-band-add]')) && cfg) {
+      bandsDraft = addBand(draftOf(cfg));
+      return renderSetup();
+    }
+    if ((b = g('[data-band-del]')) && cfg) {
+      bandsDraft = removeBand(draftOf(cfg), Number(b.dataset.bandDel));
+      return renderSetup();
+    }
+    if ((b = g('[data-bands]'))) {
+      if (b.dataset.bands === 'save') void saveBands();
+      else {
+        bandsDraft = null;
+        renderSetup();
+      }
+      return;
+    }
     if ((b = g('[data-act]'))) {
       const a = b.dataset.act;
       if (a === 'extend') void act({ action: 'extend', seconds: 30 });
@@ -1549,17 +1610,19 @@ export function mountTombola(root: HTMLElement) {
             : raw,
         ),
       );
-    } else if (t.dataset.band) {
+    } else if (t.dataset.band && cfg) {
+      // A tier depends on its neighbours (contiguous, 100 % in all): only the draft changes, saved together.
       const [i, k] = t.dataset.band.split('.') as [
         string,
         'from' | 'to' | 'pct',
       ];
-      patch(
-        (c) =>
-          (c.random.bands[Number(i)]![k] = Number(
-            t.value.replace(/\s/g, '').replace(',', '.'),
-          )),
-      );
+      const d = draftOf(cfg);
+      d.bands[Number(i)]![k] = parseNumber(t.value);
+      bandsDraft = d;
+      renderSetup();
+    } else if (t.dataset.draft === 'step' && cfg) {
+      bandsDraft = { ...draftOf(cfg), step: parseNumber(t.value) };
+      renderSetup();
     } else if (t.dataset.display) {
       const k = t.dataset.display as keyof RaffleConfig['display'];
       const v = Number(t.value.replace(',', '.'));

@@ -1153,6 +1153,19 @@
   gap: 6px;
   margin-top: 10px;
 }
+/* The tiers' draft: what prevents saving it, then « Enregistrer » / « Annuler ». */
+.tmb .bands-draft {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 191, 110, 0.4);
+  border-radius: 10px;
+}
+.tmb .bands-problems {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: #ffbf6e;
+  font-size: 13px;
+}
 .tmb .sound-row {
   display: flex;
   align-items: center;

@@ -44,6 +44,20 @@ function pickSpin(random, family, preset) {
 const HEAVY = FAMILIES.find((f) => f.id === 'lourd');
 
 /**
+ * « Punch » (26/10): about one shot in PUNCH.share arrives faster (its flight time × PUNCH.flight, i.e. 12–22 % faster).
+ * Drawn from its own stream (`${id}:speed`): every other draw of the shot (size, family, entry, impact, sounds) stays
+ * exactly as validated. Never the « tendu » family (already the fastest) nor a combo finisher (its mass slows it).
+ */
+export const PUNCH = { share: 1 / 6, flight: [0.82, 0.9] };
+
+export function punchFactor(id, familyId, giant) {
+  if (giant || familyId === 'tendu') return 1;
+  const r = createSeededRandom(seedFromReference(`${id}:speed`));
+  if (r() >= PUNCH.share) return 1;
+  return between(r, PUNCH.flight);
+}
+
+/**
  * Lot 6 — mass of a combo finisher, from its size only: 0 at a normal size, +1 each time the size
  * doubles. The same simulator gets a slower entry, less spin (inertia), a softer bounce, a stronger
  * squash and a longer time on the ground — no separate physics.
@@ -115,11 +129,12 @@ export function planShot(id, context = {}) {
   const drift = family.drift
     ? (random() < 0.5 ? -1 : 1) * between(random, family.drift)
     : 0;
+  const punch = punchFactor(id, family.id, giant);
   const trajectory = buildTrajectory({
     random,
     impact,
     start,
-    flight: between(random, family.flight) * (mass?.flight ?? 1),
+    flight: between(random, family.flight) * (mass?.flight ?? 1) * punch,
     gravity: between(random, family.gravity),
     drift,
     size,
@@ -139,6 +154,7 @@ export function planShot(id, context = {}) {
     impact,
     heavy: family.id === 'lourd',
     finisher: giant,
+    punch: punch < 1,
     trajectory,
   };
 }
