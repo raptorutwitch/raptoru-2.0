@@ -316,7 +316,9 @@ La récupération ne s'applique donc qu'aux défauts : contournement d'une prote
 
 - **Lecteur d'effets et `wheel.js` inchangés.** Toujours un segment et un montant décidés par le Core, toujours une roue à la fois.
 - **Gains V1 et lignes existantes** : jamais modifiés, sauf la réactivation de Wenuyr. Aucune récupération ne les concerne (§ 6.1).
-- **Animation ratée** : gain conservé, jamais de nouveau tirage. **Crédit refusé** : `award()`.
+- **Animation ratée** : gain conservé, jamais de nouveau tirage. Jamais démarrée → remontrée toute seule (même tirage,
+  rien de re-crédité, au plus 5 essais) ; peut-être vue → « À vérifier », jamais remontrée seule. Détail :
+  [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 5. **Crédit refusé** : `award()`.
 - **Droits** : jamais purgés (décision 5).
 
 ## 10 bis. Invitations naturelles aux tours accumulés (décision D, lot R9)
