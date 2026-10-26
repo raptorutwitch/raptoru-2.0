@@ -7,11 +7,19 @@ import type { LabChatMessage, LabStreamEvent } from '@raptoru/schemas';
 // moderation test commands… are added here as modules — never a second Twitch connection, token or
 // process per module. A plain message (not starting with « ! ») only goes to the modules that read the
 // whole chat (`plainText`: the Jeu des mots); the others keep receiving commands only.
+// One plain message answers ONE question: the modules that read a viewer's « oui » / « non » to a question they asked
+// (`answers`: Caution's quote, the Roue du Sub's invitation) see it in order, and the first one that takes it keeps
+// it — the next ones never see it. Never a single « oui » paying a caution AND accepting a wheel invitation.
 
 export interface LabChatModule {
   name: string;
   /** Also receives the plain messages (not starting with « ! »). */
   plainText?: boolean;
+  /**
+   * Reads a viewer's answer (« oui » / « non ») to a question it asked. A plain message one of these modules took
+   * (any outcome but `ignored`) is not given to the next ones: their order in the router is the priority.
+   */
+  answers?: boolean;
   chat?(msg: LabChatMessage): Promise<{ outcome: string; replayed?: boolean }>;
   stream?(ev: LabStreamEvent): Promise<unknown>;
 }
@@ -49,11 +57,16 @@ export class LabChatRouter {
     const handled: Handled[] = [];
     let error: string | undefined;
     const command = msg.text.trimStart().startsWith('!');
+    /** The module that took this plain message as the answer to its question (one answer, one question). */
+    let answeredBy: string | null = null;
     try {
       for (const m of this.modules) {
         if (!m.chat || (!command && !m.plainText)) continue;
+        if (m.answers && !command && answeredBy) continue;
         const out = await m.chat(msg);
-        if (out.outcome !== 'ignored') handled.push({ module: m.name, ...out });
+        if (out.outcome === 'ignored') continue;
+        handled.push({ module: m.name, ...out });
+        if (m.answers && !command) answeredBy = m.name;
       }
     } catch (e) {
       error = (e as { code?: string }).code ?? 'error';

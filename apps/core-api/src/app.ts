@@ -127,6 +127,7 @@ export function createCore(
     broadcasterOf,
     economy,
   );
+  const subWheel = new SubWheelService(db, clock, undefined, economy);
   return {
     credits,
     daily: new DailyService(db, clock, credits),
@@ -151,12 +152,14 @@ export function createCore(
     randomBan,
     caution,
     votekick,
-    subWheel: new SubWheelService(db, clock, undefined, economy),
+    subWheel,
     spotify,
     cpTwitch,
     botInstances: new BotInstanceService(db, clock),
     economy,
     chat: createChatGames({
+      // « !roue » and the invitations: silent while the wheel is in mode v1 (production today).
+      subWheel,
       db,
       clock,
       economy,

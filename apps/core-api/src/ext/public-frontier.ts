@@ -11,6 +11,7 @@ import { chatRouter } from '../lab-chat/games.js';
 import { labModerationRoutes } from '../http/lab-moderation-routes.js';
 import type { AppDeps } from '../http/server.js';
 import { soundLabRoutes } from '../http/sound-lab-routes.js';
+import { subWheelRoutes } from '../http/sub-wheel-routes.js';
 import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { LabModerationService } from '../lab-moderation/service.js';
 import { AvatarCache, twitchAppUserLookup } from '../raffle-lab/avatars.js';
@@ -86,6 +87,8 @@ export function createPublicFrontier(
     ...commandsRoutes(core.chat.commands, core.chat.admission, core.chat.steps),
     ...wordGameRoutes(core.chat.wordGame),
     ...miniGamesRoutes(core.chat.miniGames),
+    // Roue du Sub V2 (R8): the viewer frontier's own tours / team actions, in-process only (never on HTTP).
+    ...subWheelRoutes(core.subWheel, core.alerts),
   ]);
   const app =
     config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET

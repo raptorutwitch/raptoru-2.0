@@ -46,6 +46,16 @@ const beforeMusicDir = join(tmp, 'before-music');
 cpSync(allDir, beforeMusicDir, { recursive: true });
 rmSync(join(beforeMusicDir, MUSIC), { force: true });
 
+// Roue du Sub V2 (26/10): seven production files applied by hand in one transaction, building on each other (one
+// creates sw_invitations, a later one widens its check; two only add columns and an index IF NOT EXISTS).
+const V2 = readdirSync(allDir)
+  .filter(
+    (f) => /^20261109\d+_sub_wheel_v2.*\.sql$/.test(f) && !/_lab\.sql$/.test(f),
+  )
+  .sort();
+const beforeV2Dir = join(tmp, 'before-v2');
+cpSync(allDir, beforeV2Dir, { recursive: true });
+for (const f of V2) rmSync(join(beforeV2Dir, f));
 const sql = (f) => readFileSync(join(allDir, f), 'utf8');
 let n = 0;
 
@@ -251,6 +261,31 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
       assert.deepEqual(r.conforming, [MUSIC]);
       assert.deepEqual(r.applied, [MUSIC]);
       assert.ok((await recorded(db)).includes(MUSIC));
+      await db.close();
+    },
+  );
+
+  it(
+    'files building on each other (Roue du Sub V2): conforming together once applied in one transaction; one left out → refused, nothing recorded',
+    { skip: V2.length < 2 },
+    async () => {
+      const partial = await database(beforeV2Dir);
+      await partial.exec(
+        `begin; ${V2.slice(0, -1).map(sql).join('\n')} commit;`,
+      );
+      const refused = partial.verify(V2);
+      assert.equal(refused.ok, false);
+      assert.match(refused.problems.join(), /modifierait public\.sw_spins/);
+      assert.deepEqual(refused.applied, []);
+      assert.ok(!(await recorded(partial)).some((f) => V2.includes(f)));
+      await partial.close();
+      const db = await database(beforeV2Dir);
+      await db.exec(`begin; ${V2.map(sql).join('\n')} commit;`);
+      const r = db.verify(V2);
+      assert.equal(r.ok, true, JSON.stringify(r.problems));
+      assert.deepEqual(r.conforming, V2);
+      assert.deepEqual(r.applied, V2);
+      assert.deepEqual(db.verify(V2).recorded, V2);
       await db.close();
     },
   );

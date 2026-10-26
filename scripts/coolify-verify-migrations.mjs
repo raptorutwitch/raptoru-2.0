@@ -11,8 +11,12 @@
 // - not recorded → conformity on the real database, inside a transaction always rolled back: the file is replayed
 //   into a scratch schema (search_path raptoru_verify, public), each object it creates must exist in public with the
 //   same definition (columns, types, defaults, NOT NULL, constraints, indexes), and the replay must change nothing in
-//   public. A file made only of ALTER TABLE statements (e.g. a widened check constraint) creates nothing: it conforms
-//   when its replay changes nothing in public (its effect is already there; missing, the replay would change it).
+//   public. A file made only of ALTER TABLE statements (e.g. a widened check constraint) and CREATE INDEX IF NOT EXISTS
+//   on existing tables creates nothing: it conforms when its replay changes nothing in public (its effect is already
+//   there; missing, the replay would change it).
+// - files applied together that build on each other (one creates a table, a later one alters it — Roue du Sub V2): when
+//   one of them does not conform alone, ALL the pending files are replayed in order, as the bundle was applied; they
+//   conform together when that replay recreates exactly what public holds and changes nothing in it.
 //   Then only the Core's migrator runs; it must apply exactly those files, recorded with their checksum.
 // A file of the migrator's scope that is neither recorded nor expected stops everything before any write.
 
@@ -65,7 +69,11 @@ export async function verifyMigrations({
       .split(";")
       .map((s) => s.trim())
       .filter(Boolean)
-      .every((s) => /^alter\s+table\s/i.test(s));
+      .every(
+        (s) =>
+          /^alter\s+table\s/i.test(s) ||
+          /^create\s+(unique\s+)?index\s+if\s+not\s+exists\s/i.test(s),
+      );
   const conformity = async (sql) => {
     const rollback = {};
     try {
@@ -104,6 +112,8 @@ export async function verifyMigrations({
   for (const f of files)
     if (!sums.has(f) && !expected.includes(f))
       res.problems.push(`${f} non enregistrée et non autorisée`);
+  const pending = [];
+  const alone = [];
   for (const f of expected) {
     if (!files.includes(f)) {
       res.problems.push(`${f} hors du périmètre du migrateur`);
@@ -115,9 +125,21 @@ export async function verifyMigrations({
       else res.problems.push(`${f} enregistrée avec une autre empreinte`);
       continue;
     }
+    pending.push(f);
     const diff = await conformity(sql);
-    if (diff.length) res.problems.push(`${f} : ${diff.join(", ")}`);
+    if (diff.length) alone.push(`${f} : ${diff.join(", ")}`);
     else res.conforming.push(f);
+  }
+  if (alone.length) {
+    const sorted = [...pending].sort();
+    const together =
+      pending.length > 1
+        ? await conformity(
+            (await Promise.all(sorted.map((f) => sqlOf(f)))).join("\n"),
+          )
+        : ["-"];
+    if (together.length) res.problems.push(...alone);
+    else res.conforming = sorted;
   }
   if (res.problems.length) return res;
   if (res.conforming.length) {

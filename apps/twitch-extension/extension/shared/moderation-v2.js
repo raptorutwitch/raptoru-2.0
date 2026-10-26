@@ -65,7 +65,7 @@ const STATUS = {
   execution_unknown: 'non confirmé',
   cancelled: 'retiré',
 };
-/** The 6 permissions D4 grants per moderator (Core names them the same way). */
+/** The permissions D4 grants per moderator (Core names them the same way; Core checks them, never this page). */
 const PERMS = {
   wallet: ['Admin Wallet', 'Créditer ou débiter Jetons et crédits.'],
   modules: ['Désactiver un module', 'Passer un module en « Désactivé ».'],
@@ -74,6 +74,8 @@ const PERMS = {
   sensitive: ['Sanctions sensibles', 'Bloquer tout Raptoru, ou plus d’une heure.'],
   words: ['Mots surveillés / bloqués', 'Modifier la liste de surveillance TTS.'],
   raffle: ['Gérer la Tombola', '+ temps, pause, tirage immédiat, ajout manuel.'],
+  subWheelDraw: ['Roue du Sub · Tirer', 'Demander le tirage d’un tour en attente.'],
+  subWheelGrant: ['Roue du Sub · Accorder', 'Accorder un tour, décider des tours « À vérifier ».'],
 };
 const ROLE_LABEL = { broadcaster: 'Streamer', supermod: 'Supermod', moderator: 'Mod', viewer: 'Viewer' };
 const ACTION = {
@@ -115,6 +117,12 @@ const ACTION = {
   lab_wallet_set: 'Wallet de test défini',
   lab_wallet_adjust: 'Wallet de test ajusté',
   lab_wallet_reset: 'Wallet de test réinitialisé',
+  sw_mode: 'Roue du Sub · mode',
+  sw_draw_request: 'Roue du Sub · tirage demandé',
+  sw_grant: 'Roue du Sub · tour accordé',
+  sw_review_distinct: 'Roue du Sub · deux mois distincts',
+  sw_review_merge: 'Roue du Sub · doublon fusionné',
+  sw_review_unresolved: 'Roue du Sub · laissé en attente',
 };
 const ERRORS = {
   already_refunded: 'Déjà remboursé.',

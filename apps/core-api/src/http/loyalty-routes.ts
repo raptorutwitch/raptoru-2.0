@@ -6,6 +6,7 @@ import {
 } from '@raptoru/schemas';
 import { z } from 'zod';
 import type { LoyaltyEngine } from '../loyalty/engine.js';
+import type { SubWheelService } from '../sub-wheel/service.js';
 import { HttpError, limitParam, parse, type Route } from './server.js';
 
 const TwitchUserId = z.string().regex(/^\d+$/);
@@ -19,21 +20,51 @@ const ExclusionRequest = z.object({
   actor: z.string().min(1).max(64),
 });
 
-export function loyaltyRoutes(engine: LoyaltyEngine): Route[] {
+export function loyaltyRoutes(
+  engine: LoyaltyEngine,
+  /** Roue du Sub V2 (R2): the sub / resub events are also proofs of rights to a spin, on this channel. */
+  wheel?: { service: SubWheelService; channelId: string },
+): Route[] {
   return [
     // --- bot: normalized Twitch events (Core decides shadow/preview/credit) ---
     {
       method: 'POST',
       pattern: /^\/v1\/bot\/loyalty\/events$/,
       auth: 'bot',
-      handle: async ({ body }) => engine.handleEvent(parse(LoyaltyEvent, body)),
+      handle: async ({ body }) => {
+        const event = parse(LoyaltyEvent, body);
+        const response = await engine.handleEvent(event);
+        // Two independent transactions, loyalty first. If the acquisition fails the answer is an error: the bot keeps
+        // the event and sends it again — loyalty answers from its stored reward (never paid twice), the acquisition
+        // (idempotent per EventSub message id) completes. Replays included: a lost acquisition is always resumed.
+        if (wheel)
+          await wheel.service.acquireFromLoyalty(wheel.channelId, event);
+        return response;
+      },
     },
     {
       method: 'POST',
       pattern: /^\/v1\/bot\/loyalty\/subscriptions\/snapshot$/,
       auth: 'bot',
-      handle: async ({ body }) =>
-        engine.applySubscriptionSnapshot(parse(SubscriptionSnapshot, body)),
+      handle: async ({ body }) => {
+        const snapshot = parse(SubscriptionSnapshot, body);
+        const r = await engine.applySubscriptionSnapshot(snapshot);
+        // Roue du Sub R7, own transaction after the loyalty one (a failure: 5xx, the bot sends the snapshot again;
+        // the catch-up is idempotent per snapshot and viewer).
+        if (wheel && r.previousAt && r.added.length)
+          await wheel.service.reconcile(
+            wheel.channelId,
+            r.added.map((s) => ({
+              id: s.viewer.twitchUserId,
+              login: s.viewer.login,
+              name: s.viewer.displayName,
+              tier: s.tier === 't3' ? 3 : s.tier === 't2' ? 2 : 1,
+            })),
+            r.previousAt,
+            new Date(snapshot.fetchedAt),
+          );
+        return { subscribers: r.subscribers };
+      },
     },
 
     // --- Studio / admin ---

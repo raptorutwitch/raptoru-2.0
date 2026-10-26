@@ -511,6 +511,13 @@ export function createClient({
     modV2Act: (command) => call('POST', '/moderation/v2/actions', { body: { command }, idempotencyKey: newIdempotencyKey() }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
     commandsPublic: () => call('GET', '/commands/public'),
+    /** Roue du Sub V2 (R8): the caller's own tours (identity from the token), and « Lancer mes tours ». */
+    subWheelMe: () => call('GET', '/sub-wheel/me'),
+    subWheelAccept: () => call('POST', '/sub-wheel/me/accept', { body: {} }),
+    /** Roue du Sub V2 (R8), team: the tours waiting, « Tirer », « Accorder un tour » — Core checks the permissions. */
+    subWheelTeam: () => call('POST', '/sub-wheel/team/rights', { body: {} }),
+    subWheelTeamRequest: (spinId) => call('POST', `/sub-wheel/team/spins/${encodeURIComponent(spinId)}/request`, { body: {} }),
+    subWheelTeamGrant: (grant) => call('POST', '/sub-wheel/team/grant', { body: grant }),
     /** Commands V2 « Modération › Commandes »: Core read models with the caller's verified identity. */
     cmdV2: (path) => call('GET', `/commands/v2/${path}`),
     /** Commands V2 change (update / create / delete): Core checks the caller's rights and the version. */

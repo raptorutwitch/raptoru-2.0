@@ -95,6 +95,8 @@ export const LoyaltyEvent = z.discriminatedUnion('type', [
     occurredAt: OccurredAt,
     viewer: Viewer,
     tier: SubTier,
+    /** Twitch's cumulative months (Roue du Sub V2: a certain month). Absent from bots before R2: optional. */
+    cumulativeMonths: z.number().int().min(1).max(1000).optional(),
   }),
   /** One gifting action (channel.subscription.gift): `gifter` null when anonymous. */
   z.object({

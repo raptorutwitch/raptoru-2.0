@@ -488,10 +488,9 @@ export class LoyaltyEngine {
     };
   }
 
-  async applySubscriptionSnapshot(
-    snapshot: SubscriptionSnapshot,
-  ): Promise<{ subscribers: number }> {
-    return { subscribers: await this.db.tx((q) => applySnapshot(q, snapshot)) };
+  async applySubscriptionSnapshot(snapshot: SubscriptionSnapshot) {
+    const r = await this.db.tx((q) => applySnapshot(q, snapshot));
+    return { subscribers: r.count, added: r.added, previousAt: r.previousAt };
   }
 
   // --- Wallet credits -------------------------------------------------------------------------

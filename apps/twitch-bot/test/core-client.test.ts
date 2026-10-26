@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createCoreClient } from '../src/core-client.js';
+import {
+  CoreHttpError,
+  createCoreClient,
+  notLeaseHolder,
+} from '../src/core-client.js';
 
 const status = {
   twitchUserId: '1001',
@@ -58,5 +62,37 @@ describe('core client', () => {
     );
     await expect(client.dailyClaim(body)).rejects.toThrow('401');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('RV2-3 — a 409 carries the Core code: not_lease_holder (the lease changing hands) is told apart from a real conflict', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: 'not_lease_holder', holder: 'pc-1' }),
+          { status: 409 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'event_conflict' }), {
+          status: 409,
+        }),
+      )
+      .mockResolvedValueOnce(new Response('not json', { status: 409 }));
+    const client = createCoreClient(
+      'http://core',
+      'secret-secret-secret',
+      fetchImpl,
+    );
+    const fenced = await client.dailyClaim(body).catch((e) => e);
+    expect(fenced).toBeInstanceOf(CoreHttpError);
+    expect(fenced).toMatchObject({ status: 409, code: 'not_lease_holder' });
+    expect(notLeaseHolder(fenced)).toBe(true);
+    const conflict = await client.dailyClaim(body).catch((e) => e);
+    expect(conflict).toMatchObject({ status: 409, code: 'event_conflict' });
+    expect(notLeaseHolder(conflict)).toBe(false);
+    const bare = await client.dailyClaim(body).catch((e) => e);
+    expect(bare).toMatchObject({ status: 409, code: undefined });
+    expect(fetchImpl).toHaveBeenCalledTimes(3); // never retried here: the caller decides
   });
 });

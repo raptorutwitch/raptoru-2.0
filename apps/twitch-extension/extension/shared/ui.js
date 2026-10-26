@@ -38,6 +38,7 @@ import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
 import { createModerationV2View } from './moderation-v2.js';
 import { createCommandsV2View } from './commands-v2.js';
 import { createCommandsPublicView } from './commands-public.js';
+import { createSubWheelView } from './sub-wheel-ext.js';
 import { createTombolaV2View } from './tombola-v2.js';
 import {
   hideRestrictions,
@@ -562,6 +563,12 @@ const COMMANDS_PUBLIC_MODULE = Object.freeze({
   label: 'Commandes',
   icon: '!',
   description: 'Les commandes à taper dans le chat.',
+});
+const SUB_WHEEL_MODULE = Object.freeze({
+  id: 'sub_wheel',
+  label: 'Roue du Sub',
+  icon: '🎡',
+  description: 'Tes tours de Roue du Sub.',
 });
 const MODERATION_MODULE = Object.freeze({
   id: 'moderation',
@@ -1187,6 +1194,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let tombolaV2View = null;
   /** Commands V2 public list (phase F), kept while « Commandes » is open. */
   let commandsPublicView = null;
+  let subWheelView = null;
   let paymentWalletSync = null;
   let soundboardVolumeOpen = false;
   let soundboardVolumeSync = null;
@@ -1420,7 +1428,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (id === ACTIONS_MODULE.id) return ACTIONS_MODULE;
     if (id === MODERATION_MODULE.id) return canModerate() ? MODERATION_MODULE : null;
     if (id === COMMANDS_PUBLIC_MODULE.id) return commandsPublicAvailable() ? COMMANDS_PUBLIC_MODULE : null;
+    if (id === SUB_WHEEL_MODULE.id) return subWheelAvailable() ? SUB_WHEEL_MODULE : null;
     return (state?.modules ?? []).find((m) => m.id === id) ?? null;
+  }
+
+  /** « Roue du Sub » (R8): offered by the EBS (Lab today; the production frontier keeps it hidden in mode v1). */
+  function subWheelAvailable() {
+    return state?.sub_wheel === true && typeof client?.subWheelMe === 'function';
   }
 
   /** « Commandes » (public list, phase F): offered by the EBS, Video and Mobile only (not the Panel). */
@@ -1757,6 +1771,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       commandsV2Shown = false;
     }
     if (moduleId !== COMMANDS_PUBLIC_MODULE.id) commandsPublicView = null;
+    if (moduleId !== SUB_WHEEL_MODULE.id) subWheelView = null;
     if (moduleId !== 'raffle_join') {
       tombolaV2View?.destroy();
       tombolaV2View = null;
@@ -5884,6 +5899,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (commandsPublicAvailable() && !modules.some((mod) => mod.id === COMMANDS_PUBLIC_MODULE.id)) {
       modules.push(COMMANDS_PUBLIC_MODULE);
     }
+    if (subWheelAvailable() && !modules.some((mod) => mod.id === SUB_WHEEL_MODULE.id)) {
+      modules.push(SUB_WHEEL_MODULE);
+    }
     if (canModerate() && !modules.some((mod) => mod.id === MODERATION_MODULE.id)) {
       modules.push(MODERATION_MODULE);
     }
@@ -6157,6 +6175,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         const shownView = commandsV2Shown && commandsV2View ? commandsV2View : moderationV2View;
         body.append(shownView.node);
         queueMicrotask(() => shownView?.attached());
+      } else if (mod.id === SUB_WHEEL_MODULE.id) {
+        // Roue du Sub V2 (R8): the viewer's own tours (+ the team's part for moderators), Core's projection only.
+        if (!subWheelView) {
+          subWheelView = createSubWheelView({ document, client, team: canModerate() });
+          subWheelView.start();
+        }
+        body.append(subWheelView.node);
+        queueMicrotask(() => subWheelView?.attached());
       } else if (isCommandsPublic) {
         // Commands V2 public list (read-only, Core's public projection), under the host header.
         body.dataset.cmdPub = '1';

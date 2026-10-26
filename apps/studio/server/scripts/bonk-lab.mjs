@@ -85,12 +85,20 @@ try {
     '20261027120000_sub_wheel_lab.sql',
     '20261030120000_lab_ledger_channel_points.sql',
     '20261031140000_cmd_steps_win_announcements_lab.sql',
+    '20261101120000_sub_wheel_v2_lab.sql',
+    '20261102120000_sub_wheel_v2_review_lab.sql',
+    '20261103110000_sub_wheel_lab_sim.sql',
+    '20261103120000_sub_wheel_v2_viewers_lab.sql',
     '20261104120000_cp_redemptions_chat_source_lab.sql',
     '20261105120000_caution_lab.sql',
     '20261106120000_votekick_lab.sql',
     '20261107120000_votekick_settings_lab.sql',
     '20261108120000_spotify_lab.sql',
     '20261108140000_cmd_steps_music_lab.sql',
+    '20261109160000_sub_wheel_v2_announce_delivery_lab.sql',
+    '20261109180000_sub_wheel_v2_redraw_lab.sql',
+    '20261109200000_sub_wheel_v2_replay_lab.sql',
+    '20261109220000_sub_wheel_v2_recovery_lab.sql',
   ]) {
     if (
       (

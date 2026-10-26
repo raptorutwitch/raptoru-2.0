@@ -8,7 +8,7 @@ import {
   createLabAlertsIngest,
 } from '../src/lab-alerts-ingest.js';
 import { fileOutbox, type Outbox } from '../src/loyalty-outbox.js';
-import { createLabChatIngest } from '../src/lab-chat-ingest.js';
+import { createLabChatIngest, coreRefusal } from '../src/lab-chat-ingest.js';
 import { createEventSubRouter } from '../src/twitch/eventsub.js';
 import {
   BROADCASTER,
@@ -292,6 +292,26 @@ describe('Lab alerts ingestion — resilience', () => {
     expect(s.alertPosts().map((e) => e.source_event_id)).toEqual(['n-raid-1']);
     expect(s.alerts.pendingRetries()).toBe(0);
     expect(s.logs.join('\n')).toContain('raid GrosRaideur (n-raid-1) → queued');
+  });
+
+  it('RV2-3 — the bot lease changing hands (409 not_lease_holder): kept, retried with the same id, delivered once', async () => {
+    vi.useFakeTimers();
+    let fenced = 2;
+    const s = setup('active', {
+      fail: (p) =>
+        p === '/v1/lab/alerts/events' && fenced-- > 0
+          ? coreRefusal(409, { error: 'not_lease_holder', holder: 'pc-1' })
+          : null,
+    });
+    await s.deliver('channel.chat.notification', EVENTS.sub, 's-lease');
+    expect(s.alerts.pendingRetries()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(s.alertPosts()).toHaveLength(1);
+    expect(s.alerts.pendingRetries()).toBe(0);
+    expect(s.alerts.pending()).toBe(0);
+    expect(s.logs.join('\n')).not.toContain('refusée par Core');
   });
 
   it('Core refusing (4xx): not retried, kept in the refusal journal (bounded), never silently dropped', async () => {

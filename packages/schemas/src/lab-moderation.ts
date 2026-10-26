@@ -22,7 +22,8 @@ export const LabModuleState = z.enum(['active', 'paused', 'disabled']);
 
 /**
  * Permissions granted per moderator (supermods and the broadcaster have all of them): the 6 of D4,
- * plus « Gérer la Tombola » (Tombola V2: more time, pause, immediate draw, manual entry, payouts).
+ * plus « Gérer la Tombola » (Tombola V2: more time, pause, immediate draw, manual entry, payouts),
+ * plus the Roue du Sub V2's « Tirer » / « Accorder un tour » (R-7).
  */
 export const LabGrant = z.enum([
   'wallet',
@@ -32,6 +33,8 @@ export const LabGrant = z.enum([
   'sensitive',
   'words',
   'raffle',
+  'subWheelDraw',
+  'subWheelGrant',
 ]);
 export type LabGrant = z.infer<typeof LabGrant>;
 

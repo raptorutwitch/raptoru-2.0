@@ -142,9 +142,10 @@ describe('Roue du Sub — Lab chain (real Lab Core, Studio runtime, simulated pl
     expect(s.recent[0]).toMatchObject({
       status: 'shown',
       amount: spin.amount,
-      award: { status: 'pending' },
+      award: { status: 'awarded' },
     });
-    expect(s.pending_awards).toEqual({ count: 1, total: spin.amount });
+    // The Lab Core credits the Lab test wallet (test data): nothing left to attribute.
+    expect(s.pending_awards).toEqual({ count: 0, total: 0 });
   });
 
   it('switch OFF (default): a real sub is only noted; the Studio test (animation, full) shows a wheel without any gain', async () => {
@@ -179,75 +180,79 @@ describe('Roue du Sub — Lab chain (real Lab Core, Studio runtime, simulated pl
     ).toHaveLength(2);
   });
 
-  it('no effects player: the wheel is reported not shown, the gain stays recorded (never redrawn)', async () => {
+  it('no effects player: nothing is claimed — the wheel waits in the queue, its gain recorded, never reported « not shown »', async () => {
     const l = await lab(false);
     await l.core(`/v1/lab/sub-wheel/${CH}/settings`, { enabled: true });
     await l.sub();
     await l.playAlert();
-    expect(await l.rt.subWheel.once()).toBe(true);
+    expect(await l.rt.subWheel.once()).toBe(false);
+    expect(await l.rt.subWheel.once()).toBe(false);
+    expect(l.rt.subWheel.waiting).toBe('effects_player_unavailable');
     const r = (await l.state()).recent[0]!;
     expect(r).toMatchObject({
-      status: 'failed',
-      reason: 'effects_player_unavailable',
-      award: { status: 'pending' },
+      status: 'queued',
+      reason: null,
+      award: { status: 'awarded' },
     });
-    expect(await l.rt.subWheel.once()).toBe(false);
   });
 });
 
 describe('Roue du Sub — Studio section (pure view)', () => {
   it('switch, pending gains, escaped names, results, test rows, reconciliation buttons only for pending gains', () => {
-    const html = subWheelView(
-      {
-        settings: { enabled: false },
-        waiting: 1,
-        pending_awards: { count: 1, total: 18000 },
-        effects: {
-          connected: true,
-          current: true,
-          media: [
-            {
-              id: 'sw-fin',
-              label: 'Roue du Sub — fin casino',
-              available: false,
-            },
-          ],
-        },
-        recent: [
+    const state = {
+      settings: { enabled: false },
+      waiting: 1,
+      pending_awards: { count: 1, total: 18000 },
+      effects: {
+        connected: true,
+        current: true,
+        media: [
           {
-            spin_id: '11111111-1111-4111-8111-111111111111',
-            source: 'twitch',
-            type: 'resub',
-            viewer: { name: '<b>V</b>' },
-            tier: 3,
-            months: 12,
-            status: 'shown',
-            reason: null,
-            segment: 11,
-            amount: 18000,
-            award: { status: 'pending', ref: null, note: null },
-            created_at: '2026-10-18T20:00:00.000Z',
-          },
-          {
-            spin_id: '22222222-2222-4222-8222-222222222222',
-            source: 'test',
-            type: 'sub',
-            viewer: { name: 'T' },
-            tier: 1,
-            months: 1,
-            status: 'ignored',
-            reason: 'disabled',
-            segment: null,
-            amount: null,
-            award: { status: 'test', ref: null, note: null },
-            created_at: '2026-10-18T20:00:01.000Z',
+            id: 'sw-fin',
+            label: 'Roue du Sub — fin casino',
+            available: false,
           },
         ],
       },
-      null,
-    );
+      recent: [
+        {
+          spin_id: '11111111-1111-4111-8111-111111111111',
+          source: 'twitch',
+          type: 'resub',
+          viewer: { name: '<b>V</b>' },
+          tier: 3,
+          months: 12,
+          status: 'shown',
+          reason: null,
+          segment: 11,
+          amount: 18000,
+          award: { status: 'pending', ref: null, note: null },
+          created_at: '2026-10-18T20:00:00.000Z',
+        },
+        {
+          spin_id: '22222222-2222-4222-8222-222222222222',
+          source: 'test',
+          type: 'sub',
+          viewer: { name: 'T' },
+          tier: 1,
+          months: 1,
+          status: 'ignored',
+          reason: 'disabled',
+          segment: null,
+          amount: null,
+          award: { status: 'test', ref: null, note: null },
+          created_at: '2026-10-18T20:00:01.000Z',
+        },
+      ],
+    } as const;
+    // R4: the rows are in « Historique », the switch in « Réglages ».
+    const html = subWheelView(state as never, null, {
+      tab: 'history',
+    });
     expect(html).toContain('Roue : désactivée');
-    expect(html).toContain('Activer la roue');
+    expect(subWheelView(state as never, null, { tab: 'settings' })).toContain(
+      'Activer la roue',
+    );
     expect(html).toContain('1 gain(s) à attribuer : 18');
     expect(html).toContain('Médias non importés : Roue du Sub — fin casino');
     expect(html).toContain('&lt;b&gt;V&lt;/b&gt;');
@@ -257,6 +262,5 @@ describe('Roue du Sub — Studio section (pure view)', () => {
     expect(html).toContain('Gain en attente d’attribution');
     expect(html.match(/data-act="sw-manual"/g)).toHaveLength(1);
     expect(html).toContain('Test : aucun gain');
-    expect(html).toContain('<b>Les gains ne sont pas crédités</b>');
   });
 });

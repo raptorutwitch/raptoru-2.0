@@ -5,7 +5,12 @@ const execFileAsync = promisify(execFile);
 
 // Only start/stop/inspect of the named container. Never rm, never touches the volume.
 
-export const POSTGRES_CONTAINER = 'raptoru2-pg';
+/**
+ * The Lab's Postgres container. `RAPTORU_LAB_PG_CONTAINER` (development only) points an isolated Lab — e.g. a worktree
+ * Studio on its own fresh database — at its own container, never at the shared one.
+ */
+export const POSTGRES_CONTAINER =
+  process.env.RAPTORU_LAB_PG_CONTAINER || 'raptoru2-pg';
 
 export type ContainerState = 'running' | 'stopped' | 'missing' | 'error';
 

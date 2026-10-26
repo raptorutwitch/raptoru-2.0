@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { chatRole, createLabChatIngest } from '../src/lab-chat-ingest.js';
+import {
+  chatRole,
+  createLabChatIngest,
+  coreRefusal,
+  transient,
+} from '../src/lab-chat-ingest.js';
 
 // Lab chat ingestion: forwards, never decides (Core recognizes the commands and the roles).
 
@@ -31,6 +36,22 @@ const chat = (over: Record<string, unknown> = {}) => ({
   message: { text: '!join' },
   badges: [],
   ...over,
+});
+
+describe('RV2-3 — a Core refusal: transient or definitive', () => {
+  it('409 not_lease_holder is transient (the lease changing hands); any other 4xx is definitive; 5xx / 408 / 429 transient', () => {
+    expect(transient(coreRefusal(409, { error: 'not_lease_holder' }))).toBe(
+      true,
+    );
+    expect(transient(coreRefusal(409, { error: 'event_conflict' }))).toBe(
+      false,
+    );
+    expect(transient(coreRefusal(409, null))).toBe(false);
+    expect(transient(new Error('lab_core_409'))).toBe(false);
+    expect(transient(coreRefusal(503, {}))).toBe(true);
+    expect(transient(coreRefusal(429, {}))).toBe(true);
+    expect(transient(new TypeError('fetch failed'))).toBe(true);
+  });
 });
 
 describe('Lab chat ingestion (Twitch → Lab Core, every module)', () => {

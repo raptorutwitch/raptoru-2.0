@@ -44,8 +44,22 @@ export interface LabChatIngestDeps {
 export const CHAT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 export const CHAT_RETRY_TTL_MS = 15_000;
 
-/** Worth retrying: Core unreachable / timed out / 5xx / 408 / 429. A 4xx answer will not change. */
+/** A Core refusal in the Lab adapter's shape (`lab_core_<status>`), with the Core's error code when it gave one. */
+export function coreRefusal(status: number, body: unknown): Error {
+  const code = (body as { error?: unknown } | null)?.error;
+  return Object.assign(new Error(`lab_core_${status}`), {
+    status,
+    ...(typeof code === 'string' ? { code } : {}),
+  });
+}
+
+/**
+ * Worth retrying: Core unreachable / timed out / 5xx / 408 / 429, or 409 not_lease_holder (the bot lease changing hands:
+ * never definitive, Core deduplicates by id). Any other 4xx answer will not change.
+ */
 export function transient(error: unknown): boolean {
+  if ((error as { code?: unknown } | null)?.code === 'not_lease_holder')
+    return true;
   const m = /^lab_core_(\d{3})$/.exec((error as Error)?.message ?? '');
   if (!m) return true;
   const status = Number(m[1]);

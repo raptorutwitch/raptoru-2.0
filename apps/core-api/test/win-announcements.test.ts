@@ -96,7 +96,7 @@ describe('Roue du Sub V1 — winner announcement', () => {
     expect(s).toHaveLength(1);
     expect(s[0]!.params).toEqual({
       mode: 'normal',
-      text: `🎡 Roue du Sub : @Viewer gagne ${GAIN.toLocaleString('fr-FR').replace(/\s/g, ' ')} Jetons !`,
+      text: `🎡 @Viewer remporte ${GAIN.toLocaleString('fr-FR').replace(/\s/g, ' ')} jetons à la Roue du Sub !`,
     });
     expect(new Date(s[0]!.available_at).getTime()).toBe(
       endedAt + SW_ANNOUNCE_DELAY_MS,
@@ -143,6 +143,46 @@ describe('Roue du Sub V1 — winner announcement', () => {
     expect(new Date(s[0]!.available_at).getTime()).toBe(
       core.clock.now().getTime(),
     );
+  });
+
+  it('RV2-1 — the delay is the channel setting (Studio, broadcaster, journaled): 15 s, then 0 s; out of bounds refused', async () => {
+    const { core, wheel } = await fixture();
+    expect((await wheel.settings(CH)).announce_delay_s).toBe(
+      SW_ANNOUNCE_DELAY_MS / 1000,
+    );
+    expect(
+      (await wheel.setAnnounceDelay(CH, 15, 'studio')).announce_delay_s,
+    ).toBe(15);
+    for (const bad of [-1, 61, 2.5])
+      await expect(
+        wheel.setAnnounceDelay(CH, bad, 'studio'),
+      ).rejects.toMatchObject({ code: 'invalid_announce_delay' });
+    const end = async () => {
+      await wheel.fromAlert(event(), null);
+      const c = await wheel.claimAnimation(CH, 'studio-1');
+      core.clock.advance(12_000);
+      const at = core.clock.now().getTime();
+      await wheel.reportAnimation(c.spin!.spin_id, {
+        consumer_id: 'studio-1',
+        event: 'completed',
+      });
+      return at;
+    };
+    const first = await end();
+    await wheel.setAnnounceDelay(CH, 0, 'studio');
+    const second = await end();
+    const s = await steps(core.db, 'sub_wheel');
+    expect(s.map((x) => new Date(x.available_at).getTime())).toEqual([
+      first + 15_000,
+      second,
+    ]);
+    const audit = await core.db.query<{ before: unknown; after: unknown }>(
+      "select before, after from lab_moderation_audit where action = 'sw_announce_delay' order by id",
+    );
+    expect(audit).toEqual([
+      { before: { announce_delay_s: 8 }, after: { announce_delay_s: 15 } },
+      { before: { announce_delay_s: 15 }, after: { announce_delay_s: 0 } },
+    ]);
   });
 });
 
