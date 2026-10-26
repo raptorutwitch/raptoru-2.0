@@ -4,9 +4,8 @@
 
 - Start with `docs/REPRISE.md` (entry point: state, versions, work in progress, next action) and
   `git status`. Reference documents: `docs/ROADMAP.md` (every module's state, arbitrations),
-  `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md`, `docs/BACKUPS.md`; until the `docs/consolidation`
-  commit is merged into `main` they live in the worktree `C:\Users\Antoni\Documents\raptoru-docs`
-  (see REPRISE § 1). `Raptoru-2.0-HANDOFF.md` and `Raptoru-2.0-ETAT-PROJET.md` are frozen history:
+  `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md`, `docs/BACKUPS.md`; they are on `origin/main` (the main
+  checkout is behind: read them in an up-to-date worktree or with `git show origin/main:<path>`, see REPRISE § 1). `Raptoru-2.0-HANDOFF.md` and `Raptoru-2.0-ETAT-PROJET.md` are frozen history:
   open them only for the section a task needs. Verify `git status` / `git log` yourself before
   trusting any SHA in a document.
 - Keep `docs/REPRISE.md` current and short at each milestone and before stopping (precise enough to

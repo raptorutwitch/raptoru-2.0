@@ -181,7 +181,8 @@ Aucune opération SQL sur la Production n'est faite par la CI/CD sans mode expli
 - `none` : la plage n'en contient aucune (sinon bloqué) ;
 - `preapplied` : le SQL a été appliqué **avant** par Antoni (terminal de la base dans Coolify), comme pour Spotify V2.
   Le nouveau conteneur vérifie sur la vraie base que chaque objet existe avec la bonne définition, puis le migrateur
-  les enregistre ; tout écart = `ÉCHEC`. Exige une sauvegarde de moins de 60 min et le droit `read:sensitive` ;
+  les enregistre ; tout écart = `ÉCHEC`. Des fichiers qui dépendent l'un de l'autre (appliqués en un seul paquet) sont
+  vérifiés ensemble, dans l'ordre (Roue du Sub V2, 26/10 : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7). Exige une sauvegarde de moins de 60 min et le droit `read:sensitive` ;
 - `post-deploy` : le migrateur s'exécute après le déploiement (commande post-déploiement de Coolify). Attention : Coolify
   bascule le trafic **avant** cette commande (≈ 50 s observées le 24/10) — à réserver aux migrations dont le nouveau
   code n'a pas besoin pour démarrer.

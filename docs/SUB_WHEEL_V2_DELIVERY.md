@@ -114,8 +114,17 @@ Non vérifiable dans le Lab : OBS réel (source navigateur), Twitch réel, la ba
 | Studio      | 0.1.8 publiée (mise à jour 0.1.7 → 0.1.8 vérifiée octet par octet), installée par Antoni, profil Production  | release `v0.1.8`                                                                            |
 | Bascule     | `v1` → `v2_acquire` (12:08 UTC) → `v2` (12:12 UTC), par l'API du Core avec l'identité de Studio (journalisé) | état : interrupteur ON, 7 tirages historiques identiques, 0 droit, 0 gain en attente        |
 
-Non fait, volontairement : aucun tour accordé ni tirage en Production pour tester (aucun crédit fictif) ; invitations
-laissées OFF ; extension non publiée (le module Roue du Hub n'est pas nécessaire : Studio et chat suffisent).
+Non fait, volontairement : aucun tour accordé ni tirage en Production pour tester (aucun crédit fictif) ; extension non
+publiée (le module Roue du Hub n'est pas nécessaire : Studio et chat suffisent). Invitations : OFF à la livraison,
+**activées par Antoni le 26/10 à 12:20 UTC** (Studio → Réglages).
+
+**À observer au premier live** (aucune validation réelle encore) : un sub en live → un droit, une roue automatique
+(viewer présent, lecteur prêt), un crédit, une annonce après le délai ; l'onglet Historique sans « jamais affichée »
+durable ; « À vérifier » vide ou justifié ; les invitations, une par viewer et par live, seulement quand la sortie chat
+est active.
+
+**Limite connue** : une alerte OBS qui arrive pendant une roue passe au-dessus (la roue attend les alertes, pas
+l'inverse ; le module d'alertes n'a pas été modifié).
 
 Retour arrière : Studio → Roue du Sub → Réglages → `v1` (immédiat, aucun droit perdu) ; code :
 `deploy core|bot 0b11cc0a98447972264ee1c25115d3baf0b9e74f --rollback` (workflow, `rollback` coché) ; Studio : réinstaller

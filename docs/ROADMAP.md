@@ -1,6 +1,7 @@
 # Roadmap Raptoru 2.0
 
-Roadmap unique, consolidée le **24/10/2026** à partir de tous les documents d'état (sources en bas). Aucune priorité
+Roadmap unique, consolidée le **24/10/2026** à partir de tous les documents d'état (sources en bas) ; mise à jour le
+26/10 (Roue du Sub V2 livrée). Aucune priorité
 n'est inventée ici : une priorité n'apparaît que si un document l'a enregistrée ; les désaccords entre documents sont
 listés comme **arbitrages** à faire par Antoni. État courant, versions et prochaine action : [REPRISE.md](REPRISE.md).
 
@@ -33,12 +34,12 @@ dépôt ou les documents.
 | Alertes Twitch V2                                                 | 3 (`ALERTS_MODE` active)                                                                                                                                                                       | vrai don et sous-types réels NV                                                                                                                                                                                                                                                                   | —                                                 | —                                                                           |
 | Points de chaîne + effets (FX Cam, Couleur Cam, Creepy, BRB, NTM) | 3 ; FX Cam et Couleur Cam **4** (18/10)                                                                                                                                                        | BRB refusé sur « Just Chatting » ; règles « son d'effet » après bascule NV ; D7 remboursements ; lot 11 « unfulfilled » (A5)                                                                                                                                                                      | —                                                 | BRB P2, lot 11 P2                                                           |
 | Random Ban + `!rb`                                                | **4** (18/10)                                                                                                                                                                                  | 6 anciennes rédemptions non régularisées ; ne jamais « Annuler » côté Twitch                                                                                                                                                                                                                      | —                                                 | P2                                                                          |
-| Roue du Sub V1                                                    | 3 (interrupteur ON le 23/10)                                                                                                                                                                   | tour de Wenuyr (R5)                                                                                                                                                                                                                                                                               | —                                                 | lot 7 P1 (PPL)                                                              |
-| **Roue du Sub V2**                                                | **en Production, mode `v2` actif depuis le 26/10** (Core / bot `1df65d1`, Studio 0.1.8) : droits persistants, tirage à l'affichage, reprise autonome ; validation réelle au premier live       | invitations OFF (décision) ; extension (module Roue du Hub) non publiée ; R3b, R5 interdits ; récupération des doubles crédits OFF                                                                                                                                                                | —                                                 | « reprendre la Roue V2 » après Votekick (REPRISE 23/10)                     |
+| Roue du Sub V1                                                    | 3, remplacée en Production par la V2 le 26/10 (reste le mode de retour `v1`) ; interrupteur ON depuis le 20/10 (constaté en base)                                                              | tour de Wenuyr (R5)                                                                                                                                                                                                                                                                               | —                                                 | lot 7 P1 (PPL)                                                              |
+| **Roue du Sub V2**                                                | 3 : en Production, mode `v2` depuis le 26/10 12:12 UTC (Core / bot `1df65d1`, Studio 0.1.8), invitations ON ; validation réelle : au premier live                                              | à observer au premier live ([SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7) ; limite : une alerte OBS arrivant pendant une roue passe au-dessus ; module Roue de l'extension non publié (facultatif) ; R3b, R5 interdits ; récupération des doubles crédits OFF                         | —                                                 | livrée le 26/10 ([SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md))      |
 | Votekick V2                                                       | 3 + **4 partiel** (4 votes au live du 23/10, mute streamer 55 s ; vrai vote hors live 24/10 08:38 concluant) ; son de lancement importé validé en réel le 25/10 (sup.10)                       | validation de la durée réglable (≠ 60 s) sur un vrai vote ; aucune annulation d'un vote en cours (ni chat, ni Studio) ; design V2 final (legacy SAMMI pour l'instant, variante D interdite) ; VK § 8.4 arrondi 17,5, § 8.5 cooldown sans quorum ; cooldowns / durées de sanction réglables prévus | validation des réglages par Antoni                | —                                                                           |
 | Spotify V2 (« Choisi la prochaine musique ! »)                    | **4** (validé en réel par Antoni le 25/10 : demandes, remboursements, `!songcancel <n>`, quotas et exceptions, File musicale, skip automatique) ; Core `36a4cec`, Studio sup.10                | **clos** ; skip accepté tel quel (aucune optimisation prévue) ; exclus : overlay, module extension, mécaniques en Jetons                                                                                                                                                                          | —                                                 | clos le 25/10                                                               |
 | Caution                                                           | **4** (validée en réel le 23/10 19:19)                                                                                                                                                         | incident `53949be1` : perte acceptée                                                                                                                                                                                                                                                              | —                                                 | —                                                                           |
-| Centre de contrôle                                                | 2 (`49c1870`, dans Studio 0.1.7 local, jamais publié)                                                                                                                                          | lot 5 (contrôles avant live) ; A7 (démarrage avec Windows, « lot 3 bis »)                                                                                                                                                                                                                         | —                                                 | lot 5 P1 (PPL, TRUTH § 7)                                                   |
+| Centre de contrôle                                                | 2 (`49c1870`, inclus dans Studio 0.1.7 publiée le 25/10)                                                                                                                                       | lot 5 (contrôles avant live) ; A7 (démarrage avec Windows, « lot 3 bis »)                                                                                                                                                                                                                         | —                                                 | lot 5 P1 (PPL, TRUTH § 7)                                                   |
 | Supervision des interactions (lots 1–2)                           | 1–2 : `sup-wt` **non commité**, embarqué dans Studio sup.1→sup.8 ; « supervision verte » à chaque installation                                                                                 | lot 3 Core (refus comptés, historique en base) ; lot 4 (étiquettes)                                                                                                                                                                                                                               | commit de `sup-wt` (sur GO)                       | —                                                                           |
 | Extension Twitch                                                  | 3 (`0bf7907` publiée ; version servie NV)                                                                                                                                                      | correctif « écran gris » (`overlay.js` / `mobile.js`) non commité (checkout principal) ; mono-chaîne                                                                                                                                                                                              | —                                                 | —                                                                           |
 | Bot VPS                                                           | 3 (VPS depuis le 21/10 ; `b8bc025`)                                                                                                                                                            | image sans `cf21c4b` (chemins `/data` par variables) ; durcissements F3–F9 (INC C7)                                                                                                                                                                                                               | redéployer un jour sur ≥ `cf21c4b`                | —                                                                           |
@@ -50,13 +51,12 @@ dépôt ou les documents.
 
 ## 2. Chantiers en cours (à préserver, ne pas écraser)
 
-| Chantier                                          | Où                                                                                            | État                                                                     |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Roue du Sub V2                                    | livrée (PR #11, `1df65d1`)                                                                    | en Production ; [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 |
-| Correctif « écran gris » extension                | checkout principal (`overlay.js`, `mobile.js`)                                                | non commité                                                              |
-| Supervision / OAuth / Soundboard Ctrl+R / updater | intégré au dépôt (PR #1, `eb3f05a`) ; `sup-wt` et la copie dans `rs-vk` sont devenus inutiles | commité (PR #1), en service via Studio sup.8 à sup.10                    |
-| Script de déploiement                             | dans le dépôt (`scripts/coolify-deploy.mjs`, PR #1) + workflows GitHub ([CICD.md](CICD.md))   | dans le dépôt, outil actuel (local et GitHub)                            |
-| Restes de lots livrés                             | `chat-wt`, `wg-wt`, `solde-wt`, `node-wt`                                                     | déjà intégrés pour l'essentiel ; restes non revérifiés                   |
+| Chantier                                          | Où                                                                                            | État                                                   |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Correctif « écran gris » extension                | checkout principal (`overlay.js`, `mobile.js`)                                                | non commité                                            |
+| Supervision / OAuth / Soundboard Ctrl+R / updater | intégré au dépôt (PR #1, `eb3f05a`) ; `sup-wt` et la copie dans `rs-vk` sont devenus inutiles | commité (PR #1), en service via Studio sup.8 à sup.10  |
+| Script de déploiement                             | dans le dépôt (`scripts/coolify-deploy.mjs`, PR #1) + workflows GitHub ([CICD.md](CICD.md))   | dans le dépôt, outil actuel (local et GitHub)          |
+| Restes de lots livrés                             | `chat-wt`, `wg-wt`, `solde-wt`, `node-wt`                                                     | déjà intégrés pour l'essentiel ; restes non revérifiés |
 
 Instantané de tout ce travail : [BACKUPS.md](BACKUPS.md) § 3.
 
@@ -66,22 +66,23 @@ Instantané de tout ce travail : [BACKUPS.md](BACKUPS.md) § 3.
 
 1. ~~Bilan du live du 23/10~~ (fait). 2. ~~Tests réels Votekick~~ (faits). 3. ~~Horloge Windows~~ (corrigée le 24/10 ;
    régularité à confirmer). 4. Pérenniser : ~~push~~, ~~overlay servi par le code~~, **commit de `sup-wt`** (en attente).
-2. ~~Son Votekick~~ (livré, non validé), **design V2 final** (en attente), puis **reprendre la Roue V2**.
+2. ~~Son Votekick~~ (livré, non validé), **design V2 final** (en attente), puis ~~reprendre la Roue V2~~ (livrée le 26/10).
 
 En attente explicite au 24/10 : validation par Antoni des réglages Votekick ; pousser `80f3525` ; commiter `sup-wt` ;
 redéployer le bot sur ≥ `cf21c4b`.
 
 ### Arbitrages nécessaires (documents en désaccord)
 
-1. **Roue V2 vs incident Twitch / Bonk-DSK** : REPRISE met la Roue V2 après le design Votekick ; TRUTH § 8 et SA § 10
-   (23/10) placent l'incident du 22/10 et Bonk/DSK avant. Aucun document postérieur ne les a réordonnés.
+1. ~~Roue V2 vs incident Twitch / Bonk-DSK~~ : la Roue V2 est livrée (26/10). Restent l'incident Twitch du 22/10 et
+   Bonk/DSK (TRUTH § 8, SA § 10), sans ordre enregistré entre eux.
 2. ~~Correctif 409 `not_lease_holder`~~ : déployé le 26/10 avec la Roue V2.
 3. **Correction des en-têtes de documents de module** (SA § 10.1) : VOTEKICK_V2, CAUTION et plusieurs documents de
    parité affichent encore « non déployé ». La présente roadmap fait foi ; corriger ces en-têtes est un lot à part.
 4. **Lots du plan post-live non faits** (5, 7, 8, 10, 11, 13, A7) : aucun ordre récent.
 
 **Prochaine tâche logique** (sans arbitrage, découle des documents) : faire valider par Antoni les réglages Votekick
-livrés le 24/10, puis trancher l'arbitrage 1 avant d'ouvrir un nouveau chantier.
+livrés le 24/10 et observer la Roue V2 au premier live, puis choisir entre l'incident Twitch du 22/10 et Bonk/DSK
+(arbitrage 1) avant d'ouvrir un nouveau chantier.
 
 ## 4. Décisions enregistrées (à respecter)
 
@@ -90,7 +91,8 @@ livrés le 24/10, puis trancher l'arbitrage 1 avant d'ouvrir un nouveau chantier
   « Micro (Obsolète) » ; Audio Move conservé (zoom piloté par Studio abandonné, 24/10) ; « LeCroupier_ peut voter » laissé.
 - Caution : décisions 1–3 du 23/10 ([CAUTION.md](CAUTION.md) § 8) ; incident des 10 000 Jetons : pas de remboursement.
 - Plan post-live : décisions A1–A9 du 21/10 ([PLAN_POST_LIVE_2026-10-21.md](PLAN_POST_LIVE_2026-10-21.md) § 2).
-- Roue V2 : départ métier au 21/10, R7 en détection seule, R3b et R5 interdits pour l'instant.
+- Roue V2 : départ métier au 21/10, R7 en détection seule, R3b et R5 interdits pour l'instant ; invitations ON (26/10) ;
+  récupération des doubles crédits OFF.
 - Supervision (23/10) : « Réautoriser » masqué en Production, notification même au premier plan, jetons du PC
   conservés, étiquettes inchangées, lot 3 avec historique persistant en base.
 - Tarifs (22/10) : `!rb` 25 000, `!fxcam` 1 500 Jetons.
@@ -102,5 +104,5 @@ Documents consolidés ici (archivés ou historiques) : REPRISE (24/10, journal a
 (TRUTH, non suivi), [archive/STATE_AUDIT_2026-10-23.md](archive/STATE_AUDIT_2026-10-23.md) (SA),
 [PLAN_POST_LIVE_2026-10-21.md](PLAN_POST_LIVE_2026-10-21.md) (PPL), [Raptoru-2.0-ETAT-PROJET.md](../Raptoru-2.0-ETAT-PROJET.md)
 (ETAT, figé au 19/10), [Raptoru-2.0-HANDOFF.md](../Raptoru-2.0-HANDOFF.md) (figé au 21/10), `PLAN_SUPERVISION_2026-10-23.md`
-(PSUP), `SUB_WHEEL_V2_PLAN.md` (SWP), `TWITCH_CONNECTION_INCIDENT_2026-10-22.md` (INC) — ces quatre derniers non suivis,
-dans le checkout principal.
+(PSUP) et `TWITCH_CONNECTION_INCIDENT_2026-10-22.md` (INC), non suivis, dans le checkout principal ;
+[SUB_WHEEL_V2_PLAN.md](SUB_WHEEL_V2_PLAN.md) (SWP, suivi depuis le 26/10).

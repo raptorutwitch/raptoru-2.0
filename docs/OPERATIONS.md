@@ -77,9 +77,9 @@ Variables de Production notables : Core `CAUTION_CHAT=true`, `VOTEKICK_CHAT=true
 ### Release officielle (`npm run studio:release`)
 
 Pipeline et règles : [README](../README.md) « Studio releases ». Publie sur `raptorutwitch/raptoru-studio-releases`
-(dernière : **0.1.6**, 20/10). Depuis le 21/10 (CLAUDE.md) : commit, push et release **seulement sur demande explicite
-d'Antoni** ; un lot « validé en local » ne suffit pas. Exige `main` propre : impossible tant que le checkout principal
-porte la Roue V2 non commitée.
+(dernière : **0.1.8**, 26/10, publiée par le workflow GitHub — [CICD.md](CICD.md) § 3). Depuis le 21/10 (CLAUDE.md) :
+commit, push et release **seulement sur demande explicite d'Antoni** ; un lot « validé en local » ne suffit pas. Exige
+un `main` propre : jamais depuis le checkout principal (fichiers non commités).
 
 ### Build local de test (`0.1.7-sup.N`, utilisé du 23 au 24/10)
 

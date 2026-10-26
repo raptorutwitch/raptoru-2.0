@@ -1,6 +1,8 @@
 # Roue du Sub V2 — droits aux tours persistants : plan technique
 
-**Statut : R1–R3 validés en local ; R4, R7 (détection seule), R8, R9 + simulateurs Lab implémentés en local le 22/10/2026 (non commités, non validés). Aucune migration appliquée en Production. R3b, R5 non commencés.**
+**Statut (26/10/2026) : livrée et active en Production** (mode `v2` depuis le 26/10 12:12 UTC, Core / bot `1df65d1`,
+Studio 0.1.8). Ce document reste la référence de conception ; livraison, états et retour arrière :
+[SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md).
 
 **Base :**
 
