@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **26/10/2026** (**Roue du Sub V2 en Production, mode `v2` actif** : Core et bot `1df65d1`, Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **26/10/2026 ~16:35 UTC** (premiers correctifs stream en Production : Core et bot `d215778` ; **Roue du Sub V2 active** (mode `v2`), Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -30,9 +30,9 @@ depuis le checkout principal.
 
 | Élément              | Version                                                                                                                                                                          | Remarque                                                                         |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Core `raptoru-core`  | **`1df65d1`** (déployé 26/10 11:52 UTC depuis GitHub Actions, migrations Roue V2 `preapplied` : 7 fichiers conformes et enregistrés)                                             | `running:healthy`, `/health` `/ready` 200 ; retour : `0b11cc0`                   |
-| Bot `raptoru-bot`    | **`1df65d1`** (déployé 26/10 ~11:55 UTC depuis GitHub Actions ; 409 `not_lease_holder` jamais définitif)                                                                         | bail repris, EventSub bot et diffuseur OK ; retour : `0b11cc0`                   |
-| `origin/main`        | PR #11 (`1df65d1`, code de la Roue V2, **déployé**), puis PR #12 et suivantes : documentation seulement                                                                          | Coolify : auto-deploy désactivé                                                  |
+| Core `raptoru-core`  | **`d215778`** (déployé 26/10 16:25 UTC depuis GitHub Actions, sans migration : correctifs stream, PR #14)                                                                        | `running:healthy`, `/health` `/ready` 200 ; retour : `1df65d1`                   |
+| Bot `raptoru-bot`    | **`d215778`** (déployé 26/10 16:34 UTC ; un premier essai « ÉCHEC » à tort, revenu seul sur `1df65d1` : [CICD.md](CICD.md) § 4)                                                  | bail repris, EventSub bot et diffuseur OK ; retour : `1df65d1`                   |
+| `origin/main`        | `d215778` = PR #14 (correctifs stream, **déployé**), puis documentation seulement                                                                                                | Coolify : auto-deploy désactivé                                                  |
 | Studio installé (PC) | **0.1.8** (construite par GitHub depuis `1df65d1`, publiée le 26/10, installée par Antoni) ; profil copié avant : `Sauvegarde Raptoru 2.0\studio-profile-avant-0.1.8-2026-10-26` | retour : réinstaller 0.1.7 (release publique)                                    |
 | Roue du Sub          | **V2 active** (mode `v2`, interrupteur ON) depuis le 26/10 12:12 UTC ; **invitations ON** (activées par Antoni le 26/10 12:20 UTC) ; récupération des doubles crédits OFF        | détails et retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) |
 | Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                                              | publication manuelle par Antoni                                                  |
@@ -47,6 +47,11 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 ## 3. Dernières livraisons et décisions (24–26/10)
 
+- **Correctifs stream — 26/10** (PR #14, Core et bot `d215778`) : mini-jeux (Roulette, Slot, Duel) seulement en live ;
+  messages courts (Daily, `!solde`, Caution ; plus de confirmation pour `!rb` et `!tts` quand l'effet suffit) ; Tombola :
+  même gain pour chaque gagnant (arrondi au-dessus), une seule annonce `/announce`, au moins 2 gagnants dès 4
+  participants (gagnant unique = FULL, 1 %) ; Jeu des mots : 8 phrases de série par palier. **Non encore observés en
+  live.** Texte d'aide Tombola de Studio : à la prochaine publication de Studio.
 - **Roue du Sub V2 — livrée et active le 26/10** (PR #11 et #12) : droits persistants, tirage à l'affichage, reprise
   automatique des roues jamais démarrées sans second crédit, « À vérifier » pour les cas ambigus ; invitations ON.
   Livraison, états, limites, retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md).
