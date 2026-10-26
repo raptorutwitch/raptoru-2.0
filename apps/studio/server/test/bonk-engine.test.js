@@ -18,7 +18,7 @@ import {
   pickFamily,
 } from '../bonk-overlay/engine/families.js';
 import { sampleAt } from '../bonk-overlay/engine/physics.js';
-import { planShot } from '../bonk-overlay/engine/plan.js';
+import { planShot, PUNCH, punchFactor } from '../bonk-overlay/engine/plan.js';
 import { createScene } from '../bonk-overlay/engine/scene.js';
 import { SIZE_MEAN, sampleSize } from '../bonk-overlay/engine/size.js';
 import {
@@ -600,5 +600,34 @@ describe('salve cadence (lot 5): shot k+1 starts cadence_ms after shot k', () =>
     expect(moreInVolley(shot(2, 160, 'v', 3))).toBe(false);
     expect(moreInVolley({ volley: null })).toBe(false);
     expect(moreInVolley(null)).toBe(false);
+  });
+});
+
+describe('punch (26/10): a few shots arrive faster, nothing else changes', () => {
+  it('about one shot in six, 11–22 % faster, never « tendu » nor a finisher; deterministic; trajectories still valid', () => {
+    const N = 3000;
+    let punched = 0;
+    for (let i = 0; i < N; i++) {
+      const id = `punch-${i}`;
+      const p = planShot(id);
+      const f = punchFactor(id, p.family, false);
+      expect(p.punch).toBe(f < 1);
+      if (p.punch) {
+        punched++;
+        expect(p.family).not.toBe('tendu');
+        expect(f).toBeGreaterThanOrEqual(PUNCH.flight[0]);
+        expect(f).toBeLessThanOrEqual(PUNCH.flight[1]);
+      }
+      // The same shot again: the same punch, the same course.
+      expect(planShot(id)).toEqual(p);
+      const t = p.trajectory;
+      expect(t.durationMs).toBeGreaterThanOrEqual(1500);
+      expect(t.durationMs).toBeLessThanOrEqual(4800);
+    }
+    expect(punched / N).toBeGreaterThan(0.11);
+    expect(punched / N).toBeLessThan(0.2);
+    expect(punchFactor('x', 'tendu', false)).toBe(1);
+    expect(punchFactor('x', 'chute', true)).toBe(1);
+    expect(planShot('combo-1', { finisherSize: 400 }).punch).toBe(false);
   });
 });
