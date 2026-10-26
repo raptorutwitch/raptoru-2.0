@@ -32,7 +32,7 @@ export class WalletChat {
     const view = await this.wallet.getWallet(viewer.twitchUserId, currencyId);
     if (!view || !view.currency.active)
       return {
-        message: `@${(other ?? viewer).displayName} — monnaie indisponible.`,
+        message: `@${(other ?? viewer).displayName} - monnaie indisponible.`,
         result: null,
       };
     return {

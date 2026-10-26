@@ -83,7 +83,7 @@ async function lab(tokens = 100_000) {
 }
 
 describe('!rb in the chat', () => {
-  it('`!rb`: one Random Ban request (source chat) and 25 000 Jetons debited together; « en file », never « réussi »', async () => {
+  it('`!rb`: one Random Ban request (source chat) and 25 000 Jetons debited together; no success message (the ban is the answer)', async () => {
     const l = await lab();
     await l.poll();
     const out = await l.router.message(msg('!rb'));
@@ -94,9 +94,7 @@ describe('!rb in the chat', () => {
       { source: 'chat', status: 'queued', refund: 'none', mode: 'real' },
     ]);
     expect(await l.tokensOf()).toBe(100_000 - 25_000);
-    expect(await l.replies()).toEqual([
-      '@Alice — 🎲 Random Ban en file (25 000 Jetons). Résultat dans un instant.',
-    ]);
+    expect(await l.replies()).toEqual([]);
   });
 
   it('strict syntax: arguments, a sentence, a longer word are not commands (nothing paid, no answer)', async () => {
@@ -130,7 +128,7 @@ describe('!rb in the chat', () => {
     ]);
     expect(await l.requests()).toHaveLength(1);
     expect(await l.tokensOf()).toBe(75_000);
-    expect(await l.replies()).toHaveLength(1);
+    expect(await l.replies()).toHaveLength(0);
   });
 
   it('not enough Jetons: price, balance and gap; no request, nothing debited', async () => {
@@ -138,7 +136,7 @@ describe('!rb in the chat', () => {
     await l.poll();
     await l.router.message(msg('!rb'));
     expect(await l.replies()).toEqual([
-      '@Alice — Il te faut 25 000 Jetons pour utiliser Random Ban. Solde : 12 000 Jetons (il te manque 13 000).',
+      '@Alice - Il te faut 25 000 Jetons pour utiliser Random Ban. Solde : 12 000 Jetons (il te manque 13 000).',
     ]);
     expect(await l.requests()).toEqual([]);
     expect(await l.tokensOf()).toBe(12_000);
@@ -154,8 +152,8 @@ describe('!rb in the chat', () => {
     );
     await l.router.message(msg('!rb'));
     expect(await l.replies()).toEqual([
-      '@Alice — Random Ban indisponible pour le moment · rien n’a été débité.',
-      '@Alice — Raptoru en pause · rien n’a été débité.',
+      '@Alice - Random Ban indisponible pour le moment · rien n’a été débité.',
+      '@Alice - Raptoru en pause · rien n’a été débité.',
     ]);
     expect(await l.requests()).toEqual([]);
     expect(await l.tokensOf()).toBe(100_000);
@@ -182,7 +180,7 @@ describe('!rb in the chat', () => {
       { status: 'confirmed', refund: 'none' },
     ]);
     expect(await l.tokensOf()).toBe(75_000);
-    expect(await l.replies()).toHaveLength(1);
+    expect(await l.replies()).toHaveLength(0);
   });
 
   it('refused by Twitch after the target (nothing done): refunded once, told once', async () => {
@@ -209,8 +207,8 @@ describe('!rb in the chat', () => {
     ]);
     await l.core.chat.randomBanChat!.settle(CH); // a second settle: nothing more
     expect(await l.tokensOf()).toBe(100_000);
-    expect((await l.replies()).slice(1)).toEqual([
-      '@Alice — Random Ban impossible pour le moment · 25 000 Jetons remboursés.',
+    expect(await l.replies()).toEqual([
+      '@Alice - Random Ban impossible pour le moment · 25 000 Jetons remboursés.',
     ]);
   });
 

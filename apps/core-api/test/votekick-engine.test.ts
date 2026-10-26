@@ -308,14 +308,12 @@ describe('Caution', () => {
     l.wallet.balances.set(C!.id, 10_000);
     expect(await l.say(C!, '!caution @Viewer2')).toBe('quoted');
     expect(l.chat.at(-1)).toBe(
-      'viewer2 est encore timeout pour environ 8 minute(s) ! Coût de la caution : 8 000 jetons. viewer3, réponds oui pour payer ou non pour annuler.',
+      'viewer2 est banni encore 8 minutes. Le libérer coûte 8 000 jetons, @viewer3. Oui ou non ?',
     );
     expect(await l.say(D!, 'oui')).toBe('ignored');
     expect(await l.say(D!, '!caution viewer2')).toBe('quote_pending');
     expect(await l.say(C!, 'OUI')).toBe('released');
-    expect(l.chat.at(-1)).toBe(
-      'viewer3 paie 8 000 jetons : viewer2 est libéré !',
-    );
+    expect(l.chat.at(-1)).toBe('@viewer3 a libéré viewer2 pour 8 000 jetons !');
     expect(l.wallet.balances.get(C!.id)).toBe(2_000);
     expect(l.twitch.releases).toEqual(['viewer2']);
   });
@@ -423,7 +421,7 @@ describe('Caution', () => {
     l.wallet.balances.set(F!.id, 5_000);
     expect(await l.say(F!, '!caution raptoru_')).toBe('quoted');
     expect(l.chat.at(-1)).toBe(
-      'raptoru_ est réduit au silence pour encore environ 65 seconde(s) ! Coût de la caution : 2 000 jetons. viewer6, réponds oui pour payer ou non pour annuler.',
+      'raptoru_ est réduit au silence encore 65 secondes. Le libérer coûte 2 000 jetons, @viewer6. Oui ou non ?',
     );
     expect(await l.say(F!, 'oui')).toBe('released');
     const id = l.mute.log[0]!.split(' ')[1]!;

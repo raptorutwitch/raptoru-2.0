@@ -391,7 +391,7 @@ export class CautionService {
       q,
       r.channel_id,
       `${r.request_id}:end`,
-      `${r.payer_login} paie ${fmt(r.price!)} jetons : ${r.target_login} est libéré !`,
+      `@${r.payer_login} a libéré ${r.target_login} pour ${fmt(r.price!)} jetons !`,
     );
     return { outcome: 'released' } as const;
   }
@@ -610,7 +610,7 @@ export class CautionService {
           'mute',
           mute.endsAt,
           (price, s) =>
-            `${t.login} est réduit au silence pour encore environ ${s} seconde(s) ! Coût de la caution : ${fmt(price)} jetons. ${r.payer_login}, réponds oui pour payer ou non pour annuler.`,
+            `${t.login} est réduit au silence encore ${s} ${s > 1 ? 'secondes' : 'seconde'}. Le libérer coûte ${fmt(price)} jetons, @${r.payer_login}. Oui ou non ?`,
           mute.id,
         );
       }
@@ -630,12 +630,10 @@ export class CautionService {
           `Le timeout de ${t.login} est déjà terminé.`,
           who,
         );
-      return quote(
-        'timeout',
-        ends,
-        (price, sec) =>
-          `${t.login} est encore timeout pour environ ${Math.ceil(sec / 60)} minute(s) ! Coût de la caution : ${fmt(price)} jetons. ${r.payer_login}, réponds oui pour payer ou non pour annuler.`,
-      );
+      return quote('timeout', ends, (price, sec) => {
+        const min = Math.ceil(sec / 60);
+        return `${t.login} est banni encore ${min} ${min > 1 ? 'minutes' : 'minute'}. Le libérer coûte ${fmt(price)} jetons, @${r.payer_login}. Oui ou non ?`;
+      });
     });
   }
 
@@ -761,7 +759,7 @@ export class CautionService {
           q,
           ch,
           key,
-          `${r.payer_login} paie ${fmt(r.price!)} jetons : ${r.target_login} est libéré !`,
+          `@${r.payer_login} a libéré ${r.target_login} pour ${fmt(r.price!)} jetons !`,
         );
       } else if (rep.event === 'not_applied' || rep.event === 'not_banned') {
         const back = await this.economy.refund(

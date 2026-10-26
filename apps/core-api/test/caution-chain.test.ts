@@ -255,7 +255,7 @@ describe.each(ECONOMIES)('Caution end to end (%s wallet)', (kind) => {
     });
     expect(await c.balance()).toBe(2_000);
     expect((await c.replies()).at(-1)).toBe(
-      'viewer1 paie 8 000 jetons : viewer2 est libéré !',
+      '@viewer1 a libéré viewer2 pour 8 000 jetons !',
     );
     expect(await ex.tick()).toBe('idle');
   });
@@ -459,7 +459,7 @@ describe('Caution end to end: Twitch answers and interruptions (Lab wallet)', ()
     await c.say(PAYER, '!caution raptoru_');
     await ex.tick();
     expect((await c.replies()).at(-1)).toContain(
-      'raptoru_ est réduit au silence pour encore environ 50 seconde(s)',
+      'raptoru_ est réduit au silence encore 50 secondes',
     );
     expect((await c.say(PAYER, 'oui')).outcome).toBe('released');
     expect(ended).toEqual(['mute:vk']);

@@ -38,9 +38,7 @@ describe('Daily claim', () => {
       bestStreak: 1,
       claimedCurrentStreamDay: true,
     });
-    expect(res.message).toBe(
-      '✅ @Alice — Daily validé ! +500 jetons · 🔥 1 stream de suite · 1 Daily au total',
-    );
+    expect(res.message).toBe('@Alice - Daily validé ✅ +500 jetons !');
   });
 
   it('second !daily in the same session is refused without any effect', async () => {
@@ -53,7 +51,7 @@ describe('Daily claim', () => {
     expect(res.outcome).toBe('already_claimed');
     expect(res.reward).toBe(0);
     expect(res.message).toBe(
-      '✅ @Alice — tu as déjà récupéré ton Daily pour ce stream !',
+      '✅ @Alice - tu as déjà récupéré ton Daily pour ce stream !',
     );
     expect(res.status.totalDaily).toBe(1);
     expect(await count(core.db, 'daily_claims')).toBe(1);
@@ -91,7 +89,7 @@ describe('Daily claim', () => {
     }
     const res = await core.daily.streak(alice);
     expect(res.message).toBe(
-      "🔥 @Alice est présent depuis 3 streams d'affilée — 3 Daily validés au total · record : 3",
+      "🔥 @Alice est présent depuis 3 streams d'affilée - 3 Daily validés au total · record : 3",
     );
   });
 
@@ -165,7 +163,7 @@ describe('Daily claim', () => {
       bestStreak: 34,
     });
     expect((await core.daily.streak(alice)).message).toBe(
-      "🔥 @Alice est présent depuis 1 stream d'affilée — 60 Daily validés au total · record : 34",
+      "🔥 @Alice est présent depuis 1 stream d'affilée - 60 Daily validés au total · record : 34",
     );
   });
 
@@ -518,7 +516,7 @@ describe('read contract', () => {
 
     expect(await snapshot()).toEqual(before);
     expect(unknown.message).toBe(
-      "@Newbie n'a encore validé aucun Daily — tape !daily pendant un stream !",
+      "@Newbie n'a encore validé aucun Daily - tape !daily pendant un stream !",
     );
   });
 

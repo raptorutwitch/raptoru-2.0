@@ -90,6 +90,11 @@ export class WordGameService {
   private readonly bank: readonly string[];
   /** Committed wins listeners (the OBS sound events stream). */
   private readonly winListeners = new Set<(w: WordGameWinEvent) => void>();
+  /** The last streak phrase announced per channel (its tier and variant): the next one differs. Memory only. */
+  private readonly lastStreakPhrase = new Map<
+    string,
+    { tier: number; variant: number }
+  >();
 
   constructor(
     private readonly db: Db,
@@ -301,17 +306,26 @@ export class WordGameService {
         text: R.findAnnouncementText(chatter.displayName, out),
       },
     ];
-    if (ann.announce)
+    if (ann.announce) {
+      // Never the same phrase twice in a row (the same tier: the previous variant is left out).
+      const tier = R.streakTier(out.streak.count);
+      const last = this.lastStreakPhrase.get(msg.channel_id);
+      const variant = R.pickVariant(
+        this.rng,
+        last?.tier === tier ? last.variant : null,
+      );
+      this.lastStreakPhrase.set(msg.channel_id, { tier, variant });
       drafts.push({
         idempotencyKey: `jdm:msg:${msg.message_id}:streak`,
         mode: 'announce',
         text: R.streakAnnouncementText(
           chatter.displayName,
           out.streak.count,
-          R.pickVariant(this.rng),
+          variant,
         ),
         delayMs: R.STREAK_ANNOUNCE_DELAY_MS,
       });
+    }
     await insertWordGameSteps(q, { channelId: msg.channel_id, now, drafts });
     return true;
   }

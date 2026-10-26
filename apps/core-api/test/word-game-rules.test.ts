@@ -26,6 +26,7 @@ import {
   motsText,
   nextWordDelayMs,
   pickVariant,
+  STREAK_VARIANTS,
   pickWord,
   publishText,
   shuffleLetters,
@@ -33,6 +34,7 @@ import {
   type Streak,
   streakAnnouncement,
   streakAnnouncementText,
+  streakTier,
   streakmotText,
   wordReward,
 } from '../src/word-game/rules.js';
@@ -455,9 +457,35 @@ describe('streak announcements (§ 10)', () => {
     expect(() => streakAnnouncementText('Alice', 2, 1)).toThrow(RangeError);
   });
 
-  it('variant drawn uniformly among 1–4', () => {
-    expect([0, 0.25, 0.5, 0.999].map((v) => pickVariant(() => v))).toEqual([
-      1, 2, 3, 4,
+  it('variant drawn uniformly among 1–8, never the one to avoid (no two identical phrases in a row)', () => {
+    expect(STREAK_VARIANTS).toBe(8);
+    expect([0, 0.125, 0.5, 0.999].map((v) => pickVariant(() => v))).toEqual([
+      1, 2, 5, 8,
+    ]);
+    // Avoiding 3: the 7 others, uniformly (0 → 1, the slot of 3 → 4, the top → 8).
+    expect([0, 2 / 7, 0.999].map((v) => pickVariant(() => v, 3))).toEqual([
+      1, 4, 8,
+    ]);
+    for (let i = 0; i < 1000; i++)
+      for (const avoid of [1, 4, 8]) {
+        const v = pickVariant(Math.random, avoid);
+        expect(v).not.toBe(avoid);
+        expect(v).toBeGreaterThanOrEqual(1);
+        expect(v).toBeLessThanOrEqual(8);
+      }
+    // Every variant of every tier is a real phrase, none twice in a tier, no em dash.
+    for (const count of [3, 5, 8, 12]) {
+      const texts = Array.from({ length: 8 }, (_, i) =>
+        streakAnnouncementText('Alice', count, i + 1),
+      );
+      expect(new Set(texts).size).toBe(8);
+      for (const t of texts) {
+        expect(t).toContain('@Alice');
+        expect(t).not.toContain('—');
+      }
+    }
+    expect([3, 4, 5, 7, 8, 11, 12, 40].map(streakTier)).toEqual([
+      3, 3, 5, 5, 8, 8, 12, 12,
     ]);
   });
 });

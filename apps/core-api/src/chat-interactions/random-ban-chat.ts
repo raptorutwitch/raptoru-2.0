@@ -45,7 +45,7 @@ export class RandomBanChat {
     const name = msg.chatter.display_name;
     const price = await this.prices.price(msg.channel_id, 'random_ban');
     const answer = (key: string, body: string) =>
-      this.db.tx((q) => this.say(q, msg.channel_id, key, `@${name} — ${body}`));
+      this.db.tx((q) => this.say(q, msg.channel_id, key, `@${name} - ${body}`));
     const key = `rb:msg:${msg.message_id}`;
     if (!this.randomBan.executorReady(msg.channel_id)) {
       await answer(
@@ -81,12 +81,7 @@ export class RandomBanChat {
           module: 'random_ban',
           interactionId: request.request_id,
         });
-        await this.say(
-          q,
-          msg.channel_id,
-          key,
-          `@${name} — 🎲 Random Ban en file (${fmt(price)} Jetons). Résultat dans un instant.`,
-        );
+        // No success message: the Random Ban itself (its animation, the timeout) is the answer.
         return { replayed: false };
       });
       return out.replayed
@@ -151,7 +146,7 @@ export class RandomBanChat {
             q,
             channelId,
             `rb:refund:${r.request_id}`,
-            `@${r.buyer_name} — Random Ban impossible pour le moment · ${fmt(back.amount)} Jetons remboursés.`,
+            `@${r.buyer_name} - Random Ban impossible pour le moment · ${fmt(back.amount)} Jetons remboursés.`,
           );
       });
   }

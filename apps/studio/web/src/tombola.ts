@@ -740,7 +740,7 @@ export function mountTombola(root: HTMLElement) {
           <p class="fine" style="margin:10px 0 0">Par défaut 60 s. Fermeture puis tirage automatiques à 0.</p></div>
         <div class="card c6"><h3>${ic('users')}Gagnants</h3><div class="seg"><button type="button" class="${c.winners_mode === 'auto' ? 'on' : ''}" data-win="auto">Auto</button><button type="button" class="${c.winners_mode === 'custom' ? 'on' : ''}" data-win="custom">Nombre fixe</button></div>
           ${c.winners_mode === 'auto' ? `<table class="wtable">${status.winners_table.map((r) => `<tr><td>${r.participants} participants</td><td>${r.min === r.max ? r.min : `${r.min}–${r.max}`} gagnant${r.max > 1 ? 's' : ''}</td></tr>`).join('')}</table>` : `<div class="field"><span>Nombre de gagnants</span><input class="input" style="width:90px" data-cfg="winners_custom" value="${c.winners_custom}"></div>`}
-          <p class="fine" style="margin:8px 0 0">Gains partagés aussi équitablement que possible (au jeton près).</p></div>
+          <p class="fine" style="margin:8px 0 0">Même gain pour chaque gagnant (arrondi au jeton supérieur).</p></div>
       `,
         false,
       )}

@@ -7,6 +7,7 @@ import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
 import { type EconomyPort, labEconomy } from '../economy/economy.js';
+import { liveChannelSession } from '../stream/channel-sessions.js';
 import { DuelService, type DuelOutcome } from './duel.js';
 import { parseDuelCommand } from './duel-rules.js';
 import * as R from './rules.js';
@@ -16,13 +17,18 @@ import type { LoginLookup, TwitchUser } from './twitch-login.js';
 // transaction under the viewer's wallet lock: replay check, cooldown, bet and balance, draw, ONE balance
 // change, ONE ledger row (mini_game, key mg:<channel>:<message_id>), ONE play row, ONE LeCroupier_ answer
 // (cmd_steps origin mini_game). All or nothing. Refusals (invalid bet, cooldown…) are silent and write
-// nothing. Studio's switch « Mini-jeux » (OFF by default) gates everything.
+// nothing. Studio's switch « Mini-jeux » (OFF by default) gates everything. Off live (no open session of the channel,
+// the chat games' single reader liveChannelSession), nothing is played: no bet, no debit, no gain, no Duel step; one
+// short answer per viewer at most every OFFLINE_NOTICE_MS, the other attempts silent.
 
 export type MiniGameOutcome = 'ignored' | 'mini_game_played' | DuelOutcome;
 
 /** Why a game command did not play (silent for the viewer; returned for the tests and the logs). */
 export type MiniGameSkip =
-  'disabled' | 'cooldown' | R.BetRefusal | 'balance_cap';
+  'disabled' | 'offline' | 'cooldown' | R.BetRefusal | 'balance_cap';
+
+/** Off live: at most one answer per viewer in this window (the other attempts are silent). */
+export const OFFLINE_NOTICE_MS = 60_000;
 
 interface PlayRow {
   message_id: string;
@@ -56,6 +62,8 @@ export class MiniGamesService {
   /** Duel V1: the simulator's identities seen in this Core (login → account), memory only. */
   private readonly simulatorIdentities = new Map<string, TwitchUser>();
   private readonly duels: DuelService;
+  /** Off live: when each viewer was last told (memory only; a restart may tell once more). */
+  private readonly offlineNotified = new Map<string, number>();
 
   constructor(
     private readonly db: Db,
@@ -112,12 +120,17 @@ export class MiniGamesService {
     if (duel) {
       if (!(await this.enabled(this.db, msg.channel_id)))
         return { outcome: 'ignored', skipped: 'disabled' };
+      // Every Duel command: a challenge pending when the live ends can no longer be accepted (it simply expires).
+      if (await this.offLive(msg))
+        return { outcome: 'ignored', skipped: 'offline' };
       return this.duels.chat(msg, duel);
     }
     const cmd = R.parseCommand(msg.text);
     if (!cmd) return { outcome: 'ignored' };
     if (!(await this.enabled(this.db, msg.channel_id)))
       return { outcome: 'ignored', skipped: 'disabled' };
+    if (await this.offLive(msg))
+      return { outcome: 'ignored', skipped: 'offline' };
     const rules = R.MINI_GAME_RULES[cmd.game];
     return this.db.tx(async (q) => {
       const now = this.clock.now();
@@ -213,6 +226,35 @@ export class MiniGamesService {
       });
       return { outcome: 'mini_game_played' as const };
     });
+  }
+
+  /**
+   * True off live: the command is refused before anything is read or written in a wallet. The viewer is told once per
+   * OFFLINE_NOTICE_MS (one answer per Twitch message: a resent message writes nothing new).
+   */
+  private async offLive(msg: LabChatMessage) {
+    if (await liveChannelSession(this.db, msg.channel_id)) return false;
+    const now = this.clock.now().getTime();
+    const key = `${msg.channel_id}:${msg.chatter.id}`;
+    if (now - (this.offlineNotified.get(key) ?? -Infinity) < OFFLINE_NOTICE_MS)
+      return true;
+    if (this.offlineNotified.size > 5000) this.offlineNotified.clear();
+    this.offlineNotified.set(key, now);
+    await this.db.tx((q) =>
+      insertWordGameSteps(q, {
+        channelId: msg.channel_id,
+        now: this.clock.now(),
+        origin: 'mini_game',
+        drafts: [
+          {
+            idempotencyKey: `mg:offline:${msg.message_id}`,
+            mode: 'normal',
+            text: `@${msg.chatter.display_name} - les mini-jeux sont disponibles pendant le live.`,
+          },
+        ],
+      }),
+    );
+    return true;
   }
 
   private async enabled(q: Queryable, channelId: string) {

@@ -171,7 +171,7 @@ describe('wallet HTTP', () => {
     });
 
     const balance = await post('/v1/bot/wallet/balance', { viewer: chatter });
-    expect((await balance.json()).message).toBe('@Alice — tu as 750 Jetons.');
+    expect((await balance.json()).message).toBe('@Alice - 750 Jetons');
 
     const board = await (await fetch(`${base}/v1/wallet/leaderboard`)).json();
     expect(board.entries.map((e: { login: string }) => e.login)).toEqual([

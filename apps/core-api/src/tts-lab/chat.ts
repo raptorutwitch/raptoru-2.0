@@ -61,7 +61,7 @@ export class TtsChat {
     if (!m) return { outcome: 'ignored' };
     const name = msg.chatter.display_name;
     const text = (m[1] ?? '').trim();
-    const say = (body: string) => this.reply(msg, `@${name} — ${body}`);
+    const say = (body: string) => this.reply(msg, `@${name} - ${body}`);
 
     if (!text) {
       const now = this.clock.now().getTime();
@@ -75,7 +75,7 @@ export class TtsChat {
       const price =
         rules.tiers.find((t) => t.min <= 1 && (t.max === null || t.max >= 1))
           ?.price ?? rules.base_price;
-      await say(`Écris ton message après la commande — ${fmt(price)} Jetons`);
+      await say(`Écris ton message après la commande - ${fmt(price)} Jetons`);
       return { outcome: 'tts_help' };
     }
 
@@ -88,11 +88,12 @@ export class TtsChat {
         text,
         payment_method: 'tokens',
       });
-      const i = out.interaction;
-      const position = out.queue.position
-        ? ` · position ${out.queue.position} dans la file`
-        : '';
-      await say(`🔊 TTS envoyé (${fmt(i.simulated_cost)} Jetons)${position}.`);
+      // No success message when it plays next: the voice is the answer. Said only when it waits (behind other TTS, or
+      // held for the moderation's review), so the viewer knows it was not lost.
+      const position = out.queue.position ?? 0;
+      if (out.interaction.review_status === 'pending')
+        await say('TTS en attente de validation.');
+      else if (position >= 2) await say(`TTS en file, position ${position}.`);
       return {
         outcome: out.replayed ? 'tts_replayed' : 'tts_queued',
         replayed: out.replayed,

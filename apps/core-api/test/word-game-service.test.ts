@@ -478,6 +478,26 @@ describe('a winning message (§§ 4–10, 12, 21, 22)', () => {
     expect((await gain(ALICE.id)) + (await gain(BOB.id))).toBe(500);
   });
 
+  it('two streak announcements in a row in the same tier: never the same phrase (the same random draw)', async () => {
+    rngValue = 0;
+    const s = await live();
+    const words = ['angle', 'requin', 'tournis', 'avion', 'bateau', 'cheval'];
+    for (const w of words) await addWord(s, w);
+    for (const [i, w] of words.slice(0, 3).entries())
+      await game.chat(msg(w, ALICE, `tw-a${i}`));
+    for (const [i, w] of words.slice(3).entries())
+      await game.chat(msg(w, BOB, `tw-b${i}`));
+    const said = (
+      await db.query<{ params: { text: string } }>(
+        "select params from cmd_steps where idempotency_key like '%:streak' order by seq_global",
+      )
+    ).map((x) => x.params.text);
+    expect(said).toEqual([
+      '🔥 @Alice est EN FEU ! 3 mots d’affilée !',
+      '🔥 @Bob commence à chauffer ! 3 mots d’affilée !',
+    ]);
+  });
+
   it('streak: +1 per word of the same viewer; announced at 3 (variant 1), 2 s after the find', async () => {
     rngValue = 0;
     const s = await live();

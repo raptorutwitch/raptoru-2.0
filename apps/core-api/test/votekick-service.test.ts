@@ -652,7 +652,7 @@ describe('Votekick: the broadcaster is muted in OBS, never timed out; his Cautio
         )
       ).at(-1)!.params.text,
     ).toBe(
-      'raptoru_ est réduit au silence pour encore environ 55 seconde(s) ! Coût de la caution : 1 000 jetons. viewer5, réponds oui pour payer ou non pour annuler.',
+      'raptoru_ est réduit au silence encore 55 secondes. Le libérer coûte 1 000 jetons, @viewer5. Oui ou non ?',
     );
     expect((await caution.chat(l.msg(V5, 'oui'))).outcome).toBe('released');
     expect((await caution.chat(l.msg(V5, 'oui'))).outcome).not.toBe('released');

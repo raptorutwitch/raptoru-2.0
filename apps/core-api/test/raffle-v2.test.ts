@@ -25,6 +25,7 @@ import {
 import {
   autoWinners,
   DEFAULT_RAFFLE_CONFIG,
+  drawWinnerCount,
   eventTitles,
   idleTitle,
   randomJackpot,
@@ -161,18 +162,26 @@ async function lab(broadcasterOf?: (channelId: string) => string | null) {
 }
 
 describe('Tombola V2 rules', () => {
-  it('splits exactly: the remainder goes one unit at a time, the sum is the jackpot', () => {
-    expect(split(20_000, 3)).toEqual([6667, 6667, 6666]);
+  it('splits evenly: the same share for every winner, rounded up (never less than the jackpot, at most k − 1 more)', () => {
+    expect(split(10_000, 3)).toEqual([3334, 3334, 3334]);
+    expect(split(20_000, 3)).toEqual([6667, 6667, 6667]);
     expect(split(5, 5)).toEqual([1, 1, 1, 1, 1]);
+    expect(split(10_000, 1)).toEqual([10_000]);
+    expect(split(10_000, 0)).toEqual([]);
     for (const [t, k] of [
       [49_500, 7],
       [12_345, 4],
       [200_000, 6],
-    ] as const)
-      expect(split(t, k).reduce((a, b) => a + b, 0)).toBe(t);
+    ] as const) {
+      const parts = split(t, k);
+      expect(new Set(parts).size).toBe(1);
+      const sum = parts.reduce((a, b) => a + b, 0);
+      expect(sum).toBeGreaterThanOrEqual(t);
+      expect(sum - t).toBeLessThan(k);
+    }
   });
 
-  it('automatic winners (D4): 1–2 → 1, 3 → 1 or 2, from 4 never more winners than losers', () => {
+  it('automatic winners (D4): 1–2 → 1, 3 → 1 or 2, from 4 at least 2 and never more winners than losers', () => {
     expect(autoWinners(0, () => 0.5)).toBe(0);
     expect(autoWinners(1, () => 0.9)).toBe(1);
     expect(autoWinners(2, () => 0.9)).toBe(1);
@@ -182,9 +191,59 @@ describe('Tombola V2 rules', () => {
     for (let n = 4; n <= 200; n++)
       for (const r of [0, 0.5, 0.99]) {
         const k = autoWinners(n, () => r);
-        expect(k).toBeGreaterThanOrEqual(1);
+        expect(k).toBeGreaterThanOrEqual(2);
         expect(k).toBeLessThanOrEqual(Math.floor(n / 2));
       }
+  });
+
+  it('from 4 participants: several winners, a single one only by the exceptional FULL draw (~1 % by default)', () => {
+    let seed = 11;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const round = (
+      participants: number,
+      kind: 'normal' | 'super' = 'normal',
+    ) => ({
+      kind,
+      participants,
+      mode: 'auto' as const,
+      custom: 3,
+      full: DEFAULT_RAFFLE_CONFIG.full,
+    });
+    expect(DEFAULT_RAFFLE_CONFIG.full).toEqual({
+      enabled: true,
+      chance_pct: 1,
+    });
+    const DRAWS = 40_000;
+    for (const n of [4, 5, 9, 10, 30]) {
+      let single = 0;
+      for (let i = 0; i < DRAWS; i++) {
+        const { k, full } = drawWinnerCount(round(n), rnd);
+        if (k === 1) {
+          single++;
+          expect(full).toBe(true); // a single winner from 4 participants is always FULL
+        } else expect(k).toBeGreaterThanOrEqual(2);
+      }
+      expect(single / DRAWS).toBeGreaterThan(0.007);
+      expect(single / DRAWS).toBeLessThan(0.013);
+    }
+    // SUPER and FULL disabled: never a single winner from 4 participants.
+    for (let i = 0; i < 2_000; i++) {
+      expect(drawWinnerCount(round(6, 'super'), rnd).k).toBeGreaterThanOrEqual(
+        2,
+      );
+      expect(
+        drawWinnerCount(
+          { ...round(6), full: { enabled: false, chance_pct: 1 } },
+          rnd,
+        ).k,
+      ).toBeGreaterThanOrEqual(2);
+    }
+    // The only participant wins alone (by forfeit), FULL or not.
+    expect(drawWinnerCount(round(1), () => 0.99)).toEqual({
+      k: 1,
+      full: false,
+    });
+    expect(drawWinnerCount(round(0), () => 0)).toEqual({ k: 0, full: false });
   });
 
   it('random jackpot (D3): ~78 % under 20 000, ~18 % 20–40k, ~4 % 40–50k, rarer at the top, steps of 500', () => {

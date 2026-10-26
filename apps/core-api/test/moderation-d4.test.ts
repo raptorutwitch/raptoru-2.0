@@ -1333,11 +1333,12 @@ describe('Tombola from the D4 console (V2 model: free entry, Core draws at close
     const drawn = (await act({ action: 'raffle_close' })) as {
       winners: { viewer_id: string; amount: number }[];
     };
-    expect(drawn.winners.map((w) => w.amount).sort()).toEqual([4500, 4501]);
+    // The same share for both, rounded up (9 001 / 2 → 4 501 each).
+    expect(drawn.winners.map((w) => w.amount).sort()).toEqual([4501, 4501]);
     expect((await raffle.state(CHANNEL)).current!.status).toBe('drawn');
     expect(
       (await wallet('900245')).tokens + (await wallet('900246')).tokens,
-    ).toBe(24_000 + 9001);
+    ).toBe(24_000 + 9002);
   });
 });
 

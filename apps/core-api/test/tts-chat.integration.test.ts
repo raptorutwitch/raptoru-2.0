@@ -97,10 +97,11 @@ describe.skipIf(!isLocal)('!tts from the chat on a real Postgres', () => {
       `select count(*) as n from lab_wallet_ledger where kind = 'debit'`,
     );
     expect(Number(debits[0]!.n)).toBe(1);
-    // At most one chat answer for the message (the chat one, or « busy » when the extension won the race).
+    // At most one chat answer for the message: none when the chat one won (it plays next: the voice is the answer),
+    // « busy » when the extension won the race.
     const answers = await a.query<{ n: string }>(
       `select count(*) as n from cmd_steps where idempotency_key = 'tts:msg:tw-race-1'`,
     );
-    expect(Number(answers[0]!.n)).toBe(1);
+    expect(Number(answers[0]!.n)).toBeLessThanOrEqual(1);
   });
 });
