@@ -8,6 +8,7 @@ import {
   createRateLimiter,
   fileJournal,
   memoryJournal,
+  outputDelay,
   type SendJournal,
 } from '../src/lab-chat-output.js';
 import { createHelix } from '../src/twitch/helix.js';
@@ -448,5 +449,26 @@ describe('Lab chat output — rate limiter', () => {
     t = 30_000;
     await out.tick();
     expect(twitch.requests.map((r) => r.body.message)).toEqual(['1', '2', '3']);
+  });
+});
+
+describe('output cadence (26/10)', () => {
+  const idle = (reason: string, retry_in_ms?: number) =>
+    ({ kind: 'idle', reason, retry_in_ms }) as const;
+  it('empty or busy queue: 250 ms; a requested wait is honoured within 50 ms–5 s', () => {
+    expect(outputDelay(idle('empty'), 0)).toBe(250);
+    expect(outputDelay(idle('busy'), 0)).toBe(250);
+    expect(outputDelay(idle('backoff', 1200), 0)).toBe(1200);
+    expect(outputDelay(idle('rate_limit', 10), 0)).toBe(50);
+    expect(outputDelay(idle('backoff', 60_000), 0)).toBe(5000);
+  });
+  it('output off / no channel: 1 s; Core unreachable or in error: 1 s doubling up to 5 s', () => {
+    expect(outputDelay(idle('output_off'), 0)).toBe(1000);
+    expect(outputDelay(idle('no_channel'), 0)).toBe(1000);
+    expect(
+      [1, 2, 3, 4, 8].map((n) => outputDelay(idle('core_unavailable'), n)),
+    ).toEqual([1000, 2000, 4000, 5000, 5000]);
+    expect(outputDelay(idle('core_500'), 2)).toBe(2000);
+    expect(outputDelay(idle('tick_failed'), 1)).toBe(1000);
   });
 });

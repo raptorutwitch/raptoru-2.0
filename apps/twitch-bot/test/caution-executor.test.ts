@@ -1,8 +1,10 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  CAUTION_LOOP,
+  cautionDelay,
   createCautionExecutor,
   fileCautionJournal,
   memoryCautionJournal,
@@ -299,5 +301,89 @@ describe('the executor', () => {
     });
     await ex.tick();
     expect(t.calls.filter((c) => c.startsWith('unban'))).toEqual([]);
+  });
+});
+
+describe('cadence (26/10): fast when the queue is empty, backing off when Core fails', () => {
+  it('after the unban, the first ban-list read waits 300 ms, the next ones 700 ms', async () => {
+    const t = twitch({ bans: { [T]: later(300_000) } });
+    let reads = 0;
+    const bans = t.bans;
+    t.bans = async (ids) => {
+      // Twitch's list lags: still listed on the first read after the unban, free on the second.
+      const r = await bans(ids);
+      return ++reads === 1 ? [{ user_id: T, expires_at: later(300_000) }] : r;
+    };
+    const pauses: number[] = [];
+    const out = await releaseOnce({
+      twitch: t,
+      target: T,
+      pause: async (ms) => void pauses.push(ms),
+      now,
+    });
+    expect(out).toMatchObject({ event: 'released' });
+    expect(pauses).toEqual([CAUTION_LOOP.firstReadMs, 700]);
+    expect(CAUTION_LOOP.firstReadMs).toBe(300);
+  });
+
+  it('delays: 0 after a job, 250 ms idle, 1 s → 2 s → 4 s → 5 s (cap) while Core fails', () => {
+    expect(cautionDelay('worked', 0)).toBe(0);
+    expect(cautionDelay('idle', 0)).toBe(250);
+    expect([1, 2, 3, 4, 9].map((n) => cautionDelay('error', n))).toEqual([
+      1000, 2000, 4000, 5000, 5000,
+    ]);
+  });
+
+  async function claimsIn(
+    ms: number,
+    core: () => Promise<{ status: number; body: unknown }>,
+  ) {
+    vi.useFakeTimers();
+    let claims = 0;
+    const ex = createCautionExecutor({
+      core: async () => {
+        claims++;
+        return core();
+      },
+      channelId: '1',
+      broadcasterId: '1',
+      executorId: 'x',
+      login: 'lecroupier_',
+      botScopes: ['moderator:manage:banned_users'],
+      broadcasterScopes: ['moderation:read'],
+      twitch: twitch({}),
+      journal: memoryCautionJournal(),
+      pause,
+      now,
+      log: () => {},
+    });
+    try {
+      void ex.run();
+      await vi.advanceTimersByTimeAsync(ms);
+      ex.stop();
+      await vi.advanceTimersByTimeAsync(5000);
+      return claims;
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it('Core load: an empty queue is claimed ~4 times a second, an unreachable Core at most 4 times in 10 s', async () => {
+    // 0, 250, … 10 000 ms → 41 light claims (one short transaction each).
+    expect(
+      await claimsIn(10_000, async () => ({
+        status: 200,
+        body: { job: null, reason: 'idle' },
+      })),
+    ).toBe(41);
+    // 0, 1 s, 3 s, 7 s (then 12 s): backing off, never hammering a struggling Core.
+    expect(
+      await claimsIn(10_000, async () => {
+        throw new Error('ECONNREFUSED');
+      }),
+    ).toBe(4);
+    expect(
+      await claimsIn(10_000, async () => ({ status: 503, body: {} })),
+    ).toBe(4);
   });
 });

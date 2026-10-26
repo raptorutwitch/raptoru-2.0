@@ -203,6 +203,36 @@ export interface ClaimedStep {
   status: string;
 }
 
+/**
+ * Cadence (26/10, measured chat queue ~0.5 s): nothing to send (or another send in flight) → look again after
+ * 250 ms; the wait Core / the limiter asked for is honoured (50 ms–5 s); Core unreachable or in error → 1 s, doubling
+ * up to 5 s, so a struggling Core is never hammered; output off / no channel → 1 s.
+ */
+export const OUTPUT_LOOP = {
+  idleMs: 250,
+  offMs: 1000,
+  errorMs: 1000,
+  errorMaxMs: 5000,
+};
+const isFailure = (r: TickResult) =>
+  r.kind === 'idle' &&
+  r.retry_in_ms === undefined &&
+  (r.reason === 'core_unavailable' ||
+    r.reason === 'tick_failed' ||
+    /^core_\d+$/.test(r.reason));
+export function outputDelay(r: TickResult, failures: number) {
+  if (r.kind !== 'idle') return 0;
+  if (r.retry_in_ms !== undefined)
+    return Math.min(Math.max(r.retry_in_ms, 50), 5000);
+  if (isFailure(r))
+    return Math.min(
+      OUTPUT_LOOP.errorMs * 2 ** Math.max(failures - 1, 0),
+      OUTPUT_LOOP.errorMaxMs,
+    );
+  if (r.reason === 'empty' || r.reason === 'busy') return OUTPUT_LOOP.idleMs;
+  return OUTPUT_LOOP.offMs;
+}
+
 export interface LabChatOutputDeps {
   /** POST to the Lab Core; throws only when Core could not be reached. */
   core(path: string, body: unknown): Promise<{ status: number; body: unknown }>;
@@ -416,19 +446,18 @@ export function createLabChatOutput(d: LabChatOutputDeps) {
   }
 
   let stopped = false;
-  /** Loop: immediately after a send, otherwise after the wait Core / the limiter asked for. */
+  /** Loop: immediately after a send, otherwise after outputDelay. */
   async function run() {
+    let failures = 0;
     while (!stopped) {
-      let delay = 1000;
+      let r: TickResult = { kind: 'idle', reason: 'tick_failed' };
       try {
-        const r = await tick();
-        if (r.kind !== 'idle') delay = 0;
-        else if (r.retry_in_ms !== undefined)
-          delay = Math.min(Math.max(r.retry_in_ms, 50), 5000);
-        else if (r.reason === 'busy') delay = 250;
+        r = await tick();
       } catch (e) {
         log('[lab-chat] output tick failed', (e as Error).message);
       }
+      failures = isFailure(r) ? failures + 1 : 0;
+      const delay = outputDelay(r, failures);
       if (delay) await new Promise((r) => setTimeout(r, delay));
     }
   }
