@@ -127,11 +127,11 @@ export async function releaseOnce(o: {
 }): Promise<ReleaseOutcome> {
   const pause = o.pause ?? sleep;
   const now = o.now ?? Date.now;
-  /** Listed after `tries` reads spaced by 700 ms? (false as soon as one read says free) */
+  /** Listed after `tries` reads (the first 300 ms after the unban, then 700 ms apart)? (false as soon as one read says free) */
   const listed = async (tries: number) => {
     let last: boolean | null = null;
     for (let i = 0; i < tries; i++) {
-      await pause(700);
+      await pause(i ? 700 : CAUTION_LOOP.firstReadMs);
       last = await stillBanned(o.twitch, o.target, now, pause);
       if (last === false) return false;
     }
@@ -327,6 +327,26 @@ interface Job {
   target_id: string | null;
 }
 
+/**
+ * Cadence (26/10, measured quotes 1.0–2.4 s): an empty queue is re-checked every 250 ms (one light claim
+ * transaction); Core unreachable or in error → 1 s, doubling up to 5 s, so a struggling Core is never hammered.
+ * After an unban, the first ban-list read comes 300 ms later (then 700 ms apart: Twitch's lists lag a little).
+ */
+export const CAUTION_LOOP = {
+  idleMs: 250,
+  errorMs: 1000,
+  errorMaxMs: 5000,
+  firstReadMs: 300,
+};
+export function cautionDelay(r: 'worked' | 'idle' | 'error', failures: number) {
+  if (r === 'worked') return 0;
+  if (r === 'idle') return CAUTION_LOOP.idleMs;
+  return Math.min(
+    CAUTION_LOOP.errorMs * 2 ** Math.max(failures - 1, 0),
+    CAUTION_LOOP.errorMaxMs,
+  );
+}
+
 export function createCautionExecutor(d: CautionExecutorDeps) {
   const now = d.now ?? Date.now;
   const pause = d.pause ?? sleep;
@@ -448,8 +468,9 @@ export function createCautionExecutor(d: CautionExecutorDeps) {
     await recover();
   }
 
-  async function tick(): Promise<'worked' | 'idle'> {
-    if (!(await recover())) return 'idle';
+  /** 'error': Core unreachable or answering an error (the loop then backs off). */
+  async function tick(): Promise<'worked' | 'idle' | 'error'> {
+    if (!(await recover())) return 'error';
     let claimed: { status: number; body: unknown };
     try {
       claimed = await post(`/${d.channelId}/claim`, {
@@ -460,10 +481,11 @@ export function createCautionExecutor(d: CautionExecutorDeps) {
         missing,
       });
     } catch {
-      return 'idle';
+      return 'error';
     }
+    if (claimed.status !== 200) return 'error';
     const job = (claimed.body as { job?: Job | null }).job;
-    if (claimed.status !== 200 || !job) return 'idle';
+    if (!job) return 'idle';
     if (job.phase === 'quote') await quote(job);
     else await release(job);
     return 'worked';
@@ -471,13 +493,16 @@ export function createCautionExecutor(d: CautionExecutorDeps) {
 
   let stopped = false;
   async function run() {
+    let failures = 0;
     while (!stopped) {
-      let delay = 1000;
+      let r: 'worked' | 'idle' | 'error' = 'error';
       try {
-        if ((await tick()) === 'worked') delay = 0;
+        r = await tick();
       } catch (e) {
         log('[caution] tick failed', (e as Error).message);
       }
+      failures = r === 'error' ? failures + 1 : 0;
+      const delay = cautionDelay(r, failures);
       if (delay) await sleep(delay);
     }
   }
