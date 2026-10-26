@@ -764,6 +764,65 @@ export class SpotifyRuntime {
     return true;
   }
 
+  /**
+   * Read-only diagnostic (26/10): one Spotify search through Studio's own client (its token, rate limit and cache), and
+   * what each result carries — album, release date, popularity, ISRC — to decide how editions could be told apart.
+   * Nothing is requested, queued or played.
+   */
+  private async diagnosticSearch(body: () => Promise<Record<string, unknown>>) {
+    if (this.d.auth.view().auth !== 'ok')
+      throw Object.assign(new Error('spotify_not_connected'), { status: 409 });
+    const q = String((await body()).q ?? '')
+      .trim()
+      .slice(0, 200);
+    if (!q) throw Object.assign(new Error('empty_query'), { status: 400 });
+    type Raw = {
+      id?: string;
+      name?: string;
+      duration_ms?: number;
+      popularity?: unknown;
+      explicit?: unknown;
+      artists?: { name?: string }[];
+      external_ids?: { isrc?: unknown };
+      album?: {
+        name?: unknown;
+        album_type?: unknown;
+        release_date?: unknown;
+        total_tracks?: unknown;
+      };
+    };
+    const items = (await this.d.api.search(q)) as unknown as Raw[];
+    const has = (f: (t: Raw) => unknown) =>
+      items.filter((t) => f(t) !== undefined && f(t) !== null).length;
+    return {
+      query: q,
+      count: items.length,
+      fields: {
+        popularity: has((t) => t.popularity),
+        album_name: has((t) => t.album?.name),
+        album_type: has((t) => t.album?.album_type),
+        release_date: has((t) => t.album?.release_date),
+        isrc: has((t) => t.external_ids?.isrc),
+      },
+      items: items.map((t) => ({
+        id: t.id ?? null,
+        name: t.name ?? null,
+        artists: (t.artists ?? []).map((a) => a.name ?? ''),
+        duration_ms: t.duration_ms ?? null,
+        popularity: t.popularity ?? null,
+        isrc: t.external_ids?.isrc ?? null,
+        album: t.album
+          ? {
+              name: t.album.name ?? null,
+              type: t.album.album_type ?? null,
+              release_date: t.album.release_date ?? null,
+              total_tracks: t.album.total_tracks ?? null,
+            }
+          : null,
+      })),
+    };
+  }
+
   /** /api/spotify/* behind Studio's origin check. */
   async api(
     method: string,
@@ -798,6 +857,7 @@ export class SpotifyRuntime {
     }
     if (method !== 'POST')
       throw Object.assign(new Error('not_found'), { status: 404 });
+    if (path === '/diagnostic/search') return this.diagnosticSearch(body);
     if (path === '/settings')
       return this.d.core(`${this.base}/settings`, await body());
     if (path === '/actions')

@@ -165,6 +165,34 @@ describe('Spotify runtime (Studio)', () => {
     expect(h.sim.view().queue).toEqual(['Numb']);
   });
 
+  it('diagnostic search (read-only): which fields each result carries; nothing queued, nothing reported to Core', async () => {
+    const h = await harness();
+    const out = (await h.rt.api('POST', '/diagnostic/search', async () => ({
+      q: 'numb linkin park',
+    }))) as {
+      count: number;
+      fields: Record<string, number>;
+      items: { id: string; name: string; artists: string[] }[];
+    };
+    expect(out.count).toBeGreaterThan(0);
+    expect(out.items[0]).toMatchObject({
+      name: 'Numb',
+      artists: ['Linkin Park'],
+    });
+    expect(Object.keys(out.fields).sort()).toEqual([
+      'album_name',
+      'album_type',
+      'isrc',
+      'popularity',
+      'release_date',
+    ]);
+    expect(h.sim.view().queue).toEqual([]);
+    expect(h.core.reports).toHaveLength(0);
+    await expect(
+      h.rt.api('POST', '/diagnostic/search', async () => ({ q: ' ' })),
+    ).rejects.toThrow('empty_query');
+  });
+
   it('a request costs 2 Spotify calls when Spotify answers 204 (search, add): no duration re-read, no device list', async () => {
     const h = await harness();
     h.job(songJob(1, 'numb linkin park'));
