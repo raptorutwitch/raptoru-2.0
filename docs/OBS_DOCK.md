@@ -13,7 +13,8 @@ rapport Astra `C:\Users\Antoni\Documents\Codex\2026-10-27\files-pasted-by-the-us
   Alertes → « Dock OBS »).
 - **Lot 3 (page du dock)** : V1 faite — fil compact, filtres, « N nouveaux », détail, replay en deux clics, cadeaux
   communautaires repliés, états de connexion. Aperçu vérifié dans Chromium (240/300/420 px, aucune erreur console).
-- **Lot 4** : à faire (voir « Reste à faire »).
+- **Lot 4** : suites complètes vertes, PR #28 ouverte (CI verte). Reste : validation manuelle dans OBS par Antoni,
+  puis livraison avec son GO (migration Production additive, Core, Studio).
 - Rien de poussé, rien de déployé. Aucune migration appliquée hors bases de test.
 
 ## Décisions (et pourquoi)
@@ -104,7 +105,9 @@ Studio : `GET /api/dock` → `{ available, reason, url, clients, feed }` ; `POST
   (pseudo, message, titre, bénéficiaire), textes très longs, ordre, SSE, panneau (clé masquée), repliage des cadeaux.
 - Aperçu réel Chromium (Playwright, données factices) à 240/300/420 px : aucune erreur console, pas de défilement
   horizontal, lignes compactes.
-- Typecheck global OK ; lint des fichiers du dock OK.
+- Typecheck, lint et build globaux OK ; suites complètes : bot 285, desktop 34, Core 1188 (+ `sub-wheel-r2` intermittent,
+  vert seul), Studio 758 (+ plantage Windows connu de `prod-transport`, vert seul) ; intégration PostgreSQL réelle verte
+  (les tests de migration comptent la nouvelle migration). CI de la PR #28 verte.
 
 ## Problèmes rencontrés
 
@@ -124,4 +127,5 @@ Studio : `GET /api/dock` → `{ available, reason, url, clients, feed }` ; `POST
 
 ## Prochaine action
 
-Lot 4 : suites complètes, puis PR `feat/obs-dock` (sans fusion ni déploiement avant le GO d'Antoni).
+Attendre le GO d'Antoni pour livrer (fusion PR #28, migration Production additive, Core, Studio 0.1.15), puis sa
+validation dans OBS (installation du dock : section « Utilisation »).
