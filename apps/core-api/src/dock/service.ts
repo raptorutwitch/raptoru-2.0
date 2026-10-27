@@ -329,8 +329,8 @@ export class DockActivityService {
       `with src as (
          select 'ix:bonk:' || b.interaction_id as key, 'bonk' as type, b.created_at, b.viewer_id,
            b.viewer_display_name as viewer_name, b.status, b.refund_status, null::text as review_status,
-           coalesce(b.emote_glyph, b.emote_id) as detail,
-           jsonb_build_object('volley_id', b.volley_id, 'volley_index', b.volley_index, 'volley_count', b.volley_count,
+           b.emote_glyph as detail,
+           jsonb_build_object('emote_url', b.emote_url, 'volley_id', b.volley_id, 'volley_index', b.volley_index, 'volley_count', b.volley_count,
              'error', b.error->>'code') as extra,
            concat_ws('|', b.status, b.refund_status) as version
          from bonk_lab_interactions b where b.channel_id = $1 and b.created_at >= $2
@@ -367,7 +367,7 @@ export class DockActivityService {
         r.type === 'bonk'
           ? {
               actor,
-              emote: r.detail,
+              emote: { glyph: r.detail, url: x.emote_url },
               ...(x.volley_id
                 ? {
                     volley: {

@@ -9,15 +9,37 @@
   </head>
   <body>
     <header class="bar">
+      <h1 class="name">Activité</h1>
       <span
         id="dot"
         class="dot t-wait"
         title="Connexion…"
         role="img"
-        aria-label="État de la connexion"
+        aria-label="Connexion…"
       ></span>
-      <nav id="chips" class="chips" aria-label="Filtrer les événements"></nav>
+      <button
+        type="button"
+        id="gear"
+        class="gear"
+        title="Préférences"
+        aria-label="Préférences"
+        aria-expanded="false"
+        aria-controls="prefs"
+      ></button>
     </header>
+    <section id="prefs" class="prefs" aria-label="Préférences" hidden>
+      <p class="prefs-h">Catégories affichées</p>
+      <div id="cats" class="cats"></div>
+      <button type="button" id="all" class="link">Tout afficher</button>
+      <label class="opt">
+        <input type="checkbox" id="costs" />
+        <span>Afficher les coûts des récompenses</span>
+      </label>
+      <p class="hint">
+        Les catégories masquées restent reçues et gardées dans l’historique.
+      </p>
+      <button type="button" id="reset" class="link">Réinitialiser</button>
+    </section>
     <p id="banner" class="banner" role="status" hidden></p>
     <main class="scroll">
       <button type="button" id="pill" class="pill" hidden></button>

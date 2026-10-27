@@ -1,24 +1,33 @@
 import {
-  byRecency,
+  catOf,
+  CATS,
+  DEFAULT_PREFS,
+  entries,
+  esc,
   folded,
-  GROUPS,
-  groupOf,
+  icon,
   parseSse,
+  readPrefs,
   recipientsByGift,
   rowHtml,
 } from './dock-view.js';
 
-// Dock OBS V1 (docs/OBS_DOCK.md) — the dock page, in an OBS custom browser dock. Reads Studio's dock server only
-// (same origin, key from the URL fragment, never sent elsewhere). Keeps its position while you read: new rows are
-// inserted above (the browser's scroll anchoring keeps what you look at in place) and « N nouveaux » brings you back.
-// The replay asks a second click within 3 s; the Core decides and never repeats the event's effects.
+// Dock OBS V1.1 (docs/OBS_DOCK.md) — the dock page, in an OBS custom browser dock. Reads Studio's dock server only
+// (same origin, key from the URL fragment, never sent elsewhere). Rows are recomputed from the raw activities
+// (entries(): filters, then presentation grouping) and reconciled by key: an unchanged row keeps its element, so the
+// browser's scroll anchoring keeps what you read in place while rows arrive above; « N nouveaux » brings you back.
+// Preferences live in this dock's localStorage (kept across OBS restarts). The replay asks a second click within 3 s;
+// the Core decides and never repeats the event's effects.
 
 const KEY = new URLSearchParams(location.hash.slice(1)).get('key') ?? '';
 const $ = (s) => document.querySelector(s);
 const list = $('#list');
+const scroller = list.parentElement;
 const banner = $('#banner');
 const pill = $('#pill');
 const dot = $('#dot');
+const gear = $('#gear');
+const panel = $('#prefs');
 
 const store = (k, v) => {
   try {
@@ -31,9 +40,12 @@ const store = (k, v) => {
   return v;
 };
 
+const FRESH_MS = 60_000;
 const acts = new Map();
-const ui = new Map(); // key → { open, fresh, confirm, busy, replayKey }
-let hidden = new Set(store('hidden') ?? []);
+const ui = new Map(); // row key → { open, confirm, busy, replayKey }
+const fresh = new Map(); // activity key → until (ms)
+const htmlOf = new WeakMap(); // row element → the HTML it was built from
+let prefs = readPrefs(store('prefs'));
 let more = false;
 let unseen = 0;
 let loadingOlder = false;
@@ -42,103 +54,83 @@ const uiOf = (k) => {
   if (!ui.has(k)) ui.set(k, {});
   return ui.get(k);
 };
+const shown = (a) => !folded(a) && !prefs.hidden.includes(catOf(a));
 
-function visible(a) {
-  return !folded(a) && !hidden.has(groupOf(a));
-}
-
-/** The row's UI state, plus a community gift's folded recipients. */
-function rowUi(a, now = Date.now()) {
-  const recipients =
-    a.type === 'gift_community' && a.data?.community_gift_id
-      ? recipientsByGift(acts.values()).get(a.data.community_gift_id)
-      : undefined;
-  return { ...uiOf(a.activity_key), now, recipients };
-}
-
-/** Rebuilds the chips (counts are of the loaded activities). */
-function renderChips() {
-  const counts = {};
-  for (const a of acts.values())
-    if (!folded(a)) counts[groupOf(a)] = (counts[groupOf(a)] ?? 0) + 1;
-  $('#chips').innerHTML = GROUPS.map(
-    (g) =>
-      `<button type="button" class="chip g-${g.id}${hidden.has(g.id) ? ' off' : ''}" data-group="${g.id}"
-        aria-pressed="${!hidden.has(g.id)}" title="${g.label}"><span aria-hidden="true">${g.icon}</span>${counts[g.id] ? `<b>${counts[g.id]}</b>` : ''}</button>`,
-  ).join('');
-}
-
-/** Full render (snapshot, filter change): rows in order. */
-function renderAll() {
-  const rows = [...acts.values()].filter(visible).sort(byRecency);
-  const now = Date.now();
-  list.innerHTML = rows.map((a) => rowHtml(a, rowUi(a, now))).join('');
-  $('#empty').hidden = rows.length > 0;
-  $('#older').hidden = !more;
-  renderChips();
-}
-
-/** Inserts / replaces one row in place (keyed), keeping the reader's position. */
-function upsertRow(a, isNew) {
-  const old = list.querySelector(
-    `li[data-key="${CSS.escape(a.activity_key)}"]`,
-  );
-  if (!visible(a)) {
-    old?.remove();
-    return;
-  }
+const make = (html) => {
   const tpl = document.createElement('template');
-  tpl.innerHTML = rowHtml(a, rowUi(a)).trim();
-  const el = tpl.content.firstElementChild;
-  if (old) {
-    old.replaceWith(el);
-    return;
+  tpl.innerHTML = html.trim();
+  return tpl.content.firstElementChild;
+};
+
+/** Renders the rows, reusing every element whose HTML did not change (position, focus and scroll stay put). */
+function render() {
+  const now = Date.now();
+  const rows = entries(acts.values(), prefs);
+  const gifts = recipientsByGift(acts.values());
+  const focused =
+    document.activeElement?.closest?.('li[data-key]')?.dataset.key;
+  const prev = new Map([...list.children].map((li) => [li.dataset.key, li]));
+  let cursor = list.firstElementChild;
+  for (const row of rows) {
+    const a = row.items[0];
+    const html = rowHtml(row, {
+      ...uiOf(row.key),
+      now,
+      prefs,
+      fresh: row.items.some((x) => (fresh.get(x.activity_key) ?? 0) > now),
+      recipients:
+        a.type === 'gift_community' && a.data?.community_gift_id
+          ? gifts.get(a.data.community_gift_id)
+          : undefined,
+    });
+    let el = prev.get(row.key);
+    prev.delete(row.key);
+    if (el && htmlOf.get(el) !== html) {
+      const next = make(html);
+      el.replaceWith(next);
+      if (cursor === el) cursor = next;
+      el = next;
+    } else if (!el) el = make(html);
+    htmlOf.set(el, html);
+    if (el === cursor) cursor = el.nextElementSibling;
+    else list.insertBefore(el, cursor);
   }
-  const after = [...list.children].find((li) => {
-    const b = acts.get(li.dataset.key);
-    return b && byRecency(a, b) < 0;
-  });
-  list.insertBefore(el, after ?? null);
-  $('#empty').hidden = true;
-  if (isNew && list.parentElement.scrollTop > 24) {
-    unseen += 1;
-    pill.textContent = `${unseen} nouveau${unseen > 1 ? 'x' : ''} ↑`;
-    pill.hidden = false;
-  }
+  for (const el of prev.values()) el.remove();
+  if (focused && !list.contains(document.activeElement))
+    list.querySelector(`li[data-key="${CSS.escape(focused)}"]`)?.focus();
+  const empty = $('#empty');
+  empty.hidden = rows.length > 0;
+  empty.textContent = acts.size
+    ? 'Rien à afficher avec tes préférences actuelles.'
+    : 'Aucun événement pour l’instant.';
+  $('#older').hidden = !more;
 }
 
 function apply(activities, isNew) {
+  let added = 0;
+  const now = Date.now();
   for (const a of activities) {
     const cur = acts.get(a.activity_key);
     if (cur && cur.seq >= a.seq) continue;
     acts.set(a.activity_key, a);
-    const u = uiOf(a.activity_key);
     if (!cur && isNew) {
-      u.fresh = true;
-      setTimeout(() => {
-        u.fresh = false;
-        list
-          .querySelector(`li[data-key="${CSS.escape(a.activity_key)}"]`)
-          ?.classList.remove('fresh');
-      }, 60_000);
+      fresh.set(a.activity_key, now + FRESH_MS);
+      if (shown(a)) added += 1;
     }
     // A replay seen queued / played: the click is done.
-    if (u.busy && a.state?.replay) u.busy = false;
-    upsertRow(a, isNew && !cur);
-    // A folded recipient: its community gift's row shows it.
-    if (folded(a))
-      for (const g of acts.values())
-        if (
-          g.type === 'gift_community' &&
-          g.data?.community_gift_id === a.data.community_gift_id
-        )
-          upsertRow(g, false);
+    const u = ui.get(a.activity_key);
+    if (u?.busy && a.state?.replay) u.busy = false;
   }
-  renderChips();
+  if (added && scroller.scrollTop > 24) {
+    unseen += added;
+    pill.innerHTML = `${icon('arrowUp')}${unseen} nouveau${unseen > 1 ? 'x' : ''}`;
+    pill.hidden = false;
+  }
+  render();
 }
 
 const STATUS = {
-  live: ['ok', 'En direct'],
+  live: ['ok', 'Connecté'],
   connecting: ['wait', 'Connexion au Core…'],
   stale: ['bad', 'Core injoignable — données en cache'],
   idle: ['wait', 'En pause'],
@@ -152,11 +144,12 @@ function setStatus(s, detail) {
   const [tone, label] = STATUS[s] ?? STATUS.connecting;
   dot.className = `dot t-${tone}`;
   dot.title = label;
+  dot.setAttribute('aria-label', label);
   banner.hidden = tone === 'ok';
   banner.textContent = detail ? `${label} (${detail})` : label;
 }
 
-// --- the stream (fetch: EventSource cannot send the key header) --------------------------------------------------
+// --- the stream (fetch: EventSource cannot send the key header) ------------------------------------------------------
 
 let backoff = 1000;
 async function connect() {
@@ -202,12 +195,12 @@ function handle(e) {
       if (!cur || cur.seq < a.seq) acts.set(a.activity_key, a);
     }
     more = msg.more || more;
-    renderAll();
+    render();
   } else if (msg.type === 'upsert') apply(msg.activities, true);
   else if (msg.type === 'status') setStatus(msg.status.state, msg.status.error);
 }
 
-// --- actions -----------------------------------------------------------------------------------------------------
+// --- actions ---------------------------------------------------------------------------------------------------------
 
 async function replay(key) {
   const a = acts.get(key);
@@ -215,11 +208,11 @@ async function replay(key) {
   if (!a || u.busy) return;
   if (!u.confirm) {
     u.confirm = true;
-    upsertRow(a, false);
+    render();
     setTimeout(() => {
       if (u.confirm && !u.busy) {
         u.confirm = false;
-        upsertRow(a, false);
+        render();
       }
     }, 3_000);
     return;
@@ -228,7 +221,7 @@ async function replay(key) {
   u.busy = true;
   // One key per intention: a retried request (network) never queues a second replay.
   u.replayKey ??= crypto.randomUUID();
-  upsertRow(a, false);
+  render();
   try {
     const res = await fetch('/api/replay', {
       method: 'POST',
@@ -254,7 +247,7 @@ async function replay(key) {
         alert_not_replayable: 'aucune animation à rejouer',
       }[err.message] ?? err.message;
     toast(`Rejeu impossible : ${reason}`, true);
-    upsertRow(a, false);
+    render();
   }
 }
 
@@ -270,7 +263,14 @@ function toast(text, bad = false) {
 
 async function older() {
   if (loadingOlder) return;
-  const last = [...acts.values()].sort(byRecency).at(-1);
+  let last;
+  for (const a of acts.values())
+    if (
+      !last ||
+      a.occurred_at < last.occurred_at ||
+      (a.occurred_at === last.occurred_at && a.seq < last.seq)
+    )
+      last = a;
   if (!last) return;
   loadingOlder = true;
   $('#older').disabled = true;
@@ -284,13 +284,20 @@ async function older() {
     for (const a of out.activities)
       if (!acts.has(a.activity_key)) acts.set(a.activity_key, a);
     more = out.more;
-    renderAll();
+    render();
   } catch (err) {
     toast(`Historique indisponible : ${err.message}`, true);
   } finally {
     loadingOlder = false;
     $('#older').disabled = false;
   }
+}
+
+function toggle(li) {
+  if (!li?.classList.contains('expandable')) return;
+  const u = uiOf(li.dataset.key);
+  u.open = !u.open;
+  render();
 }
 
 list.addEventListener('click', (ev) => {
@@ -300,57 +307,86 @@ list.addEventListener('click', (ev) => {
     void replay(btn.dataset.replay);
     return;
   }
-  const li = ev.target.closest('li[data-key]');
-  if (!li) return;
-  const u = uiOf(li.dataset.key);
-  u.open = !u.open;
-  upsertRow(acts.get(li.dataset.key), false);
+  // Selecting text in an open detail does not close it.
+  if (ev.target.closest('.detail')) return;
+  toggle(ev.target.closest('li[data-key]'));
 });
 list.addEventListener('keydown', (ev) => {
   const li = ev.target.closest?.('li[data-key]');
   if (!li || ev.target !== li) return;
   if (ev.key === 'Enter' || ev.key === ' ') {
     ev.preventDefault();
-    li.click();
-  } else if (ev.key === 'Escape' && uiOf(li.dataset.key).open) {
-    uiOf(li.dataset.key).open = false;
-    upsertRow(acts.get(li.dataset.key), false);
-  }
-});
-$('#chips').addEventListener('click', (ev) => {
-  const chip = ev.target.closest('[data-group]');
-  if (!chip) return;
-  const g = chip.dataset.group;
-  if (hidden.has(g)) hidden.delete(g);
-  else hidden.add(g);
-  store('hidden', [...hidden]);
-  renderAll();
+    toggle(li);
+  } else if (ev.key === 'Escape' && uiOf(li.dataset.key).open) toggle(li);
 });
 $('#older').addEventListener('click', () => void older());
 pill.addEventListener('click', () => {
-  list.parentElement.scrollTo({ top: 0, behavior: 'smooth' });
+  scroller.scrollTo({ top: 0, behavior: 'smooth' });
 });
-list.parentElement.addEventListener('scroll', () => {
-  if (list.parentElement.scrollTop <= 24 && unseen) {
+scroller.addEventListener('scroll', () => {
+  if (scroller.scrollTop <= 24 && unseen) {
     unseen = 0;
     pill.hidden = true;
   }
 });
-// Relative times refresh every 30 s (text only, no re-sort).
+
+// --- preferences -----------------------------------------------------------------------------------------------------
+
+function renderPrefs() {
+  const hidden = new Set(prefs.hidden);
+  $('#cats').innerHTML = CATS.map(
+    (c) => `<label class="cat c-${c.id}">
+      <input type="checkbox" data-cat="${c.id}"${hidden.has(c.id) ? '' : ' checked'}>
+      ${icon(c.icon)}<span>${esc(c.label)}</span></label>`,
+  ).join('');
+  $('#costs').checked = prefs.costs;
+  gear.classList.toggle('filtered', hidden.size > 0);
+  gear.title = hidden.size
+    ? `Préférences (${hidden.size} catégorie${hidden.size > 1 ? 's' : ''} masquée${hidden.size > 1 ? 's' : ''})`
+    : 'Préférences';
+}
+
+function setPrefs(next) {
+  prefs = readPrefs(next);
+  store('prefs', prefs);
+  renderPrefs();
+  render();
+}
+
+gear.addEventListener('click', () => {
+  panel.hidden = !panel.hidden;
+  gear.setAttribute('aria-expanded', String(!panel.hidden));
+});
+$('#cats').addEventListener('change', (ev) => {
+  const id = ev.target.dataset?.cat;
+  if (!id) return;
+  const hidden = new Set(prefs.hidden);
+  if (ev.target.checked) hidden.delete(id);
+  else hidden.add(id);
+  setPrefs({ ...prefs, hidden: [...hidden] });
+});
+$('#all').addEventListener('click', () => setPrefs({ ...prefs, hidden: [] }));
+$('#costs').addEventListener('change', (ev) =>
+  setPrefs({ ...prefs, costs: ev.target.checked }),
+);
+$('#reset').addEventListener('click', () => setPrefs(DEFAULT_PREFS));
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && !panel.hidden) {
+    panel.hidden = true;
+    gear.setAttribute('aria-expanded', 'false');
+    gear.focus();
+  }
+});
+
+// Relative times and the « just arrived » highlight age every 30 s (only rows whose text changed are rebuilt).
 setInterval(() => {
   const now = Date.now();
-  for (const li of list.children) {
-    const a = acts.get(li.dataset.key);
-    const w = li.querySelector('.when');
-    if (a && w) {
-      const tpl = document.createElement('template');
-      tpl.innerHTML = rowHtml(a, rowUi(a, now));
-      w.textContent =
-        tpl.content.querySelector('.when')?.textContent ?? w.textContent;
-    }
-  }
+  for (const [k, until] of fresh) if (until <= now) fresh.delete(k);
+  render();
 }, 30_000);
 
-renderChips();
+gear.innerHTML = icon('gear');
+renderPrefs();
+render();
 setStatus('connecting');
 void connect();

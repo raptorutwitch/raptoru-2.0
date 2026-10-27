@@ -33,7 +33,7 @@ const STATIC: Record<string, { file: string; type: string }> = {
   '/dock.css': { file: 'dock.css', type: 'text/css; charset=utf-8' },
 };
 const CSP =
-  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; " +
+  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com; connect-src 'self'; " +
   "font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 export const DOCK_SERVER = {
   heartbeatMs: 20_000,

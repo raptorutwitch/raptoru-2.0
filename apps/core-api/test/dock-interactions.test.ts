@@ -82,7 +82,7 @@ describe('interactions in the dock projection', () => {
     expect(shots).toHaveLength(3);
     expect(shots[0]!.data).toMatchObject({
       actor: { id: V.id, name: V.display_name },
-      emote: '😀',
+      emote: { glyph: '😀' },
       volley: { id: volley.volley_id, count: 3 },
     });
     expect(byType('soundboard')[0]!.data).toMatchObject({
