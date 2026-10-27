@@ -6,6 +6,8 @@ import {
   type RbAnimationReport,
   type RbClaimRequest,
   type RbMode,
+  type RbMuteClaim,
+  type RbMuteReport,
   type RbResultReport,
   type RbStatus,
   type RbTargetReport,
@@ -13,6 +15,7 @@ import {
   type RbTwitchUser,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
+import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
 
 // Random Ban V2 (docs/RANDOM_BAN_V2.md) — the ONE implementation (Lab Core and production Core; the channel points
@@ -73,6 +76,24 @@ interface Row {
 }
 
 const OPEN: RbStatus[] = ['queued', 'searching', 'timeout_requested'];
+
+/**
+ * V3 (27/10) — the streamer as an exceptional target: no Twitch timeout, his mic muted in OBS by Studio. Such a request
+ * keeps the usual states, its `reason` saying what it is: `streamer_mute` while waiting for / running the mute
+ * (`timeout_requested`: Studio has to mute; `confirmed`: muted, `lease_expires_at` = the mute's end), then
+ * `streamer_mute_caution` once a paid caution ended it early. No new column (no migration).
+ */
+const STREAMER_MUTE = 'streamer_mute';
+const isStreamerMute = (r: { reason: string | null }) =>
+  !!r.reason?.startsWith(STREAMER_MUTE);
+
+/** Another effect muting the streamer (Votekick): no streamer draw while it runs. */
+export interface StreamerMuteSource {
+  active(
+    q: Queryable,
+    channelId: string,
+  ): Promise<{ id: string; endsAt: Date } | null>;
+}
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
 export const rbView = (r: Row) => ({
@@ -94,6 +115,8 @@ export const rbView = (r: Row) => ({
   refund: r.refund,
   stats: r.stats,
   attempts: r.attempts,
+  /** V3: the streamer drawn — his mic muted for duration_s (never a Twitch timeout). */
+  streamer_mute: isStreamerMute(r),
   animation: r.animation,
   animation_status: r.animation_status,
   created_at: iso(r.created_at),
@@ -111,12 +134,23 @@ type Executor = {
 
 export class RandomBanService {
   private readonly executors = new Map<string, Executor>();
+  /** What Studio last said about the streamer's mic (memory: a status, not a record). */
+  private readonly studios = new Map<
+    string,
+    { obs_ready: boolean; mic_held: boolean; at: number }
+  >();
 
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
     /** Tests only: a deterministic draw (default: crypto, never predictable by a viewer). */
     private readonly draw: (n: number) => number = (n) => randomInt(n),
+    private readonly v3: {
+      /** The channel's streamer (absent: never a streamer draw). */
+      streamer?: () => { id: string; login: string } | null;
+      /** Votekick's mute of the streamer: no streamer draw while it runs. */
+      otherMutes?: StreamerMuteSource | null;
+    } = {},
   ) {}
 
   private now() {
@@ -251,6 +285,48 @@ export class RandomBanService {
   }
 
   /** Studio « Tester »: never a real timeout — the real search without timeout, or the animation alone. */
+  /**
+   * Studio « Tester le mute du streamer »: ONLY the streamer's mic muted in OBS for the mute's length, handed to Studio
+   * at once. Never a Twitch call (never offered to the executor, even when Studio fails), nothing debited, no channel
+   * points, no chat line, no animation, no caution possible. Refused while another mute of him runs.
+   */
+  async testStreamerMute(channelId: string, trigger = 'Test Studio') {
+    const streamer = this.v3.streamer?.();
+    if (!streamer) throw new RbError(409, 'streamer_unknown');
+    const id = await this.db.tx(async (q) => {
+      await this.lock(q, channelId);
+      await this.sweep(q, channelId);
+      if (
+        (await this.v3.otherMutes?.active(q, channelId)) ||
+        (await this.streamerMuteOpen(q, channelId))
+      )
+        throw new RbError(409, 'streamer_already_muted');
+      const { request } = await this.requestIfNew(
+        {
+          channel_id: channelId,
+          source: 'test',
+          source_ref: `streamer:${randomUUID()}`,
+          mode: 'real',
+          buyer: { id: '0', login: 'test_studio', name: trigger.slice(0, 25) },
+        },
+        q,
+      );
+      await this.set(q, request.request_id, {
+        status: 'timeout_requested',
+        target_id: streamer.id,
+        target_login: streamer.login,
+        target_name: streamer.login,
+        duration_s: RANDOM_BAN.streamerMuteS,
+        reason: STREAMER_MUTE,
+        lease_expires_at: new Date(
+          this.now().getTime() + RANDOM_BAN.studioMuteLeaseMs,
+        ),
+      });
+      return request.request_id;
+    });
+    return rbView(await this.row(this.db, id));
+  }
+
   async test(channelId: string, t: RbTestRequest) {
     const buyer = {
       id: '0',
@@ -349,6 +425,14 @@ export class RandomBanService {
                 ended_at: now,
               },
         );
+      } else if (
+        r.status === 'timeout_requested' &&
+        leaseOver &&
+        isStreamerMute(r)
+      ) {
+        // Studio never confirmed the streamer's mute (OBS lost, Studio closed): nothing was paid for in vain — back
+        // to a viewers' draw (Studio releases a hold Core does not list as running).
+        await this.set(q, r.request_id, this.notMuted(r, 'studio_silent'));
       } else if (r.status === 'timeout_requested' && leaseOver) {
         // The timeout may have been sent: never again, the refund waits for a check.
         await this.set(q, r.request_id, {
@@ -422,6 +506,25 @@ export class RandomBanService {
         });
         this.ended.push(r.request_id);
         return { request: null, reason: 'refused' };
+      }
+      const streamer = await this.streamerDrawn(q, channelId, r);
+      if (streamer) {
+        // No Twitch call for him: Studio mutes his mic (claimMute); the executor goes on with the next request after.
+        await this.set(q, r.request_id, {
+          status: 'timeout_requested',
+          target_id: streamer.id,
+          target_login: streamer.login,
+          target_name: streamer.login,
+          target_is_sub: null,
+          duration_s: RANDOM_BAN.streamerMuteS,
+          reason: STREAMER_MUTE,
+          executor_id: null,
+          attempt_id: null,
+          lease_expires_at: new Date(
+            this.now().getTime() + RANDOM_BAN.studioMuteLeaseMs,
+          ),
+        });
+        return { request: null, reason: 'busy' };
       }
       const attempt = randomUUID();
       await this.set(q, r.request_id, {
@@ -643,6 +746,227 @@ export class RandomBanService {
     });
   }
 
+  // --- V3: the streamer's mute (Studio) ---------------------------------------------------------------------------
+
+  /**
+   * Studio did not mute (failed or silent): a real request goes back to a viewers' draw (nothing lost); a Studio TEST
+   * ends there — never handed to the Twitch executor (a test never times anyone out).
+   */
+  private notMuted(r: Row, error: string): Partial<Row> {
+    return r.source === 'test'
+      ? {
+          status: 'failed',
+          error,
+          refund: 'none',
+          executor_id: null,
+          attempt_id: null,
+          lease_expires_at: null,
+          ended_at: this.now(),
+        }
+      : this.backToViewers();
+  }
+
+  private backToViewers(): Partial<Row> {
+    return {
+      status: 'queued',
+      target_id: null,
+      target_login: null,
+      target_name: null,
+      target_is_sub: null,
+      duration_s: null,
+      reason: null,
+      executor_id: null,
+      attempt_id: null,
+      lease_expires_at: null,
+    };
+  }
+
+  /** The streamer's running mute (confirmed, not yet over), or the one Studio has to start. */
+  private async streamerMuteOpen(q: Queryable, channelId: string) {
+    return (
+      await q.query(
+        `select 1 from rb_requests where channel_id = $1 and reason = $2
+           and (status = 'timeout_requested' or (status = 'confirmed' and lease_expires_at > $3))`,
+        [channelId, STREAMER_MUTE, this.now()],
+      )
+    ).length;
+  }
+
+  /**
+   * Is the streamer the target of this request? Only a real one, with the streamer known, Studio ready to mute (OBS
+   * connected, the mic held by no other effect, said within studioReadyMs), no Votekick or Random Ban mute of him
+   * running — then streamerPerMille ‰.
+   */
+  private async streamerDrawn(q: Queryable, channelId: string, r: Row) {
+    const streamer = this.v3.streamer?.();
+    if (!streamer || r.mode !== 'real') return null;
+    const s = this.studios.get(channelId);
+    if (
+      !s ||
+      this.now().getTime() - s.at > RANDOM_BAN.studioReadyMs ||
+      !s.obs_ready ||
+      s.mic_held
+    )
+      return null;
+    if (await this.v3.otherMutes?.active(q, channelId)) return null;
+    if (await this.streamerMuteOpen(q, channelId)) return null;
+    return this.draw(1000) < RANDOM_BAN.streamerPerMille ? streamer : null;
+  }
+
+  /**
+   * Studio's poll (every 500 ms with the animations): it says whether it could mute now, gets the streamer's mute to
+   * start (one at a time, leased) and the list of the mutes still running (one missing → its hold is released).
+   */
+  async claimMute(channelId: string, c: RbMuteClaim) {
+    this.studios.set(channelId, {
+      obs_ready: c.obs_ready,
+      mic_held: c.mic_held,
+      at: this.now().getTime(),
+    });
+    const out = await this.db.tx(async (q) => {
+      await this.lock(q, channelId);
+      await this.sweep(q, channelId);
+      const now = this.now();
+      const running = await q.query<Row>(
+        `select * from rb_requests where channel_id = $1 and reason = $2 and status = 'confirmed'
+           and lease_expires_at > $3 order by seq`,
+        [channelId, STREAMER_MUTE, now],
+      );
+      const r = (
+        await q.query<Row>(
+          `select * from rb_requests where channel_id = $1 and reason = $2 and status = 'timeout_requested'
+             and executor_id is null order by seq limit 1 for update`,
+          [channelId, STREAMER_MUTE],
+        )
+      )[0];
+      const active = running.map((m) => ({
+        request_id: m.request_id,
+        ends_at: iso(m.lease_expires_at)!,
+      }));
+      if (!r) return { mute: null, active };
+      const attempt = randomUUID();
+      await this.set(q, r.request_id, {
+        executor_id: c.consumer_id,
+        attempt_id: attempt,
+        lease_expires_at: new Date(
+          now.getTime() + RANDOM_BAN.studioMuteLeaseMs,
+        ),
+      });
+      return {
+        mute: {
+          request_id: r.request_id,
+          attempt_id: attempt,
+          seconds: r.duration_s!,
+          buyer: r.buyer_name,
+          streamer: r.target_name,
+        },
+        active,
+      };
+    });
+    await this.tellEnded(channelId);
+    return out;
+  }
+
+  /**
+   * Studio muted the mic (the mute runs from now) or could not (back to a viewers' draw: nothing lost). Idempotent:
+   * a repeated report answers the state; a stale attempt is refused (409) and Studio releases its hold.
+   */
+  async reportMute(id: string, rep: RbMuteReport) {
+    const { view, channelId, settled } = await this.db.tx(async (q) => {
+      const r = await this.row(q, id, true);
+      if (r.executor_id !== rep.consumer_id || r.attempt_id !== rep.attempt_id)
+        throw new RbError(409, 'not_current_attempt');
+      if (r.status !== 'timeout_requested' || !isStreamerMute(r))
+        return { view: rbView(r), channelId: r.channel_id, settled: false };
+      const now = this.now();
+      if (rep.event === 'failed') {
+        await this.set(
+          q,
+          id,
+          this.notMuted(
+            r,
+            `studio: ${rep.error ?? 'mute impossible'}`.slice(0, 300),
+          ),
+        );
+        return {
+          view: rbView(await this.row(q, id)),
+          channelId: r.channel_id,
+          settled: false,
+        };
+      }
+      const test = r.source === 'test';
+      await this.set(q, id, {
+        status: 'confirmed',
+        refund: 'none',
+        lease_expires_at: new Date(now.getTime() + r.duration_s! * 1000),
+        ended_at: now,
+        // A Studio test is the mic only: no animation, no chat line, no redemption to settle.
+        ...(test ? {} : this.animated(r, this.animationFor(r))),
+      });
+      if (test)
+        return {
+          view: rbView(await this.row(q, id)),
+          channelId: r.channel_id,
+          settled: false,
+        };
+      await insertWordGameSteps(q, {
+        channelId: r.channel_id,
+        now,
+        origin: 'mini_game',
+        drafts: [
+          {
+            idempotencyKey: `rb:streamer:${id}`,
+            mode: 'normal',
+            text: `🔇 ${r.buyer_name} a coupé le micro de ${r.target_name} pendant ${r.duration_s} s !`,
+          },
+        ],
+      });
+      return {
+        view: rbView(await this.row(q, id)),
+        channelId: r.channel_id,
+        settled: true,
+      };
+    });
+    if (settled)
+      for (const fn of this.settledListeners)
+        await fn(channelId, id).catch((e) =>
+          console.error('[random-ban] redemption settle failed', id, e),
+        );
+    return view;
+  }
+
+  /** Caution (CautionMutes): the streamer's running Random Ban mute (never a Studio test); its id is `rb:<request>`. */
+  readonly mutes = {
+    kind: 'random_ban' as const,
+    label: 'Random Ban',
+    active: async (q: Queryable, channelId: string) => {
+      const m = (
+        await q.query<Row>(
+          `select * from rb_requests where channel_id = $1 and reason = $2 and status = 'confirmed'
+             and lease_expires_at > $3 and source <> 'test' order by seq limit 1`,
+          [channelId, STREAMER_MUTE, this.now()],
+        )
+      )[0];
+      return m
+        ? { id: `rb:${m.request_id}`, endsAt: new Date(m.lease_expires_at!) }
+        : null;
+    },
+    /** A paid caution ends it now (inside Caution's transaction); Studio releases its hold at its next poll. */
+    end: async (q: Queryable, channelId: string, muteId: string) => {
+      await q.query(
+        `update rb_requests set reason = $4, lease_expires_at = $3, updated_at = $3
+          where request_id = $1 and channel_id = $2 and reason = $5 and status = 'confirmed' and lease_expires_at > $3`,
+        [
+          muteId.replace(/^rb:/, ''),
+          channelId,
+          this.now(),
+          `${STREAMER_MUTE}_caution`,
+          STREAMER_MUTE,
+        ],
+      );
+    },
+  };
+
   // --- reading ---------------------------------------------------------------------------------------------------
 
   /** Outcome of a request for the channel points history (null while it runs). */
@@ -671,7 +995,18 @@ export class RandomBanService {
       rules: {
         duration_sub_s: RANDOM_BAN.durationSubS,
         duration_non_sub_s: RANDOM_BAN.durationNonSubS,
+        buyer_weight: RANDOM_BAN.buyerWeight,
+        streamer_per_mille: this.v3.streamer?.()
+          ? RANDOM_BAN.streamerPerMille
+          : 0,
+        streamer_mute_s: RANDOM_BAN.streamerMuteS,
       },
+      studio: (() => {
+        const s = this.studios.get(channelId);
+        return s && this.now().getTime() - s.at < RANDOM_BAN.studioReadyMs
+          ? { obs_ready: s.obs_ready, mic_held: s.mic_held }
+          : null;
+      })(),
       executor:
         e && this.now().getTime() - e.at < 15_000
           ? {

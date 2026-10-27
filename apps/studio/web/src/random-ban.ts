@@ -39,9 +39,9 @@ export function mountRandomBan(root: HTMLElement) {
     render();
   };
 
-  const test = async (body: object, done: string) => {
+  const test = async (body: object, done: string, path = '/test') => {
     try {
-      const res = await fetch('/api/random-ban/test', {
+      const res = await fetch(`/api/random-ban${path}`, {
         method: 'POST',
         headers: HEADERS,
         body: JSON.stringify(body),
@@ -77,6 +77,17 @@ export function mountRandomBan(root: HTMLElement) {
       void test(
         { mode: 'dry_run' },
         'Tirage à blanc envoyé : voir la liste (aucun timeout).',
+      );
+    if (
+      act === 'rb-streamer-mute' &&
+      confirm(
+        'Tester le mute du streamer ?\n\nTon micro « Micro » est VRAIMENT coupé dans OBS pendant 60 s, puis rétabli. Rien d’autre : aucun appel Twitch, aucun jeton, aucun point, aucun message dans le chat, aucune animation, aucune caution possible.',
+      )
+    )
+      void test(
+        {},
+        'Mute du streamer envoyé : voir la liste.',
+        '/test-streamer-mute',
       );
   });
 

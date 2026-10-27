@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { CpAction } from '@raptoru/schemas';
+import { MuteHolds } from './mute-holds.js';
 
 // Points de chaîne V1 — the OBS actions Studio may run for a reward (docs/CHANNEL_POINTS_V1.md). An allow-list of
 // three typed actions on Studio's ONE OBS connection (the Bonk's LabObs): show / hide a scene's source, enable /
@@ -13,7 +14,8 @@ import type { CpAction } from '@raptoru/schemas';
 // Native interactions also use direct requests here: the program scene name, a media input restart, an instant
 // screenshot of a source (in memory: never a file), and a temporary mute of an audio input (BRB, P0.2) — reverted like
 // the other temporary actions: unmuted when it ends only if still muted (a manual change is kept; an input muted before
-// is left muted), after a Studio restart too.
+// is left muted), after a Studio restart too. Since Random Ban V3 (27/10) that mute is a HOLD of the shared MuteHolds
+// (also Votekick's and the Random Ban's): the voice comes back only when no other effect still holds the input.
 
 export interface ObsLike {
   readonly connected: boolean;
@@ -63,6 +65,8 @@ export class ObsActions {
     private readonly file: string,
     private readonly obs: () => ObsLike | null,
     private readonly now: () => number,
+    /** Who keeps an audio input muted (shared with Votekick and the Random Ban). */
+    readonly holds: MuteHolds,
   ) {}
 
   static async open(
@@ -70,7 +74,12 @@ export class ObsActions {
     obs: () => ObsLike | null,
     now: () => number = Date.now,
   ) {
-    const a = new ObsActions(file, obs, now);
+    const holds = await MuteHolds.open(
+      file.replace(/\.json$/, '') + '-mute-holds.json',
+      obs,
+      now,
+    );
+    const a = new ObsActions(file, obs, now, holds);
     try {
       const saved = JSON.parse(await readFile(file, 'utf8')) as Revert[];
       if (Array.isArray(saved)) a.reverts = saved;
@@ -90,7 +99,7 @@ export class ObsActions {
     this.timer = null;
   }
   get pending() {
-    return this.reverts.length;
+    return this.reverts.length + this.holds.pending;
   }
 
   private connected() {
@@ -192,13 +201,18 @@ export class ObsActions {
     return Buffer.from(m[1]!, 'base64');
   }
 
-  /** Mutes an audio input for `ms` (temporary, see the header). Nothing to restore if it was already muted. */
+  /** Mutes an audio input for `ms` (temporary, see the header): a hold of the shared MuteHolds. */
   async temporaryMute(input: string, ms: number) {
-    await this.setFor(this.connected(), { kind: 'mute', input }, true, ms);
+    this.connected();
+    await this.holds.hold(input, `cp:${input}`, this.now() + ms).catch((e) => {
+      throw readable(e, `l'entrée audio « ${input} »`);
+    });
   }
 
-  /** Ends a temporary mute now (an interaction that failed after muting): restored with the usual check. */
+  /** Ends a temporary mute now (an interaction that failed after muting): the hold released. */
   async endMute(input: string) {
+    await this.holds.release(input, `cp:${input}`);
+    // A mute revert saved by an older Studio (before the holds): restored with the usual check.
     const r = this.reverts.find((x) => x.kind === 'mute' && x.input === input);
     if (!r) return;
     r.at = Math.min(r.at, this.now());
@@ -364,6 +378,7 @@ export class ObsActions {
 
   /** Reverts what is due, only where nothing changed meanwhile. OBS absent: kept for later (until stale). */
   async tick() {
+    await this.holds.tick();
     if (this.busy || !this.reverts.some((r) => r.at <= this.now())) return;
     this.busy = true;
     try {

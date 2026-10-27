@@ -95,3 +95,55 @@ describe('Random Ban view', () => {
     );
   });
 });
+
+describe('Random Ban V3 view', () => {
+  const v3 = {
+    ...base,
+    rules: {
+      duration_sub_s: 180,
+      duration_non_sub_s: 300,
+      buyer_weight: 0.25,
+      streamer_per_mille: 20,
+      streamer_mute_s: 60,
+    },
+  };
+  it('the rules: buyer 4× rarer, streamer 2 % → 60 s mic mute, caution price', () => {
+    const html = randomBanView(
+      { ...v3, mic: { input: 'Micro', obs_connected: true, held_by: [] } },
+      null,
+    );
+    expect(html).toContain('4 fois moins souvent');
+    expect(html).toContain('2 % des fois');
+    expect(html).toContain('coupé 60 s dans OBS');
+    expect(html).toContain('300 jetons par tranche de 10 s');
+    expect(html).toContain('Mute du streamer : prêt');
+    expect(html).toContain('data-act="rb-streamer-mute"');
+  });
+  it('the mic held by another effect / OBS absent: said; a streamer mute row reads as one', () => {
+    const held = randomBanView(
+      {
+        ...v3,
+        mic: {
+          input: 'Micro',
+          obs_connected: true,
+          held_by: ['votekick:mute:1'],
+        },
+        recent: [
+          row({
+            streamer_mute: true,
+            target: { id: '83603689', name: 'raptoru_', is_sub: null },
+            duration_s: 60,
+          }),
+        ],
+      },
+      null,
+    );
+    expect(held).toContain('tenu par : votekick');
+    expect(held).toContain('micro de raptoru_ coupé 60 s');
+    const off = randomBanView(
+      { ...v3, mic: { input: 'Micro', obs_connected: false, held_by: [] } },
+      null,
+    );
+    expect(off).toContain('OBS non connecté');
+  });
+});

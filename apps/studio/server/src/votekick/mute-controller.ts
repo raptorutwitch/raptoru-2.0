@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { MuteHolds } from '../channel-points/mute-holds.js';
 import type { ObsLike } from '../channel-points/obs-actions.js';
 
 // Votekick V2 — the broadcaster's mute in OBS (docs/VOTEKICK_V2.md § Mute). Replaces SAMMI's VK_MUTE_BROADCASTER /
@@ -22,6 +23,8 @@ import type { ObsLike } from '../channel-points/obs-actions.js';
 // 24/10: a drive left enabled after a test must not keep moving the camera); the mic gets back its own state (muted
 // before the vote: stays muted). Only these 4 items are touched. A watchdog ends a mute Core never ended (Core down);
 // a Studio restart ends a due mute when OBS answers again. OBS absent at the end: retried until it answers.
+// The mic itself is a HOLD of the shared MuteHolds (Random Ban V3, 27/10): its end gives the voice back only when no
+// other effect (BRB, the Random Ban streamer mute) still holds it — and never when it was muted before.
 
 export interface MuteFxConfig {
   /** The audio input muted. SAMMI: « Micro (Obsolète) » — hidden in every scene in the 22/10 collection: to check. */
@@ -60,6 +63,8 @@ export const RAPTORU_MUTE_FX: MuteFxConfig = {
 
 /** Core ends the mute on time; this ends it alone if Core never does. */
 export const MUTE_WATCHDOG_MS = 5_000;
+/** The mic's hold outlives the watchdog a little: released by the restore, this is only the last safety. */
+const MIC_HOLD_MARGIN_MS = 60_000;
 /**
  * The zoom at rest, written as a DECIMAL. obs-websocket stores a JSON integer (`1`) as an OBS integer, and Audio Move
  * then writes `(long long)(base + factor × level)` = 1 forever (Move 3.x, OBS_DATA_NUM_INT): the zoom froze (live of
@@ -108,6 +113,7 @@ export class MuteController {
     private readonly cfg: MuteFxConfig,
     private readonly now: () => number,
     private readonly sleep: (ms: number) => Promise<void>,
+    private readonly holds: MuteHolds,
   ) {}
 
   static async open(
@@ -116,8 +122,22 @@ export class MuteController {
     cfg: MuteFxConfig = SAMMI_MUTE_FX,
     now: () => number = Date.now,
     sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+    /** Studio's shared holds (ObsActions.holds); absent: this controller's own. */
+    holds?: MuteHolds,
   ) {
-    const c = new MuteController(file, obs, cfg, now, sleep);
+    const c = new MuteController(
+      file,
+      obs,
+      cfg,
+      now,
+      sleep,
+      holds ??
+        (await MuteHolds.open(
+          file.replace(/\.json$/, '') + '-mic-holds.json',
+          obs,
+          now,
+        )),
+    );
     try {
       const saved = JSON.parse(await readFile(file, 'utf8')) as Active;
       if (saved?.id && saved.snapshot) c.active = saved;
@@ -125,6 +145,10 @@ export class MuteController {
       /* no mute in progress */
     }
     return c;
+  }
+
+  private owner(id: string) {
+    return `votekick:${id}`;
   }
 
   get current() {
@@ -160,6 +184,11 @@ export class MuteController {
             this.active.endsAt,
             now + seconds * 1000,
           );
+          await this.holds.hold(
+            this.cfg.micInput,
+            this.owner(this.active.id),
+            this.active.endsAt + MIC_HOLD_MARGIN_MS,
+          );
           await this.save();
         }
         return;
@@ -176,7 +205,11 @@ export class MuteController {
       };
       await this.save(); // before any change: a crash from here is restored at the next start
       try {
-        await this.setMic(obs, true);
+        await this.holds.hold(
+          this.cfg.micInput,
+          this.owner(id),
+          this.active.endsAt + MIC_HOLD_MARGIN_MS,
+        );
         await this.setZoom(obs, REST_ZOOM);
         await this.setFilter(
           obs,
@@ -251,8 +284,12 @@ export class MuteController {
       await this.setFilter(obs, this.cfg.camSource, this.cfg.zoomFilter, false);
       await this.setFilter(obs, this.cfg.camSource, this.cfg.bandFilter, false);
       await this.setBand(obs, { mute_duration: s.bandDuration });
-      // 4. The voice comes back last, only if it was live before the vote.
-      if (!s.micMuted) await this.setMic(obs, false);
+      // 4. The voice comes back last: this mute's hold released (the mic stays muted while another effect holds it, or
+      //    when it was muted before). A mute started by an older Studio (no hold): its own snapshot, as before.
+      const owner = this.owner(a.id);
+      if (this.holds.holders(this.cfg.micInput).includes(owner))
+        await this.holds.release(this.cfg.micInput, owner);
+      else if (!s.micMuted) await this.setMic(obs, false);
       // 5. Rest state and the mic's own state, read back, retried once.
       const mismatches = await this.verify(obs, s, true);
       const report = { id: a.id, ok: mismatches.length === 0, mismatches };
@@ -278,14 +315,13 @@ export class MuteController {
     if (Math.abs(now.zoom - 1) > ZOOM_TOLERANCE) wrong.push('zoom_value');
     if (now.bandEnabled) wrong.push('band');
     if (now.bandDuration !== s.bandDuration) wrong.push('band_duration');
-    if (now.micMuted !== s.micMuted) wrong.push('mic');
+    // The mic is the holds' (read back there): another effect may rightly keep it muted.
     if (!wrong.length || !retry) return wrong;
     await this.setFilter(obs, this.cfg.driveInput, this.cfg.driveFilter, false);
     await this.setZoom(obs, REST_ZOOM);
     await this.setFilter(obs, this.cfg.camSource, this.cfg.zoomFilter, false);
     await this.setFilter(obs, this.cfg.camSource, this.cfg.bandFilter, false);
     await this.setBand(obs, { mute_duration: s.bandDuration });
-    await this.setMic(obs, s.micMuted);
     return this.verify(obs, s, false);
   }
 

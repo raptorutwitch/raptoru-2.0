@@ -3,6 +3,7 @@ import {
   CAUTION,
   CAUTION_EXEC,
   CAUTION_OPEN,
+  cautionMutePrice,
   cautionPrice,
   type CautionCheckReport,
   type CautionClaimRequest,
@@ -30,6 +31,10 @@ import {
 // verify, never refunded automatically). Never a debit without a fresh read; never an unban before the debit is
 // committed; at most one open caution per channel (DB index, so two Cores cannot open two). The broadcaster cannot be
 // timed out: his caution lifts the Votekick mute (CautionMutes, provided by Votekick; absent: never muted).
+// Random Ban V3 (27/10): his OBS mutes are Votekick's AND the Random Ban's; a caution ends ONE of them (the only one
+// running, or the one named: `!caution raptoru_ votekick` / `!caution raptoru_ rb` — asked when both run), at
+// 300 Jetons per started 10 s still to serve (Twitch timeouts keep 1 000 per started minute). The other mute and any
+// manual change stay (Studio's mic holds).
 // Chat texts: SAMMI's. Answers only to real commands (no spam): `oui` / `non` from anyone but the payer, or with no
 // quote, are silent; `!caution` alone answers at most once per viewer every 30 s.
 
@@ -42,7 +47,7 @@ export class CautionError extends Error {
   }
 }
 
-/** The broadcaster's Votekick mute (Votekick V2). Absent: the broadcaster is never muted. */
+/** One source of the broadcaster's OBS mute (Votekick V2, Random Ban V3). None: the broadcaster is never muted. */
 export interface CautionMutes {
   active(
     q: Queryable,
@@ -51,6 +56,25 @@ export interface CautionMutes {
   /** Ends it now (paid), inside the caller's transaction; Studio restores OBS. */
   end(q: Queryable, channelId: string, muteId: string): Promise<void>;
 }
+
+/** A named mute source: `kind` is what `!caution <streamer> <word>` picks, `label` what the chat reads. */
+export interface NamedMutes {
+  kind: 'votekick' | 'random_ban';
+  label: string;
+  source: CautionMutes;
+}
+
+/** The second word of `!caution <streamer> <word>` → the mute it picks. */
+const MUTE_WORDS: Record<string, NamedMutes['kind']> = {
+  votekick: 'votekick',
+  vk: 'votekick',
+  kick: 'votekick',
+  randomban: 'random_ban',
+  rb: 'random_ban',
+  random: 'random_ban',
+};
+/** Before the quote, `mute_id` keeps the pick of the command (`pick:<kind>`): replaced by the quoted mute's id. */
+const PICK = 'pick:';
 
 interface Row {
   request_id: string;
@@ -85,7 +109,7 @@ interface Row {
 }
 
 const fmt = (n: number) => n.toLocaleString('fr-FR').replace(/\s/g, ' ');
-const COMMAND = /^!caution(?:\s+(\S+))?\s*$/i;
+const COMMAND = /^!caution(?:\s+(\S+)(?:\s+(\S+))?)?\s*$/i;
 const cleanLogin = (s: string) => s.replace(/^@+/, '').toLowerCase();
 
 export const cautionView = (r: Row) => ({
@@ -124,15 +148,34 @@ interface Executor {
 export class CautionService {
   private readonly executors = new Map<string, Executor>();
   private readonly helped = new Map<string, number>();
+  private readonly mutes: NamedMutes[];
 
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
     private readonly economy: EconomyPort,
-    /** The channel's broadcaster (his caution is the Votekick mute), or null. */
+    /** The channel's broadcaster (his caution ends one of his OBS mutes), or null. */
     private readonly broadcasterOf: () => string | null,
-    private readonly mutes: CautionMutes | null = null,
-  ) {}
+    /** His mute sources (one bare source: Votekick's). */
+    mutes: CautionMutes | NamedMutes[] | null = null,
+  ) {
+    this.mutes = !mutes
+      ? []
+      : Array.isArray(mutes)
+        ? mutes
+        : [{ kind: 'votekick', label: 'Votekick', source: mutes }];
+  }
+
+  /** The broadcaster's OBS mutes running now, each with its source. */
+  private async activeMutes(q: Queryable, channelId: string) {
+    const now = this.now();
+    const out: (NamedMutes & { id: string; endsAt: Date })[] = [];
+    for (const m of this.mutes) {
+      const a = await m.source.active(q, channelId);
+      if (a && a.endsAt > now) out.push({ ...m, ...a });
+    }
+    return out;
+  }
 
   private now() {
     return this.clock.now();
@@ -234,6 +277,9 @@ export class CautionService {
       return { outcome: 'help' };
     }
     const input = cleanLogin(m[1]);
+    // A second word only names a mute of the streamer; anything else is not a command (no answer, nothing paid).
+    const pick = m[2] ? MUTE_WORDS[m[2].toLowerCase()] : undefined;
+    if (m[2] && !pick) return { outcome: 'ignored' };
     const key = `msg:${msg.message_id}`;
     const answer = (body: string) =>
       this.db.tx((q) => this.say(q, msg.channel_id, key, body));
@@ -271,8 +317,8 @@ export class CautionService {
         }
         await q.query(
           `insert into caution_requests (request_id, channel_id, source_ref, mode, payer_id, payer_login, payer_name,
-             target_input, status, lease_expires_at, created_at, updated_at)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, 'checking', $9, $10, $10)`,
+             target_input, status, lease_expires_at, created_at, updated_at, mute_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, 'checking', $9, $10, $10, $11)`,
           [
             randomUUID(),
             msg.channel_id,
@@ -284,6 +330,7 @@ export class CautionService {
             input.slice(0, 64),
             this.ms(CAUTION_EXEC.pickupMs),
             this.now(),
+            pick ? `${PICK}${pick}` : null,
           ],
         );
         return { outcome: 'checking' };
@@ -351,9 +398,11 @@ export class CautionService {
 
   /** The broadcaster's mute: re-checked, debited and ended in ONE transaction (no Twitch call). */
   private async payMute(q: Queryable, r: Row, confirmRef: string) {
-    const mute = await this.mutes?.active(q, r.channel_id);
+    const mute = (await this.activeMutes(q, r.channel_id)).find(
+      (m) => m.id === r.mute_id,
+    );
     const key = `${r.request_id}:answer`;
-    if (!mute || mute.id !== r.mute_id || mute.endsAt <= this.now()) {
+    if (!mute || mute.endsAt <= this.now()) {
       await this.end(q, r, 'refused', {
         reason: 'mute_over',
         confirm_ref: confirmRef,
@@ -382,7 +431,7 @@ export class CautionService {
       if (!(e instanceof LabWalletError)) throw e;
       return this.refuseDebit(q, r, e, confirmRef);
     }
-    await this.mutes!.end(q, r.channel_id, mute.id);
+    await mute.source.end(q, r.channel_id, mute.id);
     await this.end(q, r, 'released', {
       money: 'debited',
       confirm_ref: confirmRef,
@@ -584,7 +633,10 @@ export class CautionService {
         muteId?: string,
       ) => {
         const remainingS = Math.ceil((endsAt.getTime() - now.getTime()) / 1000);
-        const price = cautionPrice(remainingS);
+        const price =
+          kind === 'mute'
+            ? cautionMutePrice(remainingS)
+            : cautionPrice(remainingS);
         await this.set(q, r.request_id, {
           ...who,
           kind,
@@ -599,18 +651,37 @@ export class CautionService {
         return { status: 'quoted' as const, price };
       };
       if (t.id === this.broadcasterOf()) {
-        const mute = await this.mutes?.active(q, ch);
-        if (!mute || mute.endsAt <= now)
+        const all = await this.activeMutes(q, ch);
+        const pick = r.mute_id?.startsWith(PICK)
+          ? r.mute_id.slice(PICK.length)
+          : null;
+        if (!all.length)
           return refuse(
             'not_muted',
             `${t.login} n'est pas actuellement réduit au silence.`,
-            who,
+            { ...who, mute_id: null },
+          );
+        const left = (m: { endsAt: Date }) =>
+          Math.ceil((m.endsAt.getTime() - now.getTime()) / 1000);
+        const mute = pick ? all.find((m) => m.kind === pick) : all[0];
+        if (pick && !mute)
+          return refuse(
+            'mute_not_running',
+            `${t.login} n'a pas de mute ${this.mutes.find((m) => m.kind === pick)?.label ?? pick} en cours.`,
+            { ...who, mute_id: null },
+          );
+        if (!mute || (!pick && all.length > 1))
+          // Several sanctions: never one chosen for the payer — he names it.
+          return refuse(
+            'mute_choice',
+            `${t.login} est réduit au silence par ${all.map((m) => `${m.label} (${left(m)} s)`).join(' et ')} : précise ${all.map((m) => `!caution ${t.login} ${m.kind === 'votekick' ? 'votekick' : 'rb'}`).join(' ou ')}`,
+            { ...who, mute_id: null },
           );
         return quote(
           'mute',
           mute.endsAt,
           (price, s) =>
-            `${t.login} est réduit au silence encore ${s} ${s > 1 ? 'secondes' : 'seconde'}. Le libérer coûte ${fmt(price)} jetons, @${r.payer_login}. Oui ou non ?`,
+            `${t.login} est réduit au silence (${mute.label}) encore ${s} ${s > 1 ? 'secondes' : 'seconde'}. Le libérer coûte ${fmt(price)} jetons, @${r.payer_login}. Oui ou non ?`,
           mute.id,
         );
       }

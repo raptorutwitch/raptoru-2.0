@@ -1,7 +1,12 @@
 import type { CautionSanction, LabChatMessage } from '@raptoru/schemas';
 import { CAUTION_EXEC } from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
-import { CautionService, type CautionMutes } from '../src/caution/service.js';
+import {
+  CautionService,
+  type CautionMutes,
+  type NamedMutes,
+} from '../src/caution/service.js';
+import { cautionMutePrice, cautionPrice } from '@raptoru/schemas';
 import { labEconomy } from '../src/economy/economy.js';
 import { chatRouter } from '../src/lab-chat/games.js';
 import { createCore } from '../src/app.js';
@@ -28,7 +33,7 @@ const OTHER = user(3);
 const EXEC = { executor_id: 'bot-1', login: 'lecroupier_' };
 let n = 0;
 
-async function lab(opts: { mutes?: CautionMutes } = {}) {
+async function lab(opts: { mutes?: CautionMutes | NamedMutes[] } = {}) {
   const core = await setup();
   core.clock.set(new Date('2026-10-23T20:00:00Z'));
   const make = () =>
@@ -665,12 +670,13 @@ describe('Caution: the broadcaster’s Votekick mute', () => {
       target: BROADCASTER,
       sanction: { kind: 'none' },
     });
+    // 27/10: an OBS mute costs 300 Jetons per started 10 s (65 s → 7 × 300).
     expect((await l.replies()).at(-1)).toBe(
-      'raptoru_ est réduit au silence encore 65 secondes. Le libérer coûte 2 000 jetons, @viewer3. Oui ou non ?',
+      'raptoru_ est réduit au silence (Votekick) encore 65 secondes. Le libérer coûte 2 100 jetons, @viewer3. Oui ou non ?',
     );
     expect((await l.say(OTHER, 'oui')).outcome).toBe('released');
     expect(m.ended).toEqual(['mute:vk-1']);
-    expect(await l.tokens(OTHER)).toBe(3_000);
+    expect(await l.tokens(OTHER)).toBe(2_900);
     expect((await l.claim()).job).toBeNull(); // nothing for the executor
   });
 
@@ -706,6 +712,122 @@ describe('Caution: the broadcaster’s Votekick mute', () => {
     expect((await l.say(OTHER, 'oui')).outcome).toBe('mute_over');
     expect(await l.tokens(OTHER)).toBe(5_000);
     expect(m.ended).toEqual([]);
+  });
+});
+
+describe('Caution: the streamer’s OBS mutes — Votekick and Random Ban (V3, 27/10)', () => {
+  /** A fake mute source: running from start() for `endsInMs`, ended by a caution (recorded). */
+  function source(id: string, endsInMs: number) {
+    const ended: string[] = [];
+    let at: Date | null = null;
+    const m: CautionMutes & { ended: string[]; start(now: Date): void } = {
+      ended,
+      start: (now) => (at = new Date(now.getTime() + endsInMs)),
+      active: async () => (at && !ended.length ? { id, endsAt: at } : null),
+      end: async (_q, _c, x) => void ended.push(x),
+    };
+    return m;
+  }
+  async function two(vkMs: number | null, rbMs: number | null) {
+    const vk = source('mute:vk-1', vkMs ?? 0);
+    const rb = source('rb:00000000-0000-4000-8000-000000000001', rbMs ?? 0);
+    const l = await lab({
+      mutes: [
+        { kind: 'votekick', label: 'Votekick', source: vk },
+        { kind: 'random_ban', label: 'Random Ban', source: rb },
+      ],
+    });
+    if (vkMs !== null) vk.start(l.core.clock.now());
+    if (rbMs !== null) rb.start(l.core.clock.now());
+    await l.give(OTHER, 20_000);
+    await l.claim();
+    const ask = async (text: string) => {
+      const out = await l.say(OTHER, text);
+      if (out.outcome !== 'checking') return out;
+      const job = (await l.claim()).job!;
+      await l.caution.check(job.request_id, {
+        ...EXEC,
+        attempt_id: job.attempt_id,
+        target: BROADCASTER,
+        sanction: { kind: 'none' },
+      });
+      return out;
+    };
+    return { l, vk, rb, ask };
+  }
+
+  it('the price: 300 per started 10 s (60 s → 1 800, 120 s → 3 600, 300 s → 9 000); Twitch timeouts unchanged', () => {
+    expect(cautionMutePrice(60)).toBe(1_800);
+    expect(cautionMutePrice(120)).toBe(3_600);
+    expect(cautionMutePrice(300)).toBe(9_000);
+    expect(cautionMutePrice(41)).toBe(1_500);
+    expect(cautionMutePrice(0)).toBe(0);
+    expect(cautionPrice(60)).toBe(1_000);
+    expect(cautionPrice(61)).toBe(2_000);
+  });
+
+  it('the Random Ban mute alone: priced on the seconds left, `oui` ends it — and only it', async () => {
+    const t = await two(null, 60_000);
+    await t.ask('!caution raptoru_');
+    expect((await t.l.replies()).at(-1)).toBe(
+      'raptoru_ est réduit au silence (Random Ban) encore 60 secondes. Le libérer coûte 1 800 jetons, @viewer3. Oui ou non ?',
+    );
+    t.l.core.clock.advance(5_000); // the price is the quote's
+    expect((await t.l.say(OTHER, 'oui')).outcome).toBe('released');
+    expect(t.rb.ended).toEqual(['rb:00000000-0000-4000-8000-000000000001']);
+    expect(t.vk.ended).toEqual([]);
+    expect(await t.l.tokens(OTHER)).toBe(20_000 - 1_800);
+  });
+
+  it('both running: never chosen for the payer — he is asked to name one; then only that one ends', async () => {
+    const t = await two(120_000, 60_000);
+    await t.ask('!caution raptoru_');
+    expect((await t.l.replies()).at(-1)).toBe(
+      'raptoru_ est réduit au silence par Votekick (120 s) et Random Ban (60 s) : précise !caution raptoru_ votekick ou !caution raptoru_ rb',
+    );
+    expect(await t.l.tokens(OTHER)).toBe(20_000);
+    await t.ask('!caution raptoru_ votekick');
+    expect((await t.l.replies()).at(-1)).toContain(
+      '(Votekick) encore 120 secondes. Le libérer coûte 3 600 jetons',
+    );
+    expect((await t.l.say(OTHER, 'oui')).outcome).toBe('released');
+    expect(t.vk.ended).toEqual(['mute:vk-1']);
+    expect(t.rb.ended).toEqual([]); // the Random Ban mute goes on
+    await t.ask('!caution raptoru_ rb');
+    expect((await t.l.replies()).at(-1)).toContain('(Random Ban) encore 60');
+    expect((await t.l.say(OTHER, 'oui')).outcome).toBe('released');
+    expect(t.rb.ended).toEqual(['rb:00000000-0000-4000-8000-000000000001']);
+    expect(await t.l.tokens(OTHER)).toBe(20_000 - 3_600 - 1_800);
+  });
+
+  it('a named mute not running: told, nothing quoted; an unknown second word is not a command', async () => {
+    const t = await two(null, 30_000);
+    await t.ask('!caution raptoru_ votekick');
+    expect((await t.l.replies()).at(-1)).toBe(
+      "raptoru_ n'a pas de mute Votekick en cours.",
+    );
+    expect((await t.l.say(OTHER, '!caution raptoru_ bonjour')).outcome).toBe(
+      'ignored',
+    );
+  });
+
+  it('the mute over before `oui`: nothing debited, nothing ended', async () => {
+    const t = await two(null, 20_000);
+    await t.ask('!caution raptoru_');
+    t.l.core.clock.advance(20_000);
+    expect((await t.l.say(OTHER, 'oui')).outcome).toBe('mute_over');
+    expect(t.rb.ended).toEqual([]);
+    expect(await t.l.tokens(OTHER)).toBe(20_000);
+  });
+
+  it('`oui` delivered twice: one debit, one end', async () => {
+    const t = await two(null, 60_000);
+    await t.ask('!caution raptoru_');
+    const id = 'tw-oui-1';
+    expect((await t.l.say(OTHER, 'oui', id)).outcome).toBe('released');
+    await t.l.say(OTHER, 'oui', id);
+    expect(t.rb.ended).toHaveLength(1);
+    expect(await t.l.tokens(OTHER)).toBe(20_000 - 1_800);
   });
 });
 

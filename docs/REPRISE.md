@@ -117,6 +117,9 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 ## 6. Prochaine action
 
+0. **Random Ban V3** (GO 26–27/10, PR #20 `feat/random-ban-v3`, worktree `Documents\raptoru-random-ban`, CI verte) :
+   validation Lab par Antoni (`lab-rb3.cmd`, port 4200, fermer d'abord l'autre Lab), puis fusion, Core + bot, Studio.
+   Règles : [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md) § V3, [CAUTION.md](CAUTION.md). Rien de déployé.
 1. Premier live après la deuxième passe : délai des devis Caution (attendu sous ~1 s), demandes Spotify d'éditions
    (Indochine…), tranches Tombola, tirs Bonk.
 2. Votekick : le son de lancement est validé (25/10) ; reste à confirmer la durée de vote réglable sur un vrai vote

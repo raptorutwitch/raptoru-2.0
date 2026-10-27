@@ -337,7 +337,13 @@ describe('Random Ban — lost executor, restarts, late results (never a doubled 
       login: 'lecroupier_',
       can_timeout: false,
     });
-    expect(s.rules).toEqual({ duration_sub_s: 180, duration_non_sub_s: 300 });
+    expect(s.rules).toEqual({
+      duration_sub_s: 180,
+      duration_non_sub_s: 300,
+      buyer_weight: 0.25,
+      streamer_per_mille: 0, // no streamer known here: never drawn
+      streamer_mute_s: 60,
+    });
     expect(s.recent).toHaveLength(1);
     core.clock.advance(20_000);
     expect((await rb.state(CH)).executor).toBeNull();

@@ -459,7 +459,8 @@ describe('Caution end to end: Twitch answers and interruptions (Lab wallet)', ()
     await c.say(PAYER, '!caution raptoru_');
     await ex.tick();
     expect((await c.replies()).at(-1)).toContain(
-      'raptoru_ est réduit au silence encore 50 secondes',
+      // 27/10: the mute's source named, 300 Jetons per started 10 s.
+      'raptoru_ est réduit au silence (Votekick) encore 50 secondes. Le libérer coûte 1 500 jetons',
     );
     expect((await c.say(PAYER, 'oui')).outcome).toBe('released');
     expect(ended).toEqual(['mute:vk']);

@@ -259,7 +259,14 @@ describe('BRB — SAMMI timeline on OBS', () => {
     });
     void brb.start().end;
     await reached;
-    expect(JSON.parse(await readFile(file, 'utf8'))).toHaveLength(2);
+    // The two mutes are holds of the shared MuteHolds (Random Ban V3), saved next to obs-reverts.json.
+    expect(
+      Object.keys(
+        JSON.parse(
+          await readFile(file.replace(/\.json$/, '-mute-holds.json'), 'utf8'),
+        ),
+      ),
+    ).toEqual(['Micro', 'Musique Isolée']);
     c.t = 8000;
     const restarted = await ObsActions.open(file, () => obs, c.now);
     await restarted.tick();

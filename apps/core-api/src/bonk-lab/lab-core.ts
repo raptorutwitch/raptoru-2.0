@@ -114,15 +114,22 @@ export function createLabCore({
   // Commands V2, Jeu des mots, Roulette / Slot / Duel: the ONE assembly of the chat games (lab-chat/games.ts).
   // Commands V2 answers become durable steps, handed to the Lab Twitch adapter only while « Sortie chat réelle » is
   // ON (OFF by default); Duel finds its target by login with the Lab app credentials of the Tombola avatars.
-  const randomBan = new RandomBanService(db, systemClock);
   const votekick = new VotekickService(db, systemClock, broadcasterOf);
-  const caution = new CautionService(
-    db,
-    systemClock,
-    economy,
-    broadcasterOf,
-    votekick,
-  );
+  // Random Ban V3: the streamer as an exceptional target (his mic muted in OBS by Studio).
+  const randomBan = new RandomBanService(db, systemClock, undefined, {
+    streamer: () => {
+      const id = broadcasterOf();
+      return id
+        ? { id, login: process.env.TWITCH_CHANNEL_LOGIN || 'raptoru_' }
+        : null;
+    },
+    otherMutes: votekick,
+  });
+  // The broadcaster's caution ends ONE of his OBS mutes: Votekick's or the Random Ban's.
+  const caution = new CautionService(db, systemClock, economy, broadcasterOf, [
+    { kind: 'votekick', label: 'Votekick', source: votekick },
+    { kind: 'random_ban', label: 'Random Ban', source: randomBan.mutes },
+  ]);
   const cpTwitch = new CpTwitchActions(db, systemClock);
   const spotify = new SpotifyService(db, systemClock, cpTwitch);
   const channelPoints = new ChannelPointsService(

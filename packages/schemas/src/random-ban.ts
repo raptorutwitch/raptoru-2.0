@@ -24,6 +24,19 @@ export const RANDOM_BAN = {
   /** An animation not played within this delay after the result is dropped (never shown late). */
   animationMaxAgeMs: 120_000,
   animationLeaseMs: 60_000,
+  /**
+   * V3 (27/10): the buyer, met in the shuffled order, is kept with this probability (else the next follower): his chance
+   * is w / N among N eligible (others share the rest equally); alone eligible, he is still drawn (never a flop).
+   */
+  buyerWeight: 0.25,
+  /** V3: chance (per thousand) that a Random Ban targets the streamer: his mic muted in OBS, never a Twitch timeout. */
+  streamerPerMille: 20,
+  /** V3: the streamer's mute (seconds). */
+  streamerMuteS: 60,
+  /** V3: the streamer is drawable only while Studio said « OBS ready, mic not held » within this delay. */
+  studioReadyMs: 10_000,
+  /** V3: Studio must report the mute within this lease, else the request goes back to a viewers' draw. */
+  studioMuteLeaseMs: 15_000,
 } as const;
 
 /** The phrase pools of the legacy page (`banPhrases`), copied as they are. */
@@ -311,6 +324,24 @@ export const RbTestRequest = z.strictObject({
 export const RbAnimationClaim = z.strictObject({
   consumer_id: z.string().min(1).max(64),
 });
+
+/**
+ * V3: Studio's poll for the streamer's mute: whether it could mute now (OBS connected, the mic held by no other
+ * effect), the mutes it holds for Core's requests (to learn an early end: a caution).
+ */
+export const RbMuteClaim = z.strictObject({
+  consumer_id: z.string().min(1).max(64),
+  obs_ready: z.boolean(),
+  mic_held: z.boolean(),
+});
+export const RbMuteReport = z.strictObject({
+  consumer_id: z.string().min(1).max(64),
+  attempt_id: z.uuid(),
+  event: z.enum(['muted', 'failed']),
+  error: z.string().max(200).optional(),
+});
+export type RbMuteClaim = z.infer<typeof RbMuteClaim>;
+export type RbMuteReport = z.infer<typeof RbMuteReport>;
 export const RbAnimationReport = z.strictObject({
   consumer_id: z.string().min(1).max(64),
   event: z.enum(['completed', 'failed', 'unknown']),

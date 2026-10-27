@@ -96,13 +96,15 @@ export class ChannelPointsRuntime {
       environment: d.environment,
       channelId: d.channelId,
       effects: d.effects ?? null,
+      mic: { input: RAPTORU_MUTE_FX.micInput, holds: obs.holds, obs: d.obs },
     });
   }
 
   static async create(d: ChannelPointsRuntimeDeps) {
+    const obs = await ObsActions.open(join(d.dir, 'obs-reverts.json'), d.obs);
     return new ChannelPointsRuntime(
       d,
-      await ObsActions.open(join(d.dir, 'obs-reverts.json'), d.obs),
+      obs,
       d.votekickOverlayDir
         ? new VotekickRuntime({
             core: d.core,
@@ -112,10 +114,14 @@ export class ChannelPointsRuntime {
                 : '/v1/lab/votekick',
             channelId: d.channelId,
             // The mute in progress survives a Studio restart (restored at the next start when due).
+            // Its mic is a hold of the shared MuteHolds (BRB, the Random Ban streamer mute).
             mute: await MuteController.open(
               join(d.dir, 'votekick-mute.json'),
               d.obs,
               RAPTORU_MUTE_FX,
+              undefined,
+              undefined,
+              obs.holds,
             ),
             overlayDir: d.votekickOverlayDir,
             sound: await VotekickLaunchSound.open(

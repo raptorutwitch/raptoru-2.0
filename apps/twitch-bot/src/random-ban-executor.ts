@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { RANDOM_BAN } from '@raptoru/schemas';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { type Helix, HelixError } from './twitch/helix.js';
 
@@ -110,10 +111,14 @@ export type RbSearch =
 /**
  * The search (pure reads). Uniform among the eligible: a crypto shuffle of the candidates, then the first follower in
  * that order. Followers are checked one by one (Twitch has no bulk check), FOLLOW_WINDOW at a time.
+ * V3 (27/10): the buyer, met in that order, is kept with probability RANDOM_BAN.buyerWeight (else the next follower):
+ * his chance is w / N among N eligible, the others share the rest equally; alone eligible, he is still the target.
  */
 export async function searchTarget(o: {
   twitch: RbTwitch;
   broadcasterId: string;
+  /** The buyer (his chance lowered, never zero). */
+  buyerId?: string;
   draw?: (n: number) => number;
   pause?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -157,21 +162,30 @@ export async function searchTarget(o: {
     candidates: candidates.length,
     follow_checks: checks,
   });
+  const found = async (target: RbUser): Promise<RbSearch> => {
+    const subs = await r('abonnement', () => o.twitch.subscribers([target.id]));
+    return { target, is_sub: subs.includes(target.id), stats: stats() };
+  };
+  let buyerPassed: RbUser | null = null;
   for (const window of chunks(candidates, FOLLOW_WINDOW)) {
     const follows = await Promise.all(
       window.map((c) => r('follow', () => o.twitch.follows(c.id))),
     );
     checks += window.length;
-    const i = follows.indexOf(true);
-    if (i >= 0) {
-      const target = window[i]!;
-      const subs = await r('abonnement', () =>
-        o.twitch.subscribers([target.id]),
-      );
-      return { target, is_sub: subs.includes(target.id), stats: stats() };
+    for (const [i, c] of window.entries()) {
+      if (!follows[i]) continue;
+      if (
+        c.id === o.buyerId &&
+        draw(1000) >= Math.round(RANDOM_BAN.buyerWeight * 1000)
+      ) {
+        buyerPassed = c;
+        continue;
+      }
+      return found(c);
     }
   }
-  return { target: null, stats: stats() };
+  // Nobody else follows: the buyer passed over is the only one eligible — drawn after all (never a flop for that).
+  return buyerPassed ? found(buyerPassed) : { target: null, stats: stats() };
 }
 
 export type TimeoutOutcome =
@@ -452,6 +466,7 @@ export function createRandomBanExecutor(d: RandomBanExecutorDeps) {
           request_id: string;
           attempt_id: string;
           mode: 'real' | 'dry_run';
+          buyer?: { id: string };
         } | null;
       }
     ).request;
@@ -461,6 +476,7 @@ export function createRandomBanExecutor(d: RandomBanExecutorDeps) {
       found = await searchTarget({
         twitch: d.twitch,
         broadcasterId: d.broadcasterId,
+        buyerId: req.buyer?.id,
         draw: d.draw,
         pause: d.pause,
         now,

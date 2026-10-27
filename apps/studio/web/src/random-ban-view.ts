@@ -27,10 +27,22 @@ export interface RbView {
   animation: string | null;
   animation_status: string;
   created_at: string;
+  /** V3: the streamer drawn — his mic muted (no Twitch timeout). */
+  streamer_mute?: boolean;
 }
 
 export interface RbState {
-  rules: { duration_sub_s: number; duration_non_sub_s: number };
+  rules: {
+    duration_sub_s: number;
+    duration_non_sub_s: number;
+    buyer_weight?: number;
+    streamer_per_mille?: number;
+    streamer_mute_s?: number;
+  };
+  /** V3: what Studio said about the mic (Core's view), and its own. */
+  studio?: { obs_ready: boolean; mic_held: boolean } | null;
+  mic?: { input: string; obs_connected: boolean; held_by: string[] } | null;
+  mute_error?: string | null;
   executor: {
     login: string;
     can_search: boolean;
@@ -141,9 +153,11 @@ export function randomBanView(s: RbState | null, error: string | null) {
       const who =
         r.status === 'flop'
           ? 'aucun follower éligible'
-          : r.target
-            ? `${esc(r.target.name)}${r.target.id === r.buyer.id ? ' (CSC)' : ''}${r.duration_s ? ` · ${r.duration_s / 60} min${r.target.is_sub ? ' (abonné)' : ''}` : ''}`
-            : '—';
+          : r.streamer_mute && r.target
+            ? `micro de ${esc(r.target.name)} coupé ${r.duration_s ?? ''} s (streamer tiré)`
+            : r.target
+              ? `${esc(r.target.name)}${r.target.id === r.buyer.id ? ' (CSC)' : ''}${r.duration_s ? ` · ${r.duration_s / 60} min${r.target.is_sub ? ' (abonné)' : ''}` : ''}`
+              : '—';
       const refund =
         r.refund === 'needed'
           ? '<br><b>Remboursement nécessaire</b> (non effectué : récompense créée par SAMMI)'
@@ -163,16 +177,37 @@ export function randomBanView(s: RbState | null, error: string | null) {
         <td><small>${esc(rbError(r.error))}${refund}${anim ? `<br>Animation : ${esc(anim)}` : ''}${stats ? `<br>${esc(stats)}` : ''}</small></td></tr>`;
     })
     .join('');
-  return `<div class="cp-status">${executor} ${player}${s.animations_error ? ` ${chip('warn', 'Animations : Core injoignable', s.animations_error)}` : ''}</div>
+  const held = s.mic?.held_by ?? [];
+  const mic = !s.mic
+    ? ''
+    : !s.mic.obs_connected
+      ? chip('warn', 'Mute du streamer : OBS non connecté (jamais tiré)')
+      : held.length
+        ? chip(
+            'warn',
+            `« ${s.mic.input} » tenu par : ${held.map((h) => h.split(':')[0]).join(', ')}`,
+            'Le streamer n’est pas tiré tant qu’un autre effet coupe son micro',
+          )
+        : chip('ok', `Mute du streamer : prêt (« ${s.mic.input} »)`);
+  const v3 =
+    s.rules.buyer_weight !== undefined
+      ? ` L’acheteur est tiré ${Math.round(1 / s.rules.buyer_weight)} fois moins souvent qu’un autre (jamais impossible ; seul éligible, il est tiré). ${
+          s.rules.streamer_per_mille
+            ? `Le streamer est tiré ${s.rules.streamer_per_mille / 10} % des fois : son micro est coupé ${s.rules.streamer_mute_s} s dans OBS (jamais de timeout), seulement si OBS est connecté et qu’aucun autre effet ne coupe déjà son micro ; libérable par !caution (300 jetons par tranche de 10 s restantes).`
+            : 'Streamer jamais tiré ici (inconnu de ce Core).'
+        }`
+      : '';
+  return `<div class="cp-status">${executor} ${player} ${mic}${s.animations_error ? ` ${chip('warn', 'Animations : Core injoignable', s.animations_error)}` : ''}${s.mute_error ? ` ${chip('warn', 'Mute du streamer : erreur', s.mute_error)}` : ''}</div>
     ${missing.length ? `<p class="cp-error">Médias non importés : ${esc(missing.map((m) => m.label).join(', '))}</p>` : ''}
     <p class="cp-muted">Règles fixes : une cible au hasard parmi les chatters présents (lurkers compris) qui suivent la
       chaîne ; ni le streamer, ni les modérateurs, ni les déjà bannis ; VIP et acheteur possibles (CSC). Timeout par
       LeCroupier_ : ${s.rules.duration_sub_s / 60} min pour un abonné, ${s.rules.duration_non_sub_s / 60} min sinon. Aucun éligible : flop, rien
-      n’est remboursé. Activation : règle « Ban aléatoire » ci-dessus (Interaction native « Random Ban »).</p>
+      n’est remboursé. Activation : règle « Ban aléatoire » ci-dessus (Interaction native « Random Ban »).${esc(v3)}</p>
     <div class="cp-buttons">
       <label class="cp-inline">Animation <select data-f="rb-outcome"><option value="ban">ban (au hasard)</option><option value="csc">CSC</option><option value="flop">flop</option></select></label>
       <button type="button" data-act="rb-animation" title="Joue l’animation dans OBS, aucun appel Twitch">Tester l’animation</button>
       <button type="button" data-act="rb-dry-run" title="Vraie recherche sur Twitch (lecture seule), jamais de timeout">Tirage à blanc</button>
+      <button type="button" data-act="rb-streamer-mute" title="Coupe vraiment ton micro dans OBS 60 s, rien d’autre (ni Twitch, ni jetons, ni chat, ni animation)">Tester le mute du streamer</button>
     </div>
     ${rows ? `<table class="cp-history"><thead><tr><th>Heure</th><th>Acheteur</th><th>Résultat</th><th>Détail</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="cp-muted">Aucun Random Ban.</p>'}`;
 }
