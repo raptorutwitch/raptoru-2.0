@@ -286,8 +286,9 @@ export class RandomBanService {
 
   /** Studio « Tester »: never a real timeout — the real search without timeout, or the animation alone. */
   /**
-   * Studio « Tester le mute du streamer »: the streamer's real mute in OBS (no Twitch call, nothing paid), handed to
-   * Studio at once — no Twitch executor needed. Refused while another mute of him runs.
+   * Studio « Tester le mute du streamer »: ONLY the streamer's mic muted in OBS for the mute's length, handed to Studio
+   * at once. Never a Twitch call (never offered to the executor, even when Studio fails), nothing debited, no channel
+   * points, no chat line, no animation, no caution possible. Refused while another mute of him runs.
    */
   async testStreamerMute(channelId: string, trigger = 'Test Studio') {
     const streamer = this.v3.streamer?.();
@@ -431,7 +432,7 @@ export class RandomBanService {
       ) {
         // Studio never confirmed the streamer's mute (OBS lost, Studio closed): nothing was paid for in vain — back
         // to a viewers' draw (Studio releases a hold Core does not list as running).
-        await this.set(q, r.request_id, this.backToViewers());
+        await this.set(q, r.request_id, this.notMuted(r, 'studio_silent'));
       } else if (r.status === 'timeout_requested' && leaseOver) {
         // The timeout may have been sent: never again, the refund waits for a check.
         await this.set(q, r.request_id, {
@@ -747,6 +748,24 @@ export class RandomBanService {
 
   // --- V3: the streamer's mute (Studio) ---------------------------------------------------------------------------
 
+  /**
+   * Studio did not mute (failed or silent): a real request goes back to a viewers' draw (nothing lost); a Studio TEST
+   * ends there — never handed to the Twitch executor (a test never times anyone out).
+   */
+  private notMuted(r: Row, error: string): Partial<Row> {
+    return r.source === 'test'
+      ? {
+          status: 'failed',
+          error,
+          refund: 'none',
+          executor_id: null,
+          attempt_id: null,
+          lease_expires_at: null,
+          ended_at: this.now(),
+        }
+      : this.backToViewers();
+  }
+
   private backToViewers(): Partial<Row> {
     return {
       status: 'queued',
@@ -861,20 +880,35 @@ export class RandomBanService {
         return { view: rbView(r), channelId: r.channel_id, settled: false };
       const now = this.now();
       if (rep.event === 'failed') {
-        await this.set(q, id, this.backToViewers());
+        await this.set(
+          q,
+          id,
+          this.notMuted(
+            r,
+            `studio: ${rep.error ?? 'mute impossible'}`.slice(0, 300),
+          ),
+        );
         return {
           view: rbView(await this.row(q, id)),
           channelId: r.channel_id,
           settled: false,
         };
       }
+      const test = r.source === 'test';
       await this.set(q, id, {
         status: 'confirmed',
         refund: 'none',
         lease_expires_at: new Date(now.getTime() + r.duration_s! * 1000),
         ended_at: now,
-        ...this.animated(r, this.animationFor(r)),
+        // A Studio test is the mic only: no animation, no chat line, no redemption to settle.
+        ...(test ? {} : this.animated(r, this.animationFor(r))),
       });
+      if (test)
+        return {
+          view: rbView(await this.row(q, id)),
+          channelId: r.channel_id,
+          settled: false,
+        };
       await insertWordGameSteps(q, {
         channelId: r.channel_id,
         now,
@@ -901,7 +935,7 @@ export class RandomBanService {
     return view;
   }
 
-  /** Caution (CautionMutes): the streamer's running Random Ban mute; its id is `rb:<request>`. */
+  /** Caution (CautionMutes): the streamer's running Random Ban mute (never a Studio test); its id is `rb:<request>`. */
   readonly mutes = {
     kind: 'random_ban' as const,
     label: 'Random Ban',
@@ -909,7 +943,7 @@ export class RandomBanService {
       const m = (
         await q.query<Row>(
           `select * from rb_requests where channel_id = $1 and reason = $2 and status = 'confirmed'
-             and lease_expires_at > $3 order by seq limit 1`,
+             and lease_expires_at > $3 and source <> 'test' order by seq limit 1`,
           [channelId, STREAMER_MUTE, this.now()],
         )
       )[0];

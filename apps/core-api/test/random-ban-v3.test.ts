@@ -300,3 +300,61 @@ describe('Random Ban V3 — a caution on the streamer’s mute (real services)',
     expect(await f.tokens()).toBe(10_000);
   });
 });
+
+describe('Random Ban V3 — « Tester le mute du streamer » is the mic only (Production contract)', () => {
+  it('muted: no chat line, no animation, never a caution, no redemption; the mute is listed for Studio', async () => {
+    const f = await fixture();
+    const t = await f.rb.testStreamerMute(CH);
+    const c = await f.studio();
+    const done = await f.report(t.request_id, c.mute!.attempt_id);
+    expect(done).toMatchObject({
+      status: 'confirmed',
+      streamer_mute: true,
+      animation: null,
+      animation_status: 'none',
+      refund: 'none',
+    });
+    expect(await f.lines()).toEqual([]); // no chat line
+    expect((await f.studio()).active.map((a) => a.request_id)).toEqual([
+      t.request_id,
+    ]);
+    expect(await f.rb.mutes.active(f.core.db, CH)).toBeNull(); // no caution on a test
+    expect((await f.rb.claimAnimation(CH, 'studio-anim')).animation).toBeNull();
+    expect(
+      (
+        await f.core.db.query(
+          `select 1 from lab_wallet_ledger where module_id in ('random_ban', 'caution')`,
+        )
+      ).length,
+    ).toBe(0);
+  });
+
+  it('Studio failing or silent: the test ends there — never handed to the Twitch executor (nobody timed out)', async () => {
+    const f = await fixture();
+    const t = await f.rb.testStreamerMute(CH);
+    const c = await f.studio();
+    expect(
+      await f.rb.reportMute(t.request_id, {
+        consumer_id: 'studio-rb-1',
+        attempt_id: c.mute!.attempt_id,
+        event: 'failed',
+        error: 'obs_offline',
+      }),
+    ).toMatchObject({ status: 'failed', refund: 'none' });
+    expect(await f.rb.claim(CH, EXEC)).toEqual({
+      request: null,
+      reason: 'idle',
+    });
+    const f2 = await fixture();
+    const t2 = await f2.rb.testStreamerMute(CH);
+    f2.core.clock.advance(RANDOM_BAN.studioMuteLeaseMs + 1);
+    expect(await f2.rb.claim(CH, EXEC)).toEqual({
+      request: null,
+      reason: 'idle',
+    });
+    expect((await f2.rb.outcome(t2.request_id))!).toMatchObject({
+      status: 'failed',
+      error: 'studio_silent',
+    });
+  });
+});

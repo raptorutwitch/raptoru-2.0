@@ -81,7 +81,7 @@ export function mountRandomBan(root: HTMLElement) {
     if (
       act === 'rb-streamer-mute' &&
       confirm(
-        'Tester le mute du streamer ?\n\nTon micro est VRAIMENT coupé dans OBS pour la durée du Random Ban, comme si tu étais tiré (une ligne dans le chat Twitch si la sortie chat est active ; aucun timeout, rien de payé). Une caution peut le lever.',
+        'Tester le mute du streamer ?\n\nTon micro « Micro » est VRAIMENT coupé dans OBS pendant 60 s, puis rétabli. Rien d’autre : aucun appel Twitch, aucun jeton, aucun point, aucun message dans le chat, aucune animation, aucune caution possible.',
       )
     )
       void test(

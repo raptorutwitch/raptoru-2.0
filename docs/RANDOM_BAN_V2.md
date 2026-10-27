@@ -14,7 +14,7 @@ Décisions d'Antoni (GO du 26–27/10) : tirage toujours aléatoire, acheteur pl
   « 🔇 {acheteur} a coupé le micro de raptoru_ pendant 60 s ! », l'animation de ban habituelle. Studio n'a pas confirmé
   dans les 15 s (OBS perdu, Studio fermé) ou a échoué → la demande repart en tirage viewers (rien de perdu). Pas de
   nouvelle colonne : `reason` = `streamer_mute` (`streamer_mute_caution` après une caution), `lease_expires_at` = fin du
-  mute une fois confirmé. Studio : « Tester le mute du streamer » (vrai mute OBS, sans Twitch ni paiement).
+  mute une fois confirmé. Studio : « Tester le mute du streamer » = **le micro seulement** (60 s dans OBS) : jamais d'appel Twitch (jamais rendu au bot, même si Studio échoue), aucun jeton, aucun point, aucune ligne de chat, aucune animation, aucune caution possible.
 - **Micro partagé** (`apps/studio/server/src/channel-points/mute-holds.ts`) : Votekick, BRB et le mute Random Ban
   « tiennent » le micro sous leur nom ; la voix ne revient qu'à la fin du **dernier**, jamais s'il était coupé avant,
   jamais par-dessus un changement manuel ; enregistré sur disque (redémarrage de Studio, OBS absent : repris). Corrige
