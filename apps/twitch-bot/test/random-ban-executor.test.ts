@@ -530,3 +530,71 @@ describe('Random Ban — production bot (main Core)', () => {
     );
   });
 });
+
+describe('Random Ban V3 — the buyer drawn less often, never impossible', () => {
+  const crypto = async (n: number, chatters: RbUser[], buyerId: string) => {
+    const { randomInt } = await import('node:crypto');
+    const seen = new Map<string, number>();
+    for (let i = 0; i < n; i++) {
+      const r = await searchTarget({
+        twitch: fakeTwitch({ chatters, follows: chatters.map((c) => c.id) }),
+        broadcasterId: BROADCASTER,
+        buyerId,
+        draw: (k) => randomInt(k),
+        pause,
+        now: () => NOW,
+      });
+      seen.set(r.target!.id, (seen.get(r.target!.id) ?? 0) + 1);
+    }
+    return seen;
+  };
+
+  it('the buyer met first and passed over: the next follower is the target; kept: he is (CSC)', async () => {
+    const chatters = [u('10'), u('11'), u('12')];
+    const twitch = () => fakeTwitch({ chatters, follows: ['10', '11', '12'] });
+    // Shuffle draws (identity order: j = i), then the buyer's keep draw.
+    const run = (keep: number) => {
+      const draws = [2, 1, keep];
+      return searchTarget({
+        twitch: twitch(),
+        broadcasterId: BROADCASTER,
+        buyerId: '10',
+        draw: () => draws.shift()!,
+        pause,
+        now: () => NOW,
+      });
+    };
+    expect((await run(250)).target!.id).toBe('11'); // 250 ≥ 1000 × 0.25: passed over
+    expect((await run(249)).target!.id).toBe('10'); // kept
+  });
+
+  it('the buyer alone eligible: still the target (never a flop because of the rarity)', async () => {
+    const r = await searchTarget({
+      twitch: fakeTwitch({ chatters: [u('10'), u('11')], follows: ['10'] }),
+      broadcasterId: BROADCASTER,
+      buyerId: '10',
+      draw: (k) => (k === 1000 ? 999 : 0), // the shuffle keeps its order; the buyer is passed over
+      pause,
+      now: () => NOW,
+    });
+    expect(r.target!.id).toBe('10');
+  });
+
+  it('frequencies (crypto, 20 000 draws): buyer ≈ w/N, the others share the rest equally', async () => {
+    for (const [n, buyerP] of [
+      [2, 0.125],
+      [5, 0.05],
+    ] as const) {
+      const chatters = Array.from({ length: n }, (_, i) => u(String(20 + i)));
+      const runs = 20_000;
+      const seen = await crypto(runs, chatters, '20');
+      const p = (seen.get('20') ?? 0) / runs;
+      expect(Math.abs(p - buyerP)).toBeLessThan(0.012);
+      const others = (1 - buyerP) / (n - 1);
+      for (const c of chatters.slice(1))
+        expect(Math.abs((seen.get(c.id) ?? 0) / runs - others)).toBeLessThan(
+          0.015,
+        );
+    }
+  }, 60_000);
+});

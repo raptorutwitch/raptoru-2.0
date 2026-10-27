@@ -42,6 +42,8 @@ export const VOTEKICK_SETTINGS = {
 export const CAUTION = {
   /** CAUTION_START: 1 000 Jetons per started minute still to serve. */
   pricePerMinute: 1_000,
+  /** The streamer's OBS mute (Votekick, Random Ban): 300 Jetons per started 10 s still to serve (decided 27/10). */
+  mutePricePer10s: 300,
   /** CAUTION_START: the quote waits 30 s for the payer's `oui` / `non`. */
   quoteMs: 30_000,
   confirmWord: 'oui',
@@ -146,6 +148,11 @@ export function broadcasterMuteSeconds(durationS: number) {
 /** CAUTION_START: ceil(remaining s / 60) × 1 000 Jetons (0 when nothing is left). */
 export function cautionPrice(remainingS: number) {
   return Math.max(0, Math.ceil(remainingS / 60)) * CAUTION.pricePerMinute;
+}
+
+/** The streamer's mute: ceil(remaining s / 10) × 300 Jetons (60 s → 1 800, 120 s → 3 600, 300 s → 9 000). */
+export function cautionMutePrice(remainingS: number) {
+  return Math.max(0, Math.ceil(remainingS / 10)) * CAUTION.mutePricePer10s;
 }
 
 /**

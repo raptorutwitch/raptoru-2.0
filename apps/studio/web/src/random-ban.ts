@@ -39,9 +39,9 @@ export function mountRandomBan(root: HTMLElement) {
     render();
   };
 
-  const test = async (body: object, done: string) => {
+  const test = async (body: object, done: string, path = '/test') => {
     try {
-      const res = await fetch('/api/random-ban/test', {
+      const res = await fetch(`/api/random-ban${path}`, {
         method: 'POST',
         headers: HEADERS,
         body: JSON.stringify(body),
@@ -77,6 +77,17 @@ export function mountRandomBan(root: HTMLElement) {
       void test(
         { mode: 'dry_run' },
         'Tirage à blanc envoyé : voir la liste (aucun timeout).',
+      );
+    if (
+      act === 'rb-streamer-mute' &&
+      confirm(
+        'Tester le mute du streamer ?\n\nTon micro est VRAIMENT coupé dans OBS pour la durée du Random Ban, comme si tu étais tiré (une ligne dans le chat Twitch si la sortie chat est active ; aucun timeout, rien de payé). Une caution peut le lever.',
+      )
+    )
+      void test(
+        {},
+        'Mute du streamer envoyé : voir la liste.',
+        '/test-streamer-mute',
       );
   });
 

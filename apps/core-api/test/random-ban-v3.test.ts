@@ -1,0 +1,302 @@
+import { randomUUID } from 'node:crypto';
+import { RANDOM_BAN } from '@raptoru/schemas';
+import { describe, expect, it } from 'vitest';
+import { CautionService } from '../src/caution/service.js';
+import { labEconomy } from '../src/economy/economy.js';
+import { editWallet } from '../src/lab-moderation/store.js';
+import { RandomBanService } from '../src/random-ban/service.js';
+import { VotekickService } from '../src/votekick/service.js';
+import { setup } from './helpers.js';
+
+// Random Ban V3 (27/10) — Core: the streamer as an exceptional target (his mic muted in OBS by Studio, never a Twitch
+// timeout), drawn only when Studio can mute and nobody else mutes him; Studio's claim / report (leased, idempotent,
+// stale attempts refused, never lost: back to the viewers' draw); the running mute listed for Studio; a paid caution
+// ends it (300 Jetons per started 10 s) — through the real Caution, Random Ban and Votekick services.
+
+const CH = '83603689';
+const STREAMER = { id: CH, login: 'raptoru_' };
+const EXEC = {
+  executor_id: 'bot-1',
+  login: 'lecroupier_',
+  can_search: true,
+  can_timeout: true,
+  missing: [],
+};
+const BUYER = { id: '9001', login: 'buyer', name: 'Buyer' };
+const PAYER = { id: '9003', login: 'viewer3', name: 'Viewer3' };
+const STUDIO = 'studio-rb-1';
+
+async function fixture(drawn = true) {
+  const core = await setup();
+  core.clock.set(new Date('2026-10-27T20:00:00Z'));
+  const votekick = new VotekickService(core.db, core.clock, () => CH);
+  // draw(1000) for the streamer: 0 (< 20 ‰) drawn, 999 not; other draws (animations): 0.
+  const rb = new RandomBanService(
+    core.db,
+    core.clock,
+    (n) => (n === 1000 ? (drawn ? 0 : 999) : 0),
+    { streamer: () => STREAMER, otherMutes: votekick },
+  );
+  const caution = new CautionService(
+    core.db,
+    core.clock,
+    labEconomy,
+    () => CH,
+    [
+      { kind: 'votekick', label: 'Votekick', source: votekick },
+      { kind: 'random_ban', label: 'Random Ban', source: rb.mutes },
+    ],
+  );
+  const ask = (mode: 'real' | 'dry_run' = 'real') =>
+    rb.request({
+      channel_id: CH,
+      source: 'channel_points',
+      source_ref: randomUUID(),
+      mode,
+      buyer: BUYER,
+    });
+  const studio = (o: { obs_ready?: boolean; mic_held?: boolean } = {}) =>
+    rb.claimMute(CH, {
+      consumer_id: STUDIO,
+      obs_ready: o.obs_ready ?? true,
+      mic_held: o.mic_held ?? false,
+    });
+  const report = (
+    id: string,
+    attempt: string,
+    event: 'muted' | 'failed' = 'muted',
+  ) => rb.reportMute(id, { consumer_id: STUDIO, attempt_id: attempt, event });
+  const lines = async () =>
+    (
+      await core.db.query<{ params: { text: string } }>(
+        `select params from cmd_steps where idempotency_key like 'rb:streamer:%' or idempotency_key like 'caution:%'
+         order by seq_global`,
+      )
+    ).map((r) => r.params.text);
+  return { core, rb, votekick, caution, ask, studio, report, lines };
+}
+
+describe('Random Ban V3 — the streamer drawn', () => {
+  it('drawn only when Studio said « OBS ready, mic free » recently; never in a dry run', async () => {
+    const f = await fixture();
+    await f.ask();
+    // Studio never polled: a viewers' search.
+    expect((await f.rb.claim(CH, EXEC)).request).not.toBeNull();
+    const f2 = await fixture();
+    await f2.studio({ mic_held: true }); // BRB holds the mic
+    await f2.ask();
+    expect((await f2.rb.claim(CH, EXEC)).request).not.toBeNull();
+    const f3 = await fixture();
+    await f3.studio();
+    f3.core.clock.advance(RANDOM_BAN.studioReadyMs + 1);
+    await f3.ask();
+    expect((await f3.rb.claim(CH, EXEC)).request).not.toBeNull();
+    const f4 = await fixture();
+    await f4.studio();
+    await f4.ask('dry_run');
+    expect((await f4.rb.claim(CH, EXEC)).request).not.toBeNull();
+    const f5 = await fixture(false); // 999 ≥ 20 ‰
+    await f5.studio();
+    await f5.ask();
+    expect((await f5.rb.claim(CH, EXEC)).request).not.toBeNull();
+  });
+
+  it('drawn: no Twitch job — Studio mutes 60 s, one chat line, the redemption result; listed while it runs', async () => {
+    const f = await fixture();
+    await f.studio();
+    const r = await f.ask();
+    expect(await f.rb.claim(CH, EXEC)).toEqual({
+      request: null,
+      reason: 'busy',
+    });
+    const c = await f.studio();
+    expect(c.mute).toMatchObject({
+      request_id: r.request_id,
+      seconds: 60,
+      buyer: 'Buyer',
+      streamer: 'raptoru_',
+    });
+    expect((await f.studio()).mute).toBeNull(); // handed out once
+    const done = await f.report(r.request_id, c.mute!.attempt_id);
+    expect(done).toMatchObject({
+      status: 'confirmed',
+      streamer_mute: true,
+      duration_s: 60,
+      target: { id: CH, login: 'raptoru_' },
+      refund: 'none',
+    });
+    // Same report again (answer lost): the state, nothing more.
+    expect(await f.report(r.request_id, c.mute!.attempt_id)).toMatchObject({
+      status: 'confirmed',
+    });
+    expect(await f.lines()).toEqual([
+      '🔇 Buyer a coupé le micro de raptoru_ pendant 60 s !',
+    ]);
+    expect((await f.studio()).active).toEqual([
+      {
+        request_id: r.request_id,
+        ends_at: new Date(f.core.clock.now().getTime() + 60_000).toISOString(),
+      },
+    ]);
+    // While it runs: the next Random Ban is a viewers' one (never the streamer twice).
+    await f.ask();
+    expect((await f.rb.claim(CH, EXEC)).request).not.toBeNull();
+    f.core.clock.advance(60_000);
+    expect((await f.studio()).active).toEqual([]);
+  });
+
+  it('a stale attempt is refused; Studio failing or silent → back to a viewers’ draw (nothing lost)', async () => {
+    const f = await fixture();
+    await f.studio();
+    const r = await f.ask();
+    await f.rb.claim(CH, EXEC);
+    const c = await f.studio();
+    await expect(f.report(r.request_id, randomUUID())).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(
+      await f.report(r.request_id, c.mute!.attempt_id, 'failed'),
+    ).toMatchObject({ status: 'queued', target: null, streamer_mute: false });
+    // Studio silent past its lease: swept back too.
+    const f2 = await fixture();
+    await f2.studio();
+    const r2 = await f2.ask();
+    await f2.rb.claim(CH, EXEC);
+    await f2.studio();
+    f2.core.clock.advance(RANDOM_BAN.studioMuteLeaseMs + 1);
+    await f2.studio({ obs_ready: false }); // and it cannot mute now
+    const next = await f2.rb.claim(CH, EXEC);
+    expect(next.request?.request_id).toBe(r2.request_id); // a viewers' search
+  });
+
+  it('never while Votekick mutes him', async () => {
+    const f = await fixture();
+    await f.votekick.active(f.core.db, CH); // (no mute yet)
+    const vk = {
+      active: async () => ({
+        id: 'mute:vk',
+        endsAt: new Date(Date.now() + 1e9),
+      }),
+    };
+    const rb = new RandomBanService(f.core.db, f.core.clock, () => 0, {
+      streamer: () => STREAMER,
+      otherMutes: vk,
+    });
+    await rb.claimMute(CH, {
+      consumer_id: STUDIO,
+      obs_ready: true,
+      mic_held: false,
+    });
+    await f.ask();
+    expect((await rb.claim(CH, EXEC)).request).not.toBeNull();
+  });
+
+  it('Studio « Tester le mute »: handed to Studio at once (no Twitch executor); refused while he is muted', async () => {
+    const f = await fixture();
+    const t = await f.rb.testStreamerMute(CH);
+    expect(t).toMatchObject({
+      status: 'timeout_requested',
+      streamer_mute: true,
+    });
+    await expect(f.rb.testStreamerMute(CH)).rejects.toMatchObject({
+      status: 409,
+    });
+    const c = await f.studio();
+    expect(c.mute?.request_id).toBe(t.request_id);
+  });
+});
+
+describe('Random Ban V3 — a caution on the streamer’s mute (real services)', () => {
+  async function muted() {
+    const f = await fixture();
+    await f.studio();
+    const r = await f.ask();
+    await f.rb.claim(CH, EXEC);
+    const c = await f.studio();
+    await f.report(r.request_id, c.mute!.attempt_id);
+    await editWallet(
+      f.core.db,
+      f.core.clock.now(),
+      CH,
+      PAYER.id,
+      'set',
+      { tokens: 10_000 },
+      'test',
+    );
+    const msg = (text: string, id = randomUUID()) =>
+      f.caution.chat({
+        channel_id: CH,
+        message_id: id,
+        text,
+        chatter: {
+          id: PAYER.id,
+          login: PAYER.login,
+          display_name: PAYER.name,
+          role: 'viewer',
+        },
+        source: 'twitch',
+      });
+    const quote = async (text = '!caution raptoru_') => {
+      await f.caution.claim(CH, {
+        executor_id: 'bot-1',
+        login: 'lecroupier_',
+        can_read: true,
+        can_release: true,
+        missing: [],
+      });
+      expect((await msg(text)).outcome).toBe('checking');
+      const job = (
+        await f.caution.claim(CH, {
+          executor_id: 'bot-1',
+          login: 'lecroupier_',
+          can_read: true,
+          can_release: true,
+          missing: [],
+        })
+      ).job!;
+      return f.caution.check(job.request_id, {
+        executor_id: 'bot-1',
+        attempt_id: job.attempt_id,
+        target: { id: CH, login: 'raptoru_', name: 'Raptoru_' },
+        sanction: { kind: 'none' },
+      });
+    };
+    const tokens = async () =>
+      Number(
+        (
+          await f.core.db.query<{ tokens: number }>(
+            'select tokens from lab_wallets where channel_id = $1 and viewer_id = $2',
+            [CH, PAYER.id],
+          )
+        )[0]?.tokens ?? 0,
+      );
+    return { ...f, r, msg, quote, tokens };
+  }
+
+  it('quoted on the seconds left (41 s → 1 500), `oui` debits and ends it: Studio no longer lists it', async () => {
+    const f = await muted();
+    f.core.clock.advance(19_000);
+    expect(await f.quote()).toMatchObject({ status: 'quoted', price: 1_500 });
+    expect((await f.msg('oui')).outcome).toBe('released');
+    expect(await f.tokens()).toBe(8_500);
+    expect((await f.studio()).active).toEqual([]);
+    expect((await f.rb.outcome(f.r.request_id))!).toMatchObject({
+      status: 'confirmed',
+      streamer_mute: true,
+    });
+    // Nothing left to pay for.
+    expect(await f.quote()).toMatchObject({
+      status: 'refused',
+      reason: 'not_muted',
+    });
+  });
+
+  it('the mute over before `oui`: nothing debited', async () => {
+    const f = await muted();
+    f.core.clock.advance(45_000);
+    expect(await f.quote()).toMatchObject({ price: 600 }); // 15 s left: 2 × 300
+    f.core.clock.advance(15_000); // the mute ends, the quote (30 s) is still open
+    expect((await f.msg('oui')).outcome).toBe('mute_over');
+    expect(await f.tokens()).toBe(10_000);
+  });
+});

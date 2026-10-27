@@ -2,6 +2,8 @@ import {
   RbAnimationClaim,
   RbAnimationReport,
   RbClaimRequest,
+  RbMuteClaim,
+  RbMuteReport,
   RbResultReport,
   RbTargetReport,
   RbTestRequest,
@@ -58,6 +60,29 @@ export function randomBanRoutes(
       auth,
       handle: ({ params, body }) =>
         rb.test(channel(params[0]!), parse(RbTestRequest, body)),
+    },
+    {
+      // V3: the streamer's mic muted in OBS for real (no Twitch call, nothing paid).
+      method: 'POST',
+      pattern: at(base, '/(\\d{1,32})/test-streamer-mute'),
+      auth,
+      handle: ({ params }) =>
+        mapped(() => rb.testStreamerMute(channel(params[0]!))),
+    },
+    {
+      // V3: Studio's poll for the streamer's mute (and whether it could mute now).
+      method: 'POST',
+      pattern: at(base, '/(\\d{1,32})/mutes/claim'),
+      auth,
+      handle: ({ params, body }) =>
+        rb.claimMute(channel(params[0]!), parse(RbMuteClaim, body)),
+    },
+    {
+      method: 'POST',
+      pattern: at(base, `/requests/${uuid}/mute`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() => rb.reportMute(params[0]!, parse(RbMuteReport, body))),
     },
     {
       method: 'POST',

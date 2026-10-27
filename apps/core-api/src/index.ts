@@ -71,6 +71,7 @@ const core = createCore(
   {
     // The streamer of the chat modules (Tombola, Commands V2, games) and the Twitch app (Duel targets by login).
     broadcasterId: config.TWITCH_CHANNEL_ID ?? null,
+    broadcasterLogin: config.TWITCH_CHANNEL_LOGIN,
     twitchApp:
       config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
         ? {

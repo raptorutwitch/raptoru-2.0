@@ -215,7 +215,9 @@ function randomBanResult(
       return {
         index,
         ok: true,
-        detail: `${rb.target?.name} en timeout ${minutes}${rb.target?.id === rb.buyer.id ? ' (CSC)' : ''}`,
+        detail: rb.streamer_mute
+          ? `micro de ${rb.target?.name} coupé ${rb.duration_s} s (Random Ban sur le streamer)`
+          : `${rb.target?.name} en timeout ${minutes}${rb.target?.id === rb.buyer.id ? ' (CSC)' : ''}`,
       };
     case 'simulated':
       return {

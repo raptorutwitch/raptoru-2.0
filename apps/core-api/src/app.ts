@@ -81,6 +81,8 @@ export function createCore(
   /** The channel this Core serves: its broadcaster (streamer of the chat modules) and the Twitch app (Duel logins). */
   channel: {
     broadcasterId?: string | null;
+    /** Random Ban V3: the streamer's login (history, the chat line of his mute). */
+    broadcasterLogin?: string | null;
     twitchApp?: { clientId: string; clientSecret: string } | null;
     /** Duel targets by login without Twitch (tests). */
     loginLookup?: LoginLookup | null;
@@ -99,16 +101,23 @@ export function createCore(
   const wallet = createWalletModule(db, clock);
   const loyalty = new LoyaltyEngine(db, clock, wallet.wallet, loyaltyModes);
   const soundLab = new SoundLabService(db, clock, undefined, economy);
-  const randomBan = new RandomBanService(db, clock);
   const votekick = new VotekickService(db, clock, broadcasterOf);
-  // The broadcaster's caution lifts his Votekick mute.
-  const caution = new CautionService(
-    db,
-    clock,
-    economy,
-    broadcasterOf,
-    votekick,
-  );
+  // Random Ban V3: the streamer as an exceptional target (his mic muted in OBS), never while Votekick mutes him.
+  const randomBan = new RandomBanService(db, clock, undefined, {
+    streamer: () =>
+      channel.broadcasterId
+        ? {
+            id: channel.broadcasterId,
+            login: channel.broadcasterLogin ?? 'raptoru_',
+          }
+        : null,
+    otherMutes: votekick,
+  });
+  // The broadcaster's caution ends ONE of his OBS mutes: Votekick's or the Random Ban's.
+  const caution = new CautionService(db, clock, economy, broadcasterOf, [
+    { kind: 'votekick', label: 'Votekick', source: votekick },
+    { kind: 'random_ban', label: 'Random Ban', source: randomBan.mutes },
+  ]);
   const ttsLab = new TtsLabService(db, clock, undefined, undefined, economy);
   const cpTwitch = new CpTwitchActions(db, clock);
   const spotify = new SpotifyService(db, clock, cpTwitch);
