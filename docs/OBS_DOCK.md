@@ -20,6 +20,125 @@ rapport Astra `C:\Users\Antoni\Documents\Codex\2026-10-27\files-pasted-by-the-us
   déployé avec la migration `20261111130000` en post-deploy (`DÉPLOYÉ`, santé OK), bot inchangé (`4ba9243`),
   Studio **0.1.16** publiée (mise à jour 0.1.15 → 0.1.16 : profil et réglages identiques). URL et clé du dock
   inchangées. Reste : installation, retour d'ergonomie d'Antoni (validation).
+- **V1.2** (28/10, branche `feat/obs-dock-v12` depuis `origin/main` `5313e11`, même worktree) : passe de finition
+  (identité par famille, avatars, rejeu en un clic, Bonk seul regroupé, préférences détaillées, sélection et corbeille).
+  Voir « V1.2 » ci-dessous. **Non livrée** : aucune migration ; livraison = Core (avatars) puis Studio, après le GO
+  d'Antoni.
+
+## V1.2 — finition : identité, avatars, un clic, préférences, corbeille
+
+Cette section remplace, pour l'interface, les règles V1.1 qui la contredisent (regroupement, temps, rejeu, filtres).
+
+### Vignettes
+
+- Une carte par événement, teintée par sa **famille** : léger dégradé depuis la gauche, fin liseré coloré, icône et
+  libellé colorés, survol un peu plus lumineux. Treize familles, chacune avec sa couleur, son icône (Lucide, ISC) et son
+  libellé — la couleur n'est jamais le seul repère :
+
+  | Famille | Icône         | Couleur      | Famille          | Icône           | Couleur   |
+  | ------- | ------------- | ------------ | ---------------- | --------------- | --------- |
+  | Follow  | cœur plein    | rouge rosé   | Points de chaîne | étincelle       | or        |
+  | Sub     | étoile pleine | violet       | TTS              | bulle           | bleu      |
+  | Resub   | médaille      | violet clair | Soundboard       | haut-parleur    | vert lime |
+  | Subgift | cadeau        | fuchsia      | Bonk             | marteau         | cuivre    |
+  | Bits    | diamant       | cyan         | Random Ban       | marteau de juge | rouge     |
+  | Raid    | fusée         | orange       | Tombola          | ticket          | turquoise |
+  | Don     | pièces        | vert         |                  |                 |           |
+
+- Hiérarchie : **[avatar] [icône + LIBELLÉ] [pseudo] … [état] [rejeu]**, puis une ligne discrète **[temps · note]**
+  (tier, mois, nom du son, emote, cible, coût si demandé), puis le texte du viewer sur une ligne s'il y en a un.
+  Libellés : FOLLOW, SUB, RESUB, SUBGIFT (× N pour un cadeau communautaire), 1 500 BITS, RAID, DON 10,00 €, le **vrai
+  nom** de la récompense (sa casse), TTS, **SOUNDBOARD** (le nom du son en note), BONK, RANDOM BAN, TOMBOLA.
+- Un libellé générique n'est jamais coupé : c'est le pseudo qui cède (points de suspension, nom complet au survol). Le
+  nom d'une récompense peut être coupé (nom complet au survol).
+- Pseudo en semi-gras, blanc cassé. Temps : « à l'instant » (< 1 min), puis « 3 min », « 2 h », « 3 j » ; date et heure
+  exactes au survol.
+- Avatar rond de 30 px (26 px sous 280 px), toujours de la même taille : l'initiale sur fond teinté, la photo Twitch
+  par-dessus une fois chargée (une photo qui échoue est retirée, l'initiale reste) ; pour un anonyme, l'icône de la
+  famille ; pour une salve de plusieurs viewers, le nombre de viewers.
+- Nouvel événement : un fondu court puis un liseré lumineux pendant une minute. Rien d'animé en continu ; aucune
+  animation avec « réduire les animations ».
+
+### Avatars (Core, sans migration ni nouvelle connexion Twitch)
+
+- Source : le cache de photos Twitch déjà en Production (`lab_viewer_avatars`, rempli par Helix Get Users, 100 ids par
+  appel, avec le jeton d'application existant — celui de Votekick et de la Tombola ; `raffle-lab/avatars.ts`).
+- La projection joint ce cache : l'URL de la photo voyage avec l'acteur (`data.actor.avatar`) et fait partie de la
+  version de la ligne. Une photo trouvée plus tard ramène la ligne dans le flux, à sa place (même clé, pas de « nouveau »).
+- Après un scan, les viewers projetés sans photo sont demandés au cache en arrière-plan : au plus 100 par scan, jamais
+  attendu, avec les délais du cache (24 h pour une photo, 1 h avant de réessayer un échec). La réception des événements
+  ne dépend jamais des images.
+- Côté page : seules les URL https de `static-cdn.jtvnw.net` sont affichées (CSP `img-src` déjà limitée).
+- Au déploiement, les lignes des 24 dernières heures (30 jours au premier scan d'un Core) sont reprojetées une fois
+  (leur version inclut maintenant la photo) : rien d'autre ne change.
+
+### Rejeu en un clic
+
+- Un clic sur l'icône de rejeu envoie la demande ; le bouton se verrouille (icône qui tourne) jusqu'à la réponse, puis
+  affiche une coche 2,5 s ; un message confirme ou explique un refus.
+- Protections inchangées et renforcées côté page : une clé d'idempotence par intention (une requête rejouée par le
+  réseau ne crée jamais un second rejeu), aucun autre envoi tant que la requête est en cours ou vient d'aboutir, et le
+  Core garde un seul rejeu en attente par original (un clic après la coche reçoit « déjà en attente »). Aucun effet
+  économique, jamais la Roue, jamais un retraitement (le rejeu reste un nouvel `alert_items`, V1).
+
+### Regroupement : les Bonks seulement
+
+- Seuls les Bonks consécutifs se regroupent (« BONK × N ») : même règle qu'en V1.1 (≤ 90 s entre deux, ≤ 5 min depuis
+  le premier, coupé par tout autre événement visible, jamais par un masqué, déterministe, clé = premier Bonk).
+- TTS, Soundboard (même son compris), Random Ban, Tombola, récompenses, alertes : **une ligne chacun**, toujours.
+- Plusieurs viewers dans une salve : « A et B » ou « A, B +N » sur la ligne, « N viewers » en note, le détail liste
+  chaque Bonk (heure, pseudo, emote, état).
+- Le cadeau communautaire reste une ligne (un seul événement métier, ses bénéficiaires dans le détail).
+
+### Détails
+
+- S'ouvrent seulement s'ils montrent quelque chose de plus : les Bonks d'une salve, les bénéficiaires d'un cadeau, la
+  raison d'un échec. Un texte de viewer (TTS, message de don, de bits, de récompense) est sur la ligne ; la ligne ne
+  devient ouvrable que si ce texte y est coupé (mesuré dans la page, à chaque redimensionnement) et l'ouvrir l'affiche en
+  entier. Rien d'ouvrable pour un follow, un sub, un Bonk seul, un son.
+
+### Préférences (roue crantée)
+
+- Treize filtres en trois groupes, chacun avec une case de groupe (trois états) :
+  **Chaîne Twitch** (Follows, Subs, Resubs, Subgifts, Bits, Raids, Dons) · **Points de chaîne** (toutes les récompenses,
+  puis « Récompenses une par une » dépliable, et « Afficher les coûts », non par défaut) · **Interactions Raptoru** (TTS,
+  Soundboard, Bonk, Random Ban, Tombola). « Tout afficher », « Tout masquer », « Réinitialiser ».
+- Récompenses une par une : par leur **identifiant Twitch stable** ; la liste se construit avec les récompenses vues
+  (dernier titre connu, 200 au plus). Une récompense renommée garde son choix.
+- Gardées dans le `localStorage` du dock (`dock.prefs`, version 2). Les préférences V1.1 sont reprises : « Abos et
+  cadeaux » masqué → Subs, Resubs et Subgifts masqués ; « Tombola et Random Ban » → les deux.
+- Affichage seulement : un événement masqué reste reçu, traité, gardé dans l'historique et réapparaît dès qu'on le
+  réaffiche.
+
+### Sélection et corbeille d'affichage
+
+- **Ctrl + clic** ajoute ou retire une ligne, **Maj + clic** sélectionne la plage depuis la dernière ligne cliquée, le
+  bouton « Sélectionner » de l'en-tête passe en mode sélection (un clic simple sélectionne). Dès qu'une ligne est
+  sélectionnée, un clic simple sélectionne au lieu d'ouvrir ; le bouton de rejeu reste un bouton à part. Clavier :
+  Espace sélectionne, Suppr masque, Échap annule ou ferme.
+- La barre de sélection dit combien de lignes sont choisies, avec **Masquer** et **Annuler** ; la corbeille de l'en-tête
+  masque la sélection s'il y en a une, sinon ouvre la corbeille. Un message propose « Annuler » pendant 7 s.
+- Masquer une salve de Bonks masque **tous** ses Bonks (identifiants gardés un par un : une salve recomposée après une
+  reconnexion ne fait jamais réapparaître un Bonk masqué).
+- La **corbeille d'affichage** (`dock.trash`, `localStorage`) : restaurer un élément, une salve entière ou un seul de
+  ses Bonks, « Tout restaurer », « Vider la corbeille » (deuxième clic de confirmation ; les éléments restent masqués
+  sans être restaurables). Compteur sur l'icône. Bornée : 31 jours et 5 000 éléments au plus.
+- **Jamais** une suppression : masquer ne touche ni le Core, ni les alertes, ni les transactions, jetons, achats,
+  journaux ou données Twitch. Préférences, corbeille, historique canonique et actions métier restent séparés.
+
+### Fichiers V1.2
+
+- Core : `apps/core-api/src/dock/service.ts` (photo jointe, version, demande au cache), `ext/public-frontier.ts`
+  (branchement du cache). Test : `test/dock-interactions.test.ts`.
+- Page : `apps/studio/server/dock-page/{dock-view.js,dock.js,dock.css,index.html}`. Tests :
+  `apps/studio/server/test/dock-view.test.js`, `apps/studio/server/e2e/dock.e2e.ts` (Chromium).
+
+### Limites V1.2
+
+- Lab (Studio local) : pas de photos (viewers simulés) ; l'initiale s'affiche.
+- Corbeille et préférences propres à ce dock (origine `127.0.0.1:<port>`) : un autre dock ou un autre port repart de
+  zéro.
+- Un viewer jamais vu auparavant s'affiche d'abord avec son initiale ; sa photo arrive quelques secondes plus tard.
 
 ## Décisions (et pourquoi)
 
@@ -196,9 +315,11 @@ Studio : `GET /api/dock` → `{ available, reason, url, clients, feed }` ; `POST
 
 1. Studio → onglet **Alertes** → section **Dock OBS** → **Copier** l'URL.
 2. OBS → **Docks** → **Docks de navigateur personnalisés** → nom « Raptoru », URL collée → Appliquer.
-3. Le dock suit les événements tant que Studio est ouvert. Rejouer : survoler une alerte → ⟲ → **Rejouer ?** (second
-   clic dans les 3 s). Le replay rejoue l'animation seulement : aucun jeton, droit, Roue, fidélité ni message chat.
-4. Roue crantée : catégories affichées, coûts des récompenses, réinitialisation.
+3. Le dock suit les événements tant que Studio est ouvert. Rejouer : survoler une alerte → ⟲ (**un clic**). Le replay
+   rejoue l'animation seulement : aucun jeton, droit, Roue, fidélité ni message chat.
+4. Roue crantée : familles affichées, récompenses une par une, coûts des récompenses, réinitialisation.
+5. Nettoyer le fil : Ctrl + clic / Maj + clic (ou le bouton « Sélectionner »), puis **Masquer** ou Suppr ; corbeille
+   de l'en-tête pour restaurer.
 
 ## Tests effectués
 
@@ -240,6 +361,28 @@ V1.1 (28/10) :
   lecteur descendu de 600 px) : la ligne lue ne bouge pas (33 → 34 px), « 13 nouveaux » affiché, retour en haut au clic.
 - Pas fait ici : OBS réel (CEF).
 
+V1.2 (28/10) :
+
+- Core `dock-interactions.test.ts` 4/4 : photo du cache jointe à l'acteur, photo trouvée plus tard = la même activité
+  reprojetée, viewers sans photo demandés une fois en arrière-plan ; `dock.test.ts` 10/10.
+- Studio `dock-view.test.js` 40/40 : familles (icône distincte, cœur plein, classe de couleur, libellé écrit), libellés et
+  notes (SOUNDBOARD + nom du son, vrai nom de récompense, coût sur demande), pseudo et nom complet au survol, avatars
+  (liste blanche https, initiale, icône pour un anonyme, nombre pour une salve), états, rejeu (un seul bouton, verrouillé
+  en cours, coche), échappement partout (panneaux compris), détails seulement utiles, regroupement Bonk seul (TTS de deux
+  viewers, mêmes sons, Random Ban, Tombola, récompenses, alertes jamais groupés ; coupure ; 90 s / 5 min ; viewers
+  mélangés ; déterminisme ; clé stable ; pagination), préférences (13 filtres, reprise V1.1, Random Ban sans Tombola,
+  récompense par id même renommée, panneau), corbeille (masquer, restaurer, vider, bornes, salve masquée en entier et
+  jamais réapparue après recomposition, liste), plage Maj + clic, temps compacts.
+- E2E Chromium `dock.e2e.ts` 4/4 (vraie page, vrais relais et serveur du dock, Core scripté) : une ligne par événement
+  sauf la salve ; rejeu : double clic + clic pendant une réponse lente = **une** requête, coche ; Ctrl + clic, Maj + clic,
+  clic simple en sélection, Masquer, Annuler, Suppr sur une salve, corbeille gardée après rechargement, restauration
+  d'un seul Bonk puis de tout ; préférences Random Ban sans Tombola et une récompense par id, gardées après
+  rechargement, réinitialisation.
+- Aperçu Chromium à 240 / 300 / 420 px (lignes, détail, sélection, corbeille, préférences) : aucune erreur console,
+  aucun défilement horizontal ; à 240 px les libellés restent entiers. Flux chargé (un événement / 300 ms, lecteur
+  descendu) : la ligne lue ne bouge pas, « 13 nouveaux ».
+- Pas fait ici : OBS réel (CEF), vraies photos Twitch en Production.
+
 ## Problèmes rencontrés
 
 - Ordre à heure identique : départage par `seq`, clé de page `(occurred_at, seq)`.
@@ -249,12 +392,12 @@ V1.1 (28/10) :
 
 ## Reste à faire
 
-- V1.1 : installation de Studio 0.1.16 et retour d'ergonomie d'Antoni dans OBS (CEF : préférences gardées,
-  images d'emote, largeurs).
+- V1.2 : PR, livraison après le GO d'Antoni (Core pour les avatars, puis Studio ; aucune migration), puis son test
+  dans OBS (photos, sélection au clavier et à la souris dans CEF, corbeille et préférences après redémarrage d'OBS).
 - Plus tard : remboursement depuis le dock (conception ci-dessus, décision produit) ; état « traité » partagé ; dons SE
   manqués pendant Studio fermé (Astra §6, V2) ; campagnes SE si une charge utile officielle apparaît ; regrouper
   d'autres types (follows en rafale pendant un raid ?) si l'usage le demande.
 
 ## Prochaine action
 
-Antoni installe Studio 0.1.16, rafraîchit le dock dans OBS (clic droit → Actualiser, ou fermer / rouvrir OBS) et fait son retour ; V1.1 validée seulement après.
+V1.2 : PR prête ; livraison seulement après le GO d'Antoni, puis son test dans son OBS.
