@@ -16,9 +16,10 @@ rapport Astra `C:\Users\Antoni\Documents\Codex\2026-10-27\files-pasted-by-the-us
 - **Lot 4** : **livré le 27/10** — PR #28 fusionnée (`d1dcdca`), sauvegarde de la base (17:18 UTC), Core déployé avec la
   migration en post-deploy (`DÉPLOYÉ`, santé OK), bot inchangé, Studio **0.1.15** publiée (installateur vérifié).
   Reste : installation par Antoni et validation dans OBS.
-- **V1.1** (27–28/10, branche `feat/obs-dock-v11` depuis `origin/main` `d694dc8`, même worktree) : refonte de la page
-  et interactions Raptoru dans la projection. Voir « V1.1 » ci-dessous. **Non livrée** (migration Production additive =
-  GO d'Antoni).
+- **V1.1** : **livrée le 27/10** — PR #30 fusionnée (`190bc0a`), sauvegarde de la base (22:00 UTC), Core
+  déployé avec la migration `20261111130000` en post-deploy (`DÉPLOYÉ`, santé OK), bot inchangé (`4ba9243`),
+  Studio **0.1.16** publiée (mise à jour 0.1.15 → 0.1.16 : profil et réglages identiques). URL et clé du dock
+  inchangées. Reste : installation, retour d'ergonomie d'Antoni (validation).
 
 ## Décisions (et pourquoi)
 
@@ -140,7 +141,9 @@ interaction_id, reason }` (permission `refund.manual`, auditée, idempotente cô
 ### Limites connues
 
 - Préférences propres au dock (origine `127.0.0.1:<port>`) : si le port du dock change, elles reviennent aux défauts.
-- Premier scan d'une chaîne : 30 jours d'interactions (2000 lignes par scan, rattrapage aux scans suivants).
+- Premier scan d'un Core : 30 jours d'interactions, au plus 2000 par scan (les plus anciennes d'abord) ; les scans
+  suivants ne couvrent que 24 h. Au-delà de 2000 interactions sur 30 jours, une partie de l'historique de plus de
+  24 h peut manquer dans le dock (rien d'autre n'est touché).
 - « N nouveaux » compte des événements, pas des lignes (un Bonk qui agrandit un groupe compte pour 1).
 - Image d'emote Bonk : chargée depuis le CDN de l'emote (requête sortante du dock vers ce CDN).
 
@@ -246,12 +249,12 @@ V1.1 (28/10) :
 
 ## Reste à faire
 
-- V1.1 : livraison (migration Production additive `20261111130000` = **GO d'Antoni**, puis Core, puis Studio) ;
-  validation par Antoni dans OBS (CEF : préférences gardées, images d'emote, largeurs).
+- V1.1 : installation de Studio 0.1.16 et retour d'ergonomie d'Antoni dans OBS (CEF : préférences gardées,
+  images d'emote, largeurs).
 - Plus tard : remboursement depuis le dock (conception ci-dessus, décision produit) ; état « traité » partagé ; dons SE
   manqués pendant Studio fermé (Astra §6, V2) ; campagnes SE si une charge utile officielle apparaît ; regrouper
   d'autres types (follows en rafale pendant un raid ?) si l'usage le demande.
 
 ## Prochaine action
 
-V1.1 : PR ouverte, livraison seulement après le GO d'Antoni.
+Antoni installe Studio 0.1.16, rafraîchit le dock dans OBS (clic droit → Actualiser, ou fermer / rouvrir OBS) et fait son retour ; V1.1 validée seulement après.
