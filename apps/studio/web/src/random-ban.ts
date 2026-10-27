@@ -89,6 +89,17 @@ export function mountRandomBan(root: HTMLElement) {
         'Mute du streamer envoyé : voir la liste.',
         '/test-streamer-mute',
       );
+    if (
+      act === 'rb-caution-test' &&
+      confirm(
+        'Test Caution Random Ban ?\n\nUne VRAIE sanction Random Ban est créée sur ton compte pendant 60 s : micro coupé, zoom et MUTED dans OBS.\n\nElle est reconnue par !caution raptoru_ : si quelqu’un répond « oui » au devis, ses JETONS SONT VRAIMENT DÉBITÉS (300 par tranche de 10 s restantes) et tu es libéré.\n\nAucun tirage, aucun viewer visé, aucun timeout Twitch, aucun point de chaîne, hors statistiques des tirages.',
+      )
+    )
+      void test(
+        { caution: true },
+        'Sanction de test créée : !caution raptoru_ peut la lever (jetons réels).',
+        '/test-streamer-mute',
+      );
   });
 
   return { load };

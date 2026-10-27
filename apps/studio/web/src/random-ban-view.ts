@@ -29,6 +29,8 @@ export interface RbView {
   created_at: string;
   /** V3: the streamer drawn — his mic muted (no Twitch timeout). */
   streamer_mute?: boolean;
+  /** « Test Caution Random Ban »: a test mute Caution may end (real Jetons). */
+  caution_test?: boolean;
   /** V3 trace: why the streamer was or was not the target. */
   streamer_decision?: StreamerDecision | null;
 }
@@ -201,7 +203,7 @@ export function randomBanView(s: RbState | null, error: string | null) {
         r.status === 'flop'
           ? 'aucun follower éligible'
           : r.streamer_mute && r.target
-            ? `micro de ${esc(r.target.name)} coupé ${r.duration_s ?? ''} s (streamer tiré)`
+            ? `micro de ${esc(r.target.name)} coupé ${r.duration_s ?? ''} s (${r.caution_test ? 'test Caution : libérable par !caution, jetons réels' : r.mode === 'real' && r.source === 'test' ? 'test du micro' : 'streamer tiré'})`
             : r.target
               ? `${esc(r.target.name)}${r.target.id === r.buyer.id ? ' (CSC)' : ''}${r.duration_s ? ` · ${r.duration_s / 60} min${r.target.is_sub ? ' (abonné)' : ''}` : ''}`
               : '—';
@@ -280,6 +282,7 @@ export function randomBanView(s: RbState | null, error: string | null) {
       <label class="cp-inline">Animation <select data-f="rb-outcome"><option value="ban">ban (au hasard)</option><option value="csc">CSC</option><option value="flop">flop</option></select></label>
       <button type="button" data-act="rb-animation" title="Joue l’animation dans OBS, aucun appel Twitch">Tester l’animation</button>
       <button type="button" data-act="rb-dry-run" title="Vraie recherche sur Twitch (lecture seule), jamais de timeout">Tirage à blanc</button>
+      <button type="button" data-act="rb-caution-test" title="Vraie sanction de 60 s sur ton compte, libérable par !caution raptoru_ : les jetons du payeur sont réellement débités">Test Caution Random Ban</button>
       <button type="button" data-act="rb-streamer-mute" title="Coupe vraiment ton micro dans OBS 60 s, rien d’autre (ni Twitch, ni jetons, ni chat, ni animation)">Tester le mute du streamer</button>
     </div>
     ${rows ? `<table class="cp-history"><thead><tr><th>Heure</th><th>Acheteur</th><th>Résultat</th><th>Détail</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="cp-muted">Aucun Random Ban.</p>'}`;

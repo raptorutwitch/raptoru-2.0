@@ -87,6 +87,8 @@ const OPEN: RbStatus[] = ['queued', 'searching', 'timeout_requested'];
 const STREAMER_MUTE = 'streamer_mute';
 const isStreamerMute = (r: { reason: string | null }) =>
   !!r.reason?.startsWith(STREAMER_MUTE);
+/** The `source_ref` prefix of a Studio « Test Caution Random Ban » (a test mute Caution may end). */
+const CAUTION_TEST = 'caution-test';
 
 /**
  * V3 trace (27/10): why the streamer was or was not the target of a request, recorded in its `stats.streamer` (no new
@@ -142,6 +144,9 @@ export const rbView = (r: Row) => ({
   attempts: r.attempts,
   /** V3: the streamer drawn — his mic muted for duration_s (never a Twitch timeout). */
   streamer_mute: isStreamerMute(r),
+  /** A Studio « Test Caution Random Ban »: a test mute Caution may end (real Jetons). */
+  caution_test:
+    r.source === 'test' && r.source_ref.startsWith(`${CAUTION_TEST}:`),
   /** V3 trace: the streamer decision of this request (absent before 27/10 or when never claimed). */
   streamer_decision: r.stats?.streamer ?? null,
   animation: r.animation,
@@ -317,9 +322,25 @@ export class RandomBanService {
    * at once. Never a Twitch call (never offered to the executor, even when Studio fails), nothing debited, no channel
    * points, no chat line, no animation, no caution possible. Refused while another mute of him runs.
    */
-  async testStreamerMute(channelId: string, trigger = 'Test Studio') {
+  async testStreamerMute(
+    channelId: string,
+    trigger = 'Test Studio',
+    /**
+     * « Test Caution Random Ban » (27/10): the same test mute, but a REAL sanction for Caution — `!caution raptoru_`
+     * quotes it, `oui` debits the payer's Jetons once and ends it. Refused unless Studio said « OBS ready, mic free »
+     * within studioReadyMs. Still never a Twitch call, never in the draw statistics, no chat line, no animation.
+     */
+    opts: { caution?: boolean } = {},
+  ) {
     const streamer = this.v3.streamer?.();
     if (!streamer) throw new RbError(409, 'streamer_unknown');
+    if (opts.caution) {
+      const s = this.studios.get(channelId);
+      if (!s || this.now().getTime() - s.at > RANDOM_BAN.studioReadyMs)
+        throw new RbError(409, 'studio_silent');
+      if (!s.obs_ready) throw new RbError(409, 'obs_not_ready');
+      if (s.mic_held) throw new RbError(409, 'mic_held');
+    }
     const id = await this.db.tx(async (q) => {
       await this.lock(q, channelId);
       await this.sweep(q, channelId);
@@ -332,7 +353,7 @@ export class RandomBanService {
         {
           channel_id: channelId,
           source: 'test',
-          source_ref: `streamer:${randomUUID()}`,
+          source_ref: `${opts.caution ? CAUTION_TEST : 'streamer'}:${randomUUID()}`,
           mode: 'real',
           buyer: { id: '0', login: 'test_studio', name: trigger.slice(0, 25) },
         },
@@ -1014,7 +1035,10 @@ export class RandomBanService {
     return view;
   }
 
-  /** Caution (CautionMutes): the streamer's running Random Ban mute (never a Studio test); its id is `rb:<request>`. */
+  /**
+   * Caution (CautionMutes): the streamer's running Random Ban mute — never a plain Studio test, but a « Test Caution
+   * Random Ban » is one (decided 27/10); its id is `rb:<request>`.
+   */
   readonly mutes = {
     kind: 'random_ban' as const,
     label: 'Random Ban',
@@ -1022,8 +1046,8 @@ export class RandomBanService {
       const m = (
         await q.query<Row>(
           `select * from rb_requests where channel_id = $1 and reason = $2 and status = 'confirmed'
-             and lease_expires_at > $3 and source <> 'test' order by seq limit 1`,
-          [channelId, STREAMER_MUTE, this.now()],
+             and lease_expires_at > $3 and (source <> 'test' or source_ref like $4) order by seq limit 1`,
+          [channelId, STREAMER_MUTE, this.now(), `${CAUTION_TEST}:%`],
         )
       )[0];
       return m

@@ -340,6 +340,10 @@ export const RbMuteReport = z.strictObject({
   event: z.enum(['muted', 'failed']),
   error: z.string().max(200).optional(),
 });
+/** Studio « Tester le mute du streamer » / « Test Caution Random Ban » (caution: a test mute Caution may end). */
+export const RbTestMuteRequest = z.strictObject({
+  caution: z.boolean().optional(),
+});
 export type RbMuteClaim = z.infer<typeof RbMuteClaim>;
 export type RbMuteReport = z.infer<typeof RbMuteReport>;
 export const RbAnimationReport = z.strictObject({

@@ -222,3 +222,36 @@ describe('Random Ban V3 view — the streamer trace', () => {
     );
   });
 });
+
+describe('« Test Caution Random Ban » view', () => {
+  it('its button, and its row says Caution may end it with real Jetons', () => {
+    const html = randomBanView(
+      {
+        ...base,
+        recent: [
+          row({
+            source: 'test',
+            mode: 'real',
+            streamer_mute: true,
+            caution_test: true,
+            target: { id: '83603689', name: 'raptoru_', is_sub: null },
+            duration_s: 60,
+          }),
+          row({
+            source: 'test',
+            mode: 'real',
+            streamer_mute: true,
+            target: { id: '83603689', name: 'raptoru_', is_sub: null },
+            duration_s: 60,
+          }),
+        ],
+      },
+      null,
+    );
+    expect(html).toContain('data-act="rb-caution-test"');
+    expect(html).toContain(
+      'test Caution : libérable par !caution, jetons réels',
+    );
+    expect(html).toContain('(test du micro)');
+  });
+});
