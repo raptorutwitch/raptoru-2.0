@@ -1,5 +1,27 @@
 # Random Ban V2 (M1.1)
 
+## V3 (27/10/2026) — développée, testée automatiquement, **non validée, non déployée**
+
+Décisions d'Antoni (GO du 26–27/10) : tirage toujours aléatoire, acheteur plus rare, streamer cible exceptionnelle.
+
+- **Acheteur** : rencontré dans l'ordre mélangé, il est gardé avec la probabilité `buyerWeight` = 1/4, sinon le suivant
+  qui suit la chaîne ; seul éligible, il est tiré quand même. Sa chance est **w / N** (N éligibles), les autres se
+  partagent le reste à parts égales : N = 2 → 12,5 % (au lieu de 50 %), 5 → 5 % (20 %), 10 → 2,5 % (10 %), 20 →
+  1,25 % (5 %). Bot : `searchTarget` (`buyerId`).
+- **Streamer** : à la réclamation par le bot, le Core tire le streamer **20 ‰ (2 %)** des fois — seulement pour une vraie
+  demande, si Studio a dit dans les 10 s « OBS connecté, micro tenu par personne » et qu'aucun mute Votekick ni Random
+  Ban du streamer n'est en cours. Jamais de timeout Twitch : Studio coupe « Micro » **60 s**, une ligne de chat
+  « 🔇 {acheteur} a coupé le micro de raptoru_ pendant 60 s ! », l'animation de ban habituelle. Studio n'a pas confirmé
+  dans les 15 s (OBS perdu, Studio fermé) ou a échoué → la demande repart en tirage viewers (rien de perdu). Pas de
+  nouvelle colonne : `reason` = `streamer_mute` (`streamer_mute_caution` après une caution), `lease_expires_at` = fin du
+  mute une fois confirmé. Studio : « Tester le mute du streamer » (vrai mute OBS, sans Twitch ni paiement).
+- **Micro partagé** (`apps/studio/server/src/channel-points/mute-holds.ts`) : Votekick, BRB et le mute Random Ban
+  « tiennent » le micro sous leur nom ; la voix ne revient qu'à la fin du **dernier**, jamais s'il était coupé avant,
+  jamais par-dessus un changement manuel ; enregistré sur disque (redémarrage de Studio, OBS absent : repris). Corrige
+  aussi le défaut existant BRB pendant un mute Votekick (voix rendue au milieu du mute, puis micro laissé coupé).
+- **Caution** sur le mute : voir [CAUTION.md](CAUTION.md) (300 Jetons / 10 s, choix explicite si deux mutes).
+- Prix, débits, remboursements, sérialisation, journal du bot : inchangés. Aucune migration.
+
 **OAuth, complément du 18/10 :** correctifs locaux et procédure de réautorisation groupée dans
 [`TWITCH_OAUTH.md`](TWITCH_OAUTH.md). Le lot approuvé comprend le droit de timeout de LeCroupier_ et les lectures
 de raptoru_, indépendamment des flags de demande de scopes. Aucune autorisation réelle ni sanction réelle n'a été

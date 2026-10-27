@@ -25,8 +25,14 @@ de chaine », lu le 22/10/2026).
   quelqu'un d'autre ou sans devis : silence (pas de spam) ; devis expiré sans réponse : silencieux ; `oui` tardif :
   « Cette proposition de caution a expiré… ».
 - **Une caution ouverte à la fois** par chaîne (devis en attente → « Une caution pour X attend déjà la réponse de Y »).
-- Streamer : impossible à timeout ; sa caution lève le **mute Votekick** (prix sur les secondes restantes). Sans Votekick
-  V2 en service, le streamer n'est jamais « réduit au silence » pour Raptoru.
+- Streamer : impossible à timeout ; sa caution lève **un** de ses mutes OBS — Votekick ou Random Ban V3 (27/10) — au prix
+  de **300 Jetons par tranche de 10 s restantes entamée** (`ceil(secondes / 10) × 300` : 60 s → 1 800, 120 s → 3 600,
+  300 s → 9 000), au moment du devis. Les deux en cours : le payeur doit préciser `!caution raptoru_ votekick` ou
+  `!caution raptoru_ rb` (jamais choisi pour lui) ; l'autre mute continue (le micro reste coupé tant qu'un effet le tient,
+  voir [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md) § V3). Le devis, la confirmation et l'expiration sont ceux des timeouts ; mute
+  fini avant le `oui` : aucun débit. SAMMI (`CAUTION_START`) : variables `vk_broadcaster_muted` /
+  `vk_broadcaster_mute_remaining_sec` tenues par la boucle du mute Votekick, 1 000 / minute, fin = micro rétabli et
+  filtres coupés ; seul le mute Votekick existait.
 - Textes du chat : ceux de SAMMI (ex. « viewer1 paie 8 000 jetons : viewer2 est libéré ! »).
 
 Écarts V2 (sécurité, documentés) : la sanction est **relue sur Twitch après le `oui` et avant tout débit** ; si le
