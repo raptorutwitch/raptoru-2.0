@@ -8,7 +8,7 @@ import type { LabCoreCall } from '../lab-moderation/proxy.js';
 
 export interface DockActivity {
   activity_key: string;
-  kind: 'alert' | 'channel_points';
+  kind: 'alert' | 'channel_points' | 'interaction';
   type: string;
   occurred_at: string;
   data: Record<string, unknown>;

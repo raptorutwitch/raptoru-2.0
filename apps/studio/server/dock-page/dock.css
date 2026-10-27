@@ -1,24 +1,21 @@
-/* Dock OBS V1 — Raptoru Studio's dark look (style.css: #111317, cards #1b1e24, accent #8b5cf6), made for a narrow,
-   resizable OBS column (usable from ~240 px). No animation loop; only a short fade for what just arrived. */
+/* Dock OBS V1.1 — its own dark look (not Studio's): a cool near-black, one colour per category (always with its own
+   icon and a title that says it), status as icons. Made for a narrow, resizable OBS column (usable from ~240 px).
+   Plain CSS that OBS's embedded Chromium understands (no color-mix, no container queries). No animation loop; only a
+   short fade for what just arrived. */
 
 :root {
-  --bg: #111317;
-  --row: #16191e;
-  --row-hover: #1b1e24;
-  --line: #262a32;
-  --text: #e7e9ee;
-  --muted: #8c93a1;
-  --accent: #8b5cf6;
-  --ok: #34d399;
-  --wait: #fbbf24;
-  --bad: #f87171;
-  --follow: #60a5fa;
-  --sub: #a78bfa;
-  --gift: #f472b6;
-  --bits: #fbbf24;
-  --raid: #fb923c;
-  --donation: #34d399;
-  --reward: #38bdf8;
+  --bg: #0c0e13;
+  --surface: #12151c;
+  --hover: #181c25;
+  --raised: #1a1f2a;
+  --line: #1e2330;
+  --text: #e9ebf1;
+  --soft: #c9cdd8;
+  --muted: #858ca0;
+  --accent: #7c8cff;
+  --ok: #3ddc97;
+  --wait: #f5b84a;
+  --bad: #ff6b6b;
   color-scheme: dark;
 }
 
@@ -54,25 +51,86 @@ button {
   outline-offset: -2px;
 }
 
-/* --- top bar: status dot + filter chips ---------------------------------------------------------------------------- */
+.i {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  display: block;
+}
+
+/* --- categories: a colour and a tinted tile, never the only cue -------------------------------------------------- */
+.c-follow {
+  --c: #ff6b9d;
+  --cb: rgba(255, 107, 157, 0.14);
+}
+.c-sub {
+  --c: #b18cff;
+  --cb: rgba(177, 140, 255, 0.14);
+}
+.c-bits {
+  --c: #4dd6ff;
+  --cb: rgba(77, 214, 255, 0.13);
+}
+.c-raid {
+  --c: #ff9f45;
+  --cb: rgba(255, 159, 69, 0.14);
+}
+.c-donation {
+  --c: #3ddc97;
+  --cb: rgba(61, 220, 151, 0.13);
+}
+.c-reward {
+  --c: #ffc94d;
+  --cb: rgba(255, 201, 77, 0.13);
+}
+.c-tts {
+  --c: #6ea8ff;
+  --cb: rgba(110, 168, 255, 0.14);
+}
+.c-soundboard {
+  --c: #2ee6d6;
+  --cb: rgba(46, 230, 214, 0.12);
+}
+.c-bonk {
+  --c: #ff7a6b;
+  --cb: rgba(255, 122, 107, 0.14);
+}
+.c-internal {
+  --c: #a3adbf;
+  --cb: rgba(163, 173, 191, 0.12);
+}
+
+/* --- header: name, connection dot, gear -------------------------------------------------------------------------- */
 .bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 6px;
+  gap: 8px;
+  height: 34px;
+  padding: 0 4px 0 10px;
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
   flex: none;
 }
 
+.name {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex: none;
   background: var(--muted);
 }
 .dot.t-ok {
   background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.15);
 }
 .dot.t-wait {
   background: var(--wait);
@@ -81,75 +139,120 @@ button {
   background: var(--bad);
 }
 
-.chips {
-  display: flex;
-  gap: 3px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  min-width: 0;
+.gear {
+  position: relative;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
 }
-.chips::-webkit-scrollbar {
-  display: none;
+.gear:hover,
+.gear[aria-expanded='true'] {
+  background: var(--raised);
+  color: var(--text);
+}
+/* Some categories are hidden: a small accent mark on the gear. */
+.gear.filtered::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 22px;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: transparent;
-  cursor: pointer;
-  white-space: nowrap;
-  color: var(--c, var(--muted));
+/* --- preferences ------------------------------------------------------------------------------------------------- */
+.prefs {
+  flex: none;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
 }
-.chip b {
-  font-weight: 600;
+.prefs-h {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 2px 8px;
+}
+.cat,
+.opt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  cursor: pointer;
+}
+.cat .i {
+  color: var(--c);
+  font-size: 14px;
+}
+.cat span,
+.opt span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+.opt {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.opt span {
+  white-space: normal;
+}
+.hint {
+  margin: 6px 0 2px;
   font-size: 11px;
   color: var(--muted);
 }
-.chip.off {
-  opacity: 0.35;
+.link {
+  border: none;
+  background: none;
+  padding: 3px 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
 }
-.chip:hover {
-  background: var(--row-hover);
-}
-
-.g-follow {
-  --c: var(--follow);
-}
-.g-sub {
-  --c: var(--sub);
-}
-.g-gift {
-  --c: var(--gift);
-}
-.g-bits {
-  --c: var(--bits);
-}
-.g-raid {
-  --c: var(--raid);
-}
-.g-donation {
-  --c: var(--donation);
-}
-.g-reward {
-  --c: var(--reward);
+.link:hover {
+  text-decoration: underline;
 }
 
 .banner {
   margin: 0;
-  padding: 4px 8px;
+  padding: 5px 10px;
   font-size: 12px;
   color: var(--wait);
-  background: #2a2412;
+  background: #241e10;
   border-bottom: 1px solid var(--line);
   flex: none;
 }
 
-/* --- the list ------------------------------------------------------------------------------------------------------ */
+/* --- the list ---------------------------------------------------------------------------------------------------- */
 .scroll {
   position: relative;
   flex: 1;
@@ -168,16 +271,18 @@ button {
 .row {
   position: relative;
   display: flex;
-  gap: 7px;
+  gap: 9px;
   align-items: flex-start;
-  padding: 5px 6px 5px 8px;
+  padding: 7px 6px 7px 10px;
   border-bottom: 1px solid var(--line);
-  background: var(--row);
+  background: var(--surface);
+}
+.row.expandable {
   cursor: pointer;
 }
 .row:hover,
 .row:focus-visible {
-  background: var(--row-hover);
+  background: var(--hover);
 }
 .row::before {
   content: '';
@@ -185,27 +290,29 @@ button {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 2px;
+  width: 3px;
   background: var(--c, var(--muted));
-  opacity: 0.55;
 }
 .row.fresh {
-  background: linear-gradient(90deg, rgba(139, 92, 246, 0.14), var(--row) 70%);
+  background: linear-gradient(90deg, var(--cb), var(--surface) 75%);
   animation: arrive 0.5s ease-out;
 }
 @keyframes arrive {
   from {
-    opacity: 0.2;
+    opacity: 0.25;
   }
 }
 
 .ic {
-  width: 16px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
   flex: none;
-  text-align: center;
-  color: var(--c, var(--muted));
-  font-size: 13px;
-  line-height: 18px;
+  border-radius: 7px;
+  background: var(--cb);
+  color: var(--c);
+  font-size: 15px;
 }
 
 .main {
@@ -216,38 +323,52 @@ button {
 .l1,
 .l2 {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-.who {
-  font-weight: 600;
+.title {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  min-width: 0;
-  flex: 1;
+  font-weight: 700;
+  color: var(--c);
+}
+.title.caps {
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.03em;
 }
 
-.when {
-  flex: none;
+/* The note shrinks before the title does. */
+.note {
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
   color: var(--muted);
-  font-size: 11px;
 }
 
-.what {
-  color: #c4c9d4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  flex: 1;
+.emote {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex: none;
 }
 
 .st {
+  margin-left: auto;
   flex: none;
-  font-size: 11px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
   color: var(--muted);
 }
 .st.t-ok {
@@ -255,14 +376,54 @@ button {
 }
 .st.t-wait {
   color: var(--wait);
+  opacity: 0.85;
 }
 .st.t-bad {
   color: var(--bad);
 }
+.st.t-muted {
+  opacity: 0.7;
+}
+
+/* Viewer and time share a line when there is room; the time wraps under it otherwise. */
+.l2 {
+  flex-wrap: wrap;
+  row-gap: 0;
+  margin-top: 1px;
+}
+.who {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--soft);
+}
+.tail {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.when {
+  color: var(--muted);
+  font-size: 11px;
+}
+.more {
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+  transition: transform 0.12s;
+}
+.row.open .more {
+  transform: rotate(180deg);
+}
 
 .l3 {
+  margin: 3px 0 0;
   color: var(--muted);
-  font-style: italic;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -270,39 +431,90 @@ button {
 }
 
 .detail {
-  margin-top: 5px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg);
   font-size: 12px;
-  color: #c4c9d4;
+  color: var(--soft);
+  cursor: auto;
+  user-select: text;
 }
 .msg-full {
-  margin: 0 0 4px;
+  margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.detail dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 1px 8px;
-  margin: 0;
+.meta {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
 }
-.detail dt {
+.meta:first-child {
+  margin-top: 0;
+}
+.meta b {
   color: var(--muted);
+  font-weight: 600;
+  margin-right: 4px;
 }
-.detail dd {
+.meta.t-bad b {
+  color: var(--bad);
+}
+
+.members {
+  list-style: none;
   margin: 0;
+  padding: 0;
+}
+.members li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 3px 0;
+}
+.members li + li {
+  border-top: 1px solid var(--line);
+}
+.m-when {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.m-who {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.members .st {
+  margin-left: 0;
+}
+.m-text {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-/* --- the replay: discreet until hovered / focused ------------------------------------------------------------------ */
+/* --- the replay: discreet until hovered / focused ---------------------------------------------------------------- */
 .act {
-  flex: none;
-  align-self: center;
-  height: 22px;
-  min-width: 24px;
-  padding: 0 5px;
+  /* Over the row's right edge, so every row keeps the same columns. */
+  position: absolute;
+  right: 6px;
+  top: 12px;
+  box-shadow: 0 0 0 4px var(--hover);
+  display: grid;
+  place-items: center;
+  height: 26px;
+  min-width: 26px;
+  padding: 0 6px;
   border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #1f232a;
+  border-radius: 6px;
+  background: var(--raised);
+  font-size: 14px;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s;
@@ -318,6 +530,7 @@ button {
   color: #fff;
   background: var(--accent);
   font-size: 11px;
+  font-weight: 600;
 }
 .act:disabled {
   cursor: progress;
@@ -329,73 +542,80 @@ button {
   }
 }
 
-/* --- helpers ------------------------------------------------------------------------------------------------------- */
+/* --- helpers ----------------------------------------------------------------------------------------------------- */
 .pill {
   position: sticky;
-  top: 6px;
+  top: 8px;
   z-index: 2;
-  display: block;
-  margin: 0 auto -28px;
-  height: 22px;
-  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 auto -30px;
+  height: 24px;
+  padding: 0 11px 0 9px;
   border: none;
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--accent);
   color: #fff;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
 }
 
 .empty {
-  margin: 24px 12px;
+  margin: 28px 14px;
   text-align: center;
   color: var(--muted);
 }
 
 .older {
   display: block;
-  width: calc(100% - 12px);
-  margin: 8px 6px 12px;
-  height: 26px;
+  width: calc(100% - 16px);
+  margin: 10px 8px 14px;
+  height: 28px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 .older:hover {
   color: var(--text);
+  background: var(--surface);
 }
 
 .toast {
   position: fixed;
-  left: 6px;
-  right: 6px;
-  bottom: 6px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
   margin: 0;
-  padding: 6px 8px;
-  border-radius: 4px;
-  background: #1f2a22;
-  border: 1px solid #2f4a37;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: #13241c;
+  border: 1px solid #23503a;
   font-size: 12px;
   z-index: 5;
 }
 .toast.bad {
-  background: #2c1a1a;
-  border-color: #5b2a2a;
+  background: #2a1517;
+  border-color: #5c2a2e;
 }
 
 [hidden] {
   display: none !important;
 }
 
-@media (max-width: 260px) {
-  .chip b {
-    display: none;
+@media (max-width: 280px) {
+  .row {
+    gap: 7px;
+    padding-left: 8px;
   }
-  .when {
-    display: none;
+  .ic {
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
   }
 }
 
@@ -403,7 +623,8 @@ button {
   .row.fresh {
     animation: none;
   }
-  .act {
+  .act,
+  .more {
     transition: none;
   }
 }

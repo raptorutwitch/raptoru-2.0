@@ -78,6 +78,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Dock OBS V1: read-only activity projection, its commit-ordered cursor and the visual replays' audit (additive);
   // same content as 20261110120000_obs_dock_lab.sql.
   '20261110130000_obs_dock.sql',
+  // Dock OBS V1.1: the projection also holds Raptoru's interactions (kind check widened); same content as
+  // 20261111120000_obs_dock_interactions_lab.sql.
+  '20261111130000_obs_dock_interactions.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -156,6 +159,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261109220000_sub_wheel_v2_recovery_lab.sql',
   // Dock OBS V1: the Lab twin of 20261110130000_obs_dock.sql (same content).
   '20261110120000_obs_dock_lab.sql',
+  // Dock OBS V1.1: the Lab twin of 20261111130000_obs_dock_interactions.sql (same content).
+  '20261111120000_obs_dock_interactions_lab.sql',
 ]);
 
 /**
