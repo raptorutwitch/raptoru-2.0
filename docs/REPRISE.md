@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **26/10/2026 ~22:30 UTC** (**deuxième passe close** : Core et bot `5e7ebe6`, Studio 0.1.10 installé — § 3 ; premiers correctifs stream en Production le 26/10 (`d215778`) ; **Roue du Sub V2 active** (mode `v2`), Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **27/10/2026 ~02:10 UTC** (**Random Ban V3 en Production** : Core et bot `4ba9243`, Studio 0.1.11 publiée, à installer — § 3, § 6 ; **deuxième passe close** : Core et bot `5e7ebe6`, Studio 0.1.10 installé — § 3 ; premiers correctifs stream en Production le 26/10 (`d215778`) ; **Roue du Sub V2 active** (mode `v2`), Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -28,24 +28,32 @@ depuis le checkout principal.
 
 ## 2. Production (relevé 26/10 ~22:25 UTC)
 
-| Élément              | Version                                                                                                                                                                                       | Remarque                                                                         |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Core `raptoru-core`  | **`5e7ebe6`** (déployé 26/10 21:27 UTC depuis GitHub Actions, `core+bot`, sans migration ; code identique à `d215778`, seul un test change)                                                   | `running:healthy`, `/health` `/ready` 200 ; retour : `d215778`                   |
-| Bot `raptoru-bot`    | **`5e7ebe6`** (déployé 26/10 21:29 UTC : cadence Caution / chat, PR #17)                                                                                                                      | bail repris, EventSub bot et diffuseur OK ; retour : `d215778`                   |
-| `origin/main`        | `5e7ebe6` = PR #17 (Spotify, Caution) + PR #18 (délai d'un test), **déployé**                                                                                                                 | Coolify : auto-deploy désactivé                                                  |
-| Studio installé (PC) | **0.1.10** (construite par GitHub depuis `5e7ebe6`, publiée le 26/10, mise à jour intégrée par Antoni) ; profil copié avant : `Sauvegarde Raptoru 2.0\studio-profile-avant-0.1.10-2026-10-26` | retour : réinstaller 0.1.9 (release publique)                                    |
-| Roue du Sub          | **V2 active** (mode `v2`, interrupteur ON) depuis le 26/10 12:12 UTC ; **invitations ON** (activées par Antoni le 26/10 12:20 UTC) ; récupération des doubles crédits OFF                     | détails et retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) |
-| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                                                           | publication manuelle par Antoni                                                  |
-| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                                                                     | Node non épinglé (décision en attente)                                           |
-| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                                                           | journaux du bot sur `/data`                                                      |
-| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                                                                  | ne pas modifier ces réglages sans GO                                             |
+| Élément              | Version                                                                                                                                                                                                                                                                                                                                                      | Remarque                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Core `raptoru-core`  | **`4ba9243`** (déployé 27/10 ~01:40 UTC, `core+bot`, sans migration : Random Ban V3, PR #20)                                                                                                                                                                                                                                                                 | `running:healthy`, `/health` `/ready` 200 ; retour : `5e7ebe6`                   |
+| Bot `raptoru-bot`    | **`4ba9243`** (27/10 01:47 UTC ; le premier essai « ÉCHEC » à tort puis revenu seul sur `5e7ebe6`, relancé une fois : `DÉPLOYÉ`, [CICD.md](CICD.md) § 4)                                                                                                                                                                                                     | bail repris, EventSub bot et diffuseur OK ; retour : `5e7ebe6`                   |
+| `origin/main`        | `4ba9243` = PR #20 (Random Ban V3), **déployé** ; puis documentation                                                                                                                                                                                                                                                                                         | Coolify : auto-deploy désactivé                                                  |
+| Studio installé (PC) | **0.1.10** installée ; **0.1.11 publiée le 27/10** (construite depuis `4ba9243`, test de mise à jour 0.1.10 → 0.1.11 : 8 fichiers utilisateur identiques), **à installer par Antoni** (mise à jour intégrée ; installateur vérifié : `Documents\raptoru-studio-0.1.11-GO\`) ; profil copié : `Sauvegarde Raptoru 2.0\studio-profile-avant-0.1.11-2026-10-27` | retour : réinstaller 0.1.10 (release publique)                                   |
+| Roue du Sub          | **V2 active** (mode `v2`, interrupteur ON) depuis le 26/10 12:12 UTC ; **invitations ON** (activées par Antoni le 26/10 12:20 UTC) ; récupération des doubles crédits OFF                                                                                                                                                                                    | détails et retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) |
+| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                                                                                                                                                                                                                          | publication manuelle par Antoni                                                  |
+| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                                                                                                                                                                                                                                    | Node non épinglé (décision en attente)                                           |
+| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                                                                                                                                                                                                                          | journaux du bot sur `/data`                                                      |
+| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                                                                                                                                                                                                                                 | ne pas modifier ces réglages sans GO                                             |
 
 Fonctions en Production : économie canonique (Wallet, Daily, fidélité, présence), Commands V2 (`cmd_steps`), modération
 D4, Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2, Points de chaîne et effets,
 Random Ban, **Roue du Sub V2** (26/10), Caution, Votekick V2, **Spotify V2** (demandes de musique sans SAMMI). Niveau de validation
 de chacune : [ROADMAP.md](ROADMAP.md).
 
-## 3. Dernières livraisons et décisions (24–26/10)
+## 3. Dernières livraisons et décisions (24–27/10)
+
+- **Random Ban V3 — 27/10** (PR #20, Core et bot `4ba9243`, Studio 0.1.11 publiée) : acheteur 4× moins souvent tiré
+  (w / N) ; streamer tiré 2 % des fois → son micro « Micro » coupé 60 s dans OBS (jamais de timeout), seulement si
+  Studio 0.1.11 voit OBS connecté et que rien ne coupe déjà le micro ; micro partagé (Votekick, BRB, Random Ban : la voix
+  revient à la fin du dernier) ; Caution sur un mute OBS : 300 jetons / 10 s restantes, choix `votekick` / `rb` si les
+  deux. Bouton Studio « Tester le mute du streamer » : le micro seulement (ni Twitch, ni jetons, ni chat, ni animation,
+  ni caution). Prix Votekick : la Caution du mute streamer passe déjà à 300 / 10 s avec le Core `4ba9243`.
+  **Non validé en réel** ; règles : [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md) § V3, [CAUTION.md](CAUTION.md).
 
 - **Deuxième passe — close le 26/10** (PR #16, #17, #18) :
   - Studio 0.1.9 : Tombola, tranches du montant aléatoire éditées en brouillon (Enregistrer / Annuler) ; Bonk, un tir
@@ -117,9 +125,9 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 ## 6. Prochaine action
 
-0. **Random Ban V3** (GO 26–27/10, PR #20 `feat/random-ban-v3`, worktree `Documents\raptoru-random-ban`, CI verte) :
-   validation Lab par Antoni (`lab-rb3.cmd`, port 4200, fermer d'abord l'autre Lab), puis fusion, Core + bot, Studio.
-   Règles : [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md) § V3, [CAUTION.md](CAUTION.md). Rien de déployé.
+0. **Random Ban V3** (en Production, Studio 0.1.11 à installer) : installer 0.1.11 par la mise à jour intégrée, puis
+   hors live, OBS ouvert : Points de chaîne → Random Ban → « Mute du streamer : prêt » → « Tester le mute du streamer »
+   (micro coupé 60 s puis rétabli seul). Ensuite observer au premier live (tirages, CSC plus rares).
 1. Premier live après la deuxième passe : délai des devis Caution (attendu sous ~1 s), demandes Spotify d'éditions
    (Indochine…), tranches Tombola, tirs Bonk.
 2. Votekick : le son de lancement est validé (25/10) ; reste à confirmer la durée de vote réglable sur un vrai vote
