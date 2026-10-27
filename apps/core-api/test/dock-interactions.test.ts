@@ -141,4 +141,38 @@ describe('interactions in the dock projection', () => {
     expect(await dock.scan(CHANNEL)).toBe(0);
     expect(await keys(core)).toBe(0);
   });
+
+  it('avatars (V1.2): the cached picture rides with the actor; one found later brings the same activity back; the missing ones are asked for in the background', async () => {
+    const { core, dock } = await lab();
+    const asked: string[][] = [];
+    dock.attachAvatars({
+      ensure: async (ids) => {
+        asked.push(ids);
+      },
+    });
+    await core.bonkLab.admit({ ...base(), emote: smile });
+    expect(await dock.scan(CHANNEL)).toBe(1);
+    const first = await dock.recent(CHANNEL);
+    expect(first.activities[0]!.data.actor).toEqual({
+      id: V.id,
+      name: V.display_name,
+    });
+    expect(asked).toEqual([[V.id]]);
+    // The cache learns the picture (as AvatarCache.ensure stores it): the row is projected again, same key.
+    const url =
+      'https://static-cdn.jtvnw.net/jtv_user_pictures/x-profile_image-70x70.png';
+    await core.db.query(
+      `insert into lab_viewer_avatars (viewer_id, url, status, fetched_at) values ($1, $2, 'ok', now())`,
+      [V.id, url],
+    );
+    expect(await dock.scan(CHANNEL)).toBe(1);
+    const ch = await dock.changes(CHANNEL, { after: first.cursor });
+    expect(ch.activities.map((a) => a.activity_key)).toEqual([
+      first.activities[0]!.activity_key,
+    ]);
+    expect(ch.activities[0]!.data.actor).toMatchObject({ avatar: url });
+    expect(await dock.scan(CHANNEL)).toBe(0);
+    expect(asked).toHaveLength(1);
+    expect(await keys(core)).toBe(1);
+  });
 });

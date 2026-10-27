@@ -81,6 +81,12 @@ const pick = (o: Record<string, unknown>, keys: readonly string[]) =>
 
 const iso = (d: Date | string) => new Date(d).toISOString();
 
+/** An alert's actor with its cached picture, when there is one (the picture never replaces anything else). */
+const withAvatar = (actor: unknown, avatar: string | null) =>
+  actor && typeof actor === 'object' && avatar
+    ? { actor: { ...(actor as Record<string, unknown>), avatar } }
+    : {};
+
 export class DockActivityService {
   private readonly waiters = new Map<string, Set<() => void>>();
   private readonly loops = new Map<
@@ -92,6 +98,7 @@ export class DockActivityService {
     }
   >();
   private readonly scanning = new Map<string, Promise<number>>();
+  private avatars: { ensure(ids: string[]): Promise<unknown> } | null = null;
 
   constructor(
     private readonly db: Db,
@@ -101,6 +108,15 @@ export class DockActivityService {
 
   private now() {
     return this.clock.now();
+  }
+
+  /**
+   * V1.2 — the Twitch profile pictures cache (raffle-lab/avatars.ts, the one Votekick uses): after a scan, the viewers
+   * projected without a picture are asked for in the background (at most 100, never awaited; the cache's own TTLs
+   * bound the calls). A picture found later changes the row's version: the row comes back in the feed with it.
+   */
+  attachAvatars(cache: { ensure(ids: string[]): Promise<unknown> }) {
+    this.avatars = cache;
   }
 
   // --- the projector ---------------------------------------------------------------------------------------------
@@ -123,6 +139,7 @@ export class DockActivityService {
     const since = new Date(
       this.now().getTime() - (full ? DOCK.historyMs : DOCK.scanWindowMs),
     );
+    let missing: string[] = [];
     const written = await this.db.tx(async (q) => {
       await q.query(
         'insert into dock_activity_channels (channel_id) values ($1) on conflict do nothing',
@@ -181,9 +198,19 @@ export class DockActivityService {
            and occurred_at < $2 limit 200)`,
         [channelId, new Date(this.now().getTime() - DOCK.historyMs)],
       );
+      missing = [
+        ...new Set(
+          changed
+            .map((p) => p.data.actor as { id?: unknown; avatar?: unknown })
+            .filter((a) => a && typeof a.id === 'string' && a.id && !a.avatar)
+            .map((a) => a.id as string),
+        ),
+      ].slice(0, 100);
       return changed.length;
     });
     if (written) this.wake(channelId);
+    if (missing.length && this.avatars)
+      void this.avatars.ensure(missing).catch(() => {});
     return written;
   }
 
@@ -201,25 +228,28 @@ export class DockActivityService {
       replay_alert_id: string | null;
       replay_status: string | null;
       replays: number;
+      avatar: string | null;
       version: string;
     }>(
       `with src as (
          select 'alert:' || e.source || ':' || e.source_event_id as key, e.type, e.payload, e.outcome, e.received_at,
            e.alert_id, i.status as alert_status, i.failure,
            r.replay_alert_id, ri.status as replay_status,
-           (select count(*)::int from dock_replays x where x.original_alert_id = e.alert_id) as replays
+           (select count(*)::int from dock_replays x where x.original_alert_id = e.alert_id) as replays,
+           av.url as avatar
          from alert_events e
          left join alert_items i on i.alert_id = e.alert_id
+         left join lab_viewer_avatars av on av.viewer_id = e.payload->'actor'->>'id' and av.status = 'ok'
          left join lateral (select replay_alert_id from dock_replays d where d.original_alert_id = e.alert_id
            order by requested_at desc limit 1) r on true
          left join alert_items ri on ri.alert_id = r.replay_alert_id
          where e.channel_id = $1 and e.received_at >= $2
        )
        select src.*, concat_ws('|', src.outcome, coalesce(src.alert_status, '-'), coalesce(src.replay_status, '-'),
-         src.replays) as version
+         src.replays, coalesce(src.avatar, '-')) as version
        from src left join dock_activity a on a.channel_id = $1 and a.activity_key = src.key
        where a.version is distinct from concat_ws('|', src.outcome, coalesce(src.alert_status, '-'),
-         coalesce(src.replay_status, '-'), src.replays)
+         coalesce(src.replay_status, '-'), src.replays, coalesce(src.avatar, '-'))
        order by src.received_at, src.key limit 2000`,
       [channelId, since],
     );
@@ -234,6 +264,7 @@ export class DockActivityService {
       ),
       data: {
         ...pick(r.payload, ALERT_FIELDS),
+        ...withAvatar(r.payload.actor, r.avatar),
         source: r.payload.source,
       },
       state: {
@@ -269,13 +300,16 @@ export class DockActivityService {
       redeemed_at: Date;
       status: string;
       reason: string | null;
+      avatar: string | null;
       version: string;
     }>(
       `with src as (
-         select 'cp:' || c.source || ':' || c.redemption_id as key, c.*,
-           concat_ws('|', c.status, coalesce(c.twitch_status, '-'), coalesce(c.reason, '-'), md5(c.results::text))
-             as version
-         from cp_redemptions c where c.channel_id = $1 and c.received_at >= $2
+         select 'cp:' || c.source || ':' || c.redemption_id as key, c.*, av.url as avatar,
+           concat_ws('|', c.status, coalesce(c.twitch_status, '-'), coalesce(c.reason, '-'), md5(c.results::text),
+             coalesce(av.url, '-')) as version
+         from cp_redemptions c
+         left join lab_viewer_avatars av on av.viewer_id = c.user_id and av.status = 'ok'
+         where c.channel_id = $1 and c.received_at >= $2
        )
        select src.* from src left join dock_activity a on a.channel_id = $1 and a.activity_key = src.key
        where a.version is distinct from src.version
@@ -288,7 +322,12 @@ export class DockActivityService {
       type: 'reward',
       occurred_at: new Date(r.redeemed_at),
       data: {
-        actor: { id: r.user_id, login: r.user_login, name: r.user_name },
+        actor: {
+          id: r.user_id,
+          login: r.user_login,
+          name: r.user_name,
+          ...(r.avatar ? { avatar: r.avatar } : {}),
+        },
         reward: { id: r.reward_id, title: r.reward_title, cost: r.reward_cost },
         ...(r.user_input ? { message: r.user_input } : {}),
         source: r.source,
@@ -324,6 +363,7 @@ export class DockActivityService {
       review_status: string | null;
       detail: string | null;
       extra: Record<string, unknown> | null;
+      avatar: string | null;
       version: string;
     }>(
       `with src as (
@@ -355,13 +395,22 @@ export class DockActivityService {
            concat_ws('|', r.status, r.refund, coalesce(r.target_id, '-'), coalesce(r.reason, '-'))
          from rb_requests r where r.channel_id = $1 and r.source = 'chat' and r.created_at >= $2
        )
-       select src.* from src left join dock_activity a on a.channel_id = $1 and a.activity_key = src.key
-       where a.version is distinct from src.version
+       select src.key, src.type, src.created_at, src.viewer_id, src.viewer_name, src.status, src.refund_status,
+         src.review_status, src.detail, src.extra, av.url as avatar,
+         concat_ws('|', src.version, coalesce(av.url, '-')) as version
+       from src
+       left join lab_viewer_avatars av on av.viewer_id = src.viewer_id and av.status = 'ok'
+       left join dock_activity a on a.channel_id = $1 and a.activity_key = src.key
+       where a.version is distinct from concat_ws('|', src.version, coalesce(av.url, '-'))
        order by src.created_at, src.key limit 2000`,
       [channelId, since],
     );
     return rows.map((r): Projected => {
-      const actor = { id: r.viewer_id, name: r.viewer_name };
+      const actor = {
+        id: r.viewer_id,
+        name: r.viewer_name,
+        ...(r.avatar ? { avatar: r.avatar } : {}),
+      };
       const x = r.extra ?? {};
       const data: Record<string, unknown> =
         r.type === 'bonk'
