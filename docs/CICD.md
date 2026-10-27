@@ -125,6 +125,11 @@ artefact de test supprimés ensuite, 0.1.7 inchangée. Secours sans GitHub : `no
    (attendre `running:healthy` jusqu'au délai aussi pour le bot).
    `BLOQUÉ` du bot « raptoru-core doit d'abord tourner sur … » (26/10, `5e7ebe6`) : déployer `core+bot` sur ce commit
    (redémarre le Core : GO d'Antoni requis même si son code ne change pas).
+   Deuxième faux « ÉCHEC » du bot le 27/10 (`4ba9243`) : le retour arrière automatique vers `5e7ebe6` a lui aussi été
+   jugé « ÉCHEC » par la même lecture unique, alors que le bot était `running:healthy` avec le bail ; une relance du bot
+   seul a été `DÉPLOYÉ`. Toujours vérifier `node scripts/coolify-deploy.mjs status bot` avant d'agir sur un « ÉCHEC ».
+   Publication Studio du 27/10 : un échec intermittent de `alerts-se.test.ts` sur Windows (`ENOTEMPTY` au nettoyage d'un
+   dossier temporaire) a arrêté la validation avant toute publication ; « Re-run failed jobs » a suffi.
 5. Diagnostic conservé : artefact `deploy-…` (journal sans secret, 90 jours) et onglet Deployments.
 
 En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status core`, `plan core <sha>`,

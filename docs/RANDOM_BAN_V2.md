@@ -1,6 +1,6 @@
 # Random Ban V2 (M1.1)
 
-## V3 (27/10/2026) — développée, testée automatiquement, **non validée, non déployée**
+## V3 (27/10/2026) — **en Production** (Core et bot `4ba9243`, Studio 0.1.11 publiée), **non validée en réel**
 
 Décisions d'Antoni (GO du 26–27/10) : tirage toujours aléatoire, acheteur plus rare, streamer cible exceptionnelle.
 
