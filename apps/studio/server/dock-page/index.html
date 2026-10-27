@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Raptoru — Dock</title>
+    <link rel="stylesheet" href="/dock.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <span
+        id="dot"
+        class="dot t-wait"
+        title="Connexion…"
+        role="img"
+        aria-label="État de la connexion"
+      ></span>
+      <nav id="chips" class="chips" aria-label="Filtrer les événements"></nav>
+    </header>
+    <p id="banner" class="banner" role="status" hidden></p>
+    <main class="scroll">
+      <button type="button" id="pill" class="pill" hidden></button>
+      <ol
+        id="list"
+        class="list"
+        aria-live="polite"
+        aria-label="Événements récents"
+      ></ol>
+      <p id="empty" class="empty">Aucun événement pour l’instant.</p>
+      <button type="button" id="older" class="older" hidden>
+        Charger les plus anciens
+      </button>
+    </main>
+    <p id="toast" class="toast" role="status" hidden></p>
+    <script type="module" src="/dock.js"></script>
+  </body>
+</html>

@@ -68,6 +68,9 @@ import {
   type Signal,
 } from './supervision/signals.js';
 import { Supervisor } from './supervision/supervisor.js';
+import { DockHub } from './dock/hub.js';
+import { DockKey, DockServer } from './dock/server.js';
+import { dockStudioApi, type DockRuntime } from './dock/studio-api.js';
 import {
   createLocalRuntime,
   portFree,
@@ -379,6 +382,8 @@ export function createStudioServer(
   control: ControlCenter | null = null,
   /** Incidents of the live (incident 22/10): global banner and desktop notifications. */
   supervision: { handle: Supervisor['handle']; origin: string } | null = null,
+  /** Dock OBS V1: its own local server (another port); here only Studio's panel API (docs/OBS_DOCK.md). */
+  dock: DockRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -454,6 +459,14 @@ export function createStudioServer(
       if (wordGame && (await wordGame.handle(req, res, url))) return;
       if (url.pathname === '/api/word-game/state' && !wordGame)
         return send(res, 200, { enabled: false });
+      // Dock OBS V1: the panel's URL / key (the dock itself is served on its own port).
+      if (url.pathname === '/api/dock' || url.pathname === '/api/dock/key') {
+        if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
+        if (req.headers[STUDIO_HEADER] !== '1')
+          return send(res, 403, { error: 'missing_studio_header' });
+        const out = await dockStudioApi(dock, req, url);
+        if (out) return send(res, out.status, out.body);
+      }
       // Twitch alerts V1: Core queues; Studio serves the OBS source / preview and relays the claims / reports.
       if (alerts && (await alerts.handle(req, res, url))) return;
       if (points && (await points.handle(req, res, url))) return;
@@ -687,6 +700,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Lab chat ingress, created below (the shutdown may run before it exists).
   let labChatRef: LabChatIngress | null = null;
   let seRef: SeTipsLink | null = null;
+  let dockRef: DockRuntime | null = null;
   let pointsRef: ChannelPointsRuntime | null = null;
   let twitchConnectionsRef: TwitchConnections | null = null;
   let stopping = false;
@@ -698,6 +712,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     tts?.stop();
     production?.link.stop();
     seRef?.close();
+    void dockRef?.server.close();
     pointsRef?.stop();
     lab.logs.add(
       'studio',
@@ -1066,6 +1081,30 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     },
     log: (line) => console.log(lab.deps.redact(line)),
   });
+  // Dock OBS V1 (docs/OBS_DOCK.md): the activity feed of the profile's Core, followed once and served to OBS docks on
+  // Studio's port + 10 (DOCK_PORT; 4110 for the installed Studio). A port already taken leaves the dock unavailable, never Studio.
+  const dockHub =
+    alertsCore && alertsEnv
+      ? new DockHub({
+          core: alertsCore,
+          environment: alertsEnv,
+          channelId: cockpitChannel,
+        })
+      : null;
+  const dock: DockRuntime | null = dockHub
+    ? {
+        hub: dockHub,
+        error: null,
+        server: new DockServer({
+          hub: dockHub,
+          key: await DockKey.open(join(paths.runtimeDir, 'dock', 'key.json')),
+          port: Number(process.env.DOCK_PORT ?? port + 10),
+          pageDir: join(REPO_ROOT, 'apps', 'studio', 'server', 'dock-page'),
+          log: (line) => console.log(line),
+        }),
+      }
+    : null;
+  dockRef = dock;
   const httpServer = createStudioServer(
     lab,
     shutdown,
@@ -1101,8 +1140,22 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     // the viewer interactions as Studio sees them (supervision/signals.ts).
     control,
     { handle: supervisor.handle.bind(supervisor), origin: studioOrigin },
+    dock,
   );
   supervisor.start();
+  if (dock)
+    dock.server.listen().then(
+      () =>
+        console.log(
+          `[studio-server] Dock OBS on ${dock.server.url().split('#')[0]}`,
+        ),
+      (e: NodeJS.ErrnoException) => {
+        dock.error = e.code === 'EADDRINUSE' ? 'port_in_use' : 'listen_failed';
+        console.error(
+          `[studio-server] Dock OBS unavailable: ${e.code ?? e.message}`,
+        );
+      },
+    );
   httpServer.once('error', (error: NodeJS.ErrnoException) => {
     console.error(
       `[studio-server] listen failed: ${error.code ?? error.message}`,

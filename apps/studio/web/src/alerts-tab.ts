@@ -19,6 +19,7 @@ import {
 import { mountCalibration } from './alerts-calibrate.js';
 import { mountSeDonations } from './alerts-se.js';
 import { mountTwitchMode } from './alerts-twitch.js';
+import { mountDockPanel } from './dock-panel.js';
 
 // Twitch alerts V1 (A2) — Studio tab « Alertes » (docs/TWITCH_ALERTS_PARITY_2026-10.md § 14). The preview iframe runs
 // the SAME engine as the OBS source, driven by postMessage: it never claims or reports anything (no queue).
@@ -105,6 +106,7 @@ export function mountAlerts(root: HTMLElement) {
           </div>
           <div class="al-se"><h2>Dons StreamElements</h2><div data-role="se"></div>
           </div>
+          <div class="al-se"><h2>Dock OBS</h2><div data-role="dock"></div></div>
         </div>
       </div>
     </section>`;
@@ -116,6 +118,8 @@ export function mountAlerts(root: HTMLElement) {
 
   mountTwitchMode($('twitch'));
   mountSeDonations($('se'));
+  // Dock OBS V1: the URL for OBS and its key (dock-panel.ts).
+  mountDockPanel($('dock'));
 
   const calib = mountCalibration({
     host: $('calib'),

@@ -38,6 +38,8 @@ const PREFIXES = [
   '/v1/lab/sub-wheel/',
   // Spotify V2: Studio's sync, jobs and reports, the panel (state, settings, moderation).
   '/v1/lab/spotify/',
+  // Dock OBS V1: the activity feed (read only) and the visual replay of an alert.
+  '/v1/lab/dock/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

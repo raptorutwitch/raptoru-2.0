@@ -1,0 +1,409 @@
+/* Dock OBS V1 — Raptoru Studio's dark look (style.css: #111317, cards #1b1e24, accent #8b5cf6), made for a narrow,
+   resizable OBS column (usable from ~240 px). No animation loop; only a short fade for what just arrived. */
+
+:root {
+  --bg: #111317;
+  --row: #16191e;
+  --row-hover: #1b1e24;
+  --line: #262a32;
+  --text: #e7e9ee;
+  --muted: #8c93a1;
+  --accent: #8b5cf6;
+  --ok: #34d399;
+  --wait: #fbbf24;
+  --bad: #f87171;
+  --follow: #60a5fa;
+  --sub: #a78bfa;
+  --gift: #f472b6;
+  --bits: #fbbf24;
+  --raid: #fb923c;
+  --donation: #34d399;
+  --reward: #38bdf8;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font:
+    13px/1.35 'Segoe UI',
+    system-ui,
+    sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* --- top bar: status dot + filter chips ---------------------------------------------------------------------------- */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--muted);
+}
+.dot.t-ok {
+  background: var(--ok);
+}
+.dot.t-wait {
+  background: var(--wait);
+}
+.dot.t-bad {
+  background: var(--bad);
+}
+
+.chips {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--c, var(--muted));
+}
+.chip b {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--muted);
+}
+.chip.off {
+  opacity: 0.35;
+}
+.chip:hover {
+  background: var(--row-hover);
+}
+
+.g-follow {
+  --c: var(--follow);
+}
+.g-sub {
+  --c: var(--sub);
+}
+.g-gift {
+  --c: var(--gift);
+}
+.g-bits {
+  --c: var(--bits);
+}
+.g-raid {
+  --c: var(--raid);
+}
+.g-donation {
+  --c: var(--donation);
+}
+.g-reward {
+  --c: var(--reward);
+}
+
+.banner {
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--wait);
+  background: #2a2412;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+/* --- the list ------------------------------------------------------------------------------------------------------ */
+.scroll {
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Rows inserted above keep what you read in place. */
+  overflow-anchor: auto;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  padding: 5px 6px 5px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--row);
+  cursor: pointer;
+}
+.row:hover,
+.row:focus-visible {
+  background: var(--row-hover);
+}
+.row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--c, var(--muted));
+  opacity: 0.55;
+}
+.row.fresh {
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.14), var(--row) 70%);
+  animation: arrive 0.5s ease-out;
+}
+@keyframes arrive {
+  from {
+    opacity: 0.2;
+  }
+}
+
+.ic {
+  width: 16px;
+  flex: none;
+  text-align: center;
+  color: var(--c, var(--muted));
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.l1,
+.l2 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.who {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.when {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.what {
+  color: #c4c9d4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.st {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+.st.t-ok {
+  color: var(--ok);
+}
+.st.t-wait {
+  color: var(--wait);
+}
+.st.t-bad {
+  color: var(--bad);
+}
+
+.l3 {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #c4c9d4;
+}
+.msg-full {
+  margin: 0 0 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.detail dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 8px;
+  margin: 0;
+}
+.detail dt {
+  color: var(--muted);
+}
+.detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* --- the replay: discreet until hovered / focused ------------------------------------------------------------------ */
+.act {
+  flex: none;
+  align-self: center;
+  height: 22px;
+  min-width: 24px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #1f232a;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.row:hover .act,
+.row:focus-within .act,
+.act.confirm,
+.act:disabled {
+  opacity: 1;
+}
+.act.confirm {
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--accent);
+  font-size: 11px;
+}
+.act:disabled {
+  cursor: progress;
+  opacity: 0.5;
+}
+@media (hover: none) {
+  .act {
+    opacity: 1;
+  }
+}
+
+/* --- helpers ------------------------------------------------------------------------------------------------------- */
+.pill {
+  position: sticky;
+  top: 6px;
+  z-index: 2;
+  display: block;
+  margin: 0 auto -28px;
+  height: 22px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 11px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.empty {
+  margin: 24px 12px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.older {
+  display: block;
+  width: calc(100% - 12px);
+  margin: 8px 6px 12px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.older:hover {
+  color: var(--text);
+}
+
+.toast {
+  position: fixed;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: #1f2a22;
+  border: 1px solid #2f4a37;
+  font-size: 12px;
+  z-index: 5;
+}
+.toast.bad {
+  background: #2c1a1a;
+  border-color: #5b2a2a;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 260px) {
+  .chip b {
+    display: none;
+  }
+  .when {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row.fresh {
+    animation: none;
+  }
+  .act {
+    transition: none;
+  }
+}
