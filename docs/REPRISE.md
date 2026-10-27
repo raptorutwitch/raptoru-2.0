@@ -126,8 +126,7 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 ## 6. Prochaine action
 
 0. **Dock OBS V1** (mission du 27/10, suivi : [OBS_DOCK.md](OBS_DOCK.md)) : développé sur `feat/obs-dock` (worktree
-   `Documents
-aptoru-dock`), PR #28 CI verte, **non livré** : GO d'Antoni requis (migration Production additive, Core,
+   `Documents\raptoru-dock`), PR #28 CI verte, **non livré** : GO d'Antoni requis (migration Production additive, Core,
    Studio), puis validation dans OBS.
 1. **Random Ban V3** : installer Studio 0.1.14. « Test Caution Random Ban » (Points de chaîne → Random Ban) : vraie
    sanction de 60 s libérable par `!caution raptoru_` (jetons réels, sans tirage ni Twitch). Suivi des tirages : paragraphe
