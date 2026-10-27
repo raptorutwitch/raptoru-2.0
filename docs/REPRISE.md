@@ -126,7 +126,9 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 ## 6. Prochaine action
 
 0. **Dock OBS V1** (livré le 27/10 : Core `d1dcdca`, Studio 0.1.15 publiée) : installer Studio 0.1.15, puis connecter le
-   dock dans OBS ([OBS_DOCK.md](OBS_DOCK.md) « Utilisation ») et le valider en vrai. V1.1 seulement après ce retour.
+   dock dans OBS ([OBS_DOCK.md](OBS_DOCK.md) « Utilisation ») et le valider en vrai. **V1.1** (refonte, préférences,
+   regroupement, Bonk / Soundboard / TTS / Tombola / `!rb`) : branche `feat/obs-dock-v11`, PR ouverte, **non livrée** —
+   livraison = GO d'Antoni (migration Production additive `20261111130000`, Core, puis Studio) ; OBS_DOCK.md « V1.1 ».
 1. **Random Ban V3** : installer Studio 0.1.14. « Test Caution Random Ban » (Points de chaîne → Random Ban) : vraie
    sanction de 60 s libérable par `!caution raptoru_` (jetons réels, sans tirage ni Twitch). Suivi des tirages : paragraphe
    « Suivi du streamer ».
