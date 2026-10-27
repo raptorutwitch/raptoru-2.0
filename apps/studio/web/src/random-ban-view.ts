@@ -29,6 +29,42 @@ export interface RbView {
   created_at: string;
   /** V3: the streamer drawn — his mic muted (no Twitch timeout). */
   streamer_mute?: boolean;
+  /** V3 trace: why the streamer was or was not the target. */
+  streamer_decision?: StreamerDecision | null;
+}
+
+export interface StreamerDecision {
+  decision: string;
+  draw?: number;
+  studio_age_ms?: number | null;
+  obs_failed?: string;
+}
+
+/** The streamer decisions, read by the streamer. */
+export const STREAMER_DECISION: Record<string, string> = {
+  drawn: 'tiré',
+  not_drawn: 'éligible, pas tiré',
+  no_streamer: 'inconnu de ce Core',
+  dry_run: 'tirage à blanc (jamais le streamer)',
+  studio_silent: 'Studio non vu par le Core',
+  obs_not_ready: 'OBS non connecté',
+  mic_held: 'micro déjà tenu par un autre effet',
+  votekick_mute: 'mute Votekick en cours',
+  streamer_muted: 'mute Random Ban déjà en cours',
+};
+
+export function streamerDecisionText(d: StreamerDecision | null | undefined) {
+  if (!d) return '';
+  const label = STREAMER_DECISION[d.decision] ?? d.decision;
+  const draw = d.draw !== undefined ? ` (tirage ${d.draw}/1000)` : '';
+  const age =
+    d.decision === 'studio_silent'
+      ? d.studio_age_ms === null || d.studio_age_ms === undefined
+        ? ' (jamais vu)'
+        : ` (vu il y a ${Math.round(d.studio_age_ms / 1000)} s)`
+      : '';
+  const obs = d.obs_failed ? ` · mute impossible : ${d.obs_failed}` : '';
+  return `Streamer : ${label}${draw}${age}${obs}`;
 }
 
 export interface RbState {
@@ -39,6 +75,17 @@ export interface RbState {
     streamer_per_mille?: number;
     streamer_mute_s?: number;
   };
+  /** V3 trace over the last real Random Bans. */
+  streamer_trace?: {
+    requests: number;
+    traced: number;
+    by_decision: Record<string, number>;
+    eligible: number;
+    drawn: number;
+    obs_failed: number;
+    eligible_since_last_drawn: number;
+    luck_pct: number;
+  } | null;
   /** V3: what Studio said about the mic (Core's view), and its own. */
   studio?: { obs_ready: boolean; mic_held: boolean } | null;
   mic?: { input: string; obs_connected: boolean; held_by: string[] } | null;
@@ -167,9 +214,14 @@ export function randomBanView(s: RbState | null, error: string | null) {
       const anim = r.animation
         ? `${ANIMATION[r.animation] ?? r.animation} — ${ANIMATION_STATUS[r.animation_status] ?? r.animation_status}`
         : '';
-      const stats = r.stats
-        ? `${r.stats.chatters ?? 0} chatters, ${r.stats.candidates ?? 0} candidats, ${r.stats.follow_checks ?? 0} follows vérifiés`
-        : '';
+      const stats = [
+        r.stats && r.stats.chatters !== undefined
+          ? `${r.stats.chatters ?? 0} chatters, ${r.stats.candidates ?? 0} candidats, ${r.stats.follow_checks ?? 0} follows vérifiés`
+          : '',
+        streamerDecisionText(r.streamer_decision),
+      ]
+        .filter(Boolean)
+        .join(' · ');
       return `<tr class="cp-row--${r.status === 'confirmed' || r.status === 'flop' || r.status === 'simulated' ? 'done' : r.status === 'failed' ? 'failed' : 'pending'}">
         <td>${esc(new Date(r.created_at).toLocaleTimeString('fr-FR'))}</td>
         <td>${r.mode === 'real' ? '' : '<i>Test</i> '}${esc(r.buyer.name)}</td>
@@ -189,6 +241,26 @@ export function randomBanView(s: RbState | null, error: string | null) {
             'Le streamer n’est pas tiré tant qu’un autre effet coupe son micro',
           )
         : chip('ok', `Mute du streamer : prêt (« ${s.mic.input} »)`);
+  const t = s.streamer_trace;
+  const trace =
+    t && t.traced
+      ? `<p class="cp-muted"><b>Suivi du streamer</b> (${t.traced} Random Ban réels suivis) : éligible ${t.eligible} fois, tiré ${t.drawn} fois${
+          t.obs_failed ? `, mute impossible ${t.obs_failed} fois` : ''
+        }. Depuis le dernier tirage gagnant : ${t.eligible_since_last_drawn} tirage(s) éligible(s) perdu(s) — ${
+          t.luck_pct >= 5
+            ? `${t.luck_pct} % de chances par simple malchance (normal)`
+            : `seulement ${t.luck_pct} % de chances par simple malchance (à signaler)`
+        }.${
+          Object.entries(t.by_decision).filter(
+            ([k]) => k !== 'drawn' && k !== 'not_drawn',
+          ).length
+            ? ` Inéligible : ${Object.entries(t.by_decision)
+                .filter(([k]) => k !== 'drawn' && k !== 'not_drawn')
+                .map(([k, n]) => `${STREAMER_DECISION[k] ?? k} × ${n}`)
+                .join(', ')}.`
+            : ''
+        }</p>`
+      : '';
   const v3 =
     s.rules.buyer_weight !== undefined
       ? ` L’acheteur est tiré ${Math.round(1 / s.rules.buyer_weight)} fois moins souvent qu’un autre (jamais impossible ; seul éligible, il est tiré). ${
@@ -203,6 +275,7 @@ export function randomBanView(s: RbState | null, error: string | null) {
       chaîne ; ni le streamer, ni les modérateurs, ni les déjà bannis ; VIP et acheteur possibles (CSC). Timeout par
       LeCroupier_ : ${s.rules.duration_sub_s / 60} min pour un abonné, ${s.rules.duration_non_sub_s / 60} min sinon. Aucun éligible : flop, rien
       n’est remboursé. Activation : règle « Ban aléatoire » ci-dessus (Interaction native « Random Ban »).${esc(v3)}</p>
+    ${trace}
     <div class="cp-buttons">
       <label class="cp-inline">Animation <select data-f="rb-outcome"><option value="ban">ban (au hasard)</option><option value="csc">CSC</option><option value="flop">flop</option></select></label>
       <button type="button" data-act="rb-animation" title="Joue l’animation dans OBS, aucun appel Twitch">Tester l’animation</button>
