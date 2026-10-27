@@ -13,9 +13,9 @@ rapport Astra `C:\Users\Antoni\Documents\Codex\2026-10-27\files-pasted-by-the-us
   Alertes → « Dock OBS »).
 - **Lot 3 (page du dock)** : V1 faite — fil compact, filtres, « N nouveaux », détail, replay en deux clics, cadeaux
   communautaires repliés, états de connexion. Aperçu vérifié dans Chromium (240/300/420 px, aucune erreur console).
-- **Lot 4** : suites complètes vertes, PR #28 ouverte (CI verte). Reste : validation manuelle dans OBS par Antoni,
-  puis livraison avec son GO (migration Production additive, Core, Studio).
-- Rien de poussé, rien de déployé. Aucune migration appliquée hors bases de test.
+- **Lot 4** : **livré le 27/10** — PR #28 fusionnée (`d1dcdca`), sauvegarde de la base (17:18 UTC), Core déployé avec la
+  migration en post-deploy (`DÉPLOYÉ`, santé OK), bot inchangé, Studio **0.1.15** publiée (installateur vérifié).
+  Reste : installation par Antoni et validation dans OBS.
 
 ## Décisions (et pourquoi)
 
@@ -127,5 +127,4 @@ Studio : `GET /api/dock` → `{ available, reason, url, clients, feed }` ; `POST
 
 ## Prochaine action
 
-Attendre le GO d'Antoni pour livrer (fusion PR #28, migration Production additive, Core, Studio 0.1.15), puis sa
-validation dans OBS (installation du dock : section « Utilisation »).
+Antoni installe Studio 0.1.15, connecte le dock (« Utilisation ») et le valide en vrai ; V1.1 après son retour.
