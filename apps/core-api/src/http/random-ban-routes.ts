@@ -4,6 +4,7 @@ import {
   RbClaimRequest,
   RbMuteClaim,
   RbMuteReport,
+  RbTestMuteRequest,
   RbResultReport,
   RbTargetReport,
   RbTestRequest,
@@ -66,8 +67,15 @@ export function randomBanRoutes(
       method: 'POST',
       pattern: at(base, '/(\\d{1,32})/test-streamer-mute'),
       auth,
-      handle: ({ params }) =>
-        mapped(() => rb.testStreamerMute(channel(params[0]!))),
+      // `{ caution: true }`: « Test Caution Random Ban » — a test mute Caution may end (real Jetons).
+      handle: ({ params, body }) =>
+        mapped(() =>
+          rb.testStreamerMute(
+            channel(params[0]!),
+            undefined,
+            parse(RbTestMuteRequest, body ?? {}),
+          ),
+        ),
     },
     {
       // V3: Studio's poll for the streamer's mute (and whether it could mute now).

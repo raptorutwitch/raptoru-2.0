@@ -565,3 +565,147 @@ describe('Random Ban V3 — the streamer trace (27/10): eligible or why not, the
     expect(r).toBeTruthy();
   });
 });
+
+describe('« Test Caution Random Ban » (27/10): a real streamer sanction Caution may end — no draw, no Twitch', () => {
+  async function cautionTest() {
+    const f = await fixture(false);
+    const asPayer = (text: string, id = randomUUID()) =>
+      f.caution.chat({
+        channel_id: CH,
+        message_id: id,
+        text,
+        chatter: {
+          id: PAYER.id,
+          login: PAYER.login,
+          display_name: PAYER.name,
+          role: 'viewer',
+        },
+        source: 'twitch',
+      });
+    const exec = {
+      executor_id: 'bot-1',
+      login: 'lecroupier_',
+      can_read: true,
+      can_release: true,
+      missing: [],
+    };
+    const quote = async () => {
+      await f.caution.claim(CH, exec);
+      expect((await asPayer('!caution raptoru_')).outcome).toBe('checking');
+      const job = (await f.caution.claim(CH, exec)).job!;
+      return f.caution.check(job.request_id, {
+        executor_id: 'bot-1',
+        attempt_id: job.attempt_id,
+        target: { id: CH, login: 'raptoru_', name: 'Raptoru_' },
+        sanction: { kind: 'none' },
+      });
+    };
+    const tokens = async () =>
+      Number(
+        (
+          await f.core.db.query<{ tokens: number }>(
+            'select tokens from lab_wallets where channel_id = $1 and viewer_id = $2',
+            [CH, PAYER.id],
+          )
+        )[0]?.tokens ?? 0,
+      );
+    return { ...f, asPayer, quote, tokens };
+  }
+
+  it('refused unless Studio is ready (seen, OBS connected, mic free) and nothing mutes the streamer', async () => {
+    const f = await cautionTest();
+    await expect(
+      f.rb.testStreamerMute(CH, undefined, { caution: true }),
+    ).rejects.toMatchObject({ code: 'studio_silent' });
+    await f.studio({ obs_ready: false });
+    await expect(
+      f.rb.testStreamerMute(CH, undefined, { caution: true }),
+    ).rejects.toMatchObject({ code: 'obs_not_ready' });
+    await f.studio({ mic_held: true });
+    await expect(
+      f.rb.testStreamerMute(CH, undefined, { caution: true }),
+    ).rejects.toMatchObject({ code: 'mic_held' });
+    await f.studio();
+    await f.rb.testStreamerMute(CH, undefined, { caution: true });
+    await expect(
+      f.rb.testStreamerMute(CH, undefined, { caution: true }),
+    ).rejects.toMatchObject({ code: 'streamer_already_muted' });
+  });
+
+  it('the real Caution path: quote on the seconds left, `oui` debits ONCE and ends it; Studio no longer lists it; no draw statistics', async () => {
+    const f = await cautionTest();
+    await f.studio();
+    const t = await f.rb.testStreamerMute(CH, undefined, { caution: true });
+    expect(t).toMatchObject({
+      caution_test: true,
+      streamer_mute: true,
+      status: 'timeout_requested',
+    });
+    const m = (await f.studio()).mute!;
+    await f.report(t.request_id, m.attempt_id);
+    await editWallet(
+      f.core.db,
+      f.core.clock.now(),
+      CH,
+      PAYER.id,
+      'set',
+      { tokens: 10_000 },
+      'test',
+    );
+    f.core.clock.advance(10_000);
+    expect(await f.quote()).toMatchObject({ status: 'quoted', price: 1_500 }); // 50 s left: 5 × 300
+    const oui = randomUUID();
+    expect((await f.asPayer('oui', oui)).outcome).toBe('released');
+    await f.asPayer('oui', oui); // delivered twice
+    expect((await f.asPayer('oui')).outcome).not.toBe('released');
+    expect(await f.tokens()).toBe(8_500);
+    expect(
+      (
+        await f.core.db.query(
+          `select 1 from lab_wallet_ledger where module_id = 'caution' and kind = 'debit'`,
+        )
+      ).length,
+    ).toBe(1);
+    expect((await f.studio()).active).toEqual([]); // Studio restores the whole scene at its next poll
+    expect(await f.lines()).toEqual([
+      'raptoru_ est réduit au silence (Random Ban) encore 50 secondes. Le libérer coûte 1 500 jetons, @viewer3. Oui ou non ?',
+      '@viewer3 a libéré raptoru_ pour 1 500 jetons !',
+    ]); // no « 🔇 » line, no animation: only Caution's own messages
+    expect((await f.rb.claimAnimation(CH, 'studio-anim')).animation).toBeNull();
+    expect((await f.rb.state(CH)).streamer_trace).toMatchObject({
+      traced: 0,
+      requests: 0,
+    });
+    // Never handed to the Twitch executor.
+    expect(await f.rb.claim(CH, EXEC)).toEqual({
+      request: null,
+      reason: 'idle',
+    });
+  });
+
+  it('a plain « Tester le mute du streamer » stays out of Caution; a caution test Studio cannot start ends there (never a viewer)', async () => {
+    const f = await cautionTest();
+    await f.studio();
+    const plain = await f.rb.testStreamerMute(CH);
+    const m = (await f.studio()).mute!;
+    await f.report(plain.request_id, m.attempt_id);
+    expect(await f.rb.mutes.active(f.core.db, CH)).toBeNull();
+    f.core.clock.advance(60_000);
+    await f.studio();
+    const t = await f.rb.testStreamerMute(CH, undefined, { caution: true });
+    const m2 = (await f.studio()).mute!;
+    expect(
+      await f.rb.reportMute(t.request_id, {
+        consumer_id: STUDIO,
+        attempt_id: m2.attempt_id,
+        event: 'failed',
+        error: 'obs_offline',
+      }),
+    ).toMatchObject({ status: 'failed', refund: 'none' });
+    expect(await f.rb.claim(CH, EXEC)).toEqual({
+      request: null,
+      reason: 'idle',
+    });
+    expect(await f.rb.mutes.active(f.core.db, CH)).toBeNull();
+  });
+});

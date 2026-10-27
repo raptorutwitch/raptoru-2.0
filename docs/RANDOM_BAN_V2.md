@@ -30,6 +30,12 @@ Décisions d'Antoni (GO du 26–27/10) : tirage toujours aléatoire, acheteur pl
   motifs ; depuis le dernier tirage gagnant, la probabilité de cette série par simple malchance, « à signaler » sous
   5 %) et la décision sur chaque ligne ; le Core écrit aussi une ligne `[random-ban] … streamer: …` par tirage. Studio
   envoie son signal « prêt » dans une boucle à part (toutes les 0,5 s) : une animation longue ne le retarde plus.
+- **« Test Caution Random Ban » (Studio, administration, 27/10)** : la même sanction de test que « Tester le mute du
+  streamer » (60 s, mute + zoom + MUTED, aucun tirage, aucun viewer, aucun appel Twitch, aucun point, hors statistiques des
+  tirages, ni ligne de chat ni animation), mais **reconnue par la Caution** : `!caution raptoru_` → devis (300 / 10 s) →
+  `oui` → **vrais jetons débités une fois**, fin immédiate de la scène. Refusée si Studio n'est pas vu « prêt » (OBS
+  connecté, micro libre) ou si un mute du streamer est déjà en cours ; Studio qui échoue → échec, jamais un viewer ;
+  expiration de secours (fin à 60 s + chien de garde de Studio). `source_ref` = `caution-test:<uuid>`.
 - **Micro partagé** (`apps/studio/server/src/channel-points/mute-holds.ts`) : Votekick, BRB et le mute Random Ban
   « tiennent » le micro sous leur nom ; la voix ne revient qu'à la fin du **dernier**, jamais s'il était coupé avant,
   jamais par-dessus un changement manuel ; enregistré sur disque (redémarrage de Studio, OBS absent : repris). Corrige

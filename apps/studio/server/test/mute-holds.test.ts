@@ -381,3 +381,29 @@ describe('Random Ban V3 in Studio — the « ready » signal never waits for an 
     expect(claims).toBeGreaterThan(5); // the signal went on
   });
 });
+
+describe('« Test Caution Random Ban » in Studio (27/10)', () => {
+  it('the API passes only `caution: true` on; anything else is the plain mic test', async () => {
+    const l = await lab();
+    const sent: unknown[] = [];
+    const rt = new RandomBanRuntime({
+      core: async <T>(path: string, body?: unknown) => {
+        if (path.endsWith('/test-streamer-mute')) sent.push(body);
+        return {} as T;
+      },
+      environment: 'production',
+      channelId: '83603689',
+      effects: null,
+      mic: { input: MIC, holds: l.holds, obs: () => l.obs, fx: l.vk },
+    });
+    await rt.api('POST', '/test-streamer-mute', async () => ({
+      caution: true,
+    }));
+    await rt.api('POST', '/test-streamer-mute', async () => ({}));
+    await rt.api('POST', '/test-streamer-mute', async () => ({
+      caution: 'yes',
+      mode: 'real',
+    }));
+    expect(sent).toEqual([{ caution: true }, {}, {}]);
+  });
+});

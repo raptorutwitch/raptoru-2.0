@@ -246,8 +246,14 @@ export class RandomBanRuntime {
     }
     if (method === 'POST' && path === '/test')
       return this.d.core(`${ch}/test`, await body());
-    if (method === 'POST' && path === '/test-streamer-mute')
-      return this.d.core(`${ch}/test-streamer-mute`, {});
+    if (method === 'POST' && path === '/test-streamer-mute') {
+      // Only `caution: true` is passed on (« Test Caution Random Ban »); anything else is the plain mic test.
+      const b = await body();
+      return this.d.core(
+        `${ch}/test-streamer-mute`,
+        b.caution === true ? { caution: true } : {},
+      );
+    }
     throw Object.assign(new Error('not_found'), { status: 404 });
   }
 }
