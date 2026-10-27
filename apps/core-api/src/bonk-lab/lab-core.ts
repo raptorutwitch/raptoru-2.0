@@ -18,6 +18,8 @@ import { alertsRoutes } from '../http/alerts-routes.js';
 import { channelPointsRoutes } from '../http/channel-points-routes.js';
 import { ChannelPointsService } from '../channel-points/service.js';
 import { randomBanRoutes } from '../http/random-ban-routes.js';
+import { dockRoutes } from '../http/dock-routes.js';
+import { DockActivityService } from '../dock/service.js';
 import { cautionRoutes } from '../http/caution-routes.js';
 import { CautionService } from '../caution/service.js';
 import { votekickRoutes } from '../http/votekick-routes.js';
@@ -195,6 +197,8 @@ export function createLabCore({
     ...channelPointsRoutes(channelPoints),
     // Random Ban V2: Studio (state, tests, animations) and the Lab chat adapter (Twitch executor).
     ...randomBanRoutes(randomBan),
+    // Dock OBS V1: the activity feed and visual replays (read-only projection, docs/OBS_DOCK.md).
+    ...dockRoutes(new DockActivityService(db, systemClock)),
     // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
     ...cautionRoutes(caution),
     // Votekick V2: Studio (state, overlay, mute) and the Lab chat adapter (Twitch executor); `!votekick` in the Lab chat.

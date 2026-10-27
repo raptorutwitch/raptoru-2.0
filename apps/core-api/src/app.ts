@@ -1,5 +1,6 @@
 import { AlertsService } from './alerts/service.js';
 import { BotInstanceService } from './bot-instance/service.js';
+import { DockActivityService } from './dock/service.js';
 import { RandomBanService } from './random-ban/service.js';
 import { CautionService } from './caution/service.js';
 import { VotekickService } from './votekick/service.js';
@@ -50,6 +51,8 @@ export interface Core {
   channelPoints: ChannelPointsService;
   /** Random Ban V2 (same service as the Lab Core; triggered by the channel points rule). */
   randomBan: RandomBanService;
+  /** Dock OBS V1: read-only activity projection and visual replays (docs/OBS_DOCK.md). */
+  dock: DockActivityService;
   /** Caution: the requests and the executor's routes always; `!caution` in the chat only with `cautionChat`. */
   caution: CautionService;
   /** Votekick V2: votes and the broadcaster's mute always; `!votekick` / `!kick` / `!save` in the chat only with votekickChat. */
@@ -159,6 +162,7 @@ export function createCore(
     ),
     channelPoints,
     randomBan,
+    dock: new DockActivityService(db, clock),
     caution,
     votekick,
     subWheel,
