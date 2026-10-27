@@ -25,6 +25,9 @@ import type { ObsLike } from '../channel-points/obs-actions.js';
 // a Studio restart ends a due mute when OBS answers again. OBS absent at the end: retried until it answers.
 // The mic itself is a HOLD of the shared MuteHolds (Random Ban V3, 27/10): its end gives the voice back only when no
 // other effect (BRB, the Random Ban streamer mute) still holds it — and never when it was muted before.
+// Several OWNERS (27/10): the Random Ban streamer mute plays the same scene (zoom, MUTED band, drive, mic). Each mute
+// is recorded under its id with its own end; a second one while the scene runs joins it (no new snapshot); one ending
+// releases only its mic hold — the scene is restored when the LAST owner ends (or its watchdog).
 
 export interface MuteFxConfig {
   /** The audio input muted. SAMMI: « Micro (Obsolète) » — hidden in every scene in the 22/10 collection: to check. */
@@ -92,7 +95,11 @@ interface Active {
   snapshot: Snapshot;
   /** Set once the end is decided (the restore may wait for OBS). */
   ending: 'expired' | 'caution' | 'watchdog' | null;
+  /** The mutes sharing the scene: id → its end (ms). Absent (saved by an older Studio): only `id`, until `endsAt`. */
+  owners?: Record<string, number>;
 }
+
+const ownersOf = (a: Active) => (a.owners ??= { [a.id]: a.endsAt });
 
 export interface MuteReport {
   id: string;
@@ -147,12 +154,34 @@ export class MuteController {
     return c;
   }
 
+  /** The mic hold's name: a Random Ban mute keeps its own (`random_ban:<request>`), a Votekick one `votekick:<id>`. */
   private owner(id: string) {
-    return `votekick:${id}`;
+    return id.startsWith('random_ban:') ? id : `votekick:${id}`;
   }
 
   get current() {
     return this.active && { id: this.active.id, endsAt: this.active.endsAt };
+  }
+
+  /** Whether the mute `id` is one of the scene's owners (still running, or being restored). */
+  has(id: string) {
+    return !!this.active && id in ownersOf(this.active);
+  }
+
+  /** The ids of the mutes sharing the scene now. */
+  owners() {
+    return this.active ? Object.keys(ownersOf(this.active)) : [];
+  }
+
+  /** One owner leaves while others remain: its mic hold released, the scene's end follows the others. */
+  private async leave(a: Active, id: string) {
+    const owners = ownersOf(a);
+    delete owners[id];
+    if (this.holds.holders(this.cfg.micInput).includes(this.owner(id)))
+      await this.holds.release(this.cfg.micInput, this.owner(id));
+    a.endsAt = Math.max(...Object.values(owners));
+    if (a.id === id) a.id = Object.keys(owners)[0]!;
+    await this.save();
   }
 
   /** Checks the watchdog / a pending restore every 250 ms. */
@@ -172,22 +201,21 @@ export class MuteController {
     return run;
   }
 
-  /** Mutes for `seconds` (idempotent per id; a second mute while one runs only moves its end). */
+  /** Mutes for `seconds` (idempotent per id; a second mute while one runs joins the scene as another owner). */
   muteStart(id: string, seconds: number) {
     return this.serial(async () => {
       const obs = this.connected();
       const now = this.now();
       if (this.active && !this.active.ending) {
-        if (this.active.id !== id) {
+        const owners = ownersOf(this.active);
+        if (!(id in owners)) {
           // Only the watchdog's end moves: the band has no end of its own (mute_duration 0).
-          this.active.endsAt = Math.max(
-            this.active.endsAt,
-            now + seconds * 1000,
-          );
+          owners[id] = now + seconds * 1000;
+          this.active.endsAt = Math.max(this.active.endsAt, owners[id]);
           await this.holds.hold(
             this.cfg.micInput,
-            this.owner(this.active.id),
-            this.active.endsAt + MIC_HOLD_MARGIN_MS,
+            this.owner(id),
+            owners[id] + MIC_HOLD_MARGIN_MS,
           );
           await this.save();
         }
@@ -202,6 +230,7 @@ export class MuteController {
         bandAt: now,
         snapshot,
         ending: null,
+        owners: { [id]: now + seconds * 1000 },
       };
       await this.save(); // before any change: a crash from here is restored at the next start
       try {
@@ -243,22 +272,39 @@ export class MuteController {
     });
   }
 
-  /** Ends the mute `id` now (Core: expired or caution). An old or unknown id does nothing. */
+  /**
+   * Ends the mute `id` now (Core: expired or caution). Another owner still running: only this one leaves (its mic hold
+   * released, the scene stays). The last one: the scene is restored. An old or unknown id does nothing.
+   */
   muteEnd(id: string, reason: 'expired' | 'caution') {
     return this.serial(async () => {
-      if (!this.active || this.active.id !== id) return null;
+      if (!this.active || !(id in ownersOf(this.active))) return null;
+      if (
+        !this.active.ending &&
+        Object.keys(ownersOf(this.active)).length > 1
+      ) {
+        await this.leave(this.active, id);
+        return null;
+      }
       this.active.ending ??= reason;
       await this.save();
       return this.restore();
     });
   }
 
-  /** Watchdog and pending restores (OBS was absent). */
+  /** Watchdog (per owner: one Core never ended leaves; the last one restores) and pending restores (OBS was absent). */
   tick() {
     return this.serial(async () => {
       const a = this.active;
       if (!a) return null;
-      if (!a.ending && this.now() < a.endsAt + MUTE_WATCHDOG_MS) return null;
+      if (!a.ending) {
+        const owners = ownersOf(a);
+        const late = (end: number) => this.now() >= end + MUTE_WATCHDOG_MS;
+        for (const [id, end] of Object.entries(owners))
+          if (late(end) && Object.keys(owners).length > 1)
+            await this.leave(a, id);
+        if (!late(a.endsAt)) return null;
+      }
       a.ending ??= 'watchdog';
       return this.restore();
     });
@@ -286,10 +332,12 @@ export class MuteController {
       await this.setBand(obs, { mute_duration: s.bandDuration });
       // 4. The voice comes back last: this mute's hold released (the mic stays muted while another effect holds it, or
       //    when it was muted before). A mute started by an older Studio (no hold): its own snapshot, as before.
-      const owner = this.owner(a.id);
-      if (this.holds.holders(this.cfg.micInput).includes(owner))
-        await this.holds.release(this.cfg.micInput, owner);
-      else if (!s.micMuted) await this.setMic(obs, false);
+      const held = this.holds.holders(this.cfg.micInput);
+      const mine = Object.keys(ownersOf(a))
+        .map((id) => this.owner(id))
+        .filter((o) => held.includes(o));
+      for (const o of mine) await this.holds.release(this.cfg.micInput, o);
+      if (!mine.length && !s.micMuted) await this.setMic(obs, false);
       // 5. Rest state and the mic's own state, read back, retried once.
       const mismatches = await this.verify(obs, s, true);
       const report = { id: a.id, ok: mismatches.length === 0, mismatches };

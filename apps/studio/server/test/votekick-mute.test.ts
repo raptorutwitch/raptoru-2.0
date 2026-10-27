@@ -250,7 +250,7 @@ describe('MUTED V2: the band has no clock of its own (one clock: Studio)', () =>
     expect(l.obs.bandFilter.settings.mute_duration).toBe(110);
   });
 
-  it('extension (a second mute while one runs): no duration written to the band, it stays 0 until Studio ends it', async () => {
+  it('a second mute while one runs joins the scene: no duration written to the band; the scene ends with the LAST one', async () => {
     const l = await lab();
     const writes = watch(l.obs);
     await l.mute.muteStart('mute:a', 30);
@@ -259,12 +259,19 @@ describe('MUTED V2: the band has no clock of its own (one clock: Studio)', () =>
     expect(writes).toEqual([0]);
     expect(l.obs.bandFilter.settings.mute_duration).toBe(0);
     expect(l.mute.current?.endsAt).toBe(l.clock.now() + 60_000);
-    l.clock.advance(60_000);
-    expect(await l.mute.muteEnd('mute:a', 'expired')).toMatchObject({
+    expect(l.mute.owners()).toEqual(['mute:a', 'mute:b']);
+    l.clock.advance(10_000);
+    // mute:a over: it leaves, the scene stays for mute:b (still muted, band and zoom on).
+    expect(await l.mute.muteEnd('mute:a', 'expired')).toBeNull();
+    expect(l.obs.bandFilter.enabled).toBe(true);
+    expect(l.obs.inputs.get('Micro (Obsolète)')!.muted).toBe(true);
+    l.clock.advance(50_000);
+    expect(await l.mute.muteEnd('mute:b', 'expired')).toMatchObject({
       ok: true,
     });
     expect(writes).toEqual([0, 110]);
     expect(l.obs.bandFilter.enabled).toBe(false);
+    expect(l.obs.inputs.get('Micro (Obsolète)')!.muted).toBe(false);
   });
 
   it('caution (early end): both effects off together at once, back to the initial state', async () => {
@@ -304,21 +311,23 @@ describe('MUTED V2: the band has no clock of its own (one clock: Studio)', () =>
 });
 
 describe('MUTED V2: determinism', () => {
-  it('a late or repeated end of an old mute does nothing; a second start only moves the end', async () => {
+  it('a late or repeated end of an old mute does nothing; a repeated start does nothing; an ended mute never comes back', async () => {
     const l = await lab();
     await l.mute.muteStart('mute:a', 30);
     await l.mute.muteStart('mute:a', 30); // repeated
+    expect(l.mute.owners()).toEqual(['mute:a']);
     expect(await l.mute.muteEnd('mute:old', 'expired')).toBeNull();
     expect(l.mute.current?.id).toBe('mute:a');
-    await l.mute.muteStart('mute:b', 60);
-    expect(l.mute.current).toEqual({
-      id: 'mute:a',
-      endsAt: l.clock.now() + 60_000,
-    });
-    expect(await l.mute.muteEnd('mute:a', 'expired')).toMatchObject({
+    expect(await l.mute.muteEnd('mute:a', 'caution')).toMatchObject({
       ok: true,
     });
     expect(await l.mute.muteEnd('mute:a', 'expired')).toBeNull();
+    // A late watchdog / restart after the caution: nothing is applied again.
+    l.clock.advance(60_000);
+    await l.mute.tick();
+    expect(await (await l.open()).current).toBeNull();
+    expect(l.obs.bandFilter.enabled).toBe(false);
+    expect(l.obs.inputs.get('Micro (Obsolète)')!.muted).toBe(false);
   });
 
   it('only its items, back to their snapshot: a mic muted before the vote stays muted', async () => {

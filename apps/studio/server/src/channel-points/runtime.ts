@@ -76,6 +76,8 @@ export class ChannelPointsRuntime {
   private constructor(
     private readonly d: ChannelPointsRuntimeDeps,
     readonly obs: ObsActions,
+    /** Votekick's MUTED scene, shared with the Random Ban streamer mute. */
+    readonly muteFx: MuteController,
     /** Votekick V2: the broadcaster's mute in OBS (same OBS connection) and the overlay's live event. */
     readonly votekick: VotekickRuntime | null = null,
     /** Spotify V2: Studio is the only Spotify caller (docs/SPOTIFY_V2.md). */
@@ -96,15 +98,31 @@ export class ChannelPointsRuntime {
       environment: d.environment,
       channelId: d.channelId,
       effects: d.effects ?? null,
-      mic: { input: RAPTORU_MUTE_FX.micInput, holds: obs.holds, obs: d.obs },
+      mic: {
+        input: RAPTORU_MUTE_FX.micInput,
+        holds: obs.holds,
+        obs: d.obs,
+        fx: muteFx,
+      },
     });
   }
 
   static async create(d: ChannelPointsRuntimeDeps) {
     const obs = await ObsActions.open(join(d.dir, 'obs-reverts.json'), d.obs);
+    // Votekick's MUTED scene (zoom, band, drive, mic): ONE controller, shared with the Random Ban streamer mute. Its
+    // mic is a hold of the shared MuteHolds (BRB too). The mute in progress survives a Studio restart.
+    const muteFx = await MuteController.open(
+      join(d.dir, 'votekick-mute.json'),
+      d.obs,
+      RAPTORU_MUTE_FX,
+      undefined,
+      undefined,
+      obs.holds,
+    );
     return new ChannelPointsRuntime(
       d,
       obs,
+      muteFx,
       d.votekickOverlayDir
         ? new VotekickRuntime({
             core: d.core,
@@ -114,15 +132,7 @@ export class ChannelPointsRuntime {
                 : '/v1/lab/votekick',
             channelId: d.channelId,
             // The mute in progress survives a Studio restart (restored at the next start when due).
-            // Its mic is a hold of the shared MuteHolds (BRB, the Random Ban streamer mute).
-            mute: await MuteController.open(
-              join(d.dir, 'votekick-mute.json'),
-              d.obs,
-              RAPTORU_MUTE_FX,
-              undefined,
-              undefined,
-              obs.holds,
-            ),
+            mute: muteFx,
             overlayDir: d.votekickOverlayDir,
             sound: await VotekickLaunchSound.open(
               join(d.dir, 'votekick-launch-sound.json'),
@@ -155,6 +165,7 @@ export class ChannelPointsRuntime {
   /** Starts with Studio: the job loop and the pending reverts (nothing happens without a job). */
   start() {
     this.obs.start();
+    this.muteFx.start(); // the MUTED scene's watchdog (also without Votekick)
     this.votekick?.start();
     this.spotify?.start();
     this.randomBan.start();
@@ -182,6 +193,7 @@ export class ChannelPointsRuntime {
     if (this.timer) clearTimeout(this.timer);
     this.obs.stop();
     this.votekick?.stop();
+    this.muteFx.stop();
     this.spotify?.stop();
     this.randomBan.stop();
     this.subWheel.stop();
