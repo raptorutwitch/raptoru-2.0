@@ -22,6 +22,8 @@ export default defineConfig(
     files: [
       'apps/twitch-extension/extension/**/*.js',
       'apps/twitch-extension/calibration/**/*.js',
+      // Dock OBS V1 page (OBS custom browser dock).
+      'apps/studio/server/dock-page/**/*.js',
     ],
     languageOptions: {
       sourceType: 'module',
@@ -50,6 +52,7 @@ export default defineConfig(
           'clearTimeout',
           'setInterval',
           'clearInterval',
+          'TextDecoder',
         ].map((name) => [name, 'readonly']),
       ),
     },

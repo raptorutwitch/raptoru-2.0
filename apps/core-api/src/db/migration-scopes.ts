@@ -75,6 +75,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Roue du Sub V2: what happens to a wheel never shown (shown again automatically, by hand, or « À vérifier »); same
   // content as 20261109220000_sub_wheel_v2_recovery_lab.sql.
   '20261109230000_sub_wheel_v2_recovery.sql',
+  // Dock OBS V1: read-only activity projection, its commit-ordered cursor and the visual replays' audit (additive);
+  // same content as 20261110120000_obs_dock_lab.sql.
+  '20261110130000_obs_dock.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -151,6 +154,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261109200000_sub_wheel_v2_replay_lab.sql',
   // Roue du Sub V2: the Lab twin of 20261109230000_sub_wheel_v2_recovery.sql (same content).
   '20261109220000_sub_wheel_v2_recovery_lab.sql',
+  // Dock OBS V1: the Lab twin of 20261110130000_obs_dock.sql (same content).
+  '20261110120000_obs_dock_lab.sql',
 ]);
 
 /**

@@ -49,6 +49,8 @@ const copies = [
   'apps/studio/server/effects-player',
   // Votekick V2 overlay (OBS source served by Studio: variants/variants.html?v=D&studio).
   'apps/studio/server/votekick-overlay',
+  // Dock OBS V1 page (OBS custom browser dock served by Studio's dock server, docs/OBS_DOCK.md).
+  'apps/studio/server/dock-page',
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
@@ -84,6 +86,10 @@ const runtimeFiles = [
   'apps/studio/server/effects-player/player.html',
   'apps/studio/server/effects-player/player.js',
   'apps/studio/server/effects-player/wheel.js',
+  'apps/studio/server/dock-page/index.html',
+  'apps/studio/server/dock-page/dock.js',
+  'apps/studio/server/dock-page/dock-view.js',
+  'apps/studio/server/dock-page/dock.css',
   'apps/studio/web/dist/index.html',
   'apps/studio/desktop/static/status.html',
   'apps/twitch-extension/extension/panel.html',

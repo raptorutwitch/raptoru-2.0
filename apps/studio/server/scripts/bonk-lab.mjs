@@ -99,6 +99,7 @@ try {
     '20261109180000_sub_wheel_v2_redraw_lab.sql',
     '20261109200000_sub_wheel_v2_replay_lab.sql',
     '20261109220000_sub_wheel_v2_recovery_lab.sql',
+    '20261110120000_obs_dock_lab.sql',
   ]) {
     if (
       (

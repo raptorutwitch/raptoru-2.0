@@ -125,15 +125,18 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 ## 6. Prochaine action
 
-0. **Random Ban V3** : installer Studio 0.1.14. « Test Caution Random Ban » (Points de chaîne → Random Ban) : vraie
+0. **Dock OBS V1** (mission du 27/10, suivi : [OBS_DOCK.md](OBS_DOCK.md)) : développé sur `feat/obs-dock` (worktree
+   `Documents\raptoru-dock`), PR #28 CI verte, **non livré** : GO d'Antoni requis (migration Production additive, Core,
+   Studio), puis validation dans OBS.
+1. **Random Ban V3** : installer Studio 0.1.14. « Test Caution Random Ban » (Points de chaîne → Random Ban) : vraie
    sanction de 60 s libérable par `!caution raptoru_` (jetons réels, sans tirage ni Twitch). Suivi des tirages : paragraphe
    « Suivi du streamer ».
-1. Premier live après la deuxième passe : délai des devis Caution (attendu sous ~1 s), demandes Spotify d'éditions
+2. Premier live après la deuxième passe : délai des devis Caution (attendu sous ~1 s), demandes Spotify d'éditions
    (Indochine…), tranches Tombola, tirs Bonk.
-2. Votekick : le son de lancement est validé (25/10) ; reste à confirmer la durée de vote réglable sur un vrai vote
+3. Votekick : le son de lancement est validé (25/10) ; reste à confirmer la durée de vote réglable sur un vrai vote
    (GO requis pour tout vote réel).
-3. **Roue du Sub V2** (livrée, active) : observer le premier live ([SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7, « À observer »).
-4. Arbitrage restant de [ROADMAP.md](ROADMAP.md) § 3 : incident Twitch du 22/10 + Bonk/DSK.
+4. **Roue du Sub V2** (livrée, active) : observer le premier live ([SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7, « À observer »).
+5. Arbitrage restant de [ROADMAP.md](ROADMAP.md) § 3 : incident Twitch du 22/10 + Bonk/DSK.
 
 ## 7. Actions en attente d'accord d'Antoni
 
