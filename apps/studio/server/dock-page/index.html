@@ -17,28 +17,87 @@
         role="img"
         aria-label="Connexion…"
       ></span>
+      <span class="spacer"></span>
+      <button
+        type="button"
+        id="pick"
+        class="tool"
+        title="Sélectionner des lignes (ou Ctrl + clic, Maj + clic)"
+        aria-label="Sélectionner des lignes"
+        aria-pressed="false"
+      ></button>
+      <button
+        type="button"
+        id="bin"
+        class="tool"
+        title="Corbeille d’affichage"
+        aria-label="Corbeille d’affichage"
+        aria-expanded="false"
+        aria-controls="trash"
+      >
+        <span id="bincount" class="count" hidden>0</span>
+      </button>
       <button
         type="button"
         id="gear"
-        class="gear"
+        class="tool"
         title="Préférences"
         aria-label="Préférences"
         aria-expanded="false"
         aria-controls="prefs"
       ></button>
     </header>
-    <section id="prefs" class="prefs" aria-label="Préférences" hidden>
-      <p class="prefs-h">Catégories affichées</p>
-      <div id="cats" class="cats"></div>
-      <button type="button" id="all" class="link">Tout afficher</button>
-      <label class="opt">
-        <input type="checkbox" id="costs" />
-        <span>Afficher les coûts des récompenses</span>
-      </label>
+    <div id="selbar" class="selbar" hidden>
+      <span id="selcount"></span>
+      <button type="button" id="hide" class="btn danger" disabled>
+        Masquer
+      </button>
+      <button
+        type="button"
+        id="selclear"
+        class="link"
+        title="Annuler la sélection (Échap)"
+      >
+        Annuler
+      </button>
+    </div>
+    <section id="prefs" class="panel" aria-label="Préférences" hidden>
+      <div class="panel-h">
+        <b>Événements affichés</b>
+        <button type="button" class="link" data-close>Fermer</button>
+      </div>
+      <div id="prefs-body"></div>
+      <div class="panel-f">
+        <button type="button" id="all" class="link">Tout afficher</button>
+        <button type="button" id="none" class="link">Tout masquer</button>
+        <button type="button" id="reset" class="link">Réinitialiser</button>
+      </div>
       <p class="hint">
-        Les catégories masquées restent reçues et gardées dans l’historique.
+        L’affichage seulement : les événements masqués restent reçus, traités et
+        gardés dans l’historique.
       </p>
-      <button type="button" id="reset" class="link">Réinitialiser</button>
+    </section>
+    <section id="trash" class="panel" aria-label="Corbeille d’affichage" hidden>
+      <div class="panel-h">
+        <b>Corbeille d’affichage</b>
+        <button type="button" class="link" data-close>Fermer</button>
+      </div>
+      <p class="hint">
+        Masquées de ce dock uniquement : aucun événement, achat ou jeton n’est
+        touché.
+      </p>
+      <ol id="trash-list" class="t-list"></ol>
+      <p id="trash-empty" class="hint center">La corbeille est vide.</p>
+      <p id="trash-note" class="hint" hidden></p>
+      <div class="panel-f">
+        <button type="button" id="t-restore" class="btn" disabled>
+          Restaurer
+        </button>
+        <button type="button" id="t-all" class="link">Tout restaurer</button>
+        <button type="button" id="t-empty" class="link danger">
+          Vider la corbeille
+        </button>
+      </div>
     </section>
     <p id="banner" class="banner" role="status" hidden></p>
     <main class="scroll">
@@ -49,7 +108,7 @@
         aria-live="polite"
         aria-label="Événements récents"
       ></ol>
-      <p id="empty" class="empty">Aucun événement pour l’instant.</p>
+      <p id="empty" class="empty"></p>
       <button type="button" id="older" class="older" hidden>
         Charger les plus anciens
       </button>
