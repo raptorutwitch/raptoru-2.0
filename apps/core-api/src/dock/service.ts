@@ -305,8 +305,8 @@ export class DockActivityService {
   /**
    * V1.1 — Raptoru's own interactions, from their canonical tables (one row per business trigger, updated in place;
    * never a second activity for a status change): Bonk (each shot of a salve is its own row, with its volley), the
-   * Soundboard (the sound's name), TTS (its text, cut, and its review), Tombola entries, `!rb` Random Bans (the channel
-   * points ones are already their redemption). Read only, like the rest of the projection.
+   * Soundboard (the sound's name), TTS (its text, cut, and its review), Tombola entries, `!rb` Random Bans. What channel
+   * points paid (a sound, a Random Ban) is already its redemption: never a second activity. Read only, like the rest of the projection.
    */
   private async interactionChanges(
     q: Queryable,
@@ -338,7 +338,7 @@ export class DockActivityService {
          select 'ix:soundboard:' || s.interaction_id, 'soundboard', s.created_at, s.viewer_id, s.viewer_display_name,
            s.status, s.refund_status, null, s.sound_label, jsonb_build_object('sound_id', s.sound_id),
            concat_ws('|', s.status, s.refund_status)
-         from sound_lab_interactions s where s.channel_id = $1 and s.created_at >= $2
+         from sound_lab_interactions s where s.channel_id = $1 and s.source <> 'channel_points' and s.created_at >= $2
          union all
          select 'ix:tts:' || t.interaction_id, 'tts', t.created_at, t.viewer_id, t.viewer_display_name, t.status,
            t.refund_status, t.review_status, left(t.message, 500), null,

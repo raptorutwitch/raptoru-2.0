@@ -125,4 +125,20 @@ describe('interactions in the dock projection', () => {
     expect(ch.activities[0]!.state.status).toBe('completed');
     expect(await keys(core)).toBe(1);
   });
+
+  it('a sound paid by channel points is not a second activity: its redemption already is', async () => {
+    const { core, dock } = await lab();
+    const out = await core.soundLab.admit({
+      ...base(),
+      sound_id: 'boop',
+      payment_method: 'tokens',
+    });
+    await core.db.query(
+      `update sound_lab_interactions set source = 'channel_points', payment_method = 'channel_points'
+       where interaction_id = $1`,
+      [out.interaction.interaction_id],
+    );
+    expect(await dock.scan(CHANNEL)).toBe(0);
+    expect(await keys(core)).toBe(0);
+  });
 });
