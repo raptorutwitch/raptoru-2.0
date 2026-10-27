@@ -37,6 +37,7 @@ const RV24 = '20261109210000_sub_wheel_v2_replay.sql';
 const RV25 = '20261109230000_sub_wheel_v2_recovery.sql';
 // Dock OBS V1 (27/10): additive, after the Roue V2 files — not in the production database of 25/10 either.
 const DOCK = '20261110130000_obs_dock.sql';
+const DOCK11 = '20261111130000_obs_dock_interactions.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -622,9 +623,21 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== RV22 &&
           f !== RV24 &&
           f !== RV25 &&
-          f !== DOCK,
+          f !== DOCK &&
+          f !== DOCK11,
       ),
-      lab: [...MIGRATION_SCOPES.lab, R1, R2, R8, RV21, RV22, RV24, RV25, DOCK],
+      lab: [
+        ...MIGRATION_SCOPES.lab,
+        R1,
+        R2,
+        R8,
+        RV21,
+        RV22,
+        RV24,
+        RV25,
+        DOCK,
+        DOCK11,
+      ],
     };
     expect(await migrate(a, 'prod', undefined, at46)).toHaveLength(46);
     // What production really holds in its chat queue: Tombola announcements and Spotify answers.
@@ -666,6 +679,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       RV24,
       RV25,
       DOCK,
+      DOCK11,
     ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(

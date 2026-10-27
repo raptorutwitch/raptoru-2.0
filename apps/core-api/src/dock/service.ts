@@ -36,7 +36,7 @@ export class DockError extends Error {
   }
 }
 
-export type ActivityKind = 'alert' | 'channel_points';
+export type ActivityKind = 'alert' | 'channel_points' | 'interaction';
 
 export interface ActivityRow {
   activity_key: string;
@@ -140,6 +140,7 @@ export class DockActivityService {
       const changed = [
         ...(await this.alertChanges(q, channelId, since)),
         ...(await this.pointsChanges(q, channelId, since)),
+        ...(await this.interactionChanges(q, channelId, since)),
       ].sort(
         (a, b) =>
           a.occurred_at.getTime() - b.occurred_at.getTime() ||
@@ -299,6 +300,112 @@ export class DockActivityService {
       },
       version: r.version,
     }));
+  }
+
+  /**
+   * V1.1 — Raptoru's own interactions, from their canonical tables (one row per business trigger, updated in place;
+   * never a second activity for a status change): Bonk (each shot of a salve is its own row, with its volley), the
+   * Soundboard (the sound's name), TTS (its text, cut, and its review), Tombola entries, `!rb` Random Bans (the channel
+   * points ones are already their redemption). Read only, like the rest of the projection.
+   */
+  private async interactionChanges(
+    q: Queryable,
+    channelId: string,
+    since: Date,
+  ) {
+    const rows = await q.query<{
+      key: string;
+      type: string;
+      created_at: Date;
+      viewer_id: string;
+      viewer_name: string;
+      status: string;
+      refund_status: string | null;
+      review_status: string | null;
+      detail: string | null;
+      extra: Record<string, unknown> | null;
+      version: string;
+    }>(
+      `with src as (
+         select 'ix:bonk:' || b.interaction_id as key, 'bonk' as type, b.created_at, b.viewer_id,
+           b.viewer_display_name as viewer_name, b.status, b.refund_status, null::text as review_status,
+           coalesce(b.emote_glyph, b.emote_id) as detail,
+           jsonb_build_object('volley_id', b.volley_id, 'volley_index', b.volley_index, 'volley_count', b.volley_count,
+             'error', b.error->>'code') as extra,
+           concat_ws('|', b.status, b.refund_status) as version
+         from bonk_lab_interactions b where b.channel_id = $1 and b.created_at >= $2
+         union all
+         select 'ix:soundboard:' || s.interaction_id, 'soundboard', s.created_at, s.viewer_id, s.viewer_display_name,
+           s.status, s.refund_status, null, s.sound_label, jsonb_build_object('sound_id', s.sound_id),
+           concat_ws('|', s.status, s.refund_status)
+         from sound_lab_interactions s where s.channel_id = $1 and s.created_at >= $2
+         union all
+         select 'ix:tts:' || t.interaction_id, 'tts', t.created_at, t.viewer_id, t.viewer_display_name, t.status,
+           t.refund_status, t.review_status, left(t.message, 500), null,
+           concat_ws('|', t.status, t.refund_status, t.review_status)
+         from tts_lab_interactions t where t.channel_id = $1 and t.created_at >= $2
+         union all
+         select 'ix:raffle:' || e.entry_id, 'raffle', e.created_at, e.viewer_id, e.viewer_display_name, 'completed',
+           null, null, null, null, 'completed'
+         from lab_raffle_entries e where e.channel_id = $1 and e.created_at >= $2
+         union all
+         select 'ix:random_ban:' || r.request_id, 'random_ban', r.created_at, r.buyer_id, r.buyer_name, r.status,
+           r.refund, null, r.target_name,
+           jsonb_build_object('streamer_mute', coalesce(r.reason like 'streamer_mute%', false)),
+           concat_ws('|', r.status, r.refund, coalesce(r.target_id, '-'), coalesce(r.reason, '-'))
+         from rb_requests r where r.channel_id = $1 and r.source = 'chat' and r.created_at >= $2
+       )
+       select src.* from src left join dock_activity a on a.channel_id = $1 and a.activity_key = src.key
+       where a.version is distinct from src.version
+       order by src.created_at, src.key limit 2000`,
+      [channelId, since],
+    );
+    return rows.map((r): Projected => {
+      const actor = { id: r.viewer_id, name: r.viewer_name };
+      const x = r.extra ?? {};
+      const data: Record<string, unknown> =
+        r.type === 'bonk'
+          ? {
+              actor,
+              emote: r.detail,
+              ...(x.volley_id
+                ? {
+                    volley: {
+                      id: x.volley_id,
+                      index: x.volley_index,
+                      count: x.volley_count,
+                    },
+                  }
+                : {}),
+            }
+          : r.type === 'soundboard'
+            ? { actor, sound: { id: x.sound_id, label: r.detail } }
+            : r.type === 'tts'
+              ? { actor, message: r.detail }
+              : r.type === 'random_ban'
+                ? {
+                    actor,
+                    ...(r.detail ? { target: r.detail } : {}),
+                    streamer_mute: !!x.streamer_mute,
+                  }
+                : { actor };
+      return {
+        activity_key: r.key,
+        kind: 'interaction',
+        type: r.type,
+        occurred_at: new Date(r.created_at),
+        data,
+        state: {
+          status: r.status,
+          refund_status: r.refund_status,
+          ...(r.review_status && r.review_status !== 'none'
+            ? { review_status: r.review_status }
+            : {}),
+          ...(x.error ? { error: x.error } : {}),
+        },
+        version: r.version,
+      };
+    });
   }
 
   // --- the feed ----------------------------------------------------------------------------------------------------
