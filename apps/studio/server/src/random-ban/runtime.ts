@@ -40,6 +40,7 @@ const HOLD_PREFIX = 'random_ban:';
 export class RandomBanRuntime {
   private readonly consumer = `studio-rb-${randomUUID().slice(0, 8)}`;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private muteTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   lastError: string | null = null;
   /** V3: the last failure of the streamer's mute poll (Core or OBS). */
@@ -53,28 +54,52 @@ export class RandomBanRuntime {
       : '/v1/lab/random-ban';
   }
 
+  /**
+   * Two independent loops (27/10): the animations (one plays up to ~11 s), and the streamer's mute with Studio's
+   * « ready » signal — every 500 ms whatever plays, so a long animation never makes the streamer look absent to Core
+   * (studioReadyMs) nor delays his mute.
+   */
   start() {
-    const loop = async () => {
-      if (this.stopped) return;
-      let worked = false;
-      try {
-        worked = await this.once();
-        this.lastError = null;
-      } catch (e) {
-        this.lastError = (e as Error).message;
-      }
-      this.timer = setTimeout(
-        () => void loop(),
-        worked ? 0 : (this.d.pollMs ?? POLL_MS),
-      );
-      this.timer.unref?.();
+    const loop = (
+      run: () => Promise<boolean>,
+      onError: (e: Error | null) => void,
+      set: (t: ReturnType<typeof setTimeout>) => void,
+    ) => {
+      const tick = async () => {
+        if (this.stopped) return;
+        let worked = false;
+        try {
+          worked = await run();
+          onError(null);
+        } catch (e) {
+          onError(e as Error);
+        }
+        const t = setTimeout(
+          () => void tick(),
+          worked ? 0 : (this.d.pollMs ?? POLL_MS),
+        );
+        t.unref?.();
+        set(t);
+      };
+      void tick();
     };
-    void loop();
+    loop(
+      () => this.animationOnce(),
+      (e) => (this.lastError = e?.message ?? null),
+      (t) => (this.timer = t),
+    );
+    if (this.d.mic)
+      loop(
+        () => this.muteOnce(),
+        (e) => (this.muteError = e?.message ?? null),
+        (t) => (this.muteTimer = t),
+      );
   }
 
   stop() {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
+    if (this.muteTimer) clearTimeout(this.muteTimer);
   }
 
   /**
@@ -134,7 +159,7 @@ export class RandomBanRuntime {
     return true;
   }
 
-  /** One animation if Core has one: played to its end on the effects player, then reported. */
+  /** One step of both loops (tests): the mute poll, then one animation. */
   async once(): Promise<boolean> {
     let muted = false;
     try {
@@ -146,7 +171,8 @@ export class RandomBanRuntime {
     return (await this.animationOnce()) || muted;
   }
 
-  private async animationOnce(): Promise<boolean> {
+  /** One animation if Core has one: played to its end on the effects player, then reported. */
+  async animationOnce(): Promise<boolean> {
     const { animation: a } = await this.d.core<{
       animation: {
         request_id: string;

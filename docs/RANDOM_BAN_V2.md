@@ -23,6 +23,13 @@ Décisions d'Antoni (GO du 26–27/10) : tirage toujours aléatoire, acheteur pl
   était actif avant) à la fin de la DERNIÈRE. Une sanction finie n'est jamais réappliquée (minuterie tardive,
   redémarrage, reconnexion OBS) ; OBS qui échoue au démarrage → tout est remis en place, Core repart sur un viewer ;
   OBS absent à la fin → restauration dès qu'il répond. « Tester le mute du streamer » joue toute la scène.
+- **Suivi du streamer (27/10)** : chaque Random Ban réel garde dans `stats.streamer` la décision prise pour le streamer —
+  `drawn` / `not_drawn` (avec le tirage 0–999, gagnant < 20) ou le motif d'inéligibilité (`studio_silent` + âge du
+  dernier signal, `obs_not_ready`, `mic_held`, `votekick_mute`, `streamer_muted`, `dry_run`, `no_streamer`) et un
+  éventuel échec du mute OBS (`obs_failed`). Studio, section Random Ban : le résumé sur les 500 derniers (éligible / tiré /
+  motifs ; depuis le dernier tirage gagnant, la probabilité de cette série par simple malchance, « à signaler » sous
+  5 %) et la décision sur chaque ligne ; le Core écrit aussi une ligne `[random-ban] … streamer: …` par tirage. Studio
+  envoie son signal « prêt » dans une boucle à part (toutes les 0,5 s) : une animation longue ne le retarde plus.
 - **Micro partagé** (`apps/studio/server/src/channel-points/mute-holds.ts`) : Votekick, BRB et le mute Random Ban
   « tiennent » le micro sous leur nom ; la voix ne revient qu'à la fin du **dernier**, jamais s'il était coupé avant,
   jamais par-dessus un changement manuel ; enregistré sur disque (redémarrage de Studio, OBS absent : repris). Corrige

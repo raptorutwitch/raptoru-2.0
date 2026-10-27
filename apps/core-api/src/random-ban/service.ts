@@ -54,7 +54,8 @@ interface Row {
   reason: string | null;
   error: string | null;
   refund: 'none' | 'needed' | 'to_verify';
-  stats: Record<string, number> | null;
+  /** Search counts, and `streamer`: the streamer decision of this request (V3 trace, 27/10). */
+  stats: (Record<string, unknown> & { streamer?: StreamerDecision }) | null;
   executor_id: string | null;
   attempt_id: string | null;
   attempts: number;
@@ -87,6 +88,30 @@ const STREAMER_MUTE = 'streamer_mute';
 const isStreamerMute = (r: { reason: string | null }) =>
   !!r.reason?.startsWith(STREAMER_MUTE);
 
+/**
+ * V3 trace (27/10): why the streamer was or was not the target of a request, recorded in its `stats.streamer` (no new
+ * column) — enough to tell a run of bad luck (eligible, drawn ≥ 20 each time) from a real exclusion (never eligible).
+ */
+export type StreamerDecision = {
+  decision:
+    | 'drawn' // eligible, draw < streamerPerMille: the streamer is the target
+    | 'not_drawn' // eligible, draw ≥ streamerPerMille: a viewers' search
+    | 'no_streamer' // this Core does not know its streamer
+    | 'dry_run' // a dry run (Studio test of the search): never the streamer
+    | 'studio_silent' // Studio did not say « ready » within studioReadyMs (closed, Core unreachable from it…)
+    | 'obs_not_ready' // Studio said OBS is not connected
+    | 'mic_held' // another effect (BRB, a Votekick or Random Ban mute) holds the mic
+    | 'votekick_mute' // a Votekick mute of the streamer runs
+    | 'streamer_muted'; // a Random Ban mute of the streamer runs or waits for Studio
+  /** The draw (0–999) when eligible. */
+  draw?: number;
+  /** Age of Studio's last signal (ms) when it was too old or absent (null: never seen by this Core). */
+  studio_age_ms?: number | null;
+  /** The mute Studio could not start (then a viewers' search followed), kept across the re-draw. */
+  obs_failed?: string;
+  at: string;
+};
+
 /** Another effect muting the streamer (Votekick): no streamer draw while it runs. */
 export interface StreamerMuteSource {
   active(
@@ -117,6 +142,8 @@ export const rbView = (r: Row) => ({
   attempts: r.attempts,
   /** V3: the streamer drawn — his mic muted for duration_s (never a Twitch timeout). */
   streamer_mute: isStreamerMute(r),
+  /** V3 trace: the streamer decision of this request (absent before 27/10 or when never claimed). */
+  streamer_decision: r.stats?.streamer ?? null,
   animation: r.animation,
   animation_status: r.animation_status,
   created_at: iso(r.created_at),
@@ -507,7 +534,14 @@ export class RandomBanService {
         this.ended.push(r.request_id);
         return { request: null, reason: 'refused' };
       }
-      const streamer = await this.streamerDrawn(q, channelId, r);
+      const { streamer, trace } = await this.streamerDrawn(q, channelId, r);
+      await this.set(q, r.request_id, {
+        stats: { ...(r.stats ?? {}), streamer: trace },
+      });
+      r.stats = { ...(r.stats ?? {}), streamer: trace };
+      console.log(
+        `[random-ban] ${r.request_id.slice(0, 8)} streamer: ${trace.decision}${trace.draw !== undefined ? ` (tirage ${trace.draw}/1000, gagnant < ${RANDOM_BAN.streamerPerMille})` : ''}${trace.studio_age_ms !== undefined ? ` (Studio vu il y a ${trace.studio_age_ms ?? '∞'} ms)` : ''}`,
+      );
       if (streamer) {
         // No Twitch call for him: Studio mutes his mic (claimMute); the executor goes on with the next request after.
         await this.set(q, r.request_id, {
@@ -590,7 +624,7 @@ export class RandomBanService {
         target_is_sub: t.is_sub,
         duration_s: duration,
         reason,
-        stats: t.stats,
+        stats: { ...t.stats, streamer: r.stats?.streamer },
       };
       if (r.mode !== 'real') {
         const done = { ...r, ...fields } as Row;
@@ -625,7 +659,9 @@ export class RandomBanService {
       if (o.event === 'flop' && r.status === 'searching')
         await this.set(q, id, {
           status: 'flop',
-          stats: o.stats ?? r.stats,
+          stats: o.stats
+            ? { ...o.stats, streamer: r.stats?.streamer }
+            : r.stats,
           lease_expires_at: null,
           ended_at: now,
           ...this.animated(r, 'flop'),
@@ -638,7 +674,9 @@ export class RandomBanService {
           status: 'failed',
           error: (o.error ?? 'failed').slice(0, 300),
           refund: r.mode === 'real' ? 'needed' : 'none',
-          stats: o.stats ?? r.stats,
+          stats: o.stats
+            ? { ...o.stats, streamer: r.stats?.streamer }
+            : r.stats,
           lease_expires_at: null,
           ended_at: now,
         });
@@ -753,8 +791,18 @@ export class RandomBanService {
    * ends there — never handed to the Twitch executor (a test never times anyone out).
    */
   private notMuted(r: Row, error: string): Partial<Row> {
+    // The trace keeps why the streamer's mute did not happen (then the viewers' search's own decision follows).
+    const stats = r.stats?.streamer
+      ? {
+          stats: {
+            ...r.stats,
+            streamer: { ...r.stats.streamer, obs_failed: error.slice(0, 200) },
+          },
+        }
+      : {};
     return r.source === 'test'
       ? {
+          ...stats,
           status: 'failed',
           error,
           refund: 'none',
@@ -763,7 +811,7 @@ export class RandomBanService {
           lease_expires_at: null,
           ended_at: this.now(),
         }
-      : this.backToViewers();
+      : { ...this.backToViewers(), ...stats };
   }
 
   private backToViewers(): Partial<Row> {
@@ -797,20 +845,51 @@ export class RandomBanService {
    * connected, the mic held by no other effect, said within studioReadyMs), no Votekick or Random Ban mute of him
    * running — then streamerPerMille ‰.
    */
-  private async streamerDrawn(q: Queryable, channelId: string, r: Row) {
+  private async streamerDrawn(
+    q: Queryable,
+    channelId: string,
+    r: Row,
+  ): Promise<{
+    streamer: { id: string; login: string } | null;
+    trace: StreamerDecision;
+  }> {
+    const at = this.now().toISOString();
+    const previous = r.stats?.streamer?.obs_failed;
+    const no = (
+      decision: StreamerDecision['decision'],
+      more: Partial<StreamerDecision> = {},
+    ) => ({
+      streamer: null,
+      trace: {
+        decision,
+        ...more,
+        ...(previous ? { obs_failed: previous } : {}),
+        at,
+      },
+    });
     const streamer = this.v3.streamer?.();
-    if (!streamer || r.mode !== 'real') return null;
+    if (!streamer) return no('no_streamer');
+    if (r.mode !== 'real') return no('dry_run');
     const s = this.studios.get(channelId);
-    if (
-      !s ||
-      this.now().getTime() - s.at > RANDOM_BAN.studioReadyMs ||
-      !s.obs_ready ||
-      s.mic_held
-    )
-      return null;
-    if (await this.v3.otherMutes?.active(q, channelId)) return null;
-    if (await this.streamerMuteOpen(q, channelId)) return null;
-    return this.draw(1000) < RANDOM_BAN.streamerPerMille ? streamer : null;
+    const age = s ? this.now().getTime() - s.at : null;
+    if (age === null || age > RANDOM_BAN.studioReadyMs)
+      return no('studio_silent', { studio_age_ms: age });
+    if (!s!.obs_ready) return no('obs_not_ready');
+    if (s!.mic_held) return no('mic_held');
+    if (await this.v3.otherMutes?.active(q, channelId))
+      return no('votekick_mute');
+    if (await this.streamerMuteOpen(q, channelId)) return no('streamer_muted');
+    const draw = this.draw(1000);
+    const won = draw < RANDOM_BAN.streamerPerMille;
+    return {
+      streamer: won ? streamer : null,
+      trace: {
+        decision: won ? 'drawn' : 'not_drawn',
+        draw,
+        ...(previous ? { obs_failed: previous } : {}),
+        at,
+      },
+    };
   }
 
   /**
@@ -969,6 +1048,42 @@ export class RandomBanService {
 
   // --- reading ---------------------------------------------------------------------------------------------------
 
+  /**
+   * V3 trace summary over the last real Random Bans (tests excluded): how often the streamer was eligible, why not,
+   * how often drawn — and, since his last draw, the chance of that run happening by luck alone (0.98^eligible).
+   */
+  private async streamerTrace(channelId: string, limit = 500) {
+    const rows = await this.db.query<{ streamer: StreamerDecision | null }>(
+      `select stats->'streamer' as streamer from rb_requests
+        where channel_id = $1 and mode = 'real' and source <> 'test'
+        order by seq desc limit $2`,
+      [channelId, limit],
+    );
+    const traced = rows.map((r) => r.streamer).filter((s) => !!s?.decision);
+    const by: Record<string, number> = {};
+    for (const t of traced) by[t!.decision] = (by[t!.decision] ?? 0) + 1;
+    const eligible = (by.drawn ?? 0) + (by.not_drawn ?? 0);
+    const sinceDrawn = traced.findIndex((t) => t!.decision === 'drawn');
+    const run = (sinceDrawn < 0 ? traced : traced.slice(0, sinceDrawn)).filter(
+      (t) => t!.decision === 'not_drawn',
+    ).length;
+    return {
+      requests: rows.length,
+      traced: traced.length,
+      by_decision: by,
+      eligible,
+      drawn: by.drawn ?? 0,
+      obs_failed: traced.filter((t) => t!.obs_failed).length,
+      /** Eligible draws lost since the last win (or since the trace began). */
+      eligible_since_last_drawn: run,
+      /** The chance of that run by bad luck alone, in % (100: nothing unusual yet). */
+      luck_pct:
+        Math.round(
+          1000 * Math.pow(1 - RANDOM_BAN.streamerPerMille / 1000, run) * 100,
+        ) / 1000,
+    };
+  }
+
   /** Outcome of a request for the channel points history (null while it runs). */
   async outcome(id: string) {
     const r = (
@@ -1001,6 +1116,7 @@ export class RandomBanService {
           : 0,
         streamer_mute_s: RANDOM_BAN.streamerMuteS,
       },
+      streamer_trace: await this.streamerTrace(channelId),
       studio: (() => {
         const s = this.studios.get(channelId);
         return s && this.now().getTime() - s.at < RANDOM_BAN.studioReadyMs

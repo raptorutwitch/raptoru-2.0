@@ -358,3 +358,210 @@ describe('Random Ban V3 — « Tester le mute du streamer » is the mic only (Pr
     });
   });
 });
+
+describe('Random Ban V3 — the streamer trace (27/10): eligible or why not, the draw, re-eligibility', () => {
+  const decisionOf = async (
+    f: Awaited<ReturnType<typeof fixture>>,
+    id: string,
+  ) => (await f.rb.outcome(id))!.streamer_decision;
+
+  it('every reason is recorded on the request: Studio never seen / too old, OBS not ready, mic held, dry run', async () => {
+    const f = await fixture(false);
+    const a = await f.ask();
+    await f.rb.claim(CH, EXEC);
+    expect(await decisionOf(f, a.request_id)).toMatchObject({
+      decision: 'studio_silent',
+      studio_age_ms: null,
+    });
+    await f.studio();
+    f.core.clock.advance(RANDOM_BAN.studioReadyMs + 500);
+    await f.rb.result(a.request_id, {
+      executor_id: EXEC.executor_id,
+      attempt_id: (
+        await f.core.db.query<{ attempt_id: string }>(
+          'select attempt_id from rb_requests where request_id = $1',
+          [a.request_id],
+        )
+      )[0]!.attempt_id,
+      event: 'flop',
+      stats: { chatters: 3, candidates: 0, follow_checks: 0 },
+    });
+    // The search's own stats are written: the streamer decision stays.
+    expect(await decisionOf(f, a.request_id)).toMatchObject({
+      decision: 'studio_silent',
+    });
+    const b = await f.ask();
+    await f.rb.claim(CH, EXEC);
+    expect(await decisionOf(f, b.request_id)).toMatchObject({
+      decision: 'studio_silent',
+      studio_age_ms: RANDOM_BAN.studioReadyMs + 500,
+    });
+    const g = await fixture(false);
+    await g.studio({ obs_ready: false });
+    const c = await g.ask();
+    await g.rb.claim(CH, EXEC);
+    expect(await decisionOf(g, c.request_id)).toMatchObject({
+      decision: 'obs_not_ready',
+    });
+    const h = await fixture(false);
+    await h.studio({ mic_held: true });
+    const d = await h.ask();
+    await h.rb.claim(CH, EXEC);
+    expect(await decisionOf(h, d.request_id)).toMatchObject({
+      decision: 'mic_held',
+    });
+    const k = await fixture(false);
+    await k.studio();
+    const e = await k.ask('dry_run');
+    await k.rb.claim(CH, EXEC);
+    expect(await decisionOf(k, e.request_id)).toMatchObject({
+      decision: 'dry_run',
+    });
+  });
+
+  it('eligible: the draw is recorded (not drawn ≥ 20, drawn < 20); a Votekick or Random Ban mute running: recorded too', async () => {
+    const f = await fixture(false);
+    await f.studio();
+    const a = await f.ask();
+    const c = (await f.rb.claim(CH, EXEC)).request!;
+    expect(await decisionOf(f, a.request_id)).toMatchObject({
+      decision: 'not_drawn',
+      draw: 999,
+    });
+    await f.rb.target(a.request_id, {
+      executor_id: EXEC.executor_id,
+      attempt_id: c.attempt_id,
+      target: { id: '9002', login: 'target', name: 'Target' },
+      is_sub: false,
+      stats: { chatters: 4, candidates: 2, follow_checks: 1 },
+    });
+    expect((await f.rb.outcome(a.request_id))!).toMatchObject({
+      stats: { chatters: 4, streamer: { decision: 'not_drawn', draw: 999 } },
+    });
+    const g = await fixture(true);
+    await g.studio();
+    const b = await g.ask();
+    await g.rb.claim(CH, EXEC);
+    expect(await decisionOf(g, b.request_id)).toMatchObject({
+      decision: 'drawn',
+      draw: 0,
+    });
+    const m = (await g.studio()).mute!;
+    await g.report(b.request_id, m.attempt_id); // the streamer's mute runs
+    const next = await g.ask();
+    await g.studio();
+    await g.rb.claim(CH, EXEC);
+    expect(await decisionOf(g, next.request_id)).toMatchObject({
+      decision: 'streamer_muted',
+    });
+    const vk = await setup();
+    vk.clock.set(new Date('2026-10-27T20:00:00Z'));
+    const rb = new RandomBanService(vk.db, vk.clock, () => 0, {
+      streamer: () => STREAMER,
+      otherMutes: {
+        active: async () => ({ id: 'mute:vk', endsAt: new Date(2e12) }),
+      },
+    });
+    await rb.claimMute(CH, {
+      consumer_id: STUDIO,
+      obs_ready: true,
+      mic_held: false,
+    });
+    const r = await rb.request({
+      channel_id: CH,
+      source: 'channel_points',
+      source_ref: randomUUID(),
+      mode: 'real',
+      buyer: BUYER,
+    });
+    await rb.claim(CH, EXEC);
+    expect((await rb.outcome(r.request_id))!.streamer_decision).toMatchObject({
+      decision: 'votekick_mute',
+    });
+  });
+
+  it('OBS failing on the mute: recorded, kept after the viewers’ re-draw', async () => {
+    const f = await fixture(true);
+    await f.studio();
+    const a = await f.ask();
+    await f.rb.claim(CH, EXEC);
+    const m = (await f.studio()).mute!;
+    await f.rb.reportMute(a.request_id, {
+      consumer_id: STUDIO,
+      attempt_id: m.attempt_id,
+      event: 'failed',
+      error: 'obs_offline',
+    });
+    expect(await decisionOf(f, a.request_id)).toMatchObject({
+      decision: 'drawn',
+      obs_failed: 'studio: obs_offline',
+    });
+    await f.studio({ obs_ready: false });
+    await f.rb.claim(CH, EXEC); // the viewers' draw (OBS not ready now)
+    expect(await decisionOf(f, a.request_id)).toMatchObject({
+      decision: 'obs_not_ready',
+      obs_failed: 'studio: obs_offline',
+    });
+  });
+
+  it('re-eligible after the mute EXPIRED and after a CAUTION ended it (no residual state)', async () => {
+    const f = await fixture(true);
+    await f.studio();
+    const a = await f.ask();
+    await f.rb.claim(CH, EXEC);
+    const m = (await f.studio()).mute!;
+    await f.report(a.request_id, m.attempt_id);
+    // Expired: 60 s later, eligible again (drawn here: draw 0).
+    f.core.clock.advance(60_000);
+    await f.studio();
+    const b = await f.ask();
+    await f.rb.claim(CH, EXEC);
+    expect(await decisionOf(f, b.request_id)).toMatchObject({
+      decision: 'drawn',
+    });
+    // Ended by a caution (Core side, as Caution does): eligible again at once.
+    const m2 = (await f.studio()).mute!;
+    await f.report(b.request_id, m2.attempt_id);
+    f.core.clock.advance(5_000);
+    await f.core.db.tx(async (q) => {
+      const run = await f.rb.mutes.active(q, CH);
+      expect(run).not.toBeNull();
+      await f.rb.mutes.end(q, CH, run!.id);
+    });
+    await f.studio();
+    const c = await f.ask();
+    await f.rb.claim(CH, EXEC);
+    expect(await decisionOf(f, c.request_id)).toMatchObject({
+      decision: 'drawn',
+    });
+  });
+
+  it('the summary tells bad luck from exclusion: eligible count, reasons, run since the last win, its chance', async () => {
+    const f = await fixture(false);
+    await f.studio();
+    for (let i = 0; i < 3; i++) {
+      const r = await f.ask();
+      const c = (await f.rb.claim(CH, EXEC)).request!;
+      await f.rb.result(r.request_id, {
+        executor_id: EXEC.executor_id,
+        attempt_id: c.attempt_id,
+        event: 'flop',
+        stats: { chatters: 1, candidates: 0, follow_checks: 0 },
+      });
+      await f.studio();
+    }
+    await f.studio({ obs_ready: false });
+    const r = await f.ask();
+    await f.rb.claim(CH, EXEC);
+    const s = await f.rb.state(CH);
+    expect(s.streamer_trace).toMatchObject({
+      traced: 4,
+      eligible: 3,
+      drawn: 0,
+      by_decision: { not_drawn: 3, obs_not_ready: 1 },
+      eligible_since_last_drawn: 3,
+      luck_pct: 94.119,
+    });
+    expect(r).toBeTruthy();
+  });
+});

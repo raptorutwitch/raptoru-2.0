@@ -147,3 +147,78 @@ describe('Random Ban V3 view', () => {
     expect(off).toContain('OBS non connecté');
   });
 });
+
+describe('Random Ban V3 view — the streamer trace', () => {
+  const v3 = {
+    ...base,
+    rules: {
+      duration_sub_s: 180,
+      duration_non_sub_s: 300,
+      buyer_weight: 0.25,
+      streamer_per_mille: 20,
+      streamer_mute_s: 60,
+    },
+  };
+  it('the summary: eligible, drawn, the run since the last win and its chance; reasons; each row its decision', () => {
+    const html = randomBanView(
+      {
+        ...v3,
+        streamer_trace: {
+          requests: 60,
+          traced: 52,
+          by_decision: { not_drawn: 49, drawn: 1, obs_not_ready: 2 },
+          eligible: 50,
+          drawn: 1,
+          obs_failed: 0,
+          eligible_since_last_drawn: 49,
+          luck_pct: 37.159,
+        },
+        recent: [
+          row({
+            status: 'flop',
+            target: null,
+            streamer_decision: { decision: 'not_drawn', draw: 734 },
+          }),
+          row({
+            status: 'flop',
+            target: null,
+            streamer_decision: {
+              decision: 'studio_silent',
+              studio_age_ms: 12400,
+            },
+          }),
+        ],
+      },
+      null,
+    );
+    expect(html).toContain('éligible 50 fois, tiré 1 fois');
+    expect(html).toContain('49 tirage(s) éligible(s) perdu(s)');
+    expect(html).toContain('37.159 % de chances par simple malchance (normal)');
+    expect(html).toContain('OBS non connecté × 2');
+    expect(html).toContain('Streamer : éligible, pas tiré (tirage 734/1000)');
+    expect(html).toContain(
+      'Streamer : Studio non vu par le Core (vu il y a 12 s)',
+    );
+  });
+  it('a run too long for luck is flagged', () => {
+    const html = randomBanView(
+      {
+        ...v3,
+        streamer_trace: {
+          requests: 200,
+          traced: 200,
+          by_decision: { not_drawn: 200 },
+          eligible: 200,
+          drawn: 0,
+          obs_failed: 0,
+          eligible_since_last_drawn: 200,
+          luck_pct: 1.759,
+        },
+      },
+      null,
+    );
+    expect(html).toContain(
+      'seulement 1.759 % de chances par simple malchance (à signaler)',
+    );
+  });
+});

@@ -337,3 +337,47 @@ describe('Random Ban V3 in Studio — the streamer mute plays Votekick’s MUTED
     expect(scene(l)).toEqual(initial);
   });
 });
+
+describe('Random Ban V3 in Studio — the « ready » signal never waits for an animation (27/10)', () => {
+  it('an animation playing for a long time: the mute poll (Studio’s signal) goes on every poll', async () => {
+    const l = await lab();
+    let claims = 0;
+    let animations = 0;
+    const core = async <T>(path: string) => {
+      if (path.endsWith('/mutes/claim')) {
+        claims += 1;
+        return { mute: null, active: [] } as T;
+      }
+      if (path.endsWith('/animations/claim'))
+        return (
+          animations++ === 0
+            ? {
+                animation: {
+                  request_id: '00000000-0000-4000-8000-0000000000dd',
+                  animation: 'ban_csc',
+                  trigger: 'Buyer',
+                  banned: 'Buyer',
+                },
+              }
+            : { animation: null }
+        ) as T;
+      return {} as T;
+    };
+    const effects = {
+      play: async () => ({ end: new Promise(() => {}) }), // never ends
+    } as never;
+    const rt = new RandomBanRuntime({
+      core,
+      environment: 'production',
+      channelId: '83603689',
+      effects,
+      mic: { input: MIC, holds: l.holds, obs: () => l.obs, fx: l.vk },
+      pollMs: 5,
+    });
+    rt.start();
+    await new Promise((r) => setTimeout(r, 150));
+    rt.stop();
+    expect(animations).toBe(1); // the animation loop is stuck on its animation
+    expect(claims).toBeGreaterThan(5); // the signal went on
+  });
+});
