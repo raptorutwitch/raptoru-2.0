@@ -128,13 +128,14 @@ export class VotekickRuntime {
         },
         () => {},
       );
-    } else if (m.status === 'failed' && this.d.mute.current?.id === m.mute_id) {
+    } else if (m.status === 'failed' && this.d.mute.has(m.mute_id)) {
       // Core gave up on it (late start report): OBS restored now, never left muted.
       this.handled.add(key);
       await this.d.mute.muteEnd(m.mute_id, 'expired');
     } else if (m.status === 'ended') {
       this.handled.add(key);
-      if (this.d.mute.current?.id === m.mute_id) {
+      // has(): the scene may be shared with a Random Ban mute (another owner): only this mute leaves it.
+      if (this.d.mute.has(m.mute_id)) {
         const r = await this.d.mute.muteEnd(
           m.mute_id,
           m.end_reason ?? 'expired',

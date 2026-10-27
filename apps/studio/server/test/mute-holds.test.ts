@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MuteHolds } from '../src/channel-points/mute-holds.js';
 import { RandomBanRuntime } from '../src/random-ban/runtime.js';
 import {
+  MUTE_WATCHDOG_MS,
   MuteController,
   RAPTORU_MUTE_FX,
 } from '../src/votekick/mute-controller.js';
@@ -125,7 +126,7 @@ describe('MuteHolds — one mic, several effects', () => {
   });
 });
 
-describe('Random Ban V3 in Studio — the streamer mute (fake Core)', () => {
+describe('Random Ban V3 in Studio — the streamer mute plays Votekick’s MUTED scene (fake Core)', () => {
   function fakeCore(l: Awaited<ReturnType<typeof lab>>) {
     const calls: { path: string; body: Record<string, unknown> }[] = [];
     const state = {
@@ -156,76 +157,183 @@ describe('Random Ban V3 in Studio — the streamer mute (fake Core)', () => {
       environment: 'production',
       channelId: '83603689',
       effects: null,
-      mic: { input: MIC, holds: l.holds, obs: () => l.obs },
+      mic: { input: MIC, holds: l.holds, obs: () => l.obs, fx: l.vk },
       now: l.clock.now,
     });
-    return { calls, state, rt };
+    /** Core hands the mute; Studio starts it and reports; Core then lists it as running. */
+    const start = async (id = R, seconds = 60) => {
+      state.mute = { request_id: id, attempt_id: A, seconds };
+      await rt.muteOnce();
+      state.active = [...state.active, { request_id: id, ends_at: 'x' }];
+    };
+    /** Core no longer lists `id` (expired, or a paid caution). */
+    const over = async (id = R) => {
+      state.active = state.active.filter((a) => a.request_id !== id);
+      await rt.muteOnce();
+    };
+    return { calls, state, rt, start, over };
   }
   const R = '00000000-0000-4000-8000-0000000000aa';
+  const R2 = '00000000-0000-4000-8000-0000000000cc';
   const A = '00000000-0000-4000-8000-0000000000bb';
 
-  it('muted, reported, kept while Core lists it, released when a caution ended it — Votekick still holds', async () => {
+  /** The whole OBS state the scene touches. */
+  const scene = (l: Awaited<ReturnType<typeof lab>>) => ({
+    mic: l.obs.inputs.get(MIC)!.muted,
+    zoom: l.obs.zoomFilter.enabled,
+    // At rest the zoom is 1.000001 by design (REST_ZOOM, Votekick 24/10): read as « rest ».
+    zoomAtRest: Math.abs(Number(l.obs.zoomFilter.settings.zoom) - 1) < 0.001,
+    band: l.obs.bandFilter.enabled,
+    bandDuration: l.obs.bandFilter.settings.mute_duration,
+    drive: l.obs.driveFilter.enabled,
+  });
+  const ON = { mic: true, zoom: true, band: true, drive: true };
+
+  it('the whole scene (mic, zoom, MUTED band, drive), then back to the initial state at its natural end', async () => {
     const l = await lab();
     const f = fakeCore(l);
-    await f.rt.muteOnce();
-    expect(f.calls[0]!.body).toMatchObject({
-      obs_ready: true,
-      mic_held: false,
-    });
-    f.state.mute = { request_id: R, attempt_id: A, seconds: 60 };
-    await f.rt.muteOnce();
-    expect(l.muted()).toBe(true);
-    expect(f.calls.at(-1)!.body).toMatchObject({
-      event: 'muted',
-      attempt_id: A,
-    });
-    await l.vk.muteStart('mute:v9', 120); // a Votekick mute on top
-    f.state.active = [{ request_id: R, ends_at: 'x' }];
-    await f.rt.muteOnce();
-    expect(l.holds.holders(MIC)).toContain(`random_ban:${R}`);
-    expect(f.calls.at(-1)!.body).toMatchObject({ mic_held: true });
-    f.state.active = []; // the caution ended the Random Ban mute only
-    await f.rt.muteOnce();
-    expect(l.holds.holders(MIC)).toEqual(['votekick:mute:v9']);
-    expect(l.muted()).toBe(true);
-    await l.vk.muteEnd('mute:v9', 'expired');
-    expect(l.muted()).toBe(false);
+    const initial = scene(l);
+    await f.start();
+    expect(scene(l)).toMatchObject(ON);
+    expect(f.calls.at(-1)!.body).toMatchObject({ event: 'muted' });
+    l.clock.advance(60_000);
+    await f.over(); // expired: Core no longer lists it
+    expect(scene(l)).toEqual(initial);
+    expect(l.vk.owners()).toEqual([]);
   });
 
-  it('OBS absent: reported failed (Core goes back to the viewers), nothing held', async () => {
+  it('a caution ends it early: the whole scene stops at once, back to the initial state; never re-applied later', async () => {
     const l = await lab();
     const f = fakeCore(l);
+    const initial = scene(l);
+    await f.start();
+    l.clock.advance(15_000);
+    await f.over(); // the caution
+    expect(scene(l)).toEqual(initial);
+    // A late watchdog, a restart, OBS reconnecting: nothing comes back.
+    l.clock.advance(120_000);
+    await l.vk.tick();
+    await l.holds.tick();
+    await f.rt.muteOnce();
+    const again = await MuteController.open(
+      join(l.dir, 'votekick-mute.json'),
+      () => l.obs,
+      RAPTORU_MUTE_FX,
+      l.clock.now,
+      async () => {},
+      l.holds,
+    );
+    await again.tick();
+    expect(again.current).toBeNull();
+    expect(scene(l)).toEqual(initial);
+  });
+
+  it('overlap — Random Ban first, Votekick joins: a caution on the Random Ban keeps the scene for Votekick; its end restores all', async () => {
+    const l = await lab();
+    const f = fakeCore(l);
+    const initial = scene(l);
+    await f.start();
+    await l.vk.muteStart('mute:v1', 120);
+    await f.over(); // caution on the Random Ban only
+    expect(scene(l)).toMatchObject(ON);
+    expect(l.vk.owners()).toEqual(['mute:v1']);
+    await l.vk.muteEnd('mute:v1', 'expired');
+    expect(scene(l)).toEqual(initial);
+  });
+
+  it('overlap — Votekick first, Random Ban joins: a caution on Votekick keeps the scene for the Random Ban; its end restores all', async () => {
+    const l = await lab();
+    const f = fakeCore(l);
+    const initial = scene(l);
+    await l.vk.muteStart('mute:v2', 120);
+    await f.start();
+    expect(l.vk.owners()).toEqual(['mute:v2', `random_ban:${R}`]);
+    await l.vk.muteEnd('mute:v2', 'caution'); // the Votekick caution
+    expect(scene(l)).toMatchObject(ON);
+    await f.over();
+    expect(scene(l)).toEqual(initial);
+  });
+
+  it('two Random Ban mutes in a row never stack: the second one waits for its own start', async () => {
+    const l = await lab();
+    const f = fakeCore(l);
+    const initial = scene(l);
+    await f.start(R, 60);
+    await f.start(R2, 60); // (Core never draws it while one runs; Studio still copes)
+    await f.over(R);
+    expect(scene(l)).toMatchObject(ON);
+    await f.over(R2);
+    expect(scene(l)).toEqual(initial);
+  });
+
+  it('a mic muted by the streamer before: the scene ends, the mic stays muted', async () => {
+    const l = await lab();
+    const f = fakeCore(l);
+    l.obs.inputs.get(MIC)!.muted = true;
+    await f.start();
+    await f.over();
+    expect(scene(l)).toMatchObject({
+      mic: true,
+      zoom: false,
+      band: false,
+      drive: false,
+    });
+  });
+
+  it('OBS failing mid-start: everything back to the initial state, reported failed (Core goes back to the viewers)', async () => {
+    const l = await lab();
+    const f = fakeCore(l);
+    const initial = scene(l);
+    l.obs.failAt = 3; // OBS refuses a request half way through the scene
+    await f.start();
+    expect(f.calls.at(-1)!.body).toMatchObject({ event: 'failed' });
+    expect(scene(l)).toEqual(initial);
+    expect(l.holds.pending).toBe(0);
+  });
+
+  it('OBS absent at the start: reported failed, nothing changed; OBS gone at the end: restored when it is back', async () => {
+    const l = await lab();
+    const f = fakeCore(l);
+    const initial = scene(l);
     l.obs.connected = false;
     f.state.mute = { request_id: R, attempt_id: A, seconds: 60 };
     await f.rt.muteOnce();
     expect(f.calls.at(-1)!.body).toMatchObject({ event: 'failed' });
-    expect(l.holds.pending).toBe(0);
+    l.obs.connected = true;
+    expect(scene(l)).toEqual(initial);
+    await f.start();
+    l.obs.connected = false;
+    await f.over(); // the caution while OBS is gone
+    l.obs.connected = true;
+    await l.vk.tick(); // retried when OBS answers
+    await l.holds.tick();
+    expect(scene(l)).toEqual(initial);
   });
 
-  it('Core refuses or loses the report: the mute is never kept', async () => {
+  it('Core refuses or loses the report: the scene is never kept', async () => {
     const l = await lab();
     const f = fakeCore(l);
+    const initial = scene(l);
     f.state.mute = { request_id: R, attempt_id: A, seconds: 60 };
     f.state.report = () => {
       throw Object.assign(new Error('not_current_attempt'), { status: 409 });
     };
     await f.rt.muteOnce();
-    expect(l.muted()).toBe(false);
-    expect(l.holds.pending).toBe(0);
+    expect(scene(l)).toEqual(initial);
     f.state.mute = { request_id: R, attempt_id: A, seconds: 60 };
-    f.state.report = () => ({ status: 'queued' }); // swept back to the viewers meanwhile
+    f.state.report = () => ({ status: 'queued' }); // swept back meanwhile
     await f.rt.muteOnce();
-    expect(l.muted()).toBe(false);
+    expect(scene(l)).toEqual(initial);
   });
 
-  it('the hold ends by itself at its time even if Core is never reached again', async () => {
+  it('Core never reached again: the scene ends by its watchdog', async () => {
     const l = await lab();
     const f = fakeCore(l);
-    f.state.mute = { request_id: R, attempt_id: A, seconds: 60 };
-    await f.rt.muteOnce();
-    expect(l.muted()).toBe(true);
-    l.clock.advance(60_000);
+    const initial = scene(l);
+    await f.start();
+    l.clock.advance(60_000 + MUTE_WATCHDOG_MS);
+    await l.vk.tick();
     await l.holds.tick();
-    expect(l.muted()).toBe(false);
+    expect(scene(l)).toEqual(initial);
   });
 });

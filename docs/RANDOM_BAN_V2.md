@@ -15,6 +15,14 @@ Décisions d'Antoni (GO du 26–27/10) : tirage toujours aléatoire, acheteur pl
   dans les 15 s (OBS perdu, Studio fermé) ou a échoué → la demande repart en tirage viewers (rien de perdu). Pas de
   nouvelle colonne : `reason` = `streamer_mute` (`streamer_mute_caution` après une caution), `lease_expires_at` = fin du
   mute une fois confirmé. Studio : « Tester le mute du streamer » = **le micro seulement** (60 s dans OBS) : jamais d'appel Twitch (jamais rendu au bot, même si Studio échoue), aucun jeton, aucun point, aucune ligne de chat, aucune animation, aucune caution possible.
+- **Scène MUTED (Studio 0.1.12, 27/10)** : le mute du streamer joue la même scène OBS que le mute Votekick — micro
+  coupé, zoom caméra (« Votekick Zoom » + drive « Votekick Zoom Drive »), bandeau « Votekick Mute » — avec le même
+  `MuteController` et les mêmes sources (aucun vote, aucun réglage OBS modifié). Plusieurs sanctions = plusieurs
+  « propriétaires » de la scène : chacune a sa fin ; une caution ou une expiration ne retire que la sienne (et sa tenue
+  du micro) ; la scène entière est restaurée (états initiaux : zoom au repos, bandeau et drive coupés, micro rendu s'il
+  était actif avant) à la fin de la DERNIÈRE. Une sanction finie n'est jamais réappliquée (minuterie tardive,
+  redémarrage, reconnexion OBS) ; OBS qui échoue au démarrage → tout est remis en place, Core repart sur un viewer ;
+  OBS absent à la fin → restauration dès qu'il répond. « Tester le mute du streamer » joue toute la scène.
 - **Micro partagé** (`apps/studio/server/src/channel-points/mute-holds.ts`) : Votekick, BRB et le mute Random Ban
   « tiennent » le micro sous leur nom ; la voix ne revient qu'à la fin du **dernier**, jamais s'il était coupé avant,
   jamais par-dessus un changement manuel ; enregistré sur disque (redémarrage de Studio, OBS absent : repris). Corrige

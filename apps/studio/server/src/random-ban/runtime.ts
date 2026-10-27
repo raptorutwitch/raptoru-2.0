@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { RandomBanAnimationId } from '@raptoru/schemas';
 import type { MuteHolds } from '../channel-points/mute-holds.js';
+import type { MuteController } from '../votekick/mute-controller.js';
 import type { ObsLike } from '../channel-points/obs-actions.js';
 import { EffectError, type EffectsPlayer } from '../effects/player.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
@@ -9,10 +10,11 @@ import type { LabCoreCall } from '../lab-moderation/proxy.js';
 // Twitch executor (bot) times out; Studio only shows the animation Core hands out once the result is known (a
 // confirmed timeout, a flop, a dry run / test) — on the effects player (one OBS browser source, no reload), one at a
 // time, then reports how it went. An animation Studio cannot show (player absent…) never undoes a timeout.
-// V3 (27/10): the streamer drawn → Studio mutes his mic in OBS (a hold of the shared MuteHolds, so another effect's
-// mute is never ended by it, nor this one by another), tells Core, and releases the hold when the mute is over or when
-// Core no longer lists it as running (a paid caution ended it). It says at each poll whether it could mute now (OBS
-// connected, mic held by nobody): Core never draws the streamer otherwise.
+// V3 (27/10): the streamer drawn → Studio plays Votekick's MUTED scene in OBS (zoom, MUTED band, drive, mic — the same
+// MuteController and OBS items, no vote), as another owner of that scene: a Votekick mute running too keeps it until
+// both end, and each one holds the mic under its own name (shared MuteHolds). Studio tells Core, and ends its part when
+// the mute is over or when Core no longer lists it as running (a paid caution ended it). It says at each poll whether
+// it could mute now (OBS connected, mic held by nobody): Core never draws the streamer otherwise.
 
 const POLL_MS = 500;
 
@@ -22,7 +24,13 @@ export interface RandomBanRuntimeDeps {
   channelId: string;
   effects: EffectsPlayer | null;
   /** V3: the streamer's mic (absent: Studio never offers to mute him). */
-  mic?: { input: string; holds: MuteHolds; obs: () => ObsLike | null };
+  mic?: {
+    input: string;
+    holds: MuteHolds;
+    obs: () => ObsLike | null;
+    /** Votekick's MUTED scene (zoom, band, drive, mic), shared. */
+    fx: Pick<MuteController, 'muteStart' | 'muteEnd' | 'has' | 'owners'>;
+  };
   now?: () => number;
   pollMs?: number;
 }
@@ -76,7 +84,6 @@ export class RandomBanRuntime {
   async muteOnce(): Promise<boolean> {
     const m = this.d.mic;
     if (!m) return false;
-    const now = this.d.now ?? Date.now;
     const { mute, active } = await this.d.core<{
       mute: {
         request_id: string;
@@ -90,6 +97,10 @@ export class RandomBanRuntime {
       mic_held: m.holds.holders(m.input).length > 0,
     });
     const running = new Set(active.map((a) => HOLD_PREFIX + a.request_id));
+    for (const owner of m.fx.owners())
+      if (owner.startsWith(HOLD_PREFIX) && !running.has(owner))
+        await m.fx.muteEnd(owner, 'expired');
+    // A bare mic hold left by Studio 0.1.11 (before the scene): released the same way.
     for (const owner of m.holds.holders(m.input))
       if (owner.startsWith(HOLD_PREFIX) && !running.has(owner))
         await m.holds.release(m.input, owner);
@@ -97,7 +108,10 @@ export class RandomBanRuntime {
     const owner = HOLD_PREFIX + mute.request_id;
     let error: string | null = null;
     try {
-      await m.holds.hold(m.input, owner, now() + mute.seconds * 1000);
+      await m.fx.muteStart(owner, mute.seconds);
+      // A scene still being restored never takes a new owner: not muted.
+      if (!m.fx.has(owner))
+        throw new Error('scène MUTED en cours de restauration');
     } catch (e) {
       error = (e as Error).message || 'obs';
     }
@@ -112,10 +126,10 @@ export class RandomBanRuntime {
         },
       );
       if (!error && r.status !== 'confirmed')
-        await m.holds.release(m.input, owner);
+        await m.fx.muteEnd(owner, 'expired');
     } catch {
       // Core never heard of this mute: never kept (it would be a mute nobody can pay to end).
-      if (!error) await m.holds.release(m.input, owner);
+      if (!error) await m.fx.muteEnd(owner, 'expired');
     }
     return true;
   }

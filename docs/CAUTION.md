@@ -32,7 +32,8 @@ de chaine », lu le 22/10/2026).
   voir [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md) § V3). Le devis, la confirmation et l'expiration sont ceux des timeouts ; mute
   fini avant le `oui` : aucun débit. SAMMI (`CAUTION_START`) : variables `vk_broadcaster_muted` /
   `vk_broadcaster_mute_remaining_sec` tenues par la boucle du mute Votekick, 1 000 / minute, fin = micro rétabli et
-  filtres coupés ; seul le mute Votekick existait.
+  filtres coupés ; seul le mute Votekick existait. Libérer = fin de **toute** la sanction payée (micro, zoom, bandeau
+  MUTED, drive, minuterie, états initiaux), sauf ce qu'une autre sanction encore active utilise (Studio 0.1.12).
 - Textes du chat : ceux de SAMMI (ex. « viewer1 paie 8 000 jetons : viewer2 est libéré ! »).
 
 Écarts V2 (sécurité, documentés) : la sanction est **relue sur Twitch après le `oui` et avant tout débit** ; si le
