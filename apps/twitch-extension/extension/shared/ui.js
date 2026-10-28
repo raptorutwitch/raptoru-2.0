@@ -556,7 +556,7 @@ const HUB_MODULE_STYLES = Object.freeze({
   raffle_join: { icon: 'raffle_join', color: '#ec4899', color2: '#a855f7' },
   moderation: { icon: 'moderation', color: '#10b981', color2: '#0e7490' },
   commands: { icon: 'commands', color: '#2fd8c4', color2: '#3b82f6' },
-  event_shop: { icon: 'pumpkin', color: '#ff8a2b', color2: '#7c3aed' },
+  event_shop: { icon: 'bat', color: '#7a1220', color2: '#d4561a' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
 /** Commands V2 « Commandes » (phase F): the channel's public command list, for every viewer. */
@@ -576,7 +576,7 @@ const SUB_WHEEL_MODULE = Object.freeze({
 const EVENT_SHOP_MODULE = Object.freeze({
   id: 'event_shop',
   label: 'Événements',
-  icon: '🎃',
+  icon: '🦇',
   description: 'Fais peur à Raptoru avec tes Bonbons.',
 });
 /** The module's card names the edition the Core announces (« Halloween 2026 — … »). */
