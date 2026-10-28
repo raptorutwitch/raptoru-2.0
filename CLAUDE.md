@@ -22,6 +22,10 @@
   StreamElements or the Wallet without Antoni's explicit GO for that step.
 - The installed Studio uses this checkout as its data folder (`.env`, Twitch tokens,
   `apps/studio/server/.runtime`): never `git clean`, `reset --hard` or `checkout .` here.
+- The repository is PUBLIC since 2026-10-28 (`SECURITY.md`): never commit a secret, a `.env`, tokens,
+  backups, dumps, logs or viewer data; document variables without values; never write a secret value
+  in a report, log, commit or answer (type, location, severity only). Exploitable details of an
+  unfixed flaw stay in an uncommitted local report.
 
 ## Central files (ASTRA-P1-008, decided 2026-10-04)
 
