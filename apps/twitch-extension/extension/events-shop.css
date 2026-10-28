@@ -21,7 +21,11 @@
     radial-gradient(120% 60% at 50% -10%, rgba(255, 138, 43, 0.16), transparent 60%),
     linear-gradient(180deg, #160a22 0%, var(--evs-bg) 55%);
   border-radius: 12px;
-  overflow: hidden;
+  /* Its full height inside the module body (a flex column that scrolls, e.g. the 565×376 video component): never
+     shrunk to the visible height. `clip` (not `hidden`) keeps the mist inside without becoming a scroll container,
+     so the body scrolls and the section tabs below can stick to its top. */
+  flex: none;
+  overflow: clip;
 }
 .evs::before {
   /* the mist */
@@ -104,14 +108,18 @@
   box-shadow: 0 0 0 3px rgba(110, 231, 168, 0.15);
 }
 
-/* Interactions | Bonbons */
+/* Interactions | Bonbons — stays at the top while the list scrolls. */
 .evs-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: grid;
   grid-template-columns: 1fr 1fr;
   padding: 3px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: #1d1027;
   border: 1px solid var(--evs-line);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
 }
 .evs-tabs button {
   height: 28px;

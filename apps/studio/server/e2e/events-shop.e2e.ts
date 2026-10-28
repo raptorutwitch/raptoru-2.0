@@ -27,3 +27,29 @@ test('a viewer opens « Événements » (Halloween 2026): balance, offline engin
   await expect(shop.locator('.evs-pill')).toHaveText('🍬 14');
   await expect(shop).toContainText('Encore 8 Bonbons');
 });
+
+test('the 565×376 video component scrolls the module (wheel), its section tabs staying at hand', async ({
+  browser,
+}) => {
+  const page = await browser.newPage({ viewport: { width: 565, height: 376 } });
+  await page.goto('/ext/video_component.html?labRole=viewer');
+  const all = page.getByRole('button', { name: 'Voir tous les modules' });
+  await all.first().click();
+  await page
+    .getByRole('button', { name: /^Événements/ })
+    .first()
+    .click();
+  await expect(page.locator('.evs-item').first()).toBeVisible();
+  const body = page.locator('.jdm-module__body');
+  const box = (await page.locator('.evs-list').first().boundingBox())!;
+  await page.mouse.move(box.x + 30, 300);
+  await page.mouse.wheel(0, 900);
+  await expect
+    .poll(() => body.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(300);
+  await page.getByRole('tab', { name: 'Bonbons' }).click();
+  await page.mouse.wheel(0, 900);
+  await expect(
+    page.getByRole('button', { name: /Jetons → 1/ }),
+  ).toBeInViewport();
+});
