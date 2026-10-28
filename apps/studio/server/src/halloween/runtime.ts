@@ -792,6 +792,22 @@ export class HalloweenRuntime {
         200,
         await this.requireCore()(`${this.base}/channels/${ch}/admin`),
       );
+    // Bonbons: find a viewer (with their balance), and one viewer's purchases and movements.
+    if (req.method === 'GET' && p === '/api/halloween/admin/viewers')
+      return reply(
+        200,
+        await this.requireCore()(
+          `${this.base}/channels/${ch}/viewers?q=${encodeURIComponent((url.searchParams.get('q') ?? '').slice(0, 64))}`,
+        ),
+      );
+    const viewer = /^\/api\/halloween\/admin\/viewers\/(\d{1,32})$/.exec(p);
+    if (req.method === 'GET' && viewer)
+      return reply(
+        200,
+        await this.requireCore()(
+          `${this.base}/channels/${ch}/viewers/${viewer[1]}`,
+        ),
+      );
     if (req.method === 'POST' && p === '/api/halloween/admin/settings')
       return reply(
         200,

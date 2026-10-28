@@ -17,7 +17,12 @@ import {
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import type { EconomyPort } from '../economy/economy.js';
-import { LabWalletError } from '../lab-moderation/store.js';
+import {
+  activeBlock,
+  countGlobalRefusal,
+  globalState,
+  LabWalletError,
+} from '../lab-moderation/store.js';
 import { categoryOf, defaultItems, editionTitle, thumbOf } from './catalog.js';
 import {
   balanceOf,
@@ -337,6 +342,9 @@ export class EventShopService {
     try {
       return await this.db.tx((q) => this.purchaseTx(q, req));
     } catch (e) {
+      // Refused by the global pause: nothing was stored; the refusal is counted (D4 banner), outside the rolled back tx.
+      if (e instanceof EventShopError && e.code === 'raptoru_paused')
+        await countGlobalRefusal(this.db, req.channel_id, this.now());
       if (e instanceof EventBalanceError)
         throw new EventShopError(409, 'insufficient_bonbons', {
           balance: e.balance,
@@ -376,6 +384,12 @@ export class EventShopService {
       };
     }
     if (!settings.enabled) throw new EventShopError(409, 'event_closed');
+    // Moderation (D4), as for every paid interaction: « Pause Raptoru » refuses it (counted in the banner); a viewer
+    // blocked « everywhere » cannot buy. Refused before anything is debited.
+    if ((await globalState(q, req.channel_id)).paused)
+      throw new EventShopError(409, 'raptoru_paused');
+    if (await activeBlock(q, req.channel_id, req.viewer.id, 'all', now))
+      throw new EventShopError(403, 'viewer_blocked');
     await this.sweep(q, req.channel_id);
     const itemRow = (
       await q.query<ItemRow>(
@@ -1003,7 +1017,82 @@ export class EventShopService {
           name: v[0]!.display_name || v[0]!.login,
         };
     }
+    // Every viewer the channel has seen (extension, chat, Lab and main Core alike: the D4 « Viewer… » search's source).
+    const seen = await q.query<{ viewer_id: string; display_name: string }>(
+      `select viewer_id, display_name from lab_viewers where channel_id = $1
+         and (viewer_id = $2 or lower(display_name) = lower($2)) limit 2`,
+      [channelId, t],
+    );
+    if (seen.length === 1)
+      return { id: seen[0]!.viewer_id, name: seen[0]!.display_name };
     return /^\d{1,32}$/.test(t) && own.length === 0 ? { id: t, name: t } : null;
+  }
+
+  /**
+   * Studio › Bonbons « Trouver un viewer »: who has Bonbons, then every viewer seen (D4's source), by name or id —
+   * each with their Bonbons balance (0 for one who never had any). Read only.
+   */
+  async searchViewers(channelId: string, query: string, limit = 12) {
+    return this.db.tx(async (q) => {
+      const s = await this.ensure(q, channelId);
+      const t = query.trim().replace(/^@/, '');
+      const like = `%${t.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+      const rows = await q.query<{
+        viewer_id: string;
+        name: string;
+        balance: string | null;
+      }>(
+        `select id as viewer_id, max(name) as name, max(balance) as balance from (
+           select w.viewer_id as id, w.viewer_name as name, w.balance from event_wallets w
+           where w.season = $1 and w.channel_id = $2 and ($3 = '' or w.viewer_name ilike $4 or w.viewer_id like $4)
+           union all
+           select v.viewer_id, v.display_name, null from lab_viewers v
+           where v.channel_id = $2 and $3 <> '' and (v.display_name ilike $4 or v.viewer_id like $4)
+         ) x group by id order by max(balance) desc nulls last, max(name) limit $5`,
+        [s.season, channelId, t, like, limit],
+      );
+      return rows.map((r) => ({
+        viewer_id: r.viewer_id,
+        name: r.name,
+        balance: Number(r.balance ?? 0),
+      }));
+    });
+  }
+
+  /** One viewer's Bonbons: balance, purchases (effect, when, price, status, refund) and every movement. Read only. */
+  async viewerHistory(channelId: string, viewerId: string) {
+    return this.db.tx(async (q) => {
+      const s = await this.ensure(q, channelId);
+      const purchases = await q.query<PurchaseRow>(
+        `select * from event_shop_purchases where channel_id = $1 and viewer_id = $2 order by created_at desc limit 100`,
+        [channelId, viewerId],
+      );
+      const ledger = await q.query<{
+        kind: string;
+        amount: string;
+        balance_after: string;
+        actor: string;
+        reason: string | null;
+        created_at: Date;
+      }>(
+        `select kind, amount, balance_after, actor, reason, created_at from event_ledger
+         where season = $1 and channel_id = $2 and viewer_id = $3 order by id desc limit 200`,
+        [s.season, channelId, viewerId],
+      );
+      return {
+        viewer_id: viewerId,
+        balance: await balanceOf(q, s.season, channelId, viewerId),
+        purchases: purchases.map(view),
+        ledger: ledger.map((l) => ({
+          kind: l.kind,
+          amount: Number(l.amount),
+          balance_after: Number(l.balance_after),
+          actor: l.actor,
+          reason: l.reason,
+          created_at: iso(l.created_at),
+        })),
+      };
+    });
   }
 
   // --- reads -------------------------------------------------------------------------------------------------------

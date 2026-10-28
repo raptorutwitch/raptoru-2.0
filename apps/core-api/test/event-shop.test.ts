@@ -766,3 +766,81 @@ describe('closing the event: temporary and reversible', () => {
     expect(await balance(ANA.id)).toBe(10);
   });
 });
+
+describe('the transversal rules of paid interactions (moderation D4) and Studio’s viewer tools', () => {
+  it('« Pause Raptoru » refuses a purchase (counted in the banner), nothing debited; a viewer blocked everywhere cannot buy', async () => {
+    await open();
+    await give(ANA, 10);
+    await db.query(
+      `insert into lab_global_state (channel_id, paused, paused_at, paused_by, refused_count, updated_at)
+       values ($1, true, $2, 'test', 0, $2)`,
+      [CH, clock.now()],
+    );
+    expect(await code(buy(ANA, 'blink'))).toBe('raptoru_paused');
+    expect(await balance(ANA.id)).toBe(10);
+    expect(
+      (
+        await db.query<{ n: number }>(
+          'select refused_count as n from lab_global_state where channel_id = $1',
+          [CH],
+        )
+      )[0]!.n,
+    ).toBe(1);
+    await db.query(
+      'update lab_global_state set paused = false where channel_id = $1',
+      [CH],
+    );
+    await db.query(
+      `insert into lab_viewer_blocks (channel_id, viewer_id, module_id, until, reason, actor, created_at)
+       values ($1, $2, 'all', null, 'test', 'test', $3)`,
+      [CH, ANA.id, clock.now()],
+    );
+    expect(await code(buy(ANA, 'blink'))).toBe('viewer_blocked');
+    expect(await balance(ANA.id)).toBe(10);
+    // Bob is not blocked.
+    await give(BOB, 5);
+    expect(await code(buy(BOB, 'blink'))).toBe('ok');
+  });
+
+  it('find a viewer (Bonbons or only seen), credit them by their Twitch name, read their purchases and movements', async () => {
+    await open();
+    await db.query(
+      `insert into lab_viewers (channel_id, viewer_id, display_name, first_seen, last_seen) values ($1, '91003', 'Carla_TV', $2, $2)`,
+      [CH, clock.now()],
+    );
+    await give(ANA, 10);
+    expect(await shop.searchViewers(CH, 'carla')).toEqual([
+      { viewer_id: '91003', name: 'Carla_TV', balance: 0 },
+    ]);
+    // Credited by name (a viewer the channel has seen, no Bonbons yet); the same entry twice credits once.
+    const key = randomUUID();
+    const grant = () =>
+      shop.grant(
+        {
+          idempotency_key: key,
+          channel_id: CH,
+          viewer: 'carla_tv',
+          amount: 7,
+          reason: 'grant',
+          note: 'concours',
+        },
+        'test',
+      );
+    await grant();
+    await grant();
+    expect(await balance('91003')).toBe(7);
+    await buy(ANA, 'blink');
+    const h = await shop.viewerHistory(CH, ANA.id);
+    expect(h.balance).toBe(8);
+    expect(h.purchases[0]).toMatchObject({
+      label: 'Clignement',
+      price: 2,
+      status: 'queued',
+    });
+    expect(h.ledger.map((l) => l.kind)).toEqual(['purchase', 'grant']);
+    expect((await shop.searchViewers(CH, ''))[0]).toMatchObject({
+      viewer_id: ANA.id,
+      balance: 8,
+    });
+  });
+});

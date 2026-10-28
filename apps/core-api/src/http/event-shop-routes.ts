@@ -75,6 +75,27 @@ export function eventShopRoutes(
       handle: ({ params }) => mapped(() => shop.admin(channel(params[0]!))),
     },
     {
+      // Studio › Bonbons: find a viewer (Bonbons wallets, then every viewer seen) with their balance.
+      method: 'GET',
+      pattern: at('/channels/(\\d{1,32})/viewers'),
+      auth,
+      handle: ({ params, url }) =>
+        mapped(() =>
+          shop.searchViewers(
+            channel(params[0]!),
+            (url.searchParams.get('q') ?? '').slice(0, 64),
+          ),
+        ),
+    },
+    {
+      // One viewer's Bonbons: balance, purchases, movements.
+      method: 'GET',
+      pattern: at('/channels/(\\d{1,32})/viewers/(\\d{1,32})'),
+      auth,
+      handle: ({ params }) =>
+        mapped(() => shop.viewerHistory(channel(params[0]!), params[1]!)),
+    },
+    {
       method: 'POST',
       pattern: at('/channels/(\\d{1,32})/settings'),
       auth,

@@ -2,6 +2,8 @@
 // STOP ALL) and the Core's shop (open / closed, rules, catalogue, Bonbons grants, what was bought). Every button here
 // acts for real: a local test plays on the streamer's screen (an explicit click), the shop controls write the Core.
 
+import { mountViewerFinder } from './halloween-viewer.js';
+
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 
 type Json = Record<string, unknown>;
@@ -338,6 +340,7 @@ export function mountHalloween(root: HTMLElement) {
       <section class="card"><h3>Overlay sur mon écran</h3><div data-role="overlay"></div></section>
       <section class="card"><h3>Boutique</h3><div data-role="shop"></div></section>
       <section class="card wide"><h3>Catalogue</h3><div data-role="catalogue"></div></section>
+      <section class="card wide"><h3>Trouver un viewer</h3><div data-role="viewer"></div></section>
       <section class="card wide"><h3>Bonbons</h3><div data-role="bonbons"></div></section>
     </div></div>`;
   const part = (role: string) =>
@@ -403,13 +406,16 @@ export function mountHalloween(root: HTMLElement) {
     fn: () => Promise<Json>,
     ok: string | ((out: Json) => string),
   ) => {
+    let done = false;
     try {
       const out = await fn();
       say(typeof ok === 'string' ? ok : ok(out));
+      done = true;
     } catch (e) {
       say(`Refusé : ${errorText((e as Error).message)}`);
     }
     await Promise.all([loadStatus(), loadAdmin()]);
+    return done;
   };
 
   root.addEventListener('click', (ev) => {
@@ -497,19 +503,46 @@ export function mountHalloween(root: HTMLElement) {
       );
     }
   });
+  // « Trouver un viewer »: its own card (never redrawn by the refresh); « Créditer » fills the credit form below.
+  const finder = mountViewerFinder(
+    part('viewer'),
+    call,
+    (id, name) => {
+      const form = part('bonbons').querySelector<HTMLFormElement>(
+        '[data-form="grant"]',
+      );
+      if (!form) return;
+      (form.elements.namedItem('viewer') as HTMLInputElement).value = id;
+      delete form.dataset.key;
+      say(`Créditer ${name} : indique le montant.`);
+      (form.elements.namedItem('amount') as HTMLInputElement).focus();
+    },
+    errorText,
+  );
+  // One credit entry = one idempotency key, kept until it succeeds (a double click or a retry never credits twice);
+  // changing a field makes it a new entry.
+  root.addEventListener('input', (ev) => {
+    const form = (ev.target as HTMLElement).closest<HTMLFormElement>(
+      '[data-form="grant"]',
+    );
+    if (form) delete form.dataset.key;
+  });
   root.addEventListener('submit', (ev) => {
     const form = (ev.target as HTMLElement).closest<HTMLFormElement>(
       '[data-form="grant"]',
     );
     if (!form) return;
     ev.preventDefault();
+    if (form.dataset.sending) return;
     const f = new FormData(form);
     const amount = Math.round(Number(f.get('amount')));
     if (!amount) return say('Montant non nul requis.');
+    form.dataset.key ??= crypto.randomUUID();
+    form.dataset.sending = '1';
     void act(
       () =>
         call('/api/halloween/admin/grant', {
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: form.dataset.key,
           viewer: String(f.get('viewer')).trim(),
           amount,
           reason: f.get('reason') === 'raffle' ? 'raffle' : 'grant',
@@ -517,8 +550,16 @@ export function mountHalloween(root: HTMLElement) {
             ? { note: String(f.get('note')).trim() }
             : {}),
         }),
-      `${amount > 0 ? '+' : ''}${amount} Bonbons attribués.`,
-    ).then(() => form.reset());
+      (out) =>
+        `${amount > 0 ? '+' : ''}${amount} Bonbons attribués${out.replayed ? ' (déjà fait : rien de plus)' : ''} · solde ${String(out.balance ?? '?')}.`,
+    ).then((done) => {
+      delete form.dataset.sending;
+      // Failed (or unknown): the same entry keeps its key — sending it again can never credit twice.
+      if (!done) return;
+      form.reset();
+      delete form.dataset.key;
+      finder.refresh();
+    });
   });
 
   setInterval(() => {

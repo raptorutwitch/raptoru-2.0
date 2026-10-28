@@ -37,6 +37,8 @@ export const REASONS = {
   insufficient_tokens: 'Pas assez de Jetons.',
   identity_required: 'Partage ton identité Twitch avec l’extension pour participer.',
   idempotency_conflict: 'Action déjà envoyée.',
+  raptoru_paused: 'Raptoru est en pause : réessaie un peu plus tard.',
+  viewer_blocked: 'Les interactions te sont fermées pour le moment.',
 };
 const reasonOf = (e) =>
   REASONS[e?.code ?? e?.message] ?? 'Indisponible pour le moment.';

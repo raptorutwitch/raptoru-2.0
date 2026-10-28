@@ -33,6 +33,8 @@ const REFUSALS: Record<string, string> = {
   conversion_cap: 'limite d’échange atteinte pour cette heure',
   conversion_closed: 'l’échange de Jetons est fermé',
   insufficient_tokens: 'pas assez de Jetons',
+  raptoru_paused: 'Raptoru est en pause, réessaie plus tard',
+  viewer_blocked: 'les interactions te sont fermées pour le moment',
 };
 
 export class EventShopChat {

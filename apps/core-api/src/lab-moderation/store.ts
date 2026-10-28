@@ -398,7 +398,8 @@ export async function activeBlock(
   q: Queryable,
   channelId: string,
   viewerId: string,
-  module: LabModule,
+  /** A module, or 'all' (a module without its own block — Halloween — honours the « everywhere » one only). */
+  module: LabModule | 'all',
   now: Date,
 ) {
   return (

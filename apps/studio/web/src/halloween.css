@@ -270,3 +270,42 @@ kbd {
   color: var(--hw-warn);
   white-space: nowrap;
 }
+
+/* « Trouver un viewer » */
+.hw-find {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.hw-find input {
+  flex: 1;
+}
+.hw-hits {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.hw-hit {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  text-align: left;
+}
+.hw-hit span {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.hw-viewer-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0;
+}
+.hw-balance {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
