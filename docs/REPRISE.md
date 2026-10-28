@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **28/10/2026 ~00:25 UTC** (**Dock OBS V1.2 livré** : Core `dc06344`, Studio 0.1.17 publiée, à installer — [OBS_DOCK.md](OBS_DOCK.md) ; **Random Ban V3 en Production** : Core `ff4fb45`, bot `4ba9243` ; Studio 0.1.14 publiée (« Test Caution Random Ban »), à installer — § 3, § 6 ; **deuxième passe close** : Core et bot `5e7ebe6`, Studio 0.1.10 installé — § 3 ; premiers correctifs stream en Production le 26/10 (`d215778`) ; **Roue du Sub V2 active** (mode `v2`), Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **28/10/2026 soir** (**Halloween : PR #35 prête, non fusionnée, livraison sur GO — § 6** ; **Dock OBS V1.2 livré** : Core `dc06344`, Studio 0.1.17 publiée, à installer — [OBS_DOCK.md](OBS_DOCK.md) ; **Random Ban V3 en Production** : Core `ff4fb45`, bot `4ba9243` ; Studio 0.1.14 publiée (« Test Caution Random Ban »), à installer — § 3, § 6 ; **deuxième passe close** : Core et bot `5e7ebe6`, Studio 0.1.10 installé — § 3 ; premiers correctifs stream en Production le 26/10 (`d215778`) ; **Roue du Sub V2 active** (mode `v2`), Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -130,8 +130,14 @@ de chacune : [ROADMAP.md](ROADMAP.md).
   - **Validé par Antoni le 28/10** : screamers (vidéo et son) sur son écran ; achat depuis le module Événements,
     cooldown, effet joué.
   - **Développé et testé automatiquement, à valider** : défilement 565×376, Dock OBS (révélation à 5 s), Pause et
-    blocage, « Trouver un viewer » et crédit, Tombola en Bonbons, accès « Testeurs seulement », palette chauve-souris.
-  - **Prochaines étapes** : livraison prête à exécuter sur un GO unique, runbook [HALLOWEEN_GO.md](HALLOWEEN_GO.md).
+    blocage, « Trouver un viewer » et crédit, Tombola en Bonbons, palette chauve-souris. Réglage « Testeurs
+    seulement » laissé inactif (l'extension a déjà ses restrictions d'accès).
+  - **État au 28/10 soir** : PR #35 sur `a11dd4d`, CI verte, fusionnable, **non fusionnée** ; Production inchangée.
+    Dépôt **public** depuis le 28/10 (contrôle des secrets : rien de réel ; [SECURITY.md](../SECURITY.md)) ; Actions
+    rétabli → voie A du runbook. Fermé = aucun spoiler (`!solde` habituel, `!bonbons` / `!peur` muets, module masqué).
+    Push Protection GitHub encore désactivée (à activer par Antoni, non bloquant).
+  - **Prochaine étape** : GO d'Antoni pour les étapes 1–2 de [HALLOWEEN_GO.md](HALLOWEEN_GO.md) (sauvegarde Production
+    vérifiée, puis fusion), hors stream, idéalement le 29/10 ; arrêt avant le déploiement du Core (GO séparé).
 
 0. **Dock OBS V1.2** (livré le 28/10 : Core `dc06344`, sans migration ; Studio 0.1.17 publiée) : installer Studio
    0.1.17, actualiser le dock dans OBS (même URL, même clé, préférences V1.1 reprises) et le tester en vrai
