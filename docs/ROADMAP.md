@@ -51,12 +51,13 @@ dépôt ou les documents.
 
 ## 2. Chantiers en cours (à préserver, ne pas écraser)
 
-| Chantier                                          | Où                                                                                            | État                                                   |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Correctif « écran gris » extension                | checkout principal (`overlay.js`, `mobile.js`)                                                | non commité                                            |
-| Supervision / OAuth / Soundboard Ctrl+R / updater | intégré au dépôt (PR #1, `eb3f05a`) ; `sup-wt` et la copie dans `rs-vk` sont devenus inutiles | commité (PR #1), en service via Studio sup.8 à sup.10  |
-| Script de déploiement                             | dans le dépôt (`scripts/coolify-deploy.mjs`, PR #1) + workflows GitHub ([CICD.md](CICD.md))   | dans le dépôt, outil actuel (local et GitHub)          |
-| Restes de lots livrés                             | `chat-wt`, `wg-wt`, `solde-wt`, `node-wt`                                                     | déjà intégrés pour l'essentiel ; restes non revérifiés |
+| Chantier                                           | Où                                                                                            | État                                                   |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Correctif « écran gris » extension                 | checkout principal (`overlay.js`, `mobile.js`)                                                | non commité                                            |
+| Opération Halloween ([HALLOWEEN.md](HALLOWEEN.md)) | worktree `raptoru-halloween`, branche `feat/halloween`                                        | testé automatiquement, non validé, non déployé         |
+| Supervision / OAuth / Soundboard Ctrl+R / updater  | intégré au dépôt (PR #1, `eb3f05a`) ; `sup-wt` et la copie dans `rs-vk` sont devenus inutiles | commité (PR #1), en service via Studio sup.8 à sup.10  |
+| Script de déploiement                              | dans le dépôt (`scripts/coolify-deploy.mjs`, PR #1) + workflows GitHub ([CICD.md](CICD.md))   | dans le dépôt, outil actuel (local et GitHub)          |
+| Restes de lots livrés                              | `chat-wt`, `wg-wt`, `solde-wt`, `node-wt`                                                     | déjà intégrés pour l'essentiel ; restes non revérifiés |
 
 Instantané de tout ce travail : [BACKUPS.md](BACKUPS.md) § 3.
 
