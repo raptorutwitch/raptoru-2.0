@@ -1,0 +1,196 @@
+/* Halloween overlay (docs/HALLOWEEN.md): a transparent page over the streamer's screen. Nothing shows while idle;
+   every layer ignores the mouse (the window itself is click-through too). */
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+#stage > * {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Shown only when opened by hand without its key (never in the overlay window). */
+#notice {
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(20, 15, 28, 0.85);
+  color: #f2e9ff;
+  font:
+    600 14px/1.4 system-ui,
+    sans-serif;
+}
+
+.fx-video {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Blink: two eyelids with a soft edge. */
+.fx-lid {
+  left: 0;
+  right: 0;
+  height: 56%;
+}
+.fx-lid.top {
+  top: 0;
+  background: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 82%,
+    rgba(0, 0, 0, 0.85) 92%,
+    transparent 100%
+  );
+  transform: translateY(-100%);
+}
+.fx-lid.bottom {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    #000 0%,
+    #000 82%,
+    rgba(0, 0, 0, 0.85) 92%,
+    transparent 100%
+  );
+  transform: translateY(100%);
+}
+
+/* Fog: drifting pale masses, thicker on the edges. */
+.fx-fog {
+  inset: -10%;
+  opacity: 0;
+  background:
+    radial-gradient(
+      ellipse 38% 30% at 18% 28%,
+      rgba(222, 226, 232, 0.85),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 42% 34% at 78% 22%,
+      rgba(210, 215, 224, 0.8),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 46% 36% at 30% 78%,
+      rgba(228, 230, 236, 0.85),
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 40% 30% at 82% 74%,
+      rgba(214, 218, 226, 0.8),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 50%,
+      rgba(200, 205, 214, 0.35),
+      transparent 75%
+    ),
+    radial-gradient(
+      ellipse 120% 120% at 50% 50%,
+      transparent 45%,
+      rgba(220, 224, 230, 0.75) 100%
+    );
+  filter: blur(28px);
+  animation: fog-drift 14s ease-in-out infinite alternate;
+}
+@keyframes fog-drift {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1.02);
+  }
+  to {
+    transform: translate3d(2%, 1.5%, 0) scale(1.08);
+  }
+}
+
+/* Tunnel: darkness closing around the centre (radius driven by the script). */
+.fx-tunnel {
+  inset: 0;
+}
+
+/* Eyes in the dark. */
+.fx-dark {
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse 70% 70% at 50% 50%,
+    rgba(0, 0, 0, 0.35),
+    rgba(0, 0, 0, 0.92) 100%
+  );
+}
+.fx-eyes {
+  width: 220px;
+  height: 70px;
+  opacity: 0;
+}
+.fx-eye {
+  position: absolute;
+  top: 18px;
+  width: 54px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at 50% 55%,
+    #ffe1d6 0%,
+    #ff3b2f 28%,
+    #a10d0d 62%,
+    transparent 72%
+  );
+  box-shadow:
+    0 0 18px 6px rgba(255, 40, 30, 0.55),
+    0 0 46px 14px rgba(160, 0, 0, 0.35);
+  transform-origin: 50% 50%;
+}
+.fx-eye.l {
+  left: 24px;
+}
+.fx-eye.r {
+  right: 24px;
+}
+.fx-eyes.blink .fx-eye {
+  animation: eye-blink 260ms ease-in-out 1;
+}
+@keyframes eye-blink {
+  50% {
+    transform: scaleY(0.08);
+  }
+}
+
+/* Silhouette peering from a side. */
+.fx-silhouette {
+  bottom: 0;
+  height: 78%;
+  width: auto;
+  opacity: 0.94;
+  filter: blur(1.2px) drop-shadow(0 0 30px rgba(0, 0, 0, 0.8));
+}
+
+/* Corrupted signal: a few displaced bands (never a full-screen flash). */
+.fx-band {
+  left: 0;
+  right: 0;
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+.fx-noise {
+  inset: 0;
+  opacity: 0.18;
+  mix-blend-mode: overlay;
+}

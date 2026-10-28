@@ -71,6 +71,7 @@ import { Supervisor } from './supervision/supervisor.js';
 import { DockHub } from './dock/hub.js';
 import { DockKey, DockServer } from './dock/server.js';
 import { dockStudioApi, type DockRuntime } from './dock/studio-api.js';
+import { HalloweenRuntime } from './halloween/runtime.js';
 import {
   createLocalRuntime,
   portFree,
@@ -384,6 +385,8 @@ export function createStudioServer(
   supervision: { handle: Supervisor['handle']; origin: string } | null = null,
   /** Dock OBS V1: its own local server (another port); here only Studio's panel API (docs/OBS_DOCK.md). */
   dock: DockRuntime | null = null,
+  /** Halloween (docs/HALLOWEEN.md): the overlay engine, its page and media, Studio's panel and the shop relay. */
+  halloween: HalloweenRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -467,6 +470,8 @@ export function createStudioServer(
         const out = await dockStudioApi(dock, req, url);
         if (out) return send(res, out.status, out.body);
       }
+      // Halloween: overlay page / media (its key), Electron main (screens), Studio's panel and the shop relay.
+      if (halloween && (await halloween.handle(req, res, url))) return;
       // Twitch alerts V1: Core queues; Studio serves the OBS source / preview and relays the claims / reports.
       if (alerts && (await alerts.handle(req, res, url))) return;
       if (points && (await points.handle(req, res, url))) return;
@@ -701,6 +706,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   let labChatRef: LabChatIngress | null = null;
   let seRef: SeTipsLink | null = null;
   let dockRef: DockRuntime | null = null;
+  let halloweenRef: HalloweenRuntime | null = null;
   let pointsRef: ChannelPointsRuntime | null = null;
   let twitchConnectionsRef: TwitchConnections | null = null;
   let stopping = false;
@@ -713,6 +719,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     production?.link.stop();
     seRef?.close();
     void dockRef?.server.close();
+    halloweenRef?.stop();
     pointsRef?.stop();
     lab.logs.add(
       'studio',
@@ -1105,6 +1112,21 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       }
     : null;
   dockRef = dock;
+  // Halloween (docs/HALLOWEEN.md): the overlay engine plays what the profile's Core sold (Lab or Production), one at a
+  // time; its window is opened by Electron main on the chosen screen. Without a Core: local tests only.
+  const halloween = new HalloweenRuntime({
+    origin: `http://${host}:${port}`,
+    dir: join(paths.runtimeDir, 'halloween'),
+    pageDir: join(REPO_ROOT, 'apps', 'studio', 'server', 'halloween-overlay'),
+    core: alertsCore,
+    environment: alertsEnv,
+    channelId: cockpitChannel,
+    studioId: plan.production?.installation.installationId ?? 'studio-lab-halloween',
+    fromMain: (req) => fromMain(req, { RAPTORU_MAIN_TOKEN: mainToken }),
+    log: (line) => console.log(line),
+  });
+  await halloween.start().catch((e: Error) => console.error('[halloween] start failed', e.message));
+  halloweenRef = halloween;
   const httpServer = createStudioServer(
     lab,
     shutdown,
@@ -1141,6 +1163,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     control,
     { handle: supervisor.handle.bind(supervisor), origin: studioOrigin },
     dock,
+    halloween,
   );
   supervisor.start();
   if (dock)

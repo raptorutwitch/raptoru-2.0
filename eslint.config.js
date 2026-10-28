@@ -24,6 +24,7 @@ export default defineConfig(
       'apps/twitch-extension/calibration/**/*.js',
       // Dock OBS V1 page (OBS custom browser dock).
       'apps/studio/server/dock-page/**/*.js',
+      'apps/studio/server/halloween-overlay/**/*.js',
     ],
     languageOptions: {
       sourceType: 'module',
