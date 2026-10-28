@@ -144,19 +144,36 @@ L'onglet Halloween signale tout article actif dont la vidéo manque sur le PC. L
   - fermée avec Studio ;
   - aucun réglage Windows modifié.
 
-## 7. Extension et revue Twitch (risque principal)
+## 7. Extension, revue Twitch et accès progressif
 
-- Le Core n'ajoute **pas** le module à `modules`. Il expose une clé `event_shop` séparée, et seule la nouvelle
-  extension affiche « Événements » (édition « Halloween 2026 », nom fourni par le Core). L'extension publiée actuellement continue donc de fonctionner sans changement face
-  au nouveau Core.
-- **La revue Twitch n'a pas de délai garanti** (de quelques jours à plusieurs semaines, une seule version en revue à
-  la fois). Il faut compter sur l'absence de publication avant samedi.
-- **Hosted Test** : seuls les comptes de la liste de testeurs voient la version de test. **Attention** : un retour de
-  la communauté (forum des développeurs Twitch) signale qu'**installer la version Hosted Test sur la chaîne remplace
-  la version publiée pour tout le monde**. Les autres viewers ne verraient alors plus l'extension. **Ne pas faire ça
-  pendant un stream** sans l'avoir vérifié hors stream avec un compte qui n'est pas testeur.
-- **Recommandation** : envoyer la version en revue **dès que possible** (après validation Lab). Pour samedi, prévoir
-  que seuls les testeurs auront le module. **Le chat sert de voie principale** (§ 7 bis).
+- **Compatibilité** : le Core n'ajoute pas le module à `modules`. Il expose une clé `event_shop` séparée, et seule la
+  nouvelle extension affiche « Événements » (édition « Halloween 2026 », nom fourni par le Core). L'extension publiée
+  actuellement continue donc de fonctionner sans changement face au nouveau Core.
+- **La revue Twitch n'a pas de délai garanti** (de quelques jours à plusieurs semaines). **Une seule version peut être
+  en revue à la fois** (doc Twitch « Extension Life Cycle »).
+- **Hosted Test ne convient pas à la chaîne en direct.** La doc officielle dit : « Extensions are visible only to a
+  developer-provided list of test accounts… Other viewers see your channel without any Extensions. » Activer la
+  version de test sur `raptoru_` **retire l'extension à tous les viewers qui ne sont pas testeurs**. Hosted Test ne
+  sert qu'à vérifier la version sur une chaîne ou un compte de test, hors live.
+- **Accès progressif sans risque** :
+  - la version **publiée et approuvée** contient le module, et c'est le **Core** qui décide qui le voit ;
+  - Studio › Halloween › Boutique : « Module « Événements » dans l'extension : **Tous les viewers / Testeurs
+    seulement** » ;
+  - Studio › Trouver un viewer : « + Testeur extension » ;
+  - un non-testeur ne reçoit rien de la boutique (pas d'articles ni de solde) et le Core refuse ses achats depuis
+    l'extension (`not_invited`) ;
+  - le chat (`!peur`, `!bonbons`) et les gains (subs, Tombola) restent ouverts à tous ;
+  - on ouvre à tous d'un clic.
+- **Ne pas confondre** :
+  - **Extension Lab** : `/ext/...` servie par le Studio local, faux viewers, Core Lab. Elle ne touche jamais Twitch.
+  - **Hosted Test** : la version téléversée, visible seulement des testeurs Twitch, sur une chaîne de test.
+  - **Version publique** : celle approuvée et publiée. Elle seule doit tourner sur `raptoru_` pendant le stream.
+- **Recommandation** :
+  - téléverser la version et la tester en Hosted Test sur un compte de test ;
+  - la soumettre en revue **dès la validation Lab** ;
+  - à sa publication, régler l'accès sur « Testeurs seulement », puis ouvrir à tous.
+
+  Si l'approbation n'arrive pas avant samedi, le chat porte l'événement pour tout le monde (§ 7 bis).
 
 ## 7 bis. Le chat : la même boutique pour tous, sans revue Twitch
 
@@ -173,27 +190,97 @@ Les commandes restent **muettes tant que la boutique est fermée**.
 
 ## 8. Tester (Lab, sans Twitch, ni OBS, ni Production)
 
-0. Fermer d'abord le Studio installé : les deux utilisent les mêmes ports (4100 pour Studio, 4301 pour le Core Lab).
-   Le worktree a besoin de `apps/core-api/.env` : il ne contient que la ligne `DATABASE_URL` du checkout principal
-   (fichier créé le 28/10, ignoré par Git, sans jeton Twitch). Sans ce fichier, le Core Lab ne démarre pas et rien
-   n'est vendu (onglet Studio › Runtime local : « DATABASE_URL absent »). La base Lab `raptoru_bonk_lab` est partagée
-   avec le Studio installé : le worktree y ajoute seulement les tables `event_*`.
-1. `npm run studio` depuis le worktree, puis l'onglet Halloween. La fenêtre overlay s'ouvre sur l'écran choisi.
-   **Elle est visible sur le vrai bureau** : à tester quand Antoni le décide.
-2. « Tester » un effet, puis un screamer : vérifier l'image, le son, le clic qui traverse et STOP ALL.
-3. Ouvrir la boutique dans Studio, se donner des Bonbons (« Viewer Lab », id 900101), puis ouvrir l'Extension Lab
-   (`/ext/mobile.html?labRole=viewer`) › Événements et acheter ; ou taper `!peur blink` dans Studio › Simulation.
-4. Dans OBS (scène de test, pas une scène de Production) : la capture d'écran doit montrer l'effet et le son.
+0. **Préparation** :
+   - fermer d'abord le Studio installé : les deux utilisent les mêmes ports (4100 pour Studio, 4301 pour le Core Lab) ;
+   - le worktree a besoin de `apps/core-api/.env`, qui ne contient que la ligne `DATABASE_URL` du checkout principal
+     (créé le 28/10, ignoré par Git, sans jeton Twitch).
+1. `npm run studio` depuis le worktree, puis l'onglet Halloween 🎃.
+2. Boutique : « Ouvrir la boutique ». Trouver un viewer, par exemple « Viewer Lab » (id 900101), puis le
+   « Créditer ».
+3. Ouvrir l'Extension Lab (`/ext/mobile.html?labRole=viewer`) › Événements et acheter un effet. On peut aussi taper
+   `!peur blink` dans Studio › Simulation.
+4. Le Dock OBS montre la ligne Halloween 5 s après le début de l'effet.
+5. Tombola : Studio › Tombola › Montant fixe › Bonbons › Nombre fixe › Lancer. L'Extension Lab › Tombola ›
+   « Je participe ». Après le tirage, le solde de Bonbons du gagnant augmente.
+
+## 8 bis. Procédure de test OBS et STOP ALL (sur ton vrai bureau, avec une scène de test)
+
+Aucune scène de Production n'est modifiée : dans OBS, duplique ta scène de jeu (clic droit › Dupliquer) et fais les
+tests sur la copie.
+
+1. **Capture vidéo** : dans Studio › Halloween › « Tester sur mon écran », clique « Foxy ». L'aperçu OBS de la scène
+   copiée doit montrer le screamer, au-dessus de tout, avec la transparence (pas de rectangle noir).
+2. **Capture audio** : pendant le test, la jauge « Son du pc » d'OBS doit bouger. Sinon, vérifier la sortie audio
+   Windows utilisée par Studio.
+3. **Jeu en fenêtré sans bordure** : lance le jeu en « fenêtré sans bordure », puis teste « Brouillard ». L'effet doit
+   passer au-dessus du jeu, et un clic dans le jeu pendant l'effet doit fonctionner (la fenêtre de l'overlay laisse
+   passer les clics). En plein écran exclusif, Windows peut afficher le jeu par-dessus : reste en fenêtré sans bordure.
+4. **STOP ALL** : lance « Brouillard » (9 s), clique STOP ALL pendant l'effet. L'écran doit être propre aussitôt.
+5. **Ctrl+Maj+F12** : relance « Brouillard », mets le jeu au premier plan, puis appuie sur Ctrl+Maj+F12. L'écran doit
+   être propre aussitôt (le raccourci marche même si Studio n'est pas au premier plan).
+6. **Fermeture et réouverture de Studio** : ferme Studio pendant un effet. L'écran doit être propre (la fenêtre de
+   l'overlay se ferme avec Studio). Rouvre Studio : rien ne doit se rejouer. Le Core ne rejoue jamais un achat : un
+   achat interrompu est remboursé s'il n'a pas commencé.
+7. **Achat réel de bout en bout** (Lab) : un achat depuis l'Extension Lab, vérifié dans OBS (image et son), puis la
+   ligne Halloween dans le Dock 5 s après.
 
 ## 9. Livraison en Production (chaque étape attend le GO d'Antoni)
 
-1. Sauvegarde de la base, puis migration `supabase/migrations/20261112130000_event_shop.sql` : nouvelles tables
-   seulement, retour arrière en tête de fichier.
-2. Déploiement du Core (bot inchangé). La boutique reste **fermée** tant que Studio ne l'ouvre pas.
-3. Release Studio (`npm run studio:release`) et installation par Antoni. Ensuite, installation des médias depuis le
-   paquet (§ 5, étape 3) et contrôle avec `--check` : 30 identiques, puis l'onglet Halloween sans avertissement.
-4. Extension : `npm run build -w @raptoru/twitch-extension`, téléversement, Hosted Test (§ 7), demande de revue.
-5. Le jour J : ouvrir la boutique, vérifier « prêt » dans Studio, faire un test local, garder STOP ALL à portée.
+Avant tout : la PR #35 est relue puis **fusionnée** (GO), puisque Core, Studio et extension partent de `main`.
+
+1. **Sauvegarde de la base de Production** : téléchargement manuel de la sauvegarde dans Coolify (OPERATIONS.md,
+   BACKUPS.md § 2), et vérification qu'elle se lit.
+2. **Migration et déploiement du Core** : `node scripts/coolify-deploy.mjs plan core <sha>` (lecture seule), puis
+   `deploy core <sha> --migrations-approved --go`.
+   - La migration `20261112130000_event_shop.sql` est additive : nouvelles tables, plus une ligne Bonbons dans les
+     monnaies de la Tombola, et elle se rejoue sans risque. Retour arrière en tête du fichier.
+   - Le bot ne change pas.
+   - La boutique reste **fermée** jusqu'à son ouverture dans Studio.
+   - Le Dock lit les achats Halloween seulement une fois la table créée : aucune panne pendant les quelques secondes
+     où la migration passe après le démarrage.
+3. **Release Studio** (`npm run studio:release`), puis installation par Antoni.
+4. **Médias** : depuis `Documents\Raptoru 2.0 - Livraisons\2026-10-31-halloween-medias`, lancer
+   `node halloween-media-install.mjs --from .`, puis `--check` (30 identiques). Ensuite, Studio › Halloween ›
+   « Recharger les médias » : le catalogue ne doit plus afficher d'avertissement « absente de ce PC ».
+5. **Extension** :
+   - `npm run build -w @raptoru/twitch-extension`, puis téléversement de `dist/` comme **nouvelle version** ;
+   - Hosted Test **sur un compte de test seulement** (§ 7) ;
+   - demande de revue ;
+   - à l'approbation : publication, accès « Testeurs seulement », puis « Tous ».
+6. **Le jour J** :
+   - ouvrir la boutique, vérifier « Prêt » dans Studio, faire un test local, garder STOP ALL (Ctrl+Maj+F12) à portée ;
+   - vérifier qu'aucune commande Studio ne s'appelle `!peur` ou `!bonbons`.
+
+À la fin de l'événement : « Fermer l'événement » (les achats en attente sont remboursés et les soldes gardés).
+
+## 9 bis. Dock OBS, modération et administration
+
+- **Dock OBS** :
+  - chaque achat Halloween y apparaît (chauve-souris, nom de l'effet, viewer, coût en Bonbons, statut), **5 s après
+    le début réel de l'effet** (réglable dans les règles : « Dock OBS : afficher l'achat après (s) », 0 = dès le
+    début) ;
+  - avant ce délai, l'achat n'existe pas pour le Dock (ni compteur, ni filtre, ni historique, même si le Dock est
+    rouvert) ;
+  - un achat jamais joué n'apparaît jamais ;
+  - les autres événements ne sont jamais retardés ;
+  - filtre propre : « Événements › Halloween ».
+- **Modération (D4), comme pour les autres interactions payantes** : la « Pause Raptoru » refuse les achats (refus
+  comptés dans le bandeau) et un blocage « partout » d'un viewer l'empêche d'acheter.
+- **Non repris, volontairement** :
+  - le blocage et le cooldown propres à un module, et l'état actif/pause d'un module : il faudrait modifier la
+    console de modération, y compris l'extension publiée ; l'ouverture/fermeture de l'événement et la liste
+    d'accès suffisent ;
+  - le remboursement manuel depuis la modération : un achat non joué est déjà remboursé automatiquement ;
+  - aucune sanction propre à Halloween.
+- **Retrouver qui a acheté quoi** : Studio › Halloween › « Trouver un viewer » (pseudo Twitch ou id) montre le solde,
+  les achats (effet, heure, coût, statut, remboursement) et les mouvements. Le Dock garde 30 jours d'historique.
+- **Crédit manuel** :
+  - « Créditer » depuis la fiche du viewer, montant et note ;
+  - fonctionne avec tout viewer vu par la chaîne (et en Production, tout viewer connu) ;
+  - un double clic ou une nouvelle tentative ne crédite qu'une fois ;
+  - réservé à Studio, donc au streamer.
+- **Tombola en Bonbons** : dans Studio › Tombola, choisir « Bonbons » passe en montant fixe (montants proposés
+  5 / 10 / 20 / 30) ; « Aléatoire » est désactivé, car ses tranches sont en Jetons.
 
 ## 10. Tests
 
@@ -211,6 +298,13 @@ Les commandes restent **muettes tant que la boutique est fermée**.
   - `events-shop.e2e.ts` : Extension → EBS Lab → Core Lab.
 - **Chat** (`event-shop-chat.test.ts`) : muet fermé, un achat par message, refus sans débit, `!peur foxy` /
   `screamer`, conversion plafonnée.
+- **Dock** (`dock-halloween.test.ts` et e2e) : rien avant 5 s après le début réel, les autres événements jamais
+  retenus, un achat non joué jamais affiché ; preuve de bout en bout avec la page overlay.
+- **Accès extension** (`event-shop.test.ts`, `ext-frontier`, e2e) : un non-testeur ne voit rien et ne peut pas
+  acheter depuis l'extension ; le chat reste ouvert.
+- **Parcours Lab réels (Playwright)** : défilement du module en 565×376 ; Tombola en Bonbons depuis l'onglet Tombola
+  de Studio, inscriptions depuis l'Extension et gain crédité une fois ; « Trouver un viewer » puis « Créditer » sur un
+  vrai pseudo, double clic compris ; « Testeurs seulement ».
 - **Extension** : `events-shop.test.js`.
 - **Validé par Antoni (28/10)** : vidéo et son des screamers sur son écran. **Non testé** : la capture OBS, le parcours d’achat complet par Antoni.
 

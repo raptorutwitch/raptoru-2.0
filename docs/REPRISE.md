@@ -126,9 +126,12 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 ## 6. Prochaine action
 
-- **Halloween (31/10, prioritaire)** : Antoni teste le moteur sur son écran (`npm run studio` dans
-  `raptoru-halloween`, onglet Halloween : image, son, clic traversant, STOP ALL, capture OBS), puis GO pour chaque
-  étape de [HALLOWEEN.md](HALLOWEEN.md) § 9 (migration, Core, médias + Studio, extension en revue).
+- **Halloween (31/10, prioritaire)** — PR #35, worktree `raptoru-halloween`, [HALLOWEEN.md](HALLOWEEN.md).
+  - **Validé par Antoni le 28/10** : screamers (vidéo et son) sur son écran ; achat depuis le module Événements,
+    cooldown, effet joué.
+  - **Développé et testé automatiquement, à valider** : défilement 565×376, Dock OBS (révélation à 5 s), Pause et
+    blocage, « Trouver un viewer » et crédit, Tombola en Bonbons, accès « Testeurs seulement », palette chauve-souris.
+  - **Prochaines étapes** : procédure OBS (§ 8 bis), puis les GO de Production (§ 9).
 
 0. **Dock OBS V1.2** (livré le 28/10 : Core `dc06344`, sans migration ; Studio 0.1.17 publiée) : installer Studio
    0.1.17, actualiser le dock dans OBS (même URL, même clé, préférences V1.1 reprises) et le tester en vrai
