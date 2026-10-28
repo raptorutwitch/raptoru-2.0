@@ -131,7 +131,7 @@ de chacune : [ROADMAP.md](ROADMAP.md).
     cooldown, effet joué.
   - **Développé et testé automatiquement, à valider** : défilement 565×376, Dock OBS (révélation à 5 s), Pause et
     blocage, « Trouver un viewer » et crédit, Tombola en Bonbons, accès « Testeurs seulement », palette chauve-souris.
-  - **Prochaines étapes** : procédure OBS (§ 8 bis), puis les GO de Production (§ 9).
+  - **Prochaines étapes** : livraison prête à exécuter sur un GO unique, runbook [HALLOWEEN_GO.md](HALLOWEEN_GO.md).
 
 0. **Dock OBS V1.2** (livré le 28/10 : Core `dc06344`, sans migration ; Studio 0.1.17 publiée) : installer Studio
    0.1.17, actualiser le dock dans OBS (même URL, même clé, préférences V1.1 reprises) et le tester en vrai

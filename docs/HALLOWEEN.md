@@ -226,6 +226,8 @@ tests sur la copie.
 
 ## 9. Livraison en Production (chaque étape attend le GO d'Antoni)
 
+**Le runbook détaillé (commandes exactes, critères d'arrêt, retour arrière) : [HALLOWEEN_GO.md](HALLOWEEN_GO.md).**
+
 Avant tout : la PR #35 est relue puis **fusionnée** (GO), puisque Core, Studio et extension partent de `main`.
 
 1. **Sauvegarde de la base de Production** : téléchargement manuel de la sauvegarde dans Coolify (OPERATIONS.md,
