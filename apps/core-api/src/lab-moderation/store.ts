@@ -6,7 +6,13 @@ import type { Queryable } from '../db/db.js';
 
 export type LabModule = 'tts' | 'soundboard' | 'bonk' | 'raffle';
 /** What a debit pays for: a module, or an interaction bought from the chat (chat-interactions/prices.ts). */
-export type PaidModule = LabModule | 'random_ban' | 'fx_cam' | 'caution';
+export type PaidModule =
+  | LabModule
+  | 'random_ban'
+  | 'fx_cam'
+  | 'caution'
+  // Boutique d'événement: the Jetons of a Bonbons conversion (docs/HALLOWEEN.md).
+  | 'event_shop';
 export type ModuleState = 'active' | 'paused' | 'disabled';
 export type LabRole = 'broadcaster' | 'supermod' | 'moderator' | 'viewer';
 export type WalletCurrency = 'tokens' | 'credits_tts' | 'credits_soundboard';

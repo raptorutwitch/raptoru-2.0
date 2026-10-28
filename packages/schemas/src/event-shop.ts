@@ -1,0 +1,177 @@
+import { z } from 'zod';
+
+// Boutique d'événement (Halloween 2026, docs/HALLOWEEN.md): viewers spend the event currency (Bonbons) on effects that
+// Studio's overlay plays on the streamer's own screen (a screamer video with its sound, an apparition, a drawn effect).
+// The Core decides everything (catalogue, prices, limits, balances); Studio only plays what it claimed. The event
+// currency has its own ledger (never the Jetons Wallet); the capped conversion is the only bridge with the Jetons.
+
+const Id = z.string().regex(/^\d+$/).max(32);
+const Key = z.string().min(1).max(128);
+const Instance = z.string().min(1).max(64);
+const Viewer = z.strictObject({
+  id: Id,
+  display_name: z.string().min(1).max(64),
+});
+export const EventSeason = z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/);
+export const EventItemId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/);
+
+/** Effects the overlay draws itself (no media). */
+export const EVENT_EFFECTS = [
+  'blink',
+  'fog',
+  'glitch',
+  'tunnel',
+  'eyes',
+  'silhouette',
+] as const;
+export const EventEffect = z.enum(EVENT_EFFECTS);
+export type EventEffect = z.infer<typeof EventEffect>;
+
+/**
+ * - screamer: a sudden video with its sound (one at a time, the rarest and dearest);
+ * - apparition: something crosses or shows up (a video, sometimes silent);
+ * - effect: drawn by the overlay (blink, fog…).
+ */
+export const EventItemKind = z.enum(['screamer', 'apparition', 'effect']);
+export type EventItemKind = z.infer<typeof EventItemKind>;
+
+/** The event's rules (Studio): earning, conversion, and the limits that keep the stream playable. */
+export const EventShopRules = z.strictObject({
+  /** Jetons for one Bonbon (conversion). */
+  conversion_rate: z.number().int().min(1).max(1_000_000),
+  /** Bonbons a viewer may obtain by conversion within any rolling hour (0 = conversion closed). */
+  conversion_cap_per_hour: z.number().int().min(0).max(10_000),
+  /** Bonbons for a sub / resub (the subscriber). */
+  sub_reward: z.number().int().min(0).max(10_000),
+  /** Bonbons for the giver, per gifted sub (targeted or community gift; an anonymous gift pays nobody). */
+  gift_giver_per_sub: z.number().int().min(0).max(10_000),
+  /** Bonbons for each recipient of a gifted sub. */
+  gift_recipient: z.number().int().min(0).max(10_000),
+  /** A viewer waits this long between two purchases. */
+  viewer_gap_ms: z.number().int().min(0).max(3_600_000),
+  /** Two screamers (whoever buys them) are at least this far apart. */
+  screamer_gap_ms: z.number().int().min(0).max(3_600_000),
+  /** At most this many screamers within any rolling hour (0 = screamers closed). */
+  screamers_per_hour: z.number().int().min(0).max(120),
+});
+export type EventShopRules = z.infer<typeof EventShopRules>;
+
+export const DEFAULT_EVENT_RULES: EventShopRules = Object.freeze({
+  conversion_rate: 1000,
+  conversion_cap_per_hour: 10,
+  sub_reward: 10,
+  gift_giver_per_sub: 5,
+  gift_recipient: 3,
+  viewer_gap_ms: 120_000,
+  screamer_gap_ms: 180_000,
+  screamers_per_hour: 6,
+});
+
+export const EventShopSettings = z.strictObject({
+  season: EventSeason,
+  /** Event open: viewers see the shop, earn and spend. Closed: nothing is earned or spent (balances kept). */
+  enabled: z.boolean(),
+  rules: EventShopRules,
+});
+export type EventShopSettings = z.infer<typeof EventShopSettings>;
+
+export const EventShopItem = z.strictObject({
+  item_id: EventItemId,
+  kind: EventItemKind,
+  media_id: EventItemId.nullable(),
+  effect: EventEffect.nullable(),
+  label: z.string().min(1).max(40),
+  description: z.string().max(120),
+  price: z.number().int().min(1).max(100_000),
+  cooldown_ms: z.number().int().min(0).max(86_400_000),
+  enabled: z.boolean(),
+  sort: z.number().int().min(-10_000).max(10_000),
+  /** Effect parameters (duration, intensity…), checked by the overlay against its own limits. */
+  params: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()])),
+});
+export type EventShopItem = z.infer<typeof EventShopItem>;
+
+/** What Studio may change on an item (the id, kind and media / effect are fixed). */
+export const EventShopItemUpdate = EventShopItem.pick({
+  label: true,
+  description: true,
+  price: true,
+  cooldown_ms: true,
+  enabled: true,
+  sort: true,
+  params: true,
+}).partial();
+export type EventShopItemUpdate = z.infer<typeof EventShopItemUpdate>;
+
+/** A purchase (the extension, through the Core frontier: the viewer is the JWT's). */
+export const EventShopPurchaseRequest = z.strictObject({
+  idempotency_key: Key,
+  channel_id: Id,
+  viewer: Viewer,
+  item_id: EventItemId,
+});
+export type EventShopPurchaseRequest = z.infer<typeof EventShopPurchaseRequest>;
+
+/** Jetons → Bonbons, capped per viewer and rolling hour. */
+export const EventShopConvertRequest = z.strictObject({
+  idempotency_key: Key,
+  channel_id: Id,
+  viewer: Viewer,
+  bonbons: z.number().int().min(1).max(10_000),
+});
+export type EventShopConvertRequest = z.infer<typeof EventShopConvertRequest>;
+
+/** Studio: give or take Bonbons by hand (Tombola winners, a gesture, a correction). Never below 0. */
+export const EventShopGrantRequest = z.strictObject({
+  /** One key per click: a retried request never moves twice. */
+  idempotency_key: z.uuid(),
+  channel_id: Id,
+  /** The viewer's Twitch login or display name (as the streamer types it), or their id. */
+  viewer: z.string().min(1).max(64),
+  amount: z
+    .number()
+    .int()
+    .min(-100_000)
+    .max(100_000)
+    .refine((n) => n !== 0, 'amount must not be 0'),
+  reason: z.enum(['grant', 'raffle']),
+  note: z.string().max(200).optional(),
+});
+export type EventShopGrantRequest = z.infer<typeof EventShopGrantRequest>;
+
+// --- Studio's executor (the overlay engine) ------------------------------------------------------------------------
+
+export const EventShopHeartbeat = z.strictObject({
+  studio_instance_id: Instance,
+  channel_id: Id,
+  /** The overlay is up on a screen and answers: purchases can be admitted. */
+  engine_ready: z.boolean(),
+  /** Media ids Studio holds (an item whose media is missing is not sold). */
+  media: z.array(EventItemId).max(500),
+});
+export type EventShopHeartbeat = z.infer<typeof EventShopHeartbeat>;
+
+export const EventShopClaimRequest = z.strictObject({
+  studio_instance_id: Instance,
+  channel_id: Id,
+});
+export type EventShopClaimRequest = z.infer<typeof EventShopClaimRequest>;
+
+export const EventShopAckRequest = z.strictObject({
+  studio_instance_id: Instance,
+  attempt_id: z.uuid(),
+  event: z.enum(['started', 'completed', 'failed']),
+  /** `failed`: whether the play had started (started → no refund: it was probably seen). */
+  started: z.boolean().optional(),
+  error: z.string().max(120).optional(),
+});
+export type EventShopAckRequest = z.infer<typeof EventShopAckRequest>;
+
+export const EventPurchaseStatus = z.enum([
+  'queued',
+  'executing',
+  'completed',
+  'failed',
+  'unknown',
+]);
+export type EventPurchaseStatus = z.infer<typeof EventPurchaseStatus>;

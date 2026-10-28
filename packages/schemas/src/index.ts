@@ -24,3 +24,4 @@ export * from './twitch-oauth.js';
 export * from './sub-wheel.js';
 export * from './bot-instance.js';
 export * from './spotify.js';
+export * from './event-shop.js';

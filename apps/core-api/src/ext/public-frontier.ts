@@ -1,3 +1,4 @@
+import { eventShopRoutes } from '../http/event-shop-routes.js';
 import type { Core } from '../app.js';
 import { TwitchViewerCatalog } from '../bonk-lab/twitch-viewer.js';
 import type { Clock } from '../clock.js';
@@ -89,6 +90,8 @@ export function createPublicFrontier(
     ...miniGamesRoutes(core.chat.miniGames),
     // Roue du Sub V2 (R8): the viewer frontier's own tours / team actions, in-process only (never on HTTP).
     ...subWheelRoutes(core.subWheel, core.alerts),
+    // Boutique d'événement (docs/HALLOWEEN.md): the viewer's state, purchase and conversion, in-process only.
+    ...eventShopRoutes(core.eventShop),
   ]);
   const app =
     config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
@@ -199,7 +202,16 @@ export function createPublicFrontier(
             console.error('[core-api] spotify tick failed', e.message),
           );
       }, 1000);
+      // Boutique d'événement: overdue plays (not taken, not started, never ended) settled even when nobody reads.
+      const eventShopTick = setInterval(() => {
+        core.eventShop
+          .sweepAll()
+          .catch((e: Error) =>
+            console.error('[core-api] event shop sweep failed', e.message),
+          );
+      }, 5000);
       return () => {
+        clearInterval(eventShopTick);
         clearInterval(spotifyTick);
         clearInterval(votekickTick);
         clearInterval(wordGameTick);

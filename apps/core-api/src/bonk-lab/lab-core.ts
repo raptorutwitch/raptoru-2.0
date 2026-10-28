@@ -19,6 +19,8 @@ import { channelPointsRoutes } from '../http/channel-points-routes.js';
 import { ChannelPointsService } from '../channel-points/service.js';
 import { randomBanRoutes } from '../http/random-ban-routes.js';
 import { dockRoutes } from '../http/dock-routes.js';
+import { eventShopRoutes } from '../http/event-shop-routes.js';
+import { EventShopService } from '../event-shop/service.js';
 import { DockActivityService } from '../dock/service.js';
 import { cautionRoutes } from '../http/caution-routes.js';
 import { CautionService } from '../caution/service.js';
@@ -164,6 +166,11 @@ export function createLabCore({
       subWheel,
     });
   const alertsService = new AlertsService(db, systemClock);
+  // Boutique d'événement (docs/HALLOWEEN.md): the Lab's simulated subs / gifts earn Bonbons too.
+  const eventShop = new EventShopService(db, systemClock, economy, {
+    rewardSimulations: true,
+  });
+  alertsService.attachListener('event_shop', (q, e) => eventShop.onAlert(q, e));
   const routes = [
     ...bonkLabRoutes(bonk, viewers),
     // Soundboard V2 Lab: same isolated Lab Core process and database.
@@ -199,6 +206,8 @@ export function createLabCore({
     ...randomBanRoutes(randomBan),
     // Dock OBS V1: the activity feed and visual replays (read-only projection, docs/OBS_DOCK.md).
     ...dockRoutes(new DockActivityService(db, systemClock)),
+    // Boutique d'événement: Studio's panel and overlay, and the viewer side for the Extension Lab.
+    ...eventShopRoutes(eventShop),
     // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
     ...cautionRoutes(caution),
     // Votekick V2: Studio (state, overlay, mute) and the Lab chat adapter (Twitch executor); `!votekick` in the Lab chat.

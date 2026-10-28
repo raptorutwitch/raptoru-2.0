@@ -152,6 +152,7 @@ createApp({
   randomBan: core.randomBan,
   // Dock OBS V1: the activity feed and visual replays for the paired Studio (read-only projection).
   dock: core.dock,
+  eventShop: core.eventShop,
   // Caution: the paired Studio (state) and the bot (Twitch executor); `!caution` itself only with CAUTION_CHAT=true.
   caution: core.caution,
   // Votekick V2: the paired Studio (state, overlay, mute) and the bot (Twitch executor); chat only with VOTEKICK_CHAT.

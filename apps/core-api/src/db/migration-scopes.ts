@@ -81,6 +81,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Dock OBS V1.1: the projection also holds Raptoru's interactions (kind check widened); same content as
   // 20261111120000_obs_dock_interactions_lab.sql.
   '20261111130000_obs_dock_interactions.sql',
+  // Boutique d'événement (Halloween 2026): its own tables (Bonbons ledger, catalogue, purchases); same content as
+  // 20261112120000_event_shop_lab.sql.
+  '20261112130000_event_shop.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -161,6 +164,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261110120000_obs_dock_lab.sql',
   // Dock OBS V1.1: the Lab twin of 20261111130000_obs_dock_interactions.sql (same content).
   '20261111120000_obs_dock_interactions_lab.sql',
+  // Boutique d'événement: the Lab twin of 20261112130000_event_shop.sql (same content).
+  '20261112120000_event_shop_lab.sql',
 ]);
 
 /**

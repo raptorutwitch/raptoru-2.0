@@ -47,6 +47,8 @@ import { alertsRoutes } from './alerts-routes.js';
 import { channelPointsRoutes } from './channel-points-routes.js';
 import { randomBanRoutes } from './random-ban-routes.js';
 import { dockRoutes } from './dock-routes.js';
+import { eventShopRoutes } from './event-shop-routes.js';
+import type { EventShopService } from '../event-shop/service.js';
 import type { DockActivityService } from '../dock/service.js';
 import { cautionRoutes } from './caution-routes.js';
 import type { CautionService } from '../caution/service.js';
@@ -124,6 +126,7 @@ export interface AppDeps {
   /** Random Ban V2: /v1/studio/random-ban/* and /v1/bot/random-ban/* (same conditions as the channel points). */
   randomBan?: RandomBanService;
   dock?: DockActivityService;
+  eventShop?: EventShopService;
   /** Caution: /v1/studio/caution/{channel}/state and /v1/bot/caution/* (same conditions as Random Ban). */
   caution?: CautionService;
   /** Votekick V2: /v1/studio/votekick/{channel}/* and /v1/bot/votekick/* (same conditions as Caution). */
@@ -245,6 +248,7 @@ function routes({
   channelPoints,
   randomBan,
   dock,
+  eventShop,
   caution,
   votekick,
   spotify,
@@ -280,6 +284,9 @@ function routes({
       : []),
     ...(studioInstallations && caution && cockpit?.channelId
       ? cautionRoutes(caution, { channelId: cockpit.channelId })
+      : []),
+    ...(studioInstallations && eventShop && cockpit?.channelId
+      ? eventShopRoutes(eventShop, { channelId: cockpit.channelId })
       : []),
     ...(studioInstallations && dock && cockpit?.channelId
       ? dockRoutes(dock, { channelId: cockpit.channelId })

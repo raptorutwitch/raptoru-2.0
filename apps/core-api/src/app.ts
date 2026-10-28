@@ -1,6 +1,7 @@
 import { AlertsService } from './alerts/service.js';
 import { BotInstanceService } from './bot-instance/service.js';
 import { DockActivityService } from './dock/service.js';
+import { EventShopService } from './event-shop/service.js';
 import { RandomBanService } from './random-ban/service.js';
 import { CautionService } from './caution/service.js';
 import { VotekickService } from './votekick/service.js';
@@ -53,6 +54,7 @@ export interface Core {
   randomBan: RandomBanService;
   /** Dock OBS V1: read-only activity projection and visual replays (docs/OBS_DOCK.md). */
   dock: DockActivityService;
+  eventShop: EventShopService;
   /** Caution: the requests and the executor's routes always; `!caution` in the chat only with `cautionChat`. */
   caution: CautionService;
   /** Votekick V2: votes and the broadcaster's mute always; `!votekick` / `!kick` / `!save` in the chat only with votekickChat. */
@@ -140,6 +142,15 @@ export function createCore(
     economy,
   );
   const subWheel = new SubWheelService(db, clock, undefined, economy);
+  const alerts = new AlertsService(
+    db,
+    clock,
+    undefined,
+    channel.alertsMaxAgeMs ?? null,
+  );
+  // Boutique d'événement (docs/HALLOWEEN.md): Bonbons for real Twitch subs / gifts, once per event.
+  const eventShop = new EventShopService(db, clock, economy);
+  alerts.attachListener('event_shop', (q, e) => eventShop.onAlert(q, e));
   return {
     credits,
     daily: new DailyService(db, clock, credits),
@@ -154,15 +165,11 @@ export function createCore(
     ttsLab,
     raffleLab,
     studioInstallations: new StudioInstallations(db, clock),
-    alerts: new AlertsService(
-      db,
-      clock,
-      undefined,
-      channel.alertsMaxAgeMs ?? null,
-    ),
+    alerts,
     channelPoints,
     randomBan,
     dock: new DockActivityService(db, clock),
+    eventShop,
     caution,
     votekick,
     subWheel,
