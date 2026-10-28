@@ -147,6 +147,14 @@ const view = (r: PurchaseRow) => ({
 });
 export type EventPurchaseView = ReturnType<typeof view>;
 
+/** « Événements » in the Extension for this viewer: everyone, or the listed testers only (rules.extension_audience). */
+export const extensionAllowed = (
+  rules: EventShopRules,
+  viewerId: string | null,
+) =>
+  rules.extension_audience !== 'testers' ||
+  (!!viewerId && rules.extension_testers.includes(viewerId));
+
 export class EventShopService {
   constructor(
     private readonly db: Db,
@@ -386,6 +394,11 @@ export class EventShopService {
     if (!settings.enabled) throw new EventShopError(409, 'event_closed');
     // Moderation (D4), as for every paid interaction: « Pause Raptoru » refuses it (counted in the banner); a viewer
     // blocked « everywhere » cannot buy. Refused before anything is debited.
+    if (
+      req.via === 'extension' &&
+      !extensionAllowed(settings.rules, req.viewer.id)
+    )
+      throw new EventShopError(403, 'not_invited');
     if ((await globalState(q, req.channel_id)).paused)
       throw new EventShopError(409, 'raptoru_paused');
     if (await activeBlock(q, req.channel_id, req.viewer.id, 'all', now))
@@ -766,6 +779,8 @@ export class EventShopService {
       };
     }
     if (!s.enabled) throw new EventShopError(409, 'event_closed');
+    if (req.via === 'extension' && !extensionAllowed(s.rules, req.viewer.id))
+      throw new EventShopError(403, 'not_invited');
     if (s.rules.conversion_cap_per_hour === 0)
       throw new EventShopError(409, 'conversion_closed');
     const since = new Date(now.getTime() - EVENT_SHOP.hourMs);
@@ -1154,6 +1169,8 @@ export class EventShopService {
         enabled: s.enabled,
         season: s.season,
         edition: { id: s.season, title: editionTitle(s.season) },
+        // The Extension's façades show the module (and accept its purchases) only when true.
+        extension_allowed: extensionAllowed(s.rules, viewerId),
         engine_ready: !!engine,
         balance: viewerId
           ? await balanceOf(q, s.season, channelId, viewerId)

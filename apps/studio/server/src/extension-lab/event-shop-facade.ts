@@ -15,6 +15,9 @@ export function eventShopFacade(core: LabCoreCall, channelId: string) {
       {
         timeoutMs: 2000,
       },
+    ).then((s) =>
+      // Testers only (Studio): the module is not shown to the others.
+      s.extension_allowed === false ? { enabled: false } : s,
     );
   return async function call(
     method: string,
@@ -51,12 +54,14 @@ export function eventShopFacade(core: LabCoreCall, channelId: string) {
               channel_id: channelId,
               viewer,
               item_id: String(body?.item_id ?? ''),
+              via: 'extension',
             })
           : await core<Json>('/v1/lab/events/convert', {
               idempotency_key: idempotencyKey,
               channel_id: channelId,
               viewer,
               bonbons: Number(body?.bonbons),
+              via: 'extension',
             });
       return {
         status: 200,

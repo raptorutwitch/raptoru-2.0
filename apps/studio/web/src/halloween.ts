@@ -54,7 +54,14 @@ interface Item {
 }
 
 interface Admin {
-  settings: { season: string; enabled: boolean; rules: Record<string, number> };
+  settings: {
+    season: string;
+    enabled: boolean;
+    rules: Record<string, number> & {
+      extension_audience?: 'all' | 'testers';
+      extension_testers?: string[];
+    };
+  };
   items: Item[];
   engine: { ready: boolean } | null;
   purchases: {
@@ -241,6 +248,8 @@ export function shopCard(a: Admin | null, error: string | null) {
     return `<p class="hw-hint bad">Boutique indisponible : ${esc(error)}</p>`;
   if (!a) return '<p class="hw-hint">Chargement…</p>';
   const r = a.settings.rules;
+  const testersOnly = r.extension_audience === 'testers';
+  const testers = r.extension_testers ?? [];
   const rules = RULES.map(
     (x) =>
       `<label><span>${esc(x.label)}${x.hint ? ` <small>${esc(x.hint)}</small>` : ''}</span><input type="number" min="0" step="1" data-rule="${x.key}" value="${x.ms ? Math.round((r[x.key] ?? 0) / 1000) : (r[x.key] ?? 0)}"/></label>`,
@@ -250,6 +259,9 @@ export function shopCard(a: Admin | null, error: string | null) {
         <p class="hw-hint">${a.settings.enabled ? 'Les viewers voient « Événements », gagnent et dépensent des Bonbons ; !peur et !bonbons répondent, !solde montre les Bonbons.' : 'Fermé : rien n’est vendu, converti ni gagné ; module et commandes masqués ; les soldes sont gardés pour une prochaine édition. Fermer rembourse les achats pas encore joués.'}</p></div>
       <button type="button" class="${a.settings.enabled ? '' : 'primary'}" data-act="toggle-shop">${a.settings.enabled ? 'Fermer la boutique' : 'Ouvrir la boutique'}</button>
     </div>
+    <div class="hw-access"><b>Module « Événements » dans l'extension</b>
+      <div class="seg"><button type="button" data-audience="all" class="${testersOnly ? '' : 'on'}">Tous les viewers</button><button type="button" data-audience="testers" class="${testersOnly ? 'on' : ''}">Testeurs seulement</button></div>
+      <p class="hw-hint">${testersOnly ? `${testers.length} testeur${testers.length > 1 ? 's' : ''} (ajouter / retirer : « Trouver un viewer »). Les autres ne voient pas le module ; le chat (!peur, !bonbons) et les gains restent ouverts à tous.` : 'Tous les viewers de l’extension publiée voient le module pendant l’événement.'}</p></div>
     <div class="hw-rules">${rules}</div>
     <button type="button" class="primary" data-act="save-rules">Enregistrer les règles</button>`;
 }
@@ -364,7 +376,18 @@ export function mountHalloween(root: HTMLElement) {
   };
   // A part is redrawn only when its content changed and nothing in it is being edited: no blinking, a typed value or
   // an open « Tester » section stays as it is between two refreshes.
-  const editing = (role: string) => part(role).contains(document.activeElement);
+  // Being edited = a text field, a number, a list or a text area in focus there (a clicked button keeps the focus too,
+  // but must never freeze its card).
+  const editing = (role: string) => {
+    const el = document.activeElement;
+    return (
+      !!el &&
+      part(role).contains(el) &&
+      el.matches(
+        'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), select, textarea',
+      )
+    );
+  };
   const painted = new Map<string, string>();
   const paint = (role: string, html: string) => {
     if (painted.get(role) === html || editing(role)) return;
@@ -431,6 +454,17 @@ export function mountHalloween(root: HTMLElement) {
       void act(
         () => call('/api/halloween/media/reload', {}),
         'Médias rechargés.',
+      );
+    else if (t.closest('[data-audience]') && admin)
+      void act(
+        () =>
+          call('/api/halloween/admin/settings', {
+            rules: {
+              extension_audience:
+                t.closest<HTMLElement>('[data-audience]')!.dataset.audience,
+            },
+          }),
+        'Accès à l’extension enregistré.',
       );
     else if (a === 'toggle-shop' && admin)
       void act(
@@ -518,6 +552,27 @@ export function mountHalloween(root: HTMLElement) {
       (form.elements.namedItem('amount') as HTMLInputElement).focus();
     },
     errorText,
+    {
+      is: (id) =>
+        admin?.settings.rules.extension_audience === 'testers'
+          ? (admin.settings.rules.extension_testers ?? []).includes(id)
+          : null,
+      toggle: (id) => {
+        const list = admin?.settings.rules.extension_testers ?? [];
+        const on = !list.includes(id);
+        return act(
+          () =>
+            call('/api/halloween/admin/settings', {
+              rules: {
+                extension_testers: on
+                  ? [...list, id]
+                  : list.filter((x) => x !== id),
+              },
+            }),
+          on ? 'Ajouté aux testeurs de l’extension.' : 'Retiré des testeurs.',
+        );
+      },
+    },
   );
   // One credit entry = one idempotency key, kept until it succeeds (a double click or a retry never credits twice);
   // changing a field makes it a new entry.

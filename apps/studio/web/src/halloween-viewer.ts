@@ -72,6 +72,8 @@ export function viewerFinderHtml(
   hits: ViewerHit[] | null,
   picked: { name: string; history: ViewerHistory | null } | null,
   error: string | null,
+  /** Is the picked viewer an Extension tester (null: no testers list in use)? */
+  tester: boolean | null = null,
 ) {
   const list = hits
     ? hits.length
@@ -88,6 +90,7 @@ export function viewerFinderHtml(
     ? `<div class="hw-viewer">
         <div class="hw-viewer-head"><b>${esc(picked.name)}</b> <small>${esc(h?.viewer_id ?? '')}</small>
           <span class="hw-balance">${h ? `${h.balance} 🍬` : '…'}</span>
+          ${tester === null ? '' : `<button type="button" data-tester="${esc(h?.viewer_id ?? '')}" aria-pressed="${tester}">${tester ? '✓ Testeur extension' : '+ Testeur extension'}</button>`}
           <button type="button" class="primary" data-credit="${esc(h?.viewer_id ?? '')}" data-name="${esc(picked.name)}"${h ? '' : ' disabled'}>Créditer</button></div>
         ${
           h
@@ -127,6 +130,11 @@ export function mountViewerFinder(
   call: Call,
   onCredit: (viewerId: string, name: string) => void,
   errorText: (code: string) => string,
+  /** Extension testers (Studio › Boutique « Testeurs seulement »): who is one, and switching one. */
+  testers?: {
+    is: (viewerId: string) => boolean | null;
+    toggle: (viewerId: string) => Promise<unknown>;
+  },
 ) {
   let query = '';
   let hits: ViewerHit[] | null = null;
@@ -137,7 +145,13 @@ export function mountViewerFinder(
   } | null = null;
   let error: string | null = null;
   const render = () => {
-    el.innerHTML = viewerFinderHtml(query, hits, picked, error);
+    el.innerHTML = viewerFinderHtml(
+      query,
+      hits,
+      picked,
+      error,
+      picked && testers ? testers.is(picked.id) : null,
+    );
   };
   const load = async (id: string) => {
     try {
@@ -183,6 +197,11 @@ export function mountViewerFinder(
       };
       render();
       void load(picked.id);
+      return;
+    }
+    const tester = t.closest<HTMLElement>('[data-tester]');
+    if (tester?.dataset.tester && testers) {
+      void testers.toggle(tester.dataset.tester).then(render);
       return;
     }
     const credit = t.closest<HTMLElement>('[data-credit]');

@@ -650,9 +650,11 @@ export class ExtFacade {
   /** The shop for this viewer (null: no shop on this Core); never fails the session. */
   private async eventShop(who: Who): Promise<Json | null> {
     const v = who.viewer;
-    return this.core<Json>(
+    const s = await this.core<Json>(
       `/v1/lab/events/channels/${this.C}/state${v ? `?viewer=${v.id}` : ''}`,
     ).catch(() => null);
+    // Testers only (Studio): the module is not shown to the others — nothing of the shop is sent to them.
+    return s && s.extension_allowed === false ? { enabled: false } : s;
   }
 
   private async eventAction(
@@ -673,12 +675,14 @@ export class ExtFacade {
               channel_id: this.C,
               viewer,
               item_id: String(body.item_id ?? ''),
+              via: 'extension',
             })
           : await this.core<Json>('/v1/lab/events/convert', {
               idempotency_key: key,
               channel_id: this.C,
               viewer,
               bonbons: Number(body.bonbons),
+              via: 'extension',
             });
       return ok({ ...out, event_shop: await this.eventShop(who) });
     } catch (e) {

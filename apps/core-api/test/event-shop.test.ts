@@ -844,3 +844,44 @@ describe('the transversal rules of paid interactions (moderation D4) and Studio�
     });
   });
 });
+
+describe('« Événements » for the Extension testers only (progressive opening)', () => {
+  it('a non-tester does not get the module nor buy from the Extension; a tester does; the chat stays open to all', async () => {
+    await open({ viewer_gap_ms: 0 });
+    await give(ANA, 10);
+    await give(BOB, 10);
+    await shop.updateSettings(CH, {
+      rules: { extension_audience: 'testers', extension_testers: [ANA.id] },
+    });
+    expect((await shop.viewerState(CH, ANA.id)).extension_allowed).toBe(true);
+    expect((await shop.viewerState(CH, BOB.id)).extension_allowed).toBe(false);
+    const viaExt = (viewer: typeof ANA, item_id: string) =>
+      shop.purchase({
+        idempotency_key: randomUUID(),
+        channel_id: CH,
+        viewer,
+        item_id,
+        via: 'extension',
+      });
+    expect(await code(viaExt(BOB, 'blink'))).toBe('not_invited');
+    expect(await balance(BOB.id)).toBe(10);
+    expect(
+      await code(
+        shop.convert({
+          idempotency_key: randomUUID(),
+          channel_id: CH,
+          viewer: BOB,
+          bonbons: 1,
+          via: 'extension',
+        }),
+      ),
+    ).toBe('not_invited');
+    expect(await code(viaExt(ANA, 'blink'))).toBe('ok');
+    // The chat (no `via`) is open to everyone.
+    await shop.stopAll(CH);
+    expect(await code(buy(BOB, 'fog'))).toBe('ok');
+    // Back to everyone.
+    await shop.updateSettings(CH, { rules: { extension_audience: 'all' } });
+    expect((await shop.viewerState(CH, BOB.id)).extension_allowed).toBe(true);
+  });
+});

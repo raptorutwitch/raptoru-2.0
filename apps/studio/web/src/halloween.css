@@ -309,3 +309,18 @@ kbd {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* « Événements » in the Extension: everyone / testers only. */
+.hw-access {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+.hw-access .seg {
+  display: inline-flex;
+  gap: 4px;
+}
+.hw-access .seg button.on {
+  border-color: var(--hw-accent, #ff8a2b);
+  font-weight: 700;
+}

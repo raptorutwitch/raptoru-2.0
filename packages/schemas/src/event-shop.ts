@@ -58,6 +58,13 @@ export const EventShopRules = z.strictObject({
    * before he sees who sent it); 0 = as soon as it starts. Never before it starts.
    */
   dock_reveal_ms: z.number().int().min(0).max(600_000),
+  /**
+   * Who sees « Événements » in the Extension: everyone, or only the listed testers (Twitch ids) — a progressive opening
+   * with the published Extension (Hosted Test would hide the Extension from everybody else on the live channel). The
+   * chat commands and the Bonbons rewards stay open to all.
+   */
+  extension_audience: z.enum(['all', 'testers']),
+  extension_testers: z.array(z.string().regex(/^\d{1,32}$/)).max(500),
 });
 export type EventShopRules = z.infer<typeof EventShopRules>;
 
@@ -71,6 +78,8 @@ export const DEFAULT_EVENT_RULES: EventShopRules = Object.freeze({
   screamer_gap_ms: 180_000,
   screamers_per_hour: 6,
   dock_reveal_ms: 5_000,
+  extension_audience: 'all',
+  extension_testers: [],
 });
 
 export const EventShopSettings = z.strictObject({
@@ -115,6 +124,8 @@ export const EventShopPurchaseRequest = z.strictObject({
   channel_id: Id,
   viewer: Viewer,
   item_id: EventItemId,
+  /** `extension`: from the Extension (its audience applies); absent: the chat. */
+  via: z.enum(['extension']).optional(),
 });
 export type EventShopPurchaseRequest = z.infer<typeof EventShopPurchaseRequest>;
 
@@ -124,6 +135,7 @@ export const EventShopConvertRequest = z.strictObject({
   channel_id: Id,
   viewer: Viewer,
   bonbons: z.number().int().min(1).max(10_000),
+  via: z.enum(['extension']).optional(),
 });
 export type EventShopConvertRequest = z.infer<typeof EventShopConvertRequest>;
 

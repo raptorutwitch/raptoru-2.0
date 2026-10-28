@@ -319,9 +319,9 @@ export class LabEbs {
    */
   private labCore: LabCoreCall | null = null;
   /** Halloween shop open in the Lab Core (the « Événements » module shows only then); refreshed in the background. */
-  private eventShopOpen = false;
+  /** Per viewer (testers only: the module shows for some viewers only): open for them, the edition, when read. */
+  private eventShopFor = new Map<string, { open: boolean; at: number }>();
   private eventShopEdition: Json | null = null;
-  private eventShopCheckedAt = 0;
   private coreModules: Record<
     'tts' | 'soundboard' | 'bonk' | 'raffle',
     string
@@ -335,7 +335,7 @@ export class LabEbs {
 
   connectLab(core: LabCoreCall) {
     this.labCore = core;
-    this.refreshEventShop();
+    this.eventShopOpen(null);
   }
 
   /** Studio changed a wallet / module state: re-read on the next extension request. */
@@ -1983,27 +1983,37 @@ export class LabEbs {
 
   // --- helpers ----------------------------------------------------------------------------------
 
-  /** The shop's open / closed state for the session, at most every 3 s (the session itself stays synchronous). */
-  private refreshEventShop() {
-    if (!this.labCore || Date.now() - this.eventShopCheckedAt < 3000) return;
-    this.eventShopCheckedAt = Date.now();
-    void this.labCore<Json>(
-      `/v1/lab/events/channels/${LAB_CHANNEL.id}/state`,
-      undefined,
-      { timeoutMs: 2000 },
-    ).then(
-      (s) => {
-        this.eventShopOpen = s.enabled === true;
-        this.eventShopEdition = (s.edition as Json | undefined) ?? null;
-      },
-      () => {
-        this.eventShopOpen = false;
-      },
-    );
+  /**
+   * Is the shop shown to this viewer (open, and they are allowed in the Extension)? Read in the background at most
+   * every 3 s per viewer (the session itself stays synchronous).
+   */
+  private eventShopOpen(viewerId: string | null) {
+    const key = viewerId ?? '';
+    const known = this.eventShopFor.get(key);
+    if (this.labCore && (!known || Date.now() - known.at >= 3000)) {
+      this.eventShopFor.set(key, {
+        open: known?.open ?? false,
+        at: Date.now(),
+      });
+      void this.labCore<Json>(
+        `/v1/lab/events/channels/${LAB_CHANNEL.id}/state${viewerId ? `?viewer=${viewerId}` : ''}`,
+        undefined,
+        { timeoutMs: 2000 },
+      ).then(
+        (s) => {
+          this.eventShopFor.set(key, {
+            open: s.enabled === true && s.extension_allowed !== false,
+            at: Date.now(),
+          });
+          this.eventShopEdition = (s.edition as Json | undefined) ?? null;
+        },
+        () => this.eventShopFor.set(key, { open: false, at: Date.now() }),
+      );
+    }
+    return known?.open ?? false;
   }
 
   private session(identity: LabIdentity, identityShared: boolean): Json {
-    this.refreshEventShop();
     const isMod = identity.role !== 'viewer';
     const base = this.demo(isMod ? 'moderator' : 'paid');
     const user = this.user(identity.twitchUserId);
@@ -2112,7 +2122,12 @@ export class LabEbs {
       sub_wheel: Boolean(this.labCore),
       // Halloween shop: « Événements » in the Hub only while the Lab Core says the event is open.
       event_shop: this.labCore
-        ? { enabled: this.eventShopOpen, edition: this.eventShopEdition }
+        ? {
+            enabled: this.eventShopOpen(
+              identityShared ? identity.twitchUserId : null,
+            ),
+            edition: this.eventShopEdition,
+          }
         : null,
       role: identity.role,
       channel_id: LAB_CHANNEL.id,
