@@ -1,403 +1,234 @@
-# Dock OBS unifié — suivi du chantier
+# Dock OBS — référence
 
-Document de reprise du chantier « Dock OBS » (démarré le 27/10/2026). À lire avec `docs/REPRISE.md`. Source d'étude :
-rapport Astra `C:\Users\Antoni\Documents\Codex\2026-10-27\files-pasted-by-the-user-mission\outputs\ASTRA_DOCK_OBS_DOSSIER_CLAUDE_2026-10-27.md`
-(lu intégralement ; architecture « C » retenue, simplifiée ci-dessous).
+**Module clos.** Dock OBS **V1.2 validé à 100 % par Antoni dans son vrai OBS** (28/10/2026, Studio 0.1.17 installé).
+Ce document décrit l'état final ; les étapes V1 → V1.2 sont résumées au § 1. Aucun travail n'est engagé : les pistes
+du § 9 ne s'ouvrent que sur demande d'Antoni.
 
-## Où en est le travail
+Source d'étude initiale : rapport Astra
+`C:\Users\Antoni\Documents\Codex\2026-10-27\files-pasted-by-the-user-mission\outputs\ASTRA_DOCK_OBS_DOSSIER_CLAUDE_2026-10-27.md`
+(architecture « C », simplifiée).
 
-- Branche `feat/obs-dock`, worktree `C:\Users\Antoni\Documents\raptoru-dock` (depuis `origin/main` `5835fd8`).
-- **Lot 1 (Core)** : fait (commit `feat(dock): Lot 1`) — migration, projeteur, flux, replay, routes ; tests PGlite et
-  PostgreSQL réel verts.
-- **Lot 2 (Studio)** : fait — relais `DockHub`, serveur du dock (port Studio + 10 = **4110**), panneau Studio (onglet
-  Alertes → « Dock OBS »).
-- **Lot 3 (page du dock)** : V1 faite — fil compact, filtres, « N nouveaux », détail, replay en deux clics, cadeaux
-  communautaires repliés, états de connexion. Aperçu vérifié dans Chromium (240/300/420 px, aucune erreur console).
-- **Lot 4** : **livré le 27/10** — PR #28 fusionnée (`d1dcdca`), sauvegarde de la base (17:18 UTC), Core déployé avec la
-  migration en post-deploy (`DÉPLOYÉ`, santé OK), bot inchangé, Studio **0.1.15** publiée (installateur vérifié).
-  Reste : installation par Antoni et validation dans OBS.
-- **V1.1** : **livrée le 27/10** — PR #30 fusionnée (`190bc0a`), sauvegarde de la base (22:00 UTC), Core
-  déployé avec la migration `20261111130000` en post-deploy (`DÉPLOYÉ`, santé OK), bot inchangé (`4ba9243`),
-  Studio **0.1.16** publiée (mise à jour 0.1.15 → 0.1.16 : profil et réglages identiques). URL et clé du dock
-  inchangées. Reste : installation, retour d'ergonomie d'Antoni (validation).
-- **V1.2** : **livrée le 28/10** — PR #32 fusionnée (`dc06344`), Core déployé seul sans migration (`DÉPLOYÉ`,
-  santé OK ; retour `190bc0a`), bot inchangé (`4ba9243`), Studio **0.1.17** publiée (mise à jour 0.1.16 → 0.1.17 :
-  8 fichiers utilisateur identiques). URL et clé du dock inchangées ; préférences V1.1 reprises. Reste : test d'Antoni
-  dans OBS.
+## 1. Livraisons
 
-## V1.2 — finition : identité, avatars, un clic, préférences, corbeille
+| Version  | Date  | PR (merge)               | Core déployé                                                     | Studio | Contenu                                                                                                                    |
+| -------- | ----- | ------------------------ | ---------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
+| V1       | 27/10 | #28 (`d1dcdca`), doc #29 | `d1dcdca` + migration `20261110130000_obs_dock.sql`              | 0.1.15 | journal d'activité Core, relais Studio, page du dock, rejeu visuel des alertes                                             |
+| V1.1     | 27/10 | #30 (`190bc0a`), doc #31 | `190bc0a` + migration `20261111130000_obs_dock_interactions.sql` | 0.1.16 | refonte visuelle, préférences, interactions Raptoru (Bonk, Soundboard, TTS, Tombola, `!rb`)                                |
+| **V1.2** | 28/10 | #32 (`dc06344`), doc #33 | `dc06344`, **sans migration**                                    | 0.1.17 | identité par famille, avatars, rejeu en un clic, Bonk seul regroupé, filtres détaillés, sélection et corbeille d'affichage |
 
-Cette section remplace, pour l'interface, les règles V1.1 qui la contredisent (regroupement, temps, rejeu, filtres).
+Chaque livraison : sauvegarde de la base avant une migration, Core seul (bot jamais touché, `4ba9243`), Studio publié
+par le workflow GitHub avec test de mise à jour (fichiers utilisateur identiques). L'URL et la clé du dock n'ont jamais
+changé ; les préférences V1.1 ont été reprises en V1.2.
+
+**Validation** : V1 utilisée en vrai (rejeu compris) avant la V1.1 ; **V1.2 testée et validée à 100 % par Antoni dans
+OBS le 28/10**. Cette validation porte sur l'usage réel ; les situations rares (réseau lent, doubles clics, reconnexions,
+désordre) sont couvertes par les tests automatiques du § 7, pas par cette validation.
+
+## 2. Ce que fait le dock (V1.2)
+
+### Événements affichés (sources canoniques, aucune nouvelle source ni scrutation)
+
+| Famille (couleur, icône Lucide)                                  | Types                                                                         | Source projetée par le Core                           |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Follow (rouge rosé, cœur plein)                                  | `follow`                                                                      | `alert_events` / `alert_items`                        |
+| Sub (violet, étoile pleine) · Resub (violet clair, médaille)     | `sub`, `resub`                                                                | idem                                                  |
+| Subgift (fuchsia, cadeau)                                        | `gift_targeted`, `gift_community` (+ bénéficiaires repliés), `gift_recipient` | idem                                                  |
+| Bits (cyan, diamant) · Raid (orange, fusée) · Don (vert, pièces) | `bits`, `raid`, `donation` (StreamElements)                                   | idem                                                  |
+| Points de chaîne (or, étincelle)                                 | `reward` (vrai nom de la récompense)                                          | `cp_redemptions`                                      |
+| TTS (bleu, bulle)                                                | `tts` (texte ≤ 500 caractères, validation)                                    | `tts_lab_interactions`                                |
+| Soundboard (vert lime, haut-parleur)                             | `soundboard` (nom du son en note)                                             | `sound_lab_interactions` (sauf un son payé en points) |
+| Bonk (cuivre, marteau)                                           | `bonk` (emote, salve)                                                         | `bonk_lab_interactions` (un tir = une ligne source)   |
+| Random Ban (rouge, marteau de juge)                              | `random_ban` (`!rb` du chat)                                                  | `rb_requests` (`source = 'chat'`)                     |
+| Tombola (turquoise, ticket)                                      | `raffle` (participation)                                                      | `lab_raffle_entries`                                  |
+
+- Une ligne source = une activité ; un changement d'état (accepté → en cours → exécuté / échec / inconnu, validation,
+  remboursement, alerte jouée, rejeu) met à jour **la même** activité, jamais un second événement.
+- Ce que les points de chaîne ont payé (un son, un Random Ban) reste **une** activité : la rédemption.
 
 ### Vignettes
 
-- Une carte par événement, teintée par sa **famille** : léger dégradé depuis la gauche, fin liseré coloré, icône et
-  libellé colorés, survol un peu plus lumineux. Treize familles, chacune avec sa couleur, son icône (Lucide, ISC) et son
-  libellé — la couleur n'est jamais le seul repère :
+- Une carte par événement, teintée par sa famille (léger dégradé depuis la gauche, fin liseré, icône et libellé
+  colorés, survol un peu plus lumineux). La couleur n'est jamais le seul repère : icône et libellé écrits.
+- Hiérarchie : **[avatar] [icône + LIBELLÉ] [pseudo] … [état] [rejeu]**, puis **[temps · note]** discret (tier, mois,
+  nom du son, emote, cible, coût si demandé), puis le texte du viewer sur une ligne s'il y en a un.
+- Libellés : FOLLOW, SUB, RESUB, SUBGIFT (× N), 1 500 BITS, RAID, DON 10,00 €, le vrai nom de la récompense (sa casse),
+  TTS, SOUNDBOARD, BONK, RANDOM BAN, TOMBOLA. Un libellé générique n'est jamais coupé : le pseudo cède (nom complet au
+  survol) ; le nom d'une récompense peut être coupé (nom complet au survol).
+- Pseudo semi-gras. Temps : « à l'instant », « 3 min », « 2 h », « 3 j » ; date et heure exactes au survol.
+- États en icônes avec info-bulle : coche (fait), croix (échec / résultat inconnu), horloge (en attente / en cours /
+  en validation), cercle barré (sans animation, annulé, flop). La raison d'un échec n'est jamais sur la ligne.
+- Nouvel événement : fondu court puis liseré lumineux une minute ; rien d'animé en continu ; aucune animation avec
+  « réduire les animations ».
+- Détails seulement s'ils ajoutent quelque chose : Bonks d'une salve, bénéficiaires d'un cadeau, raison d'un échec ; un
+  texte de viewer coupé sur sa ligne s'ouvre en entier. Rien à ouvrir pour un follow, un sub, un Bonk seul, un son.
 
-  | Famille | Icône         | Couleur      | Famille          | Icône           | Couleur   |
-  | ------- | ------------- | ------------ | ---------------- | --------------- | --------- |
-  | Follow  | cœur plein    | rouge rosé   | Points de chaîne | étincelle       | or        |
-  | Sub     | étoile pleine | violet       | TTS              | bulle           | bleu      |
-  | Resub   | médaille      | violet clair | Soundboard       | haut-parleur    | vert lime |
-  | Subgift | cadeau        | fuchsia      | Bonk             | marteau         | cuivre    |
-  | Bits    | diamant       | cyan         | Random Ban       | marteau de juge | rouge     |
-  | Raid    | fusée         | orange       | Tombola          | ticket          | turquoise |
-  | Don     | pièces        | vert         |                  |                 |           |
+### Avatars
 
-- Hiérarchie : **[avatar] [icône + LIBELLÉ] [pseudo] … [état] [rejeu]**, puis une ligne discrète **[temps · note]**
-  (tier, mois, nom du son, emote, cible, coût si demandé), puis le texte du viewer sur une ligne s'il y en a un.
-  Libellés : FOLLOW, SUB, RESUB, SUBGIFT (× N pour un cadeau communautaire), 1 500 BITS, RAID, DON 10,00 €, le **vrai
-  nom** de la récompense (sa casse), TTS, **SOUNDBOARD** (le nom du son en note), BONK, RANDOM BAN, TOMBOLA.
-- Un libellé générique n'est jamais coupé : c'est le pseudo qui cède (points de suspension, nom complet au survol). Le
-  nom d'une récompense peut être coupé (nom complet au survol).
-- Pseudo en semi-gras, blanc cassé. Temps : « à l'instant » (< 1 min), puis « 3 min », « 2 h », « 3 j » ; date et heure
-  exactes au survol.
-- Avatar rond de 30 px (26 px sous 280 px), toujours de la même taille : l'initiale sur fond teinté, la photo Twitch
-  par-dessus une fois chargée (une photo qui échoue est retirée, l'initiale reste) ; pour un anonyme, l'icône de la
-  famille ; pour une salve de plusieurs viewers, le nombre de viewers.
-- Nouvel événement : un fondu court puis un liseré lumineux pendant une minute. Rien d'animé en continu ; aucune
-  animation avec « réduire les animations ».
+- Le Core joint à chaque acteur la photo du cache Twitch existant (`lab_viewer_avatars`, Helix Get Users par 100 avec le
+  jeton d'application déjà utilisé par Votekick et la Tombola, `raffle-lab/avatars.ts`). La photo fait partie de la
+  version de la ligne : trouvée plus tard, elle ramène la ligne dans le flux à sa place.
+- Après un scan, les viewers sans photo sont demandés au cache en arrière-plan (au plus 100 par scan, jamais attendu ;
+  24 h de validité, 1 h avant de réessayer un échec). La réception des événements ne dépend jamais des images.
+- Page : seules les URL https de `static-cdn.jtvnw.net` sont affichées ; avatar de taille fixe (aucun décalage),
+  initiale en attendant ou si la photo échoue, icône de la famille pour un anonyme, nombre de viewers pour une salve.
 
-### Avatars (Core, sans migration ni nouvelle connexion Twitch)
+### Rejeu des alertes (un clic)
 
-- Source : le cache de photos Twitch déjà en Production (`lab_viewer_avatars`, rempli par Helix Get Users, 100 ids par
-  appel, avec le jeton d'application existant — celui de Votekick et de la Tombola ; `raffle-lab/avatars.ts`).
-- La projection joint ce cache : l'URL de la photo voyage avec l'acteur (`data.actor.avatar`) et fait partie de la
-  version de la ligne. Une photo trouvée plus tard ramène la ligne dans le flux, à sa place (même clé, pas de « nouveau »).
-- Après un scan, les viewers projetés sans photo sont demandés au cache en arrière-plan : au plus 100 par scan, jamais
-  attendu, avec les délais du cache (24 h pour une photo, 1 h avant de réessayer un échec). La réception des événements
-  ne dépend jamais des images.
-- Côté page : seules les URL https de `static-cdn.jtvnw.net` sont affichées (CSP `img-src` déjà limitée).
-- Au déploiement, les lignes des 24 dernières heures (30 jours au premier scan d'un Core) sont reprojetées une fois
-  (leur version inclut maintenant la photo) : rien d'autre ne change.
-
-### Rejeu en un clic
-
-- Un clic sur l'icône de rejeu envoie la demande ; le bouton se verrouille (icône qui tourne) jusqu'à la réponse, puis
-  affiche une coche 2,5 s ; un message confirme ou explique un refus.
-- Protections inchangées et renforcées côté page : une clé d'idempotence par intention (une requête rejouée par le
-  réseau ne crée jamais un second rejeu), aucun autre envoi tant que la requête est en cours ou vient d'aboutir, et le
-  Core garde un seul rejeu en attente par original (un clic après la coche reçoit « déjà en attente »). Aucun effet
-  économique, jamais la Roue, jamais un retraitement (le rejeu reste un nouvel `alert_items`, V1).
+- Seulement pour une alerte jouée (ou en échec / expirée) sans rejeu en attente ; jamais pour Bonk, TTS, Soundboard,
+  récompenses. Un clic : bouton verrouillé pendant la demande, coche une fois acceptée, message en cas de refus.
+- Garanties : rejeu = **nouvel `alert_items`** (variante et données figées de l'original), audité dans `dock_replays` ;
+  jamais `receive` (donc jamais Roue, fidélité, chat, jetons, droits ou paiements) ; clé d'idempotence par intention ;
+  un seul rejeu en attente par original ; refusé si l'original n'a pas joué ou n'a pas d'animation.
 
 ### Regroupement : les Bonks seulement
 
-- Seuls les Bonks consécutifs se regroupent (« BONK × N ») : même règle qu'en V1.1 (≤ 90 s entre deux, ≤ 5 min depuis
-  le premier, coupé par tout autre événement visible, jamais par un masqué, déterministe, clé = premier Bonk).
-- TTS, Soundboard (même son compris), Random Ban, Tombola, récompenses, alertes : **une ligne chacun**, toujours.
-- Plusieurs viewers dans une salve : « A et B » ou « A, B +N » sur la ligne, « N viewers » en note, le détail liste
-  chaque Bonk (heure, pseudo, emote, état).
-- Le cadeau communautaire reste une ligne (un seul événement métier, ses bénéficiaires dans le détail).
-
-### Détails
-
-- S'ouvrent seulement s'ils montrent quelque chose de plus : les Bonks d'une salve, les bénéficiaires d'un cadeau, la
-  raison d'un échec. Un texte de viewer (TTS, message de don, de bits, de récompense) est sur la ligne ; la ligne ne
-  devient ouvrable que si ce texte y est coupé (mesuré dans la page, à chaque redimensionnement) et l'ouvrir l'affiche en
-  entier. Rien d'ouvrable pour un follow, un sub, un Bonk seul, un son.
+- Bonks consécutifs → « BONK × N » : ≤ 90 s entre deux, ≤ 5 min depuis le premier, coupé par tout autre événement
+  visible (jamais par un masqué), déterministe (tri par horodatage et clé), ligne identifiée par son premier Bonk.
+  Plusieurs viewers : « A et B » / « A, B +N », « N viewers » en note, le détail liste chaque Bonk.
+- Tout le reste (TTS, sons, Random Ban, Tombola, récompenses, alertes) : une ligne chacun. Le cadeau communautaire reste
+  une ligne (un seul événement métier).
+- Présentation uniquement : rien n'est fusionné dans le Core ni en base.
 
 ### Préférences (roue crantée)
 
-- Treize filtres en trois groupes, chacun avec une case de groupe (trois états) :
-  **Chaîne Twitch** (Follows, Subs, Resubs, Subgifts, Bits, Raids, Dons) · **Points de chaîne** (toutes les récompenses,
-  puis « Récompenses une par une » dépliable, et « Afficher les coûts », non par défaut) · **Interactions Raptoru** (TTS,
-  Soundboard, Bonk, Random Ban, Tombola). « Tout afficher », « Tout masquer », « Réinitialiser ».
-- Récompenses une par une : par leur **identifiant Twitch stable** ; la liste se construit avec les récompenses vues
-  (dernier titre connu, 200 au plus). Une récompense renommée garde son choix.
-- Gardées dans le `localStorage` du dock (`dock.prefs`, version 2). Les préférences V1.1 sont reprises : « Abos et
-  cadeaux » masqué → Subs, Resubs et Subgifts masqués ; « Tombola et Random Ban » → les deux.
-- Affichage seulement : un événement masqué reste reçu, traité, gardé dans l'historique et réapparaît dès qu'on le
-  réaffiche.
+- Treize filtres indépendants en trois groupes (case de groupe à trois états) : **Chaîne Twitch** (Follows, Subs,
+  Resubs, Subgifts, Bits, Raids, Dons) · **Points de chaîne** (toutes, puis une par une, plus « Afficher les coûts des
+  récompenses », **non** par défaut) · **Interactions Raptoru** (TTS, Soundboard, Bonk, Random Ban, Tombola).
+  « Tout afficher », « Tout masquer », « Réinitialiser ».
+- Récompenses une par une par leur **identifiant Twitch stable** (liste des récompenses vues, 200 au plus) : une
+  récompense renommée garde son choix.
+- `localStorage` du dock, clé `dock.prefs` (version 2 ; les préférences V1.1 sont reprises). Affichage seulement : un
+  événement masqué reste reçu, traité, gardé dans l'historique.
 
 ### Sélection et corbeille d'affichage
 
-- **Ctrl + clic** ajoute ou retire une ligne, **Maj + clic** sélectionne la plage depuis la dernière ligne cliquée, le
-  bouton « Sélectionner » de l'en-tête passe en mode sélection (un clic simple sélectionne). Dès qu'une ligne est
-  sélectionnée, un clic simple sélectionne au lieu d'ouvrir ; le bouton de rejeu reste un bouton à part. Clavier :
-  Espace sélectionne, Suppr masque, Échap annule ou ferme.
-- La barre de sélection dit combien de lignes sont choisies, avec **Masquer** et **Annuler** ; la corbeille de l'en-tête
-  masque la sélection s'il y en a une, sinon ouvre la corbeille. Un message propose « Annuler » pendant 7 s.
-- Masquer une salve de Bonks masque **tous** ses Bonks (identifiants gardés un par un : une salve recomposée après une
-  reconnexion ne fait jamais réapparaître un Bonk masqué).
-- La **corbeille d'affichage** (`dock.trash`, `localStorage`) : restaurer un élément, une salve entière ou un seul de
-  ses Bonks, « Tout restaurer », « Vider la corbeille » (deuxième clic de confirmation ; les éléments restent masqués
-  sans être restaurables). Compteur sur l'icône. Bornée : 31 jours et 5 000 éléments au plus.
-- **Jamais** une suppression : masquer ne touche ni le Core, ni les alertes, ni les transactions, jetons, achats,
-  journaux ou données Twitch. Préférences, corbeille, historique canonique et actions métier restent séparés.
+- Ctrl + clic (ajouter / retirer), Maj + clic (plage), bouton « Sélectionner » (un clic sélectionne) ; clavier : Espace,
+  Suppr (masquer), Échap. Dès qu'une sélection existe, un clic sélectionne au lieu d'ouvrir ; le rejeu reste à part.
+- « Masquer » (ou la corbeille de l'en-tête) envoie la sélection dans la **corbeille d'affichage** ; « Annuler » 7 s.
+  Une salve masquée masque tous ses Bonks, gardés un par un (jamais réapparus après une recomposition).
+- Corbeille (`dock.trash`, `localStorage`, 31 jours et 5 000 éléments au plus) : restaurer un élément, une salve ou un
+  seul de ses Bonks, « Tout restaurer », « Vider la corbeille » (confirmation ; éléments masqués définitivement dans ce
+  dock). Compteur sur l'icône.
+- **Jamais une suppression** : aucun événement Core, alerte, transaction, jeton, achat, journal ou donnée Twitch n'est
+  touché. Préférences, corbeille, historique canonique et actions métier sont séparés.
 
-### Fichiers V1.2
+### Flux, défilement, connexion
 
-- Core : `apps/core-api/src/dock/service.ts` (photo jointe, version, demande au cache), `ext/public-frontier.ts`
-  (branchement du cache). Test : `test/dock-interactions.test.ts`.
-- Page : `apps/studio/server/dock-page/{dock-view.js,dock.js,dock.css,index.html}`. Tests :
-  `apps/studio/server/test/dock-view.test.js`, `apps/studio/server/e2e/dock.e2e.ts` (Chromium).
+- Pas de défilement automatique : les lignes arrivent au-dessus sans déplacer ce qu'on lit (rendu par clé, ancrage du
+  navigateur) ; « ↑ N nouveaux » ; « Revenir aux récents » quand on est descendu loin.
+- Pastille de connexion dans l'en-tête et bandeau quand Studio ou le Core est injoignable ; reprise automatique ;
+  historique ancien par « Charger les plus anciens ».
 
-### Limites V1.2
-
-- Lab (Studio local) : pas de photos (viewers simulés) ; l'initiale s'affiche.
-- Corbeille et préférences propres à ce dock (origine `127.0.0.1:<port>`) : un autre dock ou un autre port repart de
-  zéro.
-- Un viewer jamais vu auparavant s'affiche d'abord avec son initiale ; sa photo arrive quelques secondes plus tard.
-
-## Décisions (et pourquoi)
-
-| Décision                                                                                                                                                        | Justification                                                                                                                        |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Journal d'activité **projeté** dans le Core (`dock_activity`) à partir des tables existantes, sans toucher aux transactions des modules                         | Zéro risque pour l'économie et les modules validés ; reconstructible ; aucun handler métier rappelé                                  |
-| `seq` donné sous le verrou de ligne `dock_activity_channels` (… `for update`) tenu jusqu'au commit                                                              | Ordre des `seq` = ordre des commits : un lecteur « after N » ne rate jamais une ligne commitée tard (piège Astra §8)                 |
-| Une ligne qui change (alerte jouée, rédemption terminée, replay) reprend un nouveau `seq`                                                                       | Le flux transporte les mises à jour ; le dock remplace par `activity_key`                                                            |
-| Détection des changements par **version** (statuts concaténés), pas par filigrane de date                                                                       | Une source commitée tard ou modifiée est toujours rattrapée                                                                          |
-| Projeteur actif seulement quand quelqu'un lit (scan 1,5 s, arrêt 10 min après la dernière lecture) ; premier scan = 30 jours                                    | Pas de charge sans dock ; rattrapage de l'historique au premier usage                                                                |
-| Replay = **nouvel `alert_items`** (variante et données figées de l'original), audité dans `dock_replays`                                                        | La file d'alertes n'a aucun effet économique (vérifié) ; jamais `receive` (donc jamais Roue/fidélité/chat)                           |
-| Replay idempotent par clé de clic ; un seul replay en attente par original ; refusé si l'original n'a pas encore joué ou n'a pas d'animation                    | Doubles clics, deux interfaces, réseau rejoué                                                                                        |
-| Studio relaie (une seule connexion Core en long-poll, cache 500, curseur, reprise) ; il ne suit le Core que si un dock est ouvert (+60 s)                       | Une connexion quel que soit le nombre de docks ; aucune charge sans dock                                                             |
-| Le dock est servi sur **un port local dédié** (Studio + 10 ; `DOCK_PORT`) qui n'expose que la page, le flux, l'historique et le replay                          | L'origine du dock ne peut appeler aucune autre API Studio ; 4101 est pris par `bonk-lab`                                             |
-| Accès par une clé dans le **fragment** de l'URL (`#key=`), envoyée en en-tête `x-dock-key`, comparée en temps constant ; régénérable dans Studio (docks fermés) | Pas dans les journaux ni le Referer ; capacité étroite (lecture + replay visuel). Écart assumé vs l'appairage à usage unique d'Astra |
-| Host vérifié (anti-rebinding), Origin + JSON exigés pour le replay, CSP stricte (`script-src 'self'`, pas d'inline), nosniff, no-referrer                       | Défense en profondeur dans CEF                                                                                                       |
-| Flux = SSE lu par `fetch` (EventSource ne peut pas envoyer l'en-tête) ; client lent coupé (512 Kio) puis reconnexion + instantané                               | Pas de mémoire illimitée                                                                                                             |
-| Texte viewer toujours échappé (`esc`) ; jamais d'HTML viewer                                                                                                    | Pseudos, messages, titres de récompense non fiables                                                                                  |
-| Bénéficiaires d'un cadeau communautaire (`absorbed` + `community_gift_id`) repliés dans la ligne du cadeau                                                      | Une ligne par lot ; recommandation Astra                                                                                             |
-| Historique 30 jours ; « nouveau » local au dock (pas d'état « traité » partagé en V1)                                                                           | Choix par défaut, réversibles                                                                                                        |
-
-## V1.1 — refonte et flux enrichi
-
-### Ce qui change pour Antoni
-
-- En-tête compact : « Activité », pastille de connexion (survol = détail), roue crantée. La barre de filtres disparaît.
-- Roue crantée → préférences : cases par catégorie, « Tout afficher », « Afficher les coûts des récompenses » (**non**
-  par défaut), « Réinitialiser ». Gardées dans le `localStorage` du dock (survivent au redémarrage d'OBS et du dock).
-  Une catégorie masquée reste reçue et gardée : la réafficher la montre aussitôt, historique compris. Petit point sur
-  la roue quand un filtre est actif.
-- Ligne : icône de catégorie (SVG aux formes Lucide, licence ISC) dans une pastille teintée · **TITRE en gras et en
-  couleur** (« NOUVEAU FOLLOW », « BONK × 8 », le vrai nom de la récompense ou du son) · note courte (tier, mois,
-  viewers…) · icône d'état · pseudo(s) · temps relatif. Au plus une ligne d'aperçu (message, texte TTS). La couleur
-  n'est jamais le seul repère : chaque catégorie a sa forme d'icône et son titre écrit.
-- États en icônes avec info-bulle et nom accessible : coche verte (fait), croix rouge (échec / résultat inconnu),
-  horloge (en attente / en cours / en validation), cercle barré (sans animation, annulé, flop). La raison d'un échec
-  est dans l'info-bulle et le détail, jamais sur la ligne.
-- Temps : « il y a quelques secondes » (< 1 min), « il y a quelques minutes » (< 5 min), puis 5, 10, 15, 20, 30,
-  45 minutes, heures, jours jusqu'à 15, puis « il y a plus de 15 jours ». Heure exacte au survol.
-- Détail (clic ou Entrée) seulement s'il apporte quelque chose : message de don / bits / récompense, texte TTS,
-  bénéficiaires d'un cadeau communautaire, membres d'un groupe, raison d'un échec. Un follow ou un Bonk seul ne s'ouvre
-  pas. Aucun champ technique.
-- Replay : inchangé (alertes seulement, deux clics en 3 s, idempotent, zéro effet économique). Le bouton apparaît au
-  survol sur le bord droit (toutes les lignes gardent les mêmes colonnes). Jamais pour Bonk, TTS, Soundboard ni
-  récompenses.
-- Flux chargé : pas de défilement automatique ; les lignes arrivent au-dessus sans déplacer ce qu'on lit (rendu par clé :
-  les lignes inchangées gardent leur élément, l'ancrage du navigateur tient la position) ; « ↑ N nouveaux » compte les
-  événements visibles arrivés pendant la lecture.
-
-### Catégories et sources (canoniques, aucune nouvelle source ni scrutation)
-
-| Catégorie (couleur)          | Types                                                               | Source projetée                                         |
-| ---------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
-| Follows (rose)               | `follow`                                                            | `alert_events` / `alert_items` (V1)                     |
-| Abos et cadeaux (violet)     | `sub`, `resub`, `gift_targeted`, `gift_community`, `gift_recipient` | idem (bénéficiaires repliés dans le cadeau)             |
-| Bits (cyan)                  | `bits`                                                              | idem                                                    |
-| Raids (orange)               | `raid`                                                              | idem                                                    |
-| Dons (vert)                  | `donation` (StreamElements)                                         | idem                                                    |
-| Points de chaîne (ambre)     | `reward` (vrai nom de la récompense)                                | `cp_redemptions` (V1)                                   |
-| TTS (bleu)                   | `tts` (texte ≤ 500 caractères, validation)                          | `tts_lab_interactions`                                  |
-| Soundboard (turquoise)       | `soundboard` (nom exact du son)                                     | `sound_lab_interactions` (sauf son payé en points)      |
-| Bonk (corail)                | `bonk` (emote, salve)                                               | `bonk_lab_interactions` (un tir = une ligne source)     |
-| Tombola et Random Ban (gris) | `raffle`, `random_ban` (`!rb` du chat)                              | `lab_raffle_entries`, `rb_requests` (`source = 'chat'`) |
-
-- Clés `ix:<type>:<id>`, `kind = 'interaction'` : migration additive `20261111130000_obs_dock_interactions.sql`
-  (jumelle Lab `20261111120000_obs_dock_interactions_lab.sql`) qui élargit le check de `dock_activity.kind`. Retour :
-  dans l'en-tête de la migration.
-- Une ligne source = une activité ; un changement d'état (accepté → en cours → exécuté / échec / inconnu, validation,
-  remboursement) met à jour **la même** activité (version `status|refund_status[|review_status]`), jamais un second
-  événement.
-- Ce que les points de chaîne ont payé (un son, un Random Ban) reste **une** activité : la rédemption.
-- Bonk : `emote.glyph` pour une emote Unicode, sinon `emote.url` affichée en image **uniquement** en https depuis
-  `static-cdn.jtvnw.net`, `cdn.7tv.app`, `cdn.betterttv.net`, `cdn.frankerfacez.com` (même liste dans la CSP `img-src`
-  du serveur du dock).
-
-### Regroupement (présentation seulement)
-
-- Calculé par la page (`entries()` de `dock-view.js`) à chaque rendu, à partir des activités brutes, **après** les
-  filtres ; rien n'est fusionné dans le Core ni en base.
-- Peuvent partager une ligne : tous les Bonk ; le **même** son (par `sound.id`) ; tous les TTS. Jamais les alertes, les
-  récompenses, la Tombola ni les Random Ban.
-- Parcours du plus ancien au plus récent : une activité rejoint la ligne précédente si elle a la même clé de groupe,
-  arrive **≤ 90 s** après le dernier déclencheur de la ligne et **≤ 5 min** après le premier. Un événement visible entre
-  deux coupe la ligne ; un événement masqué ne la coupe pas.
-- Déterministe : tri par (`occurred_at`, `activity_key`) seulement, donc même résultat quels que soient l'ordre
-  d'arrivée, les reconnexions, la pagination, les changements d'état ou de filtre. Une ligne est identifiée par son
-  premier déclencheur : elle garde sa place et son détail ouvert en grandissant ; charger l'historique ne change pas les
-  lignes récentes.
-- Titres « BONK × 5 », « Boop × 2 », « TTS × 3 ». Plusieurs viewers : « A et B », « A, B +N » (tous les noms au survol),
-  jamais un seul nom. État = le pire des membres (échec > attente > fait), comptes au survol. Le détail liste chaque
-  déclencheur (heure exacte, pseudo, emote, état, texte TTS).
-
-### Remboursement depuis le dock (conception seulement, rien de codé)
-
-- Aucun bouton tant qu'il ne fonctionne pas de bout en bout ; il n'y en a donc pas en V1.1.
-- Chemin à réutiliser : la commande de modération existante `{ action: 'refund', module: tts|soundboard|bonk,
-interaction_id, reason }` (permission `refund.manual`, auditée, idempotente côté module), jamais une écriture parallèle
-  dans le Wallet.
-- À construire : une route Studio → Core protégée comme le replay (clé du dock, Origin, JSON), limitée aux interactions
-  `failed` / `execution_unknown` non remboursées, confirmation en deux clics ; le `refund_status` revient par le flux et
-  la ligne se met à jour seule. Points de chaîne : le remboursement Twitch (annuler la rédemption) est un autre chemin.
-- Décision produit pour Antoni : qui peut rembourser depuis le dock (lui seul ?) et avec quelle raison.
-
-### Campagnes sponsorisées StreamElements / Streamlabs (recherche, rien de codé)
-
-| Source                        | Statut         | Constat                                                                                                                                              |
-| ----------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SE Astro `channel.activities` | Officiel, flou | Liste les types `sponsorship` / `sponsorshipPassive` **sans charge utile documentée** (docs.streamelements.com/websockets/topics/channel-activities) |
-| SE tableau de bord / overlays | UI seulement   | Les campagnes s'affichent dans l'interface SE ; pas d'API publique décrite                                                                           |
-| Streamlabs Socket API         | Officiel       | Dons, follows, abos… ; **rien** sur les campagnes sponsorisées (dev.streamlabs.com/docs/socket-api)                                                  |
-| Streamlabs, accès partenaires | Incertain      | Rien de public ; Raptoru n'a de toute façon aucune intégration Streamlabs                                                                            |
-
-- Studio est déjà abonné à `channel.tips` (+ modération) avec le jeton SE (`alerts/se-tips.ts`) ; ajouter
-  `channel.activities` sur la même connexion serait possible, mais le format n'est pas documenté : **ne pas construire**
-  sans charge utile officielle. Pas de scraping.
-- Pour aller plus loin : observer en local (sans stockage) un vrai événement `sponsorship` pendant une campagne pour
-  connaître son format, puis décider.
-
-### Limites connues
-
-- Préférences propres au dock (origine `127.0.0.1:<port>`) : si le port du dock change, elles reviennent aux défauts.
-- Premier scan d'un Core : 30 jours d'interactions, au plus 2000 par scan (les plus anciennes d'abord) ; les scans
-  suivants ne couvrent que 24 h. Au-delà de 2000 interactions sur 30 jours, une partie de l'historique de plus de
-  24 h peut manquer dans le dock (rien d'autre n'est touché).
-- « N nouveaux » compte des événements, pas des lignes (un Bonk qui agrandit un groupe compte pour 1).
-- Image d'emote Bonk : chargée depuis le CDN de l'emote (requête sortante du dock vers ce CDN).
-
-## Architecture
+## 3. Architecture
 
 ```
-bot / extension / SE(Studio) → modules Core (inchangés) → tables existantes (alert_events, alert_items, cp_redemptions)
+bot / extension / SE (Studio) → modules Core (inchangés) → tables existantes
+   (alert_events, alert_items, cp_redemptions, bonk/sound/tts_lab_interactions, lab_raffle_entries, rb_requests,
+    lab_viewer_avatars pour les photos)
    → projeteur Core (dock/service.ts) → dock_activity (+ seq) → GET /v1/studio/dock/:ch/activity | /changes (long-poll)
-   → Studio DockHub (une connexion, cache) → DockServer 127.0.0.1:4110 (page + SSE) → dock OBS (CEF)
-Replay : dock → POST /api/replay (4110) → DockHub → POST /v1/studio/dock/:ch/alerts/:alert_id/replay
+   → Studio DockHub (une connexion, cache) → DockServer 127.0.0.1:4110 (page + SSE) → dock navigateur OBS (CEF)
+Rejeu : dock → POST /api/replay (4110) → DockHub → POST /v1/studio/dock/:ch/alerts/:alert_id/replay
    → nouvel alert_items → lecteur d'alertes existant (source OBS)
 ```
 
-## Fichiers
+| Décision                                                                                                                                                                                              | Justification                                                                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Journal **projeté** dans le Core (`dock_activity`) depuis les tables existantes, en lecture seule                                                                                                     | zéro risque pour l'économie et les modules ; reconstructible ; aucun handler métier rappelé   |
+| `seq` donné sous le verrou `dock_activity_channels` (`for update`) tenu jusqu'au commit                                                                                                               | ordre des `seq` = ordre des commits : un lecteur « after N » ne rate jamais une ligne tardive |
+| Changements détectés par **version** (statuts concaténés, photo comprise) ; une ligne modifiée reprend un nouveau `seq`                                                                               | une source commitée tard ou modifiée est toujours rattrapée ; le dock remplace par clé        |
+| Projeteur actif seulement quand un dock lit (scan 1,5 s, arrêt 10 min après la dernière lecture) ; premier scan 30 jours, puis fenêtre de 24 h                                                        | aucune charge sans dock                                                                       |
+| Studio relaie (une connexion Core en long-poll, cache 500, curseur, reprise 1–10 s), seulement si un dock est ouvert (+60 s)                                                                          | une connexion quel que soit le nombre de docks                                                |
+| Port local dédié (Studio + 10 = **4110**, `DOCK_PORT`) qui n'expose que page, flux, historique, rejeu                                                                                                 | l'origine du dock ne peut appeler aucune autre API Studio ; 4101 est pris par `bonk-lab`      |
+| Clé dans le **fragment** de l'URL (`#key=`), en-tête `x-dock-key`, comparaison en temps constant, régénérable dans Studio ; stockée dans le dossier d'exécution de Studio (`<runtime>/dock/key.json`) | absente des journaux et du Referer ; conservée par les mises à jour de Studio                 |
+| Host vérifié, Origin + JSON pour le rejeu, CSP stricte (`script-src 'self'`, images limitées aux CDN Twitch / 7TV / BTTV / FFZ), nosniff, no-referrer                                                 | défense en profondeur dans CEF                                                                |
+| Flux SSE lu par `fetch` ; client lent coupé (512 Kio) puis reconnexion + instantané                                                                                                                   | pas de mémoire illimitée                                                                      |
+| Texte viewer toujours échappé ; jamais d'HTML viewer                                                                                                                                                  | pseudos, messages, noms non fiables                                                           |
+| Préférences et corbeille dans le `localStorage` du dock, pas en base                                                                                                                                  | affichage propre à ce dock ; aucune migration ; aucune donnée métier touchée                  |
 
-| Fichier                                                                                                                                                                                      | Rôle                                                                                                     |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `supabase/migrations/20261110120000_obs_dock_lab.sql` / `20261110130000_obs_dock.sql`                                                                                                        | Tables `dock_activity`, `dock_activity_channels`, `dock_replays` ; index `alert_events_recent` (additif) |
-| `apps/core-api/src/db/migration-scopes.ts`, `apps/studio/server/src/runtime/local-runtime.ts`, `apps/studio/server/scripts/bonk-lab.mjs`                                                     | Listes de migrations                                                                                     |
-| `apps/core-api/src/dock/service.ts`                                                                                                                                                          | `DockActivityService` : `scan`, `recent`, `changes`, `replayAlert`                                       |
-| `apps/core-api/src/http/dock-routes.ts`                                                                                                                                                      | Routes Production `/v1/studio/dock/*` (credential d'installation) et Lab `/v1/lab/dock/*`                |
-| `apps/core-api/src/app.ts`, `http/server.ts`, `index.ts`, `bonk-lab/lab-core.ts`                                                                                                             | Câblage Core                                                                                             |
-| `apps/studio/server/src/dock/hub.ts`                                                                                                                                                         | `DockHub` : suivi unique du flux Core                                                                    |
-| `apps/studio/server/src/dock/server.ts`                                                                                                                                                      | `DockServer` (port dédié) et `DockKey`                                                                   |
-| `apps/studio/server/src/dock/studio-api.ts`                                                                                                                                                  | `/api/dock` et `/api/dock/key` du panneau Studio                                                         |
-| `apps/studio/server/src/index.ts`, `lab-moderation/proxy.ts`                                                                                                                                 | Câblage Studio (création, écoute, arrêt, préfixe Lab)                                                    |
-| `apps/studio/server/dock-page/{index.html,dock.css,dock.js,dock-view.js}`                                                                                                                    | La page du dock (`dock-view.js` = partie pure testée)                                                    |
-| `apps/studio/web/src/dock-panel.ts`, `alerts-tab.ts`                                                                                                                                         | Panneau « Dock OBS » de l'onglet Alertes                                                                 |
-| `apps/studio/desktop/scripts/stage.mjs`, `eslint.config.js`                                                                                                                                  | Empaquetage de la page ; lint navigateur                                                                 |
-| V1.1 : `supabase/migrations/20261111120000_obs_dock_interactions_lab.sql` / `20261111130000_obs_dock_interactions.sql`                                                                       | Check `dock_activity.kind` élargi à `interaction`                                                        |
-| Tests : `apps/core-api/test/dock.test.ts`, `dock-interactions.test.ts`, `dock.integration.test.ts`, `migration-scopes.test.ts` ; `apps/studio/server/test/dock.test.ts`, `dock-view.test.js` |                                                                                                          |
+## 4. Contrats
 
-## Contrats
+Core (Studio seulement, credential d'installation ; Lab : `/v1/lab/dock/*`) :
 
-Core (Studio seulement) :
+- `GET /v1/studio/dock/:ch/activity?limit=&before=&before_seq=` → `{ cursor, activities[], more }` (plus récents
+  d'abord, même instantané).
+- `GET /v1/studio/dock/:ch/changes?after=&limit=&wait_ms=` → `{ cursor, activities[] }` par `seq` croissant ; attend
+  jusqu'à 20 s ; `reset: true` si `after` dépasse le curseur.
+- Activité : `{ activity_key, kind: alert | channel_points | interaction, type, occurred_at, data, state, seq }` ;
+  `data.actor.avatar` quand une photo est connue ; clés `alert:…`, `cp:…`, `ix:<type>:<id>`.
+- `POST /v1/studio/dock/:ch/alerts/:alert_id/replay { replay_key: uuid }` → `{ replay_alert_id, created,
+already_pending? }` ; 409 `original_not_played_yet` / `replay_key_reused` ; 404 `alert_not_replayable`.
 
-- `GET /activity?limit=&before=&before_seq=` → `{ cursor, activities[], more }` (plus récents d'abord ; même instantané).
-- `GET /changes?after=&limit=&wait_ms=` → `{ cursor, activities[] }` par `seq` croissant ; attend jusqu'à 20 s ;
-  `reset: true` si `after` > curseur de la chaîne.
-- Activité : `{ activity_key, kind: alert|channel_points|interaction, type, occurred_at, data, state, seq }`.
-- `POST /alerts/:alert_id/replay { replay_key: uuid }` → `{ replay_alert_id, created, already_pending? }` ; 409
-  `original_not_played_yet` / `replay_key_reused` ; 404 `alert_not_replayable`.
+Dock (127.0.0.1:4110, en-tête `x-dock-key`) : `GET /api/stream` (SSE `snapshot`, `upsert`, `status`),
+`GET /api/history?before=&before_seq=`, `POST /api/replay { alert_id, replay_key }` (Origin du dock + JSON).
 
-Dock (127.0.0.1:4110, en-tête `x-dock-key`) : `GET /api/stream` (SSE : `snapshot`, `upsert`, `status`), `GET
-/api/history?before=&before_seq=`, `POST /api/replay { alert_id, replay_key }` (Origin du dock + JSON).
+Studio : `GET /api/dock` → `{ available, reason, url, clients, feed }` ; `POST /api/dock/key` (nouvelle clé).
 
-Studio : `GET /api/dock` → `{ available, reason, url, clients, feed }` ; `POST /api/dock/key`.
+## 5. Fichiers
 
-## Utilisation (pour Antoni)
+| Fichier                                                                                                                            | Rôle                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `supabase/migrations/20261110120000_obs_dock_lab.sql` / `20261110130000_obs_dock.sql`                                              | tables `dock_activity`, `dock_activity_channels`, `dock_replays` ; index `alert_events_recent` |
+| `supabase/migrations/20261111120000_obs_dock_interactions_lab.sql` / `20261111130000_obs_dock_interactions.sql`                    | check `dock_activity.kind` élargi à `interaction` (retour arrière dans l'en-tête)              |
+| `apps/core-api/src/dock/service.ts`                                                                                                | `DockActivityService` : projection, photos, `recent`, `changes`, `replayAlert`                 |
+| `apps/core-api/src/http/dock-routes.ts` ; `app.ts`, `http/server.ts`, `index.ts`, `ext/public-frontier.ts`, `bonk-lab/lab-core.ts` | routes et câblage (dont le branchement du cache de photos)                                     |
+| `apps/studio/server/src/dock/{hub,server,studio-api}.ts` ; `src/index.ts`, `lab-moderation/proxy.ts`                               | relais, serveur dédié et clé, API du panneau, câblage                                          |
+| `apps/studio/server/dock-page/{index.html,dock.css,dock.js,dock-view.js}`                                                          | la page (`dock-view.js` = partie pure testée)                                                  |
+| `apps/studio/web/src/dock-panel.ts`, `alerts-tab.ts`                                                                               | panneau « Dock OBS » (onglet Alertes)                                                          |
+| `apps/studio/desktop/scripts/stage.mjs`, `eslint.config.js`                                                                        | empaquetage, lint navigateur                                                                   |
+| Tests Core : `test/dock.test.ts`, `dock-interactions.test.ts`, `dock.integration.test.ts`, `migration-scopes.test.ts`              |                                                                                                |
+| Tests Studio : `test/dock.test.ts`, `test/dock-view.test.js`, `e2e/dock.e2e.ts`                                                    |                                                                                                |
 
-1. Studio → onglet **Alertes** → section **Dock OBS** → **Copier** l'URL.
-2. OBS → **Docks** → **Docks de navigateur personnalisés** → nom « Raptoru », URL collée → Appliquer.
-3. Le dock suit les événements tant que Studio est ouvert. Rejouer : survoler une alerte → ⟲ (**un clic**). Le replay
-   rejoue l'animation seulement : aucun jeton, droit, Roue, fidélité ni message chat.
-4. Roue crantée : familles affichées, récompenses une par une, coûts des récompenses, réinitialisation.
-5. Nettoyer le fil : Ctrl + clic / Maj + clic (ou le bouton « Sélectionner »), puis **Masquer** ou Suppr ; corbeille
-   de l'en-tête pour restaurer.
+## 6. Utilisation (pour Antoni)
 
-## Tests effectués
+1. Studio → **Alertes** → **Dock OBS** → **Copier** l'URL (déjà faite : le dock « Raptoru » d'OBS l'utilise).
+2. OBS → Docks → Docks de navigateur personnalisés → URL collée. Après une mise à jour de Studio : clic droit dans le
+   dock → Actualiser.
+3. Rejouer une alerte : survoler → ⟲ (un clic) — l'animation seulement.
+4. Roue crantée : filtres, récompenses une par une, coûts, réinitialisation.
+5. Nettoyer le fil : Ctrl + clic / Maj + clic → Masquer ; corbeille de l'en-tête pour restaurer.
 
-- Core `dock.test.ts` (PGlite) 10/10 : projection de tous les événements (animés, absorbés, sous le seuil), données
-  d'affichage seulement, changements avec nouveau `seq`, points de chaîne et mises à jour, long-poll, reset, pagination ;
-  replay : recensement de toutes les tables (seules la file d'alertes +1, `dock_replays` +1 et la projection changent),
-  clé idempotente, un seul replay en attente, refus (non joué, sans animation, inconnu, item de replay, autre chaîne),
-  statut du replay dans le flux ; routes (credential, canal, requêtes et corps validés).
-- Core `dock.integration.test.ts` (PostgreSQL 17 réel, deux Cores) 2/2 : lecteur sans trou pendant réceptions et scans
-  concurrents ; quatre clics simultanés → un seul replay.
-- Core `migration-scopes.test.ts` 22/22 (nouvelle migration déclarée « après 25/10 »).
-- Studio `dock.test.ts` 8/8 : relais (instantané, mises à jour dans l'ordre, Core injoignable puis rétabli, reset, cache
-  borné, arrêt sans dock) ; serveur (en-têtes, clé, Host, chemins, flux, nouvelle clé, replay origine/JSON/uuid, refus
-  du Core relayé, historique, API du panneau).
-- Studio `dock-view.test.js` 15/15 : textes FR de chaque type, monnaie d'origine, états, bouton de replay, échappement
-  (pseudo, message, titre, bénéficiaire), textes très longs, ordre, SSE, panneau (clé masquée), repliage des cadeaux.
-- Aperçu réel Chromium (Playwright, données factices) à 240/300/420 px : aucune erreur console, pas de défilement
-  horizontal, lignes compactes.
-- Typecheck, lint et build globaux OK ; suites complètes : bot 285, desktop 34, Core 1188 (+ `sub-wheel-r2` intermittent,
-  vert seul), Studio 758 (+ plantage Windows connu de `prod-transport`, vert seul) ; intégration PostgreSQL réelle verte
-  (les tests de migration comptent la nouvelle migration). CI de la PR #28 verte.
+## 7. Tests automatiques (distincts de la validation réelle)
 
-V1.1 (28/10) :
+- Core : `dock.test.ts` 10/10 (projection de tous les événements, changements, points de chaîne, long-poll, reset,
+  pagination ; rejeu : seules la file d'alertes, `dock_replays` et la projection changent, idempotence, refus, routes),
+  `dock-interactions.test.ts` 4/4 (interactions projetées une fois, mise à jour en place, son payé en points non
+  dupliqué, photos), `dock.integration.test.ts` 2/2 sur PostgreSQL réel (lecteur sans trou pendant des scans concurrents,
+  quatre clics simultanés → un seul rejeu).
+- Studio : `dock.test.ts` 8/8 (relais, reprise, cache borné, serveur : en-têtes, clé, Host, flux, rejeu, historique),
+  `dock-view.test.js` 40/40 (familles, libellés, avatars, états, rejeu, échappement, détails, regroupement Bonk seul et
+  déterministe, préférences et reprise V1.1, corbeille bornée, plage de sélection, temps), `e2e/dock.e2e.ts` 4/4 dans
+  Chromium (rejeu : double clic + clic sous réponse lente = une requête ; sélection Ctrl / Maj ; corbeille et
+  préférences après rechargement).
+- Aperçus Chromium à 240 / 300 / 420 px et flux chargé simulé (la ligne lue ne bouge pas).
 
-- Core `dock-interactions.test.ts` 3/3 (PGlite) : Bonk seul et salve, Soundboard, TTS projetés une fois chacun, données
-  d'affichage seulement ; TTS démarré puis terminé = la même activité mise à jour ; son payé en points non dupliqué.
-  `dock.test.ts` 10/10 inchangé.
-- PostgreSQL 17 réel (conteneur jetable) : `dock.integration`, `migration-main-core.integration` (55 migrations
-  Production), `sub-wheel-v2.integration` : 58/58.
-- Studio `dock-view.test.js` 30/30 : titres, catégories (icône distincte chacune), états des interactions (demandé, en
-  cours, fait, échec, inconnu, annulé, en validation, remboursé), état en icône et raison hors de la ligne, replay jamais
-  pour Bonk / TTS / sons / récompenses, échappement partout (TTS, sons, groupes), liste blanche des images d'emote,
-  détail seulement s'il est utile, regroupement (Bonk, même son, TTS ; jamais les alertes ; coupé par un visible, pas
-  par un masqué ; 90 s / 5 min ; viewers mélangés ; état du groupe ; déterminisme : ordre inverse, permutation,
-  changement d'état, horodatages égaux ; clé stable en grandissant ; pagination sans effet sur les lignes récentes),
-  préférences (défauts, lecture défensive, filtre sans perte), temps relatifs (chaque palier).
-- Aperçu réel Chromium (Playwright, données factices, script hors dépôt) à 240/300/420 px, détail ouvert, préférences
-  ouvertes : aucune erreur console, pas de défilement horizontal. Flux chargé simulé (un événement toutes les 300 ms,
-  lecteur descendu de 600 px) : la ligne lue ne bouge pas (33 → 34 px), « 13 nouveaux » affiché, retour en haut au clic.
-- Pas fait ici : OBS réel (CEF).
+## 8. Limites connues
 
-V1.2 (28/10) :
+- Préférences et corbeille propres à ce dock (origine `127.0.0.1:<port>`) : un autre dock ou un autre port repart des
+  défauts.
+- Premier scan d'un Core : 30 jours, 2 000 lignes par source et par scan (les plus anciennes d'abord), puis 24 h : au-delà
+  de 2 000 interactions sur 30 jours, une partie de l'historique de plus de 24 h peut manquer dans le dock (rien d'autre).
+- Un viewer jamais vu s'affiche d'abord avec son initiale ; Lab : pas de photos (viewers simulés).
+- « N nouveaux » compte des événements, pas des lignes.
+- Images d'emotes et photos chargées depuis les CDN (requêtes sortantes du dock).
 
-- Core `dock-interactions.test.ts` 4/4 : photo du cache jointe à l'acteur, photo trouvée plus tard = la même activité
-  reprojetée, viewers sans photo demandés une fois en arrière-plan ; `dock.test.ts` 10/10.
-- Studio `dock-view.test.js` 40/40 : familles (icône distincte, cœur plein, classe de couleur, libellé écrit), libellés et
-  notes (SOUNDBOARD + nom du son, vrai nom de récompense, coût sur demande), pseudo et nom complet au survol, avatars
-  (liste blanche https, initiale, icône pour un anonyme, nombre pour une salve), états, rejeu (un seul bouton, verrouillé
-  en cours, coche), échappement partout (panneaux compris), détails seulement utiles, regroupement Bonk seul (TTS de deux
-  viewers, mêmes sons, Random Ban, Tombola, récompenses, alertes jamais groupés ; coupure ; 90 s / 5 min ; viewers
-  mélangés ; déterminisme ; clé stable ; pagination), préférences (13 filtres, reprise V1.1, Random Ban sans Tombola,
-  récompense par id même renommée, panneau), corbeille (masquer, restaurer, vider, bornes, salve masquée en entier et
-  jamais réapparue après recomposition, liste), plage Maj + clic, temps compacts.
-- E2E Chromium `dock.e2e.ts` 4/4 (vraie page, vrais relais et serveur du dock, Core scripté) : une ligne par événement
-  sauf la salve ; rejeu : double clic + clic pendant une réponse lente = **une** requête, coche ; Ctrl + clic, Maj + clic,
-  clic simple en sélection, Masquer, Annuler, Suppr sur une salve, corbeille gardée après rechargement, restauration
-  d'un seul Bonk puis de tout ; préférences Random Ban sans Tombola et une récompense par id, gardées après
-  rechargement, réinitialisation.
-- Aperçu Chromium à 240 / 300 / 420 px (lignes, détail, sélection, corbeille, préférences) : aucune erreur console,
-  aucun défilement horizontal ; à 240 px les libellés restent entiers. Flux chargé (un événement / 300 ms, lecteur
-  descendu) : la ligne lue ne bouge pas, « 13 nouveaux ».
-- Pas fait ici : OBS réel (CEF), vraies photos Twitch en Production.
+## 9. Pistes futures (non engagées — seulement sur demande d'Antoni)
 
-## Problèmes rencontrés
+- **Remboursement depuis le dock** (conception, rien de codé) : réutiliser la commande de modération existante
+  `{ action: 'refund', module: tts | soundboard | bonk, interaction_id, reason }` (permission `refund.manual`,
+  auditée, idempotente) via une route protégée comme le rejeu, limitée aux interactions `failed` /
+  `execution_unknown` non remboursées ; points de chaîne = autre chemin (annulation Twitch, permissions et limites
+  Twitch à vérifier). Décision produit à prendre : qui peut rembourser, avec quelle raison.
+- **Campagnes sponsorisées** : SE Astro `channel.activities` liste `sponsorship` / `sponsorshipPassive` sans charge
+  utile documentée (docs.streamelements.com/websockets/topics/channel-activities) ; Streamlabs Socket API : rien
+  (dev.streamlabs.com/docs/socket-api) ; Raptoru n'a aucune intégration Streamlabs. Ne pas construire sans format
+  officiel ; pas de scraping. Option : observer en local un vrai événement pendant une campagne, puis décider.
+- Évolutions après plusieurs streams d'usage ; état « traité » partagé ; dons SE manqués pendant que Studio est fermé.
 
-- Ordre à heure identique : départage par `seq`, clé de page `(occurred_at, seq)`.
-- Port 4101 déjà utilisé par `bonk-lab` : dock sur Studio + 10.
-- Un test bloquait sur une attente instantanée (boucle de reprise sans rendre la main) : attente réelle minimale dans
-  les tests ; le code réel attend 1–10 s.
+## 10. Notes de développement
 
-## Reste à faire
-
-- V1.2 : installation de Studio 0.1.17 et test d'Antoni dans OBS (photos, sélection au clavier et à la souris
-  dans CEF, corbeille et préférences après redémarrage d'OBS).
-- Plus tard : remboursement depuis le dock (conception ci-dessus, décision produit) ; état « traité » partagé ; dons SE
-  manqués pendant Studio fermé (Astra §6, V2) ; campagnes SE si une charge utile officielle apparaît ; regrouper
-  d'autres types (follows en rafale pendant un raid ?) si l'usage le demande.
-
-## Prochaine action
-
-Antoni installe Studio 0.1.17, actualise le dock dans OBS et le teste en vrai.
+- Ordre à heure identique : départage par `seq`, page `(occurred_at, seq)`.
+- Port 4101 pris par `bonk-lab` : dock sur Studio + 10.
+- Au déploiement d'un Core dont la formule de version change (V1.2 : photo), les lignes récentes sont reprojetées une
+  fois ; un retour au Core précédent fait de même, sans autre effet.
+- Test Studio local `sub-wheel-v2-studio` « Lab bug » (délai de 50 ms) : échoue sur le PC d'Antoni même sans le dock,
+  vert en CI.
