@@ -3,6 +3,7 @@ import {
   availability,
   clock,
   shopHtml,
+  viewerWait,
 } from '../extension/shared/events-shop.js';
 
 // Halloween shop (docs/HALLOWEEN.md): the pure rendering of Core's projection.
@@ -93,6 +94,44 @@ describe('events shop', () => {
     );
     expect(html).not.toContain('<img src=x');
     expect(shopHtml(state(), { filter: 'screamer' })).toContain('Rien ici');
+  });
+
+  it('unreachable shop: says so instead of loading forever', () => {
+    expect(shopHtml(null, { unreachable: true })).toContain('injoignable');
+    expect(shopHtml(null)).toContain('Chargement');
+  });
+
+  it("after a purchase: the viewer's own wait is spelled out; countdowns are tagged for in-place updates", () => {
+    const s = state({
+      items: [
+        item({
+          available: false,
+          reason: 'viewer_cooldown',
+          retry_after_ms: 113_000,
+        }),
+      ],
+    });
+    expect(viewerWait(s)).toBe(113_000);
+    expect(viewerWait(s, 120_000)).toBe(0);
+    const html = shopHtml(s);
+    expect(html).toContain('Ton prochain achat dans <b data-next>1:53</b>');
+    expect(html).toContain('data-wait="blink"');
+    expect(viewerWait(state())).toBe(0);
+  });
+
+  it('while a purchase is sent: « Envoi… » and every buy button disabled (no second tap)', () => {
+    const html = shopHtml(
+      state({ items: [item(), item({ item_id: 'fog', label: 'Brouillard' })] }),
+      { sending: 'blink' },
+    );
+    expect(html).toContain('Envoi…');
+    expect(html).toMatch(/data-buy="fog" disabled/);
+  });
+
+  it('feedback is a toast (seen wherever the viewer scrolled)', () => {
+    expect(shopHtml(state(), { notice: { text: 'Envoyé !' } })).toContain(
+      'evs-notice evs-toast',
+    );
   });
 
   it('warns when the engine is offline', () => {

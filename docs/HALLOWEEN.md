@@ -1,8 +1,11 @@
 # Opération Halloween 2026 — boutique d'événement et moteur de screamers
 
 Branche `feat/halloween` (worktree `C:\Users\Antoni\Documents\raptoru-halloween`). Stream visé : samedi 31/10, 24 h.
-**Rien n'est en Production** : ni migration, ni Core, ni Studio, ni extension. **Rien n'est validé** : aucun screamer
-n'a encore été vu et entendu par Antoni sur son écran ni dans OBS.
+**Rien n'est en Production** : ni migration, ni Core, ni Studio, ni extension.
+
+**Validé par Antoni (28/10, en local)** : les screamers s'affichent sur son écran Windows avec leur son.
+**Pas encore validé** : la capture OBS ; le parcours d'achat complet dans le Lab réel (testé seulement en automatique,
+§ 10) ; le chat.
 
 ## 1. Ce que ça fait
 
@@ -124,6 +127,11 @@ Les commandes restent **muettes tant que la boutique est fermée**.
 
 ## 8. Tester (Lab, sans Twitch, ni OBS, ni Production)
 
+0. Fermer d'abord le Studio installé : les deux utilisent les mêmes ports (4100 pour Studio, 4301 pour le Core Lab).
+   Le worktree a besoin de `apps/core-api/.env` : il ne contient que la ligne `DATABASE_URL` du checkout principal
+   (fichier créé le 28/10, ignoré par Git, sans jeton Twitch). Sans ce fichier, le Core Lab ne démarre pas et rien
+   n'est vendu (onglet Studio › Runtime local : « DATABASE_URL absent »). La base Lab `raptoru_bonk_lab` est partagée
+   avec le Studio installé : le worktree y ajoute seulement les tables `event_*`.
 1. `npm run studio` depuis le worktree, puis l'onglet Halloween. La fenêtre overlay s'ouvre sur l'écran choisi.
    **Elle est visible sur le vrai bureau** : à tester quand Antoni le décide.
 2. « Tester » un effet, puis un screamer : vérifier l'image, le son, le clic qui traverse et STOP ALL.

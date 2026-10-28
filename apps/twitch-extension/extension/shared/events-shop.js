@@ -63,9 +63,21 @@ export function availability(item, elapsedMs = 0) {
   return { ok: false, text: 'Indisponible' };
 }
 
-/** The shop's HTML (pure, tested). `ui`: { filter, confirming, converting, notice, elapsedMs, convertN }. */
+/** The viewer's own gap after a purchase (every item says viewer_cooldown): ms left, 0 when none. */
+export function viewerWait(s, elapsedMs = 0) {
+  const waits = (s?.items ?? []).filter((i) => i.reason === 'viewer_cooldown').map((i) => i.retry_after_ms ?? 0);
+  return waits.length ? Math.max(0, Math.max(...waits) - elapsedMs) : 0;
+}
+
+/**
+ * The shop's HTML (pure, tested). `ui`: { filter, confirming, converting, notice, elapsedMs, convertN, unreachable }.
+ * Countdowns carry `data-wait` / `data-next`: the view updates their text in place every second (no rebuild).
+ */
 export function shopHtml(s, ui = {}) {
-  if (!s) return '<div class="evs-empty">Chargement de la boutique…</div>';
+  if (!s)
+    return ui.unreachable
+      ? '<div class="evs-empty">👻 Boutique injoignable pour le moment… nouvel essai automatique.</div>'
+      : '<div class="evs-empty">Chargement de la boutique…</div>';
   if (!s.enabled) return '<div class="evs-empty">🎃 La boutique Halloween est fermée pour le moment.</div>';
   const elapsed = ui.elapsedMs ?? 0;
   const filter = ui.filter ?? 'all';
@@ -78,16 +90,17 @@ export function shopHtml(s, ui = {}) {
     .map((i) => {
       const a = availability(i, elapsed);
       const confirming = ui.confirming === i.item_id;
+      const sending = ui.sending === i.item_id;
       const poor = balance !== null && balance < i.price;
-      const disabled = !a.ok || poor || balance === null;
+      const disabled = !a.ok || poor || balance === null || !!ui.sending;
       return `<article class="evs-card k-${esc(i.kind)}${a.ok ? '' : ' is-off'}">
         <div class="evs-thumb"><img src="${esc(i.thumb)}" alt="" loading="lazy">
           <span class="evs-kind">${esc(KIND_LABEL[i.kind] ?? i.kind)}</span>
-          ${a.text ? `<span class="evs-state${a.wait ? ' is-wait' : ''}">${esc(a.text)}</span>` : ''}</div>
+          ${a.text ? `<span class="evs-state${a.wait ? ' is-wait' : ''}"${a.wait ? ` data-wait="${esc(i.item_id)}"` : ''}>${esc(a.text)}</span>` : ''}</div>
         <div class="evs-meta"><strong title="${esc(i.description)}">${esc(i.label)}</strong>
-          <button type="button" class="evs-buy${confirming ? ' is-confirm' : ''}" data-buy="${esc(i.item_id)}"${disabled ? ' disabled' : ''}
-            aria-label="${confirming ? `Confirmer l’achat de ${esc(i.label)}` : `Acheter ${esc(i.label)} pour ${i.price} Bonbons`}">
-            ${confirming ? 'Confirmer ?' : `${nf(i.price)} 🍬`}</button></div>
+          <button type="button" class="evs-buy${confirming || sending ? ' is-confirm' : ''}" data-buy="${esc(i.item_id)}"${disabled ? ' disabled' : ''}
+            aria-label="${sending ? `Envoi de ${esc(i.label)}` : confirming ? `Confirmer l’achat de ${esc(i.label)}` : `Acheter ${esc(i.label)} pour ${i.price} Bonbons`}">
+            ${sending ? 'Envoi…' : confirming ? 'Confirmer ?' : `${nf(i.price)} 🍬`}</button></div>
       </article>`;
     })
     .join('');
@@ -105,6 +118,7 @@ export function shopHtml(s, ui = {}) {
       </div>
       <p class="evs-earn">Gagne des Bonbons : sub ${nf(earn.sub_reward)} · par sub offert ${nf(earn.gift_giver_per_sub)} · sub reçu ${nf(earn.gift_recipient)}</p>
       ${s.engine_ready ? '' : '<p class="evs-warn">👻 Raptoru n’est pas prêt à avoir peur : les achats reviennent dès que son écran est prêt.</p>'}
+      ${viewerWait(s, elapsed) > 0 ? `<p class="evs-next">⏳ Ton prochain achat dans <b data-next>${clock(viewerWait(s, elapsed))}</b></p>` : ''}
     </div>
     ${
       conv.cap_per_hour > 0 && balance !== null
@@ -123,7 +137,7 @@ export function shopHtml(s, ui = {}) {
     <nav class="evs-filters" aria-label="Filtrer">${KINDS.map(
       (k) => `<button type="button" data-filter="${k.id}" class="${k.id === filter ? 'is-on' : ''}">${k.label}</button>`,
     ).join('')}</nav>
-    ${ui.notice ? `<p class="evs-notice${ui.notice.bad ? ' is-bad' : ''}" role="status">${esc(ui.notice.text)}</p>` : ''}
+    ${ui.notice ? `<p class="evs-notice evs-toast${ui.notice.bad ? ' is-bad' : ''}" role="status">${esc(ui.notice.text)}</p>` : ''}
     <div class="evs-grid">${cards || '<div class="evs-empty">Rien ici pour le moment.</div>'}</div>
     ${recent ? `<section class="evs-recent"><h4>Tes derniers achats</h4><ul>${recent}</ul></section>` : ''}`;
 }
@@ -143,9 +157,21 @@ export function createEventShopView({ document, client, onState }) {
   let timer = null;
   let ticker = null;
   let busy = false;
+  let unreachable = false;
+  let sending = null;
+  // A rebuild between the press and the release of a button loses the click: none while a pointer is down.
+  let pressed = false;
+  let pending = false;
 
   const render = () => {
+    if (pressed) {
+      pending = true;
+      return;
+    }
+    pending = false;
     node.innerHTML = shopHtml(state, {
+      unreachable,
+      sending,
       filter,
       confirming,
       converting,
@@ -172,11 +198,43 @@ export function createEventShopView({ document, client, onState }) {
   async function load() {
     try {
       take(await client.eventsState());
+      unreachable = false;
     } catch {
-      /* keep the last state; the next refresh retries */
+      // Keep the last state; the next refresh retries. Without any, say so instead of « Chargement » forever.
+      unreachable = true;
     }
     render();
   }
+
+  const release = () => {
+    pressed = false;
+    if (pending) render();
+  };
+  node.addEventListener('pointerdown', () => {
+    pressed = true;
+  });
+  // After the click that follows this release (same input task), never before it.
+  node.addEventListener('pointerup', () => setTimeout(release, 0));
+  node.addEventListener('pointercancel', release);
+  node.addEventListener('pointerleave', release);
+
+  /** The countdowns, in place; a card whose wait is over gets its button back (one rebuild). */
+  const tick = () => {
+    if (!state?.items) return;
+    const elapsed = Date.now() - loadedAt;
+    for (const span of node.querySelectorAll('[data-wait]')) {
+      const item = state.items.find((i) => i.item_id === span.dataset.wait);
+      const a = item ? availability(item, elapsed) : { ok: true };
+      if (a.ok) return render();
+      span.textContent = a.text;
+    }
+    const next = node.querySelector('[data-next]');
+    if (next) {
+      const left = viewerWait(state, elapsed);
+      if (left <= 0) return render();
+      next.textContent = clock(left);
+    }
+  };
 
   node.addEventListener('click', async (ev) => {
     const t = ev.target.closest('button');
@@ -221,6 +279,9 @@ export function createEventShopView({ document, client, onState }) {
     confirming = null;
     clearTimeout(confirmTimer);
     busy = true;
+    // At once: the tap is seen, and no second purchase can start until the Core answers.
+    sending = id;
+    render();
     try {
       const out = await client.eventsBuy(id);
       take(out?.event_shop);
@@ -230,6 +291,7 @@ export function createEventShopView({ document, client, onState }) {
       void load();
     } finally {
       busy = false;
+      sending = null;
       render();
     }
   });
@@ -240,10 +302,8 @@ export function createEventShopView({ document, client, onState }) {
       render();
       void load();
       timer = setInterval(() => void load(), REFRESH_MS);
-      // Countdowns move every second without a request.
-      ticker = setInterval(() => {
-        if (state?.items?.some((i) => !i.available && i.retry_after_ms)) render();
-      }, 1000);
+      // Countdowns move every second without a request, and without rebuilding the shop.
+      ticker = setInterval(tick, 1000);
     },
     attached() {},
     destroy() {

@@ -30,6 +30,8 @@ export const HALLOWEEN = {
   maxPlayMs: 80_000,
   heartbeatMs: 3000,
   claimMs: 700,
+  /** At Studio's start, the Lab Core it launches gets this long before an outage is written to the journal. */
+  coreStartGraceMs: 30_000,
 } as const;
 
 export interface HalloweenSettings {
@@ -144,6 +146,11 @@ export class HalloweenRuntime {
   private claiming = false;
   private coreError: string | null = null;
   private coreOk = false;
+  /** Studio's start: the Lab Core it launches needs a few seconds; no « injoignable » in the journal meanwhile. */
+  private startedAt = 0;
+  private everJoined = false;
+  /** The current outage is already in the journal (once per outage). */
+  private downLogged = false;
   private events: { at: string; text: string; level: 'info' | 'error' }[] = [];
 
   constructor(private readonly d: HalloweenDeps) {}
@@ -163,6 +170,7 @@ export class HalloweenRuntime {
   }
 
   async start() {
+    this.startedAt = this.now();
     await mkdir(join(this.d.dir, 'media'), { recursive: true });
     const saved = await readFile(
       join(this.d.dir, 'settings.json'),
@@ -300,10 +308,17 @@ export class HalloweenRuntime {
       });
       if (!this.coreOk) this.log('Core joint');
       this.coreOk = true;
+      this.everJoined = true;
+      this.downLogged = false;
       this.coreError = null;
     } catch (e) {
-      if (this.coreOk || !this.coreError)
+      const starting =
+        !this.everJoined &&
+        this.now() - this.startedAt < HALLOWEEN.coreStartGraceMs;
+      if (!starting && !this.downLogged) {
         this.log(`Core injoignable : ${(e as Error).message}`, 'error');
+        this.downLogged = true;
+      }
       this.coreOk = false;
       this.coreError = (e as Error).message;
     }

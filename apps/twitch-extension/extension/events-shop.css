@@ -16,7 +16,11 @@
   padding: 10px 10px 14px;
   color: var(--evs-text);
   background:
-    radial-gradient(120% 60% at 50% -10%, rgba(255, 138, 43, 0.16), transparent 60%),
+    radial-gradient(
+      120% 60% at 50% -10%,
+      rgba(255, 138, 43, 0.16),
+      transparent 60%
+    ),
     linear-gradient(180deg, #160a22 0%, var(--evs-bg) 55%);
   border-radius: 12px;
   overflow: hidden;
@@ -28,8 +32,16 @@
   inset: -20% -10% auto;
   height: 140px;
   background:
-    radial-gradient(40% 50% at 20% 60%, rgba(214, 205, 240, 0.12), transparent 70%),
-    radial-gradient(45% 55% at 75% 40%, rgba(214, 205, 240, 0.1), transparent 70%);
+    radial-gradient(
+      40% 50% at 20% 60%,
+      rgba(214, 205, 240, 0.12),
+      transparent 70%
+    ),
+    radial-gradient(
+      45% 55% at 75% 40%,
+      rgba(214, 205, 240, 0.1),
+      transparent 70%
+    );
   filter: blur(14px);
   pointer-events: none;
   animation: evs-mist 18s ease-in-out infinite alternate;
@@ -76,7 +88,12 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #ffcf9c, var(--evs-orange) 60%, #b84f0c);
+  background: radial-gradient(
+    circle at 35% 30%,
+    #ffcf9c,
+    var(--evs-orange) 60%,
+    #b84f0c
+  );
   box-shadow: 0 0 16px rgba(255, 138, 43, 0.45);
   font-size: 17px;
 }
@@ -186,7 +203,7 @@
 
 .evs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
   gap: 8px;
 }
 .evs-card {
@@ -312,4 +329,29 @@
 }
 .evs-recent .st-failed {
   color: var(--evs-bad);
+}
+
+/* Feedback pinned to the bottom of the view: seen wherever the viewer has scrolled (a screamer low in the grid). */
+.evs-toast {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 14px;
+  z-index: 50;
+  margin: 0;
+  background: #2a1406;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  font-weight: 600;
+}
+.evs-toast.is-bad {
+  background: #2a0d12;
+}
+.evs-next {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--evs-orange-2);
+}
+.evs-next b {
+  font-variant-numeric: tabular-nums;
 }

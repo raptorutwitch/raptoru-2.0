@@ -174,7 +174,11 @@ export function engineState(s: Status | null): {
   if (s.core && !s.core.connected)
     return {
       tone: 'warn',
-      text: 'Overlay prêt · Core injoignable (achats suspendus)',
+      // Lab: the local Core is started by Studio (onglet Studio › Runtime local), its error is shown there.
+      text:
+        s.environment === 'lab'
+          ? 'Overlay prêt · Core Lab injoignable (achats suspendus) — voir l’onglet Studio › Runtime local'
+          : 'Overlay prêt · Core de Production injoignable (achats suspendus)',
     };
   return {
     tone: 'ok',
