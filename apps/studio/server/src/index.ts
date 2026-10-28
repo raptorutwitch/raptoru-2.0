@@ -1121,11 +1121,14 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     core: alertsCore,
     environment: alertsEnv,
     channelId: cockpitChannel,
-    studioId: plan.production?.installation.installationId ?? 'studio-lab-halloween',
+    studioId:
+      plan.production?.installation.installationId ?? 'studio-lab-halloween',
     fromMain: (req) => fromMain(req, { RAPTORU_MAIN_TOKEN: mainToken }),
     log: (line) => console.log(line),
   });
-  await halloween.start().catch((e: Error) => console.error('[halloween] start failed', e.message));
+  await halloween
+    .start()
+    .catch((e: Error) => console.error('[halloween] start failed', e.message));
   halloweenRef = halloween;
   const httpServer = createStudioServer(
     lab,
