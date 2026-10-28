@@ -10,6 +10,8 @@
 // storage, outside Git); thumbs = apps/twitch-extension/extension/assets/halloween (shipped with the extension).
 // A media already converted from the same original (same size and date) is kept unless --force.
 
+import process from 'node:process';
+import console from 'node:console';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,

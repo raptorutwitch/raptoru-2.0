@@ -29,6 +29,8 @@ import type { CautionService } from '../caution/service.js';
 import type { VotekickService } from '../votekick/service.js';
 import type { SpotifyService } from '../spotify/service.js';
 import { SpotifyChat } from '../spotify/chat.js';
+import { EventShopChat } from '../event-shop/chat.js';
+import type { EventShopService } from '../event-shop/service.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import { WordGameService } from '../word-game/service.js';
@@ -65,6 +67,8 @@ export function createChatGames(o: {
   spotify?: SpotifyService | null;
   /** Roue du Sub V2: « !roue » and the natural invitations (silent while the wheel is in mode v1). */
   subWheel?: SubWheelService;
+  /** Halloween shop: `!peur`, `!bonbons` (silent while the event is closed). */
+  eventShop?: EventShopService | null;
 }) {
   // Tombola's chat words stay Tombola's (reserved); Roulette / Slot words are the mini-games' (StreamElements aliases);
   // `!tts` is the TTS's.
@@ -142,6 +146,14 @@ export function createChatGames(o: {
   const spotifyChat = o.spotify ? new SpotifyChat(o.spotify) : null;
   if (spotifyChat)
     chatModules.push({ name: 'spotify', chat: (m) => spotifyChat.chat(m) });
+  const eventShopChat = o.eventShop
+    ? new EventShopChat(o.db, o.clock, o.eventShop)
+    : null;
+  if (eventShopChat)
+    chatModules.push({
+      name: 'event_shop',
+      chat: (m) => eventShopChat.chat(m),
+    });
   if (o.subWheel) {
     const wheel = new SubWheelChat(o.db, o.clock, o.subWheel);
     chatModules.push({

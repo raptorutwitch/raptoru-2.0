@@ -149,6 +149,10 @@ export function createLabCore({
   const subWheel = new SubWheelService(db, systemClock, undefined, economy, {
     labCredits: true,
   });
+  // Boutique d'événement (docs/HALLOWEEN.md): the Lab's simulated subs / gifts earn Bonbons too.
+  const eventShop = new EventShopService(db, systemClock, economy, {
+    rewardSimulations: true,
+  });
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
       db,
@@ -164,12 +168,9 @@ export function createLabCore({
       votekick,
       spotify,
       subWheel,
+      eventShop,
     });
   const alertsService = new AlertsService(db, systemClock);
-  // Boutique d'événement (docs/HALLOWEEN.md): the Lab's simulated subs / gifts earn Bonbons too.
-  const eventShop = new EventShopService(db, systemClock, economy, {
-    rewardSimulations: true,
-  });
   alertsService.attachListener('event_shop', (q, e) => eventShop.onAlert(q, e));
   const routes = [
     ...bonkLabRoutes(bonk, viewers),

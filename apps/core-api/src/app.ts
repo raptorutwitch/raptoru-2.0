@@ -180,6 +180,7 @@ export function createCore(
     chat: createChatGames({
       // « !roue » and the invitations: silent while the wheel is in mode v1 (production today).
       subWheel,
+      eventShop,
       db,
       clock,
       economy,
