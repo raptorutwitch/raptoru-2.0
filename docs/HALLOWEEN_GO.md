@@ -25,12 +25,11 @@ Rien de ce document n'est exécuté sans le GO d'Antoni. Chaque étape a sa vér
 
 **Arrêt** si la sauvegarde échoue. L'outil refuse de toute façon une migration sans sauvegarde de moins de 60 min.
 
-## ⚠ GitHub Actions est bloqué (constaté le 28/10)
+## GitHub Actions : rétabli (28/10)
 
-Depuis le dernier envoi, GitHub refuse de démarrer tout job : « recent account payments have failed or your spending
-limit needs to be increased ». Ce n'est pas un échec de code : aucun job n'a tourné. La dernière CI complète, verte,
-porte sur `281cf0a`. Depuis, seuls un test supplémentaire et la documentation ont changé, et ils sont vérifiés en
-local.
+Bloqué par la facturation le 28/10 après-midi, Actions fonctionne de nouveau depuis le passage du dépôt en public :
+la CI complète est verte sur `523a27e` (run 40719308960, tous les jobs, dont e2e et images). **La voie A s'applique.**
+La voie B reste documentée en secours si Actions retombait.
 
 Deux chemins, au choix d'Antoni :
 
