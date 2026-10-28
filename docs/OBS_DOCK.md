@@ -20,10 +20,10 @@ rapport Astra `C:\Users\Antoni\Documents\Codex\2026-10-27\files-pasted-by-the-us
   déployé avec la migration `20261111130000` en post-deploy (`DÉPLOYÉ`, santé OK), bot inchangé (`4ba9243`),
   Studio **0.1.16** publiée (mise à jour 0.1.15 → 0.1.16 : profil et réglages identiques). URL et clé du dock
   inchangées. Reste : installation, retour d'ergonomie d'Antoni (validation).
-- **V1.2** (28/10, branche `feat/obs-dock-v12` depuis `origin/main` `5313e11`, même worktree) : passe de finition
-  (identité par famille, avatars, rejeu en un clic, Bonk seul regroupé, préférences détaillées, sélection et corbeille).
-  Voir « V1.2 » ci-dessous. **Non livrée** : aucune migration ; livraison = Core (avatars) puis Studio, après le GO
-  d'Antoni.
+- **V1.2** : **livrée le 28/10** — PR #32 fusionnée (`dc06344`), Core déployé seul sans migration (`DÉPLOYÉ`,
+  santé OK ; retour `190bc0a`), bot inchangé (`4ba9243`), Studio **0.1.17** publiée (mise à jour 0.1.16 → 0.1.17 :
+  8 fichiers utilisateur identiques). URL et clé du dock inchangées ; préférences V1.1 reprises. Reste : test d'Antoni
+  dans OBS.
 
 ## V1.2 — finition : identité, avatars, un clic, préférences, corbeille
 
@@ -392,12 +392,12 @@ V1.2 (28/10) :
 
 ## Reste à faire
 
-- V1.2 : PR, livraison après le GO d'Antoni (Core pour les avatars, puis Studio ; aucune migration), puis son test
-  dans OBS (photos, sélection au clavier et à la souris dans CEF, corbeille et préférences après redémarrage d'OBS).
+- V1.2 : installation de Studio 0.1.17 et test d'Antoni dans OBS (photos, sélection au clavier et à la souris
+  dans CEF, corbeille et préférences après redémarrage d'OBS).
 - Plus tard : remboursement depuis le dock (conception ci-dessus, décision produit) ; état « traité » partagé ; dons SE
   manqués pendant Studio fermé (Astra §6, V2) ; campagnes SE si une charge utile officielle apparaît ; regrouper
   d'autres types (follows en rafale pendant un raid ?) si l'usage le demande.
 
 ## Prochaine action
 
-V1.2 : PR prête ; livraison seulement après le GO d'Antoni, puis son test dans son OBS.
+Antoni installe Studio 0.1.17, actualise le dock dans OBS et le teste en vrai.
