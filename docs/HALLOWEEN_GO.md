@@ -25,11 +25,32 @@ Rien de ce document n'est exécuté sans le GO d'Antoni. Chaque étape a sa vér
 
 **Arrêt** si la sauvegarde échoue. L'outil refuse de toute façon une migration sans sauvegarde de moins de 60 min.
 
+## ⚠ GitHub Actions est bloqué (constaté le 28/10)
+
+Depuis le dernier envoi, GitHub refuse de démarrer tout job : « recent account payments have failed or your spending
+limit needs to be increased ». Ce n'est pas un échec de code : aucun job n'a tourné. La dernière CI complète, verte,
+porte sur `281cf0a`. Depuis, seuls un test supplémentaire et la documentation ont changé, et ils sont vérifiés en
+local.
+
+Deux chemins, au choix d'Antoni :
+
+- **A — Rétablir Actions** (GitHub › Settings › Billing & plans : paiement ou plafond de dépenses). Le plan se déroule
+  alors avec la CI et les workflows, comme d'habitude.
+- **B — Sans Actions (prévu par les outils)** :
+  - la fusion n'est pas bloquée : le dépôt n'a pas de protection de branche ;
+  - comme `main` est un ancêtre de la branche, le code fusionné est **exactement** l'arbre de la branche ;
+  - la preuve CI est donc refaite en local sur ce même arbre (lint, typecheck, build, toutes les suites, e2e,
+    PostgreSQL réel) ;
+  - le Core se déploie avec `--skip-ci-gate`, arbitrage local tracé par l'outil ;
+  - Studio se construit et se publie depuis le PC (§ 4, voie B).
+
 ## 2. Fusion de la PR #35 (agent, sur GO)
 
-- `gh pr merge 35 --merge`, puis attendre la CI de `main` (environ 15 min). C'est la seule exécution de CI nécessaire.
-
-**Arrêt** si la CI de `main` est rouge : on corrige, rien n'est déployé.
+- `gh pr merge 35 --merge`.
+- **Voie A** : attendre la CI de `main` (environ 15 min). **Arrêt** si elle est rouge.
+- **Voie B** : vérifier que l'arbre du commit de fusion est identique à celui de la branche
+  (`git rev-parse <fusion>^{tree}` = `git rev-parse feat/halloween^{tree}`). La preuve locale vaut alors pour `main`.
+  **Arrêt** sinon.
 
 ## 3. Core : migration et déploiement (agent, sur GO)
 
@@ -38,6 +59,7 @@ Depuis un worktree à jour de `origin/main` :
 ```
 node scripts/coolify-deploy.mjs plan core <sha40 de main>                  → doit dire PRÊT
 node scripts/coolify-deploy.mjs deploy core <sha40> --migrations-approved --go
+  (voie B : ajouter --skip-ci-gate aux deux commandes ; l'outil inscrit « CI NON vérifiée (arbitrage local) »)
 node scripts/coolify-deploy.mjs status core
 ```
 
@@ -77,8 +99,14 @@ Le workflow GitHub « Studio — construire / publier » sur `main` :
 
 - `publish = draft`, vérification, puis `publish = public` (environ 25 min sur Windows) ;
 - il teste aussi la mise à jour 0.1.17 → nouvelle version, avec les données intactes ;
-- secours sans minutes GitHub : construction locale `release.mjs --ci --dry-run --out=<dossier>` depuis une copie
-  détachée de `origin/main`, puis `release.mjs --publish-from=<dossier> --public`.
+- **voie B, sans GitHub Actions** :
+  - depuis une copie **détachée et propre** de `origin/main` (jamais le checkout principal), lancer
+    `node apps/studio/desktop/scripts/release.mjs --ci --dry-run --out=<dossier>` : tests Studio Windows, paquet et
+    vérifications ;
+  - puis `node apps/studio/desktop/scripts/release.mjs --publish-from=<dossier> --public` : brouillon, publication et
+    re-téléchargement comparé, via la connexion `gh` du PC ;
+  - différence avec la voie A : le test automatique de mise à jour 0.1.17 → nouvelle version n'est pas rejoué. La
+    sauvegarde de `%APPDATA%` (§ 5.1) et la réinstallation de 0.1.17 couvrent ce risque.
 
 **Arrêt** : la vérification du paquet ou le test de mise à jour échoue → on ne publie pas, le Studio installé reste
 en 0.1.17.
