@@ -18,7 +18,7 @@ import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import type { EconomyPort } from '../economy/economy.js';
 import { LabWalletError } from '../lab-moderation/store.js';
-import { defaultItems, thumbOf } from './catalog.js';
+import { categoryOf, defaultItems, editionTitle, thumbOf } from './catalog.js';
 import {
   balanceOf,
   byKey,
@@ -223,9 +223,14 @@ export class EventShopService {
   async updateSettings(
     channelId: string,
     patch: { enabled?: boolean; rules?: Partial<EventShopRules> },
-  ): Promise<EventShopSettings> {
+  ): Promise<EventShopSettings & { refunded?: number }> {
     return this.db.tx(async (q) => {
       const cur = await this.ensure(q, channelId);
+      // Under the admissions' lock: no purchase slips in between the switch and the closing below.
+      await q.query(
+        'select 1 from event_shop_settings where channel_id = $1 for update',
+        [channelId],
+      );
       const rules = EventShopRulesSchema.parse({
         ...cur.rules,
         ...(patch.rules ?? {}),
@@ -235,7 +240,16 @@ export class EventShopService {
         'update event_shop_settings set enabled = $2, rules = $3, updated_at = $4 where channel_id = $1',
         [channelId, enabled, JSON.stringify(rules), this.now()],
       );
-      return { season: cur.season, enabled, rules };
+      if (!(cur.enabled && !enabled))
+        return { season: cur.season, enabled, rules };
+      // Controlled closing: what was bought but not yet handed to Studio is refunded once (event_closed); a purchase
+      // already handed over or on screen ends normally (it may be seen). Balances, ledger and catalogue stay.
+      const waiting = await q.query<PurchaseRow>(
+        `select * from event_shop_purchases where channel_id = $1 and status = 'queued' and attempt_id is null for update`,
+        [channelId],
+      );
+      for (const r of waiting) await this.fail(q, r, 'event_closed', true);
+      return { season: cur.season, enabled, rules, refunded: waiting.length };
     });
   }
 
@@ -508,6 +522,8 @@ export class EventShopService {
   async claim(studioInstanceId: string, channelId: string) {
     return this.db.tx(async (q) => {
       await this.sweep(q, channelId);
+      // A closed event hands nothing more to Studio (an old request or a late claim never plays a closed shop).
+      if (!(await this.ensure(q, channelId)).enabled) return null;
       const engine = await this.engine(q, channelId);
       if (!engine || engine.instance !== studioInstanceId) return null;
       const executing = await q.query(
@@ -915,6 +931,9 @@ export class EventShopService {
           req.viewer,
         );
         if (!viewer) throw new EventShopError(404, 'viewer_unknown');
+        // An automatic reward (a raffle) pays only during the event; Studio's own hand grant stays possible.
+        if (!s.enabled && req.reason === 'raffle' && req.amount > 0)
+          throw new EventShopError(409, 'event_closed');
         const r = await move(q, {
           season: s.season,
           channelId: req.channel_id,
@@ -1024,6 +1043,7 @@ export class EventShopService {
           description: it.description,
           price: it.price,
           thumb: thumbOf(it),
+          category: categoryOf(it),
           available: !!engine && media && !limit,
           reason: !engine
             ? 'engine_offline'
@@ -1044,6 +1064,7 @@ export class EventShopService {
       return {
         enabled: s.enabled,
         season: s.season,
+        edition: { id: s.season, title: editionTitle(s.season) },
         engine_ready: !!engine,
         balance: viewerId
           ? await balanceOf(q, s.season, channelId, viewerId)
@@ -1068,6 +1089,25 @@ export class EventShopService {
         recent,
       };
     });
+  }
+
+  /**
+   * `!solde` during the event: « 17 Bonbons 🍬 » (0 for a viewer who never had any), or null when the event is closed
+   * or was never set up. Read-only (creates nothing).
+   */
+  async balanceLine(
+    channelId: string,
+    viewerId: string,
+  ): Promise<string | null> {
+    const s = (
+      await this.db.query<{ season: string; enabled: boolean }>(
+        'select season, enabled from event_shop_settings where channel_id = $1',
+        [channelId],
+      )
+    )[0];
+    if (!s?.enabled) return null;
+    const n = await balanceOf(this.db, s.season, channelId, viewerId);
+    return `${n.toLocaleString('fr-FR').replace(/\s/g, ' ')} Bonbon${n >= 2 ? 's' : ''} 🍬`;
   }
 
   /** Studio's panel: settings, the whole catalogue, the overlay, recent purchases and movements, totals. */

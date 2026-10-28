@@ -123,10 +123,8 @@ const SEEDS: Seed[] = [
     ] as const
   ).map(([id, label]) =>
     // A media item id may equal an effect id (glitch): screamers are prefixed so both coexist.
-    media('screamer', `s-${id}`, label, 10, {
-      media_id: id,
-      description: 'Screamer plein écran, avec son.',
-    }),
+    // No description: the thumbnail says it (the same sentence on 26 rows says nothing).
+    media('screamer', `s-${id}`, label, 10, { media_id: id }),
   ),
 ];
 
@@ -146,3 +144,34 @@ export function thumbOf(item: Pick<EventShopItem, 'media_id' | 'effect'>) {
     ? `assets/halloween/${item.media_id}.jpg`
     : `assets/halloween/fx-${item.effect}.svg`;
 }
+
+/**
+ * The extension's « Événements » sections, in their order. An item says its own (params.category, set from Studio);
+ * otherwise its kind decides: screamers, apparitions (eyes and silhouette are drawn apparitions), screen disruptions.
+ * « sound » (audio only) and « special » (elaborate combinations) exist for items Studio adds later.
+ */
+export const EVENT_CATEGORIES = [
+  'screamer',
+  'apparition',
+  'sound',
+  'disruption',
+  'special',
+] as const;
+export type EventCategory = (typeof EVENT_CATEGORIES)[number];
+
+export function categoryOf(
+  item: Pick<EventShopItem, 'kind' | 'effect' | 'params'>,
+): EventCategory {
+  const own = item.params?.category;
+  if (EVENT_CATEGORIES.includes(own as EventCategory))
+    return own as EventCategory;
+  if (item.kind === 'screamer') return 'screamer';
+  if (item.kind === 'apparition') return 'apparition';
+  return item.effect === 'eyes' || item.effect === 'silhouette'
+    ? 'apparition'
+    : 'disruption';
+}
+
+/** The edition's public name (the module is « Événements »; inside, the edition of the moment). */
+const EDITIONS: Record<string, string> = { 'halloween-2026': 'Halloween 2026' };
+export const editionTitle = (season: string) => EDITIONS[season] ?? season;

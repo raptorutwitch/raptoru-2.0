@@ -13,6 +13,12 @@ import type { WalletService } from './wallet-service.js';
 // returns the reply. The same wallet operations are usable without any chat output.
 
 export class WalletChat {
+  /**
+   * A temporary event's line after the balance (Halloween: « 17 Bonbons »), or null outside the event. Read-only;
+   * a failure only drops the line — `!solde` itself never fails because of it.
+   */
+  balanceExtra: ((viewerId: string) => Promise<string | null>) | null = null;
+
   constructor(
     private readonly wallet: WalletService,
     private readonly currencies: CurrencyService,
@@ -35,19 +41,26 @@ export class WalletChat {
         message: `@${(other ?? viewer).displayName} - monnaie indisponible.`,
         result: null,
       };
+    // Only the main currency's `!solde` carries the event line (another currency's balance stays as it is).
+    const extra =
+      this.balanceExtra && !currencyId
+        ? await this.balanceExtra(viewer.twitchUserId).catch(() => null)
+        : null;
     return {
-      message: other
-        ? walletMessages.balanceOf(
-            other.displayName,
-            viewer.displayName,
-            view.balance,
-            view.currency,
-          )
-        : walletMessages.balance(
-            viewer.displayName,
-            view.balance,
-            view.currency,
-          ),
+      message: `${
+        other
+          ? walletMessages.balanceOf(
+              other.displayName,
+              viewer.displayName,
+              view.balance,
+              view.currency,
+            )
+          : walletMessages.balance(
+              viewer.displayName,
+              view.balance,
+              view.currency,
+            )
+      }${extra ? ` | ${extra}` : ''}`,
       result: null,
     };
   }

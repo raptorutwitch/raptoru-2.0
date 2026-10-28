@@ -318,6 +318,10 @@ export class LabEbs {
    * This façade only mirrors them into the session the extension expects.
    */
   private labCore: LabCoreCall | null = null;
+  /** Halloween shop open in the Lab Core (the « Événements » module shows only then); refreshed in the background. */
+  private eventShopOpen = false;
+  private eventShopEdition: Json | null = null;
+  private eventShopCheckedAt = 0;
   private coreModules: Record<
     'tts' | 'soundboard' | 'bonk' | 'raffle',
     string
@@ -331,6 +335,7 @@ export class LabEbs {
 
   connectLab(core: LabCoreCall) {
     this.labCore = core;
+    this.refreshEventShop();
   }
 
   /** Studio changed a wallet / module state: re-read on the next extension request. */
@@ -1978,7 +1983,27 @@ export class LabEbs {
 
   // --- helpers ----------------------------------------------------------------------------------
 
+  /** The shop's open / closed state for the session, at most every 3 s (the session itself stays synchronous). */
+  private refreshEventShop() {
+    if (!this.labCore || Date.now() - this.eventShopCheckedAt < 3000) return;
+    this.eventShopCheckedAt = Date.now();
+    void this.labCore<Json>(
+      `/v1/lab/events/channels/${LAB_CHANNEL.id}/state`,
+      undefined,
+      { timeoutMs: 2000 },
+    ).then(
+      (s) => {
+        this.eventShopOpen = s.enabled === true;
+        this.eventShopEdition = (s.edition as Json | undefined) ?? null;
+      },
+      () => {
+        this.eventShopOpen = false;
+      },
+    );
+  }
+
   private session(identity: LabIdentity, identityShared: boolean): Json {
+    this.refreshEventShop();
     const isMod = identity.role !== 'viewer';
     const base = this.demo(isMod ? 'moderator' : 'paid');
     const user = this.user(identity.twitchUserId);
@@ -2085,8 +2110,10 @@ export class LabEbs {
       commands_public: Boolean(this.labCore),
       // Roue du Sub V2 (R8): « Roue du Sub » in the Hub (own tours; the team's part for moderators).
       sub_wheel: Boolean(this.labCore),
-      // Halloween shop: « Halloween » in the Hub (its own /events/state says whether it is open).
-      event_shop: this.labCore ? { enabled: true } : null,
+      // Halloween shop: « Événements » in the Hub only while the Lab Core says the event is open.
+      event_shop: this.labCore
+        ? { enabled: this.eventShopOpen, edition: this.eventShopEdition }
+        : null,
       role: identity.role,
       channel_id: LAB_CHANNEL.id,
       channel_login: LAB_CHANNEL.login,

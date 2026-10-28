@@ -151,6 +151,11 @@ export function createCore(
   // Boutique d'événement (docs/HALLOWEEN.md): Bonbons for real Twitch subs / gifts, once per event.
   const eventShop = new EventShopService(db, clock, economy);
   alerts.attachListener('event_shop', (q, e) => eventShop.onAlert(q, e));
+  // `!solde` shows the Bonbons too while the event is open (the channel's own shop).
+  wallet.chat.balanceExtra = async (viewerId) => {
+    const ch = broadcasterOf();
+    return ch ? eventShop.balanceLine(ch, viewerId) : null;
+  };
   return {
     credits,
     daily: new DailyService(db, clock, credits),

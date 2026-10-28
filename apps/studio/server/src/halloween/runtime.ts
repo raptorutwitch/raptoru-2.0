@@ -348,7 +348,8 @@ export class HalloweenRuntime {
         await this.finish(c, 'failed', true, 'no_end');
       return;
     }
-    if (!this.d.core || !this.ready || this.claiming) return;
+    // No claim while the Core does not answer the heartbeat (its outage is already in the journal, once).
+    if (!this.d.core || !this.ready || this.claiming || !this.coreOk) return;
     this.claiming = true;
     try {
       const r = await this.d.core<{
@@ -373,7 +374,9 @@ export class HalloweenRuntime {
       if (play.media_id && !m)
         await this.finish(d, 'failed', false, 'media_missing');
     } catch (e) {
-      this.log(`prise en charge impossible : ${(e as Error).message}`, 'error');
+      // Once per message (a claim is retried every 0.7 s: the journal must stay readable).
+      const text = `prise en charge impossible : ${(e as Error).message}`;
+      if (this.events[0]?.text !== text) this.log(text, 'error');
     } finally {
       this.claiming = false;
     }
@@ -654,10 +657,16 @@ export class HalloweenRuntime {
         body?: Record<string, unknown>;
         message: string;
       };
+      // No HTTP status: the Core did not answer at all (« fetch failed », timeout) — say so plainly.
       if (!res.headersSent)
         reply(err.status ?? 503, {
           ...(err.body ?? {}),
-          error: err.body?.error ?? err.message,
+          error:
+            err.body?.error ??
+            (!err.status &&
+            /fetch failed|timeout|abort|ECONN/i.test(err.message)
+              ? 'core_unreachable'
+              : err.message),
         });
     }
     return true;

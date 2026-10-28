@@ -572,13 +572,20 @@ const SUB_WHEEL_MODULE = Object.freeze({
   icon: '🎡',
   description: 'Tes tours de Roue du Sub.',
 });
-/** Halloween shop (docs/HALLOWEEN.md): shown only while the Core says the event is open. */
+/** « Événements » (docs/HALLOWEEN.md): the edition of the moment, shown only while the Core says one is open. */
 const EVENT_SHOP_MODULE = Object.freeze({
   id: 'event_shop',
-  label: 'Halloween',
+  label: 'Événements',
   icon: '🎃',
   description: 'Fais peur à Raptoru avec tes Bonbons.',
 });
+/** The module's card names the edition the Core announces (« Halloween 2026 — … »). */
+function eventShopModule(eventShop) {
+  const title = eventShop?.edition?.title;
+  return title
+    ? { ...EVENT_SHOP_MODULE, description: `${title} — fais peur à Raptoru avec tes Bonbons.` }
+    : EVENT_SHOP_MODULE;
+}
 const MODERATION_MODULE = Object.freeze({
   id: 'moderation',
   label: 'Modération',
@@ -1439,7 +1446,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (id === MODERATION_MODULE.id) return canModerate() ? MODERATION_MODULE : null;
     if (id === COMMANDS_PUBLIC_MODULE.id) return commandsPublicAvailable() ? COMMANDS_PUBLIC_MODULE : null;
     if (id === SUB_WHEEL_MODULE.id) return subWheelAvailable() ? SUB_WHEEL_MODULE : null;
-    if (id === EVENT_SHOP_MODULE.id) return eventShopAvailable() ? EVENT_SHOP_MODULE : null;
+    if (id === EVENT_SHOP_MODULE.id) return eventShopAvailable() ? eventShopModule(state?.event_shop) : null;
     return (state?.modules ?? []).find((m) => m.id === id) ?? null;
   }
 
@@ -5924,7 +5931,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
     // Halloween first: the event of the moment.
     if (eventShopAvailable() && !modules.some((mod) => mod.id === EVENT_SHOP_MODULE.id)) {
-      modules.unshift(EVENT_SHOP_MODULE);
+      modules.unshift(eventShopModule(state.event_shop));
     }
     if (canModerate() && !modules.some((mod) => mod.id === MODERATION_MODULE.id)) {
       modules.push(MODERATION_MODULE);

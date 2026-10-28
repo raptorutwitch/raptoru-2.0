@@ -2,16 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   availability,
   clock,
+  conversionNote,
   shopHtml,
   viewerWait,
 } from '../extension/shared/events-shop.js';
 
-// Halloween shop (docs/HALLOWEEN.md): the pure rendering of Core's projection.
+// « Événements » (docs/HALLOWEEN.md): the pure rendering of Core's projection.
 const item = (over = {}) => ({
   item_id: 'blink',
   kind: 'effect',
+  category: 'disruption',
   label: 'Clignement',
-  description: 'Les paupières lourdes',
+  description: 'Ses yeux se ferment…',
   price: 2,
   thumb: 'assets/halloween/fx-blink.svg',
   available: true,
@@ -19,23 +21,24 @@ const item = (over = {}) => ({
 });
 const state = (over = {}) => ({
   enabled: true,
+  edition: { id: 'halloween-2026', title: 'Halloween 2026' },
   engine_ready: true,
   balance: 5,
   earn: { sub_reward: 10, gift_giver_per_sub: 5, gift_recipient: 3 },
-  conversion: { rate: 1000, cap_per_hour: 10, remaining: 10 },
+  conversion: { rate: 1000, cap_per_hour: 10, remaining: 10, frees_at: null },
   items: [item()],
   recent: [],
   ...over,
 });
 
-describe('events shop', () => {
+describe('events module', () => {
   it('clock: seconds, then minutes', () => {
     expect(clock(45_000)).toBe('45 s');
     expect(clock(125_000)).toBe('2:05');
     expect(clock(-5)).toBe('0 s');
   });
 
-  it('availability: a cooldown counts down from the projection, then frees the card', () => {
+  it('availability: a cooldown counts down from the projection, then frees the row', () => {
     const cd = item({
       available: false,
       reason: 'item_cooldown',
@@ -55,53 +58,89 @@ describe('events shop', () => {
     );
   });
 
-  it('closed or loading: no card, no button', () => {
+  it('loading, unreachable, closed: a sentence, no button', () => {
     expect(shopHtml(null)).toContain('Chargement');
-    expect(shopHtml({ enabled: false })).toContain('fermée');
+    expect(shopHtml(null, { unreachable: true })).toContain('injoignable');
+    expect(shopHtml({ enabled: false })).toContain('Aucun événement en cours');
     expect(shopHtml({ enabled: false })).not.toContain('data-buy');
   });
 
-  it('a card is buyable only when available and affordable; two taps', () => {
+  it('the header names the edition the Core announces, with the balance', () => {
+    const html = shopHtml(state());
+    expect(html).toContain('Halloween 2026');
+    expect(html).toContain('🍬 5');
+    expect(html).toContain('data-section="bonbons"');
+  });
+
+  it('interactions grouped by the Core categories, in their order; an empty category is not shown', () => {
     const html = shopHtml(
       state({
         items: [
           item(),
-          item({ item_id: 's-foxy', kind: 'screamer', price: 10 }),
+          item({
+            item_id: 's-foxy',
+            kind: 'screamer',
+            category: 'screamer',
+            label: 'Foxy',
+            price: 10,
+          }),
+          item({
+            item_id: 'eyes',
+            category: 'apparition',
+            label: 'Yeux',
+            price: 4,
+          }),
+        ],
+      }),
+    );
+    const order = ['Perturbations', 'Apparitions', 'Screamers'].map((l) =>
+      html.indexOf(`<h4>${l}`),
+    );
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(html).not.toContain('<h4>Sons');
+    // A filter shows one category.
+    const only = shopHtml(
+      state({
+        items: [
+          item(),
+          item({ item_id: 's-foxy', kind: 'screamer', category: 'screamer' }),
+        ],
+      }),
+      { filter: 'screamer' },
+    );
+    expect(only).not.toContain('<h4>Perturbations');
+  });
+
+  it('a row is buyable only when available and affordable; two taps; « Envoi… » blocks a second tap', () => {
+    const html = shopHtml(
+      state({
+        items: [
+          item(),
+          item({
+            item_id: 's-foxy',
+            kind: 'screamer',
+            category: 'screamer',
+            price: 10,
+          }),
         ],
       }),
     );
     expect(html).not.toMatch(/data-buy="blink" disabled/);
     expect(html).toMatch(/data-buy="s-foxy" disabled/);
     expect(shopHtml(state(), { confirming: 'blink' })).toContain('Confirmer ?');
-    // No identity (balance null): nothing buyable, no exchange.
-    const anon = shopHtml(state({ balance: null }));
-    expect(anon).toMatch(/data-buy="blink" disabled/);
-    expect(anon).not.toContain('data-convert');
-  });
-
-  it('the exchange shows the cap left and is closed when it is reached', () => {
-    expect(shopHtml(state(), { convertN: 3 })).toMatch(/3.000 Jetons → 3/);
-    expect(
-      shopHtml(
-        state({ conversion: { rate: 1000, cap_per_hour: 10, remaining: 0 } }),
-      ),
-    ).toMatch(/data-convert="1" disabled/);
-  });
-
-  it('escapes Core text and filters by kind', () => {
-    const html = shopHtml(
-      state({ items: [item({ label: '<img src=x onerror=1>' })] }),
+    const sending = shopHtml(
+      state({ items: [item(), item({ item_id: 'fog', label: 'Brouillard' })] }),
+      { sending: 'blink' },
     );
-    expect(html).not.toContain('<img src=x');
-    expect(shopHtml(state(), { filter: 'screamer' })).toContain('Rien ici');
+    expect(sending).toContain('Envoi…');
+    expect(sending).toMatch(/data-buy="fog" disabled/);
+    expect(shopHtml(state({ balance: null }))).toMatch(
+      /data-buy="blink" disabled/,
+    );
   });
 
-  it('unreachable shop: says so instead of loading forever', () => {
-    expect(shopHtml(null, { unreachable: true })).toContain('injoignable');
-    expect(shopHtml(null)).toContain('Chargement');
-  });
-
-  it("after a purchase: the viewer's own wait is spelled out; countdowns are tagged for in-place updates", () => {
+  it('after a purchase: the viewer’s own wait is spelled out; countdowns are tagged for in-place updates', () => {
     const s = state({
       items: [
         item({
@@ -116,19 +155,60 @@ describe('events shop', () => {
     const html = shopHtml(s);
     expect(html).toContain('Ton prochain achat dans <b data-next>1:53</b>');
     expect(html).toContain('data-wait="blink"');
-    expect(viewerWait(state())).toBe(0);
   });
 
-  it('while a purchase is sent: « Envoi… » and every buy button disabled (no second tap)', () => {
+  it('Bonbons: balance, the real ways to earn, the rate and what is left this hour', () => {
+    const html = shopHtml(state(), { section: 'bonbons', convertN: 3 });
+    expect(html).toContain('+10</b> à chaque sub');
+    expect(html).toContain('+5</b> par sub offert');
+    expect(html).toContain('+3</b> quand on t’offre un sub');
+    expect(html).toMatch(/1.000 Jetons = 1 Bonbon/);
+    expect(html).toContain('Encore <b>10</b>');
+    expect(html).toMatch(/3.000 Jetons → 3/);
+    // A way the Core does not announce is not shown.
+    expect(html).not.toContain('tombola');
+    expect(
+      shopHtml(state({ earn: { sub_reward: 10, raffle: true } }), {
+        section: 'bonbons',
+      }),
+    ).toContain('tombolas');
+    expect(
+      shopHtml(state({ earn: { sub_reward: 0 } }), { section: 'bonbons' }),
+    ).not.toContain('à chaque sub');
+  });
+
+  it('the exchange says why it is unavailable: closed, cap reached (and when it frees), no identity', () => {
+    const now = Date.parse('2026-10-31T20:00:00Z');
+    expect(
+      conversionNote(state({ conversion: { rate: 1000, cap_per_hour: 0 } })),
+    ).toContain('fermé');
+    expect(
+      conversionNote(
+        state({
+          conversion: {
+            rate: 1000,
+            cap_per_hour: 10,
+            remaining: 0,
+            frees_at: '2026-10-31T20:12:00Z',
+          },
+        }),
+        now,
+      ),
+    ).toBe('Limite atteinte : de nouveau possible dans 12 min.');
+    expect(conversionNote(state({ balance: null }))).toContain('identité');
+    expect(conversionNote(state())).toBeNull();
+    expect(
+      shopHtml(state({ conversion: { rate: 1000, cap_per_hour: 0 } }), {
+        section: 'bonbons',
+      }),
+    ).not.toContain('data-convert');
+  });
+
+  it('escapes Core text; feedback is a toast', () => {
     const html = shopHtml(
-      state({ items: [item(), item({ item_id: 'fog', label: 'Brouillard' })] }),
-      { sending: 'blink' },
+      state({ items: [item({ label: '<img src=x onerror=1>' })] }),
     );
-    expect(html).toContain('Envoi…');
-    expect(html).toMatch(/data-buy="fog" disabled/);
-  });
-
-  it('feedback is a toast (seen wherever the viewer scrolled)', () => {
+    expect(html).not.toContain('<img src=x');
     expect(shopHtml(state(), { notice: { text: 'Envoyé !' } })).toContain(
       'evs-notice evs-toast',
     );

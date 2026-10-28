@@ -685,3 +685,84 @@ describe('Studio grants (Tombola winners, gestures)', () => {
     );
   });
 });
+
+describe('closing the event: temporary and reversible', () => {
+  it('what is on screen ends normally; nothing more is sold or handed to Studio; balances stay; reopened as it was', async () => {
+    await open({ viewer_gap_ms: 0 });
+    await give(ANA, 20);
+    await give(BOB, 20);
+    // Ana's purchase is on screen (handed over and started) when the event closes.
+    const { purchase: onScreen } = await buy(ANA, 'blink');
+    const c = (await shop.claim(STUDIO, CH))!;
+    await shop.ack(onScreen.purchase_id, {
+      studio_instance_id: STUDIO,
+      attempt_id: c.attempt_id,
+      event: 'started',
+    });
+    const closed = await shop.updateSettings(CH, { enabled: false });
+    expect(closed.enabled).toBe(false);
+    // Closed: no purchase, no conversion, no claim; Ana's play still reports its end.
+    expect(await code(buy(BOB, 'eyes'))).toBe('event_closed');
+    expect(await shop.claim(STUDIO, CH)).toBeNull();
+    const done = await shop.ack(onScreen.purchase_id, {
+      studio_instance_id: STUDIO,
+      attempt_id: c.attempt_id,
+      event: 'completed',
+    });
+    expect(done).toMatchObject({ status: 'completed', refund_status: 'none' });
+    expect(await balance(ANA.id)).toBe(18); // kept, not purged
+    // An automatic reward (raffle) is refused while closed; Studio's own grant stays possible.
+    expect(
+      await code(
+        shop.grant(
+          {
+            idempotency_key: randomUUID(),
+            channel_id: CH,
+            viewer: ANA.id,
+            amount: 5,
+            reason: 'raffle',
+          },
+          'test',
+        ),
+      ),
+    ).toBe('event_closed');
+    expect(
+      await code(
+        shop.grant(
+          {
+            idempotency_key: randomUUID(),
+            channel_id: CH,
+            viewer: ANA.id,
+            amount: 1,
+            reason: 'grant',
+          },
+          'test',
+        ),
+      ),
+    ).toBe('ok');
+    // Reopened later: the same shop, the same balances.
+    await shop.updateSettings(CH, { enabled: true });
+    await ready();
+    expect(await code(buy(ANA, 'eyes'))).toBe('ok');
+  });
+
+  it('a purchase bought but not yet handed to Studio is refunded at closing (event_closed), once', async () => {
+    await open({ viewer_gap_ms: 0 });
+    await give(ANA, 10);
+    await buy(ANA, 'blink'); // queued, not claimed
+    const r = await shop.updateSettings(CH, { enabled: false });
+    expect(r.refunded).toBe(1);
+    expect((await shop.admin(CH)).purchases[0]).toMatchObject({
+      status: 'failed',
+      error: 'event_closed',
+      refund_status: 'refunded',
+    });
+    expect(await balance(ANA.id)).toBe(10);
+    // Closing again refunds nothing more.
+    await shop.updateSettings(CH, { enabled: true });
+    expect((await shop.updateSettings(CH, { enabled: false })).refunded).toBe(
+      0,
+    );
+    expect(await balance(ANA.id)).toBe(10);
+  });
+});

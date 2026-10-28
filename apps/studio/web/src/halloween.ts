@@ -239,7 +239,7 @@ export function shopCard(a: Admin | null, error: string | null) {
   ).join('');
   return `<div class="hw-open ${a.settings.enabled ? 'on' : ''}">
       <div><b>Boutique ${a.settings.enabled ? 'OUVERTE' : 'fermée'}</b> <small>saison ${esc(a.settings.season)}</small>
-        <p class="hw-hint">${a.settings.enabled ? 'Les viewers voient la boutique, gagnent et dépensent des Bonbons.' : 'Fermée : rien n’est gagné ni dépensé (les soldes sont gardés).'}</p></div>
+        <p class="hw-hint">${a.settings.enabled ? 'Les viewers voient « Événements », gagnent et dépensent des Bonbons ; !peur et !bonbons répondent, !solde montre les Bonbons.' : 'Fermé : rien n’est vendu, converti ni gagné ; module et commandes masqués ; les soldes sont gardés pour une prochaine édition. Fermer rembourse les achats pas encore joués.'}</p></div>
       <button type="button" class="${a.settings.enabled ? '' : 'primary'}" data-act="toggle-shop">${a.settings.enabled ? 'Fermer la boutique' : 'Ouvrir la boutique'}</button>
     </div>
     <div class="hw-rules">${rules}</div>
@@ -311,6 +311,14 @@ export function bonbonsCard(a: Admin | null) {
     <div><h4>Mouvements</h4><ul class="hw-log">${ledger || '<li class="hw-hint">Aucun mouvement.</li>'}</ul></div></div>`;
 }
 
+/** What an error means for the streamer (the Core's codes stay readable for the rest). */
+export function errorText(code: string) {
+  if (code === 'core_unavailable') return 'aucun Core pour ce profil';
+  if (code === 'core_unreachable' || /fetch failed/i.test(code))
+    return 'Core injoignable — en Lab, voir l’onglet Studio › Runtime local (le Core local démarre-t-il ?)';
+  return code;
+}
+
 export function mountHalloween(root: HTMLElement) {
   let status: Status | null = null;
   let admin: Admin | null = null;
@@ -345,19 +353,28 @@ export function mountHalloween(root: HTMLElement) {
     if (!res.ok) throw new Error(String(out.error ?? `HTTP ${res.status}`));
     return out;
   };
-  // Only the parts not being edited are redrawn (a field in focus keeps its value).
+  // A part is redrawn only when its content changed and nothing in it is being edited: no blinking, a typed value or
+  // an open « Tester » section stays as it is between two refreshes.
   const editing = (role: string) => part(role).contains(document.activeElement);
-  const renderStatus = () => {
-    if (!editing('overlay')) part('overlay').innerHTML = overlayCard(status);
+  const painted = new Map<string, string>();
+  const paint = (role: string, html: string) => {
+    if (painted.get(role) === html || editing(role)) return;
+    const el = part(role);
+    const open = [...el.querySelectorAll('details')].map((d) => d.open);
+    el.innerHTML = html;
+    el.querySelectorAll('details').forEach((d, i) => {
+      if (open[i]) d.open = true;
+    });
+    painted.set(role, html);
   };
+  const renderStatus = () => paint('overlay', overlayCard(status));
   const renderAdmin = () => {
-    if (!editing('shop')) part('shop').innerHTML = shopCard(admin, adminError);
-    if (!editing('catalogue'))
-      part('catalogue').innerHTML = catalogueCard(
-        admin,
-        status ? status.media.map((m) => m.id) : null,
-      );
-    if (!editing('bonbons')) part('bonbons').innerHTML = bonbonsCard(admin);
+    paint('shop', shopCard(admin, adminError));
+    paint(
+      'catalogue',
+      catalogueCard(admin, status ? status.media.map((m) => m.id) : null),
+    );
+    paint('bonbons', bonbonsCard(admin));
   };
   const loadStatus = async () => {
     try {
@@ -372,19 +389,19 @@ export function mountHalloween(root: HTMLElement) {
       admin = (await call('/api/halloween/admin')) as unknown as Admin;
       adminError = null;
     } catch (e) {
-      adminError =
-        (e as Error).message === 'core_unavailable'
-          ? 'aucun Core pour ce profil'
-          : (e as Error).message;
+      adminError = errorText((e as Error).message);
     }
     renderAdmin();
   };
-  const act = async (fn: () => Promise<unknown>, ok: string) => {
+  const act = async (
+    fn: () => Promise<Json>,
+    ok: string | ((out: Json) => string),
+  ) => {
     try {
-      await fn();
-      say(ok);
+      const out = await fn();
+      say(typeof ok === 'string' ? ok : ok(out));
     } catch (e) {
-      say(`Refusé : ${(e as Error).message}`);
+      say(`Refusé : ${errorText((e as Error).message)}`);
     }
     await Promise.all([loadStatus(), loadAdmin()]);
   };
@@ -409,7 +426,10 @@ export function mountHalloween(root: HTMLElement) {
           call('/api/halloween/admin/settings', {
             enabled: !admin!.settings.enabled,
           }),
-        admin.settings.enabled ? 'Boutique fermée.' : 'Boutique ouverte.',
+        admin.settings.enabled
+          ? (out: Json) =>
+              `Événement fermé : soldes gardés${Number(out.refunded) ? `, ${Number(out.refunded)} achat(s) en attente remboursé(s)` : ''}.`
+          : 'Événement ouvert.',
       );
     else if (a === 'save-rules') {
       const rules: Record<string, number> = {};
