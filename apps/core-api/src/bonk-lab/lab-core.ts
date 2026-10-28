@@ -20,6 +20,7 @@ import { ChannelPointsService } from '../channel-points/service.js';
 import { randomBanRoutes } from '../http/random-ban-routes.js';
 import { dockRoutes } from '../http/dock-routes.js';
 import { eventShopRoutes } from '../http/event-shop-routes.js';
+import { withBonbonsRewards } from '../event-shop/raffle-currency.js';
 import { EventShopService } from '../event-shop/service.js';
 import { DockActivityService } from '../dock/service.js';
 import { cautionRoutes } from '../http/caution-routes.js';
@@ -113,7 +114,7 @@ export function createLabCore({
     systemClock,
     Math.random,
     broadcasterOf,
-    economy,
+    withBonbonsRewards(economy),
   );
   // Commands V2, Jeu des mots, Roulette / Slot / Duel: the ONE assembly of the chat games (lab-chat/games.ts).
   // Commands V2 answers become durable steps, handed to the Lab Twitch adapter only while « Sortie chat réelle » is

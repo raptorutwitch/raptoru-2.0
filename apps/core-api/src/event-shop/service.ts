@@ -1084,6 +1084,8 @@ export class EventShopService {
           sub_reward: s.rules.sub_reward,
           gift_giver_per_sub: s.rules.gift_giver_per_sub,
           gift_recipient: s.rules.gift_recipient,
+          // The Tombola can reward in Bonbons while the event is open (event-shop/raffle-currency.ts).
+          raffle: s.enabled,
         },
         items: available,
         recent,

@@ -30,6 +30,7 @@ import { PresenceService } from './presence/presence-service.js';
 import { StreamSessions } from './stream/stream-sessions.js';
 import { StudioInstallations } from './studio/installations.js';
 import { createWalletModule, type WalletModule } from './wallet/index.js';
+import { withBonbonsRewards } from './event-shop/raffle-currency.js';
 
 export interface Core {
   daily: DailyService;
@@ -134,12 +135,13 @@ export function createCore(
     economy,
     spotify,
   );
+  // The Tombola may also reward in Bonbons while the event is open (docs/HALLOWEEN.md); every other currency as before.
   const raffleLab = new RaffleLabService(
     db,
     clock,
     undefined,
     broadcasterOf,
-    economy,
+    withBonbonsRewards(economy),
   );
   const subWheel = new SubWheelService(db, clock, undefined, economy);
   const alerts = new AlertsService(

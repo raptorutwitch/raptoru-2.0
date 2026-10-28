@@ -1,8 +1,10 @@
 -- Boutique d'événement (Halloween 2026, docs/HALLOWEEN.md) — LAB schema. Same content as the Production file
--- 20261112130000_event_shop.sql. Additive and idempotent: new tables only, nothing existing is changed.
+-- 20261112130000_event_shop.sql. Additive and idempotent: new tables, plus one new
+-- row in lab_currencies (Bonbons as a Tombola reward); nothing existing is changed.
 -- The event currency (Bonbons) lives in its OWN ledger, per season: it never touches the Jetons / Crédits Wallet
 -- (the only bridge is the capped conversion, which debits Jetons through the economy port in the same transaction).
--- Rollback: drop table event_shop_purchases, event_shop_studios, event_shop_items, event_shop_settings, event_ledger,
+-- Rollback: delete from lab_currencies where currency_id = 'bonbons' (only if no Tombola round used it);
+--   drop table event_shop_purchases, event_shop_studios, event_shop_items, event_shop_settings, event_ledger,
 --   event_wallets cascade; drop function event_ledger_immutable(); delete from schema_migrations where name =
 --   '20261112120000_event_shop_lab.sql';
 
@@ -111,3 +113,14 @@ create table if not exists event_shop_purchases (
 create index if not exists event_shop_purchases_open_idx on event_shop_purchases (channel_id, created_at)
   where status in ('queued', 'executing');
 create index if not exists event_shop_purchases_recent_idx on event_shop_purchases (channel_id, created_at desc);
+
+-- Bonbons as a Tombola reward currency (event-shop/raffle-currency.ts routes it to event_ledger; no wallet column).
+-- Only where the Tombola's currency registry exists (every Lab and the production database; not a bare schema).
+do $$
+begin
+  if to_regclass('lab_currencies') is not null then
+    insert into lab_currencies (currency_id, label, short_label, icon, wallet_column, sort, max_balance)
+    values ('bonbons', 'Bonbons', '🍬', 'coin', null, 10, 1000000)
+    on conflict (currency_id) do nothing;
+  end if;
+end $$;
