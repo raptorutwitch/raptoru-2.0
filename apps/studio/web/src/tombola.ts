@@ -272,6 +272,18 @@ const normCmd = (v: string) => {
   return t.startsWith('!') ? t : `!${t}`;
 };
 
+/**
+ * Choosing the reward's currency. Bonbons (Halloween, docs/HALLOWEEN.md) are counted in units, not thousands: picking
+ * them turns a random reward (its bands are in Jetons: 5 000–50 000) into a fixed one, and a Jetons-sized amount into
+ * 10 Bonbons — never 25 000 Bonbons by one click. Other currencies: exactly as before.
+ */
+export function pickCurrency(c: RaffleConfig, id: string) {
+  c.currency_id = id;
+  if (id !== 'bonbons') return;
+  if (c.amount_mode === 'random') c.amount_mode = 'fixed';
+  if (c.fixed_amount > 1000) c.fixed_amount = 10;
+}
+
 export function mountTombola(root: HTMLElement) {
   root.innerHTML = `<div class="tmb">
     <div class="page">
@@ -478,9 +490,11 @@ export function mountTombola(root: HTMLElement) {
         <p class="fine" style="margin:8px 0 0">≈ ${Math.round(under20)} % des Tombolas sous 20 000 · plus le montant monte, plus il est rare (y compris dans chaque tranche).</p>`;
     }
     if (c.amount_mode === 'fixed')
-      return `<div class="field"><span>Montant</span><div class="inline"><input class="input" style="width:160px" data-cfg="fixed_amount" value="${c.fixed_amount}"><div class="chips">${[
-        5000, 10000, 25000, 50000,
-      ]
+      return `<div class="field"><span>Montant</span><div class="inline"><input class="input" style="width:160px" data-cfg="fixed_amount" value="${c.fixed_amount}"><div class="chips">${(c.currency_id ===
+      'bonbons'
+        ? [5, 10, 20, 30]
+        : [5000, 10000, 25000, 50000]
+      )
         .map(
           (v) =>
             `<button type="button" class="chip ${c.fixed_amount === v ? 'on' : ''}" data-fixed="${v}">${fmt(v)}</button>`,
@@ -775,7 +789,7 @@ export function mountTombola(root: HTMLElement) {
           ]
             .map(
               ([k, i, l]) =>
-                `<button type="button" class="${c.amount_mode === k ? 'on' : ''}" data-mode="${k}">${ic(i!)}${l}</button>`,
+                `<button type="button" class="${c.amount_mode === k ? 'on' : ''}" data-mode="${k}"${k === 'random' && c.currency_id === 'bonbons' ? ' disabled title="En Bonbons : montant fixe (les tranches sont en Jetons)"' : ''}>${ic(i!)}${l}</button>`,
             )
             .join('')}</div>
           ${c.amount_mode === 'giveaway' ? '' : `<div class="field"><span>Monnaie</span>${curCarousel(c)}</div>`}
@@ -1402,12 +1416,12 @@ export function mountTombola(root: HTMLElement) {
       return;
     }
     if ((b = g('[data-cur]')))
-      return patch((c) => (c.currency_id = b!.dataset.cur!));
+      return patch((c) => pickCurrency(c, b!.dataset.cur!));
     if ((b = g('[data-cur-step]'))) {
       const ok = (status?.currencies ?? []).filter((k) => k.available);
       const i = ok.findIndex((k) => k.id === cfg?.currency_id);
       const next = ok[(i + Number(b.dataset.curStep) + ok.length) % ok.length];
-      if (next) patch((c) => (c.currency_id = next.id));
+      if (next) patch((c) => pickCurrency(c, next.id));
       return;
     }
     if ((b = g('[data-mode]')))
