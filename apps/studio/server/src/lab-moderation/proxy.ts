@@ -40,6 +40,8 @@ const PREFIXES = [
   '/v1/lab/spotify/',
   // Dock OBS V1: the activity feed (read only) and the visual replay of an alert.
   '/v1/lab/dock/',
+  // Halloween: the event shop (Studio's overlay executor and panel, docs/HALLOWEEN.md).
+  '/v1/lab/events/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

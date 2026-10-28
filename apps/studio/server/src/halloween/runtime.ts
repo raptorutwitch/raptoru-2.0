@@ -483,7 +483,17 @@ export class HalloweenRuntime {
     };
   }
 
-  private async next(url: URL, reply: Reply) {
+  /**
+   * The page asks what to play (long-poll). A request whose page went away meanwhile (closed, reloaded) takes nothing:
+   * the play stays for the page that asks next.
+   */
+  private async next(req: IncomingMessage, url: URL, reply: Reply) {
+    let gone = false;
+    const onClose = () => {
+      gone = true;
+      this.wake();
+    };
+    req.socket.once('close', onClose);
     this.lastPoll = this.now();
     this.pageReady = url.searchParams.get('ready') === '1';
     const known = Number(url.searchParams.get('epoch') ?? -1);
@@ -505,9 +515,12 @@ export class HalloweenRuntime {
       } finally {
         this.polling -= 1;
       }
+      if (gone) return;
       this.lastPoll = this.now();
       v = this.pageView();
     }
+    req.socket.off('close', onClose);
+    if (gone || req.socket.destroyed) return;
     if (v.delivery && this.current) this.current.taken_at = this.now();
     reply(200, v);
   }
@@ -659,7 +672,7 @@ export class HalloweenRuntime {
     if (req.method === 'GET' && mediaMatch)
       return this.serveMedia(req, res, mediaMatch[1]!);
     if (req.method === 'GET' && name === 'overlay/next')
-      return this.next(url, reply);
+      return this.next(req, url, reply);
     if (req.method === 'POST' && name === 'overlay/report')
       return this.report(await this.body(req), reply);
     reply(404, { error: 'not_found' });
