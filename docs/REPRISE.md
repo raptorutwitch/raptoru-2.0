@@ -96,6 +96,9 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 ## 4. Travaux en cours — ne rien écraser
 
+Inventaire complet des dossiers (worktrees, clones, livraisons, sauvegardes), organisation cible et rangement
+prévu après Halloween : [WORKSPACE.md](WORKSPACE.md) (relevé du 28/10, rien n'a été déplacé).
+
 | Où                                                                                                           | Contenu                                                                                                                                                                                                                                                                                      | État                                                                                                                                          |
 | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0` (`main` @ `11ffe3f`, en retard sur `origin/main`) | ancienne copie non commitée de la **Roue du Sub V2** (remplacée par `main`, PR #11), correctif « écran gris » de l'extension (**non commité**), documents non suivis ; les deux premiers aussi dans `backup/roue-v2-wip-2026-10-25`                                                          | **C'est aussi le dossier de données de Studio installé** (`.env`, jetons, `.runtime`) : jamais de `git clean`, `reset --hard` ou `checkout .` |

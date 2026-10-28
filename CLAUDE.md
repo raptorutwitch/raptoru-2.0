@@ -23,6 +23,20 @@
 - The installed Studio uses this checkout as its data folder (`.env`, Twitch tokens,
   `apps/studio/server/.runtime`): never `git clean`, `reset --hard` or `checkout .` here.
 
+## Workspace (decided 2026-10-28)
+
+One project, one repository: `Documents\Raptoru 2.0` (main checkout and the installed Studio's data folder). Inventory,
+target layout and the post-Halloween cleanup plan: `docs/WORKSPACE.md`.
+
+- Never clone Raptoru 2.0 again and never create a Raptoru folder at the root of `Documents`. A task, a build or a
+  check uses a worktree: `git worktree add "..\Raptoru 2.0 - Worktrees\<name>" -b <branch> origin/main` — never under
+  `AppData\Local\Temp`, an agent's job or scratchpad folder, or `.claude\worktrees`.
+- Delivery packages (installers, SQL, runbooks) go to `Documents\Raptoru 2.0 - Livraisons\<YYYY-MM-DD>-<subject>\`,
+  backups to `Documents\Sauvegarde Raptoru 2.0\<YYYY-MM-DD>-<subject>\` — no `*-GO` or `*-backup-*` folder at the root.
+- Studio data (`.env`, tokens, `.runtime`, media) live only in the main checkout; a worktree's `.runtime` is disposable.
+- A worktree is removed with `git worktree remove` (moved with `git worktree move`) only once merged, delivered and
+  clean, its uncommitted work archived first; never `rm -rf`. No mass move or deletion without Antoni's GO.
+
 ## Central files (ASTRA-P1-008, decided 2026-10-04)
 
 Progressive extraction, no big refactor. Baseline at the decision: `apps/twitch-extension/extension/shared/ui.js`
