@@ -39,6 +39,7 @@ import { createModerationV2View } from './moderation-v2.js';
 import { createCommandsV2View } from './commands-v2.js';
 import { createCommandsPublicView } from './commands-public.js';
 import { createSubWheelView } from './sub-wheel-ext.js';
+import { createEventShopView } from './events-shop.js';
 import { createTombolaV2View } from './tombola-v2.js';
 import {
   hideRestrictions,
@@ -555,6 +556,7 @@ const HUB_MODULE_STYLES = Object.freeze({
   raffle_join: { icon: 'raffle_join', color: '#ec4899', color2: '#a855f7' },
   moderation: { icon: 'moderation', color: '#10b981', color2: '#0e7490' },
   commands: { icon: 'commands', color: '#2fd8c4', color2: '#3b82f6' },
+  event_shop: { icon: 'pumpkin', color: '#ff8a2b', color2: '#7c3aed' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
 /** Commands V2 « Commandes » (phase F): the channel's public command list, for every viewer. */
@@ -569,6 +571,13 @@ const SUB_WHEEL_MODULE = Object.freeze({
   label: 'Roue du Sub',
   icon: '🎡',
   description: 'Tes tours de Roue du Sub.',
+});
+/** Halloween shop (docs/HALLOWEEN.md): shown only while the Core says the event is open. */
+const EVENT_SHOP_MODULE = Object.freeze({
+  id: 'event_shop',
+  label: 'Halloween',
+  icon: '🎃',
+  description: 'Fais peur à Raptoru avec tes Bonbons.',
 });
 const MODERATION_MODULE = Object.freeze({
   id: 'moderation',
@@ -1195,6 +1204,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   /** Commands V2 public list (phase F), kept while « Commandes » is open. */
   let commandsPublicView = null;
   let subWheelView = null;
+  let eventShopView = null;
   let paymentWalletSync = null;
   let soundboardVolumeOpen = false;
   let soundboardVolumeSync = null;
@@ -1429,12 +1439,18 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (id === MODERATION_MODULE.id) return canModerate() ? MODERATION_MODULE : null;
     if (id === COMMANDS_PUBLIC_MODULE.id) return commandsPublicAvailable() ? COMMANDS_PUBLIC_MODULE : null;
     if (id === SUB_WHEEL_MODULE.id) return subWheelAvailable() ? SUB_WHEEL_MODULE : null;
+    if (id === EVENT_SHOP_MODULE.id) return eventShopAvailable() ? EVENT_SHOP_MODULE : null;
     return (state?.modules ?? []).find((m) => m.id === id) ?? null;
   }
 
   /** « Roue du Sub » (R8): offered by the EBS (Lab today; the production frontier keeps it hidden in mode v1). */
   function subWheelAvailable() {
     return state?.sub_wheel === true && typeof client?.subWheelMe === 'function';
+  }
+
+  /** « Halloween »: the EBS's session carries `event_shop` only on a Core that has the shop. */
+  function eventShopAvailable() {
+    return state?.event_shop?.enabled === true && typeof client?.eventsState === 'function';
   }
 
   /** « Commandes » (public list, phase F): offered by the EBS, Video and Mobile only (not the Panel). */
@@ -1772,6 +1788,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
     if (moduleId !== COMMANDS_PUBLIC_MODULE.id) commandsPublicView = null;
     if (moduleId !== SUB_WHEEL_MODULE.id) subWheelView = null;
+    if (moduleId !== EVENT_SHOP_MODULE.id) {
+      eventShopView?.destroy();
+      eventShopView = null;
+    }
     if (moduleId !== 'raffle_join') {
       tombolaV2View?.destroy();
       tombolaV2View = null;
@@ -5902,6 +5922,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (subWheelAvailable() && !modules.some((mod) => mod.id === SUB_WHEEL_MODULE.id)) {
       modules.push(SUB_WHEEL_MODULE);
     }
+    // Halloween first: the event of the moment.
+    if (eventShopAvailable() && !modules.some((mod) => mod.id === EVENT_SHOP_MODULE.id)) {
+      modules.unshift(EVENT_SHOP_MODULE);
+    }
     if (canModerate() && !modules.some((mod) => mod.id === MODERATION_MODULE.id)) {
       modules.push(MODERATION_MODULE);
     }
@@ -6175,6 +6199,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         const shownView = commandsV2Shown && commandsV2View ? commandsV2View : moderationV2View;
         body.append(shownView.node);
         queueMicrotask(() => shownView?.attached());
+      } else if (mod.id === EVENT_SHOP_MODULE.id) {
+        // Halloween shop: Core's projection for the JWT's viewer; kept across the host's refreshes while open.
+        if (!eventShopView) {
+          eventShopView = createEventShopView({ document, client });
+          eventShopView.start();
+        }
+        body.append(eventShopView.node);
       } else if (mod.id === SUB_WHEEL_MODULE.id) {
         // Roue du Sub V2 (R8): the viewer's own tours (+ the team's part for moderators), Core's projection only.
         if (!subWheelView) {

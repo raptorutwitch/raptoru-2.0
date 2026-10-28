@@ -536,6 +536,16 @@ export function createClient({
       body: { module_id: moduleId, payload },
       idempotencyKey: newIdempotencyKey(),
     }),
+    /** Halloween shop (docs/HALLOWEEN.md): Core's state for this viewer, a purchase, a conversion (one key per click). */
+    eventsState: () => call('GET', '/events/state'),
+    eventsBuy: (itemId) => call('POST', '/actions/events/purchase', {
+      body: { item_id: itemId },
+      idempotencyKey: newIdempotencyKey(),
+    }),
+    eventsConvert: (bonbons) => call('POST', '/actions/events/convert', {
+      body: { bonbons },
+      idempotencyKey: newIdempotencyKey(),
+    }),
     /** Tombola V2 (Lab): Core's viewer state (phase, timer, entries, refusal, result, history). */
     raffleState: () => call('GET', '/raffle/state'),
     joinRaffle: () => call('POST', '/actions/raffle', {

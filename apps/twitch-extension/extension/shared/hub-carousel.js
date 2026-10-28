@@ -14,6 +14,8 @@ export const HUB_ICON_PATHS = Object.freeze({
   // Commandes : une bulle de chat avec « ! ».
   commands: '<path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4.5 3.5V17H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 8v4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="14.6" r="1.2" fill="currentColor"/>',
   moderation: '<path d="M12 3.5 19 6v5.5c0 4.2-3 7.5-7 9-4-1.5-7-4.8-7-9V6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+  // Halloween : une citrouille (yeux et sourire découpés).
+  pumpkin: '<path d="M12 6.5c-1.2-.9-3.2-1-4.8-.2C4.4 7.6 3 10.2 3 13c0 3.9 3 6.5 6 6.5.9 0 1.9-.3 3-.9 1.1.6 2.1.9 3 .9 3 0 6-2.6 6-6.5 0-2.8-1.4-5.4-4.2-6.7-1.6-.8-3.6-.7-4.8.2Z" fill="currentColor"/><path d="M12 6.5c0-1.6.6-2.8 2-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m7.6 11 1.6-1.4 1.4 1.4ZM13.4 11l1.4-1.4 1.6 1.4ZM8 14.2c2.4 2 5.6 2 8 0l-1.6.4-1.2-.8-1.2.9-1.2-.9-1.2.8Z" fill="#1a1030"/>',
   module: '<rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 12h6M12 9v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   chevL: '<path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
   chevR: '<path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
