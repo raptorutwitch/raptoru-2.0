@@ -70,19 +70,43 @@ sans changer de code.
 ## 5. Médias
 
 Les originaux ne sont **jamais modifiés** : `Documents\Stream PROJET\Halloween` et `Anim de stream\Screameur Audio`.
-On les convertit en copies : WebM VP9 avec transparence et Opus, volume homogénéisé (loudnorm −16 LUFS), 1080p au
-plus. Les 30 médias pèsent 22 Mo.
+Les vidéos ne sont pas dans Git. Elles passent par trois étapes, chacune vérifiée.
 
-```
-node apps/studio/server/scripts/halloween-import.mjs --ffmpeg "C:/Program Files (x86)/iMyFone VoxBox/ffmpeg.exe" \
-  --out "C:\Users\Antoni\Documents\Raptoru 2.0\apps\studio\server\.runtime\halloween\media"
-```
+1. **Conversion** (`halloween-import.mjs`) : copies en WebM VP9 avec transparence et Opus, volume homogénéisé
+   (loudnorm −16 LUFS), 1080p au plus. Les 30 médias pèsent 22 Mo. Un média déjà converti depuis le même original est
+   conservé ; `--force` le refait.
 
-- **Sortie** : le dossier `.runtime\halloween\media` du Studio installé (hors Git). Studio relit les médias avec le
-  bouton « Recharger les médias ».
-- **Sans perte** : un média déjà converti à partir du même original est conservé ; `--force` le refait.
-- **Miniatures** : `--thumbs-only` les refait seules. Le script choisit l'image la plus visible du clip. Elles vont
-  dans `apps/twitch-extension/extension/assets/halloween` (livrées avec l'extension).
+   ```
+   node apps/studio/server/scripts/halloween-import.mjs --ffmpeg "C:/Program Files (x86)/iMyFone VoxBox/ffmpeg.exe"
+   ```
+
+   - **ffmpeg** : la seule commande `ffmpeg` du PC est celle d'iMyFone VoxBox.
+   - **Miniatures** : `--thumbs-only` les refait seules (l'image la plus visible du clip). Elles vont dans
+     `apps/twitch-extension/extension/assets/halloween`, livrées avec l'extension.
+
+2. **Paquet de livraison** : le paquet durable, indépendant de tout worktree, est déjà fait (28/10) et vérifié
+   (30/30) :
+   - emplacement : `Documents\Raptoru 2.0 - Livraisons\2026-10-31-halloween-medias\` ;
+   - contenu : les 30 `.webm`, `manifest.json`, `SHA256SUMS.txt`, `LISEZMOI.txt` et une copie du script
+     d'installation (le paquet se suffit à lui-même ; seul Node est nécessaire) ;
+   - commande qui l'a créé : `halloween-media-install.mjs --to <dossier>`.
+
+3. **Installation dans le Studio installé** (`halloween-media-install.mjs`). Le script lit la destination dans
+   `%APPDATA%\Raptoru Studio\studio.json`, c'est-à-dire le dossier de données du Studio installé
+   (`Raptoru 2.0\apps\studio\server\.runtime\halloween\media`) :
+
+   ```
+   cd "C:\Users\Antoni\Documents\Raptoru 2.0 - Livraisons\2026-10-31-halloween-medias"
+   node halloween-media-install.mjs --from .
+   ```
+
+   - chaque fichier du paquet est vérifié avec `SHA256SUMS.txt`, copié sous un nom temporaire, vérifié de nouveau,
+     puis renommé ; le manifeste est écrit en dernier ;
+   - rien n'est supprimé, et relancer ne recopie que ce qui manque ;
+   - `--check` vérifie sans rien écrire ;
+   - ensuite, dans Studio : « Recharger les médias ».
+
+L'onglet Halloween signale tout article actif dont la vidéo manque sur le PC. Le Core ne le vend pas (`media_missing`).
 
 ## 6. Studio — onglet « Halloween 🎃 »
 
@@ -144,7 +168,8 @@ Les commandes restent **muettes tant que la boutique est fermée**.
 1. Sauvegarde de la base, puis migration `supabase/migrations/20261112130000_event_shop.sql` : nouvelles tables
    seulement, retour arrière en tête de fichier.
 2. Déploiement du Core (bot inchangé). La boutique reste **fermée** tant que Studio ne l'ouvre pas.
-3. Copie des médias sur le PC (§ 5), puis release Studio (`npm run studio:release`) et installation par Antoni.
+3. Release Studio (`npm run studio:release`) et installation par Antoni. Ensuite, installation des médias depuis le
+   paquet (§ 5, étape 3) et contrôle avec `--check` : 30 identiques, puis l'onglet Halloween sans avertissement.
 4. Extension : `npm run build -w @raptoru/twitch-extension`, téléversement, Hosted Test (§ 7), demande de revue.
 5. Le jour J : ouvrir la boutique, vérifier « prêt » dans Studio, faire un test local, garder STOP ALL à portée.
 

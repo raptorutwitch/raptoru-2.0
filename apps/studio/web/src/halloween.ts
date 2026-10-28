@@ -246,8 +246,25 @@ export function shopCard(a: Admin | null, error: string | null) {
     <button type="button" class="primary" data-act="save-rules">Enregistrer les règles</button>`;
 }
 
-export function catalogueCard(a: Admin | null) {
+/**
+ * The catalogue. `onPc`: the media ids this Studio holds (null: not known yet). An enabled item whose video is not on
+ * this PC cannot be sold (the Core refuses it, media_missing): it is flagged, with how to install the media.
+ */
+export function catalogueCard(a: Admin | null, onPc: string[] | null = null) {
   if (!a) return '';
+  const missing = onPc
+    ? a.items.filter(
+        (i) => i.enabled && i.media_id && !onPc.includes(i.media_id),
+      )
+    : [];
+  const warn = missing.length
+    ? `<p class="hw-warn">⚠ ${missing.length} vidéo${missing.length > 1 ? 's' : ''} du catalogue absente${missing.length > 1 ? 's' : ''} de ce PC (non vendue${missing.length > 1 ? 's' : ''}) : ${missing
+        .slice(0, 6)
+        .map((i) => esc(i.label))
+        .join(
+          ', ',
+        )}${missing.length > 6 ? '…' : ''}. Installer les médias : <code>halloween-media-install.mjs</code> (docs/HALLOWEEN.md § 5), puis « Recharger les médias ».</p>`
+    : '';
   const rows = a.items
     .map(
       (
@@ -255,14 +272,14 @@ export function catalogueCard(a: Admin | null) {
       ) => `<tr data-item="${esc(i.item_id)}" class="${i.enabled ? '' : 'off'}">
       <td><input type="checkbox" data-field="enabled"${i.enabled ? ' checked' : ''} aria-label="Activé"/></td>
       <td><input type="text" maxlength="40" data-field="label" value="${esc(i.label)}"/></td>
-      <td><span class="hw-kind ${i.kind}">${KIND[i.kind]}</span></td>
+      <td><span class="hw-kind ${i.kind}">${KIND[i.kind]}</span>${missing.includes(i) ? ' <small class="hw-missing">absent du PC</small>' : ''}</td>
       <td><input type="number" min="1" max="100000" data-field="price" value="${i.price}"/></td>
       <td><input type="number" min="0" max="86400" data-field="cooldown" value="${Math.round(i.cooldown_ms / 1000)}"/></td>
       <td><button type="button" class="hw-small" ${i.media_id ? `data-test-media="${esc(i.media_id)}"` : `data-test-effect="${esc(i.effect)}"`}>Tester</button></td>
     </tr>`,
     )
     .join('');
-  return `<table class="hw-table"><thead><tr><th>On</th><th>Nom affiché</th><th>Type</th><th>Prix (Bonbons)</th><th>Cooldown (s)</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+  return `${warn}<table class="hw-table"><thead><tr><th>On</th><th>Nom affiché</th><th>Type</th><th>Prix (Bonbons)</th><th>Cooldown (s)</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     <p class="hw-hint">Chaque changement est enregistré dans le Core dès que tu quittes le champ.</p>`;
 }
 
@@ -336,7 +353,10 @@ export function mountHalloween(root: HTMLElement) {
   const renderAdmin = () => {
     if (!editing('shop')) part('shop').innerHTML = shopCard(admin, adminError);
     if (!editing('catalogue'))
-      part('catalogue').innerHTML = catalogueCard(admin);
+      part('catalogue').innerHTML = catalogueCard(
+        admin,
+        status ? status.media.map((m) => m.id) : null,
+      );
     if (!editing('bonbons')) part('bonbons').innerHTML = bonbonsCard(admin);
   };
   const loadStatus = async () => {
