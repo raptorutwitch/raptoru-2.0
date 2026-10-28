@@ -240,3 +240,36 @@ test('the overlay page closed: Studio stops saying « ready » and the Core stop
     .poll(async () => refusal(buy('eyes')), { timeout: 20_000 })
     .toBe('engine_offline');
 });
+
+test('OBS dock: the purchase shows only 5 s after its effect really started — never before', async ({
+  page,
+}) => {
+  await rt.stopAll(); // what an earlier test left pending
+  await openOverlay(page);
+  await buy('tunnel');
+  const tunnelShown = async () =>
+    (
+      await coreCall<{
+        activities: {
+          type: string;
+          data: { actor: { name: string }; effect?: { id: string } };
+        }[];
+      }>(`/v1/lab/dock/${CH}/activity?limit=50`)
+    ).activities.some(
+      (a) =>
+        a.type === 'halloween' &&
+        a.data.effect?.id === 'tunnel' &&
+        a.data.actor.name === 'Ana',
+    );
+  // Its effect starts on the page (the Core knows it): from then on, the dock must wait ~5 s.
+  await expect
+    .poll(async () => (await admin()).purchases[0]?.status, { timeout: 10_000 })
+    .toBe('executing');
+  const started = Date.now();
+  expect(await tunnelShown()).toBe(false);
+  // The dock keeps reading (its projector scans while read): the line appears after the delay.
+  await expect
+    .poll(tunnelShown, { timeout: 15_000, intervals: [250] })
+    .toBe(true);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(4_000);
+});

@@ -126,6 +126,11 @@ button {
   --ft: rgba(45, 212, 191, 0.1);
   --fa: rgba(45, 212, 191, 0.18);
 }
+.f-halloween {
+  --fc: #ff7a2f;
+  --ft: rgba(150, 28, 36, 0.22);
+  --fa: rgba(255, 122, 47, 0.2);
+}
 .f-other {
   --fc: #a3adbf;
   --ft: rgba(163, 173, 191, 0.08);

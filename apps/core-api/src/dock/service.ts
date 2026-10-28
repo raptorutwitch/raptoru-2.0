@@ -87,6 +87,22 @@ const withAvatar = (actor: unknown, avatar: string | null) =>
     ? { actor: { ...(actor as Record<string, unknown>), avatar } }
     : {};
 
+const HALLOWEEN_SOURCE = `         union all
+         -- Halloween (docs/HALLOWEEN.md): a purchase exists for the dock only once its effect STARTED on the streamer's
+         -- screen, plus the shop's reveal delay (dock_reveal_ms, default 5 s): nothing before (no row, so no count,
+         -- filter, notification or history can tell it in advance); never one that did not play (refused, refunded
+         -- before it started). Its time is its start; its seq the reveal's (the others are never held back).
+         select 'ix:halloween:' || p.purchase_id, 'halloween', p.started_at, p.viewer_id, p.viewer_name, p.status,
+           p.refund_status, null, p.label,
+           jsonb_build_object('item_id', p.item_id, 'item_kind', p.item_kind, 'price', p.price, 'error', p.error),
+           concat_ws('|', p.status, p.refund_status)
+         from event_shop_purchases p
+         left join event_shop_settings es on es.channel_id = p.channel_id
+         where p.channel_id = $1 and p.started_at is not null and p.started_at >= $2
+           and p.started_at <= $3::timestamptz
+             - coalesce((es.rules->>'dock_reveal_ms')::bigint, 5000) * interval '1 millisecond'
+`;
+
 export class DockActivityService {
   private readonly waiters = new Map<string, Set<() => void>>();
   private readonly loops = new Map<
@@ -347,11 +363,25 @@ export class DockActivityService {
    * Soundboard (the sound's name), TTS (its text, cut, and its review), Tombola entries, `!rb` Random Bans. What channel
    * points paid (a sound, a Random Ban) is already its redemption: never a second activity. Read only, like the rest of the projection.
    */
+  /** The Halloween purchases exist (its migration may land just after a deploy starts): checked until they do. */
+  private eventShop = false;
+  private async hasEventShop(q: Queryable) {
+    if (!this.eventShop)
+      this.eventShop =
+        (
+          await q.query<{ t: string | null }>(
+            "select to_regclass('event_shop_purchases')::text as t",
+          )
+        )[0]?.t != null;
+    return this.eventShop;
+  }
+
   private async interactionChanges(
     q: Queryable,
     channelId: string,
     since: Date,
   ) {
+    const halloween = (await this.hasEventShop(q)) ? HALLOWEEN_SOURCE : '';
     const rows = await q.query<{
       key: string;
       type: string;
@@ -394,7 +424,7 @@ export class DockActivityService {
            jsonb_build_object('streamer_mute', coalesce(r.reason like 'streamer_mute%', false)),
            concat_ws('|', r.status, r.refund, coalesce(r.target_id, '-'), coalesce(r.reason, '-'))
          from rb_requests r where r.channel_id = $1 and r.source = 'chat' and r.created_at >= $2
-       )
+${halloween}       )
        select src.key, src.type, src.created_at, src.viewer_id, src.viewer_name, src.status, src.refund_status,
          src.review_status, src.detail, src.extra, av.url as avatar,
          concat_ws('|', src.version, coalesce(av.url, '-')) as version
@@ -403,7 +433,7 @@ export class DockActivityService {
        left join dock_activity a on a.channel_id = $1 and a.activity_key = src.key
        where a.version is distinct from concat_ws('|', src.version, coalesce(av.url, '-'))
        order by src.created_at, src.key limit 2000`,
-      [channelId, since],
+      [channelId, since, ...(halloween ? [this.now()] : [])],
     );
     return rows.map((r): Projected => {
       const actor = {
@@ -431,13 +461,23 @@ export class DockActivityService {
             ? { actor, sound: { id: x.sound_id, label: r.detail } }
             : r.type === 'tts'
               ? { actor, message: r.detail }
-              : r.type === 'random_ban'
+              : r.type === 'halloween'
                 ? {
                     actor,
-                    ...(r.detail ? { target: r.detail } : {}),
-                    streamer_mute: !!x.streamer_mute,
+                    effect: {
+                      id: x.item_id,
+                      label: r.detail,
+                      kind: x.item_kind,
+                      price: x.price,
+                    },
                   }
-                : { actor };
+                : r.type === 'random_ban'
+                  ? {
+                      actor,
+                      ...(r.detail ? { target: r.detail } : {}),
+                      streamer_mute: !!x.streamer_mute,
+                    }
+                  : { actor };
       return {
         activity_key: r.key,
         kind: 'interaction',

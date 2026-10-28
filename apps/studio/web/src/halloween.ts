@@ -152,6 +152,12 @@ const RULES: { key: string; label: string; ms?: boolean; hint: string }[] = [
     label: 'Screamers maximum par heure',
     hint: '0 = screamers fermés',
   },
+  {
+    key: 'dock_reveal_ms',
+    label: 'Dock OBS : afficher l’achat après (s)',
+    ms: true,
+    hint: 'compté depuis le début réel de l’effet ; 0 = dès qu’il commence',
+  },
 ];
 const time = (iso: string) =>
   new Date(iso).toLocaleTimeString('fr-FR', {

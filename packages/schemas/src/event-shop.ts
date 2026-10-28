@@ -53,6 +53,11 @@ export const EventShopRules = z.strictObject({
   screamer_gap_ms: z.number().int().min(0).max(3_600_000),
   /** At most this many screamers within any rolling hour (0 = screamers closed). */
   screamers_per_hour: z.number().int().min(0).max(120),
+  /**
+   * The OBS dock shows a Halloween purchase this long AFTER it started on the streamer's screen (he lives the scare
+   * before he sees who sent it); 0 = as soon as it starts. Never before it starts.
+   */
+  dock_reveal_ms: z.number().int().min(0).max(600_000),
 });
 export type EventShopRules = z.infer<typeof EventShopRules>;
 
@@ -65,6 +70,7 @@ export const DEFAULT_EVENT_RULES: EventShopRules = Object.freeze({
   viewer_gap_ms: 120_000,
   screamer_gap_ms: 180_000,
   screamers_per_hour: 6,
+  dock_reveal_ms: 5_000,
 });
 
 export const EventShopSettings = z.strictObject({
