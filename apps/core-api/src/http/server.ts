@@ -86,6 +86,8 @@ import type { LabChatRouter } from '../lab-chat/router.js';
 import type { LabCall } from '../ext/lab-internal.js';
 import { studioCockpitRoutes } from './studio-cockpit-routes.js';
 import { publicStatsRoutes } from './public-stats-routes.js';
+import { progressionRoutes } from './progression-routes.js';
+import type { ProgressionService } from '../progression/service.js';
 import { wordGameCockpitEvents } from './word-game-routes.js';
 import { studioAdminRoutes } from './studio-admin-routes.js';
 import { botInstanceRoutes } from './bot-instance-routes.js';
@@ -146,6 +148,10 @@ export interface AppDeps {
    * Absent: the route does not exist.
    */
   ops?: { token: string; status: () => Promise<unknown> };
+  /** raptoru.fr's server token (SITE_TOKEN): the site's own write (a viewer equips a title / badges). */
+  siteToken?: string;
+  /** Progression native (docs/PROGRESSION.md). */
+  progression?: ProgressionService;
   /**
    * The /v1/lab/* routes (Studio secret, viewer named in the body). Default on for the Lab and the
    * tests; the public Core bootstrap turns them off: nothing Lab is reachable from the Internet.
@@ -173,7 +179,14 @@ export interface AppDeps {
 }
 
 type Auth =
-  'public' | 'bot' | 'studio' | 'studio_installation' | 'extension' | 'ops';
+  | 'public'
+  | 'bot'
+  | 'studio'
+  | 'studio_installation'
+  | 'extension'
+  | 'ops'
+  /** raptoru.fr's server (SITE_TOKEN): only the routes it needs, mounted only when the token is set. */
+  | 'site';
 
 export interface Route {
   method: 'GET' | 'POST';
@@ -250,6 +263,8 @@ function routes({
   randomBan,
   dock,
   eventShop,
+  progression,
+  siteToken,
   caution,
   votekick,
   spotify,
@@ -290,6 +305,13 @@ function routes({
       : []),
     ...(studioInstallations && eventShop && cockpit?.channelId
       ? eventShopRoutes(eventShop, { channelId: cockpit.channelId })
+      : []),
+    ...(studioInstallations && progression && cockpit?.channelId
+      ? progressionRoutes(progression, {
+          channelId: cockpit.channelId,
+          production: true,
+          site: !!siteToken,
+        })
       : []),
     ...(studioInstallations && dock && cockpit?.channelId
       ? dockRoutes(dock, { channelId: cockpit.channelId })
@@ -635,6 +657,13 @@ export function createHandler(deps: AppDeps): RequestListener {
       if (
         route.auth === 'ops' &&
         !secretMatches(req.headers.authorization, deps.ops?.token ?? '')
+      ) {
+        throw new HttpError(401, { error: 'unauthorized' });
+      }
+      if (
+        route.auth === 'site' &&
+        (!deps.siteToken ||
+          !secretMatches(req.headers.authorization, deps.siteToken))
       ) {
         throw new HttpError(401, { error: 'unauthorized' });
       }

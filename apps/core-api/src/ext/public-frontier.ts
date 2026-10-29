@@ -119,7 +119,10 @@ export function createPublicFrontier(
       cockpit: { core: call, channelId },
       // The chat games' doors for the production bot: the Tombola first, then the chat games (same as the Lab).
       chatIngress: {
-        router: chatRouter(core.raffleLab, core.chat.chatModules),
+        router: chatRouter(core.raffleLab, [
+          ...core.chat.chatModules,
+          core.progression.chatModule,
+        ]),
         games: core.chat,
       },
       ext: secret

@@ -78,6 +78,7 @@ export const LAB_MIGRATIONS = [
   '20261110120000_obs_dock_lab.sql',
   '20261111120000_obs_dock_interactions_lab.sql',
   '20261112120000_event_shop_lab.sql',
+  '20261113120000_progression_lab.sql',
 ];
 
 export type ServiceState =

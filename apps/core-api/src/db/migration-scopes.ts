@@ -84,6 +84,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Boutique d'événement (Halloween 2026): its own tables (Bonbons ledger, catalogue, purchases); same content as
   // 20261112120000_event_shop_lab.sql.
   '20261112130000_event_shop.sql',
+  // Progression native (XP, niveaux, titres, badges): docs/PROGRESSION.md; Lab twin 20261113120000_progression_lab.sql.
+  '20261113130000_progression.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -166,6 +168,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261111120000_obs_dock_interactions_lab.sql',
   // Boutique d'événement: the Lab twin of 20261112130000_event_shop.sql (same content).
   '20261112120000_event_shop_lab.sql',
+  // Progression native: the Lab twin of 20261113130000_progression.sql (same content).
+  '20261113120000_progression_lab.sql',
 ]);
 
 /**

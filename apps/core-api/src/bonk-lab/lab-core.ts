@@ -1,3 +1,5 @@
+import { ProgressionService } from '../progression/service.js';
+import { progressionRoutes } from '../http/progression-routes.js';
 import { createServer, type Server } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { BonkLabService } from './bonk-lab-service.js';
@@ -72,6 +74,9 @@ export interface LabCoreOptions {
    */
   economy?: EconomyPort;
 }
+
+/** The Lab's channel id (the simulator's chat and the Lab Twitch adapter). */
+const LAB_PROGRESSION_CHANNEL = '900100';
 
 export function createLabCore({
   db,
@@ -154,6 +159,12 @@ export function createLabCore({
   const eventShop = new EventShopService(db, systemClock, economy, {
     rewardSimulations: true,
   });
+  // The Lab chat's channel (simulator and Lab Twitch adapter): its viewers earn XP in the Lab.
+  const progression = new ProgressionService(
+    db,
+    systemClock,
+    () => LAB_PROGRESSION_CHANNEL,
+  );
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
       db,
@@ -193,8 +204,9 @@ export function createLabCore({
       ),
       tts,
       raffle,
-      // Whole chat for the Jeu des mots and the mini-games (the simulator identities are the Duel targets).
-      chatModules,
+      // Whole chat for the Jeu des mots and the mini-games (the simulator identities are the Duel targets), and the
+      // progression's XP for the messages.
+      [...chatModules, progression.chatModule],
     ),
     ...wordGameRoutes(wordGame),
     ...miniGamesRoutes(miniGames),
@@ -210,6 +222,12 @@ export function createLabCore({
     ...dockRoutes(new DockActivityService(db, systemClock)),
     // Boutique d'événement: Studio's panel and overlay, and the viewer side for the Extension Lab.
     ...eventShopRoutes(eventShop),
+    // Progression native (docs/PROGRESSION.md): XP, levels, titles, badges — Studio's panel and the public reads.
+    ...progressionRoutes(progression, {
+      channelId: LAB_PROGRESSION_CHANNEL,
+      production: false,
+      site: false,
+    }),
     // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
     ...cautionRoutes(caution),
     // Votekick V2: Studio (state, overlay, mute) and the Lab chat adapter (Twitch executor); `!votekick` in the Lab chat.
