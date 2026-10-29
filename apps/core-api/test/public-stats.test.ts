@@ -114,6 +114,28 @@ describe('raptoru.fr — Jeu des mots ranking', () => {
       ['1', 15],
     ]);
     expect(all.firstFindAt).toBe(old.toISOString());
+    // One viewer's own row with its rank in the whole ranking (the profile); a bad id is refused.
+    expect(
+      (await route('/v1/word-game/leaderboard')('?period=all&viewer=1'))
+        .entries,
+    ).toEqual([
+      {
+        rank: 2,
+        twitchUserId: '1',
+        login: 'ana',
+        displayName: 'Ana',
+        points: 15,
+        words: 2,
+        fastWords: 1,
+      },
+    ]);
+    expect(
+      (await route('/v1/word-game/leaderboard')('?period=all&viewer=999'))
+        .entries,
+    ).toEqual([]);
+    await expect(
+      route('/v1/word-game/leaderboard')('?viewer=abc'),
+    ).rejects.toMatchObject({ status: 400 });
     // An unknown period is the week; the limit is bounded.
     expect((await route('/v1/word-game/leaderboard')('?period=x')).period).toBe(
       'semaine',
@@ -188,5 +210,8 @@ describe('raptoru.fr — Tombola ranking', () => {
         totalWon: 0,
       },
     ]);
+    expect(
+      (await route('/v1/raffle/leaderboard')('?viewer=3')).entries,
+    ).toMatchObject([{ rank: 3, twitchUserId: '3' }]);
   });
 });
