@@ -67,7 +67,7 @@ export function progressionRoutes(
       handle: ({ url }) =>
         svc.leaderboard(
           ch,
-          limitParam(url, 100, 500),
+          limitParam(url, 100, 2000),
           parse(
             z.enum(['xp', 'watch', 'messages']),
             url.searchParams.get('by') ?? 'xp',
