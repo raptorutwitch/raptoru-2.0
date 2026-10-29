@@ -28,7 +28,14 @@ export const DEFAULT_PROGRESSION_RULES: ProgressionRules = {
   live_only: true,
   curve_base: 60,
   curve_exponent: 1.6,
-  excluded_logins: ['lecroupier_', 'viewerumobilu', 'streamelements', 'wizebot', 'nightbot', 'streamlabs'],
+  excluded_logins: [
+    'lecroupier_',
+    'viewerumobilu',
+    'streamelements',
+    'wizebot',
+    'nightbot',
+    'streamlabs',
+  ],
 };
 
 export const ProgressionSettingsPatch = z.strictObject({
@@ -38,7 +45,13 @@ export const ProgressionSettingsPatch = z.strictObject({
 
 export const RewardId = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,47}$/);
 export const RewardKind = z.enum(['title', 'badge']);
-export const RewardRarity = z.enum(['common', 'rare', 'epic', 'legendary', 'event']);
+export const RewardRarity = z.enum([
+  'common',
+  'rare',
+  'epic',
+  'legendary',
+  'event',
+]);
 
 export const ProgressionRewardInput = z.strictObject({
   reward_id: RewardId,
@@ -46,7 +59,10 @@ export const ProgressionRewardInput = z.strictObject({
   label: z.string().trim().min(1).max(60),
   description: z.string().max(200).default(''),
   rarity: RewardRarity.default('common'),
-  category: z.string().regex(/^[a-z0-9_-]{1,32}$/).default('general'),
+  category: z
+    .string()
+    .regex(/^[a-z0-9_-]{1,32}$/)
+    .default('general'),
   /** Granted automatically to every viewer reaching this level (null: event / manual only). */
   unlock_level: z.number().int().min(1).max(10_000).nullable().default(null),
   active: z.boolean().default(true),
@@ -83,7 +99,11 @@ export const ProgressionImportRequest = z.strictObject({
     .array(
       z.strictObject({
         twitch_user_id: TwitchId.nullable().default(null),
-        login: z.string().regex(/^[a-z0-9_]{1,25}$/).nullable().default(null),
+        login: z
+          .string()
+          .regex(/^[a-z0-9_]{1,25}$/)
+          .nullable()
+          .default(null),
         level: z.number().int().min(1).max(10_000),
         watch_seconds: z.number().int().min(0).max(10_000_000_000).default(0),
         messages: z.number().int().min(0).max(100_000_000).default(0),
