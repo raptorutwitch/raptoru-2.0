@@ -42,9 +42,24 @@ Récupérable (API WizeBot en lecture seule, via raptoru.fr, relevé du 29/10) :
 exposés par l'API : non récupérables.
 
 `POST …/progression/import` démarre chaque viewer **à son niveau WizeBot** (XP = seuil de ce niveau, une fois par
-viewer : clé `import:wizebot:<id>`) et garde son watchtime et ses messages comme historique importé, à part. Un pseudo
-est résolu par les viewers connus du Core ; les inconnus sont renvoyés (à réimporter plus tard, jamais devinés).
-`POST …/progression/import/revert` retire exactement l'import (les récompenses déjà données restent).
+viewer : clé `import:wizebot:<id>`) et garde son watchtime et ses messages comme historique importé, à part.
+
+Résolution, jamais devinée :
+
+- par identifiant Twitch quand le site le connaît (conflit si le Core connaît cet identifiant sous un autre pseudo) ;
+- sinon par pseudo, seulement si le Core a **un seul** compte avec ce pseudo (plus d'un : « ambigu ») ;
+- un identifiant atteint par deux lignes : conflit, aucune des deux n'est importée ;
+- les inconnus sont renvoyés (à réimporter plus tard ; l'import est idempotent).
+
+`dry_run: true` (bouton Studio « Simuler (n'écrit rien) ») renvoie les mêmes comptes sans rien écrire. Studio envoie
+par lots de 60 lignes (le Lab Core limite une requête à 8 Ko). `POST …/progression/import/revert` retire exactement
+l'import (les récompenses déjà données restent).
+
+Relevé public du 29/10 (borne basse) : 407 viewers résolubles sur 2 441, 0 ambigu, 0 conflit. Le chiffre exact vient
+de la simulation en Production (la table `viewers` du Core est plus grande que les classements publics).
+
+L'XP de présence passe dans son propre savepoint : une erreur de progression n'annule jamais le cycle de présence
+ni les Jetons de fidélité. Livraison : `docs/PROGRESSION_GO.md`.
 
 ## Routes
 
