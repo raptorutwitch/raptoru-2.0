@@ -1987,7 +1987,7 @@ export class LabEbs {
    * Is the shop shown to this viewer (open, and they are allowed in the Extension)? Read in the background at most
    * every 3 s per viewer (the session itself stays synchronous).
    */
-  private eventShopOpen(viewerId: string | null) {
+  private eventShopOpen(viewerId: string | null): boolean {
     const key = viewerId ?? '';
     const known = this.eventShopFor.get(key);
     if (this.labCore && (!known || Date.now() - known.at >= 3000)) {
@@ -2010,7 +2010,10 @@ export class LabEbs {
         () => this.eventShopFor.set(key, { open: false, at: Date.now() }),
       );
     }
-    return known?.open ?? false;
+    if (known || !viewerId) return known?.open ?? false;
+    // A viewer not read yet: the channel's answer meanwhile (open for everyone; closed in « Testeurs seulement », where
+    // only this viewer's own read can show it) — never « closed » for the first seconds of every viewer.
+    return this.eventShopOpen(null);
   }
 
   private session(identity: LabIdentity, identityShared: boolean): Json {
