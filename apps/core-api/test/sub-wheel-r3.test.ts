@@ -1343,3 +1343,126 @@ describe('Roue du Sub V2 — whole journeys', () => {
     expect((await f.claim()).spin).toBeNull();
   });
 });
+
+describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with the wheel on is drawn at once', () => {
+  // Real live of 28/10: subs and resubs (Prime too) waited as « absent » / unknown because the viewer was not (yet) in
+  // a fresh Get Chatters reading; a viewer who accepted its tour in chat waited the same way, and « Tirer » could not
+  // take it over. Rule: sub / resub in live + wheel on = present, the wheel goes normally.
+  const sub = (viewer: string, ms: number) =>
+    notice(viewer, ms, { type: 'sub', months: undefined });
+
+  it('sub, resub, Prime resub: drawn at the next wheel with NO chatters reading at all (presence unknown)', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.live('s1', 0);
+    f.at0(MIN);
+    const a = (await f.receive(sub('9501', MIN)))!;
+    const b = (await f.receive(notice('9502', MIN)))!;
+    const c = (await f.receive(
+      notice('9503', MIN, { tier: 'prime', months: 4 }),
+    ))!;
+    f.at0(MIN + SUB_WHEEL.afterAlertMaxMs + 1);
+    const presence = Object.fromEntries(
+      (await f.wheel.rights(CH)).map((r) => [r.viewer.id, r.presence]),
+    );
+    expect(presence).toEqual({
+      '9501': 'present',
+      '9502': 'present',
+      '9503': 'present',
+    });
+    const order: string[] = [];
+    for (let k = 0; k < 3; k++) {
+      const { spin } = await f.claim();
+      order.push(spin!.spin_id);
+      await f.done(spin!.spin_id);
+    }
+    expect(order).toEqual([a.spin_id, b.spin_id, c.spin_id]);
+    expect(f.draws()).toBe(3);
+    expect(await f.credits()).toBe(3);
+    expect((await f.claim()).spin).toBeNull();
+  });
+
+  it('even when a fresh reading says « absent » (the chatters list lags or misses the viewer)', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.live('s1', 0);
+    await f.reading(['7777'], 30_000);
+    f.at0(40_000);
+    const r = (await f.receive(notice('9501', 40_000)))!;
+    f.at0(40_000 + SUB_WHEEL.afterAlertMaxMs + 1);
+    expect((await f.claim()).spin?.spin_id).toBe(r.spin_id);
+  });
+
+  it('a resub that only reached us through its EventSub message (no chat notice): one right, drawn once; the notice later is the same right', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.live('s1', 0);
+    f.at0(MIN);
+    await f.post({
+      type: 'resub',
+      eventId: randomUUID(),
+      occurredAt: iso(MIN),
+      viewer: { twitchUserId: '9501', login: 'v9501', displayName: 'V9501' },
+      tier: 't1',
+      cumulativeMonths: 9,
+    } as LoyaltyEvent);
+    const { spin } = await f.claim();
+    expect(spin).toMatchObject({ name: 'V9501' });
+    await f.done(spin!.spin_id);
+    await f.receive(notice('9501', MIN + 2_000, { months: 9 }));
+    expect((await f.claim()).spin).toBeNull();
+    expect(f.draws()).toBe(1);
+    expect(await f.credits()).toBe(1);
+  });
+
+  it('still waits (tour en attente) when the wheel was off at reception, off live, or acquired in an earlier live', async () => {
+    const f = await fixture();
+    await f.v2(false);
+    await f.live('s1', 0);
+    f.at0(MIN);
+    const off = (await f.receive(notice('9501', MIN)))!;
+    f.at0(2 * MIN);
+    await f.wheel.setEnabled(CH, true);
+    f.at0(3 * MIN);
+    expect((await f.claim()).spin).toBeNull(); // kept while OFF: its presence decides
+    await endLive(f.core, at(10 * MIN));
+    f.at0(DAY);
+    const offLive = (await f.receive(notice('9502', DAY)))!;
+    expect(offLive.right.queue).toBe('manual');
+    await f.live('s2', 2 * DAY);
+    f.at0(2 * DAY + MIN);
+    expect((await f.claim()).spin).toBeNull(); // earlier live: waits for its presence
+    await f.reading(['9501'], 2 * DAY + MIN);
+    expect((await f.claim()).spin?.spin_id).toBe(off.spin_id);
+    expect(await f.status(offLive.spin_id)).toBe('owed');
+  });
+
+  it('a granted tour accepted by the viewer in this live is drawn without a chatters reading; « Tirer » also takes over a viewer request', async () => {
+    const f = await fixture();
+    await f.v2();
+    const g = (key: string, id: string) =>
+      f.wheel.grant(CH, studio, {
+        key,
+        viewer: { id, name: `V${id}` },
+        tier: 1,
+        months: 3,
+        note: 'rattrapage',
+      });
+    const a = await g(randomUUID(), '9501');
+    const b = await g(randomUUID(), '9502');
+    // b accepted before the live (yesterday): waits for its presence…
+    await f.wheel.viewerAccept(CH, { id: '9502', login: 'v9502' }, 'command');
+    await f.live('s1', MIN);
+    f.at0(2 * MIN);
+    expect((await f.claim()).spin).toBeNull();
+    // …until the broadcaster presses « Tirer »: drawn at once.
+    await f.wheel.requestDraw(b.spin_id, studio);
+    expect((await f.claim()).spin?.spin_id).toBe(b.spin_id);
+    await f.done(b.spin_id);
+    // a accepts in this live (its chat answer proves it is there): drawn.
+    await f.wheel.viewerAccept(CH, { id: '9501', login: 'v9501' }, 'command');
+    expect((await f.claim()).spin?.spin_id).toBe(a.spin_id);
+    await f.done(a.spin_id);
+    expect(await f.credits()).toBe(2);
+  });
+});

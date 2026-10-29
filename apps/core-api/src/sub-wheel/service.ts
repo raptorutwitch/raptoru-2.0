@@ -1266,8 +1266,14 @@ export class SubWheelService {
       )[0];
       if (!r) throw new SwError(404, 'spin_not_found');
       const role = await this.allow(q, r.channel_id, actor, 'subwheel.draw');
-      if (r.status === 'requested') return spinView(r);
-      if (r.status !== 'owed') throw new SwError(409, 'not_owed');
+      // Already asked by a human of the channel: idempotent. Asked by the viewer itself (waiting for its presence):
+      // « Tirer » takes it over — drawn at the next wheel without waiting (live feedback 29/10).
+      const byViewer = ['command', 'chat_accept', 'extension'].includes(
+        r.requested_via ?? '',
+      );
+      if (r.status === 'requested' && !byViewer) return spinView(r);
+      if (r.status !== 'owed' && r.status !== 'requested')
+        throw new SwError(409, 'not_owed');
       if (await underReview(q, spinId)) throw new SwError(409, 'needs_review');
       const now = this.now();
       const by = actorName(actor);
@@ -1291,7 +1297,7 @@ export class SubWheelService {
         action: 'sw_draw_request',
         viewerId: r.viewer_id,
         spinId,
-        before: { status: 'owed' },
+        before: { status: r.status, requested_via: r.requested_via ?? null },
         after: { status: 'requested' },
       });
       return spinView(row);

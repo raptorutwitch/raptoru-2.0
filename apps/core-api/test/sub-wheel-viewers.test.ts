@@ -231,9 +231,11 @@ const ana = { id: '9801', name: 'Ana' };
 const bob = { id: '9802', name: 'Bob' };
 
 describe('Roue du Sub V2 — Lab end to end (simulators, player, Lab wallet)', () => {
-  it('event → tour → presence → wheel → ONE Lab wallet credit → history; absent or unknown: kept', async () => {
+  it('event → tour → presence → wheel → ONE Lab wallet credit → history; kept while the wheel was off (absent or unknown); in live with the wheel on: drawn at once', async () => {
     const l = await lab();
     await l.v2();
+    // Wheel OFF at reception: a waiting tour, its presence decides once the wheel is back on.
+    await l.call(`${l.sw}/settings`, { enabled: false });
     await l.live(true);
     expect(
       (await l.call<{ settings: { lab: boolean } }>(`${l.sw}/state`)).settings,
@@ -254,6 +256,7 @@ describe('Roue du Sub V2 — Lab end to end (simulators, player, Lab wallet)', (
       },
     });
     // Readings OFF: unknown → nothing. Readings ON, Ana absent → nothing.
+    await l.call(`${l.sw}/settings`, { enabled: true });
     expect(await l.wheel()).toBeNull();
     await l.call(`${l.sw}/lab/presence`, {
       readings: true,
@@ -283,6 +286,14 @@ describe('Roue du Sub V2 — Lab end to end (simulators, player, Lab wallet)', (
     });
     rights = await l.call(`${l.sw}/rights`);
     expect(rights).toEqual([]);
+    // Live feedback 29/10: Bob subscribes in live, wheel on — drawn although the readings say he is absent.
+    await l.call(`${l.sw}/lab/simulate`, { kind: 'sub', viewer: bob, tier: 1 });
+    await l.playAlerts();
+    expect(
+      (await l.call<Record<string, unknown>[]>(`${l.sw}/rights`))[0],
+    ).toMatchObject({ presence: 'present' });
+    expect((await l.wheel())?.tier).toBe(1);
+    expect(await l.ledger(bob.id)).toHaveLength(1);
   });
 
   it('resub with cumulative months (notice + message): one certain tour; Prime: tier 1; a subscribe alone (unshared)', async () => {
@@ -369,7 +380,7 @@ describe('Roue du Sub V2 — « !roue » (R8)', () => {
     expect(await l.replies()).toEqual([
       '@Ana Roue du Sub : 1 tour (1 à lancer). Tape !roue oui pour les lancer.',
       '@Ana les tours se lancent pendant le live : reviens à ce moment-là !',
-      '@Ana c’est parti : 1 tour sera lancé pendant le live, quand tu seras là.',
+      '@Ana c’est parti : 1 tour va être lancé.',
       '@Ana c’est déjà demandé : tes tours arrivent.',
       '@Bob d’accord, ton tour t’attend (!roue oui quand tu veux).',
     ]);
@@ -383,14 +394,9 @@ describe('Roue du Sub V2 — « !roue » (R8)', () => {
     expect(rights.find((r) => r.viewer.name === 'Bob')).toMatchObject({
       status: 'owed',
     });
-    // A viewer's own request waits for its presence (never a credit at acceptance).
-    const before = await l.tokens(ana.id);
-    expect(await l.wheel()).toBeNull();
-    expect(await l.tokens(ana.id)).toBe(before);
-    await l.call(`${l.sw}/lab/presence`, {
-      readings: true,
-      viewers: [{ ...ana, present: true }],
-    });
+    // Live feedback 29/10: its « oui » in this live proves it is there — the next wheel draws it, without waiting for a
+    // chatters reading (never a credit at acceptance itself).
+    expect(await l.ledger(ana.id)).toEqual([]);
     const spin = (await l.wheel())!;
     expect(spin.months).toBe(4);
     expect(await l.ledger(ana.id)).toEqual([spin.amount]); // one Lab wallet movement, the exact gain

@@ -129,3 +129,26 @@ l'inverse ; le module d'alertes n'a pas été modifié).
 Retour arrière : Studio → Roue du Sub → Réglages → `v1` (immédiat, aucun droit perdu) ; code :
 `deploy core|bot 0b11cc0a98447972264ee1c25115d3baf0b9e74f --rollback` (workflow, `rollback` coché) ; Studio : réinstaller
 0.1.7 ; le schéma reste (additif, vérifié avec l'ancien Core).
+
+## 8. Correctif après le live du 28/10 (présence)
+
+**Constaté en live** : des subs et resubs (Prime compris) reçus pendant le live, roue active, restaient « absent » ou
+« inconnu » et ne partaient pas ; un tour accordé puis accepté par le viewer dans le chat ne partait pas non plus, et
+« Tirer » ne le débloquait pas.
+
+**Cause** : en mode `v2`, un tour n'était tiré que si le viewer figurait dans un relevé Get Chatters de moins de 5 min
+(relevé toutes les 2 min, en retard, incomplet : spectateurs mobiles, arrivée récente). Le sub lui-même, ou la réponse
+du viewer dans le chat, ne comptait pas comme présence. « Tirer » sur un tour déjà demandé par le viewer était ignoré
+(la demande restait « du viewer », donc en attente de présence).
+
+**Comportement final** (`apps/core-api/src/sub-wheel/draws.ts`, `liveInteractionSql`) :
+
+- Sub / resub (Prime compris) reçu **pendant le live, roue active** → le viewer est **présent** : la roue part à la
+  suite (après son alerte, une roue à la fois, dans l'ordre d'arrivée), sans attendre de relevé.
+- Le viewer demande lui-même son tour pendant le live (`!roue oui`, réponse à l'invitation, extension) → présent : la
+  roue part.
+- « Tirer » (diffuseur, modérateur autorisé) reprend un tour demandé par le viewer : il part sans attendre.
+- **Tour en attente**, présence requise comme avant : reçu hors live, reçu roue désactivée (ou réglages de la roue
+  changés depuis), acquis lors d'un live précédent.
+- Inchangés : les subs offerts ne donnent jamais de tour ; une preuve rejouée ou un même renouvellement (subscribe +
+  message + notification) = un seul tour, un seul gain ; un tour « À vérifier » n'est jamais tiré.
