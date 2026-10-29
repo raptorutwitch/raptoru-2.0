@@ -89,6 +89,7 @@ await db.query(
    values ('900100', '57012345', 'Kirito_TV', now(), now()) on conflict do nothing`,
 );
 
+const { ProgressionRelay } = await import('../src/progression/relay.js');
 const ext = await LabEbs.create(EXTENSION_DIR);
 const labCore = localLabCoreClient(coreUrl, secret);
 ext.connectLab(labCore);
@@ -140,6 +141,8 @@ const studio = createStudioServer(
   null, // supervision
   null, // dock
   halloween,
+  // Progression (docs/PROGRESSION.md): Studio's panel relay to this Lab Core.
+  new ProgressionRelay({ core: labCore, environment: 'lab' }),
 );
 studio.listen(port, '127.0.0.1', () =>
   console.log(

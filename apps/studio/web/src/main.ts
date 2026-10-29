@@ -209,6 +209,7 @@ if (app) {
     asked === 'alerts' ||
     asked === 'channel-points' ||
     asked === 'halloween' ||
+    asked === 'progression' ||
     asked === 'test-lab' ||
     asked === 'extension-lab' ||
     asked === 'soundboard'
