@@ -98,9 +98,37 @@ function measure(el) {
   else el.removeAttribute('aria-expanded');
 }
 
+// Live feedback 29/10: reading below the top, the view never moves by itself. The browser's scroll anchoring loses its
+// anchor when that row is rebuilt (relative times every 30 s, highlight, new events at once): the first visible row is
+// kept in place by hand instead. At the top (the live flow) new events show up.
+const TOP_PX = 24;
+
+/** The first row visible in the view and its offset, while reading below the top; null at the top. */
+function readingPosition() {
+  if (scroller.scrollTop <= TOP_PX) return null;
+  const top = scroller.getBoundingClientRect().top;
+  for (const li of list.children) {
+    const r = li.getBoundingClientRect();
+    if (r.bottom > top) return { key: li.dataset.key, offset: r.top - top };
+  }
+  return null;
+}
+
+function keepPosition(p) {
+  const li =
+    p && list.querySelector(`li[data-key="${CSS.escape(p.key ?? '')}"]`);
+  if (!li) return;
+  const shift =
+    li.getBoundingClientRect().top -
+    scroller.getBoundingClientRect().top -
+    p.offset;
+  if (shift) scroller.scrollTop += shift;
+}
+
 /** Renders the rows, reusing every element whose HTML did not change (position, focus and scroll stay put). */
 function render() {
   const now = Date.now();
+  const reading = readingPosition();
   rows = entries(acts.values(), skip);
   rowByKey = new Map(rows.map((r) => [r.key, r]));
   for (const k of selected) if (!rowByKey.has(k)) selected.delete(k);
@@ -142,8 +170,12 @@ function render() {
     }
   }
   for (const el of prev.values()) el.remove();
+  keepPosition(reading);
+  // Never scrolls: focus() alone would bring the focused row back into view at every refresh.
   if (focused && !list.contains(document.activeElement))
-    list.querySelector(`li[data-key="${CSS.escape(focused)}"]`)?.focus();
+    list
+      .querySelector(`li[data-key="${CSS.escape(focused)}"]`)
+      ?.focus({ preventScroll: true });
   const empty = $('#empty');
   empty.hidden = rows.length > 0;
   empty.innerHTML = acts.size
@@ -175,9 +207,17 @@ function renderChrome() {
   gear.title = hidden ? 'Préférences (filtres actifs)' : 'Préférences';
 }
 
+/** The display size: a class on the body, CSS variables do the rest. */
+function applyDensity() {
+  for (const c of [...document.body.classList])
+    if (c.startsWith('d-')) document.body.classList.remove(c);
+  document.body.classList.add(`d-${prefs.density}`);
+}
+
 function setPrefs(next) {
   prefs = readPrefs(next);
   store('prefs', prefs);
+  applyDensity();
   if (!prefsPanel.hidden) renderPrefs();
   render();
 }
@@ -195,7 +235,7 @@ function apply(activities, isNew) {
     }
   }
   learn(activities);
-  if (added && scroller.scrollTop > 24) {
+  if (added && scroller.scrollTop > TOP_PX) {
     unseen += added;
     pill.innerHTML = `${icon('arrowUp')}${unseen} nouveau${unseen > 1 ? 'x' : ''}`;
     pill.hidden = false;
@@ -536,7 +576,7 @@ pill.addEventListener('click', () => {
 const FAR_PX = 900;
 scroller.addEventListener('scroll', () => {
   const top = scroller.scrollTop;
-  if (top <= 24 && unseen) unseen = 0;
+  if (top <= TOP_PX && unseen) unseen = 0;
   if (unseen) return;
   if (top > FAR_PX) {
     if (pill.hidden) {
@@ -591,6 +631,7 @@ $('#prefs-body').addEventListener('change', (ev) => {
     else rh.add(t.dataset.reward);
     setPrefs({ ...prefs, rewards: { ...prefs.rewards, hidden: [...rh] } });
   } else if (t.id === 'costs') setPrefs({ ...prefs, costs: t.checked });
+  else if (t.name === 'density') setPrefs({ ...prefs, density: t.value });
 });
 $('#all').addEventListener('click', () =>
   setPrefs({ ...prefs, hidden: [], rewards: { ...prefs.rewards, hidden: [] } }),
@@ -603,6 +644,7 @@ $('#reset').addEventListener('click', () =>
   setPrefs({
     ...DEFAULT_PREFS,
     rewards: { hidden: [], names: prefs.rewards.names },
+    density: prefs.density, // « Réinitialiser » is about the events shown, not the size
   }),
 );
 
@@ -702,6 +744,7 @@ gear.innerHTML = icon('gear');
 bin.insertAdjacentHTML('afterbegin', icon('trash'));
 pickBtn.innerHTML = icon('select');
 $('#hide').insertAdjacentHTML('afterbegin', icon('trash'));
+applyDensity();
 render();
 setStatus('connecting');
 void connect();
