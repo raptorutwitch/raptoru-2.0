@@ -320,6 +320,13 @@ Studio : `GET /api/dock` → `{ available, reason, url, clients, feed }` ; `POST
 4. Roue crantée : familles affichées, récompenses une par une, coûts des récompenses, réinitialisation.
 5. Nettoyer le fil : Ctrl + clic / Maj + clic (ou le bouton « Sélectionner »), puis **Masquer** ou Suppr ; corbeille
    de l'en-tête pour restaurer.
+6. **Taille d'affichage** (roue crantée, depuis le 29/10) : Minimaliste · **Moyen** (l'affichage V1.2, par défaut) ·
+   Gros · Géant. Même carte, seuls les espacements, l'avatar et la taille du texte changent ; gardée par le dock
+   (« Réinitialiser » ne la touche pas).
+7. **Défilement** (correctif du 29/10) : en haut de la liste, les nouveaux événements apparaissent ; plus bas, la vue
+   ne bouge plus jamais toute seule (ni à l'arrivée d'un événement, ni au rafraîchissement des heures toutes les 30 s,
+   ni pour revenir à la ligne cliquée) ; la pastille « N nouveaux » ramène en haut. Texte un peu plus clair
+   (même hiérarchie).
 
 ## Tests effectués
 

@@ -604,6 +604,7 @@ describe('preferences', () => {
       hidden: ['sub', 'resub', 'gift', 'random_ban', 'raffle', 'bonk'],
       costs: true,
       rewards: { hidden: [], names: {} },
+      density: 'mid',
     });
     // V1.2 values read as they are, defensively.
     expect(
@@ -618,7 +619,19 @@ describe('preferences', () => {
       hidden: ['raffle'],
       costs: false,
       rewards: { hidden: ['r1'], names: { r1: 'X' } },
+      density: 'mid',
     });
+  });
+
+  it('display size (live feedback 29/10): four densities, « Moyen » by default and for anything unknown; one choice in the panel', () => {
+    for (const d of ['min', 'mid', 'big', 'xl'])
+      expect(readPrefs({ v: 2, density: d }).density).toBe(d);
+    expect(readPrefs({ v: 2, density: 'huge' }).density).toBe('mid');
+    expect(readPrefs(null).density).toBe('mid');
+    const html = prefsHtml(readPrefs({ v: 2, density: 'big' }));
+    expect(html.match(/name="density"/g)).toHaveLength(4);
+    expect(html).toContain('value="big" checked');
+    expect(html).toMatch(/Minimaliste.*Moyen.*Gros.*Géant/);
   });
 
   it('each filter independently: Random Ban without Tombola, Subgifts without Subs', () => {

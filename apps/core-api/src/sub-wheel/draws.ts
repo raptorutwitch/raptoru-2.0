@@ -40,6 +40,34 @@ function presentSql(mode: PresenceMode) {
   return '($2::timestamptz is null)';
 }
 
+/** Start of the live in progress (null: none) — the row `s`'s channel in the Lab. */
+function liveStartSql(mode: PresenceMode) {
+  if (mode === 'tracked')
+    return '(select started_at from stream_sessions where ended_at is null order by started_at desc limit 1)';
+  return `(select l.started_at from lab_stream_sessions l
+    where l.channel_id = s.channel_id and l.ended_at is null order by l.started_at desc limit 1)`;
+}
+
+/**
+ * Live feedback 29/10: the viewer of row `s` just showed up in THIS live — its sub / resub reached us while the wheel
+ * was on (acquired after the live started and after the last change of the wheel's settings: a right kept while the
+ * wheel was off still waits for its presence), or it asked its own wheel (chat answer, `!roue`, extension) during it.
+ * Counts as present: the chatters list (read every 2 min, lagging, missing some viewers) never makes it wait.
+ */
+function liveInteractionSql(mode: PresenceMode) {
+  if (mode === 'none') return 'false';
+  const start = liveStartSql(mode);
+  return `(${start} is not null and (
+    (s.queue = 'auto' and s.acquired_at >= ${start}
+      and s.acquired_at >= (select w.updated_at from sw_settings w where w.channel_id = s.channel_id and w.enabled))
+    or (${VIEWER_REQUEST} and s.requested_at >= ${start})))`;
+}
+
+/** Present (fresh chatters reading) or just interacted in this live. */
+function seenSql(mode: PresenceMode) {
+  return `(${presentSql(mode)} or ${liveInteractionSql(mode)})`;
+}
+
 export interface Candidate {
   spin_id: string;
   /** Twitch time of its first proof: the economic cutover boundary of its gain. */
@@ -59,7 +87,7 @@ export async function requestedRights(
   return q.query<Candidate>(
     `select s.spin_id, ${FIRST_AT} from sw_spins s
      where s.channel_id = $1 and s.status = 'requested' and ${NOT_UNDER_REVIEW}
-       and (s.requested_via is null or not (${VIEWER_REQUEST}) or ${presentSql(mode)})
+       and (s.requested_via is null or not (${VIEWER_REQUEST}) or ${seenSql(mode)})
      order by s.requested_at, s.seq limit 20
      for update of s skip locked`,
     [channelId, new Date(now.getTime() - PRESENCE_FRESH_MS)],
@@ -77,7 +105,7 @@ export async function autoRights(
   return q.query<Candidate>(
     `select s.spin_id, ${FIRST_AT} from sw_spins s
      where s.channel_id = $1 and s.status = 'owed' and s.queue = 'auto' and ${NOT_UNDER_REVIEW}
-       and ${presentSql(mode)}
+       and ${seenSql(mode)}
        and (s.alert_id is null
          or exists (select 1 from alert_items a where a.alert_id = s.alert_id
            and a.status in ('completed', 'failed', 'expired'))
@@ -107,7 +135,7 @@ export async function retryDue(
   return q.query<{ spin_id: string }>(
     `select s.spin_id from sw_spins s
      where s.channel_id = $1 and s.status = 'failed' and s.recovery = 'retry' and s.retry_at <= $3
-       and ((s.requested_via is not null and not (${VIEWER_REQUEST})) or ${presentSql(mode)})
+       and ((s.requested_via is not null and not (${VIEWER_REQUEST})) or ${seenSql(mode)})
      order by s.retry_at, s.seq limit 1
      for update of s skip locked`,
     [channelId, new Date(now.getTime() - PRESENCE_FRESH_MS), now],
@@ -149,6 +177,16 @@ export async function presenceOf(
   const unknown = () =>
     new Map(viewerIds.map((id) => [id, 'unknown' as const]));
   if (mode === 'none' || !viewerIds.length) return unknown();
+  // Just interacted in this live (its sub / resub with the wheel on, its own request): present, like for the draw.
+  const interacted = new Set(
+    (
+      await q.query<{ id: string }>(
+        `select distinct s.viewer_id as id from sw_spins s
+         where s.channel_id = $1 and s.viewer_id = any($2::text[]) and ${liveInteractionSql(mode)}`,
+        [channelId, viewerIds],
+      )
+    ).map((r) => r.id),
+  );
   if (mode === 'lab_sim') {
     const on = (
       await q.query<{ on: boolean }>(
@@ -158,7 +196,13 @@ export async function presenceOf(
         [channelId],
       )
     )[0]?.on;
-    if (!on) return unknown();
+    if (!on)
+      return new Map(
+        viewerIds.map((id) => [
+          id,
+          interacted.has(id) ? 'present' : ('unknown' as const),
+        ]),
+      );
     const present = new Set(
       (
         await q.query<{ id: string }>(
@@ -169,7 +213,10 @@ export async function presenceOf(
       ).map((r) => r.id),
     );
     return new Map(
-      viewerIds.map((id) => [id, present.has(id) ? 'present' : 'absent']),
+      viewerIds.map((id) => [
+        id,
+        present.has(id) || interacted.has(id) ? 'present' : 'absent',
+      ]),
     );
   }
   const since = new Date(now.getTime() - PRESENCE_FRESH_MS);
@@ -193,7 +240,11 @@ export async function presenceOf(
   return new Map(
     viewerIds.map((id) => [
       id,
-      seen.has(id) ? 'present' : fresh ? 'absent' : 'unknown',
+      seen.has(id) || interacted.has(id)
+        ? 'present'
+        : fresh
+          ? 'absent'
+          : 'unknown',
     ]),
   );
 }

@@ -162,7 +162,16 @@ export const DEFAULT_PREFS = Object.freeze({
   hidden: [],
   costs: false,
   rewards: { hidden: [], names: {} },
+  density: 'mid',
 });
+
+/** Display sizes (live feedback 29/10): one component, four densities; « Moyen » is the V1.2 look. */
+export const DENSITIES = [
+  ['min', 'Minimaliste'],
+  ['mid', 'Moyen'],
+  ['big', 'Gros'],
+  ['xl', 'Géant'],
+];
 
 /** V1.1 filters → V1.2 filters (« Abos et cadeaux » and « Tombola et Random Ban » are split). */
 const V11 = {
@@ -198,6 +207,7 @@ export function readPrefs(raw) {
     v: 2,
     hidden: [...new Set(hidden)],
     costs: raw?.costs === true,
+    density: DENSITIES.some(([d]) => d === raw?.density) ? raw.density : 'mid',
     rewards: {
       hidden: Array.isArray(r.hidden)
         ? [...new Set(r.hidden.filter((x) => typeof x === 'string'))].slice(
@@ -854,38 +864,49 @@ export function prefsHtml(prefs, { rewardsOpen = false } = {}) {
   const rewards = Object.entries(prefs.rewards.names).sort((x, y) =>
     x[1].localeCompare(y[1], 'fr'),
   );
-  return FILTER_GROUPS.map((g) => {
-    const on = g.filters.filter((f) => !hidden.has(f)).length;
-    const state =
-      on === 0 ? '' : on === g.filters.length ? ' checked' : ' data-mixed="1"';
-    const items = g.filters
-      .map((f) =>
-        box(
-          `data-filter="${f}"`,
-          !hidden.has(f),
-          `${icon(FAMILIES[f].icon)}${esc(filterLabel(f))}`,
-          '',
-          `chk f-${f}`,
-        ),
-      )
-      .join('');
-    const list =
-      g.id === 'points'
-        ? `<details class="rewards"${rewards.length ? '' : ' hidden'}${rewardsOpen ? ' open' : ''}><summary>Récompenses une par une (${rewards.length})</summary>${rewards
-            .map(([id, title]) =>
-              box(
-                `data-reward="${esc(id)}"${hidden.has('reward') ? ' disabled' : ''}`,
-                !rh.has(id),
-                esc(title),
-                ` title="${esc(title)}"`,
-              ),
-            )
-            .join(
-              '',
-            )}</details>${box('id="costs"', prefs.costs, 'Afficher les coûts des récompenses')}`
-        : '';
-    return `<fieldset class="pg"><legend><label class="chk grp"><input type="checkbox" data-group="${g.id}"${state}><span>${esc(g.label)}</span></label></legend><div class="pg-items">${items}</div>${list}</fieldset>`;
-  }).join('');
+  const sizes = `<fieldset class="pg density"><legend>Taille d’affichage</legend><div class="seg">${DENSITIES.map(
+    ([d, label]) =>
+      `<label><input type="radio" name="density" value="${d}"${prefs.density === d ? ' checked' : ''}><span>${label}</span></label>`,
+  ).join('')}</div></fieldset>`;
+  return (
+    sizes +
+    FILTER_GROUPS.map((g) => {
+      const on = g.filters.filter((f) => !hidden.has(f)).length;
+      const state =
+        on === 0
+          ? ''
+          : on === g.filters.length
+            ? ' checked'
+            : ' data-mixed="1"';
+      const items = g.filters
+        .map((f) =>
+          box(
+            `data-filter="${f}"`,
+            !hidden.has(f),
+            `${icon(FAMILIES[f].icon)}${esc(filterLabel(f))}`,
+            '',
+            `chk f-${f}`,
+          ),
+        )
+        .join('');
+      const list =
+        g.id === 'points'
+          ? `<details class="rewards"${rewards.length ? '' : ' hidden'}${rewardsOpen ? ' open' : ''}><summary>Récompenses une par une (${rewards.length})</summary>${rewards
+              .map(([id, title]) =>
+                box(
+                  `data-reward="${esc(id)}"${hidden.has('reward') ? ' disabled' : ''}`,
+                  !rh.has(id),
+                  esc(title),
+                  ` title="${esc(title)}"`,
+                ),
+              )
+              .join(
+                '',
+              )}</details>${box('id="costs"', prefs.costs, 'Afficher les coûts des récompenses')}`
+          : '';
+      return `<fieldset class="pg"><legend><label class="chk grp"><input type="checkbox" data-group="${g.id}"${state}><span>${esc(g.label)}</span></label></legend><div class="pg-items">${items}</div>${list}</fieldset>`;
+    }).join('')
+  );
 }
 
 /**

@@ -67,6 +67,8 @@ const ACTIVITIES = [
   alert('sub', 30, 'Laniyelle'),
 ];
 const replays: { replay_key?: string }[] = [];
+/** New events the scripted Core hands out at its next « changes » answer. */
+const pending: { seq: number }[] = [];
 
 let server: DockServer;
 let dir = '';
@@ -85,9 +87,13 @@ test.beforeAll(async () => {
       } as T;
     if (u.pathname.endsWith('/changes')) {
       await new Promise((r) => setTimeout(r, 500));
+      const activities = pending.splice(0);
       return {
-        cursor: Number(u.searchParams.get('after')),
-        activities: [],
+        cursor: Math.max(
+          Number(u.searchParams.get('after')),
+          ...activities.map((a) => a.seq),
+        ),
+        activities,
       } as T;
     }
     // The replay: a slow answer (the user may click again meanwhile).
@@ -220,4 +226,87 @@ test('preferences: Random Ban without Tombola, one reward by id; kept after a re
   await page.click('#reset');
   await expect(page.locator('li.row.f-random_ban')).toHaveCount(1);
   await expect(page.locator('li.row.f-reward')).toHaveCount(1);
+});
+
+/** The first row in view and its offset from the top of the list's view. */
+const firstVisible = (page: Page) =>
+  page.evaluate(() => {
+    const top = document.querySelector('.scroll')!.getBoundingClientRect().top;
+    for (const li of document.querySelectorAll<HTMLElement>('#list > li')) {
+      const r = li.getBoundingClientRect();
+      if (r.bottom > top)
+        return { key: li.dataset.key, offset: Math.round(r.top - top) };
+    }
+    return null;
+  });
+
+test('live feedback 29/10 — reading below the top: new events and the 30 s refresh never move the view; at the top, new events show', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 300 });
+  await page.clock.install({ time: new Date(T) });
+  await open(page);
+  const scroller = page.locator('.scroll');
+  // A row clicked earlier keeps the focus; then the streamer reads further down.
+  await rows(page).nth(1).focus();
+  await scroller.evaluate((el) => (el.scrollTop = 220));
+  const before = await firstVisible(page);
+  expect(before).not.toBeNull();
+  pending.push(
+    ix('tts', 1, 'Neo', { message: 'nouveau' }),
+    alert('follow', 1, 'Zoe'),
+  );
+  await expect(page.locator('#pill')).toContainText('2 nouveaux');
+  // The same row at the same place (± 1 px: scrollTop is a whole pixel).
+  const still = async () => {
+    const now = await firstVisible(page);
+    expect(now?.key).toBe(before!.key);
+    expect(Math.abs(now!.offset - before!.offset)).toBeLessThanOrEqual(1);
+  };
+  await still();
+  // The relative times and the « just arrived » glow age (rows rebuilt, the focused one too): nothing moves.
+  await page.clock.runFor(61_000);
+  await still();
+  // At the top (the live flow): a new event shows at once, the view stays at the top.
+  await page.locator('#pill').click();
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(0);
+  pending.push(alert('raid', -61, 'Kai')); // the page's clock went 61 s on
+  await expect(rows(page).first()).toContainText('Kai');
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBe(0);
+});
+
+test('live feedback 29/10 — display size: Moyen by default (the V1.2 look); Minimaliste shows more rows, Gros / Géant bigger; kept after a reload', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 420 });
+  await open(page);
+  const height = () =>
+    rows(page)
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().height);
+  const whoSize = () =>
+    page
+      .locator('#list .who')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  await expect(page.locator('body')).toHaveClass(/d-mid/);
+  const mid = await height();
+  await page.locator('#gear').click();
+  await page.getByText('Minimaliste', { exact: true }).click();
+  await expect(page.locator('body')).toHaveClass(/d-min/);
+  const min = await height();
+  expect(min).toBeLessThan(mid - 8);
+  expect(await whoSize()).toBeGreaterThanOrEqual(12); // more room, never tiny text
+  await page.getByText('Gros', { exact: true }).click();
+  const big = await height();
+  expect(big).toBeGreaterThan(mid + 4);
+  await page.getByText('Géant', { exact: true }).click();
+  expect(await height()).toBeGreaterThan(big + 4);
+  await page.reload();
+  await expect(rows(page).first()).toBeVisible();
+  await expect(page.locator('body')).toHaveClass(/d-xl/);
+  // « Réinitialiser » resets the events shown, not the size.
+  await page.locator('#gear').click();
+  await page.locator('#reset').click();
+  await expect(page.locator('body')).toHaveClass(/d-xl/);
 });
