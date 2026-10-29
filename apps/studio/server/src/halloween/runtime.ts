@@ -808,14 +808,17 @@ export class HalloweenRuntime {
           `${this.base}/channels/${ch}/viewers/${viewer[1]}`,
         ),
       );
-    if (req.method === 'POST' && p === '/api/halloween/admin/settings')
-      return reply(
-        200,
-        await this.requireCore()(
-          `${this.base}/channels/${ch}/settings`,
-          await this.body(req),
-        ),
+    if (req.method === 'POST' && p === '/api/halloween/admin/settings') {
+      const body = await this.body(req);
+      const out = await this.requireCore()<Record<string, unknown>>(
+        `${this.base}/channels/${ch}/settings`,
+        body,
       );
+      // « Fermer la boutique » is one click to a clean screen: the effect on screen and the one handed over stop at
+      // once, like STOP ALL (the Core refunds what never started; what was seen is not refunded).
+      if (body.enabled === false) await this.stopAll();
+      return reply(200, out);
+    }
     const item =
       /^\/api\/halloween\/admin\/items\/([a-z0-9][a-z0-9-]{0,39})$/.exec(p);
     if (req.method === 'POST' && item)

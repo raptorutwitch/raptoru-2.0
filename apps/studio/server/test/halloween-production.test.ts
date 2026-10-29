@@ -196,4 +196,32 @@ describe('Halloween — production profile (main Core, paired installation, HTTP
     const p = await s.until(s.last, (v) => v?.status === 'failed');
     expect(p).toMatchObject({ error: 'stopped', refund_status: 'none' });
   }, 30_000);
+
+  it('« Fermer la boutique » during a play: one click — closed, the screen cleared at once (like STOP ALL), nothing more handed over; « Ouvrir » again: the same balance', async () => {
+    const s = await stack();
+    await s.until(
+      async () => (await s.shop.viewerState(CHANNEL, VIEWER.id)).engine_ready,
+      (v) => v,
+    );
+    await s.buy('fog');
+    const d = await s.until(
+      () => s.deliveries[0]!,
+      (v) => !!v,
+    );
+    await s.report(d.delivery_id, 'started');
+    await s.until(s.last, (v) => !!v?.started_at);
+    const before = (await s.shop.viewerState(CHANNEL, VIEWER.id)).balance;
+    const off = await s.panel('/api/halloween/admin/settings', {
+      enabled: false,
+    });
+    expect(off).toMatchObject({ status: 200, body: { enabled: false } });
+    const p = await s.until(s.last, (v) => v?.status === 'failed');
+    expect(p).toMatchObject({ error: 'stopped', refund_status: 'none' });
+    expect((await s.shop.viewerState(CHANNEL, VIEWER.id)).enabled).toBe(false);
+    const on = await s.panel('/api/halloween/admin/settings', {
+      enabled: true,
+    });
+    expect(on.body).toMatchObject({ enabled: true });
+    expect((await s.shop.viewerState(CHANNEL, VIEWER.id)).balance).toBe(before);
+  }, 30_000);
 });

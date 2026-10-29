@@ -746,6 +746,74 @@ describe('closing the event: temporary and reversible', () => {
     expect(await code(buy(ANA, 'eyes'))).toBe('ok');
   });
 
+  it('ON / OFF many times (OFF = « Fermer la boutique »: closing, then Studio’s STOP ALL): every purchase ends once, nothing left to play, no double refund, balances and history kept', async () => {
+    await open({ viewer_gap_ms: 0 });
+    await give(ANA, 30);
+    await give(BOB, 30);
+    const ledger = () =>
+      db.query<{ n: number }>(
+        "select count(*)::int as n from event_ledger where channel_id = $1 and kind = 'refund'",
+        [CH],
+      );
+    // One play at a time: at each OFF the shop holds one purchase — on screen (seen), handed to Studio but not
+    // started, or waiting — then once more with nothing at all.
+    const states = ['on_screen', 'handed_over', 'waiting', 'none'] as const;
+    let seen = 0;
+    for (const state of states) {
+      clock.advance(60 * 60_000); // past every cooldown
+      await ready(); // Studio's heartbeat, as it beats every few seconds
+      const c =
+        state === 'none'
+          ? null
+          : (await buy(state === 'waiting' ? BOB : ANA, 'blink'),
+            state === 'waiting' ? null : (await shop.claim(STUDIO, CH))!);
+      if (state === 'on_screen') {
+        await shop.ack(c!.purchase.purchase_id, {
+          studio_instance_id: STUDIO,
+          attempt_id: c!.attempt_id,
+          event: 'started',
+        });
+        seen += c!.purchase.price;
+      }
+      // OFF, twice in a row (a double click): the second changes nothing.
+      for (let k = 0; k < 2; k++) {
+        await shop.updateSettings(CH, { enabled: false });
+        await shop.stopAll(CH);
+      }
+      expect(await shop.claim(STUDIO, CH)).toBeNull();
+      const live = await db.query(
+        `select 1 from event_shop_purchases where channel_id = $1 and status in ('queued', 'executing')`,
+        [CH],
+      );
+      expect(live).toHaveLength(0); // nothing left that could still play
+      expect((await shop.viewerState(CH, ANA.id)).enabled).toBe(false);
+      // A late report of the stopped play changes nothing (no refund, no second end).
+      if (c)
+        await shop
+          .ack(c.purchase.purchase_id, {
+            studio_instance_id: STUDIO,
+            attempt_id: c.attempt_id,
+            event: 'completed',
+          })
+          .catch(() => null);
+      // ON again: the same shop, the same balances.
+      await shop.updateSettings(CH, { enabled: true });
+      await ready();
+    }
+    // Only what was seen is spent; the two others refunded exactly once.
+    expect(
+      ((await balance(ANA.id)) ?? 0) + ((await balance(BOB.id)) ?? 0),
+    ).toBe(60 - seen);
+    expect((await ledger())[0]!.n).toBe(2);
+    const all = (await shop.admin(CH)).purchases;
+    expect(all).toHaveLength(3);
+    expect(all.filter((p) => p.refund_status === 'refunded')).toHaveLength(2);
+    // Reopened: buying works again.
+    clock.advance(60 * 60_000);
+    await ready();
+    expect(await code(buy(BOB, 'blink'))).toBe('ok');
+  });
+
   it('a purchase bought but not yet handed to Studio is refunded at closing (event_closed), once', async () => {
     await open({ viewer_gap_ms: 0 });
     await give(ANA, 10);

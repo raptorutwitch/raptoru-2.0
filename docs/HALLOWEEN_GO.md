@@ -176,8 +176,10 @@ Dans OBS, regarde l'aperçu de ta scène habituelle (aucune modification), le je
 **Arrêt pendant le stream** :
 
 - un effet gênant → **STOP ALL** ou **Ctrl+Maj+F12** ;
-- un problème de boutique → « Fermer la boutique » : les achats pas encore joués sont remboursés et les soldes
-  gardés ;
+- un problème de boutique, ou la fin de l'événement → « Fermer la boutique » (un clic) : l'effet à l'écran s'arrête
+  aussitôt (comme STOP ALL), les achats pas encore joués sont remboursés, plus rien n'est vendu ni joué ; module
+  d'extension, `!peur` / `!bonbons`, Bonbons dans `!solde` et Bonbons des subs disparaissent ; soldes et historique
+  gardés, « Ouvrir la boutique » reprend à l'identique ;
 - tout le reste de Raptoru continue normalement.
 
 ## 9. Extension Twitch (séparé, sur GO)
