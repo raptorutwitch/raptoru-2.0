@@ -86,6 +86,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261112130000_event_shop.sql',
   // Progression native (XP, niveaux, titres, badges): docs/PROGRESSION.md; Lab twin 20261113120000_progression_lab.sql.
   '20261113130000_progression.sql',
+  // Progression per week / month (Europe/Paris) and the WizeBot history's protections; Lab twin 20261114120000.
+  '20261114130000_progression_periods.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -170,6 +172,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261112120000_event_shop_lab.sql',
   // Progression native: the Lab twin of 20261113130000_progression.sql (same content).
   '20261113120000_progression_lab.sql',
+  // Progression periods: the Lab twin of 20261114130000_progression_periods.sql (same content).
+  '20261114120000_progression_periods_lab.sql',
 ]);
 
 /**

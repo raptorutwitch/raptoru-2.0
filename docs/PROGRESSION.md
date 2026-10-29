@@ -81,11 +81,28 @@ cycle de présence ni les Jetons de fidélité. Livraison : `docs/PROGRESSION_GO
 
 ## Présence et messages après WizeBot
 
-Le Core compte lui-même, dès l'activation : `watch_seconds` (présence validée, la même que pour les Jetons) et
-`messages` (chaque message non-commande, une fois). Le site affiche **historique WizeBot + compté par Raptoru**
-(`totals` d'un viewer ; classements `GET /v1/progression/leaderboard?by=xp|watch|messages`). « Présence détectée » =
-vue dans la liste des chatters Twitch, jamais présentée comme une preuve de visionnage. Les classements semaine / mois
-de présence et de messages restent ceux de WizeBot tant qu'il répond (le Core ne garde pas ces fenêtres).
+**Aucune dépendance à WizeBot** : le Core compte lui-même, dès l'activation, à partir des mêmes événements que les
+Jetons et les jeux :
+
+- **présence** : chaque intervalle de présence validé (la détection de la fidélité, une seule) écrit l'XP et le temps
+  (`progression_ledger.watch_seconds`, cumul `watch_seconds`) ; rejouer un cycle, redémarrer le bot ou envoyer un
+  relevé après la fin du live ne compte rien de plus (testé sur la vraie chaîne : `progression-chain.test.ts`) ;
+- **messages** : chaque message reçu par le bot (`CHAT_GAMES`, tous les messages vers `/v1/bot/chat`), **commandes
+  comprises**, est compté une fois (clé = identifiant du message Twitch) ; l'XP est à part (jamais une commande,
+  longueur minimale, délai entre messages récompensés) ; en live seulement.
+
+**Périodes** (`progression_period_stats`, migration `20261114130000_progression_periods.sql`) : ce qui est **gagné**
+par semaine calendaire (lundi 00:00) et par mois (le 1er 00:00), **heure de Paris** (changements d'heure testés) — XP de
+présence et de chat, présence, messages — écrit dans la même transaction que le mouvement. Les imports et les
+ajustements Studio n'entrent dans aucune période. L'historique WizeBot n'a pas de dates : il ne compte que dans
+« All-time », jamais réparti. `GET /v1/progression/leaderboard?by=xp|watch|messages&period=all|week|month` renvoie
+aussi `start` / `end` de la période et `since` (premier événement compté par Raptoru) ; un viewer : `totals`
+(historique + compté) et `periods.week` / `periods.month`.
+
+« Présence détectée » = vue dans la liste des chatters Twitch, jamais présentée comme une preuve de visionnage.
+
+**Historiques protégés** : une ligne de `progression_history` ne peut pas être supprimée (déclencheur) ; un viewer ne
+peut avoir qu'un historique rattaché (index unique) ; l'annulation d'un import remet les lignes en attente.
 
 ## Administration dans Studio
 

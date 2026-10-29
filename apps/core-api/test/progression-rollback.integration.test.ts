@@ -14,10 +14,11 @@ const url = process.env.TEST_DATABASE_URL;
 const isLocal =
   !!url && /@(localhost|127\.0\.0\.1)[:/][^/]*\/[^/?]*test/.test(url);
 const FILE = '20261113130000_progression.sql';
+const PERIODS = '20261114130000_progression_periods.sql';
 
 /** The rollback SQL as written in the migration's header (the « -- Rollback: » comment lines, marks removed). */
-function rollbackSql() {
-  const raw = readFileSync(join(DEFAULT_MIGRATIONS_DIR, FILE), 'utf8').split(
+function rollbackSql(file = FILE) {
+  const raw = readFileSync(join(DEFAULT_MIGRATIONS_DIR, file), 'utf8').split(
     /\r?\n/,
   );
   const start = raw.findIndex((l) => l.startsWith('-- Rollback:'));
@@ -48,6 +49,62 @@ describe.skipIf(!isLocal)(
           "select table_name as t from information_schema.tables where table_schema = 'public' order by 1",
         )
       ).map((r) => r.t);
+    const columns = async () =>
+      (
+        await db.query<{ c: string }>(
+          "select table_name || '.' || column_name as c from information_schema.columns where table_schema = 'public' order by 1",
+        )
+      ).map((r) => r.c);
+    it('periods: applied, used, rolled back by its header SQL (history and ledger rows kept), then applied again', async () => {
+      await migrate(db, 'prod');
+      const all = await tables();
+      const cols = await columns();
+      expect(all).toContain('progression_period_stats');
+      await db.query(
+        `insert into progression_history (channel_id, source, login, level, measured_at, status, first_seen_at, updated_at)
+         values ('1', 'wizebot', 'ana', 3, now(), 'pending', now(), now())`,
+      );
+      await expect(
+        db.query("delete from progression_history where login = 'ana'"),
+      ).rejects.toThrow(/never deleted/);
+      await db.query(
+        `insert into progression_ledger (channel_id, twitch_user_id, kind, amount, key, actor, created_at, watch_seconds)
+         values ('1', '9', 'presence', 2, 'p1', 'test', now(), 120)`,
+      );
+      expect(rollbackSql(PERIODS)).toMatch(
+        /^drop table progression_period_stats;/,
+      );
+      await db.query(rollbackSql(PERIODS));
+      expect(await tables()).toEqual(
+        all.filter((t) => t !== 'progression_period_stats'),
+      );
+      expect(await columns()).toEqual(
+        cols.filter(
+          (c) =>
+            !c.startsWith('progression_period_stats.') &&
+            c !== 'progression_ledger.watch_seconds',
+        ),
+      );
+      // Nothing of the history or the ledger lost; the protections gone with the migration.
+      expect((await db.query('select 1 from progression_history')).length).toBe(
+        1,
+      );
+      expect((await db.query('select 1 from progression_ledger')).length).toBe(
+        1,
+      );
+      await migrate(db, 'prod');
+      expect(await tables()).toEqual(all);
+      expect(await columns()).toEqual(cols);
+      await expect(
+        db.query("delete from progression_history where login = 'ana'"),
+      ).rejects.toThrow(/never deleted/);
+      // Back to the state the next test expects: the periods rolled back first, then the rows cleaned.
+      await db.query(rollbackSql(PERIODS));
+      await db.query(
+        'delete from progression_history; delete from progression_ledger',
+      );
+    });
+
     it('applied, used, rolled back by its header SQL to exactly the previous schema, then applied again', async () => {
       await migrate(db, 'prod');
       const all = await tables();
@@ -66,8 +123,11 @@ describe.skipIf(!isLocal)(
       expect(sql).toMatch(
         /^drop table progression_history, progression_equipped/,
       );
+      // The later migration first (its own header), then this one.
+      await db.query(rollbackSql(PERIODS));
       await db.query(sql);
       const after = await tables();
+      // The periods were rolled back before (their file is forgotten too): migrate applies both again.
       expect(after.filter((t) => t.startsWith('progression_'))).toEqual([]);
       expect(after).toEqual(all.filter((t) => !t.startsWith('progression_')));
       expect(
