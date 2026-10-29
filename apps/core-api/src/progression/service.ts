@@ -1283,7 +1283,8 @@ export class ProgressionService {
     period: 'all' | 'week' | 'month' = 'all',
   ) {
     const s = await this.settings(channelId);
-    const lim = Math.min(limit, 500);
+    // Up to 2 000 rows: the whole ranking (every attached viewer can find themselves on raptoru.fr).
+    const lim = Math.min(limit, 2000);
     // The equipped title, only while owned (not revoked) and active: what the rankings show next to the name.
     const titleJoins = `left join progression_equipped e on e.channel_id = a.channel_id and e.twitch_user_id = a.twitch_user_id
        left join progression_grants g on g.channel_id = a.channel_id and g.twitch_user_id = a.twitch_user_id
