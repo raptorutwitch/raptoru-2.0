@@ -382,5 +382,21 @@ describe('public reads and routes', () => {
     expect(
       withSite.filter((r) => r.auth === 'public').map((r) => r.method),
     ).toEqual(['GET', 'GET', 'GET']);
+    // Studio: a viewer by pseudo prefix or id, with the level; a LIKE wildcard is inert.
+    expect(
+      (await svc.searchViewers(CH, '@An')).map(
+        (r) => (r as { login: string }).login,
+      ),
+    ).toEqual(['ana']);
+    expect(await svc.searchViewers(CH, '%')).toEqual([]);
+    expect(
+      (await svc.searchViewers(CH, '2')).map(
+        (r) => (r as { login: string }).login,
+      ),
+    ).toEqual(['bob']);
+    const detail = withSite.find((r) =>
+      r.pattern.test('/v1/studio/progression/viewers/123'),
+    );
+    expect(detail?.auth).toBe('studio_installation');
   });
 });

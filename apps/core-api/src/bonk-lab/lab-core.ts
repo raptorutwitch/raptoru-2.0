@@ -164,6 +164,7 @@ export function createLabCore({
     db,
     systemClock,
     () => LAB_PROGRESSION_CHANNEL,
+    { lab: true },
   );
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({

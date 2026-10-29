@@ -42,6 +42,8 @@ const PREFIXES = [
   '/v1/lab/dock/',
   // Halloween: the event shop (Studio's overlay executor and panel, docs/HALLOWEEN.md).
   '/v1/lab/events/',
+  // Progression native: XP, levels, titles and badges (Studio's panel, docs/PROGRESSION.md).
+  '/v1/lab/progression/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

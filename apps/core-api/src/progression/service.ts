@@ -77,7 +77,21 @@ export class ProgressionService {
     private readonly clock: Clock,
     /** The channel whose viewers earn (the broadcaster); null: nothing is counted. */
     private readonly channelOf: () => string | null,
+    /**
+     * The Lab Core: its viewers are `lab_viewers` (per channel, no login: the lowercased name stands for it) and its
+     * live is the Lab session; the main Core: `viewers` (Twitch logins) and the Daily's stream sessions.
+     */
+    private readonly o: { lab?: boolean } = {},
   ) {}
+
+  /** The channel's viewer directory as `(twitch_user_id, login, display_name)` (channel ids are digits only). */
+  private dir(channelId: string) {
+    if (!this.o.lab) return 'viewers';
+    if (!/^[0-9]{1,32}$/.test(channelId))
+      throw new ProgressionError(400, 'invalid_channel');
+    return `(select viewer_id as twitch_user_id, lower(display_name) as login, display_name from lab_viewers
+      where channel_id = '${channelId}')`;
+  }
 
   private now() {
     return this.clock.now();
@@ -222,7 +236,7 @@ export class ProgressionService {
     const excluded = new Set(
       (
         await q.query<{ id: string }>(
-          'select twitch_user_id as id from viewers where twitch_user_id = any($1::text[]) and login = any($2::text[])',
+          `select twitch_user_id as id from ${this.dir(channelId)} d where twitch_user_id = any($1::text[]) and login = any($2::text[])`,
           [ids, rules.excluded_logins],
         )
       ).map((r) => r.id),
@@ -264,20 +278,14 @@ export class ProgressionService {
   };
 
   private async live(q: Queryable, channelId: string) {
-    const tracked = (
-      await q.query<{ ok: boolean }>(
-        "select to_regclass('stream_sessions') is not null as ok",
-      )
-    )[0]?.ok;
-    if (tracked)
-      return (
-        (
-          await q.query(
-            'select 1 from stream_sessions where ended_at is null limit 1',
-          )
-        ).length > 0
-      );
-    return (await liveChannelSession(q, channelId)) !== null;
+    if (this.o.lab) return (await liveChannelSession(q, channelId)) !== null;
+    return (
+      (
+        await q.query(
+          'select 1 from stream_sessions where ended_at is null limit 1',
+        )
+      ).length > 0
+    );
   }
 
   /** A chat message: counted once, XP when it passes the anti-spam rules. Never blocks the chat (errors swallowed). */
@@ -299,14 +307,21 @@ export class ProgressionService {
       await q.query('select pg_advisory_xact_lock(hashtext($1))', [
         `xp:${channelId}:${msg.chatter.id}`,
       ]);
-      await q.query(
-        `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3) on conflict do nothing`,
-        [
-          msg.chatter.id,
-          msg.chatter.login.toLowerCase(),
-          msg.chatter.display_name,
-        ],
-      );
+      if (this.o.lab)
+        await q.query(
+          `insert into lab_viewers (channel_id, viewer_id, display_name, first_seen, last_seen) values ($1, $2, $3, $4, $4)
+           on conflict (channel_id, viewer_id) do update set display_name = $3, last_seen = $4`,
+          [channelId, msg.chatter.id, msg.chatter.display_name, this.now()],
+        );
+      else
+        await q.query(
+          `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3) on conflict do nothing`,
+          [
+            msg.chatter.id,
+            msg.chatter.login.toLowerCase(),
+            msg.chatter.display_name,
+          ],
+        );
       const acc = (
         await q.query<{ last_message_xp_at: Date | null }>(
           'select last_message_xp_at from progression_accounts where channel_id = $1 and twitch_user_id = $2',
@@ -521,7 +536,7 @@ export class ProgressionService {
       const known = new Set(
         (
           await q.query<{ id: string }>(
-            'select twitch_user_id as id from viewers where twitch_user_id = any($1::text[])',
+            `select twitch_user_id as id from ${this.dir(channelId)} d where twitch_user_id = any($1::text[])`,
             [ids],
           )
         ).map((r) => r.id),
@@ -642,7 +657,7 @@ export class ProgressionService {
       const byLogin = new Map(
         (
           await q.query<{ id: string; login: string }>(
-            'select twitch_user_id as id, login from viewers where login = any($1::text[])',
+            `select twitch_user_id as id, login from ${this.dir(channelId)} d where login = any($1::text[])`,
             [logins],
           )
         ).map((r) => [r.login, r.id]),
@@ -706,6 +721,21 @@ export class ProgressionService {
     });
   }
 
+  /** Studio: viewers by pseudo (login or Twitch name, prefix) or id, with their level. */
+  async searchViewers(channelId: string, text: string) {
+    const q = text.trim().toLowerCase().replace(/^@/, '').slice(0, 25);
+    // A pseudo has no LIKE wildcard: anything else is dropped from the prefix (nothing left: no search).
+    const prefix = q.replace(/[^a-z0-9_ -]/g, '');
+    if (!prefix) return [];
+    return this.db.query(
+      `select v.twitch_user_id, v.login, v.display_name, coalesce(a.level, 1) as level, coalesce(a.xp, 0)::bigint as xp
+       from ${this.dir(channelId)} v left join progression_accounts a on a.channel_id = $1 and a.twitch_user_id = v.twitch_user_id
+       where v.twitch_user_id = $2 or v.login like $3 or lower(v.display_name) like $3
+       order by (v.login = $2) desc, a.xp desc nulls last, v.login limit 20`,
+      [channelId, q, `${prefix.replace(/_/g, '\\_')}%`],
+    );
+  }
+
   // --- public reads (raptoru.fr) ---------------------------------------------------------------------------------------
 
   async leaderboard(channelId: string, limit = 100) {
@@ -718,7 +748,7 @@ export class ProgressionService {
       level: number;
     }>(
       `select a.twitch_user_id, v.login, v.display_name, a.xp, a.level from progression_accounts a
-       left join viewers v using (twitch_user_id)
+       left join ${this.dir(channelId)} v using (twitch_user_id)
        where a.channel_id = $1 and a.xp > 0 order by a.xp desc, a.twitch_user_id limit $2`,
       [channelId, Math.min(limit, 500)],
     );

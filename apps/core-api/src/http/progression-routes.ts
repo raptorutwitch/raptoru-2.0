@@ -88,6 +88,19 @@ export function progressionRoutes(
         ),
     },
     {
+      method: 'GET',
+      pattern: admin('/viewers'),
+      auth,
+      handle: ({ url }) =>
+        svc.searchViewers(ch, url.searchParams.get('q') ?? ''),
+    },
+    {
+      method: 'GET',
+      pattern: admin('/viewers/([0-9]{1,32})'),
+      auth,
+      handle: ({ params }) => svc.viewer(ch, params[0]!),
+    },
+    {
       method: 'POST',
       pattern: admin('/rewards'),
       auth,
