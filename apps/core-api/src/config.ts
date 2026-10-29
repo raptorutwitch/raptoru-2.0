@@ -54,6 +54,8 @@ const Env = z
       .optional(),
     // Delivery tooling (docs/CICD.md): bearer token of the read-only GET /v1/ops/status. Absent = no such route.
     OPS_TOKEN: z.string().min(32).optional(),
+    /** raptoru.fr's server (a viewer equips a title / badges): the route is mounted only when set. */
+    SITE_TOKEN: z.string().min(32).optional(),
     // The commit this image was built from (Coolify passes it as SOURCE_COMMIT): reported by /v1/ops/status.
     SOURCE_COMMIT: z.string().optional(),
     // Viewer OAuth tokens encrypted at rest (AES-256-GCM): 32 random bytes, base64.

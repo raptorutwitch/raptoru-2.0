@@ -25,3 +25,4 @@ export * from './sub-wheel.js';
 export * from './bot-instance.js';
 export * from './spotify.js';
 export * from './event-shop.js';
+export * from './progression.js';

@@ -31,6 +31,7 @@ import { StreamSessions } from './stream/stream-sessions.js';
 import { StudioInstallations } from './studio/installations.js';
 import { createWalletModule, type WalletModule } from './wallet/index.js';
 import { withBonbonsRewards } from './event-shop/raffle-currency.js';
+import { ProgressionService } from './progression/service.js';
 
 export interface Core {
   daily: DailyService;
@@ -56,6 +57,7 @@ export interface Core {
   /** Dock OBS V1: read-only activity projection and visual replays (docs/OBS_DOCK.md). */
   dock: DockActivityService;
   eventShop: EventShopService;
+  progression: ProgressionService;
   /** Caution: the requests and the executor's routes always; `!caution` in the chat only with `cautionChat`. */
   caution: CautionService;
   /** Votekick V2: votes and the broadcaster's mute always; `!votekick` / `!kick` / `!save` in the chat only with votekickChat. */
@@ -158,11 +160,22 @@ export function createCore(
     const ch = broadcasterOf();
     return ch ? eventShop.balanceLine(ch, viewerId) : null;
   };
+  // Progression native (docs/PROGRESSION.md): XP from validated presence and chat, levels, titles and badges.
+  const progression = new ProgressionService(db, clock, broadcasterOf);
   return {
     credits,
     daily: new DailyService(db, clock, credits),
     streams: new StreamSessions(db, clock),
-    presence: new PresenceService(db, clock, loyalty.presenceListener),
+    // Each validated presence interval feeds the Loyalty Engine (Jetons) and the progression (XP), in its cycle.
+    presence: new PresenceService(db, clock, {
+      validated: async (q, interval) => {
+        await loyalty.presenceListener.validated(q, interval);
+        await progression.presenceListener.validated(q, interval);
+      },
+      committed: () =>
+        loyalty.presenceListener.committed?.() ?? Promise.resolve(),
+    }),
+    progression,
     wallet,
     loyalty,
     // The Bonk accepts a Twitch emote only from the viewer's own catalog (none: Twitch emotes off).
