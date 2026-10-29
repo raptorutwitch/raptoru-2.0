@@ -240,8 +240,9 @@ export class ProgressionService {
   ) {
     const now = this.now();
     const inserted = await q.query(
-      `insert into progression_ledger (channel_id, twitch_user_id, kind, amount, key, actor, reason, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8) on conflict (channel_id, key) do nothing returning id`,
+      `insert into progression_ledger (channel_id, twitch_user_id, kind, amount, key, actor, reason, created_at,
+         watch_seconds)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9) on conflict (channel_id, key) do nothing returning id`,
       [
         channelId,
         viewerId,
@@ -251,9 +252,30 @@ export class ProgressionService {
         m.actor.slice(0, 64),
         m.reason ?? null,
         now,
+        m.watchSeconds ?? 0,
       ],
     );
     if (!inserted.length) return false;
+    // What was EARNED by activity (presence, chat), per calendar week and month in Europe/Paris — the « Semaine » /
+    // « Mois » rankings. Imports and Studio adjustments are not activity: they never enter a period.
+    if (m.kind === 'presence' || m.kind === 'message')
+      await q.query(
+        `insert into progression_period_stats as s (channel_id, period, period_start, twitch_user_id, xp,
+           watch_seconds, messages, updated_at)
+         select $1, p, date_trunc(p, $6::timestamptz at time zone 'Europe/Paris')::date, $2, $3, $4, $5, $6
+         from unnest(array['week', 'month']) as p
+         on conflict (channel_id, period, period_start, twitch_user_id) do update set
+           xp = s.xp + excluded.xp, watch_seconds = s.watch_seconds + excluded.watch_seconds,
+           messages = s.messages + excluded.messages, updated_at = excluded.updated_at`,
+        [
+          channelId,
+          viewerId,
+          Math.max(0, m.amount),
+          m.watchSeconds ?? 0,
+          m.messages ?? 0,
+          now,
+        ],
+      );
     const acc = (
       await q.query<AccountRow>(
         `insert into progression_accounts (channel_id, twitch_user_id, xp, level, watch_seconds, messages,
@@ -362,7 +384,11 @@ export class ProgressionService {
     );
   }
 
-  /** A chat message: counted once, XP when it passes the anti-spam rules. Never blocks the chat (errors swallowed). */
+  /**
+   * A chat message: COUNTED once (every message the bot received, commands included — the statistic), XP only when it
+   * passes the anti-spam rules (never a command, a minimum length, one rewarded message per cooldown). Never blocks
+   * the chat (errors swallowed).
+   */
   async onMessage(msg: LabChatMessage) {
     const channelId = msg.channel_id;
     if (channelId !== this.channelOf()) return 'ignored';
@@ -370,7 +396,7 @@ export class ProgressionService {
       const s = await this.settings(channelId, q);
       if (!s.enabled) return 'off';
       const text = msg.text.trim();
-      if (text.startsWith('!')) return 'command';
+      const command = text.startsWith('!');
       if (
         msg.chatter.role === 'broadcaster' ||
         s.rules.excluded_logins.includes(msg.chatter.login.toLowerCase())
@@ -408,7 +434,7 @@ export class ProgressionService {
         now.getTime() - new Date(acc.last_message_xp_at).getTime() >=
           s.rules.message_cooldown_s * 1000;
       const long = [...text].length >= s.rules.message_min_chars;
-      const amount = ready && long ? s.rules.message_xp : 0;
+      const amount = ready && long && !command ? s.rules.message_xp : 0;
       // Every message is counted once (the counter WizeBot showed); only a rewarded one moves the cooldown.
       const done = await this.move(
         q,
@@ -427,11 +453,13 @@ export class ProgressionService {
       if (done) await this.attachReturning(q, channelId, [msg.chatter.id]);
       return !done
         ? 'replayed'
-        : amount > 0
-          ? 'xp'
-          : ready
-            ? 'too_short'
-            : 'cooldown';
+        : command
+          ? 'command'
+          : amount > 0
+            ? 'xp'
+            : ready
+              ? 'too_short'
+              : 'cooldown';
     });
   }
 
@@ -1241,60 +1269,108 @@ export class ProgressionService {
   // --- public reads (raptoru.fr) ---------------------------------------------------------------------------------------
 
   /**
-   * The public rankings: by XP (levels), by presence time or by messages — each total = WizeBot's imported history +
-   * what the Core counted since. Presence time is the time seen in Twitch's chatters list, not a proof of watching.
+   * The public rankings, by XP, presence time or messages:
+   * - `all`: each total = WizeBot's imported history + what the Core counted since (the level is cumulative);
+   * - `week` / `month`: what was EARNED in the current calendar week (Monday 00:00) or month (the 1st 00:00), Europe/Paris
+   *   — XP from presence and chat, presence time, messages — from the Core's own events only (WizeBot's history has no
+   *   dates: never spread over periods). `since`: the first event the Core counted (null: none yet).
+   * Presence time is the time seen in Twitch's chatters list, not a proof of watching.
    */
   async leaderboard(
     channelId: string,
     limit = 100,
     by: 'xp' | 'watch' | 'messages' = 'xp',
+    period: 'all' | 'week' | 'month' = 'all',
   ) {
     const s = await this.settings(channelId);
-    const total = {
-      xp: 'a.xp',
-      watch: '(a.watch_seconds + a.imported_watch_seconds)',
-      messages: '(a.messages + a.imported_messages)',
-    }[by];
-    const rows = await this.db.query<{
+    const lim = Math.min(limit, 500);
+    // The equipped title, only while owned (not revoked) and active: what the rankings show next to the name.
+    const titleJoins = `left join progression_equipped e on e.channel_id = a.channel_id and e.twitch_user_id = a.twitch_user_id
+       left join progression_grants g on g.channel_id = a.channel_id and g.twitch_user_id = a.twitch_user_id
+         and g.reward_id = e.title_id and g.revoked_at is null
+       left join progression_rewards r on r.channel_id = a.channel_id and r.reward_id = g.reward_id and r.active`;
+    type Row = {
       twitch_user_id: string;
       login: string | null;
       display_name: string | null;
       xp: string | number;
       level: number;
       watch_seconds: string | number;
-      imported_watch_seconds: string | number;
       messages: string | number;
-      imported_messages: string | number;
       title_id: string | null;
       title_label: string | null;
       title_rarity: string | null;
-    }>(
-      // The equipped title, only while owned (not revoked) and active: what the rankings show next to the name.
-      `select a.twitch_user_id, v.login, v.display_name, a.xp, a.level, a.watch_seconds, a.imported_watch_seconds,
-         a.messages, a.imported_messages, r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity
-       from progression_accounts a
-       left join ${this.dir(channelId)} v using (twitch_user_id)
-       left join progression_equipped e on e.channel_id = a.channel_id and e.twitch_user_id = a.twitch_user_id
-       left join progression_grants g on g.channel_id = a.channel_id and g.twitch_user_id = a.twitch_user_id
-         and g.reward_id = e.title_id and g.revoked_at is null
-       left join progression_rewards r on r.channel_id = a.channel_id and r.reward_id = g.reward_id and r.active
-       where a.channel_id = $1 and ${total} > 0 order by ${total} desc, a.twitch_user_id limit $2`,
-      [channelId, Math.min(limit, 500)],
-    );
+    };
+    let rows: Row[];
+    let bounds: { start: string; end: string } | null = null;
+    if (period === 'all') {
+      const total = {
+        xp: 'a.xp',
+        watch: '(a.watch_seconds + a.imported_watch_seconds)',
+        messages: '(a.messages + a.imported_messages)',
+      }[by];
+      rows = await this.db.query<Row>(
+        `select a.twitch_user_id, v.login, v.display_name, a.xp, a.level,
+           a.watch_seconds + a.imported_watch_seconds as watch_seconds, a.messages + a.imported_messages as messages,
+           r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity
+         from progression_accounts a
+         left join ${this.dir(channelId)} v using (twitch_user_id)
+         ${titleJoins}
+         where a.channel_id = $1 and ${total} > 0 order by ${total} desc, a.twitch_user_id limit $2`,
+        [channelId, lim],
+      );
+    } else {
+      const b = (
+        await this.db.query<{ start: string; s: Date; e: Date }>(
+          `select d::text as start, (d::timestamp at time zone 'Europe/Paris') as s,
+             ((d + ('1 ' || $1)::interval)::timestamp at time zone 'Europe/Paris') as e
+           from (select date_trunc($1, $2::timestamptz at time zone 'Europe/Paris')::date as d) x`,
+          [period, this.now()],
+        )
+      )[0]!;
+      bounds = {
+        start: new Date(b.s).toISOString(),
+        end: new Date(b.e).toISOString(),
+      };
+      const metric = {
+        xp: 'p.xp',
+        watch: 'p.watch_seconds',
+        messages: 'p.messages',
+      }[by];
+      rows = await this.db.query<Row>(
+        `select p.twitch_user_id, v.login, v.display_name, p.xp, coalesce(a.level, 1) as level, p.watch_seconds,
+           p.messages, r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity
+         from progression_period_stats p
+         left join progression_accounts a on a.channel_id = p.channel_id and a.twitch_user_id = p.twitch_user_id
+         left join ${this.dir(channelId)} v on v.twitch_user_id = p.twitch_user_id
+         ${titleJoins}
+         where p.channel_id = $1 and p.period = $3 and p.period_start = $4::date and ${metric} > 0
+         order by ${metric} desc, p.twitch_user_id limit $2`,
+        [channelId, lim, period, b.start],
+      );
+    }
+    const first = (
+      await this.db.query<{ at: Date | null }>(
+        `select min(created_at) as at from progression_ledger where channel_id = $1 and kind in ('presence', 'message')`,
+        [channelId],
+      )
+    )[0]?.at;
     return {
       enabled: s.enabled,
       by,
+      period,
+      ...(bounds ?? {}),
+      since: first ? new Date(first).toISOString() : null,
       entries: rows.map((r, i) => ({
         rank: i + 1,
         twitchUserId: r.twitch_user_id,
         login: r.login,
         displayName: r.display_name ?? r.login ?? r.twitch_user_id,
         level: r.level,
+        // period: XP earned in it; all: the total XP.
         xp: Number(r.xp),
-        watchMinutes: Math.floor(
-          (Number(r.watch_seconds) + Number(r.imported_watch_seconds)) / 60,
-        ),
-        messages: Number(r.messages) + Number(r.imported_messages),
+        watchMinutes: Math.floor(Number(r.watch_seconds) / 60),
+        messages: Number(r.messages),
         title: r.title_id
           ? { id: r.title_id, label: r.title_label, rarity: r.title_rarity }
           : null,
@@ -1338,7 +1414,28 @@ export class ProgressionService {
     const owned = new Set(inventory.map((i) => i.reward_id));
     const xp = Number(acc?.xp ?? 0);
     const level = acc?.level ?? 1;
+    // This calendar week and month (Europe/Paris): what the Core counted (no WizeBot history in a period).
+    const current = await this.db.query<{
+      period: 'week' | 'month';
+      xp: string;
+      watch_seconds: string;
+      messages: string;
+    }>(
+      `select period, xp, watch_seconds, messages from progression_period_stats
+       where channel_id = $1 and twitch_user_id = $2
+         and period_start = date_trunc(period, $3::timestamptz at time zone 'Europe/Paris')::date`,
+      [channelId, viewerId, this.now()],
+    );
+    const inPeriod = (p: 'week' | 'month') => {
+      const r = current.find((c) => c.period === p);
+      return {
+        xp: Number(r?.xp ?? 0),
+        watchMinutes: Math.floor(Number(r?.watch_seconds ?? 0) / 60),
+        messages: Number(r?.messages ?? 0),
+      };
+    };
     return {
+      periods: { week: inPeriod('week'), month: inPeriod('month') },
       enabled: s.enabled,
       twitchUserId: viewerId,
       level,

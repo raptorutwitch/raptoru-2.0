@@ -72,6 +72,10 @@ export function progressionRoutes(
             z.enum(['xp', 'watch', 'messages']),
             url.searchParams.get('by') ?? 'xp',
           ),
+          parse(
+            z.enum(['all', 'week', 'month']),
+            url.searchParams.get('period') ?? 'all',
+          ),
         ),
     },
     {

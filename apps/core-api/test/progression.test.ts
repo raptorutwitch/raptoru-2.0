@@ -27,6 +27,7 @@ beforeEach(async () => {
   db = await createTestDb();
   for (const t of [
     'progression_history',
+    'progression_period_stats',
     'progression_equipped',
     'progression_grants',
     'progression_rewards',
@@ -124,7 +125,7 @@ describe('XP sources', () => {
     expect(v).toMatchObject({ level: 1, xp: 2, watchMinutes: 2, messages: 0 });
   });
 
-  it('chat: live only, never a command, a minimum length, one rewarded message per cooldown; a replayed message counts once', async () => {
+  it('chat: live only; every message counted once (commands too), XP never for a command, a minimum length, one rewarded message per cooldown; a replayed message counts once', async () => {
     await svc.updateSettings(CH, { enabled: true });
     expect(await svc.onMessage(msg('1', 'salut tout le monde'))).toBe(
       'offline',
@@ -147,7 +148,10 @@ describe('XP sources', () => {
       ),
     ).toBe('excluded');
     expect(await xp('1')).toBe(10);
-    expect((await svc.viewer(CH, '1')).messages).toBe(4); // every non-command message, once each
+    // Every message the bot received is COUNTED once (the command too); XP only for 2 of them (cooldown, length).
+    const v = await svc.viewer(CH, '1');
+    expect(v.messages).toBe(5);
+    expect(v.periods.week).toEqual({ xp: 10, watchMinutes: 0, messages: 5 });
   });
 
   it('a progression failure never undoes the presence cycle (the Jetons of that interval): its own savepoint', async () => {
@@ -662,6 +666,114 @@ describe('WizeBot read by the Core', () => {
     ).rejects.toMatchObject({
       code: 'wizebot_unavailable',
     });
+  });
+});
+
+describe('periods: calendar week and month, Europe/Paris', () => {
+  const at = (iso: string) => new Date(iso);
+  const starts = async (id: string) =>
+    (
+      await db.query<{ period: string; start: string; xp: string }>(
+        `select period, period_start::text as start, xp from progression_period_stats
+         where twitch_user_id = $1 order by period, period_start`,
+        [id],
+      )
+    ).map((r) => `${r.period} ${r.start} ${r.xp}`);
+  const earnAt = async (id: string, iso: string) => {
+    clock.current = at(iso);
+    await presence([id], at(iso), 60); // 1 XP, 60 s
+  };
+
+  it('midnight, week, month and both clock changes land in the right Paris period', async () => {
+    await svc.updateSettings(CH, { enabled: true });
+    // Autumn change (25/10/2026 03:00 CEST → 02:00 CET): Sunday 25/10 23:30 Paris = 22:30 UTC → week of Monday 19/10.
+    await earnAt('1', '2026-10-25T22:30:00Z');
+    // Monday 26/10 00:00 Paris = 25/10 23:00 UTC → the next week.
+    await earnAt('1', '2026-10-25T23:00:00Z');
+    // Saturday 31/10 23:59:59 Paris (CET) = 22:59:59 UTC → October; one second later → November.
+    await earnAt('2', '2026-10-31T22:59:59Z');
+    await earnAt('2', '2026-10-31T23:00:00Z');
+    expect(await starts('1')).toEqual([
+      'month 2026-10-01 2',
+      'week 2026-10-19 1',
+      'week 2026-10-26 1',
+    ]);
+    expect(await starts('2')).toEqual([
+      'month 2026-10-01 1',
+      'month 2026-11-01 1',
+      'week 2026-10-26 2',
+    ]);
+    // Spring change (28/03/2027 02:00 CET → 03:00 CEST): Sunday 28/03 23:59 Paris = 21:59 UTC → week of 22/03;
+    // Monday 29/03 00:00 Paris = 28/03 22:00 UTC → week of 29/03.
+    await earnAt('2', '2027-03-28T21:59:00Z');
+    await earnAt('2', '2027-03-28T22:00:00Z');
+    expect(await starts('2')).toContain('week 2027-03-22 1');
+    expect(await starts('2')).toContain('week 2027-03-29 1');
+  });
+
+  it('the week / month rankings: earned in the period only (no WizeBot history, no Studio adjustment), exact bounds, since', async () => {
+    await svc.updateSettings(CH, { enabled: true });
+    await svc.importHistory(
+      CH,
+      {
+        source: 'wizebot',
+        rows: [
+          {
+            twitch_user_id: '2',
+            id_source: 'wizebot',
+            login: 'bob',
+            level: 50,
+            watch_seconds: 999_999,
+            messages: 999,
+          },
+        ],
+      },
+      { id: 'studio' },
+    );
+    await svc.adjust(
+      CH,
+      {
+        viewer: '1',
+        mode: 'add',
+        value: 1000,
+        reason: 'test',
+        request_id: 'adj-0000-period',
+      },
+      { id: 'studio' },
+    );
+    expect((await svc.leaderboard(CH, 10, 'xp', 'week')).entries).toEqual([]);
+    clock.current = at('2026-11-04T19:00:00Z'); // Wednesday 04/11 20:00 Paris
+    await presence(['1'], clock.current, 600); // 10 min
+    await presence(['2'], new Date(clock.current.getTime() + 1), 120); // 2 min
+    const week = await svc.leaderboard(CH, 10, 'watch', 'week');
+    expect(week).toMatchObject({
+      period: 'week',
+      start: '2026-11-01T23:00:00.000Z', // Monday 02/11 00:00 Paris
+      end: '2026-11-08T23:00:00.000Z',
+      since: '2026-11-04T19:00:00.000Z',
+    });
+    expect(
+      week.entries.map((e) => [e.twitchUserId, e.watchMinutes, e.xp]),
+    ).toEqual([
+      ['1', 10, 10],
+      ['2', 2, 2],
+    ]);
+    const month = await svc.leaderboard(CH, 10, 'xp', 'month');
+    expect([month.start, month.end]).toEqual([
+      '2026-10-31T23:00:00.000Z',
+      '2026-11-30T23:00:00.000Z',
+    ]);
+    // Global keeps WizeBot's history and the Studio adjustment; a period never does.
+    const all = await svc.leaderboard(CH, 10, 'watch', 'all');
+    expect(all.entries[0]).toMatchObject({
+      twitchUserId: '2',
+      watchMinutes: 16668,
+    });
+    // The next week starts empty.
+    clock.current = at('2026-11-08T23:00:00Z');
+    expect((await svc.leaderboard(CH, 10, 'watch', 'week')).entries).toEqual(
+      [],
+    );
   });
 });
 
