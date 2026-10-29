@@ -85,6 +85,7 @@ import type { ChatGames } from '../lab-chat/games.js';
 import type { LabChatRouter } from '../lab-chat/router.js';
 import type { LabCall } from '../ext/lab-internal.js';
 import { studioCockpitRoutes } from './studio-cockpit-routes.js';
+import { publicStatsRoutes } from './public-stats-routes.js';
 import { wordGameCockpitEvents } from './word-game-routes.js';
 import { studioAdminRoutes } from './studio-admin-routes.js';
 import { botInstanceRoutes } from './bot-instance-routes.js';
@@ -264,6 +265,8 @@ function routes({
 }: AppDeps): Route[] {
   return [
     ...walletRoutes(wallet),
+    // raptoru.fr: Jeu des mots and Tombola rankings (public, read-only).
+    ...(db ? publicStatsRoutes(db) : []),
     ...(studioInstallations
       ? studioTransportRoutes(
           { bonk: bonkLab, sound: soundLab, tts: ttsLab },
