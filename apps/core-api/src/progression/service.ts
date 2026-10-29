@@ -246,36 +246,49 @@ export class ProgressionService {
 
   /** The presence tracker's listener: XP for each validated interval (inside the cycle transaction). */
   readonly presenceListener: PresenceListener = {
+    /**
+     * Runs inside the presence cycle's transaction, next to the Loyalty Engine (Jetons): in its own savepoint, so a
+     * progression failure is undone alone and logged — never the cycle, never the Jetons of that interval.
+     */
     validated: async (q: Queryable, interval: ValidatedPresence) => {
-      const channelId = this.channelOf();
-      if (!channelId) return;
-      const s = await this.settings(channelId, q);
-      if (!s.enabled || interval.seconds <= 0) return;
-      const amount = Math.round(
-        (interval.seconds / 60) * s.rules.xp_per_minute,
-      );
-      const cycle = `${interval.streamId}:${interval.at.getTime()}`;
-      for (const id of await this.eligible(
-        q,
-        channelId,
-        interval.viewerIds,
-        s.rules,
-      ))
-        await this.move(
-          q,
-          channelId,
-          id,
-          {
-            kind: 'presence',
-            amount,
-            key: `presence:${cycle}:${id}`,
-            actor: 'presence',
-            watchSeconds: interval.seconds,
-          },
-          s.rules,
-        );
+      await q.query('savepoint progression_presence');
+      try {
+        await this.presenceXp(q, interval);
+        await q.query('release savepoint progression_presence');
+      } catch (e) {
+        await q.query('rollback to savepoint progression_presence');
+        console.error('[progression] presence ignored', (e as Error).message);
+      }
     },
   };
+
+  private async presenceXp(q: Queryable, interval: ValidatedPresence) {
+    const channelId = this.channelOf();
+    if (!channelId) return;
+    const s = await this.settings(channelId, q);
+    if (!s.enabled || interval.seconds <= 0) return;
+    const amount = Math.round((interval.seconds / 60) * s.rules.xp_per_minute);
+    const cycle = `${interval.streamId}:${interval.at.getTime()}`;
+    for (const id of await this.eligible(
+      q,
+      channelId,
+      interval.viewerIds,
+      s.rules,
+    ))
+      await this.move(
+        q,
+        channelId,
+        id,
+        {
+          kind: 'presence',
+          amount,
+          key: `presence:${cycle}:${id}`,
+          actor: 'presence',
+          watchSeconds: interval.seconds,
+        },
+        s.rules,
+      );
+  }
 
   private async live(q: Queryable, channelId: string) {
     if (this.o.lab) return (await liveChannelSession(q, channelId)) !== null;
@@ -639,6 +652,8 @@ export class ProgressionService {
     channelId: string,
     req: {
       source: 'wizebot';
+      /** Count only, write nothing (the delivery's first step: exact numbers before the real import). */
+      dry_run?: boolean;
       rows: {
         twitch_user_id: string | null;
         login: string | null;
@@ -651,28 +666,93 @@ export class ProgressionService {
   ) {
     return this.db.tx(async (q) => {
       const s = await this.settings(channelId, q);
-      const logins = req.rows
-        .filter((r) => !r.twitch_user_id && r.login)
-        .map((r) => r.login!);
-      const byLogin = new Map(
-        (
-          await q.query<{ id: string; login: string }>(
-            `select twitch_user_id as id, login from ${this.dir(channelId)} d where login = any($1::text[])`,
-            [logins],
-          )
-        ).map((r) => [r.login, r.id]),
+      const logins = [
+        ...new Set(
+          req.rows.map((r) => r.login).filter((l): l is string => !!l),
+        ),
+      ];
+      const ids = [
+        ...new Set(
+          req.rows.map((r) => r.twitch_user_id).filter((i): i is string => !!i),
+        ),
+      ];
+      // The Core's directory: every id behind a login (a login held by two accounts is ambiguous), every id's login.
+      const known = await q.query<{ id: string; login: string | null }>(
+        `select twitch_user_id as id, login from ${this.dir(channelId)} d
+         where login = any($1::text[]) or twitch_user_id = any($2::text[])`,
+        [logins, ids],
       );
-      let imported = 0;
-      let already = 0;
+      const idsOfLogin = new Map<string, Set<string>>();
+      const loginOfId = new Map<string, string | null>();
+      for (const k of known) {
+        loginOfId.set(k.id, k.login);
+        if (k.login)
+          idsOfLogin.set(
+            k.login,
+            (idsOfLogin.get(k.login) ?? new Set()).add(k.id),
+          );
+      }
+      // Resolution, never a guess:
+      // - a Twitch id given with the row: kept unless the Core knows that id under ANOTHER login (conflict);
+      // - a login alone: the ONE account the Core knows by it; two or more: ambiguous; none: unresolved (later);
+      // - one account reached by two rows: conflict for both.
+      type Res = {
+        row: (typeof req.rows)[number];
+        id: string;
+        by: 'id' | 'login';
+      };
+      const resolved: Res[] = [];
       const unresolved: string[] = [];
+      const ambiguous: string[] = [];
+      const conflicts: string[] = [];
       for (const row of req.rows) {
-        const id =
-          row.twitch_user_id ??
-          (row.login ? byLogin.get(row.login) : undefined);
-        if (!id) {
-          if (row.login) unresolved.push(row.login);
+        const label = row.login ?? row.twitch_user_id ?? '?';
+        if (row.twitch_user_id) {
+          const coreLogin = loginOfId.get(row.twitch_user_id);
+          if (coreLogin && row.login && coreLogin !== row.login)
+            conflicts.push(label);
+          else resolved.push({ row, id: row.twitch_user_id, by: 'id' });
           continue;
         }
+        const found = row.login ? idsOfLogin.get(row.login) : undefined;
+        if (!found?.size) unresolved.push(label);
+        else if (found.size > 1) ambiguous.push(label);
+        else resolved.push({ row, id: [...found][0]!, by: 'login' });
+      }
+      const perId = new Map<string, number>();
+      for (const r of resolved) perId.set(r.id, (perId.get(r.id) ?? 0) + 1);
+      const unique = resolved.filter((r) => {
+        if (perId.get(r.id)! > 1) {
+          conflicts.push(r.row.login ?? r.id);
+          return false;
+        }
+        return true;
+      });
+      const byId = unique.filter((r) => r.by === 'id').length;
+      const byLogin = unique.length - byId;
+      if (req.dry_run) {
+        const done = new Set(
+          (
+            await q.query<{ id: string }>(
+              `select twitch_user_id as id from progression_ledger where channel_id = $1 and key = any($2::text[])`,
+              [channelId, unique.map((r) => `import:${req.source}:${r.id}`)],
+            )
+          ).map((r) => r.id),
+        );
+        return {
+          dry_run: true,
+          would_import: unique.filter((r) => !done.has(r.id)).length,
+          already: done.size,
+          by_id: byId,
+          by_login: byLogin,
+          unresolved,
+          ambiguous,
+          conflicts,
+        };
+      }
+      let imported = 0;
+      let already = 0;
+      for (const { row, id } of unique) {
         const ok = await this.move(
           q,
           channelId,
@@ -697,7 +777,15 @@ export class ProgressionService {
         );
         imported++;
       }
-      return { imported, already, unresolved };
+      return {
+        imported,
+        already,
+        by_id: byId,
+        by_login: byLogin,
+        unresolved,
+        ambiguous,
+        conflicts,
+      };
     });
   }
 
@@ -746,9 +834,19 @@ export class ProgressionService {
       display_name: string | null;
       xp: string | number;
       level: number;
+      title_id: string | null;
+      title_label: string | null;
+      title_rarity: string | null;
     }>(
-      `select a.twitch_user_id, v.login, v.display_name, a.xp, a.level from progression_accounts a
+      // The equipped title, only while owned (not revoked) and active: what the rankings show next to the name.
+      `select a.twitch_user_id, v.login, v.display_name, a.xp, a.level,
+         r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity
+       from progression_accounts a
        left join ${this.dir(channelId)} v using (twitch_user_id)
+       left join progression_equipped e on e.channel_id = a.channel_id and e.twitch_user_id = a.twitch_user_id
+       left join progression_grants g on g.channel_id = a.channel_id and g.twitch_user_id = a.twitch_user_id
+         and g.reward_id = e.title_id and g.revoked_at is null
+       left join progression_rewards r on r.channel_id = a.channel_id and r.reward_id = g.reward_id and r.active
        where a.channel_id = $1 and a.xp > 0 order by a.xp desc, a.twitch_user_id limit $2`,
       [channelId, Math.min(limit, 500)],
     );
@@ -761,6 +859,9 @@ export class ProgressionService {
         displayName: r.display_name ?? r.login ?? r.twitch_user_id,
         level: r.level,
         xp: Number(r.xp),
+        title: r.title_id
+          ? { id: r.title_id, label: r.title_label, rarity: r.title_rarity }
+          : null,
       })),
     };
   }

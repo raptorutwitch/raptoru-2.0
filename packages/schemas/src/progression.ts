@@ -95,6 +95,8 @@ export const ProgressionEquipRequest = z.strictObject({
 /** WizeBot history: one row per viewer, by Twitch id when known, else by login (resolved by the Core). */
 export const ProgressionImportRequest = z.strictObject({
   source: z.literal('wizebot'),
+  /** Count only, write nothing. */
+  dry_run: z.boolean().default(false),
   rows: z
     .array(
       z.strictObject({

@@ -227,7 +227,8 @@ export function createLabCore({
     ...progressionRoutes(progression, {
       channelId: LAB_PROGRESSION_CHANNEL,
       production: false,
-      site: false,
+      // The site's equip route too: in the Lab, every route is behind the Lab secret (raptoru.fr tested locally).
+      site: true,
     }),
     // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
     ...cautionRoutes(caution),

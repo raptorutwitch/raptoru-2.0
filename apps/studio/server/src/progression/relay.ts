@@ -49,6 +49,82 @@ export function wizebotRows(
   return out;
 }
 
+/**
+ * Rows per request: the Lab Core takes 8 KB per request, the main Core 64 KB; ~2 400 WizeBot rows go in batches (the
+ * import is idempotent per viewer, so a batch sent twice changes nothing).
+ */
+export const IMPORT_BATCH = 60;
+
+type ImportRow = ReturnType<typeof wizebotRows>[number];
+type ImportOut = {
+  imported?: number;
+  would_import?: number;
+  already: number;
+  by_id: number;
+  by_login: number;
+  unresolved: string[];
+  ambiguous: string[];
+  conflicts: string[];
+};
+
+/**
+ * Sends the import in batches and adds up the answers. One Twitch id reached by two rows is set aside BEFORE batching
+ * (a batch alone cannot see the other row): never two histories on one viewer.
+ */
+export async function importInBatches(
+  core: LabCoreCall,
+  base: string,
+  rows: ImportRow[],
+  dryRun: boolean,
+) {
+  const count = new Map<string, number>();
+  for (const r of rows)
+    if (r.twitch_user_id)
+      count.set(r.twitch_user_id, (count.get(r.twitch_user_id) ?? 0) + 1);
+  const conflicts = rows
+    .filter((r) => r.twitch_user_id && count.get(r.twitch_user_id)! > 1)
+    .map((r) => r.login);
+  const clean = rows.filter(
+    (r) => !r.twitch_user_id || count.get(r.twitch_user_id) === 1,
+  );
+  const total: Required<Omit<ImportOut, 'imported' | 'would_import'>> & {
+    done: number;
+  } = {
+    done: 0,
+    already: 0,
+    by_id: 0,
+    by_login: 0,
+    unresolved: [],
+    ambiguous: [],
+    conflicts,
+  };
+  for (let i = 0; i < clean.length; i += IMPORT_BATCH) {
+    const out = await core<ImportOut>(
+      `${base}/import`,
+      {
+        source: 'wizebot',
+        dry_run: dryRun,
+        rows: clean.slice(i, i + IMPORT_BATCH),
+      },
+      { timeoutMs: 30_000 },
+    );
+    total.done += (dryRun ? out.would_import : out.imported) ?? 0;
+    total.already += out.already;
+    total.by_id += out.by_id;
+    total.by_login += out.by_login;
+    total.unresolved.push(...out.unresolved);
+    total.ambiguous.push(...out.ambiguous);
+    total.conflicts.push(...out.conflicts);
+  }
+  const { done, ...rest } = total;
+  return {
+    dry_run: dryRun,
+    read: rows.length,
+    [dryRun ? 'would_import' : 'imported']: done,
+    ...rest,
+  };
+}
+
 export class ProgressionRelay {
   constructor(
     private readonly d: {
@@ -142,7 +218,10 @@ export class ProgressionRelay {
           ),
           true
         );
-      if (route === 'POST /api/progression/import/wizebot') {
+      if (
+        route === 'POST /api/progression/import/wizebot' ||
+        route === 'POST /api/progression/import/wizebot/dry-run'
+      ) {
         const [levels, uptime, messages] = await Promise.all([
           this.wizebot('ranks'),
           this.wizebot('uptime'),
@@ -150,12 +229,11 @@ export class ProgressionRelay {
         ]);
         const rows = wizebotRows(levels, uptime, messages);
         if (!rows.length) return (reply(502, { error: 'wizebot_empty' }), true);
-        const out = await core(
-          `${this.base}/import`,
-          { source: 'wizebot', rows },
-          { timeoutMs: 60_000 },
+        const dryRun = route.endsWith('/dry-run');
+        return (
+          reply(200, await importInBatches(core, this.base, rows, dryRun)),
+          true
         );
-        return (reply(200, { read: rows.length, ...(out as object) }), true);
       }
       reply(404, { error: 'not_found' });
     } catch (e) {

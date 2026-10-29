@@ -79,6 +79,7 @@ export function mountProgression(root: HTMLElement) {
   let results: ViewerRow[] = [];
   let selected: { row: ViewerRow; detail: Detail } | null = null;
   let visible = false;
+  let lastImport = '';
 
   const call = async (path: string, body?: unknown) => {
     const res = await fetch(path, {
@@ -172,7 +173,7 @@ export function mountProgression(root: HTMLElement) {
             selected && d
               ? `<div class="detail">
             <h4>${esc(selected.row.display_name ?? selected.row.login)}</h4>
-            <p>Niveau <b>${d.level}</b> · ${fmt(d.xp)} XP (niveau suivant à ${fmt(d.nextLevelXp)}) · rang ${d.rank ?? '—'} · ${fmt(d.watchMinutes)} min de présence · ${fmt(d.messages)} messages</p>
+            <p>Niveau <b>${d.level}</b> · ${fmt(d.xp)} XP (niveau suivant à ${fmt(d.nextLevelXp)}) · rang ${d.rank ?? '—'} · ${fmt(d.watchMinutes)} min de présence relevée (liste des chatters : un spectateur absent de la liste n’y figure pas) · ${fmt(d.messages)} messages</p>
             ${d.imported ? `<p class="muted">Repris de WizeBot : niveau ${d.imported.level}, ${fmt(d.imported.watchMinutes)} min, ${fmt(d.imported.messages)} messages.</p>` : ''}
             <p>Équipé : ${d.equipped.title ? `titre <code>${esc(d.equipped.title)}</code>` : 'aucun titre'}${d.equipped.badges.length ? ` · badges ${d.equipped.badges.map((b) => `<code>${esc(b)}</code>`).join(' ')}` : ''}</p>
             <ul class="list">${d.inventory.map((i) => `<li>${i.kind === 'title' ? 'Titre' : 'Badge'} <b>${esc(i.label)}</b> <span class="muted">${esc(RARITY_FR[i.rarity] ?? i.rarity)} · ${esc(i.source)}${i.reference ? ` · ${esc(i.reference)}` : ''}</span> <button type="button" class="link" data-revoke="${esc(i.id)}">Retirer</button></li>`).join('') || '<li class="muted">Inventaire vide.</li>'}</ul>
@@ -186,9 +187,10 @@ export function mountProgression(root: HTMLElement) {
         </section>
         <section class="card"><h3>Reprise de WizeBot</h3>
           <p class="muted">Lit les niveaux, le temps de présence et les messages de WizeBot (via raptoru.fr) et démarre chaque viewer à son niveau, une seule fois. Les pseudos inconnus du Core sont listés, à reprendre plus tard.</p>
+          <button type="button" data-act="dry-run">Simuler (n’écrit rien)</button>
           <button type="button" data-act="import">Importer depuis WizeBot</button>
           <button type="button" class="warn" data-act="revert">Annuler l’import</button>
-          <pre data-role="import-out" class="muted"></pre>
+          <pre data-role="import-out" class="muted">${esc(lastImport)}</pre>
         </section>
       </div></div>`;
   }
@@ -277,18 +279,45 @@ export function mountProgression(root: HTMLElement) {
           }),
         'Attribué.',
       );
-    } else if (a === 'import') {
+    } else if (a === 'import' || a === 'dry-run') {
+      const dry = a === 'dry-run';
+      if (
+        !dry &&
+        !confirm(
+          'Importer les niveaux WizeBot pour de vrai ? (« Simuler » d’abord pour voir les chiffres)',
+        )
+      )
+        return;
       const out = root.querySelector<HTMLElement>('[data-role="import-out"]');
-      if (out) out.textContent = 'Import en cours…';
-      void call('/api/progression/import/wizebot', {}).then(
+      if (out)
+        out.textContent = dry ? 'Simulation en cours…' : 'Import en cours…';
+      void call(
+        `/api/progression/import/wizebot${dry ? '/dry-run' : ''}`,
+        {},
+      ).then(
         (r) => {
           const res = r as {
             read: number;
-            imported: number;
+            imported?: number;
+            would_import?: number;
             already: number;
+            by_id: number;
+            by_login: number;
             unresolved: string[];
+            ambiguous: string[];
+            conflicts: string[];
           };
-          flash = `WizeBot : ${res.read} lus, ${res.imported} importés, ${res.already} déjà là, ${res.unresolved.length} pseudos inconnus du Core.`;
+          flash = dry
+            ? 'Simulation terminée (rien n’a été écrit).'
+            : 'Import WizeBot terminé.';
+          lastImport = [
+            `${res.read} niveaux WizeBot lus`,
+            `${dry ? 'à importer' : 'importés'} : ${dry ? res.would_import : res.imported} (par identifiant Twitch ${res.by_id}, par pseudo ${res.by_login})`,
+            `déjà importés : ${res.already}`,
+            `pseudos inconnus du Core (à reprendre plus tard) : ${res.unresolved.length}`,
+            `pseudos ambigus (plusieurs comptes) : ${res.ambiguous.length}${res.ambiguous.length ? ` — ${res.ambiguous.slice(0, 20).join(', ')}` : ''}`,
+            `conflits (écartés) : ${res.conflicts.length}${res.conflicts.length ? ` — ${res.conflicts.slice(0, 20).join(', ')}` : ''}`,
+          ].join('\n');
           void load();
         },
         (e: Error) => {

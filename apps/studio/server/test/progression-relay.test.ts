@@ -112,37 +112,67 @@ describe('relay', () => {
     expect((await call('/api/progression/nope')).status).toBe(404);
   });
 
-  it('the WizeBot import reads the three public rankings and sends one import; nothing to read: an explicit error', async () => {
-    const sent: unknown[] = [];
-    const core = (async (_path: string, body?: unknown) => {
-      sent.push(body);
-      return { imported: 1, already: 0, unresolved: ['aouh'] };
+  it('the WizeBot import: the three public rankings (WizeBot forced), batches the Cores accept, a duplicated id set aside first, a dry run that writes nothing', async () => {
+    const sent: {
+      url: string;
+      body: { dry_run: boolean; rows: { login: string }[] };
+    }[] = [];
+    const core = (async (path: string, body?: unknown) => {
+      const b = body as { dry_run: boolean; rows: { login: string }[] };
+      sent.push({ url: path, body: b });
+      return {
+        [b.dry_run ? 'would_import' : 'imported']: b.rows.length,
+        already: 0,
+        by_id: 0,
+        by_login: b.rows.length,
+        unresolved: [],
+        ambiguous: [],
+        conflicts: [],
+      };
     }) as never;
+    const many = Array.from({ length: 130 }, (_, i) => ({
+      username: `v${i}`,
+      value: 5,
+    }));
     const pages: Record<string, unknown> = {
       ranks: {
         players: [
-          { username: 'chechay', value: 135, twitch_user_id: '1' },
-          { username: 'aouh', value: 90 },
+          ...many,
+          { username: 'twin_a', value: 3, twitch_user_id: '9' },
+          { username: 'twin_b', value: 4, twitch_user_id: '9' },
         ],
       },
-      uptime: { players: [{ username: 'chechay', value: 60 }] },
+      uptime: { players: [] },
       message: { players: [] },
     };
+    const asked: string[] = [];
     const call = await start(
       new ProgressionRelay({
         core,
         environment: 'lab',
-        fetchJson: async (u) => pages[new URL(u).searchParams.get('type')!],
+        fetchJson: async (u) => {
+          asked.push(u);
+          return pages[new URL(u).searchParams.get('type')!];
+        },
       }),
     );
-    const r = await call('/api/progression/import/wizebot', {});
-    expect(r.body).toEqual({
-      read: 2,
-      imported: 1,
-      already: 0,
-      unresolved: ['aouh'],
+    const dry = await call('/api/progression/import/wizebot/dry-run', {});
+    expect(dry.body).toMatchObject({
+      dry_run: true,
+      read: 132,
+      would_import: 130,
+      conflicts: ['twin_a', 'twin_b'],
     });
-    expect((sent[0] as { rows: unknown[] }).rows).toHaveLength(2);
+    expect(sent.every((x) => x.body.dry_run === true)).toBe(true);
+    expect(sent.map((x) => x.body.rows.length)).toEqual([60, 60, 10]); // under the Lab Core's 8 KB per request
+    expect(sent.every((x) => JSON.stringify(x.body).length < 8192)).toBe(true);
+    expect(
+      asked.every((u) => new URL(u).searchParams.get('source') === 'wizebot'),
+    ).toBe(true);
+    sent.length = 0;
+    const real = await call('/api/progression/import/wizebot', {});
+    expect(real.body).toMatchObject({ dry_run: false, imported: 130 });
+    expect(sent.every((x) => x.body.dry_run === false)).toBe(true);
     pages.ranks = { players: [] };
     expect((await call('/api/progression/import/wizebot', {})).status).toBe(
       502,
