@@ -85,6 +85,45 @@ redéployer le bot sur ≥ `cf21c4b`.
 livrés le 24/10 et observer la Roue V2 au premier live, puis choisir entre l'incident Twitch du 22/10 et Bonk/DSK
 (arbitrage 1) avant d'ouvrir un nouveau chantier.
 
+### Évolution produit future — gestionnaire d'événements et monnaies du Wallet (décidé le 29/10, après Halloween)
+
+Vision d'Antoni, **à ne pas développer avant le stream du 31/10** :
+
+- **Monnaies du Wallet, indépendantes des événements.** Bonbons est une monnaie secondaire du Wallet Raptoru :
+  - activable et désactivable dans le Wallet ;
+  - soldes et historique persistants, administrables hors de tout événement.
+- **Module Événements générique.** Un événement est configurable : interactions, effets, ouverture et fermeture.
+  Halloween n'en est qu'un. À sa fermeture, ses interactions disparaissent ; les monnaies, les soldes et l'historique
+  restent.
+- **Interactions multi-monnaies.** Chaque interaction accepte une ou plusieurs monnaies du Wallet, chacune avec son prix
+  (exemple : « Apparition fantôme » à Jetons 1 500 **ou** Bonbons 3 ; « Screamer » à Bonbons 10 seulement). Le viewer
+  choisit une option de paiement, jamais un cumul automatique.
+
+**État au 29/10 (couplage connu, non bloquant pour le 31/10).** Bonbons vit dans le grand livre de l'événement
+(`event_wallets` / `event_ledger`, par saison), hors du Wallet canonique (`currencies`). Quand Halloween est OFF :
+
+- `!solde` n'affiche plus les Bonbons ;
+- la Tombola n'accepte ni ne paie de Bonbons ;
+- la conversion est fermée.
+
+Les soldes et l'historique sont gardés, et le crédit manuel de Studio reste possible. Pendant le stream (Halloween ON),
+rien de cela ne gêne.
+
+**Ordre prévu après le 31/10** :
+
+1. **Interrupteur « Monnaie Bonbons » indépendant de Halloween** (choix d'Antoni le 29/10). Il réutilise le drapeau
+   `available` du registre des monnaies de la Tombola. Quand il est actif, avec ou sans Halloween :
+   - `!solde` affiche les Bonbons ;
+   - la Tombola les accepte et les paie ;
+   - le crédit manuel fonctionne.
+
+   Restent liés à Halloween : les achats, les effets, les Bonbons des subs et la conversion Jetons → Bonbons (décidé :
+   fonction de l'événement). Il est inactif par défaut, pour ne rien montrer avant son activation. La règle de la
+   Tombola reste celle de la monnaie et de la Tombola : rien de spécifique à Halloween (la suspension d'une Tombola
+   Bonbons à la fermeture de Halloween a été écartée le 29/10).
+2. Bonbons dans le Wallet canonique : migration du grand livre, administration des monnaies dans Studio.
+3. Interactions multi-monnaies, puis gestionnaire d'événements générique.
+
 ## 4. Décisions enregistrées (à respecter)
 
 - SAMMI ne doit jamais être réactivé. StreamElements garde les dons et l'affichage du chat ; ses points sont gelés.
