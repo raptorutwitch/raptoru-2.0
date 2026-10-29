@@ -109,7 +109,12 @@ export function playLeaseMs(v: AlertVariant) {
   return (base || ALERT_RULES.defaultPlayMs) + ALERT_RULES.playMarginMs;
 }
 
+/** Called once per NEW event, inside its reception transaction (a redelivered event never reaches it). */
+export type AlertListener = (q: Queryable, e: AlertEventInput) => Promise<void>;
+
 export class AlertsService {
+  private readonly listeners: { name: string; fn: AlertListener }[] = [];
+
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
@@ -117,6 +122,31 @@ export class AlertsService {
     /** Freshness of the animation (null: off). */
     readonly maxAgeMs: number | null = null,
   ) {}
+
+  /**
+   * Boutique d'événement (docs/HALLOWEEN.md): Bonbons for subs / gifts. A listener runs alone in a savepoint: its
+   * failure is logged and undone, never the alert's.
+   */
+  attachListener(name: string, fn: AlertListener) {
+    this.listeners.push({ name, fn });
+  }
+
+  private async notify(q: Queryable, e: AlertEventInput) {
+    for (const [i, l] of this.listeners.entries()) {
+      const sp = `alert_listener_${i}`;
+      await q.query(`savepoint ${sp}`);
+      try {
+        await l.fn(q, e);
+        await q.query(`release savepoint ${sp}`);
+      } catch (error) {
+        await q.query(`rollback to savepoint ${sp}`);
+        console.error(
+          `[alerts] listener ${l.name} failed`,
+          (error as Error).message,
+        );
+      }
+    }
+  }
 
   now() {
     return this.clock.now();
@@ -177,6 +207,7 @@ export class AlertsService {
           alert: prior?.alert_id ? await this.byId(q, prior.alert_id) : null,
         };
       }
+      await this.notify(q, e);
       if (decision.outcome !== 'queued') return { outcome, alert: null };
       const alertId = randomUUID();
       // Too old (outbox resumed after a long outage): kept in the history, never animated.

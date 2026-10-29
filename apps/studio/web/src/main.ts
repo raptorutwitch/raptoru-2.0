@@ -13,6 +13,7 @@ import './alerts.css';
 import './channel-points.css';
 import './spotify.css';
 import './sub-wheel.css';
+import './halloween.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
 import { mountSoundConfig } from './sound-config.js';
@@ -27,6 +28,7 @@ import { mountSimulationTab } from './simulation-tab.js';
 import { mountAlerts } from './alerts-tab.js';
 import { mountChannelPoints } from './channel-points.js';
 import { mountSupervisionBanner } from './supervision-banner.js';
+import { mountHalloween } from './halloween.js';
 
 type TabId =
   | 'studio'
@@ -39,7 +41,8 @@ type TabId =
   | 'simulation'
   | 'test-lab'
   | 'extension-lab'
-  | 'soundboard';
+  | 'soundboard'
+  | 'halloween';
 const TAB_KEY = 'raptoru-studio-tab';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -56,6 +59,7 @@ if (app) {
         <button class="tab" type="button" data-tab="word-game">Jeu des mots <em>Core</em></button>
         <button class="tab" type="button" data-tab="alerts">Alertes <em>Core</em></button>
         <button class="tab" type="button" data-tab="channel-points">Points de chaîne <em>Core</em></button>
+        <button class="tab" type="button" data-tab="halloween">Halloween <em>🎃</em></button>
         <button class="tab" type="button" data-tab="simulation">Simulation <em>Lab</em></button>
         <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
@@ -73,6 +77,7 @@ if (app) {
     <main id="tab-word-game" hidden></main>
     <main id="tab-alerts" hidden></main>
     <main id="tab-channel-points" hidden></main>
+    <main id="tab-halloween" hidden></main>
     <main id="tab-simulation" hidden></main>
     <main id="tab-test-lab" hidden></main>
     <main id="tab-extension-lab" class="tab-full" hidden></main>
@@ -93,6 +98,9 @@ if (app) {
   const alerts = mountAlerts(app.querySelector<HTMLElement>('#tab-alerts')!);
   const channelPoints = mountChannelPoints(
     app.querySelector<HTMLElement>('#tab-channel-points')!,
+  );
+  const halloween = mountHalloween(
+    app.querySelector<HTMLElement>('#tab-halloween')!,
   );
   const simulationTab = mountSimulationTab(
     app.querySelector<HTMLElement>('#tab-simulation')!,
@@ -128,6 +136,9 @@ if (app) {
     app.querySelector<HTMLElement>('#tab-channel-points')!.hidden =
       tab !== 'channel-points';
     channelPoints.setVisible(tab === 'channel-points');
+    app.querySelector<HTMLElement>('#tab-halloween')!.hidden =
+      tab !== 'halloween';
+    halloween.setVisible(tab === 'halloween');
     app.querySelector<HTMLElement>('#tab-simulation')!.hidden =
       tab !== 'simulation';
     simulationTab.setVisible(tab === 'simulation');
@@ -168,6 +179,7 @@ if (app) {
       remembered === 'word-game' ||
       remembered === 'alerts' ||
       remembered === 'channel-points' ||
+      remembered === 'halloween' ||
       remembered === 'simulation' ||
       remembered === 'soundboard' ||
       remembered === 'test-lab'
@@ -185,6 +197,7 @@ if (app) {
     asked === 'word-game' ||
     asked === 'alerts' ||
     asked === 'channel-points' ||
+    asked === 'halloween' ||
     asked === 'test-lab' ||
     asked === 'extension-lab' ||
     asked === 'soundboard'

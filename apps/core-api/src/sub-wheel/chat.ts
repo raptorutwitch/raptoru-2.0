@@ -284,7 +284,8 @@ export class SubWheelChat {
   ) {
     if (r.reason) return 'la Roue du Sub n’est pas disponible pour le moment.';
     if (r.requested)
-      return `c’est parti : ${plural(r.requested, 'tour sera lancé', 'tours seront lancés')} pendant le live, quand tu seras là.`;
+      // Only in live (« not_live » otherwise): the answer itself proves the viewer is there — drawn at the next wheel.
+      return `c’est parti : ${plural(r.requested, 'tour va être lancé', 'tours vont être lancés')}.`;
     return already
       ? 'c’est déjà demandé : tes tours arrivent.'
       : 'tu n’as aucun tour à lancer.';

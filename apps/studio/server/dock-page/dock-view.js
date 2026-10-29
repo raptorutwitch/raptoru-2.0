@@ -61,6 +61,7 @@ const PATHS = {
   restore:
     '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
   arrowUp: '<path d="m5 12 7-7 7 7M12 19V5"/>',
+  bat: '<path d="M12 9.5 10.6 8 9.8 9.6C8 8.6 5.4 8.2 2.5 9.4c1.6.8 2.4 2.3 2.4 4 1.4-1 3-1.1 4.3-.2.6-.9 1.7-1.3 2.8-1.3s2.2.4 2.8 1.3c1.3-.9 2.9-.8 4.3.2 0-1.7.8-3.2 2.4-4-2.9-1.2-5.5-.8-7.3.2L13.4 8Z"/>',
 };
 const FILLED = new Set(['heart', 'star']);
 
@@ -88,6 +89,7 @@ export const FAMILIES = {
   bonk: { icon: 'hammer', label: 'Bonk' },
   random_ban: { icon: 'gavel', label: 'Random Ban' },
   raffle: { icon: 'ticket', label: 'Tombola' },
+  halloween: { icon: 'bat', label: 'Halloween' },
   other: { icon: 'dot', label: 'Événement' },
 };
 
@@ -107,6 +109,7 @@ const FAMILY_OF = {
   bonk: 'bonk',
   random_ban: 'random_ban',
   raffle: 'raffle',
+  halloween: 'halloween',
 };
 /** The family of an activity — also its filter. */
 export const familyOf = (a) => FAMILY_OF[a.type] ?? 'other';
@@ -124,6 +127,7 @@ export const FILTER_GROUPS = [
     label: 'Interactions Raptoru',
     filters: ['tts', 'soundboard', 'bonk', 'random_ban', 'raffle'],
   },
+  { id: 'event', label: 'Événements', filters: ['halloween'] },
 ];
 export const FILTERS = FILTER_GROUPS.flatMap((g) => g.filters);
 const FILTER_LABEL = {
@@ -140,6 +144,7 @@ const FILTER_LABEL = {
   bonk: 'Bonk',
   random_ban: 'Random Ban',
   raffle: 'Tombola',
+  halloween: 'Halloween (effets achetés)',
 };
 export const filterLabel = (id) => FILTER_LABEL[id] ?? id;
 
@@ -157,7 +162,16 @@ export const DEFAULT_PREFS = Object.freeze({
   hidden: [],
   costs: false,
   rewards: { hidden: [], names: {} },
+  density: 'mid',
 });
+
+/** Display sizes (live feedback 29/10): one component, four densities; « Moyen » is the V1.2 look. */
+export const DENSITIES = [
+  ['min', 'Minimaliste'],
+  ['mid', 'Moyen'],
+  ['big', 'Gros'],
+  ['xl', 'Géant'],
+];
 
 /** V1.1 filters → V1.2 filters (« Abos et cadeaux » and « Tombola et Random Ban » are split). */
 const V11 = {
@@ -193,6 +207,7 @@ export function readPrefs(raw) {
     v: 2,
     hidden: [...new Set(hidden)],
     costs: raw?.costs === true,
+    density: DENSITIES.some(([d]) => d === raw?.density) ? raw.density : 'mid',
     rewards: {
       hidden: Array.isArray(r.hidden)
         ? [...new Set(r.hidden.filter((x) => typeof x === 'string'))].slice(
@@ -384,6 +399,16 @@ export function labelOf(a, prefs = DEFAULT_PREFS) {
       return { label: 'TTS' };
     case 'raffle':
       return { label: 'Tombola', note: 'participation' };
+    case 'halloween':
+      // The effect's own name (as the shop shows it) and what it cost — shown once it is revealed (Core's delay).
+      return {
+        label: d.effect?.label || 'Halloween',
+        named: true,
+        note:
+          typeof d.effect?.price === 'number'
+            ? `${plural(d.effect.price, 'Bonbon', 'Bonbons')}`
+            : '',
+      };
     case 'random_ban':
       return {
         label: 'Random Ban',
@@ -433,6 +458,7 @@ const IX = {
   execution_unknown: ['Résultat inconnu', 'bad'],
   uncertain: ['Résultat incertain', 'bad'],
   cancelled: ['Annulée', 'muted'],
+  unknown: ['Résultat inconnu', 'bad'],
 };
 
 /**
@@ -838,38 +864,49 @@ export function prefsHtml(prefs, { rewardsOpen = false } = {}) {
   const rewards = Object.entries(prefs.rewards.names).sort((x, y) =>
     x[1].localeCompare(y[1], 'fr'),
   );
-  return FILTER_GROUPS.map((g) => {
-    const on = g.filters.filter((f) => !hidden.has(f)).length;
-    const state =
-      on === 0 ? '' : on === g.filters.length ? ' checked' : ' data-mixed="1"';
-    const items = g.filters
-      .map((f) =>
-        box(
-          `data-filter="${f}"`,
-          !hidden.has(f),
-          `${icon(FAMILIES[f].icon)}${esc(filterLabel(f))}`,
-          '',
-          `chk f-${f}`,
-        ),
-      )
-      .join('');
-    const list =
-      g.id === 'points'
-        ? `<details class="rewards"${rewards.length ? '' : ' hidden'}${rewardsOpen ? ' open' : ''}><summary>Récompenses une par une (${rewards.length})</summary>${rewards
-            .map(([id, title]) =>
-              box(
-                `data-reward="${esc(id)}"${hidden.has('reward') ? ' disabled' : ''}`,
-                !rh.has(id),
-                esc(title),
-                ` title="${esc(title)}"`,
-              ),
-            )
-            .join(
-              '',
-            )}</details>${box('id="costs"', prefs.costs, 'Afficher les coûts des récompenses')}`
-        : '';
-    return `<fieldset class="pg"><legend><label class="chk grp"><input type="checkbox" data-group="${g.id}"${state}><span>${esc(g.label)}</span></label></legend><div class="pg-items">${items}</div>${list}</fieldset>`;
-  }).join('');
+  const sizes = `<fieldset class="pg density"><legend>Taille d’affichage</legend><div class="seg">${DENSITIES.map(
+    ([d, label]) =>
+      `<label><input type="radio" name="density" value="${d}"${prefs.density === d ? ' checked' : ''}><span>${label}</span></label>`,
+  ).join('')}</div></fieldset>`;
+  return (
+    sizes +
+    FILTER_GROUPS.map((g) => {
+      const on = g.filters.filter((f) => !hidden.has(f)).length;
+      const state =
+        on === 0
+          ? ''
+          : on === g.filters.length
+            ? ' checked'
+            : ' data-mixed="1"';
+      const items = g.filters
+        .map((f) =>
+          box(
+            `data-filter="${f}"`,
+            !hidden.has(f),
+            `${icon(FAMILIES[f].icon)}${esc(filterLabel(f))}`,
+            '',
+            `chk f-${f}`,
+          ),
+        )
+        .join('');
+      const list =
+        g.id === 'points'
+          ? `<details class="rewards"${rewards.length ? '' : ' hidden'}${rewardsOpen ? ' open' : ''}><summary>Récompenses une par une (${rewards.length})</summary>${rewards
+              .map(([id, title]) =>
+                box(
+                  `data-reward="${esc(id)}"${hidden.has('reward') ? ' disabled' : ''}`,
+                  !rh.has(id),
+                  esc(title),
+                  ` title="${esc(title)}"`,
+                ),
+              )
+              .join(
+                '',
+              )}</details>${box('id="costs"', prefs.costs, 'Afficher les coûts des récompenses')}`
+          : '';
+      return `<fieldset class="pg"><legend><label class="chk grp"><input type="checkbox" data-group="${g.id}"${state}><span>${esc(g.label)}</span></label></legend><div class="pg-items">${items}</div>${list}</fieldset>`;
+    }).join('')
+  );
 }
 
 /**

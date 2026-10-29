@@ -570,7 +570,7 @@ describe('grouping: Bonks only', () => {
 });
 
 describe('preferences', () => {
-  it('defaults: everything shown, costs hidden; the 13 filters in 3 groups', () => {
+  it('defaults: everything shown, costs hidden; the 14 filters in 4 groups (Halloween: its own)', () => {
     expect(readPrefs(null)).toEqual(DEFAULT_PREFS);
     expect(FILTERS).toEqual([
       'follow',
@@ -586,11 +586,13 @@ describe('preferences', () => {
       'bonk',
       'random_ban',
       'raffle',
+      'halloween',
     ]);
     expect(FILTER_GROUPS.map((g) => g.id)).toEqual([
       'channel',
       'points',
       'raptoru',
+      'event',
     ]);
   });
 
@@ -602,6 +604,7 @@ describe('preferences', () => {
       hidden: ['sub', 'resub', 'gift', 'random_ban', 'raffle', 'bonk'],
       costs: true,
       rewards: { hidden: [], names: {} },
+      density: 'mid',
     });
     // V1.2 values read as they are, defensively.
     expect(
@@ -616,7 +619,19 @@ describe('preferences', () => {
       hidden: ['raffle'],
       costs: false,
       rewards: { hidden: ['r1'], names: { r1: 'X' } },
+      density: 'mid',
     });
+  });
+
+  it('display size (live feedback 29/10): four densities, « Moyen » by default and for anything unknown; one choice in the panel', () => {
+    for (const d of ['min', 'mid', 'big', 'xl'])
+      expect(readPrefs({ v: 2, density: d }).density).toBe(d);
+    expect(readPrefs({ v: 2, density: 'huge' }).density).toBe('mid');
+    expect(readPrefs(null).density).toBe('mid');
+    const html = prefsHtml(readPrefs({ v: 2, density: 'big' }));
+    expect(html.match(/name="density"/g)).toHaveLength(4);
+    expect(html).toContain('value="big" checked');
+    expect(html).toMatch(/Minimaliste.*Moyen.*Gros.*Géant/);
   });
 
   it('each filter independently: Random Ban without Tombola, Subgifts without Subs', () => {
@@ -836,5 +851,33 @@ describe('Studio’s « Dock OBS » panel', () => {
         null,
       ),
     ).toContain('port est déjà utilisé');
+  });
+});
+
+describe('Halloween lines (revealed by the Core after the scare)', () => {
+  it('the effect’s name, the viewer, the cost in Bonbons; its own family and filter', () => {
+    const a = {
+      activity_key: 'ix:halloween:p1',
+      kind: 'interaction',
+      type: 'halloween',
+      occurred_at: '2026-10-31T21:00:00.000Z',
+      data: {
+        actor: { id: '9', name: 'Ana' },
+        effect: { label: 'Foxy', price: 10, kind: 'screamer' },
+      },
+      state: { status: 'completed', refund_status: 'none' },
+      seq: 1,
+    };
+    expect(familyOf(a)).toBe('halloween');
+    expect(labelOf(a)).toEqual({
+      label: 'Foxy',
+      named: true,
+      note: '10 Bonbons',
+    });
+    expect(stateOf(a)).toMatchObject({ tone: 'ok' });
+    expect(stateOf({ ...a, state: { status: 'unknown' } })).toMatchObject({
+      label: 'Résultat inconnu',
+      tone: 'bad',
+    });
   });
 });

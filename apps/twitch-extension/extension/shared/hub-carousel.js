@@ -14,6 +14,8 @@ export const HUB_ICON_PATHS = Object.freeze({
   // Commandes : une bulle de chat avec « ! ».
   commands: '<path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4.5 3.5V17H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 8v4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="14.6" r="1.2" fill="currentColor"/>',
   moderation: '<path d="M12 3.5 19 6v5.5c0 4.2-3 7.5-7 9-4-1.5-7-4.8-7-9V6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+  // Événements (Halloween) : une chauve-souris, ailes déployées, lisible sur fond rouge sombre.
+  bat: '<path d="M12 8.2 10.4 6.4 9.6 8.6C7.4 7.3 4.3 6.9.8 8.4c2 1 3 2.9 3 5 1.8-1.2 3.8-1.3 5.4-.2.8-1.1 1.8-1.6 2.8-1.6s2 .5 2.8 1.6c1.6-1.1 3.6-1 5.4.2 0-2.1 1-4 3-5-3.5-1.5-6.6-1.1-8.8.2l-.8-2.2Z" fill="currentColor"/><circle cx="10.9" cy="10.6" r=".7" fill="#1a1030"/><circle cx="13.1" cy="10.6" r=".7" fill="#1a1030"/>',
   module: '<rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 12h6M12 9v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   chevL: '<path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
   chevR: '<path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',

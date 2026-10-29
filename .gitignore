@@ -11,6 +11,8 @@ dist/
 
 # Studio runtime state (PIDs of processes it started)
 .runtime/
+# Leftovers of a crashed Studio test (a test installation identity once got committed this way)
+.runtime-*/
 
 .twitch-tokens.broadcaster.json*
 

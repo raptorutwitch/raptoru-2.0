@@ -38,6 +38,7 @@ const RV25 = '20261109230000_sub_wheel_v2_recovery.sql';
 // Dock OBS V1 (27/10): additive, after the Roue V2 files — not in the production database of 25/10 either.
 const DOCK = '20261110130000_obs_dock.sql';
 const DOCK11 = '20261111130000_obs_dock_interactions.sql';
+const EVENT_SHOP = '20261112130000_event_shop.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -624,7 +625,8 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== RV24 &&
           f !== RV25 &&
           f !== DOCK &&
-          f !== DOCK11,
+          f !== DOCK11 &&
+          f !== EVENT_SHOP,
       ),
       lab: [
         ...MIGRATION_SCOPES.lab,
@@ -637,6 +639,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
         RV25,
         DOCK,
         DOCK11,
+        EVENT_SHOP,
       ],
     };
     expect(await migrate(a, 'prod', undefined, at46)).toHaveLength(46);
@@ -680,6 +683,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       RV25,
       DOCK,
       DOCK11,
+      EVENT_SHOP,
     ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(

@@ -10,6 +10,7 @@ import type { TtsWorker } from '../tts-lab/worker.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
 import { commandsFacade } from './commands-facade.js';
 import { subWheelFacade } from './sub-wheel-facade.js';
+import { eventShopFacade } from './event-shop-facade.js';
 
 const BONK_PROVIDERS: readonly BonkLabProvider[] = BonkLabProvider.options;
 import type {
@@ -317,6 +318,10 @@ export class LabEbs {
    * This façade only mirrors them into the session the extension expects.
    */
   private labCore: LabCoreCall | null = null;
+  /** Halloween shop open in the Lab Core (the « Événements » module shows only then); refreshed in the background. */
+  /** Per viewer (testers only: the module shows for some viewers only): open for them, the edition, when read. */
+  private eventShopFor = new Map<string, { open: boolean; at: number }>();
+  private eventShopEdition: Json | null = null;
   private coreModules: Record<
     'tts' | 'soundboard' | 'bonk' | 'raffle',
     string
@@ -330,6 +335,7 @@ export class LabEbs {
 
   connectLab(core: LabCoreCall) {
     this.labCore = core;
+    this.eventShopOpen(null);
   }
 
   /** Studio changed a wallet / module state: re-read on the next extension request. */
@@ -1157,6 +1163,25 @@ export class LabEbs {
         return this.fail(503, 'commands_unavailable');
       }
     }
+    // Halloween shop: its state, a purchase, a conversion — the caller's verified identity, the Lab Core sells.
+    if (
+      this.labCore &&
+      (path.startsWith('/events/') || path.startsWith('/actions/events/'))
+    ) {
+      const out = await eventShopFacade(this.labCore, LAB_CHANNEL.id)(
+        method,
+        path,
+        body,
+        caller.identityShared
+          ? {
+              id: caller.identity.twitchUserId,
+              display_name: caller.identity.displayName,
+            }
+          : null,
+        headers.idempotencyKey,
+      );
+      if (out) return out;
+    }
     // Roue du Sub V2 (R8): the viewer's own tours, the team's actions — the caller's verified identity, Core decides.
     if (this.labCore && path.startsWith('/sub-wheel/')) {
       const out = await subWheelFacade(this.labCore, LAB_CHANNEL.id)(
@@ -1958,6 +1983,39 @@ export class LabEbs {
 
   // --- helpers ----------------------------------------------------------------------------------
 
+  /**
+   * Is the shop shown to this viewer (open, and they are allowed in the Extension)? Read in the background at most
+   * every 3 s per viewer (the session itself stays synchronous).
+   */
+  private eventShopOpen(viewerId: string | null): boolean {
+    const key = viewerId ?? '';
+    const known = this.eventShopFor.get(key);
+    if (this.labCore && (!known || Date.now() - known.at >= 3000)) {
+      this.eventShopFor.set(key, {
+        open: known?.open ?? false,
+        at: Date.now(),
+      });
+      void this.labCore<Json>(
+        `/v1/lab/events/channels/${LAB_CHANNEL.id}/state${viewerId ? `?viewer=${viewerId}` : ''}`,
+        undefined,
+        { timeoutMs: 2000 },
+      ).then(
+        (s) => {
+          this.eventShopFor.set(key, {
+            open: s.enabled === true && s.extension_allowed !== false,
+            at: Date.now(),
+          });
+          this.eventShopEdition = (s.edition as Json | undefined) ?? null;
+        },
+        () => this.eventShopFor.set(key, { open: false, at: Date.now() }),
+      );
+    }
+    if (known || !viewerId) return known?.open ?? false;
+    // A viewer not read yet: the channel's answer meanwhile (open for everyone; closed in « Testeurs seulement », where
+    // only this viewer's own read can show it) — never « closed » for the first seconds of every viewer.
+    return this.eventShopOpen(null);
+  }
+
   private session(identity: LabIdentity, identityShared: boolean): Json {
     const isMod = identity.role !== 'viewer';
     const base = this.demo(isMod ? 'moderator' : 'paid');
@@ -2065,6 +2123,15 @@ export class LabEbs {
       commands_public: Boolean(this.labCore),
       // Roue du Sub V2 (R8): « Roue du Sub » in the Hub (own tours; the team's part for moderators).
       sub_wheel: Boolean(this.labCore),
+      // Halloween shop: « Événements » in the Hub only while the Lab Core says the event is open.
+      event_shop: this.labCore
+        ? {
+            enabled: this.eventShopOpen(
+              identityShared ? identity.twitchUserId : null,
+            ),
+            edition: this.eventShopEdition,
+          }
+        : null,
       role: identity.role,
       channel_id: LAB_CHANNEL.id,
       channel_login: LAB_CHANNEL.login,

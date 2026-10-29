@@ -32,6 +32,7 @@ import {
   saveSeConnection,
 } from './se-credentials.js';
 import { setupUpdater } from './updater.js';
+import { startHalloweenOverlay } from './halloween-overlay.js';
 import {
   ServerSupervisor,
   type ChildHandle,
@@ -472,9 +473,18 @@ void app.whenReady().then(async () => {
       preload: join(here, 'preload.cjs'),
     },
   });
+  // Halloween (docs/HALLOWEEN.md): the overlay window over the chosen screen, opened / closed by Studio's settings.
+  // It never outlives the main window (closing Studio closes it, so the app quits as before).
+  const halloween = startHalloweenOverlay({
+    studioUrl,
+    mainToken,
+    log: (...args) => console.log(...args),
+  });
   win.on('closed', () => {
     win = null;
+    halloween.dispose();
   });
+  app.once('before-quit', () => halloween.dispose());
   // The window only shows Studio or its status page; web links open in the system browser.
   win.webContents.on('will-navigate', (event, url) => {
     if (isTrustedPage(url, trustPolicy)) return;

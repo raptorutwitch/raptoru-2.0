@@ -10,15 +10,72 @@
   --card-h: #181c25;
   --raised: #1d222d;
   --line: #1c212b;
-  --text: #eef0f5;
-  --soft: #c3c8d4;
-  --muted: #7f8799;
+  /* Live feedback 29/10: a little lighter for OBS (was #eef0f5 / #c3c8d4 / #7f8799), same hierarchy. */
+  --text: #f6f7fb;
+  --soft: #dadee7;
+  --muted: #9aa2b4;
   --accent: #8b9bff;
   --accent-bg: rgba(139, 155, 255, 0.14);
   --ok: #3ddc97;
   --wait: #f5b84a;
   --bad: #ff6b6b;
   color-scheme: dark;
+  /* Card density (« Moyen » = the V1.2 sizes); body.d-min / d-big / d-xl below. */
+  --row-py: 7px;
+  --row-px: 8px;
+  --row-gap: 9px;
+  --row-mb: 4px;
+  --av: 30px;
+  --av-fs: 13px;
+  --fs-who: 13px;
+  --fs-lab: 11.5px;
+  --fs-l2: 11px;
+  --fs-l3: 12px;
+  --l2-mt: 2px;
+  --l3-mt: 4px;
+}
+/* Less room around the same text (it shrinks a little only): more events in view. */
+body.d-min {
+  --row-py: 3px;
+  --row-px: 6px;
+  --row-gap: 7px;
+  --row-mb: 2px;
+  --av: 22px;
+  --av-fs: 11px;
+  --fs-who: 12.5px;
+  --fs-lab: 11px;
+  --fs-l2: 10.5px;
+  --fs-l3: 11.5px;
+  --l2-mt: 0px;
+  --l3-mt: 2px;
+}
+body.d-big {
+  --row-py: 9px;
+  --row-px: 10px;
+  --row-gap: 10px;
+  --row-mb: 5px;
+  --av: 36px;
+  --av-fs: 15px;
+  --fs-who: 15px;
+  --fs-lab: 12.5px;
+  --fs-l2: 12px;
+  --fs-l3: 13.5px;
+  --l2-mt: 3px;
+  --l3-mt: 5px;
+}
+body.d-xl {
+  --row-py: 11px;
+  --row-px: 12px;
+  --row-gap: 12px;
+  --row-mb: 6px;
+  --av: 44px;
+  --av-fs: 18px;
+  --fs-who: 17.5px;
+  --fs-lab: 14px;
+  --fs-l2: 13.5px;
+  --fs-l3: 15.5px;
+  --l2-mt: 4px;
+  --l3-mt: 6px;
 }
 
 * {
@@ -125,6 +182,11 @@ button {
   --fc: #2dd4bf;
   --ft: rgba(45, 212, 191, 0.1);
   --fa: rgba(45, 212, 191, 0.18);
+}
+.f-halloween {
+  --fc: #ff7a2f;
+  --ft: rgba(150, 28, 36, 0.22);
+  --fa: rgba(255, 122, 47, 0.2);
 }
 .f-other {
   --fc: #a3adbf;
@@ -334,6 +396,42 @@ button {
 .pg legend {
   padding: 0 4px;
 }
+.density .seg {
+  display: flex;
+  gap: 4px;
+  padding: 2px 0;
+}
+.density .seg label {
+  flex: 1;
+  min-width: 0;
+}
+.density .seg input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.density .seg span {
+  display: block;
+  padding: 4px 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--soft);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.density .seg input:checked + span {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--text);
+  font-weight: 600;
+}
+.density .seg input:focus-visible + span {
+  outline: 2px solid var(--accent);
+}
 .pg-items {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
@@ -456,8 +554,8 @@ input[type='checkbox'] {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  /* Rows inserted above keep what you read in place. */
-  overflow-anchor: auto;
+  /* What you read is kept in place by dock.js (keepPosition): no second, browser-made adjustment. */
+  overflow-anchor: none;
 }
 .list {
   list-style: none;
@@ -468,10 +566,10 @@ input[type='checkbox'] {
 .row {
   position: relative;
   display: flex;
-  gap: 9px;
+  gap: var(--row-gap);
   align-items: flex-start;
-  margin-bottom: 4px;
-  padding: 7px 8px 7px 9px;
+  margin-bottom: var(--row-mb);
+  padding: var(--row-py) var(--row-px) var(--row-py) calc(var(--row-px) + 1px);
   border-radius: 9px;
   background-color: var(--card);
   background-image: linear-gradient(90deg, var(--ft) 0%, rgba(0, 0, 0, 0) 62%);
@@ -524,18 +622,18 @@ body.picking .row {
   position: relative;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: var(--av);
+  height: var(--av);
   flex: none;
   border-radius: 50%;
   background: var(--fa);
   color: var(--fc);
   font-weight: 700;
-  font-size: 13px;
+  font-size: var(--av-fs);
   overflow: hidden;
 }
 .av-ic {
-  font-size: 15px;
+  font-size: calc(var(--av-fs) + 2px);
 }
 .av-img {
   position: absolute;
@@ -593,7 +691,7 @@ body.picking .row {
   min-width: 0;
   color: var(--fc);
   font-weight: 750;
-  font-size: 11.5px;
+  font-size: var(--fs-lab);
   letter-spacing: 0.045em;
   text-transform: uppercase;
 }
@@ -621,6 +719,7 @@ body.picking .row {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
+  font-size: var(--fs-who);
   color: var(--text);
 }
 .st {
@@ -647,9 +746,9 @@ body.picking .row {
 }
 
 .l2 {
-  margin-top: 2px;
+  margin-top: var(--l2-mt);
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--fs-l2);
   color: var(--muted);
 }
 .when {
@@ -684,12 +783,12 @@ body.picking .row {
 }
 
 .l3 {
-  margin: 4px 0 0;
-  padding: 3px 7px;
+  margin: var(--l3-mt) 0 0;
+  padding: calc(var(--l3-mt) - 1px) 7px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.035);
   color: var(--soft);
-  font-size: 12px;
+  font-size: var(--fs-l3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -811,7 +910,8 @@ body.picking .row {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin: 0 auto -30px;
+  /* Zero room in the flow (height − margin): showing it never shifts the rows you read. */
+  margin: 0 auto -26px;
   height: 26px;
   padding: 0 12px 0 10px;
   border: none;

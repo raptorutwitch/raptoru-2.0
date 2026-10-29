@@ -221,6 +221,13 @@ export class ExtFacade {
         body,
         who.viewer ? this.actor(who) : null,
       );
+    // Halloween shop (docs/HALLOWEEN.md): its state, a purchase, a conversion — the JWT's viewer, never a body field.
+    if (method === 'GET' && path === '/events/state')
+      return ok((await this.eventShop(who)) ?? { enabled: false });
+    if (method === 'POST' && path === '/actions/events/purchase')
+      return this.eventAction(who, 'purchase', body ?? {}, idempotencyKey);
+    if (method === 'POST' && path === '/actions/events/convert')
+      return this.eventAction(who, 'convert', body ?? {}, idempotencyKey);
     if (method === 'GET' && path === '/raffle/state')
       return this.raffleState(who);
     if (method === 'POST' && path === '/actions/raffle')
@@ -357,6 +364,7 @@ export class ExtFacade {
       ttsConfig,
       ttsViewer,
       raffle,
+      eventShop,
       bonkRecent,
     ] = await Promise.all([
       this.core<Json>(`/v1/lab/moderation/${C}/overview`).catch(() => null),
@@ -377,6 +385,7 @@ export class ExtFacade {
       this.core<Json>(
         `/v1/lab/raffle/${C}/state${v ? `?viewer=${v.id}` : ''}`,
       ).catch(() => null),
+      this.eventShop(who),
       v
         ? this.core<{ interactions: Json[] }>(
             `/v1/lab/bonk/channels/${C}/interactions?limit=10&viewer_id=${v.id}`,
@@ -529,6 +538,8 @@ export class ExtFacade {
             history: { can_view: false, items: [], total: 0 },
           },
       raffle: this.raffleSession(raffle, v),
+      // Halloween: shown by the extension as its « Halloween » module only while the event is open.
+      event_shop: eventShop,
     };
   }
 
@@ -549,6 +560,7 @@ export class ExtFacade {
         'notifications',
         // The extension only re-reads /state after its first load: live catalog and prices follow.
         'modules',
+        'event_shop',
       ].map((k) => [k, s[k]]),
     );
   }
@@ -631,6 +643,51 @@ export class ExtFacade {
     return ok({
       level_up_sfx_opt_in: this.preferences.get(who.viewer.id) ?? false,
     });
+  }
+
+  // --- Halloween shop (docs/HALLOWEEN.md) ---------------------------------------------------------
+
+  /** The shop for this viewer (null: no shop on this Core); never fails the session. */
+  private async eventShop(who: Who): Promise<Json | null> {
+    const v = who.viewer;
+    const s = await this.core<Json>(
+      `/v1/lab/events/channels/${this.C}/state${v ? `?viewer=${v.id}` : ''}`,
+    ).catch(() => null);
+    // Testers only (Studio): the module is not shown to the others — nothing of the shop is sent to them.
+    return s && s.extension_allowed === false ? { enabled: false } : s;
+  }
+
+  private async eventAction(
+    who: Who,
+    action: 'purchase' | 'convert',
+    body: Json,
+    key: string | undefined,
+  ): Promise<ExtReply> {
+    if (!who.viewer) return fail(403, 'identity_required');
+    if (!key || key.length < 8 || key.length > 128)
+      return fail(400, 'idempotency_key_required');
+    const viewer = { id: who.viewer.id, display_name: who.viewer.display_name };
+    try {
+      const out =
+        action === 'purchase'
+          ? await this.core<Json>('/v1/lab/events/purchase', {
+              idempotency_key: key,
+              channel_id: this.C,
+              viewer,
+              item_id: String(body.item_id ?? ''),
+              via: 'extension',
+            })
+          : await this.core<Json>('/v1/lab/events/convert', {
+              idempotency_key: key,
+              channel_id: this.C,
+              viewer,
+              bonbons: Number(body.bonbons),
+              via: 'extension',
+            });
+      return ok({ ...out, event_shop: await this.eventShop(who) });
+    } catch (e) {
+      return refused(e);
+    }
   }
 
   // --- actions (simulated payment: Lab test wallet) ----------------------------------------------

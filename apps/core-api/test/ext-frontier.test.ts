@@ -312,6 +312,127 @@ describe('public Core: viewer frontier /v1/ext', () => {
     );
   });
 
+  it('Halloween shop: closed in the session, then sold to the JWT viewer only, once per Idempotency-Key', async () => {
+    const { core, ext, send } = await fixture();
+    const jwt = viewer('4243');
+    const closed = (await ext('/session', jwt)).body;
+    expect(closed.event_shop).toMatchObject({ enabled: false });
+    // An older extension never sees an unknown module: the shop is a key of its own.
+    expect(
+      closed.modules.some((m: { id: string }) => m.id === 'event_shop'),
+    ).toBe(false);
+
+    await core.eventShop.updateSettings(CHANNEL, {
+      enabled: true,
+      rules: { viewer_gap_ms: 0 },
+    });
+    await core.eventShop.heartbeat({
+      studio_instance_id: 'studio-1',
+      channel_id: CHANNEL,
+      engine_ready: true,
+      media: [],
+    });
+    await core.eventShop.grant(
+      {
+        idempotency_key: randomUUID(),
+        channel_id: CHANNEL,
+        viewer: '4243',
+        amount: 10,
+        reason: 'grant',
+      },
+      'test',
+    );
+    const state = (await ext('/events/state', jwt)).body;
+    expect(state).toMatchObject({ enabled: true, balance: 10 });
+
+    // Unshared identity: nothing bought. No Idempotency-Key: refused.
+    const anon = await ext('/actions/events/purchase', token({}), {
+      item_id: 'blink',
+    });
+    expect(anon.status).toBe(403);
+    const noKey = await send('/v1/ext/actions/events/purchase', {
+      body: { item_id: 'blink' },
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        origin: 'https://abcdef123.ext-twitch.tv',
+      },
+    });
+    expect(noKey.status).toBe(400);
+
+    // A viewer field in the body is ignored: the JWT's viewer pays.
+    const key = randomUUID();
+    const r = await ext(
+      '/actions/events/purchase',
+      jwt,
+      { item_id: 'blink', viewer: { id: '1' } },
+      key,
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.event_shop.balance).toBe(10 - r.body.purchase.price);
+    const again = await ext(
+      '/actions/events/purchase',
+      jwt,
+      { item_id: 'blink' },
+      key,
+    );
+    expect(again.body.purchase.purchase_id).toBe(r.body.purchase.purchase_id);
+    expect((await ext('/events/state', jwt)).body.balance).toBe(
+      10 - r.body.purchase.price,
+    );
+    // Refusals carry the Core's code (one play at a time).
+    const busy = await ext('/actions/events/purchase', jwt, { item_id: 'fog' });
+    expect(busy.body.error).toBe('busy');
+  });
+
+  it('Halloween for the Extension testers only: a non-tester gets no module and cannot buy; a tester can', async () => {
+    const { core, ext } = await fixture();
+    await core.eventShop.updateSettings(CHANNEL, {
+      enabled: true,
+      rules: {
+        viewer_gap_ms: 0,
+        extension_audience: 'testers',
+        extension_testers: ['4250'],
+      },
+    });
+    await core.eventShop.heartbeat({
+      studio_instance_id: 'studio-1',
+      channel_id: CHANNEL,
+      engine_ready: true,
+      media: [],
+    });
+    for (const id of ['4250', '4251'])
+      await core.eventShop.grant(
+        {
+          idempotency_key: randomUUID(),
+          channel_id: CHANNEL,
+          viewer: id,
+          amount: 10,
+          reason: 'grant',
+        },
+        'test',
+      );
+    const outsider = viewer('4251');
+    expect((await ext('/session', outsider)).body.event_shop).toEqual({
+      enabled: false,
+    });
+    const hidden = (await ext('/events/state', outsider)).body;
+    expect(hidden).toMatchObject({ enabled: false });
+    expect(hidden.items).toBeUndefined();
+    expect(hidden.balance).toBeUndefined();
+    const refused = await ext('/actions/events/purchase', outsider, {
+      item_id: 'blink',
+    });
+    expect(refused.body.error).toBe('not_invited');
+    const tester = viewer('4250');
+    expect((await ext('/session', tester)).body.event_shop).toMatchObject({
+      enabled: true,
+    });
+    expect(
+      (await ext('/actions/events/purchase', tester, { item_id: 'blink' }))
+        .status,
+    ).toBe(200);
+  });
+
   it('Bonk salve (lot 5, Auto): Core bounds in the session, N shots paid at once, replay-safe, all or nothing', async () => {
     const { core, ext } = await fixture();
     const jwt = viewer();

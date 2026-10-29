@@ -6,7 +6,13 @@ import type { Queryable } from '../db/db.js';
 
 export type LabModule = 'tts' | 'soundboard' | 'bonk' | 'raffle';
 /** What a debit pays for: a module, or an interaction bought from the chat (chat-interactions/prices.ts). */
-export type PaidModule = LabModule | 'random_ban' | 'fx_cam' | 'caution';
+export type PaidModule =
+  | LabModule
+  | 'random_ban'
+  | 'fx_cam'
+  | 'caution'
+  // Boutique d'événement: the Jetons of a Bonbons conversion (docs/HALLOWEEN.md).
+  | 'event_shop';
 export type ModuleState = 'active' | 'paused' | 'disabled';
 export type LabRole = 'broadcaster' | 'supermod' | 'moderator' | 'viewer';
 export type WalletCurrency = 'tokens' | 'credits_tts' | 'credits_soundboard';
@@ -392,7 +398,8 @@ export async function activeBlock(
   q: Queryable,
   channelId: string,
   viewerId: string,
-  module: LabModule,
+  /** A module, or 'all' (a module without its own block — Halloween — honours the « everywhere » one only). */
+  module: LabModule | 'all',
   now: Date,
 ) {
   return (
