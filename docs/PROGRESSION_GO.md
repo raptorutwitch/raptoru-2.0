@@ -14,6 +14,24 @@ Deux PR livrées ensemble :
 - Core `7223b0a` (Halloween), bot `4ba9243`, Studio 0.1.18 ;
 - site `4400251` (affiche encore les Jetons StreamElements).
 
+## Livraison du 29/10/2026 — état réel
+
+| Étape              | Fait                                                                                                                                                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sauvegarde         | Coolify « Backup now » par l'API, 29/10 18:41:47 UTC, `success`, 3 164 586 octets (cohérent avec 04:00). **Copie hors VPS et restauration jetable : à faire par Antoni** (téléchargement web seulement).                                    |
+| Jeton du site      | `SITE_TOKEN` (Core) = `RAPTORU_SITE_TOKEN` (site), 43 caractères, généré en mémoire et posé par l'API Coolify, jamais affiché.                                                                                                              |
+| Core               | `57f3ae3` (PR #39), migration `20261113130000_progression.sql` appliquée, `running:healthy`, bot `4ba9243` actif (EventSub OK).                                                                                                             |
+| Site               | `6ae2614` (PR #106), auto-déployé ; Jetons 5/5 et Daily 8/8 égaux au Core ; routes V1 en 410 ; CSP et en-têtes présents ; rendu vérifié dans Chromium (0 erreur console, aucune donnée de démo).                                            |
+| Studio             | **0.1.19 publiée** (release `v0.1.19`, workflow GitHub, `57f3ae3`) : onglet Progression complet ; **à installer par Antoni**. 1er essai bloqué par une suppression de dossier temporaire Windows (`alerts-se`, sans rapport), relancé vert. |
+| Simulation WizeBot | 7 852 pseudos lus (2 443 niveaux, 5 946 watchtimes, 2 993 compteurs de messages) ; 1 622 rattachables (1 501 par identifiant, 121 par pseudo), 6 228 en attente, 0 ambigu, 2 conflits.                                                      |
+| Import             | 1 622 rattachés (relancé : 0 de plus, 1 622 déjà) ; 6 228 gardés en attente (rattachement automatique au retour) ; conflits `aura_dty` / `aurorra_ae` (même identifiant) à décider dans Studio.                                             |
+| Activation         | progression **active** (règles par défaut) ; raptoru.fr : Niveau, Watchtime et Messages (global) depuis le Core, semaine / mois sur WizeBot.                                                                                                |
+| Nouveaux gains     | **à constater au prochain live** (présence et chat ne comptent qu'en live).                                                                                                                                                                 |
+| WizeBot            | **action manuelle d'Antoni** : couper le module de rangs / niveaux (XP) de WizeBot et ses annonces « Level UP » ; garder WizeBot et ses archives tant que l'indépendance n'est pas confirmée.                                               |
+
+Les appels Studio de l'import et de l'activation ont été faits avec l'identité de l'installation Studio du PC
+(fichier local, jamais affichée), Studio 0.1.19 n'étant pas encore installé.
+
 ## 0. Conditions (sinon on ne commence pas)
 
 - Pas de live et pas d'enregistrement OBS (l'outil de déploiement le vérifie aussi).
