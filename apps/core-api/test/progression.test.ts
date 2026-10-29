@@ -26,6 +26,7 @@ let svc: ProgressionService;
 beforeEach(async () => {
   db = await createTestDb();
   for (const t of [
+    'progression_history',
     'progression_equipped',
     'progression_grants',
     'progression_rewards',
@@ -332,14 +333,15 @@ describe('WizeBot import', () => {
   const rules = DEFAULT_PROGRESSION_RULES;
   const row = (over: Record<string, unknown>) => ({
     twitch_user_id: null,
-    login: null,
+    login: 'x',
     level: 10,
     watch_seconds: 0,
     messages: 0,
     ...over,
   });
+  const studio = { id: 'studio' };
 
-  it('resolution never guesses: by id (unless the Core knows it under another login), by the ONE account of a login; ambiguous, conflicting and unknown rows are set aside', async () => {
+  it('every row is kept; attached by the exact Twitch id first, else by the ONE account of a pseudo; the rest waits and is attached later', async () => {
     // « old_name » is held by two accounts in the Core (a renamed viewer and the new owner of the name).
     for (const [id, login] of [
       ['3', 'old_name'],
@@ -353,21 +355,16 @@ describe('WizeBot import', () => {
     const req = {
       source: 'wizebot' as const,
       rows: [
-        row({ twitch_user_id: '1', login: 'ana', level: 30 }), // by id, Core agrees
+        row({ twitch_user_id: '1', login: 'ana_old', level: 30 }), // exact id: ana, renamed since
         row({ login: 'bob', level: 12 }), // by its one account
         row({ login: 'old_name' }), // two accounts: ambiguous
-        row({ twitch_user_id: '5', login: 'not_cid' }), // the Core knows 5 as « cid »: conflict
-        row({ login: 'inconnu' }), // unknown: later
-        row({ twitch_user_id: '777', login: 'jamais_vu' }), // an id the Core never saw: kept (Twitch's own id)
-        row({ login: 'cid' }), // cid…
-        row({ twitch_user_id: '5', login: 'cid' }), // …and cid again by id: one account, two rows → conflict
+        row({ login: 'inconnu', level: 7, watch_seconds: 600 }), // unknown today: waits
+        row({ twitch_user_id: '777', login: 'jamais_vu' }), // an id the Core never saw: Twitch's own id
+        row({ login: 'cid' }), // cid by pseudo…
+        row({ twitch_user_id: '5', login: 'cid_alt' }), // …and cid again by id: one account, two rows → conflict
       ],
     };
-    const dry = await svc.importHistory(
-      CH,
-      { ...req, dry_run: true },
-      { id: 'studio' },
-    );
+    const dry = await svc.importHistory(CH, { ...req, dry_run: true }, studio);
     expect(dry).toEqual({
       dry_run: true,
       would_import: 3,
@@ -376,20 +373,69 @@ describe('WizeBot import', () => {
       by_login: 1,
       unresolved: ['inconnu'],
       ambiguous: ['old_name'],
-      conflicts: ['not_cid', 'cid', 'cid'],
+      conflicts: ['cid', 'cid_alt'],
     });
-    expect(await xp('1')).toBe(0); // a dry run writes nothing
-    const out = await svc.importHistory(CH, req, { id: 'studio' });
-    expect(out).toMatchObject({
+    // A dry run writes nothing, not even the history.
+    expect(await xp('1')).toBe(0);
+    expect(await svc.importStatus(CH)).toMatchObject({
+      imported: 0,
+      pending: 0,
+    });
+    expect(await svc.importHistory(CH, req, studio)).toMatchObject({
       imported: 3,
       already: 0,
       by_id: 2,
       by_login: 1,
     });
-    expect(await xp('3')).toBe(0);
-    expect(await xp('4')).toBe(0);
-    expect(await xp('5')).toBe(0);
+    expect(await svc.importStatus(CH)).toMatchObject({
+      imported: 3,
+      pending: 1,
+      ambiguous: 1,
+      conflict: 2,
+    });
+    expect(await xp('1')).toBe(xpForLevel(30, rules));
     expect(await xp('777')).toBe(xpForLevel(10, rules));
+    for (const id of ['3', '4', '5']) expect(await xp(id)).toBe(0);
+    expect((await svc.history(CH, '1')).sources).toMatchObject([
+      { source: 'wizebot', login: 'ana_old', level: 30, attachedBy: 'id' },
+    ]);
+    // « inconnu » comes to the stream: the stored row is attached, with its first reading — no WizeBot needed.
+    await db.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ('6', 'inconnu', 'Inconnu')`,
+    );
+    expect(
+      await svc.importHistory(CH, { source: 'wizebot', rows: [] }, studio),
+    ).toMatchObject({ imported: 1, by_login: 1, unresolved: [] });
+    expect((await svc.viewer(CH, '6')).imported).toEqual({
+      source: 'wizebot',
+      level: 7,
+      watchMinutes: 10,
+      messages: 0,
+    });
+  });
+
+  it('a stored reading is never replaced by an older one, and an imported one never changes', async () => {
+    const at = (d: number) => new Date(T0.getTime() + d * 86_400_000);
+    const send = (level: number, when: Date, login = 'zed') =>
+      svc.importHistory(
+        CH,
+        {
+          source: 'wizebot',
+          measured_at: when.toISOString(),
+          rows: [row({ login, level })],
+        },
+        studio,
+      );
+    await send(5, at(0));
+    await send(3, at(-1)); // older: ignored
+    await db.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ('8', 'zed', 'Zed')`,
+    );
+    await svc.importHistory(CH, { source: 'wizebot', rows: [] }, studio);
+    expect((await svc.viewer(CH, '8')).imported?.level).toBe(5);
+    expect(await send(50, at(1))).toMatchObject({ imported: 0, already: 1 });
+    expect((await svc.viewer(CH, '8')).imported?.level).toBe(5);
+    expect(await xp('8')).toBe(xpForLevel(5, rules));
   });
 
   it('a second run never resets the XP earned since; the undo removes only the import, never what was earned', async () => {
@@ -407,27 +453,279 @@ describe('WizeBot import', () => {
       ],
     };
     await presence(['1'], T0); // 2 XP before the import
-    await svc.importHistory(CH, req, { id: 'studio' });
+    await svc.importHistory(CH, req, studio);
     await presence(['1'], new Date(T0.getTime() + 1)); // 2 XP earned after it
     const before = await xp('1');
     expect(before).toBe(xpForLevel(30, rules) + 4);
-    expect(await svc.importHistory(CH, req, { id: 'studio' })).toMatchObject({
+    expect(await svc.importHistory(CH, req, studio)).toMatchObject({
       imported: 0,
       already: 1,
     });
     expect(await xp('1')).toBe(before);
-    expect((await svc.viewer(CH, '1')).imported).toEqual({
+    const v = await svc.viewer(CH, '1');
+    expect(v.imported).toEqual({
       source: 'wizebot',
       level: 30,
       watchMinutes: 6000,
       messages: 5000,
     });
+    // Imported history + what the Core counted since (4 minutes of presence).
+    expect(v.totals).toEqual({ watchMinutes: 6004, messages: 5000 });
     expect(await svc.revertImport(CH, 'wizebot')).toEqual({ removed: 1 });
     expect(await xp('1')).toBe(4); // what the Core measured stays
     expect((await svc.viewer(CH, '1')).imported).toBeNull();
+    expect(await svc.importStatus(CH)).toMatchObject({
+      imported: 0,
+      pending: 1,
+    });
     // Imported again after the undo: back exactly, the earned XP still on top.
-    await svc.importHistory(CH, req, { id: 'studio' });
+    await svc.importHistory(CH, req, studio);
     expect(await xp('1')).toBe(xpForLevel(30, rules) + 4);
+  });
+});
+
+describe('WizeBot history: identity rules, automatic and manual attachment', () => {
+  const rules = DEFAULT_PROGRESSION_RULES;
+  const studio = { id: 'inst-1', name: 'Studio' };
+  const row = (over: Record<string, unknown>) => ({
+    twitch_user_id: null,
+    id_source: null,
+    login: 'x',
+    level: 10,
+    watch_seconds: 0,
+    messages: 0,
+    ...over,
+  });
+  const send = (rows: ReturnType<typeof row>[]) =>
+    svc.importHistory(CH, { source: 'wizebot', rows }, studio);
+
+  it('the Wallet rules: a legacy pair is kept unless the pseudo has another holder today; several holders are never decided', async () => {
+    await db.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ('20', 'repris', 'Repris')`,
+    );
+    const out = await send([
+      row({ login: 'bob', twitch_user_id: '2', id_source: 'legacy' }), // the Core agrees: attached by id
+      row({ login: 'repris', twitch_user_id: '21', id_source: 'legacy' }), // pseudo reassigned since: never decided
+      row({ login: 'parti', twitch_user_id: '22', id_source: 'legacy' }), // renamed / gone from the Core: its id
+      row({ login: 'ana', id_source: 'ambiguous' }), // the legacy data saw two holders of « ana »
+    ]);
+    expect(out).toMatchObject({
+      imported: 2,
+      by_id: 2,
+      ambiguous: ['ana', 'repris'],
+    });
+    expect(await xp('2')).toBe(xpForLevel(10, rules));
+    expect(await xp('20')).toBe(0);
+    expect(await xp('1')).toBe(0);
+  });
+
+  it('a viewer seen again (presence, chat, sign-in on the site) gets their waiting history; the XP earned since stays', async () => {
+    await svc.updateSettings(CH, { enabled: true });
+    await send([
+      row({ login: 'retour', level: 8, watch_seconds: 6000 }),
+      row({ login: 'bavard', level: 4 }),
+      row({ login: 'zoe', level: 6 }),
+    ]);
+    expect(await svc.importStatus(CH)).toMatchObject({ pending: 3 });
+    // Presence: the viewer comes back for the first time since the import.
+    await db.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ('10', 'retour', 'Retour')`,
+    );
+    await presence(['10'], T0);
+    expect(await xp('10')).toBe(xpForLevel(8, rules) + 2);
+    expect((await svc.viewer(CH, '10')).totals.watchMinutes).toBe(102);
+    // A replayed cycle: nothing more.
+    await presence(['10'], T0);
+    expect(await xp('10')).toBe(xpForLevel(8, rules) + 2);
+    // Chat.
+    await live();
+    await db.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ('12', 'bavard', 'Bavard')`,
+    );
+    expect(
+      await svc.onMessage(
+        msg('12', 'coucou tout le monde', { login: 'bavard' }),
+      ),
+    ).toBe('xp');
+    expect(await xp('12')).toBe(xpForLevel(4, rules) + 5);
+    // Sign-in on raptoru.fr: the site's verified pair joins the directory; attached once.
+    expect(
+      await svc.identify(CH, {
+        viewer: '11',
+        login: 'zoe',
+        display_name: 'Zoe',
+      }),
+    ).toEqual({ attached: 1 });
+    expect(
+      await svc.identify(CH, {
+        viewer: '11',
+        login: 'zoe',
+        display_name: 'Zoe',
+      }),
+    ).toEqual({ attached: 0 });
+    expect(await xp('11')).toBe(xpForLevel(6, rules));
+    expect(await svc.importStatus(CH)).toMatchObject({
+      imported: 3,
+      pending: 0,
+    });
+  });
+
+  it('Studio decides an uncertain row: attached once, journaled; never a second history for a viewer', async () => {
+    for (const [id, login] of [
+      ['3', 'old_name'],
+      ['4', 'old_name'],
+    ])
+      await db.query(
+        'insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $2)',
+        [id, login],
+      );
+    await send([
+      row({ login: 'old_name', level: 9 }),
+      row({ login: 'autre', level: 3 }),
+    ]);
+    const waiting = await svc.waiting(CH, 'old');
+    expect(waiting).toMatchObject([
+      { login: 'old_name', status: 'ambiguous', candidates: ['3', '4'] },
+    ]);
+    const attach = (login: string, viewer: string) =>
+      svc.attachManually(
+        CH,
+        { source: 'wizebot', login, viewer, reason: 'vérifié avec le viewer' },
+        studio,
+      );
+    expect(await attach('old_name', '3')).toEqual({
+      attached: true,
+      viewer: '3',
+      level: 9,
+    });
+    expect(await xp('3')).toBe(xpForLevel(9, rules));
+    await expect(attach('old_name', '4')).rejects.toMatchObject({
+      code: 'already_attached',
+    });
+    await expect(attach('autre', '3')).rejects.toMatchObject({
+      code: 'viewer_has_history',
+    });
+    await expect(attach('autre', '404')).rejects.toMatchObject({
+      code: 'unknown_viewer',
+    });
+    expect((await svc.history(CH, '3')).sources).toMatchObject([
+      { login: 'old_name', attachedBy: 'manual' },
+    ]);
+    // The automatic run never undoes a decision.
+    await send([]);
+    expect(await xp('3')).toBe(xpForLevel(9, rules));
+  });
+});
+
+describe('WizeBot read by the Core', () => {
+  it('the simulation and the import read the same export in one transaction; an unreadable export changes nothing', async () => {
+    let data: unknown = {
+      measured_at: '2026-10-30T10:00:00.000Z',
+      rows: [
+        {
+          twitch_user_id: '1',
+          id_source: 'wizebot',
+          login: 'ana',
+          level: 20,
+          watch_seconds: 600,
+          messages: 3,
+        },
+        { login: 'bob', level: 5 },
+        { login: 'nouveau', level: 2 },
+      ],
+    };
+    const s2 = new ProgressionService(db, clock, () => CH, {
+      wizebotExport: async () => data,
+    });
+    const dry = await s2.importFromWizebot(CH, true, { id: 'studio' });
+    expect(dry).toMatchObject({
+      read: 3,
+      dry_run: true,
+      would_import: 2,
+      unresolved: ['nouveau'],
+    });
+    expect(await s2.importStatus(CH)).toMatchObject({
+      imported: 0,
+      pending: 0,
+    });
+    expect(
+      await s2.importFromWizebot(CH, false, { id: 'studio' }),
+    ).toMatchObject({ read: 3, imported: 2 });
+    expect(await s2.importStatus(CH)).toMatchObject({
+      imported: 2,
+      pending: 1,
+      lastMeasuredAt: '2026-10-30T10:00:00.000Z',
+    });
+    data = { rows: 'nope' };
+    await expect(
+      s2.importFromWizebot(CH, false, { id: 'studio' }),
+    ).rejects.toMatchObject({
+      code: 'wizebot_unavailable',
+    });
+  });
+});
+
+describe('Studio: manual XP', () => {
+  const adjust = (
+    viewer: string,
+    mode: 'add' | 'remove' | 'set_xp' | 'set_level',
+    value: number,
+    request_id = randomUUID(),
+  ) =>
+    svc.adjust(
+      CH,
+      { viewer, mode, value, reason: 'test manuel', request_id },
+      { id: 'inst-1', name: 'Studio' },
+    );
+
+  it('add, remove, set the XP or the level; journaled with the reason; a repeated click is one adjustment; never below zero', async () => {
+    const id = randomUUID();
+    expect(await adjust('1', 'add', 100, id)).toEqual({
+      changed: true,
+      xp: 100,
+      level: levelForXp(100, DEFAULT_PROGRESSION_RULES),
+    });
+    expect(await adjust('1', 'add', 100, id)).toMatchObject({
+      changed: false,
+      xp: 100,
+    });
+    await expect(adjust('1', 'remove', 101)).rejects.toMatchObject({
+      code: 'below_zero',
+    });
+    expect(await adjust('1', 'remove', 40)).toMatchObject({ xp: 60 });
+    const five = xpForLevel(5, DEFAULT_PROGRESSION_RULES);
+    expect(await adjust('1', 'set_level', 5)).toEqual({
+      changed: true,
+      xp: five,
+      level: 5,
+    });
+    expect((await svc.viewer(CH, '1')).level).toBe(5);
+    expect(await adjust('1', 'set_xp', 0)).toMatchObject({ xp: 0, level: 1 });
+    expect((await svc.viewer(CH, '1')).level).toBe(1);
+    await expect(adjust('404', 'add', 1)).rejects.toMatchObject({
+      code: 'unknown_viewer',
+    });
+    const journal = (await svc.history(CH, '1')).movements;
+    expect(journal.map((m) => [m.kind, m.amount])).toEqual([
+      ['correction', -five],
+      ['grant', five - 60],
+      ['correction', -40],
+      ['grant', 100],
+    ]);
+    expect(journal[0]).toMatchObject({
+      actor: 'Studio',
+      reason: 'set_xp 0 — test manuel',
+    });
+  });
+
+  it('two removals at once never take the XP below zero', async () => {
+    await adjust('2', 'add', 100);
+    const out = await Promise.allSettled([
+      adjust('2', 'remove', 60),
+      adjust('2', 'remove', 60),
+    ]);
+    expect(out.filter((o) => o.status === 'fulfilled')).toHaveLength(1);
+    expect(await xp('2')).toBe(40);
   });
 });
 
@@ -441,6 +739,25 @@ describe('public reads and routes', () => {
       [1, '1', 20],
       [2, '2', 10],
     ]);
+    // By presence time (and by messages): imported history + counted by the Core.
+    await db.query(
+      "update progression_accounts set imported_watch_seconds = 36000, imported_messages = 7 where twitch_user_id = '2'",
+    );
+    expect(
+      (await svc.leaderboard(CH, 10, 'watch')).entries.map((e) => [
+        e.twitchUserId,
+        e.watchMinutes,
+      ]),
+    ).toEqual([
+      ['2', 610],
+      ['1', 20],
+    ]);
+    expect(
+      (await svc.leaderboard(CH, 10, 'messages')).entries.map((e) => [
+        e.twitchUserId,
+        e.messages,
+      ]),
+    ).toEqual([['2', 7]]);
     await svc.updateSettings(CH, {
       rules: { curve_base: 1, curve_exponent: 1 },
     });

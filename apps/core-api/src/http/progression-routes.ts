@@ -1,7 +1,11 @@
 import {
+  ProgressionAdjustRequest,
+  ProgressionAttachRequest,
   ProgressionEquipRequest,
   ProgressionGrantRequest,
   ProgressionImportRequest,
+  ProgressionResolveRequest,
+  ProgressionWizebotImportRequest,
   ProgressionRevokeRequest,
   ProgressionRewardInput,
   ProgressionSettingsPatch,
@@ -16,7 +20,8 @@ import { HttpError, limitParam, parse, type Route } from './server.js';
 // Progression native (docs/PROGRESSION.md):
 // - public, read-only (raptoru.fr): the levels ranking, one viewer's level / XP / inventory / equipped, the catalogue;
 // - Studio (the paired installation in production, the Lab secret in the Lab): settings, catalogue, grant, revoke,
-//   WizeBot import and its undo;
+//   WizeBot import (every row kept, attached when certain), its status, the re-attachment of waiting rows, its undo;
+//   manual XP adjustments and a viewer's journal;
 // - the site (its own token, SITE_TOKEN; mounted only when set): a viewer equips a title / badges. The site sends the
 //   Twitch id of ITS signed-in viewer; the Core checks ownership.
 
@@ -31,6 +36,11 @@ const mapped = async <T>(fn: () => Promise<T>) => {
 };
 
 const TwitchId = z.string().regex(/^\d{1,32}$/);
+const SiteIdentify = z.strictObject({
+  viewer: TwitchId,
+  login: z.string().regex(/^[a-z0-9_]{1,25}$/),
+  display_name: z.string().trim().min(1).max(40).nullable().default(null),
+});
 
 export function progressionRoutes(
   svc: ProgressionService,
@@ -54,7 +64,15 @@ export function progressionRoutes(
       method: 'GET',
       pattern: /^\/v1\/progression\/leaderboard$/,
       auth: 'public',
-      handle: ({ url }) => svc.leaderboard(ch, limitParam(url, 100, 500)),
+      handle: ({ url }) =>
+        svc.leaderboard(
+          ch,
+          limitParam(url, 100, 500),
+          parse(
+            z.enum(['xp', 'watch', 'messages']),
+            url.searchParams.get('by') ?? 'xp',
+          ),
+        ),
     },
     {
       method: 'GET',
@@ -99,6 +117,25 @@ export function progressionRoutes(
       pattern: admin('/viewers/([0-9]{1,32})'),
       auth,
       handle: ({ params }) => svc.viewer(ch, params[0]!),
+    },
+    {
+      method: 'GET',
+      pattern: admin('/viewers/([0-9]{1,32})/history'),
+      auth,
+      handle: ({ params }) => svc.history(ch, params[0]!),
+    },
+    {
+      method: 'POST',
+      pattern: admin('/adjust'),
+      auth,
+      handle: ({ body, installation }) =>
+        mapped(() =>
+          svc.adjust(
+            ch,
+            parse(ProgressionAdjustRequest, body),
+            actor(installation),
+          ),
+        ),
     },
     {
       method: 'POST',
@@ -147,6 +184,61 @@ export function progressionRoutes(
         ),
     },
     {
+      // Studio's « Simuler » / « Importer depuis WizeBot »: the Core reads raptoru.fr's export itself.
+      method: 'POST',
+      pattern: admin('/import/wizebot'),
+      auth,
+      handle: ({ body, installation }) =>
+        mapped(() =>
+          svc.importFromWizebot(
+            ch,
+            parse(ProgressionWizebotImportRequest, body ?? {}).dry_run,
+            actor(installation),
+          ),
+        ),
+    },
+    {
+      method: 'GET',
+      pattern: admin('/import/waiting'),
+      auth,
+      handle: ({ url }) => svc.waiting(ch, url.searchParams.get('q') ?? ''),
+    },
+    {
+      method: 'POST',
+      pattern: admin('/import/attach'),
+      auth,
+      handle: ({ body, installation }) =>
+        mapped(() =>
+          svc.attachManually(
+            ch,
+            parse(ProgressionAttachRequest, body),
+            actor(installation),
+          ),
+        ),
+    },
+    {
+      method: 'GET',
+      pattern: admin('/import/status'),
+      auth,
+      handle: () => svc.importStatus(ch),
+    },
+    {
+      // The stored rows still waiting, attached again against today's Core (no new WizeBot reading needed).
+      method: 'POST',
+      pattern: admin('/import/resolve'),
+      auth,
+      handle: ({ body, installation }) => {
+        const r = parse(ProgressionResolveRequest, body ?? {});
+        return mapped(() =>
+          svc.importHistory(
+            ch,
+            { source: r.source, dry_run: r.dry_run, rows: [] },
+            actor(installation),
+          ),
+        );
+      },
+    },
+    {
       method: 'POST',
       pattern: admin('/import/revert'),
       auth,
@@ -161,6 +253,14 @@ export function progressionRoutes(
             auth: 'site' as const,
             handle: ({ body }: { body: unknown }) =>
               mapped(() => svc.equip(ch, parse(ProgressionEquipRequest, body))),
+          },
+          {
+            // A viewer signed in on the site (its verified Twitch pair): joins the directory, history attached if certain.
+            method: 'POST' as const,
+            pattern: /^\/v1\/site\/progression\/identify$/,
+            auth: 'site' as const,
+            handle: ({ body }: { body: unknown }) =>
+              mapped(() => svc.identify(ch, parse(SiteIdentify, body))),
           },
         ]
       : []),

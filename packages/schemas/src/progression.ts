@@ -92,25 +92,64 @@ export const ProgressionEquipRequest = z.strictObject({
   badge_ids: z.array(RewardId).max(3),
 });
 
-/** WizeBot history: one row per viewer, by Twitch id when known, else by login (resolved by the Core). */
+/** One WizeBot viewer, by Twitch id when the source gives one, always under its pseudo (resolved by the Core). */
+export const ProgressionHistoryRow = z.strictObject({
+  twitch_user_id: TwitchId.nullable().default(null),
+  /** wizebot: WizeBot's own user id (exact); legacy: a dated (id, pseudo) pair of the legacy site; ambiguous:
+   *  the legacy data saw several holders of this pseudo (never attached by pseudo). */
+  id_source: z
+    .enum(['wizebot', 'legacy', 'ambiguous'])
+    .nullable()
+    .default(null),
+  /** The pseudo in the source (lowercase): every row is kept under it, attached or not. */
+  login: z.string().regex(/^[a-z0-9_]{1,25}$/),
+  /** 1 when WizeBot has no level for this viewer (watchtime / messages only). */
+  level: z.number().int().min(1).max(10_000),
+  watch_seconds: z.number().int().min(0).max(10_000_000_000).default(0),
+  messages: z.number().int().min(0).max(100_000_000).default(0),
+});
+
+/** WizeBot history sent as rows (tests, a manual file). */
 export const ProgressionImportRequest = z.strictObject({
   source: z.literal('wizebot'),
   /** Count only, write nothing. */
   dry_run: z.boolean().default(false),
-  rows: z
-    .array(
-      z.strictObject({
-        twitch_user_id: TwitchId.nullable().default(null),
-        login: z
-          .string()
-          .regex(/^[a-z0-9_]{1,25}$/)
-          .nullable()
-          .default(null),
-        level: z.number().int().min(1).max(10_000),
-        watch_seconds: z.number().int().min(0).max(10_000_000_000).default(0),
-        messages: z.number().int().min(0).max(100_000_000).default(0),
-      }),
-    )
-    .min(1)
-    .max(10_000),
+  /** When the source was read (default: now). */
+  measured_at: z.string().datetime().nullable().default(null),
+  rows: z.array(ProgressionHistoryRow).max(20_000),
+});
+
+/** raptoru.fr's WizeBot export (GET /api/wizebot?export=1), read by the Core itself: the whole reading at once. */
+export const WizebotExport = z.object({
+  measured_at: z.string().datetime(),
+  rows: z.array(ProgressionHistoryRow).max(20_000),
+});
+
+/** Studio: read WizeBot (through raptoru.fr) and import, or simulate. */
+export const ProgressionWizebotImportRequest = z.strictObject({
+  dry_run: z.boolean().default(false),
+});
+
+/** Studio: attach the stored rows still waiting (no new reading). */
+export const ProgressionResolveRequest = z.strictObject({
+  source: z.literal('wizebot').default('wizebot'),
+  dry_run: z.boolean().default(false),
+});
+
+/** Studio: attach one waiting WizeBot row to a viewer (a human decision, journaled). */
+export const ProgressionAttachRequest = z.strictObject({
+  source: z.literal('wizebot').default('wizebot'),
+  login: z.string().regex(/^[a-z0-9_]{1,25}$/),
+  viewer: TwitchId,
+  reason: z.string().trim().min(3).max(200),
+});
+
+/** Studio: add / remove XP, or set the XP or the level of one viewer — always with a reason (journaled). */
+export const ProgressionAdjustRequest = z.strictObject({
+  viewer: TwitchId,
+  mode: z.enum(['add', 'remove', 'set_xp', 'set_level']),
+  value: z.number().int().min(0).max(100_000_000),
+  reason: z.string().trim().min(3).max(200),
+  /** One id per click: a repeated request is the same adjustment. */
+  request_id: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
 });

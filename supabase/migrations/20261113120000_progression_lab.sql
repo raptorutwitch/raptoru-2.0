@@ -2,7 +2,7 @@
 -- file 20261113130000_progression.sql. Additive and idempotent: new tables only, nothing existing is changed.
 -- Replaces WizeBot's levels: the Core is the source of truth for XP, levels, their history and the cosmetic rewards
 -- (titles, badges) shown on raptoru.fr — never Twitch chat badges.
--- Rollback: drop table progression_equipped, progression_grants, progression_rewards, progression_ledger,
+-- Rollback: drop table progression_history, progression_equipped, progression_grants, progression_rewards, progression_ledger,
 --   progression_accounts, progression_settings cascade; drop function progression_ledger_immutable();
 --   delete from schema_migrations where name = '20261113120000_progression_lab.sql';
 
@@ -101,3 +101,33 @@ create table if not exists progression_equipped (
   updated_at timestamptz not null,
   primary key (channel_id, twitch_user_id)
 );
+
+-- Historical measures from another bot (WizeBot), every row kept with its source and date — attached or not. A row is
+-- attached to a viewer with the Wallet's identity rules (docs/ECONOMY_MIGRATION.md § 8: the Twitch id is the identity,
+-- quarantine rather than a wrong holder): an exact id, a legacy (id, pseudo) pair the Core does not contradict, or the
+-- ONE Core account behind its pseudo; otherwise it waits (pending / ambiguous / conflict) — attached automatically when
+-- the viewer comes back, or by a Studio decision; never guessed, never thrown away. Once imported, its measures are
+-- frozen (a later reading never overwrites what was imported).
+create table if not exists progression_history (
+  channel_id text not null,
+  source text not null check (source in ('wizebot')),
+  login text not null check (login ~ '^[a-z0-9_]{1,25}$'),
+  twitch_user_id text check (twitch_user_id is null or twitch_user_id ~ '^[0-9]{1,32}$'),
+  -- Where the id comes from: WizeBot's own user id (exact), the legacy site's dated (id, pseudo) pairs, or 'ambiguous'
+  -- (the legacy data saw several holders of this pseudo: never attached by pseudo).
+  id_source text check (id_source is null or id_source in ('wizebot', 'legacy', 'ambiguous')),
+  level integer not null check (level >= 1),
+  watch_seconds bigint not null default 0 check (watch_seconds >= 0),
+  messages bigint not null default 0 check (messages >= 0),
+  measured_at timestamptz not null,
+  status text not null check (status in ('pending', 'ambiguous', 'conflict', 'imported')),
+  resolved_id text,
+  resolved_by text check (resolved_by is null or resolved_by in ('id', 'login', 'manual')),
+  resolved_at timestamptz,
+  -- A Studio decision (manual attachment): who and why.
+  resolve_note text,
+  first_seen_at timestamptz not null,
+  updated_at timestamptz not null,
+  primary key (channel_id, source, login)
+);
+create index if not exists progression_history_status on progression_history (channel_id, source, status);

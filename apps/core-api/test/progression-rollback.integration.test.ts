@@ -63,7 +63,9 @@ describe.skipIf(!isLocal)(
         db.query("update progression_ledger set amount = 3 where key = 'k1'"),
       ).rejects.toThrow(/append-only/);
       const sql = rollbackSql();
-      expect(sql).toMatch(/^drop table progression_equipped/);
+      expect(sql).toMatch(
+        /^drop table progression_history, progression_equipped/,
+      );
       await db.query(sql);
       const after = await tables();
       expect(after.filter((t) => t.startsWith('progression_'))).toEqual([]);

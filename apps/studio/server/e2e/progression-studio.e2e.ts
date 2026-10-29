@@ -35,4 +35,18 @@ test('Progression: on, an event badge created, a viewer found, granted, then rev
   await tab.getByRole('button', { name: 'Retirer' }).click();
   await expect(tab).toContainText('Retiré.');
   await expect(tab.locator('.detail')).toContainText('Inventaire vide.');
+
+  // Manual XP: applied, journaled with its reason; below zero refused.
+  await tab.locator('[data-role="adj-mode"]').selectOption('add');
+  await tab.locator('[data-role="adj-value"]').fill('100');
+  await tab.locator('[data-role="adj-reason"]').fill('test e2e ajout');
+  await tab.getByRole('button', { name: 'Appliquer' }).click();
+  await expect(tab).toContainText('XP ajustée.');
+  await expect(tab.locator('.detail')).toContainText('+100 XP');
+  await expect(tab.locator('.detail')).toContainText('test e2e ajout');
+  await tab.locator('[data-role="adj-mode"]').selectOption('remove');
+  await tab.locator('[data-role="adj-value"]').fill('1000');
+  await tab.locator('[data-role="adj-reason"]').fill('trop');
+  await tab.getByRole('button', { name: 'Appliquer' }).click();
+  await expect(tab).toContainText('Refusé : below_zero');
 });

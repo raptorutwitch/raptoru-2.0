@@ -1,5 +1,6 @@
 // Progression native (docs/PROGRESSION.md) — Studio's panel: ON / OFF and the rules, the titles and badges catalogue,
-// a viewer (level, XP, inventory) with grant and revoke, the WizeBot import and its undo. Studio only relays: the
+// a viewer (level, XP, inventory) with grant and revoke, manual XP (journaled) and their journal, the WizeBot import
+// (every row kept; the waiting ones attached later, automatically or by a decision here) and its undo. Studio only relays: the
 // profile's Core decides and records (/api/progression/* → /v1/lab|studio/progression/*).
 
 type Json = Record<string, unknown>;
@@ -33,6 +34,7 @@ type Detail = {
   nextLevelXp: number;
   watchMinutes: number;
   messages: number;
+  totals: { watchMinutes: number; messages: number };
   imported: { level: number; watchMinutes: number; messages: number } | null;
   equipped: { title: string | null; badges: string[] };
   inventory: {
@@ -44,6 +46,56 @@ type Detail = {
     reference: string | null;
   }[];
 };
+
+type Journal = {
+  movements: {
+    kind: string;
+    amount: number;
+    actor: string;
+    reason: string | null;
+    at: string;
+  }[];
+  sources: {
+    login: string;
+    level: number;
+    measuredAt: string;
+    attachedBy: string | null;
+  }[];
+};
+type ImportStatus = {
+  imported: number;
+  pending: number;
+  ambiguous: number;
+  conflict: number;
+  lastMeasuredAt: string | null;
+};
+type Waiting = {
+  login: string;
+  status: string;
+  twitchUserId: string | null;
+  level: number;
+  watchMinutes: number;
+  messages: number;
+  candidates: string[];
+};
+const STATUS_FR: Record<string, string> = {
+  pending: 'inconnu du Core',
+  ambiguous: 'ambigu',
+  conflict: 'conflit',
+};
+const KIND_FR: Record<string, string> = {
+  import: 'Reprise',
+  grant: 'Ajout',
+  correction: 'Correction',
+};
+const ADJUST: [string, string][] = [
+  ['add', 'Ajouter de l’XP'],
+  ['remove', 'Retirer de l’XP'],
+  ['set_xp', 'Fixer l’XP à'],
+  ['set_level', 'Fixer le niveau à'],
+];
+const requestId = () =>
+  `st-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 const HEADERS = { 'content-type': 'application/json', 'x-raptoru-studio': '1' };
 const esc = (s: unknown) =>
@@ -77,7 +129,10 @@ export function mountProgression(root: HTMLElement) {
   let error = '';
   let flash = '';
   let results: ViewerRow[] = [];
-  let selected: { row: ViewerRow; detail: Detail } | null = null;
+  let selected: { row: ViewerRow; detail: Detail; journal: Journal } | null =
+    null;
+  let importStatus: ImportStatus | null = null;
+  let waiting: Waiting[] | null = null;
   let visible = false;
   let lastImport = '';
 
@@ -105,10 +160,18 @@ export function mountProgression(root: HTMLElement) {
     try {
       state = (await call('/api/progression/state')) as unknown as State;
       error = '';
-      if (selected)
+      importStatus = (await call('/api/progression/import/status').catch(
+        () => null,
+      )) as unknown as ImportStatus | null;
+      if (selected) {
+        const id = selected.row.twitch_user_id;
         selected.detail = (await call(
-          `/api/progression/viewers/${selected.row.twitch_user_id}`,
+          `/api/progression/viewers/${id}`,
         )) as unknown as Detail;
+        selected.journal = (await call(
+          `/api/progression/viewers/${id}/history`,
+        )) as unknown as Journal;
+      }
     } catch (e) {
       error = (e as Error).message;
     }
@@ -173,7 +236,8 @@ export function mountProgression(root: HTMLElement) {
             selected && d
               ? `<div class="detail">
             <h4>${esc(selected.row.display_name ?? selected.row.login)}</h4>
-            <p>Niveau <b>${d.level}</b> · ${fmt(d.xp)} XP (niveau suivant à ${fmt(d.nextLevelXp)}) · rang ${d.rank ?? '—'} · ${fmt(d.watchMinutes)} min de présence relevée (liste des chatters : un spectateur absent de la liste n’y figure pas) · ${fmt(d.messages)} messages</p>
+            <p>Niveau <b>${d.level}</b> · ${fmt(d.xp)} XP (niveau suivant à ${fmt(d.nextLevelXp)}) · rang ${d.rank ?? '—'}</p>
+            <p>Présence détectée : <b>${fmt(d.totals.watchMinutes)} min</b> (dont ${fmt(d.watchMinutes)} relevées par Raptoru — liste des chatters, pas une preuve de visionnage) · messages : <b>${fmt(d.totals.messages)}</b> (dont ${fmt(d.messages)} comptés par Raptoru)</p>
             ${d.imported ? `<p class="muted">Repris de WizeBot : niveau ${d.imported.level}, ${fmt(d.imported.watchMinutes)} min, ${fmt(d.imported.messages)} messages.</p>` : ''}
             <p>Équipé : ${d.equipped.title ? `titre <code>${esc(d.equipped.title)}</code>` : 'aucun titre'}${d.equipped.badges.length ? ` · badges ${d.equipped.badges.map((b) => `<code>${esc(b)}</code>`).join(' ')}` : ''}</p>
             <ul class="list">${d.inventory.map((i) => `<li>${i.kind === 'title' ? 'Titre' : 'Badge'} <b>${esc(i.label)}</b> <span class="muted">${esc(RARITY_FR[i.rarity] ?? i.rarity)} · ${esc(i.source)}${i.reference ? ` · ${esc(i.reference)}` : ''}</span> <button type="button" class="link" data-revoke="${esc(i.id)}">Retirer</button></li>`).join('') || '<li class="muted">Inventaire vide.</li>'}</ul>
@@ -181,16 +245,38 @@ export function mountProgression(root: HTMLElement) {
               <select data-role="grant-source"><option value="manual">Manuel</option><option value="event">Événement</option></select>
               <input placeholder="référence (ex. halloween-2026)" data-role="grant-ref" maxlength="80">
               <button type="button" data-act="grant" ${rewardOptions() ? '' : 'disabled'}>Attribuer</button></div>
+            <h4>XP manuelle</h4>
+            <div class="row-in"><select data-role="adj-mode">${ADJUST.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
+              <input type="number" min="0" step="1" placeholder="valeur" data-role="adj-value">
+              <input placeholder="raison (obligatoire, gardée)" data-role="adj-reason" maxlength="200">
+              <button type="button" data-act="adjust">Appliquer</button></div>
+            <p class="muted">Jamais en dessous de 0 ; le niveau suit l’XP. Chaque ajustement est journalisé (qui, quand, pourquoi).</p>
+            <h4>Journal</h4>
+            ${selected.journal.sources.map((h) => `<p class="muted">Historique WizeBot « ${esc(h.login)} » : niveau ${h.level}, relevé le ${esc(new Date(h.measuredAt).toLocaleDateString('fr-FR'))}, rattaché ${h.attachedBy === 'manual' ? 'à la main' : h.attachedBy === 'id' ? 'par identifiant Twitch' : 'par pseudo'}.</p>`).join('')}
+            <ul class="list">${selected.journal.movements.map((m) => `<li>${esc(new Date(m.at).toLocaleString('fr-FR'))} · ${esc(KIND_FR[m.kind] ?? m.kind)} <b>${m.amount > 0 ? '+' : ''}${fmt(m.amount)} XP</b> <span class="muted">${esc(m.actor)}${m.reason ? ` — ${esc(m.reason)}` : ''}</span></li>`).join('') || '<li class="muted">Aucun ajustement ni reprise.</li>'}</ul>
           </div>`
               : ''
           }
         </section>
         <section class="card"><h3>Reprise de WizeBot</h3>
-          <p class="muted">Lit les niveaux, le temps de présence et les messages de WizeBot (via raptoru.fr) et démarre chaque viewer à son niveau, une seule fois. Les pseudos inconnus du Core sont listés, à reprendre plus tard.</p>
+          <p class="muted">Lit les niveaux, le temps de présence et les messages de WizeBot (via raptoru.fr) et démarre chaque viewer à son niveau, une seule fois. Chaque ligne est gardée avec sa date ; celles qu’on ne peut pas rattacher avec certitude attendent : elles se rattachent seules quand le viewer revient (stream, connexion sur raptoru.fr), ou ici sur décision.</p>
+          ${importStatus ? `<p>Rattachés : <b>${fmt(importStatus.imported)}</b> · en attente : <b>${fmt(importStatus.pending + importStatus.ambiguous + importStatus.conflict)}</b> <span class="muted">(${fmt(importStatus.pending)} inconnus du Core, ${fmt(importStatus.ambiguous)} ambigus, ${fmt(importStatus.conflict)} conflits)${importStatus.lastMeasuredAt ? ` · dernier relevé ${esc(new Date(importStatus.lastMeasuredAt).toLocaleString('fr-FR'))}` : ''}</span></p>` : ''}
           <button type="button" data-act="dry-run">Simuler (n’écrit rien)</button>
           <button type="button" data-act="import">Importer depuis WizeBot</button>
+          <button type="button" data-act="resolve">Rattacher les lignes en attente</button>
           <button type="button" class="warn" data-act="revert">Annuler l’import</button>
           <pre data-role="import-out" class="muted">${esc(lastImport)}</pre>
+        </section>
+        <section class="card wide"><h3>Historiques en attente</h3>
+          <div class="row-in"><input placeholder="pseudo WizeBot (début)" data-role="wq" maxlength="25"><button type="button" data-act="waiting">Afficher</button></div>
+          ${
+            waiting
+              ? `<table class="tbl"><thead><tr><th>Pseudo WizeBot</th><th>Statut</th><th>Niveau</th><th>Présence</th><th>Messages</th><th>Comptes du Core sous ce pseudo</th><th></th></tr></thead><tbody>
+          ${waiting.map((w) => `<tr><td>${esc(w.login)}${w.twitchUserId ? ` <span class="muted">(id ${esc(w.twitchUserId)})</span>` : ''}</td><td>${esc(STATUS_FR[w.status] ?? w.status)}</td><td>${w.level}</td><td>${fmt(w.watchMinutes)} min</td><td>${fmt(w.messages)}</td><td>${w.candidates.map((c) => `<code>${esc(c)}</code>`).join(' ') || '—'}</td><td><button type="button" class="link" data-attach="${esc(w.login)}">Rattacher…</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Rien en attente.</td></tr>'}
+          </tbody></table>`
+              : ''
+          }
+          <p class="muted">Rattacher seulement après avoir vérifié l’identité (identifiant Twitch) : jamais sur la seule ressemblance des pseudos. Un viewer n’a qu’un historique WizeBot.</p>
         </section>
       </div></div>`;
   }
@@ -200,14 +286,84 @@ export function mountProgression(root: HTMLElement) {
     const a = t.closest<HTMLElement>('[data-act]')?.dataset.act;
     const pick = t.closest<HTMLElement>('[data-pick]')?.dataset.pick;
     const revoke = t.closest<HTMLElement>('[data-revoke]')?.dataset.revoke;
+    const attach = t.closest<HTMLElement>('[data-attach]')?.dataset.attach;
     const val = (sel: string) =>
       root.querySelector<HTMLInputElement>(sel)?.value ?? '';
     if (pick) {
       const row = results.find((r) => r.twitch_user_id === pick)!;
-      void call(`/api/progression/viewers/${pick}`).then((detail) => {
-        selected = { row, detail: detail as unknown as Detail };
+      void Promise.all([
+        call(`/api/progression/viewers/${pick}`),
+        call(`/api/progression/viewers/${pick}/history`),
+      ]).then(([detail, journal]) => {
+        selected = {
+          row,
+          detail: detail as unknown as Detail,
+          journal: journal as unknown as Journal,
+        };
         render();
       });
+    } else if (attach) {
+      const viewer = prompt(
+        `Rattacher l’historique WizeBot « ${attach} » à quel identifiant Twitch (vérifié) ?`,
+      )?.trim();
+      if (!viewer) return;
+      const reason = prompt(
+        'Comment l’identité a-t-elle été vérifiée ?',
+      )?.trim();
+      if (reason)
+        void act(async () => {
+          await call('/api/progression/import/attach', {
+            login: attach,
+            viewer,
+            reason,
+          });
+          waiting = waiting?.filter((w) => w.login !== attach) ?? null;
+        }, 'Historique rattaché.');
+    } else if (a === 'waiting') {
+      void call(
+        `/api/progression/import/waiting?q=${encodeURIComponent(val('[data-role="wq"]'))}`,
+      ).then(
+        (rows) => {
+          waiting = rows as unknown as Waiting[];
+          render();
+        },
+        (e: Error) => {
+          flash = `Liste impossible : ${e.message}`;
+          render();
+        },
+      );
+    } else if (a === 'resolve') {
+      void call('/api/progression/import/resolve', {}).then(
+        (r) => {
+          const res = r as { imported: number };
+          flash = `${res.imported} historique(s) rattaché(s).`;
+          void load();
+        },
+        (e: Error) => {
+          flash = `Rattachement impossible : ${e.message}`;
+          render();
+        },
+      );
+    } else if (a === 'adjust' && selected) {
+      const value = Number(val('[data-role="adj-value"]'));
+      const reason = val('[data-role="adj-reason"]').trim();
+      if (!Number.isInteger(value) || value < 0 || reason.length < 3) {
+        flash =
+          'Valeur entière ≥ 0 et raison (3 caractères au moins) requises.';
+        render();
+        return;
+      }
+      void act(
+        () =>
+          call('/api/progression/adjust', {
+            viewer: selected!.row.twitch_user_id,
+            mode: val('[data-role="adj-mode"]'),
+            value,
+            reason,
+            request_id: requestId(),
+          }),
+        'XP ajustée.',
+      );
     } else if (revoke && selected) {
       const reason = prompt('Raison du retrait (gardée dans l’historique) :');
       if (reason?.trim())
@@ -311,12 +467,12 @@ export function mountProgression(root: HTMLElement) {
             ? 'Simulation terminée (rien n’a été écrit).'
             : 'Import WizeBot terminé.';
           lastImport = [
-            `${res.read} niveaux WizeBot lus`,
-            `${dry ? 'à importer' : 'importés'} : ${dry ? res.would_import : res.imported} (par identifiant Twitch ${res.by_id}, par pseudo ${res.by_login})`,
-            `déjà importés : ${res.already}`,
-            `pseudos inconnus du Core (à reprendre plus tard) : ${res.unresolved.length}`,
-            `pseudos ambigus (plusieurs comptes) : ${res.ambiguous.length}${res.ambiguous.length ? ` — ${res.ambiguous.slice(0, 20).join(', ')}` : ''}`,
-            `conflits (écartés) : ${res.conflicts.length}${res.conflicts.length ? ` — ${res.conflicts.slice(0, 20).join(', ')}` : ''}`,
+            `${res.read} viewers WizeBot lus (tous gardés avec leur date)`,
+            `${dry ? 'à rattacher' : 'rattachés'} : ${dry ? res.would_import : res.imported} (par identifiant Twitch ${res.by_id}, par pseudo ${res.by_login})`,
+            `déjà rattachés : ${res.already}`,
+            `pseudos inconnus du Core (gardés, rattachés à leur retour) : ${res.unresolved.length}`,
+            `pseudos ambigus (gardés, décision ici) : ${res.ambiguous.length}${res.ambiguous.length ? ` — ${res.ambiguous.slice(0, 20).join(', ')}` : ''}`,
+            `conflits (gardés, décision ici) : ${res.conflicts.length}${res.conflicts.length ? ` — ${res.conflicts.slice(0, 20).join(', ')}` : ''}`,
           ].join('\n');
           void load();
         },

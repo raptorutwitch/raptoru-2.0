@@ -3,6 +3,7 @@ import {
   type LabChatMessage,
   type ProgressionRules,
   ProgressionRulesSchema,
+  WizebotExport,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
@@ -71,6 +72,28 @@ interface AccountRow {
   last_message_xp_at: Date | null;
 }
 
+/** A WizeBot reading (Studio sends it in batches): one row per pseudo, the source's Twitch id when it gave one. */
+interface ImportRequest {
+  source: 'wizebot';
+  /** The same work, rolled back: exact numbers, nothing written. */
+  dry_run?: boolean;
+  /** When the source was read (default: now); a reading older than the stored one never replaces it. */
+  measured_at?: string | null;
+  rows: {
+    twitch_user_id: string | null;
+    /** Where the id comes from (null: none); 'ambiguous': the legacy data saw several holders of the pseudo. */
+    id_source?: 'wizebot' | 'legacy' | 'ambiguous' | null;
+    login: string;
+    level: number;
+    watch_seconds: number;
+    messages: number;
+  }[];
+}
+
+/** raptoru.fr's WizeBot export (public, read-only); WIZEBOT_EXPORT_URL points elsewhere (staging, tests). */
+const WIZEBOT_EXPORT_URL =
+  process.env.WIZEBOT_EXPORT_URL ?? 'https://raptoru.fr/api/wizebot?export=1';
+
 export class ProgressionService {
   constructor(
     private readonly db: Db,
@@ -81,8 +104,48 @@ export class ProgressionService {
      * The Lab Core: its viewers are `lab_viewers` (per channel, no login: the lowercased name stands for it) and its
      * live is the Lab session; the main Core: `viewers` (Twitch logins) and the Daily's stream sessions.
      */
-    private readonly o: { lab?: boolean } = {},
+    private readonly o: {
+      lab?: boolean;
+      /** Reads raptoru.fr's WizeBot export (public data; the site holds the WizeBot key). Tests pass their own. */
+      wizebotExport?: () => Promise<unknown>;
+    } = {},
   ) {}
+
+  private async readWizebot() {
+    const read =
+      this.o.wizebotExport ??
+      (async () => {
+        const res = await fetch(WIZEBOT_EXPORT_URL, {
+          signal: AbortSignal.timeout(90_000),
+        });
+        if (!res.ok) throw new ProgressionError(502, 'wizebot_unavailable');
+        return res.json();
+      });
+    const parsed = WizebotExport.safeParse(await read().catch(() => null));
+    if (!parsed.success || !parsed.data.rows.length)
+      throw new ProgressionError(502, 'wizebot_unavailable');
+    return parsed.data;
+  }
+
+  /**
+   * Studio's « Simuler » / « Importer depuis WizeBot »: the Core reads the whole WizeBot export itself (every viewer of
+   * the three rankings, with the exact Twitch ids WizeBot gives and the date of the reading), then imports it in ONE
+   * transaction — the simulation sees exactly what the import would do.
+   */
+  async importFromWizebot(channelId: string, dryRun: boolean, actor: Actor) {
+    const data = await this.readWizebot();
+    const out = await this.importHistory(
+      channelId,
+      {
+        source: 'wizebot',
+        dry_run: dryRun,
+        measured_at: data.measured_at,
+        rows: data.rows,
+      },
+      actor,
+    );
+    return { read: data.rows.length, measured_at: data.measured_at, ...out };
+  }
 
   /** The channel's viewer directory as `(twitch_user_id, login, display_name)` (channel ids are digits only). */
   private dir(channelId: string) {
@@ -269,12 +332,8 @@ export class ProgressionService {
     if (!s.enabled || interval.seconds <= 0) return;
     const amount = Math.round((interval.seconds / 60) * s.rules.xp_per_minute);
     const cycle = `${interval.streamId}:${interval.at.getTime()}`;
-    for (const id of await this.eligible(
-      q,
-      channelId,
-      interval.viewerIds,
-      s.rules,
-    ))
+    const ids = await this.eligible(q, channelId, interval.viewerIds, s.rules);
+    for (const id of ids)
       await this.move(
         q,
         channelId,
@@ -288,6 +347,8 @@ export class ProgressionService {
         },
         s.rules,
       );
+    // Viewers seen again: their waiting WizeBot history, if certainly theirs.
+    await this.attachReturning(q, channelId, ids);
   }
 
   private async live(q: Queryable, channelId: string) {
@@ -363,6 +424,7 @@ export class ProgressionService {
         },
         s.rules,
       );
+      if (done) await this.attachReturning(q, channelId, [msg.chatter.id]);
       return !done
         ? 'replayed'
         : amount > 0
@@ -641,155 +703,379 @@ export class ProgressionService {
     });
   }
 
-  // --- WizeBot import (idempotent, reversible) ------------------------------------------------------------------------
+  // --- WizeBot import (every row kept, attached only when certain, idempotent, reversible) -----------------------------
 
   /**
-   * Starts each viewer at their WizeBot level: XP = the curve's threshold of that level (once per viewer: key
-   * import:wizebot:<id>); WizeBot's watchtime and messages kept apart as imported history. A login is resolved through
-   * the Core's viewers (unknown ones are returned, to import again later — never guessed).
+   * Records the source's rows in `progression_history` (with their source and date), then attaches every row still
+   * waiting: by the exact Twitch id the source gave, else by the ONE Core account behind its pseudo. An attached viewer
+   * starts at their WizeBot level (XP = the curve's threshold, once: key import:wizebot:<id>) with WizeBot's watchtime and
+   * messages kept apart. Rows that cannot be attached stay stored (pending / ambiguous / conflict) for a later run.
+   * `dry_run`: the same work in a savepoint rolled back — the exact numbers, nothing written.
    */
-  async importHistory(
-    channelId: string,
-    req: {
-      source: 'wizebot';
-      /** Count only, write nothing (the delivery's first step: exact numbers before the real import). */
-      dry_run?: boolean;
-      rows: {
-        twitch_user_id: string | null;
-        login: string | null;
-        level: number;
-        watch_seconds: number;
-        messages: number;
-      }[];
-    },
-    actor: Actor,
-  ) {
+  async importHistory(channelId: string, req: ImportRequest, actor: Actor) {
     return this.db.tx(async (q) => {
-      const s = await this.settings(channelId, q);
-      const logins = [
-        ...new Set(
-          req.rows.map((r) => r.login).filter((l): l is string => !!l),
-        ),
-      ];
-      const ids = [
-        ...new Set(
-          req.rows.map((r) => r.twitch_user_id).filter((i): i is string => !!i),
-        ),
-      ];
-      // The Core's directory: every id behind a login (a login held by two accounts is ambiguous), every id's login.
-      const known = await q.query<{ id: string; login: string | null }>(
-        `select twitch_user_id as id, login from ${this.dir(channelId)} d
-         where login = any($1::text[]) or twitch_user_id = any($2::text[])`,
-        [logins, ids],
-      );
-      const idsOfLogin = new Map<string, Set<string>>();
-      const loginOfId = new Map<string, string | null>();
-      for (const k of known) {
-        loginOfId.set(k.id, k.login);
-        if (k.login)
-          idsOfLogin.set(
-            k.login,
-            (idsOfLogin.get(k.login) ?? new Set()).add(k.id),
-          );
-      }
-      // Resolution, never a guess:
-      // - a Twitch id given with the row: kept unless the Core knows that id under ANOTHER login (conflict);
-      // - a login alone: the ONE account the Core knows by it; two or more: ambiguous; none: unresolved (later);
-      // - one account reached by two rows: conflict for both.
-      type Res = {
-        row: (typeof req.rows)[number];
-        id: string;
-        by: 'id' | 'login';
-      };
-      const resolved: Res[] = [];
-      const unresolved: string[] = [];
-      const ambiguous: string[] = [];
-      const conflicts: string[] = [];
-      for (const row of req.rows) {
-        const label = row.login ?? row.twitch_user_id ?? '?';
-        if (row.twitch_user_id) {
-          const coreLogin = loginOfId.get(row.twitch_user_id);
-          if (coreLogin && row.login && coreLogin !== row.login)
-            conflicts.push(label);
-          else resolved.push({ row, id: row.twitch_user_id, by: 'id' });
-          continue;
-        }
-        const found = row.login ? idsOfLogin.get(row.login) : undefined;
-        if (!found?.size) unresolved.push(label);
-        else if (found.size > 1) ambiguous.push(label);
-        else resolved.push({ row, id: [...found][0]!, by: 'login' });
-      }
-      const perId = new Map<string, number>();
-      for (const r of resolved) perId.set(r.id, (perId.get(r.id) ?? 0) + 1);
-      const unique = resolved.filter((r) => {
-        if (perId.get(r.id)! > 1) {
-          conflicts.push(r.row.login ?? r.id);
-          return false;
-        }
-        return true;
-      });
-      const byId = unique.filter((r) => r.by === 'id').length;
-      const byLogin = unique.length - byId;
-      if (req.dry_run) {
-        const done = new Set(
-          (
-            await q.query<{ id: string }>(
-              `select twitch_user_id as id from progression_ledger where channel_id = $1 and key = any($2::text[])`,
-              [channelId, unique.map((r) => `import:${req.source}:${r.id}`)],
-            )
-          ).map((r) => r.id),
-        );
-        return {
-          dry_run: true,
-          would_import: unique.filter((r) => !done.has(r.id)).length,
-          already: done.size,
-          by_id: byId,
-          by_login: byLogin,
-          unresolved,
-          ambiguous,
-          conflicts,
-        };
-      }
-      let imported = 0;
-      let already = 0;
-      for (const { row, id } of unique) {
-        const ok = await this.move(
+      if (!req.dry_run) return this.runImport(q, channelId, req, actor);
+      await q.query('savepoint progression_dry_run');
+      try {
+        const { imported, ...rest } = await this.runImport(
           q,
           channelId,
-          id,
-          {
-            kind: 'import',
-            amount: xpForLevel(row.level, s.rules),
-            key: `import:${req.source}:${id}`,
-            actor: actor.name ?? actor.id,
-            reason: `${req.source} niveau ${row.level}`,
-          },
-          s.rules,
+          req,
+          actor,
         );
-        if (!ok) {
-          already++;
-          continue;
-        }
-        await q.query(
-          `update progression_accounts set imported_level = $3, imported_watch_seconds = $4, imported_messages = $5
-           where channel_id = $1 and twitch_user_id = $2`,
-          [channelId, id, row.level, row.watch_seconds, row.messages],
-        );
-        imported++;
+        return { dry_run: true, would_import: imported, ...rest };
+      } finally {
+        await q.query('rollback to savepoint progression_dry_run');
       }
-      return {
-        imported,
-        already,
-        by_id: byId,
-        by_login: byLogin,
-        unresolved,
-        ambiguous,
-        conflicts,
-      };
     });
   }
 
-  /** Undo an import: its ledger rows go, every account is recomputed from what remains. Rewards granted stay. */
+  private async runImport(
+    q: Queryable,
+    channelId: string,
+    req: ImportRequest,
+    actor: Actor,
+  ) {
+    const s = await this.settings(channelId, q);
+    const now = this.now();
+    const measuredAt = req.measured_at ? new Date(req.measured_at) : now;
+    const already = (
+      await q.query<{ n: string }>(
+        `select count(*) as n from progression_history
+         where channel_id = $1 and source = $2 and status = 'imported' and login = any($3::text[])`,
+        [channelId, req.source, req.rows.map((r) => r.login)],
+      )
+    )[0]!;
+    // Stored first, attached or not. An imported row is frozen; an older reading never replaces a newer one.
+    if (req.rows.length)
+      await q.query(
+        `insert into progression_history as h (channel_id, source, login, twitch_user_id, id_source, level, watch_seconds,
+           messages, measured_at, status, first_seen_at, updated_at)
+         select $1, $2, r.login, r.twitch_user_id, r.id_source, r.level, r.watch_seconds, r.messages, $3, 'pending', $4, $4
+         from jsonb_to_recordset($5::jsonb) as r(login text, twitch_user_id text, id_source text, level int,
+           watch_seconds bigint, messages bigint)
+         on conflict (channel_id, source, login) do update set
+           -- A newer reading without identity evidence never erases the one already stored.
+           twitch_user_id = case when excluded.id_source is null then h.twitch_user_id else excluded.twitch_user_id end,
+           id_source = coalesce(excluded.id_source, h.id_source), level = excluded.level,
+           watch_seconds = excluded.watch_seconds, messages = excluded.messages, measured_at = excluded.measured_at,
+           updated_at = excluded.updated_at
+         where h.status <> 'imported' and excluded.measured_at >= h.measured_at`,
+        [channelId, req.source, measuredAt, now, JSON.stringify(req.rows)],
+      );
+    const waiting = await q.query<{
+      login: string;
+      twitch_user_id: string | null;
+      id_source: 'wizebot' | 'legacy' | 'ambiguous' | null;
+      level: number;
+      watch_seconds: string | number;
+      messages: string | number;
+    }>(
+      `select login, twitch_user_id, id_source, level, watch_seconds, messages from progression_history
+       where channel_id = $1 and source = $2 and status <> 'imported' order by login`,
+      [channelId, req.source],
+    );
+    // The Core's directory: every id behind a pseudo (a pseudo held by two accounts is ambiguous).
+    const known = await q.query<{ id: string; login: string }>(
+      `select twitch_user_id as id, login from ${this.dir(channelId)} d where login = any($1::text[])`,
+      [waiting.map((w) => w.login)],
+    );
+    const idsOfLogin = new Map<string, Set<string>>();
+    for (const k of known)
+      idsOfLogin.set(k.login, (idsOfLogin.get(k.login) ?? new Set()).add(k.id));
+    // Viewers who already have an imported history: never a second one.
+    const taken = new Set(
+      (
+        await q.query<{ id: string }>(
+          `select resolved_id as id from progression_history
+           where channel_id = $1 and source = $2 and status = 'imported'`,
+          [channelId, req.source],
+        )
+      ).map((r) => r.id),
+    );
+    type Res = {
+      row: (typeof waiting)[number];
+      id: string;
+      by: 'id' | 'login';
+    };
+    const resolved: Res[] = [];
+    const status = new Map<string, 'pending' | 'ambiguous' | 'conflict'>();
+    // The Wallet's identity rules (docs/ECONOMY_MIGRATION.md § 8, wallet/se-identity.ts), the Core's directory standing
+    // for « Twitch now »: the Twitch id is the identity; a pseudo is only a clue; quarantine rather than a wrong holder.
+    for (const row of waiting) {
+      const found = idsOfLogin.get(row.login) ?? new Set<string>();
+      if (row.id_source === 'ambiguous' || found.size > 1)
+        // The legacy data saw several holders of the pseudo, or the Core knows several accounts by it.
+        status.set(row.login, 'ambiguous');
+      else if (row.twitch_user_id && row.id_source === 'wizebot')
+        // WizeBot's own user id: exact (a renamed viewer keeps their history).
+        resolved.push({ row, id: row.twitch_user_id, by: 'id' });
+      else if (row.twitch_user_id)
+        // A legacy (id, pseudo) pair: kept unless today's holder of the pseudo is someone else (pseudo reassigned).
+        if (found.size && !found.has(row.twitch_user_id))
+          status.set(row.login, 'ambiguous');
+        else resolved.push({ row, id: row.twitch_user_id, by: 'id' });
+      else if (found.size === 1)
+        resolved.push({ row, id: [...found][0]!, by: 'login' });
+      else status.set(row.login, 'pending');
+    }
+    // One viewer reached by two rows (two pseudos of one account), or already imported: conflict, none attached.
+    const perId = new Map<string, number>();
+    for (const r of resolved) perId.set(r.id, (perId.get(r.id) ?? 0) + 1);
+    const unique: Res[] = [];
+    for (const r of resolved)
+      if (perId.get(r.id)! > 1 || taken.has(r.id))
+        status.set(r.row.login, 'conflict');
+      else unique.push(r);
+    let imported = 0;
+    for (const { row, id, by } of unique) {
+      const ok = await this.move(
+        q,
+        channelId,
+        id,
+        {
+          kind: 'import',
+          amount: xpForLevel(row.level, s.rules),
+          key: `import:${req.source}:${id}`,
+          actor: actor.name ?? actor.id,
+          reason: `${req.source} niveau ${row.level} (${row.login})`,
+        },
+        s.rules,
+      );
+      if (!ok) {
+        status.set(row.login, 'conflict');
+        continue;
+      }
+      await q.query(
+        `update progression_accounts set imported_level = $3, imported_watch_seconds = $4, imported_messages = $5
+         where channel_id = $1 and twitch_user_id = $2`,
+        [channelId, id, row.level, row.watch_seconds, row.messages],
+      );
+      await q.query(
+        `update progression_history set status = 'imported', resolved_id = $4, resolved_by = $5, resolved_at = $6,
+           updated_at = $6
+         where channel_id = $1 and source = $2 and login = $3`,
+        [channelId, req.source, row.login, id, by, now],
+      );
+      imported++;
+    }
+    const list = (st: string) =>
+      [...status].filter(([, v]) => v === st).map(([k]) => k);
+    for (const st of ['pending', 'ambiguous', 'conflict'] as const)
+      await q.query(
+        `update progression_history set status = $4, updated_at = $5
+         where channel_id = $1 and source = $2 and login = any($3::text[]) and status <> $4`,
+        [channelId, req.source, list(st), st, now],
+      );
+    return {
+      imported,
+      already: Number(already.n),
+      by_id: unique.filter((u) => u.by === 'id').length,
+      by_login: unique.filter((u) => u.by === 'login').length,
+      unresolved: list('pending'),
+      ambiguous: list('ambiguous'),
+      conflicts: list('conflict'),
+    };
+  }
+
+  /**
+   * A viewer seen again (presence, chat, sign-in on raptoru.fr): when a waiting WizeBot row could be theirs (their id or
+   * their pseudo), the waiting rows are attached again with the same rules. In the caller's transaction; cheap when
+   * nothing waits for them. The XP earned since is never touched (the import adds its own movement once).
+   */
+  private async attachReturning(
+    q: Queryable,
+    channelId: string,
+    viewerIds: string[],
+  ) {
+    if (!viewerIds.length) return;
+    const hit = await q.query(
+      `select 1 from progression_history h where h.channel_id = $1 and h.status = 'pending'
+         and (h.twitch_user_id = any($2::text[])
+           or h.login in (select login from ${this.dir(channelId)} d where twitch_user_id = any($2::text[])))
+       limit 1`,
+      [channelId, viewerIds],
+    );
+    if (hit.length)
+      await this.runImport(
+        q,
+        channelId,
+        { source: 'wizebot', rows: [] },
+        { id: 'auto', name: 'rattachement automatique' },
+      );
+  }
+
+  /**
+   * raptoru.fr: a viewer signed in (Twitch OAuth — the site's own verified pair of id and pseudo). The pair joins the
+   * Core's directory when unknown, then their waiting history is attached if it is certainly theirs.
+   */
+  async identify(
+    channelId: string,
+    req: { viewer: string; login: string; display_name?: string | null },
+  ) {
+    return this.db.tx(async (q) => {
+      if (!this.o.lab)
+        await q.query(
+          `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3) on conflict do nothing`,
+          [req.viewer, req.login, req.display_name ?? req.login],
+        );
+      const before = (await this.importStatus(channelId, 'wizebot', q))
+        .imported;
+      await this.attachReturning(q, channelId, [req.viewer]);
+      const after = (await this.importStatus(channelId, 'wizebot', q)).imported;
+      return { attached: after - before };
+    });
+  }
+
+  /** Studio: the rows still waiting (pending / ambiguous / conflict), with the Core accounts behind their pseudo. */
+  async waiting(channelId: string, search = '') {
+    const prefix = search
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, '')
+      .replace(/[^a-z0-9_]/g, '')
+      .slice(0, 25);
+    const rows = await this.db.query<{
+      login: string;
+      twitch_user_id: string | null;
+      id_source: string | null;
+      level: number;
+      watch_seconds: string;
+      messages: string;
+      measured_at: Date;
+      status: string;
+      candidates: string[] | null;
+    }>(
+      `select h.login, h.twitch_user_id, h.id_source, h.level, h.watch_seconds, h.messages, h.measured_at, h.status,
+         (select array_agg(d.twitch_user_id order by d.twitch_user_id) from ${this.dir(channelId)} d
+           where d.login = h.login) as candidates
+       from progression_history h
+       where h.channel_id = $1 and h.status <> 'imported' and h.login like $2
+       order by h.level desc, h.login limit 200`,
+      [channelId, `${prefix.replace(/_/g, '\\_')}%`],
+    );
+    return rows.map((r) => ({
+      login: r.login,
+      status: r.status,
+      twitchUserId: r.twitch_user_id,
+      idSource: r.id_source,
+      level: r.level,
+      watchMinutes: Math.floor(Number(r.watch_seconds) / 60),
+      messages: Number(r.messages),
+      measuredAt: new Date(r.measured_at).toISOString(),
+      candidates: r.candidates ?? [],
+    }));
+  }
+
+  /**
+   * Studio: Antoni attaches one waiting row to a viewer after checking it himself — journaled (who, why). Refused when
+   * that viewer already has a WizeBot history (never two) or is unknown to the Core.
+   */
+  async attachManually(
+    channelId: string,
+    req: { source: 'wizebot'; login: string; viewer: string; reason: string },
+    actor: Actor,
+  ) {
+    return this.db.tx(async (q) => {
+      await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+        `xp:${channelId}:${req.viewer}`,
+      ]);
+      const s = await this.settings(channelId, q);
+      const row = (
+        await q.query<{
+          status: string;
+          level: number;
+          watch_seconds: string;
+          messages: string;
+        }>(
+          `select status, level, watch_seconds, messages from progression_history
+           where channel_id = $1 and source = $2 and login = $3 for update`,
+          [channelId, req.source, req.login],
+        )
+      )[0];
+      if (!row) throw new ProgressionError(404, 'unknown_row');
+      if (row.status === 'imported')
+        throw new ProgressionError(409, 'already_attached');
+      const known = await q.query(
+        `select 1 from ${this.dir(channelId)} d where twitch_user_id = $1`,
+        [req.viewer],
+      );
+      if (!known.length) throw new ProgressionError(404, 'unknown_viewer');
+      const by = actor.name ?? actor.id;
+      const ok = await this.move(
+        q,
+        channelId,
+        req.viewer,
+        {
+          kind: 'import',
+          amount: xpForLevel(row.level, s.rules),
+          key: `import:${req.source}:${req.viewer}`,
+          actor: by,
+          reason:
+            `${req.source} niveau ${row.level} (${req.login}) — rattachement manuel : ${req.reason}`.slice(
+              0,
+              300,
+            ),
+        },
+        s.rules,
+      );
+      if (!ok) throw new ProgressionError(409, 'viewer_has_history');
+      await q.query(
+        `update progression_accounts set imported_level = $3, imported_watch_seconds = $4, imported_messages = $5
+         where channel_id = $1 and twitch_user_id = $2`,
+        [channelId, req.viewer, row.level, row.watch_seconds, row.messages],
+      );
+      await q.query(
+        `update progression_history set status = 'imported', resolved_id = $4, resolved_by = 'manual', resolved_at = $5,
+           resolve_note = $6, updated_at = $5
+         where channel_id = $1 and source = $2 and login = $3`,
+        [
+          channelId,
+          req.source,
+          req.login,
+          req.viewer,
+          this.now(),
+          `${by} : ${req.reason}`.slice(0, 300),
+        ],
+      );
+      return { attached: true, viewer: req.viewer, level: row.level };
+    });
+  }
+
+  /** What the history holds: rows per status, the latest reading (Studio's panel). */
+  async importStatus(
+    channelId: string,
+    source: 'wizebot' = 'wizebot',
+    q: Queryable = this.db,
+  ) {
+    const rows = await q.query<{
+      status: string;
+      n: string;
+      last: Date | null;
+    }>(
+      `select status, count(*) as n, max(measured_at) as last from progression_history
+       where channel_id = $1 and source = $2 group by status`,
+      [channelId, source],
+    );
+    const by = Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
+    const last = rows.reduce<Date | null>(
+      (m, r) => (r.last && (!m || new Date(r.last) > m) ? new Date(r.last) : m),
+      null,
+    );
+    return {
+      source,
+      imported: by.imported ?? 0,
+      pending: by.pending ?? 0,
+      ambiguous: by.ambiguous ?? 0,
+      conflict: by.conflict ?? 0,
+      lastMeasuredAt: last ? last.toISOString() : null,
+    };
+  }
+
+  /**
+   * Undo an import: its ledger rows go, every account is recomputed from what remains; the history rows stay (back to
+   * pending, attached again by the next run). Rewards granted stay.
+   */
   async revertImport(channelId: string, source: 'wizebot') {
     return this.db.tx(async (q) => {
       const s = await this.settings(channelId, q);
@@ -804,9 +1090,137 @@ export class ProgressionService {
          where a.channel_id = $1`,
         [channelId],
       );
+      await q.query(
+        `update progression_history set status = 'pending', resolved_id = null, resolved_by = null, resolved_at = null,
+           updated_at = $3
+         where channel_id = $1 and source = $2`,
+        [channelId, source, this.now()],
+      );
       await this.relevelAll(q, channelId, s.rules);
       return { removed: gone.length };
     });
+  }
+
+  // --- Studio: manual XP (authorised, journaled, never negative) ---------------------------------------------------
+
+  /**
+   * Add, remove, or set the XP / the level of one viewer: one ledger movement with the reason and who did it (key
+   * adjust:<request_id>: a repeated click is the same adjustment). Going below zero is refused.
+   */
+  async adjust(
+    channelId: string,
+    req: {
+      viewer: string;
+      mode: 'add' | 'remove' | 'set_xp' | 'set_level';
+      value: number;
+      reason: string;
+      request_id: string;
+    },
+    actor: Actor,
+  ) {
+    return this.db.tx(async (q) => {
+      await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+        `xp:${channelId}:${req.viewer}`,
+      ]);
+      const s = await this.settings(channelId, q);
+      const known = await q.query(
+        `select 1 from ${this.dir(channelId)} d where twitch_user_id = $1
+         union all select 1 from progression_accounts where channel_id = $2 and twitch_user_id = $1`,
+        [req.viewer, channelId],
+      );
+      if (!known.length) throw new ProgressionError(404, 'unknown_viewer');
+      const key = `adjust:${req.request_id}`;
+      const xpNow = async () =>
+        Number(
+          (
+            await q.query<{ xp: string }>(
+              'select xp from progression_accounts where channel_id = $1 and twitch_user_id = $2',
+              [channelId, req.viewer],
+            )
+          )[0]?.xp ?? 0,
+        );
+      const result = async (changed: boolean) => {
+        const xp = await xpNow();
+        return { changed, xp, level: levelForXp(xp, s.rules) };
+      };
+      const replay = await q.query(
+        'select 1 from progression_ledger where channel_id = $1 and key = $2',
+        [channelId, key],
+      );
+      if (replay.length) return result(false);
+      const xp = await xpNow();
+      const target =
+        req.mode === 'add'
+          ? xp + req.value
+          : req.mode === 'remove'
+            ? xp - req.value
+            : req.mode === 'set_xp'
+              ? req.value
+              : xpForLevel(req.value, s.rules);
+      if (target < 0) throw new ProgressionError(409, 'below_zero');
+      if (target === xp) return result(false);
+      await this.move(
+        q,
+        channelId,
+        req.viewer,
+        {
+          kind: target > xp ? 'grant' : 'correction',
+          amount: target - xp,
+          key,
+          actor: actor.name ?? actor.id,
+          reason: `${req.mode} ${req.value} — ${req.reason}`.slice(0, 300),
+        },
+        s.rules,
+      );
+      return result(true);
+    });
+  }
+
+  /** Studio: one viewer's journal (imports, grants, corrections) and the WizeBot rows attached to them. */
+  async history(channelId: string, viewerId: string) {
+    const movements = await this.db.query<{
+      kind: string;
+      amount: string;
+      actor: string;
+      reason: string | null;
+      created_at: Date;
+    }>(
+      `select kind, amount, actor, reason, created_at from progression_ledger
+       where channel_id = $1 and twitch_user_id = $2 and kind in ('import', 'grant', 'correction')
+       order by id desc limit 50`,
+      [channelId, viewerId],
+    );
+    const sources = await this.db.query<{
+      source: string;
+      login: string;
+      level: number;
+      watch_seconds: string;
+      messages: string;
+      measured_at: Date;
+      resolved_by: string | null;
+    }>(
+      `select source, login, level, watch_seconds, messages, measured_at, resolved_by from progression_history
+       where channel_id = $1 and resolved_id = $2`,
+      [channelId, viewerId],
+    );
+    return {
+      movements: movements.map((m) => ({
+        kind: m.kind,
+        amount: Number(m.amount),
+        actor: m.actor,
+        reason: m.reason,
+        at: new Date(m.created_at).toISOString(),
+      })),
+      sources: sources.map((h) => ({
+        source: h.source,
+        login: h.login,
+        level: h.level,
+        watchMinutes: Math.floor(Number(h.watch_seconds) / 60),
+        messages: Number(h.messages),
+        measuredAt: new Date(h.measured_at).toISOString(),
+        attachedBy: h.resolved_by,
+      })),
+    };
   }
 
   /** Studio: viewers by pseudo (login or Twitch name, prefix) or id, with their level. */
@@ -826,32 +1240,50 @@ export class ProgressionService {
 
   // --- public reads (raptoru.fr) ---------------------------------------------------------------------------------------
 
-  async leaderboard(channelId: string, limit = 100) {
+  /**
+   * The public rankings: by XP (levels), by presence time or by messages — each total = WizeBot's imported history +
+   * what the Core counted since. Presence time is the time seen in Twitch's chatters list, not a proof of watching.
+   */
+  async leaderboard(
+    channelId: string,
+    limit = 100,
+    by: 'xp' | 'watch' | 'messages' = 'xp',
+  ) {
     const s = await this.settings(channelId);
+    const total = {
+      xp: 'a.xp',
+      watch: '(a.watch_seconds + a.imported_watch_seconds)',
+      messages: '(a.messages + a.imported_messages)',
+    }[by];
     const rows = await this.db.query<{
       twitch_user_id: string;
       login: string | null;
       display_name: string | null;
       xp: string | number;
       level: number;
+      watch_seconds: string | number;
+      imported_watch_seconds: string | number;
+      messages: string | number;
+      imported_messages: string | number;
       title_id: string | null;
       title_label: string | null;
       title_rarity: string | null;
     }>(
       // The equipped title, only while owned (not revoked) and active: what the rankings show next to the name.
-      `select a.twitch_user_id, v.login, v.display_name, a.xp, a.level,
-         r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity
+      `select a.twitch_user_id, v.login, v.display_name, a.xp, a.level, a.watch_seconds, a.imported_watch_seconds,
+         a.messages, a.imported_messages, r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity
        from progression_accounts a
        left join ${this.dir(channelId)} v using (twitch_user_id)
        left join progression_equipped e on e.channel_id = a.channel_id and e.twitch_user_id = a.twitch_user_id
        left join progression_grants g on g.channel_id = a.channel_id and g.twitch_user_id = a.twitch_user_id
          and g.reward_id = e.title_id and g.revoked_at is null
        left join progression_rewards r on r.channel_id = a.channel_id and r.reward_id = g.reward_id and r.active
-       where a.channel_id = $1 and a.xp > 0 order by a.xp desc, a.twitch_user_id limit $2`,
+       where a.channel_id = $1 and ${total} > 0 order by ${total} desc, a.twitch_user_id limit $2`,
       [channelId, Math.min(limit, 500)],
     );
     return {
       enabled: s.enabled,
+      by,
       entries: rows.map((r, i) => ({
         rank: i + 1,
         twitchUserId: r.twitch_user_id,
@@ -859,6 +1291,10 @@ export class ProgressionService {
         displayName: r.display_name ?? r.login ?? r.twitch_user_id,
         level: r.level,
         xp: Number(r.xp),
+        watchMinutes: Math.floor(
+          (Number(r.watch_seconds) + Number(r.imported_watch_seconds)) / 60,
+        ),
+        messages: Number(r.messages) + Number(r.imported_messages),
         title: r.title_id
           ? { id: r.title_id, label: r.title_label, rarity: r.title_rarity }
           : null,
@@ -870,8 +1306,9 @@ export class ProgressionService {
     const s = await this.settings(channelId);
     const acc = (
       await this.db.query<AccountRow & { rank: string | number }>(
-        `select * from (select a.*, row_number() over (order by a.xp desc, a.twitch_user_id) as rank
-           from progression_accounts a where a.channel_id = $1 and a.xp > 0) x where twitch_user_id = $2`,
+        // Accounts without XP sort last: the rank of those with XP is unchanged; theirs is null.
+        `select * from (select a.*, case when a.xp > 0 then row_number() over (order by a.xp desc, a.twitch_user_id) end
+           as rank from progression_accounts a where a.channel_id = $1) x where twitch_user_id = $2`,
         [channelId, viewerId],
       )
     )[0];
@@ -906,11 +1343,22 @@ export class ProgressionService {
       twitchUserId: viewerId,
       level,
       xp,
-      rank: acc ? Number(acc.rank) : null,
+      rank: acc?.rank ? Number(acc.rank) : null,
       levelXp: xpForLevel(level, s.rules),
       nextLevelXp: xpForLevel(level + 1, s.rules),
+      // Counted by the Core since the switch (presence seen in the chatters list; messages read by the bot).
       watchMinutes: Math.floor(Number(acc?.watch_seconds ?? 0) / 60),
       messages: Number(acc?.messages ?? 0),
+      // What the site shows: imported history + counted since.
+      totals: {
+        watchMinutes: Math.floor(
+          (Number(acc?.watch_seconds ?? 0) +
+            Number(acc?.imported_watch_seconds ?? 0)) /
+            60,
+        ),
+        messages:
+          Number(acc?.messages ?? 0) + Number(acc?.imported_messages ?? 0),
+      },
       imported: acc?.imported_level
         ? {
             source: 'wizebot',

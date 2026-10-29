@@ -143,6 +143,45 @@ describe('progression on the main Core HTTP', () => {
       (await call('/v1/site/progression/equip', equip, `Bearer ${SITE}`))
         .status,
     ).toBe(200);
+    // Sign-in on the site: the site token only.
+    const who = { viewer: '3', login: 'cleo', display_name: 'Cleo' };
+    expect(
+      (await call('/v1/site/progression/identify', who, studio)).status,
+    ).toBe(401);
+    expect(
+      (await call('/v1/site/progression/identify', who, `Bearer ${SITE}`)).body,
+    ).toEqual({ attached: 0 });
+    // Studio's adjustment: the installation only, journaled.
+    expect(
+      (
+        await call(
+          '/v1/studio/progression/adjust',
+          {
+            viewer: '2',
+            mode: 'add',
+            value: 50,
+            reason: 'test http',
+            request_id: 'req-0001-abcd',
+          },
+          `Bearer ${SITE}`,
+        )
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await call(
+          '/v1/studio/progression/adjust',
+          {
+            viewer: '2',
+            mode: 'add',
+            value: 50,
+            reason: 'test http',
+            request_id: 'req-0001-abcd',
+          },
+          studio,
+        )
+      ).body,
+    ).toMatchObject({ changed: true, xp: 50 });
     // Bob owns nothing: refused, whatever the site asks.
     const bob = await call(
       '/v1/site/progression/equip',
