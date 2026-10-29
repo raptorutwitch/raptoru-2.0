@@ -1,12 +1,14 @@
 # Halloween 2026 — runbook de livraison (un GO, étape par étape)
 
-Préparé le 28/10, état vérifié en lecture seule :
+Préparé le 28/10, mis à jour le 29/10 (intégration de la PR #37), état vérifié en lecture seule :
 
 - **Production** :
   - Core `dc06344` (`running:healthy`, `/health` et `/ready` à 200), bot `4ba9243`, hors live ;
   - dernière sauvegarde automatique : 28/10 à 04:00 UTC.
-- **PR #35** :
-  - `281cf0a`, CI verte, fusionnable sans conflit ;
+- **PR #35** (contient depuis le 29/10 la **PR #37** : Roue du Sub — présence en live ; Dock — défilement, tailles,
+  lisibilité ; fusionnée dans `feat/halloween`, commit `f1c9a7d`) :
+  - CI verte sur la tête de branche, fusionnable sans conflit ; fusionner #35 livre aussi #37 (GitHub la marque
+    fusionnée) ;
   - depuis `dc06344` : **une seule migration de Production** (`20261112130000_event_shop.sql`) et **aucun
     changement du bot** ;
   - `main` n'a reçu que de la doc depuis.
@@ -23,7 +25,14 @@ Rien de ce document n'est exécuté sans le GO d'Antoni. Chaque étape a sa vér
 1. Coolify (`https://dashboard.raptoru.fr`) › base de Production › Backups › **Backup now**.
 2. Télécharger la sauvegarde (copie hors VPS) dans `Documents\Sauvegarde Raptoru 2.0\2026-10-xx-prod-db-avant-halloween\`.
 
-**Arrêt** si la sauvegarde échoue. L'outil refuse de toute façon une migration sans sauvegarde de moins de 60 min.
+3. Vérification (agent, 3 min, rien en Production). Critères de restauration, tous requis :
+   - taille du fichier = taille affichée par Coolify, statut « success » ;
+   - `pg_restore --list` (`postgres:17-alpine`) sans erreur, au moins autant de tables avec données que le 24/10 (104) ;
+   - **restauration complète** dans une base jetable locale (conteneur Docker, supprimé après) sans erreur, avec des
+     lignes dans `wallets`, `wallet_transactions`, `sw_spins` et `alert_items`.
+
+**Arrêt** si la sauvegarde échoue ou si un critère manque. L'outil de déploiement refuse de toute façon une migration
+sans sauvegarde de moins de 60 min (`BACKUP_MAX_AGE_MS`) : faire les étapes 2 et 3 dans l'heure qui suit.
 
 ## GitHub Actions : rétabli (28/10)
 
@@ -69,7 +78,9 @@ node scripts/coolify-deploy.mjs status core
 - le Core rapporte le nouveau commit ;
 - le bot inchangé (`4ba9243`) garde son bail.
 
-Ce qui change pour les viewers à cet instant : **rien**.
+Ce qui change pour les viewers à cet instant : **rien de Halloween**. Un seul changement visible, voulu (PR #37) : un
+sub / resub reçu en live, roue active, lance la Roue du Sub sans attendre le relevé des chatters ; « Tirer » reprend un
+tour accepté par le viewer. Effectif dès le Core, avec Studio 0.1.17 comme 0.1.18 (aucune migration de plus).
 
 - La boutique est **fermée par défaut** (créée fermée au premier accès) : ni module, ni `!peur`, ni Bonbons
   supplémentaires dans `!solde`.
@@ -92,7 +103,8 @@ Ce qui change pour les viewers à cet instant : **rien**.
 
 Répétition faite le 28/10 : l'installateur se construit en local (`studio:package`, rien de publié, 121 Mo). Il
 embarque la page et le runtime Halloween, la fenêtre overlay d'Electron, le Dock avec Halloween, « Trouver un
-viewer », le garde-fou Tombola en Bonbons et le réglage du délai du Dock.
+viewer », le garde-fou Tombola en Bonbons et le réglage du délai du Dock ; plus, depuis la PR #37, le Dock sans
+défilement parasite, ses quatre tailles (Minimaliste / Moyen / Gros / Géant) et son texte plus clair.
 
 Le workflow GitHub « Studio — construire / publier » sur `main` :
 
@@ -146,6 +158,8 @@ Dans OBS, regarde l'aperçu de ta scène habituelle (aucune modification), le je
    rectangle noir) et la jauge « Son du pc » bouge.
 2. Teste **Brouillard** (9 s) et clique **STOP ALL** pendant l'effet. L'écran est propre aussitôt.
 3. Teste **Brouillard** de nouveau, clique dans le jeu, puis appuie sur **Ctrl+Maj+F12**. L'écran est propre aussitôt.
+4. **Dock** (PR #37) : roue crantée › Taille d'affichage › essayer les quatre ; descendre dans l'historique et attendre
+   1 à 2 min : la vue ne bouge pas.
 
 ## 8. Ouverture progressive (Antoni, quand il le décide)
 
@@ -174,10 +188,13 @@ Dans OBS, regarde l'aperçu de ta scène habituelle (aucune modification), le je
 | Hosted Test                | la version téléversée, servie par Twitch                                                         | les comptes testeurs de Twitch ; **sur la chaîne où elle est activée, les autres viewers n'ont plus d'extension** (doc Twitch) |
 | Version publique approuvée | celle qui tourne sur `raptoru_` aujourd'hui (`0bf7907`), avec ses restrictions d'accès actuelles | les viewers autorisés                                                                                                          |
 
-- **Paquet** : `npm run build:production -w @raptoru/twitch-extension` sur le commit de `main` donne
-  `raptoru-live-PRODUCTION-<sha>.zip`. Il pointe vers `https://core.raptoru.fr/v1/ext`.
-  - Il a déjà été construit et vérifié sur `839e1ad` : module, CSS et 36 miniatures présents.
-  - Il sera reconstruit après la fusion.
+- **Paquet prêt** : `apps/twitch-extension/release/raptoru-live-PRODUCTION-f1c9a7d8c347.zip` (worktree
+  `raptoru-halloween`, SHA-256 dans le `.sha256` voisin), construit le 29/10 sur l'arbre qui sera fusionné. Contenu
+  identique à celui vérifié le 28/10 (`839e1ad`) sauf l'identifiant de build ; pointe vers
+  `https://core.raptoru.fr/v1/ext` ; aucun lien local ni `/v1/lab`. La PR #37 ne touche pas l'extension.
+- **Peut partir en revue avant le déploiement du Core** (gain de temps) : le module n'apparaît que si le Core envoie
+  `event_shop.enabled === true` (absent sur `dc06344`, faux tant que la boutique est fermée) ; la Roue du Sub n'est
+  jamais montrée en Production (`sub_wheel: false` côté Core). Approuvée tôt, elle ne change rien de visible.
 - **Étapes** :
   1. téléversement comme **nouvelle version** ;
   2. Hosted Test sur un compte ou une chaîne de test, **jamais activée sur `raptoru_` pendant le live** ;
