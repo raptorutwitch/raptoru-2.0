@@ -80,7 +80,7 @@ export class ProgressionRelay {
       (async (u: string) =>
         (await fetch(u, { signal: AbortSignal.timeout(30_000) })).json());
     const d = (await get(
-      `${WIZEBOT_SOURCE}?type=${type}&period=all&limit=6000`,
+      `${WIZEBOT_SOURCE}?type=${type}&period=all&limit=6000&source=wizebot`,
     )) as { players?: WizebotRow[] };
     if (!Array.isArray(d?.players))
       throw Object.assign(new Error('wizebot_unavailable'), { status: 502 });
