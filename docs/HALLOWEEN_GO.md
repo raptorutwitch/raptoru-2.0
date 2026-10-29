@@ -15,6 +15,11 @@ Préparé le 28/10, mis à jour le 29/10 (intégration de la PR #37), état vér
 
 Rien de ce document n'est exécuté sans le GO d'Antoni. Chaque étape a sa vérification et son critère d'arrêt.
 
+**Exécuté le 29/10 (GO global d'Antoni)** : § 1 sauvegarde (03:05 UTC, restauration complète vérifiée) · § 2 fusion
+`7223b0a` (CI verte) · § 3 Core `7223b0a`, `applied: 20261112130000_event_shop.sql`, sain, bot `4ba9243` garde son bail ·
+§ 4 Studio 0.1.18 publiée (test de mise à jour OK) · § 5.3 médias : 30/30 installés et vérifiés. Restent à Antoni : § 5.1–5.2
+(installer 0.1.18), § 6–7 (vérifications), § 9 (extension), § 8 (ouverture le 31/10).
+
 ## 0. Conditions (sinon on ne commence pas)
 
 - Pas de live et pas d'enregistrement OBS. L'outil de déploiement le vérifie aussi.
@@ -108,7 +113,10 @@ défilement parasite, ses quatre tailles (Minimaliste / Moyen / Gros / Géant) e
 
 Le workflow GitHub « Studio — construire / publier » sur `main` :
 
-- `publish = draft`, vérification, puis `publish = public` (environ 25 min sur Windows) ;
+- `publish = public` directement (environ 25 min) : il crée lui-même le brouillon, le vérifie puis le publie. Un
+  brouillon `publish = draft` laissé en place bloque ensuite `public` (« vX already exists ») : le supprimer d'abord
+  (`gh release delete vX -R raptorutwitch/raptoru-studio-releases --yes`, aucun tag n'existe pour un brouillon) ;
+  constaté et réglé ainsi le 29/10 ;
 - il teste aussi la mise à jour 0.1.17 → nouvelle version, avec les données intactes ;
 - **voie B, sans GitHub Actions** :
   - depuis une copie **détachée et propre** de `origin/main` (jamais le checkout principal), lancer
