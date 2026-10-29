@@ -121,6 +121,7 @@ rien de cela ne gêne.
    fonction de l'événement). Il est inactif par défaut, pour ne rien montrer avant son activation. La règle de la
    Tombola reste celle de la monnaie et de la Tombola : rien de spécifique à Halloween (la suspension d'une Tombola
    Bonbons à la fermeture de Halloween a été écartée le 29/10).
+
 2. Bonbons dans le Wallet canonique : migration du grand livre, administration des monnaies dans Studio.
 3. Interactions multi-monnaies, puis gestionnaire d'événements générique.
 
