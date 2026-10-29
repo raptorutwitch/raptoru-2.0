@@ -32,6 +32,20 @@ Deux PR livrées ensemble :
 Les appels Studio de l'import et de l'activation ont été faits avec l'identité de l'installation Studio du PC
 (fichier local, jamais affichée), Studio 0.1.19 n'étant pas encore installé.
 
+## Émancipation WizeBot — 29/10/2026 soir (état réel)
+
+| Étape           | Fait                                                                                                                                                                                                                                                     |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inventaire      | Seul raptoru.fr dépendait de WizeBot à l'exécution (semaine / mois, tâche quotidienne, présence du profil, succès). Core, bot, Studio : aucune dépendance. Le bot envoie **tous** les messages au Core (`CHAT_GAMES=true`).                              |
+| Sauvegarde      | Coolify 29/10 21:20:37 UTC (`success`, 3 348 756 octets), téléchargée par Antoni, **restauration complète vérifiée** en base jetable (131 tables, Wallet 747 / 13 255, historiques 7 852) — `Sauvegarde Raptoru 2.0\2026-10-29-prod-db-avant-periodes\`. |
+| Archive WizeBot | `Sauvegarde Raptoru 2.0\2026-10-29-wizebot-archive\` : l'export importé et un relevé final (7 852 pseudos chacun), `progression_history` et `progression_accounts` en CSV, empreintes SHA-256.                                                           |
+| Core            | `7b40a63` (PR #41) : migration `20261114130000_progression_periods.sql` appliquée (semaine / mois Paris, historiques non supprimables, un seul rattachement par viewer) ; puis PR #42 (classement jusqu'à 2 000 lignes).                                 |
+| Site            | `a85b111` (PR #107) : Niveau, Présence, Messages en All-time / Semaine / Mois depuis le Core ; tâche quotidienne et profil sans WizeBot ; vérifié dans Chromium (9 combinaisons, 0 requête vers WizeBot, 0 erreur) ; puis PR #108.                       |
+| Données         | 1 622 rattachés, 6 228 en attente (rattachement automatique au retour : présence, chat, connexion au site), 2 conflits non tranchés (`aura_dty` / `aurorra_ae`).                                                                                         |
+| Semaine / Mois  | vides à ce jour, avec une note honnête (« aucune activité comptée par Raptoru pour l'instant ») : aucun live depuis l'activation. Ils se remplissent dès le prochain live.                                                                               |
+| Tests           | Core 1 454 / 1 454 (PostgreSQL réel compris) ; chaîne réelle (lurker Jetons + XP + présence, rejeu, redémarrage du bot, fin de live, retour d'un ancien viewer) ; bornes Paris (minuit, semaine, mois, deux changements d'heure) ; site 201.             |
+| WizeBot         | plus aucun appel d'exécution ; seul l'export de migration (`?export=1`) l'interroge s'il est appelé. **Action d'Antoni** : couper dans WizeBot le système de rangs / XP et les annonces « Level UP » (ses classements peuvent rester).                   |
+
 ## 0. Conditions (sinon on ne commence pas)
 
 - Pas de live et pas d'enregistrement OBS (l'outil de déploiement le vérifie aussi).
