@@ -578,8 +578,9 @@ export class ProgressionService {
 
   async catalog(channelId: string, all = false) {
     return this.db.query(
-      `select reward_id, kind, label, description, rarity, category, unlock_level, active, sort from progression_rewards
-       where channel_id = $1 and ($2 or active) order by kind, sort, unlock_level nulls last, label`,
+      `select reward_id, kind, label, description, rarity, category, unlock_level, active, sort, status
+       from progression_rewards
+       where channel_id = $1 and ($2 or (active and status <> 'draft')) order by kind, sort, unlock_level nulls last, label`,
       [channelId, all],
     );
   }

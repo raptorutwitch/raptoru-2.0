@@ -124,6 +124,11 @@ export function cosmeticShopSuite(freshDb: () => Promise<Db>) {
       await item({ reward_id: 'brouillon', status: 'draft' });
       await offer({ offer_id: 'b-jetons', reward_id: 'brouillon' });
       expect((await shop.catalog(CH)).items).toEqual([]);
+      // Nor in the public progression catalogue (raptoru.fr); Studio's full list shows it as a draft.
+      expect(await progression.catalog(CH)).toEqual([]);
+      expect(await progression.catalog(CH, true)).toMatchObject([
+        { reward_id: 'brouillon', status: 'draft' },
+      ]);
       await shop.renameDraft(CH, 'brouillon', 'roi-citrouille'); // its offer follows
       expect((await shop.items(CH))[0]).toMatchObject({
         reward_id: 'roi-citrouille',
