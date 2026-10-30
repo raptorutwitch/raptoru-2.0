@@ -1,0 +1,22 @@
+/* Boutique cosmétique V1 — Studio's preview frame only (the looks themselves come from the Core's stylesheet). */
+.rc-studio-preview {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #0b1412;
+  color: #eafff9;
+}
+.rc-preview-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 15px;
+}
+.rc-preview-big .rc-badge {
+  --rc-size: 48px;
+}
+.rc-preview-cell {
+  background: #0b1412;
+  color: #eafff9;
+}
