@@ -120,6 +120,12 @@ c'est l'écran entier qui est traité. Aucune fenêtre de jeu à choisir.
   juste à côté (bloc de 60 px centré sur la pointe) : seul le vrai curseur reste, et il fonctionne normalement.
   **Limite** : sur un fond très chargé, ce bloc peut laisser une petite tache, et un curseur de jeu plus grand que 60 px
   dépasserait.
+  **Curseur transformé avec l'écran (étudié le 30/10, non fait, décision d'Antoni « facultatif »)** : il faudrait cacher
+  le vrai pointeur Windows. Les trois moyens sont écartés : remplacer les curseurs système (`SetSystemCursor`) les
+  laisse invisibles si Studio plante et ne touche pas les curseurs dessinés par les jeux ; faire capter la souris par la
+  fenêtre Chaos casse les clics (il faudrait les réinjecter) ; l'API Magnification (`MagShowSystemCursor`) exige un
+  processus natif dont la restauration du pointeur après un arrêt brutal n'est pas garantie. Aucun ne garantit qu'un
+  crash ne laisse jamais le pointeur caché : le comportement validé (vrai curseur + copie capturée recouverte) reste.
 - **Écran retourné** : rotation 180°, miroir horizontal ou retournement vertical, 3 à 60 s, instantané.
 - **Flou** : faible / moyen / fort, 2 à 30 s ; il part de l'image nette (identique à l'écran), se floute, redevient net
   avant de partir, légèrement agrandi pendant le flou (aucun bord net ne dépasse, le bureau n'apparaît jamais).
