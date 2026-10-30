@@ -99,7 +99,25 @@ export function cosmeticsRoutes(
         return STREAMED;
       },
     },
+    {
+      // The same stylesheet as JSON (Studio's preview: its Core channel speaks JSON).
+      method: 'GET',
+      pattern: /^\/v1\/cosmetics\/style\.json$/,
+      auth: 'public',
+      handle: async () => ({ css: COSMETICS_CSS }),
+    },
     // --- Studio ---------------------------------------------------------------------------------------------------------
+    {
+      // An image for Studio's editor (its Core channel speaks JSON).
+      method: 'GET',
+      pattern: admin('/images/([0-9a-f]{64})'),
+      auth,
+      handle: async ({ params }) => {
+        const img = await svc.image(params[0]!);
+        if (!img) throw new HttpError(404, { error: 'unknown_image' });
+        return { mime: img.mime, data_base64: img.bytes.toString('base64') };
+      },
+    },
     {
       method: 'GET',
       pattern: admin('/items'),
