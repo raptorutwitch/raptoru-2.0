@@ -90,11 +90,12 @@ await db.query(
 );
 
 const { ProgressionRelay } = await import('../src/progression/relay.js');
+const { CosmeticsRelay } = await import('../src/cosmetics/relay.js');
 const ext = await LabEbs.create(EXTENSION_DIR);
 const labCore = localLabCoreClient(coreUrl, secret);
 ext.connectLab(labCore);
 // Studio's Halloween and Tombola tabs, on the same Lab Core (temporary data folder, gone with the process).
-const { mkdtemp } = await import('node:fs/promises');
+const { mkdtemp, writeFile } = await import('node:fs/promises');
 const { tmpdir } = await import('node:os');
 const { join } = await import('node:path');
 const { HalloweenRuntime } = await import('../src/halloween/runtime.js');
@@ -143,6 +144,13 @@ const studio = createStudioServer(
   halloween,
   // Progression (docs/PROGRESSION.md): Studio's panel relay to this Lab Core.
   new ProgressionRelay({ core: labCore, environment: 'lab' }),
+  // Boutique cosmétique V1: Studio's « Boutique » tab relay to this Lab Core.
+  new CosmeticsRelay({ core: labCore, environment: 'lab' }),
+);
+// The browser tests that need the Lab Core itself (a simulated live, a chat message) read where it is here.
+await writeFile(
+  join(tmpdir(), `raptoru-e2e-core-${port}.json`),
+  JSON.stringify({ url: coreUrl, secret }),
 );
 studio.listen(port, '127.0.0.1', () =>
   console.log(

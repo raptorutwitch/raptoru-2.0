@@ -24,6 +24,9 @@ test('Progression: on, an event badge created, a viewer found, granted, then rev
   await tab.getByRole('button', { name: 'Chercher' }).click();
   await tab.getByRole('button', { name: 'Kirito_TV' }).click();
   await expect(tab).toContainText('Inventaire vide.');
+  await tab
+    .locator('[data-role="grant-reward"]')
+    .selectOption('citrouille-2026');
   await tab.locator('[data-role="grant-source"]').selectOption('event');
   await tab.locator('[data-role="grant-ref"]').fill('halloween-2026');
   await tab.getByRole('button', { name: 'Attribuer' }).click();

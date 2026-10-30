@@ -14,6 +14,8 @@ type Reward = {
   unlock_level: number | null;
   active: boolean;
   sort: number;
+  /** Boutique cosmétique: a draft is never granted (the Core refuses it). */
+  status?: string;
 };
 type State = {
   enabled: boolean;
@@ -180,7 +182,9 @@ export function mountProgression(root: HTMLElement) {
 
   const rewardOptions = (kind?: string) =>
     (state?.catalog ?? [])
-      .filter((r) => r.active && (!kind || r.kind === kind))
+      .filter(
+        (r) => r.active && r.status !== 'draft' && (!kind || r.kind === kind),
+      )
       .map(
         (r) =>
           `<option value="${esc(r.reward_id)}">${r.kind === 'title' ? 'Titre' : 'Badge'} · ${esc(r.label)}</option>`,

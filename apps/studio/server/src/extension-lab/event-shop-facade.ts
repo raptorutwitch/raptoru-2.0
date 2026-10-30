@@ -1,3 +1,4 @@
+import { eventTitlesView } from '@raptoru/schemas';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
 
 // Halloween shop (docs/HALLOWEEN.md) — extension façade of the Lab EBS (the production twin: core-api
@@ -19,6 +20,61 @@ export function eventShopFacade(core: LabCoreCall, channelId: string) {
       // Testers only (Studio): the module is not shown to the others.
       s.extension_allowed === false ? { enabled: false } : s,
     );
+  // Halloween « Titres » (docs/COSMETIC_SHOP.md § 8): the cosmetic shop's titles sold in Bonbons (same as production).
+  const titles = async (viewer: { id: string } | null): Promise<Json> => {
+    const shop = await state(viewer?.id ?? null);
+    if (shop.enabled !== true) return { enabled: false };
+    try {
+      const [catalog, mine] = await Promise.all([
+        core<Json>('/v1/cosmetics/catalog'),
+        viewer
+          ? core<Json>(`/v1/site/cosmetics/viewers/${viewer.id}`)
+          : Promise.resolve(null),
+      ]);
+      return eventTitlesView(catalog, mine) as unknown as Json;
+    } catch {
+      return { enabled: false };
+    }
+  };
+  const buyTitle = async (
+    viewer: { id: string; display_name: string } | null,
+    body: Json | undefined,
+    key: string | undefined,
+  ): Promise<Reply> => {
+    if (!viewer)
+      return { status: 403, body: { ok: false, error: 'identity_required' } };
+    if (!key || !/^[A-Za-z0-9_-]{8,128}$/.test(key))
+      return {
+        status: 400,
+        body: { ok: false, error: 'idempotency_key_required' },
+      };
+    const t = await titles(viewer);
+    const offer = String(body?.offer_id ?? '');
+    const items = (t.items ?? []) as { offer_id: string }[];
+    if (t.enabled !== true || !items.some((i) => i.offer_id === offer))
+      return {
+        status: 409,
+        body: {
+          ok: false,
+          error: t.enabled === true ? 'offer_unavailable' : 'event_closed',
+        },
+      };
+    const out = await core<Json>('/v1/site/cosmetics/purchase', {
+      viewer: viewer.id,
+      viewer_name: viewer.display_name.slice(0, 64) || viewer.id,
+      offer_id: offer,
+      idempotency_key: key,
+    });
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        ...out,
+        titles: await titles(viewer),
+        event_shop: await state(viewer.id),
+      },
+    };
+  };
   return async function call(
     method: string,
     rawPath: string,
@@ -27,6 +83,18 @@ export function eventShopFacade(core: LabCoreCall, channelId: string) {
     idempotencyKey: string | undefined,
   ): Promise<Reply | null> {
     const path = rawPath.split('?')[0]!;
+    if (method === 'GET' && path === '/events/titles')
+      return { status: 200, body: { ok: true, ...(await titles(viewer)) } };
+    if (method === 'POST' && path === '/actions/events/titles/purchase')
+      try {
+        return await buyTitle(viewer, body, idempotencyKey);
+      } catch (e) {
+        const err = e as { status?: number; message: string; body?: Json };
+        return {
+          status: err.status ?? 503,
+          body: { ...(err.body ?? {}), ok: false, error: err.message },
+        };
+      }
     const isAction =
       method === 'POST' &&
       (path === '/actions/events/purchase' ||

@@ -105,6 +105,8 @@ try {
     '20261113120000_progression_lab.sql',
     '20261114120000_progression_periods_lab.sql',
     '20261117120000_halloween_economy_lab.sql',
+    '20261118120000_cosmetic_shop_lab.sql',
+    '20261118120500_lab_ledger_cosmetic.sql',
   ]) {
     if (
       (

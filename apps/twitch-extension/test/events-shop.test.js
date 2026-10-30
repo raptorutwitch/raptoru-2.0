@@ -3,6 +3,7 @@ import {
   availability,
   clock,
   shopHtml,
+  titlesHtml,
   viewerWait,
 } from '../extension/shared/events-shop.js';
 
@@ -205,5 +206,63 @@ describe('events module', () => {
 
   it('warns when the engine is offline', () => {
     expect(shopHtml(state({ engine_ready: false }))).toContain('pas prêt');
+  });
+
+  it('Titres: a tab only when the Core sells titles; permanent, owned / available / unavailable, two taps to buy', () => {
+    expect(shopHtml(state(), {})).not.toContain('data-section="titles"');
+    const titles = {
+      enabled: true,
+      open: true,
+      balance: 40,
+      items: [
+        {
+          id: 'roi',
+          label: 'Roi <Citrouille>',
+          rarity: 'legendary',
+          offer_id: 'roi-b',
+          price: 30,
+          owned: false,
+        },
+        {
+          id: 'vamp',
+          label: 'Vampire',
+          rarity: 'rare',
+          offer_id: 'vamp-b',
+          price: 60,
+          owned: false,
+        },
+        {
+          id: 'chat',
+          label: 'Chat noir',
+          rarity: null,
+          offer_id: 'chat-b',
+          price: 10,
+          owned: true,
+        },
+      ],
+    };
+    const html = shopHtml(state(), { section: 'titles', titles });
+    expect(html).toContain('data-section="titles"');
+    expect(html).toContain('Récompenses permanentes');
+    expect(html).toContain('Roi &lt;Citrouille&gt;');
+    expect(html).toContain('Légendaire');
+    expect(html).toMatch(/data-buy-title="roi-b"(?![^>]*disabled)/);
+    expect(html).toMatch(/data-buy-title="vamp-b"[^>]*disabled/); // 60 > 40
+    expect(html).toContain('Pas assez de Bonbons');
+    expect(html).toContain('Possédé ✓');
+    expect(html).not.toContain('data-buy-title="chat-b"');
+    expect(titlesHtml(titles, { confirming: 'title:roi-b' })).toContain(
+      'Confirmer ?',
+    );
+    // Closed or anonymous: nothing buyable.
+    const off = titlesHtml({ ...titles, open: false });
+    expect(off).toContain('Indisponible');
+    expect(off).toMatch(/data-buy-title="roi-b"[^>]*disabled/);
+    expect(titlesHtml({ ...titles, balance: null })).toContain(
+      'Partage ton identité',
+    );
+    expect(titlesHtml({ ...titles, items: [] })).toContain(
+      'Aucun titre en vente',
+    );
   });
 });

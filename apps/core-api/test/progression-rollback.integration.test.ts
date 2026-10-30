@@ -15,6 +15,7 @@ const isLocal =
   !!url && /@(localhost|127\.0\.0\.1)[:/][^/]*\/[^/?]*test/.test(url);
 const FILE = '20261113130000_progression.sql';
 const PERIODS = '20261114130000_progression_periods.sql';
+const COSMETIC = '20261118130000_cosmetic_shop.sql';
 
 /** The rollback SQL as written in the migration's header (the « -- Rollback: » comment lines, marks removed). */
 function rollbackSql(file = FILE) {
@@ -55,6 +56,62 @@ describe.skipIf(!isLocal)(
           "select table_name || '.' || column_name as c from information_schema.columns where table_schema = 'public' order by 1",
         )
       ).map((r) => r.c);
+    it('cosmetic shop: applied, used, rolled back by its header SQL (titles kept), then applied again', async () => {
+      await migrate(db, 'prod');
+      const all = await tables();
+      const cols = await columns();
+      const SHOP = [
+        'cosmetic_awards',
+        'cosmetic_images',
+        'cosmetic_offers',
+        'cosmetic_purchases',
+      ];
+      for (const t of SHOP) expect(all).toContain(t);
+      await db.query(
+        `insert into progression_rewards (channel_id, reward_id, kind, label, created_at, updated_at, status, style)
+         values ('1', 'roi', 'title', 'Roi', now(), now(), 'published', '{"effect":"glow"}')`,
+      );
+      await db.query(
+        `insert into cosmetic_offers (offer_id, channel_id, reward_id, currency, price, enabled, created_at, updated_at)
+         values ('roi-j', '1', 'roi', 'main', 10, true, now(), now())`,
+      );
+      await expect(
+        db.query(
+          `insert into cosmetic_offers (offer_id, channel_id, reward_id, currency, price, created_at, updated_at)
+           values ('roi-x', '1', 'roi', 'dollars', 10, now(), now())`,
+        ),
+      ).rejects.toThrow(/check/);
+      expect(rollbackSql(COSMETIC)).toMatch(/^drop table cosmetic_awards,/);
+      await db.query(rollbackSql(COSMETIC));
+      expect(await tables()).toEqual(all.filter((t) => !SHOP.includes(t)));
+      expect(await columns()).toEqual(
+        cols.filter(
+          (c) =>
+            !SHOP.some((t) => c.startsWith(`${t}.`)) &&
+            ![
+              'progression_rewards.status',
+              'progression_rewards.style',
+              'progression_rewards.image_id',
+              'progression_rewards.event_key',
+            ].includes(c),
+        ),
+      );
+      // The title itself stays.
+      expect(
+        (
+          await db.query(
+            "select 1 from progression_rewards where reward_id = 'roi'",
+          )
+        ).length,
+      ).toBe(1);
+      await migrate(db, 'prod');
+      expect(await tables()).toEqual(all);
+      expect(await columns()).toEqual(cols);
+      await db.query(
+        'delete from cosmetic_offers; delete from progression_rewards',
+      );
+    });
+
     it('periods: applied, used, rolled back by its header SQL (history and ledger rows kept), then applied again', async () => {
       await migrate(db, 'prod');
       const all = await tables();
@@ -124,12 +181,18 @@ describe.skipIf(!isLocal)(
         /^drop table progression_history, progression_equipped/,
       );
       // The later migration first (its own header), then this one.
+      // The later migrations first (their own headers, newest first), then this one.
+      await db.query(rollbackSql(COSMETIC));
       await db.query(rollbackSql(PERIODS));
       await db.query(sql);
       const after = await tables();
       // The periods were rolled back before (their file is forgotten too): migrate applies both again.
       expect(after.filter((t) => t.startsWith('progression_'))).toEqual([]);
-      expect(after).toEqual(all.filter((t) => !t.startsWith('progression_')));
+      expect(after).toEqual(
+        all.filter(
+          (t) => !t.startsWith('progression_') && !t.startsWith('cosmetic_'),
+        ),
+      );
       expect(
         (
           await db.query(

@@ -90,6 +90,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261114130000_progression_periods.sql',
   // Halloween economy (presence Bonbons, ledger kinds) and alert variants; Lab twin 20261117120000.
   '20261117130000_halloween_economy.sql',
+  // Boutique cosmétique V1 (looks, offers, purchases, module awards); Lab twin 20261118120000.
+  '20261118130000_cosmetic_shop.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -178,6 +180,10 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261114120000_progression_periods_lab.sql',
   // Halloween economy and alert variants: the Lab twin of 20261117130000_halloween_economy.sql (same content).
   '20261117120000_halloween_economy_lab.sql',
+  // Boutique cosmétique V1: the Lab twin of 20261118130000_cosmetic_shop.sql (same content), then the Lab test wallet's
+  // own ledger kind for it.
+  '20261118120000_cosmetic_shop_lab.sql',
+  '20261118120500_lab_ledger_cosmetic.sql',
 ]);
 
 /**

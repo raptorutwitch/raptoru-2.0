@@ -54,7 +54,13 @@ export interface EconomyMovement {
   amount: number;
   /** `sub_wheel`: canonical Wallet only (the Lab ledger has no such kind; the wheel never credits the Lab wallet). */
   kind:
-    'word_game' | 'mini_game' | 'raffle_win' | 'sub_wheel' | 'channel_points';
+    | 'word_game'
+    | 'mini_game'
+    | 'raffle_win'
+    | 'sub_wheel'
+    | 'channel_points'
+    // Boutique cosmétique: a purchase (debit) or its refund (credit), keyed by the purchase.
+    | 'cosmetic';
   /** Ledger reason: the module's idempotency key (unique per kind where the module requires it). */
   key?: string | null;
   moduleId?: string | null;

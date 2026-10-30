@@ -59,7 +59,11 @@ export async function createTestDb(): Promise<Db> {
     await migrate(db, 'all');
     return db;
   })();
-  const db = await shared;
+  return resetTestDb(await shared);
+}
+
+/** Empties a migrated database (every table but the migrations) and puts the migrations' seed rows back. */
+export async function resetTestDb(db: Db): Promise<Db> {
   const tables = await db.query<{ tablename: string }>(
     "select tablename from pg_tables where schemaname = 'public' and tablename <> 'schema_migrations'",
   );

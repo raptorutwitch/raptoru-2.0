@@ -44,6 +44,12 @@ const PREFIXES = [
   '/v1/lab/events/',
   // Progression native: XP, levels, titles and badges (Studio's panel, docs/PROGRESSION.md).
   '/v1/lab/progression/',
+  // Boutique cosmétique V1: Studio's editor (docs/COSMETIC_SHOP.md) and the looks' stylesheet (public, read only).
+  '/v1/lab/cosmetics/',
+  '/v1/cosmetics/style.json',
+  // Halloween « Titres » in the Extension Lab: the shop's catalogue, a viewer's side and the purchase (Lab Core).
+  '/v1/cosmetics/catalog',
+  '/v1/site/cosmetics/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

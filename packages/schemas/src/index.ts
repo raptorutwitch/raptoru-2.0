@@ -26,3 +26,4 @@ export * from './bot-instance.js';
 export * from './spotify.js';
 export * from './event-shop.js';
 export * from './progression.js';
+export * from './cosmetics.js';

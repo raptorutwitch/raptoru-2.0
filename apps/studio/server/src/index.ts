@@ -72,6 +72,7 @@ import { DockHub } from './dock/hub.js';
 import { DockKey, DockServer } from './dock/server.js';
 import { dockStudioApi, type DockRuntime } from './dock/studio-api.js';
 import { HalloweenRuntime } from './halloween/runtime.js';
+import { CosmeticsRelay } from './cosmetics/relay.js';
 import { ProgressionRelay } from './progression/relay.js';
 import {
   createLocalRuntime,
@@ -390,6 +391,8 @@ export function createStudioServer(
   halloween: HalloweenRuntime | null = null,
   /** Progression native (docs/PROGRESSION.md): Studio's panel relay to the profile's Core. */
   progression: ProgressionRelay | null = null,
+  /** Boutique cosmétique V1: the « Boutique » tab relay and the preview's stylesheet / images. */
+  cosmetics: CosmeticsRelay | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -476,6 +479,7 @@ export function createStudioServer(
       // Halloween: overlay page / media (its key), Electron main (screens), Studio's panel and the shop relay.
       if (halloween && (await halloween.handle(req, res, url))) return;
       if (progression && (await progression.handle(req, res, url))) return;
+      if (cosmetics && (await cosmetics.handle(req, res, url))) return;
       // Twitch alerts V1: Core queues; Studio serves the OBS source / preview and relays the claims / reports.
       if (alerts && (await alerts.handle(req, res, url))) return;
       if (points && (await points.handle(req, res, url))) return;
@@ -1175,6 +1179,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     dock,
     halloween,
     new ProgressionRelay({ core: alertsCore, environment: alertsEnv }),
+    // Boutique cosmétique V1 (docs/COSMETIC_SHOP.md): the profile's Core decides; Studio edits and previews.
+    new CosmeticsRelay({ core: alertsCore, environment: alertsEnv }),
   );
   supervisor.start();
   if (dock)

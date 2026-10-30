@@ -156,6 +156,8 @@ createApp({
   // Progression native (docs/PROGRESSION.md): OFF until turned on in Studio.
   progression: core.progression,
   siteToken: config.SITE_TOKEN,
+  // Boutique cosmétique (docs/COSMETIC_SHOP.md): Studio › Boutique and, with SITE_TOKEN, raptoru.fr's shop.
+  cosmetics: core.cosmetics,
   // Caution: the paired Studio (state) and the bot (Twitch executor); `!caution` itself only with CAUTION_CHAT=true.
   caution: core.caution,
   // Votekick V2: the paired Studio (state, overlay, mute) and the bot (Twitch executor); chat only with VOTEKICK_CHAT.
