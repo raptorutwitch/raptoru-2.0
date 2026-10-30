@@ -19,9 +19,9 @@ describe('pickCaptureWindow', () => {
     expect(pickCaptureWindow([LIST[0]!], OWN, null)).toBeNull();
   });
   it('chosen: exact title, else contained (any case); a closed choice gives nothing', () => {
-    expect(
-      pickCaptureWindow(LIST, OWN, 'OBS 32.0 - Profil : Twitch')?.id,
-    ).toBe('window:4:0');
+    expect(pickCaptureWindow(LIST, OWN, 'OBS 32.0 - Profil : Twitch')?.id).toBe(
+      'window:4:0',
+    );
     expect(pickCaptureWindow(LIST, OWN, 'dofus')?.id).toBe('window:2:0');
     expect(pickCaptureWindow(LIST, OWN, 'Raptoru Halloween')).toBeNull();
     expect(pickCaptureWindow(LIST, OWN, 'Elden Ring')).toBeNull();
