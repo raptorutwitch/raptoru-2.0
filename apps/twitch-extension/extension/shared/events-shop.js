@@ -245,7 +245,7 @@ export function titlesHtml(t, ui = {}) {
     </li>`;
   });
   return `<p class="evs-note evs-titles-note">🏷️ <b>Récompenses permanentes</b> : un titre acheté reste à toi, même après Halloween
-      (contrairement aux effets et screamers, joués une fois). Retrouve-le dans ta collection sur raptoru.fr.</p>
+      (contrairement aux effets et screamers, joués une fois). Retrouve-le dans ta collection Raptoru.</p>
     ${rows.length ? `<ul class="evs-list">${rows.join('')}</ul>` : '<div class="evs-empty">Aucun titre en vente pour le moment.</div>'}`;
 }
 
