@@ -88,34 +88,41 @@ sans changer de code.
 - **Ajoutés le 30/10, désactivés par défaut** (le Core les insère dans un catalogue existant sans toucher aux prix,
   noms ni états déjà réglés ; Studio les active) :
   - Chaos : Écran retourné 5 (10 s, recharge 5 min), Flou 3 (6 s, moyen, recharge 2 min) — § 4 bis ;
-  - screamers à 10 : Miss Minute, Mutant au couteau, Coucou…, Chika ;
-  - apparitions : « Hello… » 2 (son seul, rubrique Sons), Fantôme 5, Nuée de chauves-souris 6 (rubrique Spécial),
-    Fantôme furtif 3 (muet).
+  - Chika (screamer, 10) et Fantôme (apparition avec son, 5).
   - Leurs miniatures sont dans `assets/halloween/` pour la **prochaine** version de l'extension : l'extension publiée
-    les affiche sans image. Le chat (`!peur flip`, `!peur s-miss-minute`…) n'en a pas besoin.
+    les affiche sans image. Le chat (`!peur flip`, `!peur s-chika`…) n'en a pas besoin.
+- **Retirés le 30/10 (décision d'Antoni)** : Miss Minute et « Hello » (c'est l'alerte Follow Halloween, § 14), la nuée
+  de chauves-souris (une transition OBS), Mutant au couteau (pas de son), Coucou, Fantôme furtif (doublon). Le Core les
+  supprime du catalogue s'ils n'ont jamais été achetés, sinon il les garde désactivés (les achats gardent leur article).
 
-## 4 bis. Chaos : écran retourné et flou (30/10)
+## 4 bis. Chaos : écran retourné et flou sur tout l'écran (30/10)
 
-Le vrai écran du joueur n'est jamais modifié (aucune orientation Windows changée) : l'overlay **capture la fenêtre du
-jeu** et la redessine par-dessus elle-même, retournée ou floue. Le joueur continue à jouer (souris et clavier vont au
-jeu, l'overlay laisse passer les clics) et OBS, qui capture l'écran, montre la même chose aux viewers.
+Le vrai réglage de Windows n'est jamais modifié : une fenêtre **« Raptoru Chaos »** (Electron, transparente, au-dessus
+de tout, clics transmis) couvre l'écran choisi pour l'overlay, **capture tout cet écran** et le redessine retourné ou
+flou. Quelle que soit l'application devant (jeu, navigateur, bureau, OBS), et même si le joueur change de fenêtre,
+c'est l'écran entier qui est traité. Aucune fenêtre de jeu à choisir.
 
-- **Fenêtre capturée** : celle choisie dans Studio › Halloween › Chaos (« Fenêtre du jeu »), sinon la fenêtre au premier
-  plan qui n'est pas Studio. Jamais l'écran entier (l'overlay se capturerait lui-même), jamais une fenêtre de Studio.
-  Fenêtre choisie fermée : l'effet échoue proprement (rien ne s'affiche ; un achat non démarré est remboursé).
-- **Écran retourné** : tête en bas (180°), miroir (gauche ↔ droite) ou inversé (haut ↔ bas), 3 à 60 s, avec un
-  retournement animé de 0,7 s à l'aller et au retour.
+- **Pas de boucle** : Windows exclut cette fenêtre de toute capture d'écran (protection du contenu, affinité
+  « exclure de la capture », Windows 10 2004 et plus) : sa capture ne la voit jamais. Elle est la seule page autorisée à
+  capturer, et seulement l'écran qu'elle couvre.
+- **Pour les viewers** : OBS ne voit pas non plus cette fenêtre. Studio applique donc le même effet à la capture
+  d'écran OBS avec des filtres (Studio › Halloween › Chaos › « Capture d'écran OBS » puis « Préparer les filtres OBS »,
+  une fois, hors live : 6 filtres « Raptoru Chaos · … » créés désactivés, jamais écrasés). Pendant l'effet, Studio
+  active le bon filtre puis le coupe à la fin, à STOP ALL, ou au redémarrage de Studio (action temporaire d'ObsActions).
+  Plugins : obs-shaderfilter (retournements) et obs-composite-blur (Gaussien / Zone). Vérifié dans un vrai OBS 32.2.2.
+  Sans OBS relié à Studio ou sans capture choisie : l'effet est sur l'écran du joueur seulement (Studio le dit).
+- **Écran retourné** : rotation 180°, miroir horizontal ou retournement vertical, 3 à 60 s, retournement animé de 0,7 s
+  à l'aller et au retour (OBS : bascule nette).
 - **Flou** : faible / moyen / fort, 2 à 30 s, légèrement agrandi pendant le flou (aucun bord net ne dépasse).
 - **Arrêt** : fin automatique, STOP ALL (bouton ou Ctrl+Maj+F12) immédiat, délai maximal comme les autres effets,
-  fermeture ou plantage de Studio (la fenêtre de l'overlay disparaît avec lui), redémarrage : rien n'est rejoué.
-- **Un effet à la fois** (comme tout le moteur : un second est refusé `busy`). Les politiques de Chaos Control
-  (Replace, Stack, Queue) ne s'appliquent pas : le moteur Halloween a sa règle unique « un à la fois, sans file ».
-- **Limites connues** : le jeu doit être en **fenêtré sans bordure** sur l'écran de l'overlay (le plein écran exclusif
-  passe au-dessus de toute fenêtre) ; un jeu lancé **en administrateur**, ou Studio lancé en administrateur, ne peut pas
-  être capturé (Windows refuse : l'effet échoue proprement) ; une fenêtre plus petite que l'écran est étirée à tout
-  l'écran ; décalage d'une ou deux images pendant l'effet.
-- **Tests gratuits** : Studio › Halloween › Chaos › « Tester » (sans Core ni Bonbon). La dernière fenêtre capturée est
-  affichée et écrite dans le journal.
+  fermeture ou plantage de Studio (les fenêtres disparaissent avec lui ; le filtre OBS a sa fin programmée),
+  redémarrage : rien n'est rejoué.
+- **Un effet à la fois** (règle du moteur : un second est refusé `busy`).
+- **Limites** : le jeu en plein écran **exclusif** passe au-dessus de toute fenêtre (rester en fenêtré sans bordure) ;
+  Studio lancé **en administrateur** ne peut pas capturer l'écran (Windows refuse : l'effet échoue proprement) ; un ou
+  deux images de décalage pendant l'effet ; le curseur réel reste à sa place (l'image retournée n'inverse pas la souris).
+- **Tests gratuits** : Studio › Halloween › Chaos › « Tester » (sans Core ni Bonbon) ; l'état réel (fenêtre Chaos,
+  OBS, filtres) et le dernier effet joué sont affichés.
 
 ## 5. Médias
 
@@ -328,13 +335,14 @@ Avant tout : la PR #35 est relue puis **fusionnée** (GO), puisque Core, Studio 
 
 ## 10. Tests
 
-**30/10 (Chaos, médias, ambiance)** : `halloween-chaos.test.ts` (fenêtre choisie, liste des fenêtres venant d'Electron
-seulement, paramètres d'un test, fenêtre capturée au journal, STOP ALL), `capture-window.test.ts` (jamais une fenêtre
-de Studio, fenêtre fermée = rien), `event-shop.test.ts` (nouveaux articles insérés désactivés sans toucher aux
-réglages de Studio), e2e Chromium `halloween-ambiance.e2e.ts` (source coupée = rien, interrupteurs immédiats, un vol,
-source « araignée seule », Chaos sans fenêtre capturable = échec propre). **Sur le vrai bureau Windows** (Studio lancé
-normalement, sans droits administrateur) : écran retourné et miroir, flou fort, double déclenchement refusé, STOP ALL
-en plein effet, Studio tué en plein effet → écran propre. **Non testé** : dans OBS, en jeu réel, par Antoni.
+**30/10 (Chaos, alertes, catalogue, ambiance)** : `halloween-chaos.test.ts` (l'effet va à la fenêtre Chaos, refus sans
+elle, filtre OBS activé au début et coupé à la fin et à STOP ALL, filtres créés désactivés sans écraser),
+`capture-window.test.ts` (l'écran couvert, jamais un autre), `alerts-halloween.test.ts` (profil coupé = alertes
+habituelles intactes, profil actif, Prime, Resub, paliers Jerry, rejeu, test forcé ignoré pour un vrai événement),
+`alerts-studio.test.ts` (média Halloween absent → alerte habituelle), `event-shop.test.ts` (articles retirés supprimés ou
+désactivés, nouveaux insérés désactivés), e2e Chromium `halloween-ambiance.e2e.ts`. **Vrai OBS 32.2.2** (copie portable,
+image de test) : les 3 retournements et les 3 niveaux de flou rendus par les filtres créés par Studio. **Non testé
+par Antoni** : tout le reste en vrai.
 
 - **Core** (`event-shop.test.ts`, 21 tests) : règles, idempotence, sort des exécutions, conversion, subs et dons,
   STOP ALL, fermeture contrôlée et réouverture.
@@ -441,3 +449,31 @@ autres lecteurs. Elle reprend le tube de 2024 :
 Estimation : environ une journée (Core, Studio, page OBS, conversions et tests). C'est faisable avant samedi
 seulement si la chaîne d'achat est validée en vrai d'ici là. Sinon, la solution de repli est un compteur texte dans
 OBS mis à jour à la main.
+
+## 14. Alertes Twitch Halloween (30/10) — un profil activable
+
+Un **profil d'alertes** dans le Core (règles de l'événement, `halloween_alerts`, **coupé par défaut**) : activé, les
+vrais événements Twitch jouent les variantes Halloween ; coupé, les alertes habituelles, inchangées. Même moteur, même
+file, même dédoublonnage, même source OBS « Alertes » : aucune seconde connexion Twitch. Se coupe d'un clic dans Studio,
+sans redéployer (Studio › Halloween › Alertes Halloween).
+
+| Événement              | Alerte Halloween                                                                                   | Médias                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Follow                 | Miss Minute                                                                                        | sa vidéo avec « Hello » intégré (un seul fichier, synchronisé ; sa piste d'origine était muette) |
+| Sub, Prime, Resub      | le Ballon, tiré au hasard parmi les animations cochées pour chacun (par défaut les 4)              | Ballon 1 bonbons, 2 citrouilles, 3 bonbons maïs, 4 araignées + « Le Ballon V2 »                  |
+| Subgift (lot)          | Jerry selon le nombre : 1, 5, 10, 20 (paliers des noms de fichiers, comme les alertes habituelles) | Jerry 1 / 5 / 10 / 20 + « My Ordinary Life » ralentie                                            |
+| Sub offert à un viewer | Jerry 1, le nom du bénéficiaire                                                                    | idem                                                                                             |
+| Raid, bits, dons       | inchangés                                                                                          | —                                                                                                |
+
+- **Repli sûr** : chaque alerte Halloween emporte la variante habituelle ; si un média Halloween manque sur le PC,
+  Studio joue l'alerte habituelle (jamais rien).
+- **Tests** : boutons Follow, Sub, Prime, Resub, Subgift ×1/5/10/20, ciblé — un événement simulé dans la vraie file
+  (source OBS « Alertes »), gratuit (aucun Bonbon ni Jeton, source `simulation`), **en Halloween même profil coupé**
+  (`test_profile`, ignoré pour un vrai événement Twitch). Aperçu et placement : onglet Alertes, variantes `hw_…`.
+- **Textes provisoires** (aucune référence dans les médias) : « {pseudo} vient de follow ! », « … vient de s'abonner ! »,
+  « … s'abonne avec Prime ! », « … se réabonne : {months} mois ! », « {pseudo} × {count} » (Jerry). Position calibrable.
+- **Médias** : convertis par `apps/studio/server/src/alerts/halloween-import-cli.ts` dans le stockage d'alertes de
+  Studio (déjà importés dans le Studio installé le 30/10). « My Ordinary Life » ralentie est une musique commerciale :
+  copie locale seulement, jamais dans Git ; à remplacer ou couper si Twitch la signale.
+- **Production** : demande le déploiement du Core (les variantes y vivent) et du nouveau Studio ; le profil reste coupé
+  jusqu'au clic d'Antoni.
