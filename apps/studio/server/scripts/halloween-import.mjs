@@ -308,6 +308,21 @@ export const MEDIA = [
     file: 'Anim de stream/Petit fantome.mov',
     kind: 'apparition',
   },
+  // Decor of the « Ambiance Halloween » OBS source (never sold, never played on the streamer's screen): silent.
+  {
+    id: 'decor-araignee-cam',
+    label: 'Araignée de la cam',
+    file: "Séquence d'images/Araignée Overlay Cam/Araignée Overlay Cam Mouche.mov",
+    kind: 'decor',
+    mute: true,
+  },
+  {
+    id: 'decor-chauves-souris',
+    label: 'Vol de chauves-souris',
+    file: 'Anim de stream/Chauve souris Fx.mov',
+    kind: 'decor',
+    mute: true,
+  },
 ];
 
 function ff(args) {
@@ -380,7 +395,7 @@ function main() {
       !FORCE &&
       prev &&
       existsSync(out) &&
-      existsSync(thumb) &&
+      (m.kind === 'decor' || existsSync(thumb)) &&
       prev.source?.size === source.size &&
       prev.source?.mtime === source.mtime
     ) {
@@ -393,18 +408,19 @@ function main() {
       ? ['-ss', String(m.clip[0]), '-t', String(m.clip[1])]
       : [];
     const tmp = `${out}.part.webm`;
-    const audio = before.audio
-      ? [
-          '-af',
-          'loudnorm=I=-16:TP=-1.5:LRA=11',
-          '-c:a',
-          'libopus',
-          '-b:a',
-          '128k',
-          '-ar',
-          '48000',
-        ]
-      : ['-an'];
+    const audio =
+      before.audio && !m.mute
+        ? [
+            '-af',
+            'loudnorm=I=-16:TP=-1.5:LRA=11',
+            '-c:a',
+            'libopus',
+            '-b:a',
+            '128k',
+            '-ar',
+            '48000',
+          ]
+        : ['-an'];
     const enc = ff([
       '-y',
       ...clip,
@@ -451,7 +467,7 @@ function main() {
       label: m.label,
       kind: m.kind,
       file: `${m.id}.webm`,
-      thumb: `assets/halloween/${m.id}.jpg`,
+      thumb: m.kind === 'decor' ? null : `assets/halloween/${m.id}.jpg`,
       duration_ms: after.duration_ms,
       width: after.width,
       height: after.height,
@@ -472,6 +488,8 @@ function main() {
     );
   }
   function makeThumb(src, m, alpha, durationMs, thumb) {
+    // A decor is never in the shop: no thumbnail in the extension.
+    if (m.kind === 'decor') return;
     // Thumbnail: the most visible frame, over the shop's dark background (no transparency in a JPEG).
     // A sound only takes its picture from the video it belongs to (thumbFrom, transparent like the others).
     if (m.thumbFrom) {

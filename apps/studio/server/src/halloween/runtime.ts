@@ -48,7 +48,33 @@ export interface HalloweenSettings {
    * automatic (the topmost window that is not Studio's own).
    */
   capture_window: string | null;
+  /** « Ambiance Halloween » OBS source (decor for the viewers, never on the streamer's screen). */
+  ambiance: AmbianceSettings;
 }
+
+export interface AmbianceSettings {
+  /** Master switch: off = the source shows nothing at all. */
+  enabled: boolean;
+  /** The spider wandering around the webcam (a 4 min 50 loop). */
+  spider: boolean;
+  /** Bats crossing the screen now and then. */
+  bats: boolean;
+  /** Minutes between two flights (0: only when Studio asks). */
+  bats_every_min: number;
+  /** A dark vignette at the edges (the middle of the screen stays clear). */
+  vignette: boolean;
+  /** 0.1–1. */
+  vignette_strength: number;
+}
+
+const DEFAULT_AMBIANCE: AmbianceSettings = {
+  enabled: false,
+  spider: true,
+  bats: true,
+  bats_every_min: 15,
+  vignette: true,
+  vignette_strength: 0.5,
+};
 
 const DEFAULT_SETTINGS: HalloweenSettings = {
   overlay_enabled: true,
@@ -56,12 +82,14 @@ const DEFAULT_SETTINGS: HalloweenSettings = {
   volume: 0.8,
   safe_mode: false,
   capture_window: null,
+  ambiance: DEFAULT_AMBIANCE,
 };
 
 export interface MediaEntry {
   id: string;
   label: string;
-  kind: 'screamer' | 'apparition';
+  /** decor: the « Ambiance Halloween » source only (never sold, never tested on the streamer's screen). */
+  kind: 'screamer' | 'apparition' | 'decor';
   file: string;
   duration_ms: number | null;
   width: number | null;
@@ -133,6 +161,9 @@ const PAGE_FILES: Record<string, string> = {
   'overlay.html': 'text/html; charset=utf-8',
   'overlay.js': 'text/javascript; charset=utf-8',
   'overlay.css': 'text/css; charset=utf-8',
+  'ambiance.html': 'text/html; charset=utf-8',
+  'ambiance.js': 'text/javascript; charset=utf-8',
+  'ambiance.css': 'text/css; charset=utf-8',
 };
 const MEDIA_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
@@ -148,6 +179,9 @@ export class HalloweenRuntime {
   private current: Delivery | null = null;
   private stopEpoch = 0;
   private lastPoll = 0;
+  /** The « Ambiance » page(s): last poll, and the « bats now » counter (Studio's button). */
+  private ambianceSeen = 0;
+  private batsEpoch = 0;
   /** Long-polls of the page waiting right now (a page waiting for work is connected). */
   private polling = 0;
   private pageReady = false;
@@ -226,6 +260,7 @@ export class HalloweenRuntime {
         typeof s.capture_window === 'string' && s.capture_window.trim()
           ? s.capture_window.trim().slice(0, 200)
           : null,
+      ambiance: cleanAmbiance(s.ambiance),
     };
   }
 
@@ -280,7 +315,15 @@ export class HalloweenRuntime {
       displays: this.displays,
       windows: this.windows,
       last_capture: this.lastCapture,
-      media: [...this.media.values()].map((m) => ({
+      ambiance: {
+        settings: this.settings.ambiance,
+        connected:
+          this.ambianceSeen > 0 && this.now() - this.ambianceSeen < 6000,
+        url: this.ambianceUrl(),
+        spider_ready: this.media.has('decor-araignee-cam'),
+        bats_ready: this.media.has('decor-chauves-souris'),
+      },
+      media: [...this.sellable()].map((m) => ({
         id: m.id,
         label: m.label,
         kind: m.kind,
@@ -320,7 +363,7 @@ export class HalloweenRuntime {
         studio_instance_id: this.d.studioId,
         channel_id: this.d.channelId,
         engine_ready: this.ready,
-        media: [...this.media.keys()],
+        media: [...this.sellable()].map((m) => m.id),
       });
       if (!this.coreOk) this.log('Core joint');
       this.coreOk = true;
@@ -635,6 +678,33 @@ export class HalloweenRuntime {
     return `${this.d.origin}/halloween/overlay.html#${this.token}`;
   }
 
+  ambianceUrl() {
+    return `${this.d.origin}/halloween/ambiance.html#${this.token}`;
+  }
+
+  /** What the shop and the tests may play (the decor is the ambiance source's only). */
+  private *sellable() {
+    for (const m of this.media.values()) if (m.kind !== 'decor') yield m;
+  }
+
+  /** The ambiance page asks what to show (every 2 s): its settings, its media and the « bats now » counter. */
+  private ambianceState() {
+    this.ambianceSeen = this.now();
+    const url = (id: string) =>
+      this.media.has(id)
+        ? `/halloween/media/${id}.webm?t=${encodeURIComponent(this.token)}`
+        : null;
+    return {
+      settings: this.settings.ambiance,
+      bats_epoch: this.batsEpoch,
+      stop_epoch: this.stopEpoch,
+      media: {
+        spider: url('decor-araignee-cam'),
+        bats: url('decor-chauves-souris'),
+      },
+    };
+  }
+
   // --- HTTP ----------------------------------------------------------------------------------------------------------
 
   private async body(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -718,6 +788,8 @@ export class HalloweenRuntime {
       return this.serveMedia(req, res, mediaMatch[1]!);
     if (req.method === 'GET' && name === 'overlay/next')
       return this.next(req, url, reply);
+    if (req.method === 'GET' && name === 'ambiance/state')
+      return reply(200, this.ambianceState());
     if (req.method === 'POST' && name === 'overlay/report')
       return this.report(await this.body(req), reply);
     reply(404, { error: 'not_found' });
@@ -775,6 +847,11 @@ export class HalloweenRuntime {
       this.settings = this.clean({
         ...this.settings,
         ...(b as Partial<HalloweenSettings>),
+        // The ambiance is changed one field at a time.
+        ambiance: {
+          ...this.settings.ambiance,
+          ...((b.ambiance as Partial<AmbianceSettings> | undefined) ?? {}),
+        },
       });
       await this.saveSettings();
       if (!this.settings.overlay_enabled && this.current) await this.stopAll();
@@ -787,13 +864,22 @@ export class HalloweenRuntime {
     }
     if (req.method === 'POST' && p === '/api/halloween/stop')
       return reply(200, await this.stopAll());
+    if (req.method === 'POST' && p === '/api/halloween/ambiance/bats') {
+      if (!this.settings.ambiance.enabled || !this.settings.ambiance.bats)
+        return reply(409, { error: 'ambiance_off' });
+      this.batsEpoch += 1;
+      this.log('Ambiance : vol de chauves-souris lancé');
+      return reply(200, { ok: true });
+    }
     if (req.method === 'POST' && p === '/api/halloween/test') {
       // An explicit click of the streamer: plays now, without the Core and without any payment.
       const b = await this.body(req);
       if (!this.pageConnected) return reply(409, { error: 'overlay_absent' });
       if (this.current) return reply(409, { error: 'busy' });
       const media =
-        typeof b.media_id === 'string' ? this.media.get(b.media_id) : null;
+        typeof b.media_id === 'string'
+          ? [...this.sellable()].find((m) => m.id === b.media_id)
+          : null;
       const effect =
         typeof b.effect === 'string' &&
         (EVENT_EFFECTS as readonly string[]).includes(b.effect)
@@ -874,4 +960,22 @@ export class HalloweenRuntime {
     }
     reply(404, { error: 'not_found' });
   }
+}
+
+function cleanAmbiance(
+  a: Partial<AmbianceSettings> | undefined,
+): AmbianceSettings {
+  const v = { ...DEFAULT_AMBIANCE, ...(a ?? {}) };
+  const num = (x: unknown, lo: number, hi: number, d: number) => {
+    const n = Number(x);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d;
+  };
+  return {
+    enabled: v.enabled === true,
+    spider: v.spider !== false,
+    bats: v.bats !== false,
+    bats_every_min: Math.round(num(v.bats_every_min, 0, 120, 15)),
+    vignette: v.vignette !== false,
+    vignette_strength: num(v.vignette_strength, 0.1, 1, 0.5),
+  };
 }

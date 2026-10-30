@@ -8,6 +8,11 @@ import {
   chaosParams,
   readChaos,
 } from './halloween-chaos.js';
+import {
+  ambianceCard,
+  ambiancePatch,
+  type AmbianceStatus,
+} from './halloween-ambiance.js';
 import { mountViewerFinder } from './halloween-viewer.js';
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
@@ -28,6 +33,7 @@ interface Status {
   };
   windows?: string[];
   last_capture?: { at: string; name: string } | null;
+  ambiance?: AmbianceStatus['ambiance'];
   displays: {
     id: number;
     label: string;
@@ -363,6 +369,7 @@ export function mountHalloween(root: HTMLElement) {
     <div class="hw-grid">
       <section class="card"><h3>Overlay sur mon écran</h3><div data-role="overlay"></div></section>
       <section class="card"><h3>Chaos — écran retourné et flou</h3><div data-role="chaos"></div></section>
+      <section class="card"><h3>Ambiance OBS (pour les viewers)</h3><div data-role="ambiance"></div></section>
       <section class="card"><h3>Boutique</h3><div data-role="shop"></div></section>
       <section class="card wide"><h3>Catalogue</h3><div data-role="catalogue"></div></section>
       <section class="card wide"><h3>Trouver un viewer</h3><div data-role="viewer"></div></section>
@@ -415,6 +422,7 @@ export function mountHalloween(root: HTMLElement) {
   const renderStatus = () => {
     paint('overlay', overlayCard(status));
     paint('chaos', chaosCard(status, chaos));
+    paint('ambiance', ambianceCard(status));
   };
   const renderAdmin = () => {
     paint('shop', shopCard(admin, adminError));
@@ -468,6 +476,11 @@ export function mountHalloween(root: HTMLElement) {
       .chaosTest as 'flip' | 'blur' | undefined;
     if (a === 'stop')
       void act(() => call('/api/halloween/stop', {}), 'Tout est arrêté.');
+    else if (a === 'ambiance-bats')
+      void act(
+        () => call('/api/halloween/ambiance/bats', {}),
+        'Vol de chauves-souris lancé.',
+      );
     else if (chaosTest)
       void act(
         () =>
@@ -527,6 +540,15 @@ export function mountHalloween(root: HTMLElement) {
   });
   root.addEventListener('change', (ev) => {
     const t = ev.target as HTMLInputElement;
+    if (t.dataset.ambiance) {
+      const patch = ambiancePatch(t.dataset.ambiance, t);
+      if (patch)
+        void act(
+          () => call('/api/halloween/settings', { ambiance: patch }),
+          'Ambiance enregistrée.',
+        );
+      return;
+    }
     if (t.dataset.chaos) {
       chaos = readChaos(chaos, t.dataset.chaos, t.value);
       return;
