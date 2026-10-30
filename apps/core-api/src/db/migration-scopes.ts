@@ -90,7 +90,7 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261114130000_progression_periods.sql',
   // Halloween economy (presence Bonbons, ledger kinds) and alert variants; Lab twin 20261117120000.
   '20261117130000_halloween_economy.sql',
-  // Boutique cosmétique V1 (looks, offers, purchases, module awards); Lab twin 20261116120000.
+  // Boutique cosmétique V1 (looks, offers, purchases, module awards); Lab twin 20261118120000.
   '20261118130000_cosmetic_shop.sql',
 ]);
 
