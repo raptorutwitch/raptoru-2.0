@@ -13,6 +13,13 @@ import {
   ambiancePatch,
   type AmbianceStatus,
 } from './halloween-ambiance.js';
+import {
+  alertTest,
+  halloweenAlertsCard,
+  togglePool,
+  type CatalogVariant,
+  type HalloweenAlertRules,
+} from './halloween-alerts.js';
 import { mountViewerFinder } from './halloween-viewer.js';
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
@@ -360,6 +367,9 @@ export function mountHalloween(root: HTMLElement) {
   let status: Status | null = null;
   let admin: Admin | null = null;
   let adminError: string | null = null;
+  let alertCatalog: CatalogVariant[] | null = null;
+  const hwRules = () =>
+    (admin?.settings.rules ?? null) as HalloweenAlertRules | null;
   let visible = false;
   let flash = '';
   let chaos = CHAOS_DEFAULT;
@@ -370,6 +380,7 @@ export function mountHalloween(root: HTMLElement) {
       <section class="card"><h3>Overlay sur mon écran</h3><div data-role="overlay"></div></section>
       <section class="card"><h3>Chaos — écran retourné et flou</h3><div data-role="chaos"></div></section>
       <section class="card"><h3>Ambiance OBS (pour les viewers)</h3><div data-role="ambiance"></div></section>
+      <section class="card wide"><h3>Alertes Halloween (Twitch)</h3><div data-role="hw-alerts"></div></section>
       <section class="card"><h3>Boutique</h3><div data-role="shop"></div></section>
       <section class="card wide"><h3>Catalogue</h3><div data-role="catalogue"></div></section>
       <section class="card wide"><h3>Trouver un viewer</h3><div data-role="viewer"></div></section>
@@ -431,6 +442,10 @@ export function mountHalloween(root: HTMLElement) {
       catalogueCard(admin, status ? status.media.map((m) => m.id) : null),
     );
     paint('bonbons', bonbonsCard(admin));
+    paint(
+      'hw-alerts',
+      halloweenAlertsCard(hwRules(), alertCatalog, adminError),
+    );
   };
   const loadStatus = async () => {
     try {
@@ -447,6 +462,11 @@ export function mountHalloween(root: HTMLElement) {
     } catch (e) {
       adminError = errorText((e as Error).message);
     }
+    // The Halloween alert variants and whether their media are on this PC (the Alerts tab's catalogue).
+    alertCatalog = await call('/api/alerts/catalog').then(
+      (r) => (r.variants as CatalogVariant[]) ?? null,
+      () => null,
+    );
     renderAdmin();
   };
   const act = async (
@@ -476,7 +496,27 @@ export function mountHalloween(root: HTMLElement) {
       .chaosTest as 'flip' | 'blur' | undefined;
     if (a === 'stop')
       void act(() => call('/api/halloween/stop', {}), 'Tout est arrêté.');
-    else if (a === 'ambiance-bats')
+    else if (a === 'toggle-hw-alerts' && admin) {
+      const on = hwRules()?.halloween_alerts === true;
+      void act(
+        () =>
+          call('/api/halloween/admin/settings', {
+            rules: { halloween_alerts: !on },
+          }),
+        on
+          ? 'Alertes habituelles rétablies.'
+          : 'Alertes Halloween actives pour les vrais événements.',
+      );
+    } else if (t.closest('[data-alert-test]')) {
+      const body = alertTest(
+        t.closest<HTMLElement>('[data-alert-test]')!.dataset.alertTest!,
+      );
+      if (body)
+        void act(
+          () => call('/api/alerts/test', body),
+          'Alerte de test envoyée à la source OBS « Alertes ».',
+        );
+    } else if (a === 'ambiance-bats')
       void act(
         () => call('/api/halloween/ambiance/bats', {}),
         'Vol de chauves-souris lancé.',
@@ -540,6 +580,24 @@ export function mountHalloween(root: HTMLElement) {
   });
   root.addEventListener('change', (ev) => {
     const t = ev.target as HTMLInputElement;
+    if (t.dataset.ballon && admin) {
+      const [kind, n] = t.dataset.ballon.split(':');
+      void act(
+        () =>
+          call('/api/halloween/admin/settings', {
+            rules: {
+              halloween_ballon: togglePool(
+                hwRules()?.halloween_ballon,
+                kind as 'sub' | 'prime' | 'resub',
+                Number(n),
+                t.checked,
+              ),
+            },
+          }),
+        'Ballons enregistrés.',
+      );
+      return;
+    }
     if (t.dataset.ambiance) {
       const patch = ambiancePatch(t.dataset.ambiance, t);
       if (patch)

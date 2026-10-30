@@ -28,6 +28,7 @@ import {
   defaultItems,
   editionTitle,
   LATE_ITEMS,
+  RETIRED_ITEMS,
   thumbOf,
 } from './catalog.js';
 import {
@@ -197,6 +198,16 @@ export class EventShopService {
         // Items added since the catalogue was created: inserted disabled, never over an existing one (Studio's price,
         // name or state stay as they are). Remembered only once they are SEEN in the base (a rolled-back transaction
         // inserted nothing: the next call does it again).
+        // Retired items: gone where never bought, disabled where a purchase refers to them (history intact).
+        await q.query(
+          `delete from event_shop_items i where i.channel_id = $1 and i.item_id = any($2) and not exists
+             (select 1 from event_shop_purchases p where p.channel_id = i.channel_id and p.item_id = i.item_id)`,
+          [channelId, RETIRED_ITEMS],
+        );
+        await q.query(
+          'update event_shop_items set enabled = false where channel_id = $1 and item_id = any($2) and enabled',
+          [channelId, RETIRED_ITEMS],
+        );
         const ids = [...LATE_ITEMS];
         const have = await q.query<{ n: number }>(
           'select count(*)::int as n from event_shop_items where channel_id = $1 and item_id = any($2)',

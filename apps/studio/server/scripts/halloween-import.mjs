@@ -255,34 +255,6 @@ export const MEDIA = [
     kind: 'apparition',
     clip: [0, 12],
   },
-  // 30/10 — the « ready to take » list of docs/HALLOWEEN.md § 11 A (Miss Minute and the others).
-  {
-    id: 'miss-minute',
-    label: 'Miss Minute',
-    file: "Séquence d'images/Miss Minute Screamer/Miss Minute Halloween.mov",
-    kind: 'screamer',
-  },
-  {
-    // Sound only: « Hello… » (its thumbnail is Miss Minute's face).
-    id: 'miss-minute-hello',
-    label: '« Hello… »',
-    file: "Séquence d'images/Miss Minute Screamer/Hello Audio.mp3",
-    kind: 'apparition',
-    thumbFrom:
-      "Séquence d'images/Miss Minute Screamer/Miss Minute Halloween.mov",
-  },
-  {
-    id: 'mutant-couteau',
-    label: 'Mutant au couteau',
-    file: 'Anim de stream/Mutant couteau.mov',
-    kind: 'screamer',
-  },
-  {
-    id: 'chien-coucou',
-    label: 'Coucou…',
-    file: 'Anim de stream/Screamer Chien coucou.mov',
-    kind: 'screamer',
-  },
   {
     id: 'chika',
     label: 'Chika',
@@ -293,19 +265,6 @@ export const MEDIA = [
     id: 'fantome',
     label: 'Fantôme',
     file: 'Anim de stream/Fantome Anim Son.mov',
-    kind: 'apparition',
-  },
-  {
-    id: 'nuee-chauves-souris',
-    label: 'Nuée de chauves-souris',
-    file: "Séquence d'images/Transition Halloween/Transition Chauve souris.mov",
-    kind: 'apparition',
-  },
-  {
-    // Silent: a ghost slips across the screen.
-    id: 'petit-fantome',
-    label: 'Fantôme furtif',
-    file: 'Anim de stream/Petit fantome.mov',
     kind: 'apparition',
   },
   // Decor of the « Ambiance Halloween » OBS source (never sold, never played on the streamer's screen): silent.

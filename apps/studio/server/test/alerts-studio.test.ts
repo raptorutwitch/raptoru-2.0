@@ -428,6 +428,28 @@ describe('AlertsRuntime', () => {
     });
   });
 
+  it('Halloween profile: a Halloween variant whose media this PC lacks plays the usual one frozen with it', async () => {
+    const halloween = {
+      ...CLAIMED,
+      variant: {
+        id: 'hw_follow_miss_minute',
+        video: 'Halloween Follow Miss Minute.webm',
+        audio: null,
+        fallback: VARIANT,
+      },
+    };
+    let claims = 0;
+    const { token, calls, post } = await setup((path) =>
+      path.endsWith('/claim') ? { alert: claims++ ? null : halloween } : {},
+    );
+    const out = (await (
+      await post('/alerts/next', { token, consumer_id: 'obs-1' })
+    ).json()) as { alert: { variant: { id: string } } };
+    expect(out.alert.variant.id).toBe(VARIANT.id);
+    // Played, never reported failed.
+    expect(calls.some((c) => c.path.endsWith('/ack'))).toBe(false);
+  });
+
   it('relays the source reports as they are (Core keeps them idempotent); Core refusals pass through', async () => {
     const { token, calls, post } = await setup((path, body) => {
       if ((body as { event?: string }).event === 'completed')

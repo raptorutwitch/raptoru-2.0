@@ -146,24 +146,6 @@ const SEEDS: Seed[] = [
     cooldown_ms: 120_000,
     enabled: false,
   },
-  media('screamer', 's-miss-minute', 'Miss Minute', 10, {
-    media_id: 'miss-minute',
-    enabled: false,
-  }),
-  media('apparition', 'miss-minute-hello', '« Hello… »', 2, {
-    description: 'Une petite voix lui dit bonjour…',
-    params: { category: 'sound' },
-    cooldown_ms: 60_000,
-    enabled: false,
-  }),
-  media('screamer', 's-mutant-couteau', 'Mutant au couteau', 10, {
-    media_id: 'mutant-couteau',
-    enabled: false,
-  }),
-  media('screamer', 's-chien-coucou', 'Coucou…', 10, {
-    media_id: 'chien-coucou',
-    enabled: false,
-  }),
   media('screamer', 's-chika', 'Chika', 10, {
     media_id: 'chika',
     enabled: false,
@@ -172,30 +154,29 @@ const SEEDS: Seed[] = [
     description: 'Un fantôme surgit en hurlant.',
     enabled: false,
   }),
-  media('apparition', 'nuee-chauves-souris', 'Nuée de chauves-souris', 6, {
-    description: 'Une nuée envahit tout son écran.',
-    params: { category: 'special' },
-    enabled: false,
-  }),
-  media('apparition', 'petit-fantome', 'Fantôme furtif', 3, {
-    description: 'Un petit fantôme traverse son écran sans un bruit.',
-    enabled: false,
-  }),
 ];
 
 /** Items added after the first seeding: a channel that already has its catalogue gets them (disabled), once. */
 export const LATE_ITEMS: ReadonlySet<string> = new Set([
   'flip',
   'blur',
+  's-chika',
+  'fantome',
+]);
+
+/**
+ * Items of the 30/10 first version that are NOT shop items (Antoni, 30/10): Miss Minute and « Hello » are the Halloween
+ * follow alert, the bat swarm an OBS transition; Mutant au couteau (no sound), Coucou and Fantôme furtif (a duplicate)
+ * are dropped. Removed where nobody bought them, otherwise kept disabled (purchases keep their item).
+ */
+export const RETIRED_ITEMS: readonly string[] = [
   's-miss-minute',
   'miss-minute-hello',
   's-mutant-couteau',
   's-chien-coucou',
-  's-chika',
-  'fantome',
-  'nuee-chauves-souris',
   'petit-fantome',
-]);
+  'nuee-chauves-souris',
+];
 
 export function defaultItems(): EventShopItem[] {
   return SEEDS.map((s, i) => ({
