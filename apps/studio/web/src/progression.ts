@@ -3,6 +3,8 @@
 // (every row kept; the waiting ones attached later, automatically or by a decision here) and its undo. Studio only relays: the
 // profile's Core decides and records (/api/progression/* → /v1/lab|studio/progression/*).
 
+import { createLevelUpPanel } from './progression-level-up.js';
+
 type Json = Record<string, unknown>;
 type Reward = {
   reward_id: string;
@@ -17,7 +19,7 @@ type Reward = {
 };
 type State = {
   enabled: boolean;
-  rules: Record<string, number | boolean | string[]>;
+  rules: Record<string, number | boolean | string | string[] | null>;
   catalog: Reward[];
 };
 type ViewerRow = {
@@ -48,6 +50,18 @@ type Detail = {
 };
 
 type Journal = {
+  notify?: 'off' | 'text' | 'sound';
+  normalization?: {
+    version: number;
+    wizebotLevel: number | null;
+    previousLevel: number;
+    previousXp: number;
+    nativeXp: number;
+    newLevel: number;
+    newXp: number;
+    appliedAt: string;
+    revertedAt: string | null;
+  } | null;
   movements: {
     kind: string;
     amount: number;
@@ -87,6 +101,7 @@ const KIND_FR: Record<string, string> = {
   import: 'Reprise',
   grant: 'Ajout',
   correction: 'Correction',
+  normalization: 'Normalisation Level Up V2',
 };
 const ADJUST: [string, string][] = [
   ['add', 'Ajouter de l’XP'],
@@ -123,6 +138,14 @@ const RULES: [string, string, string][] = [
   ['curve_base', 'Courbe : base', '1'],
   ['curve_exponent', 'Courbe : exposant', '0.05'],
 ];
+
+const NOTIFY_FR: Record<string, string> = {
+  off: 'Désactivé',
+  text: 'Écrit',
+  sound: 'Sonore',
+};
+// Level Up V2: once the levels are fixed, the curve is not a setting any more (Core refuses it).
+const CURVE_RULES = new Set(['curve_base', 'curve_exponent']);
 
 export function mountProgression(root: HTMLElement) {
   let state: State | null = null;
@@ -163,6 +186,7 @@ export function mountProgression(root: HTMLElement) {
       importStatus = (await call('/api/progression/import/status').catch(
         () => null,
       )) as unknown as ImportStatus | null;
+      await levelUp.load();
       if (selected) {
         const id = selected.row.twitch_user_id;
         selected.detail = (await call(
@@ -177,6 +201,8 @@ export function mountProgression(root: HTMLElement) {
     }
     render();
   };
+
+  const levelUp = createLevelUpPanel(call, esc, fmt);
 
   const rewardOptions = (kind?: string) =>
     (state?.catalog ?? [])
@@ -209,7 +235,15 @@ export function mountProgression(root: HTMLElement) {
           <p class="muted">Présence = vue dans deux relevés des chatters de suite (toutes les 2 min) ; un spectateur absent de cette liste n’est pas compté.</p>
         </section>
         <section class="card"><h3>Règles</h3>
-          ${RULES.map(([k, label, step]) => `<label class="row">${esc(label)} <input type="number" step="${step}" data-rule="${k}" value="${esc(s.rules[k])}"></label>`).join('')}
+          ${RULES.filter(
+            ([k]) => !(s.rules.level_model === 'fixed' && CURVE_RULES.has(k)),
+          )
+            .map(
+              ([k, label, step]) =>
+                `<label class="row">${esc(label)} <input type="number" step="${step}" data-rule="${k}" value="${esc(s.rules[k])}"></label>`,
+            )
+            .join('')}
+          ${s.rules.level_model === 'fixed' ? `<p>Palier : <b>${fmt(Number(s.rules.curve_base))} XP par niveau</b> (fixe, Level Up V2).</p>` : ''}
           <label class="row"><input type="checkbox" data-rule="live_only" ${s.rules.live_only ? 'checked' : ''}> Chat compté seulement en live</label>
           <button type="button" data-act="rules">Enregistrer les règles</button>
         </section>
@@ -251,6 +285,11 @@ export function mountProgression(root: HTMLElement) {
               <input placeholder="raison (obligatoire, gardée)" data-role="adj-reason" maxlength="200">
               <button type="button" data-act="adjust">Appliquer</button></div>
             <p class="muted">Jamais en dessous de 0 ; le niveau suit l’XP. Chaque ajustement est journalisé (qui, quand, pourquoi).</p>
+            <h4>Annonces de Level Up</h4>
+            <div class="row-in"><select data-role="notify-mode">${['off', 'text', 'sound'].map((m) => `<option value="${m}" ${(selected!.journal.notify ?? 'off') === m ? 'selected' : ''}>${NOTIFY_FR[m]}</option>`).join('')}</select>
+              <button type="button" data-act="notify-set">Enregistrer le mode</button></div>
+            <p class="muted">Le choix du viewer (extension) ; Désactivé par défaut.</p>
+            ${selected.journal.normalization ? `<p class="muted">Level Up V2${selected.journal.normalization.revertedAt ? ' (annulée)' : ''} : niveau WizeBot ${selected.journal.normalization.wizebotLevel ?? '—'} · avant : niveau ${selected.journal.normalization.previousLevel}, ${fmt(selected.journal.normalization.previousXp)} XP (dont ${fmt(selected.journal.normalization.nativeXp)} gagnées / ajustées) · après : niveau ${selected.journal.normalization.newLevel}, ${fmt(selected.journal.normalization.newXp)} XP.</p>` : ''}
             <h4>Journal</h4>
             ${selected.journal.sources.map((h) => `<p class="muted">Historique WizeBot « ${esc(h.login)} » : niveau ${h.level}, relevé le ${esc(new Date(h.measuredAt).toLocaleDateString('fr-FR'))}, rattaché ${h.attachedBy === 'manual' ? 'à la main' : h.attachedBy === 'id' ? 'par identifiant Twitch' : 'par pseudo'}.</p>`).join('')}
             <ul class="list">${selected.journal.movements.map((m) => `<li>${esc(new Date(m.at).toLocaleString('fr-FR'))} · ${esc(KIND_FR[m.kind] ?? m.kind)} <b>${m.amount > 0 ? '+' : ''}${fmt(m.amount)} XP</b> <span class="muted">${esc(m.actor)}${m.reason ? ` — ${esc(m.reason)}` : ''}</span></li>`).join('') || '<li class="muted">Aucun ajustement ni reprise.</li>'}</ul>
@@ -258,6 +297,7 @@ export function mountProgression(root: HTMLElement) {
               : ''
           }
         </section>
+        ${levelUp.html(s.rules as Record<string, unknown>)}
         <section class="card"><h3>Reprise de WizeBot</h3>
           <p class="muted">Lit les niveaux, le temps de présence et les messages de WizeBot (via raptoru.fr) et démarre chaque viewer à son niveau, une seule fois. Chaque ligne est gardée avec sa date ; celles qu’on ne peut pas rattacher avec certitude attendent : elles se rattachent seules quand le viewer revient (stream, connexion sur raptoru.fr), ou ici sur décision.</p>
           ${importStatus ? `<p>Rattachés : <b>${fmt(importStatus.imported)}</b> · en attente : <b>${fmt(importStatus.pending + importStatus.ambiguous + importStatus.conflict)}</b> <span class="muted">(${fmt(importStatus.pending)} inconnus du Core, ${fmt(importStatus.ambiguous)} ambigus, ${fmt(importStatus.conflict)} conflits)${importStatus.lastMeasuredAt ? ` · dernier relevé ${esc(new Date(importStatus.lastMeasuredAt).toLocaleString('fr-FR'))}` : ''}</span></p>` : ''}
@@ -289,6 +329,26 @@ export function mountProgression(root: HTMLElement) {
     const attach = t.closest<HTMLElement>('[data-attach]')?.dataset.attach;
     const val = (sel: string) =>
       root.querySelector<HTMLInputElement>(sel)?.value ?? '';
+    if (a && (a.startsWith('lv2-') || a.startsWith('lu-'))) {
+      void levelUp.click(a, root).then(async (r) => {
+        if (r.message) flash = r.message;
+        await load();
+      });
+      return;
+    }
+    if (a === 'notify-set' && selected) {
+      void act(
+        () =>
+          call(
+            `/api/progression/viewers/${selected!.row.twitch_user_id}/notify`,
+            {
+              level_up_notify: val('[data-role="notify-mode"]'),
+            },
+          ),
+        'Mode d’annonce enregistré.',
+      );
+      return;
+    }
     if (pick) {
       const row = results.find((r) => r.twitch_user_id === pick)!;
       void Promise.all([
@@ -383,7 +443,9 @@ export function mountProgression(root: HTMLElement) {
       );
     else if (a === 'rules') {
       const rules: Json = {};
-      for (const [k] of RULES) rules[k] = Number(val(`[data-rule="${k}"]`));
+      for (const [k] of RULES)
+        if (!(state?.rules.level_model === 'fixed' && CURVE_RULES.has(k)))
+          rules[k] = Number(val(`[data-rule="${k}"]`));
       rules.live_only = !!root.querySelector<HTMLInputElement>(
         '[data-rule="live_only"]',
       )?.checked;

@@ -88,6 +88,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261113130000_progression.sql',
   // Progression per week / month (Europe/Paris) and the WizeBot history's protections; Lab twin 20261114120000.
   '20261114130000_progression_periods.sql',
+  // Level Up V2 (normalization audit, level-up events, viewer notification modes); Lab twin 20261115120000.
+  '20261115130000_progression_level_up.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -174,6 +176,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261113120000_progression_lab.sql',
   // Progression periods: the Lab twin of 20261114130000_progression_periods.sql (same content).
   '20261114120000_progression_periods_lab.sql',
+  // Level Up V2: the Lab twin of 20261115130000_progression_level_up.sql (same content).
+  '20261115120000_progression_level_up_lab.sql',
 ]);
 
 /**

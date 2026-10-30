@@ -1,4 +1,7 @@
 import {
+  LevelUpClaimRequest,
+  LevelUpNotifyMode,
+  LevelV2ActivateRequest,
   ProgressionAdjustRequest,
   ProgressionAttachRequest,
   ProgressionEquipRequest,
@@ -6,6 +9,7 @@ import {
   ProgressionImportRequest,
   ProgressionResolveRequest,
   ProgressionWizebotImportRequest,
+  ViewerPrefsRequest,
   ProgressionRevokeRequest,
   ProgressionRewardInput,
   ProgressionSettingsPatch,
@@ -36,6 +40,36 @@ const mapped = async <T>(fn: () => Promise<T>) => {
 };
 
 const TwitchId = z.string().regex(/^\d{1,32}$/);
+/**
+ * The viewer's level-up notification mode, read and written by the extension's façade (the JWT's identity): the Lab
+ * Core serves it on HTTP to the Extension Lab (Lab secret); the main Core only in-process (never on HTTP).
+ */
+export function progressionViewerPrefsRoutes(
+  svc: ProgressionService,
+  channelId: string,
+): Route[] {
+  const pattern = /^\/v1\/lab\/progression\/prefs\/(\d{1,32})$/;
+  return [
+    {
+      method: 'GET',
+      pattern,
+      auth: 'studio',
+      handle: ({ params }) => svc.viewerPrefs(channelId, params[0]!),
+    },
+    {
+      method: 'POST',
+      pattern,
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        svc.setViewerPrefs(
+          channelId,
+          params[0]!,
+          parse(ViewerPrefsRequest, body),
+        ),
+    },
+  ];
+}
+
 const SiteIdentify = z.strictObject({
   viewer: TwitchId,
   login: z.string().regex(/^[a-z0-9_]{1,25}$/),
@@ -219,6 +253,61 @@ export function progressionRoutes(
             actor(installation),
           ),
         ),
+    },
+    // --- Level Up V2 ---------------------------------------------------------------------------------------------------
+    {
+      method: 'GET',
+      pattern: admin('/level-v2'),
+      auth,
+      handle: () => svc.levelV2Status(ch),
+    },
+    {
+      // Once, with the typed confirmation (never a plain click).
+      method: 'POST',
+      pattern: admin('/level-v2/activate'),
+      auth,
+      handle: ({ body, installation }) => {
+        parse(LevelV2ActivateRequest, body);
+        return mapped(() => svc.activateLevelV2(ch, actor(installation)));
+      },
+    },
+    {
+      method: 'POST',
+      pattern: admin('/level-v2/revert'),
+      auth,
+      handle: ({ body }) => {
+        parse(
+          z.strictObject({ confirm: z.literal('ANNULER LA NORMALISATION') }),
+          body,
+        );
+        return mapped(() => svc.revertLevelV2(ch));
+      },
+    },
+    {
+      method: 'GET',
+      pattern: admin('/levelups'),
+      auth,
+      handle: () => svc.levelUps(ch),
+    },
+    {
+      // Studio's OBS level-up source: the next notices (delivered once).
+      method: 'POST',
+      pattern: admin('/levelups/claim'),
+      auth,
+      handle: ({ body }) =>
+        svc.claimLevelUps(ch, parse(LevelUpClaimRequest, body).consumer),
+    },
+    {
+      method: 'POST',
+      pattern: admin('/viewers/([0-9]{1,32})/notify'),
+      auth,
+      handle: ({ params, body }) =>
+        svc.setViewerPrefs(ch, params[0]!, {
+          level_up_notify: parse(
+            z.strictObject({ level_up_notify: LevelUpNotifyMode }),
+            body,
+          ).level_up_notify,
+        }),
     },
     {
       method: 'GET',

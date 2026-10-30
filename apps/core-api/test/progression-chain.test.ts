@@ -118,6 +118,38 @@ describe('progression on the real presence chain', () => {
     expect(await k.xp('2001')).toBe(afterRestart);
   });
 
+  it('Level Up V2 on the real chain: the cycle that reaches 1 000 XP makes one level-up, shown once with its sound; a replayed cycle none', async () => {
+    const k = await stack();
+    const p = k.core.progression;
+    await p.activateLevelV2(CH, { id: 'studio' });
+    await p.updateSettings(CH, { rules: { level_up_notifications: true } });
+    await p.setViewerPrefs(CH, '2001', { level_up_notify: 'sound' });
+    await k.cycle(0, { cycleId: 'l0' }); // the first sighting (no interval yet)
+    await p.adjust(
+      CH,
+      {
+        viewer: '2001',
+        mode: 'set_xp',
+        value: 998,
+        reason: 'test',
+        request_id: 'adj-chain-0001',
+      },
+      { id: 'studio' },
+    );
+    await k.cycle(2, { cycleId: 'l2' }); // + 2 XP → 1 000 → level 2
+    await k.cycle(2, { cycleId: 'l2' }); // the same cycle again
+    expect([await k.xp('2001'), (await p.viewer(CH, '2001')).level]).toEqual([
+      1000, 2,
+    ]);
+    const { notices } = await p.claimLevelUps(CH, 'obs');
+    expect(notices).toMatchObject([
+      { twitchUserId: '2001', level: 2, sound: true },
+    ]);
+    expect((await p.levelUps(CH)).length).toBe(1);
+    // Jetons of the same cycles, untouched by the progression.
+    expect(await k.jetonTicks('2001')).toBeGreaterThanOrEqual(0);
+  });
+
   it('an old viewer comes back: the waiting WizeBot history is attached on their first cycle, the XP since kept', async () => {
     const k = await stack();
     await k.core.progression.importHistory(
