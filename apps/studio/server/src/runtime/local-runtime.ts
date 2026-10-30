@@ -81,6 +81,8 @@ export const LAB_MIGRATIONS = [
   '20261113120000_progression_lab.sql',
   '20261114120000_progression_periods_lab.sql',
   '20261115120000_progression_level_up_lab.sql',
+  '20261116120000_cosmetic_shop_lab.sql',
+  '20261116120500_lab_ledger_cosmetic.sql',
 ];
 
 export type ServiceState =

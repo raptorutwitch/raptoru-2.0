@@ -42,6 +42,7 @@ const EVENT_SHOP = '20261112130000_event_shop.sql';
 const PROGRESSION = '20261113130000_progression.sql';
 const PERIODS = '20261114130000_progression_periods.sql';
 const LEVEL_UP = '20261115130000_progression_level_up.sql';
+const COSMETICS = '20261116130000_cosmetic_shop.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -632,7 +633,8 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== EVENT_SHOP &&
           f !== PROGRESSION &&
           f !== PERIODS &&
-          f !== LEVEL_UP,
+          f !== LEVEL_UP &&
+          f !== COSMETICS,
       ),
       lab: [
         ...MIGRATION_SCOPES.lab,
@@ -649,6 +651,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
         PROGRESSION,
         PERIODS,
         LEVEL_UP,
+        COSMETICS,
       ],
     };
     expect(await migrate(a, 'prod', undefined, at46)).toHaveLength(46);
@@ -696,6 +699,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       PROGRESSION,
       PERIODS,
       LEVEL_UP,
+      COSMETICS,
     ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(
