@@ -126,7 +126,76 @@ const SEEDS: Seed[] = [
     // No description: the thumbnail says it (the same sentence on 26 rows says nothing).
     media('screamer', `s-${id}`, label, 10, { media_id: id }),
   ),
+  // --- added 30/10 (LATE_ITEMS): seeded on channels whose catalogue already exists, disabled — Studio turns them on.
+  {
+    ...effect(
+      'flip',
+      'Écran retourné',
+      'Son écran se retourne… et il doit continuer à jouer.',
+      5,
+      { durationMs: 10000, mode: 'rotate' },
+    ),
+    cooldown_ms: 300_000,
+    enabled: false,
+  },
+  {
+    ...effect('blur', 'Flou', 'Sa vue se brouille quelques secondes.', 3, {
+      durationMs: 6000,
+      intensity: 'medium',
+    }),
+    cooldown_ms: 120_000,
+    enabled: false,
+  },
+  media('screamer', 's-miss-minute', 'Miss Minute', 10, {
+    media_id: 'miss-minute',
+    enabled: false,
+  }),
+  media('apparition', 'miss-minute-hello', '« Hello… »', 2, {
+    description: 'Une petite voix lui dit bonjour…',
+    params: { category: 'sound' },
+    cooldown_ms: 60_000,
+    enabled: false,
+  }),
+  media('screamer', 's-mutant-couteau', 'Mutant au couteau', 10, {
+    media_id: 'mutant-couteau',
+    enabled: false,
+  }),
+  media('screamer', 's-chien-coucou', 'Coucou…', 10, {
+    media_id: 'chien-coucou',
+    enabled: false,
+  }),
+  media('screamer', 's-chika', 'Chika', 10, {
+    media_id: 'chika',
+    enabled: false,
+  }),
+  media('apparition', 'fantome', 'Fantôme', 5, {
+    description: 'Un fantôme surgit en hurlant.',
+    enabled: false,
+  }),
+  media('apparition', 'nuee-chauves-souris', 'Nuée de chauves-souris', 6, {
+    description: 'Une nuée envahit tout son écran.',
+    params: { category: 'special' },
+    enabled: false,
+  }),
+  media('apparition', 'petit-fantome', 'Fantôme furtif', 3, {
+    description: 'Un petit fantôme traverse son écran sans un bruit.',
+    enabled: false,
+  }),
 ];
+
+/** Items added after the first seeding: a channel that already has its catalogue gets them (disabled), once. */
+export const LATE_ITEMS: ReadonlySet<string> = new Set([
+  'flip',
+  'blur',
+  's-miss-minute',
+  'miss-minute-hello',
+  's-mutant-couteau',
+  's-chien-coucou',
+  's-chika',
+  'fantome',
+  'nuee-chauves-souris',
+  'petit-fantome',
+]);
 
 export function defaultItems(): EventShopItem[] {
   return SEEDS.map((s, i) => ({

@@ -143,6 +143,50 @@ describe('event, overlay and catalogue', () => {
     expect(await code(buy(ANA, 'fog'))).toBe('item_disabled');
   });
 
+  it('items added after the first seeding (30/10): inserted disabled on an existing catalogue, never over Studio’s edits', async () => {
+    // A catalogue created before them (the Production one): only the original items.
+    await shop.admin(CH);
+    await db.query(
+      `delete from event_shop_items where channel_id = $1 and item_id in ('flip', 'blur', 's-miss-minute', 'fantome')`,
+      [CH],
+    );
+    await shop.updateItem(CH, 'blink', { price: 7, label: 'Clin d’œil' });
+    await shop.updateItem(CH, 'nuee-chauves-souris', { price: 9 });
+    const fresh = new EventShopService(db, clock, labEconomy); // a new Core process
+    const items = (await fresh.admin(CH)).items;
+    expect(items.find((i) => i.item_id === 'flip')).toMatchObject({
+      kind: 'effect',
+      effect: 'flip',
+      enabled: false,
+      params: { durationMs: 10000, mode: 'rotate' },
+    });
+    expect(items.find((i) => i.item_id === 'blur')).toMatchObject({
+      effect: 'blur',
+      enabled: false,
+    });
+    expect(items.find((i) => i.item_id === 's-miss-minute')).toMatchObject({
+      kind: 'screamer',
+      media_id: 'miss-minute',
+      enabled: false,
+    });
+    // Studio's edits stay; nothing existing is touched; each item once.
+    expect(items.find((i) => i.item_id === 'blink')).toMatchObject({
+      price: 7,
+      label: 'Clin d’œil',
+      enabled: true,
+    });
+    expect(items.find((i) => i.item_id === 'nuee-chauves-souris')?.price).toBe(
+      9,
+    );
+    expect(new Set(items.map((i) => i.item_id)).size).toBe(items.length);
+    // Off until Studio turns it on: not sold.
+    await give(ANA, 100);
+    await open();
+    expect(await code(buy(ANA, 'flip'))).toBe('item_disabled');
+    await shop.updateItem(CH, 'flip', { enabled: true });
+    expect(await code(buy(ANA, 'flip'))).toBe('ok');
+  });
+
   it('the viewer state: balance, items with thumbnails and why each one cannot be bought now', async () => {
     await open();
     await give(ANA, 12);

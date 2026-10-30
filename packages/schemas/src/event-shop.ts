@@ -23,6 +23,9 @@ export const EVENT_EFFECTS = [
   'tunnel',
   'eyes',
   'silhouette',
+  // Chaos (screen): the game window captured and redrawn flipped / blurred over itself (docs/HALLOWEEN.md § 4 bis).
+  'flip',
+  'blur',
 ] as const;
 export const EventEffect = z.enum(EVENT_EFFECTS);
 export type EventEffect = z.infer<typeof EventEffect>;

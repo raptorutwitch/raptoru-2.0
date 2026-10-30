@@ -255,6 +255,59 @@ export const MEDIA = [
     kind: 'apparition',
     clip: [0, 12],
   },
+  // 30/10 — the « ready to take » list of docs/HALLOWEEN.md § 11 A (Miss Minute and the others).
+  {
+    id: 'miss-minute',
+    label: 'Miss Minute',
+    file: "Séquence d'images/Miss Minute Screamer/Miss Minute Halloween.mov",
+    kind: 'screamer',
+  },
+  {
+    // Sound only: « Hello… » (its thumbnail is Miss Minute's face).
+    id: 'miss-minute-hello',
+    label: '« Hello… »',
+    file: "Séquence d'images/Miss Minute Screamer/Hello Audio.mp3",
+    kind: 'apparition',
+    thumbFrom:
+      "Séquence d'images/Miss Minute Screamer/Miss Minute Halloween.mov",
+  },
+  {
+    id: 'mutant-couteau',
+    label: 'Mutant au couteau',
+    file: 'Anim de stream/Mutant couteau.mov',
+    kind: 'screamer',
+  },
+  {
+    id: 'chien-coucou',
+    label: 'Coucou…',
+    file: 'Anim de stream/Screamer Chien coucou.mov',
+    kind: 'screamer',
+  },
+  {
+    id: 'chika',
+    label: 'Chika',
+    file: 'Anim de stream/Screameur Chika.mov',
+    kind: 'screamer',
+  },
+  {
+    id: 'fantome',
+    label: 'Fantôme',
+    file: 'Anim de stream/Fantome Anim Son.mov',
+    kind: 'apparition',
+  },
+  {
+    id: 'nuee-chauves-souris',
+    label: 'Nuée de chauves-souris',
+    file: "Séquence d'images/Transition Halloween/Transition Chauve souris.mov",
+    kind: 'apparition',
+  },
+  {
+    // Silent: a ghost slips across the screen.
+    id: 'petit-fantome',
+    label: 'Fantôme furtif',
+    file: 'Anim de stream/Petit fantome.mov',
+    kind: 'apparition',
+  },
 ];
 
 function ff(args) {
@@ -358,24 +411,29 @@ function main() {
       '-i',
       src,
       // 1080p at most (the 640×360 originals stay as they are; the page scales them to the screen).
-      '-vf',
-      "scale='min(1920,iw)':-2:flags=lanczos",
-      '-c:v',
-      'libvpx-vp9',
-      '-pix_fmt',
-      before.alpha ? 'yuva420p' : 'yuv420p',
-      '-b:v',
-      '0',
-      '-crf',
-      '31',
-      '-row-mt',
-      '1',
-      '-deadline',
-      'good',
-      '-cpu-used',
-      '4',
-      '-auto-alt-ref',
-      '0',
+      ...(before.width
+        ? [
+            '-vf',
+            "scale='min(1920,iw)':-2:flags=lanczos",
+            '-c:v',
+            'libvpx-vp9',
+            '-pix_fmt',
+            before.alpha ? 'yuva420p' : 'yuv420p',
+            '-b:v',
+            '0',
+            '-crf',
+            '31',
+            '-row-mt',
+            '1',
+            '-deadline',
+            'good',
+            '-cpu-used',
+            '4',
+            '-auto-alt-ref',
+            '0',
+          ]
+        : // A sound only (« Hello… »): an audio WebM, played by the same page.
+          ['-vn']),
       ...audio,
       tmp,
     ]);
@@ -415,6 +473,12 @@ function main() {
   }
   function makeThumb(src, m, alpha, durationMs, thumb) {
     // Thumbnail: the most visible frame, over the shop's dark background (no transparency in a JPEG).
+    // A sound only takes its picture from the video it belongs to (thumbFrom, transparent like the others).
+    if (m.thumbFrom) {
+      src = join(SOURCE, m.thumbFrom);
+      alpha = true;
+      durationMs = null;
+    }
     const clip = m.clip
       ? ['-ss', String(m.clip[0]), '-t', String(m.clip[1])]
       : [];

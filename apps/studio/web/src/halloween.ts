@@ -2,6 +2,12 @@
 // STOP ALL) and the Core's shop (open / closed, rules, catalogue, Bonbons grants, what was bought). Every button here
 // acts for real: a local test plays on the streamer's screen (an explicit click), the shop controls write the Core.
 
+import {
+  CHAOS_DEFAULT,
+  chaosCard,
+  chaosParams,
+  readChaos,
+} from './halloween-chaos.js';
 import { mountViewerFinder } from './halloween-viewer.js';
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
@@ -18,7 +24,10 @@ interface Status {
     display_id: number | null;
     volume: number;
     safe_mode: boolean;
+    capture_window: string | null;
   };
+  windows?: string[];
+  last_capture?: { at: string; name: string } | null;
   displays: {
     id: number;
     label: string;
@@ -124,6 +133,8 @@ const EFFECT_LABEL: Record<string, string> = {
   tunnel: 'Vision tunnel',
   eyes: 'Yeux dans le noir',
   silhouette: 'Silhouette',
+  flip: 'Écran retourné',
+  blur: 'Flou',
 };
 /** Rules shown in the panel (units for people: seconds, not milliseconds). */
 const RULES: { key: string; label: string; ms?: boolean; hint: string }[] = [
@@ -345,11 +356,13 @@ export function mountHalloween(root: HTMLElement) {
   let adminError: string | null = null;
   let visible = false;
   let flash = '';
+  let chaos = CHAOS_DEFAULT;
   root.innerHTML = `<div class="hw">
     <header class="hw-head"><h2>🎃 Halloween</h2><span class="hw-flash" data-role="flash"></span>
       <button type="button" class="hw-stop" data-act="stop" title="Arrête immédiatement tout effet (Ctrl+Maj+F12)">STOP ALL</button></header>
     <div class="hw-grid">
       <section class="card"><h3>Overlay sur mon écran</h3><div data-role="overlay"></div></section>
+      <section class="card"><h3>Chaos — écran retourné et flou</h3><div data-role="chaos"></div></section>
       <section class="card"><h3>Boutique</h3><div data-role="shop"></div></section>
       <section class="card wide"><h3>Catalogue</h3><div data-role="catalogue"></div></section>
       <section class="card wide"><h3>Trouver un viewer</h3><div data-role="viewer"></div></section>
@@ -399,7 +412,10 @@ export function mountHalloween(root: HTMLElement) {
     });
     painted.set(role, html);
   };
-  const renderStatus = () => paint('overlay', overlayCard(status));
+  const renderStatus = () => {
+    paint('overlay', overlayCard(status));
+    paint('chaos', chaosCard(status, chaos));
+  };
   const renderAdmin = () => {
     paint('shop', shopCard(admin, adminError));
     paint(
@@ -448,8 +464,19 @@ export function mountHalloween(root: HTMLElement) {
       t.closest<HTMLElement>('[data-test-media]')?.dataset.testMedia;
     const effect =
       t.closest<HTMLElement>('[data-test-effect]')?.dataset.testEffect;
+    const chaosTest = t.closest<HTMLElement>('[data-chaos-test]')?.dataset
+      .chaosTest as 'flip' | 'blur' | undefined;
     if (a === 'stop')
       void act(() => call('/api/halloween/stop', {}), 'Tout est arrêté.');
+    else if (chaosTest)
+      void act(
+        () =>
+          call('/api/halloween/test', {
+            effect: chaosTest,
+            params: chaosParams(chaosTest, chaos),
+          }),
+        'Test envoyé à l’overlay.',
+      );
     else if (a === 'reload')
       void act(
         () => call('/api/halloween/media/reload', {}),
@@ -500,16 +527,22 @@ export function mountHalloween(root: HTMLElement) {
   });
   root.addEventListener('change', (ev) => {
     const t = ev.target as HTMLInputElement;
+    if (t.dataset.chaos) {
+      chaos = readChaos(chaos, t.dataset.chaos, t.value);
+      return;
+    }
     const set = t.dataset.set;
     if (set) {
       const value =
-        set === 'volume'
-          ? Number(t.value) / 100
-          : set === 'display_id'
-            ? t.value === ''
-              ? null
-              : Number(t.value)
-            : t.checked;
+        set === 'capture_window'
+          ? t.value || null
+          : set === 'volume'
+            ? Number(t.value) / 100
+            : set === 'display_id'
+              ? t.value === ''
+                ? null
+                : Number(t.value)
+              : t.checked;
       void act(
         () => call('/api/halloween/settings', { [set]: value }),
         'Réglage enregistré.',

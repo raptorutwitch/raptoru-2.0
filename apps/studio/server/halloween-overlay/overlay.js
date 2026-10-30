@@ -43,17 +43,21 @@ async function api(path, body) {
     throw Object.assign(new Error('bad_token'), { status: 401 });
   return res.json();
 }
-const report = (delivery_id, event, error) =>
+const report = (delivery_id, event, error, detail) =>
   api('/halloween/overlay/report', {
     delivery_id,
     event,
     ...(error ? { error } : {}),
+    ...(detail ? { detail } : {}),
   }).catch(() => {});
 
 /** Every layer of the current play goes; the stage is empty again. */
 function clearStage() {
   for (const v of stage.querySelectorAll('video')) {
     v.pause();
+    // A captured window: its capture ends here too (nothing keeps capturing the game after a play).
+    for (const t of v.srcObject?.getTracks?.() ?? []) t.stop();
+    v.srcObject = null;
     v.removeAttribute('src');
     v.load();
   }
@@ -325,7 +329,104 @@ async function glitch(d, ctx) {
   for (const b of bands) b.remove();
 }
 
-const EFFECTS = { blink, fog, tunnel, eyes, silhouette, glitch };
+// --- screen effects (Chaos) : the game window, captured and redrawn over itself -----------------------------------
+// Electron main answers getDisplayMedia with the GAME's window (never this overlay, never the whole screen: no capture
+// loop) and the page shows it flipped or blurred, exactly over the game; OBS captures the monitor, so viewers see what
+// the player sees. Nothing in Windows changes: when the play ends (or STOP ALL, or Studio closes) the capture stops and
+// the real screen is there again. Mouse and keyboard keep going to the game (the window is click-through).
+
+async function captureGame(ctx) {
+  if (!navigator.mediaDevices?.getDisplayMedia)
+    throw new Error('capture_unsupported');
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 60 } },
+      audio: false,
+    });
+  } catch {
+    throw new Error('no_game_window');
+  }
+  const stop = () => stream.getTracks().forEach((t) => t.stop());
+  if (ctx.cancelled()) {
+    stop();
+    return null;
+  }
+  ctx.onCancel(stop);
+  const v = el('video', 'fx-capture');
+  v.muted = true;
+  v.playsInline = true;
+  v.srcObject = stream;
+  ctx.onCancel(() => (v.srcObject = null));
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('capture_timeout')), 4000);
+    ctx.onCancel(() => (clearTimeout(t), resolve()));
+    v.addEventListener('playing', () => (clearTimeout(t), resolve()), {
+      once: true,
+    });
+    v.play().catch(() => (clearTimeout(t), reject(new Error('play_refused'))));
+  });
+  return {
+    v,
+    stop,
+    name: String(stream.getVideoTracks()[0]?.label ?? '').slice(0, 80),
+  };
+}
+
+const FLIP = {
+  rotate: (k) => `rotate(${180 * k}deg)`,
+  mirror: (k) => `scaleX(${1 - 2 * k})`,
+  vertical: (k) => `scaleY(${1 - 2 * k})`,
+};
+
+async function flip(d, ctx) {
+  const total = clamp(d.params?.durationMs, 3000, 60000, 10000);
+  const turn = FLIP[d.params?.mode] ?? FLIP.rotate;
+  const g = await captureGame(ctx);
+  if (!g) return;
+  ctx.started(g.name);
+  await animate(
+    700,
+    (p) => (g.v.style.transform = turn(ease.inOut(p))),
+    ctx.cancelled,
+  );
+  await sleep(Math.max(0, total - 1400));
+  if (!ctx.cancelled())
+    await animate(
+      700,
+      (p) => (g.v.style.transform = turn(1 - ease.inOut(p))),
+      ctx.cancelled,
+    );
+  g.stop();
+  g.v.remove();
+}
+
+/** Blur radius in px at 1080p (faible / moyen / fort, or a number). */
+const BLUR = { low: 4, medium: 10, high: 22 };
+
+async function blur(d, ctx) {
+  const total = clamp(d.params?.durationMs, 2000, 30000, 6000);
+  const level = d.params?.intensity;
+  const px =
+    (BLUR[level] ?? clamp(level, 2, 40, BLUR.medium)) *
+    (window.innerHeight / 1080);
+  const g = await captureGame(ctx);
+  if (!g) return;
+  ctx.started(g.name);
+  // Slightly enlarged while blurred: the blurred edges never let the sharp screen show through.
+  const set = (k) => {
+    g.v.style.filter = `blur(${(px * k).toFixed(2)}px)`;
+    g.v.style.transform = `scale(${1 + (k * px * 3) / window.innerHeight})`;
+  };
+  await animate(500, (p) => set(ease.out(p)), ctx.cancelled);
+  await sleep(Math.max(0, total - 1100));
+  if (!ctx.cancelled())
+    await animate(600, (p) => set(1 - ease.inOut(p)), ctx.cancelled);
+  g.stop();
+  g.v.remove();
+}
+
+const EFFECTS = { blink, fog, tunnel, eyes, silhouette, glitch, flip, blur };
 
 // --- one play ------------------------------------------------------------------------------------------------------
 
@@ -337,10 +438,10 @@ async function run(d) {
   const ctx = {
     cancelled: () => cancelled,
     onCancel: (fn) => cancelHooks.push(fn),
-    started: () => {
+    started: (detail) => {
       if (started) return;
       started = true;
-      void report(d.delivery_id, 'started');
+      void report(d.delivery_id, 'started', undefined, detail);
     },
   };
   const me = {

@@ -54,6 +54,7 @@ export default defineConfig(
           'setInterval',
           'clearInterval',
           'TextDecoder',
+          'navigator',
         ].map((name) => [name, 'readonly']),
       ),
     },

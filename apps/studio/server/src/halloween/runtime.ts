@@ -43,6 +43,11 @@ export interface HalloweenSettings {
   volume: number;
   /** Photosensitivity-safe: no glitch effect, softer contrasts. */
   safe_mode: boolean;
+  /**
+   * Chaos screen effects (flip, blur): the window they capture and redraw (its title, as Windows lists it); null:
+   * automatic (the topmost window that is not Studio's own).
+   */
+  capture_window: string | null;
 }
 
 const DEFAULT_SETTINGS: HalloweenSettings = {
@@ -50,6 +55,7 @@ const DEFAULT_SETTINGS: HalloweenSettings = {
   display_id: null,
   volume: 0.8,
   safe_mode: false,
+  capture_window: null,
 };
 
 export interface MediaEntry {
@@ -135,6 +141,10 @@ export class HalloweenRuntime {
   private token = '';
   private media = new Map<string, MediaEntry>();
   private displays: Display[] = [];
+  /** The windows Electron main can capture (titles), for the Chaos effects' target. */
+  private windows: string[] = [];
+  /** The window the last Chaos effect really captured (said by the overlay page). */
+  private lastCapture: { at: string; name: string } | null = null;
   private current: Delivery | null = null;
   private stopEpoch = 0;
   private lastPoll = 0;
@@ -212,6 +222,10 @@ export class HalloweenRuntime {
       display_id: Number.isInteger(s.display_id) ? s.display_id : null,
       volume: Math.min(1, Math.max(0, Number(s.volume ?? 0.8))),
       safe_mode: s.safe_mode === true,
+      capture_window:
+        typeof s.capture_window === 'string' && s.capture_window.trim()
+          ? s.capture_window.trim().slice(0, 200)
+          : null,
     };
   }
 
@@ -264,6 +278,8 @@ export class HalloweenRuntime {
       },
       settings: this.settings,
       displays: this.displays,
+      windows: this.windows,
+      last_capture: this.lastCapture,
       media: [...this.media.values()].map((m) => ({
         id: m.id,
         label: m.label,
@@ -551,6 +567,11 @@ export class HalloweenRuntime {
     if (event === 'started') {
       if (!c.started_at) {
         c.started_at = this.now();
+        if (typeof body.detail === 'string' && body.detail) {
+          const name = body.detail.slice(0, 80);
+          this.lastCapture = { at: new Date(this.now()).toISOString(), name };
+          this.log(`${c.play.label} : fenêtre capturée « ${name} »`);
+        }
         await this.ack(c, 'started');
       }
     } else if (event === 'ended') await this.finish(c, 'completed', true);
@@ -713,6 +734,7 @@ export class HalloweenRuntime {
     // Electron main: the screens, and what to open where.
     if (
       p === '/api/halloween/displays' ||
+      p === '/api/halloween/windows' ||
       p === '/api/halloween/overlay-config'
     ) {
       if (!this.d.fromMain(req)) return reply(403, { error: 'main_only' });
@@ -720,6 +742,16 @@ export class HalloweenRuntime {
         const list = (await this.body(req)).displays;
         this.displays = Array.isArray(list)
           ? (list as Display[]).slice(0, 16)
+          : [];
+        return reply(200, { ok: true });
+      }
+      if (req.method === 'POST' && p === '/api/halloween/windows') {
+        const list = (await this.body(req)).windows;
+        this.windows = Array.isArray(list)
+          ? list
+              .filter((w): w is string => typeof w === 'string' && !!w)
+              .map((w) => w.slice(0, 200))
+              .slice(0, 60)
           : [];
         return reply(200, { ok: true });
       }
@@ -731,6 +763,7 @@ export class HalloweenRuntime {
         enabled: this.settings.overlay_enabled,
         display_id: display?.id ?? null,
         url: this.overlayUrl(),
+        capture_window: this.settings.capture_window,
       });
     }
     if (req.headers['x-raptoru-studio'] !== '1')

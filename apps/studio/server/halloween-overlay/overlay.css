@@ -194,3 +194,14 @@ body {
   opacity: 0.18;
   mix-blend-mode: overlay;
 }
+
+/* Chaos: the game window, captured and redrawn exactly over it (flipped or blurred). */
+.fx-capture {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  background: #000;
+  transform-origin: 50% 50%;
+  will-change: transform, filter;
+}
