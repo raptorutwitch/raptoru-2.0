@@ -87,6 +87,8 @@ import type { LabCall } from '../ext/lab-internal.js';
 import { studioCockpitRoutes } from './studio-cockpit-routes.js';
 import { publicStatsRoutes } from './public-stats-routes.js';
 import { progressionRoutes } from './progression-routes.js';
+import { cosmeticsRoutes } from './cosmetics-routes.js';
+import type { CosmeticShopService } from '../cosmetics/service.js';
 import type { ProgressionService } from '../progression/service.js';
 import { wordGameCockpitEvents } from './word-game-routes.js';
 import { studioAdminRoutes } from './studio-admin-routes.js';
@@ -152,6 +154,7 @@ export interface AppDeps {
   siteToken?: string;
   /** Progression native (docs/PROGRESSION.md). */
   progression?: ProgressionService;
+  cosmetics?: CosmeticShopService;
   /**
    * The /v1/lab/* routes (Studio secret, viewer named in the body). Default on for the Lab and the
    * tests; the public Core bootstrap turns them off: nothing Lab is reachable from the Internet.
@@ -264,6 +267,7 @@ function routes({
   dock,
   eventShop,
   progression,
+  cosmetics,
   siteToken,
   caution,
   votekick,
@@ -308,6 +312,13 @@ function routes({
       : []),
     ...(studioInstallations && progression && cockpit?.channelId
       ? progressionRoutes(progression, {
+          channelId: cockpit.channelId,
+          production: true,
+          site: !!siteToken,
+        })
+      : []),
+    ...(studioInstallations && cosmetics && cockpit?.channelId
+      ? cosmeticsRoutes(cosmetics, {
           channelId: cockpit.channelId,
           production: true,
           site: !!siteToken,

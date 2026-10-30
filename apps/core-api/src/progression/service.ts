@@ -554,12 +554,12 @@ export class ProgressionService {
   }
 
   /** Returns true when the viewer now owns it (new or restored). `restore`: a revoked grant comes back (manual). */
-  private async insertGrant(
+  async insertGrant(
     q: Queryable,
     channelId: string,
     viewerId: string,
     rewardId: string,
-    source: 'level' | 'event' | 'manual' | 'import',
+    source: 'level' | 'event' | 'manual' | 'import' | 'purchase' | 'reward',
     reference: string | null,
     by: string,
     restore: boolean,
@@ -628,13 +628,16 @@ export class ProgressionService {
   ) {
     return this.db.tx(async (q) => {
       const reward = (
-        await q.query<{ active: boolean }>(
-          'select active from progression_rewards where channel_id = $1 and reward_id = $2',
+        await q.query<{ active: boolean; status: string }>(
+          'select active, status from progression_rewards where channel_id = $1 and reward_id = $2',
           [channelId, req.reward_id],
         )
       )[0];
       if (!reward) throw new ProgressionError(404, 'unknown_reward');
       if (!reward.active) throw new ProgressionError(409, 'reward_inactive');
+      // Boutique cosmétique: a draft is never given (published, hidden and archived items can be).
+      if (reward.status === 'draft')
+        throw new ProgressionError(409, 'reward_draft');
       const ids = [...new Set(req.viewers)];
       const known = new Set(
         (
@@ -674,7 +677,17 @@ export class ProgressionService {
     req: { reward_id: string; viewer: string; reason: string },
     actor: Actor,
   ) {
-    return this.db.tx(async (q) => {
+    return this.db.tx((q) => this.revokeIn(q, channelId, req, actor));
+  }
+
+  /** The same, in the caller's transaction (the cosmetic shop's refund). */
+  async revokeIn(
+    q: Queryable,
+    channelId: string,
+    req: { reward_id: string; viewer: string; reason: string },
+    actor: Actor,
+  ) {
+    {
       const r = await q.query(
         `update progression_grants set revoked_at = $4, revoked_by = $5, revoke_reason = $6
          where channel_id = $1 and twitch_user_id = $2 and reward_id = $3 and revoked_at is null returning id`,
@@ -695,7 +708,7 @@ export class ProgressionService {
         [channelId, req.viewer, req.reward_id, this.now()],
       );
       return { revoked: true };
-    });
+    }
   }
 
   /** The viewer's choice (raptoru.fr): a title and up to 3 badges among what they own (not revoked, active). */
@@ -712,7 +725,7 @@ export class ProgressionService {
           await q.query<{ reward_id: string; kind: string }>(
             `select g.reward_id, r.kind from progression_grants g join progression_rewards r using (channel_id, reward_id)
              where g.channel_id = $1 and g.twitch_user_id = $2 and g.revoked_at is null and r.active
-               and g.reward_id = any($3::text[])`,
+               and r.status <> 'draft' and g.reward_id = any($3::text[])`,
             [channelId, req.viewer, wanted],
           )
         ).map((r) => [r.reward_id, r.kind]),
@@ -1289,7 +1302,8 @@ export class ProgressionService {
     const titleJoins = `left join progression_equipped e on e.channel_id = a.channel_id and e.twitch_user_id = a.twitch_user_id
        left join progression_grants g on g.channel_id = a.channel_id and g.twitch_user_id = a.twitch_user_id
          and g.reward_id = e.title_id and g.revoked_at is null
-       left join progression_rewards r on r.channel_id = a.channel_id and r.reward_id = g.reward_id and r.active`;
+       left join progression_rewards r on r.channel_id = a.channel_id and r.reward_id = g.reward_id and r.active
+         and r.status <> 'draft'`;
     type Row = {
       twitch_user_id: string;
       login: string | null;
@@ -1301,6 +1315,7 @@ export class ProgressionService {
       title_id: string | null;
       title_label: string | null;
       title_rarity: string | null;
+      title_style: Record<string, unknown> | null;
     };
     let rows: Row[];
     let bounds: { start: string; end: string } | null = null;
@@ -1313,7 +1328,7 @@ export class ProgressionService {
       rows = await this.db.query<Row>(
         `select a.twitch_user_id, v.login, v.display_name, a.xp, a.level,
            a.watch_seconds + a.imported_watch_seconds as watch_seconds, a.messages + a.imported_messages as messages,
-           r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity
+           r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity, r.style as title_style
          from progression_accounts a
          left join ${this.dir(channelId)} v using (twitch_user_id)
          ${titleJoins}
@@ -1340,7 +1355,8 @@ export class ProgressionService {
       }[by];
       rows = await this.db.query<Row>(
         `select p.twitch_user_id, v.login, v.display_name, p.xp, coalesce(a.level, 1) as level, p.watch_seconds,
-           p.messages, r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity
+           p.messages, r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity,
+           r.style as title_style
          from progression_period_stats p
          left join progression_accounts a on a.channel_id = p.channel_id and a.twitch_user_id = p.twitch_user_id
          left join ${this.dir(channelId)} v on v.twitch_user_id = p.twitch_user_id
@@ -1373,7 +1389,12 @@ export class ProgressionService {
         watchMinutes: Math.floor(Number(r.watch_seconds) / 60),
         messages: Number(r.messages),
         title: r.title_id
-          ? { id: r.title_id, label: r.title_label, rarity: r.title_rarity }
+          ? {
+              id: r.title_id,
+              label: r.title_label,
+              rarity: r.title_rarity,
+              style: r.title_style ?? {},
+            }
           : null,
       })),
     };
@@ -1399,10 +1420,14 @@ export class ProgressionService {
       source: string;
       reference: string | null;
       granted_at: Date;
+      status: string;
+      style: Record<string, unknown> | null;
+      image_id: string | null;
     }>(
-      `select g.reward_id, r.kind, r.label, r.description, r.rarity, r.category, g.source, g.reference, g.granted_at
+      `select g.reward_id, r.kind, r.label, r.description, r.rarity, r.category, g.source, g.reference, g.granted_at,
+         r.status, r.style, r.image_id
        from progression_grants g join progression_rewards r using (channel_id, reward_id)
-       where g.channel_id = $1 and g.twitch_user_id = $2 and g.revoked_at is null and r.active
+       where g.channel_id = $1 and g.twitch_user_id = $2 and g.revoked_at is null and r.active and r.status <> 'draft'
        order by r.kind, r.sort, g.granted_at`,
       [channelId, viewerId],
     );
@@ -1479,6 +1504,10 @@ export class ProgressionService {
         source: i.source,
         reference: i.reference,
         grantedAt: new Date(i.granted_at).toISOString(),
+        // Boutique cosmétique: its look (data the site draws with the Core's stylesheet), its image, its state.
+        status: i.status,
+        style: i.style ?? {},
+        image: i.image_id ? `/v1/cosmetics/images/${i.image_id}` : null,
       })),
     };
   }
