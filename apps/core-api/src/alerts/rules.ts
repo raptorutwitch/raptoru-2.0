@@ -2,9 +2,13 @@ import type { AlertEventInput } from '@raptoru/schemas';
 import {
   ALERT_VARIANTS,
   type AlertVariant,
+  ballonVariant,
   BITS_MINIMUM,
   FOLLOW_WEIGHTS,
   GIFT_THRESHOLDS,
+  HW_FOLLOW,
+  HW_GIFT_TARGETED,
+  JERRY_THRESHOLDS,
 } from './variants.js';
 
 // Twitch alerts V1 — pure rules: which event makes an alert, with which legacy variant. No database, no clock; the
@@ -30,7 +34,57 @@ export function weighted(entries: [string, number][], rng: Rng): string {
   return entries[entries.length - 1]![0];
 }
 
-export function decideAlert(e: AlertEventInput, rng: Rng): AlertDecision {
+/** The channel's alert profile (Halloween: event shop rules); absent = the usual alerts. */
+export interface AlertProfile {
+  halloween: boolean;
+  ballon: { sub: number[]; prime: number[]; resub: number[] };
+}
+
+/** The Halloween variant of an event, or null (no Halloween variant for it: the usual one plays). */
+export function halloweenVariant(
+  e: AlertEventInput,
+  rng: Rng,
+  ballon: AlertProfile['ballon'],
+): AlertVariant | null {
+  const draw = (pool: number[]) =>
+    pool.length
+      ? pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!
+      : 1;
+  switch (e.type) {
+    case 'follow':
+      return HW_FOLLOW;
+    case 'sub': {
+      const kind = e.tier === 'prime' ? 'prime' : 'sub';
+      return ballonVariant(kind, draw(ballon[kind]));
+    }
+    case 'resub':
+      return ballonVariant('resub', draw(ballon.resub));
+    case 'gift_community': {
+      const count = e.count ?? 1;
+      return JERRY_THRESHOLDS.find(([min]) => count >= min)![1];
+    }
+    case 'gift_targeted':
+      return HW_GIFT_TARGETED;
+    default:
+      return null;
+  }
+}
+
+export function decideAlert(
+  e: AlertEventInput,
+  rng: Rng,
+  profile?: AlertProfile | null,
+): AlertDecision {
+  const usual = decideUsual(e, rng);
+  if (!profile?.halloween || usual.outcome !== 'queued') return usual;
+  const hw = halloweenVariant(e, rng, profile.ballon);
+  // The usual variant travels with it: Studio plays it when a Halloween media is missing (never no alert at all).
+  return hw
+    ? { outcome: 'queued', variant: { ...hw, fallback: usual.variant } }
+    : usual;
+}
+
+function decideUsual(e: AlertEventInput, rng: Rng): AlertDecision {
   const pick = (id: string) => ({
     outcome: 'queued' as const,
     variant: ALERT_VARIANTS[id]!,

@@ -1,0 +1,82 @@
+/* « Ambiance Halloween » OBS source (docs/HALLOWEEN.md § 6 bis): transparent, 1920 × 1080, decor only. */
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+#vignette,
+#spider,
+#bats {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+
+#spider,
+#bats {
+  object-fit: contain;
+}
+
+/* The edges darken, a faint orange glow at the corners; the middle of the screen stays clear. */
+#vignette {
+  background:
+    radial-gradient(
+      ellipse 75% 70% at 50% 50%,
+      transparent 62%,
+      rgba(20, 6, 26, 0.55) 88%,
+      rgba(8, 2, 12, 0.9) 100%
+    ),
+    radial-gradient(
+      circle at 0% 100%,
+      rgba(255, 110, 20, 0.18),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 100% 100%,
+      rgba(255, 110, 20, 0.18),
+      transparent 28%
+    );
+}
+
+#vignette.on {
+  animation: breathe 9s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #vignette.on {
+    animation: none;
+  }
+}
+
+#notice {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffb35c;
+  font:
+    600 18px system-ui,
+    sans-serif;
+}

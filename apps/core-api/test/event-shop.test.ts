@@ -143,6 +143,82 @@ describe('event, overlay and catalogue', () => {
     expect(await code(buy(ANA, 'fog'))).toBe('item_disabled');
   });
 
+  it('items added after the first seeding (30/10): inserted disabled on an existing catalogue, never over Studio’s edits', async () => {
+    // A catalogue created before them (the Production one): only the original items.
+    await shop.admin(CH);
+    await db.query(
+      `delete from event_shop_items where channel_id = $1 and item_id in ('flip', 'blur', 's-chika', 'fantome')`,
+      [CH],
+    );
+    await shop.updateItem(CH, 'blink', { price: 7, label: 'Clin d’œil' });
+    await shop.updateItem(CH, 'fantome', { price: 9 }).catch(() => {}); // deleted above: nothing to update
+    const fresh = new EventShopService(db, clock, labEconomy); // a new Core process
+    const items = (await fresh.admin(CH)).items;
+    expect(items.find((i) => i.item_id === 'flip')).toMatchObject({
+      kind: 'effect',
+      effect: 'flip',
+      enabled: false,
+      params: { durationMs: 10000, mode: 'rotate' },
+    });
+    expect(items.find((i) => i.item_id === 'blur')).toMatchObject({
+      effect: 'blur',
+      enabled: false,
+    });
+    expect(items.find((i) => i.item_id === 's-chika')).toMatchObject({
+      kind: 'screamer',
+      media_id: 'chika',
+      enabled: false,
+    });
+    expect(items.find((i) => i.item_id === 'fantome')).toMatchObject({
+      kind: 'apparition',
+      media_id: 'fantome',
+      enabled: false,
+    });
+    // Studio's edits stay; nothing existing is touched; each item once.
+    expect(items.find((i) => i.item_id === 'blink')).toMatchObject({
+      price: 7,
+      label: 'Clin d’œil',
+      enabled: true,
+    });
+    expect(new Set(items.map((i) => i.item_id)).size).toBe(items.length);
+    // Off until Studio turns it on: not sold.
+    await give(ANA, 100);
+    await open();
+    expect(await code(buy(ANA, 'flip'))).toBe('item_disabled');
+    await shop.updateItem(CH, 'flip', { enabled: true });
+    expect(await code(buy(ANA, 'flip'))).toBe('ok');
+  });
+
+  it('retired items (30/10: alerts, a transition, dropped screamers) leave the shop; one already bought stays, disabled', async () => {
+    await shop.admin(CH);
+    const ins = (id: string, media: string) =>
+      db.query(
+        `insert into event_shop_items (channel_id, item_id, kind, media_id, effect, label, description, price,
+           cooldown_ms, enabled, sort, params, updated_at)
+         values ($1, $2, 'screamer', $3, null, $2, '', 10, 0, true, 999, '{}', now())`,
+        [CH, id, media],
+      );
+    await ins('s-miss-minute', 'miss-minute');
+    await ins('s-mutant-couteau', 'mutant-couteau');
+    // Someone bought the mutant in the Lab before: its purchase keeps its item.
+    await db.query(
+      `insert into event_shop_purchases (purchase_id, season, channel_id, viewer_id, viewer_name, item_id, item_kind,
+         label, price, idempotency_key, request_hash, status, created_at)
+       values ('33333333-3333-4333-8333-333333333333', 'halloween-2026', $1, '91001', 'Ana', 's-mutant-couteau',
+         'screamer', 'Mutant', 10, 'k-mutant', 'h', 'completed', now())`,
+      [CH],
+    );
+    const items = (await new EventShopService(db, clock, labEconomy).admin(CH))
+      .items;
+    expect(items.find((i) => i.item_id === 's-miss-minute')).toBeUndefined();
+    expect(items.find((i) => i.item_id === 's-mutant-couteau')).toMatchObject({
+      enabled: false,
+    });
+    await open();
+    await give(ANA, 100);
+    expect(await code(buy(ANA, 's-mutant-couteau'))).toBe('item_disabled');
+  });
+
   it('the viewer state: balance, items with thumbnails and why each one cannot be bought now', async () => {
     await open();
     await give(ANA, 12);

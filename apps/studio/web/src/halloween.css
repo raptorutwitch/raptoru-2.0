@@ -324,3 +324,13 @@ kbd {
   border-color: var(--hw-accent, #ff8a2b);
   font-weight: 700;
 }
+
+/* Ambiance OBS: the source URLs, selectable in one click; a missing decor media. */
+.hw-url {
+  user-select: all;
+  word-break: break-all;
+  font-size: 12px;
+}
+.hw-warn {
+  color: var(--hw-warn);
+}

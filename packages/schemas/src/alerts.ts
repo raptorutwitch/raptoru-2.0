@@ -94,6 +94,11 @@ export const AlertEventInput = z.strictObject({
     .optional(),
   provider: z.string().max(32).optional(),
   message: z.string().max(500).optional(),
+  /**
+   * Studio's tests only (`source: simulation`, ignored otherwise): play this simulated event with the Halloween alert
+   * profile while the channel's profile stays as it is (docs/HALLOWEEN.md § 14).
+   */
+  test_profile: z.literal('halloween').optional(),
 });
 export type AlertEventInput = z.infer<typeof AlertEventInput>;
 

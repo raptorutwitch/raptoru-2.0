@@ -408,7 +408,11 @@ describe('isolation', () => {
       body: undefined,
       url: new URL('http://x/v1/lab/alerts/catalog'),
     })) as { variants: { id: string }[] };
-    expect(out.variants.map((v) => v.id)).toHaveLength(14);
+    // The 14 usual variants, then the Halloween profile's 18 (Miss Minute, 12 Ballons, 4 Jerry + the targeted gift).
+    expect(out.variants.map((v) => v.id)).toHaveLength(14 + 18);
+    expect(
+      out.variants.slice(0, 14).every((v) => !v.id.startsWith('hw_')),
+    ).toBe(true);
     expect(await count('alert_items')).toBe(0);
   });
 

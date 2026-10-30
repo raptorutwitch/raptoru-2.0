@@ -255,6 +255,33 @@ export const MEDIA = [
     kind: 'apparition',
     clip: [0, 12],
   },
+  {
+    id: 'chika',
+    label: 'Chika',
+    file: 'Anim de stream/Screameur Chika.mov',
+    kind: 'screamer',
+  },
+  {
+    id: 'fantome',
+    label: 'Fantôme',
+    file: 'Anim de stream/Fantome Anim Son.mov',
+    kind: 'apparition',
+  },
+  // Decor of the « Ambiance Halloween » OBS source (never sold, never played on the streamer's screen): silent.
+  {
+    id: 'decor-araignee-cam',
+    label: 'Araignée de la cam',
+    file: "Séquence d'images/Araignée Overlay Cam/Araignée Overlay Cam Mouche.mov",
+    kind: 'decor',
+    mute: true,
+  },
+  {
+    id: 'decor-chauves-souris',
+    label: 'Vol de chauves-souris',
+    file: 'Anim de stream/Chauve souris Fx.mov',
+    kind: 'decor',
+    mute: true,
+  },
 ];
 
 function ff(args) {
@@ -327,7 +354,7 @@ function main() {
       !FORCE &&
       prev &&
       existsSync(out) &&
-      existsSync(thumb) &&
+      (m.kind === 'decor' || existsSync(thumb)) &&
       prev.source?.size === source.size &&
       prev.source?.mtime === source.mtime
     ) {
@@ -340,42 +367,48 @@ function main() {
       ? ['-ss', String(m.clip[0]), '-t', String(m.clip[1])]
       : [];
     const tmp = `${out}.part.webm`;
-    const audio = before.audio
-      ? [
-          '-af',
-          'loudnorm=I=-16:TP=-1.5:LRA=11',
-          '-c:a',
-          'libopus',
-          '-b:a',
-          '128k',
-          '-ar',
-          '48000',
-        ]
-      : ['-an'];
+    const audio =
+      before.audio && !m.mute
+        ? [
+            '-af',
+            'loudnorm=I=-16:TP=-1.5:LRA=11',
+            '-c:a',
+            'libopus',
+            '-b:a',
+            '128k',
+            '-ar',
+            '48000',
+          ]
+        : ['-an'];
     const enc = ff([
       '-y',
       ...clip,
       '-i',
       src,
       // 1080p at most (the 640×360 originals stay as they are; the page scales them to the screen).
-      '-vf',
-      "scale='min(1920,iw)':-2:flags=lanczos",
-      '-c:v',
-      'libvpx-vp9',
-      '-pix_fmt',
-      before.alpha ? 'yuva420p' : 'yuv420p',
-      '-b:v',
-      '0',
-      '-crf',
-      '31',
-      '-row-mt',
-      '1',
-      '-deadline',
-      'good',
-      '-cpu-used',
-      '4',
-      '-auto-alt-ref',
-      '0',
+      ...(before.width
+        ? [
+            '-vf',
+            "scale='min(1920,iw)':-2:flags=lanczos",
+            '-c:v',
+            'libvpx-vp9',
+            '-pix_fmt',
+            before.alpha ? 'yuva420p' : 'yuv420p',
+            '-b:v',
+            '0',
+            '-crf',
+            '31',
+            '-row-mt',
+            '1',
+            '-deadline',
+            'good',
+            '-cpu-used',
+            '4',
+            '-auto-alt-ref',
+            '0',
+          ]
+        : // A sound only (« Hello… »): an audio WebM, played by the same page.
+          ['-vn']),
       ...audio,
       tmp,
     ]);
@@ -393,7 +426,7 @@ function main() {
       label: m.label,
       kind: m.kind,
       file: `${m.id}.webm`,
-      thumb: `assets/halloween/${m.id}.jpg`,
+      thumb: m.kind === 'decor' ? null : `assets/halloween/${m.id}.jpg`,
       duration_ms: after.duration_ms,
       width: after.width,
       height: after.height,
@@ -414,7 +447,15 @@ function main() {
     );
   }
   function makeThumb(src, m, alpha, durationMs, thumb) {
+    // A decor is never in the shop: no thumbnail in the extension.
+    if (m.kind === 'decor') return;
     // Thumbnail: the most visible frame, over the shop's dark background (no transparency in a JPEG).
+    // A sound only takes its picture from the video it belongs to (thumbFrom, transparent like the others).
+    if (m.thumbFrom) {
+      src = join(SOURCE, m.thumbFrom);
+      alpha = true;
+      durationMs = null;
+    }
     const clip = m.clip
       ? ['-ss', String(m.clip[0]), '-t', String(m.clip[1])]
       : [];

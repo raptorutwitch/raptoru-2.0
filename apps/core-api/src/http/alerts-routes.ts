@@ -5,7 +5,7 @@ import {
   AlertReceptionReport,
 } from '@raptoru/schemas';
 import { AlertError, type AlertsService } from '../alerts/service.js';
-import { ALERT_VARIANTS } from '../alerts/variants.js';
+import { ALERT_VARIANTS, HALLOWEEN_VARIANTS } from '../alerts/variants.js';
 import type { SubWheelService } from '../sub-wheel/service.js';
 import { HttpError, parse, type Route } from './server.js';
 
@@ -63,7 +63,10 @@ export function alertsRoutes(
       method: 'GET',
       pattern: at('/catalog'),
       auth,
-      handle: async () => ({ variants: Object.values(ALERT_VARIANTS) }),
+      // The Halloween profile's variants too (docs/HALLOWEEN.md § 14): previewed and calibrated like the others.
+      handle: async () => ({
+        variants: [...Object.values(ALERT_VARIANTS), ...HALLOWEEN_VARIANTS],
+      }),
     },
     {
       // One normalized event (deduplicated by source + id); `source: simulation` for tests.

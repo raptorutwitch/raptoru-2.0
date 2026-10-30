@@ -23,7 +23,14 @@ import {
   globalState,
   LabWalletError,
 } from '../lab-moderation/store.js';
-import { categoryOf, defaultItems, editionTitle, thumbOf } from './catalog.js';
+import {
+  categoryOf,
+  defaultItems,
+  editionTitle,
+  LATE_ITEMS,
+  RETIRED_ITEMS,
+  thumbOf,
+} from './catalog.js';
 import {
   balanceOf,
   byKey,
@@ -186,13 +193,41 @@ export class EventShopService {
       'select season, enabled, rules from event_shop_settings where channel_id = $1',
       [channelId],
     );
-    if (rows[0])
+    if (rows[0]) {
+      if (!this.lateSeeded.has(channelId)) {
+        // Items added since the catalogue was created: inserted disabled, never over an existing one (Studio's price,
+        // name or state stay as they are). Remembered only once they are SEEN in the base (a rolled-back transaction
+        // inserted nothing: the next call does it again).
+        // Retired items: gone where never bought, disabled where a purchase refers to them (history intact).
+        await q.query(
+          `delete from event_shop_items i where i.channel_id = $1 and i.item_id = any($2) and not exists
+             (select 1 from event_shop_purchases p where p.channel_id = i.channel_id and p.item_id = i.item_id)`,
+          [channelId, RETIRED_ITEMS],
+        );
+        await q.query(
+          'update event_shop_items set enabled = false where channel_id = $1 and item_id = any($2) and enabled',
+          [channelId, RETIRED_ITEMS],
+        );
+        const ids = [...LATE_ITEMS];
+        const have = await q.query<{ n: number }>(
+          'select count(*)::int as n from event_shop_items where channel_id = $1 and item_id = any($2)',
+          [channelId, ids],
+        );
+        if ((have[0]?.n ?? 0) >= ids.length) this.lateSeeded.add(channelId);
+        else
+          await this.insertItems(
+            q,
+            channelId,
+            defaultItems().filter((i) => LATE_ITEMS.has(i.item_id)),
+          );
+      }
       return {
         season: rows[0].season,
         enabled: rows[0].enabled,
         // Rules saved by an older version get the new fields' defaults.
         rules: { ...DEFAULT_EVENT_RULES, ...rows[0].rules },
       };
+    }
     const now = this.now();
     const inserted = await q.query(
       `insert into event_shop_settings (channel_id, season, enabled, rules, updated_at) values ($1, $2, false, $3, $4)
@@ -204,29 +239,39 @@ export class EventShopService {
         now,
       ],
     );
-    if (inserted.length)
-      for (const it of defaultItems())
-        await q.query(
-          `insert into event_shop_items (channel_id, item_id, kind, media_id, effect, label, description, price,
+    if (inserted.length) await this.insertItems(q, channelId, defaultItems());
+    return this.ensure(q, channelId);
+  }
+
+  private lateSeeded = new Set<string>();
+
+  private async insertItems(
+    q: Queryable,
+    channelId: string,
+    items: EventShopItem[],
+  ) {
+    const now = this.now();
+    for (const it of items)
+      await q.query(
+        `insert into event_shop_items (channel_id, item_id, kind, media_id, effect, label, description, price,
              cooldown_ms, enabled, sort, params, updated_at)
            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) on conflict do nothing`,
-          [
-            channelId,
-            it.item_id,
-            it.kind,
-            it.media_id,
-            it.effect,
-            it.label,
-            it.description,
-            it.price,
-            it.cooldown_ms,
-            it.enabled,
-            it.sort,
-            JSON.stringify(it.params),
-            now,
-          ],
-        );
-    return this.ensure(q, channelId);
+        [
+          channelId,
+          it.item_id,
+          it.kind,
+          it.media_id,
+          it.effect,
+          it.label,
+          it.description,
+          it.price,
+          it.cooldown_ms,
+          it.enabled,
+          it.sort,
+          JSON.stringify(it.params),
+          now,
+        ],
+      );
   }
 
   async settings(channelId: string) {

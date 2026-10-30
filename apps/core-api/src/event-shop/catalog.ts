@@ -126,6 +126,56 @@ const SEEDS: Seed[] = [
     // No description: the thumbnail says it (the same sentence on 26 rows says nothing).
     media('screamer', `s-${id}`, label, 10, { media_id: id }),
   ),
+  // --- added 30/10 (LATE_ITEMS): seeded on channels whose catalogue already exists, disabled — Studio turns them on.
+  {
+    ...effect(
+      'flip',
+      'Écran retourné',
+      'Son écran se retourne… et il doit continuer à jouer.',
+      5,
+      { durationMs: 10000, mode: 'rotate' },
+    ),
+    cooldown_ms: 300_000,
+    enabled: false,
+  },
+  {
+    ...effect('blur', 'Flou', 'Sa vue se brouille quelques secondes.', 3, {
+      durationMs: 6000,
+      intensity: 'medium',
+    }),
+    cooldown_ms: 120_000,
+    enabled: false,
+  },
+  media('screamer', 's-chika', 'Chika', 10, {
+    media_id: 'chika',
+    enabled: false,
+  }),
+  media('apparition', 'fantome', 'Fantôme', 5, {
+    description: 'Un fantôme surgit en hurlant.',
+    enabled: false,
+  }),
+];
+
+/** Items added after the first seeding: a channel that already has its catalogue gets them (disabled), once. */
+export const LATE_ITEMS: ReadonlySet<string> = new Set([
+  'flip',
+  'blur',
+  's-chika',
+  'fantome',
+]);
+
+/**
+ * Items of the 30/10 first version that are NOT shop items (Antoni, 30/10): Miss Minute and « Hello » are the Halloween
+ * follow alert, the bat swarm an OBS transition; Mutant au couteau (no sound), Coucou and Fantôme furtif (a duplicate)
+ * are dropped. Removed where nobody bought them, otherwise kept disabled (purchases keep their item).
+ */
+export const RETIRED_ITEMS: readonly string[] = [
+  's-miss-minute',
+  'miss-minute-hello',
+  's-mutant-couteau',
+  's-chien-coucou',
+  'petit-fantome',
+  'nuee-chauves-souris',
 ];
 
 export function defaultItems(): EventShopItem[] {

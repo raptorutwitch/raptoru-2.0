@@ -35,6 +35,10 @@ describe('legacy formatting and sizing', () => {
       '<b>x</b> × 5',
     );
     expect(fill('{pseudo} {unknown}', {})).toBe(' {unknown}');
+    // Halloween resub (docs/HALLOWEEN.md § 14): the months of the event.
+    expect(fill('se réabonne : {months} mois !', { months: 13 })).toBe(
+      'se réabonne : 13 mois !',
+    );
   });
 
   it('shrinks Dofus names over 14 characters, sizes the donation texts', () => {

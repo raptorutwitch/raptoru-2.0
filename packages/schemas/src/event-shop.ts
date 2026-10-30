@@ -23,6 +23,9 @@ export const EVENT_EFFECTS = [
   'tunnel',
   'eyes',
   'silhouette',
+  // Chaos (screen): the game window captured and redrawn flipped / blurred over itself (docs/HALLOWEEN.md § 4 bis).
+  'flip',
+  'blur',
 ] as const;
 export const EventEffect = z.enum(EVENT_EFFECTS);
 export type EventEffect = z.infer<typeof EventEffect>;
@@ -36,6 +39,8 @@ export const EventItemKind = z.enum(['screamer', 'apparition', 'effect']);
 export type EventItemKind = z.infer<typeof EventItemKind>;
 
 /** The event's rules (Studio): earning, conversion, and the limits that keep the stream playable. */
+const BallonPool = z.array(z.number().int().min(1).max(4)).min(1).max(4);
+
 export const EventShopRules = z.strictObject({
   /** Jetons for one Bonbon (conversion). */
   conversion_rate: z.number().int().min(1).max(1_000_000),
@@ -65,6 +70,18 @@ export const EventShopRules = z.strictObject({
    */
   extension_audience: z.enum(['all', 'testers']),
   extension_testers: z.array(z.string().regex(/^\d{1,32}$/)).max(500),
+  /**
+   * Halloween alert profile (30/10): Twitch alerts take their Halloween variants (Miss Minute follow, Ballon sub /
+   * Prime / resub, Jerry gifts) instead of the usual ones; off = the usual alerts, untouched. Independent of the shop
+   * being open. A Halloween variant whose media Studio lacks plays the usual one.
+   */
+  halloween_alerts: z.boolean(),
+  /** Which of the 4 Ballon animations each event may draw (equal chances among the chosen ones). */
+  halloween_ballon: z.strictObject({
+    sub: BallonPool,
+    prime: BallonPool,
+    resub: BallonPool,
+  }),
 });
 export type EventShopRules = z.infer<typeof EventShopRules>;
 
@@ -80,6 +97,12 @@ export const DEFAULT_EVENT_RULES: EventShopRules = Object.freeze({
   dock_reveal_ms: 5_000,
   extension_audience: 'all',
   extension_testers: [],
+  halloween_alerts: false,
+  halloween_ballon: {
+    sub: [1, 2, 3, 4],
+    prime: [1, 2, 3, 4],
+    resub: [1, 2, 3, 4],
+  },
 });
 
 export const EventShopSettings = z.strictObject({

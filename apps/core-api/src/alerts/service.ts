@@ -9,7 +9,12 @@ import {
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
-import { alertData, decideAlert, type Rng } from './rules.js';
+import {
+  alertData,
+  type AlertProfile,
+  decideAlert,
+  type Rng,
+} from './rules.js';
 import type { AlertVariant } from './variants.js';
 
 // Twitch alerts V1 (Lab) — the durable queue (docs/TWITCH_ALERTS_PARITY_2026-10.md § 7). Conventions of the
@@ -112,6 +117,12 @@ export function playLeaseMs(v: AlertVariant) {
 /** Called once per NEW event, inside its reception transaction (a redelivered event never reaches it). */
 export type AlertListener = (q: Queryable, e: AlertEventInput) => Promise<void>;
 
+const ALL_BALLON = {
+  sub: [1, 2, 3, 4],
+  prime: [1, 2, 3, 4],
+  resub: [1, 2, 3, 4],
+};
+
 export class AlertsService {
   private readonly listeners: { name: string; fn: AlertListener }[] = [];
 
@@ -161,6 +172,43 @@ export class AlertsService {
     );
   }
 
+  /**
+   * The channel's alert profile: Halloween when the event shop's rules say so (docs/HALLOWEEN.md § 14). No row, no
+   * table yet, a read error: the usual alerts (an alert is never lost to its profile).
+   */
+  private async profile(
+    q: Queryable,
+    channelId: string,
+  ): Promise<AlertProfile> {
+    await q.query('savepoint alert_profile');
+    try {
+      const r = await q.query<{ rules: Record<string, unknown> | null }>(
+        'select rules from event_shop_settings where channel_id = $1',
+        [channelId],
+      );
+      await q.query('release savepoint alert_profile');
+      const rules = r[0]?.rules ?? {};
+      const pool = (v: unknown) => {
+        const ok = Array.isArray(v)
+          ? v.filter((n) => Number.isInteger(n) && n >= 1 && n <= 4)
+          : [];
+        return ok.length ? (ok as number[]) : [1, 2, 3, 4];
+      };
+      const b = (rules.halloween_ballon ?? {}) as Record<string, unknown>;
+      return {
+        halloween: rules.halloween_alerts === true,
+        ballon: {
+          sub: pool(b.sub),
+          prime: pool(b.prime),
+          resub: pool(b.resub),
+        },
+      };
+    } catch {
+      await q.query('rollback to savepoint alert_profile');
+      return { halloween: false, ballon: ALL_BALLON };
+    }
+  }
+
   /** Last event received from a source (Studio: « dernier événement Twitch réel »). */
   async lastReceived(channelId: string, source: AlertEventInput['source']) {
     const r = (
@@ -179,7 +227,13 @@ export class AlertsService {
   }> {
     return this.db.tx(async (q) => {
       const now = this.clock.now();
-      const decision = decideAlert(e, this.rng);
+      const stored = await this.profile(q, e.channel_id);
+      // A Studio test may ask for the Halloween variants without switching the channel's profile.
+      const profile =
+        e.source === 'simulation' && e.test_profile === 'halloween'
+          ? { ...stored, halloween: true }
+          : stored;
+      const decision = decideAlert(e, this.rng, profile);
       const outcome = decision.outcome;
       const inserted = await q.query(
         `insert into alert_events (channel_id, source, source_event_id, type, payload, outcome, received_at)

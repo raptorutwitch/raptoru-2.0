@@ -50,12 +50,16 @@ const TEST_FIELDS = [
   'viewers',
   'amount',
   'message',
+  // Halloween: test the Halloween variant of this event without switching the channel's profile.
+  'test_profile',
 ] as const;
 
 interface Variant {
   id: string;
   video?: string;
   audio?: string;
+  /** Halloween profile: the usual variant, played when this one's media are not on this PC. */
+  fallback?: Variant;
 }
 interface ClaimedAlert {
   alert_id: string;
@@ -456,15 +460,25 @@ export class AlertsRuntime {
         { consumer_id: consumer },
       );
       if (!alert) return null;
-      const missing = this.missing(alert.variant);
+      let variant = alert.variant;
+      let missing = this.missing(variant);
+      // A Halloween variant whose media this PC lacks: the usual alert plays instead (never no alert at all).
+      if (
+        missing.length &&
+        variant.fallback &&
+        !this.missing(variant.fallback).length
+      ) {
+        variant = variant.fallback;
+        missing = [];
+      }
       if (!missing.length)
         return {
           alert_id: alert.alert_id,
           attempt_id: alert.attempt_id,
           family: alert.family,
-          variant: alert.variant,
+          variant,
           data: alert.data,
-          placement: this.placement.get(alert.variant.id),
+          placement: this.placement.get(variant.id),
         };
       await this.d.core(`${this.base}/items/${alert.alert_id}/ack`, {
         consumer_id: consumer,

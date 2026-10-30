@@ -61,6 +61,8 @@ export interface AlertVariant {
   pending?: boolean;
   /** Text, position and timings are placeholders awaiting Antoni's visual validation (raid). */
   provisional?: boolean;
+  /** Halloween profile: the usual variant, played instead when Studio lacks this one's media (frozen with it). */
+  fallback?: AlertVariant;
 }
 
 const GIFT = {
@@ -317,3 +319,110 @@ export const GIFT_THRESHOLDS: [number, string][] = [
 
 /** SAMMI bits trigger minimum. */
 export const BITS_MINIMUM = 10;
+
+// --- Halloween profile (30/10, docs/HALLOWEEN.md § 14) -----------------------------------------------------------
+// Used only while the channel's Halloween alert profile is on (event shop rules `halloween_alerts`); the usual variants
+// above are never changed. Media: `Stream PROJET\Halloween` converted by Studio's halloween-alerts-import (originals
+// only read). Text positions and timings are PROVISIONAL (calibrated in Studio): the media carry no text reference.
+
+/** Miss Minute (follow): her video with « Hello… » muxed in (her own track was silent). */
+const HW_FOLLOW: AlertVariant = {
+  id: 'hw_follow_miss_minute',
+  type: 'follow',
+  video: 'Halloween Follow Miss Minute.webm',
+  audio: null,
+  volume: LEGACY_VOLUME,
+  style: 'default',
+  textStyle: 'pseudo-classic',
+  text: '{pseudo} vient de follow !',
+  showAt: 300,
+  hideAt: 2400,
+  priority: 10,
+  mediaMs: 2470,
+  fps: 24,
+  provisional: true,
+};
+
+/** The Ballon: 4 bursts (1 candies, 2 pumpkins, 3 candy corn, 4 spiders), all with « Le Ballon V2 ». */
+const BALLON_TEXT = {
+  sub: "{pseudo} vient de s'abonner !",
+  prime: "{pseudo} s'abonne avec Prime !",
+  resub: '{pseudo} se réabonne : {months} mois !',
+} as const;
+export type BallonKind = keyof typeof BALLON_TEXT;
+
+export function ballonVariant(kind: BallonKind, n: number): AlertVariant {
+  return {
+    id: `hw_ballon_${kind}_${n}`,
+    type: kind === 'resub' ? 'resub' : 'sub',
+    video: `Halloween Ballon ${n}.webm`,
+    audio: 'Halloween Ballon V2.mp3',
+    volume: LEGACY_VOLUME,
+    style: 'default',
+    textStyle: 'pseudo-zone',
+    text: BALLON_TEXT[kind],
+    showAt: 400,
+    fadeOutAt: 3000,
+    hideAt: 3300,
+    zone: { x: 460, y: 470, w: 1000, h: 140 },
+    priority: 30,
+    mediaMs: 3480,
+    fps: 24,
+    provisional: true,
+  };
+}
+
+/** Jerry (gifts): the four animations named by their threshold (1, 5, 10, 20), music « My Ordinary Life » (slowed). */
+const JERRY = {
+  audio: 'Halloween Jerry Musique.mp3',
+  volume: LEGACY_VOLUME,
+  style: 'default',
+  textStyle: 'pseudo-subgift',
+  showAt: 2100,
+  fadeOutAt: 6400,
+  hideAt: 6750,
+  zone: { x: 835, y: 244, w: 340, h: 78 },
+  mediaMs: 7000,
+  fps: 24,
+  provisional: true,
+} as const;
+
+export const JERRY_THRESHOLDS: [number, AlertVariant][] = (
+  [
+    [20, 50],
+    [10, 40],
+    [5, 35],
+    [1, 30],
+  ] as const
+).map(([min, priority]) => [
+  min,
+  {
+    id: `hw_gift_${min}`,
+    type: 'gift_community',
+    video: `Halloween Jerry ${min}.webm`,
+    text: '{pseudo} × {count}',
+    priority,
+    ...JERRY,
+  },
+]);
+
+export const HW_GIFT_TARGETED: AlertVariant = {
+  id: 'hw_gift_targeted',
+  type: 'gift_targeted',
+  video: 'Halloween Jerry 1.webm',
+  text: '{recipient}',
+  priority: 30,
+  ...JERRY,
+};
+
+export { HW_FOLLOW };
+
+/** Every Halloween variant (Studio: media check, preview, calibration). */
+export const HALLOWEEN_VARIANTS: AlertVariant[] = [
+  HW_FOLLOW,
+  ...(['sub', 'prime', 'resub'] as const).flatMap((k) =>
+    [1, 2, 3, 4].map((n) => ballonVariant(k, n)),
+  ),
+  ...JERRY_THRESHOLDS.map(([, v]) => v),
+  HW_GIFT_TARGETED,
+];
