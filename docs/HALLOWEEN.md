@@ -455,22 +455,33 @@ catalogue chacun) :
 Règles inchangées : effets courts, un à la fois, sans stroboscope, volume homogénéisé (−16 LUFS). Les gros screamers
 restent chers et limités à 6 par heure.
 
-## 13. Subgoal Halloween : la solution la plus rapide
+## 13. Chaudron des subs (subgoal) — version Lab du 30/10, branche `feat/halloween-cauldron`
 
-Le chemin le plus court, sans toucher aux alertes OBS, est une **source navigateur OBS servie par Studio**, comme les
-autres lecteurs. Elle reprend le tube de 2024 :
+**Pas en Production** : il demande le déploiement du Core et une version de Studio, chacun sur GO d'Antoni. Le design,
+l'objectif et d'éventuelles récompenses de palier ne sont **pas validés** : les valeurs ci-dessous sont des réglages,
+pas des décisions.
 
-- **Visuel** : le tube (`Composition 1`) en image fixe et la potion (`Fond pour la barre`) en boucle WebM courte
-  (environ 20 s, 1080p, quelques Mo), masquée à la hauteur de la progression. Le texte « N / objectif ».
-- **Compteur durable** : le Core compte les subs (sub, resub, subs offerts) depuis le début de l'objectif, à partir
-  des événements Twitch qu'il enregistre déjà (`alert_events`, sans doublon). Studio règle l'objectif, les paliers et
-  une **correction manuelle** (+/−).
-- **Animations** : à chaque sub, une âme (`âme 1/3/4`) vole vers le tube. À chaque palier, une pluie de bonbons
-  (`Ballon variante`) et la couleur de la potion change. À l'objectif, les bulles de `Sub Plein !` en boucle.
-
-Estimation : environ une journée (Core, Studio, page OBS, conversions et tests). C'est faisable avant samedi
-seulement si la chaîne d'achat est validée en vrai d'ici là. Sinon, la solution de repli est un compteur texte dans
-OBS mis à jour à la main.
+- **Un seul overlay** : le chaudron EST le subgoal. Source navigateur OBS **480 × 520**, fond transparent, servie par
+  Studio (`/halloween/cauldron.html#<clé>`, la même clé que l'ambiance ; l'URL est affichée dans la carte).
+- **Compteur** : le Core compte à partir des événements Twitch qu'il enregistre déjà (`alert_events`, sans doublon : un
+  événement redélivré est une seule ligne ; un redémarrage recompte les mêmes lignes). Depuis le départ choisi :
+  - sub (Prime compris) et sub offert à un viewer : 1 ;
+  - lot de subs offerts : son nombre (ses bénéficiaires ne comptent pas en plus) ;
+  - resub (réabonnement partagé) : 1 si « Compter les resubs » est coché (par défaut) ;
+  - follows, Bits, raids, dons, Bonbons : rien.
+    Production : seulement les vrais événements Twitch ; les simulations de Studio ne comptent pas (Lab : si).
+- **Réglages** (Studio › Halloween › Chaudron des subs, enregistrés dans les règles de l'événement, aucune migration) :
+  activer / désactiver (désactivé par défaut : la source n'affiche rien), titre, objectif, compter les resubs,
+  « Repartir de zéro maintenant » (confirmation), correction manuelle ± (cumulée, visible).
+- **Animations** : la potion monte avec la progression (un fond même à 0, pleine sous le rebord à l'objectif), bulles
+  et lueur de plus en plus fortes ; à chaque abonnement compté, le chaudron tressaute et « +N pseudo » s'élève ; à
+  l'objectif, « Objectif atteint ! » et le chaudron bouillonne. Animations CSS seulement (aucune vidéo).
+- **Tests gratuits** : « Tester un sub », « Tester l'objectif atteint » jouent l'animation ; le compteur ne bouge pas.
+- **Pannes** : Studio relit le Core au plus toutes les 1,5 s ; Core injoignable : le dernier état reste affiché ;
+  Studio injoignable 15 s : la source se masque.
+- **Vérifié** : tests Core (compte, doublons, resubs, Production / Lab, départ, correction, redémarrage), tests de la
+  carte, et en Lab dans Studio et dans Edge (captures : 0, 5/10 avec « +1 Fantome » et « +3 Sorciere », 10/10 et
+  11/10 avec la bannière, masquée une fois désactivé).
 
 ## 14. Alertes Twitch Halloween (30/10) — un profil activable
 

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Raptoru — Chaudron des subs</title>
+    <link rel="stylesheet" href="cauldron.css" />
+  </head>
+  <body>
+    <main id="cauldron" class="off" aria-live="polite">
+      <p id="title"></p>
+      <div id="pot">
+        <svg viewBox="0 0 400 330" aria-hidden="true">
+          <defs>
+            <clipPath id="inside">
+              <path
+                d="M62 112 Q200 92 338 112 Q362 196 316 262 Q200 306 84 262 Q38 196 62 112 Z"
+              />
+            </clipPath>
+            <radialGradient id="potGrad" cx="40%" cy="35%" r="70%">
+              <stop offset="0" stop-color="#3b3646" />
+              <stop offset="1" stop-color="#0d0b12" />
+            </radialGradient>
+          </defs>
+          <!-- Legs -->
+          <path d="M108 270 L90 318 L122 318 L134 278 Z" fill="#14111a" />
+          <path d="M292 270 L310 318 L278 318 L266 278 Z" fill="#14111a" />
+          <!-- Body -->
+          <path
+            d="M50 104 Q200 80 350 104 Q382 200 326 270 Q200 322 74 270 Q18 200 50 104 Z"
+            fill="url(#potGrad)"
+          />
+          <!-- Potion (its level moved by the page) -->
+          <g clip-path="url(#inside)">
+            <g id="liquid">
+              <rect
+                x="0"
+                y="0"
+                width="400"
+                height="400"
+                fill="#4cff7a"
+                opacity="0.9"
+              />
+              <path
+                id="wave"
+                d="M0 0 Q50 -10 100 0 T200 0 T300 0 T400 0 T500 0 T600 0 V30 H0 Z"
+                fill="#a8ff6a"
+                opacity="0.8"
+              />
+            </g>
+          </g>
+          <!-- Rim -->
+          <ellipse
+            cx="200"
+            cy="104"
+            rx="158"
+            ry="26"
+            fill="none"
+            stroke="#2a2533"
+            stroke-width="18"
+          />
+          <ellipse
+            cx="200"
+            cy="100"
+            rx="158"
+            ry="24"
+            fill="none"
+            stroke="#4b4458"
+            stroke-width="5"
+          />
+        </svg>
+        <div id="bubbles"></div>
+        <div id="pops"></div>
+      </div>
+      <p id="count"><b id="n">0</b><span id="goal"> / 0</span></p>
+      <p id="banner" hidden>Objectif atteint !</p>
+    </main>
+    <script type="module" src="cauldron.js"></script>
+  </body>
+</html>

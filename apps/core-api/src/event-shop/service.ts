@@ -1276,6 +1276,58 @@ export class EventShopService {
     return `${n.toLocaleString('fr-FR').replace(/\s/g, ' ')} Bonbon${n >= 2 ? 's' : ''} 🍬`;
   }
 
+  /**
+   * Chaudron des subs (docs/HALLOWEEN.md § 13): the goal and its progress, derived from the recorded Twitch events
+   * (never a second counter: a redelivered event is one row, a restart recounts the same rows). Production counts Twitch
+   * events only; the Lab counts simulations too. `recent`: the last counted events (the page animates the new ones).
+   */
+  async cauldron(channelId: string) {
+    const s = await this.settings(channelId);
+    const c = { ...DEFAULT_EVENT_RULES.cauldron, ...s.rules.cauldron };
+    if (!c.enabled) return { enabled: false as const };
+    const sources = this.opts.rewardSimulations
+      ? ['twitch', 'simulation']
+      : ['twitch'];
+    const units = `case type when 'gift_community' then greatest(1, coalesce((payload->>'count')::int, 1))
+      when 'resub' then $4::int else 1 end`;
+    const where = `channel_id = $1 and source = any($2::text[]) and received_at >= $3
+      and type in ('sub', 'resub', 'gift_community', 'gift_targeted')`;
+    const since = c.since ? new Date(c.since) : new Date(0);
+    const resub = c.count_resubs ? 1 : 0;
+    const [total] = await this.db.query<{ n: string }>(
+      `select coalesce(sum(${units}), 0) as n from alert_events where ${where}`,
+      [channelId, sources, since, resub],
+    );
+    const recent = await this.db.query<{
+      id: string;
+      type: string;
+      name: string | null;
+      units: number;
+      at: Date;
+    }>(
+      `select source || ':' || source_event_id as id, type,
+         coalesce(payload->'actor'->>'display_name', payload->'actor'->>'login') as name, ${units} as units,
+         received_at as at
+       from alert_events where ${where} and ${units} > 0 order by received_at desc limit 5`,
+      [channelId, sources, since, resub],
+    );
+    return {
+      enabled: true as const,
+      title: c.title,
+      goal: c.goal,
+      count: Math.max(0, Number(total?.n ?? 0) + c.adjust),
+      count_resubs: c.count_resubs,
+      since: c.since,
+      recent: recent.map((r) => ({
+        id: r.id,
+        type: r.type,
+        name: r.name,
+        units: Number(r.units),
+        at: iso(r.at),
+      })),
+    };
+  }
+
   /** Studio's panel: settings, the whole catalogue, the overlay, recent purchases and movements, totals. */
   async admin(channelId: string) {
     return this.db.tx(async (q) => {
