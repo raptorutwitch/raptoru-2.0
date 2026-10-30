@@ -85,9 +85,37 @@ sans changer de code.
   - Silhouette 4 (4 s).
 - **Apparitions** : chauves-souris 5, araignée 5, fille fantôme 6, Bonnie qui marche (désactivée).
 - **Screamers** : 26 vidéos avec son, 10 Bonbons chacun.
-- **Non faits** : flou et vision inversée. Il faudrait capturer l'écran et le retraiter (lourd, et invisible pour OBS
-  si la fenêtre est exclue de la capture) ou modifier un réglage de Windows (interdit). Les effets dessinés les
-  remplacent.
+- **Ajoutés le 30/10, désactivés par défaut** (le Core les insère dans un catalogue existant sans toucher aux prix,
+  noms ni états déjà réglés ; Studio les active) :
+  - Chaos : Écran retourné 5 (10 s, recharge 5 min), Flou 3 (6 s, moyen, recharge 2 min) — § 4 bis ;
+  - screamers à 10 : Miss Minute, Mutant au couteau, Coucou…, Chika ;
+  - apparitions : « Hello… » 2 (son seul, rubrique Sons), Fantôme 5, Nuée de chauves-souris 6 (rubrique Spécial),
+    Fantôme furtif 3 (muet).
+  - Leurs miniatures sont dans `assets/halloween/` pour la **prochaine** version de l'extension : l'extension publiée
+    les affiche sans image. Le chat (`!peur flip`, `!peur s-miss-minute`…) n'en a pas besoin.
+
+## 4 bis. Chaos : écran retourné et flou (30/10)
+
+Le vrai écran du joueur n'est jamais modifié (aucune orientation Windows changée) : l'overlay **capture la fenêtre du
+jeu** et la redessine par-dessus elle-même, retournée ou floue. Le joueur continue à jouer (souris et clavier vont au
+jeu, l'overlay laisse passer les clics) et OBS, qui capture l'écran, montre la même chose aux viewers.
+
+- **Fenêtre capturée** : celle choisie dans Studio › Halloween › Chaos (« Fenêtre du jeu »), sinon la fenêtre au premier
+  plan qui n'est pas Studio. Jamais l'écran entier (l'overlay se capturerait lui-même), jamais une fenêtre de Studio.
+  Fenêtre choisie fermée : l'effet échoue proprement (rien ne s'affiche ; un achat non démarré est remboursé).
+- **Écran retourné** : tête en bas (180°), miroir (gauche ↔ droite) ou inversé (haut ↔ bas), 3 à 60 s, avec un
+  retournement animé de 0,7 s à l'aller et au retour.
+- **Flou** : faible / moyen / fort, 2 à 30 s, légèrement agrandi pendant le flou (aucun bord net ne dépasse).
+- **Arrêt** : fin automatique, STOP ALL (bouton ou Ctrl+Maj+F12) immédiat, délai maximal comme les autres effets,
+  fermeture ou plantage de Studio (la fenêtre de l'overlay disparaît avec lui), redémarrage : rien n'est rejoué.
+- **Un effet à la fois** (comme tout le moteur : un second est refusé `busy`). Les politiques de Chaos Control
+  (Replace, Stack, Queue) ne s'appliquent pas : le moteur Halloween a sa règle unique « un à la fois, sans file ».
+- **Limites connues** : le jeu doit être en **fenêtré sans bordure** sur l'écran de l'overlay (le plein écran exclusif
+  passe au-dessus de toute fenêtre) ; un jeu lancé **en administrateur**, ou Studio lancé en administrateur, ne peut pas
+  être capturé (Windows refuse : l'effet échoue proprement) ; une fenêtre plus petite que l'écran est étirée à tout
+  l'écran ; décalage d'une ou deux images pendant l'effet.
+- **Tests gratuits** : Studio › Halloween › Chaos › « Tester » (sans Core ni Bonbon). La dernière fenêtre capturée est
+  affichée et écrite dans le journal.
 
 ## 5. Médias
 
@@ -143,6 +171,20 @@ L'onglet Halloween signale tout article actif dont la vidéo manque sur le PC. L
   - au-dessus de tout ;
   - fermée avec Studio ;
   - aucun réglage Windows modifié.
+
+## 6 bis. Ambiance OBS (30/10) — décor pour les viewers
+
+Une source navigateur OBS servie par Studio, **jamais sur l'écran du jeu** : seuls les viewers la voient.
+
+- **Couches** : l'araignée qui se promène autour de la cam (boucle de 4 min 50, `Araignée Overlay Cam Mouche.mov`), un
+  vol de chauves-souris de temps en temps (`Chauve souris Fx.mov`, muet), une vignette sombre sur les bords (le centre
+  reste dégagé, légère respiration, coupée si l'OS demande moins d'animations).
+- **Studio › Halloween › Ambiance OBS** : interrupteur général (coupé par défaut : la source n'affiche rien), chaque
+  couche, intervalle des vols (0 = seulement sur le bouton), intensité de la vignette, « Lancer un vol maintenant ».
+  L'état dit si une source est ouverte dans OBS.
+- **URL** (affichées dans Studio, avec la clé) : tout ; `?layers=spider` (l'araignée seule, à placer et redimensionner
+  sur la cam) ; `?layers=bats,vignette` (plein écran).
+- **Sécurité** : Studio injoignable 15 s → plus rien n'est affiché ; STOP ALL arrête un vol en cours ; aucun son.
 
 ## 7. Extension, revue Twitch et accès progressif
 
@@ -285,6 +327,14 @@ Avant tout : la PR #35 est relue puis **fusionnée** (GO), puisque Core, Studio 
   5 / 10 / 20 / 30) ; « Aléatoire » est désactivé, car ses tranches sont en Jetons.
 
 ## 10. Tests
+
+**30/10 (Chaos, médias, ambiance)** : `halloween-chaos.test.ts` (fenêtre choisie, liste des fenêtres venant d'Electron
+seulement, paramètres d'un test, fenêtre capturée au journal, STOP ALL), `capture-window.test.ts` (jamais une fenêtre
+de Studio, fenêtre fermée = rien), `event-shop.test.ts` (nouveaux articles insérés désactivés sans toucher aux
+réglages de Studio), e2e Chromium `halloween-ambiance.e2e.ts` (source coupée = rien, interrupteurs immédiats, un vol,
+source « araignée seule », Chaos sans fenêtre capturable = échec propre). **Sur le vrai bureau Windows** (Studio lancé
+normalement, sans droits administrateur) : écran retourné et miroir, flou fort, double déclenchement refusé, STOP ALL
+en plein effet, Studio tué en plein effet → écran propre. **Non testé** : dans OBS, en jeu réel, par Antoni.
 
 - **Core** (`event-shop.test.ts`, 21 tests) : règles, idempotence, sort des exécutions, conversion, subs et dons,
   STOP ALL, fermeture contrôlée et réouverture.
