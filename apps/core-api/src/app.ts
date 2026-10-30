@@ -18,6 +18,7 @@ import type { Clock } from './clock.js';
 import { DailyCredits, type CreditProvider } from './daily/credits.js';
 import { DailyService } from './daily/daily-service.js';
 import type { Db } from './db/db.js';
+import { CosmeticShopService } from './cosmetics/service.js';
 import { type EconomyPort, labEconomy } from './economy/economy.js';
 import { type ChatGames, createChatGames } from './lab-chat/games.js';
 import type { LoginLookup } from './mini-games/twitch-login.js';
@@ -58,6 +59,8 @@ export interface Core {
   dock: DockActivityService;
   eventShop: EventShopService;
   progression: ProgressionService;
+  /** Boutique cosmétique V1 (docs/COSMETIC_SHOP.md): looks, offers, purchases, module awards. */
+  cosmetics: CosmeticShopService;
   /** Caution: the requests and the executor's routes always; `!caution` in the chat only with `cautionChat`. */
   caution: CautionService;
   /** Votekick V2: votes and the broadcaster's mute always; `!votekick` / `!kick` / `!save` in the chat only with votekickChat. */
@@ -176,6 +179,8 @@ export function createCore(
         loyalty.presenceListener.committed?.() ?? Promise.resolve(),
     }),
     progression,
+    // The shop pays with this Core's economy (Jetons) and the event ledger (Bonbons).
+    cosmetics: new CosmeticShopService(db, clock, progression, economy),
     wallet,
     loyalty,
     // The Bonk accepts a Twitch emote only from the viewer's own catalog (none: Twitch emotes off).

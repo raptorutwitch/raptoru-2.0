@@ -1,0 +1,44 @@
+/* Boutique cosmétique V1 — Studio's preview frame only (the looks themselves come from the Core's stylesheet). */
+.rc-studio-preview {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #0b1412;
+  color: #eafff9;
+}
+.rc-preview-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 15px;
+}
+.rc-preview-big .rc-badge {
+  --rc-size: 48px;
+}
+.rc-preview-cell {
+  background: #0b1412;
+  color: #eafff9;
+}
+/* The editor's forms: one field per cell, label above its input. */
+#tab-shop .row-in {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 14px;
+  align-items: end;
+  margin: 8px 0;
+}
+#tab-shop .row-in > label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#tab-shop .row-in > label:has(> input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+}
+#tab-shop label.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

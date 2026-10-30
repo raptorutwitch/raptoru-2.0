@@ -90,6 +90,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261114130000_progression_periods.sql',
   // Level Up V2 (normalization audit, level-up events, viewer notification modes); Lab twin 20261115120000.
   '20261115130000_progression_level_up.sql',
+  // Boutique cosmétique V1 (looks, offers, purchases, module awards); Lab twin 20261116120000.
+  '20261116130000_cosmetic_shop.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -178,6 +180,10 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261114120000_progression_periods_lab.sql',
   // Level Up V2: the Lab twin of 20261115130000_progression_level_up.sql (same content).
   '20261115120000_progression_level_up_lab.sql',
+  // Boutique cosmétique V1: the Lab twin of 20261116130000_cosmetic_shop.sql (same content), then the Lab test wallet's
+  // own ledger kind for it.
+  '20261116120000_cosmetic_shop_lab.sql',
+  '20261116120500_lab_ledger_cosmetic.sql',
 ]);
 
 /**

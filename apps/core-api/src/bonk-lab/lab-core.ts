@@ -16,7 +16,7 @@ import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { labModerationRoutes } from '../http/lab-moderation-routes.js';
 import { LabModerationService } from '../lab-moderation/service.js';
 import { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
-import { HttpError } from '../http/server.js';
+import { HttpError, STREAMED } from '../http/server.js';
 import { commandsRoutes } from '../http/commands-routes.js';
 import { miniGamesRoutes } from '../http/mini-games-routes.js';
 import { alertsRoutes } from '../http/alerts-routes.js';
@@ -48,6 +48,8 @@ import {
 import type { Clock } from '../clock.js';
 import { dbReady, type Db } from '../db/db.js';
 import { labEconomy, type EconomyPort } from '../economy/economy.js';
+import { CosmeticShopService } from '../cosmetics/service.js';
+import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
 
 // The Lab Core: its services, routes and HTTP server on a given database. One assembly for the Lab
 // Core process (local-server.ts: env, port, timers) and the end-to-end harness (apps/studio/server/e2e,
@@ -169,6 +171,13 @@ export function createLabCore({
     () => LAB_PROGRESSION_CHANNEL,
     { lab: true },
   );
+  // Boutique cosmétique V1: the Lab test wallet (Jetons) and the Lab event ledger (Bonbons) — never a real economy.
+  const cosmetics = new CosmeticShopService(
+    db,
+    systemClock,
+    progression,
+    economy,
+  );
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
       db,
@@ -233,6 +242,12 @@ export function createLabCore({
       // The site's equip route too: in the Lab, every route is behind the Lab secret (raptoru.fr tested locally).
       site: true,
     }),
+    // Boutique cosmétique V1: Studio's editor and the shop, every route behind the Lab secret (the site tested locally).
+    ...cosmeticsRoutes(cosmetics, {
+      channelId: LAB_PROGRESSION_CHANNEL,
+      production: false,
+      site: true,
+    }),
     // Level Up V2: the viewer's notification mode, for the Extension Lab (Lab secret).
     ...progressionViewerPrefsRoutes(progression, LAB_PROGRESSION_CHANNEL),
     // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
@@ -269,19 +284,23 @@ export function createLabCore({
       );
       if (!route) return send(404, { error: 'not_found' });
       let text = '';
+      // 8 Ko per request; a badge image (Boutique cosmétique, base64) up to the main Core's 64 Ko.
+      const max = /\/cosmetics\/images$/.test(requestUrl.pathname)
+        ? 64 * 1024
+        : 8192;
       for await (const chunk of req) {
         text += String(chunk);
-        if (text.length > 8192) return send(413, { error: 'too_large' });
+        if (text.length > max) return send(413, { error: 'too_large' });
       }
       const params = route.pattern.exec(requestUrl.pathname)!.slice(1);
-      send(
-        200,
-        await route.handle({
-          params,
-          url: requestUrl,
-          body: text ? JSON.parse(text) : undefined,
-        }),
-      );
+      const out = await route.handle({
+        params,
+        url: requestUrl,
+        body: text ? JSON.parse(text) : undefined,
+        res,
+      });
+      // A route that answered on `res` itself (a badge image, the looks' stylesheet).
+      if (out !== STREAMED) send(200, out);
     } catch (e) {
       if (e instanceof HttpError) return send(e.status, e.body);
       // Unexpected (ASTRA-P2-013): the client still gets a sober answer, the cause goes to the log —

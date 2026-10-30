@@ -91,6 +91,7 @@ await db.query(
 
 const { ProgressionRelay } = await import('../src/progression/relay.js');
 const { LevelUpRuntime } = await import('../src/level-up/runtime.js');
+const { CosmeticsRelay } = await import('../src/cosmetics/relay.js');
 const ext = await LabEbs.create(EXTENSION_DIR);
 const labCore = localLabCoreClient(coreUrl, secret);
 ext.connectLab(labCore);
@@ -153,6 +154,8 @@ const studio = createStudioServer(
     playerDir: join(import.meta.dirname, '..', 'level-up-player'),
     claimEveryMs: 500,
   }),
+  // Boutique cosmétique V1: Studio's « Boutique » tab relay to this Lab Core.
+  new CosmeticsRelay({ core: labCore, environment: 'lab' }),
 );
 // The browser tests that need the Lab Core itself (a simulated live, a chat message) read where it is here.
 await writeFile(
