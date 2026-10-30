@@ -103,6 +103,20 @@ export const EventShopRules = z.strictObject({
     prime: BallonPool,
     resub: BallonPool,
   }),
+  /**
+   * Chaudron des subs (31/10, Lab, docs/HALLOWEEN.md § 13): the subgoal shown by its own OBS source. Counted by the
+   * Core from the Twitch events it already records (alert_events, deduplicated) since `since`: sub, targeted gift = 1,
+   * community gift = its count, resub = 1 when `count_resubs`; plus the streamer's manual correction `adjust`.
+   * Separate from the Bonbons. OFF by default; the goal is the streamer's choice.
+   */
+  cauldron: z.strictObject({
+    enabled: z.boolean(),
+    goal: z.number().int().min(1).max(100_000),
+    since: z.string().datetime().nullable(),
+    adjust: z.number().int().min(-100_000).max(100_000),
+    count_resubs: z.boolean(),
+    title: z.string().trim().max(40),
+  }),
 });
 export type EventShopRules = z.infer<typeof EventShopRules>;
 
@@ -131,6 +145,14 @@ export const DEFAULT_EVENT_RULES: EventShopRules = Object.freeze({
     sub: [1, 2, 3, 4],
     prime: [1, 2, 3, 4],
     resub: [1, 2, 3, 4],
+  },
+  cauldron: {
+    enabled: false,
+    goal: 50,
+    since: null,
+    adjust: 0,
+    count_resubs: true,
+    title: 'Chaudron des subs',
   },
 });
 

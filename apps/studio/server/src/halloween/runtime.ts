@@ -182,6 +182,9 @@ const PAGE_FILES: Record<string, string> = {
   'ambiance.html': 'text/html; charset=utf-8',
   'ambiance.js': 'text/javascript; charset=utf-8',
   'ambiance.css': 'text/css; charset=utf-8',
+  'cauldron.html': 'text/html; charset=utf-8',
+  'cauldron.js': 'text/javascript; charset=utf-8',
+  'cauldron.css': 'text/css; charset=utf-8',
 };
 const MEDIA_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
@@ -203,6 +206,11 @@ export class HalloweenRuntime {
   /** The « Ambiance » page(s): last poll, and the « bats now » counter (Studio's button). */
   private ambianceSeen = 0;
   private batsEpoch = 0;
+  /** Chaudron des subs: the OBS page's last poll, the Core's answer (kept 1,5 s), the last free test. */
+  private cauldronSeen = 0;
+  private cauldronCache: { at: number; data: Record<string, unknown> } | null =
+    null;
+  private cauldronTest: { id: number; kind: 'sub' | 'goal' } | null = null;
   /** Long-polls of the page waiting right now (a page waiting for work is connected). */
   private polling = 0;
   private pageReady = false;
@@ -354,6 +362,11 @@ export class HalloweenRuntime {
         url: this.ambianceUrl(),
         spider_ready: this.media.has('decor-araignee-cam'),
         bats_ready: this.media.has('decor-chauves-souris'),
+      },
+      cauldron: {
+        connected:
+          this.cauldronSeen > 0 && this.now() - this.cauldronSeen < 6000,
+        url: `${this.d.origin}/halloween/cauldron.html#${this.token}`,
       },
       media: [...this.sellable()].map((m) => ({
         id: m.id,
@@ -767,6 +780,34 @@ export class HalloweenRuntime {
     for (const m of this.media.values()) if (m.kind !== 'decor') yield m;
   }
 
+  /**
+   * The cauldron page asks every 2 s: the Core's goal and count (one Core read per 1,5 s at most, whatever the number of
+   * OBS sources), plus the last free test. Core unreachable: the last answer, marked stale (the page keeps showing it).
+   */
+  private async cauldronState() {
+    this.cauldronSeen = this.now();
+    const fresh =
+      this.cauldronCache && this.now() - this.cauldronCache.at < 1500;
+    if (!fresh && this.d.core) {
+      try {
+        const data = await this.d.core<Record<string, unknown>>(
+          `${this.base}/channels/${this.d.channelId}/cauldron`,
+        );
+        this.cauldronCache = { at: this.now(), data };
+      } catch {
+        if (this.cauldronCache)
+          this.cauldronCache = {
+            at: this.now(),
+            data: { ...this.cauldronCache.data, stale: true },
+          };
+      }
+    }
+    return {
+      ...(this.cauldronCache?.data ?? { enabled: false }),
+      test: this.cauldronTest,
+    };
+  }
+
   /** The ambiance page asks what to show (every 2 s): its settings, its media and the « bats now » counter. */
   private ambianceState() {
     this.ambianceSeen = this.now();
@@ -870,6 +911,8 @@ export class HalloweenRuntime {
       return this.next(req, url, reply);
     if (req.method === 'GET' && name === 'ambiance/state')
       return reply(200, this.ambianceState());
+    if (req.method === 'GET' && name === 'cauldron/state')
+      return reply(200, await this.cauldronState());
     if (req.method === 'POST' && name === 'overlay/report')
       return this.report(await this.body(req), reply);
     reply(404, { error: 'not_found' });
@@ -955,6 +998,20 @@ export class HalloweenRuntime {
         );
         return reply(200, out);
       }
+    }
+    if (req.method === 'GET' && p === '/api/halloween/cauldron')
+      return reply(
+        200,
+        await this.requireCore()(
+          `${this.base}/channels/${this.d.channelId}/cauldron`,
+        ),
+      );
+    if (req.method === 'POST' && p === '/api/halloween/cauldron/test') {
+      // Free: the page plays the animation, the count never moves.
+      const kind = (await this.body(req)).kind === 'goal' ? 'goal' : 'sub';
+      this.cauldronTest = { id: this.now(), kind };
+      this.log(`Chaudron : test « ${kind === 'goal' ? 'objectif' : 'sub'} »`);
+      return reply(200, { ok: true });
     }
     if (req.method === 'POST' && p === '/api/halloween/ambiance/bats') {
       if (!this.settings.ambiance.enabled || !this.settings.ambiance.bats)

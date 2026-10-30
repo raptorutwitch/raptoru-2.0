@@ -23,6 +23,13 @@ import {
   type HalloweenAlertRules,
 } from './halloween-alerts.js';
 import { mountViewerFinder } from './halloween-viewer.js';
+import {
+  cauldronCard,
+  cauldronFromForm,
+  type CauldronSettings,
+  type CauldronState,
+  DEFAULT_CAULDRON,
+} from './halloween-cauldron.js';
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 
@@ -42,6 +49,7 @@ interface Status {
   };
   chaos?: ChaosStatus['chaos'];
   ambiance?: AmbianceStatus['ambiance'];
+  cauldron?: { url: string; connected: boolean };
   displays: {
     id: number;
     label: string;
@@ -460,6 +468,23 @@ export function mountHalloween(root: HTMLElement) {
   let admin: Admin | null = null;
   let adminError: string | null = null;
   let alertCatalog: CatalogVariant[] | null = null;
+  let cauldron: CauldronState | null = null;
+  const cauldronOf = (): CauldronSettings | null =>
+    admin
+      ? {
+          ...DEFAULT_CAULDRON,
+          ...((admin.settings.rules as Record<string, unknown>).cauldron as
+            Partial<CauldronSettings> | undefined),
+        }
+      : null;
+  const saveCauldron = (patch: Partial<CauldronSettings>, ok: string) =>
+    act(
+      () =>
+        call('/api/halloween/admin/settings', {
+          rules: { cauldron: { ...cauldronOf()!, ...patch } },
+        }),
+      ok,
+    );
   const hwRules = () =>
     (admin?.settings.rules ?? null) as HalloweenAlertRules | null;
   let visible = false;
@@ -473,6 +498,7 @@ export function mountHalloween(root: HTMLElement) {
       <section class="card"><h3>Overlay sur mon écran</h3><div data-role="overlay"></div></section>
       <section class="card"><h3>Chaos — écran retourné et flou</h3><div data-role="chaos"></div></section>
       <section class="card"><h3>Ambiance OBS (pour les viewers)</h3><div data-role="ambiance"></div></section>
+      <section class="card"><h3>Chaudron des subs <em>Lab</em></h3><div data-role="cauldron"></div></section>
       <section class="card wide"><h3>Alertes Halloween (Twitch)</h3><div data-role="hw-alerts"></div></section>
       <section class="card"><h3>Boutique</h3><div data-role="shop"></div></section>
       <section class="card wide"><h3>Catalogue</h3><div data-role="catalogue"></div></section>
@@ -539,6 +565,10 @@ export function mountHalloween(root: HTMLElement) {
       'hw-alerts',
       halloweenAlertsCard(hwRules(), alertCatalog, adminError),
     );
+    paint(
+      'cauldron',
+      cauldronCard(cauldronOf(), cauldron, status?.cauldron ?? null),
+    );
   };
   const loadStatus = async () => {
     try {
@@ -564,6 +594,10 @@ export function mountHalloween(root: HTMLElement) {
     // The Halloween alert variants and whether their media are on this PC (the Alerts tab's catalogue).
     alertCatalog = await call('/api/alerts/catalog').then(
       (r) => (r.variants as CatalogVariant[]) ?? null,
+      () => null,
+    );
+    cauldron = await call('/api/halloween/cauldron').then(
+      (r) => r as unknown as CauldronState,
       () => null,
     );
     renderAdmin();
@@ -595,6 +629,41 @@ export function mountHalloween(root: HTMLElement) {
       .chaosTest as 'flip' | 'blur' | undefined;
     if (a === 'stop')
       void act(() => call('/api/halloween/stop', {}), 'Tout est arrêté.');
+    else if (a === 'cauldron-toggle' && admin)
+      void saveCauldron(
+        { enabled: !cauldronOf()!.enabled },
+        cauldronOf()!.enabled ? 'Chaudron désactivé.' : 'Chaudron activé.',
+      );
+    else if (
+      a === 'cauldron-start' &&
+      admin &&
+      confirm(
+        'Repartir de zéro maintenant ? Seuls les abonnements à partir de maintenant compteront.',
+      )
+    )
+      void saveCauldron(
+        { since: new Date().toISOString(), adjust: 0 },
+        'Chaudron : nouveau départ, 0 abonnement.',
+      );
+    else if (a === 'cauldron-fix' && admin) {
+      const input = part('cauldron').querySelector<HTMLInputElement>(
+        '[data-role="cauldron-fix"]',
+      );
+      const d = Math.round(Number(input?.value));
+      if (!d) say('Indique une correction (+ ou −).');
+      else
+        void saveCauldron(
+          { adjust: cauldronOf()!.adjust + d },
+          `Chaudron corrigé de ${d > 0 ? '+' : ''}${d}.`,
+        );
+    } else if (a === 'cauldron-test-sub' || a === 'cauldron-test-goal')
+      void act(
+        () =>
+          call('/api/halloween/cauldron/test', {
+            kind: a === 'cauldron-test-goal' ? 'goal' : 'sub',
+          }),
+        'Test envoyé au chaudron (le compteur ne bouge pas).',
+      );
     else if (a === 'chaos-obs-prepare')
       void act(
         () => call('/api/halloween/obs/prepare', {}),
@@ -800,6 +869,20 @@ export function mountHalloween(root: HTMLElement) {
     if (form) delete form.dataset.key;
   });
   root.addEventListener('submit', (ev) => {
+    const cf = (ev.target as HTMLElement).closest<HTMLFormElement>(
+      '[data-form="cauldron"]',
+    );
+    if (cf && admin) {
+      ev.preventDefault();
+      const f = new FormData(cf);
+      const next = cauldronFromForm(cauldronOf()!, {
+        title: String(f.get('title') ?? ''),
+        goal: String(f.get('goal') ?? ''),
+        count_resubs: f.get('count_resubs') === 'on',
+      });
+      void saveCauldron(next, 'Chaudron enregistré.');
+      return;
+    }
     const form = (ev.target as HTMLElement).closest<HTMLFormElement>(
       '[data-form="grant"]',
     );
