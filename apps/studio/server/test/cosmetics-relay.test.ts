@@ -84,7 +84,8 @@ describe('cosmetics relay', () => {
     server!.closeAllConnections();
     await new Promise((res) => server!.close(res));
     const core = (async (path: string) => {
-      if (path === '/v1/lab/cosmetics/style.json') return { css: '.rc-title{}' };
+      if (path === '/v1/lab/cosmetics/style.json')
+        return { css: '.rc-title{}' };
       if (path.endsWith('a'.repeat(64)))
         return { mime: 'image/png', data_base64: PNG.toString('base64') };
       return { mime: 'image/svg+xml', data_base64: 'PHN2Zz4=' };
