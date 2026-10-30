@@ -18,7 +18,7 @@ export function formatAmount(amount, currency = 'EUR') {
 /** Fills a text template. Values are plain strings: the engine always inserts them as text, never as HTML. */
 export function fill(template, data) {
   return String(template ?? '').replace(
-    /\{(pseudo|amount|count|recipient|message|viewers)\}/g,
+    /\{(pseudo|amount|count|recipient|message|viewers|months)\}/g,
     (_, k) => String(data?.[k] ?? ''),
   );
 }
