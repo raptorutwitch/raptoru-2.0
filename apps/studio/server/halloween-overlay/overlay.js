@@ -5,6 +5,8 @@
 // refused in safe mode, every play has a hard deadline after which it is removed whatever happens.
 
 const TOKEN = decodeURIComponent(location.hash.slice(1));
+/** « chaos »: the Chaos window (screen effects only); otherwise the overlay (everything else). */
+const ROLE = new URLSearchParams(location.search).get('role');
 const stage = document.getElementById('stage');
 const notice = document.getElementById('notice');
 const CAN_PLAY =
@@ -329,13 +331,15 @@ async function glitch(d, ctx) {
   for (const b of bands) b.remove();
 }
 
-// --- screen effects (Chaos) : the game window, captured and redrawn over itself -----------------------------------
-// Electron main answers getDisplayMedia with the GAME's window (never this overlay, never the whole screen: no capture
-// loop) and the page shows it flipped or blurred, exactly over the game; OBS captures the monitor, so viewers see what
-// the player sees. Nothing in Windows changes: when the play ends (or STOP ALL, or Studio closes) the capture stops and
-// the real screen is there again. Mouse and keyboard keep going to the game (the window is click-through).
+// --- screen effects (Chaos) : the whole monitor, captured and redrawn over itself ---------------------------------
+// Played only by the CHAOS window (this page with ?role=chaos): Electron main answers getDisplayMedia with the monitor
+// this window covers and excludes the window itself from every capture (Windows' display affinity) — so it never sees
+// itself (no loop), whatever application is in front, and the image stays right when the streamer changes window.
+// Nothing in Windows changes: when the play ends (or STOP ALL, or Studio closes) the capture stops and the real screen
+// is there again. Mouse and keyboard keep going to what is underneath (the window is click-through). OBS cannot see
+// this window either: Studio shows the viewers the same effect with filters on OBS's screen capture.
 
-async function captureGame(ctx) {
+async function captureScreen(ctx) {
   if (!navigator.mediaDevices?.getDisplayMedia)
     throw new Error('capture_unsupported');
   let stream;
@@ -345,7 +349,7 @@ async function captureGame(ctx) {
       audio: false,
     });
   } catch {
-    throw new Error('no_game_window');
+    throw new Error('no_screen_capture');
   }
   const stop = () => stream.getTracks().forEach((t) => t.stop());
   if (ctx.cancelled()) {
@@ -382,7 +386,7 @@ const FLIP = {
 async function flip(d, ctx) {
   const total = clamp(d.params?.durationMs, 3000, 60000, 10000);
   const turn = FLIP[d.params?.mode] ?? FLIP.rotate;
-  const g = await captureGame(ctx);
+  const g = await captureScreen(ctx);
   if (!g) return;
   ctx.started(g.name);
   await animate(
@@ -410,7 +414,7 @@ async function blur(d, ctx) {
   const px =
     (BLUR[level] ?? clamp(level, 2, 40, BLUR.medium)) *
     (window.innerHeight / 1080);
-  const g = await captureGame(ctx);
+  const g = await captureScreen(ctx);
   if (!g) return;
   ctx.started(g.name);
   // Slightly enlarged while blurred: the blurred edges never let the sharp screen show through.
@@ -491,7 +495,7 @@ async function loop() {
   for (;;) {
     try {
       const r = await api(
-        `/halloween/overlay/next?wait=1&ready=${CAN_PLAY ? 1 : 0}&epoch=${epoch}`,
+        `/halloween/overlay/next?wait=1&ready=${CAN_PLAY ? 1 : 0}&epoch=${epoch}${ROLE === 'chaos' ? '&role=chaos' : ''}`,
       );
       if (r.stop_epoch !== epoch) {
         if (epoch !== -1) stopAll();

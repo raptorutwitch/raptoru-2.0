@@ -6,16 +6,19 @@ import {
   session,
   type Display,
 } from 'electron';
-import { pickCaptureWindow } from './capture-window.js';
+import { pickScreenSource } from './capture-window.js';
 
-// Halloween (docs/HALLOWEEN.md) — the overlay window over the streamer's screen. Electron main opens ONE transparent,
-// frameless, always-on-top window on the screen chosen in Studio: it is click-through (setIgnoreMouseEvents), never
-// focusable (no focus stolen from a game, no key taken), out of the taskbar, and it loads the overlay page served by
-// the Studio server (which decides what plays). It follows the settings (enabled, screen) every 2 s and closes with
-// Studio. A global shortcut (Ctrl + Shift + F12) asks Studio for STOP ALL. No Windows setting is ever changed.
-// Chaos screen effects (flip, blur): the overlay page asks getDisplayMedia; this process answers, without any picker,
-// with the GAME's window — the one chosen in Studio, else the topmost window that is not Studio's own — never a whole
-// screen (the overlay would capture itself) and never for any other page.
+// Halloween (docs/HALLOWEEN.md) — the windows over the streamer's screen. Electron main opens, on the screen chosen in
+// Studio, transparent, frameless, always-on-top windows: click-through (setIgnoreMouseEvents), never focusable (no focus
+// stolen from a game, no key taken), out of the taskbar, loading the overlay page served by the Studio server (which
+// decides what plays). They follow the settings (enabled, screen) every 2 s and close with Studio. A global shortcut
+// (Ctrl + Shift + F12) asks Studio for STOP ALL. No Windows setting is ever changed.
+// - The OVERLAY window (screamers, apparitions, drawn effects): seen by OBS's screen capture like any window.
+// - The CHAOS window (écran retourné, flou, docs/HALLOWEEN.md § 4 bis): it captures the WHOLE monitor it covers and
+//   redraws it flipped or blurred. Windows excludes it from every capture (content protection = display affinity
+//   « exclude from capture »), so it never captures itself — whatever application is in front, even when the streamer
+//   changes window. OBS does not see it either: Studio applies the same effect to OBS's screen capture with filters.
+//   Its page may capture only that monitor; any other page or request is refused.
 
 export const STOP_ALL_SHORTCUT = 'CommandOrControl+Shift+F12';
 
@@ -23,10 +26,11 @@ export interface OverlayConfig {
   enabled: boolean;
   display_id: number | null;
   url: string;
-  capture_window?: string | null;
+  /** The same page in its « chaos » role. */
+  chaos_url?: string;
 }
 
-/** The overlay's own session: only its page may capture, and only a game window. */
+/** The windows' own session: only the Chaos page may capture, and only the monitor it covers. */
 export const OVERLAY_PARTITION = 'halloween-overlay';
 
 /** The screen to cover: the chosen one when still connected, else the primary screen. */
@@ -43,15 +47,21 @@ export const sameBounds = (
   b: { x: number; y: number; width: number; height: number },
 ) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 
+type Kind = 'overlay' | 'chaos';
+
 export function startHalloweenOverlay(deps: {
   studioUrl: string;
   mainToken: string;
   log: (...args: unknown[]) => void;
 }) {
-  let overlay: BrowserWindow | null = null;
-  let loadedUrl: string | null = null;
+  const wins: Record<Kind, BrowserWindow | null> = {
+    overlay: null,
+    chaos: null,
+  };
+  const loaded: Record<Kind, string | null> = { overlay: null, chaos: null };
+  /** The monitor the windows cover now (the Chaos capture's source). */
+  let covered: Display | null = null;
   let disposed = false;
-  let captureWindow: string | null = null;
 
   const call = async (path: string, body?: unknown) => {
     const res = await fetch(`${deps.studioUrl}${path}`, {
@@ -80,52 +90,27 @@ export function startHalloweenOverlay(deps: {
       displays: screen.getAllDisplays().map(describe),
     }).catch(() => {});
 
-  const ownSources = () =>
-    new Set(
-      BrowserWindow.getAllWindows()
-        .filter((w) => !w.isDestroyed())
-        .map((w) => w.getMediaSourceId()),
-    );
-  const windowSources = () =>
-    desktopCapturer.getSources({
-      types: ['window'],
-      thumbnailSize: { width: 0, height: 0 },
-    });
-  const pushWindows = async () => {
-    try {
-      const own = ownSources();
-      const names = (await windowSources())
-        .filter((s) => !own.has(s.id) && s.name.trim() !== '')
-        .map((s) => s.name);
-      await call('/api/halloween/windows', { windows: names });
-    } catch {
-      /* Studio server restarting: next round */
-    }
-  };
   const overlaySession = session.fromPartition(OVERLAY_PARTITION);
   overlaySession.setDisplayMediaRequestHandler((request, callback) => {
-    // Only Studio's overlay page, only its own window: anything else is refused (no stream).
+    // Only the Chaos window's page, and only the monitor it covers: anything else is refused (no stream).
+    const chaos = wins.chaos;
     const from = request.frame?.url ?? '';
     if (
-      !overlay ||
-      overlay.isDestroyed() ||
-      !from.startsWith(`${deps.studioUrl}/halloween/`)
+      !chaos ||
+      chaos.isDestroyed() ||
+      !covered ||
+      !from.startsWith(`${deps.studioUrl}/halloween/`) ||
+      !from.includes('role=chaos')
     )
       return callback({});
-    // The window chosen in Studio NOW (not the copy read every 2 s: a choice made just before a test counts).
-    call('/api/halloween/overlay-config')
-      .then(
-        (cfg) => {
-          captureWindow = (cfg as OverlayConfig).capture_window ?? null;
-        },
-        () => {},
-      )
-      .then(windowSources)
+    const display = covered;
+    desktopCapturer
+      .getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } })
       .then(
         (sources) => {
-          const pick = pickCaptureWindow(sources, ownSources(), captureWindow);
+          const pick = pickScreenSource(sources, display.id);
           if (!pick) {
-            deps.log('[halloween] capture : aucune fenêtre de jeu trouvée');
+            deps.log('[halloween] Chaos : écran introuvable pour la capture');
             return callback({});
           }
           callback({ video: pick });
@@ -134,13 +119,19 @@ export function startHalloweenOverlay(deps: {
       );
   });
 
-  const close = () => {
-    if (overlay && !overlay.isDestroyed()) overlay.destroy();
-    overlay = null;
-    loadedUrl = null;
+  const close = (kind: Kind) => {
+    const w = wins[kind];
+    if (w && !w.isDestroyed()) w.destroy();
+    wins[kind] = null;
+    loaded[kind] = null;
+  };
+  const closeAll = () => {
+    close('chaos');
+    close('overlay');
+    covered = null;
   };
 
-  const open = (display: Display, url: string) => {
+  const open = (kind: Kind, display: Display, url: string) => {
     const w = new BrowserWindow({
       ...display.bounds,
       show: false,
@@ -156,7 +147,7 @@ export function startHalloweenOverlay(deps: {
       focusable: false,
       skipTaskbar: true,
       alwaysOnTop: true,
-      title: 'Raptoru Halloween',
+      title: kind === 'chaos' ? 'Raptoru Chaos' : 'Raptoru Halloween',
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -166,6 +157,8 @@ export function startHalloweenOverlay(deps: {
         autoplayPolicy: 'no-user-gesture-required',
       },
     });
+    // The Chaos window is invisible to every screen capture: it never captures itself (no loop).
+    if (kind === 'chaos') w.setContentProtection(true);
     // Never a click, never the keyboard: everything goes through to the game / desktop underneath.
     w.setIgnoreMouseEvents(true);
     w.setAlwaysOnTop(true, 'screen-saver');
@@ -174,19 +167,33 @@ export function startHalloweenOverlay(deps: {
     w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     w.once('ready-to-show', () => w.showInactive());
     w.on('closed', () => {
-      if (overlay === w) {
-        overlay = null;
-        loadedUrl = null;
+      if (wins[kind] === w) {
+        wins[kind] = null;
+        loaded[kind] = null;
       }
     });
     void w
       .loadURL(url)
       .catch((e: Error) =>
-        deps.log('[halloween] overlay load failed', e.message),
+        deps.log(`[halloween] ${kind} load failed`, e.message),
       );
-    overlay = w;
-    loadedUrl = url;
-    deps.log(`[halloween] overlay ouvert sur ${display.label || display.id}`);
+    wins[kind] = w;
+    loaded[kind] = url;
+    deps.log(
+      `[halloween] ${kind === 'chaos' ? 'Chaos' : 'overlay'} ouvert sur ${display.label || display.id}`,
+    );
+  };
+
+  const place = (kind: Kind, display: Display, url: string) => {
+    const w = wins[kind];
+    if (!w || w.isDestroyed() || loaded[kind] !== url) {
+      close(kind);
+      open(kind, display, url);
+      return;
+    }
+    if (!sameBounds(w.getBounds(), display.bounds)) w.setBounds(display.bounds);
+    // Some games raise themselves: stay above them.
+    w.setAlwaysOnTop(true, 'screen-saver');
   };
 
   const sync = async () => {
@@ -198,35 +205,25 @@ export function startHalloweenOverlay(deps: {
       return; // Studio server restarting: keep what is there (it plays nothing without the server anyway)
     }
     if (disposed) return;
-    captureWindow = cfg.capture_window ?? null;
-    if (!cfg.enabled) return close();
+    if (!cfg.enabled) return closeAll();
     const display = pickDisplay(
       screen.getAllDisplays(),
       screen.getPrimaryDisplay(),
       cfg.display_id,
     );
-    if (!overlay || overlay.isDestroyed() || loadedUrl !== cfg.url) {
-      close();
-      open(display, cfg.url);
-      return;
-    }
-    if (!sameBounds(overlay.getBounds(), display.bounds))
-      overlay.setBounds(display.bounds);
-    // Some games raise themselves: stay above them.
-    overlay.setAlwaysOnTop(true, 'screen-saver');
+    covered = display;
+    place('overlay', display, cfg.url);
+    if (cfg.chaos_url) place('chaos', display, cfg.chaos_url);
+    else close('chaos');
   };
 
   screen.on('display-added', pushDisplays);
   screen.on('display-removed', pushDisplays);
   screen.on('display-metrics-changed', pushDisplays);
   pushDisplays();
-  void pushWindows();
-  let round = 0;
   const timer = setInterval(() => {
     pushDisplays();
     void sync();
-    // The window list for Studio's « Fenêtre du jeu » (cheap: no thumbnails), every 6 s.
-    if (++round % 3 === 0) void pushWindows();
   }, 2000);
   void sync();
   const shortcut = globalShortcut.register(STOP_ALL_SHORTCUT, () => {
@@ -244,7 +241,7 @@ export function startHalloweenOverlay(deps: {
       clearInterval(timer);
       if (shortcut) globalShortcut.unregister(STOP_ALL_SHORTCUT);
       overlaySession.setDisplayMediaRequestHandler(null);
-      close();
+      closeAll();
     },
   };
 }

@@ -1129,6 +1129,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       plan.production?.installation.installationId ?? 'studio-lab-halloween',
     fromMain: (req) => fromMain(req, { RAPTORU_MAIN_TOKEN: mainToken }),
     log: (line) => console.log(line),
+    // Chaos: the viewers see the effect through filters on OBS's screen capture (Studio's one OBS connection).
+    obs: () => bonk?.obs ?? null,
+    obsActions: () => points?.obs ?? null,
   });
   await halloween
     .start()

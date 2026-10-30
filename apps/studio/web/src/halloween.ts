@@ -3,6 +3,8 @@
 // acts for real: a local test plays on the streamer's screen (an explicit click), the shop controls write the Core.
 
 import {
+  type ChaosObs,
+  type ChaosStatus,
   CHAOS_DEFAULT,
   chaosCard,
   chaosParams,
@@ -36,10 +38,9 @@ interface Status {
     display_id: number | null;
     volume: number;
     safe_mode: boolean;
-    capture_window: string | null;
+    obs_chaos_source?: string | null;
   };
-  windows?: string[];
-  last_capture?: { at: string; name: string } | null;
+  chaos?: ChaosStatus['chaos'];
   ambiance?: AmbianceStatus['ambiance'];
   displays: {
     id: number;
@@ -373,6 +374,7 @@ export function mountHalloween(root: HTMLElement) {
   let visible = false;
   let flash = '';
   let chaos = CHAOS_DEFAULT;
+  let chaosObs: ChaosObs | null = null;
   root.innerHTML = `<div class="hw">
     <header class="hw-head"><h2>🎃 Halloween</h2><span class="hw-flash" data-role="flash"></span>
       <button type="button" class="hw-stop" data-act="stop" title="Arrête immédiatement tout effet (Ctrl+Maj+F12)">STOP ALL</button></header>
@@ -432,7 +434,7 @@ export function mountHalloween(root: HTMLElement) {
   };
   const renderStatus = () => {
     paint('overlay', overlayCard(status));
-    paint('chaos', chaosCard(status, chaos));
+    paint('chaos', chaosCard(status, chaos, chaosObs));
     paint('ambiance', ambianceCard(status));
   };
   const renderAdmin = () => {
@@ -462,6 +464,12 @@ export function mountHalloween(root: HTMLElement) {
     } catch (e) {
       adminError = errorText((e as Error).message);
     }
+    // Chaos in OBS: the screen captures and the filters on the chosen one (OBS absent: nothing to show).
+    chaosObs = await call('/api/halloween/obs').then(
+      (r) => r as unknown as ChaosObs,
+      () => null,
+    );
+    renderStatus();
     // The Halloween alert variants and whether their media are on this PC (the Alerts tab's catalogue).
     alertCatalog = await call('/api/alerts/catalog').then(
       (r) => (r.variants as CatalogVariant[]) ?? null,
@@ -496,6 +504,14 @@ export function mountHalloween(root: HTMLElement) {
       .chaosTest as 'flip' | 'blur' | undefined;
     if (a === 'stop')
       void act(() => call('/api/halloween/stop', {}), 'Tout est arrêté.');
+    else if (a === 'chaos-obs-prepare')
+      void act(
+        () => call('/api/halloween/obs/prepare', {}),
+        (out: Json) =>
+          (out.created as string[] | undefined)?.length
+            ? `${(out.created as string[]).length} filtre(s) OBS créé(s), coupés.`
+            : 'Filtres OBS déjà prêts.',
+      );
     else if (a === 'toggle-hw-alerts' && admin) {
       const on = hwRules()?.halloween_alerts === true;
       void act(
@@ -614,7 +630,7 @@ export function mountHalloween(root: HTMLElement) {
     const set = t.dataset.set;
     if (set) {
       const value =
-        set === 'capture_window'
+        set === 'obs_chaos_source'
           ? t.value || null
           : set === 'volume'
             ? Number(t.value) / 100

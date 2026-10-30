@@ -4,7 +4,17 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { EVENT_EFFECTS } from '@raptoru/schemas';
+import type { ObsActions, ObsLike } from '../channel-points/obs-actions.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
+import {
+  CHAOS_FILTERS,
+  chaosFilterOf,
+  chaosFilterState,
+  type ChaosFilterKey,
+  prepareChaosFilters,
+  screenSources,
+  setChaosFilter,
+} from './chaos-obs.js';
 
 // Halloween (docs/HALLOWEEN.md) — Studio's overlay engine. The overlay is a transparent, click-through, always-on-top
 // window opened by Electron's main process on the chosen screen (never focused, never taking a click or a key); it
@@ -44,10 +54,10 @@ export interface HalloweenSettings {
   /** Photosensitivity-safe: no glitch effect, softer contrasts. */
   safe_mode: boolean;
   /**
-   * Chaos screen effects (flip, blur): the window they capture and redraw (its title, as Windows lists it); null:
-   * automatic (the topmost window that is not Studio's own).
+   * Chaos (flip, blur, docs/HALLOWEEN.md § 4 bis): the OBS screen capture whose filters show the effect to the viewers
+   * (the streamer's Chaos window is invisible to every capture); null: the effect is on the streamer's screen only.
    */
-  capture_window: string | null;
+  obs_chaos_source: string | null;
   /** « Ambiance Halloween » OBS source (decor for the viewers, never on the streamer's screen). */
   ambiance: AmbianceSettings;
 }
@@ -81,7 +91,7 @@ const DEFAULT_SETTINGS: HalloweenSettings = {
   display_id: null,
   volume: 0.8,
   safe_mode: false,
-  capture_window: null,
+  obs_chaos_source: null,
   ambiance: DEFAULT_AMBIANCE,
 };
 
@@ -145,7 +155,15 @@ export interface HalloweenDeps {
   fromMain: (req: IncomingMessage) => boolean;
   now?: () => number;
   log?: (line: string) => void;
+  /** Studio's one OBS connection (Chaos: the viewers' filters) and its temporary actions; absent: no OBS part. */
+  obs?: () => ObsLike | null;
+  obsActions?: () => ObsActions | null;
 }
+
+/** Drawn by the Chaos window (a screen capture shown flipped / blurred), never by the overlay page. */
+const CHAOS_EFFECTS: readonly string[] = ['flip', 'blur'];
+const isChaos = (effect: string | null) =>
+  !!effect && CHAOS_EFFECTS.includes(effect);
 
 type Reply = (status: number, body: unknown) => void;
 const json =
@@ -172,10 +190,13 @@ export class HalloweenRuntime {
   private token = '';
   private media = new Map<string, MediaEntry>();
   private displays: Display[] = [];
-  /** The windows Electron main can capture (titles), for the Chaos effects' target. */
-  private windows: string[] = [];
-  /** The window the last Chaos effect really captured (said by the overlay page). */
-  private lastCapture: { at: string; name: string } | null = null;
+  /** The screen the last Chaos effect really captured (said by the Chaos window), and whether OBS showed it. */
+  private lastChaos: { at: string; screen: string; obs: string } | null = null;
+  /** The Chaos window's page: last poll, polls waiting now. */
+  private chaosPoll = 0;
+  private chaosPolling = 0;
+  /** The OBS filter on now for the current Chaos play (switched off at its end). */
+  private chaosFilter: ChaosFilterKey | null = null;
   private current: Delivery | null = null;
   private stopEpoch = 0;
   private lastPoll = 0;
@@ -256,9 +277,9 @@ export class HalloweenRuntime {
       display_id: Number.isInteger(s.display_id) ? s.display_id : null,
       volume: Math.min(1, Math.max(0, Number(s.volume ?? 0.8))),
       safe_mode: s.safe_mode === true,
-      capture_window:
-        typeof s.capture_window === 'string' && s.capture_window.trim()
-          ? s.capture_window.trim().slice(0, 200)
+      obs_chaos_source:
+        typeof s.obs_chaos_source === 'string' && s.obs_chaos_source.trim()
+          ? s.obs_chaos_source.trim().slice(0, 200)
           : null,
       ambiance: cleanAmbiance(s.ambiance),
     };
@@ -292,6 +313,13 @@ export class HalloweenRuntime {
     return this.polling > 0 || this.now() - this.lastPoll < HALLOWEEN.pageMs;
   }
 
+  /** The Chaos window (Electron, excluded from screen captures) answers. */
+  get chaosConnected() {
+    return (
+      this.chaosPolling > 0 || this.now() - this.chaosPoll < HALLOWEEN.pageMs
+    );
+  }
+
   /** Ready to play a purchase: overlay enabled, page connected and ready. */
   get ready() {
     return (
@@ -313,8 +341,12 @@ export class HalloweenRuntime {
       },
       settings: this.settings,
       displays: this.displays,
-      windows: this.windows,
-      last_capture: this.lastCapture,
+      chaos: {
+        connected: this.chaosConnected,
+        obs_source: this.settings.obs_chaos_source,
+        obs_connected: this.d.obs?.()?.connected === true,
+        last: this.lastChaos,
+      },
       ambiance: {
         settings: this.settings.ambiance,
         connected:
@@ -504,6 +536,7 @@ export class HalloweenRuntime {
     error?: string,
   ) {
     if (this.current?.delivery_id === d.delivery_id) this.current = null;
+    if (isChaos(d.play.effect)) await this.chaosObsOff();
     if (event === 'failed')
       this.log(`${d.play.label} : échec (${error ?? 'inconnu'})`, 'error');
     await this.ack(d, event, started, error);
@@ -516,6 +549,7 @@ export class HalloweenRuntime {
     this.current = null;
     this.wake();
     if (c) await this.ack(c, 'failed', !!c.started_at, 'stopped');
+    await this.chaosObsOff();
     let refunded = 0;
     if (this.d.core)
       refunded = await this.d
@@ -536,8 +570,10 @@ export class HalloweenRuntime {
     this.waiters.clear();
   }
 
-  private pageView() {
+  /** What a page may take: the Chaos window takes the Chaos effects, the overlay page everything else. */
+  private pageView(role: 'overlay' | 'chaos' = 'overlay') {
     const c = this.current;
+    const mine = !!c && isChaos(c.play.effect) === (role === 'chaos');
     return {
       stop_epoch: this.stopEpoch,
       settings: {
@@ -545,7 +581,7 @@ export class HalloweenRuntime {
         safe_mode: this.settings.safe_mode,
       },
       delivery:
-        c && !c.started_at && !c.taken_at
+        c && mine && !c.started_at && !c.taken_at
           ? {
               delivery_id: c.delivery_id,
               kind: c.play.kind,
@@ -571,16 +607,23 @@ export class HalloweenRuntime {
       this.wake();
     };
     req.socket.once('close', onClose);
-    this.lastPoll = this.now();
-    this.pageReady = url.searchParams.get('ready') === '1';
+    const role = url.searchParams.get('role') === 'chaos' ? 'chaos' : 'overlay';
+    const seen = () => {
+      if (role === 'chaos') this.chaosPoll = this.now();
+      else this.lastPoll = this.now();
+    };
+    seen();
+    if (role === 'overlay')
+      this.pageReady = url.searchParams.get('ready') === '1';
     const known = Number(url.searchParams.get('epoch') ?? -1);
-    let v = this.pageView();
+    let v = this.pageView(role);
     if (
       !v.delivery &&
       known === this.stopEpoch &&
       url.searchParams.get('wait') === '1'
     ) {
-      this.polling += 1;
+      if (role === 'chaos') this.chaosPolling += 1;
+      else this.polling += 1;
       try {
         await new Promise<void>((resolve) => {
           const t = setTimeout(resolve, HALLOWEEN.waitMs);
@@ -590,11 +633,12 @@ export class HalloweenRuntime {
           });
         });
       } finally {
-        this.polling -= 1;
+        if (role === 'chaos') this.chaosPolling -= 1;
+        else this.polling -= 1;
       }
       if (gone) return;
-      this.lastPoll = this.now();
-      v = this.pageView();
+      seen();
+      v = this.pageView(role);
     }
     req.socket.off('close', onClose);
     if (gone || req.socket.destroyed) return;
@@ -610,11 +654,7 @@ export class HalloweenRuntime {
     if (event === 'started') {
       if (!c.started_at) {
         c.started_at = this.now();
-        if (typeof body.detail === 'string' && body.detail) {
-          const name = body.detail.slice(0, 80);
-          this.lastCapture = { at: new Date(this.now()).toISOString(), name };
-          this.log(`${c.play.label} : fenêtre capturée « ${name} »`);
-        }
+        if (isChaos(c.play.effect)) await this.chaosStarted(c, body.detail);
         await this.ack(c, 'started');
       }
     } else if (event === 'ended') await this.finish(c, 'completed', true);
@@ -672,6 +712,46 @@ export class HalloweenRuntime {
     const a = Buffer.from(given ?? '');
     const b = Buffer.from(this.token);
     return b.length > 0 && a.length === b.length && timingSafeEqual(a, b);
+  }
+
+  /** A Chaos effect began on the streamer's screen: the same effect in OBS for the viewers, for as long. */
+  private async chaosStarted(c: Delivery, detail: unknown) {
+    const screen =
+      typeof detail === 'string' && detail ? detail.slice(0, 80) : 'écran';
+    const key = chaosFilterOf(c.play.effect, c.play.params);
+    const source = this.settings.obs_chaos_source;
+    const actions = this.d.obsActions?.() ?? null;
+    let obs = 'non (aucune capture OBS choisie)';
+    if (source && key && actions) {
+      try {
+        await setChaosFilter(
+          actions,
+          source,
+          key,
+          true,
+          (c.duration_ms ?? 10_000) + 3_000,
+        );
+        this.chaosFilter = key;
+        obs = `oui (filtre « ${CHAOS_FILTERS[key]} »)`;
+      } catch (e) {
+        obs = `non : ${(e as Error).message}`;
+        this.log(`OBS (Chaos) : ${(e as Error).message}`, 'error');
+      }
+    } else if (source && !actions) obs = 'non (OBS non relié à Studio)';
+    this.lastChaos = { at: new Date(this.now()).toISOString(), screen, obs };
+    this.log(`${c.play.label} : ${screen} · OBS ${obs}`);
+  }
+
+  /** The viewers' filter off now (end, failure, STOP ALL); its timed revert stays as a safety net. */
+  private async chaosObsOff() {
+    const key = this.chaosFilter;
+    this.chaosFilter = null;
+    const source = this.settings.obs_chaos_source;
+    const actions = this.d.obsActions?.() ?? null;
+    if (!key || !source || !actions) return;
+    await setChaosFilter(actions, source, key, false).catch((e: Error) =>
+      this.log(`OBS (Chaos) : filtre non coupé : ${e.message}`, 'error'),
+    );
   }
 
   overlayUrl() {
@@ -806,7 +886,6 @@ export class HalloweenRuntime {
     // Electron main: the screens, and what to open where.
     if (
       p === '/api/halloween/displays' ||
-      p === '/api/halloween/windows' ||
       p === '/api/halloween/overlay-config'
     ) {
       if (!this.d.fromMain(req)) return reply(403, { error: 'main_only' });
@@ -814,16 +893,6 @@ export class HalloweenRuntime {
         const list = (await this.body(req)).displays;
         this.displays = Array.isArray(list)
           ? (list as Display[]).slice(0, 16)
-          : [];
-        return reply(200, { ok: true });
-      }
-      if (req.method === 'POST' && p === '/api/halloween/windows') {
-        const list = (await this.body(req)).windows;
-        this.windows = Array.isArray(list)
-          ? list
-              .filter((w): w is string => typeof w === 'string' && !!w)
-              .map((w) => w.slice(0, 200))
-              .slice(0, 60)
           : [];
         return reply(200, { ok: true });
       }
@@ -835,7 +904,8 @@ export class HalloweenRuntime {
         enabled: this.settings.overlay_enabled,
         display_id: display?.id ?? null,
         url: this.overlayUrl(),
-        capture_window: this.settings.capture_window,
+        // The Chaos window: the same page in its « chaos » role (Electron excludes it from screen captures).
+        chaos_url: `${this.d.origin}/halloween/overlay.html?role=chaos#${this.token}`,
       });
     }
     if (req.headers['x-raptoru-studio'] !== '1')
@@ -864,6 +934,28 @@ export class HalloweenRuntime {
     }
     if (req.method === 'POST' && p === '/api/halloween/stop')
       return reply(200, await this.stopAll());
+    // Chaos in OBS: the screen captures, the filters' state on the chosen one, and preparing them (created disabled).
+    if (p === '/api/halloween/obs' || p === '/api/halloween/obs/prepare') {
+      const obs = this.d.obs?.() ?? null;
+      if (!obs?.connected) return reply(409, { error: 'obs_offline' });
+      const source = this.settings.obs_chaos_source;
+      if (req.method === 'GET' && p === '/api/halloween/obs')
+        return reply(200, {
+          sources: await screenSources(obs),
+          source,
+          filters: source ? await chaosFilterState(obs, source) : null,
+        });
+      if (req.method === 'POST' && p === '/api/halloween/obs/prepare') {
+        if (!source) return reply(400, { error: 'no_obs_source' });
+        const out = await prepareChaosFilters(obs, source);
+        this.log(
+          out.created.length
+            ? `OBS (Chaos) : ${out.created.length} filtre(s) créé(s) sur « ${source} »`
+            : `OBS (Chaos) : filtres déjà prêts sur « ${source} »`,
+        );
+        return reply(200, out);
+      }
+    }
     if (req.method === 'POST' && p === '/api/halloween/ambiance/bats') {
       if (!this.settings.ambiance.enabled || !this.settings.ambiance.bats)
         return reply(409, { error: 'ambiance_off' });
@@ -876,6 +968,11 @@ export class HalloweenRuntime {
       const b = await this.body(req);
       if (!this.pageConnected) return reply(409, { error: 'overlay_absent' });
       if (this.current) return reply(409, { error: 'busy' });
+      if (
+        isChaos(typeof b.effect === 'string' ? b.effect : null) &&
+        !this.chaosConnected
+      )
+        return reply(409, { error: 'chaos_absent' });
       const media =
         typeof b.media_id === 'string'
           ? [...this.sellable()].find((m) => m.id === b.media_id)

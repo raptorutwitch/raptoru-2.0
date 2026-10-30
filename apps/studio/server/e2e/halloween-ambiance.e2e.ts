@@ -9,8 +9,8 @@ import { HalloweenRuntime } from '../src/halloween/runtime.js';
 // Halloween (docs/HALLOWEEN.md § 4 bis, § 6 bis) in Chromium, with the REAL Studio runtime and pages:
 // - « Ambiance Halloween » OBS source: nothing while off; Studio's switches act at once; « Lancer un vol » plays the bats
 //   once; a source with ?layers=spider shows the spider only; the decor is never sold nor tested on the screen;
-// - Chaos without a game window to capture (a plain browser has no Electron handler): the effect fails cleanly, nothing
-//   stays on the overlay. No Core, no Twitch, no OBS (the source is the page OBS loads).
+// - Chaos: the effect goes to the Chaos window only (the overlay page in its « chaos » role); in a plain browser its
+//   screen capture is refused (no Electron handler): the effect fails cleanly, nothing stays on either page. No Core, no Twitch, no OBS (the source is the page OBS loads).
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.E2E_HALLOWEEN_AMBIANCE_PORT ?? 4397);
@@ -164,8 +164,9 @@ test('Ambiance: nothing while off; the switches act at once; one flight on deman
   expect(errors).toEqual([]);
 });
 
-test('Chaos without a game window to capture: the effect fails cleanly, the overlay stays empty', async ({
+test('Chaos: refused without the Chaos window; in a browser (no capture) it fails cleanly, both pages stay empty', async ({
   page,
+  browser,
 }) => {
   const status = (await api('/api/halloween/status')).body;
   expect(status.effects).toEqual(expect.arrayContaining(['flip', 'blur']));
@@ -180,21 +181,28 @@ test('Chaos without a game window to capture: the effect fails cleanly, the over
     (await api('/api/halloween/test', { media_id: 'decor-araignee-cam' }))
       .status,
   ).toBe(400);
-  expect(
-    (
-      await api('/api/halloween/test', {
-        effect: 'flip',
-        params: { mode: 'rotate', durationMs: 4000 },
-      })
-    ).status,
-  ).toBe(200);
+  const flip = () =>
+    api('/api/halloween/test', {
+      effect: 'flip',
+      params: { mode: 'rotate', durationMs: 4000 },
+    });
+  expect((await flip()).body.error).toBe('chaos_absent');
+  const chaos = await browser.newPage();
+  await chaos.goto(
+    `${origin}/halloween/overlay.html?role=chaos#${status.ambiance.url.split('#')[1]}`,
+  );
+  await expect
+    .poll(async () => (await api('/api/halloween/status')).body.chaos.connected)
+    .toBe(true);
+  expect((await flip()).status).toBe(200);
   await expect
     .poll(
       async () =>
         (await api('/api/halloween/status')).body.events[0]?.text as string,
       { timeout: 10_000 },
     )
-    .toMatch(/^flip : échec \((no_game_window|capture_unsupported)\)$/);
+    .toMatch(/^flip : échec \((no_screen_capture|capture_unsupported)\)$/);
   expect((await api('/api/halloween/status')).body.current).toBeNull();
   expect(await page.locator('#stage > *').count()).toBe(0);
+  expect(await chaos.locator('#stage > *').count()).toBe(0);
 });

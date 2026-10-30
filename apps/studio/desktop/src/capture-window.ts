@@ -1,20 +1,12 @@
-// Halloween Chaos effects (docs/HALLOWEEN.md § 4 bis) — which window the overlay captures. Pure (tested).
+// Halloween Chaos effects (docs/HALLOWEEN.md § 4 bis) — which screen the Chaos window captures. Pure (tested).
 
 /**
- * The window a Chaos effect captures: the chosen title (exact, else contained, ignoring case); with no choice, the
- * first listed (Windows lists them topmost first). Studio's own windows are never candidates. Null: nothing to capture.
+ * The capture source of the monitor the Chaos window covers (Electron gives each screen source its display id). Null:
+ * that monitor is not offered (unplugged meanwhile): nothing is captured, never another screen by surprise.
  */
-export function pickCaptureWindow<S extends { id: string; name: string }>(
+export function pickScreenSource<S extends { id: string; display_id: string }>(
   sources: S[],
-  own: Set<string>,
-  wanted: string | null | undefined,
+  displayId: number,
 ): S | null {
-  const list = sources.filter((s) => !own.has(s.id) && s.name.trim() !== '');
-  if (!wanted) return list[0] ?? null;
-  const w = wanted.toLowerCase();
-  return (
-    list.find((s) => s.name === wanted) ??
-    list.find((s) => s.name.toLowerCase().includes(w)) ??
-    null
-  );
+  return sources.find((s) => s.display_id === String(displayId)) ?? null;
 }
