@@ -171,6 +171,8 @@ export function createCore(
       validated: async (q, interval) => {
         await loyalty.presenceListener.validated(q, interval);
         await progression.presenceListener.validated(q, interval);
+        // Halloween: Bonbons for watching (only while the event is open and its presence rule is on).
+        await eventShop.presenceListener.validated(q, interval);
       },
       committed: () =>
         loyalty.presenceListener.committed?.() ?? Promise.resolve(),

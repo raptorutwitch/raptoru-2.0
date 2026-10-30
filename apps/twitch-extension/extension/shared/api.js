@@ -542,10 +542,6 @@ export function createClient({
       body: { item_id: itemId },
       idempotencyKey: newIdempotencyKey(),
     }),
-    eventsConvert: (bonbons) => call('POST', '/actions/events/convert', {
-      body: { bonbons },
-      idempotencyKey: newIdempotencyKey(),
-    }),
     /** Tombola V2 (Lab): Core's viewer state (phase, timer, entries, refusal, result, history). */
     raffleState: () => call('GET', '/raffle/state'),
     joinRaffle: () => call('POST', '/actions/raffle', {

@@ -6,6 +6,7 @@ import {
   type AlertFamily,
   alertFamilyOf,
   type AlertStatus,
+  AlertVariantSettings,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
@@ -15,7 +16,7 @@ import {
   decideAlert,
   type Rng,
 } from './rules.js';
-import type { AlertVariant } from './variants.js';
+import { type AlertVariant, FOLLOW_WEIGHTS } from './variants.js';
 
 // Twitch alerts V1 (Lab) — the durable queue (docs/TWITCH_ALERTS_PARITY_2026-10.md § 7). Conventions of the
 // Soundboard / TTS queues: a channel row lock serializes the claims, each claim gets an attempt id and a lease, a
@@ -209,6 +210,57 @@ export class AlertsService {
     }
   }
 
+  /** Studio › Alertes › Variantes. No row, no table yet, a bad row: {} (the usual behaviour). */
+  private async readVariants(q: Queryable, channelId: string) {
+    await q.query('savepoint alert_variants');
+    try {
+      const r = await q.query<{ variants: unknown }>(
+        'select variants from alert_settings where channel_id = $1',
+        [channelId],
+      );
+      await q.query('release savepoint alert_variants');
+      const parsed = AlertVariantSettings.safeParse(r[0]?.variants ?? {});
+      return parsed.success ? parsed.data : AlertVariantSettings.parse({});
+    } catch {
+      await q.query('rollback to savepoint alert_variants');
+      return AlertVariantSettings.parse({});
+    }
+  }
+
+  async variantSettings(channelId: string) {
+    return this.db.tx((q) => this.readVariants(q, channelId));
+  }
+
+  /**
+   * Saves the variants of one or more families (merged into what is stored). Refused, nothing saved: an unknown follow
+   * variant, an empty selection (to play nothing, switch the family « off »), Halloween forced on a family that has no
+   * Halloween variant.
+   */
+  async updateVariantSettings(channelId: string, patch: unknown) {
+    const p = AlertVariantSettings.safeParse(patch);
+    if (!p.success) throw new AlertError(400, 'invalid_variant_settings');
+    const known = new Set(FOLLOW_WEIGHTS.map(([id]) => id));
+    if (p.data.follow?.some((id) => !known.has(id)))
+      throw new AlertError(400, 'unknown_variant');
+    for (const f of ['bits', 'raid', 'donation'] as const)
+      if (p.data.families[f] === 'halloween')
+        throw new AlertError(400, 'no_halloween_variant');
+    return this.db.tx(async (q) => {
+      const cur = await this.readVariants(q, channelId);
+      const follow = p.data.follow ?? cur.follow;
+      const next: AlertVariantSettings = {
+        families: { ...cur.families, ...p.data.families },
+        ...(follow ? { follow: [...new Set(follow)] } : {}),
+      };
+      await q.query(
+        `insert into alert_settings (channel_id, variants, updated_at) values ($1, $2, $3)
+         on conflict (channel_id) do update set variants = excluded.variants, updated_at = excluded.updated_at`,
+        [channelId, JSON.stringify(next), this.clock.now()],
+      );
+      return next;
+    });
+  }
+
   /** Last event received from a source (Studio: « dernier événement Twitch réel »). */
   async lastReceived(channelId: string, source: AlertEventInput['source']) {
     const r = (
@@ -227,11 +279,15 @@ export class AlertsService {
   }> {
     return this.db.tx(async (q) => {
       const now = this.clock.now();
-      const stored = await this.profile(q, e.channel_id);
-      // A Studio test may ask for the Halloween variants without switching the channel's profile.
+      const stored = {
+        ...(await this.profile(q, e.channel_id)),
+        variants: await this.readVariants(q, e.channel_id),
+      };
+      // A Studio test may ask for the Halloween variants without switching the channel's profile (whatever the
+      // families' settings: the « Alertes Halloween » card tests the Halloween media themselves).
       const profile =
         e.source === 'simulation' && e.test_profile === 'halloween'
-          ? { ...stored, halloween: true }
+          ? { ...stored, halloween: true, variants: undefined }
           : stored;
       const decision = decideAlert(e, this.rng, profile);
       const outcome = decision.outcome;

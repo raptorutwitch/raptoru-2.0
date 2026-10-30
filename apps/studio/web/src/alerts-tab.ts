@@ -19,6 +19,7 @@ import {
 import { mountCalibration } from './alerts-calibrate.js';
 import { mountSeDonations } from './alerts-se.js';
 import { mountTwitchMode } from './alerts-twitch.js';
+import { mountAlertVariants } from './alerts-variants.js';
 import { mountDockPanel } from './dock-panel.js';
 
 // Twitch alerts V1 (A2) — Studio tab « Alertes » (docs/TWITCH_ALERTS_PARITY_2026-10.md § 14). The preview iframe runs
@@ -104,6 +105,7 @@ export function mountAlerts(root: HTMLElement) {
               <h2>Médias</h2><div data-role="media"></div>
               <h2>Événements Twitch réels</h2><div data-role="twitch"></div></div>
           </div>
+          <div class="al-se"><h2>Variantes par famille</h2><div data-role="variants"></div></div>
           <div class="al-se"><h2>Dons StreamElements</h2><div data-role="se"></div>
           </div>
           <div class="al-se"><h2>Dock OBS</h2><div data-role="dock"></div></div>
@@ -118,6 +120,7 @@ export function mountAlerts(root: HTMLElement) {
 
   mountTwitchMode($('twitch'));
   mountSeDonations($('se'));
+  mountAlertVariants($('variants'), HEADERS);
   // Dock OBS V1: the URL for OBS and its key (dock-panel.ts).
   mountDockPanel($('dock'));
 

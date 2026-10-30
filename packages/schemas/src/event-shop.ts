@@ -42,12 +42,33 @@ export type EventItemKind = z.infer<typeof EventItemKind>;
 const BallonPool = z.array(z.number().int().min(1).max(4)).min(1).max(4);
 
 export const EventShopRules = z.strictObject({
-  /** Jetons for one Bonbon (conversion). */
+  /**
+   * REMOVED 30/10 (Antoni: the Jetons → Bonbons exchange is abandoned): kept only so that saved rules still read;
+   * the Core never converts any more, whatever these say.
+   */
   conversion_rate: z.number().int().min(1).max(1_000_000),
-  /** Bonbons a viewer may obtain by conversion within any rolling hour (0 = conversion closed). */
   conversion_cap_per_hour: z.number().int().min(0).max(10_000),
-  /** Bonbons for a sub / resub (the subscriber). */
+  /** Bonbons for a sub (the subscriber; also Prime / resub while those are null). */
   sub_reward: z.number().int().min(0).max(10_000),
+  /** Bonbons for a Prime sub; null = the sub's amount. */
+  prime_reward: z.number().int().min(0).max(10_000).nullable(),
+  /** Bonbons for a resub (its chat message); null = the sub's amount. */
+  resub_reward: z.number().int().min(0).max(10_000).nullable(),
+  /**
+   * Presence (30/10): `presence_bonbons` Bonbons for every `presence_every_min` minutes of VALIDATED watching (the
+   * presence tracker's intervals, the same as the Jetons'); 0 = off. Counted per viewer over the season.
+   */
+  presence_every_min: z.number().int().min(0).max(1440),
+  presence_bonbons: z.number().int().min(1).max(10_000),
+  /** Bits (Twitch cheer events only): `bits_bonbons` Bonbons per full `bits_step` Bits; 0 = off. */
+  bits_step: z.number().int().min(0).max(1_000_000),
+  bits_bonbons: z.number().int().min(1).max(10_000),
+  /**
+   * Donations (StreamElements tips relayed by Studio in « active » mode): Bonbons per whole euro, euros only, from
+   * `donation_min_cents`; the donor is the viewer whose Twitch name is EXACTLY the tip's name. 0 = off.
+   */
+  donation_per_euro: z.number().int().min(0).max(10_000),
+  donation_min_cents: z.number().int().min(0).max(1_000_000),
   /** Bonbons for the giver, per gifted sub (targeted or community gift; an anonymous gift pays nobody). */
   gift_giver_per_sub: z.number().int().min(0).max(10_000),
   /** Bonbons for each recipient of a gifted sub. */
@@ -87,8 +108,16 @@ export type EventShopRules = z.infer<typeof EventShopRules>;
 
 export const DEFAULT_EVENT_RULES: EventShopRules = Object.freeze({
   conversion_rate: 1000,
-  conversion_cap_per_hour: 10,
+  conversion_cap_per_hour: 0,
   sub_reward: 10,
+  prime_reward: null,
+  resub_reward: null,
+  presence_every_min: 0,
+  presence_bonbons: 1,
+  bits_step: 0,
+  bits_bonbons: 1,
+  donation_per_euro: 0,
+  donation_min_cents: 100,
   gift_giver_per_sub: 5,
   gift_recipient: 3,
   viewer_gap_ms: 120_000,

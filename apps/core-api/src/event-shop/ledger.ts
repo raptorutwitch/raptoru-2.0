@@ -13,7 +13,11 @@ export type LedgerKind =
   | 'convert'
   | 'purchase'
   | 'refund'
-  | 'raffle';
+  | 'raffle'
+  // 30/10: presence, Bits and donations (migration 20261117130000_halloween_economy.sql).
+  | 'presence'
+  | 'bits_reward'
+  | 'donation_reward';
 
 export class EventBalanceError extends Error {
   constructor(

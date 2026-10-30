@@ -377,3 +377,19 @@
 .al-se-error td:nth-child(2) b {
   color: #ff8a8a;
 }
+
+/* Alertes › Variantes (30/10). */
+.al-variants {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.al-variants td,
+.al-variants th {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.al-variants td:first-child {
+  white-space: nowrap;
+}

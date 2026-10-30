@@ -165,3 +165,75 @@ describe('Halloween alert profile', () => {
     expect(d.outcome).toBe('below_threshold');
   });
 });
+
+describe('variants per family (Studio › Alertes › Variantes, 30/10)', () => {
+  const outcome = async (e: AlertEventInput) =>
+    (await alerts.receive(e)).outcome;
+
+  it('nothing saved: exactly the behaviour so far (profile off → usual, on → Halloween)', async () => {
+    expect(await alerts.variantSettings(CH)).toEqual({ families: {} });
+    expect((await variantOf(ev()))!.id).toBe('follow_dofus_ebene');
+    await shop.updateSettings(CH, { rules: { halloween_alerts: true } });
+    expect((await variantOf(ev()))!.id).toBe('hw_follow_miss_minute');
+  });
+
+  it('per family: usual only, Halloween only (even profile off, with its fallback), off = recorded, not animated', async () => {
+    await alerts.updateVariantSettings(CH, {
+      families: { follow: 'usual', sub: 'halloween', raid: 'off' },
+    });
+    await shop.updateSettings(CH, { rules: { halloween_alerts: true } });
+    expect((await variantOf(ev()))!.id).toBe('follow_dofus_ebene'); // ignores the profile
+    await shop.updateSettings(CH, { rules: { halloween_alerts: false } });
+    const sub = (await variantOf(ev({ type: 'sub', tier: '1000' })))!;
+    expect(sub.id).toMatch(/^hw_ballon_sub_[1-4]$/);
+    expect(sub.fallback?.id).toBe('eren_sub');
+    // Prime is its own family: still « auto » (profile off → the usual Eren).
+    expect((await variantOf(ev({ type: 'sub', tier: 'prime' })))!.id).toBe(
+      'eren_sub',
+    );
+    expect(await outcome(ev({ type: 'raid', viewers: 12 }))).toBe('disabled');
+    const rows = await db.query<{ outcome: string }>(
+      `select outcome from alert_events where type = 'raid'`,
+    );
+    expect(rows.map((r) => r.outcome)).toEqual(['disabled']);
+    expect(
+      (await db.query(`select 1 from alert_items where type = 'raid'`)).length,
+    ).toBe(0);
+  });
+
+  it('follow: only the checked usual variants are drawn (their weights kept between them)', async () => {
+    await alerts.updateVariantSettings(CH, {
+      follow: ['follow_eren', 'follow_discord'],
+    });
+    rolls = [0];
+    expect((await variantOf(ev()))!.id).toBe('follow_eren');
+    rolls = [0.999];
+    expect((await variantOf(ev()))!.id).toBe('follow_discord');
+    // Saving another family keeps the follow selection.
+    await alerts.updateVariantSettings(CH, { families: { gift: 'usual' } });
+    expect(await alerts.variantSettings(CH)).toEqual({
+      families: { gift: 'usual' },
+      follow: ['follow_eren', 'follow_discord'],
+    });
+  });
+
+  it('refused, nothing saved: empty selection, unknown variant, Halloween on a family without one, unknown family', async () => {
+    for (const bad of [
+      { follow: [] },
+      { follow: ['nope'] },
+      { families: { raid: 'halloween' } },
+      { families: { cheer: 'off' } },
+      { families: { follow: 'sometimes' } },
+    ])
+      await expect(alerts.updateVariantSettings(CH, bad)).rejects.toThrow();
+    expect(await alerts.variantSettings(CH)).toEqual({ families: {} });
+  });
+
+  it('the « Alertes Halloween » tests still play the Halloween media, whatever the families say', async () => {
+    await alerts.updateVariantSettings(CH, { families: { follow: 'off' } });
+    expect((await variantOf(ev({ test_profile: 'halloween' })))!.id).toBe(
+      'hw_follow_miss_minute',
+    );
+    expect(await outcome(ev())).toBe('disabled');
+  });
+});

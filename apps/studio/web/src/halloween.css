@@ -165,7 +165,18 @@
 .hw-rules {
   display: grid;
   gap: 6px;
-  margin-bottom: 10px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+.hw-rules legend {
+  font-weight: 600;
+  font-size: 13px;
+  padding: 0 4px;
+}
+.hw-rules .hw-hint {
+  margin: 0 0 4px;
 }
 .hw-rules label {
   display: flex;

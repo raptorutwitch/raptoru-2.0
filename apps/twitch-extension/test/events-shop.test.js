@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   availability,
   clock,
-  conversionNote,
   shopHtml,
   viewerWait,
 } from '../extension/shared/events-shop.js';
@@ -157,51 +156,41 @@ describe('events module', () => {
     expect(html).toContain('data-wait="blink"');
   });
 
-  it('Bonbons: balance, the real ways to earn, the rate and what is left this hour', () => {
-    const html = shopHtml(state(), { section: 'bonbons', convertN: 3 });
+  it('Bonbons: balance and the real ways to earn; no Jetons exchange any more', () => {
+    const html = shopHtml(state(), { section: 'bonbons' });
     expect(html).toContain('+10</b> à chaque sub');
     expect(html).toContain('+5</b> par sub offert');
     expect(html).toContain('+3</b> quand on t’offre un sub');
-    expect(html).toMatch(/1.000 Jetons = 1 Bonbon/);
-    expect(html).toContain('Encore <b>10</b>');
-    expect(html).toMatch(/3.000 Jetons → 3/);
+    expect(html).not.toMatch(/Jetons|data-convert/);
     // A way the Core does not announce is not shown.
     expect(html).not.toContain('tombola');
-    expect(
-      shopHtml(state({ earn: { sub_reward: 10, raffle: true } }), {
-        section: 'bonbons',
+    expect(html).not.toContain('Bits');
+    const all = shopHtml(
+      state({
+        earn: {
+          sub_reward: 10,
+          prime_reward: 5,
+          resub_reward: 10,
+          presence: { every_min: 10, bonbons: 1 },
+          bits: { step: 100, bonbons: 2 },
+          donation_per_euro: 3,
+          raffle: true,
+        },
       }),
-    ).toContain('tombolas');
+      { section: 'bonbons' },
+    );
+    for (const way of [
+      '+1</b> toutes les 10 min',
+      '+5</b> pour un sub Prime',
+      '+10</b> quand tu partages ton réabonnement',
+      '+2</b> tous les 100 Bits',
+      '+3</b> par euro de don',
+      'tombolas',
+    ])
+      expect(all).toContain(way);
     expect(
       shopHtml(state({ earn: { sub_reward: 0 } }), { section: 'bonbons' }),
     ).not.toContain('à chaque sub');
-  });
-
-  it('the exchange says why it is unavailable: closed, cap reached (and when it frees), no identity', () => {
-    const now = Date.parse('2026-10-31T20:00:00Z');
-    expect(
-      conversionNote(state({ conversion: { rate: 1000, cap_per_hour: 0 } })),
-    ).toContain('fermé');
-    expect(
-      conversionNote(
-        state({
-          conversion: {
-            rate: 1000,
-            cap_per_hour: 10,
-            remaining: 0,
-            frees_at: '2026-10-31T20:12:00Z',
-          },
-        }),
-        now,
-      ),
-    ).toBe('Limite atteinte : de nouveau possible dans 12 min.');
-    expect(conversionNote(state({ balance: null }))).toContain('identité');
-    expect(conversionNote(state())).toBeNull();
-    expect(
-      shopHtml(state({ conversion: { rate: 1000, cap_per_hour: 0 } }), {
-        section: 'bonbons',
-      }),
-    ).not.toContain('data-convert');
   });
 
   it('escapes Core text; feedback is a toast', () => {

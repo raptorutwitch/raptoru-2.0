@@ -8,7 +8,7 @@ import { EventShopError, type EventShopService } from './service.js';
 // Halloween shop in the chat (docs/HALLOWEEN.md § 7): the same shop as the extension's « Halloween » module, for every
 // viewer while the extension version waits for Twitch's review. Silent while the event is closed (never a word in the
 // chat outside the event). The Core decides everything (service.ts): price, limits, one play at a time, the overlay.
-// - `!bonbons`: the balance and how to earn; `!bonbons <n>`: exchange Jetons for n Bonbons (capped per hour);
+// - `!bonbons` (with or without a number): the balance and how to earn — the Jetons exchange is gone (30/10);
 // - `!peur`: the menu; `!peur <effet>` (blink, fog…, a media id such as foxy); `!peur screamer`: a random screamer
 //   available now. The Twitch message id is the idempotency key: the same message again buys nothing.
 
@@ -30,9 +30,6 @@ const REFUSALS: Record<string, string> = {
   media_missing: 'indisponible pour le moment',
   item_disabled: 'cet effet n’est plus disponible',
   item_not_found: 'effet inconnu (!peur pour la liste)',
-  conversion_cap: 'limite d’échange atteinte pour cette heure',
-  conversion_closed: 'l’échange de Jetons est fermé',
-  insufficient_tokens: 'pas assez de Jetons',
   raptoru_paused: 'Raptoru est en pause, réessaie plus tard',
   viewer_blocked: 'les interactions te sont fermées pour le moment',
 };
@@ -78,8 +75,8 @@ export class EventShopChat {
       return { outcome: `event_refused:${e.code}` };
     };
 
-    // Free answers: throttled per viewer.
-    const free = !(b?.[1] || p?.[1]);
+    // Free answers: throttled per viewer (`!bonbons <n>` too: there is no exchange any more).
+    const free = !!b || !p?.[1];
     if (free) {
       const now = this.clock.now().getTime();
       if (
@@ -93,31 +90,20 @@ export class EventShopChat {
     const state = await this.shop.viewerState(msg.channel_id, viewer.id);
 
     if (b) {
-      if (!b[1]) {
-        const c = state.conversion;
-        await answer(
-          `🍬 ${fmt(state.balance ?? 0)} Bonbons. Gagne-en : sub ${state.earn.sub_reward}, par sub offert ${state.earn.gift_giver_per_sub} · ` +
-            (c.cap_per_hour > 0
-              ? `!bonbons <n> échange ${fmt(c.rate)} Jetons par Bonbon (encore ${c.remaining} cette heure). `
-              : '') +
-            'Dépense-les avec !peur 👻',
-        );
-        return { outcome: 'event_balance' };
-      }
-      try {
-        const out = await this.shop.convert({
-          idempotency_key: key,
-          channel_id: msg.channel_id,
-          viewer,
-          bonbons: Number(b[1]),
-        });
-        await answer(
-          `+${out.bonbons} 🍬 (${fmt(out.jetons)} Jetons) · solde ${fmt(out.balance)} Bonbons.`,
-        );
-        return { outcome: 'event_converted', replayed: out.replayed };
-      } catch (e) {
-        return refused(e);
-      }
+      const e = state.earn;
+      const ways = [
+        e.presence &&
+          `${e.presence.bonbons} toutes les ${e.presence.every_min} min de présence`,
+        e.sub_reward > 0 && `sub ${e.sub_reward}`,
+        e.gift_giver_per_sub > 0 && `par sub offert ${e.gift_giver_per_sub}`,
+        e.bits && `${e.bits.bonbons} par ${fmt(e.bits.step)} Bits`,
+        e.donation_per_euro && `${e.donation_per_euro} par € de don`,
+        e.raffle && 'tombolas',
+      ].filter(Boolean);
+      await answer(
+        `🍬 ${fmt(state.balance ?? 0)} Bonbons. ${ways.length ? `Gagne-en : ${ways.join(', ')}. ` : ''}Dépense-les avec !peur 👻`,
+      );
+      return { outcome: 'event_balance' };
     }
 
     const typed = p![1]?.toLowerCase();

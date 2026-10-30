@@ -274,6 +274,15 @@ export class AlertsRuntime {
         variants: variants.map((v) => ({ ...v, missing: this.missing(v) })),
       });
     }
+    // Alertes › Variantes (30/10): which variants each family may play (the Core decides and validates).
+    if (p === '/variants' && (req.method === 'GET' || req.method === 'POST'))
+      return reply(
+        200,
+        await this.d.core(
+          `${this.base}/${this.d.channelId}/variants`,
+          req.method === 'POST' ? await this.body(req) : undefined,
+        ),
+      );
     if (req.method === 'GET' && p === '/twitch')
       return reply(
         200,

@@ -499,6 +499,8 @@ export function stateOf(a) {
   }
   if (s.outcome === 'below_threshold')
     return { label: 'Sous le seuil : pas d’animation', tone: 'muted' };
+  if (s.outcome === 'disabled')
+    return { label: 'Famille désactivée : pas d’animation', tone: 'muted' };
   if (s.outcome === 'absorbed')
     return { label: 'Dans un lot : pas d’animation propre', tone: 'muted' };
   const r = s.replay;

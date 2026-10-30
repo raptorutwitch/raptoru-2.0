@@ -107,7 +107,12 @@ export type AlertStatus =
 
 /** What Core did with an event. */
 export type AlertEventOutcome =
-  'queued' | 'duplicate' | 'absorbed' | 'below_threshold';
+  | 'queued'
+  | 'duplicate'
+  | 'absorbed'
+  | 'below_threshold'
+  /** The family is switched off in Studio › Alertes › Variantes (30/10): recorded, not animated. */
+  | 'disabled';
 
 /**
  * Lot 9: the production bot's alerts reception, reported to the main Core (at each EventSub (re)connection and every
@@ -137,3 +142,64 @@ export const AlertAckRequest = z.strictObject({
   family: z.enum(ALERT_FAMILIES).optional(),
 });
 export type AlertAckRequest = z.infer<typeof AlertAckRequest>;
+
+// --- Variants per family (30/10/2026, Studio › Alertes › Variantes) ---------------------------------------------------
+// Stored in alert_settings.variants. No row / no family: the usual behaviour, unchanged (Halloween profile included).
+
+/** The families a streamer configures (Prime and resub apart from the sub; gifts = community + targeted). */
+export const ALERT_VARIANT_FAMILIES = [
+  'follow',
+  'sub',
+  'prime',
+  'resub',
+  'gift',
+  'bits',
+  'raid',
+  'donation',
+] as const;
+export type AlertVariantFamily = (typeof ALERT_VARIANT_FAMILIES)[number];
+
+/**
+ * - auto: Halloween variant while the Halloween profile is on, the usual one otherwise (the behaviour so far);
+ * - usual: always the usual variant (this family ignores the Halloween profile);
+ * - halloween: always the Halloween variant, profile on or off (exclusive);
+ * - off: no animation at all (the event is still recorded; rewards and the Roue du Sub never depend on it).
+ */
+export const AlertFamilyMode = z.enum(['auto', 'usual', 'halloween', 'off']);
+export type AlertFamilyMode = z.infer<typeof AlertFamilyMode>;
+
+export const AlertVariantSettings = z.strictObject({
+  families: z
+    .strictObject({
+      follow: AlertFamilyMode.optional(),
+      sub: AlertFamilyMode.optional(),
+      prime: AlertFamilyMode.optional(),
+      resub: AlertFamilyMode.optional(),
+      gift: AlertFamilyMode.optional(),
+      bits: AlertFamilyMode.optional(),
+      raid: AlertFamilyMode.optional(),
+      donation: AlertFamilyMode.optional(),
+    })
+    .default({}),
+  /** The usual follow variants that may be drawn (their legacy weights kept); absent = all. Never empty. */
+  follow: z.array(z.string().min(1).max(64)).min(1).max(20).optional(),
+});
+export type AlertVariantSettings = z.infer<typeof AlertVariantSettings>;
+
+/** The configured family of an event (null: a gift recipient, always absorbed in its batch). */
+export function alertVariantFamilyOf(e: {
+  type: AlertType;
+  tier?: string;
+}): AlertVariantFamily | null {
+  switch (e.type) {
+    case 'sub':
+      return e.tier === 'prime' ? 'prime' : 'sub';
+    case 'gift_community':
+    case 'gift_targeted':
+      return 'gift';
+    case 'gift_recipient':
+      return null;
+    default:
+      return e.type;
+  }
+}
