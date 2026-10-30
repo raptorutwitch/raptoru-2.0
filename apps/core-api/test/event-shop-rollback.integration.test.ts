@@ -15,6 +15,24 @@ const url = process.env.TEST_DATABASE_URL;
 const isLocal =
   !!url && /@(localhost|127\.0\.0\.1)[:/][^/]*\/[^/?]*test/.test(url);
 const FILE = '20261112130000_event_shop.sql';
+/** Applied after it (30/10): its rollback runs first, newest first. */
+const ECONOMY = '20261117130000_halloween_economy.sql';
+
+/** A header's rollback SQL for the 30/10 file: its inline « -- only if … » notes removed, its own name filled in. */
+function economyRollbackSql() {
+  const raw = readFileSync(join(DEFAULT_MIGRATIONS_DIR, ECONOMY), 'utf8').split(
+    /\r?\n/,
+  );
+  const start = raw.findIndex((l) => l.startsWith('-- Rollback:'));
+  const lines: string[] = [];
+  for (let i = start; i < raw.length && raw[i]!.startsWith('--'); i++)
+    lines.push(raw[i]!.replace(/^--\s?/, '').replace(/\s+--\s.*$/, ''));
+  return lines
+    .join(' ')
+    .slice('Rollback:'.length)
+    .replace('<this file>', ECONOMY)
+    .trim();
+}
 
 /** The rollback SQL as written in the migration's header (the « -- Rollback: » comment lines, marks removed). */
 function rollbackSql() {
@@ -75,13 +93,37 @@ describe.skipIf(!isLocal)('Halloween migration rollback, real Postgres', () => {
        values ('halloween-2026', '1', '9', 'grant', 5, 5, 'k1', 'test', now())`,
     );
 
+    // Newest first: the 30/10 economy file (presence counter, alert variants, wider checks) back to before.
+    const checks = async () =>
+      (
+        await db.query<{ def: string }>(
+          `select pg_get_constraintdef(oid) as def from pg_constraint
+           where conname in ('event_ledger_kind_check', 'alert_events_outcome_check') order by conname`,
+        )
+      ).map((r) => r.def);
+    expect((await checks()).join(' ')).toContain('disabled');
+    await db.query(economyRollbackSql());
+    expect(await tables()).not.toContain('event_presence');
+    expect(await tables()).not.toContain('alert_settings');
+    expect((await checks()).join(' ')).not.toMatch(/disabled|presence/);
+    expect(
+      (
+        await db.query('select 1 from schema_migrations where name = $1', [
+          ECONOMY,
+        ])
+      ).length,
+    ).toBe(0);
+    const all30 = all.filter(
+      (t) => t !== 'event_presence' && t !== 'alert_settings',
+    );
+
     const sql = rollbackSql();
     expect(sql).toMatch(/^delete from lab_currencies/);
     await db.query(sql);
     const after = await tables();
     expect(after.filter((t) => t.startsWith('event_'))).toEqual([]);
     // Nothing else moved: the same tables minus the event ones.
-    expect(after).toEqual(all.filter((t) => !t.startsWith('event_')));
+    expect(after).toEqual(all30.filter((t) => !t.startsWith('event_')));
     expect(await currencies()).not.toContain('bonbons');
     expect(
       (

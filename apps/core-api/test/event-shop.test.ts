@@ -470,127 +470,170 @@ describe('execution: never replayed, refunded once when it never played', () => 
   });
 });
 
-describe('conversion Jetons → Bonbons, capped per viewer and rolling hour', () => {
-  it('debits the Jetons at the rate, credits the Bonbons, once per key; the cap and when it frees up', async () => {
+describe('the Jetons → Bonbons exchange is removed (30/10)', () => {
+  it('refused everywhere, nothing moved, whatever the saved rules say; past exchanges stay in the ledger', async () => {
     await open({ conversion_rate: 1000, conversion_cap_per_hour: 10 });
     await setTokens(ANA.id, 50_000);
-    const key = randomUUID();
-    const r = await shop.convert({
-      idempotency_key: key,
-      channel_id: CH,
-      viewer: ANA,
-      bonbons: 6,
-    });
-    expect(r).toMatchObject({
-      bonbons: 6,
-      jetons: 6000,
-      balance: 6,
-      conversion: { remaining: 4 },
-    });
-    expect(
-      await shop.convert({
-        idempotency_key: key,
-        channel_id: CH,
-        viewer: ANA,
-        bonbons: 6,
-      }),
-    ).toMatchObject({
-      replayed: true,
-      balance: 6,
-    });
-    expect(await tokens(ANA.id)).toBe(44_000);
-    const cap = await shop
-      .convert({
-        idempotency_key: randomUUID(),
-        channel_id: CH,
-        viewer: ANA,
-        bonbons: 5,
-      })
-      .catch((e: EventShopError) => e);
-    expect(cap).toMatchObject({
-      code: 'conversion_cap',
-      details: { remaining: 4 },
-    });
-    expect((cap as EventShopError).details.retry_after_ms).toBe(
-      EVENT_SHOP.hourMs,
+    // A past exchange (written before the removal) stays as it was.
+    await db.query(
+      `insert into event_wallets (season, channel_id, viewer_id, viewer_name, balance, updated_at)
+       values ('halloween-2026', $1, $2, 'Ana', 3, now())`,
+      [CH, ANA.id],
     );
-    await shop.convert({
-      idempotency_key: randomUUID(),
-      channel_id: CH,
-      viewer: ANA,
-      bonbons: 4,
-    });
-    clock.advance(EVENT_SHOP.hourMs + 1);
-    expect(
-      (
-        await shop.convert({
-          idempotency_key: randomUUID(),
-          channel_id: CH,
-          viewer: ANA,
-          bonbons: 10,
-        })
-      ).balance,
-    ).toBe(20);
-    expect(await tokens(ANA.id)).toBe(50_000 - 20_000);
-  });
-
-  it('not enough Jetons, event closed, conversion closed: refused, nothing moved', async () => {
-    await open();
-    await setTokens(BOB.id, 500);
-    expect(
-      await code(
-        shop.convert({
-          idempotency_key: randomUUID(),
-          channel_id: CH,
-          viewer: BOB,
-          bonbons: 1,
-        }),
-      ),
-    ).toBe('insufficient_tokens');
-    expect(await tokens(BOB.id)).toBe(500);
-    expect(await balance(BOB.id)).toBe(0);
-    await shop.updateSettings(CH, { rules: { conversion_cap_per_hour: 0 } });
-    expect(
-      await code(
-        shop.convert({
-          idempotency_key: randomUUID(),
-          channel_id: CH,
-          viewer: BOB,
-          bonbons: 1,
-        }),
-      ),
-    ).toBe('conversion_closed');
-    await shop.updateSettings(CH, { enabled: false });
-    expect(
-      await code(
-        shop.convert({
-          idempotency_key: randomUUID(),
-          channel_id: CH,
-          viewer: BOB,
-          bonbons: 1,
-        }),
-      ),
-    ).toBe('event_closed');
-  });
-
-  it('concurrent conversions of one viewer never pass the cap', async () => {
-    await open({ conversion_cap_per_hour: 10, conversion_rate: 10 });
-    await setTokens(ANA.id, 1_000_000);
-    const results = await Promise.all(
-      Array.from({ length: 6 }, () =>
-        code(
+    await db.query(
+      `insert into event_ledger (season, channel_id, viewer_id, kind, amount, balance_after, key, actor, reason, created_at)
+       values ('halloween-2026', $1, $2, 'convert', 3, 3, 'convert:old', 'viewer', '3000 jetons', now())`,
+      [CH, ANA.id],
+    );
+    for (const via of [undefined, 'extension'] as const)
+      expect(
+        await code(
           shop.convert({
             idempotency_key: randomUUID(),
             channel_id: CH,
             viewer: ANA,
-            bonbons: 3,
+            bonbons: 1,
+            ...(via ? { via } : {}),
           }),
         ),
-      ),
+      ).toBe('conversion_removed');
+    expect(await tokens(ANA.id)).toBe(50_000);
+    expect(await balance(ANA.id)).toBe(3);
+    const state = await shop.viewerState(CH, ANA.id);
+    expect(state.conversion).toMatchObject({ cap_per_hour: 0, remaining: 0 });
+    expect(
+      (await shop.viewerHistory(CH, ANA.id)).ledger.map((m) => m.kind),
+    ).toContain('convert');
+  });
+});
+
+describe('Bonbons earned (30/10): Prime, resub, Bits, donations, presence', () => {
+  let n = 0;
+  const ev = (
+    over: Partial<AlertEventInput> & Record<string, unknown>,
+  ): AlertEventInput =>
+    ({
+      channel_id: CH,
+      source: 'twitch',
+      source_event_id: `earn-${++n}`,
+      type: 'sub',
+      actor: { id: ANA.id, login: 'ana', display_name: 'Ana' },
+      ...over,
+    }) as AlertEventInput;
+
+  it('Prime and resub: their own amounts; null = the sub’s; one renewal never pays twice', async () => {
+    await shop.updateSettings(CH, { enabled: true, rules: { sub_reward: 10 } });
+    await alerts.receive(ev({ tier: 'prime' }));
+    expect(await balance(ANA.id)).toBe(10); // null: the sub's amount
+    await shop.updateSettings(CH, {
+      rules: { prime_reward: 4, resub_reward: 7 },
+    });
+    await alerts.receive(ev({ tier: 'prime' }));
+    await alerts.receive(ev({ type: 'resub', months: 3 }));
+    await alerts.receive(ev({ tier: '1000' }));
+    expect(await balance(ANA.id)).toBe(10 + 4 + 7 + 10);
+    await shop.updateSettings(CH, { rules: { prime_reward: null } });
+    await alerts.receive(ev({ tier: 'prime' }));
+    expect(await balance(ANA.id)).toBe(10 + 4 + 7 + 10 + 10);
+  });
+
+  it('Bits: per full step, from the Twitch cheer event only (once per event id); off by default', async () => {
+    await shop.updateSettings(CH, { enabled: true });
+    await alerts.receive(ev({ type: 'bits', bits: 500 }));
+    expect(await balance(ANA.id)).toBe(0); // off by default
+    await shop.updateSettings(CH, {
+      rules: { bits_step: 100, bits_bonbons: 2 },
+    });
+    const cheer = ev({ type: 'bits', bits: 350 });
+    await alerts.receive(cheer);
+    await alerts.receive(cheer); // redelivered
+    expect(await balance(ANA.id)).toBe(6);
+    // A simulated / external « bits » event pays nothing in Production.
+    await alerts.receive(
+      ev({ type: 'bits', bits: 1000, source: 'simulation' }),
     );
-    expect(results.filter((r) => r === 'ok')).toHaveLength(3);
-    expect(results.filter((r) => r === 'conversion_cap')).toHaveLength(3);
-    expect(await balance(ANA.id)).toBe(9);
+    expect(await balance(ANA.id)).toBe(6);
+  });
+
+  it('donations: euros only, from the minimum, whole euros; the donor is the one viewer with exactly that name', async () => {
+    await db.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ($1, 'ana', 'Ana'), ($2, 'bob', 'Bob'),
+         ('91003', 'twin', 'Twin'), ('91004', 'twin_', 'twin')`,
+      [ANA.id, BOB.id],
+    );
+    await shop.updateSettings(CH, {
+      enabled: true,
+      rules: { donation_per_euro: 3, donation_min_cents: 200 },
+    });
+    const tip = (
+      name: string,
+      value: number,
+      currency = 'EUR',
+      id = `tip-${++n}`,
+    ) =>
+      alerts.receive({
+        channel_id: CH,
+        source: 'external',
+        source_event_id: `streamelements-tip-${id}`,
+        type: 'donation',
+        actor: { display_name: name },
+        amount: { value, decimal_place: 2, currency },
+        provider: 'streamelements',
+      } as AlertEventInput);
+    await tip('ANA', 550); // 5,50 € → 5 × 3
+    await tip('ana', 550, 'EUR', 'same'); // the same tip again: once
+    await tip('ana', 550, 'EUR', 'same');
+    await tip('Bob', 150); // under the minimum
+    await tip('Bob', 1000, 'USD'); // no exchange rate guessed
+    await tip('twin', 1000); // two viewers answer to « twin »: nobody
+    await tip('Quelqu’un', 1000); // no such viewer
+    expect(await balance(ANA.id)).toBe(15 + 15);
+    expect(await balance(BOB.id)).toBe(0);
+    expect(await balance('91003')).toBe(0);
+    expect(
+      (await shop.viewerHistory(CH, ANA.id)).ledger.map((m) => m.kind),
+    ).toContain('donation_reward');
+  });
+
+  it('presence: validated minutes add up per viewer; one movement per full block; closed or off: nothing', async () => {
+    await db.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ($1, 'ana', 'Ana'), ($2, 'bob', 'Bob'),
+         ('91009', 'botto', 'Botto')`,
+      [ANA.id, BOB.id],
+    );
+    await db.query(
+      `insert into loyalty_exclusions (twitch_user_id, reason, created_by) values ('91009', 'bot', 'test')`,
+    );
+    const at = (min: number) => new Date(T0.getTime() + min * 60_000);
+    const seen = (seconds: number, ids: string[], min: number) =>
+      db.tx((q) =>
+        shop.presenceListener.validated(q, {
+          streamId: 's1',
+          seconds,
+          viewerIds: ids,
+          at: at(min),
+        }),
+      );
+    await shop.updateSettings(CH, { enabled: true });
+    await seen(600, [ANA.id], 0); // rule off by default
+    expect(await balance(ANA.id)).toBe(0);
+    await shop.updateSettings(CH, {
+      rules: { presence_every_min: 10, presence_bonbons: 2 },
+    });
+    await seen(300, [ANA.id, BOB.id, '91009', CH], 10); // 5 min: no block yet
+    expect(await balance(ANA.id)).toBe(0);
+    await seen(300, [ANA.id, BOB.id, '91009', CH], 15); // 10 min: one block each
+    expect([await balance(ANA.id), await balance(BOB.id)]).toEqual([2, 2]);
+    expect(await balance('91009')).toBe(0); // excluded (bot)
+    expect(await balance(CH)).toBe(0); // the broadcaster
+    await seen(1500, [ANA.id], 20); // +25 min → 35 min: 3 blocks in all
+    expect(await balance(ANA.id)).toBe(6);
+    await shop.updateSettings(CH, { enabled: false });
+    await seen(3600, [ANA.id], 80); // closed: nothing earned, nothing counted
+    await shop.updateSettings(CH, { enabled: true });
+    expect(await balance(ANA.id)).toBe(6);
+    const moves = (await shop.viewerHistory(CH, ANA.id)).ledger;
+    expect(moves.filter((m) => m.kind === 'presence')).toHaveLength(2);
   });
 });
 
@@ -1019,7 +1062,7 @@ describe('« Événements » for the Extension testers only (progressive opening
           via: 'extension',
         }),
       ),
-    ).toBe('not_invited');
+    ).toBe('conversion_removed');
     expect(await code(viaExt(ANA, 'blink'))).toBe('ok');
     // The chat (no `via`) is open to everyone.
     await shop.stopAll(CH);

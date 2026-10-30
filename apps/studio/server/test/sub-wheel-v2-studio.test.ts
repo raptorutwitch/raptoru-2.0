@@ -450,7 +450,9 @@ describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player ca
     l.fx.audio = true;
     l.fx.hold = true;
     const first = l.rt.subWheel.once();
-    await new Promise((r) => setTimeout(r, 50));
+    // Shown as soon as the claim lands (a fixed 50 ms was too short on a loaded machine).
+    for (let i = 0; i < 40 && !l.shown.length; i++)
+      await new Promise((r) => setTimeout(r, 50));
     expect(l.shown).toHaveLength(1);
     expect(await l.rt.subWheel.once()).toBe(false);
     expect(l.shown).toHaveLength(1);

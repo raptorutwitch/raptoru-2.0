@@ -1,7 +1,7 @@
 // « Événements » in the Hub (docs/HALLOWEEN.md) — the edition of the moment (Halloween 2026): its interactions, played
 // on Raptoru's own screen, and its currency, the Bonbons. Everything is Core's projection for the JWT's viewer: names,
-// thumbnails, descriptions, prices, categories, limits, cooldowns, the overlay's state, the ways to earn, the exchange
-// rate and its hourly cap. A purchase is two taps (« price » then « Confirmer ? ») with one Idempotency-Key each (a
+// thumbnails, descriptions, prices, categories, limits, cooldowns, the overlay's state, the ways to earn (the Jetons
+// exchange is gone since 30/10). A purchase is two taps (« price » then « Confirmer ? ») with one Idempotency-Key each (a
 // network retry never buys twice). Nothing is decided here.
 
 const esc = (s) =>
@@ -32,10 +32,9 @@ export const REASONS = {
   event_closed: 'L’événement est terminé.',
   item_disabled: 'Cet effet n’est plus disponible.',
   item_not_found: 'Cet effet n’existe plus.',
-  conversion_cap: 'Limite d’échange atteinte pour cette heure.',
-  conversion_closed: 'L’échange de Jetons est fermé.',
   insufficient_tokens: 'Pas assez de Jetons.',
-  identity_required: 'Partage ton identité Twitch avec l’extension pour participer.',
+  identity_required:
+    'Partage ton identité Twitch avec l’extension pour participer.',
   idempotency_conflict: 'Action déjà envoyée.',
   raptoru_paused: 'Raptoru est en pause : réessaie un peu plus tard.',
   viewer_blocked: 'Les interactions te sont fermées pour le moment.',
@@ -78,9 +77,6 @@ export function clock(ms) {
     : `${s} s`;
 }
 
-/** « 12 min » / « 45 s »: a wait counted in minutes when it is long. */
-const later = (ms) => (ms >= 120_000 ? `${Math.ceil(ms / 60_000)} min` : clock(ms));
-
 /** What a card says about its availability now (pure, tested). */
 export function availability(item, elapsedMs = 0) {
   if (item.available) return { ok: true, text: '' };
@@ -109,22 +105,6 @@ export function viewerWait(s, elapsedMs = 0) {
     .filter((i) => i.reason === 'viewer_cooldown')
     .map((i) => i.retry_after_ms ?? 0);
   return waits.length ? Math.max(0, Math.max(...waits) - elapsedMs) : 0;
-}
-
-/** The exchange's state in words (pure, tested): null when it can be used now. */
-export function conversionNote(s, now = Date.now()) {
-  const c = s?.conversion ?? {};
-  if (s?.balance === null || s?.balance === undefined)
-    return 'Partage ton identité Twitch avec l’extension pour échanger.';
-  if (!(c.cap_per_hour > 0))
-    return 'L’échange de Jetons est fermé pendant cet événement.';
-  if (!(c.remaining > 0)) {
-    const left = c.frees_at ? new Date(c.frees_at).getTime() - now : 0;
-    return left > 0
-      ? `Limite atteinte : de nouveau possible dans ${later(left)}.`
-      : 'Limite atteinte pour cette heure.';
-  }
-  return null;
 }
 
 function itemRow(i, s, ui, elapsed) {
@@ -184,20 +164,26 @@ function interactionsHtml(s, ui, elapsed) {
     ${recent ? `<section class="evs-recent"><h4>Tes derniers achats</h4><ul>${recent}</ul></section>` : ''}`;
 }
 
-function bonbonsHtml(s, ui) {
+function bonbonsHtml(s) {
   const earn = s.earn ?? {};
-  const c = s.conversion ?? {};
-  const note = conversionNote(s, ui.now);
-  const n = Math.max(1, Math.min(ui.convertN ?? 1, Math.max(1, c.remaining ?? 1)));
   const ways = [
+    earn.presence &&
+      `<li><b>+${nf(earn.presence.bonbons)}</b> toutes les ${nf(earn.presence.every_min)} min passées sur le live</li>`,
     earn.sub_reward > 0 &&
-      `<li><b>+${nf(earn.sub_reward)}</b> à chaque sub ou resub</li>`,
+      `<li><b>+${nf(earn.sub_reward)}</b> à chaque sub</li>`,
+    earn.prime_reward > 0 &&
+      earn.prime_reward !== earn.sub_reward &&
+      `<li><b>+${nf(earn.prime_reward)}</b> pour un sub Prime</li>`,
+    earn.resub_reward > 0 &&
+      `<li><b>+${nf(earn.resub_reward)}</b> quand tu partages ton réabonnement</li>`,
     earn.gift_giver_per_sub > 0 &&
       `<li><b>+${nf(earn.gift_giver_per_sub)}</b> par sub offert, pour celui qui l’offre</li>`,
     earn.gift_recipient > 0 &&
       `<li><b>+${nf(earn.gift_recipient)}</b> quand on t’offre un sub</li>`,
-    c.cap_per_hour > 0 &&
-      `<li>en échangeant tes Jetons (ci-dessous)</li>`,
+    earn.bits &&
+      `<li><b>+${nf(earn.bits.bonbons)}</b> tous les ${nf(earn.bits.step)} Bits</li>`,
+    earn.donation_per_euro > 0 &&
+      `<li><b>+${nf(earn.donation_per_euro)}</b> par euro de don (avec ton pseudo Twitch)</li>`,
     earn.raffle && '<li>en gagnant les tombolas Bonbons de Raptoru</li>',
   ]
     .filter(Boolean)
@@ -206,28 +192,12 @@ function bonbonsHtml(s, ui) {
       <span class="evs-candy" aria-hidden="true">🍬</span>
       <div><b>${s.balance === null ? '—' : nf(s.balance)}</b> Bonbons<small>gardés jusqu’à la fin de l’événement</small></div>
     </div>
-    <section class="evs-group"><h4>Gagner des Bonbons</h4><ul class="evs-ways">${ways}</ul></section>
-    <section class="evs-group evs-convert"><h4>Échanger des Jetons</h4>
-      <p class="evs-rate">${c.rate ? `${nf(c.rate)} Jetons = 1 Bonbon` : ''}${c.cap_per_hour > 0 ? ` · ${nf(c.cap_per_hour)} Bonbons max par heure` : ''}</p>
-      ${
-        note
-          ? `<p class="evs-note">${esc(note)}</p>`
-          : `<p class="evs-rate">Encore <b>${nf(c.remaining)}</b> Bonbon${c.remaining > 1 ? 's' : ''} échangeable${c.remaining > 1 ? 's' : ''} cette heure.</p>
-      <div class="evs-convert-row">
-        <div class="evs-stepper">
-          <button type="button" data-step="-1" aria-label="Moins"${n <= 1 ? ' disabled' : ''}>−</button>
-          <output>${n} 🍬</output>
-          <button type="button" data-step="1" aria-label="Plus"${n >= (c.remaining ?? 0) ? ' disabled' : ''}>+</button>
-        </div>
-        <button type="button" class="evs-exchange" data-convert="${n}"${ui.converting ? ' disabled' : ''}>${nf(n * c.rate)} Jetons → ${n} 🍬</button>
-      </div>`
-      }
-    </section>`;
+    <section class="evs-group"><h4>Gagner des Bonbons</h4><ul class="evs-ways">${ways}</ul></section>`;
 }
 
 /**
  * The module's HTML (pure, tested). `ui`: { section: 'interactions' | 'bonbons', filter, confirming, sending,
- * converting, notice, elapsedMs, convertN, unreachable }. Countdowns carry `data-wait` / `data-next`: the view
+ * notice, elapsedMs, unreachable }. Countdowns carry `data-wait` / `data-next`: the view
  * updates their text in place every second (no rebuild).
  */
 export function shopHtml(s, ui = {}) {
@@ -248,7 +218,7 @@ export function shopHtml(s, ui = {}) {
       <button type="button" role="tab" data-section="interactions" aria-selected="${section === 'interactions'}" class="${section === 'interactions' ? 'is-on' : ''}">Interactions</button>
       <button type="button" role="tab" data-section="bonbons" aria-selected="${section === 'bonbons'}" class="${section === 'bonbons' ? 'is-on' : ''}">Bonbons</button>
     </nav>
-    ${section === 'bonbons' ? bonbonsHtml(s, ui) : interactionsHtml(s, ui, elapsed)}
+    ${section === 'bonbons' ? bonbonsHtml(s) : interactionsHtml(s, ui, elapsed)}
     ${ui.notice ? `<p class="evs-notice evs-toast${ui.notice.bad ? ' is-bad' : ''}" role="status">${esc(ui.notice.text)}</p>` : ''}`;
 }
 
@@ -261,8 +231,6 @@ export function createEventShopView({ document, client, onState }) {
   let filter = 'all';
   let confirming = null;
   let confirmTimer = null;
-  let converting = false;
-  let convertN = 1;
   let notice = null;
   let noticeTimer = null;
   let timer = null;
@@ -286,9 +254,7 @@ export function createEventShopView({ document, client, onState }) {
       section,
       filter,
       confirming,
-      converting,
       notice,
-      convertN,
       elapsedMs: Date.now() - loadedAt,
     });
   };
@@ -358,28 +324,6 @@ export function createEventShopView({ document, client, onState }) {
     if (t.dataset.filter) {
       filter = t.dataset.filter;
       return render();
-    }
-    if (t.dataset.step) {
-      convertN = Math.max(1, convertN + Number(t.dataset.step));
-      return render();
-    }
-    if (t.dataset.convert) {
-      busy = true;
-      converting = true;
-      render();
-      try {
-        const out = await client.eventsConvert(Number(t.dataset.convert));
-        take(out?.event_shop);
-        convertN = 1;
-        say(`+${out?.bonbons ?? t.dataset.convert} 🍬 — bon appétit !`);
-      } catch (e) {
-        say(reasonOf(e), true);
-      } finally {
-        busy = false;
-        converting = false;
-        render();
-      }
-      return;
     }
     const id = t.dataset.buy;
     if (!id) return;

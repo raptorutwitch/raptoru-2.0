@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 // Halloween shop (docs/HALLOWEEN.md): the production Extension (mobile surface) → Lab EBS → Lab Core. The stack opens
 // the shop, grants 12 Bonbons to « Viewer Lab » and gives them 5 000 test Jetons; no overlay is connected.
 
-test('a viewer opens « Événements » (Halloween 2026): balance, offline engine, nothing sellable; a Jetons exchange credits Bonbons', async ({
+test('a viewer opens « Événements » (Halloween 2026): balance, offline engine, nothing sellable; ways to earn, no Jetons exchange', async ({
   browser,
 }) => {
   const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
@@ -19,13 +19,12 @@ test('a viewer opens « Événements » (Halloween 2026): balance, offline engin
   const blink = shop.getByRole('button', { name: /^Acheter Clignement/ });
   await expect(blink).toBeDisabled();
 
-  // Exchange 2 Bonbons in « Bonbons » (the Core debits the Jetons, capped per hour).
+  // « Bonbons »: the ways to earn; the Jetons exchange is gone (30/10).
   await shop.getByRole('tab', { name: 'Bonbons' }).click();
   await expect(shop).toContainText('+10 à chaque sub');
-  await shop.getByRole('button', { name: 'Plus' }).click();
-  await shop.getByRole('button', { name: /Jetons → 2/ }).click();
-  await expect(shop.locator('.evs-pill')).toHaveText('🍬 14');
-  await expect(shop).toContainText('Encore 8 Bonbons');
+  await expect(shop).not.toContainText('Jetons');
+  await expect(shop.locator('[data-convert]')).toHaveCount(0);
+  await expect(shop.locator('.evs-pill')).toHaveText('🍬 12');
 });
 
 test('the 565×376 video component scrolls the module (wheel), its section tabs staying at hand', async ({
@@ -49,7 +48,5 @@ test('the 565×376 video component scrolls the module (wheel), its section tabs 
     .toBeGreaterThan(300);
   await page.getByRole('tab', { name: 'Bonbons' }).click();
   await page.mouse.wheel(0, 900);
-  await expect(
-    page.getByRole('button', { name: /Jetons → 1/ }),
-  ).toBeInViewport();
+  await expect(page.locator('.evs-ways').first()).toBeInViewport();
 });

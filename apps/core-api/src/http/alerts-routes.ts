@@ -69,6 +69,20 @@ export function alertsRoutes(
       }),
     },
     {
+      // Studio › Alertes › Variantes (30/10): which variants each family may play.
+      method: 'GET',
+      pattern: at('/(\\d{1,32})/variants'),
+      auth,
+      handle: ({ params }) => alerts.variantSettings(channel(params[0]!)),
+    },
+    {
+      method: 'POST',
+      pattern: at('/(\\d{1,32})/variants'),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() => alerts.updateVariantSettings(channel(params[0]!), body)),
+    },
+    {
       // One normalized event (deduplicated by source + id); `source: simulation` for tests.
       method: 'POST',
       pattern: at('/events'),

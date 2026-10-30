@@ -131,11 +131,14 @@ const STATUS: Record<string, string> = {
   unknown: 'fin inconnue',
 };
 const LEDGER: Record<string, string> = {
-  grant: 'cadeau',
-  remove: 'retrait',
+  grant: 'attribution manuelle',
+  remove: 'retrait manuel',
   sub_reward: 'sub',
   gift_reward: 'subgift',
-  convert: 'conversion',
+  convert: 'conversion (ancienne)',
+  presence: 'présence',
+  bits_reward: 'Bits',
+  donation_reward: 'don',
   purchase: 'achat',
   refund: 'remboursement',
   raffle: 'tombola',
@@ -150,49 +153,128 @@ const EFFECT_LABEL: Record<string, string> = {
   flip: 'Écran retourné',
   blur: 'Flou',
 };
-/** Rules shown in the panel (units for people: seconds, not milliseconds). */
-const RULES: { key: string; label: string; ms?: boolean; hint: string }[] = [
-  { key: 'conversion_rate', label: 'Jetons pour 1 Bonbon', hint: 'conversion' },
+/**
+ * Rules shown in the panel, by section (units for people: seconds, euros). `scale`: stored = shown × scale;
+ * `same`: empty = the sub's amount (stored null).
+ */
+type Rule = {
+  key: string;
+  label: string;
+  hint: string;
+  scale?: number;
+  step?: number;
+  same?: boolean;
+};
+const RULE_GROUPS: { title: string; hint: string; rules: Rule[] }[] = [
   {
-    key: 'conversion_cap_per_hour',
-    label: 'Bonbons convertibles / heure / viewer',
-    hint: '0 = conversion fermée',
-  },
-  { key: 'sub_reward', label: 'Bonbons par sub / resub', hint: 'l’abonné' },
-  {
-    key: 'gift_giver_per_sub',
-    label: 'Bonbons au donateur, par sub offert',
-    hint: 'anonyme : rien',
-  },
-  {
-    key: 'gift_recipient',
-    label: 'Bonbons au bénéficiaire d’un sub offert',
-    hint: '',
-  },
-  {
-    key: 'viewer_gap_ms',
-    label: 'Attente entre deux achats d’un viewer (s)',
-    ms: true,
-    hint: '',
-  },
-  {
-    key: 'screamer_gap_ms',
-    label: 'Écart minimal entre deux screamers (s)',
-    ms: true,
-    hint: '',
+    title: 'Présence',
+    hint: 'Minutes de présence validées pendant le live (comme la fidélité : bots exclus, pas le streamer). Événement fermé : rien n’est compté.',
+    rules: [
+      {
+        key: 'presence_every_min',
+        label: 'Toutes les … minutes de présence',
+        hint: '0 = désactivé',
+      },
+      { key: 'presence_bonbons', label: 'Bonbons par palier', hint: '' },
+    ],
   },
   {
-    key: 'screamers_per_hour',
-    label: 'Screamers maximum par heure',
-    hint: '0 = screamers fermés',
+    title: 'Récompenses Twitch',
+    hint: 'Payées une seule fois par événement Twitch (un resub n’est jamais payé deux fois).',
+    rules: [
+      { key: 'sub_reward', label: 'Sub', hint: 'l’abonné' },
+      {
+        key: 'prime_reward',
+        label: 'Sub Prime',
+        hint: 'vide = comme un sub',
+        same: true,
+      },
+      {
+        key: 'resub_reward',
+        label: 'Resub (message de réabonnement)',
+        hint: 'vide = comme un sub',
+        same: true,
+      },
+      {
+        key: 'gift_giver_per_sub',
+        label: 'Donateur, par sub offert',
+        hint: 'anonyme : rien',
+      },
+      {
+        key: 'gift_recipient',
+        label: 'Bénéficiaire d’un sub offert',
+        hint: '',
+      },
+      {
+        key: 'bits_step',
+        label: 'Bits : un palier tous les … Bits',
+        hint: '0 = désactivé',
+      },
+      { key: 'bits_bonbons', label: 'Bits : Bonbons par palier', hint: '' },
+    ],
   },
   {
-    key: 'dock_reveal_ms',
-    label: 'Dock OBS : afficher l’achat après (s)',
-    ms: true,
-    hint: 'compté depuis le début réel de l’effet ; 0 = dès qu’il commence',
+    title: 'Dons (StreamElements)',
+    hint: 'En euros seulement. Le pseudo tapé par le donateur doit correspondre exactement à un seul viewer Twitch connu, sinon personne n’est payé (voir le journal). StreamElements doit être en mode « actif » dans Studio.',
+    rules: [
+      {
+        key: 'donation_per_euro',
+        label: 'Bonbons par euro entier',
+        hint: '0 = désactivé',
+      },
+      {
+        key: 'donation_min_cents',
+        label: 'Don minimum (€)',
+        hint: '',
+        scale: 100,
+        step: 0.5,
+      },
+    ],
+  },
+  {
+    title: 'Achats et limites',
+    hint: 'Prix et récupération de chaque effet : catalogue ci-dessous. Cadeaux / retraits : « Bonbons » (motif Cadeau ou Tombola). Tombolas en Bonbons : onglet Tombola, monnaie « bonbons » (événement ouvert).',
+    rules: [
+      {
+        key: 'viewer_gap_ms',
+        label: 'Attente entre deux achats d’un viewer (s)',
+        scale: 1000,
+        hint: '',
+      },
+      {
+        key: 'screamer_gap_ms',
+        label: 'Écart minimal entre deux screamers (s)',
+        scale: 1000,
+        hint: '',
+      },
+      {
+        key: 'screamers_per_hour',
+        label: 'Screamers maximum par heure',
+        hint: '0 = screamers fermés',
+      },
+      {
+        key: 'dock_reveal_ms',
+        label: 'Dock OBS : afficher l’achat après (s)',
+        scale: 1000,
+        hint: 'compté depuis le début réel de l’effet ; 0 = dès qu’il commence',
+      },
+    ],
   },
 ];
+const RULES = RULE_GROUPS.flatMap((g) => g.rules);
+
+/** The rules typed in the panel, as the Core stores them (pure, tested). */
+export function rulesFromInputs(values: Record<string, string>) {
+  const rules: Record<string, number | null> = {};
+  for (const def of RULES) {
+    const raw = (values[def.key] ?? '').trim();
+    rules[def.key] =
+      def.same && raw === ''
+        ? null
+        : Math.max(0, Math.round((Number(raw) || 0) * (def.scale ?? 1)));
+  }
+  return rules;
+}
 const time = (iso: string) =>
   new Date(iso).toLocaleTimeString('fr-FR', {
     hour: '2-digit',
@@ -275,19 +357,28 @@ export function shopCard(a: Admin | null, error: string | null) {
   const r = a.settings.rules;
   const testersOnly = r.extension_audience === 'testers';
   const testers = r.extension_testers ?? [];
-  const rules = RULES.map(
-    (x) =>
-      `<label><span>${esc(x.label)}${x.hint ? ` <small>${esc(x.hint)}</small>` : ''}</span><input type="number" min="0" step="1" data-rule="${x.key}" value="${x.ms ? Math.round((r[x.key] ?? 0) / 1000) : (r[x.key] ?? 0)}"/></label>`,
+  const shown = (x: Rule) => {
+    const v = (r as Record<string, number | null | undefined>)[x.key];
+    return v == null ? (x.same ? '' : 0) : v / (x.scale ?? 1);
+  };
+  const rules = RULE_GROUPS.map(
+    (g) =>
+      `<fieldset class="hw-rules"><legend>${esc(g.title)}</legend><p class="hw-hint">${esc(g.hint)}</p>${g.rules
+        .map(
+          (x) =>
+            `<label><span>${esc(x.label)}${x.hint ? ` <small>${esc(x.hint)}</small>` : ''}</span><input type="number" min="0" step="${x.step ?? 1}" data-rule="${x.key}" value="${shown(x)}"${x.same ? ' placeholder="comme un sub"' : ''}/></label>`,
+        )
+        .join('')}</fieldset>`,
   ).join('');
   return `<div class="hw-open ${a.settings.enabled ? 'on' : ''}">
       <div><b>Boutique ${a.settings.enabled ? 'OUVERTE' : 'fermée'}</b> <small>saison ${esc(a.settings.season)}</small>
-        <p class="hw-hint">${a.settings.enabled ? 'Les viewers voient « Événements », gagnent et dépensent des Bonbons ; !peur et !bonbons répondent, !solde montre les Bonbons.' : 'Fermé : rien n’est vendu, converti ni gagné ; module et commandes masqués ; les soldes sont gardés pour une prochaine édition. Fermer rembourse les achats pas encore joués.'}</p></div>
+        <p class="hw-hint">${a.settings.enabled ? 'Les viewers voient « Événements », gagnent et dépensent des Bonbons ; !peur et !bonbons répondent, !solde montre les Bonbons.' : 'Fermé : rien n’est vendu ni gagné ; module et commandes masqués ; les soldes sont gardés pour une prochaine édition. Fermer rembourse les achats pas encore joués.'}</p></div>
       <button type="button" class="${a.settings.enabled ? '' : 'primary'}" data-act="toggle-shop">${a.settings.enabled ? 'Fermer la boutique' : 'Ouvrir la boutique'}</button>
     </div>
     <div class="hw-access"><b>Module « Événements » dans l'extension</b>
       <div class="seg"><button type="button" data-audience="all" class="${testersOnly ? '' : 'on'}">Tous les viewers</button><button type="button" data-audience="testers" class="${testersOnly ? 'on' : ''}">Testeurs seulement</button></div>
       <p class="hw-hint">${testersOnly ? `${testers.length} testeur${testers.length > 1 ? 's' : ''} (ajouter / retirer : « Trouver un viewer »). Les autres ne voient pas le module ; le chat (!peur, !bonbons) et les gains restent ouverts à tous.` : 'Tous les viewers de l’extension publiée voient le module pendant l’événement.'}</p></div>
-    <div class="hw-rules">${rules}</div>
+    ${rules}
     <button type="button" class="primary" data-act="save-rules">Enregistrer les règles</button>`;
 }
 
@@ -574,15 +665,12 @@ export function mountHalloween(root: HTMLElement) {
           : 'Événement ouvert.',
       );
     else if (a === 'save-rules') {
-      const rules: Record<string, number> = {};
+      const values: Record<string, string> = {};
       for (const input of part('shop').querySelectorAll<HTMLInputElement>(
         '[data-rule]',
-      )) {
-        const def = RULES.find((r) => r.key === input.dataset.rule)!;
-        rules[def.key] =
-          Math.max(0, Math.round(Number(input.value) || 0)) *
-          (def.ms ? 1000 : 1);
-      }
+      ))
+        values[input.dataset.rule!] = input.value;
+      const rules = rulesFromInputs(values);
       void act(
         () => call('/api/halloween/admin/settings', { rules }),
         'Règles enregistrées.',
@@ -721,6 +809,15 @@ export function mountHalloween(root: HTMLElement) {
     const f = new FormData(form);
     const amount = Math.round(Number(f.get('amount')));
     if (!amount) return say('Montant non nul requis.');
+    const who = String(f.get('viewer')).trim();
+    // An explicit confirmation (a typo in the amount is caught here; a mistake is corrected by a new movement).
+    if (
+      !form.dataset.key &&
+      !confirm(
+        `${amount > 0 ? 'Donner' : 'Retirer'} ${Math.abs(amount)} Bonbons ${amount > 0 ? 'à' : 'de'} ${who} ?`,
+      )
+    )
+      return;
     form.dataset.key ??= crypto.randomUUID();
     form.dataset.sending = '1';
     void act(

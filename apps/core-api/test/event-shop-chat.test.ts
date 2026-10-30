@@ -32,7 +32,7 @@ async function lab({ open = true, ready = true } = {}) {
   if (open)
     await shop.updateSettings(CH, {
       enabled: true,
-      rules: { viewer_gap_ms: 0, conversion_rate: 100 },
+      rules: { viewer_gap_ms: 0 },
     });
   if (ready)
     await shop.heartbeat({
@@ -114,8 +114,11 @@ describe('Halloween shop in the chat', () => {
     expect(random.handled[0]?.outcome).toMatch(/^event_(bought|refused)/);
   });
 
-  it('!bonbons: the balance (throttled); !bonbons <n>: Jetons exchanged within the hourly cap', async () => {
+  it('!bonbons: the balance and the ways to earn (throttled); !bonbons <n> never exchanges Jetons any more', async () => {
     const { say, replies, balance, core } = await lab();
+    await core.eventShop.updateSettings(CH, {
+      rules: { presence_every_min: 10, presence_bonbons: 1, bits_step: 100 },
+    });
     await editWallet(
       core.db,
       core.clock.now(),
@@ -126,19 +129,22 @@ describe('Halloween shop in the chat', () => {
       'test',
     );
     await say('!bonbons');
-    expect((await replies())[0]).toContain('15 Bonbons');
+    const first = (await replies())[0]!;
+    expect(first).toContain('15 Bonbons');
+    expect(first).toContain('toutes les 10 min de présence');
+    expect(first).toContain('par 100 Bits');
+    expect(first).not.toMatch(/jetons/i);
     expect((await say('!bonbons')).handled[0]?.outcome).toBe(
       'event_help_throttled',
     );
     core.clock.advance(EVENT_CHAT_HELP_COOLDOWN_MS);
-    expect((await say('!bonbons 3')).handled[0]?.outcome).toBe(
-      'event_converted',
+    expect((await say('!bonbons 3')).handled[0]?.outcome).toBe('event_balance');
+    expect(await balance()).toBe(15);
+    const tokens = await core.db.query<{ tokens: string }>(
+      `select tokens from lab_wallets where channel_id = $1 and viewer_id = $2`,
+      [CH, alice.id],
     );
-    expect(await balance()).toBe(18);
-    expect((await say('!bonbons 50')).handled[0]?.outcome).toBe(
-      'event_refused:conversion_cap',
-    );
-    expect(await balance()).toBe(18);
+    expect(Number(tokens[0]?.tokens)).toBe(10_000);
   });
 
   it('!peur alone: the menu, with the prices', async () => {

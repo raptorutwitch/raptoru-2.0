@@ -38,17 +38,23 @@ Studio → page overlay (long-poll) → vidéo WebM alpha + son / effet dessiné
 ## 3. Bonbons
 
 Monnaie séparée par saison (`halloween-2026`), dans ses propres tables (`event_wallets`, `event_ledger` append-only,
-solde ≥ 0). **Les Jetons de Production ne sont jamais touchés**, sauf par la conversion. Manières d'en gagner :
+solde ≥ 0). **Les Jetons ne sont jamais touchés** : l'échange Jetons → Bonbons est **supprimé** (30/10, décision
+d'Antoni) ; toutes les sources ci-dessous alimentent le même solde, dépensable aussitôt dans la boutique. Réglages :
+Studio › Halloween › règles, par sections (Présence, Récompenses Twitch, Dons, Achats et limites).
 
-| Source               | Règle (par défaut, réglable)                                                                                                                                                                                                                          |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Don Studio           | onglet Halloween › Bonbons : viewer (nom ou id), montant (négatif = retrait), motif `grant` ou `raffle` (récompense de tirage)                                                                                                                        |
-| Sub / resub          | 10 Bonbons ; une fois par événement Twitch (clé `<rôle>:<source>:<event_id>`), après l'enregistrement de l'alerte. Un échec ne bloque jamais l'alerte                                                                                                 |
-| Sub offert           | donneur 5 par sub offert, bénéficiaire 3                                                                                                                                                                                                              |
-| Conversion de Jetons | 1 000 Jetons = 1 Bonbon, **10 Bonbons par heure et par viewer**, plafond vérifié dans le Core sous verrou. Le débit passe par le Wallet canonique (`module 'event_shop'`)                                                                             |
-| Tombola              | Studio › Tombola › Récompense : monnaie **Bonbons** (montant fixe, N gagnants ; le pot est partagé à parts égales). Une seule fois par gagnant et par tirage, même en cas de reprise. Seulement pendant l'événement. L'inscription reste **gratuite** |
+| Source                | Règle (réglable ; 0 = désactivé)                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Présence              | N Bonbons par palier de M minutes de présence **validée** par le tracker de présence du Core (comme la fidélité : bots exclus, pas le streamer). Compteur cumulé par viewer et par saison (`event_presence`) : une reconnexion reprend le compte, rien n'est inventé. Un mouvement par palier (clé `presence:<saison>:<chaîne>:<viewer>:<de>-<à>`). Événement fermé : rien n'est compté. **Production seulement** (le Lab n'a pas de tracker de présence)                            |
+| Sub                   | 10 Bonbons ; une fois par événement Twitch (clé `<rôle>:<source>:<event_id>`), après l'enregistrement de l'alerte. Un échec ne bloque jamais l'alerte                                                                                                                                                                                                                                                                                                                                |
+| Sub Prime / Resub     | leur propre montant ; vide = celui du sub. Un réabonnement n'est jamais payé deux fois (même famille de clé que le sub)                                                                                                                                                                                                                                                                                                                                                              |
+| Sub offert            | donneur 5 par sub offert (anonyme : personne), bénéficiaire 3                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Bits                  | N Bonbons par palier entier de M Bits, sur l'événement Twitch (son id) ; jamais un montant tapé dans le chat ni une alerte externe                                                                                                                                                                                                                                                                                                                                                   |
+| Dons (StreamElements) | N Bonbons par euro entier, à partir d'un minimum ; **euros seulement** (aucun taux de change deviné). Le don porte le pseudo tapé : payé au viewer dont le login ou le nom Twitch est **exactement** ce pseudo, et seulement s'il est unique (sinon personne, l'alerte joue quand même). Un même don rejoué paie une fois. Remboursements : StreamElements ne les transmet pas, rien n'est repris automatiquement (retrait manuel si besoin). Exige StreamElements en mode « actif » |
+| Attribution manuelle  | Halloween › Bonbons : viewer (« Trouver un viewer » › Créditer, ou nom / id), montant (négatif = retrait), confirmation, une clé par saisie (double clic ou nouvel essai : une seule fois). Historique « attribution manuelle » / « retrait manuel » ; une erreur se corrige par un nouveau mouvement, jamais en effaçant                                                                                                                                                            |
+| Tombola               | onglet Tombola › Récompense : monnaie **bonbons** (montant fixe, N gagnants ; le pot est partagé à parts égales). Une seule fois par gagnant et par tirage, même en cas de reprise. Seulement pendant l'événement. L'inscription reste **gratuite**                                                                                                                                                                                                                                  |
 
-Seules les alertes `source 'twitch'` paient, ce qui exclut les alertes de test de Studio (sauf dans le Lab). Pendant
+Seules les alertes `source 'twitch'` (et les dons StreamElements, `external`) paient, ce qui exclut les alertes de test de
+Studio (sauf dans le Lab). Pendant
 l'événement, `!solde` (la commande existante, sans doublon) ajoute « | 17 Bonbons 🍬 » (0 si aucun) ; hors événement
 sa réponse est exactement l'habituelle.
 
@@ -59,13 +65,13 @@ monétaire, jamais échangeables contre de l'argent ou des Bits. La Tombola est 
 
 Le Core porte l'état ouvert/fermé (Studio › Halloween › « Ouvrir / Fermer l'événement »).
 
-- **Ouvert** : module « Événements » visible, achats, conversions, gains (subs, Tombola), `!peur` / `!bonbons`
+- **Ouvert** : module « Événements » visible, achats, gains (présence, subs, Bits, dons, Tombola), `!peur` / `!bonbons`
   actifs, `!solde` enrichi.
 - **Fermer** est un arrêt contrôlé, dans une seule transaction :
   - un achat payé mais pas encore remis à Studio est **remboursé** une fois (`event_closed`) ;
   - un effet déjà remis ou à l'écran se termine normalement ;
   - plus rien n'est remis à Studio, même par une requête ancienne ;
-  - achats, conversions, gains de sub et Tombola Bonbons sont refusés par le Core ;
+  - achats, gains (présence, subs, Bits, dons) et Tombola Bonbons sont refusés par le Core ;
   - le module disparaît et les commandes redeviennent muettes ;
   - le don manuel de Studio reste possible.
 - **Rien n'est purgé** : soldes, historique et catalogue restent. Rouvrir rend la même boutique, et une prochaine
@@ -247,7 +253,7 @@ Les commandes restent **muettes tant que la boutique est fermée**.
 
 - `!peur` : le menu avec les prix ; `!peur <effet>` (`blink`, `fog`, `eyes`… ou un screamer : `!peur foxy`) ;
   `!peur screamer` : un screamer au hasard parmi ceux qui sont disponibles maintenant.
-- `!bonbons` : le solde et comment en gagner ; `!bonbons <n>` : échange de Jetons, dans le plafond horaire.
+- `!bonbons` (avec ou sans nombre) : le solde et comment en gagner. Plus aucun échange de Jetons (30/10).
 - Mêmes règles que l'extension, toutes décidées par le Core. L'id du message Twitch sert de clé : le même message
   rejoué n'achète rien. Les réponses gratuites (menu, solde) sont limitées à une toutes les 30 s par viewer.
 - Les mots `peur` et `bonbons` ne sont **pas** réservés dans Commands V2 : si une commande Studio porte déjà ce nom,
@@ -360,7 +366,7 @@ désactivés, nouveaux insérés désactivés), e2e Chromium `halloween-ambiance
 image de test) : les 3 retournements et les 3 niveaux de flou rendus par les filtres créés par Studio. **Non testé
 par Antoni** : tout le reste en vrai.
 
-- **Core** (`event-shop.test.ts`, 21 tests) : règles, idempotence, sort des exécutions, conversion, subs et dons,
+- **Core** (`event-shop.test.ts`, 29 tests) : règles, idempotence, sort des exécutions, échange refusé, subs, Prime, resub, Bits, dons, présence,
   STOP ALL, fermeture contrôlée et réouverture.
 - **`!solde`** (`event-shop-solde.test.ts`) : réponse habituelle hors événement, « | N Bonbons » pendant.
 - **Tombola Bonbons** (`event-shop-raffle.test.ts`) : 3 gagnants crédités une fois, rejeu sans double, refus hors
@@ -368,7 +374,7 @@ par Antoni** : tout le reste en vrai.
 - **Profil Production** (`halloween-production.test.ts`) : Studio ↔ Core principal en HTTPS, installation appairée.
 - **Installation des médias** (`halloween-media-install.test.ts`) et **journal du moteur** (`halloween-runtime.test.ts`).
 - **Frontière d'extension** (`ext-frontier`) : le viewer vient du JWT, la clé d'idempotence est exigée, refus `busy`.
-- **Vrai PostgreSQL** (`event-shop.integration.test.ts`) : conversions et achats concurrents depuis deux pools Core.
+- **Vrai PostgreSQL** (`event-shop.integration.test.ts`) : échange refusé, cycles de présence, récompenses (Bits, don) et achats concurrents depuis deux pools Core.
 - **Studio e2e** (Chromium) :
   - `halloween.e2e.ts` : Core Lab → runtime → page → son → fin ;
   - `events-shop.e2e.ts` : Extension → EBS Lab → Core Lab.
@@ -493,3 +499,26 @@ sans redéployer (Studio › Halloween › Alertes Halloween).
   copie locale seulement, jamais dans Git ; à remplacer ou couper si Twitch la signale.
 - **Production** : demande le déploiement du Core (les variantes y vivent) et du nouveau Studio ; le profil reste coupé
   jusqu'au clic d'Antoni.
+
+## 14 bis. Variantes par famille (30/10) — Studio › Alertes › « Variantes par famille »
+
+Rien d'enregistré = le comportement d'avant, inchangé. Pour chaque famille (Follow, Sub, Sub Prime, Resub, Subgift,
+Bits, Raid, Don) :
+
+| Choix      | Joue                                                                                               |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| Auto       | la variante Halloween quand le profil Halloween (§ 14) est actif, sinon l'habituelle               |
+| Habituelle | toujours l'habituelle (la famille ignore le profil Halloween)                                      |
+| Halloween  | toujours la variante Halloween, profil coupé ou non (exclusive) ; seulement si la famille en a une |
+| Désactivée | aucune animation : l'événement est noté `disabled` (gains, Roue du Sub, fidélité inchangés)        |
+
+- **Follow** : cases à cocher des variantes habituelles tirées au sort (leurs poids d'origine gardés entre elles).
+  Au moins une reste cochée : une sélection vide est refusée par Studio et par le Core (pour ne rien jouer, choisir
+  « Désactivée »). Le Ballon (Sub / Prime / Resub) se choisit toujours dans Halloween › Alertes Halloween.
+- **Une seule alerte par événement** : le Core choisit UNE variante (habituelle OU Halloween), jamais deux.
+- **Secours** : une variante Halloween emporte l'habituelle (tirée parmi les cochées) ; Studio la joue si le média
+  Halloween manque.
+- Les boutons de test de « Alertes Halloween » jouent toujours le média Halloween, quels que soient ces choix ; la
+  « Simulation (file réelle) » de l'onglet Alertes suit ces choix.
+- Stockage : table `alert_settings` (migration additive `20261117130000_halloween_economy.sql`) ; routes
+  `GET/POST …/alerts/<chaîne>/variants`.

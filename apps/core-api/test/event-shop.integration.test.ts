@@ -1,6 +1,6 @@
 // Halloween shop (docs/HALLOWEEN.md) on a real Postgres with real parallel connections (PGlite serializes every
-// transaction and cannot prove the locks): conversions racing on two Core pools never pass the hourly cap nor debit
-// a Jeton without its Bonbon; purchases racing never admit two plays nor spend a Bonbon twice.
+// transaction and cannot prove the locks): the removed Jetons exchange moves nothing; presence cycles and reward events
+// racing on two Core pools pay each block / event once; purchases racing never admit two plays nor spend a Bonbon twice.
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
 import { randomUUID } from 'node:crypto';
@@ -71,7 +71,7 @@ describe.skipIf(!isLocal)('Halloween shop, real Postgres', () => {
       source: 'test',
     });
 
-  it('eight conversions from two Cores at once: never past the hourly cap, one Jeton debit per Bonbon', async () => {
+  it('the Jetons exchange is refused from every Core at once: no Jeton debited, no Bonbon credited', async () => {
     const [s1, s2] = [shop(a), shop(b)];
     await s1.updateSettings(CH, {
       enabled: true,
@@ -79,7 +79,7 @@ describe.skipIf(!isLocal)('Halloween shop, real Postgres', () => {
     });
     await fund(5000);
     const out = await settle(
-      Array.from({ length: 8 }, (_, i) =>
+      Array.from({ length: 6 }, (_, i) =>
         (i % 2 ? s2 : s1).convert({
           idempotency_key: randomUUID(),
           channel_id: CH,
@@ -88,35 +88,80 @@ describe.skipIf(!isLocal)('Halloween shop, real Postgres', () => {
         }),
       ),
     );
-    expect(out.filter((o) => o.startsWith('crash'))).toEqual([]);
-    expect(out.filter((o) => o === 'ok')).toHaveLength(3); // 3 × 3 = 9 ≤ 10; a 4th would be 12
-    expect(out.filter((o) => o === 'conversion_cap')).toHaveLength(5);
-    expect((await s1.viewerState(CH, ANA.id)).balance).toBe(9);
-    expect(await tokens()).toBe(5000 - 900);
-    expect(await n("wallet_transactions where source = 'event_shop'")).toBe(3);
+    expect(out).toEqual(Array(6).fill('conversion_removed'));
+    expect((await s1.viewerState(CH, ANA.id)).balance).toBe(0);
+    expect(await tokens()).toBe(5000);
+    expect(await n("wallet_transactions where source = 'event_shop'")).toBe(0);
   });
 
-  it('the same conversion key from two Cores: debited and credited once', async () => {
+  it('presence cycles racing on two Cores (viewers in any order): every second counted once, every block paid once', async () => {
     const [s1, s2] = [shop(a), shop(b)];
     await s1.updateSettings(CH, {
       enabled: true,
-      rules: { conversion_rate: 100, conversion_cap_per_hour: 10 },
+      rules: { presence_every_min: 5, presence_bonbons: 2 },
     });
-    await fund(1000);
-    const req = {
-      idempotency_key: randomUUID(),
+    const ids = ['9301', '9302', '9303', '9304'];
+    // 12 cycles of 2 min, half of them with the viewers reversed: 24 min each → 4 blocks of 5 min.
+    const out = await settle(
+      Array.from({ length: 12 }, (_, i) =>
+        (i % 2 ? b : a).tx((q) =>
+          (i % 2 ? s2 : s1).presenceListener.validated(q, {
+            streamId: 's1',
+            seconds: 120,
+            viewerIds: i % 2 ? [...ids].reverse() : ids,
+            at: clock.now(),
+          }),
+        ),
+      ),
+    );
+    expect(out.filter((o) => o !== 'ok')).toEqual([]);
+    const rows = await a.query<{ seconds: string; blocks_paid: number }>(
+      'select seconds, blocks_paid from event_presence order by viewer_id',
+    );
+    expect(rows.map((r) => [Number(r.seconds), r.blocks_paid])).toEqual(
+      Array(4).fill([1440, 4]),
+    );
+    for (const id of ids)
+      expect((await s1.viewerState(CH, id)).balance).toBe(8);
+    expect(await n("event_ledger where kind = 'presence'")).toBeLessThanOrEqual(
+      16,
+    );
+  });
+
+  it('the same reward event from two Cores at once (Bits, donation): paid once', async () => {
+    const [s1, s2] = [shop(a), shop(b)];
+    await s1.updateSettings(CH, {
+      enabled: true,
+      rules: { bits_step: 100, bits_bonbons: 1, donation_per_euro: 2 },
+    });
+    await a.query(
+      `insert into viewers (twitch_user_id, login, display_name) values ('9301', 'ana', 'Ana')`,
+    );
+    const cheer = {
       channel_id: CH,
-      viewer: ANA,
-      bonbons: 2,
-    };
-    const out = await settle([
-      s1.convert(req),
-      s2.convert(req),
-      s1.convert(req),
-    ]);
-    expect(out.filter((o) => o.startsWith('crash'))).toEqual([]);
-    expect((await s1.viewerState(CH, ANA.id)).balance).toBe(2);
-    expect(await tokens()).toBe(800);
+      source: 'twitch',
+      source_event_id: 'cheer-1',
+      type: 'bits',
+      bits: 500,
+      actor: { id: ANA.id, login: 'ana', display_name: 'Ana' },
+    } as const;
+    const tip = {
+      channel_id: CH,
+      source: 'external',
+      source_event_id: 'streamelements-tip-1',
+      type: 'donation',
+      actor: { display_name: 'ana' },
+      amount: { value: 1000, decimal_place: 2, currency: 'EUR' },
+      provider: 'streamelements',
+    } as const;
+    const out = await settle(
+      [cheer, tip, cheer, tip].map((e, i) =>
+        (i % 2 ? b : a).tx((q) => (i % 2 ? s2 : s1).onAlert(q, e as never)),
+      ),
+    );
+    expect(out.filter((o) => o !== 'ok')).toEqual([]);
+    expect((await s1.viewerState(CH, ANA.id)).balance).toBe(5 + 20);
+    expect(await n('event_ledger')).toBe(2);
   });
 
   it('five purchases from two Cores at once: one play admitted, one debit, the rest refused busy', async () => {

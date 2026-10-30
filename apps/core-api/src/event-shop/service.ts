@@ -17,11 +17,14 @@ import {
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import type { EconomyPort } from '../economy/economy.js';
+import type {
+  PresenceListener,
+  ValidatedPresence,
+} from '../presence/presence-service.js';
 import {
   activeBlock,
   countGlobalRefusal,
   globalState,
-  LabWalletError,
 } from '../lab-moderation/store.js';
 import {
   categoryOf,
@@ -31,15 +34,7 @@ import {
   RETIRED_ITEMS,
   thumbOf,
 } from './catalog.js';
-import {
-  balanceOf,
-  byKey,
-  convertedSince,
-  EventBalanceError,
-  lock,
-  move,
-  oldestConversionSince,
-} from './ledger.js';
+import { balanceOf, EventBalanceError, move } from './ledger.js';
 
 // Boutique d'événement (Halloween 2026, docs/HALLOWEEN.md). The Core decides everything: catalogue, prices, the limits
 // that keep the stream playable, balances (the event currency's own ledger, ledger.ts), purchases and their fate.
@@ -116,11 +111,6 @@ interface ItemRow {
 const iso = (d: Date | string | null) => (d ? new Date(d).toISOString() : null);
 const hash = (v: unknown) =>
   createHash('sha256').update(JSON.stringify(v)).digest('hex');
-/** A stable uuid from a text (the conversion's debit key: a retried conversion hits the same Jetons debit). */
-const uuidOf = (text: string) => {
-  const h = createHash('sha256').update(text).digest('hex');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
-};
 /** Statuses that count for the cooldowns and quotas (a failed, refunded purchase did not play). */
 const PLAYED = `status in ('queued', 'executing', 'completed', 'unknown')`;
 
@@ -788,123 +778,100 @@ export class EventShopService {
 
   // --- conversion, rewards, grants ---------------------------------------------------------------------------------
 
-  async convert(req: EventShopConvertRequest) {
-    try {
-      return await this.db.tx((q) => this.convertTx(q, req));
-    } catch (e) {
-      if (e instanceof LabWalletError)
-        throw new EventShopError(409, e.code, e.details ?? {});
-      throw e;
-    }
+  /**
+   * REMOVED 30/10 (Antoni): the Jetons → Bonbons exchange is abandoned. Every way in (extension, chat, route) is
+   * refused here, whatever the saved rules say; the past conversions stay in the ledger as they were.
+   */
+  async convert(req: EventShopConvertRequest): Promise<never> {
+    void req;
+    throw new EventShopError(410, 'conversion_removed');
   }
 
-  private async convertTx(q: Queryable, req: EventShopConvertRequest) {
-    const now = this.now();
-    const s = await this.ensure(q, req.channel_id);
-    const key = `convert:${req.channel_id}:${req.viewer.id}:${req.idempotency_key}`;
-    const viewer = { id: req.viewer.id, name: req.viewer.display_name };
-    // The viewer's event wallet first: concurrent conversions of one viewer are serialized here (the cap holds).
-    await lock(q, s.season, req.channel_id, viewer, now);
-    const prior = await byKey(q, key);
-    if (prior) {
-      if (prior.amount !== req.bonbons || prior.viewer_id !== req.viewer.id)
-        throw new EventShopError(409, 'idempotency_conflict');
-      return {
-        bonbons: prior.amount,
-        jetons: prior.amount * s.rules.conversion_rate,
-        balance: await balanceOf(q, s.season, req.channel_id, req.viewer.id),
-        replayed: true,
-        ...(await this.conversionState(
-          q,
-          s,
-          req.channel_id,
-          req.viewer.id,
-          now,
-        )),
-      };
-    }
-    if (!s.enabled) throw new EventShopError(409, 'event_closed');
-    if (req.via === 'extension' && !extensionAllowed(s.rules, req.viewer.id))
-      throw new EventShopError(403, 'not_invited');
-    if (s.rules.conversion_cap_per_hour === 0)
-      throw new EventShopError(409, 'conversion_closed');
-    const since = new Date(now.getTime() - EVENT_SHOP.hourMs);
-    const used = await convertedSince(
-      q,
-      s.season,
-      req.channel_id,
-      req.viewer.id,
-      since,
+  /**
+   * Bonbons for watching (30/10): the presence tracker's VALIDATED intervals (the same ones as the Jetons, exactly once
+   * per cycle) add up per viewer over the season; every `presence_every_min` minutes pays `presence_bonbons`, one ledger
+   * movement per block (its key is the block's number: a block is never paid twice). Only while the event is open and
+   * the rule is on; the broadcaster and the viewers excluded from the Jetons (bots) earn nothing. Runs in its own
+   * savepoint of the cycle's transaction: a failure here is undone alone and logged, never the Jetons or the XP.
+   */
+  readonly presenceListener: PresenceListener = {
+    validated: async (q: Queryable, interval: ValidatedPresence) => {
+      await q.query('savepoint event_presence');
+      try {
+        await this.presence(q, interval);
+        await q.query('release savepoint event_presence');
+      } catch (e) {
+        await q.query('rollback to savepoint event_presence');
+        console.error('[event-shop] presence ignored', (e as Error).message);
+      }
+    },
+  };
+
+  private async presence(q: Queryable, interval: ValidatedPresence) {
+    if (interval.seconds <= 0 || !interval.viewerIds.length) return;
+    const rows = await q.query<{
+      channel_id: string;
+      season: string;
+      rules: EventShopRules;
+    }>(
+      'select channel_id, season, rules from event_shop_settings where enabled',
     );
-    if (used + req.bonbons > s.rules.conversion_cap_per_hour) {
-      const oldest = await oldestConversionSince(
-        q,
-        s.season,
-        req.channel_id,
-        req.viewer.id,
-        since,
+    for (const s of rows) {
+      const rules = { ...DEFAULT_EVENT_RULES, ...s.rules };
+      if (!rules.presence_every_min) continue;
+      const block = rules.presence_every_min * 60;
+      const excluded = new Set(
+        (
+          await q.query<{ id: string }>(
+            `select twitch_user_id as id from loyalty_exclusions where twitch_user_id = any($1::text[])`,
+            [interval.viewerIds],
+          )
+        ).map((r) => r.id),
       );
-      throw new EventShopError(409, 'conversion_cap', {
-        remaining: Math.max(0, s.rules.conversion_cap_per_hour - used),
-        retry_after_ms: oldest
-          ? oldest.getTime() + EVENT_SHOP.hourMs - now.getTime()
-          : 0,
-      });
+      // Sorted: two cycles locking the same viewers always do it in the same order (no deadlock).
+      const ids = [...new Set(interval.viewerIds)]
+        .filter((id) => id !== s.channel_id && !excluded.has(id))
+        .sort();
+      if (!ids.length) continue;
+      const names = new Map(
+        (
+          await q.query<{ id: string; name: string | null }>(
+            `select twitch_user_id as id, coalesce(display_name, login) as name from viewers
+             where twitch_user_id = any($1::text[])`,
+            [ids],
+          )
+        ).map((r) => [r.id, r.name]),
+      );
+      const now = this.now();
+      for (const id of ids) {
+        const [p] = await q.query<{ seconds: string; blocks_paid: number }>(
+          `insert into event_presence (season, channel_id, viewer_id, seconds, blocks_paid, updated_at)
+           values ($1, $2, $3, $4, 0, $5)
+           on conflict (season, channel_id, viewer_id)
+           do update set seconds = event_presence.seconds + excluded.seconds, updated_at = excluded.updated_at
+           returning seconds, blocks_paid`,
+          [s.season, s.channel_id, id, interval.seconds, now],
+        );
+        const blocks = Math.floor(Number(p!.seconds) / block);
+        if (blocks <= p!.blocks_paid) continue;
+        await move(q, {
+          season: s.season,
+          channelId: s.channel_id,
+          viewer: { id, name: names.get(id) ?? id },
+          kind: 'presence',
+          amount: (blocks - p!.blocks_paid) * rules.presence_bonbons,
+          key: `presence:${s.season}:${s.channel_id}:${id}:${p!.blocks_paid + 1}-${blocks}`,
+          reference: interval.streamId,
+          actor: 'presence',
+          reason: `${blocks - p!.blocks_paid} × ${rules.presence_every_min} min`,
+          now,
+        });
+        await q.query(
+          'update event_presence set blocks_paid = $4 where season = $1 and channel_id = $2 and viewer_id = $3',
+          [s.season, s.channel_id, id, blocks],
+        );
+      }
     }
-    const jetons = req.bonbons * s.rules.conversion_rate;
-    // The Jetons, in this same transaction (refused → nothing at all is kept); one debit per conversion key.
-    await this.economy.debit(q, now, {
-      channelId: req.channel_id,
-      viewer: req.viewer,
-      currency: 'tokens',
-      amount: jetons,
-      module: 'event_shop',
-      interactionId: uuidOf(key),
-    });
-    const credit = await move(q, {
-      season: s.season,
-      channelId: req.channel_id,
-      viewer,
-      kind: 'convert',
-      amount: req.bonbons,
-      key,
-      reference: uuidOf(key),
-      actor: 'viewer',
-      reason: `${jetons} jetons`,
-      now,
-    });
-    return {
-      bonbons: req.bonbons,
-      jetons,
-      balance: credit.balance_after,
-      replayed: false,
-      ...(await this.conversionState(q, s, req.channel_id, req.viewer.id, now)),
-    };
-  }
-
-  private async conversionState(
-    q: Queryable,
-    s: EventShopSettings,
-    channelId: string,
-    viewerId: string,
-    now: Date,
-  ) {
-    const since = new Date(now.getTime() - EVENT_SHOP.hourMs);
-    const used = await convertedSince(q, s.season, channelId, viewerId, since);
-    const oldest = used
-      ? await oldestConversionSince(q, s.season, channelId, viewerId, since)
-      : null;
-    return {
-      conversion: {
-        rate: s.rules.conversion_rate,
-        cap_per_hour: s.rules.conversion_cap_per_hour,
-        used_last_hour: used,
-        remaining: Math.max(0, s.rules.conversion_cap_per_hour - used),
-        frees_at: oldest
-          ? new Date(oldest.getTime() + EVENT_SHOP.hourMs).toISOString()
-          : null,
-      },
-    };
   }
 
   /**
@@ -914,11 +881,12 @@ export class EventShopService {
    * line (targeted, or `gift_recipient` of a community gift) — never twice.
    */
   async onAlert(q: Queryable, e: AlertEventInput) {
-    if (
-      e.source !== 'twitch' &&
-      !(this.opts.rewardSimulations && e.source === 'simulation')
-    )
-      return;
+    // Twitch events; a donation comes from its provider (StreamElements, relayed by Studio); Lab: simulations too.
+    const trusted =
+      e.source === 'twitch' ||
+      (e.source === 'external' && e.type === 'donation') ||
+      (this.opts.rewardSimulations && e.source === 'simulation');
+    if (!trusted) return;
     const rows = await q.query<{
       season: string;
       enabled: boolean;
@@ -935,7 +903,7 @@ export class EventShopService {
       who: { id: string; display_name?: string; login?: string } | undefined,
       amount: number,
       role: string,
-      kind: 'sub_reward' | 'gift_reward',
+      kind: 'sub_reward' | 'gift_reward' | 'bits_reward' | 'donation_reward',
     ) => {
       if (!who?.id || amount <= 0) return;
       await move(q, {
@@ -960,9 +928,45 @@ export class EventShopService {
     const giver = ev.anonymous ? undefined : ev.actor;
     switch (e.type) {
       case 'sub':
-      case 'resub':
-        await pay(ev.actor, rules.sub_reward, 'sub', 'sub_reward');
+        await pay(
+          ev.actor,
+          e.tier === 'prime'
+            ? (rules.prime_reward ?? rules.sub_reward)
+            : rules.sub_reward,
+          'sub',
+          'sub_reward',
+        );
         break;
+      case 'resub':
+        // Same key family as a sub: one Twitch renewal never pays twice (the subscribe event of a resub is a sub).
+        await pay(
+          ev.actor,
+          rules.resub_reward ?? rules.sub_reward,
+          'sub',
+          'sub_reward',
+        );
+        break;
+      case 'bits':
+        // The Twitch cheer event (its id is the key): never a number typed in the chat.
+        if (rules.bits_step > 0 && e.source !== 'external')
+          await pay(
+            ev.actor,
+            Math.floor((e.bits ?? 0) / rules.bits_step) * rules.bits_bonbons,
+            'bits',
+            'bits_reward',
+          );
+        break;
+      case 'donation': {
+        const amount = donationBonbons(e, rules);
+        if (amount > 0)
+          await pay(
+            await donorOf(q, ev.actor),
+            amount,
+            'donation',
+            'donation_reward',
+          );
+        break;
+      }
       case 'gift_targeted':
         await pay(giver, rules.gift_giver_per_sub, 'gift-giver', 'gift_reward');
         await pay(
@@ -1220,21 +1224,30 @@ export class EventShopService {
         balance: viewerId
           ? await balanceOf(q, s.season, channelId, viewerId)
           : null,
-        ...(viewerId
-          ? await this.conversionState(q, s, channelId, viewerId, now)
-          : {
-              conversion: {
-                rate: s.rules.conversion_rate,
-                cap_per_hour: s.rules.conversion_cap_per_hour,
-                used_last_hour: 0,
-                remaining: s.rules.conversion_cap_per_hour,
-                frees_at: null,
-              },
-            }),
+        // No exchange any more (30/10): the published Extension reads « closed » from this.
+        conversion: {
+          rate: s.rules.conversion_rate,
+          cap_per_hour: 0,
+          used_last_hour: 0,
+          remaining: 0,
+          frees_at: null,
+        },
         earn: {
           sub_reward: s.rules.sub_reward,
+          prime_reward: s.rules.prime_reward ?? s.rules.sub_reward,
+          resub_reward: s.rules.resub_reward ?? s.rules.sub_reward,
           gift_giver_per_sub: s.rules.gift_giver_per_sub,
           gift_recipient: s.rules.gift_recipient,
+          presence: s.rules.presence_every_min
+            ? {
+                every_min: s.rules.presence_every_min,
+                bonbons: s.rules.presence_bonbons,
+              }
+            : null,
+          bits: s.rules.bits_step
+            ? { step: s.rules.bits_step, bonbons: s.rules.bits_bonbons }
+            : null,
+          donation_per_euro: s.rules.donation_per_euro || null,
           // The Tombola can reward in Bonbons while the event is open (event-shop/raffle-currency.ts).
           raffle: s.enabled,
         },
@@ -1325,5 +1338,51 @@ export class EventShopService {
         },
       };
     });
+  }
+}
+
+/** Bonbons for a donation: euros only (no exchange rate is guessed), from the minimum, whole euros × the rate. */
+export function donationBonbons(
+  e: Pick<AlertEventInput, 'amount'>,
+  rules: Pick<EventShopRules, 'donation_per_euro' | 'donation_min_cents'>,
+) {
+  const a = e.amount;
+  if (!rules.donation_per_euro || !a || a.currency !== 'EUR') return 0;
+  const cents = Math.round(a.value / 10 ** Math.max(0, a.decimal_place - 2));
+  if (cents < rules.donation_min_cents) return 0;
+  return Math.floor(cents / 100) * rules.donation_per_euro;
+}
+
+/**
+ * A tip carries the name typed by the donor, not a Twitch account: it pays the viewer whose Twitch login or display
+ * name is EXACTLY that name (any case), and only when exactly one viewer matches; otherwise nobody (never a guess).
+ */
+async function donorOf(
+  q: Queryable,
+  actor: { id?: string; display_name?: string; login?: string } | undefined,
+) {
+  if (actor?.id) return { id: actor.id, display_name: actor.display_name };
+  const name = (actor?.login ?? actor?.display_name ?? '').trim().toLowerCase();
+  if (!/^[a-z0-9_]{2,25}$/.test(name)) return undefined;
+  await q.query('savepoint event_donor');
+  try {
+    const rows = await q.query<{
+      twitch_user_id: string;
+      display_name: string | null;
+    }>(
+      `select twitch_user_id, display_name from viewers where lower(login) = $1 or lower(display_name) = $1 limit 2`,
+      [name],
+    );
+    await q.query('release savepoint event_donor');
+    return rows.length === 1
+      ? {
+          id: rows[0]!.twitch_user_id,
+          display_name: rows[0]!.display_name ?? name,
+        }
+      : undefined;
+  } catch {
+    // No viewers table (a Lab database without the presence schema): nobody.
+    await q.query('rollback to savepoint event_donor');
+    return undefined;
   }
 }

@@ -18,13 +18,19 @@ test('« Trouver un viewer » → Créditer: a real Twitch name, credited once, 
   await expect(form.locator('input[name="viewer"]')).toHaveValue('57012345');
   await form.locator('input[name="amount"]').fill('7');
   await form.locator('input[name="note"]').fill('concours e2e');
-  // A double click: one credit.
+  // A double click: one confirmation (accepted), one credit.
+  const asked: string[] = [];
+  s.on('dialog', (d) => {
+    asked.push(d.message());
+    void d.accept();
+  });
   await form.getByRole('button', { name: 'Attribuer' }).dblclick();
   await expect(finder.locator('.hw-balance')).toHaveText('7 🍬', {
     timeout: 10_000,
   });
   await expect(finder).toContainText('+7 🍬');
   await expect(finder).toContainText('concours e2e');
+  expect(asked).toEqual(['Donner 7 Bonbons à 57012345 ?']);
   await s.waitForTimeout(1500);
   await finder.getByRole('button', { name: 'Chercher' }).click();
   await expect(finder.getByRole('button', { name: /Kirito_TV/ })).toContainText(

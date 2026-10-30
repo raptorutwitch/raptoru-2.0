@@ -1,4 +1,8 @@
-import type { AlertEventInput } from '@raptoru/schemas';
+import {
+  type AlertEventInput,
+  alertVariantFamilyOf,
+  type AlertVariantSettings,
+} from '@raptoru/schemas';
 import {
   ALERT_VARIANTS,
   type AlertVariant,
@@ -21,7 +25,9 @@ export type AlertDecision =
   /** A community gift recipient: the batch alert already covers it (never one alert per recipient). */
   | { outcome: 'absorbed' }
   /** Bits under the SAMMI minimum (10). */
-  | { outcome: 'below_threshold' };
+  | { outcome: 'below_threshold' }
+  /** The family is switched off (Studio › Alertes › Variantes). */
+  | { outcome: 'disabled' };
 
 /** Weighted draw (legacy follow weights). */
 export function weighted(entries: [string, number][], rng: Rng): string {
@@ -38,6 +44,8 @@ export function weighted(entries: [string, number][], rng: Rng): string {
 export interface AlertProfile {
   halloween: boolean;
   ballon: { sub: number[]; prime: number[]; resub: number[] };
+  /** Studio › Alertes › Variantes (absent: the usual behaviour). */
+  variants?: AlertVariantSettings;
 }
 
 /** The Halloween variant of an event, or null (no Halloween variant for it: the usual one plays). */
@@ -75,23 +83,41 @@ export function decideAlert(
   rng: Rng,
   profile?: AlertProfile | null,
 ): AlertDecision {
-  const usual = decideUsual(e, rng);
-  if (!profile?.halloween || usual.outcome !== 'queued') return usual;
-  const hw = halloweenVariant(e, rng, profile.ballon);
+  const usual = decideUsual(e, rng, profile?.variants?.follow);
+  if (usual.outcome !== 'queued') return usual;
+  const family = alertVariantFamilyOf(e);
+  const mode = (family && profile?.variants?.families[family]) || 'auto';
+  if (mode === 'off') return { outcome: 'disabled' };
+  if (mode === 'usual' || (mode === 'auto' && !profile?.halloween))
+    return usual;
+  const hw = halloweenVariant(e, rng, profile?.ballon ?? ALL_BALLON);
   // The usual variant travels with it: Studio plays it when a Halloween media is missing (never no alert at all).
   return hw
     ? { outcome: 'queued', variant: { ...hw, fallback: usual.variant } }
     : usual;
 }
 
-function decideUsual(e: AlertEventInput, rng: Rng): AlertDecision {
+const ALL_BALLON = {
+  sub: [1, 2, 3, 4],
+  prime: [1, 2, 3, 4],
+  resub: [1, 2, 3, 4],
+};
+
+function decideUsual(
+  e: AlertEventInput,
+  rng: Rng,
+  /** The follow variants allowed (absent / none known: all of them). */
+  follow?: string[],
+): AlertDecision {
   const pick = (id: string) => ({
     outcome: 'queued' as const,
     variant: ALERT_VARIANTS[id]!,
   });
   switch (e.type) {
-    case 'follow':
-      return pick(weighted(FOLLOW_WEIGHTS, rng));
+    case 'follow': {
+      const allowed = FOLLOW_WEIGHTS.filter(([id]) => follow?.includes(id));
+      return pick(weighted(allowed.length ? allowed : FOLLOW_WEIGHTS, rng));
+    }
     case 'sub':
     case 'resub':
       // Same Eren animation for both (decision 16/10/2026); the event type stays distinct.

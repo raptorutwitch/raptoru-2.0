@@ -321,52 +321,6 @@
 .evs-ways b {
   color: var(--evs-orange-2);
 }
-.evs-rate {
-  margin: 0 0 6px;
-  font-size: 12px;
-  color: var(--evs-muted);
-}
-.evs-rate b {
-  color: var(--evs-text);
-}
-.evs-convert-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.evs-stepper {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.evs-stepper button {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  border: 1px solid var(--evs-line);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--evs-text);
-  font-size: 15px;
-  cursor: pointer;
-}
-.evs-stepper output {
-  min-width: 40px;
-  text-align: center;
-  font-weight: 700;
-  font-size: 13px;
-}
-.evs-exchange {
-  flex: 1;
-  height: 30px;
-  border-radius: 8px;
-  border: 1px solid rgba(226, 98, 27, 0.5);
-  background: rgba(226, 98, 27, 0.14);
-  color: var(--evs-orange-2);
-  font-weight: 700;
-  font-size: 12px;
-  cursor: pointer;
-}
-
 .evs-recent h4 {
   margin: 4px 0;
   font-size: 12px;
