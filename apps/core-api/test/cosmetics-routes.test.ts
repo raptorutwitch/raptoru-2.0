@@ -63,11 +63,11 @@ async function fixture(siteToken?: string) {
     } catch {
       /* not JSON */
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely read answers
     return {
       status: res.status,
       headers: res.headers,
       text,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely read answers
       body: json as any,
     };
   };

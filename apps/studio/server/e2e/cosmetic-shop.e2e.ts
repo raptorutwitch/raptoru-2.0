@@ -21,6 +21,7 @@ const labCore = async (path: string, body?: unknown) => {
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosely read answers
   return { status: r.status, body: (await r.json()) as Record<string, any> };
 };
 // A 1 × 1 PNG.
