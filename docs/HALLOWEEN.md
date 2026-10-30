@@ -111,16 +111,26 @@ c'est l'écran entier qui est traité. Aucune fenêtre de jeu à choisir.
   active le bon filtre puis le coupe à la fin, à STOP ALL, ou au redémarrage de Studio (action temporaire d'ObsActions).
   Plugins : obs-shaderfilter (retournements) et obs-composite-blur (Gaussien / Zone). Vérifié dans un vrai OBS 32.2.2.
   Sans OBS relié à Studio ou sans capture choisie : l'effet est sur l'écran du joueur seulement (Studio le dit).
-- **Écran retourné** : rotation 180°, miroir horizontal ou retournement vertical, 3 à 60 s, retournement animé de 0,7 s
-  à l'aller et au retour (OBS : bascule nette).
-- **Flou** : faible / moyen / fort, 2 à 30 s, légèrement agrandi pendant le flou (aucun bord net ne dépasse).
+- **Rendu (corrigé après le test d'Antoni, 30/10)** : la capture est dessinée dans une surface **opaque** qui
+  n'apparaît qu'avec sa **première vraie image**, déjà transformée : pas d'écran noir, pas d'attente visible (l'écran
+  reste normal jusqu'à cette image, 0,5 à 0,9 s après le déclenchement), pas d'animation (une image qui tourne laissait
+  voir le vrai bureau dans ses coins). À la fin, elle disparaît d'un coup : le vrai écran revient, sans image noire.
+- **Curseur** : Chromium dessine toujours le curseur dans une capture d'écran (l'option « sans curseur » est ignorée,
+  vérifié). Studio recouvre donc à chaque image la copie capturée, à la position que lui donne Electron, avec le fond
+  juste à côté (bloc de 60 px centré sur la pointe) : seul le vrai curseur reste, et il fonctionne normalement.
+  **Limite** : sur un fond très chargé, ce bloc peut laisser une petite tache, et un curseur de jeu plus grand que 60 px
+  dépasserait.
+- **Écran retourné** : rotation 180°, miroir horizontal ou retournement vertical, 3 à 60 s, instantané.
+- **Flou** : faible / moyen / fort, 2 à 30 s ; il part de l'image nette (identique à l'écran), se floute, redevient net
+  avant de partir, légèrement agrandi pendant le flou (aucun bord net ne dépasse, le bureau n'apparaît jamais).
 - **Arrêt** : fin automatique, STOP ALL (bouton ou Ctrl+Maj+F12) immédiat, délai maximal comme les autres effets,
   fermeture ou plantage de Studio (les fenêtres disparaissent avec lui ; le filtre OBS a sa fin programmée),
-  redémarrage : rien n'est rejoué.
+  redémarrage : rien n'est rejoué. Vérifié en vrai : Studio tué en plein effet → aucune fenêtre Raptoru restante.
 - **Un effet à la fois** (règle du moteur : un second est refusé `busy`).
 - **Limites** : le jeu en plein écran **exclusif** passe au-dessus de toute fenêtre (rester en fenêtré sans bordure) ;
-  Studio lancé **en administrateur** ne peut pas capturer l'écran (Windows refuse : l'effet échoue proprement) ; un ou
-  deux images de décalage pendant l'effet ; le curseur réel reste à sa place (l'image retournée n'inverse pas la souris).
+  Studio lancé **en administrateur** ne peut pas capturer l'écran (Windows refuse : l'effet échoue proprement) ; une ou
+  deux images de décalage pendant l'effet ; la souris garde son vrai sens (l'image retournée n'inverse pas les
+  mouvements).
 - **Tests gratuits** : Studio › Halloween › Chaos › « Tester » (sans Core ni Bonbon) ; l'état réel (fenêtre Chaos,
   OBS, filtres) et le dernier effet joué sont affichés.
 

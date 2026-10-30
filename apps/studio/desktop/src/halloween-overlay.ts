@@ -6,7 +6,11 @@ import {
   session,
   type Display,
 } from 'electron';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { pickScreenSource } from './capture-window.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 // Halloween (docs/HALLOWEEN.md) — the windows over the streamer's screen. Electron main opens, on the screen chosen in
 // Studio, transparent, frameless, always-on-top windows: click-through (setIgnoreMouseEvents), never focusable (no focus
@@ -153,6 +157,10 @@ export function startHalloweenOverlay(deps: {
         nodeIntegration: false,
         sandbox: true,
         partition: OVERLAY_PARTITION,
+        // The Chaos page learns where the cursor is (it hides the copy Chromium draws into the capture).
+        ...(kind === 'chaos'
+          ? { preload: join(here, 'chaos-preload.cjs') }
+          : {}),
         backgroundThrottling: false,
         autoplayPolicy: 'no-user-gesture-required',
       },
@@ -225,6 +233,23 @@ export function startHalloweenOverlay(deps: {
     pushDisplays();
     void sync();
   }, 2000);
+  // The cursor's position on the covered monitor, for the Chaos page (60 times a second, only when it moved).
+  let lastCursor = '';
+  const cursorTimer = setInterval(() => {
+    const w = wins.chaos;
+    if (!w || w.isDestroyed() || !covered) return;
+    const p = screen.getCursorScreenPoint();
+    const b = covered.bounds;
+    const at = {
+      x: (p.x - b.x) / b.width,
+      y: (p.y - b.y) / b.height,
+      scale: covered.scaleFactor,
+    };
+    const key = `${at.x}|${at.y}|${at.scale}`;
+    if (key === lastCursor) return;
+    lastCursor = key;
+    w.webContents.send('chaos-cursor', at);
+  }, 16);
   void sync();
   const shortcut = globalShortcut.register(STOP_ALL_SHORTCUT, () => {
     void call('/api/halloween/stop', {}).catch(() => {});
@@ -239,6 +264,7 @@ export function startHalloweenOverlay(deps: {
     dispose() {
       disposed = true;
       clearInterval(timer);
+      clearInterval(cursorTimer);
       if (shortcut) globalShortcut.unregister(STOP_ALL_SHORTCUT);
       overlaySession.setDisplayMediaRequestHandler(null);
       closeAll();

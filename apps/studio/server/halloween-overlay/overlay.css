@@ -205,3 +205,10 @@ body {
   transform-origin: 50% 50%;
   will-change: transform, filter;
 }
+
+/* The capture itself (drawn into the canvas above): kept in the page, invisible. */
+.fx-capture-src {
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+}

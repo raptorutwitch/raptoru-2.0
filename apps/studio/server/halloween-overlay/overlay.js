@@ -339,7 +339,35 @@ async function glitch(d, ctx) {
 // is there again. Mouse and keyboard keep going to what is underneath (the window is click-through). OBS cannot see
 // this window either: Studio shows the viewers the same effect with filters on OBS's screen capture.
 
-async function captureScreen(ctx) {
+// Rendering (Antoni's test, 30/10): the capture is drawn into an OPAQUE canvas that appears only with its first real
+// frame (no black flash, no wait shown) and already transformed (no animation: a turning image let the real desktop show
+// in its corners); it leaves at once, the real screen is there again (no black frame either). Chromium always draws the
+// mouse cursor into a screen capture: that copy is covered on every frame (Electron main tells the page where the
+// cursor is), so only the real cursor remains, which keeps working normally.
+
+/** Covers the captured copy of the cursor (now and just before: a frame may show either) with the pixels beside it. */
+function hideCursor(g, W, H) {
+  const c = window.raptoruChaos?.cursor?.();
+  if (!c) return;
+  // Captured pixels per page pixel (the window is in DIP, the capture in physical pixels). The block is centred on the
+  // cursor's point, wide enough for the usual shapes (arrow below-right, text I-beam and hand around it, game cursors).
+  const k = W / Math.max(1, window.innerWidth);
+  const size = Math.ceil(60 * k);
+  for (const at of [c.latest, c.previous]) {
+    if (!at || at.x < 0 || at.x > 1 || at.y < 0 || at.y > 1) continue;
+    const x = Math.round(at.x * W - 16 * k);
+    const y = Math.round(at.y * H - 16 * k);
+    // The block just left of it (right of it near the left edge), same height: the background around the cursor.
+    const from = x - size - 8 * k >= 0 ? x - size - 8 * k : x + size + 8 * k;
+    g.drawImage(g.canvas, from, y, size, size, x, y, size, size);
+  }
+}
+
+/**
+ * The monitor, captured into an opaque canvas shown with its first real frame, with `style` (transform / filter)
+ * applied from that first frame on. Resolves with { stop, name } once it is on screen; null if cancelled meanwhile.
+ */
+async function captureScreen(ctx, style) {
   if (!navigator.mediaDevices?.getDisplayMedia)
     throw new Error('capture_unsupported');
   let stream;
@@ -351,58 +379,80 @@ async function captureScreen(ctx) {
   } catch {
     throw new Error('no_screen_capture');
   }
-  const stop = () => stream.getTracks().forEach((t) => t.stop());
+  // In the page (invisible, 2 × 2 px): a video outside the document may be throttled; STOP ALL's clearStage stops it.
+  const v = el('video', 'fx-capture-src');
+  v.muted = true;
+  v.playsInline = true;
+  v.srcObject = stream;
+  const cv = el('canvas', 'fx-capture');
+  cv.style.visibility = 'hidden';
+  Object.assign(cv.style, style);
+  const g = cv.getContext('2d', { alpha: false });
+  let alive = true;
+  // The canvas leaves first (the real screen shows at once), then the capture stops: never a black frame.
+  const stop = () => {
+    if (!alive) return;
+    alive = false;
+    cv.remove();
+    for (const t of stream.getTracks()) t.stop();
+    v.srcObject = null;
+    v.remove();
+  };
+  ctx.onCancel(stop);
   if (ctx.cancelled()) {
     stop();
     return null;
   }
-  ctx.onCancel(stop);
-  const v = el('video', 'fx-capture');
-  v.muted = true;
-  v.playsInline = true;
-  v.srcObject = stream;
-  ctx.onCancel(() => (v.srcObject = null));
   await new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('capture_timeout')), 4000);
     ctx.onCancel(() => (clearTimeout(t), resolve()));
-    v.addEventListener('playing', () => (clearTimeout(t), resolve()), {
-      once: true,
-    });
+    const draw = () => {
+      if (!alive) return;
+      if (v.videoWidth) {
+        if (cv.width !== v.videoWidth || cv.height !== v.videoHeight) {
+          cv.width = v.videoWidth;
+          cv.height = v.videoHeight;
+        }
+        g.drawImage(v, 0, 0);
+        hideCursor(g, cv.width, cv.height);
+        if (cv.style.visibility === 'hidden') {
+          cv.style.visibility = 'visible';
+          clearTimeout(t);
+          resolve();
+        }
+      }
+      v.requestVideoFrameCallback(draw);
+    };
+    v.requestVideoFrameCallback(draw);
     v.play().catch(() => (clearTimeout(t), reject(new Error('play_refused'))));
+  }).catch((e) => {
+    stop();
+    throw e;
   });
+  if (ctx.cancelled()) return null;
   return {
-    v,
+    cv,
     stop,
     name: String(stream.getVideoTracks()[0]?.label ?? '').slice(0, 80),
   };
 }
 
+/** Instant, whole-screen transforms (a full-size flip covers the screen exactly: nothing behind shows). */
 const FLIP = {
-  rotate: (k) => `rotate(${180 * k}deg)`,
-  mirror: (k) => `scaleX(${1 - 2 * k})`,
-  vertical: (k) => `scaleY(${1 - 2 * k})`,
+  rotate: 'rotate(180deg)',
+  mirror: 'scaleX(-1)',
+  vertical: 'scaleY(-1)',
 };
 
 async function flip(d, ctx) {
   const total = clamp(d.params?.durationMs, 3000, 60000, 10000);
-  const turn = FLIP[d.params?.mode] ?? FLIP.rotate;
-  const g = await captureScreen(ctx);
+  const g = await captureScreen(ctx, {
+    transform: FLIP[d.params?.mode] ?? FLIP.rotate,
+  });
   if (!g) return;
   ctx.started(g.name);
-  await animate(
-    700,
-    (p) => (g.v.style.transform = turn(ease.inOut(p))),
-    ctx.cancelled,
-  );
-  await sleep(Math.max(0, total - 1400));
-  if (!ctx.cancelled())
-    await animate(
-      700,
-      (p) => (g.v.style.transform = turn(1 - ease.inOut(p))),
-      ctx.cancelled,
-    );
+  await sleep(total);
   g.stop();
-  g.v.remove();
 }
 
 /** Blur radius in px at 1080p (faible / moyen / fort, or a number). */
@@ -414,20 +464,20 @@ async function blur(d, ctx) {
   const px =
     (BLUR[level] ?? clamp(level, 2, 40, BLUR.medium)) *
     (window.innerHeight / 1080);
-  const g = await captureScreen(ctx);
+  // Starts sharp (identical to the screen), blurs in, sharp again before leaving: the opaque canvas covers the screen
+  // all along, slightly enlarged while blurred (its blurred edges never show the real screen).
+  const set = (cv, k) => {
+    cv.style.filter = `blur(${(px * k).toFixed(2)}px)`;
+    cv.style.transform = `scale(${1 + (k * px * 3) / window.innerHeight})`;
+  };
+  const g = await captureScreen(ctx, {});
   if (!g) return;
   ctx.started(g.name);
-  // Slightly enlarged while blurred: the blurred edges never let the sharp screen show through.
-  const set = (k) => {
-    g.v.style.filter = `blur(${(px * k).toFixed(2)}px)`;
-    g.v.style.transform = `scale(${1 + (k * px * 3) / window.innerHeight})`;
-  };
-  await animate(500, (p) => set(ease.out(p)), ctx.cancelled);
-  await sleep(Math.max(0, total - 1100));
+  await animate(400, (p) => set(g.cv, ease.out(p)), ctx.cancelled);
+  await sleep(Math.max(0, total - 900));
   if (!ctx.cancelled())
-    await animate(600, (p) => set(1 - ease.inOut(p)), ctx.cancelled);
+    await animate(500, (p) => set(g.cv, 1 - ease.inOut(p)), ctx.cancelled);
   g.stop();
-  g.v.remove();
 }
 
 const EFFECTS = { blink, fog, tunnel, eyes, silhouette, glitch, flip, blur };
