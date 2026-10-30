@@ -19,6 +19,7 @@ import { AvatarCache, twitchAppUserLookup } from '../raffle-lab/avatars.js';
 import { ExtFacade } from './ext-facade.js';
 import { internalLabCall } from './lab-internal.js';
 import { TwitchNames } from './twitch-names.js';
+import { progressionViewerPrefsRoutes } from '../http/progression-routes.js';
 
 // Public Core assembly of the viewer frontier (/v1/ext/*) and the Studio cockpit (/v1/studio/cockpit/*):
 // the Lab services and routes (Moderation V2, Tombola, test wallet, Bonk / Soundboard / TTS admission)
@@ -92,6 +93,8 @@ export function createPublicFrontier(
     ...subWheelRoutes(core.subWheel, core.alerts),
     // Boutique d'événement (docs/HALLOWEEN.md): the viewer's state, purchase and conversion, in-process only.
     ...eventShopRoutes(core.eventShop),
+    // Level Up V2: the viewer's notification mode (the extension's preferences), in-process only.
+    ...progressionViewerPrefsRoutes(core.progression, channelId),
   ]);
   const app =
     config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET

@@ -43,6 +43,8 @@ const copies = [
   // Tombola V2 OBS overlay (single browser source served by the Studio server).
   'apps/studio/server/raffle-overlay',
   'apps/studio/server/word-game-player',
+  // Level Up V2 OBS source (the chime is made by Studio; a custom sound lives in Studio's storage).
+  'apps/studio/server/level-up-player',
   // Twitch alerts V1 OBS source / Studio preview (media live in Studio's storage, never in the package).
   'apps/studio/server/alerts-player',
   // Effects player OBS source (effect media live in Studio's storage, never in the package).
@@ -82,6 +84,8 @@ const runtimeFiles = [
   'apps/studio/server/raffle-overlay/overlay.html',
   'apps/studio/server/word-game-player/player.html',
   'apps/studio/server/word-game-player/ShuffleWordsSong.ogg',
+  'apps/studio/server/level-up-player/player.html',
+  'apps/studio/server/level-up-player/player.js',
   'apps/studio/server/alerts-player/player.html',
   'apps/studio/server/alerts-player/engine.js',
   'apps/studio/server/effects-player/player.html',

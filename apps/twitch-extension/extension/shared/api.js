@@ -291,12 +291,13 @@ export function createClient({
     if (path === '/state') return Promise.resolve(dynamicSessionState(demo));
     if (path === '/viewer/preferences') {
       if (method === 'GET') {
-        return Promise.resolve({ ok: true, level_up_sfx_opt_in: Boolean(demo.viewer_preferences?.level_up_sfx_opt_in) });
+        const mode = demo.viewer_preferences?.level_up_notify ?? 'off';
+        return Promise.resolve({ ok: true, level_up_notify: mode, level_up_sfx_opt_in: mode === 'sound' });
       }
-      if (method === 'POST' && typeof body?.level_up_sfx_opt_in === 'boolean') {
+      if (method === 'POST' && ['off', 'text', 'sound'].includes(body?.level_up_notify)) {
         demo.viewer_preferences ??= {};
-        demo.viewer_preferences.level_up_sfx_opt_in = body.level_up_sfx_opt_in;
-        return Promise.resolve({ ok: true, level_up_sfx_opt_in: body.level_up_sfx_opt_in });
+        demo.viewer_preferences.level_up_notify = body.level_up_notify;
+        return Promise.resolve({ ok: true, level_up_notify: body.level_up_notify, level_up_sfx_opt_in: body.level_up_notify === 'sound' });
       }
       return Promise.reject(Object.assign(new Error('invalid_payload'), { code: 'invalid_payload' }));
     }
@@ -472,8 +473,9 @@ export function createClient({
     session: () => call('GET', '/session'),
     state: () => call('GET', '/state'),
     getViewerPreference: () => call('GET', '/viewer/preferences'),
-    setViewerPreference: (levelUpSfxOptIn) => call('POST', '/viewer/preferences', {
-      body: { level_up_sfx_opt_in: Boolean(levelUpSfxOptIn) },
+    // Level Up V2: 'off' | 'text' | 'sound'.
+    setViewerPreference: (mode) => call('POST', '/viewer/preferences', {
+      body: { level_up_notify: ['off', 'text', 'sound'].includes(mode) ? mode : 'off' },
     }),
     refresh: async () => {
       if (!lastSession) return call('GET', '/session');

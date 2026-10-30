@@ -1,5 +1,8 @@
 import { ProgressionService } from '../progression/service.js';
-import { progressionRoutes } from '../http/progression-routes.js';
+import {
+  progressionRoutes,
+  progressionViewerPrefsRoutes,
+} from '../http/progression-routes.js';
 import { createServer, type Server } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { BonkLabService } from './bonk-lab-service.js';
@@ -230,6 +233,8 @@ export function createLabCore({
       // The site's equip route too: in the Lab, every route is behind the Lab secret (raptoru.fr tested locally).
       site: true,
     }),
+    // Level Up V2: the viewer's notification mode, for the Extension Lab (Lab secret).
+    ...progressionViewerPrefsRoutes(progression, LAB_PROGRESSION_CHANNEL),
     // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
     ...cautionRoutes(caution),
     // Votekick V2: Studio (state, overlay, mute) and the Lab chat adapter (Twitch executor); `!votekick` in the Lab chat.

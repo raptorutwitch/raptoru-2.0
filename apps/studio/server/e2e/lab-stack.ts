@@ -90,11 +90,12 @@ await db.query(
 );
 
 const { ProgressionRelay } = await import('../src/progression/relay.js');
+const { LevelUpRuntime } = await import('../src/level-up/runtime.js');
 const ext = await LabEbs.create(EXTENSION_DIR);
 const labCore = localLabCoreClient(coreUrl, secret);
 ext.connectLab(labCore);
 // Studio's Halloween and Tombola tabs, on the same Lab Core (temporary data folder, gone with the process).
-const { mkdtemp } = await import('node:fs/promises');
+const { mkdtemp, writeFile } = await import('node:fs/promises');
 const { tmpdir } = await import('node:os');
 const { join } = await import('node:path');
 const { HalloweenRuntime } = await import('../src/halloween/runtime.js');
@@ -143,6 +144,20 @@ const studio = createStudioServer(
   halloween,
   // Progression (docs/PROGRESSION.md): Studio's panel relay to this Lab Core.
   new ProgressionRelay({ core: labCore, environment: 'lab' }),
+  // Level Up V2: its OBS source, on this Lab Core.
+  await LevelUpRuntime.create({
+    core: labCore,
+    environment: 'lab',
+    origin,
+    dir: join(data, 'level-up'),
+    playerDir: join(import.meta.dirname, '..', 'level-up-player'),
+    claimEveryMs: 500,
+  }),
+);
+// The browser tests that need the Lab Core itself (a simulated live, a chat message) read where it is here.
+await writeFile(
+  join(tmpdir(), `raptoru-e2e-core-${port}.json`),
+  JSON.stringify({ url: coreUrl, secret }),
 );
 studio.listen(port, '127.0.0.1', () =>
   console.log(

@@ -72,6 +72,7 @@ import { DockHub } from './dock/hub.js';
 import { DockKey, DockServer } from './dock/server.js';
 import { dockStudioApi, type DockRuntime } from './dock/studio-api.js';
 import { HalloweenRuntime } from './halloween/runtime.js';
+import { LevelUpRuntime } from './level-up/runtime.js';
 import { ProgressionRelay } from './progression/relay.js';
 import {
   createLocalRuntime,
@@ -390,6 +391,8 @@ export function createStudioServer(
   halloween: HalloweenRuntime | null = null,
   /** Progression native (docs/PROGRESSION.md): Studio's panel relay to the profile's Core. */
   progression: ProgressionRelay | null = null,
+  /** Level Up V2: its own OBS source (the viewers' level-ups), apart from every other overlay. */
+  levelUp: LevelUpRuntime | null = null,
 ) {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -476,6 +479,7 @@ export function createStudioServer(
       // Halloween: overlay page / media (its key), Electron main (screens), Studio's panel and the shop relay.
       if (halloween && (await halloween.handle(req, res, url))) return;
       if (progression && (await progression.handle(req, res, url))) return;
+      if (levelUp && (await levelUp.handle(req, res, url))) return;
       // Twitch alerts V1: Core queues; Studio serves the OBS source / preview and relays the claims / reports.
       if (alerts && (await alerts.handle(req, res, url))) return;
       if (points && (await points.handle(req, res, url))) return;
@@ -1172,6 +1176,22 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     dock,
     halloween,
     new ProgressionRelay({ core: alertsCore, environment: alertsEnv }),
+    // Level Up V2 (docs/PROGRESSION.md): the profile's Core decides; this OBS source shows.
+    alertsCore && alertsEnv
+      ? await LevelUpRuntime.create({
+          core: alertsCore,
+          environment: alertsEnv,
+          origin: `http://${host}:${port}`,
+          dir: join(paths.runtimeDir, 'level-up'),
+          playerDir: join(
+            REPO_ROOT,
+            'apps',
+            'studio',
+            'server',
+            'level-up-player',
+          ),
+        })
+      : null,
   );
   supervisor.start();
   if (dock)

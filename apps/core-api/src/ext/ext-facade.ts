@@ -161,7 +161,6 @@ const refused = (e: unknown): ExtReply => {
 export class ExtFacade {
   /** Recent TTS / Soundboard admissions per viewer (Bonk is read back from Core). */
   private receipts = new Map<string, Json[]>();
-  private preferences = new Map<string, boolean>();
 
   constructor(
     private readonly core: LabCall,
@@ -629,20 +628,39 @@ export class ExtFacade {
     });
   }
 
-  private viewerPreferences(
+  /**
+   * Level Up V2: the viewer's level-up notification mode (off / written / with sound), kept by Core (it survives a
+   * restart; off by default) for the JWT's identity only. The first extension's boolean is still accepted and returned.
+   */
+  private async viewerPreferences(
     who: Who,
     method: string,
     body: Json | undefined,
-  ): ExtReply {
+  ): Promise<ExtReply> {
     if (!who.viewer) return fail(403, 'identity_required');
-    if (method === 'POST') {
-      if (typeof body?.level_up_sfx_opt_in !== 'boolean')
-        return fail(400, 'invalid_payload');
-      this.preferences.set(who.viewer.id, body.level_up_sfx_opt_in);
+    const path = `/v1/lab/progression/prefs/${who.viewer.id}`;
+    const mode = body?.level_up_notify;
+    const valid = mode === 'off' || mode === 'text' || mode === 'sound';
+    if (
+      method === 'POST' &&
+      !valid &&
+      typeof body?.level_up_sfx_opt_in !== 'boolean'
+    )
+      return fail(400, 'invalid_payload');
+    try {
+      return ok(
+        await this.core<Json>(
+          path,
+          method !== 'POST'
+            ? undefined
+            : valid
+              ? { level_up_notify: mode }
+              : { level_up_sfx_opt_in: body!.level_up_sfx_opt_in },
+        ),
+      );
+    } catch (e) {
+      return refused(e);
     }
-    return ok({
-      level_up_sfx_opt_in: this.preferences.get(who.viewer.id) ?? false,
-    });
   }
 
   // --- Halloween shop (docs/HALLOWEEN.md) ---------------------------------------------------------

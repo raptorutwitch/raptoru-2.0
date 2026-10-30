@@ -17,6 +17,35 @@ export const ProgressionRulesSchema = z.strictObject({
   curve_exponent: z.number().min(1).max(3),
   /** Accounts that never earn XP (bots); the broadcaster neither. */
   excluded_logins: z.array(z.string().regex(/^[a-z0-9_]{1,25}$/)).max(50),
+  /**
+   * Level Up V2 (docs/PROGRESSION.md): `curve` (the first model) or `fixed` (curve_base XP per level, exponent 1),
+   * switched only by the guarded normalization — never by a rules patch.
+   */
+  level_model: z.enum(['curve', 'fixed']),
+  /** Level Up notifications on stream (the viewers' own choice still applies); OFF until Antoni turns them on. */
+  level_up_notifications: z.boolean(),
+  /** One level-up SOUND at most per this delay, whole channel (written notices are never held back by it). */
+  level_up_sound_cooldown_s: z.number().int().min(0).max(86_400),
+  /** A notification not shown within this delay is dropped (never an old level-up much later). */
+  level_up_max_age_s: z.number().int().min(10).max(3600),
+  /**
+   * The frozen WizeBot normalization (set once by the activation; null before): every WizeBot history, attached now or
+   * months later, gets the same level — newLevel = floor(1 + (target_max − 1) × ((L − 1) / (max_level − 1)) ^ exponent).
+   */
+  wizebot_normalization: z
+    .strictObject({
+      version: z.number().int().min(1),
+      exponent: z.number().min(0.1).max(1),
+      max_level: z.number().int().min(1),
+      target_max: z.number().int().min(2),
+      applied_at: z.string(),
+      /** The curve before the activation (its undo). */
+      previous_curve: z.strictObject({
+        curve_base: z.number(),
+        curve_exponent: z.number(),
+      }),
+    })
+    .nullable(),
 });
 export type ProgressionRules = z.infer<typeof ProgressionRulesSchema>;
 
@@ -28,6 +57,11 @@ export const DEFAULT_PROGRESSION_RULES: ProgressionRules = {
   live_only: true,
   curve_base: 60,
   curve_exponent: 1.6,
+  level_model: 'curve',
+  level_up_notifications: false,
+  level_up_sound_cooldown_s: 300,
+  level_up_max_age_s: 120,
+  wizebot_normalization: null,
   excluded_logins: [
     'lecroupier_',
     'viewerumobilu',
@@ -40,7 +74,47 @@ export const DEFAULT_PROGRESSION_RULES: ProgressionRules = {
 
 export const ProgressionSettingsPatch = z.strictObject({
   enabled: z.boolean().optional(),
-  rules: ProgressionRulesSchema.partial().optional(),
+  // The level model and the normalization change only through the guarded Level Up V2 activation.
+  rules: ProgressionRulesSchema.omit({
+    level_model: true,
+    wizebot_normalization: true,
+  })
+    .partial()
+    .optional(),
+});
+
+/** Level Up V2: the normalization parameters chosen on the real data of 29/10/2026 (docs/PROGRESSION.md). */
+export const LEVEL_V2 = {
+  version: 1,
+  xpPerLevel: 1000,
+  exponent: 0.7,
+  targetMax: 50,
+} as const;
+
+/** A viewer's level-up notification: none (default), written, or written with a short sound. */
+export const LevelUpNotifyMode = z.enum(['off', 'text', 'sound']);
+export type LevelUpNotifyMode = z.infer<typeof LevelUpNotifyMode>;
+
+/** The extension's preferences: the 3-way mode; the first extension's boolean is still read (true = sound). */
+export const ViewerPrefsRequest = z
+  .strictObject({
+    level_up_notify: LevelUpNotifyMode.optional(),
+    level_up_sfx_opt_in: z.boolean().optional(),
+  })
+  .refine(
+    (b) =>
+      b.level_up_notify !== undefined || b.level_up_sfx_opt_in !== undefined,
+    { message: 'empty' },
+  );
+
+/** Studio: switch every level to Level Up V2 — once, with a typed confirmation. */
+export const LevelV2ActivateRequest = z.strictObject({
+  confirm: z.literal('NORMALISER LES NIVEAUX'),
+});
+
+/** Studio's OBS level-up source: the next notifications to show. */
+export const LevelUpClaimRequest = z.strictObject({
+  consumer: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
 });
 
 export const RewardId = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,47}$/);

@@ -91,3 +91,33 @@ describe('Extension API client — response budget and contract', () => {
     expect(calls[1].key).toBe(calls[0].key);
   });
 });
+
+describe('Level Up V2 — the viewer preference', () => {
+  it('sends the 3-way mode (anything else is off) and returns the Core answer', async () => {
+    const bodies = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      bodies.push(init.body ? JSON.parse(init.body) : null);
+      return json({
+        ok: true,
+        level_up_notify: 'text',
+        level_up_sfx_opt_in: false,
+      });
+    });
+    const api = createClient({
+      getToken: () => 'tok',
+      apiBase: 'http://ebs',
+      demoMode: false,
+      fetchImpl,
+    });
+    await expect(api.setViewerPreference('text')).resolves.toMatchObject({
+      level_up_notify: 'text',
+    });
+    await api.setViewerPreference('loud');
+    await api.setViewerPreference(true);
+    expect(bodies).toEqual([
+      { level_up_notify: 'text' },
+      { level_up_notify: 'off' },
+      { level_up_notify: 'off' },
+    ]);
+  });
+});

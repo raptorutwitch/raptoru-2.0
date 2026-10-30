@@ -9,7 +9,7 @@ test('Progression: on, an event badge created, a viewer found, granted, then rev
 }) => {
   await page.goto('/?tab=progression');
   const tab = page.locator('#tab-progression');
-  await tab.getByRole('button', { name: 'Activer' }).click();
+  await tab.getByRole('button', { name: 'Activer', exact: true }).click();
   await expect(tab).toContainText('Active');
 
   const form = tab.locator('[data-role="reward-form"]');
@@ -18,7 +18,7 @@ test('Progression: on, an event badge created, a viewer found, granted, then rev
   await form.locator('[data-f="label"]').fill('Citrouille 2026');
   await form.locator('[data-f="rarity"]').selectOption('event');
   await form.getByRole('button', { name: 'Créer / mettre à jour' }).click();
-  await expect(tab.locator('table')).toContainText('Citrouille 2026');
+  await expect(tab.locator('table').first()).toContainText('Citrouille 2026');
 
   await tab.locator('[data-role="q"]').fill('kir');
   await tab.getByRole('button', { name: 'Chercher' }).click();

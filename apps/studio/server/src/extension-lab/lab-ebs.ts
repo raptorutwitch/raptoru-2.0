@@ -1562,6 +1562,34 @@ export class LabEbs {
         );
       }
     }
+    // Level Up V2: the Lab Core keeps the viewer's mode (as the main Core does), for the viewer of the token.
+    if (path.split('?')[0] === '/viewer/preferences' && this.labCore) {
+      const mode = body?.level_up_notify;
+      const valid = mode === 'off' || mode === 'text' || mode === 'sound';
+      if (
+        method === 'POST' &&
+        !valid &&
+        typeof body?.level_up_sfx_opt_in !== 'boolean'
+      )
+        return this.fail(400, 'invalid_payload');
+      try {
+        return this.ok(
+          await this.labCore<Json>(
+            `/v1/lab/progression/prefs/${caller.identity.twitchUserId}`,
+            method !== 'POST'
+              ? undefined
+              : valid
+                ? { level_up_notify: mode }
+                : { level_up_sfx_opt_in: body!.level_up_sfx_opt_in },
+          ),
+        );
+      } catch (e) {
+        return this.fail(
+          (e as { status?: number }).status ?? 503,
+          (e as Error).message,
+        );
+      }
+    }
     const key = headers.idempotencyKey
       ? `${caller.identity.twitchUserId}:${headers.idempotencyKey}`
       : null;
@@ -1635,13 +1663,24 @@ export class LabEbs {
       );
     }
     if (path === '/viewer/preferences') {
+      const mode = body?.level_up_notify;
+      const valid = mode === 'off' || mode === 'text' || mode === 'sound';
+      if (
+        method === 'POST' &&
+        !valid &&
+        typeof body?.level_up_sfx_opt_in !== 'boolean'
+      )
+        return this.fail(400, 'invalid_payload');
+      // Without the Lab Core (unit tests): the façade's memory.
       const user = this.user(identity.twitchUserId);
-      if (method === 'POST') {
-        if (typeof body.level_up_sfx_opt_in !== 'boolean')
-          return this.fail(400, 'invalid_payload');
-        user.levelUpSfx = body.level_up_sfx_opt_in;
-      }
-      return this.ok({ level_up_sfx_opt_in: user.levelUpSfx });
+      if (method === 'POST')
+        user.levelUpSfx = valid
+          ? mode === 'sound'
+          : body.level_up_sfx_opt_in === true;
+      return this.ok({
+        level_up_notify: user.levelUpSfx ? 'sound' : 'off',
+        level_up_sfx_opt_in: user.levelUpSfx,
+      });
     }
     if (path === '/emotes' || path === '/emotes/refresh')
       return this.ok({

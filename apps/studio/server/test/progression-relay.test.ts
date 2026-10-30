@@ -93,6 +93,13 @@ describe('relay', () => {
     await call('/api/progression/adjust', { viewer: '42' });
     await call('/api/progression/import/attach', { login: 'x' });
     await call('/api/progression/import/resolve', {});
+    await call('/api/progression/level-v2');
+    await call('/api/progression/levelups');
+    await call('/api/progression/level-v2/activate', { confirm: 'x' });
+    await call('/api/progression/level-v2/revert', { confirm: 'x' });
+    await call('/api/progression/viewers/42/notify', {
+      level_up_notify: 'text',
+    });
     expect(calls.map((c) => c[0])).toEqual([
       '/v1/studio/progression/import/status',
       '/v1/studio/progression/import/waiting?q=old',
@@ -100,6 +107,11 @@ describe('relay', () => {
       '/v1/studio/progression/adjust',
       '/v1/studio/progression/import/attach',
       '/v1/studio/progression/import/resolve',
+      '/v1/studio/progression/level-v2',
+      '/v1/studio/progression/levelups',
+      '/v1/studio/progression/level-v2/activate',
+      '/v1/studio/progression/level-v2/revert',
+      '/v1/studio/progression/viewers/42/notify',
     ]);
     calls.length = 0;
     await call('/api/progression/import/wizebot/dry-run', {});

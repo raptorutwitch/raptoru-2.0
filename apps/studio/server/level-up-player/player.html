@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Raptoru — Level Up</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+      }
+      #stage {
+        position: absolute;
+        left: 50%;
+        bottom: 8%;
+        transform: translateX(-50%);
+      }
+      .card {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 26px;
+        border-radius: 16px;
+        background: rgba(10, 18, 16, 0.86);
+        border: 2px solid #2ee6c1;
+        box-shadow: 0 0 28px rgba(46, 230, 193, 0.45);
+        color: #eafff9;
+        font-size: 30px;
+        font-weight: 700;
+        white-space: nowrap;
+        animation:
+          in 0.45s ease-out,
+          out 0.5s ease-in 4.5s forwards;
+      }
+      .card .arrow {
+        font-size: 34px;
+        color: #2ee6c1;
+      }
+      .card .level {
+        color: #2ee6c1;
+      }
+      #status {
+        display: none;
+      }
+      @keyframes in {
+        from {
+          opacity: 0;
+          transform: translateY(30px) scale(0.92);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes out {
+        to {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- OBS browser source (1920 × 1080, transparent): the viewers' level-ups, one at a time. -->
+    <div id="stage"></div>
+    <span id="status"></span>
+    <script type="module" src="player.js"></script>
+  </body>
+</html>
