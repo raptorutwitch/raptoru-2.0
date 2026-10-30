@@ -538,6 +538,12 @@ export function createClient({
     }),
     /** Halloween shop (docs/HALLOWEEN.md): Core's state for this viewer, a purchase, a conversion (one key per click). */
     eventsState: () => call('GET', '/events/state'),
+    /** Halloween « Titres »: the cosmetic shop's titles sold in Bonbons (absent on an older Core: the tab hides). */
+    eventsTitles: () => call('GET', '/events/titles'),
+    eventsBuyTitle: (offerId) => call('POST', '/actions/events/titles/purchase', {
+      body: { offer_id: offerId },
+      idempotencyKey: newIdempotencyKey(),
+    }),
     eventsBuy: (itemId) => call('POST', '/actions/events/purchase', {
       body: { item_id: itemId },
       idempotencyKey: newIdempotencyKey(),

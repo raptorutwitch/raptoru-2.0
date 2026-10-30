@@ -112,49 +112,6 @@ describe.skipIf(!isLocal)(
       );
     });
 
-    it('level up: applied, used, rolled back by its header SQL (ledger rows kept), then applied again', async () => {
-      await migrate(db, 'prod');
-      const all = await tables();
-      const cols = await columns();
-        'progression_level_events',
-        'progression_normalizations',
-        'progression_viewer_prefs',
-      ];
-      await db.query(
-        `insert into progression_ledger (channel_id, twitch_user_id, kind, amount, key, actor, created_at)
-         values ('1', '9', 'normalization', -5, 'n1', 'test', now())`,
-      );
-      await db.query(
-         values ('1', '9', 'sound', now())`,
-      );
-      await expect(
-        db.query(
-           values ('1', '8', 'loud', now())`,
-        ),
-      ).rejects.toThrow(/check/);
-        /^drop table progression_viewer_prefs,/,
-      );
-      expect(await tables()).toEqual(
-      );
-      expect(await columns()).toEqual(
-      );
-      // The movement already written stays; a new one of that kind is refused again.
-      expect(
-        (await db.query("select 1 from progression_ledger where key = 'n1'"))
-          .length,
-      ).toBe(1);
-      await expect(
-        db.query(
-          `insert into progression_ledger (channel_id, twitch_user_id, kind, amount, key, actor, created_at)
-           values ('1', '9', 'normalization', 1, 'n2', 'test', now())`,
-        ),
-      ).rejects.toThrow(/check/);
-      await migrate(db, 'prod');
-      expect(await tables()).toEqual(all);
-      expect(await columns()).toEqual(cols);
-      await db.query('delete from progression_ledger');
-    });
-
     it('periods: applied, used, rolled back by its header SQL (history and ledger rows kept), then applied again', async () => {
       await migrate(db, 'prod');
       const all = await tables();

@@ -140,3 +140,56 @@ export const CosmeticAwardRequest = z.strictObject({
   reference: z.string().max(80).nullable().default(null),
 });
 export type CosmeticAwardRequest = z.infer<typeof CosmeticAwardRequest>;
+
+// --- Halloween « Titres » in the extension (30/10/2026, docs/COSMETIC_SHOP.md § 8) -----------------------------------
+// The extension's Événements module lists the TITLES sold in Bonbons (the cosmetic shop's own catalogue and offers, the
+// event's Bonbons balance): the same items, prices and purchase as raptoru.fr, never a second shop.
+
+interface CatalogLike {
+  event?: { open?: boolean };
+  items?: {
+    id: string;
+    kind: string;
+    label: string;
+    description?: string | null;
+    rarity?: string | null;
+    style?: unknown;
+    offers?: { offer_id: string; currency: string; price: number }[];
+  }[];
+}
+interface ViewerShopLike {
+  balances?: { bonbons?: number | null };
+  owned?: string[];
+}
+
+/** What the extension shows (pure, shared by the production and Lab façades). */
+export function eventTitlesView(
+  catalog: CatalogLike,
+  mine: ViewerShopLike | null,
+) {
+  const owned = new Set(mine?.owned ?? []);
+  const items = (catalog.items ?? []).flatMap((i) => {
+    if (i.kind !== 'title') return [];
+    const offer = (i.offers ?? []).find((o) => o.currency === 'bonbons');
+    if (!offer) return [];
+    return [
+      {
+        id: i.id,
+        label: i.label,
+        description: i.description ?? null,
+        rarity: i.rarity ?? null,
+        style: i.style ?? null,
+        offer_id: offer.offer_id,
+        price: offer.price,
+        owned: owned.has(i.id),
+      },
+    ];
+  });
+  return {
+    enabled: true,
+    open: catalog.event?.open === true,
+    balance: mine ? (mine.balances?.bonbons ?? 0) : null,
+    items,
+  };
+}
+export type EventTitlesView = ReturnType<typeof eventTitlesView>;

@@ -1,3 +1,4 @@
+import { eventTitlesView } from '@raptoru/schemas';
 import { subWheelExt } from './sub-wheel-ext.js';
 import {
   BONK_LAB_RULES,
@@ -228,6 +229,11 @@ export class ExtFacade {
       return this.eventAction(who, 'purchase', body ?? {}, idempotencyKey);
     if (method === 'POST' && path === '/actions/events/convert')
       return this.eventAction(who, 'convert', body ?? {}, idempotencyKey);
+    // Halloween « Titres » (docs/COSMETIC_SHOP.md § 8): the cosmetic shop's titles sold in Bonbons.
+    if (method === 'GET' && path === '/events/titles')
+      return ok(await this.eventTitles(who));
+    if (method === 'POST' && path === '/actions/events/titles/purchase')
+      return this.buyTitle(who, body ?? {}, idempotencyKey);
     if (method === 'GET' && path === '/raffle/state')
       return this.raffleState(who);
     if (method === 'POST' && path === '/actions/raffle')
@@ -685,6 +691,61 @@ export class ExtFacade {
               via: 'extension',
             });
       return ok({ ...out, event_shop: await this.eventShop(who) });
+    } catch (e) {
+      return refused(e);
+    }
+  }
+
+  /**
+   * The titles sold in Bonbons, for this viewer: what they own and their Bonbons (anonymous: the list only). Hidden
+   * like the module itself (closed event, testers only): nothing is sent then.
+   */
+  private async eventTitles(who: Who): Promise<Json> {
+    const shop = await this.eventShop(who);
+    if (!shop || shop.enabled !== true) return { enabled: false };
+    try {
+      const [catalog, mine] = await Promise.all([
+        this.core<Json>('/v1/cosmetics/catalog'),
+        who.viewer
+          ? this.core<Json>(`/v1/site/cosmetics/viewers/${who.viewer.id}`)
+          : Promise.resolve(null),
+      ]);
+      return eventTitlesView(catalog, mine) as unknown as Json;
+    } catch {
+      // No cosmetic shop on this Core (or it failed): the tab stays hidden, the module works.
+      return { enabled: false };
+    }
+  }
+
+  /** One title, bought with the JWT viewer's Bonbons; only an offer this tab shows (a title in Bonbons, on sale). */
+  private async buyTitle(
+    who: Who,
+    body: Json,
+    key: string | undefined,
+  ): Promise<ExtReply> {
+    if (!who.viewer) return fail(403, 'identity_required');
+    if (!key || !/^[A-Za-z0-9_-]{8,128}$/.test(key))
+      return fail(400, 'idempotency_key_required');
+    const titles = await this.eventTitles(who);
+    const offer = String(body.offer_id ?? '');
+    const items = (titles.items ?? []) as { offer_id: string }[];
+    if (titles.enabled !== true || !items.some((i) => i.offer_id === offer))
+      return fail(
+        409,
+        titles.enabled === true ? 'offer_unavailable' : 'event_closed',
+      );
+    try {
+      const out = await this.core<Json>('/v1/site/cosmetics/purchase', {
+        viewer: who.viewer.id,
+        viewer_name: who.viewer.display_name.slice(0, 64) || who.viewer.id,
+        offer_id: offer,
+        idempotency_key: key,
+      });
+      return ok({
+        ...out,
+        titles: await this.eventTitles(who),
+        event_shop: await this.eventShop(who),
+      });
     } catch (e) {
       return refused(e);
     }

@@ -1,8 +1,9 @@
 # Boutique cosmétique V1 — titres et badges en Jetons ou en Bonbons
 
-**État (30/10/2026)** : développée et testée (Lab de bout en bout, PostgreSQL réel, navigateur), **rien n'est actif en
-Production**. Branches : monorepo `feat/cosmetic-shop` (sur `feat/level-up-v2`, PR #43), site `feat/cosmetic-shop`
-(repo `Leaderboard-Jeu-des-mots`). Activation après Halloween, chaque étape sur GO d'Antoni (§ 6).
+**État (30/10/2026 soir)** : développée et testée (Lab de bout en bout, PostgreSQL réel, navigateur), **rien n'est actif
+en Production**. Branche monorepo **`feat/halloween-titles`** : la boutique (PR #44) rejouée sur `main` **sans Level Up V2**
+(PR #43, indépendante), plus les « Titres » de l'extension (§ 8). Site : `feat/cosmetic-shop` (repo
+`Leaderboard-Jeu-des-mots`, PR #109), facultatif (§ 8). Chaque étape sur GO d'Antoni.
 
 ## 1. Principe
 
@@ -57,7 +58,7 @@ vente, événement fermé.
 
 ## 5. Technique
 
-- Migration `20261116130000_cosmetic_shop.sql` (additive ; contrainte de source élargie `NOT VALID` ; SQL de retour
+- Migration `20261118130000_cosmetic_shop.sql` (renommée le 30/10 : après `20261117130000_halloween_economy.sql`, déjà en Production) (additive ; contrainte de source élargie `NOT VALID` ; SQL de retour
   arrière en tête, démontré sur PostgreSQL réel). Tables `cosmetic_images`, `cosmetic_offers`, `cosmetic_purchases`,
   `cosmetic_awards` ; `progression_rewards` gagne `status`, `style`, `image_id`, `event_key` (les récompenses existantes
   restent « Publié »).
@@ -71,7 +72,7 @@ vente, événement fermé.
 
 ## 6. Activation après Halloween (chaque étape sur GO d'Antoni)
 
-Prérequis : Level Up V2 (PR #43) fusionné d'abord (la boutique est construite dessus).
+Prérequis : aucun (depuis le 30/10, la branche `feat/halloween-titles` ne dépend plus de Level Up V2, PR #43).
 
 1. Sauvegarde Coolify + restauration vérifiée (comme le 29/10).
 2. Fusion de la PR boutique, CI verte, déploiement du Core : migration additive, rien ne change pour les viewers
@@ -101,3 +102,31 @@ commit précédent) ; Core précédent (la migration reste, additive) ; en derni
 - Navigateur réel (Lab local, 30/10) : raptoru.fr branché sur un Core Lab isolé — catalogue, apparences du Core,
   achat 300 Jetons (13 000 → 12 700, « Possédé »), solde insuffisant en Jetons et en Bonbons (« Confirmer » désactivé),
   bureau et mobile. **Non validé par Antoni.**
+
+## 8. « Titres » dans l'extension (Halloween, 30/10)
+
+- Module « Événements » : onglets **Interactions · Titres · Bonbons**. « Titres » liste les **titres** de la boutique
+  vendus en **Bonbons** (créés et mis en vente dans Studio › Boutique, § 2–3) : nom avec son apparence (couleur,
+  dégradé, graisse, lueur), rareté, prix, état (Disponible, Possédé ✓, Pas assez de Bonbons, Indisponible), achat en
+  deux touches (« Confirmer ? »), retour immédiat (« Titre ajouté à ta collection »). Message : récompense
+  **permanente**, contrairement aux effets.
+- Même boutique que raptoru.fr : mêmes objets, offres, prix, solde de Bonbons de l'événement, même achat (un débit,
+  un titre, journalisé ; même clic = même achat ; `already_owned`). Le viewer est **l'identité Twitch du jeton de
+  l'extension** (jamais un champ envoyé) ; seules les offres « titre en Bonbons » affichées peuvent être achetées par
+  cette route.
+- **Bonbons = événement ouvert** : une offre en Bonbons n'est jamais vendue quand l'événement est fermé (règle du Core,
+  pour toute offre en Bonbons). Fermé : l'onglet disparaît ; les titres achetés restent (inventaire de la
+  progression, `progression_grants`).
+- **raptoru.fr** : le site en Production lit déjà ce même inventaire (`GET /v1/progression/viewers/:id`, « Ma
+  collection ») et équipe par le Core (`/v1/site/progression/equip`, vérifie la possession) : un titre acheté y apparaît
+  et s'équipe **sans déployer le site** ; il y est affiché en texte simple tant que le site n'a pas la page Boutique
+  (PR #109 : apparences dessinées, achat sur le site).
+- Routes : extension `GET /events/titles`, `POST /actions/events/titles/purchase` (Core `ext-facade.ts`, appels internes
+  au service de la boutique, jamais exposés en HTTP par la frontière ; Lab : `event-shop-facade.ts`).
+- **Extension publiée** : l'onglet n'existe que dans une **nouvelle version** de l'extension, soumise à la revue
+  Twitch (délai non garanti, une seule version en revue à la fois). L'extension publiée actuellement l'ignore sans
+  erreur (elle n'appelle pas ces routes).
+- Tests : Core (frontière extension avec vrais jetons : liste, fermé, anonyme, offre en Jetons refusée, achat, rejeu,
+  déjà possédé, fermeture → titre gardé, profil et équipement du site) ; suite boutique PGlite + PostgreSQL réel
+  (Bonbons refusés événement fermé) ; extension (états de l'onglet) ; e2e navigateur `halloween-titles.e2e.ts`
+  (Studio crée et vend, l'extension achète, rechargement, inventaire).

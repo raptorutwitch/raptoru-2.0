@@ -120,6 +120,31 @@ export function cosmeticShopSuite(freshDb: () => Promise<Db>) {
     (await shop.viewerShop(CH, id)).owned.includes(reward);
 
   describe('the editor', () => {
+    it('Bonbons: never sold while the event is closed, even without an event key; the offer comes back on reopening', async () => {
+      await item();
+      await offer({ offer_id: 'roi-bonbons', currency: 'bonbons', price: 5 });
+      await db.query(
+        'update event_shop_settings set enabled = false where channel_id = $1',
+        [CH],
+      );
+      await expect(
+        shop.purchase(CH, {
+          viewer: '77',
+          viewer_name: 'V',
+          offer_id: 'roi-bonbons',
+          idempotency_key: 'closed-key-1',
+        }),
+      ).rejects.toMatchObject({ code: 'event_closed' });
+      expect((await shop.catalog(CH)).items).toEqual([]);
+      await db.query(
+        'update event_shop_settings set enabled = true where channel_id = $1',
+        [CH],
+      );
+      expect((await shop.catalog(CH)).items.map((i) => i.id)).toEqual([
+        'roi-citrouille',
+      ]);
+    });
+
     it('a draft is invisible and its id can change; once published the id is fixed; a duplicate is a new draft', async () => {
       await item({ reward_id: 'brouillon', status: 'draft' });
       await offer({ offer_id: 'b-jetons', reward_id: 'brouillon' });

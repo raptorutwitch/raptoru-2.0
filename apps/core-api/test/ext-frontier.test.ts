@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { CosmeticItemInput, CosmeticOfferInput } from '@raptoru/schemas';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CoreConfig } from '../src/config.js';
@@ -310,6 +311,140 @@ describe('public Core: viewer frontier /v1/ext', () => {
     expect((await ext('/session', viewer('77'))).body.wallet.available).toBe(
       12_000,
     );
+  });
+
+  it('Halloween « Titres »: the shop’s titles in Bonbons, bought once by the JWT viewer, kept after the event', async () => {
+    const { core, ext } = await fixture();
+    const jwt = viewer('4260');
+    const title = (reward_id: string, label: string) =>
+      core.cosmetics.upsertItem(
+        CHANNEL,
+        CosmeticItemInput.parse({
+          reward_id,
+          kind: 'title',
+          label,
+          rarity: 'epic',
+          status: 'published',
+          style: { color: '#ff8a00' },
+        }),
+      );
+    await title('roi-citrouille', 'Roi Citrouille');
+    await title('vampire', 'Vampire');
+    await core.cosmetics.upsertOffer(
+      CHANNEL,
+      CosmeticOfferInput.parse({
+        offer_id: 'roi-bonbons',
+        reward_id: 'roi-citrouille',
+        currency: 'bonbons',
+        price: 30,
+        enabled: true,
+      }),
+    );
+    // A Jetons offer is never shown nor sold here.
+    await core.cosmetics.upsertOffer(
+      CHANNEL,
+      CosmeticOfferInput.parse({
+        offer_id: 'vampire-jetons',
+        reward_id: 'vampire',
+        currency: 'main',
+        price: 100,
+        enabled: true,
+      }),
+    );
+    // Event closed: nothing shown, nothing sold.
+    expect((await ext('/events/titles', jwt)).body).toMatchObject({
+      enabled: false,
+    });
+    const closed = await ext('/actions/events/titles/purchase', jwt, {
+      offer_id: 'roi-bonbons',
+    });
+    expect([closed.status, closed.body.error]).toEqual([409, 'event_closed']);
+
+    await core.eventShop.updateSettings(CHANNEL, { enabled: true });
+    await core.eventShop.grant(
+      {
+        idempotency_key: randomUUID(),
+        channel_id: CHANNEL,
+        viewer: '4260',
+        amount: 50,
+        reason: 'grant',
+      },
+      'test',
+    );
+    const t = (await ext('/events/titles', jwt)).body;
+    expect(t).toMatchObject({ enabled: true, open: true, balance: 50 });
+    expect(t.items).toEqual([
+      expect.objectContaining({
+        id: 'roi-citrouille',
+        label: 'Roi Citrouille',
+        rarity: 'epic',
+        offer_id: 'roi-bonbons',
+        price: 30,
+        owned: false,
+      }),
+    ]);
+    // Anonymous: the list, no balance; no purchase.
+    expect((await ext('/events/titles', token({}))).body.balance).toBeNull();
+    expect(
+      (
+        await ext('/actions/events/titles/purchase', token({}), {
+          offer_id: 'roi-bonbons',
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await ext('/actions/events/titles/purchase', jwt, {
+          offer_id: 'vampire-jetons',
+        })
+      ).body.error,
+    ).toBe('offer_unavailable');
+
+    // The JWT's viewer pays (a body viewer is ignored); the same key is the same purchase.
+    const key = randomUUID();
+    const r = await ext(
+      '/actions/events/titles/purchase',
+      jwt,
+      { offer_id: 'roi-bonbons', viewer: '1' },
+      key,
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.titles.balance).toBe(20);
+    expect(r.body.titles.items[0].owned).toBe(true);
+    expect(r.body.event_shop.balance).toBe(20);
+    const again = await ext(
+      '/actions/events/titles/purchase',
+      jwt,
+      { offer_id: 'roi-bonbons' },
+      key,
+    );
+    expect(again.body.purchase.purchase_id).toBe(r.body.purchase.purchase_id);
+    const twice = await ext('/actions/events/titles/purchase', jwt, {
+      offer_id: 'roi-bonbons',
+    });
+    expect(twice.body.error).toBe('already_owned');
+    expect((await ext('/events/titles', jwt)).body.balance).toBe(20);
+
+    // Closing the event: the title stays in the viewer's inventory (the same one raptoru.fr reads).
+    await core.eventShop.updateSettings(CHANNEL, { enabled: false });
+    const owned = await core.db.query<{ reward_id: string; source: string }>(
+      `select reward_id, source from progression_grants where channel_id = $1 and twitch_user_id = '4260' and revoked_at is null`,
+      [CHANNEL],
+    );
+    expect(owned).toEqual([
+      { reward_id: 'roi-citrouille', source: 'purchase' },
+    ]);
+    // raptoru.fr reads the viewer's profile (GET /v1/progression/viewers/:id) and equips through the Core: both
+    // already see the purchased title (no site change needed for that; its look needs the site's shop page).
+    const profile = await core.progression.viewer(CHANNEL, '4260');
+    expect(JSON.stringify(profile)).toContain('roi-citrouille');
+    await expect(
+      core.progression.equip(CHANNEL, {
+        viewer: '4260',
+        title_id: 'roi-citrouille',
+        badge_ids: [],
+      }),
+    ).resolves.toBeTruthy();
   });
 
   it('Halloween shop: closed in the session, then sold to the JWT viewer only, once per Idempotency-Key', async () => {

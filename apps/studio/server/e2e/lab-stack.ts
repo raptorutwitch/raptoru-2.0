@@ -95,7 +95,7 @@ const ext = await LabEbs.create(EXTENSION_DIR);
 const labCore = localLabCoreClient(coreUrl, secret);
 ext.connectLab(labCore);
 // Studio's Halloween and Tombola tabs, on the same Lab Core (temporary data folder, gone with the process).
-const { mkdtemp } = await import('node:fs/promises');
+const { mkdtemp, writeFile } = await import('node:fs/promises');
 const { tmpdir } = await import('node:os');
 const { join } = await import('node:path');
 const { HalloweenRuntime } = await import('../src/halloween/runtime.js');

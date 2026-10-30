@@ -455,6 +455,8 @@ export class CosmeticShopService {
     if (o.closes_at && now >= new Date(o.closes_at)) return 'offer_closed';
     if (o.event_key && (o.event_key !== event.season || !event.open))
       return 'event_closed';
+    // The Bonbons are the event's currency: never spent while it is closed (30/10, docs/COSMETIC_SHOP.md § 8).
+    if (o.currency === 'bonbons' && !event.open) return 'event_closed';
     return null;
   }
 

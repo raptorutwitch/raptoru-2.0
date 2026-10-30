@@ -115,7 +115,9 @@
   top: 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* As many equal columns as tabs (2, or 3 with « Titres »). */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   padding: 3px;
   border-radius: 10px;
   background: #22090f;
@@ -373,4 +375,51 @@
 .evs-toast.is-bad {
   background: #2a0d12;
   border-color: rgba(255, 107, 107, 0.35);
+}
+
+/* « Titres » (permanent cosmetics, docs/COSMETIC_SHOP.md § 8). */
+.evs-titles-note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--evs-muted);
+}
+.evs-title-row {
+  /* No thumbnail: the name takes the room, the price / « Possédé » on the right. */
+  grid-template-columns: 1fr auto;
+}
+.evs-title-row .evs-txt strong {
+  font-size: 15px;
+}
+.evs-title-row .evs-rarity {
+  justify-self: start;
+  margin-left: 0;
+}
+.evs-rarity {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--evs-line);
+  color: var(--evs-muted);
+}
+.evs-rarity.is-rare {
+  color: #6fb6ff;
+  border-color: rgba(111, 182, 255, 0.5);
+}
+.evs-rarity.is-epic {
+  color: #c48bff;
+  border-color: rgba(196, 139, 255, 0.5);
+}
+.evs-rarity.is-legendary {
+  color: #ffc95a;
+  border-color: rgba(255, 201, 90, 0.55);
+}
+.evs-owned {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8fe388;
 }

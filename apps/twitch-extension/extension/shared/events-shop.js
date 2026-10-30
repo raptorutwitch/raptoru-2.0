@@ -38,6 +38,13 @@ export const REASONS = {
   idempotency_conflict: 'Action déjà envoyée.',
   raptoru_paused: 'Raptoru est en pause : réessaie un peu plus tard.',
   viewer_blocked: 'Les interactions te sont fermées pour le moment.',
+  already_owned: 'Tu possèdes déjà ce titre.',
+  insufficient_funds: 'Pas assez de Bonbons.',
+  offer_unavailable: 'Ce titre n’est plus en vente.',
+  offer_disabled: 'Ce titre n’est plus en vente.',
+  offer_closed: 'Ce titre n’est plus en vente.',
+  offer_not_open: 'Ce titre n’est pas encore en vente.',
+  item_unavailable: 'Ce titre n’est plus en vente.',
 };
 const reasonOf = (e) =>
   REASONS[e?.code ?? e?.message] ?? 'Indisponible pour le moment.';
@@ -200,6 +207,66 @@ function bonbonsHtml(s) {
  * notice, elapsedMs, unreachable }. Countdowns carry `data-wait` / `data-next`: the view
  * updates their text in place every second (no rebuild).
  */
+const RARITY = {
+  common: 'Commun',
+  rare: 'Rare',
+  epic: 'Épique',
+  legendary: 'Légendaire',
+};
+
+/** « Titres »: permanent rewards bought with the Bonbons (pure, tested). `t`: the Core's /events/titles. */
+export function titlesHtml(t, ui = {}) {
+  const balance = t.balance ?? null;
+  const rows = (t.items ?? []).map((i) => {
+    const key = `title:${i.offer_id}`;
+    const confirming = ui.confirming === key;
+    const sending = ui.sending === key;
+    const poor = balance !== null && balance < i.price;
+    const action = i.owned
+      ? '<span class="evs-owned">Possédé ✓</span>'
+      : `<button type="button" class="evs-buy${confirming || sending ? ' is-confirm' : ''}" data-buy-title="${esc(i.offer_id)}"${!t.open || poor || balance === null || ui.sending ? ' disabled' : ''}
+          aria-label="${confirming ? `Confirmer l’achat du titre ${esc(i.label)}` : `Acheter le titre ${esc(i.label)} pour ${i.price} Bonbons`}">
+          ${sending ? 'Achat…' : confirming ? 'Confirmer ?' : `${nf(i.price)} 🍬`}</button>`;
+    const state = i.owned
+      ? ''
+      : !t.open
+        ? 'Indisponible'
+        : balance === null
+          ? 'Partage ton identité Twitch pour l’acheter'
+          : poor
+            ? 'Pas assez de Bonbons'
+            : 'Disponible';
+    return `<li class="evs-item evs-title-row${i.owned ? ' is-owned' : ''}">
+      <div class="evs-txt"><strong class="evs-title-name" data-look="${esc(i.id)}">${esc(i.label)}</strong>
+        ${i.rarity && RARITY[i.rarity] ? `<span class="evs-rarity is-${esc(i.rarity)}">${RARITY[i.rarity]}</span>` : ''}
+        ${i.description ? `<small>${esc(i.description)}</small>` : ''}
+        ${state ? `<em class="evs-state">${esc(state)}</em>` : ''}</div>
+      ${action}
+    </li>`;
+  });
+  return `<p class="evs-note evs-titles-note">🏷️ <b>Récompenses permanentes</b> : un titre acheté reste à toi, même après Halloween
+      (contrairement aux effets et screamers, joués une fois). Retrouve-le dans ta collection sur raptoru.fr.</p>
+    ${rows.length ? `<ul class="evs-list">${rows.join('')}</ul>` : '<div class="evs-empty">Aucun titre en vente pour le moment.</div>'}`;
+}
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+/** A title's look from the Core (colour, gradient, weight, glow), applied through the DOM (no inline style). */
+function paintTitles(root, t) {
+  for (const el of root.querySelectorAll('[data-look]')) {
+    const st = (t?.items ?? []).find((i) => i.id === el.dataset.look)?.style;
+    if (!st) continue;
+    if (st.gradient && HEX.test(st.gradient.from) && HEX.test(st.gradient.to)) {
+      el.style.backgroundImage = `linear-gradient(${Number(st.gradient.angle) || 90}deg, ${st.gradient.from}, ${st.gradient.to})`;
+      el.style.backgroundClip = 'text';
+      el.style.webkitBackgroundClip = 'text';
+      el.style.color = 'transparent';
+    } else if (st.color && HEX.test(st.color)) el.style.color = st.color;
+    el.style.fontWeight = st.weight === 'normal' ? '500' : '800';
+    if (st.effect && st.effect !== 'none')
+      el.style.textShadow = `0 0 8px ${HEX.test(st.color ?? '') ? st.color : 'rgba(255, 170, 60, 0.8)'}`;
+  }
+}
+
 export function shopHtml(s, ui = {}) {
   if (!s)
     return ui.unreachable
@@ -208,7 +275,13 @@ export function shopHtml(s, ui = {}) {
   if (!s.enabled)
     return '<div class="evs-empty">Aucun événement en cours pour le moment.</div>';
   const elapsed = ui.elapsedMs ?? 0;
-  const section = ui.section === 'bonbons' ? 'bonbons' : 'interactions';
+  const hasTitles = ui.titles?.enabled === true;
+  const section =
+    ui.section === 'bonbons'
+      ? 'bonbons'
+      : ui.section === 'titles' && hasTitles
+        ? 'titles'
+        : 'interactions';
   return `<header class="evs-head">
       <div><small>Événement</small><b>${esc(s.edition?.title ?? 'Événement')}</b></div>
       <span class="evs-pill" aria-label="Ton solde de Bonbons">🍬 ${s.balance === null ? '—' : nf(s.balance)}</span>
@@ -216,9 +289,10 @@ export function shopHtml(s, ui = {}) {
     </header>
     <nav class="evs-tabs" role="tablist">
       <button type="button" role="tab" data-section="interactions" aria-selected="${section === 'interactions'}" class="${section === 'interactions' ? 'is-on' : ''}">Interactions</button>
+      ${hasTitles ? `<button type="button" role="tab" data-section="titles" aria-selected="${section === 'titles'}" class="${section === 'titles' ? 'is-on' : ''}">Titres</button>` : ''}
       <button type="button" role="tab" data-section="bonbons" aria-selected="${section === 'bonbons'}" class="${section === 'bonbons' ? 'is-on' : ''}">Bonbons</button>
     </nav>
-    ${section === 'bonbons' ? bonbonsHtml(s) : interactionsHtml(s, ui, elapsed)}
+    ${section === 'bonbons' ? bonbonsHtml(s) : section === 'titles' ? titlesHtml(ui.titles, ui) : interactionsHtml(s, ui, elapsed)}
     ${ui.notice ? `<p class="evs-notice evs-toast${ui.notice.bad ? ' is-bad' : ''}" role="status">${esc(ui.notice.text)}</p>` : ''}`;
 }
 
@@ -226,6 +300,7 @@ export function createEventShopView({ document, client, onState }) {
   const node = document.createElement('div');
   node.className = 'evs';
   let state = null;
+  let titles = null;
   let loadedAt = 0;
   let section = 'interactions';
   let filter = 'all';
@@ -255,8 +330,10 @@ export function createEventShopView({ document, client, onState }) {
       filter,
       confirming,
       notice,
+      titles,
       elapsedMs: Date.now() - loadedAt,
     });
+    paintTitles(node, titles);
   };
   const say = (text, bad = false) => {
     notice = { text, bad };
@@ -275,7 +352,13 @@ export function createEventShopView({ document, client, onState }) {
   };
   async function load() {
     try {
-      take(await client.eventsState());
+      const [s, t] = await Promise.all([
+        client.eventsState(),
+        // An older Core has no titles: the tab simply does not show.
+        client.eventsTitles ? client.eventsTitles().catch(() => null) : null,
+      ]);
+      take(s);
+      titles = t && t.enabled === true ? t : null;
       unreachable = false;
     } catch {
       // Keep the last state; the next refresh retries. Without any, say so instead of « Chargement » forever.
@@ -325,7 +408,8 @@ export function createEventShopView({ document, client, onState }) {
       filter = t.dataset.filter;
       return render();
     }
-    const id = t.dataset.buy;
+    const offer = t.dataset.buyTitle;
+    const id = t.dataset.buy ?? (offer ? `title:${offer}` : null);
     if (!id) return;
     if (confirming !== id) {
       confirming = id;
@@ -343,9 +427,16 @@ export function createEventShopView({ document, client, onState }) {
     sending = id;
     render();
     try {
-      const out = await client.eventsBuy(id);
-      take(out?.event_shop);
-      say('Envoyé ! Surveille l’écran de Raptoru… 👀');
+      if (offer) {
+        const out = await client.eventsBuyTitle(offer);
+        take(out?.event_shop);
+        if (out?.titles?.enabled) titles = out.titles;
+        say('Titre ajouté à ta collection, pour toujours ! 🎃');
+      } else {
+        const out = await client.eventsBuy(id);
+        take(out?.event_shop);
+        say('Envoyé ! Surveille l’écran de Raptoru… 👀');
+      }
     } catch (e) {
       say(reasonOf(e), true);
       void load();

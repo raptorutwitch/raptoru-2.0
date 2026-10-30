@@ -1,3 +1,4 @@
+import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
 import { eventShopRoutes } from '../http/event-shop-routes.js';
 import type { Core } from '../app.js';
 import { TwitchViewerCatalog } from '../bonk-lab/twitch-viewer.js';
@@ -92,6 +93,13 @@ export function createPublicFrontier(
     ...subWheelRoutes(core.subWheel, core.alerts),
     // Boutique d'événement (docs/HALLOWEEN.md): the viewer's state, purchase and conversion, in-process only.
     ...eventShopRoutes(core.eventShop),
+    // Halloween « Titres » (docs/COSMETIC_SHOP.md § 8): the cosmetic shop's catalogue, a viewer's side and the purchase,
+    // in-process only (the façade passes the JWT viewer; these routes are never on HTTP from here).
+    ...cosmeticsRoutes(core.cosmetics, {
+      channelId,
+      production: false,
+      site: true,
+    }),
   ]);
   const app =
     config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
