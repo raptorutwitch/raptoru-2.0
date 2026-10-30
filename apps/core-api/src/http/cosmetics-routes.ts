@@ -108,6 +108,13 @@ export function cosmeticsRoutes(
     },
     // --- Studio ---------------------------------------------------------------------------------------------------------
     {
+      // The stylesheet on Studio's own channel too (the installed Studio may only call /v1/studio/*).
+      method: 'GET',
+      pattern: admin('/style.json'),
+      auth,
+      handle: async () => ({ css: COSMETICS_CSS }),
+    },
+    {
       // An image for Studio's editor (its Core channel speaks JSON).
       method: 'GET',
       pattern: admin('/images/([0-9a-f]{64})'),
