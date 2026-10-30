@@ -95,8 +95,6 @@ export class CosmeticsRelay {
       const route = `${req.method} ${p}`;
       if (route === 'GET /api/cosmetics/items')
         return (reply(200, await core(`${this.base}/items`)), true);
-      if (route === 'GET /api/cosmetics/catalog')
-        return (reply(200, await core('/v1/cosmetics/catalog')), true);
       if (route === 'GET /api/cosmetics/purchases')
         return (reply(200, await core(`${this.base}/purchases`)), true);
       const viewer = /^\/api\/cosmetics\/viewers\/(\d{1,32})$/.exec(p)?.[1];

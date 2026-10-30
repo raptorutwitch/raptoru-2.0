@@ -20,3 +20,25 @@
   background: #0b1412;
   color: #eafff9;
 }
+/* The editor's forms: one field per cell, label above its input. */
+#tab-shop .row-in {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 14px;
+  align-items: end;
+  margin: 8px 0;
+}
+#tab-shop .row-in > label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#tab-shop .row-in > label:has(> input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+}
+#tab-shop label.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
