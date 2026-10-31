@@ -568,3 +568,29 @@ describe('SeTipsLink — token, reconnection, errors', () => {
     ).toBe('{"mode":"test"}');
   });
 });
+
+describe('SeTipsLink — the journal on disk (31/10: concurrent writes lost entries on Windows)', () => {
+  it('30 tips in a row: every line kept, in order, and found again after a Studio restart', async () => {
+    const t = await link();
+    t.se.setToken('jwt', FAKE_JWT, null);
+    await t.se.setMode('test');
+    t.last().welcome();
+    t.last().ok();
+    for (let i = 0; i < 30; i++)
+      t.last().push(tip({ _id: `burst-${i}`, username: `Fan ${i}` }));
+    // Every journal write done (the link's writes are queued: flush waits for the last one).
+    await t.se.flush();
+    const onDisk = JSON.parse(
+      await readFile(join(t.dir, 'se-journal.json'), 'utf8'),
+    ) as { tip_id: string }[];
+    expect(onDisk.map((e) => e.tip_id)).toEqual(
+      Array.from({ length: 30 }, (_, i) => `burst-${i}`),
+    );
+    expect(t.lines.filter((l) => l.includes('journal not saved'))).toEqual([]);
+    t.se.close();
+    const again = await link({ dir: t.dir });
+    expect(again.se.status().journal).toHaveLength(30);
+    expect(again.se.status().last_event).toMatchObject({ tip_id: 'burst-29' });
+    again.se.close();
+  });
+});
