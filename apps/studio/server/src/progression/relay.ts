@@ -79,6 +79,7 @@ export class ProgressionRelay {
         'POST /api/progression/rewards': '/rewards',
         'POST /api/progression/grant': '/grant',
         'POST /api/progression/revoke': '/revoke',
+        'POST /api/progression/equip': '/equip',
         'POST /api/progression/adjust': '/adjust',
         'POST /api/progression/import/attach': '/import/attach',
         'POST /api/progression/import/resolve': '/import/resolve',

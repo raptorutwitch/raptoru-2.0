@@ -75,6 +75,13 @@ describe('relay', () => {
     expect((await call('/api/progression/viewers/42')).body.path).toBe(
       '/v1/studio/progression/viewers/42',
     );
+    // Equip / unequip for a viewer (support): relayed as is to the Core, which checks ownership.
+    const equip = { viewer: '42', title_id: null, badge_ids: [] };
+    await call('/api/progression/equip', equip);
+    expect(calls.at(-1)).toEqual(['/v1/studio/progression/equip', equip]);
+    expect((await call('/api/progression/equip', equip, false)).status).toBe(
+      403,
+    );
     expect((await call('/api/progression/nope')).status).toBe(404);
   });
 

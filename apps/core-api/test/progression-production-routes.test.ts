@@ -241,6 +241,77 @@ describe('progression on the main Core HTTP', () => {
     });
   });
 
+  it('Studio equips / unequips for a viewer: installation only, owned titles only, other viewers untouched', async () => {
+    const { call, studio } = await fixture(SITE);
+    await call('/v1/studio/progression/settings', { enabled: true }, studio);
+    for (const id of ['loup', 'diab'])
+      await call(
+        '/v1/studio/progression/rewards',
+        { reward_id: id, kind: 'title', label: id, rarity: 'rare' },
+        studio,
+      );
+    await call(
+      '/v1/studio/progression/grant',
+      { reward_id: 'loup', viewers: ['1', '2'], source: 'manual' },
+      studio,
+    );
+    await call(
+      '/v1/studio/progression/grant',
+      { reward_id: 'diab', viewers: ['1'], source: 'manual' },
+      studio,
+    );
+    const equip = (body: unknown, auth?: string) =>
+      call('/v1/studio/progression/equip', body, auth);
+    const ana = { viewer: '1', title_id: 'loup', badge_ids: [] };
+    // Only the paired installation: no credential, the site's or the bot's token are refused.
+    expect((await equip(ana)).status).toBe(401);
+    expect((await equip(ana, `Bearer ${SITE}`)).status).toBe(401);
+    expect((await equip(ana, 'Bearer bot-test-secret')).status).toBe(401);
+    expect((await equip(ana, studio)).status).toBe(200);
+    expect(
+      (await equip({ viewer: '2', title_id: 'loup', badge_ids: [] }, studio))
+        .status,
+    ).toBe(200);
+    // Bob does not own « diab »: refused, his equipped title unchanged.
+    const no = await equip(
+      { viewer: '2', title_id: 'diab', badge_ids: [] },
+      studio,
+    );
+    expect([no.status, no.body.error]).toEqual([403, 'title_not_owned']);
+    // Change, then unequip Ana: Bob keeps his.
+    await equip({ viewer: '1', title_id: 'diab', badge_ids: [] }, studio);
+    expect((await call('/v1/progression/viewers/1')).body.equipped.title).toBe(
+      'diab',
+    );
+    await equip({ viewer: '1', title_id: null, badge_ids: [] }, studio);
+    expect((await call('/v1/progression/viewers/1')).body.equipped.title).toBe(
+      null,
+    );
+    expect((await call('/v1/progression/viewers/2')).body.equipped.title).toBe(
+      'loup',
+    );
+    // Revoking Bob's EQUIPPED title: unequipped, gone from his inventory only; Ana keeps hers and the catalogue its item.
+    await call(
+      '/v1/studio/progression/revoke',
+      { reward_id: 'loup', viewer: '2', reason: 'test retrait' },
+      studio,
+    );
+    const bob = (await call('/v1/progression/viewers/2')).body;
+    expect(bob.equipped.title).toBe(null);
+    expect(bob.inventory).toEqual([]);
+    const anaInv = (await call('/v1/progression/viewers/1')).body.inventory.map(
+      (i: { id: string }) => i.id,
+    );
+    expect(anaInv.sort()).toEqual(['diab', 'loup']);
+    const catalog = (await call('/v1/progression/catalog')).body;
+    expect(JSON.stringify(catalog)).toContain('"loup"');
+    // A revoked title can no longer be equipped.
+    expect(
+      (await equip({ viewer: '2', title_id: 'loup', badge_ids: [] }, studio))
+        .status,
+    ).toBe(403);
+  });
+
   it('without SITE_TOKEN the equip route does not exist', async () => {
     const { call } = await fixture(undefined);
     expect(
