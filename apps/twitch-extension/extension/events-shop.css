@@ -389,6 +389,9 @@
 }
 .evs-title-row .evs-txt strong {
   font-size: 15px;
+  /* A title's full name, on two lines if needed (never « … »). */
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .evs-title-row .evs-rarity {
   justify-self: start;
