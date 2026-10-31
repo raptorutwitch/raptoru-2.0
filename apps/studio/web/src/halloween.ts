@@ -239,13 +239,19 @@ const RULE_GROUPS: { title: string; hint: string; rules: Rule[] }[] = [
         key: 'viewer_gap_ms',
         label: 'Attente entre deux achats d’un viewer (s)',
         scale: 1000,
-        hint: '',
+        hint: 'tous les achats',
+      },
+      {
+        key: 'viewer_screamer_gap_ms',
+        label: 'Attente entre deux screamers d’un même viewer (s)',
+        scale: 1000,
+        hint: '0 = désactivé',
       },
       {
         key: 'screamer_gap_ms',
         label: 'Écart minimal entre deux screamers (s)',
         scale: 1000,
-        hint: '',
+        hint: 'tous viewers confondus',
       },
       {
         key: 'screamers_per_hour',

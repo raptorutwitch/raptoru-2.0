@@ -1072,3 +1072,66 @@ describe('« Événements » for the Extension testers only (progressive opening
     expect((await shop.viewerState(CH, BOB.id)).extension_allowed).toBe(true);
   });
 });
+
+describe('screamers of one viewer (31/10): viewer_screamer_gap_ms', () => {
+  /** Studio plays the pending purchase to its end (`ok` false: it fails before starting, refunded). */
+  const playOut = async (ok = true) => {
+    await ready();
+    const c = (await shop.claim(STUDIO, CH))!;
+    await shop.ack(c.purchase.purchase_id, {
+      studio_instance_id: STUDIO,
+      attempt_id: c.attempt_id,
+      ...(ok
+        ? { event: 'completed' }
+        : { event: 'failed', error: 'play_failed', started: false }),
+    } as never);
+  };
+  const quiet = {
+    viewer_gap_ms: 0,
+    screamer_gap_ms: 0,
+    screamers_per_hour: 100,
+  };
+
+  it('off by default: only the other limits apply', async () => {
+    await open(quiet);
+    await give(ANA, 100);
+    expect(await code(buy(ANA, 's-foxy'))).toBe('ok');
+    await playOut();
+    expect(await code(buy(ANA, 's-golden-freddy'))).toBe('ok');
+  });
+
+  it('10 min between two screamers of the same viewer, any screamer; nothing charged on refusal; others and effects unaffected', async () => {
+    await open({ ...quiet, viewer_screamer_gap_ms: 600_000 });
+    await give(ANA, 100);
+    await give(BOB, 100);
+    expect(await code(buy(ANA, 's-foxy'))).toBe('ok');
+    await playOut();
+    const before = await balance(ANA.id);
+    clock.advance(9 * 60_000);
+    await ready();
+    expect(await code(buy(ANA, 's-golden-freddy'))).toBe('viewer_cooldown');
+    expect(await balance(ANA.id)).toBe(before);
+    // The refusal says when it frees up.
+    const refused = await buy(ANA, 's-golden-freddy').catch((e) => e);
+    expect((refused as EventShopError).details).toMatchObject({
+      retry_after_ms: 60_000,
+    });
+    expect(await code(buy(BOB, 's-golden-freddy'))).toBe('ok'); // another viewer
+    await playOut();
+    expect(await code(buy(ANA, 'blink'))).toBe('ok'); // an effect is not a screamer
+    await playOut();
+    clock.advance(60_000);
+    await ready();
+    expect(await code(buy(ANA, 's-golden-freddy'))).not.toBe('viewer_cooldown');
+  });
+
+  it('a screamer that never played (failed before its start, refunded) does not count', async () => {
+    await open({ ...quiet, viewer_screamer_gap_ms: 600_000 });
+    await give(ANA, 100);
+    const before = await balance(ANA.id);
+    expect(await code(buy(ANA, 's-foxy'))).toBe('ok');
+    await playOut(false);
+    expect(await balance(ANA.id)).toBe(before);
+    expect(await code(buy(ANA, 's-golden-freddy'))).toBe('ok');
+  });
+});
