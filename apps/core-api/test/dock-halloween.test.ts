@@ -172,3 +172,144 @@ describe('Halloween in the OBS dock: revealed after the scare', () => {
     expect(await t.halloween()).toHaveLength(2);
   });
 });
+
+// 31/10 (before the 24 h live): the screamers' own chain — two viewers, one play at a time (a second purchase is
+// refused, never queued nor charged), STOP ALL and failures before / after the start, a dock that reconnects.
+describe('Halloween screamers in the dock: who scared me, only after the scare', () => {
+  const BOB = { id: '900132', display_name: 'Bob' };
+  async function screamers() {
+    const t = await lab();
+    await t.shop.heartbeat({
+      studio_instance_id: STUDIO,
+      channel_id: CH,
+      engine_ready: true,
+      media: ['foxy', 'golden-freddy'],
+    });
+    await t.shop.grant(
+      {
+        idempotency_key: randomUUID(),
+        channel_id: CH,
+        viewer: BOB.id,
+        amount: 50,
+        reason: 'grant',
+      },
+      'test',
+    );
+    const buyAs = (
+      viewer: { id: string; display_name: string },
+      item_id: string,
+    ) =>
+      t.shop.purchase({
+        idempotency_key: randomUUID(),
+        channel_id: CH,
+        viewer,
+        item_id,
+      });
+    const balance = async (id: string) =>
+      (await t.shop.viewerState(CH, id)).balance;
+    const end = (
+      c: { purchase: { purchase_id: string }; attempt_id: string },
+      event: 'completed' | 'failed',
+      started = true,
+    ) =>
+      t.shop.ack(c.purchase.purchase_id, {
+        studio_instance_id: STUDIO,
+        attempt_id: c.attempt_id,
+        event,
+        ...(event === 'failed' ? { error: 'play_failed', started } : {}),
+      } as never);
+    const lines = async () =>
+      (await t.halloween()).map((a) => [
+        (a.data as { actor: { name: string } }).actor.name,
+        (a.data as { effect: { label: string } }).effect.label,
+      ]);
+    /** Studio's heartbeat (every few seconds in real life): the engine stays « ready ». */
+    const alive = () =>
+      t.shop.heartbeat({
+        studio_instance_id: STUDIO,
+        channel_id: CH,
+        engine_ready: true,
+        media: ['foxy', 'golden-freddy'],
+      });
+    return { ...t, buyAs, balance, end, lines, alive };
+  }
+
+  it('two viewers: the second is refused while the first is pending (nothing charged); each name appears 5 s after its own start, once', async () => {
+    const t = await screamers();
+    await t.buyAs(ANA, 's-foxy');
+    const bobBefore = await t.balance(BOB.id);
+    await expect(t.buyAs(BOB, 's-golden-freddy')).rejects.toMatchObject({
+      code: 'busy',
+    });
+    expect(await t.balance(BOB.id)).toBe(bobBefore);
+    const first = await t.play();
+    t.core.clock.advance(5_000);
+    await t.dock.scan(CH);
+    expect(await t.lines()).toEqual([['Ana', 'Foxy']]);
+    await t.end(first, 'completed');
+    await t.buyAs(BOB, 's-golden-freddy');
+    await t.dock.scan(CH);
+    expect(await t.lines()).toEqual([['Ana', 'Foxy']]); // Bob's not played yet: not even hinted
+    await t.play();
+    t.core.clock.advance(4_000);
+    await t.dock.scan(CH);
+    expect(await t.lines()).toEqual([['Ana', 'Foxy']]);
+    t.core.clock.advance(1_000);
+    await t.dock.scan(CH);
+    expect(await t.lines()).toEqual(
+      expect.arrayContaining([
+        ['Ana', 'Foxy'],
+        ['Bob', 'Golden Freddy'],
+      ]),
+    );
+    expect(await t.lines()).toHaveLength(2);
+    // A dock that reconnects (a new reader) reads the same two lines, never a duplicate.
+    const again = new DockActivityService(t.core.db, t.core.clock, {
+      autoScan: false,
+    });
+    await again.scan(CH);
+    const reread = (await again.recent(CH)).activities.filter(
+      (a) => a.type === 'halloween',
+    );
+    expect(reread).toHaveLength(2);
+  });
+
+  it('STOP ALL before the start: refunded, never in the dock; after the start: shown (it was seen), not refunded', async () => {
+    const t = await screamers();
+    const before = await t.balance(ANA.id);
+    await t.buyAs(ANA, 's-foxy');
+    await t.shop.stopAll(CH);
+    t.core.clock.advance(10_000);
+    await t.dock.scan(CH);
+    expect(await t.lines()).toEqual([]);
+    expect(await t.balance(ANA.id)).toBe(before);
+    await t.alive();
+    await t.buyAs(ANA, 's-golden-freddy');
+    const paid = await t.balance(ANA.id);
+    await t.play();
+    await t.shop.stopAll(CH);
+    t.core.clock.advance(5_000);
+    await t.dock.scan(CH);
+    expect(await t.lines()).toEqual([['Ana', 'Golden Freddy']]);
+    expect(await t.balance(ANA.id)).toBe(paid);
+  });
+
+  it('a play that fails before its start is refunded and never shown; one that fails after its start is shown', async () => {
+    const t = await screamers();
+    const before = await t.balance(ANA.id);
+    await t.buyAs(ANA, 's-foxy');
+    const c = (await t.shop.claim(STUDIO, CH))!;
+    await t.end(c, 'failed', false);
+    t.core.clock.advance(10_000);
+    await t.dock.scan(CH);
+    expect(await t.lines()).toEqual([]);
+    expect(await t.balance(ANA.id)).toBe(before);
+    await t.alive();
+    await t.buyAs(BOB, 's-golden-freddy');
+    const started = await t.play();
+    await t.end(started, 'failed', true);
+    t.core.clock.advance(5_000);
+    await t.dock.scan(CH);
+    expect(await t.lines()).toEqual([['Bob', 'Golden Freddy']]);
+  });
+});

@@ -551,6 +551,15 @@ export class EventShopService {
     if (item.kind === 'screamer') {
       if (s.rules.screamers_per_hour === 0)
         return { code: 'screamers_closed', retry_after_ms: 0 };
+      // This viewer's own screamers (31/10): the same refusal as the viewer's gap (every client already shows it).
+      const own = s.rules.viewer_screamer_gap_ms ?? 0;
+      if (viewerId && own > 0) {
+        const at = await last(`viewer_id = $2 and item_kind = 'screamer'`, [
+          viewerId,
+        ]);
+        if (at !== null && t - at < own)
+          return { code: 'viewer_cooldown', retry_after_ms: at + own - t };
+      }
       if (s.rules.screamer_gap_ms > 0) {
         const at = await last(`item_kind = 'screamer'`, []);
         if (at !== null && t - at < s.rules.screamer_gap_ms)

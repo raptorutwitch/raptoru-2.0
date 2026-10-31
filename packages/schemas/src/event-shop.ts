@@ -77,6 +77,8 @@ export const EventShopRules = z.strictObject({
   viewer_gap_ms: z.number().int().min(0).max(3_600_000),
   /** Two screamers (whoever buys them) are at least this far apart. */
   screamer_gap_ms: z.number().int().min(0).max(3_600_000),
+  /** 31/10: between two screamers bought by the SAME viewer (any screamer). 0 = off (only viewer_gap_ms applies). */
+  viewer_screamer_gap_ms: z.number().int().min(0).max(86_400_000),
   /** At most this many screamers within any rolling hour (0 = screamers closed). */
   screamers_per_hour: z.number().int().min(0).max(120),
   /**
@@ -122,6 +124,7 @@ export const DEFAULT_EVENT_RULES: EventShopRules = Object.freeze({
   gift_recipient: 3,
   viewer_gap_ms: 120_000,
   screamer_gap_ms: 180_000,
+  viewer_screamer_gap_ms: 0,
   screamers_per_hour: 6,
   dock_reveal_ms: 5_000,
   extension_audience: 'all',
