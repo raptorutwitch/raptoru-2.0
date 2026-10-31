@@ -4,6 +4,7 @@
 // (refund with a reason) and give an item, Bonbons or Jetons by hand. The Core checks everything; Studio never decides.
 
 import './cosmetics.css';
+import { itemPayload } from './cosmetics-item.js';
 
 type Json = Record<string, unknown>;
 type Style = {
@@ -518,8 +519,7 @@ export function mountCosmetics(root: HTMLElement) {
       render();
     } else if (a === 'save') {
       readItemForm();
-      const item: Record<string, unknown> = { ...edit };
-      delete item.isNew;
+      const item = itemPayload(edit);
       void act(async () => {
         await call('/api/cosmetics/items', item);
         edit.isNew = false;
