@@ -117,6 +117,15 @@ const RARITY_FR: Record<string, string> = {
   legendary: 'Légendaire',
   event: 'Événement',
 };
+const SOURCE_FR: Record<string, string> = {
+  purchase: 'acheté',
+  manual: 'donné à la main',
+  event: 'événement',
+  level: 'niveau',
+};
+/** A reward's label in the viewer's inventory (its id when unknown). */
+const labelOf = (d: Detail, id: string) =>
+  d.inventory.find((i) => i.id === id)?.label ?? id;
 const RULES: [string, string, string][] = [
   ['xp_per_minute', 'XP par minute de présence validée', '0.1'],
   ['message_xp', 'XP par message récompensé', '1'],
@@ -243,8 +252,9 @@ export function mountProgression(root: HTMLElement) {
             <p>Niveau <b>${d.level}</b> · ${fmt(d.xp)} XP (niveau suivant à ${fmt(d.nextLevelXp)}) · rang ${d.rank ?? '—'}</p>
             <p>Présence détectée : <b>${fmt(d.totals.watchMinutes)} min</b> (dont ${fmt(d.watchMinutes)} relevées par Raptoru — liste des chatters, pas une preuve de visionnage) · messages : <b>${fmt(d.totals.messages)}</b> (dont ${fmt(d.messages)} comptés par Raptoru)</p>
             ${d.imported ? `<p class="muted">Repris de WizeBot : niveau ${d.imported.level}, ${fmt(d.imported.watchMinutes)} min, ${fmt(d.imported.messages)} messages.</p>` : ''}
-            <p>Équipé : ${d.equipped.title ? `titre <code>${esc(d.equipped.title)}</code>` : 'aucun titre'}${d.equipped.badges.length ? ` · badges ${d.equipped.badges.map((b) => `<code>${esc(b)}</code>`).join(' ')}` : ''}</p>
-            <ul class="list">${d.inventory.map((i) => `<li>${i.kind === 'title' ? 'Titre' : 'Badge'} <b>${esc(i.label)}</b> <span class="muted">${esc(RARITY_FR[i.rarity] ?? i.rarity)} · ${esc(i.source)}${i.reference ? ` · ${esc(i.reference)}` : ''}</span> <button type="button" class="link" data-revoke="${esc(i.id)}">Retirer</button></li>`).join('') || '<li class="muted">Inventaire vide.</li>'}</ul>
+            <p>Titre équipé : ${d.equipped.title ? `<b>${esc(labelOf(d, d.equipped.title))}</b> <button type="button" class="link" data-equip="">Déséquiper</button>` : 'aucun'}${d.equipped.badges.length ? ` · badges ${d.equipped.badges.map((b) => `<b>${esc(labelOf(d, b))}</b>`).join(' ')}` : ''}</p>
+            <ul class="list">${d.inventory.map((i) => `<li>${i.kind === 'title' ? 'Titre' : 'Badge'} <b>${esc(i.label)}</b> <span class="muted">${esc(RARITY_FR[i.rarity] ?? i.rarity)} · ${esc(SOURCE_FR[i.source] ?? i.source)}${i.reference ? ` · ${esc(i.reference)}` : ''}</span>${i.kind === 'title' ? (d.equipped.title === i.id ? ' <span class="muted">· équipé</span>' : ` <button type="button" class="link" data-equip="${esc(i.id)}">Équiper</button>`) : ''} <button type="button" class="link" data-revoke="${esc(i.id)}">Retirer…</button></li>`).join('') || '<li class="muted">Inventaire vide.</li>'}</ul>
+            <p class="muted">Attribuer n’est pas un achat et retirer n’est pas un remboursement : aucun solde (Jetons, Bonbons) ne bouge. Retirer ne concerne que ce viewer : le catalogue et les autres propriétaires ne changent pas ; l’historique garde qui, quand et pourquoi.</p>
             <div class="row-in"><select data-role="grant-reward">${rewardOptions()}</select>
               <select data-role="grant-source"><option value="manual">Manuel</option><option value="event">Événement</option></select>
               <input placeholder="référence (ex. halloween-2026)" data-role="grant-ref" maxlength="80">
@@ -290,6 +300,8 @@ export function mountProgression(root: HTMLElement) {
     const a = t.closest<HTMLElement>('[data-act]')?.dataset.act;
     const pick = t.closest<HTMLElement>('[data-pick]')?.dataset.pick;
     const revoke = t.closest<HTMLElement>('[data-revoke]')?.dataset.revoke;
+    /** '' = unequip the title. */
+    const equip = t.closest<HTMLElement>('[data-equip]')?.dataset.equip;
     const attach = t.closest<HTMLElement>('[data-attach]')?.dataset.attach;
     const val = (sel: string) =>
       root.querySelector<HTMLInputElement>(sel)?.value ?? '';
@@ -368,7 +380,26 @@ export function mountProgression(root: HTMLElement) {
           }),
         'XP ajustée.',
       );
+    } else if (equip !== undefined && selected) {
+      const d = selected.detail;
+      void act(
+        () =>
+          call('/api/progression/equip', {
+            viewer: selected!.row.twitch_user_id,
+            title_id: equip || null,
+            badge_ids: d.equipped.badges,
+          }),
+        equip ? `« ${labelOf(d, equip)} » équipé.` : 'Titre déséquipé.',
+      );
     } else if (revoke && selected) {
+      const d = selected.detail;
+      const who = `${selected.row.display_name ?? selected.row.login} (${selected.row.login}, id ${selected.row.twitch_user_id})`;
+      if (
+        !confirm(
+          `Retirer « ${labelOf(d, revoke)} » à ${who} ?\n\nSeulement pour ce viewer : le catalogue et les autres propriétaires ne changent pas. Pas de remboursement.${d.equipped.title === revoke || d.equipped.badges.includes(revoke) ? '\nIl est actuellement équipé : il sera déséquipé.' : ''}`,
+        )
+      )
+        return;
       const reason = prompt('Raison du retrait (gardée dans l’historique) :');
       if (reason?.trim())
         void act(

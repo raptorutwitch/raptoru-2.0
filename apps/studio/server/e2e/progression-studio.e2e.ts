@@ -34,9 +34,50 @@ test('Progression: on, an event badge created, a viewer found, granted, then rev
   await expect(tab.locator('.detail')).toContainText('Citrouille 2026');
   await expect(tab.locator('.detail')).toContainText('halloween-2026');
 
-  page.once('dialog', (d) => void d.accept('test e2e'));
-  await tab.getByRole('button', { name: 'Retirer' }).click();
+  // A title: granted, equipped, unequipped by Studio (support), shown by its name.
+  await form.locator('[data-f="reward_id"]').fill('roi-2026');
+  await form.locator('[data-f="kind"]').selectOption('title');
+  await form.locator('[data-f="label"]').fill('Roi 2026');
+  await form.getByRole('button', { name: 'Créer / mettre à jour' }).click();
+  await expect(tab.locator('table')).toContainText('Roi 2026');
+  await tab.locator('[data-role="grant-reward"]').selectOption('roi-2026');
+  await tab.getByRole('button', { name: 'Attribuer' }).click();
+  await expect(tab.locator('.detail')).toContainText('Roi 2026');
+  await tab.getByRole('button', { name: 'Équiper', exact: true }).click();
+  await expect(tab).toContainText('« Roi 2026 » équipé.');
+  await expect(tab.locator('.detail')).toContainText('Titre équipé : Roi 2026');
+  await tab.getByRole('button', { name: 'Déséquiper' }).click();
+  await expect(tab).toContainText('Titre déséquipé.');
+  await expect(tab.locator('.detail')).toContainText('Titre équipé : aucun');
+  await tab.getByRole('button', { name: 'Équiper', exact: true }).click();
+  await expect(tab.locator('.detail')).toContainText('Titre équipé : Roi 2026');
+
+  // Revoke: cancelled at the confirmation → nothing changes; confirmed (it names the viewer and the title) → gone.
+  const dialogs: string[] = [];
+  page.once('dialog', (d) => {
+    dialogs.push(d.message());
+    void d.dismiss();
+  });
+  await tab
+    .locator('li', { hasText: 'Roi 2026' })
+    .getByRole('button', { name: 'Retirer…' })
+    .click();
+  await expect(tab.locator('.detail')).toContainText('Titre équipé : Roi 2026');
+  expect(dialogs[0]).toContain('« Roi 2026 »');
+  expect(dialogs[0]).toContain('Kirito_TV');
+  expect(dialogs[0]).toContain('Pas de remboursement');
+  expect(dialogs[0]).toContain('déséquipé');
+  page.on('dialog', (d) => void d.accept('test e2e'));
+  await tab
+    .locator('li', { hasText: 'Roi 2026' })
+    .getByRole('button', { name: 'Retirer…' })
+    .click();
   await expect(tab).toContainText('Retiré.');
+  await expect(tab.locator('.detail')).toContainText('Titre équipé : aucun');
+  await tab
+    .locator('li', { hasText: 'Citrouille 2026' })
+    .getByRole('button', { name: 'Retirer…' })
+    .click();
   await expect(tab.locator('.detail')).toContainText('Inventaire vide.');
 
   // Manual XP: applied, journaled with its reason; below zero refused.

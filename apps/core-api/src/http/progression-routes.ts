@@ -175,6 +175,14 @@ export function progressionRoutes(
         ),
     },
     {
+      // Studio (support): equip / unequip for a viewer, with the site's rules — only what they own (not revoked, active).
+      method: 'POST',
+      pattern: admin('/equip'),
+      auth,
+      handle: ({ body }) =>
+        mapped(() => svc.equip(ch, parse(ProgressionEquipRequest, body))),
+    },
+    {
       method: 'POST',
       pattern: admin('/import'),
       auth,
