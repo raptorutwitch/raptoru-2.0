@@ -222,6 +222,8 @@ export class SeTipsLink {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private retries = new Set<ReturnType<typeof setTimeout>>();
   private closed = false;
+  /** The files' writes, one after the other (31/10: concurrent writes shared one .tmp and lost journal lines). */
+  private saving: Promise<void> = Promise.resolve();
 
   private constructor(
     private readonly d: SeTipsDeps,
@@ -535,10 +537,21 @@ export class SeTipsLink {
     );
   }
 
-  private async write(file: string, value: unknown) {
+  /** Queued after the previous write (each one renames its own complete .tmp); its failure never blocks the next. */
+  private write(file: string, value: unknown) {
     const path = join(this.d.dir, file);
-    await writeFile(`${path}.tmp`, JSON.stringify(value), { mode: 0o600 });
-    await rename(`${path}.tmp`, path);
+    const json = JSON.stringify(value);
+    const job = this.saving.then(async () => {
+      await writeFile(`${path}.tmp`, json, { mode: 0o600 });
+      await rename(`${path}.tmp`, path);
+    });
+    this.saving = job.catch(() => undefined);
+    return job;
+  }
+
+  /** Resolves once every write asked so far is on disk (tests; a clean stop). */
+  flush() {
+    return this.saving;
   }
 
   /** Studio tab API under /api/alerts/se (the alerts runtime checked the Studio header and origin). */
