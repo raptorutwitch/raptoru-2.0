@@ -4,7 +4,7 @@
 // (refund with a reason) and give an item, Bonbons or Jetons by hand. The Core checks everything; Studio never decides.
 
 import './cosmetics.css';
-import { itemPayload } from './cosmetics-item.js';
+import { frameProblemsOf, itemPayload } from './cosmetics-item.js';
 
 type Json = Record<string, unknown>;
 type Style = {
@@ -24,9 +24,41 @@ type Offer = {
   event_key: string | null;
   sort: number;
 };
+type Kind = 'title' | 'badge' | 'frame' | 'banner';
+const KIND_FR: Record<Kind, string> = {
+  title: 'Titre',
+  badge: 'Badge',
+  frame: 'Cadre d’avatar',
+  banner: 'Bannière',
+};
+/** Each image kind's rule, as the Core checks it on the bytes (apps/core-api/src/cosmetics/images.ts). */
+const IMAGE_RULE_FR: Record<Exclude<Kind, 'title'>, string> = {
+  badge: 'PNG ou WebP fixe, 128 × 128 et 40 Ko au plus',
+  frame:
+    'PNG ou WebP fixe, carré de 128 à 512 px (512 conseillé), 96 Ko au plus ; centre transparent (l’avatar occupe le cercle central de 62,5 %), 8 px vides sur les bords',
+  banner:
+    'PNG ou WebP fixe, format 4:1 de 1024 × 256 à 2048 × 512, 256 Ko au plus ; rien d’important dans les 40 % de gauche (voilés sous le pseudo)',
+};
+/** raptoru.fr's avatar sizes (rows compact / normal, hover card, podium, profile): the frame is drawn at each. */
+const FRAME_SIZES = [30, 38, 64, 84, 112];
+
+async function frameProblems(file: Blob): Promise<string[]> {
+  const bmp = await createImageBitmap(file);
+  const c = document.createElement('canvas');
+  c.width = bmp.width;
+  c.height = bmp.height;
+  const g = c.getContext('2d', { willReadFrequently: true })!;
+  g.drawImage(bmp, 0, 0);
+  return frameProblemsOf(
+    g.getImageData(0, 0, bmp.width, bmp.height).data,
+    bmp.width,
+    bmp.height,
+  );
+}
+
 type Item = {
   reward_id: string;
-  kind: 'title' | 'badge';
+  kind: Kind;
   label: string;
   description: string;
   rarity: string;
@@ -217,26 +249,36 @@ export function mountCosmetics(root: HTMLElement) {
     render();
   };
 
-  const lookHtml = (
-    kind: 'title' | 'badge',
-    label: string,
-    image: string | null,
-  ) =>
-    kind === 'title'
-      ? `<span data-look>${esc(label || 'Titre')}</span>`
-      : `<span data-look>${image ? `<img src="/cosmetics/images/${esc(image)}" alt="">` : esc((label || 'B').slice(0, 2))}</span>`;
+  /** A frame around a neutral avatar, with raptoru.fr's geometry (the avatar is 62.5 % of the slot). */
+  const framed = (image: string | null, av: number) => {
+    const slot = Math.round(av / 0.625);
+    return `<span class="rc-av" style="--av:${av}px;--slot:${slot}px"><span class="rc-av-img"></span>${image ? `<img class="rc-av-frame" src="/cosmetics/images/${esc(image)}" alt="">` : ''}</span>`;
+  };
+  const bannerHtml = (image: string | null, name: string, wide = true) =>
+    `<span class="rc-banner${wide ? '' : ' rc-banner-s'}"${image ? ` style="--banner:url('/cosmetics/images/${esc(image)}')"` : ''}><span class="rc-banner-veil"></span>${framed(null, wide ? 64 : 30)}<b>${esc(name)}</b></span>`;
+  const lookHtml = (kind: Kind, label: string, image: string | null) =>
+    kind === 'frame'
+      ? framed(image, 30)
+      : kind === 'banner'
+        ? bannerHtml(image, label || 'Bannière', false)
+        : kind === 'title'
+          ? `<span data-look>${esc(label || 'Titre')}</span>`
+          : `<span data-look>${image ? `<img src="/cosmetics/images/${esc(image)}" alt="">` : esc((label || 'B').slice(0, 2))}</span>`;
 
   /** After each render: every [data-look] gets its item's look (classes + variables, never HTML). */
   const paintLooks = () => {
     root.querySelectorAll<HTMLElement>('[data-row]').forEach((row) => {
       const it = items.find((i) => i.reward_id === row.dataset.row);
       const el = row.querySelector<HTMLElement>('[data-look]');
-      if (it && el) applyLook(el, it.kind, it.style);
+      if (it && el && (it.kind === 'title' || it.kind === 'badge'))
+        applyLook(el, it.kind, it.style);
     });
     const prev = root.querySelectorAll<HTMLElement>(
       '[data-preview] [data-look]',
     );
-    prev.forEach((el) => applyLook(el, edit.kind, edit.style));
+    const k = edit.kind;
+    if (k === 'title' || k === 'badge')
+      prev.forEach((el) => applyLook(el, k, edit.style));
   };
 
   const offerRow = (o: Offer) =>
@@ -253,7 +295,7 @@ export function mountCosmetics(root: HTMLElement) {
     );
     const st = edit.style;
     root.innerHTML = `<div class="hw">
-      <header class="hw-head"><h2>🛍️ Boutique — titres et badges</h2><span class="hw-flash">${esc(flash)}</span></header>
+      <header class="hw-head"><h2>🛍️ Boutique — titres, badges, cadres et bannières</h2><span class="hw-flash">${esc(flash)}</span></header>
       <div class="hw-grid">
         <section class="card wide"><h3>Catalogue</h3>
           <table class="tbl"><thead><tr><th>Aperçu</th><th>Id</th><th>Type</th><th>État</th><th>Offres</th><th>Possédé par</th><th></th></tr></thead><tbody>
@@ -261,18 +303,25 @@ export function mountCosmetics(root: HTMLElement) {
             items
               .map(
                 (i) =>
-                  `<tr data-row="${esc(i.reward_id)}"><td class="rc-preview-cell">${lookHtml(i.kind, i.label, i.image_id)}</td><td><code>${esc(i.reward_id)}</code></td><td>${i.kind === 'title' ? 'Titre' : 'Badge'}</td><td>${esc(STATUS_FR[i.status])}</td><td>${i.offers.map((o) => `${fmt(o.price)} ${esc(CURRENCY_FR[o.currency])}${o.enabled ? '' : ' (arrêtée)'}`).join(' · ') || '<span class="muted">non vendu</span>'}</td><td>${fmt(i.owners)}</td><td><button type="button" class="link" data-edit="${esc(i.reward_id)}">Modifier</button> <button type="button" class="link" data-dup="${esc(i.reward_id)}">Dupliquer</button></td></tr>`,
+                  `<tr data-row="${esc(i.reward_id)}"><td class="rc-preview-cell">${lookHtml(i.kind, i.label, i.image_id)}</td><td><code>${esc(i.reward_id)}</code></td><td>${esc(KIND_FR[i.kind] ?? i.kind)}</td><td>${esc(STATUS_FR[i.status])}</td><td>${i.offers.map((o) => `${fmt(o.price)} ${esc(CURRENCY_FR[o.currency])}${o.enabled ? '' : ' (arrêtée)'}`).join(' · ') || '<span class="muted">non vendu</span>'}</td><td>${fmt(i.owners)}</td><td><button type="button" class="link" data-edit="${esc(i.reward_id)}">Modifier</button> <button type="button" class="link" data-dup="${esc(i.reward_id)}">Dupliquer</button></td></tr>`,
               )
               .join('') ||
-            '<tr><td colspan="7" class="muted">Aucun titre ni badge pour l’instant. Crée le premier ci-dessous.</td></tr>'
+            '<tr><td colspan="7" class="muted">Aucun objet pour l’instant. Crée le premier ci-dessous.</td></tr>'
           }
           </tbody></table>
-          <button type="button" data-act="new">Nouveau titre / badge</button>
+          <button type="button" data-act="new">Nouvel objet</button>
         </section>
         <section class="card wide"><h3>${edit.isNew ? 'Nouveau' : `Modifier « ${esc(edit.label)} »`}</h3>
           <div class="row-in" data-role="item-form">
             <label>Identifiant <input data-f="reward_id" maxlength="48" value="${esc(edit.reward_id)}" ${edit.isNew ? '' : 'disabled'} placeholder="ex. roi-citrouille"></label>
-            <label>Type <select data-f="kind" ${edit.isNew ? '' : 'disabled'}><option value="title" ${edit.kind === 'title' ? 'selected' : ''}>Titre</option><option value="badge" ${edit.kind === 'badge' ? 'selected' : ''}>Badge</option></select></label>
+            <label>Type <select data-f="kind" ${edit.isNew ? '' : 'disabled'}>${Object.entries(
+              KIND_FR,
+            )
+              .map(
+                ([k, v]) =>
+                  `<option value="${k}" ${edit.kind === k ? 'selected' : ''}>${v}</option>`,
+              )
+              .join('')}</select></label>
             <label>Nom affiché <input data-f="label" maxlength="60" value="${esc(edit.label)}"></label>
             <label>Catégorie <input data-f="category" maxlength="32" value="${esc(edit.category)}"></label>
             <label>Rareté <select data-f="rarity">${Object.entries(RARITY_FR)
@@ -292,8 +341,8 @@ export function mountCosmetics(root: HTMLElement) {
             <label>Événement <input data-f="event_key" maxlength="40" placeholder="ex. halloween-2026" value="${esc(edit.event_key ?? '')}"></label>
           </div>
           <label class="row">Description <input data-f="description" maxlength="200" value="${esc(edit.description)}"></label>
-          <h4>Apparence</h4>
-          <div class="row-in" data-role="look-form">
+          <h4 ${edit.kind === 'frame' || edit.kind === 'banner' ? 'hidden' : ''}>Apparence</h4>
+          <div class="row-in" data-role="look-form" ${edit.kind === 'frame' || edit.kind === 'banner' ? 'hidden' : ''}>
             <label>Couleur <input type="color" data-l="color" value="${esc(st.color ?? '#ffffff')}"></label>
             <label><input type="checkbox" data-l="use-color" ${st.color ? 'checked' : ''}> utiliser la couleur</label>
             <label><input type="checkbox" data-l="use-gradient" ${st.gradient ? 'checked' : ''}> dégradé</label>
@@ -309,13 +358,19 @@ export function mountCosmetics(root: HTMLElement) {
             <label>Graisse <select data-l="weight"><option value="bold" ${st.weight !== 'normal' ? 'selected' : ''}>Gras</option><option value="normal" ${st.weight === 'normal' ? 'selected' : ''}>Normal</option></select></label>
           </div>
           ${
-            edit.kind === 'badge'
-              ? `<div class="row-in"><label>Image du badge (PNG ou WebP fixe, 40 Ko et 128 × 128 au plus) <input type="file" accept="image/png,image/webp" data-role="image"></label>${edit.image_id ? `<button type="button" class="link" data-act="no-image">Retirer l’image</button>` : ''}</div>`
+            edit.kind !== 'title'
+              ? `<div class="row-in"><label>Image (${IMAGE_RULE_FR[edit.kind]}) <input type="file" accept="image/png,image/webp" data-role="image"></label>${edit.image_id ? `<button type="button" class="link" data-act="no-image">Retirer l’image</button>` : ''}</div>${edit.kind === 'frame' || edit.kind === 'banner' ? '<p class="muted">Un cadre ou une bannière ne sort du brouillon qu’avec son image.</p>' : ''}`
               : ''
           }
           <div class="rc-studio-preview" data-preview>
             <p class="muted">Aperçu (rendu de raptoru.fr) :</p>
-            <p class="rc-preview-line"><b>Pseudo</b> ${lookHtml(edit.kind, edit.label, edit.image_id)}</p>
+            ${
+              edit.kind === 'frame'
+                ? `<p class="rc-preview-line">${FRAME_SIZES.map((s) => framed(edit.image_id, s)).join('')}</p><p class="muted">Lignes compacte et normale, carte de survol, podium, profil.</p>`
+                : edit.kind === 'banner'
+                  ? `<p class="rc-preview-line">${bannerHtml(edit.image_id, 'Pseudo')}</p><p class="rc-preview-line">${bannerHtml(edit.image_id, 'Pseudo', false)}</p><p class="muted">En-tête du profil et carte de survol (voile à gauche), puis une ligne étroite : seule la droite se voit.</p>`
+                  : `<p class="rc-preview-line"><b>Pseudo</b> ${lookHtml(edit.kind, edit.label, edit.image_id)}</p>`
+            }
             ${edit.kind === 'badge' ? `<p class="rc-preview-line rc-preview-big">${lookHtml('badge', edit.label, edit.image_id)}</p>` : ''}
           </div>
           <button type="button" class="primary" data-act="save">${edit.isNew ? 'Créer' : 'Enregistrer'}</button>
@@ -388,7 +443,7 @@ export function mountCosmetics(root: HTMLElement) {
     edit = {
       ...edit,
       reward_id: edit.isNew ? f('reward_id').value.trim() : edit.reward_id,
-      kind: (edit.isNew ? f('kind').value : edit.kind) as 'title' | 'badge',
+      kind: (edit.isNew ? f('kind').value : edit.kind) as Kind,
       label: f('label').value.trim(),
       description: f('description').value.trim(),
       category: f('category').value.trim() || 'general',
@@ -424,8 +479,9 @@ export function mountCosmetics(root: HTMLElement) {
     root
       .querySelectorAll<HTMLElement>('[data-preview] [data-look]')
       .forEach((el) => {
-        if (edit.kind === 'title') el.textContent = edit.label || 'Titre';
-        applyLook(el, edit.kind, edit.style);
+        const k = edit.kind;
+        if (k === 'title') el.textContent = edit.label || 'Titre';
+        if (k === 'title' || k === 'badge') applyLook(el, k, edit.style);
       });
   });
 
@@ -436,12 +492,28 @@ export function mountCosmetics(root: HTMLElement) {
       render();
     }
     if (t.dataset.role === 'image' && t.files?.[0]) {
-      const file = t.files[0];
       readItemForm();
+      void upload(t.files[0], edit.kind === 'title' ? 'badge' : edit.kind);
+    }
+  });
+
+  /** The atelier: a frame is checked here first (transparent centre, empty border); the Core checks every file again. */
+  async function upload(file: File, purpose: Exclude<Kind, 'title'>) {
+    if (purpose === 'frame') {
+      const problems = await frameProblems(file).catch(() => [
+        'image illisible',
+      ]);
+      if (problems.length) {
+        flash = `Cadre refusé : ${problems.join(' ; ')}.`;
+        render();
+        return;
+      }
+    }
+    {
       const reader = new FileReader();
       reader.onload = () => {
         const b64 = String(reader.result).split(',')[1] ?? '';
-        void call('/api/cosmetics/images', { data_base64: b64 }).then(
+        void call('/api/cosmetics/images', { data_base64: b64, purpose }).then(
           (r) => {
             edit.image_id = String(r.image_id);
             flash = `Image acceptée (${r.width} × ${r.height}, ${fmt(Number(r.size))} o).`;
@@ -455,7 +527,7 @@ export function mountCosmetics(root: HTMLElement) {
       };
       reader.readAsDataURL(file);
     }
-  });
+  }
 
   root.addEventListener('click', (ev) => {
     const t = ev.target as HTMLElement;

@@ -6,7 +6,8 @@ import type { LabCoreCall } from '../lab-moderation/proxy.js';
 // and right. For the preview, Studio serves the Core's OWN stylesheet and the badge images locally
 // (/cosmetics/style.css, /cosmetics/images/<id>): the preview is drawn exactly as raptoru.fr draws it.
 
-const MAX_BODY = 64 * 1024;
+// A banner image is up to 256 Ko (about 342 Ko in base64); the Core checks each route's own limit again.
+const MAX_BODY = 400 * 1024;
 
 export class CosmeticsRelay {
   private css: { text: string; at: number } | null = null;
