@@ -88,6 +88,8 @@ import { studioCockpitRoutes } from './studio-cockpit-routes.js';
 import { publicStatsRoutes } from './public-stats-routes.js';
 import { progressionRoutes } from './progression-routes.js';
 import { cosmeticsRoutes } from './cosmetics-routes.js';
+import { moduleStatsRoutes } from './module-stats-routes.js';
+import { ModuleStatsService } from '../module-stats/service.js';
 import type { CosmeticShopService } from '../cosmetics/service.js';
 import type { ProgressionService } from '../progression/service.js';
 import { wordGameCockpitEvents } from './word-game-routes.js';
@@ -324,6 +326,11 @@ function routes({
           channelId: cockpit.channelId,
           production: true,
           site: !!siteToken,
+        })
+      : []),
+    ...(siteToken && db && cockpit?.channelId
+      ? moduleStatsRoutes(new ModuleStatsService(db), {
+          channelId: cockpit.channelId,
         })
       : []),
     ...(studioInstallations && dock && cockpit?.channelId
