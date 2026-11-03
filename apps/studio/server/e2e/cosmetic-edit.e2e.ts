@@ -29,7 +29,7 @@ test('Boutique: an existing title is edited (name, look, rarity, Publié → Mas
   await page.goto('/?tab=shop');
   const tab = page.locator('#tab-shop');
   const form = tab.locator('[data-role="item-form"]');
-  await tab.getByRole('button', { name: 'Nouveau titre / badge' }).click();
+  await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-gentil-fantome');
   await form.locator('[data-f="label"]').fill('Gentil fantôme');
   await form.locator('[data-f="status"]').selectOption('published');

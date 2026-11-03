@@ -28,7 +28,7 @@ test('Titres: created in Studio, sold in Bonbons, bought once in the extension, 
   await page.goto('/?tab=shop');
   const tab = page.locator('#tab-shop');
   const form = tab.locator('[data-role="item-form"]');
-  await tab.getByRole('button', { name: 'Nouveau titre / badge' }).click();
+  await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-faucheuse');
   await form.locator('[data-f="label"]').fill('Faucheuse');
   await form.locator('[data-f="status"]').selectOption('published');
