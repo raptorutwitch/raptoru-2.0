@@ -19,6 +19,8 @@ export interface ChallengeMetric {
   unit: string;
   source: string;
   granularity: 'exact' | 'period';
+  /** The source tables (a Core without them cannot count this metric: the Lab has no canonical Wallet, no Daily). */
+  tables: string[];
   /** What the history really holds (shown in Studio next to the metric). */
   history: string;
   exact?: string;
@@ -36,6 +38,7 @@ const paid = (module: string): ChallengeMetric => ({
   unit: 'utilisations',
   source: `Wallet canonique : débits interaction:<id>:debit (source ${module}), remboursés exclus`,
   granularity: 'exact',
+  tables: ['wallet_transactions', 'wallet_operations'],
   history:
     'Depuis le Wallet canonique (20/10/2026). Usages gratuits et usages du Lab non comptés.',
   exact: `select t.twitch_user_id as viewer_id, count(*) as n
@@ -56,6 +59,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     unit: 'mots',
     source: 'Jeu des mots : word_game_finds',
     granularity: 'exact',
+    tables: ['word_game_finds'],
     history:
       'Mots trouvés depuis le Core (20/10/2026). L’archive de l’ancien site n’est pas datée par mot : non comptée.',
     exact: `select viewer_id, count(*) as n from word_game_finds where channel_id = $1 and ${W('created_at')} group by 1`,
@@ -68,6 +72,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     unit: 'mots',
     source: 'Jeu des mots : word_game_finds (fast)',
     granularity: 'exact',
+    tables: ['word_game_finds'],
     history: 'Comme « Mots trouvés ».',
     exact: `select viewer_id, count(*) as n from word_game_finds where channel_id = $1 and fast and ${W('created_at')}
       group by 1`,
@@ -81,6 +86,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     source:
       'Tombola : lab_raffle_entries des tirages terminés (retirés et annulés exclus)',
     granularity: 'exact',
+    tables: ['lab_raffles', 'lab_raffle_entries'],
     history:
       'Tombolas du Core. Les totaux importés de l’ancien site ne sont pas datés : non comptés.',
     exact: `select e.viewer_id, count(*) as n from lab_raffle_entries e join lab_raffles r using (raffle_id)
@@ -93,6 +99,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     unit: 'victoires',
     source: 'Tombola : lab_raffle_winners des tirages terminés',
     granularity: 'exact',
+    tables: ['lab_raffles', 'lab_raffle_winners'],
     history: 'Comme « Participations aux tombolas ».',
     exact: `select w.viewer_id, count(*) as n from lab_raffle_winners w join lab_raffles r using (raffle_id)
       where r.channel_id = $1 and r.status = 'finished' and ${W('r.finished_at')} group by 1`,
@@ -104,6 +111,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     unit: 'jours',
     source: 'Daily : daily_claims (historique importé daté inclus)',
     granularity: 'exact',
+    tables: ['daily_claims'],
     history:
       'Chaque Daily a sa date, y compris l’historique importé de l’ancien système.',
     exact: `select twitch_user_id as viewer_id, count(*) as n from daily_claims
@@ -118,6 +126,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     source:
       'Random Ban V3 : rb_requests réels terminés (touché, retourné ou raté)',
     granularity: 'exact',
+    tables: ['rb_requests'],
     history:
       'Depuis Random Ban V3 dans le Core. Aucun historique exploitable avant (SAMMI).',
     exact: `select buyer_id as viewer_id, count(*) as n from rb_requests
@@ -131,6 +140,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     source:
       'Random Ban V3 : rb_requests confirmés dont la cible n’est pas l’acheteur',
     granularity: 'exact',
+    tables: ['rb_requests'],
     history: 'Comme « Random Ban lancés ».',
     exact: `select buyer_id as viewer_id, count(*) as n from rb_requests
       where channel_id = $1 and mode = 'real' and status = 'confirmed' and target_id is distinct from buyer_id
@@ -143,6 +153,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     unit: 'Random Ban',
     source: 'Random Ban V3 : rb_requests confirmés lancés par un autre viewer',
     granularity: 'exact',
+    tables: ['rb_requests'],
     history: 'Comme « Random Ban lancés ».',
     exact: `select target_id as viewer_id, count(*) as n from rb_requests
       where channel_id = $1 and mode = 'real' and status = 'confirmed' and target_id is not null
@@ -158,6 +169,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     unit: 'duels',
     source: 'Mini-jeux : mini_game_duels résolus',
     granularity: 'exact',
+    tables: ['mini_game_duels'],
     history: 'Depuis les duels du Core (20/10/2026).',
     exact: `select winner_id as viewer_id, count(*) as n from mini_game_duels
       where channel_id = $1 and status = 'resolved' and ${W('created_at')} group by 1`,
@@ -171,6 +183,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     source:
       'Progression : progression_period_stats (semaine, mois) ; progression_accounts (total, import WizeBot inclus)',
     granularity: 'period',
+    tables: ['progression_period_stats', 'progression_accounts'],
     history:
       'Totaux par semaine et par mois seulement. Le total à vie inclut l’import WizeBot (non daté).',
     period: `select twitch_user_id as viewer_id, watch_seconds / 60 as n from progression_period_stats
@@ -187,6 +200,7 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
     source:
       'Progression : progression_period_stats (semaine, mois) ; progression_accounts (total, import WizeBot inclus)',
     granularity: 'period',
+    tables: ['progression_period_stats', 'progression_accounts'],
     history: 'Comme « Temps de présence ».',
     period: `select twitch_user_id as viewer_id, messages as n from progression_period_stats
       where channel_id = $1 and period = $2 and period_start = $3::date and messages > 0`,

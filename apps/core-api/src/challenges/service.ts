@@ -142,8 +142,12 @@ interface Window {
   period?: { kind: 'week' | 'month'; start: string };
 }
 
+/** Tables read when present: names (production: viewers; the Lab: lab_viewers) and the excluded accounts. */
+const OPTIONAL = ['viewers', 'lab_viewers', 'loyalty_exclusions'];
+
 export class ChallengeService {
-  private ready: boolean | null = null;
+  /** The public tables this database has (read once the challenge tables exist). */
+  private tables: Set<string> | null = null;
 
   constructor(
     private readonly db: Db,
@@ -158,13 +162,40 @@ export class ChallengeService {
 
   /** The tables exist (migration applied). Absent: every route answers 503, the timer does nothing. */
   async available() {
-    if (this.ready) return true;
-    const r = await this.db.query<{ n: string | number }>(
-      `select count(*) as n from information_schema.tables where table_schema = 'public' and table_name = any($1::text[])`,
-      [TABLES],
+    if (this.tables) return true;
+    const r = await this.db.query<{ table_name: string }>(
+      `select table_name from information_schema.tables where table_schema = 'public' and table_name = any($1::text[])`,
+      [[...TABLES, ...OPTIONAL, ...CHALLENGE_METRICS.flatMap((m) => m.tables)]],
     );
-    this.ready = num(r[0]?.n) === TABLES.length;
-    return this.ready;
+    const found = new Set(r.map((x) => x.table_name));
+    if (!TABLES.every((t) => found.has(t))) return false;
+    this.tables = found;
+    return true;
+  }
+
+  private has(table: string) {
+    return !!this.tables?.has(table);
+  }
+
+  /** The metric's source tables exist in this database (the Lab has no canonical Wallet, Daily…). */
+  metricReady(key: string) {
+    const m = metricOf(key);
+    return !!m && m.tables.every((t) => this.has(t));
+  }
+
+  /** A viewer's shown name: `<alias>.name` joined on `<col>` (production: viewers; the Lab: lab_viewers, channel $1). */
+  private nameJoin(col: string) {
+    if (this.has('viewers'))
+      return {
+        join: `left join viewers nv on nv.twitch_user_id = ${col}`,
+        name: 'coalesce(nv.display_name, nv.login)',
+      };
+    if (this.has('lab_viewers'))
+      return {
+        join: `left join lab_viewers nv on nv.channel_id = $1 and nv.viewer_id = ${col}`,
+        name: 'nv.display_name',
+      };
+    return { join: '', name: 'null::text' };
   }
 
   private async need() {
@@ -186,6 +217,12 @@ export class ChallengeService {
       out.push({ field, code, message });
     const m = metricOf(d.metric);
     if (!m) p('metric', 'unknown_metric', 'Cette métrique n’existe pas.');
+    else if (!this.metricReady(m.key))
+      p(
+        'metric',
+        'metric_unavailable',
+        `« ${m.label} » n’a pas sa source sur ce Core (${m.tables.filter((t) => !this.has(t)).join(', ')}).`,
+      );
     const start = d.starts_at ? Date.parse(d.starts_at) : null;
     const end = d.ends_at ? Date.parse(d.ends_at) : null;
     if (start !== null && end !== null && end <= start)
@@ -271,16 +308,15 @@ export class ChallengeService {
   async meta(channelId: string) {
     await this.need();
     const firsts = await Promise.all(
-      CHALLENGE_METRICS.map(async (m) => {
-        try {
-          return iso(
-            (await this.db.query<{ at: Date | null }>(m.first, [channelId]))[0]
-              ?.at,
-          );
-        } catch {
-          return null; // the source table is absent here (an older Lab)
-        }
-      }),
+      CHALLENGE_METRICS.map(async (m) =>
+        this.metricReady(m.key)
+          ? iso(
+              (
+                await this.db.query<{ at: Date | null }>(m.first, [channelId])
+              )[0]?.at,
+            )
+          : null,
+      ),
     );
     const items = await this.db.query<{
       reward_id: string;
@@ -302,6 +338,8 @@ export class ChallengeService {
         source: m.source,
         granularity: m.granularity,
         history: m.history,
+        /** false: its source is not on this Core (the Lab has no canonical Wallet, no Daily). */
+        available: this.metricReady(m.key),
         first_record_at: firsts[i],
       })),
       items,
@@ -564,7 +602,7 @@ export class ChallengeService {
     const rows = await q.query<{ viewer_id: string; n: string | number }>(
       `select x.viewer_id, x.n from (${sql}) x
        where x.viewer_id is not null and x.n > 0
-         and not exists (select 1 from loyalty_exclusions e where e.twitch_user_id = x.viewer_id)`,
+         ${this.has('loyalty_exclusions') ? 'and not exists (select 1 from loyalty_exclusions e where e.twitch_user_id = x.viewer_id)' : ''}`,
       params,
     );
     return new Map(rows.map((r) => [r.viewer_id, num(r.n)]));
@@ -576,7 +614,10 @@ export class ChallengeService {
     const problems = await this.problems(channelId, input, true);
     if (
       problems.some(
-        (p) => p.code === 'unknown_metric' || p.code === 'period_metric_window',
+        (p) =>
+          p.code === 'unknown_metric' ||
+          p.code === 'metric_unavailable' ||
+          p.code === 'period_metric_window',
       )
     )
       return { problems, windows: [], eligible: null };
@@ -598,7 +639,7 @@ export class ChallengeService {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10);
       const names = await this.names(
-        this.db,
+        channelId,
         top.map(([v]) => v),
       );
       out.push({
@@ -618,22 +659,14 @@ export class ChallengeService {
     return { problems, windows: out };
   }
 
-  private async names(q: Queryable, ids: string[]) {
+  private async names(channelId: string, ids: string[]) {
     if (!ids.length) return new Map<string, string>();
-    const rows = await q.query<{
-      twitch_user_id: string;
-      display_name: string | null;
-      login: string | null;
-    }>(
-      'select twitch_user_id, display_name, login from viewers where twitch_user_id = any($1::text[])',
-      [ids],
+    const n = this.nameJoin('x.id');
+    const rows = await this.db.query<{ id: string; name: string | null }>(
+      `select x.id, ${n.name} as name from unnest($2::text[]) as x(id) ${n.join} where $1::text is not null`,
+      [channelId, ids],
     );
-    return new Map(
-      rows.map((r) => [
-        r.twitch_user_id,
-        r.display_name ?? r.login ?? r.twitch_user_id,
-      ]),
-    );
+    return new Map(rows.map((r) => [r.id, r.name ?? r.id]));
   }
 
   private async log(
@@ -678,7 +711,7 @@ export class ChallengeService {
     return this.db.tx(async (q) => {
       const d = await this.def(q, channelId, id, true);
       const out = { periods: 0, changed: 0, completed: 0, below: 0 };
-      if (d.status !== 'active') return out;
+      if (d.status !== 'active' || !this.metricReady(d.metric)) return out;
       const now = this.now();
       if (d.starts_at && d.starts_at > now) return out;
       if (d.ends_at && now.getTime() > d.ends_at.getTime() + END_GRACE_MS)
@@ -803,9 +836,9 @@ export class ChallengeService {
       name: string | null;
     }>(
       `select a.challenge_id, a.period_key, a.viewer_id, a.award_key, a.reward, a.status, a.error,
-         coalesce(v.display_name, v.login) as name
+         ${this.nameJoin('a.viewer_id').name} as name
        from challenge_awards a join challenge_defs d using (channel_id, challenge_id)
-       left join viewers v on v.twitch_user_id = a.viewer_id
+       ${this.nameJoin('a.viewer_id').join}
        where a.channel_id = $1 and a.status in ('pending', 'failed') and a.attempts < $2 and d.status = 'active'
          and ($3::text is null or a.challenge_id = $3)
        order by a.created_at limit 500`,
@@ -982,8 +1015,8 @@ export class ChallengeService {
         updated_at: Date;
         name: string | null;
       }>(
-        `select p.*, coalesce(v.display_name, v.login) as name from challenge_progress p
-         left join viewers v on v.twitch_user_id = p.viewer_id
+        `select p.*, ${this.nameJoin('p.viewer_id').name} as name from challenge_progress p
+         ${this.nameJoin('p.viewer_id').join}
          where p.channel_id = $1 and p.challenge_id = $2
          order by p.period_key desc, p.value desc, p.viewer_id limit 200`,
         [channelId, id],
@@ -1002,8 +1035,8 @@ export class ChallengeService {
         revoke_reason: string | null;
         name: string | null;
       }>(
-        `select a.*, coalesce(v.display_name, v.login) as name from challenge_awards a
-         left join viewers v on v.twitch_user_id = a.viewer_id
+        `select a.*, ${this.nameJoin('a.viewer_id').name} as name from challenge_awards a
+         ${this.nameJoin('a.viewer_id').join}
          where a.channel_id = $1 and a.challenge_id = $2 order by a.created_at desc limit 200`,
         [channelId, id],
       ),
@@ -1018,8 +1051,11 @@ export class ChallengeService {
         detail: unknown;
         actor: string | null;
         at: Date;
+        name: string | null;
       }>(
-        `select * from challenge_log where channel_id = $1 and challenge_id = $2 order by id desc limit 100`,
+        `select l.*, ${this.nameJoin('l.viewer_id').name} as name from challenge_log l
+         ${this.nameJoin('l.viewer_id').join}
+         where l.channel_id = $1 and l.challenge_id = $2 order by l.id desc limit 100`,
         [channelId, id],
       ),
     ]);
@@ -1054,6 +1090,7 @@ export class ChallengeService {
         run_id: l.run_id,
         period_key: l.period_key,
         viewer: l.viewer_id,
+        name: l.viewer_id ? (l.name ?? l.viewer_id) : null,
         kind: l.kind,
         before: l.before === null ? null : num(l.before),
         after: l.after === null ? null : num(l.after),

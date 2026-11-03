@@ -526,6 +526,41 @@ describe('challenges engine', () => {
     expect((await core.db.query('select * from challenge_runs')).length).toBe(
       0,
     );
+    // A Core without a metric's source (the Lab: no canonical Wallet, no Daily, names in lab_viewers): the metric is
+    // shown unavailable, a challenge on it cannot go live, the others work.
+    await core.db.query('alter table daily_claims rename to daily_claims_off');
+    try {
+      const lab = new ChallengeService(
+        core.db,
+        core.clock,
+        core.cosmetics,
+        core.progression,
+      );
+      const meta = await lab.meta(CH);
+      expect(
+        meta.metrics.find((m) => m.key === 'daily_claims')!.available,
+      ).toBe(false);
+      expect(meta.metrics.find((m) => m.key === 'words_found')!.available).toBe(
+        true,
+      );
+      await lab.create(
+        CH,
+        def({ challenge_id: 'fictif-daily', metric: 'daily_claims' }),
+        'test',
+      );
+      await expect(
+        lab.setStatus(CH, 'fictif-daily', 'active', 'test'),
+      ).rejects.toMatchObject({ code: 'invalid_challenge' });
+      expect(
+        (await lab.preview(CH, def({ metric: 'daily_claims' }))).problems.map(
+          (p) => p.code,
+        ),
+      ).toEqual(['metric_unavailable']);
+    } finally {
+      await core.db.query(
+        'alter table daily_claims_off rename to daily_claims',
+      );
+    }
   });
 });
 
