@@ -1373,6 +1373,42 @@ export class ProgressionService {
         [channelId],
       )
     )[0]?.at;
+    // The equipped badges of the returned rows, in ONE grouped query (never one per viewer), with the profile's rule:
+    // owned and not revoked, active, published, kind badge; in the viewer's chosen order. Additive field.
+    const badges = new Map<
+      string,
+      { id: string; label: string; rarity: string; image: string | null }[]
+    >();
+    if (rows.length) {
+      const eq = await this.db.query<{
+        twitch_user_id: string;
+        reward_id: string;
+        label: string;
+        rarity: string;
+        image_id: string | null;
+      }>(
+        `select e.twitch_user_id, r.reward_id, r.label, r.rarity, r.image_id
+         from progression_equipped e
+         cross join lateral unnest(e.badge_ids) with ordinality as b(reward_id, ord)
+         join progression_rewards r on r.channel_id = e.channel_id and r.reward_id = b.reward_id
+           and r.kind = 'badge' and r.active and r.status <> 'draft'
+         where e.channel_id = $1 and e.twitch_user_id = any($2::text[])
+           and exists (select 1 from progression_grants g where g.channel_id = e.channel_id
+             and g.twitch_user_id = e.twitch_user_id and g.reward_id = b.reward_id and g.revoked_at is null)
+         order by e.twitch_user_id, b.ord`,
+        [channelId, rows.map((r) => r.twitch_user_id)],
+      );
+      for (const b of eq) {
+        const list = badges.get(b.twitch_user_id) ?? [];
+        list.push({
+          id: b.reward_id,
+          label: b.label,
+          rarity: b.rarity,
+          image: b.image_id ? `/v1/cosmetics/images/${b.image_id}` : null,
+        });
+        badges.set(b.twitch_user_id, list);
+      }
+    }
     return {
       enabled: s.enabled,
       by,
@@ -1397,6 +1433,7 @@ export class ProgressionService {
               style: r.title_style ?? {},
             }
           : null,
+        badges: badges.get(r.twitch_user_id) ?? [],
       })),
     };
   }

@@ -241,6 +241,77 @@ describe('progression on the main Core HTTP', () => {
     });
   });
 
+  it('the ranking carries the equipped badges in one grouped read (owned, active, published only; chosen order)', async () => {
+    const { call, studio } = await fixture(SITE);
+    await call('/v1/studio/progression/settings', { enabled: true }, studio);
+    for (const r of [
+      { reward_id: 'etoile', kind: 'badge', label: 'Étoile', rarity: 'rare' },
+      { reward_id: 'lune', kind: 'badge', label: 'Lune', rarity: 'epic' },
+      { reward_id: 'soleil', kind: 'badge', label: 'Soleil', rarity: 'common' },
+    ])
+      expect(
+        (await call('/v1/studio/progression/rewards', r, studio)).status,
+      ).toBe(200);
+    await call(
+      '/v1/studio/progression/import',
+      {
+        source: 'wizebot',
+        rows: [
+          { twitch_user_id: '1', login: 'ana', level: 5 },
+          { twitch_user_id: '2', login: 'bob', level: 3 },
+        ],
+      },
+      studio,
+    );
+    for (const id of ['etoile', 'lune', 'soleil'])
+      await call(
+        '/v1/studio/progression/grant',
+        { reward_id: id, viewers: ['1'] },
+        studio,
+      );
+    expect(
+      (
+        await call(
+          '/v1/site/progression/equip',
+          {
+            viewer: '1',
+            title_id: null,
+            badge_ids: ['lune', 'etoile', 'soleil'],
+          },
+          `Bearer ${SITE}`,
+        )
+      ).status,
+    ).toBe(200);
+    let board = (await call('/v1/progression/leaderboard')).body;
+    expect(board.entries[0].badges.map((b: { id: string }) => b.id)).toEqual([
+      'lune',
+      'etoile',
+      'soleil',
+    ]);
+    expect(board.entries[0].badges[0]).toEqual({
+      id: 'lune',
+      label: 'Lune',
+      rarity: 'epic',
+      image: null,
+    });
+    expect(board.entries[1]).toMatchObject({
+      twitchUserId: '2',
+      badges: [],
+      title: null,
+    });
+    // Revoked: gone from the ranking at once; the others keep the viewer's order.
+    await call(
+      '/v1/studio/progression/revoke',
+      { reward_id: 'etoile', viewer: '1', reason: 'test' },
+      studio,
+    );
+    board = (await call('/v1/progression/leaderboard')).body;
+    expect(board.entries[0].badges.map((b: { id: string }) => b.id)).toEqual([
+      'lune',
+      'soleil',
+    ]);
+  });
+
   it('without SITE_TOKEN the equip route does not exist', async () => {
     const { call } = await fixture(undefined);
     expect(
