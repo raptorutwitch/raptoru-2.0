@@ -6,8 +6,8 @@
 
 | Composant | Branche (worktree) | Écart | Contenu |
 |---|---|---|---|
-| Core + Studio (dépôt Raptoru 2.0) | `feat/site-hub-core` (`Raptoru 2.0 - Worktrees/site-hub-core`) | 11 commits sur `origin/main` `8b2189e`, 0 de retard, fusion sans conflit | badges équipés dans les classements, cadres et bannières, statistiques des modules, moteur de défis, Daily avec sa table de paliers ; atelier Cadres / Bannières et onglet Défis dans Studio |
-| Site (dépôt raptoru.fr) | `feat/site-hub-chantier` (`Raptoru 2.0 - Worktrees/raptoru-fr-refonte`) | 14 commits sur `origin/main` `542b1f2` (la Production), 0 de retard, fusion sans conflit | lots 1 à 5, Twitch / Portfolio, panneau « EN LIVE », indicateur Daily, banc d'intégration |
+| Core + Studio (dépôt Raptoru 2.0) | `feat/site-hub-core` (`Raptoru 2.0 - Worktrees/site-hub-core`) | 12 commits (dont ce plan) sur `origin/main` `8b2189e`, 0 de retard, fusion sans conflit | badges équipés dans les classements, cadres et bannières, statistiques des modules, moteur de défis, Daily avec sa table de paliers ; atelier Cadres / Bannières et onglet Défis dans Studio |
+| Site (dépôt raptoru.fr) | `feat/site-hub-chantier` (`Raptoru 2.0 - Worktrees/raptoru-fr-refonte`) | 15 commits sur `origin/main` `542b1f2` (la Production), 0 de retard, fusion sans conflit | lots 1 à 5, Twitch / Portfolio, panneau « EN LIVE », indicateur Daily, banc d'intégration |
 | Bot, extension | — | aucun changement | — |
 
 **À savoir avant le Core** :
