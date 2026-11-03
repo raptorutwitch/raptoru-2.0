@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/http/server.js';
 import { sha256, STUDIO_PROTOCOL_HEADER } from '../src/studio/installations.js';
+import { png } from './cosmetic-shop.suite.js';
 import { setup } from './helpers.js';
 
 // Progression native on the MAIN Core's HTTP (docs/PROGRESSION.md): the public reads need nothing; Studio's routes the
@@ -193,6 +194,8 @@ describe('progression on the main Core HTTP', () => {
     expect(v.equipped).toEqual({
       title: 'roi-halloween',
       badges: ['citrouille'],
+      frame: null,
+      banner: null,
     });
     // Revoked: unequipped at once; the ranking no longer shows the title.
     await call(
@@ -201,7 +204,12 @@ describe('progression on the main Core HTTP', () => {
       studio,
     );
     v = (await call('/v1/progression/viewers/1')).body;
-    expect(v.equipped).toEqual({ title: null, badges: ['citrouille'] });
+    expect(v.equipped).toEqual({
+      title: null,
+      badges: ['citrouille'],
+      frame: null,
+      banner: null,
+    });
     expect(v.inventory.map((i: { id: string }) => i.id)).toEqual([
       'citrouille',
     ]);
@@ -310,6 +318,162 @@ describe('progression on the main Core HTTP', () => {
       'lune',
       'soleil',
     ]);
+  });
+
+  it('frames and banners (lot 3): a banner upload passes the larger body; equipped, ranked, kept by an older site, revoked', async () => {
+    const { call, studio } = await fixture(SITE);
+    await call('/v1/studio/progression/settings', { enabled: true }, studio);
+    // A real-size banner body (> 64 Ko of JSON) reaches its route; any other route keeps the 64 Ko limit.
+    const big = Buffer.concat([png(1024, 256), Buffer.alloc(120 * 1024)]);
+    const banner = await call(
+      '/v1/studio/cosmetics/images',
+      { purpose: 'banner', data_base64: big.toString('base64') },
+      studio,
+    );
+    expect([banner.status, banner.body.width]).toEqual([200, 1024]);
+    const frame = await call(
+      '/v1/studio/cosmetics/images',
+      { purpose: 'frame', data_base64: png(256, 256).toString('base64') },
+      studio,
+    );
+    expect(
+      (
+        await call(
+          '/v1/studio/progression/adjust',
+          {
+            viewer: '2',
+            mode: 'add',
+            value: 1,
+            reason: 'x'.repeat(70 * 1024),
+            request_id: 'req-big-0001',
+          },
+          studio,
+        )
+      ).status,
+    ).toBe(413);
+    for (const r of [
+      {
+        reward_id: 'givre',
+        kind: 'frame',
+        label: 'Givre',
+        rarity: 'epic',
+        image_id: frame.body.image_id,
+      },
+      {
+        reward_id: 'aurore',
+        kind: 'banner',
+        label: 'Aurore',
+        image_id: banner.body.image_id,
+      },
+    ])
+      expect(
+        (
+          await call(
+            '/v1/studio/cosmetics/items',
+            { ...r, status: 'published' },
+            studio,
+          )
+        ).status,
+      ).toBe(200);
+    await call(
+      '/v1/studio/progression/import',
+      {
+        source: 'wizebot',
+        rows: [
+          { twitch_user_id: '1', login: 'ana', level: 5 },
+          { twitch_user_id: '2', login: 'bob', level: 3 },
+        ],
+      },
+      studio,
+    );
+    for (const id of ['givre', 'aurore'])
+      await call(
+        '/v1/studio/progression/grant',
+        { reward_id: id, viewers: ['1'] },
+        studio,
+      );
+    const site = (b: unknown) =>
+      call('/v1/site/progression/equip', b, `Bearer ${SITE}`);
+    // Not owned, or the wrong kind in a slot: refused.
+    expect(
+      (
+        await site({
+          viewer: '2',
+          title_id: null,
+          badge_ids: [],
+          frame_id: 'givre',
+        })
+      ).body.error,
+    ).toBe('frame_not_owned');
+    expect(
+      (
+        await site({
+          viewer: '1',
+          title_id: null,
+          badge_ids: [],
+          frame_id: 'aurore',
+        })
+      ).body.error,
+    ).toBe('frame_not_owned');
+    expect(
+      (
+        await site({
+          viewer: '1',
+          title_id: null,
+          badge_ids: [],
+          banner_id: 'givre',
+        })
+      ).body.error,
+    ).toBe('banner_not_owned');
+    expect(
+      (
+        await site({
+          viewer: '1',
+          title_id: null,
+          badge_ids: [],
+          frame_id: 'givre',
+          banner_id: 'aurore',
+        })
+      ).body,
+    ).toMatchObject({ frame_id: 'givre', banner_id: 'aurore' });
+    // An older site (no frame_id / banner_id) never clears them.
+    expect(
+      (await site({ viewer: '1', title_id: null, badge_ids: [] })).body,
+    ).toMatchObject({ frame_id: 'givre', banner_id: 'aurore' });
+    let board = (await call('/v1/progression/leaderboard')).body;
+    expect(board.entries[0]).toMatchObject({
+      twitchUserId: '1',
+      frame: {
+        id: 'givre',
+        label: 'Givre',
+        rarity: 'epic',
+        image: `/v1/cosmetics/images/${frame.body.image_id}`,
+      },
+      banner: {
+        id: 'aurore',
+        image: `/v1/cosmetics/images/${banner.body.image_id}`,
+      },
+    });
+    expect(board.entries[1]).toMatchObject({
+      twitchUserId: '2',
+      frame: null,
+      banner: null,
+    });
+    expect(
+      (await call('/v1/progression/viewers/1')).body.equipped,
+    ).toMatchObject({ frame: 'givre', banner: 'aurore' });
+    // null removes; a revocation unequips at once.
+    await site({ viewer: '1', title_id: null, badge_ids: [], banner_id: null });
+    await call(
+      '/v1/studio/progression/revoke',
+      { reward_id: 'givre', viewer: '1', reason: 'test' },
+      studio,
+    );
+    board = (await call('/v1/progression/leaderboard')).body;
+    expect(board.entries[0]).toMatchObject({ frame: null, banner: null });
+    expect(
+      (await call('/v1/progression/viewers/1')).body.equipped,
+    ).toMatchObject({ frame: null, banner: null });
   });
 
   it('without SITE_TOKEN the equip route does not exist', async () => {

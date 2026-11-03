@@ -164,10 +164,12 @@ export function cosmeticsRoutes(
       method: 'POST',
       pattern: admin('/images'),
       auth,
-      handle: ({ body }) =>
-        mapped(() =>
-          svc.uploadImage(parse(CosmeticImageUpload, body).data_base64),
-        ),
+      // A banner is up to 256 Ko (≈ 342 Ko in base64): this route alone accepts a larger body.
+      maxBody: 400 * 1024,
+      handle: ({ body }) => {
+        const r = parse(CosmeticImageUpload, body);
+        return mapped(() => svc.uploadImage(r.data_base64, r.purpose));
+      },
     },
     {
       method: 'POST',

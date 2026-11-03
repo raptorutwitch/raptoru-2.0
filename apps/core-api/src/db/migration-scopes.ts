@@ -92,6 +92,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261117130000_halloween_economy.sql',
   // Boutique cosmétique V1 (looks, offers, purchases, module awards); Lab twin 20261118120000.
   '20261118130000_cosmetic_shop.sql',
+  // Cadres d'avatar et bannières (kinds, equipped frame / banner, image room); Lab twin 20261119120000.
+  '20261119130000_cosmetic_frames_banners.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -184,6 +186,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   // own ledger kind for it.
   '20261118120000_cosmetic_shop_lab.sql',
   '20261118120500_lab_ledger_cosmetic.sql',
+  // Cadres d'avatar et bannières: the Lab twin of 20261119130000_cosmetic_frames_banners.sql (same content).
+  '20261119120000_cosmetic_frames_banners_lab.sql',
 ]);
 
 /**

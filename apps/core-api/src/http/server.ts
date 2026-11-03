@@ -195,6 +195,8 @@ export interface Route {
   method: 'GET' | 'POST';
   pattern: RegExp;
   auth: Auth;
+  /** A larger JSON body for this route only (default MAX_BODY_BYTES: 64 Ko). */
+  maxBody?: number;
   handle: (ctx: {
     params: string[];
     /** Authenticated Studio installation (auth 'studio_installation' only). */
@@ -510,13 +512,15 @@ function secretMatches(header: string | undefined, secret: string): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+async function readJson(
+  req: IncomingMessage,
+  max = MAX_BODY_BYTES,
+): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES)
-      throw new HttpError(413, { error: 'body_too_large' });
+    if (size > max) throw new HttpError(413, { error: 'body_too_large' });
     chunks.push(chunk as Buffer);
   }
   if (size === 0) return {};
@@ -727,7 +731,8 @@ export function createHandler(deps: AppDeps): RequestListener {
           typeof key === 'string' && key.length <= 128 ? key : undefined;
       }
       const params = route.pattern.exec(url.pathname)!.slice(1);
-      const body = req.method === 'POST' ? await readJson(req) : undefined;
+      const body =
+        req.method === 'POST' ? await readJson(req, route.maxBody) : undefined;
       const out = await route.handle({
         params,
         body,

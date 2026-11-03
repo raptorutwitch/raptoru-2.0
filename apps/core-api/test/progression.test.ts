@@ -283,6 +283,8 @@ describe('levels, rewards, inventory', () => {
     expect((await svc.viewer(CH, '1')).equipped).toEqual({
       title: 'roi-halloween',
       badges: ['citrouille'],
+      frame: null,
+      banner: null,
     });
     // A badge given as a title is refused.
     await expect(
@@ -294,7 +296,12 @@ describe('levels, rewards, inventory', () => {
       { id: 'studio' },
     );
     let v = await svc.viewer(CH, '1');
-    expect(v.equipped).toEqual({ title: 'roi-halloween', badges: [] });
+    expect(v.equipped).toEqual({
+      title: 'roi-halloween',
+      badges: [],
+      frame: null,
+      banner: null,
+    });
     expect(v.inventory.map((i) => i.id)).toEqual(['roi-halloween']); // other titles kept
     await expect(
       svc.revoke(

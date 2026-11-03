@@ -90,6 +90,9 @@ export const ProgressionEquipRequest = z.strictObject({
   viewer: TwitchId,
   title_id: RewardId.nullable(),
   badge_ids: z.array(RewardId).max(3),
+  /** One avatar frame and one banner (lot 3). Absent: unchanged (an older site never clears them). */
+  frame_id: RewardId.nullable().optional(),
+  banner_id: RewardId.nullable().optional(),
 });
 
 /** One WizeBot viewer, by Twitch id when the source gives one, always under its pseudo (resolved by the Core). */
