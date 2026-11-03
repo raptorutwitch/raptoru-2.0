@@ -47,6 +47,8 @@ import { dbReady, type Db } from '../db/db.js';
 import { labEconomy, type EconomyPort } from '../economy/economy.js';
 import { CosmeticShopService } from '../cosmetics/service.js';
 import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
+import { ChallengeService } from '../challenges/service.js';
+import { challengesRoutes } from '../http/challenges-routes.js';
 
 // The Lab Core: its services, routes and HTTP server on a given database. One assembly for the Lab
 // Core process (local-server.ts: env, port, timers) and the end-to-end harness (apps/studio/server/e2e,
@@ -93,6 +95,8 @@ export function createLabCore({
   wordGame: WordGameService;
   votekick: VotekickService;
   spotify: SpotifyService;
+  /** Défis: one recount pass (the Lab process's timer). */
+  challenges: { tick: () => Promise<unknown> };
 } {
   if (secret.length < 32) throw new Error('bonk_secret_required');
   // Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
@@ -175,6 +179,13 @@ export function createLabCore({
     progression,
     economy,
   );
+  // Défis: the Lab's own definitions, counted on the Lab tables and paid by the Lab shop award (test wallet).
+  const challenges = new ChallengeService(
+    db,
+    systemClock,
+    cosmetics,
+    progression,
+  );
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
       db,
@@ -245,6 +256,12 @@ export function createLabCore({
       production: false,
       site: true,
     }),
+    // Défis et succès: Studio's editor and the site's read, every route behind the Lab secret.
+    ...challengesRoutes(challenges, {
+      channelId: LAB_PROGRESSION_CHANNEL,
+      production: false,
+      site: true,
+    }),
     // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
     ...cautionRoutes(caution),
     // Votekick V2: Studio (state, overlay, mute) and the Lab chat adapter (Twitch executor); `!votekick` in the Lab chat.
@@ -308,5 +325,12 @@ export function createLabCore({
       send(500, { error: 'bonk_core_error' });
     }
   });
-  return { server, raffle, wordGame, votekick, spotify };
+  return {
+    server,
+    raffle,
+    wordGame,
+    votekick,
+    spotify,
+    challenges: { tick: () => challenges.tick(LAB_PROGRESSION_CHANNEL) },
+  };
 }

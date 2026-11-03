@@ -158,6 +158,8 @@ createApp({
   siteToken: config.SITE_TOKEN,
   // Boutique cosmétique (docs/COSMETIC_SHOP.md): Studio › Boutique and, with SITE_TOKEN, raptoru.fr's shop.
   cosmetics: core.cosmetics,
+  // Défis (docs/CHALLENGES.md): Studio's editor; with SITE_TOKEN, raptoru.fr's read. 503 until the migration exists.
+  challenges: core.challenges,
   // Caution: the paired Studio (state) and the bot (Twitch executor); `!caution` itself only with CAUTION_CHAT=true.
   caution: core.caution,
   // Votekick V2: the paired Studio (state, overlay, mute) and the bot (Twitch executor); chat only with VOTEKICK_CHAT.

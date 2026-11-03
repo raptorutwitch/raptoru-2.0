@@ -89,6 +89,8 @@ import { publicStatsRoutes } from './public-stats-routes.js';
 import { progressionRoutes } from './progression-routes.js';
 import { cosmeticsRoutes } from './cosmetics-routes.js';
 import { moduleStatsRoutes } from './module-stats-routes.js';
+import { challengesRoutes } from './challenges-routes.js';
+import type { ChallengeService } from '../challenges/service.js';
 import { ModuleStatsService } from '../module-stats/service.js';
 import type { CosmeticShopService } from '../cosmetics/service.js';
 import type { ProgressionService } from '../progression/service.js';
@@ -157,6 +159,8 @@ export interface AppDeps {
   /** Progression native (docs/PROGRESSION.md). */
   progression?: ProgressionService;
   cosmetics?: CosmeticShopService;
+  /** Défis et succès: Studio's editor (installation) and the site's read (its token). */
+  challenges?: ChallengeService;
   /**
    * The /v1/lab/* routes (Studio secret, viewer named in the body). Default on for the Lab and the
    * tests; the public Core bootstrap turns them off: nothing Lab is reachable from the Internet.
@@ -272,6 +276,7 @@ function routes({
   eventShop,
   progression,
   cosmetics,
+  challenges,
   siteToken,
   caution,
   votekick,
@@ -323,6 +328,13 @@ function routes({
       : []),
     ...(studioInstallations && cosmetics && cockpit?.channelId
       ? cosmeticsRoutes(cosmetics, {
+          channelId: cockpit.channelId,
+          production: true,
+          site: !!siteToken,
+        })
+      : []),
+    ...(studioInstallations && challenges && cockpit?.channelId
+      ? challengesRoutes(challenges, {
           channelId: cockpit.channelId,
           production: true,
           site: !!siteToken,

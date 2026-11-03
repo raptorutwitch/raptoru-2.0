@@ -33,6 +33,7 @@ import { StudioInstallations } from './studio/installations.js';
 import { createWalletModule, type WalletModule } from './wallet/index.js';
 import { withBonbonsRewards } from './event-shop/raffle-currency.js';
 import { ProgressionService } from './progression/service.js';
+import { ChallengeService } from './challenges/service.js';
 
 export interface Core {
   daily: DailyService;
@@ -61,6 +62,8 @@ export interface Core {
   progression: ProgressionService;
   /** Boutique cosmétique V1 (docs/COSMETIC_SHOP.md): looks, offers, purchases, module awards. */
   cosmetics: CosmeticShopService;
+  /** Défis et succès (docs/CHALLENGES.md): definitions from Studio, recount, idempotent rewards (shop award). */
+  challenges: ChallengeService;
   /** Caution: the requests and the executor's routes always; `!caution` in the chat only with `cautionChat`. */
   caution: CautionService;
   /** Votekick V2: votes and the broadcaster's mute always; `!votekick` / `!kick` / `!save` in the chat only with votekickChat. */
@@ -165,6 +168,8 @@ export function createCore(
   };
   // Progression native (docs/PROGRESSION.md): XP from validated presence and chat, levels, titles and badges.
   const progression = new ProgressionService(db, clock, broadcasterOf);
+  // The shop pays with this Core's economy (Jetons) and the event ledger (Bonbons).
+  const cosmetics = new CosmeticShopService(db, clock, progression, economy);
   return {
     credits,
     daily: new DailyService(db, clock, credits),
@@ -181,8 +186,9 @@ export function createCore(
         loyalty.presenceListener.committed?.() ?? Promise.resolve(),
     }),
     progression,
-    // The shop pays with this Core's economy (Jetons) and the event ledger (Bonbons).
-    cosmetics: new CosmeticShopService(db, clock, progression, economy),
+    cosmetics,
+    // Challenges pay through the shop's award (an item or Jetons, once per key) and revoke through the progression.
+    challenges: new ChallengeService(db, clock, cosmetics, progression),
     wallet,
     loyalty,
     // The Bonk accepts a Twitch emote only from the viewer's own catalog (none: Twitch emotes off).
