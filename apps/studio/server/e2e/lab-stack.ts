@@ -89,8 +89,26 @@ await db.query(
    values ('900100', '57012345', 'Kirito_TV', now(), now()) on conflict do nothing`,
 );
 
+// Défis (fictional source data for the « Défis » e2e): three finished Random Ban of Fictif_Defis (its own viewer, so
+// the other tests' viewers keep an empty inventory), yesterday.
+await db.query(
+  `insert into lab_viewers (channel_id, viewer_id, display_name, first_seen, last_seen)
+   values ('900100', '57099999', 'Fictif_Defis', now(), now()) on conflict do nothing`,
+);
+for (const [i, status] of (
+  ['confirmed', 'confirmed', 'flop'] as const
+).entries())
+  await db.query(
+    `insert into rb_requests (request_id, channel_id, source, source_ref, mode, buyer_id, buyer_login, buyer_name, status,
+       created_at, updated_at)
+     values ($1::uuid, '900100', 'chat', $1::text, 'real', '57099999', 'fictif_defis', 'Fictif_Defis', $2,
+       now() - interval '1 day', now() - interval '1 day')`,
+    [`00000000-0000-4000-8000-0000000c4a1${i}`, status],
+  );
+
 const { ProgressionRelay } = await import('../src/progression/relay.js');
 const { CosmeticsRelay } = await import('../src/cosmetics/relay.js');
+const { ChallengesRelay } = await import('../src/challenges/relay.js');
 const ext = await LabEbs.create(EXTENSION_DIR);
 const labCore = localLabCoreClient(coreUrl, secret);
 ext.connectLab(labCore);
@@ -146,6 +164,8 @@ const studio = createStudioServer(
   new ProgressionRelay({ core: labCore, environment: 'lab' }),
   // Boutique cosmétique V1: Studio's « Boutique » tab relay to this Lab Core.
   new CosmeticsRelay({ core: labCore, environment: 'lab' }),
+  // Défis: Studio's « Défis » tab relay to this Lab Core.
+  new ChallengesRelay({ core: labCore, environment: 'lab' }),
 );
 // The browser tests that need the Lab Core itself (a simulated live, a chat message) read where it is here.
 await writeFile(

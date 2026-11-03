@@ -46,6 +46,8 @@ const PREFIXES = [
   '/v1/lab/progression/',
   // Boutique cosmétique V1: Studio's editor (docs/COSMETIC_SHOP.md) and the looks' stylesheet (public, read only).
   '/v1/lab/cosmetics/',
+  // Défis: Studio's editor, recount and follow-up (docs/CHALLENGES.md).
+  '/v1/lab/challenges',
   '/v1/cosmetics/style.json',
   // Halloween « Titres » in the Extension Lab: the shop's catalogue, a viewer's side and the purchase (Lab Core).
   '/v1/cosmetics/catalog',
