@@ -44,6 +44,16 @@ export const DailyStatus = z.object({
   lastClaim: DailyLastClaim.nullable(),
   /** Reward of the viewer's next claim if the streak is kept. */
   nextReward: z.number().int(),
+  /**
+   * The reward table by streak (index 0 = streak 1; past the end, the last step repeats). Null: a linear rule (base +
+   * per streak, capped) without steps. Absent from an older Core.
+   */
+  rewardSteps: z.array(z.number().int()).nullable().optional(),
+  /**
+   * Outside a live, the end of the window in which the current stream-day can still be claimed (Paris reset hour).
+   * Null while live (open as long as the live lasts) or when there is nothing to claim. Absent from an older Core.
+   */
+  claimOpenUntil: z.string().nullable().optional(),
 });
 export type DailyStatus = z.infer<typeof DailyStatus>;
 

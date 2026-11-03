@@ -543,6 +543,28 @@ describe('read contract', () => {
     });
   });
 
+  it('status gives the reward table and, outside a live, when the stream-day stops being claimable', async () => {
+    const core = await setup();
+    const live = await streamOn(core, '2026-09-24');
+    core.clock.set(paris('2026-09-24', 20, 10));
+    expect(await core.daily.status(bob.twitchUserId)).toMatchObject({
+      rewardSteps: [500, 700, 900, 1100, 1300, 1500, 1600, 1700, 1850, 2000],
+      claimOpenUntil: null, // open as long as the live lasts
+    });
+    await live.end();
+    core.clock.set(paris('2026-09-24', 23, 30));
+    expect(await core.daily.status(bob.twitchUserId)).toMatchObject({
+      live: false,
+      currentStreamDay: '2026-09-24',
+      claimOpenUntil: paris('2026-09-25', 16).toISOString(),
+    });
+    core.clock.set(paris('2026-09-25', 16, 1));
+    expect(await core.daily.status(bob.twitchUserId)).toMatchObject({
+      currentStreamDay: null,
+      claimOpenUntil: null,
+    });
+  });
+
   it('leaderboards rank total, effective streak and best', async () => {
     const core = await setup();
     for (const day of ['2026-09-21', '2026-09-22']) {

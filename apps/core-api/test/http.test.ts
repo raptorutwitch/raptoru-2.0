@@ -120,6 +120,9 @@ describe('core-api HTTP', () => {
     expect(status).toMatchObject({
       currentStreak: 1,
       claimedCurrentStreamDay: true,
+      // raptoru.fr draws the steps from the Core's real table; open as long as the live lasts.
+      rewardSteps: [500, 700, 900, 1100, 1300, 1500, 1600, 1700, 1850, 2000],
+      claimOpenUntil: null,
     });
     const board = DailyLeaderboard.parse(
       await (await fetch(`${base}/v1/daily/leaderboard`)).json(),

@@ -360,6 +360,11 @@ export class DailyService {
           }
         : null,
       nextReward: rewardForStreak(currentStreak + 1, config),
+      rewardSteps: config.reward.steps ?? null,
+      claimOpenUntil:
+        !ctx.live && ctx.currentStreamDay !== null
+          ? streamDayWindow(ctx.currentStreamDay).end.toISOString()
+          : null,
     };
   }
 
