@@ -406,3 +406,9 @@ export function historyView(s: CpState) {
     })
     .join('')}</tbody></table>`;
 }
+
+/** Confirmations of the channel-point automations switch (page Récompenses Twitch and Régie): purchases, refunds. */
+export const CP_ON_CONFIRM =
+  'Activer les automatisations de points de chaîne ?\n\nLes vraies récompenses de ta chaîne déclencheront les actions configurées (OBS, sons, interactions). Les achats faits pendant la coupure ne sont pas rejoués.';
+export const CP_OFF_CONFIRM =
+  'Couper les automatisations de points de chaîne ?\n\n• Les récompenses ne déclenchent plus leurs actions (OBS, sons, interactions, crédits TTS / Soundboard) ; ces achats restent dans l’historique comme « automatisations coupées » et ne seront jamais rejoués.\n• Elles restent achetables sur Twitch : les points dépensés ne sont pas remboursés par Raptoru (désactive ou mets en pause les récompenses sur Twitch si besoin).\n• Les autres modules (alertes, Tombola, TTS, Spotify…) ne sont pas touchés.';

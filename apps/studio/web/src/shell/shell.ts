@@ -6,6 +6,9 @@
 //   - la supervision compacte : un résumé dans l'en-tête, une ligne par incident, « Vu » conservé (même route) ;
 //   - les pages de regroupement (Centre de contrôle, Régie, Modules, Communauté, Activité, Laboratoire).
 import {
+  LIVE_ACTIONS,
+  loadLive,
+  type LiveState,
   CP_OFF_CONFIRM,
   CP_ON_CONFIRM,
   loadChannelPoints,
@@ -173,7 +176,11 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
     supOk = !!snap;
     if (snap) sup = snap;
     drawSup();
-    if (current.hub === 'regie') regieCp = await loadChannelPoints();
+    if (current.hub === 'regie')
+      [regieCp, regieLive] = await Promise.all([
+        loadChannelPoints(),
+        loadLive(),
+      ]);
     if (
       current.hub === 'centre' ||
       current.hub === 'activite' ||
@@ -184,7 +191,27 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   // Régie : état des points de chaîne (lu à chaque relevé tant que la Régie est ouverte) et message de la dernière action.
   let regieCp: Awaited<ReturnType<typeof loadChannelPoints>> | undefined;
   let regieMsg = '';
+  let regieLive: LiveState | undefined;
+  let liveMsg = '';
   hub.addEventListener('click', (e) => {
+    const liveId = (e.target as HTMLElement).closest<HTMLElement>('[data-live]')
+      ?.dataset.live;
+    const action = liveId ? LIVE_ACTIONS[liveId] : undefined;
+    if (action) {
+      if (action.confirm && !confirm(action.confirm)) return;
+      void action
+        .run()
+        .then(
+          () => {
+            liveMsg = `${action.label.replace('…', '')} : fait.`;
+          },
+          (err: Error) => {
+            liveMsg = `Refusé : ${err.message}`;
+          },
+        )
+        .then(pollSup);
+      return;
+    }
     if (!(e.target as HTMLElement).closest('[data-regie="cp"]') || !regieCp)
       return;
     const on = !regieCp.enabled;
@@ -233,7 +260,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
         <section class="rs-panel"><h2>Préparer le live</h2><div class="rs-tiles">${list(['regie', 'moderation', 'alerts', 'channel-points', 'tombola', 'simulation']).map(card).join('')}</div></section>`;
     } else if (h === 'regie') {
       hub.innerHTML = `${head('Régie live', 'Pendant le stream : l’état réel, les coupures nommées et l’accès direct aux contrôles de chaque module (mêmes écrans, aucune copie).')}
-        ${regieHtml({ sup, supOk, cp: regieCp, message: regieMsg, href: (id) => hrefOf(pageById(id)!) })}`;
+        ${regieHtml({ sup, supOk, cp: regieCp, message: regieMsg, live: regieLive, liveMessage: liveMsg, profile: document.querySelector<HTMLElement>('.rs-profile')?.dataset.profile ?? 'unknown', href: (id) => hrefOf(pageById(id)!) })}`;
     } else if (h === 'modules') {
       hub.innerHTML = `${head('Modules', 'Toutes les fonctionnalités, regroupées. Un clic ouvre le module ; Ctrl+K pour aller plus vite.')}
         <div class="rs-catalog">${moduleGroups()

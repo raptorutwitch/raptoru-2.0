@@ -1004,3 +1004,40 @@ body {
 .rs-row.rs-row-2 small {
   white-space: normal;
 }
+/* Régie : cartes des files en direct. */
+.rs-live {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.rs-live-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--rs-border);
+  border-radius: 10px;
+  background: var(--rs-raised);
+}
+.rs-live-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.rs-live-card h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.rs-live-card header a {
+  color: var(--rs-accent);
+  font-size: 12.5px;
+}
+.rs-live-card p {
+  margin: 0;
+}
+.rs-live-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}

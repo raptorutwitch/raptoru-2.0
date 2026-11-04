@@ -13,6 +13,8 @@ import {
 import { MAX_FAVS, pushRecent, toggleFav } from '../../web/src/shell/shell.ts';
 import {
   CP_OFF_CONFIRM,
+  LIVE_ACTIONS,
+  liveHtml,
   REGIE_CONTROLS,
   regieHtml,
 } from '../../web/src/shell/regie.ts';
@@ -130,7 +132,59 @@ describe('Régie live', () => {
   });
 
   it('the stop confirmation states its real scope', () => {
-    expect(CP_OFF_CONFIRM).toContain('ne sont pas remboursées');
+    expect(CP_OFF_CONFIRM).toContain('ne sont pas remboursés');
     expect(CP_OFF_CONFIRM).toContain('ne sont pas touchés');
+  });
+});
+
+describe('Régie live queues', () => {
+  const href = (id: string) => `/?p=${id}`;
+  const live = {
+    tombola: {
+      status: 'open',
+      kind: 'normal',
+      participants: 3,
+      remaining_ms: 41_000,
+      label: '500 Jetons',
+    },
+    alerts: { playing: 1, queued: 2, source: true },
+    tts: { state: 'active', current: 'Fictif', waiting: 4 },
+    spotify: { admission: 'closed', current: null, queue: 0 },
+  };
+  it('shows real queue states and named actions only where they apply', () => {
+    const lab = liveHtml(live, 'lab', href);
+    expect(lab).toContain('3 participant(s) · 41 s restantes');
+    expect(lab).toContain('data-live="tombola-pause"');
+    expect(lab).toContain('data-live="tombola-cancel"');
+    expect(lab).toContain('1 en lecture · 2 en attente');
+    expect(lab).toContain('data-live="tts-stop"');
+    expect(lab).toContain('Demandes fermées');
+  });
+  it('Production: no TTS action here (Modération owns them)', () => {
+    const prod = liveHtml(live, 'production', href);
+    expect(prod).not.toContain('data-live="tts-');
+    expect(prod).toContain('Modération');
+  });
+  it('an unreadable module offers no action; a paused Tombola offers Reprendre', () => {
+    const html = liveHtml(
+      {
+        tombola: { ...live.tombola, status: 'paused' },
+        alerts: null,
+        tts: null,
+        spotify: null,
+      },
+      'lab',
+      href,
+    );
+    expect(html).toContain('data-live="tombola-resume"');
+    expect(html).not.toContain('data-live="tts-');
+    expect(html.match(/Indisponible sur ce profil/g)).toHaveLength(3);
+  });
+  it('destructive live actions confirm their consequences', () => {
+    expect(LIVE_ACTIONS['tombola-cancel']!.confirm).toContain(
+      'personne n’est payé',
+    );
+    expect(LIVE_ACTIONS['tts-stop']!.confirm).toContain('remboursé');
+    expect(CP_OFF_CONFIRM).toContain('jamais rejoués');
   });
 });

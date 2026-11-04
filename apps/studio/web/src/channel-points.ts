@@ -1,6 +1,8 @@
 import { COLOR_CAM_PRESETS, FX_CAM } from '@raptoru/schemas';
 import {
   actionLabel,
+  CP_OFF_CONFIRM,
+  CP_ON_CONFIRM,
   type CpActionView,
   type CpState,
   effectItems,
@@ -370,13 +372,7 @@ export function mountChannelPoints(root: HTMLElement) {
     if (!act) return;
     if (act === 'switch' && state) {
       const on = !state.settings.enabled;
-      if (
-        on &&
-        !confirm(
-          'Activer les automatisations de points de chaîne ?\n\nLes vraies récompenses de ta chaîne déclencheront les actions configurées (OBS, sons).',
-        )
-      )
-        return;
+      if (!confirm(on ? CP_ON_CONFIRM : CP_OFF_CONFIRM)) return;
       void post('/settings', { enabled: on }).then(load, (e) => {
         error = (e as Error).message;
         render();
