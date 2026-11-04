@@ -18,7 +18,7 @@ type ConsoleFactory = (options: {
   document: Document;
   client: {
     modV2: (path: string) => Promise<unknown>;
-    modV2Act: (command: Json) => Promise<unknown>;
+    modV2Act: (command: Json, key?: string) => Promise<unknown>;
   };
   assetBase?: string;
 }) => ConsoleView;
@@ -160,7 +160,11 @@ export function mountModeration(root: HTMLElement) {
         document,
         client: {
           modV2: (path) => api(`/${path}`),
-          modV2Act: (command) => api('/actions', { command }),
+          modV2Act: (command, key) =>
+            api(
+              '/actions',
+              key ? { command, idempotency_key: key } : { command },
+            ),
         },
         assetBase: '/ext/',
       });

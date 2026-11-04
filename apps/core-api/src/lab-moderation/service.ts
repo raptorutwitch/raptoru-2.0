@@ -3,7 +3,7 @@ import type {
   LabModerationRequest,
   LabWalletRequest,
 } from '@raptoru/schemas';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import { labEconomy, type EconomyPort } from '../economy/economy.js';
@@ -529,6 +529,12 @@ export class LabModerationService {
           return { ok: true };
         }
         case 'wallet_adjust': {
+          // Refonte P0-2: applied once per intent — the caller names it (after the access check), Core never invents it.
+          if (!req.idempotency_key)
+            throw new LabModerationError(
+              'idempotency_key_required',
+              'a wallet adjustment needs the idempotency key of its dialog',
+            );
           const out = await this.economy.adjust(q, now, {
             channelId,
             viewerId: cmd.viewer_id,
@@ -537,7 +543,8 @@ export class LabModerationService {
             actor: actorName(actor),
             reason,
             // The action's Idempotency-Key (P1-009): a replay applies nothing more, on the canonical Wallet too.
-            key: `moderation:${channelId}:${req.idempotency_key ?? randomUUID()}`,
+            // Refonte P0-2: required for this money action (checked before the transaction), never invented here.
+            key: `moderation:${channelId}:${req.idempotency_key}`,
           });
           if (out.applied === 0)
             throw new LabModerationError(

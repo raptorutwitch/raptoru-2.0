@@ -222,6 +222,10 @@ export function labProxy(d: LabProxyDeps) {
         const out = await d.core(`/v1/lab/moderation/${C}/actions`, {
           actor: STUDIO_ACTOR,
           command: body.command as LabModerationCommand,
+          // Refonte P0-2: the console's intent key goes to Core, which applies a money action once per key.
+          ...(typeof body.idempotency_key === 'string'
+            ? { idempotency_key: body.idempotency_key }
+            : {}),
         });
         d.onChange?.();
         reply(200, out);

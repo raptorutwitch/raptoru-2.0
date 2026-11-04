@@ -90,4 +90,20 @@ describe('Extension API client — response budget and contract', () => {
     expect(calls[0].key).toBeTruthy();
     expect(calls[1].key).toBe(calls[0].key);
   });
+
+  it('a moderation action with its dialog key sends that key (refonte P0-2: two clicks = one intent)', async () => {
+    const { api, calls } = client(json({ ok: true }), json({ ok: true }));
+    const cmd = {
+      action: 'wallet_adjust',
+      viewer_id: '1',
+      currency: 'tokens',
+      delta: 5,
+    };
+    await api.modV2Act(cmd, 'dialog-intent-0001');
+    await api.modV2Act(cmd, 'dialog-intent-0001');
+    expect(calls.map((c) => c.key)).toEqual([
+      'dialog-intent-0001',
+      'dialog-intent-0001',
+    ]);
+  });
 });

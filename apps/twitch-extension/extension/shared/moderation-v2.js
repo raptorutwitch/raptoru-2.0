@@ -443,11 +443,14 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     }
     return ERRORS[code] ?? e?.details?.message ?? code ?? 'Action impossible.';
   };
-  /** One Core command; the console then shows Core's new state. */
-  async function act(command, done) {
+  /**
+   * One Core command; the console then shows Core's new state. `key`: the intent's Idempotency-Key (refonte P0-2) —
+   * the same dialog sends the same key, so a double click or a retry after a lost answer applies once.
+   */
+  async function act(command, done, key) {
     let ok = true;
     try {
-      await client.modV2Act(command);
+      await client.modV2Act(command, key);
       if (done) toast(done, true);
       onChange?.();
     } catch (e) {
@@ -1359,7 +1362,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   }
   function walletDialog(vid, sign) {
     dialog({
-      state: { amount: 500, cur: 'tokens', reason: '' },
+      // One key per opened dialog (refonte P0-2): every « Créditer / Débiter » click of this dialog is one intent.
+      state: { amount: 500, cur: 'tokens', reason: '', key: win.crypto.randomUUID() },
       render(s) {
         const v = cards.get(vid);
         const bal = Number(v?.wallet?.[s.cur] ?? 0);
@@ -1380,6 +1384,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
         void act(
           { action: 'wallet_adjust', viewer_id: vid, currency: s.cur, delta: sign * amount, reason: String(s.reason ?? '').trim() || undefined },
           `${sign > 0 ? '+' : '−'} ${fmt(amount)} ${CUR[s.cur]} · ${esc(nameOf(vid))}`,
+          // A changed amount or currency is another intent: a new key.
+          `${s.key}:${s.cur}:${sign * amount}`,
         );
       },
     });

@@ -508,7 +508,7 @@ export function createClient({
     /** Moderation V2 (D4): Core read models (overview, whoami, search, viewer card, audit). */
     modV2: (path) => call('GET', `/moderation/v2/${path}`),
     /** Moderation V2 command, executed and audited by Core with the caller's permissions. */
-    modV2Act: (command) => call('POST', '/moderation/v2/actions', { body: { command }, idempotencyKey: newIdempotencyKey() }),
+    modV2Act: (command, key) => call('POST', '/moderation/v2/actions', { body: { command }, idempotencyKey: key ?? newIdempotencyKey() }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
     commandsPublic: () => call('GET', '/commands/public'),
     /** Roue du Sub V2 (R8): the caller's own tours (identity from the token), and « Lancer mes tours ». */

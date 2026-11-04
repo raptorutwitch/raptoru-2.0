@@ -429,6 +429,7 @@ describe('Lab economy unchanged (regression)', () => {
         delta: 100,
         reason: 'test',
       } as LabModerationCommand,
+      idempotency_key: 'test-intent-lab-0001',
     });
     expect((await mod.wallet(CH, V.id)).tokens).toBe(before.tokens + 100);
     expect(await count(core.db, 'wallet_transactions')).toBe(0);

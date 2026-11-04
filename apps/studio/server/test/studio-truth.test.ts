@@ -124,3 +124,25 @@ describe('« Exécuter maintenant (réel) » (H11)', () => {
     expect(text).toContain('à blanc (vraie recherche Twitch, aucun timeout)');
   });
 });
+
+describe('« Donner » (Boutique): one key per intent (P0-2)', () => {
+  it('same intent and gift → same key; another viewer, item or intent → another', async () => {
+    const { awardKey } = await import('../../web/src/cosmetics.ts');
+    const g = { kind: 'jetons', amount: 500 };
+    const k = awardKey('11111111-1111-4111-8111-111111111111', '4242', g);
+    expect(awardKey('11111111-1111-4111-8111-111111111111', '4242', g)).toBe(k);
+    expect(k.length).toBeLessThanOrEqual(120);
+    expect(
+      awardKey('11111111-1111-4111-8111-111111111111', '4243', g),
+    ).not.toBe(k);
+    expect(
+      awardKey('11111111-1111-4111-8111-111111111111', '4242', {
+        kind: 'jetons',
+        amount: 501,
+      }),
+    ).not.toBe(k);
+    expect(
+      awardKey('22222222-2222-4222-8222-222222222222', '4242', g),
+    ).not.toBe(k);
+  });
+});

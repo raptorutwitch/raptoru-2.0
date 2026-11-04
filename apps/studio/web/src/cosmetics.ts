@@ -197,6 +197,22 @@ const BLANK: Omit<Item, 'owners' | 'offers'> = {
   event_key: null,
 };
 
+/**
+ * « Donner » award key (refonte P0-2): the form's intent plus what is given. Same intent, same gift → same key (a
+ * retry never credits twice); another viewer or item → another key. ≤ 120 chars (Core's limit).
+ */
+export function awardKey(
+  intent: string,
+  viewer: string,
+  item: { kind: string; reward_id?: string; amount?: number },
+) {
+  const what = `${viewer}|${item.kind}|${item.reward_id ?? item.amount ?? ''}`;
+  let h = 5381;
+  for (let i = 0; i < what.length; i++)
+    h = ((h * 33) ^ what.charCodeAt(i)) >>> 0;
+  return `studio-${intent}-${h.toString(36)}`;
+}
+
 export function mountCosmetics(root: HTMLElement) {
   let items: Item[] = [];
   let purchases: Purchase[] = [];
@@ -231,8 +247,11 @@ export function mountCosmetics(root: HTMLElement) {
     if (!res.ok) throw new Error(String(out.error ?? `HTTP ${res.status}`));
     return out;
   };
-  // One action at a time: a double click must not send twice (« Donner » credits the real Wallet, one key per click).
+  // One action at a time: a double click must not send twice (« Donner » credits the real Wallet).
   let acting = false;
+  // Refonte P0-2: « Donner » is one intent per form filling — the same key until it succeeds, so a retry after an
+  // error or a lost answer never credits twice (Core: one award per key). A success starts a new intent.
+  let awardIntent = crypto.randomUUID();
   const act = async (fn: () => Promise<unknown>, ok: string) => {
     if (acting) return;
     acting = true;
@@ -478,7 +497,7 @@ export function mountCosmetics(root: HTMLElement) {
           <label>Quantité <input type="number" data-a="amount" min="1" step="1" value="1"><small>Pour les Bonbons et les Jetons.</small></label>
           <div><button type="button" class="rs-btn" data-act="award">Donner</button></div>
         </div>
-        <p class="rs-muted">Crédit réel sur le Core du profil, une fois par clic (clé unique), journalisé.</p>
+        <p class="rs-muted">Crédit réel sur le Core du profil, journalisé. Un nouvel essai après une erreur ne crédite jamais deux fois.</p>
       </section>
     </div>`;
   }
@@ -712,22 +731,22 @@ export function mountCosmetics(root: HTMLElement) {
           `[data-role="award-form"] [data-a="${k}"]`,
         )!;
       const kind = w('kind').value;
-      void act(
-        () =>
-          call('/api/cosmetics/award', {
-            module: 'studio',
-            key: `studio-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-            viewer: w('viewer').value.trim(),
-            viewer_name:
-              w('viewer_name').value.trim() || w('viewer').value.trim(),
-            item:
-              kind === 'reward'
-                ? { kind, reward_id: w('reward_id').value }
-                : { kind, amount: Number(w('amount').value) },
-            reference: 'Studio',
-          }),
-        'Donné.',
-      );
+      const item =
+        kind === 'reward'
+          ? { kind, reward_id: w('reward_id').value }
+          : { kind, amount: Number(w('amount').value) };
+      const viewer = w('viewer').value.trim();
+      void act(async () => {
+        await call('/api/cosmetics/award', {
+          module: 'studio',
+          key: awardKey(awardIntent, viewer, item),
+          viewer,
+          viewer_name: w('viewer_name').value.trim() || viewer,
+          item,
+          reference: 'Studio',
+        });
+        awardIntent = crypto.randomUUID();
+      }, 'Donné.');
     }
   });
 

@@ -776,6 +776,7 @@ describe('Studio cockpit over the installation credential', () => {
         delta: 5000,
         reason: 'test staging',
       },
+      idempotency_key: 'test-intent-staging-01',
     });
     expect(r.status).toBe(200);
     expect((await ext('/session', viewer())).body.wallet.available).toBe(
