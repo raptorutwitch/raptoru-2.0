@@ -24,6 +24,7 @@ les capacités métier restent.
 | 04/11 | Studio doit accueillir les futurs modules sans nouvel onglet principal ni nouvelle charte (§ 9). | Antoni |
 | 04/11 | Le Laboratoire, en particulier l'**Extension Lab**, est essentiel : mieux organisé, jamais dégradé ni supprimé. | Antoni |
 | 04/11 | Catégories strictes **PRODUCTION / LAB / SIMULATION / APERÇU LOCAL** selon le comportement technique réel (§ 7) ; simulations inutiles ou trompeuses à éliminer progressivement après vérification des usages. | Antoni |
+| 04/11 | **Audit fonctionnel** (démarrages, cycle du live, automatisations, réglages) : [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md). La refonte devient fonctionnelle autant que visuelle ; principes au § 17. Arbitrages métier H1-H16 en attente. | mission d'Antoni |
 
 ## 3. Problèmes du Studio initial (résumé Astra, non réaudité)
 
@@ -106,11 +107,11 @@ actifs ou files OBS de Production ; ne pas relier un aperçu local au Core de Pr
 | Outil | Comportement relevé | Classement provisoire |
 |---|---|---|
 | Extension Lab (`extension-lab.ts`) | Extension de production servie par Studio dans des cadres Twitch réalistes, contexte Twitch simulé, Lab EBS local, Jetons fictifs ; ne peut joindre que ce Studio (CSP). | Aperçu local + simulation — **essentiel, à garder** |
-| Widget « Simulation de stream » (`simulation.ts`, barre du haut) | Mélange live simulé, **ingestion du vrai chat Twitch** et **sortie réelle dans le chat par LeCroupier_**, mini-jeux. | **Ambigu** : actions réelles sous le nom « Simulation » → à séparer |
+| Widget « Simulation de stream » (`simulation.ts`, barre du haut) | Mélange live simulé, **ingestion du vrai chat Twitch** et **sortie réelle dans le chat par LeCroupier_**, mini-jeux. En Production : live simulé retiré et interrupteur mini-jeux annoncé réel avec confirmation (`0675b9b`). | **Ambigu** : actions réelles sous le nom « Simulation » → à séparer (lot 9) |
 | Vue Simulation (`simulation-tab.ts`) | Simulateur de chat (identités, rôles), mêmes interrupteurs que le widget. | Simulation utile ; à regrouper |
-| Test Lab (`test-lab.ts`) | « Temporary » : services locaux (Postgres, Core 3000, bot, auth), test de présence. | Diagnostic réel / historique → à auditer |
+| Test Lab (`test-lab.ts`) | « Temporary » : services locaux (Postgres, Core 3000, bot, auth), test de présence. En Production : seuls les arrêts sont permis (`cde6c4f`) : un bot démarré ici tournerait hors du bail du Core de production. | Diagnostic réel / historique → à auditer |
 | Aperçu Alertes | Moteur réel dans une iframe, sans file. | Aperçu local |
-| « Tester » d'une récompense (Récompenses Twitch) | Exécute la règle enregistrée **pour de vrai** (OBS, Soundboard). | Action réelle — libellé à clarifier |
+| « Tester » d'une récompense (Récompenses Twitch) | Exécute la règle enregistrée **pour de vrai** (OBS, Soundboard, effets, Spotify sans mode à blanc ; crédits et Random Ban à blanc). | Action réelle — libellé à clarifier (audit P0-6) |
 | Random Ban « Tester » | Tirage à blanc, jamais de timeout. | Simulation (lecture Twitch réelle) |
 | Spotify, onglet simulateur (Lab) | Simulateur du module en profil Lab. | Simulation utile |
 
@@ -178,6 +179,9 @@ anciennes adresses `?tab=` ; Extension Lab et les simulations utiles ; séparati
 4. **Storyboard** : introuvable (dépôt, branches, `prototypes/`, ancien dossier Raptoru, Bureau, Téléchargements, le
    04/11). Aucun équivalent inventé ; Antoni doit dire ce qu'il désigne.
 5. Classement final des outils de simulation (§ 7) et sort du Test Lab « temporaire ».
+6. **Arbitrages de l'audit fonctionnel H1-H16** ([AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) § H) : achats hors live,
+   points de chaîne quand Studio est absent, fraîcheur des alertes, expiration TTS, StreamElements au redémarrage, fin de
+   live Spotify, limites réglables, etc. Comportement actuel conservé en attendant.
 
 ## 14. Emplacements
 
@@ -220,3 +224,26 @@ Prettier exige `--end-of-line auto` (checkout CRLF) ; E2E instables sous charge,
 `docs/REPRISE.md` (point d'entrée général) · `docs/ROADMAP.md` (modules du projet) · `docs/ARCHITECTURE.md` ·
 `docs/OPERATIONS.md` · `docs/CHALLENGES.md` · `docs/COSMETIC_SHOP.md` · `docs/CHANNEL_POINTS_V1.md` ·
 `docs/COMMANDS_V2_STATUS.md` · `docs/ASTRA_GLOBAL_AUDIT_2026-10.md`.
+
+## 17. Principes fonctionnels (audit du 04/11, structurants)
+
+Détail et preuves : [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md).
+
+- **Grille d'états unique** (§ B.1 de l'audit) :
+  - axes : Disponibilité (autorisé / bloqué par le serveur) · Intention (activé / en pause / désactivé) · Constat (prêt /
+    en attente + dépendance / erreur / inconnu) · Activité (en cours ou non) · Démarrage (permanent / avec le live /
+    manuel) ;
+  - **une intention ON ne s'affiche jamais en vert si le constat n'est pas « prêt »** ;
+  - la grille étend le `ModuleStatus` du Centre de contrôle, sans nouveau modèle.
+- **L'intention vit dans le Core, le constat est recalculé** par les fournisseurs du Centre de contrôle. Pas de moteur
+  générique de déclencheurs ni de workflows ; des règles explicites par module.
+- **Variables d'environnement = plafond de sécurité**, base = intention réglable dans Studio : migration progressive des
+  interrupteurs de comportement (P2-2). Une variable qui bloque un module s'affiche comme « bloqué par le serveur ».
+- **Une seule vérité du live à terme** (P2-1) : le live simulé n'existe qu'en profil Lab. Depuis `0675b9b`, le serveur
+  Studio le refuse en Production.
+- **Aucun démarrage automatique de tirage, vote ou ouverture** au début du live (recommandation H7) ; seule la
+  préparation du live est automatique, et elle est en lecture seule.
+- **Un test réel se déclare réel** jusqu'au bout : libellé, confirmation, portée.
+- **Cotes et tables de gains** restent dans le code ; prix, recharges, durées et limites deviennent réglables avec des
+  bornes côté Core (H10).
+- Tant qu'un arbitrage H n'est pas tranché, **le comportement métier actuel est conservé**.

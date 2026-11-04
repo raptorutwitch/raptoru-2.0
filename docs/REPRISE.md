@@ -79,6 +79,8 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   `Raptoru 2.0 - Worktrees\studio-ux`. **Reprise : [studio-refonte/CHECKPOINT.md](studio-refonte/CHECKPOINT.md)**,
   puis [CONTEXTE.md](studio-refonte/CONTEXTE.md) et [ROADMAP.md](studio-refonte/ROADMAP.md) (dans ce worktree).
   Rien de poussé, validé ni publié ; aucune release Studio sans GO explicite.
+  - **Audit fonctionnel du 04/11** (démarrages, cycle du live, automatisations, réglages) :
+    [studio-refonte/AUDIT_FONCTIONNEL.md](studio-refonte/AUDIT_FONCTIONNEL.md). Arbitrages H1-H16 à trancher par Antoni.
 
 ## 4. Points ouverts hors site (repris du 02/11, non revérifiés le 04/11)
 

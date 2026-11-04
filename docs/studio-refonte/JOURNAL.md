@@ -33,6 +33,24 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   code). Décisions d'Antoni intégrées : tout Studio refondable, Studio extensible, Laboratoire essentiel, catégories
   Production / Lab / Simulation / Aperçu.
 
+- **Audit fonctionnel** (mission d'Antoni : démarrages, cycle du live, automatisations, réglages).
+  - Méthode : lecture seule du code (Core, bot, Studio, extension, lecteurs), quatre audits parallèles, constats graves
+    relus dans le code. Aucune action en Production ; aucun service, bot, OBS ni Studio installé lancé. Au moment des
+    tests, ports 4100 / 4110 / 4301 / 4399 libres (Studio installé non lancé).
+  - Livrable : [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md). Principes structurants : CONTEXTE § 17. Lots F1-F7 :
+    ROADMAP.
+  - `0675b9b` :
+    - lecteur Soundboard de Production monté au lancement (régression de la refonte : page par défaut = Centre) ;
+    - `RaffleRuntime.simulatedStream=false` en Production : `stream_start` refusé, `stream_end` refusé sur une session
+      Twitch ;
+    - Tombola et widget ne proposent plus le live simulé en Production ;
+    - interrupteur mini-jeux « PRODUCTION » avec confirmation ;
+    - voyant Caution sur `seen_ms_ago`.
+  - `cde6c4f` : Test Lab limité aux arrêts en Production (`testLabActionAllowed`).
+  - `a49178a` : Boutique, une action à la fois.
+  - E2E `tombola-bonbons` : échec relancé seul, puis rejoué sur les fichiers de `f1f1b03` restaurés temporairement dans le
+    worktree. Il échoue de la même façon : défaut antérieur.
+
 ## Vérifications marquantes
 
 - Storyboard cherché le 04/11 : dépôt (code, docs, branches, messages de commit), checkout principal, `prototypes/`

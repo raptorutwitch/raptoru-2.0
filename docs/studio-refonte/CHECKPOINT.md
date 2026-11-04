@@ -1,49 +1,83 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 04/11/2026, après la consolidation documentaire.**
-Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture) puis [ROADMAP.md](ROADMAP.md) (état par lot).
+**Mis à jour : 04/11/2026, après l'audit fonctionnel.**
+Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
+[ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
+le travail touche au comportement d'un module.
 
 ## Où
 
-- Branche **`feat/studio-ux`** (locale, jamais poussée), worktree
-  `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\studio-ux`. Base : `docs/site-hub-delivered` (68420a0) → `main`
-  8a897a5.
+- Branche **`feat/studio-ux`**, locale et jamais poussée.
+- Worktree : `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\studio-ux`.
+- Base : `docs/site-hub-delivered` (68420a0) → `main` 8a897a5.
 - Production : Core 8a897a5, bot 4ba9243, site 74f7542, Studio **0.1.25 publiée** (sans la refonte ; installation sur
   le PC à confirmer). À revérifier soi-même : `docs/REPRISE.md` § 2.
-- Vérifier d'abord : `git -C "<worktree>" status --short` et `git log --oneline -8` (attendu : arbre propre).
+- Vérifier d'abord `git -C "<worktree>" status --short` et `git log --oneline -8`. L'arbre doit être propre.
 
 ## Derniers commits (plus récent en haut)
 
-`377e726` kit de revue · `4282312` palette + petite largeur des vues historiques · `f5c5b0d` Progression ·
-`b1aab1f` Régie étape 2 · `1d8992a` Régie étape 1 · `a08a249` lots 0-4 — puis le commit de cette consolidation.
+- Commit de cette documentation.
+- `a49178a` Boutique : une action à la fois.
+- `cde6c4f` Test Lab : uniquement des arrêts en Production.
+- `0675b9b` lecteur Soundboard chargé au lancement, live simulé refusé en Production, mini-jeux, Caution.
+- `f1f1b03` consolidation documentaire.
+- `377e726` kit de revue.
+- `4282312` habillage des vues historiques.
+- `f5c5b0d` Progression.
+- `b1aab1f` / `1d8992a` Régie.
+- `a08a249` lots 0-4.
 
 ## État
 
-- **Refondu (code + tests automatiques)** : shell / navigation, Défis, Boutique, Progression, Régie live (partielle),
-  Récompenses Twitch (partielle : pages modules, déclencheurs, coupure confirmée).
-- **Seulement habillé** (palette, petite largeur) : Alertes, Soundboard, TTS, Bonk, Tombola, Commandes, Modération,
-  Jeu des mots, Halloween, Simulation, Test Lab, Extension Lab, Système.
+- **Refondu (code + tests automatiques)** :
+  - shell et navigation ;
+  - Défis, Boutique, Progression ;
+  - Régie live (partielle) ;
+  - Récompenses Twitch (partielle).
+- **Seulement habillé** : Alertes, Soundboard, TTS, Bonk, Tombola, Commandes, Modération, Jeu des mots, Halloween,
+  Simulation, Test Lab, Extension Lab, Système.
+- **Audit fonctionnel livré** : [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md).
+  - Contenu : cartographie, grille d'états, analyse des modules, cycle du live, backlog P0-P3, arbitrages H1-H16, plan
+    F1-F7.
+  - Six correctifs sûrs, dans trois commits.
 - **Rien n'est validé par Antoni ni publié.**
-- Tests au dernier lot : typecheck, build, lint, Prettier ; unitaires `studio-shell` (15), `challenges-form`,
-  `supervision*`, `control-center`, `prod-bot-status` ; E2E `challenges`, `cosmetic-*` (3), `halloween-*`,
-  `progression-studio`, `alerts`. Aucun échec non expliqué ; instables connus relancés seuls (CONTEXTE § 15).
+- Tests de l'audit :
+  - unitaires `raffle-lab`, `caution-view`, `simulation-view`, `studio-shell`, `control-center`, `test-lab`,
+    `extension-lab`, `twitch-connections-routing` ;
+  - E2E `cosmetic-*` (3) ;
+  - typecheck, lint, Prettier, build web.
+- E2E `tombola-bonbons` en échec : il échoue aussi sans ces changements, sur `f1f1b03` (ROADMAP, instabilités).
 
-## Règles à respecter (résumé, détail CONTEXTE § 7, 10-12)
+## Règles à respecter (résumé, détail CONTEXTE § 7, 10-12, 17)
 
-- Tout Studio peut être refondu (prototypes validés compris) ; capacités métier conservées ; aucune duplication de
-  handler ; pas de septième destination.
-- PRODUCTION / LAB / SIMULATION / APERÇU LOCAL selon le comportement réel ; jamais d'état inconnu maquillé.
-- Extension Lab essentiel ; simulations inutiles retirées seulement après vérification des usages.
-- Aucune action Production, push, release sans GO d'Antoni. Données fictives uniquement. Pas de contenu métier inventé.
+- Tout Studio peut être refondu, prototypes validés compris. Les capacités métier sont conservées. Aucun gestionnaire en
+  double, pas de septième destination.
+- Les catégories PRODUCTION / LAB / SIMULATION / APERÇU LOCAL suivent le comportement réel. Jamais d'état inconnu
+  maquillé. Jamais de vert sur une intention seule.
+- L'Extension Lab est essentiel. Une simulation inutile n'est retirée qu'après vérification de ses usages.
+- Aucun nouvel automatisme métier avant les arbitrages H. Comportement actuel conservé.
+- Aucune action en Production, push ou release sans GO d'Antoni. Données fictives uniquement. Pas de contenu métier
+  inventé.
 
 ## Ouvert
 
-Questions Défis (3), Storyboard introuvable, classement des simulations — CONTEXTE § 13.
+- **Arbitrages H1-H16** (audit § H), à faire trancher par Antoni.
+- Questions Défis (3), Storyboard introuvable, classement des simulations : CONTEXTE § 13.
+- Vérifications que seul Antoni peut faire :
+  - lecteur Soundboard dans le vrai Studio en profil Production ;
+  - P0-9 : `BOT_INSTANCE_ID` dans Coolify, en lecture.
 
 ## Prochaine action
 
-**Lot 5 — refonte d'Alertes** (éditeur, aperçu local, calibrage, file, source OBS, événements réels, variantes,
-StreamElements) sur les primitives `rs-`, sans perte de capacité ; E2E `alerts` vert. Puis Soundboard, TTS, Bonk.
+1. **F1 — Vérité des états**, Studio seul, sans décision ni déploiement :
+   - P0-7 : un échec de démarrage du profil Production devient visible ;
+   - P0-8 : la Régie et le Centre de contrôle n'affichent plus de vert sur une intention seule ;
+   - P1-13 : libellés de portée des actions réelles ;
+   - « Tester » renommé.
+2. Ensuite, F4 (Centre de contrôle et « Prêt pour le live »).
+3. Reprendre en parallèle le lot UX 5 (Alertes), en y joignant les points fonctionnels d'Alertes : file, fraîcheur,
+   « Envoyer dans la file » en Production.
+4. F2, F3, F6 et F7 attendent les arbitrages H et un GO de déploiement.
 
 ## Reprendre
 
@@ -52,8 +86,12 @@ cd "C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\studio-ux"
 git status --short ; git log --oneline -8
 npm run build -w @raptoru/schemas
 cd apps/studio/web && npx tsc -p tsconfig.json
-cd ../server && npx vitest run test/studio-shell.test.ts
+cd ../server && npx tsc -p tsconfig.build.json --noEmit
+npx vitest run test/studio-shell.test.ts test/raffle-lab.test.ts test/simulation-view.test.js
 dev\apercu-refonte-studio.cmd    (aperçu navigateur, données fictives)
 ```
+
+`npx tsc -p tsconfig.json` sur le serveur signale 3 erreurs anciennes dans `test/studio-shell.test.ts` (imports `.ts`).
+Utiliser `tsconfig.build.json`.
 
 Mettre à jour ce fichier et ROADMAP.md à chaque lot commité ; le détail daté va dans JOURNAL.md.

@@ -26,6 +26,8 @@ par Antoni) · **Publié** (release Studio). À ce jour : rien n'est validé ni 
 | 10 | Clôture de la coexistence (styles historiques, alias) | non commencé | — | — | — | — |
 | SB | Storyboard | bloqué (introuvable) | — | — | — | — |
 | V | Validation dans le vrai Studio (Electron) par Antoni | à faire | — | — | — | — |
+| **F0** | Audit fonctionnel + correctifs sûrs (Soundboard au lancement, live simulé refusé en Production, mini-jeux, Caution, Test Lab, Boutique) | terminé | unitaires + E2E cosmétiques | non | non | 0675b9b, cde6c4f, a49178a |
+| F1-F7 | Lots fonctionnels de l'audit (ci-dessous) | non commencé | — | — | — | — |
 
 ## Détail
 
@@ -112,9 +114,30 @@ par Antoni) · **Publié** (release Studio). À ce jour : rien n'est validé ni 
 ### Lot V — validation
 - Session de validation par Antoni quand plusieurs ensembles sont refondus ; puis, sur GO, commit / push / release.
 
+### Lots fonctionnels (audit du 04/11) — [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) § G-I
+
+Un module n'est refondu qu'une fois : quand un lot UX touche une page, il embarque les points fonctionnels de ce module.
+
+| Lot | Contenu | Livré par | Joint au lot UX | Attend |
+|---|---|---|---|---|
+| F1 Vérité des états | P0-7 échec Production visible, P0-8 pas de vert sur une intention seule, P1-13 libellés de portée, « Tester » renommé | Studio | 7a, 8, 9 | — |
+| F2 Argent et files | P0-1 expiration des travaux OBS (points de chaîne), P0-2 clés par formulaire (Modération, Boutique), P0-3 frontière de la roue, P0-4 garde Core du live simulé, P0-6 Spotify à blanc, P1-7 file d'alertes | Core + Studio | 4, 5 | H2, H3 ; GO de déploiement |
+| F3 Bot et live | P0-5 live manqué / retard Helix, P0-9 identité du bot (lecture Coolify), fonctions remontées, P1-10 instantané des abonnés, P2-9 | bot (+ Core) | — | H9 ; GO de déploiement |
+| F4 Centre de contrôle et préparation du live | P1-1 « Prêt pour le live », P1-2 fournisseurs par module, P1-3 configuration effective, P1-4 supervision, P1-9, P1-11 | Core (lecture) + Studio | Centre, Régie | — |
+| F5 Reprise propre | P1-5 restauration OBS à la fermeture, P1-6 exécuteurs avec porte OBS, P1-8 démarrage avec Windows, P2-8 | Studio | 8 | — |
+| F6 Réglages essentiels | P1-12 pages Mini-jeux et Votekick, P2-5 à P2-7 | Core + Studio | 4, 6 | H8, H10, H12-H16 |
+| F7 Cycle du live | P2-1 session unique, P2-2 variables = plafond, P2-3 règle de live, P2-4 fin de live | Core + bot + Studio | — | H1, H6 |
+
+Ordre recommandé : F1 → F2 → F4 → F3 → F5 → F6 (au fil des pages) → F7.
+
 ## Régressions et instabilités connues
 
 - Aucune régression connue introduite par la refonte.
 - E2E instables sous charge (non liés) : `effects-player`, `tombola-bonbons` (bloqué une fois), `alerts` « families »,
   `progression-studio` ; passent relancés seuls.
-- Le widget « Simulation de stream » mélange encore actions simulées et réelles (lot 9).
+- Le widget « Simulation de stream » mélange encore actions simulées et réelles (lot 9). En Production, le live simulé en
+  est retiré et l'interrupteur mini-jeux est annoncé réel (`0675b9b`).
+- Régression de la refonte corrigée (`0675b9b`) : le lecteur Soundboard de Production n'était chargé qu'à l'ouverture de
+  Système (page par défaut devenue le Centre de contrôle).
+- E2E `tombola-bonbons` : échoue (délai dépassé en attendant les Bonbons des gagnants) seul et aussi sur `f1f1b03`, sans
+  les changements de l'audit. Défaut antérieur, cause non analysée.
