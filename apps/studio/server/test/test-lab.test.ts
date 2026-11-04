@@ -4,7 +4,12 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { crashLine, createStudioServer, stopAll } from '../src/index.js';
+import {
+  crashLine,
+  createStudioServer,
+  stopAll,
+  testLabActionAllowed,
+} from '../src/index.js';
 import { redact } from '../src/test-lab/local-env.js';
 import { LogBuffer } from '../src/test-lab/log-buffer.js';
 import { ManagedProcess, PidStore } from '../src/test-lab/managed-process.js';
@@ -341,6 +346,28 @@ describe('Studio HTTP API', () => {
     ).toBe(403);
     expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
     await new Promise((r) => server.close(r));
+  });
+});
+
+describe('Test Lab in the Production profile', () => {
+  it('only stops (never starts a second Twitch-connected bot outside the production lease)', () => {
+    for (const a of [
+      'core/start',
+      'bot/start',
+      'bot/restart',
+      'start-all',
+      'preflight',
+    ])
+      expect(testLabActionAllowed(a, true)).toBe(false);
+    for (const a of [
+      'bot/stop',
+      'core/stop',
+      'postgres/stop',
+      'stop-all',
+      'logs/clear',
+    ])
+      expect(testLabActionAllowed(a, true)).toBe(true);
+    expect(testLabActionAllowed('bot/start', false)).toBe(true);
   });
 });
 

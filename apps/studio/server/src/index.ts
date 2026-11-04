@@ -328,6 +328,21 @@ const actions: Record<string, Action> = {
   'logs/clear': async (lab) => lab.logs.clear(),
 };
 
+/**
+ * Production profile: the Test Lab may only stop what it adopted. Starting its Core / bot would run a second
+ * Twitch-connected bot with this PC's tokens next to the production bot, outside the production Core's lease.
+ */
+const TEST_LAB_PRODUCTION_ACTIONS = new Set([
+  'postgres/stop',
+  'core/stop',
+  'bot/stop',
+  'stop-all',
+  'logs/clear',
+]);
+export function testLabActionAllowed(name: string, production: boolean) {
+  return !production || TEST_LAB_PRODUCTION_ACTIONS.has(name);
+}
+
 /** One stderr line for a crash: full stack (diagnosis) through the secret redaction. */
 export function crashLine(
   kind: string,
@@ -598,11 +613,15 @@ export function createStudioServer(
         onShutdown();
         return;
       }
-      const action =
-        req.method === 'POST'
-          ? actions[url.pathname.replace('/api/test-lab/', '')]
-          : undefined;
+      const name = url.pathname.replace('/api/test-lab/', '');
+      const action = req.method === 'POST' ? actions[name] : undefined;
       if (!action) return send(res, 404, { error: 'not_found' });
+      if (!testLabActionAllowed(name, profile?.plan.effective === 'production'))
+        return send(res, 403, {
+          ok: false,
+          error:
+            'Test Lab : démarrage refusé en profil Production (un second bot Twitch tournerait hors du bail du Core de production).',
+        });
       return send(res, 200, { ok: true, result: await action(lab) });
     } catch (error) {
       const message = lab.deps.redact((error as Error).message);
