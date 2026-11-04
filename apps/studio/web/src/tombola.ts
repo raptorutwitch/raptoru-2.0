@@ -48,6 +48,8 @@ interface Status {
   scheduler: Scheduler;
   currencies: Currency[];
   stream: { session_id: string; started_at: string; source: string } | null;
+  /** False in the Production profile: no simulated live there (Studio server refuses it). */
+  simulated_stream?: boolean;
   winners_table: { participants: number; min: number; max: number }[];
   /** Titles composed by Core from the labels (overlay + extension). */
   titles?: { normal: Titles; super: Titles; giveaway: Titles; idle: string };
@@ -545,7 +547,9 @@ export function mountTombola(root: HTMLElement) {
   function streamLine() {
     const st = status!.stream;
     if (!st)
-      return `<span>État stream : <b>Hors ligne</b></span><button class="t-btn t-btn--ghost" type="button" data-stream="start">Simuler début de stream</button>`;
+      return status!.simulated_stream === false
+        ? `<span>État stream : <b>Hors ligne</b></span><span class="fine">début détecté par Twitch</span>`
+        : `<span>État stream : <b>Hors ligne</b></span><button class="t-btn t-btn--ghost" type="button" data-stream="start">Simuler début de stream</button>`;
     if (st.source === 'twitch')
       return `<span>État stream : <b style="color:var(--t-ok)">En direct (Twitch)</b> depuis ${hhmm(st.started_at)}</span><span class="fine">fin détectée par l’ingestion Twitch</span>`;
     return `<span>État stream : <b style="color:var(--t-ok)">En direct (simulation)</b> depuis ${hhmm(st.started_at)}</span><button class="t-btn t-btn--ghost" type="button" data-stream="end">Simuler fin de stream</button>`;

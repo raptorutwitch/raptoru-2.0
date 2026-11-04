@@ -35,6 +35,8 @@ export interface CautionState {
     can_read: boolean;
     can_release: boolean;
     missing: string[];
+    /** Age of the bot's last signal (the Core's clock); a silent bot is not « prête ». */
+    seen_ms_ago?: number;
   } | null;
   ready: boolean;
   to_verify: number;
@@ -105,12 +107,19 @@ export function cautionView(s: CautionState | null, error: string | null) {
   if (error) return `<p class="cp-error">${esc(error)}</p>`;
   if (!s) return '<p class="cp-muted">Chargement…</p>';
   const e = s.executor;
+  // Rights are only meaningful from a living bot (the Core's `executorReady`: a signal under 15 s).
+  const silent = e?.seen_ms_ago !== undefined && e.seen_ms_ago >= 15_000;
   const executor = !e
     ? chip('warn', 'Exécuteur Twitch : absent')
-    : `${chip(e.can_read ? 'ok' : 'warn', `Lecture des bannis : ${e.can_read ? 'prête' : 'impossible'}`)} ${chip(
-        e.can_release ? 'ok' : 'warn',
-        `Levées par ${e.login} : ${e.can_release ? 'autorisées' : 'droit manquant'}`,
-      )}${e.missing.length ? `<br><small class="cp-muted">Droits Twitch manquants : ${esc(e.missing.join(', '))}</small>` : ''}`;
+    : silent
+      ? chip(
+          'warn',
+          `Exécuteur Twitch : aucun signal depuis ${Math.round(e.seen_ms_ago! / 1000)} s · Caution refusée (aucun jeton débité)`,
+        )
+      : `${chip(e.can_read ? 'ok' : 'warn', `Lecture des bannis : ${e.can_read ? 'prête' : 'impossible'}`)} ${chip(
+          e.can_release ? 'ok' : 'warn',
+          `Levées par ${e.login} : ${e.can_release ? 'autorisées' : 'droit manquant'}`,
+        )}${e.missing.length ? `<br><small class="cp-muted">Droits Twitch manquants : ${esc(e.missing.join(', '))}</small>` : ''}`;
   const rows = s.recent
     .map((r) => {
       const who = r.target?.name ?? r.target_input;

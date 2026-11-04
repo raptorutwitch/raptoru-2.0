@@ -66,9 +66,12 @@ export async function loadSimState(): Promise<SimState> {
     getJson('/api/lab-chat/output'),
     getJson('/api/mini-games/state'),
   ]);
+  // Production profile: the Studio server refuses a simulated live (it would open the real shared session).
+  const production = raffle?.simulated_stream === false;
   const state: SimState = {
+    production,
     stream:
-      raffle && 'stream' in raffle
+      raffle && 'stream' in raffle && !production
         ? (raffle.stream as SimState['stream'])
         : undefined,
     ingress:

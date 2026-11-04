@@ -183,6 +183,7 @@ export function mountStudioHome(root: HTMLElement) {
   // Production profile: the Bonk overlay, Soundboard player and TTS source are set up from this tab.
   let players: { setVisible(v: boolean): void }[] | null = null;
   let production = false;
+  let profileRead = false;
   let playersShown = false;
   const showPlayers = (v: boolean) => {
     if (v === playersShown) return; // each card polls on its own while shown
@@ -191,6 +192,7 @@ export function mountStudioHome(root: HTMLElement) {
   };
   async function refresh() {
     const profile = await getJson<{ effective?: string }>('/api/profile');
+    profileRead ||= Boolean(profile?.effective);
     production = profile?.effective === 'production';
     const card = slot('players');
     card.hidden = !production;
@@ -292,6 +294,13 @@ export function mountStudioHome(root: HTMLElement) {
     timer = setTimeout(() => void loop(), 2000);
   };
   void loadPrototypes();
+  // Mounts the Production players at launch (Soundboard player: see sound-lab.ts), whichever page opens first;
+  // retried until the profile is known.
+  const primePlayers = async () => {
+    await refresh();
+    if (!profileRead) setTimeout(() => void primePlayers(), 5000);
+  };
+  void primePlayers();
   return {
     setVisible(v: boolean) {
       visible = v;

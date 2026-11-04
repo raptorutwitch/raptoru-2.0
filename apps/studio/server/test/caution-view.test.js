@@ -97,4 +97,22 @@ describe('Caution Studio section', () => {
     expect(html).not.toContain('<img src=x>');
     expect(html).toContain('<i>Test</i>');
   });
+  it('a bot silent for 15 s or more is never shown « prête » (the Core refuses the caution)', () => {
+    const html = cautionView(
+      {
+        ...base,
+        ready: false,
+        executor: { ...base.executor, can_release: true, seen_ms_ago: 42_000 },
+      },
+      null,
+    );
+    expect(html).toContain('aucun signal depuis 42 s');
+    expect(html).not.toContain('prête');
+    expect(html).not.toContain('autorisées');
+    const fresh = cautionView(
+      { ...base, executor: { ...base.executor, seen_ms_ago: 3_000 } },
+      null,
+    );
+    expect(fresh).toContain('Lecture des bannis : prête');
+  });
 });

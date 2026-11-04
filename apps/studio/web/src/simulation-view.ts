@@ -3,6 +3,8 @@
 // their effective states. Nothing is decided here; the detailed settings stay in their own tabs.
 
 export interface SimState {
+  /** Production profile: the mini-games switch below is the viewers' real one. */
+  production?: boolean;
   /** Shared live session (Tombola status); undefined = unavailable (Production profile / no Lab Core). */
   stream?: { source: string; started_at: string } | null;
   ingress?: {
@@ -166,18 +168,25 @@ export function simPanel(
           : 'Réponses Commandes, Jeu des mots, mini-jeux.',
       );
   const g = s.games;
+  const gamesLabel = s.production
+    ? 'Mini-jeux Roulette / Slot / Duel · PRODUCTION'
+    : 'Mini-jeux Roulette / Slot / Duel';
   const games = !g
-    ? row('Mini-jeux Roulette / Slot', 'Indisponible', 'na', '')
+    ? row(gamesLabel, 'Indisponible', 'na', '')
     : row(
-        'Mini-jeux Roulette / Slot',
-        g.enabled ? 'ON · !roulette et !slots répondent' : 'OFF',
+        gamesLabel,
+        g.enabled
+          ? 'ON · !roulette, !slots et !duel répondent pendant un live'
+          : 'OFF',
         g.enabled ? 'on' : 'off',
         btn(
           g.enabled ? 'games_off' : 'games_on',
           g.enabled ? 'Désactiver' : 'Activer',
           busy,
         ),
-        'Coupez Roulette / Slot dans StreamElements pendant un test en vrai chat.',
+        s.production
+          ? 'Interrupteur réel des viewers (Core Production, vrais Jetons) : ce n’est pas une simulation.'
+          : 'Profil Lab : Core local, Jetons fictifs.',
       );
   return `<div class="sim-panel" role="dialog" aria-label="Simulation de stream">
     <div class="sim-head"><b>Simulation de stream</b><span class="sim-chip${writesRealChat(s) ? ' sim-chip--warn' : ''}">${writesRealChat(s) ? 'Écrit dans le vrai chat' : 'Aucune écriture dans le vrai chat'}</span></div>
@@ -194,6 +203,10 @@ export function simPanel(
 export function confirmFor(action: string, s: SimState): string | null {
   if (action === 'output_on')
     return 'Activer la sortie réelle ? LeCroupier_ écrira dans le VRAI chat Twitch (Commandes, Jeu des mots, mini-jeux). Le bot de production répond aussi dans ce chat : évitez de tester un module qu’il exécute déjà.';
+  if (s.production && (action === 'games_on' || action === 'games_off'))
+    return action === 'games_on'
+      ? 'Profil Production : activer Roulette / Slot / Duel pour les vrais viewers (vrais Jetons, pendant les lives) ?'
+      : 'Profil Production : couper Roulette / Slot / Duel pour les vrais viewers ?';
   if (!writesRealChat(s)) return null;
   if (action === 'stream_start')
     return 'La sortie réelle est ON : un live simulé fera publier le Jeu des mots dans le VRAI chat. Démarrer ?';

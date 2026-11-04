@@ -820,6 +820,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   const raffle = labCore
     ? await RaffleRuntime.create({
         channelId: cockpitChannel,
+        simulatedStream: !production,
         core: labCore,
         origin: `http://${host}:${port}`,
         dir: join(paths.runtimeDir, 'raffle-lab'),

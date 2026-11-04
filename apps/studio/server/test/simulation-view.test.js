@@ -61,7 +61,9 @@ describe('states', () => {
     expect(html).toContain('ON · connectée (lecroupier_)');
     expect(html).toContain('ON · écrit dans le vrai chat');
     expect(html).toContain('Écrit dans le vrai chat');
-    expect(html).toContain('ON · !roulette et !slots répondent');
+    expect(html).toContain(
+      'ON · !roulette, !slots et !duel répondent pendant un live',
+    );
     expect(button(html, 'stream_end')).toBe('Terminer');
     expect(button(html, 'ingress_off')).toBe('Désactiver');
     expect(button(html, 'output_off')).toBe('Désactiver');
@@ -98,6 +100,26 @@ describe('states', () => {
         (s) => s.tone,
       ),
     ).toEqual(['na', 'na', 'na', 'na']);
+  });
+
+  it('Production profile: no simulated live; the mini-games switch says it is the real one and always asks', () => {
+    const prod = {
+      production: true,
+      stream: undefined,
+      ingress: null,
+      output: null,
+      games: { enabled: false },
+    };
+    const html = simPanel(prod);
+    expect(html).toContain('Indisponible (profil Lab uniquement)');
+    expect(button(html, 'stream_start')).toBeUndefined();
+    expect(html).toContain('PRODUCTION');
+    expect(html).toContain('ce n’est pas une simulation');
+    expect(confirmFor('games_on', prod)).toContain('Profil Production');
+    expect(
+      confirmFor('games_off', { ...prod, games: { enabled: true } }),
+    ).toContain('Profil Production');
+    expect(confirmFor('games_on', ALL_OFF)).toBeNull();
   });
 
   it('busy disables the buttons; errors and the ingestion block message are escaped', () => {

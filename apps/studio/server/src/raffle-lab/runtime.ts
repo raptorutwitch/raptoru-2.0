@@ -53,6 +53,11 @@ export interface RaffleRuntimeDeps {
   overlayDir: string;
   /** Channel of the Core (Production: the real channel); Lab default: the Lab channel. */
   channelId?: string;
+  /**
+   * False on the Production Core: a simulated live there would open the shared channel session on the real
+   * Wallet (Jeu des mots, Roulette / Slot / Duel, Commands) and Twitch offline never closes it. Default true (Lab).
+   */
+  simulatedStream?: boolean;
 }
 
 export class RaffleRuntime {
@@ -249,6 +254,7 @@ export class RaffleRuntime {
       );
       return reply(200, {
         ...settings,
+        simulated_stream: this.d.simulatedStream !== false,
         overlay_url: this.overlayUrl,
         preview_url: this.previewUrl,
       });
@@ -273,6 +279,18 @@ export class RaffleRuntime {
       );
     if (!get && p === '/actions') {
       const command = json.command as RaffleCommand;
+      if (this.d.simulatedStream === false) {
+        // Production: never open a simulated live; only a simulated one left open may be ended, never Twitch's.
+        if (command?.action === 'stream_start')
+          return reply(403, { error: 'simulated_stream_lab_only' });
+        if (command?.action === 'stream_end') {
+          const st = await this.d.core<{ stream?: { source?: string } | null }>(
+            `/v1/lab/raffle/${C}/settings`,
+          );
+          if (!st.stream || st.stream.source === 'twitch')
+            return reply(403, { error: 'simulated_stream_lab_only' });
+        }
+      }
       const out = await this.d.core<Record<string, unknown>>(
         `/v1/lab/raffle/${C}/actions`,
         { actor: STUDIO_ACTOR, command },

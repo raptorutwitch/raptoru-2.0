@@ -48,6 +48,16 @@ export function mountSoundLab(
     }
   };
   let timer: ReturnType<typeof setInterval> | undefined;
+  // Production: the Core refuses Soundboard purchases while this player is absent, so it is loaded at launch,
+  // not at the first visit of the page that shows it (retried until the profile's runtime answers).
+  if (options.production) {
+    const prime = async () => {
+      await refresh();
+      if (!el<HTMLIFrameElement>('player').getAttribute('src'))
+        setTimeout(() => void prime(), 5000);
+    };
+    void prime();
+  }
   return {
     setVisible(visible: boolean) {
       clearInterval(timer);
