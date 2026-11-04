@@ -75,10 +75,10 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   - **aucun défi ni cosmétique définitif créé** : le contenu est à décider par Antoni.
 - **Prochain chantier** : les vrais cosmétiques, les récompenses et les premiers défis.
   - Avant : confirmer Studio 0.1.25 installé et valider les parcours connectés du site (`SITE_CONTEXT.md` § 10-11).
-- **En cours (GO du 04/11) : refonte UX/UI du Studio**, branche locale `feat/studio-ux`, worktree
-  `Raptoru 2.0 - Worktrees\studio-ux`. Référence : `docs/RAPTORU_STUDIO_UX_UI_2026-11-04.md` (étude Astra, charte § F) ;
-  avancement, arbitrages et Storyboard (introuvable) : **`docs/STUDIO_REFONTE_JOURNAL.md`**. Rien de poussé ni publié ;
-  aucune release Studio sans GO explicite. Validation manuelle d'Antoni à faire dans `npm run studio` (Lab).
+- **En cours (GO du 04/11) : refonte UX/UI du Studio** — branche locale `feat/studio-ux`, worktree
+  `Raptoru 2.0 - Worktrees\studio-ux`. **Reprise : [studio-refonte/CHECKPOINT.md](studio-refonte/CHECKPOINT.md)**,
+  puis [CONTEXTE.md](studio-refonte/CONTEXTE.md) et [ROADMAP.md](studio-refonte/ROADMAP.md) (dans ce worktree).
+  Rien de poussé, validé ni publié ; aucune release Studio sans GO explicite.
 
 ## 4. Points ouverts hors site (repris du 02/11, non revérifiés le 04/11)
 
