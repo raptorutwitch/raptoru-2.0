@@ -67,8 +67,8 @@ export const UNREACHABLE: ModuleStatus = {
 };
 
 export function mountControlCenter(root: HTMLElement) {
-  root.innerHTML = `<h2>Centre de contrôle</h2>
-    <p class="muted">État réel des services du live. Lecture seule pour l’instant : chaque module se pilote encore depuis son onglet.</p>
+  root.innerHTML = `<h2>État des services</h2>
+    <p class="muted">État réel des services du live (lecture seule). Les interventions se font depuis la <a href="/?p=regie">Régie live</a> et chaque module.</p>
     <div class="cc-grid" data-slot="cc-tiles"><p class="muted">Chargement…</p></div>
     <p class="cc-updated muted" data-slot="cc-updated"></p>
     <h3>Coupures récentes</h3>

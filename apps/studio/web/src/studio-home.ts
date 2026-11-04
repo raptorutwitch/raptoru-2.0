@@ -85,7 +85,7 @@ async function getJson<T>(path: string): Promise<T | null> {
 export function mountStudioHome(root: HTMLElement) {
   root.innerHTML = `
     <section class="hero"><div>
-      <h1>Raptoru Studio</h1>
+      <h1>Système</h1>
       <p>Runtime local du stream : Studio démarre et surveille lui-même ce dont Hub, Bonk, Soundboard et TTS ont besoin. Aucun terminal, aucun <code>npm run bonk:lab</code>.</p>
     </div></section>
     <div class="grid home-grid">

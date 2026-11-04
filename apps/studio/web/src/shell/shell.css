@@ -1041,3 +1041,58 @@ body {
   gap: 6px;
   margin-top: 4px;
 }
+/* Pont avec les vues historiques : leurs variables prennent les couleurs de la charte (composition inchangée). */
+.rs-content {
+  --bg: var(--rs-canvas);
+  --card: var(--rs-surface);
+  --line: var(--rs-border);
+  --text: var(--rs-text);
+  --muted: var(--rs-muted);
+  --accent: var(--rs-accent);
+  --ok: var(--rs-success);
+  --ko: var(--rs-danger);
+  --warn: var(--rs-warning);
+}
+.rs-content button.primary {
+  color: var(--rs-accent-ink);
+}
+.rs-content button:not([class*='rs-']):not([class*='t-']) {
+  border-radius: var(--rs-r-ctl);
+}
+/* Vues historiques en petite largeur : rien ne dépasse de la fenêtre (composition conservée au-delà). */
+.rs-content > main {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 720px) {
+  .rs-content .hw-grant {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rs-content .hw-table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .rs-content .tmb .quick,
+  .rs-content .tmb .seg,
+  .rs-content .tmb .track {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+  .rs-content .tmb .card {
+    min-width: 0;
+  }
+  .rs-content .tmb .grid > * {
+    grid-column: 1 / -1;
+  }
+  .rs-content .scfg-search {
+    width: 100%;
+  }
+  .rs-content .scfg-head {
+    flex-wrap: wrap;
+    gap: 10px;
+  } /* Prototypes validés (Tombola, Soundboard) : ce qui reste trop large défile dans la vue, pas la page. */
+  .rs-content > #tab-tombola,
+  .rs-content > #tab-soundboard {
+    overflow-x: auto;
+  }
+}
