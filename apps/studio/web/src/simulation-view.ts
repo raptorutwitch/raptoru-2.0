@@ -193,7 +193,7 @@ export function simPanel(
  */
 export function confirmFor(action: string, s: SimState): string | null {
   if (action === 'output_on')
-    return 'Activer la sortie réelle ? LeCroupier_ écrira dans le VRAI chat Twitch (Commandes, Jeu des mots, mini-jeux). Coupez dans SAMMI / StreamElements les modules que vous testez.';
+    return 'Activer la sortie réelle ? LeCroupier_ écrira dans le VRAI chat Twitch (Commandes, Jeu des mots, mini-jeux). Le bot de production répond aussi dans ce chat : évitez de tester un module qu’il exécute déjà.';
   if (!writesRealChat(s)) return null;
   if (action === 'stream_start')
     return 'La sortie réelle est ON : un live simulé fera publier le Jeu des mots dans le VRAI chat. Démarrer ?';

@@ -106,10 +106,14 @@ export function mountStudioProfile(
       ? `Studio ${b.version}${b.sha ? ` · ${b.sha}` : ''}${b.packaged ? '' : ' · dev'}`
       : 'Studio';
     const host = p.core_origin ? p.core_origin.replace(/^https:\/\//, '') : '';
-    if (topbar)
+    // Dérivé du profil EFFECTIF confirmé par le serveur : en Production le Core paie réellement (Wallet canonique).
+    if (topbar) {
       topbar.textContent = prod
-        ? `${build} · Production ${p.label ?? ''} (${host}) · ${label} · paiement simulé`
-        : `${build} · Profil Lab · local uniquement · aucun crédit réel`;
+        ? `Production${p.label ? ` ${p.label}` : ''}${host ? ` (${host})` : ''} · ${label} · actions réelles`
+        : 'Profil Lab · Core local · paiements simulés';
+      topbar.title = `${build}${prod ? ' · le Core Production décide des Jetons, achats et récompenses' : ' · aucun Jeton réel ; Twitch/OBS peuvent rester connectés'}`;
+      topbar.dataset.profile = prod ? 'production' : 'lab';
+    }
     card.innerHTML = `
       <h2>Profil Studio <span class="badge ${prod ? 'warn' : 'ok'}">${prod ? `Production${p.label ? ` · ${esc(p.label)}` : ''}` : 'Lab'}</span></h2>
       ${status.notice ? `<p class="badge-line"><span class="badge ko">!</span> ${esc(status.notice)}</p>` : ''}
@@ -146,6 +150,11 @@ export function mountStudioProfile(
       if (res.ok) status = (await res.json()) as ProfileStatus;
     } catch {
       /* server restarting: keep the last view */
+    }
+    // Jamais lu : l’état n’est pas confirmé (pas de « Lab sûr » supposé).
+    if (!status && topbar) {
+      topbar.textContent = 'Profil non confirmé';
+      topbar.dataset.profile = 'unknown';
     }
     render();
   }

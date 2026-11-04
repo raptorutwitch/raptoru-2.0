@@ -53,6 +53,34 @@ const blank = (type: CpActionView['type']): CpActionView =>
                   { type, currency: 'credits_tts', amount: 0 }
                 : { type, scene: '' };
 
+/** Modules set up inside this view, each its own page in the shell (registry anchors). `uses`: a reward's action
+ * that triggers it — the visible trigger → action link. No predicate: not triggered by a channel-point reward. */
+const SATS: {
+  id: string;
+  title: string;
+  uses?: (a: CpActionView) => boolean;
+}[] = [
+  {
+    id: 'effects',
+    title: 'Effets et lecteur d’effets',
+    uses: (a) =>
+      a.type === 'effect_sound' ||
+      a.type === 'effect_video' ||
+      (a.type === 'interaction' &&
+        ['creepy', 'brb', 'fx_cam', 'color_cam'].includes(a.interaction)),
+  },
+  // Spotify has its own linked reward (its « Récompense » tab), not a rule action.
+  { id: 'spotify', title: 'Musique (Spotify)' },
+  {
+    id: 'random-ban',
+    title: 'Random Ban',
+    uses: (a) => a.type === 'interaction' && a.interaction === 'random_ban',
+  },
+  { id: 'caution', title: 'Caution' },
+  { id: 'votekick', title: 'Votekick' },
+  { id: 'sub-wheel', title: 'Roue du Sub' },
+];
+
 export function mountChannelPoints(root: HTMLElement) {
   let state: CpState | null = null;
   let error: string | null = null;
@@ -68,23 +96,25 @@ export function mountChannelPoints(root: HTMLElement) {
   };
   let timer: number | null = null;
 
-  root.innerHTML = `<section class="cp">
-    <div class="cp-head"><h1>Points de chaîne <em>Core</em></h1>
+  // Refonte lot 4: one mount, several canonical pages. Without focus, the page « Récompenses Twitch » (rewards, their
+  // actions, history, links to the modules). With a focus (`setFocus`, from the shell), only that module's section and
+  // the rewards that trigger it. The modules are mounted once here, as before; only their visibility changes.
+  root.innerHTML = `<section class="cp" data-focus="">
+    <div data-main>
+    <div class="cp-head"><h1>Récompenses Twitch <em>points de chaîne</em></h1>
       <button type="button" data-act="switch"></button></div>
     <div class="cp-status" data-role="status"></div>
-    <div data-role="effects"></div>
     <p class="cp-muted">Les récompenses viennent de Twitch (lecture seule : Raptoru ne les valide ni ne les rembourse).
-      Les règles sont propres à Raptoru. SAMMI exécute encore les récompenses de production.</p>
+      Les règles sont propres à Raptoru et exécutées par Raptoru (Core et bot ; SAMMI est débranché depuis le 20/10).</p>
     <div class="cp-grid">
       <div><h2>Récompenses Twitch</h2><div data-role="rewards"></div></div>
       <div><h2>Actions de la récompense</h2><div data-role="editor"></div></div>
     </div>
     <h2>Historique</h2><div data-role="history"></div>
-    <h2>Musique (Spotify)</h2><div data-role="spotify"></div>
-    <h2>Random Ban</h2><div data-role="random-ban"></div>
-    <h2>Caution</h2><div data-role="caution"></div>
-    <h2>Votekick</h2><div data-role="votekick"></div>
-    <h2>Roue du Sub</h2><div data-role="sub-wheel"></div>
+    <h2>Modules réglés ici</h2>
+    <nav class="cp-sat-links">${SATS.map((x) => `<a href="/?p=${x.id}">${esc(x.title)}</a>`).join('')}</nav>
+    </div>
+    ${SATS.map((x) => `<section class="cp-sat" data-sat="${x.id}"><h2>${esc(x.title)}</h2><div class="cp-trig" data-role="trig-${x.id}"></div><div data-role="${x.id}"></div></section>`).join('')}
     <datalist id="cp-scenes"></datalist><datalist id="cp-sources"></datalist><datalist id="cp-filters"></datalist>
   </section>`;
   const $ = (role: string) =>
@@ -251,6 +281,29 @@ export function mountChannelPoints(root: HTMLElement) {
     $('rewards').innerHTML = state ? rewardsView(state, selected) : '';
     $('history').innerHTML = state ? historyView(state) : '';
     renderEditor();
+    renderTriggers();
+  };
+
+  /** Each module page: the rewards whose rule triggers it (a link opens the reward's actions). */
+  const renderTriggers = () => {
+    const on = state?.settings.enabled;
+    for (const x of SATS) {
+      const el = $(`trig-${x.id}`);
+      if (!x.uses) continue;
+      const list = (state?.rewards ?? []).filter((r) =>
+        r.rule?.actions.some(x.uses!),
+      );
+      el.innerHTML = `<p class="cp-muted"><b>Déclencheurs :</b> ${
+        list.length
+          ? list
+              .map(
+                (r) =>
+                  `<a href="/?p=channel-points" data-reward="${esc(r.id)}">${esc(r.title)}</a> (${r.cost.toLocaleString('fr-FR')} pts${r.rule!.enabled ? '' : ', règle désactivée'})`,
+              )
+              .join(', ')
+          : 'aucune récompense Twitch ne le déclenche pour l’instant'
+      }. Automatisations des points de chaîne : <b>${state ? (on ? 'actives' : 'coupées') : error ? 'état inconnu' : '…'}</b>.</p>`;
+    }
   };
 
   const load = async () => {
@@ -320,7 +373,7 @@ export function mountChannelPoints(root: HTMLElement) {
       if (
         on &&
         !confirm(
-          'Activer les automatisations de points de chaîne ?\n\nLes vraies récompenses de ta chaîne déclencheront les actions configurées (OBS, sons). SAMMI exécute encore les récompenses de production : si une même récompense est configurée des deux côtés, elle sera exécutée deux fois.',
+          'Activer les automatisations de points de chaîne ?\n\nLes vraies récompenses de ta chaîne déclencheront les actions configurées (OBS, sons).',
         )
       )
         return;
@@ -448,6 +501,13 @@ export function mountChannelPoints(root: HTMLElement) {
   });
 
   return {
+    /** Shell: a module page (anchor) or the rewards page (null). */
+    setFocus(focus: string | null) {
+      const cp = root.querySelector<HTMLElement>('.cp')!;
+      cp.dataset.focus = SATS.some((x) => x.id === focus) ? focus! : '';
+      for (const s of root.querySelectorAll<HTMLElement>('[data-sat]'))
+        s.classList.toggle('is-focus', s.dataset.sat === cp.dataset.focus);
+    },
     setVisible(visible: boolean) {
       if (timer) window.clearInterval(timer);
       timer = null;

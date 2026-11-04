@@ -1,13 +1,70 @@
-/* Défis (docs/CHALLENGES.md) — Studio's « Défis » tab: only what the shared panel styles do not cover. */
-.ch .ch-actions {
+/* Défis (docs/CHALLENGES.md) — refonte lot 2 : seulement la mise en page propre à Défis (primitives rs- dans shell.css). */
+.ch-actions {
   white-space: nowrap;
+  text-align: right;
 }
-.ch .ch-preview {
-  margin-top: 10px;
-  padding: 10px 14px;
+.ch-empty {
+  max-width: 720px;
+}
+.ch-empty p {
+  color: var(--rs-muted);
+}
+.ch-run {
+  max-width: 900px;
+}
+.ch-run p {
+  margin: 0 0 10px;
+  color: var(--rs-muted);
+}
+.ch-run p.rs-warn {
+  color: var(--rs-text);
+}
+/* Atelier : formulaire + colonne résumé/vérification/actions (sous le formulaire en dessous de 1 200 px). */
+.ch-atelier {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 16px;
+  align-items: start;
+}
+.ch-side {
+  position: sticky;
+  top: calc(var(--topbar-h, 52px) + 12px);
+}
+.ch-preview {
+  margin-top: 12px;
+  padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(127, 127, 127, 0.1);
+  background: var(--rs-raised);
+  font-size: 13.5px;
 }
-.ch .ch-preview ul {
+.ch-preview p {
+  margin: 0 0 6px;
+}
+.ch-preview .ok {
+  color: var(--rs-success);
+}
+.ch-preview ul {
   margin: 4px 0 8px 18px;
+  padding: 0;
+  color: var(--rs-danger);
+}
+.ch-actions-panel {
+  display: grid;
+  gap: 10px;
+}
+.ch-actions-panel p {
+  margin: 0;
+}
+.ch-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 1200px) {
+  .ch-atelier {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ch-side {
+    position: static;
+  }
 }

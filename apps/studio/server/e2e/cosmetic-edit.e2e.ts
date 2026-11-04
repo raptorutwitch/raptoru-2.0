@@ -35,7 +35,8 @@ test('Boutique: an existing title is edited (name, look, rarity, Publié → Mas
   await form.locator('[data-f="status"]').selectOption('published');
   await tab.locator('[data-act="save"]').click();
   await expect(tab).toContainText('Enregistré.');
-  // A viewer owns it (Studio's « Donner »).
+  // A viewer owns it (Studio's « Donner », in « Achats et dons »).
+  await tab.getByRole('tab', { name: 'Achats et dons' }).click();
   const award = tab.locator('[data-role="award-form"]');
   await award.locator('[data-a="viewer"]').fill('57012399');
   await award.locator('[data-a="viewer_name"]').fill('Casper');

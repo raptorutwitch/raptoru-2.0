@@ -75,6 +75,10 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   - **aucun défi ni cosmétique définitif créé** : le contenu est à décider par Antoni.
 - **Prochain chantier** : les vrais cosmétiques, les récompenses et les premiers défis.
   - Avant : confirmer Studio 0.1.25 installé et valider les parcours connectés du site (`SITE_CONTEXT.md` § 10-11).
+- **En cours (GO du 04/11) : refonte UX/UI du Studio**, branche locale `feat/studio-ux`, worktree
+  `Raptoru 2.0 - Worktrees\studio-ux`. Référence : `docs/RAPTORU_STUDIO_UX_UI_2026-11-04.md` (étude Astra, charte § F) ;
+  avancement, arbitrages et Storyboard (introuvable) : **`docs/STUDIO_REFONTE_JOURNAL.md`**. Rien de poussé ni publié ;
+  aucune release Studio sans GO explicite. Validation manuelle d'Antoni à faire dans `npm run studio` (Lab).
 
 ## 4. Points ouverts hors site (repris du 02/11, non revérifiés le 04/11)
 
@@ -95,7 +99,8 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   - **jamais** de `git clean`, `reset --hard` ni `checkout .`.
 - **Worktrees de travail** : `Documents\Raptoru 2.0 - Worktrees\…`. Nouveaux worktrees **uniquement** à cet endroit.
   - `raptoru-fr-refonte` : site, branche de documentation `docs/site-context` (locale, non poussée) ;
-  - `site-hub-core` : Core et Studio, branche de documentation `docs/site-hub-delivered` (locale, non poussée ; elle remplace le `REPRISE.md` du 28/10 d’`origin/main`).
+  - `site-hub-core` : Core et Studio, branche de documentation `docs/site-hub-delivered` (locale, non poussée ; elle remplace le `REPRISE.md` du 28/10 d’`origin/main`) ;
+  - `studio-ux` : refonte du Studio, branche `feat/studio-ux` (locale, partie de `docs/site-hub-delivered`).
 - **Anciens worktrees** (`git worktree list`) :
   - sous `AppData\Local\Temp\…\scratchpad\*-wt` ;
   - `Documents\raptoru-*` ;

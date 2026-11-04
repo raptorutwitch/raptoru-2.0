@@ -1,4 +1,5 @@
 import './style.css';
+import './shell/shell.css';
 import './extension-lab.css';
 import './sound-config.css';
 import './studio-home.css';
@@ -27,214 +28,74 @@ import { mountSimulation } from './simulation.js';
 import { mountSimulationTab } from './simulation-tab.js';
 import { mountAlerts } from './alerts-tab.js';
 import { mountChannelPoints } from './channel-points.js';
-import { mountSupervisionBanner } from './supervision-banner.js';
 import { mountHalloween } from './halloween.js';
 import { mountProgression } from './progression.js';
 import { mountCosmetics } from './cosmetics.js';
 import { mountChallenges } from './challenges.js';
+import { mountShell, shellHtml } from './shell/shell.js';
+import { VIEW_IDS, type ViewId } from './shell/registry.js';
 
-type TabId =
-  | 'studio'
-  | 'moderation'
-  | 'tombola'
-  | 'commands'
-  | 'word-game'
-  | 'alerts'
-  | 'channel-points'
-  | 'simulation'
-  | 'test-lab'
-  | 'extension-lab'
-  | 'soundboard'
-  | 'halloween'
-  | 'progression'
-  | 'shop'
-  | 'challenges';
-const TAB_KEY = 'raptoru-studio-tab';
+// Raptoru Studio — la refonte (docs/RAPTORU_STUDIO_UX_UI_2026-11-04.md) : le SHELL possède la navigation (six
+// rubriques, Laboratoire, favoris, Ctrl+K, supervision compacte) ; chaque vue existante est montée UNE seule fois ici,
+// dans son conteneur historique `#tab-<id>`, et le shell l'affiche. Mêmes instances, mêmes pollers, mêmes lecteurs :
+// aucune vue n'est montée deux fois, aucune action n'est dupliquée. `?tab=<id>` reste un alias exact.
+
+interface View {
+  setVisible?(visible: boolean): void;
+  /** Une vue qui porte plusieurs pages (Récompenses Twitch et ses modules) n'en montre qu'une. */
+  setFocus?(focus: string | null): void;
+}
 
 const app = document.querySelector<HTMLDivElement>('#app');
 
 if (app) {
-  app.innerHTML = `
-    <header class="topbar">
-      <strong class="brand">Raptoru Studio</strong>
-      <nav class="tabs">
-        <button class="tab" type="button" data-tab="studio">Studio <em>runtime</em></button>
-        <button class="tab" type="button" data-tab="moderation">Modération <em>Core</em></button>
-        <button class="tab" type="button" data-tab="tombola">Tombola <em>Core</em></button>
-        <button class="tab" type="button" data-tab="commands">Commandes <em>Core</em></button>
-        <button class="tab" type="button" data-tab="word-game">Jeu des mots <em>Core</em></button>
-        <button class="tab" type="button" data-tab="alerts">Alertes <em>Core</em></button>
-        <button class="tab" type="button" data-tab="channel-points">Points de chaîne <em>Core</em></button>
-        <button class="tab" type="button" data-tab="halloween">Halloween <em>🎃</em></button>
-        <button class="tab" type="button" data-tab="progression">Progression <em>⭐</em></button>
-        <button class="tab" type="button" data-tab="shop">Boutique <em>🛍️</em></button>
-        <button class="tab" type="button" data-tab="challenges">Défis <em>🏆</em></button>
-        <button class="tab" type="button" data-tab="simulation">Simulation <em>Lab</em></button>
-        <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
-        <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
-        <button class="tab" type="button" data-tab="soundboard">Soundboard <em>config</em></button>
-      </nav>
-      <div class="sim-widget"></div>
-      <div class="update-widget"></div>
-      <span class="topbar-safety">Local uniquement · aucun crédit réel</span>
-    </header>
-    <div class="sup-banner" hidden></div>
-    <main id="tab-studio"></main>
-    <main id="tab-moderation" hidden></main>
-    <main id="tab-tombola" class="tab-flush" hidden></main>
-    <main id="tab-commands" hidden></main>
-    <main id="tab-word-game" hidden></main>
-    <main id="tab-alerts" hidden></main>
-    <main id="tab-channel-points" hidden></main>
-    <main id="tab-halloween" hidden></main>
-    <main id="tab-progression" hidden></main>
-    <main id="tab-shop" hidden></main>
-    <main id="tab-challenges" hidden></main>
-    <main id="tab-simulation" hidden></main>
-    <main id="tab-test-lab" hidden></main>
-    <main id="tab-extension-lab" class="tab-full" hidden></main>
-    <main id="tab-soundboard" hidden></main>`;
-  mountSupervisionBanner(app.querySelector<HTMLElement>('.sup-banner')!);
-  const home = mountStudioHome(app.querySelector<HTMLElement>('#tab-studio')!);
-  mountTestLab(app.querySelector<HTMLElement>('#tab-test-lab')!);
-  const moderation = mountModeration(
-    app.querySelector<HTMLElement>('#tab-moderation')!,
+  const CLASS: Partial<Record<ViewId, string>> = {
+    tombola: 'tab-flush',
+    'extension-lab': 'tab-full',
+  };
+  app.innerHTML = shellHtml(
+    VIEW_IDS.map(
+      (id) =>
+        `<main id="tab-${id}"${CLASS[id] ? ` class="${CLASS[id]}"` : ''} hidden></main>`,
+    ).join(''),
   );
-  const tombola = mountTombola(app.querySelector<HTMLElement>('#tab-tombola')!);
-  const commands = mountCommands(
-    app.querySelector<HTMLElement>('#tab-commands')!,
-  );
-  const wordGame = mountWordGame(
-    app.querySelector<HTMLElement>('#tab-word-game')!,
-  );
-  const alerts = mountAlerts(app.querySelector<HTMLElement>('#tab-alerts')!);
-  const channelPoints = mountChannelPoints(
-    app.querySelector<HTMLElement>('#tab-channel-points')!,
-  );
-  const halloween = mountHalloween(
-    app.querySelector<HTMLElement>('#tab-halloween')!,
-  );
-  const progression = mountProgression(
-    app.querySelector<HTMLElement>('#tab-progression')!,
-  );
-  const shop = mountCosmetics(app.querySelector<HTMLElement>('#tab-shop')!);
-  const challenges = mountChallenges(
-    app.querySelector<HTMLElement>('#tab-challenges')!,
-  );
-  const simulationTab = mountSimulationTab(
-    app.querySelector<HTMLElement>('#tab-simulation')!,
-  );
-  const extensionLab = mountExtensionLab(
-    app.querySelector<HTMLElement>('#tab-extension-lab')!,
-  );
-  const soundConfig = mountSoundConfig(
-    app.querySelector<HTMLElement>('#tab-soundboard')!,
-  );
+  const el = (id: ViewId) => app.querySelector<HTMLElement>(`#tab-${id}`)!;
+  const views: Record<ViewId, View> = {
+    studio: mountStudioHome(el('studio')),
+    'test-lab': (mountTestLab(el('test-lab')), {}),
+    moderation: mountModeration(el('moderation')),
+    tombola: mountTombola(el('tombola')),
+    commands: mountCommands(el('commands')),
+    'word-game': mountWordGame(el('word-game')),
+    alerts: mountAlerts(el('alerts')),
+    'channel-points': mountChannelPoints(el('channel-points')),
+    halloween: mountHalloween(el('halloween')),
+    progression: mountProgression(el('progression')),
+    shop: mountCosmetics(el('shop')),
+    challenges: mountChallenges(el('challenges')),
+    simulation: mountSimulationTab(el('simulation')),
+    'extension-lab': mountExtensionLab(el('extension-lab')),
+    soundboard: mountSoundConfig(el('soundboard')),
+  };
   mountUpdateWidget(app.querySelector<HTMLElement>('.update-widget')!);
-  // « Simulation de stream »: live, chat ingestion, real output, mini-games (from any tab).
+  // « Simulation de stream » : live, chat, sortie réelle, mini-jeux (depuis n'importe quelle page).
   mountSimulation(app.querySelector<HTMLElement>('.sim-widget')!);
 
-  const show = (tab: TabId) => {
-    for (const button of app.querySelectorAll<HTMLElement>('[data-tab]'))
-      button.classList.toggle('active', button.dataset.tab === tab);
-    app.querySelector<HTMLElement>('#tab-studio')!.hidden = tab !== 'studio';
-    home.setVisible(tab === 'studio');
-    app.querySelector<HTMLElement>('#tab-moderation')!.hidden =
-      tab !== 'moderation';
-    moderation.setVisible(tab === 'moderation');
-    app.querySelector<HTMLElement>('#tab-tombola')!.hidden = tab !== 'tombola';
-    tombola.setVisible(tab === 'tombola');
-    app.querySelector<HTMLElement>('#tab-commands')!.hidden =
-      tab !== 'commands';
-    commands.setVisible(tab === 'commands');
-    app.querySelector<HTMLElement>('#tab-word-game')!.hidden =
-      tab !== 'word-game';
-    wordGame.setVisible(tab === 'word-game');
-    app.querySelector<HTMLElement>('#tab-alerts')!.hidden = tab !== 'alerts';
-    alerts.setVisible(tab === 'alerts');
-    app.querySelector<HTMLElement>('#tab-channel-points')!.hidden =
-      tab !== 'channel-points';
-    channelPoints.setVisible(tab === 'channel-points');
-    app.querySelector<HTMLElement>('#tab-halloween')!.hidden =
-      tab !== 'halloween';
-    halloween.setVisible(tab === 'halloween');
-    app.querySelector<HTMLElement>('#tab-progression')!.hidden =
-      tab !== 'progression';
-    progression.setVisible(tab === 'progression');
-    app.querySelector<HTMLElement>('#tab-shop')!.hidden = tab !== 'shop';
-    shop.setVisible(tab === 'shop');
-    app.querySelector<HTMLElement>('#tab-challenges')!.hidden =
-      tab !== 'challenges';
-    challenges.setVisible(tab === 'challenges');
-    app.querySelector<HTMLElement>('#tab-simulation')!.hidden =
-      tab !== 'simulation';
-    simulationTab.setVisible(tab === 'simulation');
-    app.querySelector<HTMLElement>('#tab-test-lab')!.hidden =
-      tab !== 'test-lab';
-    app.querySelector<HTMLElement>('#tab-extension-lab')!.hidden =
-      tab !== 'extension-lab';
-    app.querySelector<HTMLElement>('#tab-soundboard')!.hidden =
-      tab !== 'soundboard';
-    soundConfig.setVisible(tab === 'soundboard');
-    // The lab fills the window below the top bar (no page scroll).
+  let shown: ViewId | null | undefined;
+  const showView = (tab: ViewId | null, focus: string | null = null) => {
+    if (tab) views[tab].setFocus?.(focus);
+    if (tab === shown) return;
+    shown = tab;
+    for (const id of VIEW_IDS) {
+      el(id).hidden = id !== tab;
+      views[id].setVisible?.(id === tab);
+    }
+    // L'Extension Lab remplit la fenêtre sous la barre du haut (pas de défilement de page).
     document.documentElement.style.setProperty(
       '--topbar-h',
-      `${app.querySelector<HTMLElement>('.topbar')!.offsetHeight}px`,
+      `${app.querySelector<HTMLElement>('.rs-top')!.offsetHeight}px`,
     );
     document.body.classList.toggle('lab-open', tab === 'extension-lab');
-    extensionLab.setVisible(tab === 'extension-lab');
-    try {
-      localStorage.setItem(TAB_KEY, tab);
-    } catch {
-      /* private mode: tab not remembered */
-    }
   };
-  app.querySelector('.tabs')!.addEventListener('click', (ev) => {
-    const tab = (ev.target as HTMLElement).closest<HTMLElement>('[data-tab]')
-      ?.dataset.tab as TabId | undefined;
-    if (tab) show(tab);
-  });
-  // ?tab=extension-lab (deep link) wins over the remembered tab.
-  let initial: TabId = 'studio';
-  try {
-    const remembered = localStorage.getItem(TAB_KEY);
-    if (
-      remembered === 'extension-lab' ||
-      remembered === 'moderation' ||
-      remembered === 'tombola' ||
-      remembered === 'commands' ||
-      remembered === 'word-game' ||
-      remembered === 'alerts' ||
-      remembered === 'channel-points' ||
-      remembered === 'halloween' ||
-      remembered === 'progression' ||
-      remembered === 'shop' ||
-      remembered === 'challenges' ||
-      remembered === 'simulation' ||
-      remembered === 'soundboard' ||
-      remembered === 'test-lab'
-    )
-      initial = remembered;
-  } catch {
-    /* ignore */
-  }
-  const asked = new URLSearchParams(location.search).get('tab');
-  if (
-    asked === 'studio' ||
-    asked === 'moderation' ||
-    asked === 'tombola' ||
-    asked === 'commands' ||
-    asked === 'word-game' ||
-    asked === 'alerts' ||
-    asked === 'channel-points' ||
-    asked === 'halloween' ||
-    asked === 'progression' ||
-    asked === 'shop' ||
-    asked === 'challenges' ||
-    asked === 'test-lab' ||
-    asked === 'extension-lab' ||
-    asked === 'soundboard'
-  )
-    initial = asked;
-  show(initial);
+  mountShell(app, { showView });
 }

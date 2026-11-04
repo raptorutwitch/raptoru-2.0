@@ -78,7 +78,8 @@ test('Boutique: Studio creates, previews and sells a title; the site buys it onc
   await expect(tab).toContainText('Offre enregistrée.');
   await expect(tab.locator('[data-row="e2e-roi"]')).toContainText('300 Jetons');
 
-  // Kirito_TV gets 500 Jetons (Studio's « Donner »).
+  // Kirito_TV gets 500 Jetons (Studio's « Donner », in « Achats et dons »).
+  await tab.getByRole('tab', { name: 'Achats et dons' }).click();
   const award = tab.locator('[data-role="award-form"]');
   await award.locator('[data-a="viewer"]').fill('57012345');
   await award.locator('[data-a="viewer_name"]').fill('Kirito_TV');
@@ -119,6 +120,7 @@ test('Boutique: Studio creates, previews and sells a title; the site buys it onc
 
   // Studio lists it and refunds it: the Jetons back, the title gone.
   await page.reload();
+  await tab.getByRole('tab', { name: 'Achats et dons' }).click();
   await expect(tab).toContainText('Kirito_TV');
   page.once('dialog', (d) => void d.accept('test e2e'));
   await tab.getByRole('button', { name: 'Rembourser…' }).first().click();

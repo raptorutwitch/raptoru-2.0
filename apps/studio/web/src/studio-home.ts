@@ -113,7 +113,7 @@ export function mountStudioHome(root: HTMLElement) {
           <a class="home-module" href="/?tab=extension-lab&amp;surface=panel"><b>Bonk</b><span>Core local · providers · overlay OBS</span></a>
           <a class="home-module" href="/?tab=soundboard"><b>Soundboard</b><span>Banque, réglages, lecteur local</span></a>
           <a class="home-module" href="/?tab=extension-lab&amp;surface=panel"><b>TTS V2</b><span data-slot="tts-module">Core local · lecteur OBS · Lab</span></a>
-          <span class="home-module is-off"><b>Tombola V2</b><span>Simulation du Lab · migration à venir</span></span>
+          <a class="home-module" href="/?tab=tombola"><b>Tombola V2</b><span>Préparer · En direct · Historique</span></a>
           <a class="home-module" href="/?tab=moderation"><b>Modération V2</b><span>Core local · files, sanctions, remboursements, audit</span></a>
         </div>
       </article>
@@ -266,8 +266,8 @@ export function mountStudioHome(root: HTMLElement) {
       <p class="home-detail">${production ? 'URL de la source OBS : carte « TTS — source OBS (Production) » ci-dessous.' : `Module ${esc(ttsState)} · file ${esc(ttsQueue)}. URL de la source OBS, file et modération : Extension Lab (carte « TTS V2 Lab »).`}</p>
       <div class="row home-row"><span>Données locales</span><span>${rt ? (rt.packaged ? 'Application installée' : 'Repo (dev)') : '—'}</span></div>
       <p class="home-detail">${esc(rt?.dataRoot ?? '—')} · .env et jetons lus ici, jamais embarqués.</p>
-      <div class="row home-row"><span>Production</span><span>SAMMI + StreamElements</span></div>
-      <p class="home-detail">Économie de test ; les connexions Twitch peuvent lire de vrais événements et exécuter des actions réelles selon les automatismes activés.</p>`;
+      <div class="row home-row"><span>Économie</span><span>${production ? 'Core Production · Wallet canonique' : 'Core local · paiements simulés'}</span></div>
+      <p class="home-detail">${production ? 'Jetons, achats, récompenses et remboursements sont réels : le Core Production en décide.' : 'Aucun Jeton réel ; les connexions Twitch peuvent tout de même lire de vrais événements et exécuter des actions réelles selon les automatismes activés.'}</p>`;
     if (Array.isArray(logs) && logs.length) {
       logSeq = logs[logs.length - 1]!.seq;
       logLines.push(

@@ -195,3 +195,45 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Refonte lot 4 : une page par module (focus), la page Récompenses Twitch sans les modules. */
+.cp[data-focus=''] .cp-sat,
+.cp:not([data-focus='']) [data-main],
+.cp:not([data-focus='']) .cp-sat:not(.is-focus) {
+  display: none;
+}
+.cp-sat > h2 {
+  margin-top: 0;
+  font-size: 24px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--rs-text, #eef3f1);
+}
+.cp-trig a,
+.cp-sat-links a {
+  color: var(--rs-accent, #83dfc1);
+}
+.cp-sat-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.cp-sat-links a {
+  padding: 6px 12px;
+  border: 1px solid var(--rs-border, #2c3a41);
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 13px;
+}
+.cp-sat-links a:hover {
+  background: var(--rs-hover, #26343b);
+}
+.cp-reward-acts {
+  display: block;
+  flex-basis: 100%;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--rs-dim, #8ea2a7);
+  text-align: left;
+}

@@ -346,9 +346,12 @@ export function rewardsView(s: CpState, selected: string | null) {
         : r.rule.enabled
           ? `<span class="cp-tag cp-tag--on">${r.rule.actions.length} action(s)</span>`
           : '<span class="cp-tag">règle désactivée</span>';
+      const acts = r.rule?.actions.length
+        ? `<span class="cp-reward-acts">→ ${r.rule.actions.map((a) => esc(actionLabel(a, s.sounds, effectItems(s.effects)))).join(' → ')}</span>`
+        : '';
       return `<li><button type="button" class="cp-reward${r.id === selected ? ' cp-reward--sel' : ''}" data-reward="${esc(r.id)}">
         <span class="cp-reward-title">${esc(r.title)}</span>
-        <span class="cp-muted">${r.cost.toLocaleString('fr-FR')} pts</span>${twitch}${rule}</button></li>`;
+        <span class="cp-muted">${r.cost.toLocaleString('fr-FR')} pts</span>${twitch}${rule}${acts}</button></li>`;
     })
     .join('')}</ul>`;
 }
