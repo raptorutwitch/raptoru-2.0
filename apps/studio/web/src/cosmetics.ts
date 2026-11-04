@@ -231,12 +231,18 @@ export function mountCosmetics(root: HTMLElement) {
     if (!res.ok) throw new Error(String(out.error ?? `HTTP ${res.status}`));
     return out;
   };
+  // One action at a time: a double click must not send twice (« Donner » credits the real Wallet, one key per click).
+  let acting = false;
   const act = async (fn: () => Promise<unknown>, ok: string) => {
+    if (acting) return;
+    acting = true;
     try {
       await fn();
       flash = ok;
     } catch (e) {
       flash = `Refusé : ${(e as Error).message}`;
+    } finally {
+      acting = false;
     }
     await load();
   };
