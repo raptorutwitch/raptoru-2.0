@@ -1,4 +1,9 @@
-# Défis et succès (raptoru.fr lot 5) — Lab, non livré
+# Défis et succès (raptoru.fr lot 5)
+
+> **En Production depuis le 04/11/2026** (Core `8a897a5`, migration `20261120130000_challenges.sql` appliquée, Studio
+> 0.1.25). **Aucun défi créé** : le catalogue est à choisir par Antoni. **`CHALLENGES_ENGINE` désactivé** (absent dans
+> Coolify) : pas de recomptage toutes les 60 s ; un défi n'est compté qu'à son activation ou par « Recompter maintenant ».
+> Contexte complet du site : `lb-app/docs/SITE_CONTEXT.md` du dépôt du site.
 
 Le Core est l'autorité : il compte, termine et récompense. Studio sert à administrer, le site ne fait que lire.
 **Aucun défi n'existe par défaut** : la migration ne crée aucune ligne, et les défis du simulateur et des tests sont
@@ -88,8 +93,9 @@ Pour toutes les métriques :
 
 ## 5. État
 
-- Migration `20261120130000_challenges.sql`, avec son jumeau Lab `20261120120000_challenges_lab.sql` : uniquement de nouvelles tables, aucune donnée. **Préparée, non appliquée.** Le retour arrière est en commentaire dans le fichier.
-- Rien n'est en Production : aucune migration appliquée, aucun déploiement, aucune release Studio.
+- Migration `20261120130000_challenges.sql`, avec son jumeau Lab `20261120120000_challenges_lab.sql` : uniquement de nouvelles tables, aucune donnée. **Appliquée en Production le 04/11/2026**, avant le déploiement du Core `8a897a5`. Le retour arrière est en commentaire dans le fichier.
+- En Production depuis le 04/11 : Core `8a897a5`, Studio 0.1.25 (onglet Défis), site `74f7542` (page Défis). Moteur coupé (`CHALLENGES_ENGINE`), aucun défi.
+- Mesures sur une copie restaurée de la Production : `RELEASE_SITE_HUB.md` § 5 bis.
 - **Testé automatiquement** :
   - Core : règles, rétroactif ou non, rejeu, remboursement, passages répétés et simultanés (PGlite et vrai PostgreSQL), panne au paiement puis reprise, suspension, retrait, semaine, défi secret, migration absente, métrique sans source, routes et accès ;
   - Studio : test de bout en bout de l'onglet sur des données fictives ;

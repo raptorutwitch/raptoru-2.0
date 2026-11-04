@@ -1,187 +1,138 @@
 # Reprise — point d'entrée
 
-Mis à jour : **28/10/2026 soir** (**Halloween : PR #35 prête, non fusionnée, livraison sur GO — § 6** ; **Dock OBS V1.2 livré** : Core `dc06344`, Studio 0.1.17 publiée, à installer — [OBS_DOCK.md](OBS_DOCK.md) ; **Random Ban V3 en Production** : Core `ff4fb45`, bot `4ba9243` ; Studio 0.1.14 publiée (« Test Caution Random Ban »), à installer — § 3, § 6 ; **deuxième passe close** : Core et bot `5e7ebe6`, Studio 0.1.10 installé — § 3 ; premiers correctifs stream en Production le 26/10 (`d215778`) ; **Roue du Sub V2 active** (mode `v2`), Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
-`git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
+**Mis à jour : 04/11/2026, après la livraison de raptoru.fr V2.**
 
-**Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
-piloter depuis Raptoru Studio ; le Core décide, le bot parle à Twitch, Studio pilote OBS, l'extension parle aux viewers.
-SAMMI est **abandonné** (débranché le 20/10). Architecture : [ARCHITECTURE.md](ARCHITECTURE.md).
+- À lire en premier dans toute nouvelle session, puis `git status`.
+- Vérifier soi-même `git log` et Coolify avant de se fier à un SHA écrit ici :
+  `node scripts/coolify-deploy.mjs status core`, et `curl -s https://raptoru.fr/api/status` pour le site.
+- L'état détaillé du 28/10 au 04/11 (Halloween, chantier du site) est archivé dans
+  [archive/REPRISE_2026-10-28_2026-11-04.md](archive/REPRISE_2026-10-28_2026-11-04.md).
+- La version du 28/10 de ce fichier reste dans l'historique Git.
 
-## 1. Où se trouvent les documents (important)
+**Raptoru 2.0** : la plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689).
 
-Les documents de référence sont sur **`origin/main`** (poussés le 24/10). Le checkout principal
-`C:\Users\Antoni\Documents\Raptoru 2.0` est en retard (`main` local @ `11ffe3f`, avec par-dessus l'ancienne copie non commitée de la Roue V2, remplacée par
-`main`) :
-seuls `CLAUDE.md` et ce fichier (copie non suivie, identique) y sont à jour. Lire les autres dans le worktree
-**`C:\Users\Antoni\Documents\raptoru-docs`** (branche `docs/consolidation` = `origin/main` ; la mettre à jour avec
-`git -C C:\Users\Antoni\Documents\raptoru-docs pull --ff-only origin main`) ou avec `git show origin/main:docs/ROADMAP.md`
-depuis le checkout principal.
+- Objectif : tout piloter depuis Raptoru Studio.
+- Le **Core** décide (données, économie, règles, progression, récompenses).
+- Le **bot** parle à Twitch (EventSub, commandes du chat).
+- **Studio**, l'app Electron du PC, administre, crée, modère et pilote OBS.
+- L'**extension** parle aux viewers pendant le live.
+- **raptoru.fr** présente la communauté.
+- SAMMI est **abandonné** depuis le 20/10 : ne jamais le réactiver.
+- Architecture : [ARCHITECTURE.md](ARCHITECTURE.md).
 
-| Besoin                                                               | Document (`origin/main`, lisible dans `raptoru-docs\docs\`) |
-| -------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Roadmap, état de chaque module, arbitrages                           | [ROADMAP.md](ROADMAP.md)                                    |
-| Composants, flux, dépendances externes, doc de chaque module         | [ARCHITECTURE.md](ARCHITECTURE.md)                          |
-| Tests, déploiement, retour arrière, build Studio, vérifications      | [OPERATIONS.md](OPERATIONS.md)                              |
-| Sauvegardes, risques de perte, restauration                          | [BACKUPS.md](BACKUPS.md)                                    |
-| Journal détaillé 21→24/10 (dont chantier Roue V2), anciens documents | [archive/](archive/README.md)                               |
-| Règles de travail des agents                                         | `CLAUDE.md` (racine)                                        |
+## 1. Où lire quoi
 
-## 2. Production (relevé 26/10 ~22:25 UTC)
+| Besoin                                                                                              | Document                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Le site raptoru.fr** : contexte, architecture, état, décisions, prochaines étapes, **checkpoint** | **`lb-app/docs/SITE_CONTEXT.md`**, dépôt du site (`raptorutwitch/Leaderboard-Jeu-des-mots`, worktree `Documents\Raptoru 2.0 - Worktrees\raptoru-fr-refonte`) |
+| Roadmap du projet, état de chaque module, arbitrages                                                | [ROADMAP.md](ROADMAP.md)                                                                                                                                     |
+| Composants, flux, document de chaque module                                                         | [ARCHITECTURE.md](ARCHITECTURE.md)                                                                                                                           |
+| Tests, déploiement, retour arrière, build Studio                                                    | [OPERATIONS.md](OPERATIONS.md), [CICD.md](CICD.md)                                                                                                           |
+| Sauvegardes, restauration                                                                           | [BACKUPS.md](BACKUPS.md)                                                                                                                                     |
+| Cosmétiques côté Core / défis / statistiques des modules                                            | [COSMETIC_SHOP.md](COSMETIC_SHOP.md), [CHALLENGES.md](CHALLENGES.md), [MODULE_STATS.md](MODULE_STATS.md)                                                     |
+| Dernière publication (site, Core, Studio) : plan, compte rendu, retour arrière                      | [RELEASE_SITE_HUB.md](RELEASE_SITE_HUB.md)                                                                                                                   |
+| Règles de travail des agents                                                                        | `CLAUDE.md` (racine)                                                                                                                                         |
+| Anciens journaux                                                                                    | [archive/](archive/README.md)                                                                                                                                |
 
-| Élément              | Version                                                                                                                                                                                                          | Remarque                                                                         |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Core `raptoru-core`  | **`dc06344`** (déployé 28/10 ~00:09 UTC, Core seul, sans migration : Dock OBS V1.2, PR #32 — photos Twitch dans la projection)                                                                                   | `running:healthy`, `/health` `/ready` 200 ; retour : `190bc0a`                   |
-| Bot `raptoru-bot`    | **`4ba9243`** (27/10 01:47 UTC, Random Ban V3 ; inchangé par PR #22 et #24)                                                                                                                                      | bail tenu, EventSub bot et diffuseur OK ; retour : `5e7ebe6`                     |
-| `origin/main`        | `dc06344` = PR #32 (Dock OBS V1.2), **déployé** (Core) ; bot inchangé `4ba9243` ; puis documentation                                                                                                             | Coolify : auto-deploy désactivé                                                  |
-| Studio installé (PC) | **0.1.17 publiée le 28/10** (`dc06344` : Dock OBS V1.2 ; test de mise à jour 0.1.16 → 0.1.17 : 8 fichiers identiques), **à installer par Antoni** (mise à jour intégrée ou installateur de la release `v0.1.17`) | retour : réinstaller 0.1.16                                                      |
-| Roue du Sub          | **V2 active** (mode `v2`, interrupteur ON) depuis le 26/10 12:12 UTC ; **invitations ON** (activées par Antoni le 26/10 12:20 UTC) ; récupération des doubles crédits OFF                                        | détails et retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) |
-| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                                                                              | publication manuelle par Antoni                                                  |
-| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                                                                                        | Node non épinglé (décision en attente)                                           |
-| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                                                                              | journaux du bot sur `/data`                                                      |
-| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                                                                                     | ne pas modifier ces réglages sans GO                                             |
+**Attention, deux copies.** Le checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0` est très en retard sur
+`origin/main` : environ 260 commits le 04/11.
 
-Fonctions en Production : économie canonique (Wallet, Daily, fidélité, présence), Commands V2 (`cmd_steps`), modération
-D4, Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2, Points de chaîne et effets,
-Random Ban, **Roue du Sub V2** (26/10), Caution, Votekick V2, **Spotify V2** (demandes de musique sans SAMMI). Niveau de validation
-de chacune : [ROADMAP.md](ROADMAP.md).
+- Seuls `CLAUDE.md` et `docs/REPRISE.md`, une copie **non suivie** du présent fichier, y sont à jour.
+- Lire les autres documents :
+  - dans un worktree à jour de `origin/main`, par exemple `Documents\Raptoru 2.0 - Worktrees\site-hub-core` après `git fetch` ;
+  - ou depuis le checkout principal, avec `git show origin/main:docs/<FICHIER>.md`.
+- `C:\Users\Antoni\Documents\raptoru-docs` est en retard lui aussi.
 
-## 3. Dernières livraisons et décisions (24–27/10)
+## 2. Production (04/11/2026 ~02:00 UTC)
 
-- **Random Ban V3 — 27/10** (PR #20, Core et bot `4ba9243`, Studio 0.1.11 publiée) : acheteur 4× moins souvent tiré
-  (w / N) ; streamer tiré 2 % des fois → son micro « Micro » coupé 60 s dans OBS (jamais de timeout), seulement si
-  Studio 0.1.11 voit OBS connecté et que rien ne coupe déjà le micro ; micro partagé (Votekick, BRB, Random Ban : la voix
-  revient à la fin du dernier) ; Caution sur un mute OBS : 300 jetons / 10 s restantes, choix `votekick` / `rb` si les
-  deux. Bouton Studio « Tester le mute du streamer » : le micro seulement (ni Twitch, ni jetons, ni chat, ni animation,
-  ni caution). Prix Votekick : la Caution du mute streamer passe déjà à 300 / 10 s avec le Core `4ba9243`.
-  **Non validé en réel** ; règles : [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md) § V3, [CAUTION.md](CAUTION.md).
+| Élément             | Version                                                                                                                                                   | Retour arrière                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Core `raptoru-core` | **`8a897a5`** (PR #55, 04/11) ; migrations `cosmetic_frames_banners` et `challenges` appliquées ; `CHALLENGES_ENGINE` absent (= off)                      | `deploy core 8b2189e --rollback --go`                 |
+| Bot `raptoru-bot`   | **`4ba9243`** (27/10), inchangé                                                                                                                           | —                                                     |
+| Site raptoru.fr     | **`74f7542`** (PR site #116, 04/11) ; ancien site sur `/classic/`                                                                                         | Coolify › redéployer `542b1f2`                        |
+| Studio              | **0.1.25 publiée** le 04/11 (atelier Cadres / Bannières, onglet Défis). Version **installée sur le PC : à confirmer** par Antoni                          | réinstaller la 0.1.24                                 |
+| Sauvegarde du Core  | Coolify quotidienne (04:00 UTC) ; 04/11 01:44 UTC juste avant les migrations ; dump 00:06 UTC vérifié par restauration (fichier chez Antoni, `Downloads`) | [BACKUPS.md](BACKUPS.md)                              |
+| Coolify             | tableau de bord `https://dashboard.raptoru.fr` ; proxy API `https://coolify.raptoru.fr` en **502** le 04/11                                               | `COOLIFY_URL=https://dashboard.raptoru.fr` fonctionne |
 
-- **Deuxième passe — close le 26/10** (PR #16, #17, #18) :
-  - Studio 0.1.9 : Tombola, tranches du montant aléatoire éditées en brouillon (Enregistrer / Annuler) ; Bonk, un tir
-    sur six plus appuyé ; diagnostic Spotify en lecture seule (Spotify ne renvoie jamais la popularité).
-  - Studio 0.1.10 : Spotify départage les éditions d'un même morceau quand aucune version n'est demandée (artistes exacts,
-    sans featuring non demandé, pas d'album live, album / single avant compilation, plus ancienne sortie). Vérifié sur
-    les vraies recherches du 26/10 : Indochine « J'ai demandé à la lune » → Paradize, Dirty Heads « Vacation » → SWIM
-    TEAM ; « LISA Tarantino » et les demandes « live » restent ambiguës.
-  - Bot `5e7ebe6` : Caution et sortie chat relisent une file vide toutes les 250 ms (au lieu de 1 s) ; Core en erreur
-    → 1 s puis jusqu'à 5 s ; première relecture des bans 300 ms après le déban (puis 700 ms, 3 relectures). Prix,
-    débits et remboursements inchangés. Mesure avant : devis en 1,0–2,4 s.
-  - **Non encore observés en live** (aucun test économique en Production).
+En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
 
-- **Correctifs stream — 26/10** (PR #14, Core et bot `d215778`) : mini-jeux (Roulette, Slot, Duel) seulement en live ;
-  messages courts (Daily, `!solde`, Caution ; plus de confirmation pour `!rb` et `!tts` quand l'effet suffit) ; Tombola :
-  même gain pour chaque gagnant (arrondi au-dessus), une seule annonce `/announce`, au moins 2 gagnants dès 4
-  participants (gagnant unique = FULL, 1 %) ; Jeu des mots : 8 phrases de série par palier. **Non encore observés en
-  live.** Texte d'aide Tombola de Studio : à la prochaine publication de Studio.
-- **Roue du Sub V2 — livrée et active le 26/10** (PR #11 et #12) : droits persistants, tirage à l'affichage, reprise
-  automatique des roues jamais démarrées sans second crédit, « À vérifier » pour les cas ambigus ; invitations ON.
-  Livraison, états, limites, retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md).
-- **Infrastructure — chantier clos le 25/10** : CI/CD en service ([CICD.md](CICD.md)) ; Coolify : tableau de bord
-  `https://dashboard.raptoru.fr`, API `https://coolify.raptoru.fr`, ports 8000/6001/6002 fermés depuis Internet en
-  IPv4 et IPv6 ([OPERATIONS.md](OPERATIONS.md) § 8 : état, secours par la console VNC, retour arrière).
+- économie canonique (Wallet, Daily, fidélité, présence), Commands V2, modération ;
+- Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2 ;
+- Points de chaîne et effets, Random Ban V3, Roue du Sub V2 ;
+- Caution, Votekick V2, Spotify V2, Dock OBS ;
+- Boutique cosmétique (depuis le 30/10 au soir).
+- Événement Halloween **fermé** le 02/11.
+- Niveau de validation de chaque module : [ROADMAP.md](ROADMAP.md).
 
-- **Spotify V2 / Studio sup.10 — validé par Antoni en réel le 25/10, chantier clos** ([SPOTIFY_V2.md](SPOTIFY_V2.md)) :
-  demandes de musique, remboursements, `!songcancel 1` / `!songcancel 2`, quotas et exceptions par viewer, « File
-  musicale », skip automatique d'une demande annulée. **Skip accepté tel quel** : une fraction de seconde peut s'entendre
-  sur un morceau qui démarre aussitôt ; aucune optimisation supplémentaire prévue. Mesures du 25/10 : Studio traite une
-  demande en 0,97–1,56 s (1,9–2,9 s avant) ; skip envoyé 6 ms après la détection. Aucune modification fonctionnelle
-  Spotify ou Votekick sans nouvelle décision d'Antoni.
-- Votekick V2 : mute au repos, zoom en décimal, bandeau synchronisé, compte à rebours 60 (et non 63), **durée de vote
-  réglable dans Studio (15–300 s, défaut 60, appliquée par le Core aux nouveaux votes)** et **son de lancement**
-  (désactivé par défaut, joué une fois par vote ouvert). **Son de lancement importé validé en réel par Antoni le 25/10**
-  (correctif `31e3c0f`, sup.10). Aucune commande d'annulation d'un vote en cours n'existe (ni chat, ni Studio).
-- Soundboard : lecteur rétabli après l'installation de sup.10 (vert en supervision le 25/10) ; son lecteur est un cadre
-  de la fenêtre de Studio, pas une source OBS.
-- Décisions : Audio Move conservé ; micro du streamer = « Micro » ; design legacy SAMMI de l'overlay (variante D
-  interdite) ; horloge Windows resynchronisée chaque heure (régularité à confirmer : `w32tm /query /status`).
+## 3. Où on en est
 
-## 4. Travaux en cours — ne rien écraser
+- **raptoru.fr V2 : livré et clos le 04/11.**
+  - Classements avec équipement, carte de joueur, cadres et bannières, statistiques des modules (privées), défis, Twitch,
+    Portfolio, panneau « EN LIVE », Daily à 10 points.
+  - Tout le détail est dans `lb-app/docs/SITE_CONTEXT.md` ; le **checkpoint du site est son § 13** (il n'y en a pas d'autre).
+- **Protections actives** :
+  - moteur de défis coupé ;
+  - **aucun défi ni cosmétique définitif créé** : le contenu est à décider par Antoni.
+- **Prochain chantier** : les vrais cosmétiques, les récompenses et les premiers défis.
+  - Avant : confirmer Studio 0.1.25 installé et valider les parcours connectés du site (`SITE_CONTEXT.md` § 10-11).
 
-| Où                                                                                                           | Contenu                                                                                                                                                                                                                                                                                      | État                                                                                                                                          |
-| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0` (`main` @ `11ffe3f`, en retard sur `origin/main`) | ancienne copie non commitée de la **Roue du Sub V2** (remplacée par `main`, PR #11), correctif « écran gris » de l'extension (**non commité**), documents non suivis ; les deux premiers aussi dans `backup/roue-v2-wip-2026-10-25`                                                          | **C'est aussi le dossier de données de Studio installé** (`.env`, jetons, `.runtime`) : jamais de `git clean`, `reset --hard` ou `checkout .` |
-| `…\scratchpad\sup-wt` (`fix/supervision` @ `2d80c2a`)                                                        | supervision, OAuth du PC, Ctrl+R Soundboard, updater de test                                                                                                                                                                                                                                 | **intégré au dépôt** (PR #1, `eb3f05a`, identique au source de sup.10) ; le worktree peut être retiré après la fusion                         |
-| `C:\Users\Antoni\Documents\raptoru-release` (`chore/coolify-deploy` @ `1f10da3`)                             | script de déploiement Coolify (`ef79a37`, `80f3525`, `1f10da3`)                                                                                                                                                                                                                              | **intégré au dépôt** (PR #1, historique conservé) et étendu (CI, live, vérifications) ; ce worktree n'est plus l'unique copie                 |
-| `C:\Users\Antoni\Documents\rs-vk`                                                                            | clone de build Studio (patch `sup-wt` appliqué + `stash@{0}`), dossier `GO/` (runbook, SQL)                                                                                                                                                                                                  | ne pas nettoyer                                                                                                                               |
-| `…\scratchpad\{chat,wg,solde,node}-wt`                                                                       | restes de lots déjà intégrés                                                                                                                                                                                                                                                                 | à revérifier avant tout retrait                                                                                                               |
-| `C:\Users\Antoni\Documents\raptoru-roue-v2`                                                                  | Roue du Sub V2 : **livrée** (PR #11) ; Lab isolé `lab-v2.cmd` (port 4200, base Docker `raptoru-lab-v2-pg`) ; paquet de livraison `Documents\raptoru-roue-v2-GO\` (SQL, installateur 0.1.8) ; ancien travail : `backup/roue-v2-wip-2026-10-25` + `Sauvegarde Raptoru 2.0\roue-v2-2026-10-25\` | worktree retirable (la copie non commitée du checkout principal est remplacée par `main`)                                                     |
-| `C:\Users\Antoni\Documents\raptoru-halloween` (`feat/halloween`)                                             | **Opération Halloween** (stream du 31/10) : boutique à Bonbons (Core), moteur de screamers (Studio), module d'extension, `!peur` / `!bonbons` — [HALLOWEEN.md](HALLOWEEN.md) ; médias convertis dans son `.runtime\halloween\media` (hors Git)                                               | développé et testé automatiquement, **rien de validé ni de déployé**                                                                          |
-| `C:\Users\Antoni\Documents\raptoru-docs` (`docs/consolidation`)                                              | documentation, = `origin/main`                                                                                                                                                                                                                                                               | poussé                                                                                                                                        |
-| `C:\Users\Antoni\Documents\raptoru-spotify` (`feat/spotify-v2` = `origin/main`)                              | **Spotify V2** ; installateurs sup.9 / sup.10 et SHA-256 : `Documents\raptoru-spotify-GO\`                                                                                                                                                                                                   | livré, validé et **clos** le 25/10 ; rien en attente                                                                                          |
+## 4. Points ouverts hors site (repris du 02/11, non revérifiés le 04/11)
 
-`scratchpad` = `C:\Users\Antoni\AppData\Local\Temp\claude\C--Users-Antoni-Documents-Raptoru-2-0\c435dbde-5dd7-4b54-8561-68eabf04712a\scratchpad`
-(**dossier temporaire Windows ; l'Assistant de stockage y supprime des fichiers** : instantané du 24/10 dans
-`Documents\Sauvegarde Raptoru 2.0\worktrees-2026-10-24\`, voir [BACKUPS.md](BACKUPS.md) § 3).
+- Profil d'alertes Halloween `halloween_alerts` : **encore actif** le 02/11, à couper sur GO d'Antoni.
+- Un achat Halloween d’un viewer (125 Jetons, non remboursé) attend une décision d’Antoni ; le détail est conservé hors du dépôt public.
+- PRs ouvertes du dépôt Raptoru 2.0 au 04/11 : #54 (titres équipés depuis Studio ; commit local `5d24614` non poussé),
+  #47 (brouillon, chaudron des subs), #44 et #43 (brouillons), et les PRs de documentation #48, #40, #38, #36, #34.
+- Côté site : PR #76 (ancienne) ; #115 est remplacée par la documentation de clôture et peut être fermée.
+- Extension : nouvelle version après Halloween (sans « Échanger des Jetons »), à soumettre en revue par Antoni.
+- Tests e2e de Studio instables (`tombola-bonbons`, `progression-studio`, `halloween-*`) et test Windows `alerts-se`
+  pendant les releases : les relances passent, cause à traiter dans un chantier dédié.
 
-## 5. Risques et blocages connus
+## 5. Espaces de travail — ne rien écraser
 
-1. Données de travail de Studio (jetons, `.env`, `.runtime`) : sauvegardes ponctuelles vérifiées (24/10, avant sup.9,
-   avant sup.10 — extraction complète testée le 25/10), aucune régulière ([BACKUPS.md](BACKUPS.md) § 1).
-2. Base de Production : copie hors VPS du 24/10 09:56 vérifiée ; les suivantes demandent un téléchargement manuel dans
-   Coolify (pas d'API, pas de SSH, pas de S3) ; restauration démontrée une seule fois (20/10).
-3. Worktrees de travail non commité sous `AppData\Local\Temp` (risque de nettoyage automatique).
-4. ~~Bot : 409 `not_lease_holder` définitif~~ : corrigé et déployé le 26/10 (`1df65d1`).
-5. Checkout principal en retard sur `origin/main`, avec une copie de la Roue V2 désormais obsolète : sa mise à jour doit
-   préserver les données de Studio et le correctif « écran gris » non commité (jamais de reset ni de clean).
-6. Plusieurs documents de module ont encore un en-tête « non déployé » : la roadmap fait foi.
+- **Checkout principal** `C:\Users\Antoni\Documents\Raptoru 2.0` :
+  - c'est **le dossier de données du Studio installé** (`.env`, jetons Twitch, `.runtime`) ;
+  - il contient du travail non commité (`tools/subgoal/`, un correctif « écran gris » de l'extension…) ;
+  - **jamais** de `git clean`, `reset --hard` ni `checkout .`.
+- **Worktrees de travail** : `Documents\Raptoru 2.0 - Worktrees\…`. Nouveaux worktrees **uniquement** à cet endroit.
+  - `raptoru-fr-refonte` : site, branche de documentation `docs/site-context` ;
+  - `site-hub-core` : Core et Studio, branche de documentation `docs/site-hub-delivered`.
+- **Anciens worktrees** (`git worktree list`) :
+  - sous `AppData\Local\Temp\…\scratchpad\*-wt` ;
+  - `Documents\raptoru-*` ;
+  - `Documents\Raptoru 2.0 - Worktrees\{halloween-24h, halloween-titles, live-feedback, responsive-live}`.
+  - Ce sont surtout des chantiers fusionnés. **À vérifier un par un avant tout retrait** ; aucun n'a été nettoyé.
+- **Sauvegardes** : `Documents\Sauvegarde Raptoru 2.0\` (accès restreint). Ne jamais les déplacer ni les supprimer.
 
-## 6. Prochaine action
+## 6. Risques connus
 
-- **Halloween (31/10, prioritaire)** — PR #35, worktree `raptoru-halloween`, [HALLOWEEN.md](HALLOWEEN.md).
-  - **Validé par Antoni le 28/10** : screamers (vidéo et son) sur son écran ; achat depuis le module Événements,
-    cooldown, effet joué.
-  - **Développé et testé automatiquement, à valider** : défilement 565×376, Dock OBS (révélation à 5 s), Pause et
-    blocage, « Trouver un viewer » et crédit, Tombola en Bonbons, palette chauve-souris. Réglage « Testeurs
-    seulement » laissé inactif (l'extension a déjà ses restrictions d'accès).
-  - **État au 28/10 soir** : PR #35 sur `a11dd4d`, CI verte, fusionnable, **non fusionnée** ; Production inchangée.
-    Dépôt **public** depuis le 28/10 (contrôle des secrets : rien de réel ; [SECURITY.md](../SECURITY.md)) ; Actions
-    rétabli → voie A du runbook. Fermé = aucun spoiler (`!solde` habituel, `!bonbons` / `!peur` muets, module masqué).
-    Push Protection GitHub encore désactivée (à activer par Antoni, non bloquant).
-  - **Prochaine étape** : GO d'Antoni pour les étapes 1–2 de [HALLOWEEN_GO.md](HALLOWEEN_GO.md) (sauvegarde Production
-    vérifiée, puis fusion), hors stream, idéalement le 29/10 ; arrêt avant le déploiement du Core (GO séparé).
+1. Données de travail de Studio (`.env`, jetons, `.runtime`) : sauvegardes ponctuelles seulement ([BACKUPS.md](BACKUPS.md)).
+2. Copies hors VPS de la base : manuelles (téléchargement dans Coolify). La restauration a été prouvée le 20/10, puis le
+   04/11.
+3. Checkout principal en retard et non commité : sa mise à jour doit préserver les données de Studio. Retirer d'abord
+   la copie non suivie `docs/REPRISE.md`, sinon Git refuse d'écraser un fichier non suivi.
+4. Proxy API Coolify en 502 : le workflow GitHub « Déployer » en dépend.
 
-0. **Dock OBS V1.2** (livré le 28/10 : Core `dc06344`, sans migration ; Studio 0.1.17 publiée) : installer Studio
-   0.1.17, actualiser le dock dans OBS (même URL, même clé, préférences V1.1 reprises) et le tester en vrai
-   ([OBS_DOCK.md](OBS_DOCK.md) « V1.2 »).
-1. **Random Ban V3** : installer Studio 0.1.14. « Test Caution Random Ban » (Points de chaîne → Random Ban) : vraie
-   sanction de 60 s libérable par `!caution raptoru_` (jetons réels, sans tirage ni Twitch). Suivi des tirages : paragraphe
-   « Suivi du streamer ».
-2. Premier live après la deuxième passe : délai des devis Caution (attendu sous ~1 s), demandes Spotify d'éditions
-   (Indochine…), tranches Tombola, tirs Bonk.
-3. Votekick : le son de lancement est validé (25/10) ; reste à confirmer la durée de vote réglable sur un vrai vote
-   (GO requis pour tout vote réel).
-4. **Roue du Sub V2** (livrée, active) : observer le premier live ([SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7, « À observer »).
-5. Arbitrage restant de [ROADMAP.md](ROADMAP.md) § 3 : incident Twitch du 22/10 + Bonk/DSK.
+## 7. Règles (texte complet dans `CLAUDE.md`)
 
-## 7. Actions en attente d'accord d'Antoni
+- GO explicite d'Antoni pour :
+  - push, fusion, déploiement, migration ;
+  - flag ou variable, redémarrage ;
+  - release ou installation de Studio ;
+  - OBS, Wallet, sanction Twitch hors test consenti, vote réel.
+- « Validé » = testé à la main par Antoni. Les tests automatiques ne sont pas une validation.
+- Git : ajouter les fichiers un par un ; jamais de reset, clean ni réécriture d'historique. Ne jamais committer
+  `docs/HANDOFF_MIGRATION_2026-10-20.md` ni `docs/POST_LIVE_AUDIT_2026-10-20.md`.
+- Ne jamais afficher un secret : jeton Coolify, `.env`, jetons Twitch, mot de passe OBS.
+- Ne jamais créer de contenu métier à la place d'Antoni (défis, montants, récompenses, objets).
 
-- Lors de la mise à jour du checkout principal sur `origin/main` (sa copie de la Roue V2 est remplacée par `main`) : retirer d'abord la
-  copie non suivie `docs/REPRISE.md` (identique à la version suivie), sinon Git refuse d'écraser un fichier non suivi.
-- **CI/CD** ([CICD.md](CICD.md)) : chantier clos le 25/10 — CI, déploiement du Core (11:11 UTC) et du bot (12:40
-  UTC) depuis GitHub, publication Studio depuis GitHub (brouillon de test 0.1.8 créé, vérifié, supprimé) validés pour
-  de vrai ; API Coolify sur `https://coolify.raptoru.fr`.
-- Sauvegardes : rythme des copies hors VPS (ou S3 dans Coolify) et des données de Studio ; nouveau test de restauration
-  en base jetable ; déplacer les worktrees hors de `Temp`.
-- Archiver les documents non suivis du checkout principal ([archive/README.md](archive/README.md)).
-- Nettoyages proposés (aucun fait) : [BACKUPS.md](BACKUPS.md) § 9.
+## 8. Procédure de reprise (nouvelle session)
 
-## 8. Règles (rappel ; texte complet dans `CLAUDE.md`)
-
-- GO explicite d'Antoni pour : tout push, déploiement, migration, flag / variable, redémarrage, installation Studio,
-  modification OBS, remboursement / ajustement Wallet, sanction Twitch hors test consenti, vote réel, release Studio.
-- « Validé » = testé à la main par Antoni. Ne jamais réactiver SAMMI.
-- Git : ajouter les fichiers un par un (jamais un dossier) ; jamais de reset, clean, réécriture d'historique ;
-  ne jamais committer `docs/HANDOFF_MIGRATION_2026-10-20.md` ni `docs/POST_LIVE_AUDIT_2026-10-20.md`.
-- Ne jamais afficher un secret (jeton Coolify, mot de passe OBS, jetons Twitch, `.env`).
-
-## 9. Procédure de reprise (nouvelle session)
-
-1. Lire ce fichier, puis `git -C "C:\Users\Antoni\Documents\Raptoru 2.0" status` et `git fetch` ; mettre à jour
-   `raptoru-docs` (§ 1) pour lire les documents de référence.
-2. Production en lecture seule : Actions → « État de la livraison », ou dans un worktree à jour de `origin/main` :
-   `node scripts/delivery/status.mjs` (ou `node scripts/coolify-deploy.mjs status core` / `… status bot`).
-3. Lire [ROADMAP.md](ROADMAP.md) § 3 (prochain travail, arbitrages), puis le document du module concerné
-   ([ARCHITECTURE.md](ARCHITECTURE.md) § 5).
-4. Travailler dans un worktree dédié basé sur `origin/main`, jamais dans le checkout principal (données de Studio,
-   travail non commité).
-5. À chaque étape franchie et avant de s'arrêter : mettre à jour ce fichier (court : état, décisions, prochaine
-   action) ; le détail daté va dans un journal sous `archive/`.
+1. Lire ce fichier, puis lancer `git -C "C:\Users\Antoni\Documents\Raptoru 2.0" status` et `git fetch`.
+2. Pour le site : lire `lb-app/docs/SITE_CONTEXT.md`, en entier ou ses § 4, 10, 11 et 13.
+3. Vérifier la Production en lecture seule : `node scripts/coolify-deploy.mjs status core`, depuis un worktree à jour (ajouter
+   `COOLIFY_URL=https://dashboard.raptoru.fr` si `coolify.raptoru.fr` répond 502), et `https://raptoru.fr/api/status`.
+4. Travailler dans un worktree basé sur `origin/main`, jamais dans le checkout principal.
+5. À chaque étape franchie et avant de s'arrêter :
+   - mettre à jour ce fichier (court : état, décisions, prochaine action) ;
+   - mettre à jour `SITE_CONTEXT.md` pour le site ;
+   - le détail daté va dans `archive/`.

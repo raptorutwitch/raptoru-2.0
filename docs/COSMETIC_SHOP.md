@@ -1,5 +1,12 @@
 # Boutique cosmétique V1 — titres et badges en Jetons ou en Bonbons
 
+> **État au 04/11/2026** :
+>
+> - Boutique en Production depuis le 30/10 au soir (Core `ca57adf`, PR #49).
+> - Cadres d'avatar et bannières (§ 9) en Production depuis le 04/11 (Core `8a897a5`, migration appliquée, Studio 0.1.25).
+> - Aucune offre en vente : l'événement Halloween est fermé et aucun nouvel objet n'est créé.
+> - Le paragraphe suivant décrit l'état du 30/10, avant la livraison.
+
 **État (30/10/2026 soir)** : développée et testée (Lab de bout en bout, PostgreSQL réel, navigateur), **rien n'est actif
 en Production**. Branche monorepo **`feat/halloween-titles`** : la boutique (PR #44) rejouée sur `main` **sans Level Up V2**
 (PR #43, indépendante), plus les « Titres » de l'extension (§ 8). Site : `feat/cosmetic-shop` (repo
@@ -131,7 +138,7 @@ commit précédent) ; Core précédent (la migration reste, additive) ; en derni
   (Bonbons refusés événement fermé) ; extension (états de l'onglet) ; e2e navigateur `halloween-titles.e2e.ts`
   (Studio crée et vend, l'extension achète, rechargement, inventaire).
 
-## 9. Cadres d'avatar et bannières (raptoru.fr lot 3, Lab — non livré)
+## 9. Cadres d'avatar et bannières (raptoru.fr lot 3) — en Production depuis le 04/11/2026
 
 Deux nouveaux types dans le **même** catalogue : `frame` (l'ornement autour de l'avatar) et `banner` (l'image large de
 la carte de joueur). Même possession (`progression_grants`), boutique, dons de module, remboursement et retrait que les
@@ -151,7 +158,7 @@ titres et badges : aucune seconde économie.
   avant l'envoi (cercle de l'avatar transparent — 62,5 % central, 12 px de recouvrement sur 512 —, 8 px de bord vides),
   aperçus à la géométrie du site (cadre aux cinq tailles, bannière sur l'en-tête, la carte et une ligne étroite).
 - **Migration** : `20261119130000_cosmetic_frames_banners.sql` (jumeau Lab `20261119120000`) : contraintes élargies
-  NOT VALID, deux colonnes facultatives. **Préparée et testée (PGlite), jamais appliquée à la Production.**
+  NOT VALID, deux colonnes facultatives. **Appliquée en Production le 04/11/2026** (testée avant sur PGlite, sur PostgreSQL réel et sur une copie restaurée de la Production).
 - **Non fait** : conversion serveur (tailles 128/256, GIF ou animation → WebP) décrite dans le guide du créateur du site ;
   cadres animés ; validation des pixels côté Core (le contrôle du centre transparent est dans Studio seulement).
-- **Publication** (sur GO) : migration, Core, Studio (release), puis le site — le site fonctionne avec un Core plus ancien.
+- **Publication** : faite le 04/11/2026 (`RELEASE_SITE_HUB.md`). Aucun cadre ni bannière définitif n'existe encore.
