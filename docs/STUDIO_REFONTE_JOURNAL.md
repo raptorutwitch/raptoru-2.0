@@ -22,37 +22,38 @@ chaque lot attend la validation manuelle d'Antoni.
 | design system | Primitives `rs-` partagées dans `shell/shell.css` : page, en-tête, retour, message, puce d'état, tableau, champs, sections numérotées, notes / alertes, onglets segmentés, filtres, résumé. Défis et Boutique les utilisent. | en place |
 | 3 — Boutique | Catalogue filtrable (type, état, recherche) ; atelier en sections Type · Présentation · Apparence · Disponibilité · Offres, aperçu raptoru.fr latéral (rendu réel du Core, inchangé) ; « Achats et dons » séparés de la création ; remboursement expliqué. Mêmes routes, mêmes contrôles d'image. | fait, à valider |
 | 4 — Récompenses Twitch | Une seule vue montée, plusieurs pages canoniques : « Récompenses Twitch » (récompenses avec leurs actions affichées, éditeur, historique, liens vers les modules) et une page par module (Effets, Spotify, Random Ban, Caution, Votekick, Roue du Sub) via `setFocus`. Chaque page module liste les récompenses qui la déclenchent (lien → règle de la récompense) quand ce lien existe vraiment dans les règles (Effets, Random Ban) ; Spotify garde sa récompense propre ; Caution, Votekick, Roue du Sub ne sont pas déclenchés par une règle de récompense (aucun lien inventé). | fait, à valider |
+| 5 — Régie live | Incidents ; points de chaîne (état réel, coupure / activation confirmées avec leurs effets sur les achats : jamais rejoués, points non remboursés par Raptoru, autres modules intacts — même texte sur la page Récompenses, qui confirme désormais aussi la coupure) ; files en direct lues sur les routes des modules (Tombola, Alertes, TTS, Spotify) ; actions nommées par ces mêmes routes : Tombola pause / reprise / annulation, TTS pause / reprise / arrêt du message (Lab ; en Production → Modération) ; contrôles de chaque module en lien. Aucun « arrêter tout ». | fait, à valider |
+| 6 — Progression | Onglets Viewers · Titres et badges · Règles d'XP · Reprise WizeBot ; fiche viewer en indicateurs (niveau, XP, rang, présence, messages), inventaire, attribution, XP manuelle, journal ; désactivation confirmée (ce qui s'arrête, ce qui est conservé). | fait, à valider |
+| 7 — harmonisation | Les variables des vues historiques prennent les couleurs de la charte dans le shell (composition inchangée) ; Système : titre « Système », « État des services » au lieu d'un second « Centre de contrôle ». Plus aucun défilement horizontal de page à 480 et 1 024 px sur les 29 pages (Tombola et Soundboard, prototypes validés : ce qui reste trop large défile dans la vue). | fait, à valider |
 
-## Checkpoint (04/11, commit `a08a249` sur `feat/studio-ux`)
+## Pour juger la refonte
 
-- Lots 0 à 4 commités. Vérifié : typecheck + build Studio web, lint et Prettier des fichiers touchés, tests unitaires
-  `studio-shell` / `challenges-form` / `supervision-view`, E2E navigateur Défis, Boutique (3), Halloween Studio / Titres,
-  Progression, Alertes (pile isolée, données fictives). Captures 1440 / 1024 / 480 px : pas de défilement horizontal
-  sur les pages refondues.
-- E2E hors périmètre observés pendant la suite complète : `effects-player` (6 échecs sous charge, passe relancé seul ;
-  aucun fichier de la refonte n'y touche) ; `tombola-bonbons` s'est bloqué une fois (instabilité connue) ; `alerts`
-  « families » une fois (passe 4/4 relancé).
-- Pas encore vérifié dans le vrai Studio (Electron) ni par Antoni. Lancement pour essai : `npm run studio` depuis ce
-  worktree (profil Lab).
-- Vues historiques non refondues (s'affichent dans le shell, inchangées) : Tombola, Alertes, Commandes, Jeu des mots,
-  Modération, Halloween, Progression, Soundboard, Simulation, Test Lab, Extension Lab, Système (ancien accueil).
-  Tombola déborde horizontalement à 480 px (prototype validé : à traiter sans toucher à sa composition).
+- **Aperçu navigateur, données fictives, sans Twitch / OBS / Production** : double-cliquer
+  `dev\apercu-refonte-studio.cmd` dans ce worktree (construit l'interface, lance une pile Lab en mémoire, ouvre
+  http://127.0.0.1:4411 ; fermer la fenêtre arrête tout). La pile démarre vide : Défis, Boutique et Tombola se
+  remplissent en créant des éléments fictifs.
+- **Vrai Studio (Electron), profil Lab** : `npm run studio` dans ce worktree.
+- **Captures** (pile isolée, données fictives) : `docs/assets/studio-refonte/` — Centre de contrôle, Régie live,
+  Modules, Défis (catalogue, atelier), Boutique, Progression, Récompenses Twitch, palette Ctrl+K, Système, et deux
+  vues mobiles (Défis, tiroir de navigation).
 
-### Régie live — étape 1 (commit suivant `a08a249`)
+## État au 04/11 (branche `feat/studio-ux`, locale)
 
-`shell/regie.ts` : incidents en cours ; état réel des automatisations de points de chaîne (Core du profil) avec
-« Couper / Activer les automatisations… » (même route `/api/channel-points/settings` que la page Récompenses ; la
-confirmation de coupure dit ce qui n'est pas fait : récompenses toujours achetables, non remboursées, autres modules
-intacts) ; contrôles nommés de chaque module = lien vers l'écran qui les porte. Tests : `studio-shell.test.ts`.
+- Vérifié : typecheck, build, lint et Prettier des fichiers touchés ; tests unitaires shell / Régie / Défis /
+  supervision / centre de contrôle ; E2E Défis, Boutique (3), Halloween, Progression, Alertes ; Tombola mise en pause
+  puis annulée depuis la Régie sur la pile isolée.
+- E2E instables hors périmètre : `effects-player` sous charge, `tombola-bonbons` (bloqué une fois), `alerts`
+  « families » ; tous passent relancés seuls.
+- Pas encore vu dans le vrai Studio ni par Antoni.
 
-### Suite prévue (ordre de la mission)
+### Reste à refondre
 
-1. Régie live, étape 2 : états en lecture des files (alertes, TTS, Spotify, Tombola) et actions nommées réutilisant les
-   routes existantes, profil par profil (en Production, certaines commandes vivent dans Modération : y renvoyer).
-   Lire le contrat de chaque route avant de l'appeler d'ici. Jamais d'« arrêter tout ».
-2. Alertes et déclencheurs, sons et lecteurs (Soundboard, TTS), jeux, Halloween, communauté et modération, activité,
-   système, laboratoire : passer chaque vue sur les primitives `rs-` en gardant l'UX validée (extraction locale seulement).
-3. Uniformisation générale ; retirer les styles historiques devenus inutiles seulement quand plus rien ne les utilise.
+1. Alertes (éditeur, file, source OBS, événements réels), Soundboard, Jeu des mots, Halloween, Simulation, Test Lab,
+   Système : composition sur les primitives `rs-` (seule la palette est harmonisée aujourd'hui).
+2. Tombola, Commandes, Modération, TTS, Bonk : prototypes validés — composition conservée ; seulement responsive et
+   palette, sauf décision d'Antoni.
+3. Extension Lab : surfaces de l'extension à leurs tailles Twitch (larges par nature).
+4. Retirer les styles historiques devenus inutiles quand plus rien ne les utilise.
 
 ## Storyboard
 
@@ -60,9 +61,14 @@ Recherché le 04/11 : dépôt (code, docs, toutes branches, messages de commit),
 (15 prototypes, aucun Storyboard), ancien dossier `Documents\Raptoru`, Bureau, Téléchargements. **Introuvable.**
 Aucun équivalent n'est inventé ; le lot attend qu'Antoni indique où il se trouve (ou ce qu'il désigne).
 
-## Arbitrages relevés (non tranchés par la refonte)
+## Questions métier Défis — documentées, règles inchangées (décision d'Antoni le 04/11)
 
-- Défis : la liste des objets récompense du Core inclut des objets masqués/archivés (`status <> draft AND active`) ; le
-  sélecteur Studio n'affiche pas leur statut (méta sans statut). À corriger côté Core avant d'utiliser une récompense objet.
-- Défis : dates converties dans le fuseau du PC (affiché « heure de ce PC ») ; la Boutique convertit en Europe/Paris.
-- Défis : la reprise après suspension peut compter les événements survenus pendant la suspension (sémantique à décider).
+1. **Objets récompense masqués ou archivés** : la liste du Core accepte tout objet `status <> draft AND active`, donc un
+   objet masqué ou archivé peut être choisi, validé puis attribué ; le sélecteur Studio n'affiche pas son statut (la
+   méta n'en fournit pas). La documentation dit « publié et actif ». À décider : filtrer `published && active` (Core et
+   Studio) ou assumer.
+2. **Fuseau des dates** : Défis convertit début / fin dans le fuseau du PC (le Studio l'affiche « heure de ce PC ») ;
+   la Boutique convertit explicitement en Europe/Paris. À décider : aligner Défis sur Paris.
+3. **Reprise après suspension** : `activated_at` garde la première activation ; un recomptage après reprise peut compter
+   les événements survenus pendant la suspension, dans la fenêtre comptée. La confirmation « Reprendre » le dit. À
+   décider : « pause » = gel sans rattrapage, ou rattrapage assumé.
