@@ -94,8 +94,8 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   - il contient du travail non commité (`tools/subgoal/`, un correctif « écran gris » de l'extension…) ;
   - **jamais** de `git clean`, `reset --hard` ni `checkout .`.
 - **Worktrees de travail** : `Documents\Raptoru 2.0 - Worktrees\…`. Nouveaux worktrees **uniquement** à cet endroit.
-  - `raptoru-fr-refonte` : site, branche de documentation `docs/site-context` ;
-  - `site-hub-core` : Core et Studio, branche de documentation `docs/site-hub-delivered`.
+  - `raptoru-fr-refonte` : site, branche de documentation `docs/site-context` (locale, non poussée) ;
+  - `site-hub-core` : Core et Studio, branche de documentation `docs/site-hub-delivered` (locale, non poussée ; elle remplace le `REPRISE.md` du 28/10 d’`origin/main`).
 - **Anciens worktrees** (`git worktree list`) :
   - sous `AppData\Local\Temp\…\scratchpad\*-wt` ;
   - `Documents\raptoru-*` ;
