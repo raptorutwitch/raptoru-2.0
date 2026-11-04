@@ -11,6 +11,11 @@ import {
   searchPages,
 } from '../../web/src/shell/registry.ts';
 import { MAX_FAVS, pushRecent, toggleFav } from '../../web/src/shell/shell.ts';
+import {
+  CP_OFF_CONFIRM,
+  REGIE_CONTROLS,
+  regieHtml,
+} from '../../web/src/shell/regie.ts';
 
 // Refonte Studio (lot 1) : le registre est la seule source de la navigation. Aucune vue ne doit disparaître et
 // chaque ancien `?tab=` doit rester une adresse valide.
@@ -90,5 +95,42 @@ describe('favourites and recents', () => {
       '4',
       '5',
     ]);
+  });
+});
+
+describe('Régie live', () => {
+  const href = (id: string) => `/?p=${id}`;
+  it('names each stop by module, never a global stop', () => {
+    const html = regieHtml({
+      sup: null,
+      supOk: true,
+      cp: { enabled: true, rules: 2 },
+      message: '',
+      href,
+    });
+    expect(html).toContain('Couper les automatisations…');
+    expect(html).toContain('2 récompense(s)');
+    expect(html.toLowerCase()).not.toMatch(
+      /<button[^>]*>[^<]*(tout arr|arrêter tout|stop all)/,
+    );
+    for (const c of REGIE_CONTROLS)
+      expect(pageById(c.page), c.page).toBeTruthy();
+  });
+
+  it('an unknown state offers no action', () => {
+    const html = regieHtml({
+      sup: null,
+      supOk: false,
+      cp: null,
+      message: '',
+      href,
+    });
+    expect(html).toContain('État inconnu');
+    expect(html).not.toContain('data-regie="cp"');
+  });
+
+  it('the stop confirmation states its real scope', () => {
+    expect(CP_OFF_CONFIRM).toContain('ne sont pas remboursées');
+    expect(CP_OFF_CONFIRM).toContain('ne sont pas touchés');
   });
 });

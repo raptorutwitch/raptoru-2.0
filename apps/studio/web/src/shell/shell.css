@@ -998,3 +998,9 @@ body {
     transition: none;
   }
 }
+.rs-row.rs-row-2 {
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+}
+.rs-row.rs-row-2 small {
+  white-space: normal;
+}

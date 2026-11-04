@@ -5,6 +5,13 @@
 //   - la palette Ctrl+K (pages, anciens noms, récents) — elle OUVRE des pages, elle n'exécute aucune action métier ;
 //   - la supervision compacte : un résumé dans l'en-tête, une ligne par incident, « Vu » conservé (même route) ;
 //   - les pages de regroupement (Centre de contrôle, Régie, Modules, Communauté, Activité, Laboratoire).
+import {
+  CP_OFF_CONFIRM,
+  CP_ON_CONFIRM,
+  loadChannelPoints,
+  regieHtml,
+  setChannelPoints,
+} from './regie.js';
 import { icon } from './icons.js';
 import {
   type Page,
@@ -166,8 +173,35 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
     supOk = !!snap;
     if (snap) sup = snap;
     drawSup();
-    if (current.hub === 'centre' || current.hub === 'activite') drawHub();
+    if (current.hub === 'regie') regieCp = await loadChannelPoints();
+    if (
+      current.hub === 'centre' ||
+      current.hub === 'activite' ||
+      current.hub === 'regie'
+    )
+      drawHub();
   }
+  // Régie : état des points de chaîne (lu à chaque relevé tant que la Régie est ouverte) et message de la dernière action.
+  let regieCp: Awaited<ReturnType<typeof loadChannelPoints>> | undefined;
+  let regieMsg = '';
+  hub.addEventListener('click', (e) => {
+    if (!(e.target as HTMLElement).closest('[data-regie="cp"]') || !regieCp)
+      return;
+    const on = !regieCp.enabled;
+    if (!confirm(on ? CP_ON_CONFIRM : CP_OFF_CONFIRM)) return;
+    void setChannelPoints(on)
+      .then(
+        () => {
+          regieMsg = on
+            ? 'Automatisations activées.'
+            : 'Automatisations coupées.';
+        },
+        (err: Error) => {
+          regieMsg = `Refusé : ${err.message}`;
+        },
+      )
+      .then(pollSup);
+  });
 
   // --- Pages de regroupement ------------------------------------------------------------------------------------
   const card = (p: Page) =>
@@ -198,9 +232,8 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
         </div>
         <section class="rs-panel"><h2>Préparer le live</h2><div class="rs-tiles">${list(['regie', 'moderation', 'alerts', 'channel-points', 'tombola', 'simulation']).map(card).join('')}</div></section>`;
     } else if (h === 'regie') {
-      hub.innerHTML = `${head('Régie live', 'Les écrans d’intervention du stream. Chaque tuile ouvre le module lui-même : mêmes contrôles, mêmes files, aucune copie.')}
-        <section class="rs-panel"><h2>Interventions</h2><div class="rs-tiles">${list(['moderation', 'tombola', 'alerts', 'spotify', 'tts', 'random-ban', 'sub-wheel', 'word-game', 'effects']).map(card).join('')}</div></section>
-        <p class="rs-muted">Les contrôles directs (pause, file, arrêts nommés) arrivent ici module par module, en réutilisant leurs actions existantes.</p>`;
+      hub.innerHTML = `${head('Régie live', 'Pendant le stream : l’état réel, les coupures nommées et l’accès direct aux contrôles de chaque module (mêmes écrans, aucune copie).')}
+        ${regieHtml({ sup, supOk, cp: regieCp, message: regieMsg, href: (id) => hrefOf(pageById(id)!) })}`;
     } else if (h === 'modules') {
       hub.innerHTML = `${head('Modules', 'Toutes les fonctionnalités, regroupées. Un clic ouvre le module ; Ctrl+K pour aller plus vite.')}
         <div class="rs-catalog">${moduleGroups()
@@ -237,6 +270,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
       hub.hidden = false;
       drawHub();
       hub.scrollTop = 0;
+      if (p.hub === 'regie') void pollSup(); // l'état des points de chaîne tout de suite, pas au prochain relevé
     } else {
       hub.hidden = true;
       hub.innerHTML = '';
