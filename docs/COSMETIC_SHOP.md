@@ -130,3 +130,28 @@ commit précédent) ; Core précédent (la migration reste, additive) ; en derni
   déjà possédé, fermeture → titre gardé, profil et équipement du site) ; suite boutique PGlite + PostgreSQL réel
   (Bonbons refusés événement fermé) ; extension (états de l'onglet) ; e2e navigateur `halloween-titles.e2e.ts`
   (Studio crée et vend, l'extension achète, rechargement, inventaire).
+
+## 9. Cadres d'avatar et bannières (raptoru.fr lot 3, Lab — non livré)
+
+Deux nouveaux types dans le **même** catalogue : `frame` (l'ornement autour de l'avatar) et `banner` (l'image large de
+la carte de joueur). Même possession (`progression_grants`), boutique, dons de module, remboursement et retrait que les
+titres et badges : aucune seconde économie.
+
+- **Images** (vérifiées sur les octets, PNG ou WebP fixe, sans conversion en V1 : le fichier servi est le fichier envoyé) :
+  badge ≤ 128 × 128 et 40 Ko (inchangé) ; cadre carré de 128 à 512 px, 96 Ko ; bannière 4:1 de 1024 à 2048 px de
+  large, 256 Ko. L'envoi porte son usage (`purpose`) ; l'objet refuse une image d'un autre type (`image_kind_mismatch`).
+  Un cadre ou une bannière ne sort du brouillon qu'avec son image (`image_required`). La route d'envoi accepte seule un
+  corps de 400 Ko (64 Ko partout ailleurs).
+- **Équipement** : `progression_equipped.frame_id` / `banner_id`. `POST /v1/site/progression/equip` accepte
+  `frame_id` / `banner_id` : absent = inchangé (un site plus ancien ne les efface jamais), `null` = retiré ; possédé et du
+  bon type, sinon `frame_not_owned` / `banner_not_owned`. Un retrait ou un remboursement les déséquipe aussitôt.
+- **Lectures publiques** (champs additifs) : chaque ligne du classement porte `frame` et `banner`
+  (`{ id, label, rarity, image }` ou `null`, une requête groupée) ; le profil porte `equipped.frame` / `equipped.banner`.
+- **Studio › Boutique (atelier)** : types Cadre d'avatar et Bannière, règle d'image affichée, contrôle local d'un cadre
+  avant l'envoi (cercle de l'avatar transparent — 62,5 % central, 12 px de recouvrement sur 512 —, 8 px de bord vides),
+  aperçus à la géométrie du site (cadre aux cinq tailles, bannière sur l'en-tête, la carte et une ligne étroite).
+- **Migration** : `20261119130000_cosmetic_frames_banners.sql` (jumeau Lab `20261119120000`) : contraintes élargies
+  NOT VALID, deux colonnes facultatives. **Préparée et testée (PGlite), jamais appliquée à la Production.**
+- **Non fait** : conversion serveur (tailles 128/256, GIF ou animation → WebP) décrite dans le guide du créateur du site ;
+  cadres animés ; validation des pixels côté Core (le contrôle du centre transparent est dans Studio seulement).
+- **Publication** (sur GO) : migration, Core, Studio (release), puis le site — le site fonctionne avec un Core plus ancien.

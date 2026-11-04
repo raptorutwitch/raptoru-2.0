@@ -39,7 +39,7 @@ test('Boutique: Studio creates, previews and sells a title; the site buys it onc
   const save = () => tab.locator('[data-act="save"]').click();
 
   // A title: glow, gold, published — the preview drawn by the Core's own classes.
-  await tab.getByRole('button', { name: 'Nouveau titre / badge' }).click();
+  await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-roi');
   await form.locator('[data-f="label"]').fill('Roi des citrouilles');
   await form.locator('[data-f="status"]').selectOption('published');
@@ -53,7 +53,7 @@ test('Boutique: Studio creates, previews and sells a title; the site buys it onc
   await expect(tab.locator('[data-row="e2e-roi"]')).toContainText('Publié');
 
   // A badge with its image (checked by the Core), served back to the preview.
-  await tab.getByRole('button', { name: 'Nouveau titre / badge' }).click();
+  await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-citrouille');
   await form.locator('[data-f="kind"]').selectOption('badge');
   await form.locator('[data-f="label"]').fill('Citrouille');

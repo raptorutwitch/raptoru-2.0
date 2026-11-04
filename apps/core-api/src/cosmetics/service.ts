@@ -16,7 +16,12 @@ import {
 import { EVENT_SHOP } from '../event-shop/service.js';
 import { LabWalletError } from '../lab-moderation/store.js';
 import type { ProgressionService } from '../progression/service.js';
-import { checkImage, CosmeticImageError } from './images.js';
+import {
+  checkImage,
+  CosmeticImageError,
+  fitsKind,
+  type ImagePurpose,
+} from './images.js';
 
 // Boutique cosmétique V1 (docs/COSMETIC_SHOP.md). The titles and badges ARE the progression's catalogue and inventory
 // (progression_rewards / progression_grants / progression_equipped): this module adds their look, their state, the
@@ -44,7 +49,7 @@ type Currency = 'main' | 'bonbons';
 
 interface ItemRow {
   reward_id: string;
-  kind: 'title' | 'badge';
+  kind: 'title' | 'badge' | 'frame' | 'banner';
   label: string;
   description: string;
   rarity: string;
@@ -202,12 +207,26 @@ export class CosmeticShopService {
       if (prior && prior.kind !== input.kind)
         throw new CosmeticError(409, 'kind_locked');
       if (input.image_id) {
-        const img = await q.query(
-          'select 1 from cosmetic_images where image_id = $1',
-          [input.image_id],
-        );
-        if (!img.length) throw new CosmeticError(404, 'unknown_image');
+        const img = (
+          await q.query<{ width: number; height: number; size: number }>(
+            'select width, height, size from cosmetic_images where image_id = $1',
+            [input.image_id],
+          )
+        )[0];
+        if (!img) throw new CosmeticError(404, 'unknown_image');
+        // A frame's image is never a badge's, nor a banner's: each kind has its own shape (images.ts).
+        if (input.kind !== 'title' && !fitsKind(input.kind, img))
+          throw new CosmeticError(400, 'image_kind_mismatch', {
+            kind: input.kind,
+          });
       }
+      // A frame or a banner IS its image: it can only leave the draft state with one.
+      if (
+        (input.kind === 'frame' || input.kind === 'banner') &&
+        !input.image_id &&
+        input.status !== 'draft'
+      )
+        throw new CosmeticError(400, 'image_required', { kind: input.kind });
       const now = this.now();
       await q.query(
         `insert into progression_rewards (channel_id, reward_id, kind, label, description, rarity, category, unlock_level,
@@ -323,8 +342,8 @@ export class CosmeticShopService {
     });
   }
 
-  /** A badge image, checked on its bytes, stored once by content hash. */
-  async uploadImage(base64: string) {
+  /** An image (a badge, a frame, a banner), checked on its bytes for its purpose, stored once by content hash. */
+  async uploadImage(base64: string, purpose: ImagePurpose = 'badge') {
     let bytes: Buffer;
     try {
       bytes = Buffer.from(base64, 'base64');
@@ -333,7 +352,7 @@ export class CosmeticShopService {
     }
     let img;
     try {
-      img = checkImage(bytes);
+      img = checkImage(bytes, purpose);
     } catch (e) {
       if (e instanceof CosmeticImageError) throw new CosmeticError(400, e.code);
       throw e;

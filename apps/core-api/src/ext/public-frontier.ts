@@ -221,7 +221,23 @@ export function createPublicFrontier(
             console.error('[core-api] event shop sweep failed', e.message),
           );
       }, 5000);
+      // Défis: the recount (only with CHALLENGES_ENGINE=true; nothing without the tables or a live challenge).
+      let counting = false;
+      const challengesTick =
+        config.CHALLENGES_ENGINE === 'true'
+          ? setInterval(() => {
+              if (counting) return;
+              counting = true;
+              core.challenges
+                .tick(channelId)
+                .catch((e: Error) =>
+                  console.error('[core-api] challenges run failed', e.message),
+                )
+                .finally(() => (counting = false));
+            }, 60_000)
+          : null;
       return () => {
+        if (challengesTick) clearInterval(challengesTick);
         clearInterval(eventShopTick);
         clearInterval(spotifyTick);
         clearInterval(votekickTick);

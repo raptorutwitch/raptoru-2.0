@@ -16,13 +16,14 @@ if (secret.length < 32) throw new Error('bonk_secret_required');
 const db = createPgDb(url.href, SERVER_DB_LIMITS);
 const clientId = process.env.BONK_LAB_TWITCH_CLIENT_ID ?? '';
 const clientSecret = process.env.BONK_LAB_TWITCH_CLIENT_SECRET ?? '';
-const { server, raffle, wordGame, votekick, spotify } = createLabCore({
-  db,
-  clock: systemClock,
-  secret,
-  twitch: clientId && clientSecret ? { clientId, clientSecret } : null,
-  channelTwitchId: process.env.BONK_LAB_CHANNEL_TWITCH_ID ?? '',
-});
+const { server, raffle, wordGame, votekick, spotify, challenges } =
+  createLabCore({
+    db,
+    clock: systemClock,
+    secret,
+    twitch: clientId && clientSecret ? { clientId, clientSecret } : null,
+    channelTwitchId: process.env.BONK_LAB_CHANNEL_TWITCH_ID ?? '',
+  });
 // 4301 by default (Studio runtime); another port only for isolated end-to-end tests.
 const port = Number(process.env.BONK_LAB_CORE_PORT ?? 4301);
 server.listen(port, '127.0.0.1', () =>
@@ -79,7 +80,20 @@ const avatarTick = setInterval(() => {
     .refresh()
     .catch((e) => console.error('[bonk-lab-core] avatars failed', e));
 }, 5000);
+// Défis: the recount every minute (nothing while no challenge is live).
+let counting = false;
+const challengesTick = setInterval(() => {
+  if (counting) return;
+  counting = true;
+  challenges
+    .tick()
+    .catch((e: unknown) =>
+      console.error('[bonk-lab-core] challenges run failed', e),
+    )
+    .finally(() => (counting = false));
+}, 60_000);
 const stop = () => {
+  clearInterval(challengesTick);
   clearInterval(raffleTick);
   clearInterval(votekickTick);
   clearInterval(spotifyTick);

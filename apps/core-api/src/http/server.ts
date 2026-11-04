@@ -88,6 +88,10 @@ import { studioCockpitRoutes } from './studio-cockpit-routes.js';
 import { publicStatsRoutes } from './public-stats-routes.js';
 import { progressionRoutes } from './progression-routes.js';
 import { cosmeticsRoutes } from './cosmetics-routes.js';
+import { moduleStatsRoutes } from './module-stats-routes.js';
+import { challengesRoutes } from './challenges-routes.js';
+import type { ChallengeService } from '../challenges/service.js';
+import { ModuleStatsService } from '../module-stats/service.js';
 import type { CosmeticShopService } from '../cosmetics/service.js';
 import type { ProgressionService } from '../progression/service.js';
 import { wordGameCockpitEvents } from './word-game-routes.js';
@@ -155,6 +159,8 @@ export interface AppDeps {
   /** Progression native (docs/PROGRESSION.md). */
   progression?: ProgressionService;
   cosmetics?: CosmeticShopService;
+  /** Défis et succès: Studio's editor (installation) and the site's read (its token). */
+  challenges?: ChallengeService;
   /**
    * The /v1/lab/* routes (Studio secret, viewer named in the body). Default on for the Lab and the
    * tests; the public Core bootstrap turns them off: nothing Lab is reachable from the Internet.
@@ -195,6 +201,8 @@ export interface Route {
   method: 'GET' | 'POST';
   pattern: RegExp;
   auth: Auth;
+  /** A larger JSON body for this route only (default MAX_BODY_BYTES: 64 Ko). */
+  maxBody?: number;
   handle: (ctx: {
     params: string[];
     /** Authenticated Studio installation (auth 'studio_installation' only). */
@@ -268,6 +276,7 @@ function routes({
   eventShop,
   progression,
   cosmetics,
+  challenges,
   siteToken,
   caution,
   votekick,
@@ -322,6 +331,18 @@ function routes({
           channelId: cockpit.channelId,
           production: true,
           site: !!siteToken,
+        })
+      : []),
+    ...(studioInstallations && challenges && cockpit?.channelId
+      ? challengesRoutes(challenges, {
+          channelId: cockpit.channelId,
+          production: true,
+          site: !!siteToken,
+        })
+      : []),
+    ...(siteToken && db && cockpit?.channelId
+      ? moduleStatsRoutes(new ModuleStatsService(db), {
+          channelId: cockpit.channelId,
         })
       : []),
     ...(studioInstallations && dock && cockpit?.channelId
@@ -510,13 +531,15 @@ function secretMatches(header: string | undefined, secret: string): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+async function readJson(
+  req: IncomingMessage,
+  max = MAX_BODY_BYTES,
+): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES)
-      throw new HttpError(413, { error: 'body_too_large' });
+    if (size > max) throw new HttpError(413, { error: 'body_too_large' });
     chunks.push(chunk as Buffer);
   }
   if (size === 0) return {};
@@ -727,7 +750,8 @@ export function createHandler(deps: AppDeps): RequestListener {
           typeof key === 'string' && key.length <= 128 ? key : undefined;
       }
       const params = route.pattern.exec(url.pathname)!.slice(1);
-      const body = req.method === 'POST' ? await readJson(req) : undefined;
+      const body =
+        req.method === 'POST' ? await readJson(req, route.maxBody) : undefined;
       const out = await route.handle({
         params,
         body,

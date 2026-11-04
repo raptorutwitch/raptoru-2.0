@@ -251,6 +251,127 @@ export function cosmeticShopSuite(freshDb: () => Promise<Db>) {
     });
   });
 
+  describe('avatar frames and banners (raptoru.fr lot 3): their own image rules, the same shop', () => {
+    const up = (b: Buffer, purpose: 'badge' | 'frame' | 'banner') =>
+      shop.uploadImage(b.toString('base64'), purpose);
+    it('each purpose checks its own shape and weight on the bytes', async () => {
+      expect(await up(png(256, 256), 'frame')).toMatchObject({ width: 256 });
+      expect(await up(png(1024, 256), 'banner')).toMatchObject({ width: 1024 });
+      expect(await up(png(2048, 512), 'banner')).toMatchObject({ height: 512 });
+      for (const [bytes, purpose, code] of [
+        [png(256, 200), 'frame', 'image_dimensions'], // not square
+        [png(96, 96), 'frame', 'image_dimensions'], // too small to stay sharp on the profile
+        [png(1024, 1024), 'frame', 'image_dimensions'],
+        [png(256, 256), 'badge', 'image_dimensions'], // badges keep their 128 px rule
+        [png(1024, 300), 'banner', 'image_dimensions'], // not 4:1
+        [png(800, 200), 'banner', 'image_dimensions'],
+        [
+          Buffer.concat([png(256, 256), Buffer.alloc(100 * 1024)]),
+          'frame',
+          'image_too_large',
+        ],
+        [
+          Buffer.concat([png(1024, 256), Buffer.alloc(260 * 1024)]),
+          'banner',
+          'image_too_large',
+        ],
+        [png(256, 256, 'acTL'), 'frame', 'image_animated'],
+      ] as const)
+        await expect(up(bytes, purpose)).rejects.toMatchObject({ code });
+    });
+
+    it('a frame or banner needs a fitting image to leave the draft state; a badge image never dresses a frame', async () => {
+      const frame = (await up(png(256, 256), 'frame')).image_id;
+      const badge = (await up(png(64, 64), 'badge')).image_id;
+      const banner = (await up(png(1024, 256), 'banner')).image_id;
+      const make = (
+        kind: string,
+        image_id: string | null,
+        status = 'published',
+      ) =>
+        item({
+          reward_id: `x-${kind}`,
+          kind,
+          label: 'X',
+          image_id,
+          status,
+          style: {},
+        });
+      await expect(make('frame', null)).rejects.toMatchObject({
+        code: 'image_required',
+      });
+      await expect(make('banner', null)).rejects.toMatchObject({
+        code: 'image_required',
+      });
+      expect(await make('frame', null, 'draft')).toMatchObject({
+        kind: 'frame',
+        image: null,
+      });
+      await expect(make('frame', badge)).rejects.toMatchObject({
+        code: 'image_kind_mismatch',
+      });
+      await expect(make('frame', banner)).rejects.toMatchObject({
+        code: 'image_kind_mismatch',
+      });
+      await expect(make('badge', frame)).rejects.toMatchObject({
+        code: 'image_kind_mismatch',
+      });
+      await expect(make('banner', frame)).rejects.toMatchObject({
+        code: 'image_kind_mismatch',
+      });
+      expect(await make('frame', frame)).toMatchObject({
+        kind: 'frame',
+        status: 'published',
+      });
+      expect(await make('banner', banner)).toMatchObject({
+        kind: 'banner',
+        image: `/v1/cosmetics/images/${banner}`,
+      });
+      // The kind never changes.
+      await expect(
+        item({
+          reward_id: 'x-frame',
+          kind: 'banner',
+          label: 'X',
+          image_id: banner,
+          status: 'published',
+          style: {},
+        }),
+      ).rejects.toMatchObject({ code: 'kind_locked' });
+    });
+
+    it('sold, bought, owned and equipped like a title; refunded: unequipped', async () => {
+      const image_id = (await up(png(256, 256), 'frame')).image_id;
+      await item({
+        reward_id: 'givre',
+        kind: 'frame',
+        label: 'Givre',
+        image_id,
+        style: {},
+      });
+      await offer({ offer_id: 'givre-jetons', reward_id: 'givre', price: 200 });
+      const cat = await shop.catalog(CH);
+      expect(
+        cat.items.find((i: { id: string }) => i.id === 'givre'),
+      ).toMatchObject({ kind: 'frame' });
+      const p = await buy('givre-jetons', 'click-givre-1');
+      expect(await jetons('1')).toBe(800);
+      expect(await owns('1', 'givre')).toBe(true);
+      await progression.equip(CH, {
+        viewer: '1',
+        title_id: null,
+        badge_ids: [],
+        frame_id: 'givre',
+      });
+      expect((await progression.viewer(CH, '1')).equipped).toMatchObject({
+        frame: 'givre',
+        banner: null,
+      });
+      await shop.refund(CH, p.purchase.purchase_id, 'test', 'Studio');
+      expect((await progression.viewer(CH, '1')).equipped.frame).toBe(null);
+    });
+  });
+
   describe('the catalogue: publication, sale, dates and event are separate', () => {
     it('only a published item with an offer on sale now; an empty shop is a normal answer', async () => {
       expect(await shop.catalog(CH)).toMatchObject({ items: [] });

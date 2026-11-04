@@ -107,6 +107,8 @@ try {
     '20261117120000_halloween_economy_lab.sql',
     '20261118120000_cosmetic_shop_lab.sql',
     '20261118120500_lab_ledger_cosmetic.sql',
+    '20261119120000_cosmetic_frames_banners_lab.sql',
+    '20261120120000_challenges_lab.sql',
   ]) {
     if (
       (

@@ -45,6 +45,9 @@ const Env = z
     // Spotify V2 (docs/SPOTIFY_V2.md): `!song`, `!songqueue`, `!mysong`, `!songcancel`, `!songremove`, `!songskip`
     // answered by this Core. OFF by default (the song requests themselves follow the channel points rule).
     SPOTIFY_CHAT: z.enum(['true', 'false']).default('false'),
+    // Défis (docs/CHALLENGES.md): the recount timer. OFF by default; even ON it does nothing without the tables or a
+    // live challenge. Studio's « Recompter » and an activation count anyway.
+    CHALLENGES_ENGINE: z.enum(['true', 'false']).default('false'),
     // Bonk Twitch emotes on /v1/ext: the HTTPS OAuth redirect registered on that same Twitch app
     // (…/v1/ext/emotes/oauth/callback). Absent = no linking. Needs the app and EXT_TOKEN_KEY.
     EXT_TWITCH_REDIRECT_URI: z

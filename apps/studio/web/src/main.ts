@@ -31,6 +31,7 @@ import { mountSupervisionBanner } from './supervision-banner.js';
 import { mountHalloween } from './halloween.js';
 import { mountProgression } from './progression.js';
 import { mountCosmetics } from './cosmetics.js';
+import { mountChallenges } from './challenges.js';
 
 type TabId =
   | 'studio'
@@ -46,7 +47,8 @@ type TabId =
   | 'soundboard'
   | 'halloween'
   | 'progression'
-  | 'shop';
+  | 'shop'
+  | 'challenges';
 const TAB_KEY = 'raptoru-studio-tab';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -66,6 +68,7 @@ if (app) {
         <button class="tab" type="button" data-tab="halloween">Halloween <em>🎃</em></button>
         <button class="tab" type="button" data-tab="progression">Progression <em>⭐</em></button>
         <button class="tab" type="button" data-tab="shop">Boutique <em>🛍️</em></button>
+        <button class="tab" type="button" data-tab="challenges">Défis <em>🏆</em></button>
         <button class="tab" type="button" data-tab="simulation">Simulation <em>Lab</em></button>
         <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
         <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
@@ -86,6 +89,7 @@ if (app) {
     <main id="tab-halloween" hidden></main>
     <main id="tab-progression" hidden></main>
     <main id="tab-shop" hidden></main>
+    <main id="tab-challenges" hidden></main>
     <main id="tab-simulation" hidden></main>
     <main id="tab-test-lab" hidden></main>
     <main id="tab-extension-lab" class="tab-full" hidden></main>
@@ -114,6 +118,9 @@ if (app) {
     app.querySelector<HTMLElement>('#tab-progression')!,
   );
   const shop = mountCosmetics(app.querySelector<HTMLElement>('#tab-shop')!);
+  const challenges = mountChallenges(
+    app.querySelector<HTMLElement>('#tab-challenges')!,
+  );
   const simulationTab = mountSimulationTab(
     app.querySelector<HTMLElement>('#tab-simulation')!,
   );
@@ -156,6 +163,9 @@ if (app) {
     progression.setVisible(tab === 'progression');
     app.querySelector<HTMLElement>('#tab-shop')!.hidden = tab !== 'shop';
     shop.setVisible(tab === 'shop');
+    app.querySelector<HTMLElement>('#tab-challenges')!.hidden =
+      tab !== 'challenges';
+    challenges.setVisible(tab === 'challenges');
     app.querySelector<HTMLElement>('#tab-simulation')!.hidden =
       tab !== 'simulation';
     simulationTab.setVisible(tab === 'simulation');
@@ -199,6 +209,7 @@ if (app) {
       remembered === 'halloween' ||
       remembered === 'progression' ||
       remembered === 'shop' ||
+      remembered === 'challenges' ||
       remembered === 'simulation' ||
       remembered === 'soundboard' ||
       remembered === 'test-lab'
@@ -219,6 +230,7 @@ if (app) {
     asked === 'halloween' ||
     asked === 'progression' ||
     asked === 'shop' ||
+    asked === 'challenges' ||
     asked === 'test-lab' ||
     asked === 'extension-lab' ||
     asked === 'soundboard'

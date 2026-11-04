@@ -36,6 +36,10 @@ export const CosmeticStyle = z.strictObject({
 });
 export type CosmeticStyle = z.infer<typeof CosmeticStyle>;
 
+/** What the catalogue holds: titles and badges, avatar frames and banners (raptoru.fr lot 3). */
+export const COSMETIC_KINDS = ['title', 'badge', 'frame', 'banner'] as const;
+export type CosmeticKind = (typeof COSMETIC_KINDS)[number];
+
 export const COSMETIC_STATUSES = [
   'draft',
   'published',
@@ -46,7 +50,7 @@ export const COSMETIC_STATUSES = [
 /** Studio's editor: one title or badge (its id is fixed once it left the draft state). */
 export const CosmeticItemInput = z.strictObject({
   reward_id: RewardId,
-  kind: z.enum(['title', 'badge']),
+  kind: z.enum(COSMETIC_KINDS),
   label: z.string().trim().min(1).max(60),
   description: z.string().trim().max(200).default(''),
   rarity: z
@@ -65,7 +69,8 @@ export const CosmeticItemInput = z.strictObject({
     effect: 'none',
     weight: 'bold',
   }),
-  /** A badge's image (an id returned by the upload); null: the badge shows its label only. */
+  /** The item's image (an id returned by the upload): optional for a badge (null: its label only), required for a
+   *  frame or a banner once it leaves the draft state; it must fit the kind's own rule (images.ts). */
   image_id: z
     .string()
     .regex(/^[0-9a-f]{64}$/)
@@ -82,9 +87,13 @@ export const CosmeticDuplicateRequest = z.strictObject({
   label: z.string().trim().min(1).max(60).optional(),
 });
 
-/** A badge image: PNG or still WebP, ≤ 40 Ko, ≤ 128 × 128 (checked again by the Core on the bytes). */
+/**
+ * An image, PNG or still WebP, checked by the Core on its bytes against its purpose: a badge ≤ 128 × 128 and 40 Ko;
+ * a frame square 128 to 512 px and 96 Ko; a banner 4:1, 1024 to 2048 px wide and 256 Ko.
+ */
 export const CosmeticImageUpload = z.strictObject({
-  data_base64: z.string().min(16).max(56_000),
+  purpose: z.enum(['badge', 'frame', 'banner']).default('badge'),
+  data_base64: z.string().min(16).max(350_000),
 });
 
 /** How an item is sold. Publication (the item), visibility (its status) and sale (this offer) are separate. */

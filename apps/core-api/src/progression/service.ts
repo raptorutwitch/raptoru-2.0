@@ -704,7 +704,9 @@ export class ProgressionService {
       if (!r.length) throw new ProgressionError(404, 'not_owned');
       await q.query(
         `update progression_equipped set title_id = case when title_id = $3 then null else title_id end,
-           badge_ids = array_remove(badge_ids, $3), updated_at = $4
+           badge_ids = array_remove(badge_ids, $3),
+           frame_id = case when frame_id = $3 then null else frame_id end,
+           banner_id = case when banner_id = $3 then null else banner_id end, updated_at = $4
          where channel_id = $1 and twitch_user_id = $2`,
         [channelId, req.viewer, req.reward_id, this.now()],
       );
@@ -712,14 +714,27 @@ export class ProgressionService {
     }
   }
 
-  /** The viewer's choice (raptoru.fr): a title and up to 3 badges among what they own (not revoked, active). */
+  /**
+   * The viewer's choice (raptoru.fr): a title, up to 3 badges, a frame and a banner among what they own (not revoked,
+   * active). frame_id / banner_id absent: unchanged (an older site never clears them); null: removed.
+   */
   async equip(
     channelId: string,
-    req: { viewer: string; title_id: string | null; badge_ids: string[] },
+    req: {
+      viewer: string;
+      title_id: string | null;
+      badge_ids: string[];
+      frame_id?: string | null;
+      banner_id?: string | null;
+    },
   ) {
     return this.db.tx(async (q) => {
       const wanted = [
-        ...new Set([...(req.title_id ? [req.title_id] : []), ...req.badge_ids]),
+        ...new Set(
+          [req.title_id, req.frame_id, req.banner_id, ...req.badge_ids].filter(
+            (x): x is string => !!x,
+          ),
+        ),
       ];
       const owned = new Map(
         (
@@ -736,12 +751,37 @@ export class ProgressionService {
       const badges = [...new Set(req.badge_ids)];
       if (badges.some((b) => owned.get(b) !== 'badge'))
         throw new ProgressionError(403, 'badge_not_owned');
-      await q.query(
-        `insert into progression_equipped (channel_id, twitch_user_id, title_id, badge_ids, updated_at) values ($1, $2, $3, $4, $5)
-         on conflict (channel_id, twitch_user_id) do update set title_id = $3, badge_ids = $4, updated_at = $5`,
-        [channelId, req.viewer, req.title_id, badges, this.now()],
-      );
-      return { title_id: req.title_id, badge_ids: badges };
+      if (req.frame_id && owned.get(req.frame_id) !== 'frame')
+        throw new ProgressionError(403, 'frame_not_owned');
+      if (req.banner_id && owned.get(req.banner_id) !== 'banner')
+        throw new ProgressionError(403, 'banner_not_owned');
+      const row = (
+        await q.query<{ frame_id: string | null; banner_id: string | null }>(
+          `insert into progression_equipped (channel_id, twitch_user_id, title_id, badge_ids, frame_id, banner_id, updated_at)
+           values ($1, $2, $3, $4, $6, $8, $5)
+           on conflict (channel_id, twitch_user_id) do update set title_id = $3, badge_ids = $4, updated_at = $5,
+             frame_id = case when $7 then $6 else progression_equipped.frame_id end,
+             banner_id = case when $9 then $8 else progression_equipped.banner_id end
+           returning frame_id, banner_id`,
+          [
+            channelId,
+            req.viewer,
+            req.title_id,
+            badges,
+            this.now(),
+            req.frame_id ?? null,
+            req.frame_id !== undefined,
+            req.banner_id ?? null,
+            req.banner_id !== undefined,
+          ],
+        )
+      )[0]!;
+      return {
+        title_id: req.title_id,
+        badge_ids: badges,
+        frame_id: row.frame_id,
+        banner_id: row.banner_id,
+      };
     });
   }
 
@@ -1373,6 +1413,81 @@ export class ProgressionService {
         [channelId],
       )
     )[0]?.at;
+    // The equipped badges of the returned rows, in ONE grouped query (never one per viewer), with the profile's rule:
+    // owned and not revoked, active, published, kind badge; in the viewer's chosen order. Additive field.
+    const badges = new Map<
+      string,
+      { id: string; label: string; rarity: string; image: string | null }[]
+    >();
+    if (rows.length) {
+      const eq = await this.db.query<{
+        twitch_user_id: string;
+        reward_id: string;
+        label: string;
+        rarity: string;
+        image_id: string | null;
+      }>(
+        `select e.twitch_user_id, r.reward_id, r.label, r.rarity, r.image_id
+         from progression_equipped e
+         cross join lateral unnest(e.badge_ids) with ordinality as b(reward_id, ord)
+         join progression_rewards r on r.channel_id = e.channel_id and r.reward_id = b.reward_id
+           and r.kind = 'badge' and r.active and r.status <> 'draft'
+         where e.channel_id = $1 and e.twitch_user_id = any($2::text[])
+           and exists (select 1 from progression_grants g where g.channel_id = e.channel_id
+             and g.twitch_user_id = e.twitch_user_id and g.reward_id = b.reward_id and g.revoked_at is null)
+         order by e.twitch_user_id, b.ord`,
+        [channelId, rows.map((r) => r.twitch_user_id)],
+      );
+      for (const b of eq) {
+        const list = badges.get(b.twitch_user_id) ?? [];
+        list.push({
+          id: b.reward_id,
+          label: b.label,
+          rarity: b.rarity,
+          image: b.image_id ? `/v1/cosmetics/images/${b.image_id}` : null,
+        });
+        badges.set(b.twitch_user_id, list);
+      }
+    }
+    // The equipped frame and banner of the returned rows, in ONE grouped query, with the same rule (lot 3).
+    const looks = new Map<
+      string,
+      Partial<
+        Record<
+          'frame' | 'banner',
+          { id: string; label: string; rarity: string; image: string | null }
+        >
+      >
+    >();
+    if (rows.length) {
+      const eq = await this.db.query<{
+        twitch_user_id: string;
+        kind: 'frame' | 'banner';
+        reward_id: string;
+        label: string;
+        rarity: string;
+        image_id: string | null;
+      }>(
+        `select e.twitch_user_id, r.kind, r.reward_id, r.label, r.rarity, r.image_id
+         from progression_equipped e
+         join progression_rewards r on r.channel_id = e.channel_id and r.active and r.status <> 'draft'
+           and ((r.kind = 'frame' and r.reward_id = e.frame_id) or (r.kind = 'banner' and r.reward_id = e.banner_id))
+         where e.channel_id = $1 and e.twitch_user_id = any($2::text[])
+           and exists (select 1 from progression_grants g where g.channel_id = e.channel_id
+             and g.twitch_user_id = e.twitch_user_id and g.reward_id = r.reward_id and g.revoked_at is null)`,
+        [channelId, rows.map((r) => r.twitch_user_id)],
+      );
+      for (const l of eq) {
+        const look = looks.get(l.twitch_user_id) ?? {};
+        look[l.kind] = {
+          id: l.reward_id,
+          label: l.label,
+          rarity: l.rarity,
+          image: l.image_id ? `/v1/cosmetics/images/${l.image_id}` : null,
+        };
+        looks.set(l.twitch_user_id, look);
+      }
+    }
     return {
       enabled: s.enabled,
       by,
@@ -1397,6 +1512,9 @@ export class ProgressionService {
               style: r.title_style ?? {},
             }
           : null,
+        badges: badges.get(r.twitch_user_id) ?? [],
+        frame: looks.get(r.twitch_user_id)?.frame ?? null,
+        banner: looks.get(r.twitch_user_id)?.banner ?? null,
       })),
     };
   }
@@ -1433,8 +1551,13 @@ export class ProgressionService {
       [channelId, viewerId],
     );
     const eq = (
-      await this.db.query<{ title_id: string | null; badge_ids: string[] }>(
-        'select title_id, badge_ids from progression_equipped where channel_id = $1 and twitch_user_id = $2',
+      await this.db.query<{
+        title_id: string | null;
+        badge_ids: string[];
+        frame_id: string | null;
+        banner_id: string | null;
+      }>(
+        'select title_id, badge_ids, frame_id, banner_id from progression_equipped where channel_id = $1 and twitch_user_id = $2',
         [channelId, viewerId],
       )
     )[0];
@@ -1494,6 +1617,8 @@ export class ProgressionService {
       equipped: {
         title: eq?.title_id && owned.has(eq.title_id) ? eq.title_id : null,
         badges: (eq?.badge_ids ?? []).filter((b) => owned.has(b)),
+        frame: eq?.frame_id && owned.has(eq.frame_id) ? eq.frame_id : null,
+        banner: eq?.banner_id && owned.has(eq.banner_id) ? eq.banner_id : null,
       },
       inventory: inventory.map((i) => ({
         id: i.reward_id,
