@@ -12,14 +12,14 @@ quels totaux deviennent publics (`lb-app/docs/ROADMAP_SITE.md` § 4.1).
 
 ## Sources et règles
 
-| Champ | Source (Production) | Compté | Exclu |
-|---|---|---|---|
-| `interactions.<module>` (bonk, tts, soundboard…) | Wallet canonique : opérations `interaction:<id>:debit` (source = module) | utilisations **payées** | remboursées (`interaction:<id>:refund` appliqué) ; usages gratuits (aucune trace) |
-| `random_ban.sent / landed / backfired / flops / received` | `rb_requests`, mode `real` | envoyés ; touché un autre ; retourné contre l'acheteur ; personne touché ; subis (par un autre) | tests et animations Studio |
-| `roulette`, `slot` (`plays`, `wins`) | `mini_game_plays` | parties, victoires | — |
-| `duels.played / won` | `mini_game_duels` | duels `resolved` | refusés, expirés, annulés |
-| `sub_wheel.spins` | `sw_spins`, source `twitch`, statut `shown` | tours affichés | simulations, tests, échecs |
-| `screamers.<saison>` | `event_shop_purchases` | achats `completed` | échoués, remboursés |
+| Champ                                                     | Source (Production)                                                      | Compté                                                                                          | Exclu                                                                             |
+| --------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `interactions.<module>` (bonk, tts, soundboard…)          | Wallet canonique : opérations `interaction:<id>:debit` (source = module) | utilisations **payées**                                                                         | remboursées (`interaction:<id>:refund` appliqué) ; usages gratuits (aucune trace) |
+| `random_ban.sent / landed / backfired / flops / received` | `rb_requests`, mode `real`                                               | envoyés ; touché un autre ; retourné contre l'acheteur ; personne touché ; subis (par un autre) | tests et animations Studio                                                        |
+| `roulette`, `slot` (`plays`, `wins`)                      | `mini_game_plays`                                                        | parties, victoires                                                                              | —                                                                                 |
+| `duels.played / won`                                      | `mini_game_duels`                                                        | duels `resolved`                                                                                | refusés, expirés, annulés                                                         |
+| `sub_wheel.spins`                                         | `sw_spins`, source `twitch`, statut `shown`                              | tours affichés                                                                                  | simulations, tests, échecs                                                        |
+| `screamers.<saison>`                                      | `event_shop_purchases`                                                   | achats `completed`                                                                              | échoués, remboursés                                                               |
 
 `since.<source>` : le premier enregistrement que le Core possède pour cette source sur la chaîne (cache 10 min).
 

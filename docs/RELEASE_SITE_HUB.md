@@ -4,13 +4,14 @@
 
 ## 1. Ce qui part, et d'où
 
-| Composant | Branche (worktree) | Écart | Contenu |
-|---|---|---|---|
-| Core + Studio (dépôt Raptoru 2.0) | `feat/site-hub-core` (`Raptoru 2.0 - Worktrees/site-hub-core`) | 14 commits (dont ce plan) sur `origin/main` `8b2189e` (= la Production), 0 de retard, fusion sans conflit | badges équipés dans les classements, cadres et bannières, statistiques des modules, moteur de défis, Daily avec sa table de paliers ; atelier Cadres / Bannières et onglet Défis dans Studio |
-| Site (dépôt raptoru.fr) | `feat/site-hub-chantier` (`Raptoru 2.0 - Worktrees/raptoru-fr-refonte`) | 15 commits sur `origin/main` `542b1f2` (la Production), 0 de retard, fusion sans conflit | lots 1 à 5, Twitch / Portfolio, panneau « EN LIVE », indicateur Daily, banc d'intégration |
-| Bot, extension | — | aucun changement | — |
+| Composant                         | Branche (worktree)                                                      | Écart                                                                                                     | Contenu                                                                                                                                                                                      |
+| --------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core + Studio (dépôt Raptoru 2.0) | `feat/site-hub-core` (`Raptoru 2.0 - Worktrees/site-hub-core`)          | 14 commits (dont ce plan) sur `origin/main` `8b2189e` (= la Production), 0 de retard, fusion sans conflit | badges équipés dans les classements, cadres et bannières, statistiques des modules, moteur de défis, Daily avec sa table de paliers ; atelier Cadres / Bannières et onglet Défis dans Studio |
+| Site (dépôt raptoru.fr)           | `feat/site-hub-chantier` (`Raptoru 2.0 - Worktrees/raptoru-fr-refonte`) | 15 commits sur `origin/main` `542b1f2` (la Production), 0 de retard, fusion sans conflit                  | lots 1 à 5, Twitch / Portfolio, panneau « EN LIVE », indicateur Daily, banc d'intégration                                                                                                    |
+| Bot, extension                    | —                                                                       | aucun changement                                                                                          | —                                                                                                                                                                                            |
 
 **Versions vérifiées le 04/11** (`node scripts/coolify-deploy.mjs status core`, lecture seule) :
+
 - Le Core en Production est sur `8b2189e` (déployé le 31/10 13:02 UTC), soit exactement `origin/main`. Les PR #50 à #53 y sont déjà.
 - Le déploiement n'apportera donc **que** les commits de `feat/site-hub-core` : des ajouts dans `apps/core-api`, `apps/studio`, `packages/schemas`, les deux migrations et la documentation.
 - Bot `4ba9243`, inchangé. Santé `/health` et `/ready` OK. Dernière sauvegarde Coolify réussie : 03/11 04:00 UTC.
@@ -24,6 +25,7 @@
 2. `20261120130000_challenges.sql` : cinq tables neuves (`challenge_defs`, `challenge_progress`, `challenge_awards`, `challenge_runs`, `challenge_log`).
 
 Ce qu'il faut savoir :
+
 - **Additives**, sans aucune donnée : aucun objet, aucune offre, aucun défi n'est créé. Vérifié : une base neuve migrée a des catalogues vides.
 - Contraintes sur de petites tables (catalogue, images), sans verrou long.
 - Le Core actuel les ignore : on peut migrer avant de déployer.
@@ -34,24 +36,26 @@ Ce qu'il faut savoir :
 
 ## 3. Ordre de publication recommandé
 
-| # | Étape | Qui | Vérification avant de continuer |
-|---|---|---|---|
-| 0 | **Sauvegarde** | Antoni | Coolify › `raptoru-prod-postgres` › Backups › Download ; ranger hors du dépôt ; `pg_restore --list` sans erreur, taille identique à Coolify (`docs/BACKUPS.md`). |
-| 0 bis | ~~Répétition sur une copie~~ **faite le 04/11** (§ 5 bis) | — | Facultatif : la refaire sur la sauvegarde de l'étape 0, avec les mêmes scripts, si plusieurs jours ont passé. |
-| 1 | PR Core `feat/site-hub-core` → `main`, CI verte, fusion | Antoni | CI : tests, typage, build. |
-| 2 | Déploiement du Core avec migrations | agent sur GO | `plan core <sha> --migrations-approved`, puis `deploy … --go`. **`CHALLENGES_ENGINE` reste absent ou à `false`.** Contrôles § 4.1. |
-| 3 | Release Studio (`npm run studio:release`) | agent sur GO | Antoni installe. Contrôles § 4.2. |
-| 4 | PR site `feat/site-hub-chantier` → `main`, fusion (déploie) | Antoni | Contrôles § 4.3. Retour arrière prêt : redéployer `542b1f2`. |
-| 5 | Contenu : objets (cadres, bannières), puis défis, créés et validés par Antoni dans Studio | Antoni | Les catalogues restent vides jusque-là. Un défi n'est compté qu'une fois activé par Antoni. |
-| 6 | Plus tard : `CHALLENGES_ENGINE=true` (recomptage toutes les 60 s) | agent sur GO | Seulement après la mesure du premier recomptage et quelques défis validés. |
+| #     | Étape                                                                                     | Qui          | Vérification avant de continuer                                                                                                                                  |
+| ----- | ----------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | **Sauvegarde**                                                                            | Antoni       | Coolify › `raptoru-prod-postgres` › Backups › Download ; ranger hors du dépôt ; `pg_restore --list` sans erreur, taille identique à Coolify (`docs/BACKUPS.md`). |
+| 0 bis | ~~Répétition sur une copie~~ **faite le 04/11** (§ 5 bis)                                 | —            | Facultatif : la refaire sur la sauvegarde de l'étape 0, avec les mêmes scripts, si plusieurs jours ont passé.                                                    |
+| 1     | PR Core `feat/site-hub-core` → `main`, CI verte, fusion                                   | Antoni       | CI : tests, typage, build.                                                                                                                                       |
+| 2     | Déploiement du Core avec migrations                                                       | agent sur GO | `plan core <sha> --migrations-approved`, puis `deploy … --go`. **`CHALLENGES_ENGINE` reste absent ou à `false`.** Contrôles § 4.1.                               |
+| 3     | Release Studio (`npm run studio:release`)                                                 | agent sur GO | Antoni installe. Contrôles § 4.2.                                                                                                                                |
+| 4     | PR site `feat/site-hub-chantier` → `main`, fusion (déploie)                               | Antoni       | Contrôles § 4.3. Retour arrière prêt : redéployer `542b1f2`.                                                                                                     |
+| 5     | Contenu : objets (cadres, bannières), puis défis, créés et validés par Antoni dans Studio | Antoni       | Les catalogues restent vides jusque-là. Un défi n'est compté qu'une fois activé par Antoni.                                                                      |
+| 6     | Plus tard : `CHALLENGES_ENGINE=true` (recomptage toutes les 60 s)                         | agent sur GO | Seulement après la mesure du premier recomptage et quelques défis validés.                                                                                       |
 
 Le Core passe avant Studio et avant le site. Pourquoi :
+
 - un nouveau Studio face à un ancien Core afficherait l'onglet Défis et l'atelier sans leurs routes ;
 - le site, lui, supporte un ancien Core : Défis « momentanément indisponibles », points du Daily seulement si la récompense du Core confirme la table, pas de cadres.
 
 ## 4. Contrôles après chaque déploiement (lecture seule, rien n'est créé)
 
 ### 4.1 Core
+
 - `status core` sur le SHA attendu ; journal de migration avec les deux fichiers.
 - `GET /v1/daily/viewers/<id d'Antoni>` contient `rewardSteps` (500 → 2000).
 - `GET /v1/site/challenges` avec le jeton du site répond `{ challenges: [] }`.
@@ -59,11 +63,13 @@ Le Core passe avant Studio et avant le site. Pourquoi :
 - Supervision Studio verte ; les modules en direct (Daily, Bonk, Boutique) répondent comme avant.
 
 ### 4.2 Studio
+
 - L'onglet Défis s'ouvre, les métriques sont « disponibles » (Wallet, Daily), la liste est vide.
 - Atelier : ouvrir un cadre en **brouillon** sans le publier, puis le supprimer.
 - La Boutique et la Progression sont inchangées.
 
 ### 4.3 Site
+
 - Accueil, classements, profils, Boutique, Défis (« Aucun défi pour l'instant »), Guide.
 - Connecté : Daily à 10 points avec les bons montants ; « Mes défis » ; équipement d'un titre existant.
 - Pendant un live : panneau « EN LIVE » avec la photo de la chaîne, pastille dans la navigation. Hors live : rien.
@@ -120,25 +126,25 @@ Le Core passe avant Studio et avant le site. Pourquoi :
 
 ## 6. Risques et dépendances
 
-| Risque | Mesure |
-|---|---|
-| Premier recomptage rétroactif lourd sur tout l'historique (Wallet, Daily) | **mesuré sur la copie : 112 ms au plus par défi** ; moteur coupé en Production ; un défi n'est compté qu'à son activation par Antoni |
-| Récompense versée par erreur | aucune récompense sans défi activé ; une seule par (défi, période, viewer) ; un objet se retire dans Studio ; les Jetons se corrigent par un ajustement du Wallet |
-| Index du Wallet à long terme (requêtes « payé ») | 2 ms aujourd'hui, croissance linéaire ; ajouter un index seulement si le Wallet atteint des centaines de milliers de lignes |
-| Studio publié avant le Core | ne pas inverser les étapes 2 et 3 |
-| « EN LIVE » sans jeton Twitch sur le site | le lien Twitch reste, sans statut ; `TWITCH_CLIENT_ID` et `TWITCH_CLIENT_SECRET` existent déjà pour la connexion. L'identifiant de chaîne est le premier de `ADMIN_TWITCH_IDS`, ou `TWITCH_BROADCASTER_ID` s'il est défini : à vérifier dans Coolify, en lecture. |
-| Cache | progression d'un viewer : 15 s ; statut live : 60 s ; Daily : 15 s côté site, 30 s dans la page |
+| Risque                                                                    | Mesure                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Premier recomptage rétroactif lourd sur tout l'historique (Wallet, Daily) | **mesuré sur la copie : 112 ms au plus par défi** ; moteur coupé en Production ; un défi n'est compté qu'à son activation par Antoni                                                                                                                              |
+| Récompense versée par erreur                                              | aucune récompense sans défi activé ; une seule par (défi, période, viewer) ; un objet se retire dans Studio ; les Jetons se corrigent par un ajustement du Wallet                                                                                                 |
+| Index du Wallet à long terme (requêtes « payé »)                          | 2 ms aujourd'hui, croissance linéaire ; ajouter un index seulement si le Wallet atteint des centaines de milliers de lignes                                                                                                                                       |
+| Studio publié avant le Core                                               | ne pas inverser les étapes 2 et 3                                                                                                                                                                                                                                 |
+| « EN LIVE » sans jeton Twitch sur le site                                 | le lien Twitch reste, sans statut ; `TWITCH_CLIENT_ID` et `TWITCH_CLIENT_SECRET` existent déjà pour la connexion. L'identifiant de chaîne est le premier de `ADMIN_TWITCH_IDS`, ou `TWITCH_BROADCASTER_ID` s'il est défini : à vérifier dans Coolify, en lecture. |
+| Cache                                                                     | progression d'un viewer : 15 s ; statut live : 60 s ; Daily : 15 s côté site, 30 s dans la page                                                                                                                                                                   |
 
 ## 7. Retour arrière
 
-| Quoi | Comment |
-|---|---|
-| Site | Coolify › redéployer `542b1f2` (l'ancien site reste aussi sur `/classic/`) |
-| Core | `node scripts/coolify-deploy.mjs deploy core <sha précédent> --rollback --go` ; les tables restent, l'ancien code les ignore |
-| Studio | réinstaller l'installateur précédent (`docs/BACKUPS.md` § 5) |
-| Un défi | Studio › Défis › Suspendre (plus de comptage ni de versement), ou Archiver ; `CHALLENGES_ENGINE=false` |
-| Un objet ou une offre | Studio › Boutique : Masquer, ou désactiver l'offre ; une récompense de défi se retire avec une raison |
-| Base | restaurer la sauvegarde de l'étape 0 dans une base, jamais sur la Production sans décision |
+| Quoi                  | Comment                                                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Site                  | Coolify › redéployer `542b1f2` (l'ancien site reste aussi sur `/classic/`)                                                   |
+| Core                  | `node scripts/coolify-deploy.mjs deploy core <sha précédent> --rollback --go` ; les tables restent, l'ancien code les ignore |
+| Studio                | réinstaller l'installateur précédent (`docs/BACKUPS.md` § 5)                                                                 |
+| Un défi               | Studio › Défis › Suspendre (plus de comptage ni de versement), ou Archiver ; `CHALLENGES_ENGINE=false`                       |
+| Un objet ou une offre | Studio › Boutique : Masquer, ou désactiver l'offre ; une récompense de défi se retire avec une raison                        |
+| Base                  | restaurer la sauvegarde de l'étape 0 dans une base, jamais sur la Production sans décision                                   |
 
 ## 8. Activation des défis, plus tard
 

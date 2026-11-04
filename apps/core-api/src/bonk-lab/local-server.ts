@@ -18,12 +18,12 @@ const clientId = process.env.BONK_LAB_TWITCH_CLIENT_ID ?? '';
 const clientSecret = process.env.BONK_LAB_TWITCH_CLIENT_SECRET ?? '';
 const { server, raffle, wordGame, votekick, spotify, challenges } =
   createLabCore({
-  db,
-  clock: systemClock,
-  secret,
-  twitch: clientId && clientSecret ? { clientId, clientSecret } : null,
-  channelTwitchId: process.env.BONK_LAB_CHANNEL_TWITCH_ID ?? '',
-});
+    db,
+    clock: systemClock,
+    secret,
+    twitch: clientId && clientSecret ? { clientId, clientSecret } : null,
+    channelTwitchId: process.env.BONK_LAB_CHANNEL_TWITCH_ID ?? '',
+  });
 // 4301 by default (Studio runtime); another port only for isolated end-to-end tests.
 const port = Number(process.env.BONK_LAB_CORE_PORT ?? 4301);
 server.listen(port, '127.0.0.1', () =>
