@@ -280,10 +280,10 @@ export function randomBanView(s: RbState | null, error: string | null) {
     ${trace}
     <div class="cp-buttons">
       <label class="cp-inline">Animation <select data-f="rb-outcome"><option value="ban">ban (au hasard)</option><option value="csc">CSC</option><option value="flop">flop</option></select></label>
-      <button type="button" data-act="rb-animation" title="Joue l’animation dans OBS, aucun appel Twitch">Tester l’animation</button>
+      <button type="button" data-act="rb-animation" title="Joue l’animation dans OBS, aucun appel Twitch">Jouer l’animation dans OBS (réel)</button>
       <button type="button" data-act="rb-dry-run" title="Vraie recherche sur Twitch (lecture seule), jamais de timeout">Tirage à blanc</button>
-      <button type="button" data-act="rb-caution-test" title="Vraie sanction de 60 s sur ton compte, libérable par !caution raptoru_ : les jetons du payeur sont réellement débités">Test Caution Random Ban</button>
-      <button type="button" data-act="rb-streamer-mute" title="Coupe vraiment ton micro dans OBS 60 s, rien d’autre (ni Twitch, ni jetons, ni chat, ni animation)">Tester le mute du streamer</button>
+      <button type="button" data-act="rb-caution-test" title="Vraie sanction de 60 s sur ton compte, libérable par !caution raptoru_ : les jetons du payeur sont réellement débités">Sanction Caution de test (réelle)</button>
+      <button type="button" data-act="rb-streamer-mute" title="Coupe vraiment ton micro dans OBS 60 s, rien d’autre (ni Twitch, ni jetons, ni chat, ni animation)">Couper mon micro 60 s (réel)</button>
     </div>
     ${rows ? `<table class="cp-history"><thead><tr><th>Heure</th><th>Acheteur</th><th>Résultat</th><th>Détail</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="cp-muted">Aucun Random Ban.</p>'}`;
 }

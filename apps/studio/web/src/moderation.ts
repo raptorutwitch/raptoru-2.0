@@ -91,6 +91,18 @@ export function mountModeration(root: HTMLElement) {
     <div class="mod-toast" data-id="toast" hidden></div>`;
   const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
     root.querySelector<T>(`[data-id="${id}"]`)!;
+  // Refonte F1 (P1-13): in Production this console acts on the real Core; the Lab test wallet does not exist there.
+  void fetch('/api/profile', { headers: { 'x-raptoru-studio': '1' } })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((p: { effective?: string } | null) => {
+      if (p?.effective !== 'production') return;
+      root.querySelector<HTMLElement>('[data-view="wallet"]')!.hidden = true;
+      root.querySelector<HTMLElement>('.mod-foot')!.textContent =
+        'Même console que l’extension · Core Production : sanctions, remboursements et Jetons réels · tout est audité';
+      ERRORS.lab_core_unavailable = ERRORS.core_unavailable =
+        'Core Production injoignable.';
+    })
+    .catch(() => undefined);
 
   let view: View = 'console';
   let visible = false;

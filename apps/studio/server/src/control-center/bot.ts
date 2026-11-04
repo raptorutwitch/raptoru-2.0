@@ -263,11 +263,25 @@ export function describeBot(s: BotStatus, readAt: Date): ModuleStatus {
 export function botStatusProvider(
   core: CoreCall | null,
   now: () => Date = () => new Date(),
+  /** Production profile selected but not started (refonte F1, P0-7): unknown, never « Profil Lab ». */
+  productionStartError: string | null = null,
 ): StatusProvider {
   return {
     id: ID,
     label: LABEL,
     async read() {
+      if (!core && productionStartError)
+        return {
+          ...base(now()),
+          level: 'unknown',
+          state: 'Inconnu',
+          summary:
+            'Le profil Production n’a pas démarré : Studio ne peut pas lire le statut du bot.',
+          facts: [
+            { label: 'Cause', value: productionStartError, level: 'error' },
+          ],
+          hint: 'Redémarrer Studio. Si cela se répète : carte « Profil » (Système) et journal studio-server.log.',
+        };
       if (!core)
         return {
           ...base(now()),

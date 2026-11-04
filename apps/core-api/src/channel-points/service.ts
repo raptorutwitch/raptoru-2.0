@@ -756,6 +756,20 @@ export class ChannelPointsService {
       name: e.user.display_name,
     };
     for (const { index, action } of decided.songs) {
+      // Refonte H11 (R8): a Studio test never reaches the real Spotify queue nor skips the real song — dry run.
+      if (e.source === 'simulation') {
+        await this.setResults(e.channel_id, e.source, e.redemption_id, [
+          {
+            index,
+            ok: true,
+            detail:
+              (action as { interaction: string }).interaction === 'song_request'
+                ? 'simulation : aucune demande Spotify créée (à blanc)'
+                : 'simulation : aucun morceau passé (à blanc)',
+          },
+        ]);
+        continue;
+      }
       try {
         if (!this.spotify) throw new Error('spotify_unavailable');
         if (
@@ -802,7 +816,7 @@ export class ChannelPointsService {
         ]);
       }
     }
-    if (decided.songRefusal && this.spotify)
+    if (decided.songRefusal && this.spotify && e.source !== 'simulation')
       await this.spotify
         .admit({
           channel_id: e.channel_id,

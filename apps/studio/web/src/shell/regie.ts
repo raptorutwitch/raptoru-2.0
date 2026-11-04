@@ -19,6 +19,24 @@ const esc = (t: unknown) =>
 interface CpSummary {
   enabled: boolean;
   rules: number;
+  /**
+   * What Studio itself sees of the execution side (refonte F1 : jamais de vert sur une intention seule). undefined: not
+   * read. A string: why the OBS / effects actions would wait or fail right now.
+   */
+  blocker?: string | null;
+}
+
+/** Why channel-point OBS actions cannot run right now, from Studio's own state (null: nothing blocks). */
+export function cpBlocker(s: {
+  obs?: { connected?: boolean };
+  effects?: { connected?: boolean; audio?: boolean } | null;
+  executor_error?: string | null;
+}): string | null {
+  if (!s.obs?.connected) return 'OBS non connecté à Studio';
+  if (s.effects && !s.effects.connected) return 'lecteur d’effets absent';
+  if (s.effects && !s.effects.audio) return 'lecteur d’effets sans son';
+  if (s.executor_error) return `erreur de l’exécuteur (${s.executor_error})`;
+  return null;
 }
 
 /** Named controls of each module, where they already live. `what` says exactly what can be done there. */
@@ -77,10 +95,14 @@ export async function loadChannelPoints(): Promise<CpSummary | null> {
     const s = (await res.json()) as {
       settings?: { enabled?: boolean };
       rewards?: { rule?: { enabled?: boolean } | null }[];
+      obs?: { connected?: boolean };
+      effects?: { connected?: boolean; audio?: boolean } | null;
+      executor_error?: string | null;
     };
     return {
       enabled: !!s.settings?.enabled,
       rules: (s.rewards ?? []).filter((r) => r.rule?.enabled).length,
+      blocker: cpBlocker(s),
     };
   } catch {
     return null;
@@ -118,19 +140,24 @@ export function regieHtml(opts: {
           ? 'Supervision indisponible : état inconnu.'
           : active.length
             ? `${active.length} incident(s) en cours : ${active.map((i) => esc(i.label)).join(', ')}.`
-            : 'Aucun incident confirmé en cours.'
+            : `Aucun incident sur les éléments suivis : ${SUPERVISED}.`
       }</p>
+      ${opts.supOk && !active.length ? `<p class="rs-muted">Non suivis ici : ${NOT_SUPERVISED}. Leur état est dans chaque module.</p>` : ''}
       <p class="rs-muted"><a href="${opts.href('activite')}">Historique des coupures</a> · <a href="${opts.href('systeme')}">Connexions (Système)</a></p>
     </section>
     <section class="rs-panel" data-role="regie-cp"><h2>Points de chaîne</h2>
-      <p class="rs-state ${cp === undefined ? '' : cp === null ? 'is-unknown' : cp.enabled ? 'is-ok' : ''}">${
+      <p class="rs-state ${cp === undefined ? '' : cp === null ? 'is-unknown' : !cp.enabled ? '' : cp.blocker === null ? 'is-ok' : cp.blocker === undefined ? 'is-unknown' : 'is-down'}">${
         cp === undefined
           ? 'Lecture…'
           : cp === null
             ? 'État inconnu (Core du profil injoignable ou module absent).'
-            : cp.enabled
-              ? `Automatisations actives · ${cp.rules} récompense(s) avec une règle active.`
-              : `Automatisations coupées · ${cp.rules} récompense(s) avec une règle active (sans effet tant que c’est coupé).`
+            : !cp.enabled
+              ? `Automatisations coupées · ${cp.rules} récompense(s) avec une règle active (sans effet tant que c’est coupé).`
+              : cp.blocker === null
+                ? `Automatisations actives et exécutables · ${cp.rules} récompense(s) avec une règle active.`
+                : cp.blocker === undefined
+                  ? `Automatisations activées · ${cp.rules} récompense(s) avec une règle active · exécution non vérifiée.`
+                  : `Automatisations activées, mais ${esc(cp.blocker)} : les actions OBS et les sons attendent · ${cp.rules} récompense(s) avec une règle active.`
       }</p>
       ${cp ? `<button type="button" class="rs-btn ${cp.enabled ? 'danger' : ''}" data-regie="cp">${cp.enabled ? 'Couper les automatisations…' : 'Activer les automatisations…'}</button>` : ''}
       <p class="rs-muted">${opts.message ? `${esc(opts.message)} · ` : ''}Règles et historique : <a href="${opts.href('channel-points')}">Récompenses Twitch</a>.</p>
@@ -142,6 +169,11 @@ export function regieHtml(opts: {
     <div class="rs-rows">${REGIE_CONTROLS.map((c) => `<a class="rs-row rs-row-2" href="${opts.href(c.page)}"><b>${esc(c.title)}</b><small>${esc(c.what)}</small></a>`).join('')}</div>
   </section>`;
 }
+
+/** What the supervision follows today (server/src/supervision): an empty list of incidents means only this. */
+export const SUPERVISED = 'lien Studio ↔ Core, bot, TTS, Soundboard, Bonk';
+export const NOT_SUPERVISED =
+  'lecteur d’effets, source Alertes, overlays Tombola et Votekick, Spotify';
 
 // --- Files en direct (étape 2) : les routes de lecture et d'action que les modules utilisent déjà ---------------------
 
@@ -158,8 +190,23 @@ export interface LiveState {
     | null;
   alerts: { playing: number; queued: number; source: boolean | null } | null;
   tts:
-    { state: string; current: string | null; waiting: number } | 'off' | null;
-  spotify: { admission: string; current: string | null; queue: number } | null;
+    | {
+        state: string;
+        current: string | null;
+        /** null: the queue is not readable from this profile (Production: Modération). */
+        waiting: number | null;
+        /** The TTS player answers (Studio's worker); undefined: not read. */
+        ready?: boolean;
+      }
+    | 'off'
+    | null;
+  spotify: {
+    admission: string;
+    current: string | null;
+    queue: number;
+    /** Studio's Spotify connection (auth ok, not rate limited); undefined: not read. */
+    connected?: boolean;
+  } | null;
 }
 
 const getJson = async <T>(path: string): Promise<T | null> => {
@@ -192,6 +239,7 @@ export async function loadLive(): Promise<LiveState> {
     }>('/api/alerts/state'),
     getJson<{
       enabled: boolean;
+      ready?: boolean;
       module_state?: string;
       queue?: {
         current: { viewer_display_name: string } | null;
@@ -202,6 +250,8 @@ export async function loadLive(): Promise<LiveState> {
       admission: string;
       current: { title?: string; artists?: string } | null;
       queue: unknown[];
+      connection?: { auth?: string };
+      api?: { limited_until?: string | null; quota_exceeded?: boolean };
     }>('/api/spotify/state'),
   ]);
   const r = raffle?.round;
@@ -235,7 +285,8 @@ export async function loadLive(): Promise<LiveState> {
         : {
             state: tts.module_state ?? 'active',
             current: tts.queue?.current?.viewer_display_name ?? null,
-            waiting: tts.queue?.waiting.length ?? 0,
+            waiting: tts.queue ? tts.queue.waiting.length : null,
+            ready: tts.ready,
           },
     spotify: !sp
       ? null
@@ -247,6 +298,14 @@ export async function loadLive(): Promise<LiveState> {
                 .join(' — ') || 'en cours'
             : null,
           queue: sp.queue.length,
+          connected: sp.connection
+            ? sp.connection.auth === 'ok' &&
+              !sp.api?.quota_exceeded &&
+              !(
+                sp.api?.limited_until &&
+                Date.parse(sp.api.limited_until) > Date.now()
+              )
+            : undefined,
         },
   };
 }
@@ -360,7 +419,7 @@ export function liveHtml(
       'alerts',
       a === null
         ? unknown
-        : `<p class="rs-state ${a.source === false ? 'is-unknown' : 'is-ok'}">${a.playing ? `${a.playing} en lecture` : 'Rien en lecture'} · ${a.queued} en attente</p>
+        : `<p class="rs-state ${a.source === null ? 'is-unknown' : a.source ? 'is-ok' : 'is-down'}">${a.playing ? `${a.playing} en lecture` : 'Rien en lecture'} · ${a.queued} en attente</p>
            <p class="rs-muted">Source OBS : ${a.source === null ? 'inconnue' : a.source ? 'vue' : 'absente (les alertes attendent)'}.</p>`,
     )}
     ${card(
@@ -370,8 +429,8 @@ export function liveHtml(
         ? unknown
         : v === 'off'
           ? '<p class="rs-state">Module TTS coupé sur ce profil.</p>'
-          : `<p class="rs-state ${v.state === 'paused' ? 'is-unknown' : 'is-ok'}">${v.state === 'paused' ? 'En pause' : v.state === 'disabled' ? 'Désactivé' : 'Actif'} · ${v.current ? `lit le message de ${esc(v.current)}` : 'aucun message en cours'}</p>
-             <p class="rs-muted">${v.waiting} message(s) en attente.${lab ? '' : ' En Production, pause, stop et file se pilotent dans Modération.'}</p>
+          : `<p class="rs-state ${v.state !== 'active' ? '' : v.ready === true ? 'is-ok' : v.ready === false ? 'is-down' : 'is-unknown'}">${v.state === 'paused' ? 'En pause' : v.state === 'disabled' ? 'Désactivé' : v.ready === false ? 'Activé, lecteur absent' : v.ready === true ? 'Actif' : 'Activé (lecteur non vérifié)'} · ${v.current ? `lit le message de ${esc(v.current)}` : 'aucun message en cours'}</p>
+             <p class="rs-muted">${v.waiting === null ? 'File non lisible ici.' : `${v.waiting} message(s) en attente.`}${lab ? '' : ' En Production, pause, stop et file se pilotent dans Modération.'}</p>
              ${lab ? `<div class="rs-live-acts">${v.state === 'paused' ? btn('tts-resume') : btn('tts-pause')}${v.current ? btn('tts-stop', 'danger') : ''}</div>` : ''}`,
     )}
     ${card(
@@ -379,7 +438,7 @@ export function liveHtml(
       'spotify',
       s === null
         ? unknown
-        : `<p class="rs-state ${s.admission === 'open' ? 'is-ok' : ''}">Demandes ${s.admission === 'open' ? 'ouvertes' : s.admission === 'closed' ? 'fermées' : esc(s.admission)} · ${s.queue} en file</p>
+        : `<p class="rs-state ${s.admission !== 'open' ? '' : s.connected === true ? 'is-ok' : s.connected === false ? 'is-down' : 'is-unknown'}">Demandes ${s.admission === 'open' ? 'ouvertes' : s.admission === 'closed' ? 'fermées' : esc(s.admission)}${s.admission === 'open' && s.connected === false ? ', mais Spotify n’est pas connecté à Studio' : ''} · ${s.queue} en file</p>
            <p class="rs-muted">${s.current ? `En cours : ${esc(s.current)}` : 'Aucune demande en cours.'}</p>`,
     )}
   </div></section>`;

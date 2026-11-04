@@ -430,6 +430,30 @@ describe('Spotify V2 — a song request (« Choisi la prochaine musique ! »)', 
     expect((await t.spotify.state(CH)).to_verify).toEqual([]);
   });
 
+  it('a Studio test of the rule (simulation) is a dry run: no request, no job, no skip (refonte H11)', async () => {
+    const t = await lab();
+    await t.sync();
+    const out = await t.redeem(1, 'Daft Punk One More Time', {
+      source: 'simulation',
+    });
+    expect(out.redemption.results[0]).toMatchObject({
+      status: 'done',
+      detail: 'simulation : aucune demande Spotify créée (à blanc)',
+    });
+    await t.cp.receive({
+      channel_id: CH,
+      source: 'simulation',
+      redemption_id: randomUUID(),
+      reward: { id: SKIP_REWARD, title: 'Skip la musique', cost: 2000 },
+      user: viewer(2),
+      twitch_status: 'unfulfilled',
+      redeemed_at: t.core.clock.now().toISOString(),
+    });
+    expect(await t.requests()).toEqual([]);
+    expect((await t.sync()).jobs).toEqual([]);
+    expect(await t.replies()).toEqual([]);
+  });
+
   it('a redelivered redemption creates nothing more', async () => {
     const t = await lab();
     await t.sync();

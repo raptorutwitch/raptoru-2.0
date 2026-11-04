@@ -81,7 +81,7 @@ export function mountRandomBan(root: HTMLElement) {
     if (
       act === 'rb-streamer-mute' &&
       confirm(
-        'Tester le mute du streamer ?\n\nTon micro « Micro » est VRAIMENT coupé dans OBS pendant 60 s, puis rétabli. Rien d’autre : aucun appel Twitch, aucun jeton, aucun point, aucun message dans le chat, aucune animation, aucune caution possible.',
+        'Couper ton micro 60 s (réel) ?\n\nTon micro « Micro » est VRAIMENT coupé dans OBS pendant 60 s, puis rétabli. Rien d’autre : aucun appel Twitch, aucun jeton, aucun point, aucun message dans le chat, aucune animation, aucune caution possible.',
       )
     )
       void test(
@@ -92,7 +92,7 @@ export function mountRandomBan(root: HTMLElement) {
     if (
       act === 'rb-caution-test' &&
       confirm(
-        'Test Caution Random Ban ?\n\nUne VRAIE sanction Random Ban est créée sur ton compte pendant 60 s : micro coupé, zoom et MUTED dans OBS.\n\nElle est reconnue par !caution raptoru_ : si quelqu’un répond « oui » au devis, ses JETONS SONT VRAIMENT DÉBITÉS (300 par tranche de 10 s restantes) et tu es libéré.\n\nAucun tirage, aucun viewer visé, aucun timeout Twitch, aucun point de chaîne, hors statistiques des tirages.',
+        'Sanction Caution de test (réelle) ?\n\nUne VRAIE sanction Random Ban est créée sur ton compte pendant 60 s : micro coupé, zoom et MUTED dans OBS.\n\nElle est reconnue par !caution raptoru_ : si quelqu’un répond « oui » au devis, ses JETONS SONT VRAIMENT DÉBITÉS (300 par tranche de 10 s restantes) et tu es libéré.\n\nAucun tirage, aucun viewer visé, aucun timeout Twitch, aucun point de chaîne, hors statistiques des tirages.',
       )
     )
       void test(

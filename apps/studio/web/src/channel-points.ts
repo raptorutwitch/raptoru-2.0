@@ -1,6 +1,7 @@
 import { COLOR_CAM_PRESETS, FX_CAM } from '@raptoru/schemas';
 import {
   actionLabel,
+  runNowConfirm,
   CP_OFF_CONFIRM,
   CP_ON_CONFIRM,
   type CpActionView,
@@ -257,7 +258,7 @@ export function mountChannelPoints(root: HTMLElement) {
       <div class="cp-buttons">
         <button type="button" data-act="add"${draft.actions.length >= 5 ? ' disabled' : ''}>+ Ajouter une action</button>
         <button type="button" class="cp-primary" data-act="save">Enregistrer</button>
-        <button type="button" data-act="test"${r.rule ? '' : ' disabled'} title="Exécute la règle enregistrée pour de vrai (OBS / Soundboard)">Tester</button>
+        <button type="button" data-act="test"${r.rule ? '' : ' disabled'} title="Exécute la règle enregistrée pour de vrai sur le stream (OBS, sons, effets) ; crédits, Random Ban et Spotify à blanc">Exécuter maintenant (réel)</button>
         ${
           choices
             ? `<label class="cp-inline">avec le texte <input data-f="test-input" list="cp-text-choices" size="12" value="${esc(testInput || choices[0]!)}" title="Ce qu’un viewer écrirait (texte inconnu possible)"/></label>
@@ -427,24 +428,28 @@ export function mountChannelPoints(root: HTMLElement) {
       return;
     }
     if (act === 'test' && selected) {
+      const r = reward();
       if (
         !confirm(
-          'Tester cette récompense ?\n\nLa règle enregistrée est exécutée pour de vrai : OBS, Soundboard et lecteur d’effets.',
+          runNowConfirm(
+            r?.rule?.actions ?? [],
+            state?.sounds,
+            effectItems(state?.effects),
+          ),
         )
       )
         return;
-      const r = reward();
       const choices = r && textChoices(r);
       void post('/test', {
         reward_id: selected,
         ...(choices ? { user_input: testInput || choices[0]! } : {}),
       }).then(
         async () => {
-          message = 'Test envoyé : voir l’historique.';
+          message = 'Exécution envoyée : voir l’historique.';
           await load();
         },
         (e) => {
-          message = `Test refusé : ${(e as Error).message}`;
+          message = `Exécution refusée : ${(e as Error).message}`;
           renderEditor();
         },
       );

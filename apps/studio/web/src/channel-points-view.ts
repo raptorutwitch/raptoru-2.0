@@ -247,6 +247,37 @@ export function actionLabel(
   }
 }
 
+/**
+ * Refonte H11 : « Exécuter maintenant (réel) » lists what each action REALLY does when run from Studio. Core runs a
+ * Studio run as `source: simulation` : crédits, Random Ban and Spotify are dry runs there; OBS, sounds and effects are
+ * real, whatever the profile.
+ */
+export function runNowConfirm(
+  actions: CpActionView[],
+  sounds: CpState['sounds'] = [],
+  effects: EffectSoundView[] = [],
+): string {
+  const dry = (a: CpActionView) =>
+    a.type === 'credits' ||
+    (a.type === 'interaction' &&
+      ['random_ban', 'song_request', 'song_skip'].includes(a.interaction));
+  const lines = actions.map(
+    (a) =>
+      `• ${actionLabel(a, sounds, effects)} : ${
+        dry(a)
+          ? a.type === 'credits'
+            ? 'à blanc (aucun crédit versé)'
+            : a.type === 'interaction' && a.interaction === 'random_ban'
+              ? 'à blanc (vraie recherche Twitch, aucun timeout)'
+              : 'à blanc (rien n’est envoyé à Spotify)'
+          : a.type === 'sound'
+            ? 'RÉEL (joué par le lecteur Soundboard du stream)'
+            : 'RÉEL (OBS / lecteur d’effets du stream)'
+      }`,
+  );
+  return `Exécuter cette récompense maintenant ?\n\n${lines.join('\n')}\n\nAucun point de chaîne n’est utilisé ; l’exécution est inscrite dans l’historique.`;
+}
+
 const chip = (cls: string, text: string, title = '') =>
   `<span class="cp-chip cp-chip--${cls}"${title ? ` title="${esc(title)}"` : ''}>${esc(text)}</span>`;
 

@@ -67,7 +67,7 @@ export function mountAlerts(root: HTMLElement) {
           <h2>Aperçu</h2>
           <div class="al-actions">
             <button type="button" class="primary" data-act="play">Lancer</button>
-            <button type="button" data-act="replay">Rejouer</button>
+            <button type="button" data-act="replay">Rejouer l’aperçu</button>
             <button type="button" data-act="stop">Arrêter</button>
           </div>
           <button type="button" class="al-small" data-act="overlay">Superposer les autres familles</button>
@@ -79,7 +79,7 @@ export function mountAlerts(root: HTMLElement) {
           <div data-role="calib"></div>
           <h2>Simulation (file réelle)</h2>
           <button type="button" data-act="queue">Envoyer dans la file</button>
-          <p class="al-hint">Événement simulé, mis dans la file du Core de ce profil : la source OBS le joue.</p>
+          <p class="al-hint" data-role="queue-hint">Événement simulé, mis dans la file du Core de ce profil : la source OBS le joue.</p>
           <p class="al-hint" data-role="queue-result"></p>
         </div>
         <div class="al-main">
@@ -150,9 +150,16 @@ export function mountAlerts(root: HTMLElement) {
     $('media').innerHTML = mediaView(state);
     $('source').innerHTML = sourceView(state);
     if (state) $<HTMLInputElement>('obs-url').value = state.player_url;
-    if (state?.environment)
-      $('alerts-env').textContent =
-        state.environment === 'production' ? 'Core production' : 'Core Lab';
+    if (state?.environment) {
+      const prod = state.environment === 'production';
+      $('alerts-env').textContent = prod ? 'Core production' : 'Core Lab';
+      // Refonte F1 (P1-13): in Production the « simulation » is a real alert on the stream.
+      root.querySelector<HTMLButtonElement>('[data-act="queue"]')!.textContent =
+        prod ? 'Jouer sur le stream (réel)' : 'Envoyer dans la file';
+      $('queue-hint').textContent = prod
+        ? 'Production : alerte fictive mise dans la VRAIE file du stream. La source OBS « Alertes » la joue devant les viewers, après les alertes déjà en attente.'
+        : 'Événement simulé, mis dans la file du Core Lab : la source OBS de ce profil le joue.';
+    }
   };
 
   /** Reads the visible inputs back into the fake data. */
@@ -339,6 +346,13 @@ export function mountAlerts(root: HTMLElement) {
     }
     if (act === 'queue') {
       const out = $('queue-result');
+      if (
+        state?.environment === 'production' &&
+        !confirm(
+          'Jouer cette alerte sur le stream ?\n\nC’est une alerte fictive, mais elle passe par la VRAIE file : la source OBS « Alertes » la joue devant les viewers. Aucun Jeton, aucun événement Twitch.',
+        )
+      )
+        return;
       try {
         const res = await fetch('/api/alerts/test', {
           method: 'POST',

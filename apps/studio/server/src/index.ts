@@ -1076,8 +1076,12 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   twitchConnectionsRef = twitchConnections;
   // Supervision (incident 22/10): what would make the Core refuse a viewer, read from the live runtimes.
   const studioOrigin = `http://${host}:${port}`;
+  // Refonte F1 (P0-7): a Production profile whose runtimes did not start is an incident, never « nothing runs here ».
+  const startFailed = productionError
+    ? { state: 'start_failed', detail: productionError as string | null }
+    : null;
   const interactionSources = (): InteractionSources => ({
-    link: production?.link ?? null,
+    link: production?.link ?? startFailed,
     tts: tts?.worker ?? null,
     sound: sound?.worker ?? null,
     bonk: bonk
@@ -1092,7 +1096,11 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         }
       : null,
   });
-  const bot = botStatusProvider(production?.alertsCore ?? null);
+  const bot = botStatusProvider(
+    production?.alertsCore ?? null,
+    undefined,
+    productionError,
+  );
   const control = new ControlCenter(studioOrigin, [
     bot,
     interactionsStatusProvider(() =>
