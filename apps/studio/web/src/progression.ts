@@ -3,6 +3,8 @@
 // (every row kept; the waiting ones attached later, automatically or by a decision here) and its undo. Studio only relays: the
 // profile's Core decides and records (/api/progression/* → /v1/lab|studio/progression/*).
 
+import './progression.css';
+
 type Json = Record<string, unknown>;
 type Reward = {
   reward_id: string;
@@ -17,6 +19,7 @@ type Reward = {
   /** Boutique cosmétique: a draft is never granted (the Core refuses it). */
   status?: string;
 };
+type Tab = 'viewers' | 'catalog' | 'rules' | 'import';
 type State = {
   enabled: boolean;
   rules: Record<string, number | boolean | string[]>;
@@ -130,6 +133,7 @@ export function mountProgression(root: HTMLElement) {
   let state: State | null = null;
   let error = '';
   let flash = '';
+  let tab: Tab = 'viewers';
   let results: ViewerRow[] = [];
   let selected: { row: ViewerRow; detail: Detail; journal: Journal } | null =
     null;
@@ -194,95 +198,112 @@ export function mountProgression(root: HTMLElement) {
   function render() {
     if (!visible) return;
     if (error && !state) {
-      root.innerHTML = `<div class="hw"><h2>⭐ Progression</h2><p class="muted">Progression indisponible : ${esc(error)} (Core du profil sans la progression ?).</p></div>`;
+      root.innerHTML = `<div class="rs-page"><header class="rs-page-head"><h1>Progression</h1></header><p class="rs-muted">Progression indisponible : ${esc(error)} (Core du profil sans la progression ?).</p></div>`;
       return;
     }
     if (!state) {
       root.innerHTML =
-        '<div class="hw"><h2>⭐ Progression</h2><p class="muted">Chargement…</p></div>';
+        '<div class="rs-page"><header class="rs-page-head"><h1>Progression</h1></header><p class="rs-muted">Chargement…</p></div>';
       return;
     }
     const s = state;
     const d = selected?.detail;
-    root.innerHTML = `<div class="hw">
-      <header class="hw-head"><h2>⭐ Progression</h2><span class="hw-flash">${esc(flash)}</span></header>
-      <div class="hw-grid">
-        <section class="card"><h3>Activation</h3>
-          <p>${s.enabled ? '<b>Active</b> : la présence et le chat rapportent de l’XP.' : '<b>Inactive</b> : rien n’est compté.'}</p>
-          <button type="button" data-act="toggle" class="${s.enabled ? '' : 'primary'}">${s.enabled ? 'Désactiver' : 'Activer'}</button>
-          <p class="muted">Présence = vue dans deux relevés des chatters de suite (toutes les 2 min) ; un spectateur absent de cette liste n’est pas compté.</p>
-        </section>
-        <section class="card"><h3>Règles</h3>
-          ${RULES.map(([k, label, step]) => `<label class="row">${esc(label)} <input type="number" step="${step}" data-rule="${k}" value="${esc(s.rules[k])}"></label>`).join('')}
-          <label class="row"><input type="checkbox" data-rule="live_only" ${s.rules.live_only ? 'checked' : ''}> Chat compté seulement en live</label>
-          <button type="button" data-act="rules">Enregistrer les règles</button>
-        </section>
-        <section class="card wide"><h3>Titres et badges</h3>
-          <table class="tbl"><thead><tr><th>Id</th><th>Type</th><th>Libellé</th><th>Rareté</th><th>Catégorie</th><th>Niveau</th><th>Actif</th></tr></thead><tbody>
-          ${s.catalog.map((r) => `<tr><td><code>${esc(r.reward_id)}</code></td><td>${r.kind === 'title' ? 'Titre' : 'Badge'}</td><td>${esc(r.label)}</td><td>${esc(RARITY_FR[r.rarity] ?? r.rarity)}</td><td>${esc(r.category)}</td><td>${r.unlock_level ?? '—'}</td><td>${r.active ? 'oui' : 'non'}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Aucune récompense pour l’instant.</td></tr>'}
-          </tbody></table>
-          <div class="row-in" data-role="reward-form">
-            <input placeholder="id (ex. citrouille-2026)" data-f="reward_id" maxlength="48">
-            <select data-f="kind"><option value="title">Titre</option><option value="badge">Badge</option></select>
-            <input placeholder="Libellé" data-f="label" maxlength="60">
-            <select data-f="rarity">${RARITIES.map((r) => `<option value="${r}">${RARITY_FR[r]}</option>`).join('')}</select>
-            <input placeholder="catégorie" data-f="category" value="general" maxlength="32">
-            <input type="number" min="1" placeholder="niveau (vide : événement / manuel)" data-f="unlock_level">
-            <label><input type="checkbox" data-f="active" checked> actif</label>
-            <button type="button" data-act="reward">Créer / mettre à jour</button>
-          </div>
-          <p class="muted">Un id existant est mis à jour (le type ne change pas). Un niveau de déblocage donne la récompense à tous ceux qui l’ont atteint.</p>
-        </section>
-        <section class="card wide"><h3>Un viewer</h3>
-          <div class="row-in"><input placeholder="Pseudo Twitch ou identifiant" data-role="q" maxlength="40"><button type="button" data-act="search">Chercher</button></div>
-          ${results.length ? `<ul class="list">${results.map((r) => `<li><button type="button" class="link" data-pick="${esc(r.twitch_user_id)}">${esc(r.display_name ?? r.login)}</button> <span class="muted">${esc(r.login)} · niveau ${r.level} · ${fmt(Number(r.xp))} XP</span></li>`).join('')}</ul>` : ''}
-          ${
-            selected && d
-              ? `<div class="detail">
-            <h4>${esc(selected.row.display_name ?? selected.row.login)}</h4>
-            <p>Niveau <b>${d.level}</b> · ${fmt(d.xp)} XP (niveau suivant à ${fmt(d.nextLevelXp)}) · rang ${d.rank ?? '—'}</p>
-            <p>Présence détectée : <b>${fmt(d.totals.watchMinutes)} min</b> (dont ${fmt(d.watchMinutes)} relevées par Raptoru — liste des chatters, pas une preuve de visionnage) · messages : <b>${fmt(d.totals.messages)}</b> (dont ${fmt(d.messages)} comptés par Raptoru)</p>
-            ${d.imported ? `<p class="muted">Repris de WizeBot : niveau ${d.imported.level}, ${fmt(d.imported.watchMinutes)} min, ${fmt(d.imported.messages)} messages.</p>` : ''}
-            <p>Équipé : ${d.equipped.title ? `titre <code>${esc(d.equipped.title)}</code>` : 'aucun titre'}${d.equipped.badges.length ? ` · badges ${d.equipped.badges.map((b) => `<code>${esc(b)}</code>`).join(' ')}` : ''}</p>
-            <ul class="list">${d.inventory.map((i) => `<li>${i.kind === 'title' ? 'Titre' : 'Badge'} <b>${esc(i.label)}</b> <span class="muted">${esc(RARITY_FR[i.rarity] ?? i.rarity)} · ${esc(i.source)}${i.reference ? ` · ${esc(i.reference)}` : ''}</span> <button type="button" class="link" data-revoke="${esc(i.id)}">Retirer</button></li>`).join('') || '<li class="muted">Inventaire vide.</li>'}</ul>
-            <div class="row-in"><select data-role="grant-reward">${rewardOptions()}</select>
-              <select data-role="grant-source"><option value="manual">Manuel</option><option value="event">Événement</option></select>
-              <input placeholder="référence (ex. halloween-2026)" data-role="grant-ref" maxlength="80">
-              <button type="button" data-act="grant" ${rewardOptions() ? '' : 'disabled'}>Attribuer</button></div>
-            <h4>XP manuelle</h4>
-            <div class="row-in"><select data-role="adj-mode">${ADJUST.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
-              <input type="number" min="0" step="1" placeholder="valeur" data-role="adj-value">
-              <input placeholder="raison (obligatoire, gardée)" data-role="adj-reason" maxlength="200">
-              <button type="button" data-act="adjust">Appliquer</button></div>
-            <p class="muted">Jamais en dessous de 0 ; le niveau suit l’XP. Chaque ajustement est journalisé (qui, quand, pourquoi).</p>
-            <h4>Journal</h4>
-            ${selected.journal.sources.map((h) => `<p class="muted">Historique WizeBot « ${esc(h.login)} » : niveau ${h.level}, relevé le ${esc(new Date(h.measuredAt).toLocaleDateString('fr-FR'))}, rattaché ${h.attachedBy === 'manual' ? 'à la main' : h.attachedBy === 'id' ? 'par identifiant Twitch' : 'par pseudo'}.</p>`).join('')}
-            <ul class="list">${selected.journal.movements.map((m) => `<li>${esc(new Date(m.at).toLocaleString('fr-FR'))} · ${esc(KIND_FR[m.kind] ?? m.kind)} <b>${m.amount > 0 ? '+' : ''}${fmt(m.amount)} XP</b> <span class="muted">${esc(m.actor)}${m.reason ? ` — ${esc(m.reason)}` : ''}</span></li>`).join('') || '<li class="muted">Aucun ajustement ni reprise.</li>'}</ul>
-          </div>`
-              : ''
-          }
-        </section>
-        <section class="card"><h3>Reprise de WizeBot</h3>
-          <p class="muted">Lit les niveaux, le temps de présence et les messages de WizeBot (via raptoru.fr) et démarre chaque viewer à son niveau, une seule fois. Chaque ligne est gardée avec sa date ; celles qu’on ne peut pas rattacher avec certitude attendent : elles se rattachent seules quand le viewer revient (stream, connexion sur raptoru.fr), ou ici sur décision.</p>
-          ${importStatus ? `<p>Rattachés : <b>${fmt(importStatus.imported)}</b> · en attente : <b>${fmt(importStatus.pending + importStatus.ambiguous + importStatus.conflict)}</b> <span class="muted">(${fmt(importStatus.pending)} inconnus du Core, ${fmt(importStatus.ambiguous)} ambigus, ${fmt(importStatus.conflict)} conflits)${importStatus.lastMeasuredAt ? ` · dernier relevé ${esc(new Date(importStatus.lastMeasuredAt).toLocaleString('fr-FR'))}` : ''}</span></p>` : ''}
-          <button type="button" data-act="dry-run">Simuler (n’écrit rien)</button>
-          <button type="button" data-act="import">Importer depuis WizeBot</button>
-          <button type="button" data-act="resolve">Rattacher les lignes en attente</button>
-          <button type="button" class="warn" data-act="revert">Annuler l’import</button>
-          <pre data-role="import-out" class="muted">${esc(lastImport)}</pre>
-        </section>
-        <section class="card wide"><h3>Historiques en attente</h3>
-          <div class="row-in"><input placeholder="pseudo WizeBot (début)" data-role="wq" maxlength="25"><button type="button" data-act="waiting">Afficher</button></div>
-          ${
-            waiting
-              ? `<table class="tbl"><thead><tr><th>Pseudo WizeBot</th><th>Statut</th><th>Niveau</th><th>Présence</th><th>Messages</th><th>Comptes du Core sous ce pseudo</th><th></th></tr></thead><tbody>
-          ${waiting.map((w) => `<tr><td>${esc(w.login)}${w.twitchUserId ? ` <span class="muted">(id ${esc(w.twitchUserId)})</span>` : ''}</td><td>${esc(STATUS_FR[w.status] ?? w.status)}</td><td>${w.level}</td><td>${fmt(w.watchMinutes)} min</td><td>${fmt(w.messages)}</td><td>${w.candidates.map((c) => `<code>${esc(c)}</code>`).join(' ') || '—'}</td><td><button type="button" class="link" data-attach="${esc(w.login)}">Rattacher…</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Rien en attente.</td></tr>'}
-          </tbody></table>`
-              : ''
-          }
-          <p class="muted">Rattacher seulement après avoir vérifié l’identité (identifiant Twitch) : jamais sur la seule ressemblance des pseudos. Un viewer n’a qu’un historique WizeBot.</p>
-        </section>
-      </div></div>`;
+    const tabBtn = (id: Tab, label: string) =>
+      `<button type="button" role="tab" data-tab="${id}" aria-selected="${tab === id}">${label}</button>`;
+    root.innerHTML = `<div class="rs-page rs-form pg">
+      <header class="rs-page-head rs-head-row"><div><h1>Progression <span class="rs-chip ${s.enabled ? 'is-active' : ''}">${s.enabled ? 'Active' : 'Inactive'}</span></h1>
+        <p>${s.enabled ? 'La présence et le chat rapportent de l’XP.' : 'Rien n’est compté tant que la progression est inactive.'} Présence = vue dans deux relevés des chatters de suite (toutes les 2 min) ; un spectateur absent de cette liste n’est pas compté.</p></div>
+        <button type="button" data-act="toggle" class="rs-btn ${s.enabled ? '' : 'primary'}">${s.enabled ? 'Désactiver…' : 'Activer'}</button></header>
+      ${flash ? `<p class="rs-flash${/^(Refusé|Liste impossible|Rattachement impossible|Import)/.test(flash) ? ' is-bad' : ''}" role="status">${esc(flash)}</p>` : ''}
+      <div class="rs-seg" role="tablist" aria-label="Progression">${tabBtn('viewers', 'Viewers')}${tabBtn('catalog', 'Titres et badges')}${tabBtn('rules', 'Règles d’XP')}${tabBtn('import', 'Reprise WizeBot')}</div>
+      ${tab === 'viewers' ? viewersHtml(d) : tab === 'catalog' ? catalogHtml(s) : tab === 'rules' ? rulesHtml(s) : importHtml()}
+    </div>`;
+  }
+
+  function rulesHtml(s: State) {
+    return `<section class="rs-panel pg-rules"><h2>Règles d’XP</h2>
+      <div class="rs-fields">${RULES.map(([k, label, step]) => `<label>${esc(label)} <input type="number" step="${step}" data-rule="${k}" value="${esc(s.rules[k])}"></label>`).join('')}
+        <label class="rs-check span2"><input type="checkbox" data-rule="live_only" ${s.rules.live_only ? 'checked' : ''}> <span>Chat compté seulement en live</span></label></div>
+      <p><button type="button" class="rs-btn primary" data-act="rules">Enregistrer les règles</button></p>
+      <p class="rs-muted">Les nouvelles règles s’appliquent à l’XP gagnée ensuite ; l’XP déjà acquise ne change pas.</p>
+    </section>`;
+  }
+
+  function catalogHtml(s: State) {
+    return `<section class="rs-panel"><h2>Titres et badges</h2>
+      <div class="rs-scroll"><table class="rs-tbl"><thead><tr><th>Libellé</th><th>Type</th><th>Rareté</th><th>Catégorie</th><th class="num">Niveau</th><th>État</th></tr></thead><tbody>
+      ${s.catalog.map((r) => `<tr><td><b>${esc(r.label)}</b><small><code>${esc(r.reward_id)}</code></small></td><td>${r.kind === 'title' ? 'Titre' : 'Badge'}</td><td>${esc(RARITY_FR[r.rarity] ?? r.rarity)}</td><td>${esc(r.category)}</td><td class="num">${r.unlock_level ?? '—'}</td><td><span class="rs-chip ${r.active ? 'is-active' : ''}">${r.active ? 'actif' : 'inactif'}</span></td></tr>`).join('') || '<tr><td colspan="6" class="rs-muted">Aucune récompense pour l’instant.</td></tr>'}
+      </tbody></table></div></section>
+      <section class="rs-panel rs-step"><h2><i>+</i> Créer ou mettre à jour</h2>
+        <div class="rs-fields pg-reward" data-role="reward-form">
+          <label>Identifiant <input placeholder="ex. citrouille-2026" data-f="reward_id" maxlength="48"><small>Un identifiant existant est mis à jour (le type ne change pas).</small></label>
+          <label>Type <select data-f="kind"><option value="title">Titre</option><option value="badge">Badge</option></select></label>
+          <label>Libellé <input data-f="label" maxlength="60"></label>
+          <label>Rareté <select data-f="rarity">${RARITIES.map((r) => `<option value="${r}">${RARITY_FR[r]}</option>`).join('')}</select></label>
+          <label>Catégorie <input data-f="category" value="general" maxlength="32"></label>
+          <label>Débloqué au niveau <input type="number" min="1" placeholder="vide : événement / manuel" data-f="unlock_level"><small>Donné à tous ceux qui ont atteint ce niveau.</small></label>
+          <label class="rs-check"><input type="checkbox" data-f="active" checked> <span>Actif</span></label>
+          <div><button type="button" class="rs-btn primary" data-act="reward">Créer / mettre à jour</button></div>
+        </div>
+        <p class="rs-muted">Apparence, cadres, bannières et vente : <a href="/?p=shop">Boutique</a>.</p>
+      </section>`;
+  }
+
+  function viewersHtml(d: Detail | undefined) {
+    return `<div class="pg-viewers">
+      <section class="rs-panel pg-search"><h2>Trouver un viewer</h2>
+        <div class="pg-q"><input placeholder="Pseudo Twitch ou identifiant" data-role="q" maxlength="40" aria-label="Pseudo Twitch ou identifiant"><button type="button" class="rs-btn" data-act="search">Chercher</button></div>
+        ${results.length ? `<div class="rs-rows">${results.map((r) => `<button type="button" class="rs-row pg-hit${selected?.row.twitch_user_id === r.twitch_user_id ? ' is-sel' : ''}" data-pick="${esc(r.twitch_user_id)}"><b>${esc(r.display_name ?? r.login)}</b><small>${esc(r.login)} · niveau ${r.level} · ${fmt(Number(r.xp))} XP</small></button>`).join('')}</div>` : '<p class="rs-muted">Les viewers vus par la chaîne (présence, chat, achats).</p>'}
+      </section>
+      ${
+        selected && d
+          ? `<section class="rs-panel detail">
+        <h2>${esc(selected.row.display_name ?? selected.row.login)}</h2>
+        <div class="pg-kpis"><div><b>${d.level}</b><span>niveau</span></div><div><b>${fmt(d.xp)}</b><span>XP · suivant à ${fmt(d.nextLevelXp)}</span></div><div><b>${d.rank ?? '—'}</b><span>rang</span></div><div><b>${fmt(d.totals.watchMinutes)}</b><span>min de présence</span></div><div><b>${fmt(d.totals.messages)}</b><span>messages</span></div></div>
+        <p class="rs-muted">Dont ${fmt(d.watchMinutes)} min relevées par Raptoru (liste des chatters, pas une preuve de visionnage) et ${fmt(d.messages)} messages comptés par Raptoru.${d.imported ? ` Repris de WizeBot : niveau ${d.imported.level}, ${fmt(d.imported.watchMinutes)} min, ${fmt(d.imported.messages)} messages.` : ''}</p>
+        <p>Équipé : ${d.equipped.title ? `titre <code>${esc(d.equipped.title)}</code>` : 'aucun titre'}${d.equipped.badges.length ? ` · badges ${d.equipped.badges.map((b) => `<code>${esc(b)}</code>`).join(' ')}` : ''}</p>
+        <h3>Inventaire</h3>
+        <ul class="pg-list">${d.inventory.map((i) => `<li>${i.kind === 'title' ? 'Titre' : 'Badge'} <b>${esc(i.label)}</b> <span class="rs-muted">${esc(RARITY_FR[i.rarity] ?? i.rarity)} · ${esc(i.source)}${i.reference ? ` · ${esc(i.reference)}` : ''}</span> <button type="button" class="rs-btn sm quiet" data-revoke="${esc(i.id)}">Retirer</button></li>`).join('') || '<li class="rs-muted">Inventaire vide.</li>'}</ul>
+        <div class="pg-inline"><select data-role="grant-reward" aria-label="Récompense">${rewardOptions()}</select>
+          <select data-role="grant-source" aria-label="Source"><option value="manual">Manuel</option><option value="event">Événement</option></select>
+          <input placeholder="référence (ex. halloween-2026)" data-role="grant-ref" maxlength="80" aria-label="Référence">
+          <button type="button" class="rs-btn" data-act="grant" ${rewardOptions() ? '' : 'disabled'}>Attribuer</button></div>
+        <h3>XP manuelle</h3>
+        <div class="pg-inline"><select data-role="adj-mode" aria-label="Opération">${ADJUST.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
+          <input type="number" min="0" step="1" placeholder="valeur" data-role="adj-value" aria-label="Valeur">
+          <input placeholder="raison (obligatoire, gardée)" data-role="adj-reason" maxlength="200" aria-label="Raison">
+          <button type="button" class="rs-btn" data-act="adjust">Appliquer</button></div>
+        <p class="rs-muted">Jamais en dessous de 0 ; le niveau suit l’XP. Chaque ajustement est journalisé (qui, quand, pourquoi).</p>
+        <h3>Journal</h3>
+        ${selected.journal.sources.map((h) => `<p class="rs-muted">Historique WizeBot « ${esc(h.login)} » : niveau ${h.level}, relevé le ${esc(new Date(h.measuredAt).toLocaleDateString('fr-FR'))}, rattaché ${h.attachedBy === 'manual' ? 'à la main' : h.attachedBy === 'id' ? 'par identifiant Twitch' : 'par pseudo'}.</p>`).join('')}
+        <ul class="pg-list">${selected.journal.movements.map((m) => `<li>${esc(new Date(m.at).toLocaleString('fr-FR'))} · ${esc(KIND_FR[m.kind] ?? m.kind)} <b>${m.amount > 0 ? '+' : ''}${fmt(m.amount)} XP</b> <span class="rs-muted">${esc(m.actor)}${m.reason ? ` — ${esc(m.reason)}` : ''}</span></li>`).join('') || '<li class="rs-muted">Aucun ajustement ni reprise.</li>'}</ul>
+      </section>`
+          : '<section class="rs-panel pg-empty"><p class="rs-muted">Choisis un viewer pour voir son niveau, son inventaire et son journal.</p></section>'
+      }
+    </div>`;
+  }
+
+  function importHtml() {
+    return `<section class="rs-panel"><h2>Reprise de WizeBot</h2>
+        <p class="rs-muted">Lit les niveaux, le temps de présence et les messages de WizeBot (via raptoru.fr) et démarre chaque viewer à son niveau, une seule fois. Chaque ligne est gardée avec sa date ; celles qu’on ne peut pas rattacher avec certitude attendent : elles se rattachent seules quand le viewer revient (stream, connexion sur raptoru.fr), ou ici sur décision.</p>
+        ${importStatus ? `<div class="pg-kpis"><div><b>${fmt(importStatus.imported)}</b><span>rattachés</span></div><div><b>${fmt(importStatus.pending)}</b><span>inconnus du Core</span></div><div><b>${fmt(importStatus.ambiguous)}</b><span>ambigus</span></div><div><b>${fmt(importStatus.conflict)}</b><span>conflits</span></div></div>${importStatus.lastMeasuredAt ? `<p class="rs-muted">Dernier relevé ${esc(new Date(importStatus.lastMeasuredAt).toLocaleString('fr-FR'))}.</p>` : ''}` : ''}
+        <div class="pg-inline"><button type="button" class="rs-btn" data-act="dry-run">Simuler (n’écrit rien)</button>
+          <button type="button" class="rs-btn" data-act="import">Importer depuis WizeBot</button>
+          <button type="button" class="rs-btn" data-act="resolve">Rattacher les lignes en attente</button>
+          <button type="button" class="rs-btn danger" data-act="revert">Annuler l’import</button></div>
+        <pre data-role="import-out" class="pg-out">${esc(lastImport)}</pre>
+      </section>
+      <section class="rs-panel"><h2>Historiques en attente</h2>
+        <div class="pg-q"><input placeholder="pseudo WizeBot (début)" data-role="wq" maxlength="25" aria-label="Pseudo WizeBot"><button type="button" class="rs-btn" data-act="waiting">Afficher</button></div>
+        ${
+          waiting
+            ? `<div class="rs-scroll"><table class="rs-tbl"><thead><tr><th>Pseudo WizeBot</th><th>Statut</th><th class="num">Niveau</th><th class="num">Présence</th><th class="num">Messages</th><th>Comptes du Core sous ce pseudo</th><th></th></tr></thead><tbody>
+        ${waiting.map((w) => `<tr><td>${esc(w.login)}${w.twitchUserId ? `<small>id ${esc(w.twitchUserId)}</small>` : ''}</td><td>${esc(STATUS_FR[w.status] ?? w.status)}</td><td class="num">${w.level}</td><td class="num">${fmt(w.watchMinutes)} min</td><td class="num">${fmt(w.messages)}</td><td>${w.candidates.map((c) => `<code>${esc(c)}</code>`).join(' ') || '—'}</td><td><button type="button" class="rs-btn sm quiet" data-attach="${esc(w.login)}">Rattacher…</button></td></tr>`).join('') || '<tr><td colspan="7" class="rs-muted">Rien en attente.</td></tr>'}
+        </tbody></table></div>`
+            : ''
+        }
+        <p class="rs-muted">Rattacher seulement après avoir vérifié l’identité (identifiant Twitch) : jamais sur la seule ressemblance des pseudos. Un viewer n’a qu’un historique WizeBot.</p>
+      </section>`;
   }
 
   root.addEventListener('click', (ev) => {
@@ -380,12 +401,22 @@ export function mountProgression(root: HTMLElement) {
             }),
           'Retiré.',
         );
-    } else if (a === 'toggle' && state)
+    } else if (t.closest('[data-tab]')) {
+      tab = t.closest<HTMLElement>('[data-tab]')!.dataset.tab as Tab;
+      render();
+    } else if (a === 'toggle' && state) {
+      if (
+        state.enabled &&
+        !confirm(
+          'Désactiver la progression ?\n\nLa présence et le chat ne rapportent plus d’XP tant qu’elle est désactivée. Les niveaux, l’XP et les inventaires déjà acquis sont conservés.',
+        )
+      )
+        return;
       void act(
         () => call('/api/progression/settings', { enabled: !state!.enabled }),
         state.enabled ? 'Progression désactivée.' : 'Progression activée.',
       );
-    else if (a === 'rules') {
+    } else if (a === 'rules') {
       const rules: Json = {};
       for (const [k] of RULES) rules[k] = Number(val(`[data-rule="${k}"]`));
       rules.live_only = !!root.querySelector<HTMLInputElement>(

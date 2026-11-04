@@ -12,6 +12,7 @@ test('Progression: on, an event badge created, a viewer found, granted, then rev
   await tab.getByRole('button', { name: 'Activer' }).click();
   await expect(tab).toContainText('Active');
 
+  await tab.getByRole('tab', { name: 'Titres et badges' }).click();
   const form = tab.locator('[data-role="reward-form"]');
   await form.locator('[data-f="reward_id"]').fill('citrouille-2026');
   await form.locator('[data-f="kind"]').selectOption('badge');
@@ -20,6 +21,7 @@ test('Progression: on, an event badge created, a viewer found, granted, then rev
   await form.getByRole('button', { name: 'Créer / mettre à jour' }).click();
   await expect(tab.locator('table')).toContainText('Citrouille 2026');
 
+  await tab.getByRole('tab', { name: 'Viewers' }).click();
   await tab.locator('[data-role="q"]').fill('kir');
   await tab.getByRole('button', { name: 'Chercher' }).click();
   await tab.getByRole('button', { name: 'Kirito_TV' }).click();
