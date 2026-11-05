@@ -40,24 +40,46 @@ export function mountWordGame(root: HTMLElement) {
   }
 
   async function act(action: string) {
+    // Refonte H8: the durable switch and the interval are the « settings » action (allowed off live).
+    const minutes = (k: string) =>
+      Number(
+        root.querySelector<HTMLInputElement>(`[data-interval="${k}"]`)?.value,
+      ) * 60;
+    const payload =
+      action === 'new_word'
+        ? { action, request_id: crypto.randomUUID() }
+        : action === 'enable' || action === 'disable'
+          ? { action: 'settings', enabled: action === 'enable' }
+          : action === 'interval'
+            ? {
+                action: 'settings',
+                interval_min_s: minutes('min'),
+                interval_max_s: minutes('max'),
+              }
+            : { action };
+    if (
+      action === 'disable' &&
+      !confirm(
+        'Désactiver le Jeu des mots ?\n\nPlus aucun mot automatique, même après un redémarrage ou un nouveau live, jusqu’à « Activer le jeu ». Les mots déjà affichés restent trouvables jusqu’à la fin du live.',
+      )
+    )
+      return;
     busy = true;
     render();
     try {
       const res = await fetch('/api/word-game/actions', {
         method: 'POST',
         headers: HEADERS,
-        body: JSON.stringify(
-          action === 'new_word'
-            ? { action, request_id: crypto.randomUUID() }
-            : { action },
-        ),
+        body: JSON.stringify(payload),
       });
       const body = (await res.json()) as WordGamePanel & { error?: string };
       if (!res.ok)
         throw new Error(
           body.error === 'offline'
             ? 'Hors live : action impossible.'
-            : (body.error ?? `HTTP ${res.status}`),
+            : body.error === 'invalid_interval'
+              ? 'Intervalle refusé : le minimum doit être inférieur ou égal au maximum.'
+              : (body.error ?? `HTTP ${res.status}`),
         );
       state = { ...body, fetched_at: Date.now() };
       error = null;

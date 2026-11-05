@@ -8,6 +8,13 @@ export const WordGameAction = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('stop') }),
   z.strictObject({ action: z.literal('start') }),
   z.strictObject({ action: z.literal('new_word'), request_id: z.uuid() }),
+  // Refonte H8: the durable switch and the interval between two words (Core checks min ≤ max against what is stored).
+  z.strictObject({
+    action: z.literal('settings'),
+    enabled: z.boolean().optional(),
+    interval_min_s: z.number().int().min(60).max(3600).optional(),
+    interval_max_s: z.number().int().min(60).max(3600).optional(),
+  }),
 ]);
 export type WordGameAction = z.infer<typeof WordGameAction>;
 
@@ -48,9 +55,13 @@ export interface WordGameState {
   /** A live session is open: the game runs only then. */
   live: boolean;
   session_id: string | null;
-  /** live and not stopped: new words are drawn. */
+  /** live, enabled and not stopped: new words are drawn. */
   running: boolean;
   stopped: boolean;
+  /** Refonte H8: the durable switch (OFF on purpose stays OFF across lives and restarts). */
+  enabled: boolean;
+  /** Refonte H8: a new word every min_s to max_s seconds (uniform). */
+  interval: { min_s: number; max_s: number };
   next_word_at: string | null;
   active: WordGameActiveWord[];
   streak: {

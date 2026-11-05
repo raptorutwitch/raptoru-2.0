@@ -144,3 +144,14 @@
   min-width: 3.5em;
   font-variant-numeric: tabular-nums;
 }
+
+/* Refonte H8 — durable switch and interval. */
+.wg-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.wg-settings input[type='number'] {
+  width: 4.5em;
+}

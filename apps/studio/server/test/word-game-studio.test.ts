@@ -145,6 +145,14 @@ describe('panel relay', () => {
         action: 'new_word',
         request_id: '6b0f7c2e-8f0e-4c3a-9a1e-0b6f8e2d1c3a',
       },
+      // Refonte H8: the durable switch and the interval.
+      {
+        action: 'settings',
+        enabled: false,
+        interval_min_s: 120,
+        interval_max_s: 600,
+        actor: { id: 'evil' },
+      },
     ])
       expect(
         (
@@ -162,6 +170,15 @@ describe('panel relay', () => {
         {
           action: 'new_word',
           request_id: '6b0f7c2e-8f0e-4c3a-9a1e-0b6f8e2d1c3a',
+        },
+      ],
+      [
+        `/v1/lab/word-game/${CH}/actions`,
+        {
+          action: 'settings',
+          enabled: false,
+          interval_min_s: 120,
+          interval_max_s: 600,
         },
       ],
     ]);

@@ -196,6 +196,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261120120000_challenges_lab.sql',
   // Roue du Sub live boundary: the Lab twin of 20261121130000_sub_wheel_enabled_at.sql (same content).
   '20261121120000_sub_wheel_enabled_at_lab.sql',
+  // Jeu des mots: durable ON / OFF and interval (refonte H8); the main Core applies it too (MAIN_CORE_LAB_MIGRATIONS).
+  '20261121140000_word_game_settings_lab.sql',
 ]);
 
 /**
@@ -252,6 +254,8 @@ export const MAIN_CORE_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261104120000_cp_redemptions_chat_source_lab.sql',
   // Spotify V2: the music answers' own origin in cmd_steps (shown « Musique »).
   '20261108140000_cmd_steps_music_lab.sql',
+  // Jeu des mots: durable ON / OFF and interval (refonte H8).
+  '20261121140000_word_game_settings_lab.sql',
 ]);
 
 export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([

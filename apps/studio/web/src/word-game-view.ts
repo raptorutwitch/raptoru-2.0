@@ -70,9 +70,24 @@ export function wordGameView(
   if (!('live' in s))
     return `<section class="wg"><h1>Jeu des mots</h1><p class="wg-muted">Indisponible : aucun Core connecté (Core Lab non démarré, ou profil Production non connecté).</p></section>`;
   const off = !s.live || busy;
-  const status = s.live
-    ? `<span class="wg-chip wg-chip--live">En live</span><span class="wg-chip ${s.stopped ? 'wg-chip--stop' : 'wg-chip--on'}">${s.stopped ? 'Arrêté' : 'Actif'}</span>`
-    : `<span class="wg-chip wg-chip--off">Hors live</span><span class="wg-chip wg-chip--off">Jeu à l’arrêt</span>`;
+  // Refonte H8: the durable switch (an older Core without it: treated as ON, the historical behaviour).
+  const enabled = s.enabled !== false;
+  const status = !enabled
+    ? `<span class="wg-chip wg-chip--off">Désactivé (réglage)</span>${s.live ? '<span class="wg-chip wg-chip--live">En live</span>' : ''}`
+    : s.live
+      ? `<span class="wg-chip wg-chip--live">En live</span><span class="wg-chip ${s.stopped ? 'wg-chip--stop' : 'wg-chip--on'}">${s.stopped ? 'Arrêté pour ce live' : 'Actif'}</span>`
+      : `<span class="wg-chip wg-chip--off">Hors live</span><span class="wg-chip wg-chip--off">Jeu à l’arrêt</span>`;
+  const settings = s.interval
+    ? `<h2>Réglages</h2>
+    <div class="wg-settings">
+      <button type="button" class="wg-btn ${enabled ? '' : 'wg-btn--primary'}" data-action="${enabled ? 'disable' : 'enable'}" ${busy ? 'disabled' : ''}>${enabled ? 'Désactiver le jeu' : 'Activer le jeu'}</button>
+      <span class="wg-muted">${enabled ? 'Activé : un mot apparaît automatiquement pendant chaque live.' : 'Désactivé : aucun mot automatique, même après un redémarrage ou un nouveau live. Les mots déjà affichés restent trouvables jusqu’à la fin du live.'}</span>
+      <label>Un mot toutes les <input type="number" min="1" max="60" step="1" value="${Math.round(s.interval.min_s / 60)}" data-interval="min" aria-label="Intervalle minimal en minutes"></label>
+      <label>à <input type="number" min="1" max="60" step="1" value="${Math.round(s.interval.max_s / 60)}" data-interval="max" aria-label="Intervalle maximal en minutes"> min</label>
+      <button type="button" class="wg-btn" data-action="interval" ${busy ? 'disabled' : ''}>Enregistrer l’intervalle</button>
+      <span class="wg-muted">Au hasard entre les deux (par défaut 5 à 15 min), de 1 à 60 min. « Arrêter » ne vaut que pour le live en cours.</span>
+    </div>`
+    : '';
   const next =
     s.live && s.next_word_at
       ? `<p class="wg-muted">Prochain mot dans ~${esc(ageLabel((Date.parse(s.next_word_at) - now) / 1000))}</p>`
@@ -112,13 +127,14 @@ export function wordGameView(
       ${s.live ? '' : '<span class="wg-muted">Actions disponibles pendant un live.</span>'}
     </div>
     ${error ? `<p class="wg-error">${esc(error)}</p>` : ''}
-    ${next}
+    ${enabled ? next : ''}
     <h2>Mots actifs <span class="wg-count">${s.active.length}</span></h2>
     ${words}
     <h2>Série</h2>
     ${streak}
     <h2>Dernières trouvailles</h2>
     ${recent}
+    ${settings}
     ${volume}
     ${player}
   </section>`;

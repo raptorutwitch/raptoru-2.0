@@ -53,9 +53,12 @@ export function randomInt(rng: Rng, min: number, max: number): number {
   return min + Math.floor(rng() * (max - min + 1));
 }
 
-/** Delay before the next word: uniform 300 000 – 900 000 ms. */
-export function nextWordDelayMs(rng: Rng): number {
-  return randomInt(rng, WORD_INTERVAL_MS.min, WORD_INTERVAL_MS.max);
+/** Delay before the next word: uniform in [min, max] (default 300 000 – 900 000 ms; refonte H8: per channel). */
+export function nextWordDelayMs(
+  rng: Rng,
+  interval: { min: number; max: number } = WORD_INTERVAL_MS,
+): number {
+  return randomInt(rng, interval.min, interval.max);
 }
 
 /** Legacy roll 1–100, golden when roll < GOLDEN_WORD_CHANCE + 1 (10 %). */

@@ -245,3 +245,35 @@ describe('panel view', () => {
     ]);
   });
 });
+
+describe('panel view: durable switch and interval (refonte H8)', () => {
+  it('ON: « Désactiver le jeu », the interval in minutes, no confusion with « Arrêter » (this live only)', () => {
+    const html = wordGameView(
+      state({ enabled: true, interval: { min_s: 300, max_s: 900 } }),
+      NOW,
+    );
+    expect(button(html, 'disable')[2]).toBe('Désactiver le jeu');
+    expect(html).toContain(
+      'data-interval="min" aria-label="Intervalle minimal en minutes"',
+    );
+    expect(html).toContain('value="5" data-interval="min"');
+    expect(html).toContain('value="15" data-interval="max"');
+    expect(html).toContain('« Arrêter » ne vaut que pour le live en cours');
+  });
+  it('OFF on purpose: said as a setting, never as a failure; no next-word line; « Activer le jeu »', () => {
+    const html = wordGameView(
+      state({
+        enabled: false,
+        running: false,
+        interval: { min_s: 300, max_s: 900 },
+      }),
+      NOW,
+    );
+    expect(html).toContain('Désactivé (réglage)');
+    expect(html).not.toContain('Prochain mot');
+    expect(button(html, 'enable')[2]).toBe('Activer le jeu');
+  });
+  it('an older Core without the setting: no settings block, historical behaviour', () => {
+    expect(wordGameView(state(), NOW)).not.toContain('Réglages');
+  });
+});

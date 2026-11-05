@@ -246,7 +246,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a blank database: everything once; again: nothing', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod')).length).toBe(63);
+    expect((await migrate(db, 'prod')).length).toBe(64);
     expect(await migrate(db, 'prod')).toEqual([]);
     for (const t of ['cmd_steps', 'word_game_words', 'mini_game_duels'])
       expect(
@@ -261,7 +261,11 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
   const SETTINGS = '20261107130000_votekick_settings.sql';
   const SPOTIFY = '20261108130000_spotify.sql';
   const MUSIC = '20261108140000_cmd_steps_music_lab.sql';
-  const mainCoreBefore = MAIN_CORE_LAB_MIGRATIONS.filter((f) => f !== MUSIC);
+  // Refonte H8 (05/11): a main Core Lab file after everything production holds — absent from every past database.
+  const WORD_SETTINGS = '20261121140000_word_game_settings_lab.sql';
+  const mainCoreBefore = MAIN_CORE_LAB_MIGRATIONS.filter(
+    (f) => f !== MUSIC && f !== WORD_SETTINGS,
+  );
   // Roue du Sub V2: its production files come after everything production holds (25/10: 46 files). In the past
   // databases below they did not exist yet: classified Lab there, so the folder stays valid.
   const SUB_WHEEL_V2 = [
@@ -286,6 +290,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
     '20261119130000_cosmetic_frames_banners.sql',
     '20261120130000_challenges.sql',
     '20261121130000_sub_wheel_enabled_at.sql',
+    WORD_SETTINGS,
   ];
   const prodBeforeWheel = PROD_MIGRATIONS.filter(
     (f) => !AFTER_25_10.includes(f),
@@ -399,6 +404,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       ...MIGRATION_SCOPES,
       prod: prodBeforeWheel,
       lab: labBeforeWheel,
+      mainCore: MAIN_CORE_LAB_MIGRATIONS.filter((f) => f !== WORD_SETTINGS),
     };
     expect((await migrate(db, 'prod', undefined, before)).length).toBe(46);
     const held = await origins(db);
