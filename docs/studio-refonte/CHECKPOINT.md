@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026 — « Mission d'exécution » (extension) : variantes et D4 sortis de `ui.js` (`2d9f7b2` + docs). Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 05/11/2026 — Continuation : Soundboard, Bonk, cycle de vie (`d3e564a` + docs). Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -180,6 +180,27 @@ Prochaines étapes (ordre conseillé) :
 3. Adaptateurs Core et Studio, seulement là où ils apportent un vrai gain (Roue du Sub, Points de chaîne).
 4. Le jour du GO : suivre `LIVRAISON.md`. L'extension ne change aucune route du Core : elle peut être livrée après le Core
    ou avec lui.
+
+### Continuation (05/11) — Soundboard, Bonk, cycle de vie
+
+| Commit | Contenu |
+|---|---|
+| `a573bf4` | E2E de parité Soundboard (3 rôles) avant extraction |
+| `480ee5c` | E2E TTS intermittent : vraie cause trouvée et corrigée (signal `data-recovered`, lecteurs fictifs qui acquittent) |
+| `295e59c` / `b8a5f19` / `7cc951b` | aperçu et retour d'envoi Soundboard sortis de `ui.js` |
+| `208791e` | vue Soundboard = une poignée de cycle de vie ; 2 défauts du volume corrigés |
+| `dbf64cb` | E2E de parité Bonk (fournisseurs 7TV/BTTV/FFZ fictifs, aucun réseau) |
+| `c960894` / `725df10` | Bonk : ancien message au retour corrigé ; envoi sorti de `ui.js` |
+| `dc209e2` | contrat de cycle de vie : 3 rôles, transitions, lectures arrêtées, coupure réseau |
+| `d3e564a` | corrections de la revue indépendante (message Bonk en vol, test du glisser, garde réseau du navigateur) |
+
+`ui.js` : 6 214 → 6 005 lignes. Détail et limites : `architecture/MIGRATIONS.md`, `architecture/PREUVES.md`.
+
+Prochaines étapes (ordre conseillé) :
+1. Antoni valide dans le vrai Lab (`npm run studio`) : Soundboard (aperçu, volume + Échap, glisser, envoi) et Bonk (tir,
+   salve, favori, retour au Hub), en viewer puis modérateur.
+2. Sortir `soundboardForm` dans son fichier (les E2E de parité sont prêts).
+3. Bonk : simulateur Lab de l'autorisation Twitch des émotes, puis extraction du catalogue.
 
 ## Prochaine action
 

@@ -127,3 +127,23 @@ Pas fait :
   (Soundboard « inchangé », glisser en cours). Aucun E2E de l'extension ne les couvre.
 - Lot suivant : E2E de parité d'abord, puis extraction avec un `ctx`, sur le modèle de TTS.
 
+## Extension : Soundboard et Bonk (05/11, continuation)
+
+Méthode : E2E de parité écrit et vert **avant** chaque extraction, puis extraction, puis le même E2E.
+
+| Lot | Retiré de `ui.js` | Nouveau propriétaire | Preuve |
+|---|---|---|---|
+| Aperçu Soundboard (`295e59c`) | 8 fonctions, 4 variables, 1 constante | `soundboard-preview.js` (audio, son écouté, volume) | `soundboard.e2e.ts` (3 rôles) + 5 tests unitaires |
+| Retour d'envoi Soundboard (`7cc951b`) | 3 variables, 3 fonctions, 1 branche morte | `soundboard-feedback.js` (résultat, minuterie) | toast vérifié avant/après + 4 tests unitaires |
+| Vue Soundboard dessinée (`208791e`) | 7 variables globales, démontage manuel de `render()` | poignée `soundboardMount` | parcours volume / Échap / désélection / glisser ; mutation |
+| Envoi Bonk (`725df10`, `d3e564a`) | 4 variables, 2 fonctions, `bonkFeedbackForResult` | `bonk-send.js` (requêtes en vol, message, emplacement, visite) | `bonk.e2e.ts` (4 parcours) + 6 tests unitaires |
+
+`ui.js` : 6 214 → 6 005 lignes ; 18 variables de fermeture en moins. Ce qui reste volontairement dans `ui.js` :
+- `soundboardForm` (≈ 950 lignes) : grille, recherche, tri, alias, favoris, glisser. Ses dépendances réelles sont
+  maintenant explicites (état, brouillons, paiement, restrictions) ; l'extraire en fichier est le prochain lot, avec les
+  mêmes E2E ;
+- Bonk : le catalogue d'émotes et l'autorisation Twitch (14 variables). Non testable de bout en bout sans Twitch : à
+  extraire seulement avec un simulateur Lab de l'autorisation ;
+- changement de comportement assumé : un appui long pas encore devenu glisser est annulé par un nouveau dessin (avant, son
+  minuteur lançait un glisser sur une grille détachée et retenait les états suivants).
+

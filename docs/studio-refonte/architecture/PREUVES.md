@@ -160,3 +160,19 @@ Limites mesurées :
 | P1 (`2d9f7b2`) | écran vide pour un modérateur sur TTS V2 et Tombola V2 (panneau du socle monté à tort) | panneau réservé aux vues du socle | E2E en modérateur ; confirmé aussi par la revue |
 | Chemin rapide prouvé | l'E2E ne prouvait pas `onState` (signalé par la revue) | marqueur sur l'en-tête de l'hôte, vérifié à la lecture d'état suivante | mutation : `onState` forcé à `false` → échec ; code réel → succès |
 
+## Continuation (05/11) : Soundboard, Bonk, cycle de vie
+
+| Lot | Problème | Changement | Preuve |
+|---|---|---|---|
+| E2E TTS intermittent (`480ee5c`) | échec 1 fois sur 2 en série | cause 1 : la vue TTS remplace son premier composer par le TTS en cours → signal `data-recovered` ; cause 2 : les lecteurs fictifs n'acquittaient rien, chaque achat était remboursé ≈ 15 s plus tard pendant le test suivant (mesuré : solde 19 500 → 20 000) → ils acquittent | 3 séries vertes ; mutation `onState` toujours détectée |
+| Volume Soundboard (`208791e`) | après un nouvel état, Échap ne refermait plus l'aperçu | vue détachée neutralisée ; focus rendu au curseur | E2E en échec avant, vert après |
+| Glisser retenu (`208791e`, `d3e564a`) | — | signal déterministe : la lecture qui suit celle qui porte le nouveau solde | mutation `holdState → false` détectée |
+| Bonk : ancien message au retour (`c960894`, `d3e564a`) | « Salve ×1 acceptée ✓ » d'une visite passée | effacé en quittant ; aussi pour une requête encore en vol (trouvé par la revue) | E2E en échec avant ; test unitaire en échec avant |
+| Bonk sur la pile (`dbf64cb`) | aucun E2E Bonk ; 7TV/BTTV/FFZ passent par le réseau | fournisseurs fictifs injectés dans le Lab Core ; images servies localement | 0 requête hors machine, vérifiée |
+| Cycle de vie (`dc209e2`) | — | `lifecycle.e2e.ts` : 3 rôles, transitions Hub, lectures arrêtées, coupure réseau | 4/4 |
+| Isolation (`d3e564a`) | rien n'empêchait un navigateur E2E de joindre Internet | Chromium ne résout plus aucun nom (sauf 127.0.0.1) | suite E2E complète |
+
+Revue indépendante (sous-agent, code seul) : 1 défaut réel (message Bonk d'une requête en vol), 1 test trop faible
+(glisser), 4 remarques ; corrigés dans `d3e564a` sauf « `channelTwitchId: '900100'` touche aussi Random Ban / Votekick sur
+la pile » (hypothèse, aucun test n'en dépend aujourd'hui) — noté ici.
+

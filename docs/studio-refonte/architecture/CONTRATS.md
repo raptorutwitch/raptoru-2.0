@@ -172,3 +172,21 @@ Consommateurs :
 - Tombola V2 (`tombola-v2.js`) ;
 - console D4 (`moderation-v2.js`, avec sa bascule vers « Commandes »).
 
+## 11. Extension : cycle de vie d'une vue dessinée par l'hôte (05/11, continuation)
+
+Le contrat de la § 10 (`view` / `rendered` / `onState` / `destroy`) reste le seul. Pour les modules encore dessinés par
+`ui.js` (Soundboard, Bonk), la même règle est appliquée sans nouvelle architecture :
+
+- **ce qu'une vue possède, elle le libère** : la Soundboard dessinée rend une poignée unique `soundboardMount`
+  (`syncVolume`, `closeSearch`, `deselect`, `holdState`, `destroy`), détruite au rendu suivant ; son glisser, son compte à
+  rebours et ses contrôles sont à elle ;
+- **une vue détachée n'écrit plus l'état partagé** (défaut trouvé : le `focusout` de l'ancien curseur de volume refermait
+  l'aperçu que la nouvelle vue venait d'ouvrir) ;
+- **un résultat appartient à la visite** : en quittant le module, son dernier message est oublié, y compris celui d'une
+  requête encore en vol (`bonk-send.js`, compteur de visite ; `soundboard-feedback.js`) ; une erreur reste publiée dans le
+  centre de notifications ;
+- **un module fermé ne lit plus rien** : vérifié par `lifecycle.e2e.ts` (TTS `/tts/state`, Tombola `/raffle/state`,
+  D4 `/moderation/v2/*`) sur deux lectures de l'hôte.
+
+Signal de disponibilité : `.ttsv2[data-recovered]` quand la vue TTS a décidé de son écran (composer ou TTS en cours).
+

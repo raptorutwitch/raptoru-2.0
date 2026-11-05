@@ -167,3 +167,16 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Revue indépendante de `50e8601` : 1 P1 et 1 P2, corrigés dans `2d9f7b2`. Le test du chemin rapide est vérifié par
   mutation.
 
+## 05/11/2026 — Continuation : Soundboard, Bonk, cycle de vie
+
+- E2E TTS intermittent : deux vraies causes (premier composer remplacé ; remboursements tardifs des lecteurs fictifs qui
+  tombaient dans le test suivant). Aucune attente ajoutée : signal `data-recovered`, lecteurs qui acquittent.
+- Soundboard : aperçu, retour d'envoi et vue dessinée sortis de `ui.js` ; deux défauts anciens du volume trouvés par le
+  nouvel E2E (Échap inopérant après un nouvel état).
+- Bonk : pile E2E avec fournisseurs fictifs dans le Lab Core ; E2E de parité ; ancien message au retour corrigé ; envoi
+  sorti de `ui.js`.
+- `lifecycle.e2e.ts` : transitions Hub sans rechargement, lectures arrêtées à la fermeture, coupure réseau, 3 rôles.
+- Revue indépendante : 1 défaut réel et 1 test faible, corrigés (`d3e564a`).
+- Pile E2E morte une fois en cours de série (`ERR_CONNECTION_REFUSED`, puis `fetch failed`) : non reproduite depuis ;
+  journaux complets conservés à chaque série pour la prochaine occurrence.
+
