@@ -120,7 +120,9 @@ export function modulesRoutes(host: ModuleHost): Route[] {
       pattern: at(`${M}\\/report`),
       auth: 'studio',
       handle: ({ params, body }) =>
-        mapped(() => host.report(params[0]!, params[1]!, parse(ReportCall, body))),
+        mapped(() =>
+          host.report(params[0]!, params[1]!, parse(ReportCall, body)),
+        ),
     },
     {
       method: 'GET',

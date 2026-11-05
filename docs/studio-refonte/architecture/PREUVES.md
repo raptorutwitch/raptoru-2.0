@@ -104,3 +104,22 @@ Raccordement unique des fichiers centraux :
    Ce passage a trouvé trois défauts, corrigés dans `dbb1798`. Ce n'est pas une validation.
    **Pas vu** : le panneau de modération sous le module avec une identité modérateur ; le remboursement cliqué. Ces deux
    points sont couverts seulement par des tests HTTP.
+
+## Mesure après consolidation (05/11, « Opération fondation totale »)
+
+| Scénario | Avant le socle | Maintenant | Il reste à écrire |
+|---|---|---|---|
+| Nouveau mini-jeu **du chat** | service + migration d'origine chat + liste de mots réservés + câblage dans `createChatGames` et les deux Cores + écran | 1 fichier `modules/<id>.ts` (`chat`, `chatWords`, `ctx.say`) + 1 ligne d'index + 1 entrée de registre | la règle du jeu |
+| Nouveau module **extension** (achat en Jetons) | ~45 fichiers, ~65 endroits (`FRICTIONS.md`) | 2 fichiers (Core + vue) + 3 lignes | la règle, la vue |
+| Nouveau module **économique** | débit, clé, live, pause, blocages, journal, remboursement à recoder | tout est fourni : prix confirmé, une personne à la fois, remboursement unique, auto-remboursement refusé, cockpit fermé aux achats | rien de commun |
+| Nouveau module **OBS** | file, expiration, remboursement à recoder | file avec bail (`claim`), compte rendu (`report`), expiration et remboursement unique fournis | la page d'overlay et l'exécuteur Studio |
+| Nouvelle fonction de **modération** | une console par module | journal, remboursement motivé, D4 › « Autres modules » (extension et Studio) fournis | une action propre au module, s'il en faut une |
+| **Modifier un module historique** (réglage + état) | liste centrale, service, panneau monté à la main, aucune supervision | un adaptateur (`modules/<x>.ts`) + une lecture dans le service + une ligne `modules.add` par Core (Votekick : 1 fichier, ~10 lignes de service, 2 lignes de raccordement) | la matrice de parité |
+| **Ajouter un réglage** | Core, route, schéma, écran | une entrée `settings` : bornes, stockage, validation, écran (panneau partagé) et catalogue suivent | la lecture par le moteur, testée |
+
+Limites mesurées :
+- un adaptateur demande toujours une ligne dans chacun des deux Cores ;
+- un lecteur OBS réel reste à écrire par module ;
+- Bonk, Soundboard, TTS et Tombola gardent leur câblage (`MIGRATIONS.md`, D20) ;
+- `ui.js` garde ses branches historiques (6 300 lignes).
+

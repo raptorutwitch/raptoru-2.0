@@ -1,4 +1,4 @@
-# Contrats du socle modulaire (implémentés, 05/11/2026)
+# Contrats du socle modulaire (implémentés, mis à jour le 05/11/2026 — consolidation)
 
 Ce qui existe dans le code, pas une intention. Les chemins sont relatifs à `apps/` sauf mention.
 
@@ -130,3 +130,20 @@ Un Core sans la table `module_settings` applique les défauts.
 
 **La migration de Production n'est pas appliquée.** Aucun module non `labOnly` n'utilise encore le journal : la
 migration est exigée avant le premier.
+
+## 9. Ajouts de la consolidation (« Opération fondation totale »)
+
+| Contrat | Où | Règle |
+|---|---|---|
+| Porte chat | `kit.ts` `chat` + `chatWords`, `ctx.say` | mots réservés contre Commandes V2 ; réponses `module:<id>` (une migration pour tous : `20261121190000`) ; idempotentes par clé ; module coupé = sourd ; un module qui échoue répond `module_error`, les autres reçoivent le message |
+| Interrupteur | `hasSwitch` | l'interrupteur du socle existe pour un module à actions viewer ou à lecture du chat, sauf s'il garde le sien (`enabled()`) ; le catalogue dit `has_switch` |
+| Adaptateur | `ModuleHost.add(def)` | un module historique s'enregistre une fois son service créé (Votekick, Caution, Random Ban, Jeu des mots, Boutique d'événement) ; même contrôle `checkModule` |
+| Prix confirmé | `viewer(…, expected_price)` | un prix différent du prix actuel est refusé (`price_changed`) **avant** tout débit |
+| Une personne à la fois | verrou consultatif `module:<ch>:<id>:<viewer>` | les actions d'un viewer sur un module sont sérialisées : intention rejouée, limite par viewer tenue ; même clé d'un autre viewer = `idempotency_conflict` |
+| Compteurs partagés | `ctx.lock(q, ch, key)` | un module sérialise ses mises à jour partagées dans la transaction de l'appelant |
+| Lecteur OBS | `POST …/<id>/claim {player}`, `POST …/<id>/report` | bail de 30 s (`PLAYER_LEASE_MS`), `skip locked` : deux lecteurs ne montrent jamais la même action ; l'expiration ne rembourse pas une action réservée avant la fin du bail |
+| Auto-remboursement | `refund` | refusé depuis l'extension sur son propre achat (`self_refund`) |
+| Cockpit | `studio-cockpit-routes.ts` | une action **viewer** n'y passe jamais (404) : elle n'entre que par la porte de l'extension, avec l'identité du jeton vérifié |
+| Isolation | `catalog`, `status`, `tick` | un module illisible est listé « inconnu » sans vider le catalogue ; chaque travail périodique tourne à part, jamais deux fois en même temps |
+| Modération d'équipe | façade `GET /modules/v3/moderation`, `GET /modules/v3/moderation/<id>/activity` | liste des modules modérables (coupés compris), journal d'un seul module dont la politique est visible ; équipe seulement |
+| Studio | `createStudioServer(options)` | options nommées (friction S1) |

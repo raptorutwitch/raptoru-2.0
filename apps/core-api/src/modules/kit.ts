@@ -166,7 +166,11 @@ export interface ModuleDefinition {
    * A historical module that keeps its OWN switch (e.g. Studio « Mini-jeux »): the host reads it for the catalog and the
    * supervision instead of the automatic one. Not for modules with viewer actions (they use the host's switch).
    */
-  enabled?(ctx: ModuleContext, q: Queryable, channelId: string): Promise<boolean>;
+  enabled?(
+    ctx: ModuleContext,
+    q: Queryable,
+    channelId: string,
+  ): Promise<boolean>;
   admin?: Record<string, AdminAction>;
   viewer?: Record<string, ViewerAction>;
   /** What the extension shows of this module for one viewer (null: anonymous). */
@@ -234,12 +238,16 @@ export function checkModule(d: ModuleDefinition): string[] {
       p.push(`${d.id}: « ${c} » implémenté mais non déclaré`);
   }
   if (viewerActions.length && d.enabled)
-    p.push(`${d.id}: un module à actions viewer utilise l’interrupteur du socle, pas le sien`);
+    p.push(
+      `${d.id}: un module à actions viewer utilise l’interrupteur du socle, pas le sien`,
+    );
   if (d.chat && !d.chatWords?.length)
     p.push(`${d.id}: lecture du chat sans mots réservés (chatWords)`);
-  if (d.chatWords && !d.chat) p.push(`${d.id}: mots réservés sans lecture du chat`);
+  if (d.chatWords && !d.chat)
+    p.push(`${d.id}: mots réservés sans lecture du chat`);
   for (const w of d.chatWords ?? [])
-    if (!/^[a-z0-9_]{1,25}$/.test(w)) p.push(`${d.id}: mot du chat « ${w} » invalide`);
+    if (!/^[a-z0-9_]{1,25}$/.test(w))
+      p.push(`${d.id}: mot du chat « ${w} » invalide`);
   if (d.settings && 'enabled' in d.settings)
     p.push(`${d.id}: « enabled » est réservé à l’interrupteur du socle`);
   if (viewerActions.length && !d.moderation)

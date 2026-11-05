@@ -39,7 +39,12 @@ export async function moduleFacade(o: {
    * The verified caller as a moderation actor when the caller is on the channel's team (null otherwise): the Core
    * checks the permission (refund: moderator) and audits — the façade never decides.
    */
-  moderator?: { id: string; role: string; via: 'extension'; display_name?: string } | null;
+  moderator?: {
+    id: string;
+    role: string;
+    via: 'extension';
+    display_name?: string;
+  } | null;
 }): Promise<ModuleFacadeReply | null> {
   if (o.path !== '/modules/v3' && !o.path.startsWith('/modules/v3/'))
     return null;
@@ -51,7 +56,10 @@ export async function moduleFacade(o: {
     const modJournal = new RegExp(`^/moderation/(${ID})/activity$`).exec(sub);
     if (modJournal || sub === '/moderation/refund' || sub === '/moderation') {
       // The journal names every viewer: team only (the refund's permission is checked again by the Core).
-      if (!o.moderator || (o.moderator.role !== 'moderator' && o.moderator.role !== 'broadcaster'))
+      if (
+        !o.moderator ||
+        (o.moderator.role !== 'moderator' && o.moderator.role !== 'broadcaster')
+      )
         return { status: 403, body: { ok: false, error: 'forbidden' } };
       if (o.method === 'GET' && sub === '/moderation') {
         // The team's list (the D4 console): every module whose policy shows it — switched off ones too (their journal
@@ -156,7 +164,9 @@ export async function moduleFacade(o: {
       const b = (o.body ?? {}) as { input?: unknown; expected_price?: unknown };
       const input = b.input ?? null;
       const expected =
-        typeof b.expected_price === 'number' && Number.isInteger(b.expected_price) && b.expected_price >= 0
+        typeof b.expected_price === 'number' &&
+        Number.isInteger(b.expected_price) &&
+        b.expected_price >= 0
           ? b.expected_price
           : undefined;
       return {

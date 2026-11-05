@@ -53,3 +53,35 @@ On ne le réécrit pas :
 - son service reçoit une fonction de lecture des réglages, dont les défauts sont les valeurs d'avant.
 
 Voir `core-api/src/modules/mini-games.ts`.
+
+## Une commande dans le chat
+
+Déclarer `chat(ctx)` et `chatWords: ['mot']`, avec la capacité `chat`. Le socle se charge du reste :
+- il réserve ces mots (Commandes V2 les refuse) ;
+- il coupe la lecture quand le module est coupé ;
+- il isole une erreur du module.
+
+Répondre avec ``ctx.say(q, ch, { key: `msg:${msg.message_id}`, text })`` : réponse idempotente, origine `module:<id>`, sans
+migration. Modèle : `modules/objectif-soiree.ts` (« !objectif »).
+
+## Un lecteur OBS
+
+Le module rend `{ status: 'queued' }`. Son exécuteur dans Studio fait la suite :
+1. il réserve `POST /v1/lab/modules/<ch>/<id>/claim { player }` (bail de 30 s) ;
+2. il joue ;
+3. il rend compte avec `POST …/<id>/report { activity_id, status }`.
+
+Un échec ou une expiration rembourse le débit d'origine, une fois. Il reste à écrire, par module : la page d'overlay et
+l'exécuteur Studio.
+
+## Brancher un module historique (adaptateur)
+
+Modèles : `modules/votekick.ts`, `caution.ts`, `mini-games.ts`, `status-adapters.ts`.
+1. Une fonction `xModule(service, { … })` déclare :
+   - les réglages, avec les valeurs d'aujourd'hui en défaut ;
+   - `enabled()`, qui lit **son** interrupteur ;
+   - `status()`, qui lit ce qui marche vraiment.
+2. Le service reçoit une fonction de lecture des réglages (champ public, valeurs historiques par défaut). Il la lit dans
+   **sa** transaction.
+3. `modules.add(xModule(service))` dans les deux Cores (`app.ts`, `lab-core.ts`).
+4. Écrire la matrice de parité dans `MIGRATIONS.md`, puis les tests : défauts identiques, réglage appliqué, état.

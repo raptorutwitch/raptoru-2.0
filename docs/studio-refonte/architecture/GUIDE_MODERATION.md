@@ -34,3 +34,12 @@ La console de modération D4 de l'extension (`moderation-v2.js`, prototype valid
 Bonk et Tombola. Les modules du socle ont leur panneau générique **sous le module**, pas dans la console D4.
 
 Les fondre exige une décision d'interface : faut-il un onglet « Modules » dans D4 ? Je ne l'ai pas fait seul.
+
+## Mise à jour du 05/11 : D4 intégrée
+
+La limite ci-dessus est levée.
+- **Où.** D4 › « Autres modules », dans l'extension et dans Studio › Modération : mêmes panneaux et mêmes routes que sous
+  chaque module.
+- **Règles en plus.** Pas de remboursement de son propre achat depuis l'extension. Le journal n'est lu que pour un module
+  dont la politique est visible.
+- **Ce que D4 garde.** Ses actions propres à TTS, Soundboard, Bonk et Tombola : rien n'en a été retiré.

@@ -784,7 +784,8 @@ export class CautionService {
       // Extended since the quote = more minutes to buy than the quote counted (the SAMMI check « price now > quoted
       // price » with a constant rate). Compared in minutes, so a rate changed in Studio during the 30 s quote never
       // reads « prolongé »: the debit is always the quoted price.
-      const quotedAt = new Date(r.quote_expires_at!).getTime() - CAUTION.quoteMs;
+      const quotedAt =
+        new Date(r.quote_expires_at!).getTime() - CAUTION.quoteMs;
       const quotedS = Math.ceil(
         (new Date(r.sanction_ends_at!).getTime() - quotedAt) / 1000,
       );

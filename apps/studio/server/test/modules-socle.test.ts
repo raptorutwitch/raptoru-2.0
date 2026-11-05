@@ -171,7 +171,12 @@ describe('generic module page (pure parts)', () => {
   it('OFF is said as a setting (host switch) or plainly with where the switch is (historical); refund only where allowed', () => {
     const historical = statusHtml(
       sample({
-        status: { intention: 'off', observed: 'unknown', summary: 'x', reasons: ['Interrupteur : page « Simulation ».'] },
+        status: {
+          intention: 'off',
+          observed: 'unknown',
+          summary: 'x',
+          reasons: ['Interrupteur : page « Simulation ».'],
+        },
       }),
     );
     expect(historical).toContain('Coupé.');
@@ -219,8 +224,13 @@ describe('automatic checks (architecture socle § 11)', () => {
   it('every host module passes the contract and has ITS Studio page (navigation is never forgotten)', () => {
     for (const m of MODULES) {
       expect(checkModule(m), m.id).toEqual([]);
-      const pages = PAGES.filter((p) => p.view === 'modules' && p.anchor === m.id);
-      expect(pages, `${m.id}: one page { view: 'modules', anchor: '${m.id}' } in shell/registry.ts`).toHaveLength(1);
+      const pages = PAGES.filter(
+        (p) => p.view === 'modules' && p.anchor === m.id,
+      );
+      expect(
+        pages,
+        `${m.id}: one page { view: 'modules', anchor: '${m.id}' } in shell/registry.ts`,
+      ).toHaveLength(1);
     }
   });
 });

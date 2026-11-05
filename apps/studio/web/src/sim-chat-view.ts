@@ -79,7 +79,9 @@ const OUTCOME_FR: Record<string, string> = {
 };
 /** A module of the module host answers with `module:<id>` (shown as its id; the historical ones by name). */
 const originLabel = (o: string | undefined) =>
-  o?.startsWith('module:') ? `Module ${o.slice(7)}` : (ORIGIN_FR[o ?? 'commands'] ?? o ?? '');
+  o?.startsWith('module:')
+    ? `Module ${o.slice(7)}`
+    : (ORIGIN_FR[o ?? 'commands'] ?? o ?? '');
 const ORIGIN_FR: Record<string, string> = {
   commands: 'Commandes',
   word_game: 'Jeu des mots',

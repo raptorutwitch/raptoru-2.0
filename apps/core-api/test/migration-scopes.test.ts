@@ -409,7 +409,9 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       ...MIGRATION_SCOPES,
       prod: prodBeforeWheel,
       lab: labBeforeWheel,
-      mainCore: MAIN_CORE_LAB_MIGRATIONS.filter((f) => f !== WORD_SETTINGS && f !== MODULE_ORIGIN),
+      mainCore: MAIN_CORE_LAB_MIGRATIONS.filter(
+        (f) => f !== WORD_SETTINGS && f !== MODULE_ORIGIN,
+      ),
     };
     expect((await migrate(db, 'prod', undefined, before)).length).toBe(46);
     const held = await origins(db);

@@ -671,7 +671,9 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
         MODULE_ACTIVITY,
       ],
       // Refonte H8: a main Core file production did not hold on 25/10.
-      mainCore: MIGRATION_SCOPES.mainCore!.filter((f) => f !== WORD_SETTINGS && f !== MODULE_ORIGIN),
+      mainCore: MIGRATION_SCOPES.mainCore!.filter(
+        (f) => f !== WORD_SETTINGS && f !== MODULE_ORIGIN,
+      ),
     };
     expect(await migrate(a, 'prod', undefined, at46)).toHaveLength(46);
     // What production really holds in its chat queue: Tombola announcements and Spotify answers.

@@ -15,7 +15,7 @@ attend Antoni.
 | D8 | Pas de lecteur OBS universel : le contrat commun est seulement `queued → settle → remboursement unique` et l'expiration | Les rendus OBS n'ont rien en commun au-delà | Lecteur générique paramétrable (sur-ingénierie) |
 | D9 | Les modules historiques ne sont **pas** migrés vers l'hôte ; ils peuvent le rejoindre par petites étapes (`enabled` propre, lecteur de réglages, défauts identiques) | Règle ASTRA-P1-008 : pas de grand refactor ; règles métier inchangées | Tout migrer (risque Production, aucune décision) |
 | D10 | Les réglages des mini-jeux (H10 : mises, délais, plafond du Duel) passent par l'hôte, avec les défauts d'avant ; jamais les chances ni les gains | Démonstration C, couverte par H10 | — |
-| D11 | La modération des modules du socle dans l'extension est un panneau **sous le module** | La console D4 est un prototype validé : on ne la change pas seul | **À arbitrer** : un onglet « Modules » dans D4 ? |
+| D11 | Modération des modules du socle : un panneau sous le module **et** D4 › « Autres modules » (extension et Studio), la même implémentation | Tranché par ton message du 05/11 (« intègre les nouveaux modules dans la console D4 sans deuxième implémentation ») | — |
 | D12 | Les migrations `module_activity` de Production sont préparées, **pas appliquées** | Interdiction de migrer une base réelle ; aucun module non `labOnly` n'en a besoin aujourd'hui | — |
 | D13 | Le générateur `module:new` a deux profils (`admin`, `paid`) et n'écrit que deux fichiers neufs | Proportionné ; il ne touche jamais un fichier central | Générateur qui modifie les listes (fragile) |
 | D14 | La page Studio « Roulette · Slots · Duels » ouvre la carte du module ; l'interrupteur et les essais restent sur « Simulation » | Les réglages et l'état réel au même endroit, sans dupliquer l'interrupteur | Copier l'interrupteur dans la carte (deux commandes pour un même état) |
@@ -32,3 +32,14 @@ attend Antoni.
   (`dbb1798`).
 - **Typecheck du serveur Studio** rouge à cause des tests qui importent des sources web (mission précédente). Corrigé
   (8ef2912).
+
+## Consolidation du 05/11 (mission « Opération fondation totale »)
+
+| # | Décision | Pourquoi |
+|---|---|---|
+| D15 | Revue indépendante du socle avant toute migration ; ses 13 constats corrigés ou encadrés (`77e614d`) | Ne pas propager une faille dans vingt modules |
+| D16 | Les migrations `module_activity` (jamais appliquées hors tests) sont modifiées sur place : colonnes de réservation et index, en `add column if not exists` | Plus simple et sans risque, plutôt qu'une paire de migrations de plus (C6) |
+| D17 | Modules historiques en **adaptateurs** (stratégie B, `MIGRATIONS.md`) : réglages H10 et état, le moteur reste seul exécuteur | Aucune régression ; jamais deux exécuteurs |
+| D18 | Un interrupteur qui est un drapeau de déploiement (`VOTEKICK_CHAT`, `CAUTION_CHAT`) est lu, jamais écrit depuis Studio | Changer une variable de Production exige le GO d'Antoni |
+| D19 | Caution : « prolongé » compté en minutes, plus en prix | Même règle SAMMI, indépendante d'un tarif changé pendant le devis |
+| D20 | Bonk, Soundboard, TTS et Tombola restent hors de l'hôte pour l'instant (E) | Supervision et modération D4 déjà complètes ; un adaptateur dupliquerait l'existant |

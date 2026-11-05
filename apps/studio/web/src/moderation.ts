@@ -22,7 +22,10 @@ type ConsoleFactory = (options: {
     modV2Act: (command: Json, key?: string) => Promise<unknown>;
     moduleModerationList?: () => Promise<unknown>;
     moduleModerationActivity?: (id: string) => Promise<unknown>;
-    moduleModerationRefund?: (activityId: string, reason: string) => Promise<unknown>;
+    moduleModerationRefund?: (
+      activityId: string,
+      reason: string,
+    ) => Promise<unknown>;
   };
   assetBase?: string;
 }) => ConsoleView;
@@ -183,13 +186,23 @@ export function mountModeration(root: HTMLElement) {
             return {
               modules: modules
                 .filter((m) => m.moderation?.visible)
-                .map((m) => ({ id: m.id, label: m.label, enabled: m.enabled, moderation: m.moderation })),
+                .map((m) => ({
+                  id: m.id,
+                  label: m.label,
+                  enabled: m.enabled,
+                  moderation: m.moderation,
+                })),
             };
           },
           moduleModerationActivity: (id) =>
-            getJson(`/api/modules/activity?module=${encodeURIComponent(id)}&limit=100`),
+            getJson(
+              `/api/modules/activity?module=${encodeURIComponent(id)}&limit=100`,
+            ),
           moduleModerationRefund: (activityId, reason) =>
-            postJson('/api/modules/refund', { activity_id: activityId, reason }),
+            postJson('/api/modules/refund', {
+              activity_id: activityId,
+              reason,
+            }),
         },
         assetBase: '/ext/',
       });

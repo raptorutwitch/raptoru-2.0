@@ -126,12 +126,18 @@ export function mountSettingsPanel(
     );
   });
   host.addEventListener('change', (e) => {
-    const box = (e.target as HTMLElement).closest<HTMLInputElement>('[data-ms-toggle]');
+    const box = (e.target as HTMLElement).closest<HTMLInputElement>(
+      '[data-ms-toggle]',
+    );
     const key = box?.dataset.msToggle;
     const s = key ? settings?.find((x) => x.key === key) : null;
     if (!box || !s) return;
     const value = box.checked ? 1 : 0;
-    if (!confirm(`${s.label} : ${value ? 'activer' : 'couper'} ?\n\nSur le Core de ce profil.`)) {
+    if (
+      !confirm(
+        `${s.label} : ${value ? 'activer' : 'couper'} ?\n\nSur le Core de ce profil.`,
+      )
+    ) {
       box.checked = !box.checked;
       return;
     }

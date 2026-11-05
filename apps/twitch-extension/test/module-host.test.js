@@ -6,7 +6,11 @@ import {
   resetHostModulesForTests,
   viewerModuleView,
 } from '../extension/shared/module-registry.js';
-import { createIntent, createPurchaseButton, isRetryable } from '../extension/shared/purchase.js';
+import {
+  createIntent,
+  createPurchaseButton,
+  isRetryable,
+} from '../extension/shared/purchase.js';
 import { coffreHistoryHtml } from '../extension/shared/coffre-mystere.js';
 import { moduleJournalHtml } from '../extension/shared/module-moderation.js';
 
@@ -41,16 +45,36 @@ describe('viewer module registry', () => {
       {
         moduleCatalog: async () => ({
           modules: [
-            { id: 'coffre_mystere', label: 'Coffre', description: 'd', enabled: true, actions: [] },
-            { id: 'pas_de_vue_ici', label: 'X', description: 'd', enabled: true, actions: [] },
-            { id: 'coupe', label: 'Coupé', description: 'd', enabled: false, actions: [] },
+            {
+              id: 'coffre_mystere',
+              label: 'Coffre',
+              description: 'd',
+              enabled: true,
+              actions: [],
+            },
+            {
+              id: 'pas_de_vue_ici',
+              label: 'X',
+              description: 'd',
+              enabled: true,
+              actions: [],
+            },
+            {
+              id: 'coupe',
+              label: 'Coupé',
+              description: 'd',
+              enabled: false,
+              actions: [],
+            },
           ],
         }),
       },
       () => redraws++,
       1_000_000,
     );
-    expect(hostModules().map((m) => [m.id, m.icon, m.host])).toEqual([['coffre_mystere', '🎁', true]]);
+    expect(hostModules().map((m) => [m.id, m.icon, m.host])).toEqual([
+      ['coffre_mystere', '🎁', true],
+    ]);
     expect(redraws).toBe(1);
     expect(viewerModuleView('pas_de_vue_ici')).toBeNull();
     resetHostModulesForTests();
@@ -68,7 +92,9 @@ describe('purchase per intent', () => {
     expect(i.key()).not.toBe(k1);
     expect(isRetryable({ status: 503 })).toBe(true);
     expect(isRetryable({ code: 'timeout' })).toBe(true);
-    expect(isRetryable({ status: 409, code: 'insufficient_tokens' })).toBe(false);
+    expect(isRetryable({ status: 409, code: 'insufficient_tokens' })).toBe(
+      false,
+    );
   });
   it('two taps, never two sends in parallel; a timeout retried with the SAME key; a success closes the intent', async () => {
     const keys = [];
@@ -80,7 +106,8 @@ describe('purchase per intent', () => {
       run: async (key, price) => {
         keys.push(key);
         prices.push(price);
-        if (fail) throw Object.assign(new Error('timeout'), { code: 'timeout' });
+        if (fail)
+          throw Object.assign(new Error('timeout'), { code: 'timeout' });
         return { ok: true };
       },
       onResult: (r) => results.push(r.ok),
@@ -106,8 +133,16 @@ describe('purchase per intent', () => {
     expect(keys[2]).not.toBe(keys[0]);
   });
   it('unavailable from the server: disabled, the reason in words', () => {
-    const btn = createPurchaseButton({ document: fakeDocument(), run: async () => ({}) });
-    btn.update({ label: 'Ouvrir', price: 100, available: false, reason: 'stream_offline' });
+    const btn = createPurchaseButton({
+      document: fakeDocument(),
+      run: async () => ({}),
+    });
+    btn.update({
+      label: 'Ouvrir',
+      price: 100,
+      available: false,
+      reason: 'stream_offline',
+    });
     expect(btn.node.children[0].disabled).toBe(true);
     expect(btn.node.children[1].textContent).toContain('pendant le live');
   });
@@ -128,9 +163,28 @@ describe('Coffre mystère (démonstration B) — viewer history', () => {
 
 describe('module moderation panel (host, generic)', () => {
   const rows = [
-    { activity_id: 'a1', viewer: { display_name: '<i>Zoé</i>' }, action: 'ouvrir', amount: 100, status: 'queued' },
-    { activity_id: 'a2', viewer: { display_name: 'Max' }, action: 'ouvrir', amount: 100, status: 'refunded', reason: 'test' },
-    { activity_id: 'a3', viewer: null, action: 'ajouter', amount: 0, status: 'done' },
+    {
+      activity_id: 'a1',
+      viewer: { display_name: '<i>Zoé</i>' },
+      action: 'ouvrir',
+      amount: 100,
+      status: 'queued',
+    },
+    {
+      activity_id: 'a2',
+      viewer: { display_name: 'Max' },
+      action: 'ouvrir',
+      amount: 100,
+      status: 'refunded',
+      reason: 'test',
+    },
+    {
+      activity_id: 'a3',
+      viewer: null,
+      action: 'ajouter',
+      amount: 0,
+      status: 'done',
+    },
   ];
   it('a refund button only on a paid, not yet refunded row, and only when the policy allows it', () => {
     const html = moduleJournalHtml(rows, { refund: 'moderator' });
@@ -138,7 +192,11 @@ describe('module moderation panel (host, generic)', () => {
     expect(html).toContain('data-refund="a1"');
     expect(html).toContain('&lt;i&gt;Zoé&lt;/i&gt;');
     expect(html).toContain('« test »');
-    expect(moduleJournalHtml(rows, { refund: 'never' })).not.toContain('data-refund');
-    expect(moduleJournalHtml([], { refund: 'moderator' })).toContain('Rien dans le journal');
+    expect(moduleJournalHtml(rows, { refund: 'never' })).not.toContain(
+      'data-refund',
+    );
+    expect(moduleJournalHtml([], { refund: 'moderator' })).toContain(
+      'Rien dans le journal',
+    );
   });
 });

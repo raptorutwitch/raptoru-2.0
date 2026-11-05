@@ -18,11 +18,22 @@ const studio: LabActor = { id: 'studio', role: 'broadcaster', via: 'studio' };
 
 async function lab() {
   const core = await setup();
-  await editWallet(core.db, core.clock.now(), CH, V.id, 'set', { tokens: 1_000 }, 'test');
+  await editWallet(
+    core.db,
+    core.clock.now(),
+    CH,
+    V.id,
+    'set',
+    { tokens: 1_000 },
+    'test',
+  );
   await core.moduleSettings.set(CH, 'coffre_mystere.enabled', 1, 'test');
   let k = 0;
   const buy = () =>
-    core.modules.viewer(CH, 'coffre_mystere', 'ouvrir', { viewer: V, idempotency_key: `intent-${++k}-robust` });
+    core.modules.viewer(CH, 'coffre_mystere', 'ouvrir', {
+      viewer: V,
+      idempotency_key: `intent-${++k}-robust`,
+    });
   const tokens = async () =>
     Number(
       (
@@ -42,10 +53,15 @@ describe('module host — consolidation', () => {
     core.clock.advance(COFFRE_SHOW_MS - 5_000);
     const claim = await core.modules.claim(CH, 'coffre_mystere', 'obs-a');
     expect(claim.items.map((i) => i.activity_id)).toEqual([shown]);
-    expect((await core.modules.claim(CH, 'coffre_mystere', 'obs-b')).items).toEqual([]); // never two players
+    expect(
+      (await core.modules.claim(CH, 'coffre_mystere', 'obs-b')).items,
+    ).toEqual([]); // never two players
     core.clock.advance(10_000); // past the expiry, inside the lease
     await core.modules.tick();
-    const done = await core.modules.report(CH, 'coffre_mystere', { activity_id: shown, status: 'done' });
+    const done = await core.modules.report(CH, 'coffre_mystere', {
+      activity_id: shown,
+      status: 'done',
+    });
     expect(done.activity.status).toBe('done');
     expect(await tokens()).toBe(900); // shown and paid: no refund
     // A player that died: once its lease is over, the expiry fails and refunds the action once.
@@ -53,7 +69,8 @@ describe('module host — consolidation', () => {
     await core.modules.claim(CH, 'coffre_mystere', 'obs-a');
     core.clock.advance(COFFRE_SHOW_MS + PLAYER_LEASE_MS);
     await core.modules.tick();
-    const rows = (await core.modules.activity(CH, { module: 'coffre_mystere' })).items;
+    const rows = (await core.modules.activity(CH, { module: 'coffre_mystere' }))
+      .items;
     expect(rows.find((r) => r.activity_id === lost)?.status).toBe('refunded');
     expect(await tokens()).toBe(900);
   });
@@ -88,7 +105,9 @@ describe('module host — consolidation', () => {
       tick: () => {
         ticks++;
         // Hangs the first time only (until released).
-        return ticks === 1 ? new Promise<void>((r) => (release = r)) : Promise.resolve();
+        return ticks === 1
+          ? new Promise<void>((r) => (release = r))
+          : Promise.resolve();
       },
     };
     let fine = 0;
@@ -110,7 +129,11 @@ describe('module host — consolidation', () => {
     });
     const cat = (await host.catalog(CH)).modules;
     expect(cat.map((m) => m.id)).toEqual(['casse_prix', 'bloque', 'sain']);
-    expect(cat[0]).toMatchObject({ enabled: false, viewer: [], status: { observed: 'unknown' } });
+    expect(cat[0]).toMatchObject({
+      enabled: false,
+      viewer: [],
+      status: { observed: 'unknown' },
+    });
     void host.tick(); // « bloque » hangs
     await new Promise((r) => setTimeout(r, 0)); // the healthy jobs of that pass finish
     await host.tick();
@@ -127,15 +150,27 @@ describe('module host — consolidation', () => {
     const { core, buy } = await lab();
     const bought = (await buy()).activity.activity_id;
     const self: LabActor = { id: V.id, role: 'moderator', via: 'extension' };
-    await core.db.query(
-      `insert into lab_staff (channel_id, viewer_id, role, grants) values ($1, $2, 'moderator', '{}')
+    await core.db
+      .query(
+        `insert into lab_staff (channel_id, viewer_id, role, grants) values ($1, $2, 'moderator', '{}')
        on conflict (channel_id, viewer_id) do update set role = 'moderator'`,
-      [CH, V.id],
-    ).catch(() => undefined);
-    await expect(core.modules.refund(CH, { actor: self, activity_id: bought, reason: 'moi' })).rejects.toMatchObject({
+        [CH, V.id],
+      )
+      .catch(() => undefined);
+    await expect(
+      core.modules.refund(CH, {
+        actor: self,
+        activity_id: bought,
+        reason: 'moi',
+      }),
+    ).rejects.toMatchObject({
       code: 'self_refund',
     });
-    const out = await core.modules.refund(CH, { actor: studio, activity_id: bought, reason: 'jamais montré' });
+    const out = await core.modules.refund(CH, {
+      actor: studio,
+      activity_id: bought,
+      reason: 'jamais montré',
+    });
     expect(out.refunded).toBe(100);
   });
 });

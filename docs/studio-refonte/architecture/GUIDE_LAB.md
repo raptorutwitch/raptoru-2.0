@@ -38,3 +38,14 @@ Ce qu'Antoni doit voir dans le vrai Lab (`npm run studio`) :
 - la carte « Roulette · Slots · Duels » ;
 - le coffre dans l'Extension Lab ;
 - le panneau de modération sous le coffre (avec une identité modérateur).
+
+## Pile d'aperçu (mise à jour du 05/11)
+
+`e2e/lab-stack.ts` (port 4411) sert maintenant :
+- la même chaîne de relais que le vrai Studio (mini-jeux, réglages, socle) ;
+- le relais `/api/lab` (console D4 de Studio).
+
+Il n'a toujours ni lecteurs ni Points de chaîne : Votekick et Caution y affichent « indisponible », honnêtement.
+
+**Arrêt.** Arrêter la tâche laisse le processus `node … lab-stack.ts` vivant. Vérifier la ligne de commande du processus
+qui écoute sur 4411, puis l'arrêter. Jamais un autre.

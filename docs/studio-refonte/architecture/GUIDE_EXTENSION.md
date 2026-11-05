@@ -42,3 +42,14 @@ Prendre `shared/coffre-mystere.js` comme modèle (67 lignes) :
 - son seul contenu propre : son texte et son affichage ;
 - ajouter une ligne `import './<id>.js'` dans `ui.js` ;
 - `ui.js` ne reçoit **aucune** branche, constante ou garde par module.
+
+## Modération (consolidation du 05/11)
+
+- `GET /modules/v3/moderation` (équipe) : les modules dont la politique est visible, coupés compris.
+- `GET /modules/v3/moderation/<id>/activity` : le journal de ce module.
+- `POST /modules/v3/moderation/refund { activity_id, reason }` : remboursement. Le Core refuse `self_refund` (son propre
+  achat) et l'audite.
+- La console D4 (extension et Studio) a « Autres modules » : les mêmes panneaux qu'en dessous de chaque module. Le motif se
+  saisit dans un champ, pas une boîte `prompt`.
+- Un module coupé n'est plus proposé aux viewers.
+- L'achat envoie le prix confirmé (`expected_price`) : `price_changed` est refusé avant tout débit.

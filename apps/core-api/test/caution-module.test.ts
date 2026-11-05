@@ -9,7 +9,11 @@ import { setup } from './helpers.js';
 // SAMMI prices by default, the supervision from the real executor. Fictional channel and viewers, Lab wallet.
 
 const CH = '83603689';
-const user = (k: number) => ({ id: String(9100 + k), login: `cv${k}`, name: `Cv${k}` });
+const user = (k: number) => ({
+  id: String(9100 + k),
+  login: `cv${k}`,
+  name: `Cv${k}`,
+});
 const PAYER = user(1);
 const TARGET = user(2);
 const EXEC = { executor_id: 'bot-1', login: 'lecroupier_' };
@@ -26,22 +30,34 @@ async function lab() {
     chatter: { id: u.id, login: u.login, display_name: u.name, role: 'viewer' },
     source: 'twitch',
   });
-  const claim = () => c.claim(CH, { ...EXEC, can_read: true, can_release: true, missing: [] });
+  const claim = () =>
+    c.claim(CH, { ...EXEC, can_read: true, can_release: true, missing: [] });
   const timeoutFor = (ms: number): CautionSanction => ({
     kind: 'timeout',
     ends_at: new Date(core.clock.now().getTime() + ms).toISOString(),
   });
   const quote = async (ms: number) => {
     await claim();
-    expect((await c.chat(msg(PAYER, `!caution @${TARGET.name}`))).outcome).toBe('checking');
+    expect((await c.chat(msg(PAYER, `!caution @${TARGET.name}`))).outcome).toBe(
+      'checking',
+    );
     const job = (await claim()).job!;
-    const q = await c.check(job.request_id, { ...EXEC, attempt_id: job.attempt_id, target: TARGET, sanction: timeoutFor(ms) });
+    const q = await c.check(job.request_id, {
+      ...EXEC,
+      attempt_id: job.attempt_id,
+      target: TARGET,
+      sanction: timeoutFor(ms),
+    });
     return { id: job.request_id, q };
   };
   const pay = async (id: string, ms: number) => {
     expect((await c.chat(msg(PAYER, 'oui'))).outcome).toBe('confirmed');
     const job = (await claim()).job!;
-    return c.recheck(id, { ...EXEC, attempt_id: job.attempt_id, sanction: timeoutFor(ms) });
+    return c.recheck(id, {
+      ...EXEC,
+      attempt_id: job.attempt_id,
+      sanction: timeoutFor(ms),
+    });
   };
   const tokens = async () =>
     Number(
@@ -52,8 +68,17 @@ async function lab() {
         )
       )[0]?.tokens ?? 0,
     );
-  await editWallet(core.db, core.clock.now(), CH, PAYER.id, 'set', { tokens: 20_000 }, 'test');
-  const set = (key: string, value: number) => core.moduleSettings.set(CH, `caution.${key}`, value, 'test');
+  await editWallet(
+    core.db,
+    core.clock.now(),
+    CH,
+    PAYER.id,
+    'set',
+    { tokens: 20_000 },
+    'test',
+  );
+  const set = (key: string, value: number) =>
+    core.moduleSettings.set(CH, `caution.${key}`, value, 'test');
   return { core, quote, pay, tokens, set };
 }
 
@@ -78,9 +103,20 @@ describe('Caution on the module host (adapter)', () => {
 
   it('supervision: waiting without the Twitch executor, ready once it reports; bounds refused', async () => {
     const l = await lab();
-    expect(await l.core.modules.status(CH, 'caution')).toMatchObject({ observed: 'waiting' });
-    await l.core.caution.claim(CH, { ...EXEC, can_read: true, can_release: true, missing: [] });
-    expect(await l.core.modules.status(CH, 'caution')).toMatchObject({ observed: 'ready' });
-    await expect(l.set('price_per_minute', 0)).rejects.toMatchObject({ code: 'out_of_bounds' });
+    expect(await l.core.modules.status(CH, 'caution')).toMatchObject({
+      observed: 'waiting',
+    });
+    await l.core.caution.claim(CH, {
+      ...EXEC,
+      can_read: true,
+      can_release: true,
+      missing: [],
+    });
+    expect(await l.core.modules.status(CH, 'caution')).toMatchObject({
+      observed: 'ready',
+    });
+    await expect(l.set('price_per_minute', 0)).rejects.toMatchObject({
+      code: 'out_of_bounds',
+    });
   });
 });

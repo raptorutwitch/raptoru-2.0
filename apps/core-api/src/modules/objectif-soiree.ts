@@ -17,9 +17,11 @@ export const objectifSoiree: ModuleDefinition = {
   chat: (ctx) => ({
     name: 'objectif_soiree',
     async chat(msg) {
-      if (!/^!objectif(\s|$)/i.test(msg.text.trim())) return { outcome: 'ignored' };
+      if (!/^!objectif(\s|$)/i.test(msg.text.trim()))
+        return { outcome: 'ignored' };
       return ctx.db.tx(async (q) => {
-        const points = (await ctx.state.get<number>(q, msg.channel_id, 'points')) ?? 0;
+        const points =
+          (await ctx.state.get<number>(q, msg.channel_id, 'points')) ?? 0;
         const cible = await ctx.setting(q, msg.channel_id, 'cible');
         const written = await ctx.say(q, msg.channel_id, {
           key: `msg:${msg.message_id}`,
