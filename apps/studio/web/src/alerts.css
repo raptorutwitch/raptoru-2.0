@@ -393,3 +393,15 @@
 .al-variants td:first-child {
   white-space: nowrap;
 }
+
+/* Tabs of the page (shell .rs-seg): one panel shown, the others stay mounted. */
+.al-tabs {
+  margin: 4px 0 14px;
+}
+.al-panel[hidden] {
+  display: none;
+}
+.al-panel > h2:first-child,
+.al-panel .al-columns > div > h2:first-child {
+  margin-top: 0;
+}

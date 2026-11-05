@@ -31,6 +31,17 @@ import { mountDockPanel } from './dock-panel.js';
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 
+/** The page's tabs: making an alert, what goes on air, where events come from, the variants of each family. */
+const ALERT_TABS = [
+  ['create', 'Créer et tester'],
+  ['live', 'File et OBS'],
+  ['sources', 'Sources d’événements'],
+  ['variants', 'Variantes'],
+] as const;
+type AlertTab = (typeof ALERT_TABS)[number][0];
+/** The tab shown, kept while Studio runs (coming back to Alertes reopens it). */
+let alertTab: AlertTab = 'create';
+
 export function mountAlerts(root: HTMLElement) {
   let variants: AlertVariantInfo[] = [];
   let state: AlertsState | null = null;
@@ -47,7 +58,12 @@ export function mountAlerts(root: HTMLElement) {
   root.innerHTML = `
     <section class="al">
       <div class="al-head"><h1>Alertes <em data-role="alerts-env">Core</em></h1>
-        <span class="al-note">Aperçu : local, sans file. Simulation : passe par la file du Core. Événements réels : réglés plus bas (OFF par défaut).</span></div>
+        <span class="al-note">Aperçu : local, sans file. Simulation : passe par la file du Core. Événements réels : onglet « Sources » (OFF par défaut).</span></div>
+      <div class="rs-seg al-tabs" role="tablist" aria-label="Alertes">${ALERT_TABS.map(
+        ([id, label]) =>
+          `<button type="button" role="tab" id="al-tab-${id}" data-al-tab="${id}" aria-controls="al-panel-${id}" aria-selected="${id === alertTab}" tabindex="${id === alertTab ? 0 : -1}">${label}</button>`,
+      ).join('')}</div>
+      <div class="al-panel" role="tabpanel" id="al-panel-create" aria-labelledby="al-tab-create"${alertTab === 'create' ? '' : ' hidden'}>
       <div class="al-grid">
         <div class="al-side">
           <h2>Alerte</h2>
@@ -97,6 +113,10 @@ export function mountAlerts(root: HTMLElement) {
             </div>
             <p class="al-hint" data-role="scrub-marks">Timeline : image figée de la vraie vidéo, textes à cet instant, sans son.</p>
           </div>
+        </div>
+      </div>
+      </div>
+      <div class="al-panel" role="tabpanel" id="al-panel-live" aria-labelledby="al-tab-live"${alertTab === 'live' ? '' : ' hidden'}>
           <div class="al-columns">
             <div><h2>File des alertes</h2>
               <p class="al-hint">Une alerte qui attend plus de 30 min n’est plus jouée (elle reste dans l’historique).
@@ -108,15 +128,52 @@ export function mountAlerts(root: HTMLElement) {
               <p class="al-hint">Source navigateur 1920×1080, fond transparent. Seule consommatrice de la file.</p>
               <div data-role="source"></div>
               <h2>Médias</h2><div data-role="media"></div>
-              <h2>Événements Twitch réels</h2><div data-role="twitch"></div></div>
+              <h2>Dock OBS</h2><div data-role="dock"></div></div>
           </div>
-          <div class="al-se"><h2>Variantes par famille</h2><div data-role="variants"></div></div>
-          <div class="al-se"><h2>Dons StreamElements</h2><div data-role="se"></div>
-          </div>
-          <div class="al-se"><h2>Dock OBS</h2><div data-role="dock"></div></div>
+      </div>
+      <div class="al-panel" role="tabpanel" id="al-panel-sources" aria-labelledby="al-tab-sources"${alertTab === 'sources' ? '' : ' hidden'}>
+        <div class="al-columns">
+          <div><h2>Événements Twitch réels</h2><div data-role="twitch"></div></div>
+          <div><h2>Dons StreamElements</h2><div data-role="se"></div></div>
         </div>
       </div>
+      <div class="al-panel" role="tabpanel" id="al-panel-variants" aria-labelledby="al-tab-variants"${alertTab === 'variants' ? '' : ' hidden'}>
+        <h2>Variantes par famille</h2><div data-role="variants"></div>
+      </div>
     </section>`;
+
+  // Tabs: every panel stays in the page (its loaders and live updates keep running); only one is shown.
+  const tabs = [...root.querySelectorAll<HTMLButtonElement>('[data-al-tab]')];
+  const showTab = (id: AlertTab, focus = false) => {
+    alertTab = id;
+    for (const t of tabs) {
+      const on = t.dataset.alTab === id;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      if (on && focus) t.focus();
+    }
+    for (const p of root.querySelectorAll<HTMLElement>('.al-panel'))
+      p.hidden = p.id !== `al-panel-${id}`;
+  };
+  for (const t of tabs) {
+    t.addEventListener('click', () => showTab(t.dataset.alTab as AlertTab));
+    t.addEventListener('keydown', (e) => {
+      const i = tabs.indexOf(t);
+      const next =
+        e.key === 'ArrowRight'
+          ? (i + 1) % tabs.length
+          : e.key === 'ArrowLeft'
+            ? (i - 1 + tabs.length) % tabs.length
+            : e.key === 'Home'
+              ? 0
+              : e.key === 'End'
+                ? tabs.length - 1
+                : -1;
+      if (next < 0) return;
+      e.preventDefault();
+      showTab(tabs[next]!.dataset.alTab as AlertTab, true);
+    });
+  }
 
   const $ = <T extends HTMLElement>(role: string) =>
     root.querySelector<T>(`[data-role="${role}"]`)!;
