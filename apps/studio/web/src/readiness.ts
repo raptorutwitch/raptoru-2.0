@@ -702,7 +702,9 @@ export function summary(checks: Check[]) {
           : 'ok') as Level,
     text: bad
       ? `${bad} point(s) à corriger · ${n('unknown')} non vérifié(s) · ${n('ok')} prêt(s) · ${n('off')} coupé(s) volontairement`
-      : `Rien à corriger · ${n('unknown')} non vérifié(s) · ${n('ok')} prêt(s) · ${n('off')} coupé(s) volontairement`,
+      : n('unknown')
+        ? `Aucun problème détecté, mais ${n('unknown')} point(s) non vérifié(s) · ${n('ok')} prêt(s) · ${n('off')} coupé(s) volontairement`
+        : `Tout est prêt · ${n('ok')} prêt(s) · ${n('off')} coupé(s) volontairement`,
   };
 }
 

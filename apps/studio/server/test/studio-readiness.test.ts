@@ -97,7 +97,9 @@ describe('Prêt pour le live', () => {
       level: 'unknown',
       state: 'Non vérifié',
     });
-    expect(summary(readiness(ready)).text).toMatch(/^Rien à corriger/);
+    expect(summary(readiness(ready)).text).toContain(
+      'Aucun problème détecté, mais 1 point(s) non vérifié(s)',
+    );
   });
 
   it('each dependency down turns its line red with the consequence and where to fix it', () => {

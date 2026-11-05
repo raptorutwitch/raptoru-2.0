@@ -1116,3 +1116,6 @@ body {
   font-style: normal;
   font-weight: 600;
 }
+.rs-ready-row a {
+  color: var(--rs-accent);
+}
