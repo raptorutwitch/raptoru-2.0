@@ -35,6 +35,7 @@ import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { hoverMarquee } from './hover-marquee.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 import { createSoundPreview, soundPreviewUrls } from './soundboard-preview.js';
+import { createSoundboardFeedback } from './soundboard-feedback.js';
 // Module variants register themselves (TTS V2, Tombola V2).
 import './tts-v2.js';
 // The D4 console registers itself as the variant of « moderation » (with its « Commandes » view).
@@ -1198,9 +1199,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let hubAllOpen = false;
   let hubWalletMethod = 'tokens';
   let hubCarousel = null;
-  let soundboardFeedback = null;
-  let soundboardFeedbackTimer = null;
-  let soundboardFeedbackSequence = 0;
+  // Soundboard feedback after a send (soundboard-feedback.js): its outcome and its timer are its own state.
+  const soundboardFeedback = createSoundboardFeedback({
+    document,
+    root: () => root,
+    reasonFor: (error) => soundboardFeedbackForError(error).reason,
+  });
   let moderationHistoryQuery = '';
   let moderationHistoryModule = '';
   let moderationHistoryStatus = '';
@@ -1719,7 +1723,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       hostViewId = null;
       hostVariant = null;
     }
-    if (moduleId !== 'soundboard') clearSoundboardFeedback({ render: false });
+    if (moduleId !== 'soundboard') soundboardFeedback.clear();
     if (moduleId !== 'raffle_join') {
       stopRaffleTimer();
       raffleTimerSnapshot = null;
@@ -1806,54 +1810,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const box = el('p', `jdm-flash jdm-flash--${kind}`, message);
     node.append(box);
     setTimeout(() => box.remove(), 4000);
-  }
-
-  function clearSoundboardFeedback({ render: shouldRender = true } = {}) {
-    if (soundboardFeedbackTimer !== null) {
-      clearTimeout(soundboardFeedbackTimer);
-      soundboardFeedbackTimer = null;
-    }
-    soundboardFeedback = null;
-    if (shouldRender) renderPreservingViewport();
-  }
-
-  function setSoundboardFeedback(kind, error = null) {
-    if (soundboardFeedbackTimer !== null) clearTimeout(soundboardFeedbackTimer);
-    const reason = kind === 'error' ? soundboardFeedbackForError(error).reason : '';
-    const sequence = ++soundboardFeedbackSequence;
-    soundboardFeedback = { kind, reason, sequence };
-    const duration = reason ? 3_800 : kind === 'success' ? 2_300 : 2_900;
-    soundboardFeedbackTimer = setTimeout(() => {
-      if (soundboardFeedback?.sequence !== sequence) return;
-      soundboardFeedback = null;
-      soundboardFeedbackTimer = null;
-      // Retire uniquement la couche déjà montée. Un rerender ici pourrait
-      // déplacer le caret/viewport d’une autre interaction qui vient juste
-      // de commencer, et le feedback est purement décoratif.
-      try { root.querySelector('.sbx-toast')?.remove(); } catch { /* vue déjà démontée */ }
-    }, duration);
-  }
-
-  function createSoundboardFeedbackOverlay() {
-    const feedback = soundboardFeedback;
-    const toast = el('div', 'sbx-toast');
-    if (!feedback) {
-      toast.hidden = true;
-      toast.setAttribute('aria-hidden', 'true');
-      return toast;
-    }
-    const isError = feedback.kind === 'error';
-    toast.classList.add(isError ? 'is-error' : 'is-success');
-    toast.setAttribute('role', isError ? 'alert' : 'status');
-    toast.setAttribute('aria-live', isError ? 'assertive' : 'polite');
-    toast.setAttribute('aria-atomic', 'true');
-    const title = isError ? 'Non envoyé' : 'Envoyé au stream';
-    toast.append(el('span', 'sbx-toast__mark', isError ? '!' : '✓'));
-    const text = el('span', 'sbx-toast__text');
-    text.append(el('strong', '', title));
-    if (feedback.reason) text.append(el('span', '', feedback.reason));
-    toast.append(text);
-    return toast;
   }
 
   async function beginEmoteAuthorization(node) {
@@ -1987,12 +1943,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         else if (result?.status === 'queued') successMessage = 'Action mise en file ✓';
         else successMessage = 'Action envoyée ✓';
       }
-      if (feedbackScope === 'soundboard') setSoundboardFeedback('success');
+      if (feedbackScope === 'soundboard') soundboardFeedback.set('success');
     } catch (error) {
       const message = errorLabel(error?.code);
       if (errorScope === 'tts') ttsActionError = message;
       else if (feedbackScope !== 'soundboard') actionError = message;
-      if (feedbackScope === 'soundboard') setSoundboardFeedback('error', error);
+      if (feedbackScope === 'soundboard') soundboardFeedback.set('error', error);
       const notificationModule = notificationModuleForNode(node,
         notification?.module || (errorScope === 'tts' ? 'tts' : feedbackScope === 'soundboard' ? 'soundboard' : null));
       publishRuntimeNotification(runtimeNotificationForError(error, {
@@ -6039,7 +5995,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         FORMS[mod.id]?.(mod, body);
       }
       item.append(body);
-      if (isSoundboard) (body.querySelector('.sbx-toast-slot') ?? item).append(createSoundboardFeedbackOverlay());
+      if (isSoundboard) (body.querySelector('.sbx-toast-slot') ?? item).append(soundboardFeedback.overlay());
       screen.append(head, item);
       // Every active restriction of the module (blocks and cooldown) in one popup, at each visit; the
       // module stays readable behind it.
