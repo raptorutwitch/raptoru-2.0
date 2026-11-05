@@ -11,6 +11,9 @@ import {
   modulesStatusProvider,
 } from '../src/control-center/modules.js';
 import { modulesRelay } from '../src/modules/relay.js';
+import { MODULES } from '../../../core-api/src/modules/index.js';
+import { checkModule } from '../../../core-api/src/modules/kit.js';
+import { PAGES } from '../../web/src/shell/registry.ts';
 
 // Architecture socle, Studio side: ONE relay, ONE Control Center provider and ONE generic page for every module of the
 // module host. Fictional modules and data.
@@ -200,5 +203,15 @@ describe('generic module page (pure parts)', () => {
     expect(activityHtml([{ ...row, amount: 0 }], sample())).not.toContain(
       'data-refund',
     );
+  });
+});
+
+describe('automatic checks (architecture socle § 11)', () => {
+  it('every host module passes the contract and has ITS Studio page (navigation is never forgotten)', () => {
+    for (const m of MODULES) {
+      expect(checkModule(m), m.id).toEqual([]);
+      const pages = PAGES.filter((p) => p.view === 'modules' && p.anchor === m.id);
+      expect(pages, `${m.id}: one page { view: 'modules', anchor: '${m.id}' } in shell/registry.ts`).toHaveLength(1);
+    }
   });
 });
