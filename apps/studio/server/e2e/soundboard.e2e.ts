@@ -120,6 +120,101 @@ test('viewer: search, favourite, preview, buy once (debit, recents), leave and c
   await page.close();
 });
 
+test('viewer: volume popover (kept across a new state, Escape closes it), Escape clears the search, a click beside the cards deselects, a drag holds a new state until the drop', async ({
+  browser,
+}) => {
+  const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto('/ext/mobile.html?labRole=viewer');
+  await openModule(page, /^Soundboard|^Sons/);
+  await ready(page);
+  const nextState = () =>
+    page.waitForResponse(
+      (r) => new URL(r.url()).pathname.endsWith('/api/state'),
+      { timeout: 30_000 },
+    );
+  let tokens = 21_000;
+  const changeBalance = () =>
+    labCore('/v1/lab/wallet/900100', {
+      actor: STUDIO,
+      viewer_id: '900101',
+      op: 'set',
+      tokens: (tokens += 7),
+    });
+
+  // A marker on the grid element: a host redraw (new state) replaces it.
+  const markGrid = () =>
+    page.evaluate(() => {
+      (window as unknown as { __grid: Element | null }).__grid =
+        document.querySelector('.jdm-module__body .sbx-grid');
+    });
+  const gridAlive = () =>
+    page.evaluate(() => {
+      const g = (window as unknown as { __grid: Element | null }).__grid;
+      return !!g && document.contains(g);
+    });
+
+  // Volume: opened from the header, still open after a redraw (new balance), Escape closes it.
+  await page
+    .getByRole('button', { name: 'Régler le volume des aperçus' })
+    .click();
+  await expect(page.locator('.sbx-vol.is-open')).toHaveCount(1);
+  await markGrid();
+  await changeBalance();
+  await expect.poll(gridAlive, { timeout: 20_000 }).toBe(false); // redrawn
+  await expect(page.locator('.sbx-vol.is-open')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.sbx-vol.is-open')).toHaveCount(0);
+
+  // Escape clears the search.
+  const all = await cards(page).count();
+  const search = page.locator('.sbx-search input').first();
+  await search.fill('boop');
+  await expect(cards(page)).toHaveCount(1);
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(cards(page)).toHaveCount(all);
+
+  // A click in the module beside the cards deselects.
+  await page.getByRole('button', { name: 'Sélectionner Boop' }).click();
+  await expect(page.locator('.sbx-card.is-selected')).toHaveCount(1);
+  await grid(page).click({ position: { x: 2, y: 2 } });
+  await expect(page.locator('.sbx-card.is-selected')).toHaveCount(0);
+
+  // Drag (long press on a card): a new state during the gesture never rebuilds the grid under the pointer.
+  await markGrid();
+  const first = cards(page).nth(0);
+  const firstId = await first.getAttribute('data-sound-id');
+  const box = (await first.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(grid(page)).toHaveClass(/is-dragging/); // the long press began the drag
+  const held = nextState();
+  await changeBalance();
+  await held;
+  expect(await gridAlive()).toBe(true); // held: same grid, still dragging
+  await expect(grid(page)).toHaveClass(/is-dragging/);
+  const target = (await cards(page).nth(2).boundingBox())!;
+  await page.mouse.move(
+    target.x + target.width / 2,
+    target.y + target.height / 2,
+    {
+      steps: 8,
+    },
+  );
+  await page.mouse.up();
+  // Dropped: the order changed, then the held state is drawn (a new grid).
+  await expect(cards(page).nth(0)).not.toHaveAttribute(
+    'data-sound-id',
+    firstId!,
+  );
+  await expect.poll(gridAlive, { timeout: 10_000 }).toBe(false);
+  await expect(grid(page)).toHaveCount(1);
+  expect(errors).toEqual([]);
+  await page.close();
+});
+
 for (const role of ['moderator', 'broadcaster'] as const) {
   test(`${role}: the Soundboard draws (one grid, player status, sounds), Hub and back, no page error`, async ({
     browser,

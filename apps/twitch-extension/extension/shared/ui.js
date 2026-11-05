@@ -1181,17 +1181,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     };
   }
   let paymentWalletSync = null;
+  /** The Soundboard volume popover open: kept across redraws (a viewer's choice, like the Hub list). */
   let soundboardVolumeOpen = false;
-  let soundboardVolumeSync = null;
-  let soundboardSearchClose = null;
-  let soundboardDeselect = null;
-  let soundboardDragCancel = null;
-  // Glisser Soundboard en cours : un nouvel état serveur attend la fin du geste (sinon la grille serait
-  // reconstruite sous le pointeur) et s'affiche juste après.
-  let soundboardDragging = false;
-  let soundboardRenderAfterDrag = false;
-  // Compte à rebours des cooldowns Soundboard (mis à jour sur place, sans reconstruire la grille).
-  let soundboardCooldownTimer = null;
+  /**
+   * The Soundboard drawn on screen (built by soundboardForm, destroyed by the next render): what the host's shared
+   * listeners and its state updates may ask of it. It owns its drag, its cooldown countdown and its controls.
+   * `{ syncVolume(open), closeSearch(), deselect(), holdState() → bool, destroy() }`
+   */
+  let soundboardMount = null;
   let soundboardVolumeHeaderButton = null;
   // Hub : module sélectionné dans le carousel et monnaie affichée par le wallet (consultation).
   let hubSelectedId = null;
@@ -1313,12 +1310,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
     if (soundboardVolumeOpen) {
       soundboardVolumeOpen = false;
-      soundboardVolumeSync?.(false);
+      soundboardMount?.syncVolume(false);
       return;
     }
     if (drafts.soundboard.searchOpen) {
       event.preventDefault();
-      soundboardSearchClose?.();
+      soundboardMount?.closeSearch();
       return;
     }
     if (raffleHistoryOpen) {
@@ -1340,22 +1337,22 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   root.addEventListener('click', (event) => {
     if (!drafts.soundboard.searchOpen
       || event.target?.closest?.('.rl-soundboard')) return;
-    const closeSearch = soundboardSearchClose;
+    const mount = soundboardMount;
     queueMicrotask(() => {
-      if (drafts.soundboard.searchOpen) closeSearch?.();
+      if (drafts.soundboard.searchOpen) mount?.closeSearch();
     });
   }, true);
   root.addEventListener('click', (event) => {
     const target = event.target;
     if (soundboardVolumeOpen && !event.target?.closest?.('.sbx-vol')) {
       soundboardVolumeOpen = false;
-      soundboardVolumeSync?.(false);
+      soundboardMount?.syncVolume(false);
     }
-    if (!soundboardDeselect || !target?.closest?.('.rl-soundboard')) return;
+    if (!soundboardMount || !target?.closest?.('.rl-soundboard')) return;
     // Une carte et ses contrôles restent dans leur flux d'interaction. Tout
     // clic dans le reste du module désélectionne la carte courante.
     if (target.closest('.sbx-card, .sbx-dock, .sbx-head, .sbx-vol')) return;
-    soundboardDeselect();
+    soundboardMount.deselect();
   });
   document.addEventListener('click', (event) => {
     if (!notificationCenterOpen && !viewerPreferencesOpen) return;
@@ -1580,11 +1577,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       && hostVariant.onState(hostView, next, previous, variantContext(hostVariant, (next?.modules ?? []).find((m) => m.id === openModule)))) {
       return;
     }
-    // Moderation V2 open: the console polls Core itself; a host re-render would only reset it.
-    if (render && !unchanged && soundboardDragging) {
-      soundboardRenderAfterDrag = true;
-      return;
-    }
+    // A Soundboard card being dragged: the new state waits for the end of the gesture (never a grid rebuilt under
+    // the pointer), then shows.
+    if (render && !unchanged && soundboardMount?.holdState()) return;
     if (render && !unchanged) renderPreservingViewport();
   }
 
@@ -2513,6 +2508,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     let dragPending = null;
     let dragSession = null;
     let dragJustDroppedId = null;
+    let renderAfterDrag = false; // a new server state arrived during the drag: drawn once it ends
+    let cooldownTimer = null;
     const dragDelayMs = 300;
     const bindGlobalPointerTracking = (onMove, onUp, onCancel) => {
       const target = globalThis.window;
@@ -2584,8 +2581,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const session = dragSession;
       if (!session) return;
       dragSession = null;
-      soundboardDragging = false;
-      soundboardDragCancel = null;
       session.detach?.();
       if (session.frame !== null) globalThis.cancelAnimationFrame?.(session.frame);
       grid.removeEventListener('scroll', session.onScroll);
@@ -2609,8 +2604,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       grid.classList.remove('is-settling', 'is-dragging');
       item.classList.remove('is-dragging');
       item.style.transform = '';
-      if (soundboardRenderAfterDrag) {
-        soundboardRenderAfterDrag = false;
+      if (renderAfterDrag) {
+        renderAfterDrag = false;
         globalThis.setTimeout?.(() => renderPreservingViewport(), 220);
       }
     };
@@ -2653,7 +2648,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         onScroll: null,
       };
       dragSession = session;
-      soundboardDragging = true;
       session.target = from;
       session.marker.style.transform = `translate(${slots[from].left}px, ${slots[from].top}px)`;
       session.onScroll = () => layoutDrag(session);
@@ -2678,7 +2672,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         },
       );
       session.frame = globalThis.requestAnimationFrame?.(() => autoScroll(session)) ?? null;
-      soundboardDragCancel = () => finishDrag();
     };
     // Tactile : une fois le glisser commencé, le doigt déplace la carte, pas la grille (sinon pointercancel).
     grid.addEventListener('touchmove', (event) => {
@@ -2966,7 +2959,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       clearSearch.hidden = true;
       if (had) renderGrid();
     };
-    soundboardSearchClose = resetSearch;
     clearSearch.hidden = !search.value;
     clearSearch.addEventListener('click', (event) => {
       event.preventDefault();
@@ -3105,7 +3097,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       drafts.soundboard.selectedId = null;
       setActionState();
     };
-    soundboardDeselect = deselectSound;
 
     const clearSound = () => {
       soundPreview.stop();
@@ -3163,6 +3154,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     volumeRange.max = '100';
     volumeRange.step = '5';
     volumeRange.setAttribute('aria-label', 'Volume des aperçus');
+    // Focus given back after a redraw (a new state while the popover is open): Escape and the keyboard keep working.
+    volumeRange.dataset.draftKey = 'soundboard-preview-volume';
     volumeRow.append(volumeMute, volumeRange);
     volumePopover.append(volumeHead, volumeRow, el('p', 'sbx-vol__note', 'Pour toi seulement · rien n’est joué sur le stream'));
     volumeZone.append(volumeHandle, volumePopover);
@@ -3205,13 +3198,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         requestAnimationFrame(() => volumeRange.focus({ preventScroll: true }));
       }
     };
-    soundboardVolumeSync = syncVolume;
     volumeHandle.addEventListener('click', (event) => {
       event.stopPropagation();
       syncVolume(!soundboardVolumeOpen, { focus: !soundboardVolumeOpen });
     });
     volumeZone.addEventListener('focusout', () => {
       queueMicrotask(() => {
+        // A redraw removes this zone (its focused slider fires focusout): a detached view never closes the popover
+        // the new view has just drawn open.
+        if (!volumeZone.isConnected) return;
         if (soundboardVolumeOpen && !volumeZone.contains(document.activeElement)) syncVolume(false);
       });
     });
@@ -3227,11 +3222,25 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     renderGrid();
     // Compte à rebours sur place tant qu'un son est en cooldown (arrêté au prochain rendu).
     if (sounds.some((sound) => sound.cooldown_until && Date.parse(sound.cooldown_until) > Date.now())) {
-      soundboardCooldownTimer = setInterval(() => {
+      cooldownTimer = setInterval(() => {
         for (const card of grid.querySelectorAll('.sbx-card[data-state="cooldown"]')) syncCard(card);
         if (selectedSound) setActionState();
       }, 1000);
     }
+    soundboardMount = {
+      syncVolume,
+      closeSearch: resetSearch,
+      deselect: deselectSound,
+      holdState: () => {
+        if (!dragSession) return false;
+        renderAfterDrag = true;
+        return true;
+      },
+      destroy: () => {
+        finishDrag(); // a drag cut short by a redraw: its listeners go, nothing is reordered
+        clearInterval(cooldownTimer);
+      },
+    };
     // Hauteur disponible sous l'en-tête : la grille défile dans le module, la barre reste visible.
     requestAnimationFrame(() => {
       if (!body.isConnected) return;
@@ -5490,17 +5499,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function render() {
     hubCarousel?.destroy();
     hubCarousel = null;
-    soundboardDragCancel?.();
-    soundboardDragCancel = null;
-    clearInterval(soundboardCooldownTimer);
-    soundboardCooldownTimer = null;
+    soundboardMount?.destroy();
+    soundboardMount = null;
     root.replaceChildren();
     // Les callbacks pointent toujours vers le Soundboard actuellement rendu.
     // Un rerender d’état ne doit jamais conserver un listener vers une vue
     // démontée.
-    soundboardVolumeSync = null;
-    soundboardSearchClose = null;
-    soundboardDeselect = null;
     soundboardVolumeHeaderButton = null;
     paymentWalletSync = null;
     root.dataset.view = loadError ? 'error' : state ? (openModule ? 'module' : 'home') : 'loading';
