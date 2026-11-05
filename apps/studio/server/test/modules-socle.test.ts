@@ -168,10 +168,19 @@ describe('Control Center: one provider for every module', () => {
 });
 
 describe('generic module page (pure parts)', () => {
-  it('OFF is said as a setting; refund button only for a paid action the policy allows', () => {
+  it('OFF is said as a setting (host switch) or plainly with where the switch is (historical); refund only where allowed', () => {
+    const historical = statusHtml(
+      sample({
+        status: { intention: 'off', observed: 'unknown', summary: 'x', reasons: ['Interrupteur : page « Simulation ».'] },
+      }),
+    );
+    expect(historical).toContain('Coupé.');
+    expect(historical).not.toContain('(réglage)');
+    expect(historical).toContain('page « Simulation »');
     expect(
       statusHtml(
         sample({
+          has_switch: true,
           status: {
             intention: 'off',
             observed: 'ready',

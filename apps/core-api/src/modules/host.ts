@@ -138,7 +138,7 @@ export class ModuleHost {
                   default: d.enabledByDefault ? 1 : 0,
                   min: 0,
                   max: 1,
-                  help: 'interrupteur du module (0 = coupé pour les viewers et le chat)',
+                  help: 'coupé : invisible pour les viewers et sourd au chat',
                 },
               ] as const,
             ]

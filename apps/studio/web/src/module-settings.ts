@@ -23,6 +23,7 @@ const esc = (t: unknown) =>
       ]!,
   );
 const fmt = (n: number) => n.toLocaleString('fr-FR');
+const isSwitch = (s: SettingView) => s.min === 0 && s.max === 1;
 
 /** The panel (pure): one line per setting, its bounds and its default; a value off the default says so. */
 export function settingsPanelHtml(
@@ -36,11 +37,17 @@ export function settingsPanelHtml(
   const rows = keys
     .map((k) => settings.find((s) => s.key === k))
     .filter((s): s is SettingView => !!s)
-    .map(
-      (s) => `<div class="ms-row" data-setting="${esc(s.key)}">
-        <label>${esc(s.label)} <input type="number" min="${s.min}" max="${s.max}" step="1" value="${s.value}" data-ms-input="${esc(s.key)}"> ${esc(s.unit)}</label>
+    .map((s) =>
+      isSwitch(s)
+        ? // A 0 / 1 setting is a switch (never a number to type).
+          `<div class="ms-row ms-row--switch" data-setting="${esc(s.key)}">
+        <label class="ms-label" for="ms-${esc(s.key)}">${esc(s.label)}<small class="rs-muted">${s.help ? esc(s.help) : ''}</small></label>
+        <label class="ms-switch"><input id="ms-${esc(s.key)}" type="checkbox" data-ms-toggle="${esc(s.key)}" ${s.value === 1 ? 'checked' : ''}> ${s.value === 1 ? 'Activé' : 'Coupé'}</label>
+      </div>`
+        : `<div class="ms-row" data-setting="${esc(s.key)}">
+        <label class="ms-label" for="ms-${esc(s.key)}">${esc(s.label)}<small class="rs-muted">De ${fmt(s.min)} à ${fmt(s.max)} · par défaut ${fmt(s.default)}${s.value !== s.default ? ' · <b>modifié</b>' : ''}${s.help ? ` · ${esc(s.help)}` : ''}</small></label>
+        <span class="rs-unit ms-field"><input id="ms-${esc(s.key)}" type="number" min="${s.min}" max="${s.max}" step="1" value="${s.value}" data-ms-input="${esc(s.key)}"><em>${esc(s.unit)}</em></span>
         <button type="button" class="rs-btn sm" data-ms-save="${esc(s.key)}">Enregistrer</button>
-        <small class="rs-muted">De ${fmt(s.min)} à ${fmt(s.max)} · par défaut ${fmt(s.default)}${s.value !== s.default ? ' · <b>modifié</b>' : ''}${s.help ? ` · ${esc(s.help)}` : ''}</small>
       </div>`,
     )
     .join('');
@@ -110,6 +117,28 @@ export function mountSettingsPanel(
       (next) => {
         if (next) settings = next;
         message = `${s.label} : ${fmt(value)} ${s.unit} enregistré.`;
+        render();
+      },
+      (err: Error) => {
+        message = `Refusé : ${REFUSED[err.message] ?? err.message}`;
+        render();
+      },
+    );
+  });
+  host.addEventListener('change', (e) => {
+    const box = (e.target as HTMLElement).closest<HTMLInputElement>('[data-ms-toggle]');
+    const key = box?.dataset.msToggle;
+    const s = key ? settings?.find((x) => x.key === key) : null;
+    if (!box || !s) return;
+    const value = box.checked ? 1 : 0;
+    if (!confirm(`${s.label} : ${value ? 'activer' : 'couper'} ?\n\nSur le Core de ce profil.`)) {
+      box.checked = !box.checked;
+      return;
+    }
+    void saveSetting(s.key, value).then(
+      (next) => {
+        if (next) settings = next;
+        message = `${s.label} : ${value ? 'activé' : 'coupé'}.`;
         render();
       },
       (err: Error) => {

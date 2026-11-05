@@ -1119,3 +1119,55 @@ body {
 .rs-ready-row a {
   color: var(--rs-accent);
 }
+
+/* Réglages bornés (module-settings.ts): one compact row per setting — label and bounds, the value with its unit, save. */
+.ms-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--rs-border);
+}
+.ms-row--switch {
+  grid-template-columns: minmax(12rem, 1fr) auto;
+}
+.ms-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ms-label small {
+  font-weight: 400;
+}
+.ms-field {
+  width: 11rem;
+}
+/* The panel is mounted in pages without .rs-form too (Points de chaîne, Bonk): the same field look everywhere. */
+.ms-field input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--rs-input-border);
+  border-radius: var(--rs-r-ctl);
+  background: var(--rs-canvas);
+  color: var(--rs-text);
+  font: inherit;
+  font-size: 14px;
+}
+.ms-switch,
+.rs-form label.ms-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .ms-row {
+    grid-template-columns: 1fr auto;
+  }
+  .ms-row .ms-label {
+    grid-column: 1 / -1;
+  }
+}

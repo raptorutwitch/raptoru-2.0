@@ -1,5 +1,7 @@
 import { esc, getJson, postJson, tryGetJson } from './http.js';
 import { mountSettingsPanel } from './module-settings.js';
+import { PAGES } from './shell/registry.js';
+import './module-host.css';
 
 // The generic Studio page of a module of the module host (architecture socle): status, settings, admin actions with
 // their real scope, activity with the moderator refund. Every module gets it for free; a module that needs its own
@@ -72,7 +74,10 @@ export function statusHtml(m: CatalogModule) {
     s.intention === 'off' ? '' : (STATE_CLASS[s.observed] ?? 'is-unknown');
   const text =
     s.intention === 'off'
-      ? 'Coupé (réglage) : invisible pour les viewers.'
+      ? // Its own switch is a setting here (the host's); a historical one says where its switch is (reasons).
+        m.has_switch
+        ? 'Coupé (réglage) : invisible pour les viewers.'
+        : 'Coupé.'
       : s.summary;
   return `<p class="rs-state ${cls}">${esc(text)}</p>${
     // Off too: a historical module says where its own switch is.
@@ -96,6 +101,32 @@ export function activityHtml(items: Activity[], m: CatalogModule | null) {
         }</td></tr>`,
     )
     .join('')}</tbody></table></div>`;
+}
+
+/** The module's own Studio page (its card here, or a historical page with its own screen), or null. */
+export function modulePage(id: string) {
+  return (
+    PAGES.find((p) => p.anchor === id) ??
+    PAGES.find((p) => p.id === id.replace(/_/g, '-')) ??
+    null
+  );
+}
+
+/** Pure: the overview — one compact tile per module (its real state, never green on a switch), a link to its page. */
+export function overviewHtml(modules: CatalogModule[]) {
+  return `<div class="mh-grid">${modules
+    .map((m) => {
+      const page = modulePage(m.id);
+      const open = page
+        ? `<a class="rs-btn sm" href="?p=${esc(page.id)}">Ouvrir</a>`
+        : `<button type="button" class="rs-btn sm" data-focus="${esc(m.id)}">Ouvrir</button>`;
+      return `<article class="rs-panel mh-tile" data-tile="${esc(m.id)}">
+        <header><h2>${esc(m.label)}</h2>${m.lab_only ? '<span class="rs-chip">Lab</span>' : ''}</header>
+        ${statusHtml(m)}
+        <footer>${m.status.activity ? `<small class="rs-muted">${esc(m.status.activity)}</small>` : '<span></span>'}${open}</footer>
+      </article>`;
+    })
+    .join('')}</div>`;
 }
 
 function cardHtml(m: CatalogModule) {
@@ -128,9 +159,10 @@ export function mountModuleHost(root: HTMLElement) {
       <header class="rs-page-head"><h1>${focus && shown[0] ? esc(shown[0].label) : 'Modules du socle'}</h1>
       <p>Modules construits sur le socle commun : chacun a son état, ses réglages, ses actions et son activité, sans raccordement propre.</p></header>
       ${message ? `<p class="rs-flash${message.startsWith('Refusé') ? ' is-bad' : ''}" role="status">${esc(message)}</p>` : ''}
-      ${modules === null ? '<p class="rs-state is-unknown">Catalogue illisible : le Core de ce profil ne fournit pas les modules du socle.</p>' : shown.length ? shown.map(cardHtml).join('') : '<p class="rs-muted">Aucun module.</p>'}
+      ${modules === null ? '<p class="rs-state is-unknown">Catalogue illisible : le Core de ce profil ne fournit pas les modules du socle.</p>' : !shown.length ? '<p class="rs-muted">Aucun module.</p>' : focus ? shown.map(cardHtml).join('') : overviewHtml(shown)}
     </div>`;
-    for (const m of shown) {
+    // The overview is tiles only: the cards (settings, actions, activity) live on each module's page.
+    for (const m of focus ? shown : []) {
       if (mine !== generation) return;
       const card = root.querySelector<HTMLElement>(`[data-module="${m.id}"]`);
       if (!card) continue;
@@ -152,6 +184,12 @@ export function mountModuleHost(root: HTMLElement) {
   };
   root.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
+    const toFocus = t.closest<HTMLElement>('[data-focus]')?.dataset.focus;
+    if (toFocus) {
+      focus = toFocus;
+      void render();
+      return;
+    }
     const card = t.closest<HTMLElement>('[data-module]');
     const m = modules?.find((x) => x.id === card?.dataset.module);
     if (!m) return;
