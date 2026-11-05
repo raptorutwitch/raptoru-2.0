@@ -1,4 +1,9 @@
 import { ProgressionService } from '../progression/service.js';
+import {
+  eventShopModule,
+  randomBanModule,
+  wordGameModule,
+} from '../modules/status-adapters.js';
 import { cautionModule, cautionRates } from '../modules/caution.js';
 import { miniGameLimits } from '../modules/mini-games.js';
 import { votekickLimits, votekickModule } from '../modules/votekick.js';
@@ -233,6 +238,10 @@ export function createLabCore({
       subWheel,
       eventShop,
     });
+  // Module host: supervision adapters of historical modules (they only READ their module's own state).
+  modules.add(randomBanModule(randomBan));
+  modules.add(wordGameModule(wordGame));
+  modules.add(eventShopModule);
   const alertsService = new AlertsService(db, systemClock);
   alertsService.attachListener('event_shop', (q, e) => eventShop.onAlert(q, e));
   const routes = [

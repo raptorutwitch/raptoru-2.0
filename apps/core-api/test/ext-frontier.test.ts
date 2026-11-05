@@ -876,6 +876,9 @@ describe('module host through the real Production doors (architecture socle)', (
       'mini_games',
       'votekick', // adapters added once their service exists (architecture/MIGRATIONS.md)
       'caution',
+      'random_ban',
+      'word_game',
+      'event_shop',
     ]);
     const refund = await studio(
       `/v1/studio/cockpit/modules/${CHANNEL}/refund`,

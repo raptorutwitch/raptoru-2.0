@@ -1,4 +1,9 @@
 import { ALERT_RULES, AlertsService } from './alerts/service.js';
+import {
+  eventShopModule,
+  randomBanModule,
+  wordGameModule,
+} from './modules/status-adapters.js';
 import { cautionModule, cautionRates } from './modules/caution.js';
 import { miniGameLimits } from './modules/mini-games.js';
 import { votekickLimits, votekickModule } from './modules/votekick.js';
@@ -200,6 +205,33 @@ export function createCore(
   const progression = new ProgressionService(db, clock, broadcasterOf);
   // The shop pays with this Core's economy (Jetons) and the event ledger (Bonbons).
   const cosmetics = new CosmeticShopService(db, clock, progression, economy);
+  const chat = createChatGames({
+    // Refonte H10: !rb and !fxcam prices from the module settings (defaults = today's prices).
+    chatPrices: moduleSettings.chatPrices(),
+    hostChatModules: modules.chatModules(),
+    hostReservedWords: modules.reservedWords(),
+    miniGameLimits: miniGameLimits(moduleSettings),
+    // « !roue » and the invitations: silent while the wheel is in mode v1 (production today).
+    subWheel,
+    eventShop,
+    db,
+    clock,
+    economy,
+    tts: ttsLab,
+    randomBan,
+    channelPoints,
+    caution: channel.cautionChat ? caution : null,
+    votekick: channel.votekickChat ? votekick : null,
+    spotify: channel.spotifyChat ? spotify : null,
+    raffle: raffleLab,
+    broadcasterOf,
+    twitch: channel.twitchApp ?? null,
+    loginLookup: channel.loginLookup ?? null,
+  });
+  // Module host: supervision adapters of historical modules (they only READ their module's own state).
+  modules.add(randomBanModule(randomBan));
+  modules.add(wordGameModule(chat.wordGame));
+  modules.add(eventShopModule);
   return {
     credits,
     daily: new DailyService(db, clock, credits),
@@ -242,28 +274,6 @@ export function createCore(
     cpTwitch,
     botInstances: new BotInstanceService(db, clock),
     economy,
-    chat: createChatGames({
-      // Refonte H10: !rb and !fxcam prices from the module settings (defaults = today's prices).
-      chatPrices: moduleSettings.chatPrices(),
-      hostChatModules: modules.chatModules(),
-      hostReservedWords: modules.reservedWords(),
-      miniGameLimits: miniGameLimits(moduleSettings),
-      // « !roue » and the invitations: silent while the wheel is in mode v1 (production today).
-      subWheel,
-      eventShop,
-      db,
-      clock,
-      economy,
-      tts: ttsLab,
-      randomBan,
-      channelPoints,
-      caution: channel.cautionChat ? caution : null,
-      votekick: channel.votekickChat ? votekick : null,
-      spotify: channel.spotifyChat ? spotify : null,
-      raffle: raffleLab,
-      broadcasterOf,
-      twitch: channel.twitchApp ?? null,
-      loginLookup: channel.loginLookup ?? null,
-    }),
+    chat,
   };
 }

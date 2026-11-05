@@ -19,9 +19,9 @@ Mise à jour : 05/11/2026, mission « Opération fondation totale ». Inventaire
 | Mini-jeux (Roulette, Slot, Duel) | B | **fait** (`e08d1a5`) | réglages H10 et supervision ; service inchangé |
 | Votekick | B | **fait** (ce lot) | H10 « délais » ; l'interrupteur est un drapeau de déploiement (lecture seule) ; la durée du vote reste dans `votekick_settings` (son écran) |
 | Caution | B | **fait** | H10 « prix » ; argent : tarifs lus dans la transaction du devis, le devis garde son prix ; interrupteur `CAUTION_CHAT` en lecture seule |
-| Random Ban | B (état seulement) | à faire | le prix est déjà un réglage ; la chance du streamer (2 %) est une probabilité : jamais réglable (H10) |
-| Boutique Halloween | B (état) | à faire | interrupteur en base et pouls persistant (`event_shop_studios`) |
-| Jeu des mots | B (état) | à faire | interrupteur et intervalle déjà en base (H8) ; « Prêt pour le live » le couvre déjà |
+| Random Ban | B (état seulement) | **fait** | le prix est déjà un réglage ; la chance du streamer (2 %) est une probabilité : jamais réglable (H10) |
+| Boutique Halloween | B (état) | **fait** | interrupteur en base et pouls persistant (`event_shop_studios`) |
+| Jeu des mots | B (état) | **fait** | interrupteur et intervalle déjà en base (H8) ; « Prêt pour le live » le couvre déjà |
 | Bonk, Soundboard, TTS | E pour l'instant | — | supervision Studio (`signals.ts`) et modération D4 complètes ; un adaptateur dupliquerait l'existant |
 | Tombola | E pour l'instant | — | modération D4 complète, configuration propre (ordonnanceur) |
 | Roue du Sub, Spotify, Points de chaîne, Alertes | C plus tard | — | moteurs riches avec leurs écrans ; candidats à un état commun seulement |
@@ -67,3 +67,13 @@ Mise à jour : 05/11/2026, mission « Opération fondation totale ». Inventaire
 | Interrupteur | `CAUTION_CHAT` (bascule SAMMI pas encore faite) | lu, jamais écrit | — |
 | État | écran Caution | en plus : « prêt » seulement si le bot s'est signalé depuis moins de 15 s | `caution-module.test.ts` |
 | Écran | Points de chaîne › Caution | même section, avec le panneau « Tarifs » | build web |
+
+## Adaptateurs d'état (Random Ban, Jeu des mots, Boutique d'événement)
+
+Ils ne font que **lire**. Aucun réglage, aucun exécuteur ni interrupteur ne s'ajoute : rien ne change pour ces modules.
+
+| Module | Intention | « Prêt » seulement si | Preuve |
+|---|---|---|---|
+| Random Ban | toujours « on » : `!rb` n'a pas d'interrupteur Core | l'exécuteur du bot s'est signalé depuis moins de 15 s, avec les droits recherche et exclusion | `status-adapters.test.ts` |
+| Jeu des mots | son interrupteur durable (H8), lu par son service | un live est ouvert et le jeu tourne | idem |
+| Boutique d'événement | `event_shop_settings.enabled` | un overlay de Studio prêt, vu depuis moins de 10 s | idem |
