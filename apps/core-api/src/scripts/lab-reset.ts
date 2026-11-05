@@ -3,10 +3,10 @@ import { loadConfig } from '../config.js';
 import { createPgDb } from '../db/db.js';
 import { migrate } from '../db/migrate.js';
 import {
-  LAB_CHANNEL,
   LAB_TWITCH_USERS,
   labEnvironmentProblems,
 } from '../lab/environment.js';
+import { LAB_VIEWER_TOKENS, seedLabFixtures } from '../lab/fixtures.js';
 
 // Resets the Lab database of the main Core (src/lab/environment.ts): drop, create, the PRODUCTION migrator (same schema
 // as the VPS), then the fictional fixtures (the Lab's viewers and their test Jetons). Explicit only:
@@ -14,8 +14,6 @@ import {
 // .env.lab: CORE_ENVIRONMENT=lab, DATABASE_URL=postgres://…@127.0.0.1:<port>/<name containing « lab »>,
 // TWITCH_CHANNEL_ID=900100, BOT_SECRET / STUDIO_SECRET (16+ characters), TWITCH_EXTENSION_SECRET (base64).
 // Refused unless the configuration is a valid Lab one AND the database's name says « lab »: never another database.
-
-const LAB_VIEWER_TOKENS = 12_000;
 
 const config = loadConfig();
 const problems =
@@ -46,17 +44,7 @@ try {
 const db = createPgDb(config.DATABASE_URL);
 try {
   const applied = await migrate(db, 'prod');
-  for (const u of LAB_TWITCH_USERS)
-    await db.query(
-      `insert into lab_viewers (channel_id, viewer_id, display_name, first_seen, last_seen)
-       values ($1, $2, $3, now(), now()) on conflict do nothing`,
-      [LAB_CHANNEL.id, u.id, u.display_name],
-    );
-  await db.query(
-    `insert into lab_wallets (channel_id, viewer_id, tokens, credits_tts, credits_soundboard, updated_at)
-     values ($1, '900101', $2, 0, 0, now())`,
-    [LAB_CHANNEL.id, LAB_VIEWER_TOKENS],
-  );
+  await seedLabFixtures(db);
   console.log(
     `[lab-reset] ${name} : ${applied.length} migrations (périmètre Production), ${LAB_TWITCH_USERS.length} viewers fictifs, ${LAB_VIEWER_TOKENS} Jetons de test pour Viewer Lab`,
   );

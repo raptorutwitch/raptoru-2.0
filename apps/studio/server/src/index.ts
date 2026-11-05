@@ -49,9 +49,16 @@ import {
   LAB_API_PREFIX,
 } from './extension-lab/serve.js';
 import {
+  LAB_TOKEN_PATH,
   TWITCH_EXT_MOCK_JS,
   TWITCH_EXT_MOCK_PATH,
 } from './extension-lab/twitch-mock.js';
+import {
+  labExtensionToken,
+  labRoleOf,
+  relayToFrontier,
+  type LabFrontier,
+} from './extension-lab/core-frontier.js';
 import {
   applyDataRootEnv,
   DATA_ROOT,
@@ -234,6 +241,8 @@ async function extensionLabRoute(
   res: ServerResponse,
   url: URL,
   production = false,
+  /** The main Core in its Lab environment: the extension speaks to its real /v1/ext (no Lab EBS). */
+  frontier: LabFrontier | null = null,
 ): Promise<boolean> {
   // Production profile (ASTRA-P1-019 lot 2): no Lab façade at all. Without it, the extension would run
   // on the façade's in-memory simulation and look like an old version (legacy screens, no V2 data).
@@ -290,9 +299,41 @@ async function extensionLabRoute(
     res.end(file.body);
     return true;
   }
+  if (frontier && url.pathname === LAB_TOKEN_PATH) {
+    if (req.method !== 'GET' || !sameHost(req)) {
+      send(res, 403, { ok: false, error: 'forbidden_host' });
+      return true;
+    }
+    send(res, 200, {
+      token: labExtensionToken(
+        frontier,
+        labRoleOf(url.searchParams.get('role')),
+        url.searchParams.get('identity') !== '0',
+      ),
+    });
+    return true;
+  }
   if (url.pathname.startsWith(`${LAB_API_PREFIX}/`)) {
     if (!sameHost(req)) {
       send(res, 403, { ok: false, error: 'forbidden_host' });
+      return true;
+    }
+    if (frontier) {
+      const reply = await relayToFrontier(
+        frontier,
+        req.method ?? 'GET',
+        url.pathname.slice(LAB_API_PREFIX.length) + url.search,
+        req.method === 'POST' ? JSON.stringify(await readJson(req)) : undefined,
+        {
+          authorization: req.headers.authorization,
+          idempotencyKey: req.headers['idempotency-key'] as string | undefined,
+        },
+      );
+      res.writeHead(reply.status, {
+        'content-type': reply.contentType,
+        'cache-control': 'no-store',
+      });
+      res.end(reply.body);
       return true;
     }
     if (!extLab) {
@@ -437,6 +478,8 @@ export interface StudioServerOptions {
   cosmetics?: CosmeticsRelay | null;
   /** Défis (docs/CHALLENGES.md): the « Défis » tab relay to the profile's Core. */
   challenges?: ChallengesRelay | null;
+  /** Extension Lab on the main Core's real /v1/ext (CORE_ENVIRONMENT=lab): Studio signs the Lab JWT and relays. */
+  labFrontier?: LabFrontier | null;
 }
 
 export function createStudioServer(o: StudioServerOptions) {
@@ -465,6 +508,7 @@ export function createStudioServer(o: StudioServerOptions) {
     progression = null,
     cosmetics = null,
     challenges = null,
+    labFrontier = null,
   } = o;
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -590,6 +634,7 @@ export function createStudioServer(o: StudioServerOptions) {
           res,
           url,
           profile?.plan.effective === 'production',
+          labFrontier,
         )
       )
         return;
