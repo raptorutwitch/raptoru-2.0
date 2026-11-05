@@ -1,8 +1,10 @@
 // Module skeleton (docs/studio-refonte/architecture/GUIDE_MODULE.md): `npm run module:new -- <id> [admin|paid]`.
 // Writes src/modules/<id>.ts and test/module-<id>.test.ts, Lab only, OFF by default, then prints the two lines to add.
 // It never edits a central file and never overwrites a file. Profiles: admin (démonstration A), paid (démonstration B).
+import console from 'node:console';
 import { existsSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const [id, profile = 'admin'] = process.argv.slice(2);
