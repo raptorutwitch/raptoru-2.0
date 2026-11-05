@@ -205,6 +205,7 @@ export const REASONS: Record<string, string> = {
   TEMPORARY_ERROR: 'erreur temporaire de Spotify',
   QUEUE_RESULT_UNKNOWN: 'ajout non confirmé',
   MODULE_DISABLED: 'demandes fermées',
+  STREAM_ENDED: 'annulée à la fin du live (non jouée)',
   STUDIO_UNAVAILABLE: 'Studio absent',
   STUDIO_LOST: 'Studio perdu pendant le traitement',
   LATE: 'rédemption trop ancienne',

@@ -213,6 +213,14 @@ export function createPublicFrontier(
             console.error('[core-api] spotify tick failed', e.message),
           );
       }, 1000);
+      // Refonte H6: the waiting song requests closed and refunded after the end of the live (every 30 s, idempotent).
+      const spotifyEndTick = setInterval(() => {
+        core.spotify
+          .closeAfterLive(channelId)
+          .catch((e: Error) =>
+            console.error('[core-api] spotify end of live failed', e.message),
+          );
+      }, 30_000);
       // Boutique d'événement: overdue plays (not taken, not started, never ended) settled even when nobody reads.
       const eventShopTick = setInterval(() => {
         core.eventShop
@@ -241,6 +249,7 @@ export function createPublicFrontier(
         if (challengesTick) clearInterval(challengesTick);
         clearInterval(eventShopTick);
         clearInterval(spotifyTick);
+        clearInterval(spotifyEndTick);
         clearInterval(votekickTick);
         clearInterval(wordGameTick);
         clearInterval(raffleTick);

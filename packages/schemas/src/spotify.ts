@@ -117,6 +117,8 @@ export const SpotifyReason = z.enum([
   'STUDIO_UNAVAILABLE',
   'LATE',
   'STUDIO_LOST',
+  // Refonte H6: canceled at the end of the live (not started), refunded when the reward allows it.
+  'STREAM_ENDED',
 ]);
 export type SpotifyReason = z.infer<typeof SpotifyReason>;
 
