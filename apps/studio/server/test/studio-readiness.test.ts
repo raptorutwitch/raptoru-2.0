@@ -244,4 +244,22 @@ describe('Prêt pour le live', () => {
     expect(html).not.toContain('<button');
     expect(html).toContain('Lecture seule');
   });
+
+  it('Jeu des mots (H8): OFF on purpose folded, ON says its interval; unreadable → non vérifié', () => {
+    expect(
+      byId({ ...ready, wordGame: { enabled: false } })['word-game'],
+    ).toMatchObject({ level: 'off' });
+    expect(
+      byId({
+        ...ready,
+        wordGame: { enabled: true, interval: { min_s: 300, max_s: 900 } },
+      })['word-game'],
+    ).toMatchObject({
+      level: 'ok',
+      why: 'Un mot toutes les 5 à 15 min pendant le live.',
+    });
+    expect(byId({ ...ready, wordGame: null })['word-game']).toMatchObject({
+      level: 'unknown',
+    });
+  });
 });

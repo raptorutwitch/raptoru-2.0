@@ -70,6 +70,11 @@ export interface ReadinessInput {
   } | null;
   games: { enabled?: boolean } | null;
   spotify: { admission?: string } | null;
+  /** Refonte H8: the word game's durable switch and interval (absent: an older Core). */
+  wordGame?: {
+    enabled?: boolean;
+    interval?: { min_s: number; max_s: number };
+  } | null;
 }
 
 const c = (
@@ -626,6 +631,36 @@ export function readiness(i: ReadinessInput): Check[] {
               { page: 'centre', label: 'Centre de contrôle (bot)' },
             ),
     );
+  const wg = i.wordGame;
+  if (wg === null)
+    out.push(
+      NOT_READ('word-game', 'Jeu des mots', {
+        page: 'word-game',
+        label: 'Jeu des mots',
+      }),
+    );
+  else if (wg && wg.enabled !== undefined)
+    out.push(
+      !wg.enabled
+        ? c(
+            'word-game',
+            'Jeu des mots',
+            'off',
+            'Désactivé',
+            'Désactivé dans ses réglages : aucun mot automatique.',
+            null,
+            null,
+          )
+        : c(
+            'word-game',
+            'Jeu des mots',
+            'ok',
+            'Activé',
+            `Un mot toutes les ${Math.round((wg.interval?.min_s ?? 300) / 60)} à ${Math.round((wg.interval?.max_s ?? 900) / 60)} min pendant le live.`,
+            null,
+            null,
+          ),
+    );
   const sp = i.spotify;
   if (!sp?.admission)
     out.push(
@@ -720,17 +755,27 @@ const get = async <T>(path: string): Promise<T | null> => {
 
 /** Every input from the module's own read route (a missing one stays null: « non vérifié »). */
 export async function loadReadiness(): Promise<ReadinessInput> {
-  const [profile, control, channelPoints, alerts, se, wheel, games, spotify] =
-    await Promise.all([
-      get<ReadinessInput['profile']>('/api/profile'),
-      get<{ modules: Module[] }>('/api/control/status'),
-      get<ReadinessInput['channelPoints']>('/api/channel-points/state'),
-      get<ReadinessInput['alerts']>('/api/alerts/state'),
-      get<ReadinessInput['se']>('/api/alerts/se'),
-      get<ReadinessInput['wheel']>('/api/sub-wheel/state'),
-      get<ReadinessInput['games']>('/api/mini-games/state'),
-      get<ReadinessInput['spotify']>('/api/spotify/state'),
-    ]);
+  const [
+    profile,
+    control,
+    channelPoints,
+    alerts,
+    se,
+    wheel,
+    games,
+    spotify,
+    wordGame,
+  ] = await Promise.all([
+    get<ReadinessInput['profile']>('/api/profile'),
+    get<{ modules: Module[] }>('/api/control/status'),
+    get<ReadinessInput['channelPoints']>('/api/channel-points/state'),
+    get<ReadinessInput['alerts']>('/api/alerts/state'),
+    get<ReadinessInput['se']>('/api/alerts/se'),
+    get<ReadinessInput['wheel']>('/api/sub-wheel/state'),
+    get<ReadinessInput['games']>('/api/mini-games/state'),
+    get<ReadinessInput['spotify']>('/api/spotify/state'),
+    get<NonNullable<ReadinessInput['wordGame']>>('/api/word-game/state'),
+  ]);
   return {
     profile,
     modules: control?.modules ?? null,
@@ -740,6 +785,7 @@ export async function loadReadiness(): Promise<ReadinessInput> {
     wheel,
     games,
     spotify,
+    wordGame,
   };
 }
 
