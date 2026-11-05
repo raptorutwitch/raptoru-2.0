@@ -96,6 +96,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261119130000_cosmetic_frames_banners.sql',
   // Défis et succès (definitions, progress, awards, runs, log); Lab twin 20261120120000. Nothing seeded.
   '20261120130000_challenges.sql',
+  // Roue du Sub: the live boundary moves only on OFF → ON (refonte P0-3); Lab twin 20261121120000.
+  '20261121130000_sub_wheel_enabled_at.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -192,6 +194,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261119120000_cosmetic_frames_banners_lab.sql',
   // Défis et succès: the Lab twin of 20261120130000_challenges.sql (same content).
   '20261120120000_challenges_lab.sql',
+  // Roue du Sub live boundary: the Lab twin of 20261121130000_sub_wheel_enabled_at.sql (same content).
+  '20261121120000_sub_wheel_enabled_at_lab.sql',
 ]);
 
 /**

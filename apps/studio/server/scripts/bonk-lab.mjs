@@ -109,6 +109,7 @@ try {
     '20261118120500_lab_ledger_cosmetic.sql',
     '20261119120000_cosmetic_frames_banners_lab.sql',
     '20261120120000_challenges_lab.sql',
+    '20261121120000_sub_wheel_enabled_at_lab.sql',
   ]) {
     if (
       (

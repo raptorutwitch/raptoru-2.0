@@ -539,8 +539,11 @@ export class SubWheelService {
   /** The switch (persistent; OFF by default). */
   async setEnabled(channelId: string, enabled: boolean) {
     await this.db.query(
-      `insert into sw_settings (channel_id, enabled, updated_at) values ($1, $2, $3)
-       on conflict (channel_id) do update set enabled = $2, updated_at = $3`,
+      // enabled_at (refonte P0-3): the live boundary, moved only by an OFF → ON switch, never by a repeated ON.
+      `insert into sw_settings (channel_id, enabled, updated_at, enabled_at)
+         values ($1, $2, $3, case when $2 then $3::timestamptz end)
+       on conflict (channel_id) do update set enabled = $2, updated_at = $3,
+         enabled_at = case when $2 and not sw_settings.enabled then $3::timestamptz else sw_settings.enabled_at end`,
       [channelId, enabled, this.now()],
     );
     return this.settings(channelId);

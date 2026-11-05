@@ -1415,6 +1415,30 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
     expect(await f.credits()).toBe(1);
   });
 
+  it('refonte P0-3: saving a setting in live (invitations, announce delay, mode) keeps the subs already received drawable; a repeated ON too', async () => {
+    const f = await fixture();
+    await f.v2();
+    await f.live('s1', 0);
+    f.at0(MIN);
+    const r = (await f.receive(sub('9501', MIN)))!;
+    f.at0(2 * MIN);
+    await f.wheel.setInvitations(CH, false, 'test');
+    await f.wheel.setAnnounceDelay(CH, 5, 'test');
+    await f.wheel.setMode(CH, 'v2', 'test');
+    await f.wheel.setEnabled(CH, true); // already ON: not a new boundary
+    f.at0(2 * MIN + SUB_WHEEL.afterAlertMaxMs + 1);
+    expect((await f.claim()).spin?.spin_id).toBe(r.spin_id);
+    // Counter-proof: an OFF → ON switch IS the boundary — a sub received before it waits for its presence.
+    await f.done(r.spin_id);
+    const before = (await f.receive(sub('9502', 3 * MIN)))!;
+    f.at0(4 * MIN);
+    await f.wheel.setEnabled(CH, false);
+    await f.wheel.setEnabled(CH, true);
+    f.at0(4 * MIN + SUB_WHEEL.afterAlertMaxMs + 1);
+    expect((await f.claim()).spin).toBeNull();
+    expect(await f.status(before.spin_id)).toBe('owed');
+  });
+
   it('still waits (tour en attente) when the wheel was off at reception, off live, or acquired in an earlier live', async () => {
     const f = await fixture();
     await f.v2(false);
