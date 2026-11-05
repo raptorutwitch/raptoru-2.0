@@ -467,14 +467,15 @@ function settingsTab(s: SwState) {
     ${
       s.v2_unavailable
         ? V2_UNAVAILABLE
-        : `<div class="sw-block"><h3>Mode <small class="cp-muted">diffuseur uniquement</small></h3>
+        : `<details class="sw-block sw-advanced"${mode === 'v2' ? '' : ' open'}><summary><h3>Paramètres avancés · retour arrière</h3>
+        <small class="cp-muted">Mode actuel : ${esc(MODE[mode][0])}. À changer seulement pour revenir à l’ancienne roue (diffuseur uniquement).</small></summary>
       <div class="sw-modes">${(Object.keys(MODE) as SwMode[])
         .map(
           (m) =>
             `<label class="sw-mode${m === mode ? ' sw-mode--on' : ''}"><input type="radio" name="sw-mode" value="${m}" data-act="sw-mode"${m === mode ? ' checked' : ''}/>
               <b>${esc(MODE[m][0])}</b><span>${esc(MODE[m][1])}</span></label>`,
         )
-        .join('')}</div></div>
+        .join('')}</div></details>
     <div class="sw-block"><h3>Invitations naturelles <small class="cp-muted">diffuseur uniquement</small></h3>
       <p class="cp-muted">En V2, pendant le live, LeCroupier_ propose une fois par live à un viewer qui a des tours à
         lancer de les lancer (« oui » / « non », ou !roue oui / !roue non). Accepter demande le tirage ; rien n’est

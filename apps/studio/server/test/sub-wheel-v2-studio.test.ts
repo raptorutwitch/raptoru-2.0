@@ -828,6 +828,15 @@ describe('Roue du Sub V2 — R4, the Studio section (pure view)', () => {
     expect(html).toContain('Désactiver la roue');
     expect(html.match(/name="sw-mode"/g)).toHaveLength(3);
     expect(html).toContain('value="v1" data-act="sw-mode" checked');
+    // Refonte H13: the mode is a rollback setting — folded under « Paramètres avancés », open only when not V2.
+    expect(html).toContain('<details class="sw-block sw-advanced" open>');
+    const v2 = subWheelView(
+      { ...base, settings: { enabled: true, mode: 'v2' as const } },
+      null,
+      { tab: 'settings' },
+    );
+    expect(v2).toContain('<details class="sw-block sw-advanced">');
+    expect(v2).toContain('Mode actuel : ');
     expect(html).toContain('diffuseur uniquement');
     expect(html).toContain('Tester l’animation');
   });
