@@ -24,7 +24,6 @@ import {
   normalizeSearchQuery,
   providerPresentation,
   UI_ICONS,
-  updateFeedbackSlot,
 } from './ui-primitives.js';
 import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
 import { createEmotePicker } from './emote-picker.js';
@@ -36,6 +35,7 @@ import { hoverMarquee } from './hover-marquee.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 import { createSoundPreview, soundPreviewUrls } from './soundboard-preview.js';
 import { createSoundboardFeedback } from './soundboard-feedback.js';
+import { createBonkSend } from './bonk-send.js';
 // Module variants register themselves (TTS V2, Tombola V2).
 import './tts-v2.js';
 // The D4 console registers itself as the variant of « moderation » (with its « Commandes » view).
@@ -1043,17 +1043,6 @@ export function preventBonkDoubleClick(event) {
   event?.stopPropagation?.();
 }
 
-export function bonkFeedbackForResult(result = {}) {
-  // Bonk lot 5: a salve is admitted (and paid) as one block.
-  if (Array.isArray(result?.interactions) && result?.volley_id)
-    return `Salve ×${result.interactions.length} acceptée ✓`;
-  const status = String(result?.status ?? '').trim().toLowerCase();
-  if (status === 'queued') return 'Bonk accepté · en file ✓';
-  if (status === 'delivered') return 'Bonk livré ✓';
-  if (status === 'spawned') return 'Bonk apparu ✓';
-  return 'Bonk accepté ✓';
-}
-
 /**
  * Returns only a reliable, user-facing Soundboard reason. Unknown errors stay
  * deliberately reason-less so the feedback never invents a cause from a
@@ -1234,9 +1223,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   const isStudioPreview = new URLSearchParams(globalThis.location?.search || '').get('studio') === '1';
   // Soundboard local preview (soundboard-preview.js): its audio, the sound heard and the volume are its own state.
   const soundPreview = createSoundPreview({ document, root: () => root });
-  let bonkInFlight = 0;
-  let bonkFeedbackMessage = '';
-  let bonkFeedbackKind = 'ok';
   let bonkEmotePicker = null;
   /** Bonk lot 5: the chargeur (persistent, like the picker) and the feedback slot of the current render. */
   let bonkChargeur = null;
@@ -1244,7 +1230,18 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let bonkTourAutoOpened = false;
   /** « Récents » shown while Bonk stays open: frozen, so a catalogue click never reflows the grid. */
   let bonkRecentsShown = null;
-  let bonkFeedbackNode = null;
+  // Bonk sending and its last outcome (bonk-send.js): requests in flight, message and slot are its own state.
+  const bonkSend = createBonkSend({
+    refresh: () => onRefresh?.(),
+    notice: (text, kind) => bonkChargeur?.notice(text, kind),
+    errorText: (code) => errorLabel(code),
+    notifyError: (error) => publishRuntimeNotification(runtimeNotificationForError(error, {
+      module: 'bonk',
+      title: 'Bonk non envoyé',
+      actionModule: 'bonk',
+    })),
+    redraw: () => renderPreservingViewport(),
+  });
   let raffleHistoryOpen = false;
   let raffleTimer = null;
   let raffleTimerSnapshot = null;
@@ -1730,8 +1727,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (moduleId !== 'bonk') {
       bonkChargeur?.reset();
       // The last outcome belongs to this visit (as the Soundboard's feedback): never shown again on return.
-      bonkFeedbackMessage = '';
-      bonkFeedbackKind = 'ok';
+      bonkSend.clear();
     }
     soundboardVolumeOpen = false;
     if (moduleId === 'soundboard') {
@@ -2032,58 +2028,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     });
   }
 
-  function syncBonkFeedback(node) {
-    if (!node) return;
-    const message = bonkFeedbackMessage || (bonkInFlight ? 'Bonk en cours…' : '');
-    updateFeedbackSlot(node, message, { kind: bonkFeedbackKind });
-    node.classList.toggle(
-      'jdm-bonk-feedback--error',
-      bonkFeedbackKind === 'error' && Boolean(message),
-    );
-  }
-
-
-  function sendBonk(node, task) {
-    // Chaque clic démarre immédiatement sa propre requête. Le client lui donne
-    // une clé d’idempotence unique ; aucun échec ne vide ou n’annule les autres.
-    bonkInFlight += 1;
-    bonkFeedbackMessage = 'Bonk en cours…';
-    bonkFeedbackKind = 'ok';
-    syncBonkFeedback(node);
-    let request;
-    try {
-      request = task();
-    } catch (error) {
-      request = Promise.reject(error);
-    }
-    return Promise.resolve(request)
-      .then(async (result) => {
-        try { await onRefresh?.(); } catch { /* le prochain polling récupérera l’état */ }
-        bonkFeedbackMessage = bonkFeedbackForResult(result);
-        bonkFeedbackKind = 'ok';
-        syncBonkFeedback(node);
-        // A salve has its own bubble at the end of its playback (bonk-chargeur.js).
-        if (!result?.volley_id) bonkChargeur?.notice(bonkFeedbackMessage);
-        return true;
-      })
-      .catch((error) => {
-        bonkFeedbackMessage = `Bonk non envoyé · ${errorLabel(error?.code)}`;
-        bonkFeedbackKind = 'error';
-        syncBonkFeedback(node);
-        bonkChargeur?.notice(bonkFeedbackMessage, 'error');
-        publishRuntimeNotification(runtimeNotificationForError(error, {
-          module: 'bonk',
-          title: 'Bonk non envoyé',
-          actionModule: 'bonk',
-        }));
-        return false;
-      })
-      .finally(() => {
-        bonkInFlight = Math.max(0, bonkInFlight - 1);
-        syncBonkFeedback(node);
-        renderPreservingViewport();
-      });
-  }
 
   // --- formulaires par module ----------------------------------------------
 
@@ -3483,7 +3427,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       className: 'jdm-bonk-feedback',
       label: 'Retour du Bonk',
     });
-    bonkFeedbackNode = bonkFeedback;
     const chargeur = bonkChargeurView();
     const restricted = holdsAction(restrictionOf('bonk'));
     // Core's price and salve bounds (module): the chargeur never decides them.
@@ -3548,19 +3491,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     emotePicker.attached();
     chargeur.attached();
     syncSelection();
-    syncBonkFeedback(bonkFeedback);
+    bonkSend.mount(bonkFeedback);
   }
 
   /** Bonk lot 5: the payload of one shot, or null (feedback shown) when this emote cannot be fired. */
   function bonkShotPayload(emote) {
     const twitchLocked = bonkTwitchLockedForRole(state);
     if (!isBonkEmoteSelectable(emote, { demoMode: state?.demo_mode === true, twitchLocked })) {
-      bonkFeedbackMessage = twitchLocked && emote.source === 'twitch'
+      bonkSend.refuse(twitchLocked && emote.source === 'twitch'
         ? `${BONK_TWITCH_ROLE_HINT}.`
-        : 'Connecte tes emotes Twitch pour utiliser celle-ci.';
-      bonkFeedbackKind = 'error';
-      syncBonkFeedback(bonkFeedbackNode);
-      bonkChargeur?.notice(bonkFeedbackMessage, 'error');
+        : 'Connecte tes emotes Twitch pour utiliser celle-ci.');
       return null;
     }
     // Le Bonk vise la caméra du streamer, pas un autre spectateur.
@@ -3603,7 +3543,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       onFire: (emote) => {
         const payload = bonkShotPayload(emote);
         if (!payload) return Promise.resolve(false);
-        return sendBonk(bonkFeedbackNode, () => client.spendTokens('bonk', payload));
+        return bonkSend.send(() => client.spendTokens('bonk', payload));
       },
       onSalve: (emotes, cadenceMs, key) => {
         const shots = [];
@@ -3616,7 +3556,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
             emote_glyph: payload.emote_glyph,
           });
         }
-        return sendBonk(bonkFeedbackNode, () => client.spendBonkSalve(key, {
+        return bonkSend.send(() => client.spendBonkSalve(key, {
           target_login: 'streamer',
           shots,
           cadence_ms: cadenceMs,
