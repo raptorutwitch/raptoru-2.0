@@ -102,6 +102,21 @@ describe('Bonk send', () => {
     expect(next.textContent).toBe('');
   });
 
+  it('a Bonk still in flight when the viewer leaves: its answer never comes back on return (another visit)', async () => {
+    const { send } = setup();
+    for (const outcome of ['resolve', 'reject']) {
+      const req = deferred();
+      const done = send.send(() => req.promise);
+      send.clear(); // « Retour au Hub » before Core answered
+      if (outcome === 'resolve') req.resolve({ status: 'queued' });
+      else req.reject({ code: 'insufficient_funds' });
+      await done;
+      const next = slot();
+      send.mount(next);
+      expect(next.textContent).toBe('');
+    }
+  });
+
   it('Core’s statuses', () => {
     expect(bonkFeedbackForResult({ status: 'spawned' })).toBe('Bonk apparu ✓');
     expect(bonkFeedbackForResult({})).toBe('Bonk accepté ✓');

@@ -197,7 +197,10 @@ ext.connectLab(labCore);
   // Settling every purchase at once matters: an unreported one is refunded ~15 s later and that balance change would
   // land in whichever test runs then.
   const player = 'e2e-player-fictif';
+  let busy = false; // one cycle at a time: a slow one is never doubled by the next tick
   setInterval(() => {
+    if (busy) return;
+    busy = true;
     void ttsWorker
       .playerHeartbeat(player, 12)
       .then(() => ttsWorker.tick())
@@ -213,7 +216,8 @@ ext.connectLab(labCore);
           'completed',
         );
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => (busy = false));
   }, 2_000).unref();
 }
 // Soundboard in the Extension Lab: the Studio sound worker (journal + this Lab Core only) and a FICTIONAL player (no
@@ -232,7 +236,10 @@ ext.connectLab(labCore);
   ext.connectSound(soundWorker);
   // It reports every sound handed to it as played (started → completed), never playing anything (see the TTS player).
   const player = 'e2e-player-fictif';
+  let busy = false; // one cycle at a time: a slow one is never doubled by the next tick
   setInterval(() => {
+    if (busy) return;
+    busy = true;
     void soundWorker
       .playerHeartbeat(player, true)
       .then(() => soundWorker.tick())
@@ -257,7 +264,8 @@ ext.connectLab(labCore);
           );
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => (busy = false));
   }, 2_000).unref();
 }
 // Bonk in the Extension Lab: the Studio Bonk worker (journal + this Lab Core only), WITHOUT its runtime (no OBS, no
@@ -283,7 +291,10 @@ ext.connectLab(labCore);
   );
   bonkWorker.setObs(true, true); // fictional: no OBS here, the source is « ready »
   const renderer = 'e2e-overlay-fictif';
+  let busy = false; // one cycle at a time: a slow one is never doubled by the next tick
   setInterval(() => {
+    if (busy) return;
+    busy = true;
     void bonkWorker
       .rendererHeartbeat(renderer)
       .then(() => bonkWorker.tick())
@@ -308,7 +319,8 @@ ext.connectLab(labCore);
           );
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => (busy = false));
   }, 2_000).unref();
 }
 // Studio's Halloween and Tombola tabs, on the same Lab Core (temporary data folder, gone with the process).

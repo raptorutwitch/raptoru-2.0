@@ -83,8 +83,11 @@ test('viewer: search, favourite, preview, buy once (debit, recents), leave and c
   await page.locator('[data-view="favorites"]').click();
   await expect(cards(page)).toHaveCount(1);
   await page.locator('[data-view="all"]').click();
-  // Local preview: the button answers (never a viewer purchase).
+  // Local preview: never a purchase; muted by default (Twitch), it says how to hear it.
   await page.getByRole('button', { name: 'Écouter Boop' }).click();
+  await expect(page.locator('.jdm-module__body')).toContainText(
+    'Monte le volume des aperçus',
+  );
   // Buy: select, send; the balance goes down once and the sound is in the recents.
   await page.getByRole('button', { name: 'Sélectionner Boop' }).click();
   const send = page
@@ -190,11 +193,27 @@ test('viewer: volume popover (kept across a new state, Escape closes it), Escape
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await expect(grid(page)).toHaveClass(/is-dragging/); // the long press began the drag
-  const held = nextState();
+  // The host's reads are sequential (the next one is scheduled after the previous state was applied): once the read
+  // AFTER the one carrying the new balance has arrived, that state has reached the page for sure.
+  const expected = String(tokens + 7); // the balance changeBalance() is about to set
+  const carrying = page.waitForResponse(
+    async (r) =>
+      new URL(r.url()).pathname.endsWith('/api/state') &&
+      JSON.stringify(await r.json().catch(() => null)).includes(expected),
+    { timeout: 30_000 },
+  );
   await changeBalance();
-  await held;
+  await carrying;
+  await nextState();
   expect(await gridAlive()).toBe(true); // held: same grid, still dragging
   await expect(grid(page)).toHaveClass(/is-dragging/);
+  const shown = (n: number) =>
+    page.getByRole('button', {
+      name: new RegExp(
+        `Jetons · ${String(n).replace(/(\d)(?=(\d{3})+$)/g, '$1.?')} jetons`,
+      ),
+    });
+  await expect(shown(tokens)).toHaveCount(0); // the new balance waits for the drop
   const target = (await cards(page).nth(2).boundingBox())!;
   await page.mouse.move(
     target.x + target.width / 2,
@@ -210,6 +229,7 @@ test('viewer: volume popover (kept across a new state, Escape closes it), Escape
     firstId!,
   );
   await expect.poll(gridAlive, { timeout: 10_000 }).toBe(false);
+  await expect(shown(tokens).first()).toBeAttached(); // …and shows once the card is dropped
   await expect(grid(page)).toHaveCount(1);
   expect(errors).toEqual([]);
   await page.close();

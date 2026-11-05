@@ -27,6 +27,7 @@ export function createBonkSend({ refresh, notice, errorText, notifyError, redraw
   let message = '';
   let kind = 'ok';
   let slot = null;
+  let visit = 0; // `clear()` ends a visit: an answer arriving after it belongs to the past one
 
   function sync() {
     if (!slot) return;
@@ -52,12 +53,14 @@ export function createBonkSend({ refresh, notice, errorText, notifyError, redraw
       notice(text, 'error');
     },
     clear() {
+      visit += 1;
       message = '';
       kind = 'ok';
     },
     /** `task()` → the client's request. Resolves true when Core accepted it. */
     send(task) {
       inFlight += 1;
+      const mine = visit;
       say('Bonk en cours…', 'ok');
       let request;
       try {
@@ -72,15 +75,17 @@ export function createBonkSend({ refresh, notice, errorText, notifyError, redraw
           } catch {
             /* le prochain polling récupérera l’état */
           }
+          if (mine !== visit) return true; // the viewer left meanwhile: nothing to say on this screen
           say(bonkFeedbackForResult(result), 'ok');
           // A salve has its own bubble at the end of its playback (bonk-chargeur.js).
           if (!result?.volley_id) notice(message);
           return true;
         })
         .catch((error) => {
+          notifyError(error); // a refusal is always reported in the notification centre, even after leaving
+          if (mine !== visit) return false;
           say(`Bonk non envoyé · ${errorText(error?.code)}`, 'error');
           notice(message, 'error');
-          notifyError(error);
           return false;
         })
         .finally(() => {
