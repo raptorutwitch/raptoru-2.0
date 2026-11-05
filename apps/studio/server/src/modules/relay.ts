@@ -10,7 +10,15 @@ const STUDIO_ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
 const ID = '[a-z][a-z0-9_]{1,40}';
 const ACTION = '[a-z][a-z0-9_]{0,40}';
 
-export function modulesRelay(core: LabCoreCall, channelId: string) {
+/**
+ * `labPlayer`: Studio may act as a FICTIONAL player of the modules that hand their actions to a player (claim, then
+ * report) — the Lab only: on the Production profile a « played » report would close a real paid action nobody saw.
+ */
+export function modulesRelay(
+  core: LabCoreCall,
+  channelId: string,
+  o: { labPlayer?: boolean } = {},
+) {
   const base = `/v1/lab/modules/${channelId}`;
   return async function handle(
     req: IncomingMessage,
@@ -41,7 +49,31 @@ export function modulesRelay(core: LabCoreCall, channelId: string) {
     const get = req.method === 'GET';
     let m: RegExpExecArray | null;
     try {
-      if (get && sub === '') return (reply(200, await core(base)), true);
+      if (get && sub === '')
+        return (
+          reply(200, {
+            ...(await core<Record<string, unknown>>(base)),
+            lab_player: !!o.labPlayer,
+          }),
+          true
+        );
+      // The fictional player (Lab): the SAME door as a real OBS executor — claim (lease), then report.
+      if (!get && (m = new RegExp(`^/(${ID})/(claim|report)$`).exec(sub))) {
+        if (!o.labPlayer) return (reply(404, { error: 'not_found' }), true);
+        const b = await body();
+        return (
+          reply(
+            200,
+            await core(
+              `${base}/${m[1]}/${m[2]}`,
+              m[2] === 'claim'
+                ? { player: 'studio-lab-fictif' }
+                : { activity_id: b.activity_id, status: b.status },
+            ),
+          ),
+          true
+        );
+      }
       if (get && sub === '/activity') {
         const q = new URLSearchParams();
         for (const k of ['module', 'viewer', 'limit']) {

@@ -196,18 +196,21 @@ describe('démonstration B — Coffre mystère (paid viewer module)', () => {
     ).toHaveLength(2);
     expect(await t.tokensOf()).toBe(900); // balance set to 1 000, then one chest
   });
-  it('the fictional player shows it (done) or fails (refunded once, the original debit); expiry refunds once', async () => {
+  it('a player (claim, then report) shows it (done) or fails (refunded once, the original debit); expiry refunds once', async () => {
     const t = await lab();
     await t.enable();
     await t.open('k-2000001');
     await t.open('k-2000002');
-    await t.host.admin(CH, 'coffre_mystere', 'lecteur_fictif', {
-      actor: studio,
-      input: {},
+    const [first, second] = (
+      await t.host.claim(CH, 'coffre_mystere', 'obs-test', 2)
+    ).items;
+    await t.host.report(CH, 'coffre_mystere', {
+      activity_id: first!.activity_id,
+      status: 'done',
     });
-    await t.host.admin(CH, 'coffre_mystere', 'lecteur_fictif', {
-      actor: studio,
-      input: { echec: true },
+    await t.host.report(CH, 'coffre_mystere', {
+      activity_id: second!.activity_id,
+      status: 'failed',
     });
     const items = (
       await t.host.activity(CH, { module: 'coffre_mystere' })
@@ -315,8 +318,15 @@ describe('the host on the canonical economy (Production)', () => {
     expect(host.ids).toEqual(['mini_games', 'echantillon']); // demos A and B are Lab only; mini-games is Production
     // Nothing of a Lab-only module reaches Production: no setting listed in Studio, none settable through the cockpit.
     const keys = (await settings.list(CH)).map((x) => x.key);
-    expect(keys.some((k) => k.startsWith('coffre_mystere.') || k.startsWith('objectif_soiree.'))).toBe(false);
-    await expect(settings.set(CH, 'coffre_mystere.enabled', 1, 'test')).rejects.toMatchObject({
+    expect(
+      keys.some(
+        (k) =>
+          k.startsWith('coffre_mystere.') || k.startsWith('objectif_soiree.'),
+      ),
+    ).toBe(false);
+    await expect(
+      settings.set(CH, 'coffre_mystere.enabled', 1, 'test'),
+    ).rejects.toMatchObject({
       code: 'unknown_setting',
     });
     await settings.set(CH, 'echantillon.enabled', 1, 'test');

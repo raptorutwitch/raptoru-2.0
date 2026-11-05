@@ -17,6 +17,8 @@ export interface CatalogModule {
   enabled: boolean;
   /** The host's switch `<id>.enabled` exists (older Core: absent, read as « no switch »). */
   has_switch?: boolean;
+  /** It hands its actions to a player (OBS…): claim / report. */
+  player?: boolean;
   chat_words?: string[];
   settings: string[];
   admin: {
@@ -129,12 +131,40 @@ export function overviewHtml(modules: CatalogModule[]) {
     .join('')}</div>`;
 }
 
-function cardHtml(m: CatalogModule) {
+/**
+ * Pure: the Lab's fictional player — the SAME door as a real OBS executor (claim with a lease, then « joué » or
+ * « échec »: an échec refunds the original debit once). Shown only when Studio says it is the Lab.
+ */
+export function playerHtml(
+  m: CatalogModule,
+  labPlayer: boolean,
+  claimed: Activity[] = [],
+) {
+  if (!m.player || !labPlayer) return '';
+  return `<div class="mh-player" data-role="player"><h3>Lecteur fictif <span class="rs-chip">Lab</span></h3>
+    <p class="rs-muted">Joue le rôle de l’exécuteur OBS : il prend la prochaine action en attente (30 s pour lui seul), puis dit si elle a été montrée. Aucun OBS réel.</p>
+    <button type="button" class="rs-btn sm" data-claim>Prendre la prochaine action</button>
+    ${claimed
+      .map(
+        (a) =>
+          `<p class="mh-claimed">${esc(a.viewer?.display_name ?? '—')} · ${esc(a.action)} · ${a.amount ? `${a.amount} Jetons` : 'gratuit'}
+          <button type="button" class="rs-btn sm" data-report="${esc(a.activity_id)}" data-status="done">Montrée</button>
+          <button type="button" class="rs-btn sm" data-report="${esc(a.activity_id)}" data-status="failed">Échec (rembourse)</button></p>`,
+      )
+      .join('')}</div>`;
+}
+
+function cardHtml(
+  m: CatalogModule,
+  labPlayer = false,
+  claimed: Activity[] = [],
+) {
   return `<section class="rs-panel" data-module="${esc(m.id)}"><h2>${esc(m.label)}${m.lab_only ? ' <span class="rs-chip">Lab</span>' : ''}</h2>
     <p class="rs-muted">${esc(m.description)}</p>${statusHtml(m)}
     ${m.viewer.length ? `<p class="rs-muted">Pour les viewers : ${m.viewer.map((v) => `${esc(v.label)} (${v.price ? `${v.price} Jetons` : 'gratuit'}${v.live_only ? ', pendant le live' : ''})`).join(' · ')}.</p>` : ''}
     ${m.moderation ? `<p class="rs-muted">Modération : ${esc(m.moderation.note)}</p>` : ''}
     <div data-role="settings"></div>
+    ${playerHtml(m, labPlayer, claimed)}
     ${m.admin.length ? `<div class="rs-buttons">${m.admin.map((a) => `<button type="button" class="rs-btn" data-admin="${esc(a.name)}">${esc(a.label)}</button>`).join('')}</div>` : ''}
     ${m.capabilities.includes('history') ? '<h3>Activité</h3><div data-role="activity"><p class="rs-muted">Lecture…</p></div>' : ''}</section>`;
 }
@@ -144,22 +174,27 @@ export function mountModuleHost(root: HTMLElement) {
   let visible = false;
   let modules: CatalogModule[] | null = null;
   let message = '';
+  let labPlayer = false;
+  /** What the fictional player holds (per module), until it reports. */
+  const claimed = new Map<string, Activity[]>();
   // Overlapping renders (setVisible then setFocus): only the latest one writes the page.
   let generation = 0;
   const render = async () => {
     if (!visible) return;
     const mine = ++generation;
-    const read =
-      (await tryGetJson<{ modules: CatalogModule[] }>('/api/modules'))
-        ?.modules ?? null;
+    const answer = await tryGetJson<{
+      modules: CatalogModule[];
+      lab_player?: boolean;
+    }>('/api/modules');
     if (mine !== generation) return;
-    modules = read;
+    modules = answer?.modules ?? null;
+    labPlayer = answer?.lab_player === true;
     const shown = modules?.filter((m) => !focus || m.id === focus) ?? [];
     root.innerHTML = `<div class="rs-page rs-form">
       <header class="rs-page-head"><h1>${focus && shown[0] ? esc(shown[0].label) : 'Modules du socle'}</h1>
       <p>Modules construits sur le socle commun : chacun a son état, ses réglages, ses actions et son activité, sans raccordement propre.</p></header>
       ${message ? `<p class="rs-flash${message.startsWith('Refusé') ? ' is-bad' : ''}" role="status">${esc(message)}</p>` : ''}
-      ${modules === null ? '<p class="rs-state is-unknown">Catalogue illisible : le Core de ce profil ne fournit pas les modules du socle.</p>' : !shown.length ? '<p class="rs-muted">Aucun module.</p>' : focus ? shown.map(cardHtml).join('') : overviewHtml(shown)}
+      ${modules === null ? '<p class="rs-state is-unknown">Catalogue illisible : le Core de ce profil ne fournit pas les modules du socle.</p>' : !shown.length ? '<p class="rs-muted">Aucun module.</p>' : focus ? shown.map((m) => cardHtml(m, labPlayer, claimed.get(m.id))).join('') : overviewHtml(shown)}
     </div>`;
     // The overview is tiles only: the cards (settings, actions, activity) live on each module's page.
     for (const m of focus ? shown : []) {
@@ -193,6 +228,45 @@ export function mountModuleHost(root: HTMLElement) {
     const card = t.closest<HTMLElement>('[data-module]');
     const m = modules?.find((x) => x.id === card?.dataset.module);
     if (!m) return;
+    if (t.closest('[data-claim]')) {
+      void postJson<{ items: Activity[] }>(
+        `/api/modules/${m.id}/claim`,
+        {},
+      ).then(
+        (out) => {
+          claimed.set(m.id, [...(claimed.get(m.id) ?? []), ...out.items]);
+          message = out.items.length
+            ? 'Action prise par le lecteur fictif.'
+            : 'Aucune action en attente.';
+          void render();
+        },
+        (err: Error) => ((message = `Refusé : ${err.message}`), void render()),
+      );
+      return;
+    }
+    const report = t.closest<HTMLElement>('[data-report]');
+    if (report) {
+      const id = report.dataset.report!;
+      const status = report.dataset.status!;
+      void postJson(`/api/modules/${m.id}/report`, {
+        activity_id: id,
+        status,
+      }).then(
+        () => {
+          claimed.set(
+            m.id,
+            (claimed.get(m.id) ?? []).filter((a) => a.activity_id !== id),
+          );
+          message =
+            status === 'done'
+              ? 'Montrée : action terminée.'
+              : 'Échec : remboursée une fois (débit d’origine).';
+          void render();
+        },
+        (err: Error) => ((message = `Refusé : ${err.message}`), void render()),
+      );
+      return;
+    }
     const admin = t.closest<HTMLElement>('[data-admin]')?.dataset.admin;
     const refund = t.closest<HTMLElement>('[data-refund]')?.dataset.refund;
     if (admin) {

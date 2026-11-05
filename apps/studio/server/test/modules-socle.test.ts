@@ -23,12 +23,16 @@ afterEach(() => {
   for (const s of servers.splice(0)) s.close();
 });
 
-async function relay(answer: unknown = { ok: true }) {
+async function relay(answer: unknown = { ok: true }, labPlayer = false) {
   const calls: { path: string; body: unknown }[] = [];
-  const handle = modulesRelay(async (path, body) => {
-    calls.push({ path, body });
-    return answer as never;
-  }, '900100');
+  const handle = modulesRelay(
+    async (path, body) => {
+      calls.push({ path, body });
+      return answer as never;
+    },
+    '900100',
+    { labPlayer },
+  );
   const server = createServer((req, res) => {
     void handle(req, res, new URL(req.url!, 'http://x')).then((done) => {
       if (!done) res.writeHead(418).end();
@@ -71,8 +75,8 @@ describe('modules relay (one for every module)', () => {
   it('forwards to the profile Core with the broadcaster actor; a body actor is ignored; only known paths', async () => {
     const r = await relay();
     expect((await r.api('/api/modules')).status).toBe(200);
-    await r.api('/api/modules/coffre_mystere/admin/lecteur_fictif', {
-      input: { echec: true },
+    await r.api('/api/modules/objectif_soiree/admin/ajouter', {
+      input: { points: 3 },
       actor: { id: 'evil', role: 'broadcaster', via: 'studio' },
     });
     await r.api('/api/modules/refund', {
@@ -83,10 +87,10 @@ describe('modules relay (one for every module)', () => {
     expect(r.calls).toEqual([
       { path: '/v1/lab/modules/900100', body: undefined },
       {
-        path: '/v1/lab/modules/900100/coffre_mystere/admin/lecteur_fictif',
+        path: '/v1/lab/modules/900100/objectif_soiree/admin/ajouter',
         body: {
           actor: { id: 'studio', role: 'broadcaster', via: 'studio' },
-          input: { echec: true },
+          input: { points: 3 },
         },
       },
       {
@@ -105,6 +109,49 @@ describe('modules relay (one for every module)', () => {
     expect((await r.api('/api/modules', undefined, false)).status).toBe(403);
     expect((await r.api('/api/other')).status).toBe(418);
     expect(r.calls).toEqual([]);
+  });
+});
+
+describe('the fictional player (Lab only)', () => {
+  it('Lab: claim with Studio’s fixed player name, report passes only the activity and status; the catalog says so', async () => {
+    const r = await relay({ items: [] }, true);
+    expect(await (await r.api('/api/modules')).json()).toMatchObject({
+      lab_player: true,
+    });
+    await r.api('/api/modules/coffre_mystere/claim', { player: 'evil' });
+    await r.api('/api/modules/coffre_mystere/report', {
+      activity_id: 'a1',
+      status: 'failed',
+      result: { x: 1 },
+    });
+    expect(r.calls.slice(1)).toEqual([
+      {
+        path: '/v1/lab/modules/900100/coffre_mystere/claim',
+        body: { player: 'studio-lab-fictif' },
+      },
+      {
+        path: '/v1/lab/modules/900100/coffre_mystere/report',
+        body: { activity_id: 'a1', status: 'failed' },
+      },
+    ]);
+  });
+  it('Production profile: no fictional player (a « played » report would close a real paid action nobody saw)', async () => {
+    const r = await relay({ modules: [] }, false);
+    expect(await (await r.api('/api/modules')).json()).toMatchObject({
+      lab_player: false,
+    });
+    expect((await r.api('/api/modules/coffre_mystere/claim', {})).status).toBe(
+      404,
+    );
+    expect(
+      (
+        await r.api('/api/modules/coffre_mystere/report', {
+          activity_id: 'a',
+          status: 'done',
+        })
+      ).status,
+    ).toBe(404);
+    expect(r.calls).toHaveLength(1); // only the catalog read
   });
 });
 

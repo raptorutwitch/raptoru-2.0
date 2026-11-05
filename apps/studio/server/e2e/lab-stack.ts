@@ -160,7 +160,7 @@ const studio = createStudioServer({
   relays: chainRelays(
     miniGamesRelay(labCore, '900100'),
     moduleSettingsRelay(labCore, '900100'),
-    modulesRelay(labCore, '900100'),
+    modulesRelay(labCore, '900100', { labPlayer: true }),
   ),
   halloween,
   // Progression (docs/PROGRESSION.md): Studio's panel relay to this Lab Core.

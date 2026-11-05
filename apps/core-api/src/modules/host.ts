@@ -370,6 +370,8 @@ export class ModuleHost {
         /** The host's switch `<id>.enabled` exists (Studio shows it with the settings). */
         has_switch: this.hasSwitch(d),
         chat_words: d.chatWords ?? [],
+        /** It hands its actions to a player (OBS…): claim / report, expiry (expireQueuedMs). */
+        player: !!d.expireQueuedMs,
         settings: Object.keys(d.settings ?? {}).map((k) => `${d.id}.${k}`),
         admin: Object.entries(d.admin ?? {}).map(([name, a]) => ({
           name,

@@ -93,9 +93,12 @@ describe.skipIf(!isLocal)('module host, real Postgres, two Cores', () => {
   it('refund, expiry and the fictional player racing on one chest: refunded exactly once', async () => {
     const [A, B] = [host(a), host(b)];
     // The chest of the previous test is shown first (otherwise it would expire too, refunded once — correctly).
-    await A.admin(CH, 'coffre_mystere', 'lecteur_fictif', {
-      actor: { id: 'studio', role: 'broadcaster', via: 'studio' },
-    });
+    for (const left of (await A.claim(CH, 'coffre_mystere', 'obs-test', 10))
+      .items)
+      await A.report(CH, 'coffre_mystere', {
+        activity_id: left.activity_id,
+        status: 'done',
+      });
     const { activity } = await A.viewer(CH, 'coffre_mystere', 'ouvrir', {
       viewer: V,
       idempotency_key: 'intent-race-001',

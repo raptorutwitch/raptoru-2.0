@@ -1281,7 +1281,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       ? chainRelays(
           miniGamesRelay(labCore, cockpitChannel),
           moduleSettingsRelay(labCore, cockpitChannel),
-          modulesRelay(labCore, cockpitChannel),
+          // The fictional player (claim / report) only off the Production profile.
+          modulesRelay(labCore, cockpitChannel, { labPlayer: !production }),
         )
       : null,
     alerts,

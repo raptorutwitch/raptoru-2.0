@@ -33,7 +33,6 @@ export const coffreMystere: ModuleDefinition = {
   labOnly: true,
   capabilities: [
     'settings',
-    'admin',
     'viewer',
     'wallet',
     'live',
@@ -92,25 +91,6 @@ export const coffreMystere: ModuleDefinition = {
       (await ctx.state.get<number>(ctx.db, channelId, 'opened')) ?? 0;
     return { opened_total: opened, viewer: viewer?.display_name ?? null };
   },
-  admin: {
-    lecteur_fictif: {
-      label: 'Lecteur fictif : montrer le prochain coffre',
-      confirm:
-        'Simulation Lab : le lecteur fictif montre le plus ancien coffre en attente (aucun OBS réel).',
-      async run(ctx, q, { channelId, input }) {
-        const failed = (input as { echec?: unknown } | null)?.echec === true;
-        const next = (await waiting(q, channelId))[0];
-        if (!next) return { shown: null };
-        const out = await ctx.settle(
-          q,
-          next.activity_id,
-          { status: failed ? 'failed' : 'done' },
-          'lecteur fictif',
-        );
-        return { shown: next.activity_id, status: out.status };
-      },
-    },
-  },
   async status(ctx, channelId) {
     const w = await waiting(ctx.db, channelId);
     const late = w.filter(
@@ -126,7 +106,7 @@ export const coffreMystere: ModuleDefinition = {
         : 'Aucun coffre en attente',
       reasons: late.length
         ? [
-            'Le lecteur fictif ne montre pas les coffres (plus d’une minute d’attente).',
+            'Aucun lecteur ne prend les coffres (plus d’une minute d’attente) : en Lab, le lecteur fictif de Studio.',
           ]
         : [],
       activity: w.length ? `${w.length} en attente` : null,
