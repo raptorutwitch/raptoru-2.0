@@ -52,6 +52,16 @@ export interface ModuleContext {
   settings: ModuleSettings;
   /** Reads one of THIS module's settings (`<key>` without the module prefix). */
   setting(q: Queryable, channelId: string, key: string): Promise<number>;
+  /**
+   * LeCroupier_ writes in the chat for THIS module (durable chat queue, origin `module:<id>`), inside the caller's
+   * transaction, alone in a savepoint: refused (a database without the module origins yet), it is skipped and logged,
+   * never the action it follows. `key` makes it idempotent (a resent message never answers twice).
+   */
+  say(
+    q: Queryable,
+    channelId: string,
+    m: { key: string; text: string; delayMs?: number; announce?: boolean },
+  ): Promise<number>;
   /** Is the canonical live open (Production) / always true in the Lab (H1). */
   live(q: Queryable): Promise<boolean>;
   /**
@@ -168,6 +178,11 @@ export interface ModuleDefinition {
    */
   expireQueuedMs?: number;
   chat?(ctx: ModuleContext): LabChatModule;
+  /**
+   * The chat words (without « ! ») this module answers: reserved, so Commands V2 refuses them (never two answers to one
+   * command). Required with `chat`.
+   */
+  chatWords?: readonly string[];
   tick?(ctx: ModuleContext): Promise<void>;
 }
 
@@ -215,6 +230,11 @@ export function checkModule(d: ModuleDefinition): string[] {
   }
   if (viewerActions.length && d.enabled)
     p.push(`${d.id}: un module à actions viewer utilise l’interrupteur du socle, pas le sien`);
+  if (d.chat && !d.chatWords?.length)
+    p.push(`${d.id}: lecture du chat sans mots réservés (chatWords)`);
+  if (d.chatWords && !d.chat) p.push(`${d.id}: mots réservés sans lecture du chat`);
+  for (const w of d.chatWords ?? [])
+    if (!/^[a-z0-9_]{1,25}$/.test(w)) p.push(`${d.id}: mot du chat « ${w} » invalide`);
   if (d.settings && 'enabled' in d.settings)
     p.push(`${d.id}: « enabled » est réservé à l’interrupteur du socle`);
   if (viewerActions.length && !d.moderation)

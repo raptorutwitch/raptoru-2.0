@@ -103,7 +103,8 @@ describe('démonstration A — Objectif de soirée (simple admin module)', () =>
     )!;
     expect(cat).toMatchObject({
       lab_only: true,
-      enabled: true,
+      enabled: false, // it reads the chat (« !objectif »): the host's switch, OFF by default
+      has_switch: true,
       settings: ['objectif_soiree.cible'],
     });
     await host.admin(CH, 'objectif_soiree', 'ajouter', {

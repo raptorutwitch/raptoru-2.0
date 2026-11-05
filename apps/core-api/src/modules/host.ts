@@ -15,6 +15,7 @@ import {
   LabWalletError,
   type PaidModule,
 } from '../lab-moderation/store.js';
+import { insertAnnouncement } from '../commands/steps.js';
 import type { ModuleSettings } from '../module-settings/service.js';
 import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import {
@@ -95,7 +96,7 @@ export class ModuleHost {
       this.modules.set(d.id, d);
       deps.settings.register(
         Object.fromEntries([
-          ...(d.viewer
+          ...(this.hasSwitch(d)
             ? [
                 [
                   `${d.id}.enabled`,
@@ -105,7 +106,7 @@ export class ModuleHost {
                     default: d.enabledByDefault ? 1 : 0,
                     min: 0,
                     max: 1,
-                    help: 'interrupteur du module (0 = coupé pour les viewers)',
+                    help: 'interrupteur du module (0 = coupé pour les viewers et le chat)',
                   },
                 ] as const,
               ]
@@ -120,6 +121,7 @@ export class ModuleHost {
     this.ctx = {
       ...deps,
       setting: unscoped,
+      say: unscoped,
       live: (q) => liveForPaid(q, deps.economy),
       settle: unscoped,
       state: { get: unscoped, set: unscoped },
@@ -133,6 +135,20 @@ export class ModuleHost {
       ...this.ctx,
       setting: (q, channelId, key) =>
         this.ctx.settings.get(q, channelId, `${d.id}.${key}`),
+      say: (q, channelId, m) =>
+        insertAnnouncement(q, {
+          channelId,
+          now: clock.now(),
+          origin: `module:${d.id}`,
+          drafts: [
+            {
+              idempotencyKey: `module:${d.id}:${m.key}`,
+              mode: m.announce ? 'announce' : 'normal',
+              text: m.text.slice(0, 450),
+              delayMs: m.delayMs,
+            },
+          ],
+        }),
       settle: (q, activityId, outcome, actor) =>
         this.settleIn(q, activityId, outcome, actor, d.id),
       state: {
@@ -172,10 +188,44 @@ export class ModuleHost {
   }
 
   /** Chat modules and periodic jobs, handed to the Core assembly once (never per module). */
+  /**
+   * The chat readers of the modules, behind the host's guard: a module switched off reads nothing; a module that throws
+   * is isolated (logged, `module_error`) — the other modules still get the message.
+   */
   chatModules(): LabChatModule[] {
     return [...this.modules.values()]
       .filter((d) => d.chat)
-      .map((d) => d.chat!(this.ctxFor(d)));
+      .map((d) => {
+        const inner = d.chat!(this.ctxFor(d));
+        return {
+          ...inner,
+          name: d.id,
+          chat: inner.chat
+            ? async (msg) => {
+                try {
+                  if (!(await this.enabled(this.ctx.db, msg.channel_id, d)))
+                    return { outcome: 'ignored' };
+                  return await inner.chat!(msg);
+                } catch (e) {
+                  console.error(`[modules] ${d.id} chat failed`, (e as Error).message);
+                  return { outcome: 'module_error' };
+                }
+              }
+            : undefined,
+        };
+      });
+  }
+
+  /** The chat words of the modules (Commands V2 refuses them). */
+  reservedWords() {
+    return [...this.modules.values()].flatMap((d) =>
+      (d.chatWords ?? []).map((word) => ({ word, module: d.label })),
+    );
+  }
+
+  /** The host's own switch `<id>.enabled`: modules that act for viewers (extension or chat), unless they keep theirs. */
+  private hasSwitch(d: ModuleDefinition) {
+    return !d.enabled && (!!d.viewer || !!d.chat);
   }
 
   async tick() {
@@ -211,7 +261,7 @@ export class ModuleHost {
 
   private async enabled(q: Queryable, channelId: string, d: ModuleDefinition) {
     if (d.enabled) return d.enabled(this.ctxFor(d), q, channelId);
-    return d.viewer
+    return this.hasSwitch(d)
       ? (await this.ctx.settings.get(q, channelId, `${d.id}.enabled`)) === 1
       : true;
   }
@@ -229,6 +279,9 @@ export class ModuleHost {
         lab_only: !!d.labOnly,
         capabilities: d.capabilities,
         enabled: await this.enabled(this.ctx.db, channelId, d),
+        /** The host's switch `<id>.enabled` exists (Studio shows it with the settings). */
+        has_switch: this.hasSwitch(d),
+        chat_words: d.chatWords ?? [],
         settings: Object.keys(d.settings ?? {}).map((k) => `${d.id}.${k}`),
         admin: Object.entries(d.admin ?? {}).map(([name, a]) => ({
           name,

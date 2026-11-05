@@ -208,6 +208,7 @@ export function createLabCore({
     createChatGames({
       chatPrices: moduleSettings.chatPrices(),
       hostChatModules: modules.chatModules(),
+      hostReservedWords: modules.reservedWords(),
       miniGameLimits: miniGameLimits(moduleSettings),
       db,
       clock: systemClock,

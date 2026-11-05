@@ -238,6 +238,7 @@ export function createCore(
       // Refonte H10: !rb and !fxcam prices from the module settings (defaults = today's prices).
       chatPrices: moduleSettings.chatPrices(),
       hostChatModules: modules.chatModules(),
+      hostReservedWords: modules.reservedWords(),
       miniGameLimits: miniGameLimits(moduleSettings),
       // « !roue » and the invitations: silent while the wheel is in mode v1 (production today).
       subWheel,

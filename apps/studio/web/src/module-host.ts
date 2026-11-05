@@ -13,6 +13,9 @@ export interface CatalogModule {
   lab_only: boolean;
   capabilities: string[];
   enabled: boolean;
+  /** The host's switch `<id>.enabled` exists (older Core: absent, read as « no switch »). */
+  has_switch?: boolean;
+  chat_words?: string[];
   settings: string[];
   admin: {
     name: string;
@@ -124,11 +127,11 @@ export function mountModuleHost(root: HTMLElement) {
     </div>`;
     for (const m of shown) {
       const card = root.querySelector<HTMLElement>(`[data-module="${m.id}"]`)!;
-      if (m.settings.length || m.viewer.length)
+      if (m.settings.length || m.has_switch)
         void mountSettingsPanel(
           card.querySelector<HTMLElement>('[data-role="settings"]')!,
           'Réglages',
-          [...(m.viewer.length ? [`${m.id}.enabled`] : []), ...m.settings],
+          [...(m.has_switch ? [`${m.id}.enabled`] : []), ...m.settings],
         ).refresh();
       // No journal on the host for this module (a historical one keeps its own): never an empty « Activité ».
       if (!m.capabilities.includes('history')) continue;

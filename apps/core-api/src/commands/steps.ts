@@ -125,7 +125,14 @@ export function draftSteps(r: Rendered): StepDraft[] {
 
 /** Who wrote the step: a Commands V2 invocation, or the Jeu des mots (no invocation). */
 export type StepOrigin =
-  'commands' | 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel' | 'music';
+  | 'commands'
+  | 'word_game'
+  | 'mini_game'
+  | 'raffle'
+  | 'sub_wheel'
+  | 'music'
+  /** A module of the module host (architecture socle): no migration per new module (20261121190000). */
+  | `module:${string}`;
 
 /**
  * Winner announcements (Tombola, Roue du Sub): independent messages scheduled for later (the reveal, the end of the
@@ -258,7 +265,7 @@ export async function insertWordGameSteps(
      * Who writes (no invocation): the Jeu des mots by default, the mini-games (Roulette / Slot), or a winner
      * announcement (Tombola, Roue du Sub).
      */
-    origin?: 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel' | 'music';
+    origin?: Exclude<StepOrigin, 'commands'>;
   },
 ) {
   const ttlMs = s.ttlMs ?? STEP_RULES.ttlMs;
@@ -303,7 +310,7 @@ export async function insertWordGameSteps(
 export async function insertAnnouncement(
   q: Queryable,
   s: Parameters<typeof insertWordGameSteps>[1] & {
-    origin: 'raffle' | 'sub_wheel';
+    origin: 'raffle' | 'sub_wheel' | `module:${string}`;
   },
 ) {
   await q.query('savepoint win_announcement');

@@ -11,7 +11,24 @@ export const objectifSoiree: ModuleDefinition = {
     'Un compteur d’objectif pour le live (démonstration du socle, Lab uniquement) : une cible réglable, des ajouts et une remise à zéro.',
   category: 'outils',
   labOnly: true,
-  capabilities: ['settings', 'admin', 'history', 'supervision'],
+  capabilities: ['settings', 'admin', 'history', 'supervision', 'chat'],
+  // « !objectif » in the chat: LeCroupier_ answers the progress (the host's chat door: switch, reserved word, origin).
+  chatWords: ['objectif'],
+  chat: (ctx) => ({
+    name: 'objectif_soiree',
+    async chat(msg) {
+      if (!/^!objectif(\s|$)/i.test(msg.text.trim())) return { outcome: 'ignored' };
+      return ctx.db.tx(async (q) => {
+        const points = (await ctx.state.get<number>(q, msg.channel_id, 'points')) ?? 0;
+        const cible = await ctx.setting(q, msg.channel_id, 'cible');
+        const written = await ctx.say(q, msg.channel_id, {
+          key: `msg:${msg.message_id}`,
+          text: `Objectif de soirée : ${points} / ${cible} points.`,
+        });
+        return { outcome: 'objective_said', replayed: written === 0 };
+      });
+    },
+  }),
   settings: {
     cible: {
       label: 'Cible de l’objectif',

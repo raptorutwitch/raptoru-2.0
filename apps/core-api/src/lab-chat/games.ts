@@ -62,6 +62,8 @@ export function createChatGames(o: {
   chatPrices?: ChatPrices;
   /** Chat modules of the module host (modules/host.ts), after the historical ones. */
   hostChatModules?: LabChatModule[];
+  /** The host modules' chat words (ModuleHost.reservedWords): Commands V2 refuses them. */
+  hostReservedWords?: { word: string; module: string }[];
   /** Mini-games stakes, delays and Duel cap (module host « mini_games », H10); absent = historical values. */
   miniGameLimits?: MiniGameLimitsReader;
   /** `!caution pseudo` + `oui` / `non` (absent: no chat Caution — the main Core only with CAUTION_CHAT=true). */
@@ -77,9 +79,13 @@ export function createChatGames(o: {
 }) {
   // Tombola's chat words stay Tombola's (reserved); Roulette / Slot words are the mini-games' (StreamElements aliases);
   // `!tts` is the TTS's.
-  const reserved = withInteractionWords(
+  const historical = withInteractionWords(
     withMiniGameWords(raffleReservedWords(o.raffle)),
   );
+  const reserved: typeof historical = async (q, channelId) => [
+    ...(await historical(q, channelId)),
+    ...(o.hostReservedWords ?? []),
+  ];
   const commands = new CommandsService(o.db, o.clock, { reserved });
   const admission = new CommandsAdmission(o.db, o.clock, {
     reserved,

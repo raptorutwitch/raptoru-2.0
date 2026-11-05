@@ -206,6 +206,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261121150000_module_settings_lab.sql',
   // Module host journal: the Lab twin of 20261121180000_module_activity.sql (same content).
   '20261121170000_module_activity_lab.sql',
+  // Module host: the chat answers' origin `module:<id>` (one migration for every future module).
+  '20261121190000_cmd_steps_module_origin_lab.sql',
 ]);
 
 /**
@@ -264,6 +266,8 @@ export const MAIN_CORE_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261108140000_cmd_steps_music_lab.sql',
   // Jeu des mots: durable ON / OFF and interval (refonte H8).
   '20261121140000_word_game_settings_lab.sql',
+  // Module host: the chat answers' origin `module:<id>` (main Core too: its modules answer in the real chat queue).
+  '20261121190000_cmd_steps_module_origin_lab.sql',
 ]);
 
 export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([
