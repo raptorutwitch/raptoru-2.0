@@ -88,13 +88,22 @@ Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par A
 
 ## Prochaine action
 
-Les seize décisions sont codées et testées automatiquement (H10 en partie). Rien n'est validé ni publié.
+**Mission « socle modulaire » (05/11, GO Lab)** en cours. Constats : `architecture/FRICTIONS.md`, intention :
+`architecture/VISION.md`.
 
-1. **Antoni** : relire CONTEXTE § 19 (choix techniques), tester en Lab (`npm run studio` depuis ce worktree, profil Lab),
-   puis décider du déploiement (ordre : ROADMAP « Ordre de déploiement »). H1 change la Production : à annoncer.
-2. H10, suite : Caution, Votekick, mini-jeux, Duel (mécanisme `module_settings`).
-3. F4 / F5 / F3 restants (ROADMAP « État au 05/11 ») ; pages Mini-jeux et Votekick (P1-12) ; refonte UX des lots 5, 6, 8.
-4. Nettoyage en fin de chantier : conteneur Docker `studio-ux-test-pg` (port 55499), sur GO d'Antoni.
+- Fait : socle Core `e780437`.
+  - `apps/core-api/src/modules/` : kit (contrat, vérifications), host (catalogue, réglages, actions admin et viewer,
+    paiement, journal, remboursement, expiration), `index.ts` = la liste unique.
+  - Routes génériques `http/modules-routes.ts`.
+  - Démos A `objectif-soiree.ts` et B `coffre-mystere.ts` (Lab uniquement).
+- Reste, dans l'ordre :
+  1. Studio : un relais générique `/api/modules*` dans la chaîne de relais (corriger le contrôle d'hôte de Progression,
+     Boutique et Défis) ; `web/src/http.ts` partagé ; vue générique `module-host` (page Laboratoire) ; fournisseur
+     « Modules » du Centre de contrôle.
+  2. Extension : routes génériques `/modules/v3/<id>/…` dans `ext-facade.ts` et `lab-ebs.ts` ; `shared/module-registry.js`,
+     `shared/purchase.js` (clé par intention), vue `shared/coffre-mystere.js`, branche générique dans `ui.js`.
+  3. Démo C : mini-jeux (réglages H10 via `module_settings`, état au catalogue).
+  4. Docs `architecture/` : CONTRATS, GUIDE_MODULE, GUIDE_EXTENSION, GUIDE_MODERATION, GUIDE_LAB, PREUVES, DECISIONS.
 
 ## Reprendre
 
