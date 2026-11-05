@@ -263,7 +263,7 @@ Rien n'atteint la Production sans nouvelle autorisation explicite (déploiement,
 | H6 | Spotify en fin de live : fermer, annuler les non commencées, **rembourser** quand c'est possible, jamais deux fois. | codé, testé (délai de grâce technique de 10 min, voir § 19) |
 | H7 | Activités ponctuelles **manuelles** (aucun démarrage automatique nouveau). | rien à coder (comportement actuel) |
 | H8 | Jeu des mots : **ON/OFF durable**, intervalle réglable (5-15 min par défaut). | codé, testé |
-| H9 | Fidélité `tier_unknown` : **taux de base immédiat, complément différé** une seule fois. | à faire |
+| H9 | Fidélité `tier_unknown` : **taux de base immédiat, complément différé** une seule fois. | codé, testé (règle de preuve au § 19) |
 | H10 | Prix, recharges, durées, limites **réglables** (§ D.3 Essentiels), bornes Core ; jamais cotes ni tables de gains. | en partie : mécanisme + `!rb`, `!fxcam`, Bonk ; reste Caution, Votekick, mini-jeux, Duel |
 | H11 | « Exécuter maintenant (réel) » et aperçu distincts ; Spotify à blanc. | codé, testé |
 | H12 | Bonk : prix et recharge réglables, **valeurs actuelles du Core** par défaut. | codé, testé (200 Jetons, délai 0 s par défaut) |
@@ -290,6 +290,10 @@ Rien n'atteint la Production sans nouvelle autorisation explicite (déploiement,
   (comportement actuel) ; indépendant du cooldown personnel de la modération.
 - **H14, bornes** : 1 à 30 paliers, 0 à 20 000 Jetons chacun, jamais en baisse d'un palier au suivant.
 - **H10, bornes** : `!rb` 1 000 à 1 000 000 ; `!fxcam` 100 à 100 000 ; Bonk 10 à 100 000 ; délai Bonk 0 à 600 s.
+- **H9, ce qui fait foi** : le premier relevé complet des abonnés reçu après le gain, dans les 36 h. Listé avec un
+  niveau → complément (dû − base), une fois ; absent → base juste ; un événement d'abonnement Twitch après le gain → on
+  ne peut pas prouver le niveau au moment du gain, rien de plus (« indéterminé ») ; aucun relevé dans les 36 h →
+  « expiré ». Jamais un niveau supposé.
 - **H2 / H3 / H4** : délais pris tels que décidés (2 min, 30 min, 5 min) ; le délai TTS est fixé à la création de chaque
   message (un message déjà en attente garde le sien).
 

@@ -136,7 +136,7 @@ Ordre recommandé : F1 → F2 → F4 → F3 → F5 → F6 (au fil des pages) →
 |---|---|---|
 | F1 | Régie sans vert sur une intention (points de chaîne, TTS, Spotify sur l'admission réelle du Core, source d'alertes) ; échec Production visible ; « Exécuter maintenant (réel) » + Spotify à blanc ; libellés réels (Alertes, Random Ban, Modération) ; Extension Lab « joue sur OBS » | — |
 | F2 | P0-2, P0-3, P0-4, H2, H3, H4 | — |
-| F3 | P0-5 (bot : événement de live rejoué tant que le Core ne l'a pas enregistré) | H9 ; pont des jeux et fenêtre de confiance Helix ; P2-9 |
+| F3 | P0-5 (bot : événement de live rejoué tant que le Core ne l'a pas enregistré) ; H9 (complément de fidélité) | pont des jeux et fenêtre de confiance Helix ; P2-9 ; P1-10 alerte sur l'âge du relevé des abonnés |
 | F4 | « Prêt pour le live » (18 contrôles, lecture seule) | relance au passage en live + notification ; P1-3 configuration effective détaillée ; P1-4 supervision du lecteur d'effets et des overlays |
 | F5 | P1-5 : micro et filtres rétablis à la fermeture | avertir avant de quitter pendant un effet (Electron) ; P1-6 ; P1-8 |
 | F6 | H8, H10 (`!rb`, `!fxcam`, Bonk), H12, H13, H14, H15, H16 | H10 : Caution, Votekick, mini-jeux, Duel (même mécanisme) ; pages Mini-jeux et Votekick |

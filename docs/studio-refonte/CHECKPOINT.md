@@ -18,6 +18,7 @@ le travail touche au comportement d'un module.
 
 Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par Antoni, rien de publié) :
 
+- `3a06b78` **H9** complément de fidélité · `3d8f681` attentes Studio alignées (H3, H5, P0-2).
 - `a53873a` **H10 / H12 / H14** réglages (migration `module_settings` préparée) · `061c5a8` **H6** Spotify en fin
   de live · `23b8434` suites PostgreSQL canoniques avec live.
 - `c93dc4d` Jeu des mots dans « Prêt pour le live » · `f9e9724` **H1** achats liés au stream uniquement pendant le live
@@ -87,11 +88,13 @@ Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par A
 
 ## Prochaine action
 
-1. H9 (complément `tier_unknown`) : taux de base immédiat, complément décidé par le premier relevé complet des abonnés
-   reçu après le gain (36 h au plus), une seule fois (clé dédiée) ; jamais payé si non vérifiable.
-2. H10, suite : Caution, Votekick, mini-jeux, Duel (même mécanisme `module_settings`).
-3. F4 / F5 restants (ROADMAP « État au 05/11 »). Pages Mini-jeux et Votekick (P1-12).
-4. Antoni : relire CONTEXTE § 19 (choix techniques), tester en Lab, décider du déploiement.
+Les seize décisions sont codées et testées automatiquement (H10 en partie). Rien n'est validé ni publié.
+
+1. **Antoni** : relire CONTEXTE § 19 (choix techniques), tester en Lab (`npm run studio` depuis ce worktree, profil Lab),
+   puis décider du déploiement (ordre : ROADMAP « Ordre de déploiement »). H1 change la Production : à annoncer.
+2. H10, suite : Caution, Votekick, mini-jeux, Duel (mécanisme `module_settings`).
+3. F4 / F5 / F3 restants (ROADMAP « État au 05/11 ») ; pages Mini-jeux et Votekick (P1-12) ; refonte UX des lots 5, 6, 8.
+4. Nettoyage en fin de chantier : conteneur Docker `studio-ux-test-pg` (port 55499), sur GO d'Antoni.
 
 ## Reprendre
 

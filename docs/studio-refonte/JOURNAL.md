@@ -72,6 +72,10 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   12 échecs, exactement ceux-là) · `c93dc4d` Jeu des mots dans la préparation · `061c5a8` **H6** · `a53873a` **H10 /
   H12 / H14**.
 - Suite Core complète après H1 : 1 351 tests verts. Bot : 287 verts.
+- Régression complète avant H9 : Core 1 360 verts ; Studio 876 (3 attentes ajustées à H3 / H5 / P0-2, `3d8f681` ;
+  `effects-player` instable sous charge, vert seul) ; extension 72 ; build web et lint propres.
+- `3a06b78` **H9** : complément de fidélité ; course à deux Cores sur PostgreSQL (même relevé appliqué 6 fois) : un
+  complément par gain.
 
 ## Vérifications marquantes
 
