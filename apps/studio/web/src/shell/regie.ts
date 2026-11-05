@@ -442,7 +442,7 @@ export function liveHtml(
         : v === 'off'
           ? '<p class="rs-state">Module TTS coupé sur ce profil.</p>'
           : `<p class="rs-state ${v.state !== 'active' ? '' : v.ready === true ? 'is-ok' : v.ready === false ? 'is-down' : 'is-unknown'}">${v.state === 'paused' ? 'En pause' : v.state === 'disabled' ? 'Désactivé' : v.ready === false ? 'Activé, lecteur absent' : v.ready === true ? 'Actif' : 'Activé (lecteur non vérifié)'} · ${v.current ? `lit le message de ${esc(v.current)}` : 'aucun message en cours'}</p>
-             <p class="rs-muted">${v.waiting === null ? 'File non lisible ici.' : `${v.waiting} message(s) en attente.`}${lab ? '' : ' En Production, pause, stop et file se pilotent dans Modération.'}</p>
+             <p class="rs-muted">${v.waiting === null ? 'File non lisible ici.' : `${v.waiting} message(s) en attente.`} Un message non lu après 5 min d’attente est remboursé.${lab ? '' : ' En Production, pause, stop et file se pilotent dans Modération.'}</p>
              ${lab ? `<div class="rs-live-acts">${v.state === 'paused' ? btn('tts-resume') : btn('tts-pause')}${v.current ? btn('tts-stop', 'danger') : ''}</div>` : ''}`,
     )}
     ${card(

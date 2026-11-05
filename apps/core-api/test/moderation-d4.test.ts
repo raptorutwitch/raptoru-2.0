@@ -1377,11 +1377,12 @@ describe('D4 read models (history, ledger, drawer, search)', () => {
       'soundboard',
       'tts',
     ]);
+    // a waited 20 min unread: expired and refunded since refonte H4 (5 min); b was cancelled and refunded.
     expect(
       (await m.interactions(CHANNEL, { status: 'refunded' })).items.map(
         (i) => i.interaction_id,
       ),
-    ).toEqual([b.interaction_id]);
+    ).toEqual([b.interaction_id, a.interaction_id]);
     expect(
       (await m.interactions(CHANNEL, { module: 'soundboard' })).items,
     ).toHaveLength(1);

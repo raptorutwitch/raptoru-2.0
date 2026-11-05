@@ -121,7 +121,9 @@ export const DEFAULT_TTS_RULES: TtsRules = {
   },
   speech: { chars_per_second: 13.5, overhead_ms: 2_400 },
   transition_gap_ms: 1_500,
-  expires_after_ms: 30 * 60_000,
+  // Refonte H4 (decided 05/11): 5 min (was 30): a paid voice is read in the moment, or refunded. Set per message at
+  // its creation (expires_at): a message already waiting keeps its own deadline.
+  expires_after_ms: 5 * 60_000,
   claim_lease_ms: 30_000,
   playing_lease_factor: 2,
   playing_lease_margin_ms: 30_000,
