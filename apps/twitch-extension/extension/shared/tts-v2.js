@@ -735,10 +735,13 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
   };
 }
 
+/** TTS V2 takes over the session's « tts » module when the session offers it (otherwise TTS V1: tts-v1.js). */
+export const ttsV2Applies = ({ module, client }) => !!module?.tts_v2 && typeof client?.ttsBuy === 'function';
+
 // Module variant (module-registry.js): TTS V2 takes over the session's « tts » module when the session offers it.
 registerModuleVariant({
   id: 'tts',
-  match: ({ module, client }) => !!module?.tts_v2 && typeof client?.ttsBuy === 'function',
+  match: ttsV2Applies,
   intro: false,
   bodyData: { ttsV2: '1' },
   view: ({ document, client, state, host }) => {

@@ -13,12 +13,11 @@ import {
   unreadNotificationCount,
 } from './notifications.js';
 import { createEmoteAccess } from './emote-access.js';
-import { walletPaymentMethods, walletCanPayTokens } from './wallet-payment.js';
+import { walletPaymentMethods } from './wallet-payment.js';
 import {
   createIconButton,
   createWalletFace,
   createCurrencySwitch,
-  createMultiCurrencyPayment,
   formatWalletExactValue,
   UI_ICONS,
 } from './ui-primitives.js';
@@ -28,8 +27,9 @@ import './soundboard-view.js';
 // The Bonk screen registers itself as the variant of « bonk » (bonk-view.js).
 import './bonk-view.js';
 import { readTutorialDisabled, writeTutorialDisabled } from './tutorial-prefs.js';
-// Module variants register themselves (TTS V2, Tombola V2).
+// Module variants register themselves (TTS V2, then TTS V1 for the sessions without V2; Tombola V2).
 import './tts-v2.js';
+import './tts-v1.js';
 // The D4 console registers itself as the variant of « moderation » (with its « Commandes » view).
 import './moderation-v2.js';
 // Session modules: each registers itself (card, availability, view) — the import order is the Hub order.
@@ -142,18 +142,6 @@ function homeModuleDescription(mod) {
 
 function visibleModuleLabel(mod) {
   return mod?.id === ACTIONS_MODULE.id ? 'Historique' : mod?.label;
-}
-
-function normalizeTtsDraft(value) {
-  return String(value ?? '')
-    // eslint-disable-next-line no-control-regex -- control characters are stripped on purpose
-    .replace(/[\u0000-\u001F\u007F-\u009F]/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim();
-}
-
-function ttsDraftLength(value) {
-  return Array.from(normalizeTtsDraft(value)).length;
 }
 
 function raffleSeconds(raffle) {
@@ -325,7 +313,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let retryLoad = null;
   let successMessage = null;
   let actionError = null;
-  let ttsActionError = null;
+  /** A refused action of a view that shows its own error (`errorScope` = its module id): { scope, message }. */
+  let scopedError = null;
   let tutorialOpen = false;
   let notificationCenterOpen = false;
   let viewerPreferencesOpen = false;
@@ -385,6 +374,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         memory: (moduleMemory[mod?.id] ??= {}),
         /** The action runner (busy flag, refresh, notifications); `feedbackScope` + `onSettled`: the view says it. */
         run: (node, task, options) => run(node, task, options),
+        /** The message of this module's last refused action run with `errorScope: <module id>` (cleared by the next state). */
+        scopedError: () => (scopedError?.scope === mod?.id ? scopedError.message : null),
         /** The module's active restriction that holds actions (cooldown or block), or null. */
         restriction: () => {
           const restriction = restrictionOf(mod?.id);
@@ -457,9 +448,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     refreshHost: () => onRefresh?.(),
     following: () => openModule === 'bonk',
   });
-  const drafts = {
-    tts: { text: '' },
-  };
   root.classList.add('jdm-shell');
   root.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
@@ -679,7 +667,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     loadError = null;
     retryLoad = null;
     actionError = null;
-    ttsActionError = null;
+    scopedError = null;
     syncViewerPreferenceIdentity(next);
     // The open module's own live update (module variants: TTS V2, Tombola V2…): absorbed, the host does not redraw.
     if (render && !hadLoadError && hostView && hostViewId === openModule && hostVariant?.onState
@@ -756,7 +744,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     busy = true;
     actionError = null;
     if (feedbackScope) successMessage = null;
-    if (errorScope === 'tts') ttsActionError = null;
+    if (errorScope) scopedError = null;
     root.dataset.busy = '1';
     if (!feedbackScope) flash(
       node,
@@ -788,7 +776,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       actionError = confirmation?.confirmed === false
         ? String(confirmation.message || 'Commande envoyée, exécution non confirmée')
         : null;
-      if (errorScope === 'tts') ttsActionError = null;
+      if (errorScope) scopedError = null;
       if (!feedbackScope) {
         if (confirmation?.confirmed === true) {
           successMessage = String(confirmation.message || (typeof success === 'function' ? success(result) : success || 'Action exécutée ✓'));
@@ -803,11 +791,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       if (feedbackScope) onSettled?.(true);
     } catch (error) {
       const message = errorLabel(error?.code);
-      if (errorScope === 'tts') ttsActionError = message;
+      if (errorScope) scopedError = { scope: errorScope, message };
       else if (!feedbackScope) actionError = message;
       if (feedbackScope) onSettled?.(false, error);
       const notificationModule = notificationModuleForNode(node,
-        notification?.module || (errorScope === 'tts' ? 'tts' : feedbackScope || null));
+        notification?.module || errorScope || feedbackScope || null);
       publishRuntimeNotification(runtimeNotificationForError(error, {
         module: notificationModule,
         title: notification?.title || `Action ${notificationModule === 'global' ? '' : `${notificationModule} `}échouée`.replace(/\s+/g, ' ').trim(),
@@ -891,211 +879,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
 
   // --- formulaires par module ----------------------------------------------
-
-  function ttsForm(mod, body) {
-    const pending = pendingFor('tts');
-    const interactionsAvailable = state?.interactions?.available !== false;
-    const moderation = state?.moderation?.tts ?? {};
-    const ttsAvailable = interactionsAvailable
-      && !moderation.paused
-      && !moderation.blocked
-      && !moderation.viewer_busy
-      && Number(moderation.cooldown_remaining_s || 0) <= 0;
-    const approvalMode = moderation.mode === 'approval';
-    const ttsRules = mod.tts_rules && typeof mod.tts_rules === 'object' ? mod.tts_rules : null;
-    const actionLabel = approvalMode ? 'Soumettre' : 'Envoyer';
-    const { displayMethods, spendMethods } = walletPaymentMethods(mod, state);
-    const supportsPaymentMethod = (method) => spendMethods.includes(method);
-    const paymentMethodsFor = () => displayMethods;
-
-    const normalizePaymentMethod = (methods) => {
-      const available = methods.length ? methods : ['tokens'];
-      if (available.includes(paymentChoice.tts)) return paymentChoice.tts;
-      paymentChoice.tts = available[0];
-      return paymentChoice.tts;
-    };
-
-    const quoteFor = (raw) => {
-      const length = ttsDraftLength(normalizeTtsDraft(raw));
-      const tier = (ttsRules?.tiers || []).find((candidate) => (
-        length >= Number(candidate.min)
-          && (candidate.max === null || length <= Number(candidate.max))
-      ));
-      const multiplier = Number(tier?.price_multiplier || 1);
-      return {
-        length,
-        tier,
-        multiplier,
-        price: tier
-          ? Math.round(Number(ttsRules.base_price) * multiplier)
-          : Number(mod.token_cost || 0),
-      };
-    };
-
-    const maxChars = Math.max(1, Number(mod.max_chars) || 800);
-    const field = el('textarea', 'jdm-input jdm-tts-input');
-    // maxlength compte les unites UTF-16 dans le navigateur, alors que le
-    // contrat serveur compte les points de code. Le controle metier ci-dessous
-    // reste donc la source de verite ; cette borne evite seulement une saisie
-    // deraisonnable avant le retour serveur.
-    field.maxLength = maxChars * 2;
-    field.rows = 2;
-    field.placeholder = 'Ton message…';
-    field.setAttribute('aria-label', 'Message TTS');
-    field.dataset.draftKey = 'tts-text';
-    field.value = drafts.tts.text;
-
-    const counter = el('span', 'jdm-counter', `${ttsDraftLength(field.value)}/${maxChars}`);
-    const help = el('p', 'jdm-hint jdm-tts-help', 'Écris du texte pour le faire lire à l’oral sur le stream.');
-    const actions = el('div', 'jdm-actions jdm-tts-actions');
-    actions.setAttribute('aria-label', 'Actions TTS');
-
-    const payload = () => {
-      const text = normalizeTtsDraft(field.value);
-      if (!text) {
-        flash(body, 'Écris un message.');
-        return null;
-      }
-      if (Array.from(text).length > maxChars) {
-        flash(body, `Message trop long : ${maxChars} caractères maximum.`);
-        return null;
-      }
-      return { text };
-    };
-
-    let paymentControl = null;
-    const syncControls = () => {
-      const valid = Boolean(normalizeTtsDraft(field.value))
-        && ttsDraftLength(field.value) <= maxChars;
-      counter.textContent = `${ttsDraftLength(field.value)}/${maxChars}`;
-      const hasText = Boolean(normalizeTtsDraft(field.value));
-      const quote = quoteFor(field.value);
-      const methods = paymentMethodsFor();
-      const method = normalizePaymentMethod(methods);
-      const usingCredits = method === 'credits';
-      const cost = usingCredits ? 1 : quote.price;
-      const methodSupported = supportsPaymentMethod(method);
-      const methodAvailable = usingCredits ? pending.length > 0 : walletCanPayTokens(state.wallet, cost);
-      const unit = usingCredits ? 'crédit' : 'jetons';
-      const costLabel = `${fmt(cost)} ${unit}`;
-      if (hasText) {
-        const tierText = quote.tier
-          ? ` · palier ${quote.tier.id} · ×${String(quote.multiplier).replace('.', ',')}`
-          : '';
-        // Le prix reste dans le CTA : la ligne d'aide décrit uniquement la
-        // longueur et le palier pour éviter une seconde source visuelle de
-        // vérité sur le coût.
-        help.textContent = `${fmt(quote.length)} caractères${tierText}`;
-      } else {
-        help.textContent = 'Écris du texte pour le faire lire à l’oral sur le stream.';
-      }
-      actions.classList.toggle('is-visible', hasText);
-      actions.setAttribute('aria-hidden', String(!hasText));
-      body.dataset.paymentMethod = method;
-      paymentWalletSync?.(methods, (next) => {
-        paymentChoice.tts = next;
-        syncControls();
-      });
-      paymentControl?.sync({
-        method,
-        methods,
-        cost: fmt(cost),
-        unit,
-        disabled: !valid || !ttsAvailable || !methodSupported || !methodAvailable,
-        hint: !ttsAvailable
-          ? 'TTS indisponible'
-          : !methodSupported
-            ? 'Paiement indisponible pour cette monnaie'
-            : usingCredits && !pending.length
-              ? 'Crédits TTS indisponibles'
-              : !usingCredits && !methodAvailable
-                ? 'Jetons insuffisants ou solde indisponible'
-                : '',
-        label: actionLabel,
-        ariaLabel: hasText ? `${actionLabel} pour ${costLabel}` : actionLabel,
-        title: hasText ? `${actionLabel} pour ${costLabel}` : actionLabel,
-        amounts: {
-          tokens: state?.wallet?.unavailable ? null : state?.wallet?.available,
-          credits: Array.isArray(state?.pending_actions) ? pending.length : null,
-        },
-      });
-    };
-
-    paymentControl = createMultiCurrencyPayment({
-      className: 'rl-pay--tts',
-      modern: true,
-      actionLabel,
-      enableMethodSwitch: true,
-      onMethodChange: (method) => {
-        paymentChoice.tts = method;
-        syncControls();
-      },
-      onAction: (method) => {
-        if (!ttsAvailable || !supportsPaymentMethod(method)) return;
-        if (method === 'tokens' && !walletCanPayTokens(state.wallet, quoteFor(field.value).price)) return;
-        const data = payload();
-        if (!data) return;
-        if (method === 'credits') {
-          return run(body, () => pending[0]
-            ? client.useRedemption(pending[0].redemption_id, 'tts', data)
-            : Promise.reject(Object.assign(new Error('insufficient_credits'), { code: 'insufficient_credits' })), {
-            errorScope: 'tts',
-            onSuccess: () => { drafts.tts.text = ''; },
-          });
-        }
-        return run(body, () => client.spendTokens('tts', data), {
-          errorScope: 'tts',
-          onSuccess: () => { drafts.tts.text = ''; },
-        });
-      },
-    });
-
-    if (state?.lab_mode) {
-      const lab = el('button', 'jdm-btn jdm-ui-action jdm-btn--primary jdm-tts-action jdm-tts-action--lab', 'Tester gratuitement');
-      lab.type = 'button';
-      lab.addEventListener('click', () => {
-        const data = payload();
-        if (data) return run(body, () => client.runLab('tts', data), {
-          errorScope: 'tts',
-          onSuccess: () => { drafts.tts.text = ''; },
-        });
-      });
-      actions.append(lab);
-    }
-
-    field.addEventListener('input', () => {
-      drafts.tts.text = field.value;
-      syncControls();
-    });
-
-    const row = el('div', 'jdm-row');
-    row.append(counter);
-    const composer = el('div', 'jdm-tts-composer');
-    composer.append(field, row);
-    body.append(composer, help, actions);
-    actions.prepend(paymentControl.node);
-    if (ttsActionError) {
-      body.append(el('p', 'jdm-flash jdm-flash--error jdm-tts-error', ttsActionError));
-    }
-    if (!interactionsAvailable && !state?.lab_mode) {
-      body.append(el('p', 'jdm-hint', 'Interactions en pause : SAMMI se reconnecte. Ton crédit et tes jetons restent intacts.'));
-    } else if (moderation.paused) {
-      body.append(el('p', 'jdm-hint', 'Le TTS est mis en pause par la modération. Rien ne sera consommé.'));
-    } else if (moderation.blocked) {
-      body.append(el('p', 'jdm-hint', 'Le TTS n’est pas disponible pour ton compte.'));
-    } else if (moderation.viewer_busy) {
-      body.append(el('p', 'jdm-hint', 'Ton TTS précédent est encore en attente ou en lecture.'));
-    } else if (Number(moderation.cooldown_remaining_s || 0) > 0) {
-      body.append(el('p', 'jdm-hint', `Cooldown TTS : encore ${fmt(moderation.cooldown_remaining_s)} s.`));
-    } else if (approvalMode) {
-      body.append(el('p', 'jdm-hint', 'Validation active : ton message attendra un accord, sans consommer ton crédit ni tes jetons avant celui-ci.'));
-    }
-    if (mod.kinds?.includes('redemption')) {
-      body.append(el('p', 'jdm-hint jdm-tts-credit-hint',
-        `Ou utilise la récompense TTS (${fmt(mod.channel_points_cost)} points) dans le menu Twitch : elle apparaîtra ici.`));
-    }
-    syncControls();
-  }
 
   // Soundboard viewer (markup sbx-*, feuille soundboard.css). Le son est la star : cartes lisibles,
   // aperçu distinct de l'achat, prix et envoi regroupés dans la barre d'action du bas.
@@ -2641,7 +2424,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     return panel;
   }
 
-  const FORMS = { tts: ttsForm, raffle_join: raffleForm };
+  const FORMS = { raffle_join: raffleForm };
 
   // --- rendu ---------------------------------------------------------------
 
