@@ -162,7 +162,7 @@ migration est exigée avant le premier.
 `ctx.host` fournit ce que `ui.js` passait à la main :
 - `home()`, `refresh()` ;
 - `payment` : le choix de monnaie, rangé par module dans `paymentChoice` ;
-- `walletMethods()`, `restrictionChips(id)`, `stopRaffleTimer()`.
+- `walletMethods()`, `restrictionChips(id)` (`stopRaffleTimer()` retiré le 05/11 : le compte à rebours de la Tombola V1 appartient à sa vue).
 
 Un seul emplacement dans `ui.js` (`hostView`, `hostViewId`, `hostVariant`) sert aux modules de session, aux variantes et
 aux vues du socle. Le panneau de modération du socle n'est monté que pour une vue du socle.
@@ -207,4 +207,20 @@ et Bonk) et reste facultatif : TTS V2, Tombola V2 et D4 n'en utilisent aucun et 
 
 Règle des instances persistantes : une instance gardée dans `host.memory` (chargeur, tutoriel de Bonk) ne capture jamais
 la fermeture d'une vue ; ses rappels passent par `memory.handlers`, que la vue ouverte remplace.
+
+## 13. Extension : chemins V1 et porte-monnaie déclaré (05/11, « derniers couplages »)
+
+Toujours le même contrat de variante (§ 10-12). Les écrans V1 sont des variantes comme les autres, enregistrées
+**après** leur V2 avec le complément exact de son `match` (`ttsV2Applies`, `tombolaV2Applies`, `moderationV2Applies`,
+exportés par le fichier V2) : jamais deux écrans pour une même interaction.
+
+| Ajout | Rôle | Utilisé par |
+|---|---|---|
+| `wallet: { label, credits(state) }` (définition de variante) | le porte-monnaie d'en-tête devient le sélecteur de monnaie du module, avec son solde de crédits et son nom | Soundboard, TTS V1, TTS V2 |
+| `host.run(node, task, { errorScope: <id du module> })` + `host.scopedError()` | un refus affiché par la vue elle-même, effacé par l'état suivant (généralise l'ancien emplacement réservé au TTS) | TTS V1 (et le comportement historique de `run`) |
+| `host.feedback()` | les messages d'action de l'hôte, pour une vue qui les montre à sa place (le succès une fois) | modération V1 |
+
+Instance persistante : la console de modération V1 vit dans `host.memory` (onglet, recherches, utilisateur choisi,
+suspensions gardés le temps du panneau, comme avant) ; une visite l'ouvre et la ferme (`open` / `close`), son Échap
+n'agit que pendant une visite.
 

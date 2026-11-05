@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026 — Frontières Soundboard et Bonk terminées (`dccec77` + docs). Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 05/11/2026 — Chemins V1 de l'extension sortis de `ui.js` (`9443ac1` + docs). Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -220,6 +220,21 @@ Prochaines étapes (ordre conseillé) :
 1. Antoni valide dans le vrai Lab (`npm run studio`) : Soundboard (tri à la souris, volume, glisser, crédits) et Bonk
    (tir, salve, Twitch lié, panneau Twitch étroit), en viewer puis en modérateur.
 2. TTS V1, Tombola V1 et modération V1 : encore dans `ui.js` ; à sortir quand on y retouche (même méthode).
+
+### Derniers couplages de l'extension (05/11)
+
+| Commit | Contenu |
+|---|---|
+| `6e0e4ae` | harnais V1 en mode démo (`v1-parity.e2e.ts`) ; TTS V1 = variante (`tts-v1.js`) |
+| `2ad1bb1` | Tombola V1 = variante (`tombola-v1.js`) |
+| `b27da6e` | modération V1 = variante (`moderation-v1.js`) ; Échap sur l'historique d'un utilisateur corrigé |
+| `9443ac1` | porte-monnaie d'en-tête déclaré par la variante (`wallet`) |
+
+`ui.js` : 3 444 → 1 642 lignes. Les V1 restent les écrans des sessions sans V2 (Lab sans Core, calibration, TTS de
+Production en repli) : rien supprimé. Détail : architecture/MIGRATIONS.md, CONTRATS § 13.
+
+À vérifier par Antoni (facultatif, ces écrans ne servent pas en Production) : un Studio Lab sans Lab Core
+(`BONK_LAB_CORE_URL` absent) affiche TTS, Tombola et modération V1 comme avant.
 
 ## Prochaine action
 

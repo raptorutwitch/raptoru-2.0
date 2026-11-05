@@ -204,3 +204,12 @@ sous charge, jamais seul) et laissait la pile en « testeurs seulement » en cas
   partait avec un identifiant vide). Visible seulement sous charge ; désactivé comme « Créditer ». Suite E2E complète
   84/84 après reconstruction de l'interface Studio (la pile sert `apps/studio/web/dist`).
 
+## Chemins V1 (05/11)
+
+| Lot | Problème précis | Preuve |
+|---|---|---|
+| Modération V1 (`b27da6e`) | ouvrir l'historique d'un utilisateur redessinait le panneau et perdait le focus hors du panneau : Échap ne fermait plus le tiroir | E2E en échec sur l'ancien code (vérifié en remettant les fichiers de HEAD), vert après |
+
+Harnais : l'extension en mode démo sur la pile E2E (`runtime-config.js` servi par le test) ; fixtures locales ; requêtes
+sortantes enregistrées et vides.
+

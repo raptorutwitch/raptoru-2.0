@@ -190,3 +190,11 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Outils : les skills navigateur / bureau n'ont pas d'outil branché dans cette session ; Playwright et les captures
   avant/après restent la vérification visuelle.
 
+## 05/11/2026 — Chemins V1 de l'extension
+
+- Vérifié qui affiche les V1 : jamais la Production pour la Tombola et la modération (le Core envoie toujours les V2),
+  le TTS seulement en repli ; le Lab sans Core et le paquet de calibration toujours. Conservés.
+- Harnais : l'extension en mode démo sur la pile E2E ; tests écrits avant chaque déplacement.
+- TTS V1, Tombola V1, modération V1 en variantes ; le porte-monnaie d'en-tête lit le paiement déclaré. `ui.js` 1 642.
+- Défaut trouvé : Échap ne fermait pas l'historique d'un utilisateur dans la console V1 (focus perdu) ; corrigé.
+

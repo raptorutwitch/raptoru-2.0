@@ -165,3 +165,23 @@ Méthode : E2E de parité écrit et vert **avant** chaque extraction, puis extra
 Développer Soundboard ou Bonk ne demande plus de toucher `ui.js` : écran, état, écouteurs, minuteries, persistance et
 règles sont dans leurs fichiers ; seuls un nouveau service de l'hôte ou un nouvel emplacement d'en-tête le feraient.
 
+## Extension : chemins V1 (05/11, « derniers couplages »)
+
+Consommateurs réels vérifiés : le Core de Production envoie toujours `raffle_v2: true` et `moderation_v2: true`, et
+`tts_v2` dès que sa configuration TTS répond (`ext-facade.ts`, identique dans 8a897a5). Les V1 restent donc l'écran :
+- d'un Studio Lab dont le Lab Core n'est pas branché (`BONK_LAB_CORE_URL` absent) ou sans worker TTS ;
+- du paquet de calibration (`build:calibration`, mode démo) ;
+- du TTS de Production si `/v1/lab/tts/config` ne répond pas (repli).
+Aucune n'est supprimée.
+
+| Lot | Ancien chemin | Nouveau chemin | Preuve |
+|---|---|---|---|
+| Harnais (`6e0e4ae`) | aucun test des V1 (la pile E2E n'offre que les V2) | `v1-parity.e2e.ts` : l'extension en mode démo (fixtures `demo-data.js`, rien ne sort) | vert avant chaque déplacement |
+| TTS V1 (`6e0e4ae`) | `ttsForm` + `drafts.tts` + `ttsActionError` dans `ui.js` | `tts-v1.js` (variante) | E2E V1 + TTS V2 |
+| Tombola V1 (`2ad1bb1`) | `raffleForm`, 10 aides, minuterie, instantané, tiroir, confirmation d'inscription dans `updateState`, Échap, `navigateTo` | `tombola-v1.js` (variante) | E2E V1 + V2 + cycle de vie 13/13 |
+| Modération V1 (`b27da6e`) | ≈ 1 150 lignes, 14 variables, branche de `render`, Échap | `moderation-v1.js` (instance persistante), `history-format.js` | E2E V1 6/6, D4 |
+| Porte-monnaie (`9443ac1`) | `soundboardView` / `ttsView`, somme de crédits, compte TTS dans `render` | `wallet` déclaré par la variante | E2E 20/20 |
+
+`ui.js` : 3 444 → 1 642 lignes (6 005 au début des frontières). Il ne nomme plus aucun module payant ; restent les
+couleurs du Hub, la pastille « Ouverte / Fermée » de l'en-tête Tombola, le tutoriel global et l'Historique du viewer.
+
