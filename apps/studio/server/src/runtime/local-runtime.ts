@@ -1,4 +1,9 @@
 import { randomBytes } from 'node:crypto';
+import {
+  cleanEnv,
+  MAIN_LAB_CORE_PORT,
+  type MainLabCore,
+} from './main-lab-core.js';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
@@ -116,6 +121,17 @@ export interface RuntimeDeps {
   logs: LogBuffer;
   /** Removes known secrets from any detail shown in the UI. */
   redact: (text: string) => string;
+  /**
+   * The local Lab on the MAIN Core (opt-in, runtime/main-lab-core.ts): `labCore` is then that Core's process; the
+   * database step prepares ITS database (production migrator, fixtures, Studio pairing) instead of the Lab one.
+   */
+  main?: {
+    port: number;
+    env: (coreDatabaseUrl: string | undefined) => Record<string, string>;
+    prepare: (env: Record<string, string>) => Promise<string>;
+    /** Shown on the « providers » line: what of the outside this Core reads. */
+    providers: string;
+  };
 }
 
 const LOCAL_HOSTS = ['127.0.0.1', 'localhost'];
@@ -144,13 +160,26 @@ export class LocalRuntime {
   /** Since when the live Lab Core's /health has been silent (null: it answers). */
   private silentSince: number | null = null;
   readonly secret = randomBytes(32).toString('hex');
-  readonly coreUrl = `http://127.0.0.1:${LAB_CORE_PORT}`;
+  readonly port: number;
+  readonly coreUrl: string;
+  /** Main Core mode: the environment prepared by the database step, given to the Core's process. */
+  private mainEnv: Record<string, string> | null = null;
 
   constructor(readonly deps: RuntimeDeps) {
+    this.port = deps.main?.port ?? LAB_CORE_PORT;
+    this.coreUrl = `http://127.0.0.1:${this.port}`;
     for (const [id, label] of [
       ['postgres', 'Postgres (Docker)'],
-      ['database', 'Base locale Lab'],
-      ['labcore', 'Core local (Bonk · Soundboard)'],
+      [
+        'database',
+        deps.main ? 'Base Lab du Core principal' : 'Base locale Lab',
+      ],
+      [
+        'labcore',
+        deps.main
+          ? 'Core principal (environnement Lab)'
+          : 'Core local (Bonk · Soundboard)',
+      ],
       ['providers', 'Providers emotes'],
     ] as const)
       this.set(id, 'stopped', '—', label);
@@ -185,7 +214,7 @@ export class LocalRuntime {
       // The Studio port actually used (PORT, as the server reads it), not an assumed 4100.
       ports: {
         studio: Number(process.env.PORT ?? 4100),
-        labCore: LAB_CORE_PORT,
+        labCore: this.port,
         oauthCallback: 3789,
       },
       restartsInWindow: this.recentRestarts().length,
@@ -268,6 +297,21 @@ export class LocalRuntime {
   private labUrl: URL | null = null;
 
   private async ensureDatabase(): Promise<boolean> {
+    if (this.deps.main) {
+      try {
+        this.set('database', 'starting', 'migrations (périmètre Production)');
+        this.mainEnv = this.deps.main.env(this.deps.readCoreEnv().DATABASE_URL);
+        this.set(
+          'database',
+          'ready',
+          await this.deps.main.prepare(this.mainEnv),
+        );
+        return true;
+      } catch (e) {
+        this.set('database', 'error', (e as Error).message);
+        return false;
+      }
+    }
     try {
       this.labUrl = labDatabaseUrl(this.deps.readCoreEnv().DATABASE_URL);
       const admin = new URL(this.labUrl.href);
@@ -323,15 +367,45 @@ export class LocalRuntime {
       );
       await core.stop();
     }
-    if (!(await this.deps.portFree(LAB_CORE_PORT))) {
+    if (!(await this.deps.portFree(this.port))) {
       const other = await this.labCoreHealth();
       this.set(
         'labcore',
         'error',
         other.service === 'bonk-lab-core'
-          ? `port ${LAB_CORE_PORT} déjà utilisé par un Core Lab lancé hors Studio (npm run bonk:lab ?) — ferme-le puis « Réessayer »`
-          : `port ${LAB_CORE_PORT} occupé par une autre application — libère-le puis « Réessayer »`,
+          ? `port ${this.port} déjà utilisé par un Core Lab lancé hors Studio (npm run bonk:lab ?) — ferme-le puis « Réessayer »`
+          : other.service === 'core-api'
+            ? `port ${this.port} déjà utilisé par un Core lancé hors Studio (npm run lab ?) — ferme-le puis « Réessayer »`
+            : `port ${this.port} occupé par une autre application — libère-le puis « Réessayer »`,
       );
+      return;
+    }
+    if (this.deps.main && this.mainEnv) {
+      this.set('labcore', 'starting', `lancement sur 127.0.0.1:${this.port}`);
+      core.start(this.mainEnv);
+      for (let i = 0; i < 40 && !this.stopping; i++) {
+        if ((await this.labCoreHealth()).ok) {
+          this.set(
+            'labcore',
+            'ready',
+            `127.0.0.1:${this.port} (pid ${core.pid})`,
+          );
+          this.set('providers', 'ready', this.deps.main.providers);
+          this.watch();
+          return;
+        }
+        if (!core.running) break;
+        await this.deps.sleep(500);
+      }
+      this.set(
+        'labcore',
+        'error',
+        core.running
+          ? '/health sans réponse après 20 s'
+          : `arrêt immédiat (code ${core.lastExit?.code ?? '?'}) — voir les logs`,
+      );
+      if (core.running) await core.stop();
+      this.onCrash();
       return;
     }
     const bot = this.deps.readBotEnv();
@@ -470,7 +544,7 @@ export class LocalRuntime {
           this.set(
             'labcore',
             'ready',
-            `127.0.0.1:${LAB_CORE_PORT} (pid ${this.deps.labCore.pid})`,
+            `127.0.0.1:${this.port} (pid ${this.deps.labCore.pid})`,
           );
       }
       this.watchTimer = setTimeout(() => void loop(), 3000);
@@ -505,8 +579,40 @@ export function createLocalRuntime(
   logs: LogBuffer,
   redactor: (text: string) => string,
   labCore?: ManagedProcess,
+  /** The local Lab on the MAIN Core (opt-in): its process replaces the historical Lab Core. */
+  mainCore?: MainLabCore,
 ): LocalRuntime {
   const pids = new PidStore(paths.runtimeDir);
+  if (mainCore)
+    return new LocalRuntime({
+      docker: dockerOps,
+      fetch,
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      now: () => Date.now(),
+      portFree,
+      prepareDatabase,
+      labCore: new ManagedProcess({
+        name: 'labcore',
+        cwd: mainCore.coreDir,
+        args: [join('dist', 'index.js')],
+        pids,
+        cleanEnv,
+        onLine: (line, stream) =>
+          logs.add('labcore', line, stream === 'stderr' ? 'error' : 'info'),
+      }),
+      readCoreEnv: () => readEnvFile(paths.coreEnv),
+      readBotEnv: () => ({}),
+      logs,
+      redact: redactor,
+      main: {
+        port: MAIN_LAB_CORE_PORT,
+        env: (url) => mainCore.env(url),
+        prepare: (env) => mainCore.prepare(env),
+        providers: mainCore.emoteCatalog
+          ? `Twitch fictif · 7TV / BTTV / FFZ publics de la chaîne ${mainCore.emoteCatalog} (lecture seule)`
+          : 'Twitch fictif · catalogues publics 7TV / BTTV / FFZ : désactivés',
+      },
+    });
   return new LocalRuntime({
     docker: dockerOps,
     fetch,

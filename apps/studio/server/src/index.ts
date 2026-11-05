@@ -42,6 +42,7 @@ import {
 } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { LabEbs } from './extension-lab/lab-ebs.js';
+import { MainLabCore, MAIN_LAB_CHANNEL } from './runtime/main-lab-core.js';
 import {
   EXT_PREFIX,
   EXTENSION_CSP,
@@ -781,13 +782,42 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Standalone Studio: the local runtime (Postgres → base Lab → Core local) is started and watched
   // here; Bonk and Soundboard workers use its per-session secret. `npm run bonk:lab` (BONK_LAB_ONLY)
   // keeps its own launcher and environment.
+  // The local Lab on the MAIN Core (decision of 05/11/2026), opt-in until Antoni validates it: STUDIO_LAB_CORE=main.
+  // The Production entry point runs here with CORE_ENVIRONMENT=lab and Studio talks to it as to the VPS (its transport,
+  // its cockpit, the Extension's /v1/ext). Without the switch: the historical Lab Core, unchanged.
+  const mainLab =
+    labProfile &&
+    plan.startLabCore &&
+    process.env.BONK_LAB_ONLY !== '1' &&
+    process.env.STUDIO_LAB_CORE === 'main'
+      ? await MainLabCore.open({
+          runtimeDir: paths.runtimeDir,
+          coreDir: join(REPO_ROOT, 'apps', 'core-api'),
+          emoteCatalogChannelId:
+            process.env.STUDIO_LAB_EMOTE_CATALOG_CHANNEL_ID ?? null,
+        }).catch((error: Error) => {
+          lab.logs.add(
+            'studio',
+            `Lab sur le Core principal indisponible : ${lab.deps.redact(error.message)}`,
+            'error',
+          );
+          return null;
+        })
+      : null;
   const runtime =
     process.env.BONK_LAB_ONLY === '1' || !plan.startLabCore
       ? null
-      : createLocalRuntime(lab.logs, lab.deps.redact);
-  if (runtime) {
+      : createLocalRuntime(
+          lab.logs,
+          lab.deps.redact,
+          undefined,
+          mainLab ?? undefined,
+        );
+  if (runtime && !mainLab) {
     process.env.BONK_LAB_CORE_URL = runtime.coreUrl;
     process.env.BONK_LAB_SECRET = runtime.secret;
+  }
+  if (runtime) {
     // The Lab Core uses the same Postgres: the Test Lab never stops it under a running Lab Core.
     lab.deps.postgresUsers = () =>
       runtime.deps.labCore.running ? ['the Lab Core (Studio runtime)'] : [];
@@ -801,7 +831,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         `found ${service.name} (pid ${service.pid}) left running by a previous Studio session`,
       );
   }
-  const labCoreUrl = labProfile ? process.env.BONK_LAB_CORE_URL : undefined;
+  const labCoreUrl =
+    labProfile && !mainLab ? process.env.BONK_LAB_CORE_URL : undefined;
   // Production profile: the same Bonk / Soundboard / TTS runtimes over the future-prod transport
   // (own journals and player tokens). Started inside a guard: a failure falls back to nothing
   // running and an explicit error, never to a silent Lab Core.
@@ -821,20 +852,49 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         return null;
       })
     : null;
-  const bonk = production
-    ? production.bonk
+  // The local Lab on the main Core: the SAME runtimes as the Production profile (workers over /v1/studio, cockpit),
+  // to the loopback Core, journals under runtimeDir/lab-main — never the Production ones.
+  const labMainRuntimes = mainLab
+    ? await createProductionRuntimes(
+        `http://${host}:${port}`,
+        join(paths.runtimeDir, 'lab-main'),
+        {
+          config: {
+            url: mainLab.url,
+            origin: mainLab.url,
+            ca: undefined,
+            caSha256: null,
+            channelId: MAIN_LAB_CHANNEL.id,
+            label: 'Lab (Core principal)',
+          },
+          installation: mainLab.installation,
+        },
+        { labLoopback: true },
+      ).catch((error: Error) => {
+        lab.logs.add(
+          'studio',
+          `Lab sur le Core principal : démarrage impossible (${lab.deps.redact(error.message)})`,
+          'error',
+        );
+        return null;
+      })
+    : null;
+  /** The profile's Core over Studio's transport: the VPS (Production) or the main Core of the local Lab. */
+  const transport = production ?? labMainRuntimes;
+  const bonk = transport
+    ? transport.bonk
     : labCoreUrl
       ? await BonkRuntime.create(`http://${host}:${port}`)
       : null;
   // Soundboard V2 Lab: same Lab Core (test only), local player page.
-  const sound = production
-    ? production.sound
+  const sound = transport
+    ? transport.sound
     : labCoreUrl
       ? await SoundRuntime.create(`http://${host}:${port}`)
       : null;
   // TTS V2 Lab: same Lab Core (test only), local player page / OBS overlay.
-  const tts = production
-    ? production.tts
+  const tts = transport
+    ? transport.tts
     : labCoreUrl
       ? await TtsRuntime.create(`http://${host}:${port}`)
       : null;
@@ -866,7 +926,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     bonk?.stop();
     sound?.stop();
     tts?.stop();
-    production?.link.stop();
+    transport?.link.stop();
     seRef?.close();
     void dockRef?.server.close();
     halloweenRef?.stop();
@@ -894,22 +954,23 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     ).finally(() => process.exit(0));
   };
   // Lab profile only: in Production the façade would only serve its outdated simulation.
-  const extLab = !labProfile
-    ? null
-    : await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
-        lab.logs.add(
-          'studio',
-          `Extension Lab unavailable: ${error.message}`,
-          'error',
-        );
-        return null;
-      });
-  if (production) {
-    // Admissions will come from the public EBS (P1-006): no Lab façade on the production workers.
-    production.bonk.start();
-    production.sound.start();
-    production.tts.start();
-    production.link.start();
+  const extLab =
+    !labProfile || mainLab
+      ? null
+      : await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
+          lab.logs.add(
+            'studio',
+            `Extension Lab unavailable: ${error.message}`,
+            'error',
+          );
+          return null;
+        });
+  if (transport) {
+    // Admissions come from the Core's viewer frontier (/v1/ext): no Lab façade on these workers.
+    transport.bonk.start();
+    transport.sound.start();
+    transport.tts.start();
+    transport.link.start();
   }
   if (bonk && extLab && !production) {
     extLab.connectBonk(bonk.worker, bonk.viewerAuth, bonk.thirdPartyCatalog);
@@ -926,8 +987,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   }
   // Moderation V2 + TTS configuration + Lab test wallet: Core decides, Studio relays. Production: the
   // same cockpit on the Production Core (installation credential, the Core's own channel).
-  const labCore = production
-    ? production.cockpit
+  const labCore = transport
+    ? transport.cockpit
     : labCoreUrl
       ? localLabCoreClient(labCoreUrl, process.env.BONK_LAB_SECRET ?? '')
       : null;
@@ -978,8 +1039,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         channelId: cockpitChannel,
         core: labCore,
         environment: production ? 'production' : 'lab',
-        events: production
-          ? production.cockpitEvents
+        events: transport
+          ? transport.cockpitEvents
           : localLabCoreEvents(labCoreUrl!, process.env.BONK_LAB_SECRET ?? ''),
         origin: `http://${host}:${port}`,
         dir: join(paths.runtimeDir, 'word-game'),
@@ -995,14 +1056,23 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Twitch alerts V1 (§ 22): ONE runtime, on the Core of the profile — the Lab Core, or the paired production Core
   // (/v1/studio/alerts). Media, calibration and the OBS source token are shared by both profiles (runtimeDir/alerts:
   // the OBS URL does not change at the cutover); the StreamElements mode and journal are per profile.
-  const alertsEnv: 'lab' | 'production' | null =
-    labCore && labProfile ? 'lab' : production ? 'production' : null;
+  // The local Lab on the main Core takes the Production routes (/v1/studio/*) of ITS Core; what reaches a real outside
+  // service in Production (StreamElements, the points de chaîne's Spotify, the chat ingress) stays off there (below).
+  const alertsEnv: 'lab' | 'production' | null = mainLab
+    ? labMainRuntimes
+      ? 'production'
+      : null
+    : labCore && labProfile
+      ? 'lab'
+      : production
+        ? 'production'
+        : null;
   const alertsCore =
-    alertsEnv === 'lab' ? labCore : (production?.alertsCore ?? null);
+    alertsEnv === 'lab' ? labCore : (transport?.alertsCore ?? null);
   // Real StreamElements donations: own mode (OFF by default; ACTIVE resumed in Production only, refonte H5), token from
   // Electron main.
   const se =
-    alertsCore && alertsEnv
+    alertsCore && alertsEnv && !mainLab
       ? await SeTipsLink.open({
           dir:
             alertsEnv === 'lab'
@@ -1067,7 +1137,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Lab profile only: in Production the chat / bot 2.0 stays off (no collision with SAMMI / legacy).
   const ingressLines: string[] = [];
   const labChat: LabChatIngress | null =
-    labCore && labProfile
+    labCore && labProfile && !mainLab
       ? await LabChatIngress.create({
           core: labCore,
           origin: `http://${host}:${port}`,
@@ -1116,8 +1186,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // in Core, or an explicit « Tester »). Twitch reception: the Lab chat adapter's broadcaster connection (Lab) or
   // the production bot (Production).
   const broadcasterTokenFile = twitchTokenFiles().broadcaster;
+  // Not yet on the main Core's Lab: its Production side plays on the real Spotify account (a Lab mode comes next).
   const points =
-    alertsCore && alertsEnv
+    alertsCore && alertsEnv && !mainLab
       ? await ChannelPointsRuntime.create({
           core: alertsCore,
           environment: alertsEnv,
@@ -1201,7 +1272,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     ? { state: 'start_failed', detail: productionError as string | null }
     : null;
   const interactionSources = (): InteractionSources => ({
-    link: production?.link ?? startFailed,
+    link: transport?.link ?? startFailed,
     tts: tts?.worker ?? null,
     sound: sound?.worker ?? null,
     bonk: bonk
@@ -1284,7 +1355,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     environment: alertsEnv,
     channelId: cockpitChannel,
     studioId:
-      plan.production?.installation.installationId ?? 'studio-lab-halloween',
+      (plan.production?.installation ?? mainLab?.installation)
+        ?.installationId ?? 'studio-lab-halloween',
     fromMain: (req) => fromMain(req, { RAPTORU_MAIN_TOKEN: mainToken }),
     log: (line) => console.log(line),
     // Chaos: the viewers see the effect through filters on OBS's screen capture (Studio's one OBS connection).
@@ -1353,6 +1425,14 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       core: alertsCore,
       environment: alertsEnv,
     }),
+    // The local Lab on the main Core: the Extension Lab speaks to its real /v1/ext (Studio signs the Lab JWT).
+    labFrontier: mainLab
+      ? {
+          coreUrl: mainLab.url,
+          extensionSecret: mainLab.extensionSecret,
+          channelId: MAIN_LAB_CHANNEL.id,
+        }
+      : null,
   });
   supervisor.start();
   if (dock)

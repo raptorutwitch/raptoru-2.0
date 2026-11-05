@@ -259,3 +259,97 @@ describe('LocalRuntime', () => {
     await rt.stop();
   });
 });
+
+describe('LocalRuntime — the local Lab on the MAIN Core (opt-in STUDIO_LAB_CORE=main)', () => {
+  async function mainSetup(
+    prepare: (env: Record<string, string>) => Promise<string>,
+  ) {
+    const { mkdtemp } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { MainLabCore, MAIN_LAB_CORE_PORT } =
+      await import('../src/runtime/main-lab-core.js');
+    const main = await MainLabCore.open({
+      runtimeDir: await mkdtemp(join(tmpdir(), 'studio-main-lab-')),
+      coreDir: '/core-api',
+    });
+    const prepared: Record<string, string>[] = [];
+    const t = setup({
+      readBotEnv: () => {
+        throw new Error(
+          'the bot environment (real Twitch app) is never read in this mode',
+        );
+      },
+      main: {
+        port: MAIN_LAB_CORE_PORT,
+        env: (url) => main.env(url),
+        prepare: async (env) => {
+          prepared.push(env);
+          return prepare(env);
+        },
+        providers: 'Twitch fictif',
+      },
+    });
+    return { ...t, main, prepared, port: MAIN_LAB_CORE_PORT };
+  }
+
+  it('prepares then starts the main Core with ITS environment only: Lab, local database, fictional channel, own secrets', async () => {
+    const { rt, core, state, prepared, main, port } = await mainSetup(
+      async () => '67 migration(s)',
+    );
+    expect(rt.coreUrl).toBe(`http://127.0.0.1:${port}`);
+    await rt.start();
+    expect(state('database').state).toBe('ready');
+    expect(state('database').detail).toBe('67 migration(s)');
+    expect(state('labcore').state).toBe('ready');
+    expect(prepared).toHaveLength(1);
+    expect(core.starts).toEqual(prepared);
+    const env = core.starts[0]!;
+    expect(env).toMatchObject({
+      CORE_ENVIRONMENT: 'lab',
+      PORT: String(port),
+      TWITCH_CHANNEL_ID: '900100',
+    });
+    expect(new URL(env.DATABASE_URL!).hostname).toBe('127.0.0.1');
+    expect(new URL(env.DATABASE_URL!).pathname).toBe('/raptoru_core_lab');
+    expect(Buffer.from(env.TWITCH_EXTENSION_SECRET!, 'base64')).toEqual(
+      main.extensionSecret,
+    );
+    // Nothing of the historical Lab, nothing of a real Twitch app, no public catalog unless asked.
+    expect(
+      Object.keys(env).filter((k) =>
+        /^BONK_LAB_|^TWITCH_APP_|EMOTE_CATALOG|OPS_TOKEN/.test(k),
+      ),
+    ).toEqual([]);
+    await rt.stop();
+  });
+
+  it('a refused preparation (guards, migration) never starts the Core', async () => {
+    const { rt, core, state } = await mainSetup(async () => {
+      throw new Error(
+        'préparation du Core Lab refusée : DATABASE_URL doit viser cette machine',
+      );
+    });
+    await rt.start();
+    expect(state('database').state).toBe('error');
+    expect(state('database').detail).toMatch(/refusée/);
+    expect(core.starts).toHaveLength(0);
+  });
+
+  it('the Core’s process environment is built from nothing: no variable of Studio’s process', async () => {
+    const { cleanEnv } = await import('../src/runtime/main-lab-core.js');
+    process.env.TWITCH_APP_CLIENT_SECRET = 'must-not-leak';
+    process.env.BOT_SECRET = 'must-not-leak';
+    try {
+      const env = cleanEnv();
+      expect(env.TWITCH_APP_CLIENT_SECRET).toBeUndefined();
+      expect(env.BOT_SECRET).toBeUndefined();
+      expect(Object.keys(env).some((k) => k.toUpperCase() === 'PATH')).toBe(
+        true,
+      );
+    } finally {
+      delete process.env.TWITCH_APP_CLIENT_SECRET;
+      delete process.env.BOT_SECRET;
+    }
+  });
+});

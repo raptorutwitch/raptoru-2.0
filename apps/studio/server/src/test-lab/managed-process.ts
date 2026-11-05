@@ -142,6 +142,11 @@ export interface ManagedProcessOptions {
   pids: PidStore;
   onLine: (line: string, stream: 'stdout' | 'stderr') => void;
   nodePath?: string;
+  /**
+   * Builds the child's environment from nothing but this (no variable of Studio's process): the main Core in its Lab
+   * environment (runtime/main-lab-core.ts cleanEnv + its own variables).
+   */
+  cleanEnv?: () => Record<string, string>;
   /** OS view of a process (injectable for tests). */
   probe?: (pid: number) => Promise<ProcessInfo | null>;
 }
@@ -209,7 +214,10 @@ export class ManagedProcess {
       this.options.args,
       {
         cwd: this.options.cwd,
-        env: { ...process.env, ...env },
+        env: {
+          ...(this.options.cleanEnv ? this.options.cleanEnv() : process.env),
+          ...env,
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       },

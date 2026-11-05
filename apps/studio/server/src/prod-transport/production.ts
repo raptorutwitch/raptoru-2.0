@@ -141,12 +141,15 @@ export async function createProductionRuntimes(
   origin: string,
   runtimeDir: string,
   production: NonNullable<BootPlan['production']>,
+  /** The local Lab on the main Core: plain HTTP to that loopback Core (core-client.ts), journals under `runtimeDir`. */
+  o: { labLoopback?: boolean } = {},
 ): Promise<ProductionRuntimes> {
   const files = profileFiles(runtimeDir);
   const core = prodCoreClient({
     url: production.config.url,
     installation: production.installation,
     ca: production.config.ca,
+    labLoopback: o.labLoopback === true,
   });
   const wiring = (module: 'bonk' | 'sound' | 'tts') => ({
     core,
