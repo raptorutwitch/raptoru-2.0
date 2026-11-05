@@ -1103,11 +1103,21 @@ body {
   margin: 0.5rem 0 0;
   padding: 0;
   display: grid;
-  gap: 0.4rem;
+  /* One small card per check, problems first (ordered by the code): scanned at a glance before a live. */
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
 }
 .rs-ready-row {
   display: grid;
-  gap: 0.15rem;
+  align-content: start;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--rs-border);
+  border-radius: var(--rs-r-ctl);
+  background: var(--rs-canvas);
+}
+.rs-ready-row .rs-state {
+  margin: 0;
 }
 .rs-ready-row small {
   color: var(--rs-muted, inherit);
