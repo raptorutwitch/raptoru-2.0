@@ -47,29 +47,38 @@ test('« Testeurs seulement »: the Extension module hides for the others, shows
     const v = await browser.newPage({ viewport: { width: 400, height: 800 } });
     await v.goto('/ext/mobile.html?labRole=viewer');
     await v.getByRole('button', { name: 'Voir tous les modules' }).click();
+    // Counted once the list is drawn (« Commandes » is always listed), never on a page still loading.
+    await v
+      .getByRole('button', { name: /^Commandes$/ })
+      .filter({ visible: true })
+      .first()
+      .waitFor({ timeout: 20_000 });
     const n = await v.getByRole('button', { name: /^Événements/ }).count();
     await v.close();
     return n;
   };
   await expect.poll(hub).toBeGreaterThan(0);
   await s.getByRole('button', { name: 'Testeurs seulement' }).click();
-  await expect(s.locator('#tab-halloween')).toContainText('0 testeur');
-  await expect.poll(hub, { timeout: 15_000 }).toBe(0);
-  const finder = s.locator('#tab-halloween [data-role="viewer"]');
-  await finder.getByPlaceholder('Pseudo Twitch ou id').fill('900101');
-  await finder.getByRole('button', { name: 'Chercher' }).click();
-  await finder
-    .getByRole('button', { name: /900101/ })
-    .first()
-    .click();
-  await finder.getByRole('button', { name: '+ Testeur extension' }).click();
-  await expect(
-    finder.getByRole('button', { name: '✓ Testeur extension' }),
-  ).toBeVisible();
-  await expect.poll(hub, { timeout: 15_000 }).toBeGreaterThan(0);
-  // Back to everyone (the other specs share the stack).
-  await s.getByRole('button', { name: 'Tous les viewers' }).click();
-  await expect(s.locator('#tab-halloween')).toContainText(
-    'Tous les viewers de l’extension publiée',
-  );
+  // The other specs share the stack: whatever happens below, everyone sees the module again at the end.
+  try {
+    await expect(s.locator('#tab-halloween')).toContainText('0 testeur');
+    await expect.poll(hub, { timeout: 15_000 }).toBe(0);
+    const finder = s.locator('#tab-halloween [data-role="viewer"]');
+    await finder.getByPlaceholder('Pseudo Twitch ou id').fill('900101');
+    await finder.getByRole('button', { name: 'Chercher' }).click();
+    await finder
+      .getByRole('button', { name: /900101/ })
+      .first()
+      .click();
+    await finder.getByRole('button', { name: '+ Testeur extension' }).click();
+    await expect(
+      finder.getByRole('button', { name: '✓ Testeur extension' }),
+    ).toBeVisible();
+    await expect.poll(hub, { timeout: 15_000 }).toBeGreaterThan(0);
+  } finally {
+    await s.getByRole('button', { name: 'Tous les viewers' }).click();
+    await expect(s.locator('#tab-halloween')).toContainText(
+      'Tous les viewers de l’extension publiée',
+    );
+  }
 });

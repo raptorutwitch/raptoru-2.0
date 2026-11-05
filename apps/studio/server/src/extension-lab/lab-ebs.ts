@@ -1039,7 +1039,8 @@ export class LabEbs {
       await this.refreshThirdParty();
     if (
       this.bonkWorker &&
-      path === '/session' &&
+      // The extension's reads (first session, then its polling): a Studio price change shows while Bonk is open.
+      ['/session', '/state'].includes(path.split('?')[0]!) &&
       Date.now() - this.bonkRulesAt >= 1000
     ) {
       this.bonkRulesAt = Date.now();

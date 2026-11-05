@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { isolate } from './isolation.js';
 
 // Parity of the Soundboard in the production Extension (mobile) → Lab EBS → Lab Core, with the Studio sound worker and a
 // FICTIONAL player (no page, never any sound): written BEFORE its extraction from ui.js — the same expectations must hold
@@ -261,6 +262,7 @@ test('viewer: pay with a Soundboard credit (dock and header follow the choice, o
       credits_soundboard: number;
     };
   const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
+  const { outside } = await isolate(page);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto('/ext/mobile.html?labRole=viewer');
@@ -315,6 +317,7 @@ test('viewer: pay with a Soundboard credit (dock and header follow the choice, o
   );
   await expect(bar).toHaveAttribute('data-method', 'credits');
   expect(errors).toEqual([]);
+  expect(outside).toEqual([]);
   await page.close();
 });
 
@@ -339,3 +342,45 @@ for (const role of ['moderator', 'broadcaster'] as const) {
     await page.close();
   });
 }
+
+test('an Escape the Soundboard uses (volume, search) stays in the panel; the page still gets the other ones (the Video Overlay closes its drawer on a page Escape)', async ({
+  browser,
+}) => {
+  const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
+  const { outside } = await isolate(page);
+  await page.goto('/ext/mobile.html?labRole=viewer');
+  // What overlay.js does: a page-level Escape listener.
+  await page.evaluate(() => {
+    (window as unknown as { __pageEscapes: number }).__pageEscapes = 0;
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape')
+        (window as unknown as { __pageEscapes: number }).__pageEscapes += 1;
+    });
+  });
+  const pageEscapes = () =>
+    page.evaluate(
+      () => (window as unknown as { __pageEscapes: number }).__pageEscapes,
+    );
+  await openModule(page, /^Soundboard|^Sons/);
+  await ready(page);
+  await page
+    .getByRole('button', { name: 'Régler le volume des aperçus' })
+    .click();
+  await expect(page.locator('.sbx-vol.is-open')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.sbx-vol.is-open')).toHaveCount(0);
+  await page.locator('.sbx-search input').first().fill('boop');
+  await expect(cards(page)).toHaveCount(1);
+  // Focus on a control of the panel, off the field (a card, not selected).
+  await page.getByRole('button', { name: 'Sélectionner Boop' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(cards(page)).not.toHaveCount(1); // the search was cleared
+  expect(await pageEscapes()).toBe(0); // neither Escape left the panel
+  // Back on the Hub, nothing of the Soundboard listens any more: an Escape reaches the page, as before.
+  await back(page);
+  await page.getByRole('button', { name: 'Voir tous les modules' }).focus();
+  await page.keyboard.press('Escape');
+  await expect.poll(pageEscapes).toBe(1);
+  expect(outside).toEqual([]);
+  await page.close();
+});

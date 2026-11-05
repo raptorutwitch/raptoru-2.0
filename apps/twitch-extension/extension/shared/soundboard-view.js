@@ -69,7 +69,7 @@ const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 /** The form's state, kept between visits (host.memory): the selection, the search, the sort and the filter. */
 const DRAFT_DEFAULTS = { selectedId: null, query: '', searchOpen: true, sort: 'custom', favoritesOnly: false, view: 'all' };
 
-export function createSoundboardView({ document, client, host }) {
+export function createSoundboardView({ document, client, host, root }) {
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -98,6 +98,8 @@ export function createSoundboardView({ document, client, host }) {
   volumeHandle.type = 'button';
   volumeHandle.append(sbxIcon('speaker'));
   volumeHandle.setAttribute('aria-controls', 'soundboard-preview-volume-popover');
+  // Each control of the popover gets its focus back after a host redraw (Escape keeps reaching the panel).
+  volumeHandle.dataset.draftKey = 'soundboard-volume-handle';
   const volumePopover = el('div', 'sbx-vol__pop');
   volumePopover.id = 'soundboard-preview-volume-popover';
   volumePopover.setAttribute('role', 'dialog');
@@ -109,6 +111,7 @@ export function createSoundboardView({ document, client, host }) {
   const volumeRow = el('div', 'sbx-vol__row');
   const volumeMute = el('button', 'sbx-vol__mute');
   volumeMute.type = 'button';
+  volumeMute.dataset.draftKey = 'soundboard-volume-mute';
   volumeMute.append(sbxIcon('speaker'));
   const volumeRange = el('input', 'sbx-vol__range');
   volumeRange.type = 'range';
@@ -1067,19 +1070,19 @@ export function createSoundboardView({ document, client, host }) {
     (body.querySelector('.sbx-toast-slot') ?? body).append(feedback.overlay());
   }
 
-  // --- Listeners of the visit (removed by destroy) ---------------------------------------------
-  // Escape (the host's own popups — notifications, preferences, tutorial — stop it before it gets here).
+  // --- Listeners of the visit, on the PANEL root (removed by destroy) -----------------------------
+  // Escape: the host's own popups (notifications, preferences, tutorial) take it first (their handler, registered earlier
+  // on the same root, marks it defaultPrevented). Otherwise the Soundboard uses it and it stops here, as it always did:
+  // it never reaches the page (the Video Overlay would close its drawer).
   const onKey = (event) => {
-    if (event.key !== 'Escape') return;
+    if (event.key !== 'Escape' || event.defaultPrevented || !mount) return;
+    event.preventDefault();
+    event.stopPropagation();
     if (volumeOpen) {
-      event.preventDefault();
       syncVolume(false);
       return;
     }
-    if (drafts.searchOpen && mount) {
-      event.preventDefault();
-      mount.closeSearch();
-    }
+    if (drafts.searchOpen) mount.closeSearch();
   };
   // Une interaction dans le catalogue reste une interaction interne : elle ne doit pas faire disparaître la barre pendant
   // qu'un viewer choisit un tri, active Favoris ou clique une carte. Seul un clic hors du corps Soundboard replie
@@ -1100,9 +1103,9 @@ export function createSoundboardView({ document, client, host }) {
     if (target.closest('.sbx-card, .sbx-dock, .sbx-head, .sbx-vol')) return;
     mount.deselect();
   };
-  document.addEventListener('keydown', onKey);
-  document.addEventListener('click', onClickCapture, true);
-  document.addEventListener('click', onClick);
+  root.addEventListener('keydown', onKey);
+  root.addEventListener('click', onClickCapture, true);
+  root.addEventListener('click', onClick);
 
   return {
     /** No node of its own: the Soundboard draws into the host's module body (its CSS container). */
@@ -1121,9 +1124,9 @@ export function createSoundboardView({ document, client, host }) {
       mount = null;
       soundPreview.stop();
       feedback.clear();
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('click', onClickCapture, true);
-      document.removeEventListener('click', onClick);
+      root.removeEventListener('keydown', onKey);
+      root.removeEventListener('click', onClickCapture, true);
+      root.removeEventListener('click', onClick);
       currentBody = null;
     },
   };

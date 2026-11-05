@@ -346,7 +346,8 @@ export function createBonkView({ document, client, host }) {
       memory.tourAutoOpened = true;
       if (!readTutorialDisabled(BONK_TUTORIAL)) {
         setTimeout(() => {
-          if (!destroyed) tourView().start();
+          // The visit open now (this one, or the next if the viewer left and came back meanwhile).
+          if (memory.visitOpen?.()) tourView().start();
         }, 400);
       }
     }
@@ -508,6 +509,7 @@ export function createBonkView({ document, client, host }) {
   }
 
   memory.handlers = { renderEmote: chargeurEmote, help: () => tourView().start(), fire, salve, tourSteps };
+  memory.visitOpen = () => !destroyed;
 
   return {
     node: null,

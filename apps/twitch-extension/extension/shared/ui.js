@@ -361,6 +361,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     return {
       document,
       client,
+      /** The panel's root element: a view's listeners stay inside the panel (never document-wide). */
+      root,
       module: mod,
       state,
       /** The module body of this draw (rendered only): views that draw into the host's container (Soundboard). */
@@ -440,9 +442,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   const moderationCustomDurationMinMs = 60_000;
   const moderationCustomDurationMaxMs = 365 * 24 * 60 * 60 * 1000;
   const isStudioPreview = new URLSearchParams(globalThis.location?.search || '').get('studio') === '1';
-  /** Bonk lot 5: the chargeur (persistent, like the picker) and the feedback slot of the current render. */
-  /** « Récents » shown while Bonk stays open: frozen, so a catalogue click never reflows the grid. */
-  // Bonk sending and its last outcome (bonk-send.js): requests in flight, message and slot are its own state.
   let raffleHistoryOpen = false;
   let raffleTimer = null;
   let raffleTimerSnapshot = null;
@@ -3127,6 +3126,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     void loadHostModules(client, () => renderPreservingViewport());
     for (const mod of hostModules()) if (!modules.some((m) => m.id === mod.id)) modules.push(mod);
     if (openModule && !modules.some((mod) => mod.id === openModule)) openModule = null;
+    // Its view goes with it (as navigateTo does): no timer, audio, listener or tour left behind.
+    if (hostView && hostViewId !== openModule) {
+      hostView.destroy?.();
+      hostView = null;
+      hostViewId = null;
+      hostVariant = null;
+    }
     root.dataset.view = openModule ? 'module' : 'home';
 
     const moduleNotices = (mod) => notificationCount(state, mod.id);

@@ -249,7 +249,13 @@ const settings = async () =>
 test('viewer: the price and the delay set in Studio reach Bonk; a shot within the delay is refused by Core, nothing debited', async ({
   browser,
 }) => {
-  const before = JSON.stringify(await settings());
+  const before = await settings();
+  const initial = (key: string, fallback: number) => {
+    const found = (
+      before.settings as { key: string; value: unknown }[] | undefined
+    )?.find((x) => x.key === key);
+    return Number(found?.value ?? fallback);
+  };
   await moduleSetting('bonk.price', 350);
   await moduleSetting('bonk.cooldown_s', 0);
   await setTokens(10_000);
@@ -285,12 +291,23 @@ test('viewer: the price and the delay set in Studio reach Bonk; a shot within th
     await expect(count(page)).toHaveText('1/2');
     expect(await tokens()).toBe(9_650);
     expect(outside).toEqual([]);
+    // A price changed in Studio while the screen is open reaches it (the EBS re-reads Core's price).
+    await moduleSetting('bonk.price', 420);
+    await expect(cta(page)).toHaveAttribute('aria-label', /◆ 420/, {
+      timeout: 20_000,
+    });
   } finally {
-    await moduleSetting('bonk.price', 200);
-    await moduleSetting('bonk.cooldown_s', 0);
+    await moduleSetting('bonk.price', initial('bonk.price', 200));
+    await moduleSetting('bonk.cooldown_s', initial('bonk.cooldown_s', 0));
     await page.close();
   }
-  expect(JSON.stringify(await settings())).toBe(before);
+  const now = await settings();
+  const valueOf = (from: Record<string, unknown>, key: string) =>
+    (from.settings as { key: string; value: unknown }[] | undefined)?.find(
+      (x) => x.key === key,
+    )?.value;
+  for (const key of ['bonk.price', 'bonk.cooldown_s'])
+    expect(valueOf(now, key)).toEqual(valueOf(before, key)); // the shared stack is left as found
 });
 
 test('viewer: Twitch emotes through the fictional Twitch — a refused consent changes nothing; linked: the emotes by channel, a Twitch Bonk accepted, unlinked again', async ({
@@ -310,62 +327,76 @@ test('viewer: Twitch emotes through the fictional Twitch — a refused consent c
   const link = page.getByRole('button', {
     name: 'Emotes Twitch · lier mon compte',
   });
-  const authorize = async () => {
-    const popup = context.waitForEvent('page');
-    await link.click();
-    await page.getByRole('button', { name: 'Autoriser Twitch' }).click();
-    return popup;
-  };
-  // Refused at Twitch: the Studio's callback says so, the viewer closes the window, the extension says it is not
-  // confirmed; nothing is linked.
-  iso.twitchConsent = 'deny';
-  const refused = await authorize();
-  await expect(
-    refused.getByRole('heading', { name: 'Connexion Twitch annulée' }),
-  ).toBeVisible({
-    timeout: 15_000,
-  });
-  await refused.close();
-  await expect(
-    page.getByRole('status').filter({ hasText: 'Autorisation non confirmée' }),
-  ).toBeVisible({
-    timeout: 20_000,
-  });
-  await expect(link).toBeVisible();
-  // Granted: Core exchanges the code, checks the account and the read-only scope, reads the catalog.
-  iso.twitchConsent = 'grant';
-  const granted = await authorize();
-  await expect(
-    granted.getByRole('heading', { name: 'Connexion Twitch réussie' }),
-  ).toBeVisible({
-    timeout: 15_000,
-  });
-  await granted.close();
-  await expect(
-    page.getByRole('status').filter({ hasText: 'Emotes Twitch connectées' }),
-  ).toBeVisible({
-    timeout: 20_000,
-  });
-  for (const name of ['KappaFictif', 'raptorHype', 'raptorDance', 'autreWave'])
-    await expect(emote(page, name)).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: /^Autre chaîne \(fictive\)/ }),
-  ).toBeVisible();
-  // A Twitch Bonk: Core accepts an emote of the viewer's own catalog and debits once.
-  await emote(page, 'raptorHype').click();
-  await expect(ammoOf(page, 'raptorHype')).toHaveText('1');
-  await expect(cta(page)).toBeEnabled({ timeout: 15_000 });
-  await cta(page).click();
-  await expect(status(page)).toContainText('Bonk accepté', { timeout: 15_000 });
-  await expect.poll(tokens).toBe(9_800);
-  // Unlinked at once (no confirmation): back to « lier mon compte » (the shared stack is left as found).
-  await page
-    .getByRole('button', { name: 'Retirer l’accès Twitch aux emotes' })
-    .click();
-  await expect(link).toBeVisible({ timeout: 20_000 });
-  await expect(emote(page, 'raptorHype')).toHaveCount(0);
-  expect(errors).toEqual([]);
-  expect(iso.outside).toEqual([]);
+  // The shared stack is left as found whatever happens: the fictional account is unlinked in Core at the end.
+  try {
+    const authorize = async () => {
+      const popup = context.waitForEvent('page');
+      await link.click();
+      await page.getByRole('button', { name: 'Autoriser Twitch' }).click();
+      return popup;
+    };
+    // Refused at Twitch: the Studio's callback says so, the viewer closes the window, the extension says it is not
+    // confirmed; nothing is linked.
+    iso.twitchConsent = 'deny';
+    const refused = await authorize();
+    await expect(
+      refused.getByRole('heading', { name: 'Connexion Twitch annulée' }),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
+    await refused.close();
+    await expect(
+      page
+        .getByRole('status')
+        .filter({ hasText: 'Autorisation non confirmée' }),
+    ).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(link).toBeVisible();
+    // Granted: Core exchanges the code, checks the account and the read-only scope, reads the catalog.
+    iso.twitchConsent = 'grant';
+    const granted = await authorize();
+    await expect(
+      granted.getByRole('heading', { name: 'Connexion Twitch réussie' }),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
+    await granted.close();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Emotes Twitch connectées' }),
+    ).toBeVisible({
+      timeout: 20_000,
+    });
+    for (const name of [
+      'KappaFictif',
+      'raptorHype',
+      'raptorDance',
+      'autreWave',
+    ])
+      await expect(emote(page, name)).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /^Autre chaîne \(fictive\)/ }),
+    ).toBeVisible();
+    // A Twitch Bonk: Core accepts an emote of the viewer's own catalog and debits once.
+    await emote(page, 'raptorHype').click();
+    await expect(ammoOf(page, 'raptorHype')).toHaveText('1');
+    await expect(cta(page)).toBeEnabled({ timeout: 15_000 });
+    await cta(page).click();
+    await expect(status(page)).toContainText('Bonk accepté', {
+      timeout: 15_000,
+    });
+    await expect.poll(tokens).toBe(9_800);
+    // Unlinked at once (no confirmation): back to « lier mon compte » (the shared stack is left as found).
+    await page
+      .getByRole('button', { name: 'Retirer l’accès Twitch aux emotes' })
+      .click();
+    await expect(link).toBeVisible({ timeout: 20_000 });
+    await expect(emote(page, 'raptorHype')).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect(iso.outside).toEqual([]);
+  } finally {
+    await labCore('/v1/lab/bonk/viewers/900101/disconnect', {});
+  }
   await context.close();
 });
 
