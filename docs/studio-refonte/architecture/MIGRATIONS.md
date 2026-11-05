@@ -77,3 +77,17 @@ Ils ne font que **lire**. Aucun réglage, aucun exécuteur ni interrupteur ne s'
 | Random Ban | toujours « on » : `!rb` n'a pas d'interrupteur Core | l'exécuteur du bot s'est signalé depuis moins de 15 s, avec les droits recherche et exclusion | `status-adapters.test.ts` |
 | Jeu des mots | son interrupteur durable (H8), lu par son service | un live est ouvert et le jeu tourne | idem |
 | Boutique d'événement | `event_shop_settings.enabled` | un overlay de Studio prêt, vu depuis moins de 10 s | idem |
+
+## Spotify : fin du live (H6), vérifiée le 05/11
+
+| Scénario | Résultat | Preuve |
+|---|---|---|
+| Coupure plus courte que la grâce (10 min) | rien n'est annulé | `spotify-service.test.ts` « queued, never played… » (`grâce − 1 s`) |
+| Nouveau live pendant la grâce (Twitch qui se reconnecte) | rien n'est annulé | « a new live within the grace » |
+| Fin réelle | **seules** les demandes `QUEUED` (jamais jouées) sont annulées et remboursées, une fois ; une relance ne change rien | même test, et `closeAfterLive` (`spotify/service.ts`, `state = 'QUEUED'`) |
+| Demande commencée (en lecture, jouée, interrompue, passée) | jamais touchée par la fin du live ni remboursée comme jamais jouée | requête limitée à `QUEUED` ; « accepted, queued, played, interrupted, skipped… never refunded » |
+| Jamais en live | rien n'est touché | « never live » |
+
+Pas d'adaptateur pour l'instant : Spotify a son écran, ses réglages (`spotify_settings`) et sa supervision. Un adaptateur
+d'état seul n'apporterait que la tuile du socle.
+
