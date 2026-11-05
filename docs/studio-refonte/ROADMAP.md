@@ -83,11 +83,13 @@ par Antoni) · **Publié** (release Studio). À ce jour : rien n'est validé ni 
 - Ce n'est **pas** une refonte : Alertes, Soundboard, TTS, Bonk, Tombola, Commandes, Modération, Jeu des mots,
   Halloween, Simulation, Test Lab, Extension Lab, Système gardent leur ancienne composition.
 
-### Lot 5 — chaîne audio / visuelle — non commencé
+### Lot 5 — chaîne audio / visuelle — commencé (Alertes organisée)
 - Alertes (éditeur, aperçu, calibrage, file, source OBS, événements réels, variantes, StreamElements), Soundboard,
   TTS, Bonk, Effets et lecteur d'effets. Dépend du DS. Critères : aucune capacité perdue, aperçu local identifié comme
   tel, E2E `alerts`, `players`, `effects-player`, `dock` verts.
-- **Prochaine tâche de la refonte : Alertes.**
+- Fait (05/11, `99c7478`) : Alertes en quatre onglets (Créer et tester · File et OBS · Sources d’événements ·
+  Variantes) ; mêmes blocs et chargeurs, onglets au clavier, onglet gardé ; E2E `alerts-studio`.
+- Reste : recomposer chaque onglet sur les primitives (éditeur, calibrage, file) ; Soundboard, TTS, Bonk, Effets.
 
 ### Lot 6 — autres outils — non commencé
 - Tombola (live, préparation, historique), Commandes (V2 : éditeur, droits, étapes), Jeu des mots, Mini-jeux, Halloween,
@@ -97,9 +99,10 @@ par Antoni) · **Publié** (release Studio). À ce jour : rien n'est validé ni 
 ### Lot 7b — Activité — hub minimal
 - Fait : historique des coupures + liens. Reste : historiques des modules consultables ici (lecture seule, sans copie).
 
-### Lot 8 — Système — habillé seulement
-- Fait : titre « Système », « État des services ». Reste : recomposer profil, connexions (Twitch, OBS, lecteurs),
-  runtime, mises à jour.
+### Lot 8 — Système — en partie recomposé
+- Fait : titre « Système », « État des services » ; 05/11 (`f220e31`) : carte « Modules » (doublon, liens Lab en
+  Production) retirée, outils de développement seulement en profil Lab, profil illisible dit au lieu de
+  « Chargement… » sans fin. Reste : recomposer profil, connexions (Twitch, OBS, lecteurs), runtime, mises à jour.
 
 ### Lot 9 — Laboratoire et simulations — non commencé
 - Classer chaque outil (CONTEXTE § 7) : utile / redondant / historique / trompeur / diagnostic réel ; séparer dans le

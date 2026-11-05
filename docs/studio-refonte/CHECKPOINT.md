@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026 — Chemins V1 de l'extension sortis de `ui.js` (`9443ac1` + docs). Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 05/11/2026 — Chemins V1 de l'extension sortis de `ui.js`, puis Studio : Alertes en onglets, Système, Prêt pour le live (`5080f9e` + docs). Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -232,6 +232,17 @@ Prochaines étapes (ordre conseillé) :
 
 `ui.js` : 3 444 → 1 642 lignes. Les V1 restent les écrans des sessions sans V2 (Lab sans Core, calibration, TTS de
 Production en repli) : rien supprimé. Détail : architecture/MIGRATIONS.md, CONTRATS § 13.
+
+Studio ensuite (05/11) :
+
+| Commit | Contenu |
+|---|---|
+| `99c7478` | Alertes en quatre onglets (Créer et tester · File et OBS · Sources d’événements · Variantes) ; E2E `alerts-studio` |
+| `f220e31` | Système : carte « Modules » retirée (doublon, liens Lab en Production), outils de développement en Lab seulement, profil illisible dit |
+| `5080f9e` | Prêt pour le live : seul ce qui demande attention reste en cartes ; « Prêt (n) » replié |
+
+À voir par Antoni dans le vrai Lab : Alertes (les quatre onglets, l’aperçu, la file, les sources), Système, Centre de
+contrôle.
 
 À vérifier par Antoni (facultatif, ces écrans ne servent pas en Production) : un Studio Lab sans Lab Core
 (`BONK_LAB_CORE_URL` absent) affiche TTS, Tombola et modération V1 comme avant.

@@ -197,4 +197,5 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Harnais : l'extension en mode démo sur la pile E2E ; tests écrits avant chaque déplacement.
 - TTS V1, Tombola V1, modération V1 en variantes ; le porte-monnaie d'en-tête lit le paiement déclaré. `ui.js` 1 642.
 - Défaut trouvé : Échap ne fermait pas l'historique d'un utilisateur dans la console V1 (focus perdu) ; corrigé.
-
+- Studio : Alertes en onglets (même contenu, rangé par tâche) ; Système débarrassé de la carte « Modules » trompeuse en
+  Production ; Prêt pour le live replie ce qui est prêt.
