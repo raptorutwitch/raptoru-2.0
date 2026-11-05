@@ -37,12 +37,13 @@ import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
 import { createModerationV2View } from './moderation-v2.js';
 import { createCommandsV2View } from './commands-v2.js';
-import { createCommandsPublicView } from './commands-public.js';
-import { createSubWheelView } from './sub-wheel-ext.js';
-import { createEventShopView } from './events-shop.js';
+// Session modules: each registers itself (card, availability, view) — the import order is the Hub order.
+import './commands-public.js';
+import './sub-wheel-ext.js';
+import './events-shop.js';
 import { createTombolaV2View } from './tombola-v2.js';
 // The module host (architecture socle): viewer modules register themselves; ui.js only hosts them.
-import { hostModules, loadHostModules, viewerModuleView } from './module-registry.js';
+import { hostModules, loadHostModules, sessionModule, sessionModules, viewerModuleView } from './module-registry.js';
 import { createModuleModerationPanel } from './module-moderation.js';
 import './coffre-mystere.js';
 import {
@@ -563,33 +564,6 @@ const HUB_MODULE_STYLES = Object.freeze({
   event_shop: { icon: 'bat', color: '#7a1220', color2: '#d4561a' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
-/** Commands V2 « Commandes » (phase F): the channel's public command list, for every viewer. */
-const COMMANDS_PUBLIC_MODULE = Object.freeze({
-  id: 'commands',
-  label: 'Commandes',
-  icon: '!',
-  description: 'Les commandes à taper dans le chat.',
-});
-const SUB_WHEEL_MODULE = Object.freeze({
-  id: 'sub_wheel',
-  label: 'Roue du Sub',
-  icon: '🎡',
-  description: 'Tes tours de Roue du Sub.',
-});
-/** « Événements » (docs/HALLOWEEN.md): the edition of the moment, shown only while the Core says one is open. */
-const EVENT_SHOP_MODULE = Object.freeze({
-  id: 'event_shop',
-  label: 'Événements',
-  icon: '🦇',
-  description: 'Fais peur à Raptoru avec tes Bonbons.',
-});
-/** The module's card names the edition the Core announces (« Halloween 2026 — … »). */
-function eventShopModule(eventShop) {
-  const title = eventShop?.edition?.title;
-  return title
-    ? { ...EVENT_SHOP_MODULE, description: `${title} — fais peur à Raptoru avec tes Bonbons.` }
-    : EVENT_SHOP_MODULE;
-}
 const MODERATION_MODULE = Object.freeze({
   id: 'moderation',
   label: 'Modération',
@@ -1213,9 +1187,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   /** Tombola V2 (Lab): persistent screen reading Core itself (never rebuilt by the host's polling). */
   let tombolaV2View = null;
   /** Commands V2 public list (phase F), kept while « Commandes » is open. */
-  let commandsPublicView = null;
-  let subWheelView = null;
-  let eventShopView = null;
   /** The open module of the module host (one at a time) and its id. */
   let hostView = null;
   let hostViewId = null;
@@ -1451,26 +1422,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function moduleById(id) {
     if (id === ACTIONS_MODULE.id) return ACTIONS_MODULE;
     if (id === MODERATION_MODULE.id) return canModerate() ? MODERATION_MODULE : null;
-    if (id === COMMANDS_PUBLIC_MODULE.id) return commandsPublicAvailable() ? COMMANDS_PUBLIC_MODULE : null;
-    if (id === SUB_WHEEL_MODULE.id) return subWheelAvailable() ? SUB_WHEEL_MODULE : null;
-    if (id === EVENT_SHOP_MODULE.id) return eventShopAvailable() ? eventShopModule(state?.event_shop) : null;
+    const session = sessionModule(id);
+    if (session) return session.available(sessionEnv()) ? session.card(state) : null;
     return (state?.modules ?? []).find((m) => m.id === id) ?? hostModules().find((m) => m.id === id) ?? null;
   }
 
-  /** « Roue du Sub » (R8): offered by the EBS (Lab today; the production frontier keeps it hidden in mode v1). */
-  function subWheelAvailable() {
-    return state?.sub_wheel === true && typeof client?.subWheelMe === 'function';
-  }
-
-  /** « Halloween »: the EBS's session carries `event_shop` only on a Core that has the shop. */
-  function eventShopAvailable() {
-    return state?.event_shop?.enabled === true && typeof client?.eventsState === 'function';
-  }
-
-  /** « Commandes » (public list, phase F): offered by the EBS, Video and Mobile only (not the Panel). */
-  function commandsPublicAvailable() {
-    return state?.commands_public === true && typeof client?.commandsPublic === 'function'
-      && !document.body.classList.contains('panel-view');
+  /** What a session module's availability reads (module-registry.js). */
+  function sessionEnv() {
+    return { state, client, document };
   }
 
   let runtimeNotificationSequence = 0;
@@ -1800,16 +1759,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       commandsV2View = null;
       commandsV2Shown = false;
     }
-    if (moduleId !== COMMANDS_PUBLIC_MODULE.id) commandsPublicView = null;
-    if (moduleId !== SUB_WHEEL_MODULE.id) subWheelView = null;
     if (moduleId !== hostViewId) {
       hostView?.destroy?.();
       hostView = null;
       hostViewId = null;
-    }
-    if (moduleId !== EVENT_SHOP_MODULE.id) {
-      eventShopView?.destroy();
-      eventShopView = null;
     }
     if (moduleId !== 'raffle_join') {
       tombolaV2View?.destroy();
@@ -5939,16 +5892,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const modules = [...(state.modules ?? [])]
       .filter((mod) => mod.id !== MODERATION_MODULE.id);
     if (state.identity_shared && !modules.some((mod) => mod.id === ACTIONS_MODULE.id)) modules.push(ACTIONS_MODULE);
-    // « Commandes » (public, every viewer) when the EBS offers it — Video and Mobile, not the Panel.
-    if (commandsPublicAvailable() && !modules.some((mod) => mod.id === COMMANDS_PUBLIC_MODULE.id)) {
-      modules.push(COMMANDS_PUBLIC_MODULE);
-    }
-    if (subWheelAvailable() && !modules.some((mod) => mod.id === SUB_WHEEL_MODULE.id)) {
-      modules.push(SUB_WHEEL_MODULE);
-    }
-    // Halloween first: the event of the moment.
-    if (eventShopAvailable() && !modules.some((mod) => mod.id === EVENT_SHOP_MODULE.id)) {
-      modules.unshift(eventShopModule(state.event_shop));
+    // Session modules (Commandes, Roue du Sub, Événements…) when the EBS offers them: their own files decide.
+    for (const session of sessionModules()) {
+      if (!session.available(sessionEnv()) || modules.some((mod) => mod.id === session.id)) continue;
+      if (session.hubFirst) modules.unshift(session.card(state));
+      else modules.push(session.card(state));
     }
     if (canModerate() && !modules.some((mod) => mod.id === MODERATION_MODULE.id)) {
       modules.push(MODERATION_MODULE);
@@ -6178,8 +6126,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       item.classList.add('is-open');
       const body = el('div', 'jdm-module__body');
       if (!isModeration) body.dataset.scrollKey = `module-${mod.id}`;
-      const isCommandsPublic = mod.id === COMMANDS_PUBLIC_MODULE.id;
-      if (!isSoundboard && !isModeration && !isTombolaV2 && !isCommandsPublic) {
+      const session = sessionModule(mod.id);
+      if (!isSoundboard && !isModeration && !isTombolaV2 && session?.intro !== false) {
         const intro = el('div', 'jdm-module__intro');
         intro.append(
           el('strong', 'jdm-module__intro-title', mod.label),
@@ -6226,21 +6174,18 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         const shownView = commandsV2Shown && commandsV2View ? commandsV2View : moderationV2View;
         body.append(shownView.node);
         queueMicrotask(() => shownView?.attached());
-      } else if (mod.id === EVENT_SHOP_MODULE.id) {
-        // Halloween shop: Core's projection for the JWT's viewer; kept across the host's refreshes while open.
-        if (!eventShopView) {
-          eventShopView = createEventShopView({ document, client });
-          eventShopView.start();
-        }
-        body.append(eventShopView.node);
-      } else if (mod.host && viewerModuleView(mod.id)) {
-        // A module of the module host: its own view, hosted (no per-module branch here).
+      } else if (session || (mod.host && viewerModuleView(mod.id))) {
+        // A registered view — a session module or a module of the module host: created once while the module is open,
+        // kept across the host's refreshes, destroyed when it closes (navigateTo). No per-module branch here.
+        Object.assign(body.dataset, session?.bodyData ?? {});
         if (!hostView || hostViewId !== mod.id) {
-          hostView = viewerModuleView(mod.id)({ document, client, module: mod.server });
+          hostView = session
+            ? session.view({ document, client, module: mod, team: canModerate() })
+            : viewerModuleView(mod.id)({ document, client, module: mod.server });
           hostViewId = mod.id;
           hostView.start();
-          // The team's moderation of this module: the host's generic panel, never written by the module.
-          const panel = canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
+          // The team's moderation of a host module: the generic panel, never written by the module.
+          const panel = !session && canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
           if (panel?.visible) {
             hostView.node.append(panel.node);
             void panel.refresh();
@@ -6248,23 +6193,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         }
         body.append(hostView.node);
         queueMicrotask(() => hostView?.attached?.());
-      } else if (mod.id === SUB_WHEEL_MODULE.id) {
-        // Roue du Sub V2 (R8): the viewer's own tours (+ the team's part for moderators), Core's projection only.
-        if (!subWheelView) {
-          subWheelView = createSubWheelView({ document, client, team: canModerate() });
-          subWheelView.start();
-        }
-        body.append(subWheelView.node);
-        queueMicrotask(() => subWheelView?.attached());
-      } else if (isCommandsPublic) {
-        // Commands V2 public list (read-only, Core's public projection), under the host header.
-        body.dataset.cmdPub = '1';
-        if (!commandsPublicView) {
-          commandsPublicView = createCommandsPublicView({ document, client });
-          commandsPublicView.start();
-        }
-        body.append(commandsPublicView.node);
-        queueMicrotask(() => commandsPublicView?.attached());
       } else if (isTombolaV2) {
         // Tombola V2 (validated prototype): its own header and way back to the Hub, Core's state only.
         body.dataset.tmbV2 = '1';

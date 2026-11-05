@@ -1,9 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   hostModules,
   loadHostModules,
+  registerSessionModule,
   registerViewerModule,
   resetHostModulesForTests,
+  sessionModule,
+  sessionModules,
   viewerModuleView,
 } from '../extension/shared/module-registry.js';
 import {
@@ -198,5 +201,86 @@ describe('module moderation panel (host, generic)', () => {
     expect(moduleJournalHtml([], { refund: 'moderator' })).toContain(
       'Rien dans le journal',
     );
+  });
+});
+
+describe('session modules (registered by their own files, no branch in ui.js)', () => {
+  beforeEach(() => resetHostModulesForTests());
+  it('keeps the registration order; availability and card come from the module, never from ui.js', () => {
+    registerSessionModule({
+      id: 'a',
+      card: () => ({ id: 'a' }),
+      available: ({ state }) => state.a === true,
+      view: () => ({}),
+    });
+    registerSessionModule({
+      id: 'b',
+      card: (state) => ({ id: 'b', label: state.title }),
+      available: () => true,
+      hubFirst: true,
+      view: () => ({}),
+    });
+    expect(sessionModules().map((m) => m.id)).toEqual(['a', 'b']);
+    expect(sessionModule('a').available({ state: { a: false } })).toBe(false);
+    expect(sessionModule('b').card({ title: 'Halloween' })).toEqual({
+      id: 'b',
+      label: 'Halloween',
+    });
+    expect(sessionModule('inconnu')).toBeNull();
+  });
+});
+
+describe('the real session modules register themselves', () => {
+  it('Commandes (no intro, not in the Panel), Roue du Sub (team flag), Événements (first, edition title)', async () => {
+    // Fresh module instances: the views register into the registry instance read below (ui.js's import order).
+    vi.resetModules();
+    const reg = await import('../extension/shared/module-registry.js');
+    await import('../extension/shared/commands-public.js');
+    await import('../extension/shared/sub-wheel-ext.js');
+    await import('../extension/shared/events-shop.js');
+    const { sessionModule, sessionModules } = reg;
+    expect(sessionModules().map((m) => m.id)).toEqual([
+      'commands',
+      'sub_wheel',
+      'event_shop',
+    ]);
+    const doc = (panel) => ({
+      body: { classList: { contains: (c) => panel && c === 'panel-view' } },
+    });
+    const cmd = sessionModule('commands');
+    expect(cmd.intro).toBe(false);
+    expect(cmd.bodyData).toEqual({ cmdPub: '1' });
+    expect(
+      cmd.available({
+        state: { commands_public: true },
+        client: { commandsPublic() {} },
+        document: doc(false),
+      }),
+    ).toBe(true);
+    expect(
+      cmd.available({
+        state: { commands_public: true },
+        client: { commandsPublic() {} },
+        document: doc(true),
+      }),
+    ).toBe(false);
+    expect(
+      sessionModule('sub_wheel').available({
+        state: { sub_wheel: true },
+        client: {},
+      }),
+    ).toBe(false); // older client
+    const shop = sessionModule('event_shop');
+    expect(shop.hubFirst).toBe(true);
+    expect(
+      shop.card({ event_shop: { edition: { title: 'Halloween 2026' } } })
+        .description,
+    ).toContain('Halloween 2026');
+    expect(
+      shop.available({
+        state: { event_shop: { enabled: false } },
+        client: { eventsState() {} },
+      }),
+    ).toBe(false);
   });
 });

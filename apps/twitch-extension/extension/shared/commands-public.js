@@ -3,6 +3,7 @@
 // by the streamer's categories, viewer fields only). Same V6.3 list as Studio / Modération, adapted to
 // reading: Video 600×432 (Commande | Accès | Cooldown) and Mobile (command + state, then access ·
 // cooldown, then description). No edit, no test, no admin data, no polling: read when opened.
+import { registerSessionModule } from './module-registry.js';
 import { ic } from './commands-v2-icons.js';
 import { publicCooldown, publicGroups, publicQuota, publicWho, WHEN_LABEL } from './commands-v2-model.js';
 
@@ -100,3 +101,25 @@ export function createCommandsPublicView({ document, client }) {
     },
   };
 }
+
+/** Commands V2 « Commandes » (phase F): the channel's public command list, for every viewer. */
+const COMMANDS_PUBLIC_MODULE = Object.freeze({
+  id: 'commands',
+  label: 'Commandes',
+  icon: '!',
+  description: 'Les commandes à taper dans le chat.',
+});
+
+registerSessionModule({
+  id: COMMANDS_PUBLIC_MODULE.id,
+  card: () => COMMANDS_PUBLIC_MODULE,
+  // Offered by the EBS, Video and Mobile only (not the Panel).
+  available: ({ state, client, document }) =>
+    state?.commands_public === true &&
+    typeof client?.commandsPublic === 'function' &&
+    !document.body.classList.contains('panel-view'),
+  // Read-only, Core's public projection, under the host header (no intro: the list is the screen).
+  intro: false,
+  bodyData: { cmdPub: '1' },
+  view: ({ document, client }) => createCommandsPublicView({ document, client }),
+});

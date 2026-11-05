@@ -55,7 +55,33 @@ export async function loadHostModules(client, onChange, now = Date.now()) {
 /** Tests only. */
 export function resetHostModulesForTests() {
   views.clear();
+  sessionDefs.clear();
   catalog = [];
   loaded = false;
   lastLoad = 0;
+}
+
+// --- Session modules -------------------------------------------------------------------------------------------------
+// A module the EBS's SESSION offers (not /modules/v3): Commandes, Roue du Sub, Événements… Each one registers here from
+// its own file — its Hub card, when it is offered, its view and how the host frames it — so ui.js has no branch, constant,
+// availability check or state of its own for it (architecture/MIGRATIONS.md, extension).
+
+const sessionDefs = new Map();
+
+/**
+ * `def` = { id, card(state) → { id, label, icon, description }, available({ state, client, document }) → boolean,
+ * view({ document, client, module, team }) → { node, start(), attached?(), destroy?() }, hubFirst?: boolean (top of the
+ * Hub), intro?: boolean (the host's intro above the view, default true), bodyData?: { [key]: value } (body dataset) }.
+ */
+export function registerSessionModule(def) {
+  sessionDefs.set(def.id, def);
+}
+
+export function sessionModule(id) {
+  return sessionDefs.get(id) ?? null;
+}
+
+/** In registration order (the import order in ui.js). */
+export function sessionModules() {
+  return [...sessionDefs.values()];
 }
