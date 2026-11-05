@@ -805,7 +805,7 @@ const CLS: Record<Level, string> = {
   off: '',
 };
 
-/** The panel (pure): problems first; what is off on purpose folded at the end. */
+/** The panel (pure): what needs attention in sight; what is ready, then what is off on purpose, folded. */
 export function readinessHtml(
   checks: Check[] | undefined,
   href: (page: string) => string,
@@ -817,12 +817,15 @@ export function readinessHtml(
     `<li class="rs-ready-row" data-check="${esc(x.id)}"><span class="rs-state ${CLS[x.level]}"><b>${esc(x.label)}</b> · ${esc(x.state)}</span>
       <small>${esc(x.why)}${x.consequence ? ` <em>Pour les viewers : ${esc(x.consequence)}</em>` : ''}${x.fix ? ` <a href="${href(x.fix.page)}">${esc(x.fix.label)}</a>` : ''}</small></li>`;
   const sorted = ordered(checks);
-  const on = sorted.filter((x) => x.level !== 'off');
+  // In sight: what needs attention (problems, « non vérifié »). Folded: what is ready, what is off on purpose.
+  const on = sorted.filter((x) => x.level !== 'off' && x.level !== 'ok');
+  const ok = sorted.filter((x) => x.level === 'ok');
   const off = sorted.filter((x) => x.level === 'off');
   return `<section class="rs-panel rs-ready" data-role="readiness"><h2>Prêt pour le live</h2>
     <p class="rs-state ${CLS[s.level]}">${esc(s.text)}</p>
     <p class="rs-muted">Lecture seule : rien n’est activé ni coupé d’ici. Chaque correction se fait dans la page indiquée.</p>
     <ul class="rs-ready-list">${on.map(row).join('')}</ul>
+    ${ok.length ? `<details class="rs-ready-ok"><summary>Prêt (${ok.length})</summary><ul class="rs-ready-list">${ok.map(row).join('')}</ul></details>` : ''}
     ${off.length ? `<details><summary>Coupé volontairement (${off.length})</summary><ul class="rs-ready-list">${off.map(row).join('')}</ul></details>` : ''}
   </section>`;
 }

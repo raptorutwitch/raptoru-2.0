@@ -239,6 +239,28 @@ describe('Prêt pour le live', () => {
     });
   });
 
+  it('what is ready is folded after what needs attention: problems and « non vérifié » stay in sight', () => {
+    const checks = readiness({ ...ready, alerts: null });
+    const html = readinessHtml(checks, (p) => `/?p=${p}`);
+    const okCount = checks.filter((x) => x.level === 'ok').length;
+    expect(okCount).toBeGreaterThan(0);
+    expect(html).toContain(
+      `<details class="rs-ready-ok"><summary>Prêt (${okCount})</summary>`,
+    );
+    const folded = html.slice(html.indexOf('rs-ready-ok'));
+    expect(folded).not.toContain('data-check="alerts"'); // the unchecked one is above, in sight
+    expect(html.indexOf('data-check="alerts"')).toBeLessThan(
+      html.indexOf('rs-ready-ok'),
+    );
+    // All ready: nothing but the summary and the folded list.
+    const allOk = readiness(ready).filter(
+      (x) => x.level === 'ok' || x.level === 'off',
+    );
+    expect(readinessHtml(allOk, (p) => `/?p=${p}`)).toContain(
+      '<ul class="rs-ready-list"></ul>',
+    );
+  });
+
   it('the panel never offers an action button (read only)', () => {
     const html = readinessHtml(readiness(ready), (p) => `/?p=${p}`);
     expect(html).not.toContain('<button');
