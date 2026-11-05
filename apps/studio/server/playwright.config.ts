@@ -22,7 +22,9 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     // Isolation: the browser resolves no host name at all (the stack is on 127.0.0.1). A spec that wants a remote image
     // (e.g. 7TV/BTTV/FFZ CDNs in bonk.e2e.ts) serves it locally with page.route; anything else simply fails.
-    launchOptions: { args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] },
+    launchOptions: {
+      args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'],
+    },
   },
   webServer: {
     command: 'npx tsx e2e/lab-stack.ts',
@@ -32,5 +34,7 @@ export default defineConfig({
     timeout: 60_000,
     env: { E2E_PORT: String(PORT) },
     stdout: 'pipe',
+    // The stack's own diagnostics ([e2e-stack] lines: fatal errors, exit) always reach the run log.
+    stderr: 'pipe',
   },
 });

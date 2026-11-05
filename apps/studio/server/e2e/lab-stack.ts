@@ -14,6 +14,21 @@ import { migrate } from '../../../core-api/src/db/migrate.js';
 import { createPgliteDb } from '../../../core-api/test/helpers.js';
 
 const port = Number(process.env.E2E_PORT ?? 4399);
+// Diagnostics (the stack died twice mid-run, never reproduced since): an uncaught error, an unhandled rejection or the
+// process exit is written to the run log with its cause — nothing is swallowed (the process still exits on a fatal error).
+const stackLog = (what: string, detail: unknown) =>
+  console.error(
+    `[e2e-stack] ${new Date().toISOString()} ${what}: ${detail instanceof Error ? (detail.stack ?? detail.message) : String(detail)}`,
+  );
+process.on('uncaughtException', (error) => {
+  stackLog('FATAL uncaughtException', error);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  stackLog('FATAL unhandledRejection', reason);
+  process.exit(1);
+});
+process.on('exit', (code) => stackLog('exit', `code ${code}`));
 // Imported after this flag: the Studio module must not start the real Studio (runtime, Core, PIDs).
 process.env.STUDIO_SERVER_NO_LISTEN = '1';
 // Studio only answers requests addressed to its own host:port (anti DNS-rebinding guard).
