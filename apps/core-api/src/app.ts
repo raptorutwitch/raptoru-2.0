@@ -142,6 +142,7 @@ export function createCore(
     randomBan,
     economy,
     spotify,
+    cpTwitch,
   );
   // The Tombola may also reward in Bonbons while the event is open (docs/HALLOWEEN.md); every other currency as before.
   const raffleLab = new RaffleLabService(

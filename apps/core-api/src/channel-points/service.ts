@@ -20,6 +20,7 @@ import { type EconomyPort, labEconomy } from '../economy/economy.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import type { SpotifyRequestView, SpotifyService } from '../spotify/service.js';
+import type { CpTwitchActions } from './twitch-actions.js';
 
 // Points de chaîne V1 (docs/CHANNEL_POINTS_V1.md) — the ONE implementation, served to the Lab Core and to the
 // production Core (same pattern as the alerts). A Twitch redemption (read only) is recorded once (dedup by its Twitch
@@ -47,7 +48,20 @@ export const CP_RULES = {
   maxAgeMs: 120_000,
   /** An effect reported playing whose end is not reported within this delay is « unknown » (Studio gone…). */
   effectEndMs: 120_000,
+  /**
+   * Refonte H2 (decided 05/11): an OBS job not started this long after its reception expires — never run later (no
+   * burst of effects when Studio comes back). Counted from the job's persistent created_at.
+   */
+  queuedMaxMs: 120_000,
 } as const;
+
+/** Why a queued OBS job expired, in the streamer's words (history). */
+export const CP_EXPIRED_TEXT: Record<string, string> = {
+  expired_studio_absent: 'expiré : Studio absent pendant plus de 2 min',
+  expired_not_started:
+    'expiré : Studio n’a pas pu le lancer en 2 min (OBS ou lecteur indisponible)',
+  expired_queue_late: 'expiré : délai de 2 min dépassé dans la file',
+};
 
 export class CpError extends Error {
   constructor(
@@ -326,6 +340,8 @@ export class ChannelPointsService {
     private readonly economy: EconomyPort = labEconomy,
     /** Spotify V2: the « song_request » / « song_skip » interactions (absent → they fail explicitly). */
     private readonly spotify?: SpotifyService,
+    /** Refonte H2: the Twitch-side refund of an expired redemption (Raptoru's rewards only; absent → never refunded). */
+    private readonly twitch?: CpTwitchActions,
   ) {
     randomBan?.onResult((channelId, requestId) =>
       this.settleRandomBans(channelId, requestId),
@@ -1257,8 +1273,81 @@ export class ChannelPointsService {
     return { created: true, jobId };
   }
 
+  /**
+   * Refonte H2: queued OBS jobs older than CP_RULES.queuedMaxMs expire (under the channel lock, before any claim: a job
+   * is either claimed or expired, never both). Never a started job. The redemption is refunded once on Twitch only when
+   * nothing of it took effect and the reward is Raptoru's; a chat purchase (!fxcam) is refunded in Jetons by its own
+   * module (fx-cam-chat.ts: every result failed). `seenBefore`: when Studio asked before this call (wording only).
+   */
+  private async expireQueued(
+    q: Queryable,
+    channelId: string,
+    seenBefore: number | undefined,
+  ) {
+    const now = this.clock.now();
+    const old = await q.query<JobRow>(
+      `select * from cp_jobs where channel_id = $1 and status = 'queued' and created_at < $2 order by seq`,
+      [channelId, new Date(now.getTime() - CP_RULES.queuedMaxMs)],
+    );
+    for (const j of old) {
+      const code =
+        j.attempts > 0
+          ? 'expired_not_started'
+          : seenBefore !== undefined &&
+              now.getTime() - seenBefore < CP_RULES.queuedMaxMs
+            ? 'expired_queue_late'
+            : 'expired_studio_absent';
+      await q.query(
+        `update cp_jobs set status = 'expired', ended_at = $2, failure = $3, attempt_id = null, lease_expires_at = null
+         where job_id = $1 and status = 'queued'`,
+        [j.job_id, now, code],
+      );
+      const refund =
+        j.source === 'twitch' ? await this.refundExpired(q, channelId, j) : '';
+      await this.setResults(
+        channelId,
+        j.source,
+        j.redemption_id,
+        j.actions.map((a) => ({
+          index: a.index,
+          ok: false,
+          error: `${CP_EXPIRED_TEXT[code]}${refund}`,
+        })),
+        q,
+      );
+    }
+  }
+
+  /** The refund note of an expired Twitch redemption, after asking Twitch once when it is due and possible. */
+  private async refundExpired(q: Queryable, channelId: string, j: JobRow) {
+    const row = (
+      await q.query<RedemptionRow>(
+        'select * from cp_redemptions where channel_id = $1 and source = $2 and redemption_id = $3 for update',
+        [channelId, j.source, j.redemption_id],
+      )
+    )[0];
+    if (!row || row.twitch_status === 'canceled') return '';
+    const mine = new Set(j.actions.map((a) => a.index));
+    // Anything else of this redemption that worked, runs or may have run (credits, a sound, a Random Ban…): no refund.
+    if (row.results.some((r) => !mine.has(r.index) && r.status !== 'failed'))
+      return ' — non remboursé (une autre action a eu lieu)';
+    if (
+      !this.twitch ||
+      !(await this.twitch.managed(q, channelId, row.reward_id))
+    )
+      return ' — non remboursable (récompense non créée par Raptoru)';
+    await this.twitch.redemptionStatus(q, {
+      channel_id: channelId,
+      reward_id: row.reward_id,
+      redemption_id: row.redemption_id,
+      status: 'CANCELED',
+    });
+    return ' — remboursement demandé à Twitch';
+  }
+
   /** The next OBS job for this Studio (one in flight per channel), or null. */
   async claim(channelId: string, consumerId: string) {
+    const seenBefore = this.studioSeen.get(channelId);
     this.studioSeen.set(channelId, this.clock.now().getTime());
     await this.settleSounds(channelId);
     await this.settleEffects(channelId);
@@ -1273,6 +1362,7 @@ export class ChannelPointsService {
         [channelId],
       );
       await this.sweep(q, channelId);
+      await this.expireQueued(q, channelId, seenBefore);
       const busy = await q.query(
         "select 1 from cp_jobs where channel_id = $1 and status in ('claimed', 'running')",
         [channelId],
@@ -1471,6 +1561,14 @@ export class ChannelPointsService {
 
   /** The Studio tab: switch, rewards with their rule, recent redemptions, jobs in flight, Soundboard sounds. */
   async state(channelId: string) {
+    // Refonte H2: the history shows an expired job as expired even while Studio is away.
+    await this.db.tx(async (q) => {
+      await q.query(
+        'select 1 from cp_settings where channel_id = $1 for update',
+        [channelId],
+      );
+      await this.expireQueued(q, channelId, this.studioSeen.get(channelId));
+    });
     await this.settleSounds(channelId);
     await this.settleEffects(channelId);
     await this.settleRandomBans(channelId);
