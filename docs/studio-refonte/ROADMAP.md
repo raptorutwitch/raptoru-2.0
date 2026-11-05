@@ -148,6 +148,21 @@ Ordre recommandé : F1 → F2 → F4 → F3 → F5 → F6 (au fil des pages) →
 - **H1 change la Production** : hors live, plus aucun achat lié au stream ; à annoncer aux viewers ;
 - l'extension (H15, P0-2 de la console partagée, texte `stream_offline`) par Antoni.
 
+### Mission continue (05/11) — `66cab2b` → `4624658`
+
+Fait :
+- extension : modules de session hors de `ui.js` ;
+- lecteur OBS fictif générique (Lab) ;
+- « Prêt pour le live » en grille ;
+- `LIVRAISON.md` ;
+- Spotify H6 vérifié ;
+- 3 P2 de revue corrigés.
+
+Reste :
+- TTS V2 et Tombola V2 hors de `ui.js` (rafraîchissement rapide à généraliser) ;
+- vrai exécuteur OBS d'un module du socle ;
+- Bonk, Soundboard, TTS, Tombola (D20).
+
 ### Opération fondation totale (05/11) — consolidation et migrations, [architecture/MIGRATIONS.md](architecture/MIGRATIONS.md)
 
 Codé et testé automatiquement, vu en navigateur sur la pile isolée ; rien de validé par Antoni ni publié.

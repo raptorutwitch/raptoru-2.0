@@ -91,3 +91,22 @@ Ils ne font que **lire**. Aucun réglage, aucun exécuteur ni interrupteur ne s'
 Pas d'adaptateur pour l'instant : Spotify a son écran, ses réglages (`spotify_settings`) et sa supervision. Un adaptateur
 d'état seul n'apporterait que la tuile du socle.
 
+## Extension : modules de session sortis de `ui.js` (`8a2f113`)
+
+| Module | Avant | Après | Preuve |
+|---|---|---|---|
+| Commandes (liste publique) | 7 endroits dans `ui.js` | `registerSessionModule` dans `commands-public.js` | `commands-public.e2e.ts`, `session-modules.e2e.ts` |
+| Roue du Sub (vue viewer) | 7 endroits | `sub-wheel-ext.js` | `session-modules.e2e.ts` (aller-retour sans rechargement) |
+| Événements (boutique) | 7 endroits | `events-shop.js` | `events-shop.e2e.ts` (2) |
+
+Les 7 endroits par module : constante, test de disponibilité, `moduleById`, injection dans le Hub, remise à zéro dans
+`navigateTo`, branche de rendu, variable d'état.
+
+Restent dans `ui.js` (raccord historique, couplé au chemin de rafraîchissement rapide) :
+- TTS V2, Tombola V2, Soundboard, Bonk ;
+- Modération D4 et Commandes V2 (côté modérateur) ;
+- Actions.
+
+Les extraire demande d'abord de généraliser la mise à jour sans re-rendu (`update(state)`, devise de paiement). C'est le
+prochain obstacle.
+

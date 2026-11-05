@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026 — « Opération fondation totale » : phase de consolidation et premières migrations livrées en code (`d46e912`, arbre propre). Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 05/11/2026 — « Mission continue » livrée en code (`4624658` + docs, arbre propre). Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -132,18 +132,42 @@ Vu dans un navigateur, sur la pile isolée (port 4411) :
 - tuiles du socle ;
 - réglages, y compris en largeur mobile.
 
+### Mission continue (05/11)
+
+| Commit | Contenu |
+|---|---|
+| `66cab2b` | vérification ciblée du socle (10 questions, `PREUVES.md`) ; un module Lab ne laisse aucun réglage en Production |
+| `8a2f113` | extension : Commandes, Roue du Sub et Événements sortis de `ui.js` (`registerSessionModule`) |
+| `3e1785c` | `LIVRAISON.md` (8 migrations, coexistence des versions, ordre, retour arrière) ; Spotify H6 vérifié |
+| `9dddeec` | lecteur OBS fictif générique, en Lab seulement, par la vraie porte `claim` / `report` |
+| `46b2c50` | « Prêt pour le live » en grille de cartes |
+| `4624658` | les 3 P2 d'une revue indépendante corrigés |
+
+Suites avant `4624658` :
+
+| Suite | Résultat |
+|---|---|
+| Core | 1 396 |
+| Intégration | 191 |
+| Studio | 886 |
+| Extension | 80 |
+
+En plus : les E2E Boutique, Commandes et modules de session.
+
+Vu en navigateur (pile isolée, port 4411) :
+- achat, prise par le lecteur fictif, échec, « remboursé » chez le viewer et dans Studio ;
+- Centre de contrôle en 1440 et 420 px.
+
 Prochaines étapes (ordre conseillé) :
 1. Antoni valide dans le vrai Lab (`npm run studio`) :
-   - Modules du socle ;
-   - Points de chaîne › Votekick et Caution (nouveaux panneaux) ;
+   - Modules du socle et le lecteur fictif du Coffre ;
+   - Points de chaîne › Votekick et Caution ;
    - D4 › Autres modules ;
-   - le coffre dans l'Extension Lab.
-2. Adaptateurs d'état pour Roue du Sub, Spotify et Points de chaîne (modèle : `status-adapters.ts`).
-3. Exécuteur OBS générique côté Studio (`claim` / `report`) et page d'overlay par module.
-4. Extraction progressive de `ui.js` (historique), module par module, avec tests de parité.
-5. Le jour du GO de déploiement :
-   - migrations `20261121170000` / `180000` / `190000`, dans l'ordre (voir ROADMAP) ;
-   - supprimer le conteneur de test `studio-ux-test-pg`.
+   - Hub de l'extension (Commandes, Roue du Sub, Événements).
+2. Extension : généraliser la mise à jour sans re-rendu (`update(state)`), puis sortir TTS V2 et Tombola V2 de `ui.js`.
+3. Un vrai exécuteur OBS Studio pour un module du socle (modèle : le lecteur fictif ; page d'overlay propre).
+4. Bonk, Soundboard, TTS, Tombola : adaptateurs seulement si un besoin concret le justifie (D20).
+5. Le jour du GO : suivre `LIVRAISON.md`.
 
 ## Prochaine action
 

@@ -138,3 +138,14 @@ Limites mesurées :
 | Les routes sont-elles accessibles dans le Lab, par le vrai client Studio ? | oui : la liste blanche est corrigée et testée sur la vraie chaîne | `modules-lab-chain.test.ts` |
 | Les migrations préparées sont-elles compatibles avec les données historiques ? | oui : elles sont additives et testées sur des bases passées | `migration-scopes.test.ts`, `migration-main-core` et `sub-wheel-v2` (intégration) |
 
+## Mission continue (05/11) : ce qui a changé, avec preuve
+
+| Lot | Problème réel | Changement | Preuve | Ce qui devient plus simple |
+|---|---|---|---|---|
+| Socle | aucun test ne prouvait qu'un module Lab ne laisse aucun réglage en Production | assertion ajoutée (réglages listés, réglage refusé) | `modules-host.test.ts` | — |
+| Extension | 7 endroits de `ui.js` par module autonome | `registerSessionModule` ; un seul chemin de montage | 3 E2E, dont un nouveau (aller-retour sans rechargement) | un module de session = son fichier + une ligne d'import |
+| OBS | le faux lecteur de la démo contournait la porte `claim` / `report` | un lecteur fictif générique, en Lab seulement, par la vraie porte ; doublon supprimé | navigateur : achat → prise en charge → échec → « remboursé » chez le viewer et dans Studio ; `modules-socle.test.ts` (404 en Production) | tester tout module OBS en Lab sans écrire de faux lecteur |
+| Studio | « Prêt pour le live » en longue liste qui masquait Santé et Favoris | grille de cartes, en CSS seulement | captures 1440 px et 420 px, sans défilement horizontal | voir l'état du live en un coup d'œil |
+| Spotify H6 | la grâce n'avait pas été vérifiée de bout en bout | vérifié : seules les demandes `QUEUED` sont annulées, une coupure plus courte que la grâce et une reconnexion ne touchent rien | `MIGRATIONS.md` § Spotify | — |
+| Livraison | aucun plan | `LIVRAISON.md` : 8 migrations, coexistence des versions, ordre, contrôles, retour arrière | — | le jour du GO |
+

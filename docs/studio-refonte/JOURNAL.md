@@ -141,3 +141,16 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   | Extension | 78 |
   | Bot | 287 |
 
+## 05/11/2026 — Mission continue
+
+- Vérification ciblée du socle (10 questions) : les réponses et leurs tests sont dans `PREUVES.md`. Un manque a été
+  comblé : aucun test ne prouvait qu'un module Lab ne laisse aucun réglage en Production.
+- Extension, `8a2f113` : Commandes, Roue du Sub et Événements s'enregistrent eux-mêmes.
+  - Retirés de `ui.js` : 21 endroits (7 par module) ; `ui.js` passe de 6 361 à 6 289 lignes.
+  - Nouveau E2E : aller-retour sans rechargement.
+- Lecteur OBS fictif générique, en Lab seulement, par `claim` / `report`. Le doublon de la démo est supprimé.
+  - Vérifié en navigateur : achat → échec → remboursé.
+- « Prêt pour le live » en grille de cartes.
+- `LIVRAISON.md` préparé. Rien n'est exécuté.
+- Revue indépendante des deux changements structurels : aucun P0 / P1, 3 P2 corrigés (`4624658`).
+
