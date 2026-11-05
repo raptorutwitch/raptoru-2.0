@@ -15,8 +15,13 @@ const STUDIO_ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
 /** Allowed Lab sub-paths: `<prefix>/<channel>/…` (channel checked) or a channel-less route. */
 const CHANNEL_ROUTES =
   /^(moderation|raffle|wallet|commands|word-game|mini-games|module-settings|modules)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
-/** Never through the cockpit: the executor side of the chat answers belongs to the bot. */
-const BOT_ONLY = /^commands\/\d{1,32}\/steps\/(claim|[0-9a-f-]{36}\/ack)$/;
+/**
+ * Never through the cockpit: the executor side of the chat answers belongs to the bot; a module's VIEWER action belongs
+ * to the extension's door (the viewer from the verified Twitch token) — through here a Studio installation could spend
+ * any viewer's Jetons (the body names the viewer).
+ */
+const BOT_ONLY =
+  /^(commands\/\d{1,32}\/steps\/(claim|[0-9a-f-]{36}\/ack)|modules\/\d{1,32}\/[a-z0-9_]+\/viewer(\/.*)?)$/;
 // Channel-less: TTS rules; Soundboard bank configuration (prices, cooldowns, stack / queue / ignore,
 // enabled, volume protection) — the « Soundboard config » screen.
 const PLAIN_ROUTES =

@@ -69,7 +69,8 @@ export function createPurchaseButton({ document, onResult, run }) {
     busy = true;
     draw();
     try {
-      const out = await run(intent.key());
+      // The price the viewer just confirmed travels with the intent (the server refuses if it changed meanwhile).
+      const out = await run(intent.key(), view.price);
       intent.close();
       onResult?.({ ok: true, out });
     } catch (e) {

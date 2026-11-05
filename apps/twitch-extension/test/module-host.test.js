@@ -35,6 +35,7 @@ describe('viewer module registry', () => {
   it('shows only the modules the server lists AND this build knows; an older server shows none', async () => {
     registerViewerModule('coffre_mystere', () => ({}), { icon: '🎁' });
     registerViewerModule('inconnu_du_serveur', () => ({}));
+    registerViewerModule('coupe', () => ({})); // known, but switched off on the server (older server listing it)
     let redraws = 0;
     await loadHostModules(
       {
@@ -42,6 +43,7 @@ describe('viewer module registry', () => {
           modules: [
             { id: 'coffre_mystere', label: 'Coffre', description: 'd', enabled: true, actions: [] },
             { id: 'pas_de_vue_ici', label: 'X', description: 'd', enabled: true, actions: [] },
+            { id: 'coupe', label: 'Coupé', description: 'd', enabled: false, actions: [] },
           ],
         }),
       },
@@ -70,12 +72,14 @@ describe('purchase per intent', () => {
   });
   it('two taps, never two sends in parallel; a timeout retried with the SAME key; a success closes the intent', async () => {
     const keys = [];
+    const prices = [];
     let fail = true;
     const results = [];
     const btn = createPurchaseButton({
       document: fakeDocument(),
-      run: async (key) => {
+      run: async (key, price) => {
         keys.push(key);
+        prices.push(price);
         if (fail) throw Object.assign(new Error('timeout'), { code: 'timeout' });
         return { ok: true };
       },
@@ -96,6 +100,7 @@ describe('purchase per intent', () => {
     expect(keys).toHaveLength(2);
     expect(keys[0]).toBe(keys[1]);
     expect(results).toEqual([false, true]);
+    expect(prices).toEqual([100, 100]); // the confirmed price travels with the intent (the server refuses a change)
     await click();
     await click();
     expect(keys[2]).not.toBe(keys[0]);

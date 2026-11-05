@@ -50,7 +50,12 @@ export interface ActivityRow {
   updated_at: Date;
   ended_by: string | null;
   reason: string | null;
+  claimed_at?: Date | null;
+  claimed_by?: string | null;
 }
+
+/** An OBS player's claim on an action: it is that player's for this long (then another player, or the expiry, may). */
+export const PLAYER_LEASE_MS = 30_000;
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 export const activityView = (r: ActivityRow) => ({
@@ -65,6 +70,7 @@ export const activityView = (r: ActivityRow) => ({
   updated_at: iso(r.updated_at),
   ended_by: r.ended_by,
   reason: r.reason,
+  claimed_by: r.claimed_by ?? null,
 });
 
 const hash = (v: unknown) =>
@@ -122,6 +128,7 @@ export class ModuleHost {
       ...deps,
       setting: unscoped,
       say: unscoped,
+      lock: unscoped,
       live: (q) => liveForPaid(q, deps.economy),
       settle: unscoped,
       state: { get: unscoped, set: unscoped },
@@ -135,6 +142,11 @@ export class ModuleHost {
       ...this.ctx,
       setting: (q, channelId, key) =>
         this.ctx.settings.get(q, channelId, `${d.id}.${key}`),
+      lock: async (q, channelId, key) => {
+        await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+          `module:${channelId}:${d.id}:lock:${key}`,
+        ]);
+      },
       say: (q, channelId, m) =>
         insertAnnouncement(q, {
           channelId,
@@ -228,27 +240,45 @@ export class ModuleHost {
     return !d.enabled && (!!d.viewer || !!d.chat);
   }
 
+  /** The jobs still running (`<module>:<job>`): a slow or hung job is skipped on the next pass, never stacked. */
+  private readonly running = new Set<string>();
+
+  /**
+   * The periodic job (both Cores, every 5 s): every module's jobs in parallel and isolated — one that throws or hangs
+   * never holds the others back, and is never started twice at once.
+   */
   async tick() {
-    for (const d of this.modules.values())
-      if (d.expireQueuedMs)
-        await this.expireQueued(d).catch((e: Error) =>
-          console.error(`[modules] ${d.id} expiry failed`, e.message),
-        );
-    for (const d of this.modules.values())
-      if (d.tick)
-        await d
-          .tick(this.ctxFor(d))
-          .catch((e: Error) =>
-            console.error(`[modules] ${d.id} tick failed`, e.message),
-          );
+    const run = async (what: string, d: ModuleDefinition, job: () => Promise<unknown>) => {
+      const k = `${d.id}:${what}`;
+      if (this.running.has(k)) return;
+      this.running.add(k);
+      try {
+        await job();
+      } catch (e) {
+        console.error(`[modules] ${d.id} ${what} failed`, (e as Error).message);
+      } finally {
+        this.running.delete(k);
+      }
+    };
+    await Promise.all(
+      [...this.modules.values()].flatMap((d) => [
+        ...(d.expireQueuedMs ? [run('expiry', d, () => this.expireQueued(d))] : []),
+        ...(d.tick ? [run('tick', d, async () => d.tick!(this.ctxFor(d)))] : []),
+      ]),
+    );
   }
 
-  /** Queued actions past the module's delay: failed, a paid one refunded once (each row decided under its lock). */
+  /**
+   * Queued actions past the module's delay: failed, a paid one refunded once (each row decided under its lock). An
+   * action a player claimed is left to that player until its lease ends (never shown AND refunded).
+   */
   async expireQueued(d: ModuleDefinition) {
-    const cut = new Date(this.ctx.clock.now().getTime() - d.expireQueuedMs!);
+    const now = this.ctx.clock.now().getTime();
+    const cut = new Date(now - d.expireQueuedMs!);
     const old = await this.ctx.db.query<{ activity_id: string }>(
-      `select activity_id from module_activity where module_id = $1 and status = 'queued' and created_at < $2`,
-      [d.id, cut],
+      `select activity_id from module_activity where module_id = $1 and status = 'queued' and created_at < $2
+          and (claimed_at is null or claimed_at < $3)`,
+      [d.id, cut, new Date(now - PLAYER_LEASE_MS)],
     );
     for (const r of old)
       await this.settle(
@@ -270,8 +300,40 @@ export class ModuleHost {
   async catalog(channelId: string) {
     const out = [];
     for (const d of this.modules.values()) {
+      try {
+        out.push(await this.entry(channelId, d));
+      } catch (e) {
+        // One failing module never hides the others: listed, said unknown, nothing offered to viewers.
+        out.push({
+          id: d.id,
+          label: d.label,
+          description: d.description,
+          category: d.category,
+          lab_only: !!d.labOnly,
+          capabilities: d.capabilities,
+          enabled: false,
+          has_switch: this.hasSwitch(d),
+          chat_words: d.chatWords ?? [],
+          settings: Object.keys(d.settings ?? {}).map((k) => `${d.id}.${k}`),
+          admin: [],
+          viewer: [],
+          moderation: d.moderation ?? null,
+          status: {
+            intention: 'off' as const,
+            observed: 'unknown' as const,
+            summary: `Module illisible : ${(e as Error).message}`,
+            reasons: [],
+          },
+        });
+      }
+    }
+    return { modules: out };
+  }
+
+  private async entry(channelId: string, d: ModuleDefinition) {
+    {
       const c = this.ctxFor(d);
-      out.push({
+      return {
         id: d.id,
         label: d.label,
         description: d.description,
@@ -299,15 +361,24 @@ export class ModuleHost {
         ),
         moderation: d.moderation ?? null,
         status: await this.status(channelId, d.id),
-      });
+      };
     }
-    return { modules: out };
   }
 
   /** The module's own view of itself, never green on the switch alone; a failing status reads « unknown ». */
   async status(channelId: string, id: string): Promise<ModuleStatusView> {
     const d = this.module(id);
-    const on = await this.enabled(this.ctx.db, channelId, d);
+    let on: boolean;
+    try {
+      on = await this.enabled(this.ctx.db, channelId, d);
+    } catch (e) {
+      return {
+        intention: 'off',
+        observed: 'unknown',
+        summary: `Interrupteur illisible : ${(e as Error).message}`,
+        reasons: [],
+      };
+    }
     if (!d.status)
       return {
         intention: on ? 'on' : 'off',
@@ -385,7 +456,13 @@ export class ModuleHost {
     channelId: string,
     id: string,
     name: string,
-    req: { viewer: Viewer; idempotency_key: string; input?: unknown },
+    req: {
+      viewer: Viewer;
+      idempotency_key: string;
+      input?: unknown;
+      /** The price the viewer confirmed: a different current price refuses BEFORE the debit (`price_changed`). */
+      expected_price?: number;
+    },
   ) {
     const d = this.module(id);
     const a = d.viewer?.[name];
@@ -395,6 +472,11 @@ export class ModuleHost {
     const requestHash = hash([name, req.viewer.id, req.input ?? null]);
     try {
       return await this.ctx.db.tx(async (q) => {
+        // One viewer's actions on one module, one at a time (a resent intent waits for the first and replays it; a
+        // module's per-viewer limit is read after the previous purchase committed).
+        await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+          `module:${channelId}:${id}:${req.viewer.id}`,
+        ]);
         const prior = (
           await q.query<ActivityRow>(
             `select * from module_activity where channel_id = $1 and module_id = $2 and idempotency_key = $3`,
@@ -414,6 +496,8 @@ export class ModuleHost {
         if (!(await this.enabled(q, channelId, d)))
           throw new ModuleError(409, 'module_disabled');
         const price = a.price ? await a.price(c, q, channelId) : 0;
+        if (req.expected_price !== undefined && req.expected_price !== price)
+          throw new ModuleError(409, 'price_changed', { price });
         if (price > 0 && a.liveOnly !== false && !(await c.live(q)))
           throw new ModuleError(409, STREAM_OFFLINE);
         const activityId = randomUUID();
@@ -469,6 +553,9 @@ export class ModuleHost {
         });
       if (e instanceof GlobalPauseError)
         throw new ModuleError(409, 'global_pause');
+      // The same key from ANOTHER viewer (the lock is per viewer): the intent belongs to the first — never a 500.
+      if ((e as { code?: string }).code === '23505')
+        throw new ModuleError(409, 'idempotency_conflict');
       throw e;
     }
   }
@@ -519,6 +606,29 @@ export class ModuleHost {
    * The player's door (OBS executor in Studio, architecture § 9 — no universal player): the module's waiting actions,
    * oldest first, then its report through the same single settlement (a failure refunds the original debit once).
    */
+  /**
+   * A player takes the next waiting actions for itself (lease PLAYER_LEASE_MS): two players never show the same one,
+   * and the expiry leaves a claimed action to its player until the lease ends. A player that died frees them by itself.
+   */
+  async claim(channelId: string, id: string, player: string, limit = 1) {
+    this.module(id);
+    const now = this.ctx.clock.now();
+    return this.ctx.db.tx(async (q) => {
+      const rows = await q.query<ActivityRow>(
+        `update module_activity set claimed_at = $4, claimed_by = $5, updated_at = $4
+          where activity_id in (
+            select activity_id from module_activity
+             where channel_id = $1 and module_id = $2 and status = 'queued'
+               and (claimed_at is null or claimed_at < $6 or claimed_by = $5)
+             order by created_at limit $3 for update skip locked)
+          returning *`,
+        [channelId, id, Math.min(Math.max(limit, 1), 10), now, player, new Date(now.getTime() - PLAYER_LEASE_MS)],
+      );
+      return { items: rows.map(activityView), lease_ms: PLAYER_LEASE_MS };
+    });
+  }
+
+  /** Read only (diagnostics): the waiting actions, claimed or not. */
   async queue(channelId: string, id: string, limit = 10) {
     this.module(id);
     const rows = await this.ctx.db.query<ActivityRow>(
@@ -635,6 +745,9 @@ export class ModuleHost {
         )
       )[0];
       if (!row) throw new ModuleError(404, 'activity_not_found');
+      // Nobody refunds their own purchase from the extension (same rule as the permissions' self_edit).
+      if (req.actor.via === 'extension' && row.viewer_id === req.actor.id)
+        throw new ModuleError(403, 'self_refund');
       const d = this.module(row.module_id);
       if (d.moderation?.refund !== 'moderator')
         throw new ModuleError(409, 'refund_not_allowed');

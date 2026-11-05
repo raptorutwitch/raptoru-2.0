@@ -48,15 +48,27 @@ export async function moduleFacade(o: {
   let m: RegExpExecArray | null;
   try {
     // Moderation of the host's modules (GUIDE_MODERATION.md): the shared journal and the refund of an original debit.
-    if (sub === '/moderation/activity' || sub === '/moderation/refund') {
+    const modJournal = new RegExp(`^/moderation/(${ID})/activity$`).exec(sub);
+    if (modJournal || sub === '/moderation/refund') {
       // The journal names every viewer: team only (the refund's permission is checked again by the Core).
       if (!o.moderator || (o.moderator.role !== 'moderator' && o.moderator.role !== 'broadcaster'))
         return { status: 403, body: { ok: false, error: 'forbidden' } };
-      if (o.method === 'GET' && sub === '/moderation/activity')
+      if (o.method === 'GET' && modJournal) {
+        // One module's journal (never a slice of every module's), and only a module whose policy shows it to the team.
+        const { modules } = await o.call<{ modules: CatalogModule[] }>(base);
+        const m = modules.find((x) => x.id === modJournal[1]);
+        if (!m?.moderation?.visible)
+          return { status: 404, body: { ok: false, error: 'not_available' } };
         return {
           status: 200,
-          body: { ok: true, ...(await o.call<Record<string, unknown>>(`${base}/activity`)) },
+          body: {
+            ok: true,
+            ...(await o.call<Record<string, unknown>>(
+              `${base}/activity?module=${encodeURIComponent(m.id)}&limit=100`,
+            )),
+          },
         };
+      }
       if (o.method === 'POST' && sub === '/moderation/refund') {
         const b = (o.body ?? {}) as { activity_id?: unknown; reason?: unknown };
         return {
@@ -79,8 +91,9 @@ export async function moduleFacade(o: {
         status: 200,
         body: {
           ok: true,
+          // A module switched off is not offered (Studio says « invisible pour les viewers »).
           modules: modules
-            .filter((x) => x.capabilities.includes('viewer'))
+            .filter((x) => x.capabilities.includes('viewer') && x.enabled)
             .map((x) => ({
               id: x.id,
               label: x.label,
@@ -121,7 +134,12 @@ export async function moduleFacade(o: {
           status: 400,
           body: { ok: false, error: 'idempotency_key_required' },
         };
-      const input = (o.body as { input?: unknown } | null)?.input ?? null;
+      const b = (o.body ?? {}) as { input?: unknown; expected_price?: unknown };
+      const input = b.input ?? null;
+      const expected =
+        typeof b.expected_price === 'number' && Number.isInteger(b.expected_price) && b.expected_price >= 0
+          ? b.expected_price
+          : undefined;
       return {
         status: 200,
         body: {
@@ -132,6 +150,7 @@ export async function moduleFacade(o: {
               viewer: o.viewer,
               idempotency_key: o.idempotencyKey,
               input,
+              ...(expected === undefined ? {} : { expected_price: expected }),
             },
           )),
         },

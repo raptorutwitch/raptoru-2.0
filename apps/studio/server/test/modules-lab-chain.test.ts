@@ -54,7 +54,7 @@ describe('module host — real Lab chain (Lab Core + Studio client + Extension L
     expect(again.body).toMatchObject({ ok: true, replayed: true });
     expect((await ext('viewer', 'GET', '/modules/v3/coffre_mystere/state')).body.recent).toHaveLength(1);
     // The journal is the team's; the refund is the original debit, once.
-    expect((await ext('viewer', 'GET', '/modules/v3/moderation/activity')).status).toBe(403);
+    expect((await ext('viewer', 'GET', '/modules/v3/moderation/coffre_mystere/activity')).status).toBe(403);
     const id = (first.body.activity as { activity_id: string }).activity_id;
     const out = await ext('moderator', 'POST', '/modules/v3/moderation/refund', { activity_id: id, reason: 'test Lab' });
     expect(out.body).toMatchObject({ ok: true, refunded: 100 });
@@ -70,6 +70,10 @@ describe('module host — real Lab chain (Lab Core + Studio client + Extension L
     const base = '/v1/lab/modules/900100/coffre_mystere';
     const queue = await core<{ items: { activity_id: string; amount: number }[] }>(`${base}/queue`);
     expect(queue.items.map((i) => i.activity_id)).toEqual([id]);
+    // Two players: the first claims it (lease), the second gets nothing — never shown twice.
+    const first = await core<{ items: { activity_id: string; claimed_by: string }[] }>(`${base}/claim`, { player: 'obs-a' });
+    expect(first.items.map((i) => [i.activity_id, i.claimed_by])).toEqual([[id, 'obs-a']]);
+    expect((await core<{ items: unknown[] }>(`${base}/claim`, { player: 'obs-b' })).items).toEqual([]);
     await expect(core('/v1/lab/modules/900100/objectif_soiree/report', { activity_id: id, status: 'done' })).rejects.toMatchObject({
       status: 404, // another module's action: never settled through this door
     });
@@ -78,7 +82,7 @@ describe('module host — real Lab chain (Lab Core + Studio client + Extension L
     const again = await core<{ activity: { status: string } }>(`${base}/report`, { activity_id: id, status: 'done' });
     expect(again.activity.status).toBe('refunded'); // decided once
     expect((await core<{ items: unknown[] }>(`${base}/queue`)).items).toEqual([]);
-    const refunds = (await ext('moderator', 'GET', '/modules/v3/moderation/activity')).body.items as { status: string }[];
+    const refunds = (await ext('moderator', 'GET', '/modules/v3/moderation/coffre_mystere/activity')).body.items as { status: string }[];
     expect(refunds.filter((r) => r.status === 'refunded')).toHaveLength(1);
   });
 });

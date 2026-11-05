@@ -45,7 +45,7 @@ export function createCoffreView({ document, client, module }) {
   };
   const buy = createPurchaseButton({
     document,
-    run: (key) => client.moduleAct(module.id, 'ouvrir', null, key),
+    run: (key, price) => client.moduleAct(module.id, 'ouvrir', null, key, price),
     onResult: (r) => {
       $('msg').textContent = r.ok ? 'Coffre acheté : il arrive sur le stream.' : r.message;
       void refresh();

@@ -77,7 +77,9 @@ export const coffreMystere: ModuleDefinition = {
         );
         if (mine.length >= limit)
           throw new ModuleError(409, 'too_many_waiting', { limit });
-        // A fixed rotation (no randomness to tune): the content is decided now, shown by the player later.
+        // A fixed rotation (no randomness to tune): the content is decided now, shown by the player later. The shared
+        // counter under the module's lock (two viewers buying at once never lose an opening).
+        await ctx.lock(q, channelId, 'opened');
         const n =
           ((await ctx.state.get<number>(q, channelId, 'opened')) ?? 0) + 1;
         await ctx.state.set(q, channelId, 'opened', n);

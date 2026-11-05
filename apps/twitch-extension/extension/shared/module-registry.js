@@ -23,7 +23,7 @@ export function viewerModuleView(id) {
 /** The Hub entries: the server's modules that this build can show (same shape as the session's `modules`). */
 export function hostModules() {
   return catalog
-    .filter((m) => views.has(m.id))
+    .filter((m) => views.has(m.id) && m.enabled !== false)
     .map((m) => ({
       id: m.id,
       label: m.label,

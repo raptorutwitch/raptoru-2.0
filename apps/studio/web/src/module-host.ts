@@ -113,11 +113,16 @@ export function mountModuleHost(root: HTMLElement) {
   let visible = false;
   let modules: CatalogModule[] | null = null;
   let message = '';
+  // Overlapping renders (setVisible then setFocus): only the latest one writes the page.
+  let generation = 0;
   const render = async () => {
     if (!visible) return;
-    modules =
+    const mine = ++generation;
+    const read =
       (await tryGetJson<{ modules: CatalogModule[] }>('/api/modules'))
         ?.modules ?? null;
+    if (mine !== generation) return;
+    modules = read;
     const shown = modules?.filter((m) => !focus || m.id === focus) ?? [];
     root.innerHTML = `<div class="rs-page rs-form">
       <header class="rs-page-head"><h1>${focus && shown[0] ? esc(shown[0].label) : 'Modules du socle'}</h1>
@@ -126,7 +131,9 @@ export function mountModuleHost(root: HTMLElement) {
       ${modules === null ? '<p class="rs-state is-unknown">Catalogue illisible : le Core de ce profil ne fournit pas les modules du socle.</p>' : shown.length ? shown.map(cardHtml).join('') : '<p class="rs-muted">Aucun module.</p>'}
     </div>`;
     for (const m of shown) {
-      const card = root.querySelector<HTMLElement>(`[data-module="${m.id}"]`)!;
+      if (mine !== generation) return;
+      const card = root.querySelector<HTMLElement>(`[data-module="${m.id}"]`);
+      if (!card) continue;
       if (m.settings.length || m.has_switch)
         void mountSettingsPanel(
           card.querySelector<HTMLElement>('[data-role="settings"]')!,
@@ -155,12 +162,13 @@ export function mountModuleHost(root: HTMLElement) {
       let input: unknown = null;
       if (a.confirm && !confirm(a.confirm)) return;
       if (a.input) {
-        const n = Number(
-          prompt(
-            `${a.input.label} (${a.input.min} à ${a.input.max})`,
-            String(a.input.min),
-          ),
+        const raw = prompt(
+          `${a.input.label} (${a.input.min} à ${a.input.max})`,
+          String(a.input.min),
         );
+        // « Annuler » (null) or an empty answer sends nothing (Number(null) would be 0).
+        if (raw === null || !raw.trim()) return;
+        const n = Number(raw);
         if (!Number.isInteger(n)) return;
         input = { [a.input.key]: n };
       }

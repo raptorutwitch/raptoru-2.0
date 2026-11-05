@@ -30,6 +30,12 @@ create unique index if not exists module_activity_intent on module_activity (cha
   where idempotency_key is not null;
 create index if not exists module_activity_recent on module_activity (channel_id, module_id, created_at desc);
 create index if not exists module_activity_viewer on module_activity (channel_id, viewer_id, created_at desc);
+-- An OBS player's claim (POST …/<id>/claim): the action is the claiming player's until its lease ends — the expiry never
+-- refunds an action being shown. Additive and re-runnable (a database that already has the table gets the columns).
+alter table module_activity add column if not exists claimed_at timestamptz;
+alter table module_activity add column if not exists claimed_by text;
+-- The periodic expiry reads the waiting actions of a module (every 5 s): never a scan of the whole journal.
+create index if not exists module_activity_waiting on module_activity (module_id, created_at) where status = 'queued';
 
 create table if not exists module_state (
   channel_id text not null,

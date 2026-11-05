@@ -1,6 +1,6 @@
 import { LabActor } from '@raptoru/schemas';
 import { z } from 'zod';
-import { LabForbiddenError } from '../lab-moderation/store.js';
+import { LabForbiddenError, LabWalletError } from '../lab-moderation/store.js';
 import { ModuleSettingsError } from '../module-settings/service.js';
 import type { ModuleHost } from '../modules/host.js';
 import { ModuleError } from '../modules/kit.js';
@@ -19,10 +19,15 @@ const ViewerCall = z.strictObject({
   viewer: Viewer,
   idempotency_key: z.string().regex(/^[A-Za-z0-9_:-]{8,128}$/),
   input: z.unknown().optional(),
+  expected_price: z.number().int().min(0).optional(),
 });
 const AdminCall = z.strictObject({
   actor: LabActor,
   input: z.unknown().optional(),
+});
+const ClaimCall = z.strictObject({
+  player: z.string().regex(/^[A-Za-z0-9:_-]{1,64}$/),
+  limit: z.number().int().min(1).max(10).optional(),
 });
 const ReportCall = z.strictObject({
   activity_id: z.uuid(),
@@ -44,6 +49,9 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
       throw new HttpError(e.status, { error: e.code, ...e.details });
     if (e instanceof ModuleSettingsError)
       throw new HttpError(e.status, { error: e.code });
+    // A refund or a report the wallet refused: a clear code, never a 500.
+    if (e instanceof LabWalletError)
+      throw new HttpError(409, { error: e.code, ...e.details });
     if (e instanceof LabForbiddenError)
       throw new HttpError(403, {
         error: 'forbidden',
@@ -96,6 +104,16 @@ export function modulesRoutes(host: ModuleHost): Route[] {
       pattern: at(`${M}\\/queue`),
       auth: 'studio',
       handle: ({ params }) => mapped(() => host.queue(params[0]!, params[1]!)),
+    },
+    {
+      method: 'POST',
+      pattern: at(`${M}\\/claim`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() => {
+          const c = parse(ClaimCall, body);
+          return host.claim(params[0]!, params[1]!, c.player, c.limit);
+        }),
     },
     {
       method: 'POST',

@@ -513,10 +513,14 @@ export function createClient({
     // viewer, an action with the intent's key (purchase.js keeps it until the server decided).
     moduleCatalog: () => call('GET', '/modules/v3'),
     moduleState: (id) => call('GET', `/modules/v3/${encodeURIComponent(id)}/state`),
-    moduleAct: (id, action, input, idempotencyKey) =>
-      call('POST', `/modules/v3/${encodeURIComponent(id)}/${encodeURIComponent(action)}`, { body: { input }, idempotencyKey }),
+    /** `expectedPrice`: the price the viewer confirmed (the Core refuses `price_changed` before any debit). */
+    moduleAct: (id, action, input, idempotencyKey, expectedPrice) =>
+      call('POST', `/modules/v3/${encodeURIComponent(id)}/${encodeURIComponent(action)}`, {
+        body: { input, ...(Number.isInteger(expectedPrice) ? { expected_price: expectedPrice } : {}) },
+        idempotencyKey,
+      }),
     /** Team only (the server refuses others): the host modules' journal, and the refund of an original debit. */
-    moduleModerationActivity: () => call('GET', '/modules/v3/moderation/activity'),
+    moduleModerationActivity: (id) => call('GET', `/modules/v3/moderation/${encodeURIComponent(id)}/activity`),
     moduleModerationRefund: (activityId, reason) =>
       call('POST', '/modules/v3/moderation/refund', { body: { activity_id: activityId, reason } }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
@@ -668,6 +672,11 @@ export const ERROR_LABELS = {
   raffle_paused: 'La tombola est en pause.',
   module_disabled: 'Ce module est désactivé pour le moment.',
   too_many_waiting: 'Tu as déjà des achats en attente : patiente un peu.',
+  price_changed: 'Le prix vient de changer : vérifie-le avant de confirmer.',
+  self_refund: 'Tu ne peux pas rembourser ton propre achat.',
+  refund_not_allowed: 'Ce module ne permet pas de remboursement.',
+  already_refunded: 'Déjà remboursé.',
+  reason_required: 'Un motif est obligatoire.',
   idempotency_conflict: 'Cette demande a déjà été envoyée autrement : recharge le module.',
   // Refonte H1: paid stream interactions only during the live (refused before any debit).
   stream_offline: 'Disponible uniquement pendant le live : rien n’a été débité.',

@@ -62,6 +62,11 @@ export interface ModuleContext {
     channelId: string,
     m: { key: string; text: string; delayMs?: number; announce?: boolean },
   ): Promise<number>;
+  /**
+   * Serializes THIS module's work on `key` until the caller's transaction ends (a shared counter, a round): two
+   * concurrent actions never lose an update.
+   */
+  lock(q: Queryable, channelId: string, key: string): Promise<void>;
   /** Is the canonical live open (Production) / always true in the Lab (H1). */
   live(q: Queryable): Promise<boolean>;
   /**
