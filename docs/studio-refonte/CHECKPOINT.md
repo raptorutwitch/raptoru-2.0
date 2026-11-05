@@ -18,6 +18,8 @@ le travail touche au comportement d'un module.
 
 Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par Antoni, rien de publié) :
 
+- `a0ed9a7` H8 Jeu des mots ON/OFF durable + intervalle (migration préparée) · `3e4e1db` / `38d8d43` F4 « Prêt pour le
+  live » en tête du Centre de contrôle.
 - `3311fb5` H16 état réel du moteur des Défis · `e944670` H15 option Level Up masquée (extension) · `2355f55` H13 mode
   V1/V2 de la roue en « avancé » · `53b9981` H5 StreamElements ACTIVE repris en Production · `d167ca4` H4 TTS 5 min.
 - `ba1b669` H3 alertes 30 min + « Vider la file » · `04ccc3f` H2 travaux OBS des points expirés à 2 min + remboursement
@@ -79,15 +81,10 @@ Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par A
 
 ## Prochaine action
 
-1. **F1 — Vérité des états**, Studio seul, sans décision ni déploiement :
-   - P0-7 : un échec de démarrage du profil Production devient visible ;
-   - P0-8 : la Régie et le Centre de contrôle n'affichent plus de vert sur une intention seule ;
-   - P1-13 : libellés de portée des actions réelles ;
-   - « Tester » renommé.
-2. Ensuite, F4 (Centre de contrôle et « Prêt pour le live »).
-3. Reprendre en parallèle le lot UX 5 (Alertes), en y joignant les points fonctionnels d'Alertes : file, fraîcheur,
-   « Envoyer dans la file » en Production.
-4. F2, F3, F6 et F7 attendent les arbitrages H et un GO de déploiement.
+1. H1 (interactions payantes uniquement en live, refus avant débit, source canonique) puis H6 (Spotify en fin de live).
+2. H10 / H12 / H14 (réglages : prix, recharges, Bonk, paliers du Daily) dans les pages des modules.
+3. H9 (fidélité `tier_unknown`), F3 (P0-5), F5 (restauration OBS à la fermeture).
+4. Tableau d'état détaillé : ROADMAP « État au 05/11 ».
 
 ## Reprendre
 

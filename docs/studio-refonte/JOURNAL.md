@@ -51,6 +51,22 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   - E2E `tombola-bonbons` : échec relancé seul, puis rejoué sur les fichiers de `f1f1b03` restaurés temporairement dans le
     worktree. Il échoue de la même façon : défaut antérieur.
 
+## 05/11/2026
+
+- **Décisions H1-H16 tranchées par Antoni** ; GO pour le développement autonome en Lab (CONTEXTE § 18).
+- Base PostgreSQL jetable dédiée : conteneur `studio-ux-test-pg` (port 55499) ; jamais `raptoru2-pg`, `vk-test-pg` ni
+  `raptoru-lab-v2-pg`. Le Studio installé tournait (port 4100) : jamais utilisé, aucun test sur ses ports ni son dossier.
+- `76de82e` F1 vérité des états. `9e1e3fa` P0-2. `5b792f8` P0-3 (contre-preuve : le test échoue sur `updated_at`).
+  `67b1d04` P0-4. `04ccc3f` H2 (course réelle à deux Cores sur PostgreSQL : 20 prises / lectures simultanées → aucune
+  prise, un remboursement par utilisation). `ba1b669` H3. `d167ca4` H4. `53b9981` H5. `2355f55` H13. `e944670` H15.
+  `3311fb5` H16. `3e4e1db` / `38d8d43` F4 « Prêt pour le live ». `a0ed9a7` H8.
+- Constat corrigé en passant : la carte Spotify de la Régie attendait `open` / `closed` alors que le Core renvoie
+  `ready` / `MODULE_DISABLED` / un motif de refus (état faux affiché depuis le lot 7a).
+- Suite Core complète (PGlite) : 1 333 tests verts ; un test d'historique de Modération ajusté (un TTS de 20 min est
+  désormais remboursé par l'expiration à 5 min). Suites Roue, migrations, H2 : vertes sur PostgreSQL réel (106 + 5).
+- Aperçu isolé (pile E2E, port 4411, données fictives) : Centre de contrôle en 1280 px et 390 px, sans défilement
+  horizontal.
+
 ## Vérifications marquantes
 
 - Storyboard cherché le 04/11 : dépôt (code, docs, branches, messages de commit), checkout principal, `prototypes/`

@@ -25,6 +25,7 @@ les capacités métier restent.
 | 04/11 | Le Laboratoire, en particulier l'**Extension Lab**, est essentiel : mieux organisé, jamais dégradé ni supprimé. | Antoni |
 | 04/11 | Catégories strictes **PRODUCTION / LAB / SIMULATION / APERÇU LOCAL** selon le comportement technique réel (§ 7) ; simulations inutiles ou trompeuses à éliminer progressivement après vérification des usages. | Antoni |
 | 04/11 | **Audit fonctionnel** (démarrages, cycle du live, automatisations, réglages) : [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md). La refonte devient fonctionnelle autant que visuelle ; principes au § 17. Arbitrages métier H1-H16 en attente. | mission d'Antoni |
+| 05/11 | **H1-H16 tranchés** (§ 18) ; GO pour le développement autonome **en Lab** (aucune Production, aucune publication). | mission d'Antoni |
 
 ## 3. Problèmes du Studio initial (résumé Astra, non réaudité)
 
@@ -179,9 +180,7 @@ anciennes adresses `?tab=` ; Extension Lab et les simulations utiles ; séparati
 4. **Storyboard** : introuvable (dépôt, branches, `prototypes/`, ancien dossier Raptoru, Bureau, Téléchargements, le
    04/11). Aucun équivalent inventé ; Antoni doit dire ce qu'il désigne.
 5. Classement final des outils de simulation (§ 7) et sort du Test Lab « temporaire ».
-6. **Arbitrages de l'audit fonctionnel H1-H16** ([AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) § H) : achats hors live,
-   points de chaîne quand Studio est absent, fraîcheur des alertes, expiration TTS, StreamElements au redémarrage, fin de
-   live Spotify, limites réglables, etc. Comportement actuel conservé en attendant.
+6. ~~Arbitrages de l'audit fonctionnel H1-H16~~ : **tranchés le 05/11**, voir § 18.
 
 ## 14. Emplacements
 
@@ -246,4 +245,32 @@ Détail et preuves : [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md).
 - **Un test réel se déclare réel** jusqu'au bout : libellé, confirmation, portée.
 - **Cotes et tables de gains** restent dans le code ; prix, recharges, durées et limites deviennent réglables avec des
   bornes côté Core (H10).
-- Tant qu'un arbitrage H n'est pas tranché, **le comportement métier actuel est conservé**.
+- Tant qu'un arbitrage H n'est pas tranché, **le comportement métier actuel est conservé**. Depuis le 05/11, les seize
+  sont tranchés (§ 18) ; une règle métier hors de ces décisions ne change jamais en silence.
+
+## 18. Décisions métier validées le 05/11 (H1-H16)
+
+Antoni a tranché les seize arbitrages de l'audit (§ H) et donné son GO pour les mettre en œuvre **en Lab uniquement**.
+Rien n'atteint la Production sans nouvelle autorisation explicite (déploiement, migration, release, extension).
+
+| # | Décision | Mise en œuvre |
+|---|---|---|
+| H1 | Interactions payantes liées au stream **uniquement en live** (Soundboard, TTS, Bonk, Chaos, `!rb`, Caution, Votekick, Spotify, effets de points de chaîne) ; refus avant débit, source de live canonique. Pas la Boutique, le Wallet, le Daily, la fidélité. Aucun contournement en Production ; tests en Lab. | à faire |
+| H2 | Travaux OBS des points de chaîne non commencés : **expiration à 2 min**, remboursement unique quand c'est possible. | codé, testé |
+| H3 | Alertes : **30 min**, commande « Vider la file » (en attente seulement). | codé, testé |
+| H4 | TTS : **5 min** (au lieu de 30). | codé, testé |
+| H5 | StreamElements : **ACTIVE repris en Production** au redémarrage (Lab : TEST). | codé, testé |
+| H6 | Spotify en fin de live : fermer, annuler les non commencées, **rembourser** quand c'est possible, jamais deux fois. | à faire |
+| H7 | Activités ponctuelles **manuelles** (aucun démarrage automatique nouveau). | rien à coder (comportement actuel) |
+| H8 | Jeu des mots : **ON/OFF durable**, intervalle réglable (5-15 min par défaut). | codé, testé |
+| H9 | Fidélité `tier_unknown` : **taux de base immédiat, complément différé** une seule fois. | à faire |
+| H10 | Prix, recharges, durées, limites **réglables** (§ D.3 Essentiels), bornes Core ; jamais cotes ni tables de gains. | à faire |
+| H11 | « Exécuter maintenant (réel) » et aperçu distincts ; Spotify à blanc. | codé, testé |
+| H12 | Bonk : prix et recharge réglables, **valeurs actuelles du Core** par défaut. | à faire |
+| H13 | Roue : choix V1/V2 en **paramètres avancés** ; bug de frontière corrigé séparément. | codé, testé |
+| H14 | Daily : **paliers réglables**, heure fixe. | à faire |
+| H15 | « Annoncer mes Level Up » **masqué**. | codé (extension à publier par Antoni) |
+| H16 | Moteur des Défis : **état réel affiché**, jamais activé d'ici. | codé, testé |
+
+« Codé, testé » = tests automatiques seulement. Rien n'est validé par Antoni ni publié. État détaillé : ROADMAP.
+
