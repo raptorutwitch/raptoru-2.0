@@ -116,6 +116,7 @@ export function createCore(
   const loyalty = new LoyaltyEngine(db, clock, wallet.wallet, loyaltyModes);
   const soundLab = new SoundLabService(db, clock, undefined, economy);
   const votekick = new VotekickService(db, clock, broadcasterOf);
+  votekick.economy = economy; // refonte H1: votes only during the canonical live
   // Random Ban V3: the streamer as an exceptional target (his mic muted in OBS), never while Votekick mutes him.
   const randomBan = new RandomBanService(db, clock, undefined, {
     streamer: () =>

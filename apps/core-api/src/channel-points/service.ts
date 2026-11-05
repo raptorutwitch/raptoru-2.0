@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import {
   type CpAckRequest,
   type CpAction,
@@ -591,11 +592,13 @@ export class ChannelPointsService {
                 now.getTime() - new Date(e.redeemed_at).getTime() >
                   CP_RULES.maxAgeMs
               ? 'late'
-              : null;
-      // Actions frozen at reception (a later edit of the rule never changes this redemption). Late: only its credits
-      // (the points are spent; an OBS effect or a sound minutes later would surprise the stream).
+              : real && !(await liveForPaid(q, this.economy))
+                ? STREAM_OFFLINE
+                : null;
+      // Actions frozen at reception (a later edit of the rule never changes this redemption). Late or outside the live
+      // (refonte H1): only its credits (the points are spent; credits are not a stream effect).
       const actions =
-        reason && reason !== 'late'
+        reason && reason !== 'late' && reason !== STREAM_OFFLINE
           ? []
           : rule!.actions
               .map((a) => withViewerText(CpActionSchema.parse(a), e.user_input))
@@ -649,6 +652,21 @@ export class ChannelPointsService {
           jobId,
         ],
       );
+      // Refonte H1: a stream effect bought outside the live is refused; its points go back once on Twitch when the
+      // reward is Raptoru's and nothing was granted (a song request is refunded by Spotify's own refusal below).
+      if (
+        reason === STREAM_OFFLINE &&
+        !actions.length &&
+        !rule!.actions.some(isSongRequest) &&
+        this.twitch &&
+        (await this.twitch.managed(q, e.channel_id, e.reward.id))
+      )
+        await this.twitch.redemptionStatus(q, {
+          channel_id: e.channel_id,
+          reward_id: e.reward.id,
+          redemption_id: e.redemption_id,
+          status: 'CANCELED',
+        });
       if (jobId)
         await q.query(
           `insert into cp_jobs (job_id, channel_id, source, redemption_id, actions, status, created_at)

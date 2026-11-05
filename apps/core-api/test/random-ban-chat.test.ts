@@ -311,3 +311,42 @@ describe('!rb in the chat', () => {
     expect(Number(tokens[0]!.tokens)).toBe(70_000);
   });
 });
+
+describe('Refonte H1: `!rb` only during the canonical live', () => {
+  it('offline on the canonical economy: told in the chat, nothing requested nor debited; in live: queued and paid once', async () => {
+    const l = await lab();
+    await l.poll();
+    const { coreWalletEconomy } = await import('../src/economy/economy.js');
+    const { defaultChatPrices } =
+      await import('../src/chat-interactions/prices.js');
+    const port = coreWalletEconomy(l.core.wallet.wallet);
+    await l.core.wallet.wallet.credit({
+      key: 'fund-h1',
+      viewer: {
+        twitchUserId: alice.id,
+        login: alice.login,
+        displayName: alice.display_name,
+      },
+      amount: 100_000,
+      source: 'test',
+    });
+    const chat = new RandomBanChat(
+      l.core.db,
+      l.core.clock,
+      l.rb,
+      port,
+      defaultChatPrices,
+    );
+    expect(await chat.chat(msg('!rb'))).toEqual({ outcome: 'stream_offline' });
+    expect(await l.requests()).toEqual([]);
+    expect(await l.replies()).toEqual([
+      '@Alice - Random Ban disponible uniquement pendant le live · rien n’a été débité.',
+    ]);
+    const { openCanonicalLive } = await import('./live.js');
+    await openCanonicalLive(l.core.db, l.core.clock);
+    expect((await chat.chat(msg('!rb'))).outcome).toBe('rb_queued');
+    expect((await l.core.wallet.wallet.getWallet(alice.id))!.balance).toBe(
+      75_000,
+    );
+  });
+});

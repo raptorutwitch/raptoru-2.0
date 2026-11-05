@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import type {
   TtsLabAckRequest,
   TtsLabAdmitRequest,
@@ -330,6 +331,8 @@ export class TtsLabService {
         throw new TtsLabError409('tts_disabled', 'TTS disabled');
       if (moduleState === 'paused')
         throw new TtsLabError409('tts_paused', 'TTS paused by moderation');
+      if (!(await liveForPaid(q, this.economy)))
+        throw new TtsLabError409(STREAM_OFFLINE, 'TTS only during the live');
       if (!length) throw new TtsLabError409('empty_message', 'empty message');
       if (length > rules.max_chars)
         throw new TtsLabError409('message_too_long', 'message too long', {

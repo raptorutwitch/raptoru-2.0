@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { openCanonicalLive } from './live.js';
 import type { LabActor, LabModerationCommand } from '@raptoru/schemas';
 import {
   BONK_LAB_RULES,
@@ -23,6 +24,7 @@ let seq = 0;
 
 async function canonical() {
   const core = await setup();
+  await openCanonicalLive(core.db, core.clock);
   const port = coreWalletEconomy(core.wallet.wallet);
   /** A fresh set of services on the same database (a Core restart). */
   const services = () => {
@@ -433,5 +435,105 @@ describe('Lab economy unchanged (regression)', () => {
     });
     expect((await mod.wallet(CH, V.id)).tokens).toBe(before.tokens + 100);
     expect(await count(core.db, 'wallet_transactions')).toBe(0);
+  });
+});
+
+describe('Refonte H1: paid stream interactions only during the canonical live', () => {
+  const offline = async () => {
+    const f = await canonical();
+    await f.core.streams.offline();
+    await f.fund(100_000);
+    return f;
+  };
+  it('offline: TTS, Soundboard, Bonk refused BEFORE any debit (stream_offline); nothing stored', async () => {
+    const f = await offline();
+    const before = await count(f.core.db, 'wallet_transactions');
+    expect(
+      await code(
+        f.s.tts.admit({
+          ...f.base,
+          idempotency_key: 'h1-tts',
+          text: 'Salut',
+          payment_method: 'tokens',
+        }),
+      ),
+    ).toBe('stream_offline');
+    expect(
+      await code(
+        f.s.sound.admit({
+          ...f.base,
+          idempotency_key: 'h1-sound',
+          sound_id: 'boop',
+          payment_method: 'tokens',
+        }),
+      ),
+    ).toBe('stream_offline');
+    expect(
+      await code(
+        f.s.bonk.admit({
+          ...f.base,
+          idempotency_key: 'h1-bonk',
+          emote: f.emote('😀'),
+        }),
+      ),
+    ).toBe('stream_offline');
+    expect(await f.balance()).toBe(100_000);
+    expect(await count(f.core.db, 'wallet_transactions')).toBe(before);
+    await consistent(f.core.db);
+  });
+  it('offline → online: accepted and paid once; the same request replayed stays one debit; online again (same live) changes nothing', async () => {
+    const f = await offline();
+    await openCanonicalLive(f.core.db, f.core.clock, 'test-live-2');
+    await openCanonicalLive(f.core.db, f.core.clock, 'test-live-2'); // event received twice
+    const req = {
+      ...f.base,
+      idempotency_key: 'h1-tts-live',
+      text: 'Salut',
+      payment_method: 'tokens' as const,
+    };
+    const { interaction } = await f.s.tts.admit(req);
+    await f.s.tts.admit(req);
+    expect(await f.balance()).toBe(100_000 - interaction.simulated_cost);
+    await consistent(f.core.db);
+  });
+  it('online → offline: a message already admitted keeps its normal life (never refused afterwards); new ones refused', async () => {
+    const f = await offline();
+    await openCanonicalLive(f.core.db, f.core.clock, 'test-live-3');
+    const { interaction } = await f.s.tts.admit({
+      ...f.base,
+      idempotency_key: 'h1-before-end',
+      text: 'Salut',
+      payment_method: 'tokens',
+    });
+    await f.core.streams.offline();
+    const after = await f.s.tts.get(interaction.interaction_id);
+    expect(after.status).toBe('queued');
+    expect(
+      await code(
+        f.s.tts.admit({
+          ...f.base,
+          idempotency_key: 'h1-after-end',
+          text: 'Salut',
+          payment_method: 'tokens',
+        }),
+      ),
+    ).toBe('stream_offline');
+  });
+  it('the Lab test wallet is never gated (tests stay possible in an isolated Lab)', async () => {
+    const core = await setup();
+    const tts = new TtsLabService(core.db, core.clock, Math.random);
+    await tts.heartbeat({ studio_instance_id: STUDIO, player_ready: true });
+    expect(
+      await code(
+        tts.admit({
+          channel_id: CH,
+          viewer: V,
+          lab_session_id: 'lab-1',
+          idempotency_key: 'h1-lab',
+          text: 'Salut',
+          payment_method: 'tokens',
+        }),
+      ),
+    ).toBe('ok');
   });
 });

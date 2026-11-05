@@ -657,6 +657,8 @@ export const ERROR_LABELS = {
   message_blocked: 'Ce message contient un mot interdit : rien n’a été débité.',
   raffle_paused: 'La tombola est en pause.',
   module_disabled: 'Ce module est désactivé pour le moment.',
+  // Refonte H1: paid stream interactions only during the live (refused before any debit).
+  stream_offline: 'Disponible uniquement pendant le live : rien n’a été débité.',
   tts_banned: 'Tu ne peux pas utiliser le TTS pour le moment.',
   tts_viewer_busy: 'Ton TTS précédent est encore en attente ou en lecture.',
   tts_queue_full: 'La file TTS est pleine — aucun jeton ni crédit n’a été consommé.',

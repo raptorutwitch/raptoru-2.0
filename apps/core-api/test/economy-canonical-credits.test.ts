@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { openCanonicalLive } from './live.js';
 import type { CpRedemptionInput, LabActor } from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
 import { ChannelPointsService } from '../src/channel-points/service.js';
@@ -22,6 +23,7 @@ let seq = 0;
 async function fixture(economy: 'canonical' | 'lab' = 'canonical') {
   const core = await setup();
   core.clock.set(new Date('2026-10-19T20:00:00Z'));
+  await openCanonicalLive(core.db, core.clock);
   const port =
     economy === 'canonical'
       ? coreWalletEconomy(core.wallet.wallet)

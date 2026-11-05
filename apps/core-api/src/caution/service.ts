@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import {
   CAUTION,
   CAUTION_EXEC,
@@ -286,6 +287,12 @@ export class CautionService {
     if (input === payer.login.toLowerCase()) {
       await answer(`${payer.login}, tu ne peux pas payer ta propre caution`);
       return { outcome: 'self' };
+    }
+    if (!(await liveForPaid(this.db, this.economy))) {
+      await answer(
+        'Caution disponible uniquement pendant le live · aucun jeton débité.',
+      );
+      return { outcome: STREAM_OFFLINE };
     }
     if (!this.executorReady(msg.channel_id)) {
       await answer('Caution indisponible pour le moment · aucun jeton débité.');

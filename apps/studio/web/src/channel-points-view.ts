@@ -162,6 +162,8 @@ const REASON: Record<string, string> = {
   no_rule: 'aucune action configurée',
   rule_disabled: 'règle désactivée',
   late: 'reçue trop tard',
+  stream_offline:
+    'hors live : rien exécuté, seuls les crédits sont accordés (remboursement demandé à Twitch si la récompense est créée par Raptoru)',
 };
 const STATUS: Record<CpRedemption['status'], string> = {
   ignored: 'Ignorée',

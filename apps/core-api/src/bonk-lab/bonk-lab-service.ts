@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import type {
   BonkLabAckRequest,
   BonkLabAdmitRequest,
@@ -450,6 +451,8 @@ export class BonkLabService {
       throw new BonkLabError409('module_disabled', 'Bonk disabled');
     if (state === 'paused')
       throw new BonkLabError409('bonk_paused', 'Bonk paused by moderation');
+    if (!(await liveForPaid(q, this.economy)))
+      throw new BonkLabError409(STREAM_OFFLINE, 'Bonk only during the live');
     if (await activeBlock(q, channelId, viewerId, 'bonk', now0))
       throw new BonkLabError409(
         'viewer_blocked',

@@ -1,4 +1,5 @@
 import { randomInt, randomUUID } from 'node:crypto';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import {
   broadcasterMuteSeconds,
   VOTEKICK,
@@ -152,6 +153,9 @@ export class VotekickService implements CautionMutes {
     /** 0 = the target loses the coin flip, 1 = the initiator (tests inject it). */
     private readonly coin: () => 0 | 1 = () => randomInt(2) as 0 | 1,
   ) {}
+
+  /** Refonte H1: the economy of this Core (canonical: a vote starts only during the canonical live). Set by createCore. */
+  economy: { readonly mode: 'lab' | 'canonical' } = { mode: 'lab' };
 
   /** The Twitch profile pictures (the Tombola's cache, lab_viewer_avatars): the target's picture for the overlay. */
   private avatars: { ensure(ids: string[]): Promise<unknown> } | null = null;
@@ -352,6 +356,12 @@ export class VotekickService implements CautionMutes {
     const key = `msg:${msg.message_id}`;
     const ch = msg.channel_id;
     const mode = msg.source === 'simulator' ? 'dry_run' : 'real';
+    if (!(await liveForPaid(this.db, this.economy))) {
+      await this.db.tx((q) =>
+        this.say(q, ch, key, 'Votekick disponible uniquement pendant le live.'),
+      );
+      return { outcome: STREAM_OFFLINE };
+    }
     try {
       return await this.db.tx(async (q) => {
         await assertNotGloballyPaused(q, ch);

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import type {
   SoundLabAckRequest,
   SoundLabAdmitRequest,
@@ -497,6 +498,11 @@ export class SoundLabService {
         throw new SoundLabError409(
           'soundboard_paused',
           'Soundboard paused by moderation',
+        );
+      if (!(await liveForPaid(q, this.economy)))
+        throw new SoundLabError409(
+          STREAM_OFFLINE,
+          'Soundboard only during the live',
         );
       if (
         await activeBlock(q, req.channel_id, req.viewer.id, 'soundboard', now)

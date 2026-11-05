@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import {
   type AlertEventInput,
   DEFAULT_EVENT_RULES,
@@ -398,6 +399,9 @@ export class EventShopService {
   }
 
   private async purchaseTx(q: Queryable, req: EventShopPurchaseRequest) {
+    // Refonte H1: an event effect (Chaos…) plays on the stream — only during the canonical live, refused before payment.
+    if (!(await liveForPaid(q, this.economy)))
+      throw new EventShopError(409, STREAM_OFFLINE);
     const now = this.now();
     const settings = await this.ensure(q, req.channel_id);
     // The channel's admissions, one at a time: every limit below is read under this lock.

@@ -176,3 +176,95 @@ describe('Points de chaîne — expired OBS jobs (H2)', () => {
     expect(await t.refunds()).toHaveLength(1);
   });
 });
+
+describe('Refonte H1: channel points stream effects only during the canonical live', () => {
+  const canonicalCp = async (
+    opts: { managed?: boolean; credits?: boolean } = {},
+  ) => {
+    const core = await setup();
+    core.clock.set(T0);
+    const { coreWalletEconomy } = await import('../src/economy/economy.js');
+    const twitch = new CpTwitchActions(core.db, core.clock);
+    const cp = new ChannelPointsService(
+      core.db,
+      core.clock,
+      core.soundLab,
+      undefined,
+      coreWalletEconomy(core.wallet.wallet),
+      undefined,
+      twitch,
+    );
+    await cp.syncRewards({
+      channel_id: CH,
+      rewards: [
+        { id: REWARD, title: 'Scène fictive', cost: 500, is_enabled: true },
+      ],
+    });
+    if (opts.managed)
+      await core.db.query(
+        'update cp_rewards set managed_by_raptoru = true where channel_id = $1',
+        [CH],
+      );
+    await cp.saveRule(CH, REWARD, {
+      enabled: true,
+      actions: [
+        ...(opts.credits
+          ? [
+              {
+                type: 'credits' as const,
+                currency: 'credits_tts' as const,
+                amount: 1,
+              },
+            ]
+          : []),
+        { type: 'obs_scene', scene: 'Fictive' },
+      ],
+    });
+    await cp.setEnabled(CH, true, 'test');
+    const redeem = (id = randomUUID()) =>
+      cp.receive({
+        channel_id: CH,
+        source: 'twitch',
+        redemption_id: id,
+        reward: { id: REWARD, title: 'Scène fictive', cost: 500 },
+        user: { id: '9001', login: 'fictif', display_name: 'Fictif' },
+        user_input: '',
+        twitch_status: 'unfulfilled',
+        redeemed_at: core.clock.now().toISOString(),
+      });
+    const refunds = () =>
+      core.db.query(
+        "select 1 from cp_twitch_actions where kind = 'redemption_status'",
+      );
+    return { core, cp, redeem, refunds };
+  };
+
+  it('offline: nothing run, no OBS job; a Raptoru reward is refunded once (redelivery included)', async () => {
+    const t = await canonicalCp({ managed: true });
+    const id = randomUUID();
+    await t.redeem(id);
+    await t.redeem(id);
+    expect((await t.cp.state(CH)).recent[0]).toMatchObject({
+      status: 'ignored',
+      reason: 'stream_offline',
+    });
+    expect(await t.cp.claim(CH, 'studio-1')).toBeNull();
+    expect(await t.refunds()).toHaveLength(1);
+  });
+  it('offline with credits in the rule: the credits are granted (not a stream effect), no refund', async () => {
+    const t = await canonicalCp({ managed: true, credits: true });
+    await t.redeem();
+    const r = (await t.cp.state(CH)).recent[0]!;
+    expect(r.reason).toBe('stream_offline');
+    expect(r.results).toMatchObject([{ type: 'credits', status: 'done' }]);
+    expect(await t.refunds()).toHaveLength(0);
+  });
+  it('during the canonical live: run normally (job handed to Studio)', async () => {
+    const t = await canonicalCp({ managed: true });
+    const { openCanonicalLive } = await import('./live.js');
+    await openCanonicalLive(t.core.db, t.core.clock);
+    await t.redeem();
+    expect(await t.cp.claim(CH, 'studio-1')).not.toBeNull();
+    expect(await t.refunds()).toHaveLength(0);
+  });
+});
