@@ -580,12 +580,15 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   };
 }
 
+/** Tombola V2 takes the session's « raffle_join » when the session says `raffle_v2` (otherwise Tombola V1: tombola-v1.js). */
+export const tombolaV2Applies = ({ module, client }) => module?.raffle_v2 === true && typeof client?.raffleState === 'function';
+
 // Module variant (module-registry.js): Tombola V2 (validated prototype) takes over the session's « raffle_join » module
 // when the session says `raffle_v2`. Its own header and way back to the Hub; Core's state only (it reads Core itself);
 // the host only hands it the balance.
 registerModuleVariant({
   id: 'raffle_join',
-  match: ({ module, client }) => module?.raffle_v2 === true && typeof client?.raffleState === 'function',
+  match: tombolaV2Applies,
   intro: false,
   ownHeader: true,
   bodyData: { tmbV2: '1' },
@@ -593,7 +596,6 @@ registerModuleVariant({
   view: ({ document, client, host }) =>
     createTombolaV2View({ document, client, onBack: () => host.home(), onJoined: () => host.refresh() }),
   rendered: (view, { module, state, host }) => {
-    host.stopRaffleTimer(); // the V1 countdown never runs under the V2 screen
     view.update(state);
     // Its own header (the host's is hidden): the restriction chips go after its way back.
     const head = view.node.querySelector('.head');
