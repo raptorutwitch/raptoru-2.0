@@ -157,3 +157,31 @@ test('moderation V1 (moderator): tabs by keyboard, TTS controls confirmed, pendi
   expect(errors).toEqual([]);
   expect(outside).toEqual([]);
 });
+
+test('moderation V1 (moderator): find a user, adjust credits, user history drawer closes on Escape (focus back)', async ({ page }) => {
+  const { outside, errors } = await demo(page, 'moderator');
+  page.on('dialog', (d) => d.accept());
+  await openModule(page, /^Modération/);
+  await page.getByRole('tab', { name: 'Utilisateurs' }).click();
+  await page.getByRole('searchbox', { name: 'Rechercher un utilisateur' }).or(page.getByRole('textbox', { name: 'Rechercher un utilisateur' })).fill('viewer');
+  await page.getByRole('button', { name: 'Rechercher cet utilisateur' }).click();
+  await page.getByRole('button', { name: 'Ouvrir le profil de @viewer_test' }).click();
+  const card = page.getByRole('group', { name: 'Actions pour @viewer_test' }).or(page.getByLabel('Actions pour @viewer_test'));
+  await expect(card.first()).toBeVisible();
+  await page.getByRole('button', { name: 'Ajouter des crédits Soundboard' }).click();
+  await expect(page.locator('.jdm-flash--error')).toHaveCount(0);
+  // The user's history: a drawer; Escape closes it and gives the focus back to its toggle.
+  const toggle = page.getByRole('button', { name: 'Afficher l’historique de @viewer_test' });
+  await toggle.click();
+  const drawer = page.getByRole('dialog', { name: 'Historique de @viewer_test' });
+  await expect(drawer).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
+  await expect(toggle).toBeFocused();
+  // The selected user is the console's, not the visit's: still there after a Hub visit.
+  await back(page);
+  await openModule(page, /^Modération/);
+  await expect(page.getByRole('button', { name: 'Afficher l’historique de @viewer_test' })).toBeVisible();
+  expect(errors).toEqual([]);
+  expect(outside).toEqual([]);
+});

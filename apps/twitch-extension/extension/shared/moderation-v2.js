@@ -1862,9 +1862,12 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
 // `moderation_v2` (same Core as Studio: read models + commands, no local state). The whole screen (its own header and
 // way back to the Hub); « Modération › Commandes » swaps in the Commands V2 view and gives the console back (Video and
 // Mobile only, not the Panel); the commands view stays in place across the host's refreshes while it is open.
+/** The D4 console takes « moderation » when the session says `moderation_v2` (otherwise moderation V1: moderation-v1.js). */
+export const moderationV2Applies = ({ state, client }) => state?.moderation_v2 === true && !!client?.modV2;
+
 registerModuleVariant({
   id: 'moderation',
-  match: ({ state, client }) => state?.moderation_v2 === true && !!client?.modV2,
+  match: moderationV2Applies,
   intro: false,
   bodyData: { modV2: '1' },
   screenClass: 'jdm-module-screen--modv2',
