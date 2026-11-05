@@ -134,17 +134,19 @@ Ordre recommandé : F1 → F2 → F4 → F3 → F5 → F6 (au fil des pages) →
 
 | Lot | Fait | Reste |
 |---|---|---|
-| F1 | Régie sans vert sur une intention (points de chaîne, TTS, Spotify, source d'alertes) ; échec Production visible (incident + tuile bot) ; « Exécuter maintenant (réel) » avec la liste réel / à blanc ; Spotify à blanc dans le Core ; libellés réels (Alertes, Random Ban, Modération en Production) | badge « joue sur OBS » de l'Extension Lab (lot 9) |
-| F2 | P0-2 (Core exige la clé, une par dialogue / formulaire), P0-3 (`enabled_at`), P0-4 (garde Core), H2, H3, H4 | — |
-| F4 | « Prêt pour le live » (17 contrôles, lecture seule) en tête du Centre ; Spotify de la Régie lu sur l'admission réelle du Core | relance au passage en live + notification ; Jeu des mots dans la liste ; P1-3 configuration effective détaillée ; P1-4 supervision du lecteur d'effets et des overlays |
-| F6 | H8 Jeu des mots, H13, H15, H16 | H10, H12, H14 ; pages Mini-jeux et Votekick |
-| F3 | — | P0-5, H9, P2-9 |
-| F5 | — | P1-5, P1-6, P1-8 |
-| F7 | H5 | H1, H6, P2-1, P2-2 |
+| F1 | Régie sans vert sur une intention (points de chaîne, TTS, Spotify sur l'admission réelle du Core, source d'alertes) ; échec Production visible ; « Exécuter maintenant (réel) » + Spotify à blanc ; libellés réels (Alertes, Random Ban, Modération) ; Extension Lab « joue sur OBS » | — |
+| F2 | P0-2, P0-3, P0-4, H2, H3, H4 | — |
+| F3 | P0-5 (bot : événement de live rejoué tant que le Core ne l'a pas enregistré) | H9 ; pont des jeux et fenêtre de confiance Helix ; P2-9 |
+| F4 | « Prêt pour le live » (18 contrôles, lecture seule) | relance au passage en live + notification ; P1-3 configuration effective détaillée ; P1-4 supervision du lecteur d'effets et des overlays |
+| F5 | P1-5 : micro et filtres rétablis à la fermeture | avertir avant de quitter pendant un effet (Electron) ; P1-6 ; P1-8 |
+| F6 | H8, H10 (`!rb`, `!fxcam`, Bonk), H12, H13, H14, H15, H16 | H10 : Caution, Votekick, mini-jeux, Duel (même mécanisme) ; pages Mini-jeux et Votekick |
+| F7 | H1, H5, H6 | P2-1 session de live unique (`lab_stream_sessions` miroir), P2-2 variables = plafond |
 
-**Ordre de déploiement à respecter le jour du GO** : Core et Studio ensemble (une ancienne version de Studio n'envoie pas
-la clé exigée par « Créditer / Débiter ») ; migrations `20261121120000/130000` (roue) et `20261121140000` (Jeu des mots)
-avant le Core ; l'extension (H15, P0-2 de la console partagée) par Antoni.
+**Ordre de déploiement à respecter le jour du GO** :
+- migrations avant le Core : `20261121130000` (roue), `20261121140000` (Jeu des mots), `20261121160000` (réglages) ;
+- Core, bot et Studio ensemble (une ancienne version de Studio n'envoie pas la clé exigée par « Créditer / Débiter ») ;
+- **H1 change la Production** : hors live, plus aucun achat lié au stream ; à annoncer aux viewers ;
+- l'extension (H15, P0-2 de la console partagée, texte `stream_offline`) par Antoni.
 
 ## Régressions et instabilités connues
 

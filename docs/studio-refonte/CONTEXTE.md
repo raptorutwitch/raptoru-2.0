@@ -255,22 +255,41 @@ Rien n'atteint la Production sans nouvelle autorisation explicite (déploiement,
 
 | # | Décision | Mise en œuvre |
 |---|---|---|
-| H1 | Interactions payantes liées au stream **uniquement en live** (Soundboard, TTS, Bonk, Chaos, `!rb`, Caution, Votekick, Spotify, effets de points de chaîne) ; refus avant débit, source de live canonique. Pas la Boutique, le Wallet, le Daily, la fidélité. Aucun contournement en Production ; tests en Lab. | à faire |
+| H1 | Interactions payantes liées au stream **uniquement en live** (Soundboard, TTS, Bonk, Chaos, `!rb`, Caution, Votekick, Spotify, effets de points de chaîne) ; refus avant débit, source de live canonique. Pas la Boutique, le Wallet, le Daily, la fidélité. Aucun contournement en Production ; tests en Lab. | codé, testé : source = session canonique `stream_sessions` (Production) ; le Lab n'est jamais bloqué |
 | H2 | Travaux OBS des points de chaîne non commencés : **expiration à 2 min**, remboursement unique quand c'est possible. | codé, testé |
 | H3 | Alertes : **30 min**, commande « Vider la file » (en attente seulement). | codé, testé |
 | H4 | TTS : **5 min** (au lieu de 30). | codé, testé |
 | H5 | StreamElements : **ACTIVE repris en Production** au redémarrage (Lab : TEST). | codé, testé |
-| H6 | Spotify en fin de live : fermer, annuler les non commencées, **rembourser** quand c'est possible, jamais deux fois. | à faire |
+| H6 | Spotify en fin de live : fermer, annuler les non commencées, **rembourser** quand c'est possible, jamais deux fois. | codé, testé (délai de grâce technique de 10 min, voir § 19) |
 | H7 | Activités ponctuelles **manuelles** (aucun démarrage automatique nouveau). | rien à coder (comportement actuel) |
 | H8 | Jeu des mots : **ON/OFF durable**, intervalle réglable (5-15 min par défaut). | codé, testé |
 | H9 | Fidélité `tier_unknown` : **taux de base immédiat, complément différé** une seule fois. | à faire |
-| H10 | Prix, recharges, durées, limites **réglables** (§ D.3 Essentiels), bornes Core ; jamais cotes ni tables de gains. | à faire |
+| H10 | Prix, recharges, durées, limites **réglables** (§ D.3 Essentiels), bornes Core ; jamais cotes ni tables de gains. | en partie : mécanisme + `!rb`, `!fxcam`, Bonk ; reste Caution, Votekick, mini-jeux, Duel |
 | H11 | « Exécuter maintenant (réel) » et aperçu distincts ; Spotify à blanc. | codé, testé |
-| H12 | Bonk : prix et recharge réglables, **valeurs actuelles du Core** par défaut. | à faire |
+| H12 | Bonk : prix et recharge réglables, **valeurs actuelles du Core** par défaut. | codé, testé (200 Jetons, délai 0 s par défaut) |
 | H13 | Roue : choix V1/V2 en **paramètres avancés** ; bug de frontière corrigé séparément. | codé, testé |
-| H14 | Daily : **paliers réglables**, heure fixe. | à faire |
+| H14 | Daily : **paliers réglables**, heure fixe. | codé, testé (16:00 Paris confirmé dans le code, affichée) |
 | H15 | « Annoncer mes Level Up » **masqué**. | codé (extension à publier par Antoni) |
 | H16 | Moteur des Défis : **état réel affiché**, jamais activé d'ici. | codé, testé |
 
 « Codé, testé » = tests automatiques seulement. Rien n'est validé par Antoni ni publié. État détaillé : ROADMAP.
+
+## 19. Choix techniques pris pendant la mise en œuvre (à relire par Antoni, réversibles)
+
+- **H1, source du live** : la session canonique `stream_sessions` (ouverte et fermée par Twitch via le bot). Le bot
+  rejoue désormais un événement de live que le Core n'a pas enregistré (P0-5), pour ne pas bloquer les achats pendant
+  5 min si le Core n'a pas répondu au passage en live. Le Lab (portefeuille de test) n'est jamais bloqué.
+- **H1, crédits des points de chaîne** : hors live, les crédits TTS / Soundboard d'une récompense sont accordés (ce
+  n'est pas un effet de stream) ; les effets ne sont pas joués ; une récompense créée par Raptoru sans crédit fait
+  l'objet d'une demande de remboursement unique à Twitch.
+- **H1, Votekick** : gratuit mais sanction ; refusé hors live avec la même règle.
+- **H6, fin du live** : délai de grâce de **10 min** après la fin canonique avant d'annuler les demandes en file (une
+  coupure brève ou une reconnexion n'est pas une fin). Les demandes en cours de recherche sont traitées au passage
+  suivant ; le morceau en cours n'est jamais touché ; aucun message chat ajouté.
+- **H12, délai du Bonk** : en secondes, par viewer et par chaîne, une salve compte pour un achat, 0 par défaut
+  (comportement actuel) ; indépendant du cooldown personnel de la modération.
+- **H14, bornes** : 1 à 30 paliers, 0 à 20 000 Jetons chacun, jamais en baisse d'un palier au suivant.
+- **H10, bornes** : `!rb` 1 000 à 1 000 000 ; `!fxcam` 100 à 100 000 ; Bonk 10 à 100 000 ; délai Bonk 0 à 600 s.
+- **H2 / H3 / H4** : délais pris tels que décidés (2 min, 30 min, 5 min) ; le délai TTS est fixé à la création de chaque
+  message (un message déjà en attente garde le sien).
 

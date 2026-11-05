@@ -67,6 +67,12 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Aperçu isolé (pile E2E, port 4411, données fictives) : Centre de contrôle en 1280 px et 390 px, sans défilement
   horizontal.
 
+- Suite (05/11, nuit) : `0246e56` P0-5 bot · `ad5eeb4` F5 · `2d2e7c6` Extension Lab · `f9e9724` **H1** + `23b8434` (les
+  suites PostgreSQL canoniques ouvrent un live comme Twitch le ferait : 9 fichiers, 22 tests verts ; avant correction,
+  12 échecs, exactement ceux-là) · `c93dc4d` Jeu des mots dans la préparation · `061c5a8` **H6** · `a53873a` **H10 /
+  H12 / H14**.
+- Suite Core complète après H1 : 1 351 tests verts. Bot : 287 verts.
+
 ## Vérifications marquantes
 
 - Storyboard cherché le 04/11 : dépôt (code, docs, branches, messages de commit), checkout principal, `prototypes/`

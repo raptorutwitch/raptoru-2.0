@@ -18,6 +18,8 @@ le travail touche au comportement d'un module.
 
 Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par Antoni, rien de publié) :
 
+- `a53873a` **H10 / H12 / H14** réglages (migration `module_settings` préparée) · `061c5a8` **H6** Spotify en fin
+  de live · `23b8434` suites PostgreSQL canoniques avec live.
 - `c93dc4d` Jeu des mots dans « Prêt pour le live » · `f9e9724` **H1** achats liés au stream uniquement pendant le live
   canonique (refus avant débit ; Lab jamais bloqué) · `2d2e7c6` Extension Lab « joue sur OBS » · `ad5eeb4` **F5** micro
   et filtres rétablis à la fermeture de Studio · `0246e56` **P0-5** bot : événement de live rejoué tant que le Core ne
@@ -85,12 +87,11 @@ Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par A
 
 ## Prochaine action
 
-1. Vérifier le résultat de la suite d'intégration PostgreSQL lancée après H1 (fixtures canoniques sans live à ouvrir,
-   comme pour les tests unitaires : `test/live.ts`).
-2. H6 prêt dans `scratchpad` (non appliqué) : `closeAfterLive` Spotify, grâce de 10 min, raison `STREAM_ENDED`.
-3. H10 / H12 / H14 : interface Studio écrite (`web/src/module-settings.ts`, onglet Daily de Progression, non commités) ;
-   reste le Core (table `module_settings`, routes, lecture par `!rb`, `!fxcam`, Bonk ; route `daily/config`).
-4. H9 (complément `tier_unknown`) : conception à faire (donnée qui fait foi pour la période du gain).
+1. H9 (complément `tier_unknown`) : taux de base immédiat, complément décidé par le premier relevé complet des abonnés
+   reçu après le gain (36 h au plus), une seule fois (clé dédiée) ; jamais payé si non vérifiable.
+2. H10, suite : Caution, Votekick, mini-jeux, Duel (même mécanisme `module_settings`).
+3. F4 / F5 restants (ROADMAP « État au 05/11 »). Pages Mini-jeux et Votekick (P1-12).
+4. Antoni : relire CONTEXTE § 19 (choix techniques), tester en Lab, décider du déploiement.
 
 ## Reprendre
 
