@@ -19,6 +19,7 @@ export interface ModuleStatus {
   facts: StatusFact[];
   hint: string | null;
   checkedAt: string;
+  data?: Record<string, unknown>;
 }
 
 const HEADERS = { 'x-raptoru-studio': '1' };

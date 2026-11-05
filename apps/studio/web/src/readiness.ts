@@ -1,0 +1,780 @@
+// « Prêt pour le live » (refonte F4, audit P1-1 / D.1 B) — a READ-ONLY checklist: what is ready, what is not, why, what
+// it means for the viewers, and where to fix it. It never switches a module on or off.
+// Rules (CONTEXTE § 17): an intention ON whose dependency is not ready is never green; a module OFF on purpose is
+// « off », never an outage; what Studio cannot check says « non vérifié », never an invented value.
+// Data: the read routes each module already serves (the same ones its page reads) — nothing is duplicated.
+
+export type Level = 'ok' | 'warn' | 'error' | 'off' | 'unknown';
+
+export interface Check {
+  id: string;
+  label: string;
+  level: Level;
+  /** One or two words. */
+  state: string;
+  /** Why, in the streamer's words. */
+  why: string;
+  /** What the viewers get meanwhile (null when nothing is wrong). */
+  consequence: string | null;
+  /** Where to fix it: a page id of the registry. */
+  fix: { page: string; label: string } | null;
+}
+
+interface Signal {
+  id: string;
+  label: string;
+  level: Level;
+  value: string;
+  hint: string | null;
+}
+interface Module {
+  id: string;
+  level: Level;
+  state: string;
+  summary: string;
+  hint: string | null;
+  data?: Record<string, unknown>;
+}
+
+/** What the page read (null: the route did not answer / the module is absent from this profile). */
+export interface ReadinessInput {
+  profile: {
+    effective?: string;
+    production?: { state?: string; detail?: string | null };
+  } | null;
+  modules: Module[] | null;
+  channelPoints: {
+    settings?: { enabled?: boolean };
+    obs?: { connected?: boolean };
+    effects?: {
+      connected?: boolean;
+      audio?: boolean;
+      current?: boolean;
+    } | null;
+    executor_error?: string | null;
+  } | null;
+  alerts: {
+    enabled?: boolean;
+    queued?: unknown[];
+    source?: { seen?: boolean };
+  } | null;
+  se: { mode?: string; state?: string; state_label?: string } | null;
+  wheel: {
+    settings?: { enabled?: boolean };
+    animations_waiting?: string | null;
+    effects?: {
+      connected?: boolean;
+      audio?: boolean;
+      current?: boolean;
+    } | null;
+  } | null;
+  games: { enabled?: boolean } | null;
+  spotify: { admission?: string } | null;
+}
+
+const c = (
+  id: string,
+  label: string,
+  level: Level,
+  state: string,
+  why: string,
+  consequence: string | null,
+  fix: Check['fix'],
+): Check => ({ id, label, level, state, why, consequence, fix });
+
+const NOT_READ = (id: string, label: string, fix: Check['fix']) =>
+  c(
+    id,
+    label,
+    'unknown',
+    'Non vérifié',
+    'Studio n’a pas pu lire cet état sur ce profil.',
+    null,
+    fix,
+  );
+
+function botFlags(m: Module | undefined) {
+  return (m?.data?.flags ?? null) as Record<string, unknown> | null;
+}
+
+export function readiness(i: ReadinessInput): Check[] {
+  const out: Check[] = [];
+  const prod = i.profile?.effective === 'production';
+  const bot = i.modules?.find((m) => m.id === 'bot');
+  const signals = (i.modules?.find((m) => m.id === 'interactions')?.data
+    ?.signals ?? []) as Signal[];
+  const sig = (id: string) => signals.find((s) => s.id === id);
+  const flags = botFlags(bot);
+  const health = (bot?.data?.health ?? null) as {
+    eventSubBot?: boolean | null;
+    eventSubBroadcaster?: boolean | null;
+    broadcasterToken?: boolean | null;
+  } | null;
+
+  // --- Core -------------------------------------------------------------------------------------------------------
+  const link = sig('core-link');
+  if (!i.profile)
+    out.push(
+      NOT_READ('core', 'Core', { page: 'systeme', label: 'Profil (Système)' }),
+    );
+  else if (!prod)
+    out.push(
+      c(
+        'core',
+        'Core',
+        'warn',
+        'Profil Lab',
+        'Studio est sur le Core local du Lab : cette liste ne vérifie pas ton stream.',
+        'Rien de ce qui est vérifié ici ne concerne les viewers.',
+        { page: 'systeme', label: 'Profil (Système)' },
+      ),
+    );
+  else if (i.profile.production?.state === 'start_failed')
+    out.push(
+      c(
+        'core',
+        'Core Production',
+        'error',
+        'Démarrage impossible',
+        i.profile.production.detail ?? 'Le profil Production n’a pas démarré.',
+        'Soundboard, TTS, Bonk et effets refusés aux viewers.',
+        { page: 'systeme', label: 'Profil (Système)' },
+      ),
+    );
+  else if (link)
+    out.push(
+      c(
+        'core',
+        'Core Production',
+        link.level,
+        link.value,
+        link.hint ?? 'Studio est relié au Core Production.',
+        link.level === 'ok'
+          ? null
+          : 'Les demandes des viewers servies par Studio sont refusées en attendant.',
+        link.level === 'ok'
+          ? null
+          : { page: 'systeme', label: 'Profil (Système)' },
+      ),
+    );
+  else
+    out.push(
+      NOT_READ('core', 'Core Production', {
+        page: 'systeme',
+        label: 'Profil (Système)',
+      }),
+    );
+
+  // --- Bot and Twitch -----------------------------------------------------------------------------------------------
+  if (!bot)
+    out.push(
+      NOT_READ('bot', 'Bot LeCroupier_', {
+        page: 'centre',
+        label: 'Centre de contrôle',
+      }),
+    );
+  else
+    out.push(
+      c(
+        'bot',
+        'Bot LeCroupier_',
+        bot.level,
+        bot.state,
+        bot.summary,
+        bot.level === 'ok' || bot.level === 'off'
+          ? null
+          : 'Commandes, jeux, Daily, fidélité et points de chaîne dépendent de lui.',
+        bot.hint ? { page: 'centre', label: 'Centre de contrôle (bot)' } : null,
+      ),
+    );
+  if (prod) {
+    const tw = (
+      id: string,
+      label: string,
+      v: boolean | null | undefined,
+      conseq: string,
+    ) =>
+      out.push(
+        v === undefined
+          ? NOT_READ(id, label, {
+              page: 'centre',
+              label: 'Centre de contrôle (bot)',
+            })
+          : v === null
+            ? c(
+                id,
+                label,
+                'off',
+                'Non utilisé',
+                'Le bot n’utilise pas cette connexion (fonctions coupées sur le serveur).',
+                null,
+                null,
+              )
+            : v
+              ? c(
+                  id,
+                  label,
+                  'ok',
+                  'Connecté',
+                  'Twitch répond au bot.',
+                  null,
+                  null,
+                )
+              : c(
+                  id,
+                  label,
+                  'error',
+                  'Coupé',
+                  'Le bot ne reçoit plus ces événements de Twitch.',
+                  conseq,
+                  { page: 'centre', label: 'Centre de contrôle (bot)' },
+                ),
+      );
+    tw(
+      'twitch-chat',
+      'Twitch · chat (LeCroupier_)',
+      health ? health.eventSubBot : undefined,
+      'Aucune commande ni jeu ne répond dans le chat.',
+    );
+    tw(
+      'twitch-broadcaster',
+      'Twitch · subs, bits, points (raptoru_)',
+      health ? health.eventSubBroadcaster : undefined,
+      'Subs, bits et points de chaîne ne sont pas reçus (alertes, roue, fidélité).',
+    );
+    if (health && health.broadcasterToken === false)
+      out.push(
+        c(
+          'twitch-token',
+          'Autorisation raptoru_',
+          'error',
+          'Inutilisable',
+          'Le jeton de raptoru_ du bot est refusé par Twitch.',
+          'Fidélité, points de chaîne et sanctions ne fonctionnent pas.',
+          { page: 'centre', label: 'Centre de contrôle (bot)' },
+        ),
+      );
+  }
+
+  // --- OBS and players ----------------------------------------------------------------------------------------------
+  const cp = i.channelPoints;
+  if (!cp)
+    out.push(
+      NOT_READ('obs', 'OBS', { page: 'bonk', label: 'Bonk (connexion OBS)' }),
+    );
+  else
+    out.push(
+      cp.obs?.connected
+        ? c('obs', 'OBS', 'ok', 'Connecté', 'Studio commande OBS.', null, null)
+        : c(
+            'obs',
+            'OBS',
+            'error',
+            'Non connecté',
+            'Studio n’est pas relié à OBS (OBS fermé, WebSocket coupé ou mot de passe).',
+            'Effets de points de chaîne en attente puis expirés après 2 min ; Bonk et mutes OBS refusés.',
+            { page: 'bonk', label: 'Bonk (connexion OBS)' },
+          ),
+    );
+  const fx = cp?.effects ?? i.wheel?.effects ?? null;
+  if (!cp && !i.wheel)
+    out.push(
+      NOT_READ('effects', 'Lecteur d’effets', {
+        page: 'channel-points',
+        label: 'Récompenses Twitch',
+      }),
+    );
+  else if (!fx)
+    out.push(
+      c(
+        'effects',
+        'Lecteur d’effets',
+        'unknown',
+        'Non vérifié',
+        'Ce profil ne fournit pas l’état du lecteur d’effets.',
+        null,
+        null,
+      ),
+    );
+  else
+    out.push(
+      !fx.connected
+        ? c(
+            'effects',
+            'Lecteur d’effets',
+            'error',
+            'Absent',
+            'La source navigateur du lecteur d’effets n’est pas ouverte dans OBS.',
+            'Roue du Sub, BRB, FX Cam et sons d’effet ne jouent pas.',
+            { page: 'effects', label: 'Lecteur d’effets' },
+          )
+        : fx.audio === false
+          ? c(
+              'effects',
+              'Lecteur d’effets',
+              'error',
+              'Son bloqué',
+              'Le lecteur est ouvert mais son son est bloqué : clique une fois dans sa page.',
+              'Les effets jouent sans le son, la roue attend.',
+              { page: 'effects', label: 'Lecteur d’effets' },
+            )
+          : fx.current === false
+            ? c(
+                'effects',
+                'Lecteur d’effets',
+                'warn',
+                'À recharger',
+                'La source OBS exécute une ancienne version : clic droit › Actualiser.',
+                null,
+                { page: 'effects', label: 'Lecteur d’effets' },
+              )
+            : c(
+                'effects',
+                'Lecteur d’effets',
+                'ok',
+                'Prêt',
+                'La source OBS du lecteur répond.',
+                null,
+                null,
+              ),
+    );
+  for (const [id, label, page, conseq] of [
+    [
+      'soundboard',
+      'Soundboard',
+      'soundboard',
+      'Les sons achetés sont refusés (aucun Jeton débité).',
+    ],
+    [
+      'tts',
+      'TTS',
+      'tts',
+      'Les messages TTS sont refusés (aucun Jeton débité).',
+    ],
+    ['bonk', 'Bonk', 'bonk', 'Les Bonk sont refusés (aucun Jeton débité).'],
+  ] as const) {
+    const s = sig(id);
+    out.push(
+      !s
+        ? c(
+            id,
+            label,
+            'unknown',
+            'Non vérifié',
+            'Ce module ne tourne pas dans ce Studio.',
+            null,
+            { page, label },
+          )
+        : c(
+            id,
+            label,
+            s.level,
+            s.value,
+            s.hint ??
+              (s.level === 'ok' ? 'Prêt à servir les viewers.' : s.value),
+            s.level === 'ok' || s.level === 'off' ? null : conseq,
+            s.level === 'ok' ? null : { page, label },
+          ),
+    );
+  }
+
+  // --- Alerts and StreamElements ------------------------------------------------------------------------------------
+  const al = i.alerts;
+  if (!al || al.enabled === false)
+    out.push(
+      NOT_READ('alerts', 'Alertes', { page: 'alerts', label: 'Alertes' }),
+    );
+  else {
+    const waiting = al.queued?.length ?? 0;
+    out.push(
+      al.source?.seen === undefined
+        ? c(
+            'alerts',
+            'Alertes',
+            'unknown',
+            'Non vérifié',
+            'Studio ne sait pas si la source OBS « Alertes » est ouverte.',
+            null,
+            { page: 'alerts', label: 'Alertes' },
+          )
+        : al.source.seen
+          ? c(
+              'alerts',
+              'Alertes',
+              'ok',
+              'Prête',
+              `La source OBS des alertes répond${waiting ? ` · ${waiting} en attente` : ''}.`,
+              null,
+              null,
+            )
+          : c(
+              'alerts',
+              'Alertes',
+              'error',
+              'Source absente',
+              'La source navigateur « Alertes » ne répond pas dans OBS.',
+              `Les alertes attendent${waiting ? ` (${waiting})` : ''}, puis ne sont plus jouées après 30 min.`,
+              { page: 'alerts', label: 'Alertes' },
+            ),
+    );
+  }
+  if (prod) {
+    const se = i.se;
+    out.push(
+      !se
+        ? NOT_READ('se', 'Dons StreamElements', {
+            page: 'alerts',
+            label: 'Alertes (StreamElements)',
+          })
+        : se.mode === 'off'
+          ? c(
+              'se',
+              'Dons StreamElements',
+              'off',
+              'Coupé',
+              'Mode OFF choisi : les dons ne sont pas affichés.',
+              null,
+              null,
+            )
+          : se.mode === 'test'
+            ? c(
+                'se',
+                'Dons StreamElements',
+                'warn',
+                'Mode TEST',
+                'Les dons sont observés dans Studio, jamais affichés sur le stream.',
+                'Aucun don n’apparaît en alerte.',
+                { page: 'alerts', label: 'Alertes (StreamElements)' },
+              )
+            : se.state === 'connected'
+              ? c(
+                  'se',
+                  'Dons StreamElements',
+                  'ok',
+                  'ACTIVE',
+                  'Connecté à StreamElements.',
+                  null,
+                  null,
+                )
+              : c(
+                  'se',
+                  'Dons StreamElements',
+                  'error',
+                  'ACTIVE, non connecté',
+                  se.state_label ?? 'StreamElements ne répond pas.',
+                  'Les dons n’apparaissent pas en alerte.',
+                  { page: 'alerts', label: 'Alertes (StreamElements)' },
+                ),
+    );
+  }
+
+  // --- Modules ------------------------------------------------------------------------------------------------------
+  if (cp?.settings)
+    out.push(
+      !cp.settings.enabled
+        ? c(
+            'cp',
+            'Points de chaîne',
+            'off',
+            'Coupés',
+            'Automatisations coupées : les utilisations sont enregistrées, jamais exécutées.',
+            null,
+            null,
+          )
+        : cp.obs?.connected && !cp.executor_error
+          ? c(
+              'cp',
+              'Points de chaîne',
+              'ok',
+              'Actifs',
+              'Automatisations actives et exécutables.',
+              null,
+              null,
+            )
+          : c(
+              'cp',
+              'Points de chaîne',
+              'error',
+              'Activés, en attente',
+              cp.executor_error
+                ? `Erreur de l’exécuteur : ${cp.executor_error}`
+                : 'Activés, mais OBS n’est pas relié à Studio.',
+              'Les effets attendent puis expirent après 2 min (remboursés quand c’est possible).',
+              { page: 'channel-points', label: 'Récompenses Twitch' },
+            ),
+    );
+  const w = i.wheel;
+  if (!w)
+    out.push(
+      NOT_READ('wheel', 'Roue du Sub', {
+        page: 'sub-wheel',
+        label: 'Roue du Sub',
+      }),
+    );
+  else
+    out.push(
+      !w.settings?.enabled
+        ? c(
+            'wheel',
+            'Roue du Sub',
+            'off',
+            'Désactivée',
+            'Roue coupée : rien n’est tiré, aucun tour n’est perdu.',
+            null,
+            null,
+          )
+        : w.animations_waiting
+          ? c(
+              'wheel',
+              'Roue du Sub',
+              'error',
+              'En attente',
+              w.animations_waiting,
+              'Les roues dues attendent (aucun tour perdu).',
+              { page: 'sub-wheel', label: 'Roue du Sub' },
+            )
+          : c(
+              'wheel',
+              'Roue du Sub',
+              'ok',
+              'Prête',
+              'Activée, lecteur prêt.',
+              null,
+              null,
+            ),
+    );
+  const g = i.games;
+  const chatGames = flags ? flags.CHAT_GAMES === true : undefined;
+  if (!g)
+    out.push(
+      NOT_READ('games', 'Mini-jeux (Roulette, Slot, Duel)', {
+        page: 'mini-games',
+        label: 'Mini-jeux',
+      }),
+    );
+  else
+    out.push(
+      !g.enabled
+        ? c(
+            'games',
+            'Mini-jeux (Roulette, Slot, Duel)',
+            'off',
+            'Coupés',
+            'Interrupteur des mini-jeux sur OFF.',
+            null,
+            null,
+          )
+        : prod && chatGames === false
+          ? c(
+              'games',
+              'Mini-jeux (Roulette, Slot, Duel)',
+              'error',
+              'Bloqués par le serveur',
+              'Activés, mais le bot n’a pas les jeux chat (CHAT_GAMES).',
+              '!roulette, !slots et !duel ne répondent pas.',
+              { page: 'centre', label: 'Centre de contrôle (bot)' },
+            )
+          : prod && chatGames === undefined
+            ? c(
+                'games',
+                'Mini-jeux (Roulette, Slot, Duel)',
+                'unknown',
+                'Activés, bot non vérifié',
+                'Activés ; Studio ne lit pas les fonctions du bot.',
+                null,
+                null,
+              )
+            : c(
+                'games',
+                'Mini-jeux (Roulette, Slot, Duel)',
+                'ok',
+                'Activés',
+                'Pendant un live, !roulette, !slots et !duel répondent.',
+                null,
+                null,
+              ),
+    );
+  if (prod)
+    out.push(
+      !flags
+        ? c(
+            'chat-output',
+            'Sortie chat',
+            'unknown',
+            'Non vérifiée',
+            'Studio ne lit pas les fonctions du bot.',
+            null,
+            null,
+          )
+        : flags.CHAT_GAMES_OUTPUT === true
+          ? c(
+              'chat-output',
+              'Sortie chat',
+              'ok',
+              'Active (bot)',
+              'Le bot peut répondre dans le chat. Chaque commande garde son propre réglage de sortie.',
+              null,
+              null,
+            )
+          : c(
+              'chat-output',
+              'Sortie chat',
+              'error',
+              'Bloquée par le serveur',
+              'Le bot n’envoie aucune réponse de jeux ni de commandes (CHAT_GAMES_OUTPUT).',
+              'Commandes et jeux décidés, mais rien n’est écrit dans le chat.',
+              { page: 'centre', label: 'Centre de contrôle (bot)' },
+            ),
+    );
+  const sp = i.spotify;
+  if (!sp?.admission)
+    out.push(
+      NOT_READ('spotify', 'Spotify', { page: 'spotify', label: 'Spotify' }),
+    );
+  else
+    out.push(
+      sp.admission === 'MODULE_DISABLED'
+        ? c(
+            'spotify',
+            'Spotify',
+            'off',
+            'Fermé',
+            'Demandes de musique fermées.',
+            null,
+            null,
+          )
+        : sp.admission === 'ready'
+          ? c(
+              'spotify',
+              'Spotify',
+              'ok',
+              'Ouvert',
+              'Les demandes de musique sont acceptées.',
+              null,
+              null,
+            )
+          : c(
+              'spotify',
+              'Spotify',
+              'error',
+              'Refusé',
+              `Le Core refuse les demandes : ${sp.admission}.`,
+              'Les demandes sont refusées et remboursées quand c’est possible.',
+              { page: 'spotify', label: 'Spotify' },
+            ),
+    );
+  out.push(
+    c(
+      'extension',
+      'Extension servie par Twitch',
+      'unknown',
+      'Non vérifié',
+      'Studio ne lit pas la version de l’extension que Twitch sert aux viewers.',
+      null,
+      null,
+    ),
+  );
+  return out;
+}
+
+const RANK: Record<Level, number> = {
+  error: 0,
+  warn: 1,
+  unknown: 2,
+  ok: 3,
+  off: 4,
+};
+
+/** Problems first, then what cannot be checked, then what is ready, then what is off on purpose. */
+export const ordered = (checks: Check[]) =>
+  [...checks].sort((a, b) => RANK[a.level] - RANK[b.level]);
+
+export function summary(checks: Check[]) {
+  const n = (l: Level) => checks.filter((x) => x.level === l).length;
+  const bad = n('error') + n('warn');
+  return {
+    level: (n('error')
+      ? 'error'
+      : n('warn')
+        ? 'warn'
+        : n('unknown')
+          ? 'unknown'
+          : 'ok') as Level,
+    text: bad
+      ? `${bad} point(s) à corriger · ${n('unknown')} non vérifié(s) · ${n('ok')} prêt(s) · ${n('off')} coupé(s) volontairement`
+      : `Rien à corriger · ${n('unknown')} non vérifié(s) · ${n('ok')} prêt(s) · ${n('off')} coupé(s) volontairement`,
+  };
+}
+
+const HEADERS = { 'x-raptoru-studio': '1' };
+const get = async <T>(path: string): Promise<T | null> => {
+  try {
+    const res = await fetch(path, { headers: HEADERS });
+    return res.ok ? ((await res.json()) as T) : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Every input from the module's own read route (a missing one stays null: « non vérifié »). */
+export async function loadReadiness(): Promise<ReadinessInput> {
+  const [profile, control, channelPoints, alerts, se, wheel, games, spotify] =
+    await Promise.all([
+      get<ReadinessInput['profile']>('/api/profile'),
+      get<{ modules: Module[] }>('/api/control/status'),
+      get<ReadinessInput['channelPoints']>('/api/channel-points/state'),
+      get<ReadinessInput['alerts']>('/api/alerts/state'),
+      get<ReadinessInput['se']>('/api/alerts/se'),
+      get<ReadinessInput['wheel']>('/api/sub-wheel/state'),
+      get<ReadinessInput['games']>('/api/mini-games/state'),
+      get<ReadinessInput['spotify']>('/api/spotify/state'),
+    ]);
+  return {
+    profile,
+    modules: control?.modules ?? null,
+    channelPoints,
+    alerts,
+    se,
+    wheel,
+    games,
+    spotify,
+  };
+}
+
+const esc = (t: unknown) =>
+  String(t ?? '').replace(
+    /[&<>"']/g,
+    (ch) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
+        ch
+      ]!,
+  );
+const CLS: Record<Level, string> = {
+  ok: 'is-ok',
+  warn: 'is-unknown',
+  error: 'is-down',
+  unknown: 'is-unknown',
+  off: '',
+};
+
+/** The panel (pure): problems first; what is off on purpose folded at the end. */
+export function readinessHtml(
+  checks: Check[] | undefined,
+  href: (page: string) => string,
+) {
+  if (!checks)
+    return '<section class="rs-panel rs-ready"><h2>Prêt pour le live</h2><p class="rs-muted">Vérification…</p></section>';
+  const s = summary(checks);
+  const row = (x: Check) =>
+    `<li class="rs-ready-row" data-check="${esc(x.id)}"><span class="rs-state ${CLS[x.level]}"><b>${esc(x.label)}</b> · ${esc(x.state)}</span>
+      <small>${esc(x.why)}${x.consequence ? ` <em>Pour les viewers : ${esc(x.consequence)}</em>` : ''}${x.fix ? ` <a href="${href(x.fix.page)}">${esc(x.fix.label)}</a>` : ''}</small></li>`;
+  const sorted = ordered(checks);
+  const on = sorted.filter((x) => x.level !== 'off');
+  const off = sorted.filter((x) => x.level === 'off');
+  return `<section class="rs-panel rs-ready" data-role="readiness"><h2>Prêt pour le live</h2>
+    <p class="rs-state ${CLS[s.level]}">${esc(s.text)}</p>
+    <p class="rs-muted">Lecture seule : rien n’est activé ni coupé d’ici. Chaque correction se fait dans la page indiquée.</p>
+    <ul class="rs-ready-list">${on.map(row).join('')}</ul>
+    ${off.length ? `<details><summary>Coupé volontairement (${off.length})</summary><ul class="rs-ready-list">${off.map(row).join('')}</ul></details>` : ''}
+  </section>`;
+}

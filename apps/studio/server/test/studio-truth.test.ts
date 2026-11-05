@@ -68,10 +68,9 @@ describe('Régie: intention ≠ constat', () => {
           ready: false,
         },
         spotify: {
-          admission: 'open',
+          admission: 'AUTH_NOT_CONFIGURED',
           current: null,
           queue: 0,
-          connected: false,
         },
       },
       'production',
@@ -80,7 +79,7 @@ describe('Régie: intention ≠ constat', () => {
     expect(html).not.toContain('is-ok');
     expect(html).toContain('Activé, lecteur absent');
     expect(html).toContain('File non lisible ici.');
-    expect(html).toContain('Spotify n’est pas connecté à Studio');
+    expect(html).toContain('Demandes refusées : Spotify non connecté à Studio');
   });
 });
 

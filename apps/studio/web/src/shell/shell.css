@@ -1096,3 +1096,23 @@ body {
     overflow-x: auto;
   }
 }
+
+/* Refonte F4 — « Prêt pour le live » (read-only checklist). */
+.rs-ready-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.rs-ready-row {
+  display: grid;
+  gap: 0.15rem;
+}
+.rs-ready-row small {
+  color: var(--rs-muted, inherit);
+}
+.rs-ready-row em {
+  font-style: normal;
+  font-weight: 600;
+}

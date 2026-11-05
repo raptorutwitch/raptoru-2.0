@@ -207,11 +207,10 @@ export interface LiveState {
     | 'off'
     | null;
   spotify: {
+    /** The Core's own admission: « ready », « MODULE_DISABLED » or the refusal reason (Studio absent, auth…). */
     admission: string;
     current: string | null;
     queue: number;
-    /** Studio's Spotify connection (auth ok, not rate limited); undefined: not read. */
-    connected?: boolean;
   } | null;
 }
 
@@ -256,8 +255,6 @@ export async function loadLive(): Promise<LiveState> {
       admission: string;
       current: { title?: string; artists?: string } | null;
       queue: unknown[];
-      connection?: { auth?: string };
-      api?: { limited_until?: string | null; quota_exceeded?: boolean };
     }>('/api/spotify/state'),
   ]);
   const r = raffle?.round;
@@ -304,17 +301,24 @@ export async function loadLive(): Promise<LiveState> {
                 .join(' — ') || 'en cours'
             : null,
           queue: sp.queue.length,
-          connected: sp.connection
-            ? sp.connection.auth === 'ok' &&
-              !sp.api?.quota_exceeded &&
-              !(
-                sp.api?.limited_until &&
-                Date.parse(sp.api.limited_until) > Date.now()
-              )
-            : undefined,
         },
   };
 }
+
+/** The Core's Spotify admission in the streamer's words (refonte F1: the real answer, never an assumed « open »). */
+export function spotifyAdmission(a: string) {
+  return a === 'ready'
+    ? 'Demandes ouvertes'
+    : a === 'MODULE_DISABLED'
+      ? 'Demandes fermées (module coupé)'
+      : `Demandes refusées : ${SPOTIFY_REFUSAL[a] ?? a}`;
+}
+const SPOTIFY_REFUSAL: Record<string, string> = {
+  STUDIO_UNAVAILABLE: 'Studio non vu par le Core',
+  AUTH_NOT_CONFIGURED: 'Spotify non connecté à Studio',
+  AUTH_REQUIRED: 'Spotify à reconnecter',
+  RATE_LIMITED: 'Spotify limite les appels',
+};
 
 /** Named live actions, each through the module's own route, with its own confirmation wording. */
 export const LIVE_ACTIONS: Record<
@@ -450,7 +454,7 @@ export function liveHtml(
       'spotify',
       s === null
         ? unknown
-        : `<p class="rs-state ${s.admission !== 'open' ? '' : s.connected === true ? 'is-ok' : s.connected === false ? 'is-down' : 'is-unknown'}">Demandes ${s.admission === 'open' ? 'ouvertes' : s.admission === 'closed' ? 'fermées' : esc(s.admission)}${s.admission === 'open' && s.connected === false ? ', mais Spotify n’est pas connecté à Studio' : ''} · ${s.queue} en file</p>
+        : `<p class="rs-state ${s.admission === 'ready' ? 'is-ok' : s.admission === 'MODULE_DISABLED' ? '' : 'is-down'}">${esc(spotifyAdmission(s.admission))} · ${s.queue} en file</p>
            <p class="rs-muted">${s.current ? `En cours : ${esc(s.current)}` : 'Aucune demande en cours.'}</p>`,
     )}
   </div></section>`;

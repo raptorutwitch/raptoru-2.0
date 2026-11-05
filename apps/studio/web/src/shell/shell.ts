@@ -14,8 +14,15 @@ import {
   loadChannelPoints,
   regieHtml,
   setChannelPoints,
+  SUPERVISED,
 } from './regie.js';
 import { icon } from './icons.js';
+import {
+  type Check,
+  loadReadiness,
+  readiness,
+  readinessHtml,
+} from '../readiness.js';
 import {
   type Page,
   type ViewId,
@@ -181,6 +188,8 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
         loadChannelPoints(),
         loadLive(),
       ]);
+    // Refonte F4: « Prêt pour le live », read from the modules' own routes while the Centre is open.
+    if (current.hub === 'centre') ready = readiness(await loadReadiness());
     if (
       current.hub === 'centre' ||
       current.hub === 'activite' ||
@@ -190,6 +199,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   }
   // Régie : état des points de chaîne (lu à chaque relevé tant que la Régie est ouverte) et message de la dernière action.
   let regieCp: Awaited<ReturnType<typeof loadChannelPoints>> | undefined;
+  let ready: Check[] | undefined;
   let regieMsg = '';
   let regieLive: LiveState | undefined;
   let liveMsg = '';
@@ -243,9 +253,10 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
     if (h === 'centre') {
       const active = sup?.incidents.filter((i) => !i.endedAt) ?? [];
       hub.innerHTML = `${head('Centre de contrôle', 'L’état de Studio et des services, ce qui demande ton attention, et tes accès rapides.')}
+        ${readinessHtml(ready, (id) => hrefOf(pageById(id) ?? pageById('centre')!))}
         <div class="rs-cols">
           <section class="rs-panel"><h2>Santé</h2>
-            <p class="rs-state ${!supOk ? 'is-unknown' : active.length ? 'is-down' : 'is-ok'}">${!supOk ? 'Supervision indisponible (serveur Studio injoignable ou supervision absente) : état inconnu.' : active.length ? `${active.length} incident(s) en cours — détails ci-dessus.` : 'Aucun incident confirmé en cours.'}</p>
+            <p class="rs-state ${!supOk ? 'is-unknown' : active.length ? 'is-down' : 'is-ok'}">${!supOk ? 'Supervision indisponible (serveur Studio injoignable ou supervision absente) : état inconnu.' : active.length ? `${active.length} incident(s) en cours — détails ci-dessus.` : `Aucun incident sur les éléments suivis : ${SUPERVISED}.`}</p>
             <p class="rs-muted">Profil, Core, bot, comptes Twitch, OBS et lecteurs : <a href="${hrefOf(pageById('systeme')!)}" data-page="systeme">Système</a>.</p>
             <h3>Dernières coupures</h3>${sup ? renderHistory(sup.history, 6) : '<p class="rs-muted">—</p>'}
             <p><a href="${hrefOf(pageById('activite')!)}" data-page="activite">Tout l’historique</a></p></section>

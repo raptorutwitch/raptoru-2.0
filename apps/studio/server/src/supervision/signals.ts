@@ -329,6 +329,7 @@ export function interactionsStatusProvider(
             .map((s) => `${s.label} : ${s.hint}`)
             .join(' ') || null,
         checkedAt: now().toISOString(),
+        data: { signals },
       };
     },
   };

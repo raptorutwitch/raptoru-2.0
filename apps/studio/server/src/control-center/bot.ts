@@ -293,10 +293,12 @@ export function botStatusProvider(
           hint: null,
         };
       try {
-        return describeBot(
-          BotStatus.parse(await core('/v1/studio/status/bot')),
-          now(),
-        );
+        const s = BotStatus.parse(await core('/v1/studio/status/bot'));
+        const out = describeBot(s, now());
+        // Refonte F4: what the readiness list needs, structured (the bot's flags and Twitch connections).
+        return s.state === 'active' && s.active
+          ? { ...out, data: { flags: s.active.flags, health: s.active.health } }
+          : out;
       } catch (e) {
         const err = e instanceof StudioTransportError ? e : null;
         const missing = err?.status === 404;

@@ -149,7 +149,7 @@ describe('Régie live queues', () => {
     },
     alerts: { playing: 1, queued: 2, source: true },
     tts: { state: 'active', current: 'Fictif', waiting: 4 },
-    spotify: { admission: 'closed', current: null, queue: 0 },
+    spotify: { admission: 'MODULE_DISABLED', current: null, queue: 0 },
   };
   it('shows real queue states and named actions only where they apply', () => {
     const lab = liveHtml(live, 'lab', href);
@@ -158,7 +158,7 @@ describe('Régie live queues', () => {
     expect(lab).toContain('data-live="tombola-cancel"');
     expect(lab).toContain('1 en lecture · 2 en attente');
     expect(lab).toContain('data-live="tts-stop"');
-    expect(lab).toContain('Demandes fermées');
+    expect(lab).toContain('Demandes fermées (module coupé)');
   });
   it('Production: no TTS action here (Modération owns them)', () => {
     const prod = liveHtml(live, 'production', href);
