@@ -313,6 +313,12 @@ describe('the host on the canonical economy (Production)', () => {
       settings,
     });
     expect(host.ids).toEqual(['mini_games', 'echantillon']); // demos A and B are Lab only; mini-games is Production
+    // Nothing of a Lab-only module reaches Production: no setting listed in Studio, none settable through the cockpit.
+    const keys = (await settings.list(CH)).map((x) => x.key);
+    expect(keys.some((k) => k.startsWith('coffre_mystere.') || k.startsWith('objectif_soiree.'))).toBe(false);
+    await expect(settings.set(CH, 'coffre_mystere.enabled', 1, 'test')).rejects.toMatchObject({
+      code: 'unknown_setting',
+    });
     await settings.set(CH, 'echantillon.enabled', 1, 'test');
     await core.wallet.wallet.credit({
       key: 'fund-mod-1',

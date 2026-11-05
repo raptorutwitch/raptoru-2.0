@@ -123,3 +123,18 @@ Limites mesurées :
 - Bonk, Soundboard, TTS et Tombola gardent leur câblage (`MIGRATIONS.md`, D20) ;
 - `ui.js` garde ses branches historiques (6 300 lignes).
 
+## Vérification ciblée du socle (mission continue, 05/11)
+
+| Question | Réponse | Preuve |
+|---|---|---|
+| Les modules du socle passent-ils par les contrats communs ? | oui : achat, journal, remboursement et réglages ne passent que par `ModuleHost` | `modules-host.test.ts`, `modules-robustness.test.ts` |
+| Production et Lab ont-ils les mêmes règles, sans partager leurs données ? | même hôte depuis la même liste ; économie Lab ou Wallet canonique ; modules `labOnly` absents en Production, **réglages compris** (ajouté ici) | `modules-host.test.ts` « Lab-only modules are not mounted… » |
+| Une action viewer est-elle possible avec une identité arbitraire côté Studio ? | non : le cockpit refuse `…/viewer/…` (404) ; le relais Studio n'a pas de route viewer | `ext-frontier.test.ts` « the cockpit never buys for a viewer » |
+| Le remboursement porte-t-il uniquement sur la transaction d'origine ? | oui : `economy.refund(activityId)`, une seule fois, sous verrou de ligne ; aucune route de crédit | `modules-host.integration.test.ts` (course sur PostgreSQL) |
+| Les anciennes fonctionnalités ont-elles un seul exécuteur ? | oui : les adaptateurs ne font que lire, le moteur historique reste le seul à agir | `status-adapters.ts`, `votekick.ts`, `caution.ts` (aucun `run`) |
+| Les adaptateurs reflètent-ils leur moteur ? | oui : intention et « prêt » lus sur le moteur réel (exécuteur, live, pouls) | `votekick-module`, `caution-module`, `status-adapters` |
+| Les réglages H10 sont-ils lus par les exécuteurs ? | oui : chaque réglage a un test qui change le comportement | `mini-games-settings`, `votekick-module` (plage, délai), `caution-module` (tarif) |
+| Le registre de l'extension crée-t-il une vérité concurrente ? | non : il affiche la liste du serveur, croisée avec les vues connues ; il ne décide rien | `module-host.test.js` |
+| Les routes sont-elles accessibles dans le Lab, par le vrai client Studio ? | oui : la liste blanche est corrigée et testée sur la vraie chaîne | `modules-lab-chain.test.ts` |
+| Les migrations préparées sont-elles compatibles avec les données historiques ? | oui : elles sont additives et testées sur des bases passées | `migration-scopes.test.ts`, `migration-main-core` et `sub-wheel-v2` (intégration) |
+
