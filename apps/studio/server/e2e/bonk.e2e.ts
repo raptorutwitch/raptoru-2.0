@@ -196,6 +196,8 @@ test('viewer: sources, search, multi-click magazine, manual shot, favourite, Aut
     /Rapide \(3\/4\)/,
   );
   await expect(page.getByRole('button', { name: 'Passer' })).toHaveCount(0);
+  // The last outcome belongs to the previous visit: not shown again on return.
+  await expect(status(page)).toHaveText('');
   expect(errors).toEqual([]);
   expect(outside).toEqual([]);
   await page.close();

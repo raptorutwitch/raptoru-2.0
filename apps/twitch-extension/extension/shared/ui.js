@@ -1727,7 +1727,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     captureScrollPositions();
     if (moduleId !== openModule) restrictionsSeen = new Set();
     openModule = moduleId;
-    if (moduleId !== 'bonk') bonkChargeur?.reset();
+    if (moduleId !== 'bonk') {
+      bonkChargeur?.reset();
+      // The last outcome belongs to this visit (as the Soundboard's feedback): never shown again on return.
+      bonkFeedbackMessage = '';
+      bonkFeedbackKind = 'ok';
+    }
     soundboardVolumeOpen = false;
     if (moduleId === 'soundboard') {
       tutorialOpen = false;
