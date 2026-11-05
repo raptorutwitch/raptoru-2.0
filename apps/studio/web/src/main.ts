@@ -1,4 +1,5 @@
 import './style.css';
+import { mountModuleHost } from './module-host.js';
 import './shell/shell.css';
 import './extension-lab.css';
 import './sound-config.css';
@@ -76,6 +77,7 @@ if (app) {
     simulation: mountSimulationTab(el('simulation')),
     'extension-lab': mountExtensionLab(el('extension-lab')),
     soundboard: mountSoundConfig(el('soundboard')),
+    modules: mountModuleHost(el('modules')),
   };
   mountUpdateWidget(app.querySelector<HTMLElement>('.update-widget')!);
   // « Simulation de stream » : live, chat, sortie réelle, mini-jeux (depuis n'importe quelle page).

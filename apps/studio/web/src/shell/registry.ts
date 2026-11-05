@@ -5,24 +5,8 @@
 // ouvrent la même vue. Les anciens liens `?tab=<id>` restent des alias exacts (e2e, liens internes, habitudes).
 
 /** Les vues historiques (identifiants d'onglet de Studio 0.1.25, gardés comme contrat). */
-export type ViewId =
-  | 'studio'
-  | 'moderation'
-  | 'tombola'
-  | 'commands'
-  | 'word-game'
-  | 'alerts'
-  | 'channel-points'
-  | 'simulation'
-  | 'test-lab'
-  | 'extension-lab'
-  | 'soundboard'
-  | 'halloween'
-  | 'progression'
-  | 'shop'
-  | 'challenges';
-
-export const VIEW_IDS: readonly ViewId[] = [
+// One declaration of the view ids (architecture socle: was declared 3 times). A new view = one id here + its mount.
+export const VIEW_IDS = [
   'studio',
   'moderation',
   'tombola',
@@ -38,7 +22,9 @@ export const VIEW_IDS: readonly ViewId[] = [
   'progression',
   'shop',
   'challenges',
-];
+  'modules',
+] as const;
+export type ViewId = (typeof VIEW_IDS)[number];
 
 export type SectionId =
   | 'centre'
@@ -405,6 +391,36 @@ export const PAGES: readonly Page[] = [
     desc: 'Live simulé, chat fictif, scénarios.',
     keywords: 'sim chat fictif',
   },
+  // Architecture socle: the modules of the module host — one generic view, one page per module (its anchor).
+  {
+    id: 'socle-modules',
+    label: 'Modules du socle',
+    section: 'labo',
+    icon: 'grid',
+    view: 'modules',
+    desc: 'Modules construits sur le socle commun : état, réglages, actions, activité.',
+    keywords: 'socle module catalogue démonstration',
+  },
+  {
+    id: 'objectif-soiree',
+    label: 'Objectif de soirée (démo)',
+    section: 'labo',
+    icon: 'grid',
+    view: 'modules',
+    anchor: 'objectif_soiree',
+    desc: 'Démonstration A du socle : compteur d’objectif (Lab).',
+    keywords: 'objectif compteur démonstration socle',
+  },
+  {
+    id: 'coffre-mystere',
+    label: 'Coffre mystère (démo)',
+    section: 'labo',
+    icon: 'grid',
+    view: 'modules',
+    anchor: 'coffre_mystere',
+    desc: 'Démonstration B du socle : achat en Jetons fictifs, lecteur fictif, modération (Lab).',
+    keywords: 'coffre jetons extension démonstration socle',
+  },
   {
     id: 'test-lab',
     label: 'Test Lab',
@@ -434,7 +450,8 @@ export const sectionOf = (p: Page) =>
     : SECTIONS.find((s) => s.id === p.section)!;
 
 /** Alias historiques : `?tab=<ViewId>` → la page canonique qui l'affiche. */
-const LEGACY: Record<ViewId, string> = {
+/** Historical `?tab=<id>` aliases (views created before the shell only). */
+const LEGACY: Partial<Record<ViewId, string>> = {
   studio: 'systeme',
   moderation: 'moderation',
   tombola: 'tombola',
@@ -453,7 +470,12 @@ const LEGACY: Record<ViewId, string> = {
 };
 export const pageForLegacyTab = (tab: string | null) =>
   tab && (VIEW_IDS as readonly string[]).includes(tab)
-    ? pageById(LEGACY[tab as ViewId])
+    ? // A view without a historical alias: its first page (no list to maintain for new views).
+      pageById(
+        LEGACY[tab as ViewId] ??
+          PAGES.find((p) => p.view === tab && !p.anchor)?.id ??
+          '',
+      )
     : undefined;
 
 /** Adresse canonique d'une page (les paramètres de vue, ex. surface, suivent). */

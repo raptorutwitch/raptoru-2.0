@@ -112,6 +112,8 @@ export interface AdminAction {
   permission?: string;
   /** Says what really happens (Production / Lab), shown before running it (refonte F1 / H11). */
   confirm?: string;
+  /** One whole-number field asked before running (generic screen); a richer form is the module's own screen. */
+  input?: { key: string; label: string; min: number; max: number };
   run(
     ctx: ModuleContext,
     q: Queryable,

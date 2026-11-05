@@ -1,4 +1,6 @@
 import { BonkRuntime } from './bonk-lab/runtime.js';
+import { modulesStatusProvider } from './control-center/modules.js';
+import { modulesRelay } from './modules/relay.js';
 import { moduleSettingsRelay } from './module-settings/relay.js';
 import { bootPlan } from './prod-transport/profile.js';
 import {
@@ -340,6 +342,10 @@ const TEST_LAB_PRODUCTION_ACTIONS = new Set([
   'stop-all',
   'logs/clear',
 ]);
+/** The paths served by the relay chain (relays to the profile's Core). */
+const RELAYED =
+  /^\/api\/(mini-games\/|module-settings$|daily\/config$|modules(\/|$))/;
+
 /** Several relays behind one handler slot: the first that knows the path answers. */
 function chainRelays(
   ...handlers: ((
@@ -405,7 +411,8 @@ export function createStudioServer(
   /** Jeu des mots V1 (Lab): panel relay + OBS sound source. */
   wordGame: WordGameRuntime | null = null,
   /** Roulette and Slot V1 (Lab): the switch « Mini-jeux » (Simulation de stream panel). */
-  miniGames: ReturnType<typeof miniGamesRelay> | null = null,
+  /** The relay chain to the profile's Core (mini-games, module settings, Daily, module host). */
+  relays: ReturnType<typeof chainRelays> | null = null,
   /** Twitch alerts V1 (Lab): OBS source + media, Studio preview, queue relay. */
   alerts: AlertsRuntime | null = null,
   /** Points de chaîne V1: tab API and the OBS executor of the redemptions. */
@@ -511,6 +518,12 @@ export function createStudioServer(
       }
       // Halloween: overlay page / media (its key), Electron main (screens), Studio's panel and the shop relay.
       if (halloween && (await halloween.handle(req, res, url))) return;
+      // Security (architecture audit S2): these relays answered without the same-host check (DNS rebinding).
+      if (
+        /^\/api\/(progression|cosmetics|challenges)(\/|$)/.test(url.pathname) &&
+        !sameHost(req)
+      )
+        return send(res, 403, { error: 'forbidden_host' });
       if (progression && (await progression.handle(req, res, url))) return;
       if (cosmetics && (await cosmetics.handle(req, res, url))) return;
       if (challenges && (await challenges.handle(req, res, url))) return;
@@ -519,24 +532,14 @@ export function createStudioServer(
       if (points && (await points.handle(req, res, url))) return;
       if (url.pathname === '/api/alerts/state' && !alerts)
         return send(res, 200, { enabled: false });
-      // Roulette and Slot V1: Core decides; Studio relays the switch « Mini-jeux ».
-      if (url.pathname.startsWith('/api/mini-games/')) {
+      // Relays to the profile's Core — ONE chain, ONE host check (architecture socle): mini-games, module settings and
+      // Daily steps, the module host (/api/modules…). A new relay joins the chain where it is built, nothing here.
+      if (RELAYED.test(url.pathname)) {
         if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
-        if (!miniGames)
-          return url.pathname === '/api/mini-games/state'
-            ? send(res, 200, { available: false })
-            : send(res, 503, { error: 'lab_core_unavailable' });
-        if (await miniGames(req, res, url)) return;
-      }
-      // Refonte H10 / H12 / H14: module settings and Daily steps, relayed to the profile's Core (same relay chain).
-      if (
-        url.pathname === '/api/module-settings' ||
-        url.pathname === '/api/daily/config'
-      ) {
-        if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
-        if (!miniGames)
-          return send(res, 503, { error: 'lab_core_unavailable' });
-        if (await miniGames(req, res, url)) return;
+        if (relays && (await relays(req, res, url))) return;
+        return url.pathname === '/api/mini-games/state'
+          ? send(res, 200, { available: false })
+          : send(res, 503, { error: 'lab_core_unavailable' });
       }
       // Moderation V2 cockpit / TTS configuration / Lab test wallet (relayed to the local Lab Core).
       if (url.pathname.startsWith('/api/lab/')) {
@@ -1143,6 +1146,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   );
   const control = new ControlCenter(studioOrigin, [
     bot,
+    // Every module of the module host, in one provider (architecture socle).
+    modulesStatusProvider(labCore, cockpitChannel),
     interactionsStatusProvider(() =>
       readSignals(interactionSources(), Date.now()),
     ),
@@ -1244,6 +1249,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       ? chainRelays(
           miniGamesRelay(labCore, cockpitChannel),
           moduleSettingsRelay(labCore, cockpitChannel),
+          modulesRelay(labCore, cockpitChannel),
         )
       : null,
     alerts,

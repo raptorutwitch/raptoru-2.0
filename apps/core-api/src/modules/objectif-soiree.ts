@@ -24,6 +24,12 @@ export const objectifSoiree: ModuleDefinition = {
   admin: {
     ajouter: {
       label: 'Ajouter des points',
+      input: {
+        key: 'points',
+        label: 'Combien de points ?',
+        min: 1,
+        max: 1_000,
+      },
       async run(ctx, q, { channelId, input }) {
         const n = Number((input as { points?: unknown } | null)?.points);
         if (!Number.isInteger(n) || n < 1 || n > 1_000)

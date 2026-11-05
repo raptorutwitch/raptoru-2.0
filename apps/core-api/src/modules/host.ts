@@ -233,6 +233,7 @@ export class ModuleHost {
           name,
           label: a.label,
           confirm: a.confirm ?? null,
+          input: a.input ?? null,
         })),
         viewer: await Promise.all(
           Object.entries(d.viewer ?? {}).map(async ([name, a]) => ({
