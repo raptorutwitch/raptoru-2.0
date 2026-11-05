@@ -385,6 +385,7 @@ export function mountExtensionLab(root: HTMLElement): {
     stage.dataset.surface = ui.surface;
     $('context').innerHTML = `
       <span class="xlab-pill xlab-pill--lab">LAB LOCAL · jetons fictifs · aucun appel prod</span>
+      <span class="xlab-pill" title="Bonk, sons et TTS achetés ici passent par les lecteurs de Studio : s’ils sont ouverts dans OBS, ils s’affichent et s’entendent sur le vrai OBS (aucun Jeton réel).">Joue sur OBS si ses lecteurs y sont ouverts</span>
       <span class="xlab-pill">${SURFACES[ui.surface].label}</span>
       <span class="xlab-pill">${dims}</span>
       <span class="xlab-pill">${ROLES[ui.role]}${ui.identity ? '' : ' · identité non partagée'}</span>
