@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 04/11/2026, après l'audit fonctionnel.**
+**Mis à jour : 05/11/2026, mise en œuvre des décisions H1-H16 en cours (GO d'Antoni du 05/11, Lab uniquement).**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -16,7 +16,17 @@ le travail touche au comportement d'un module.
 
 ## Derniers commits (plus récent en haut)
 
-- Commit de cette documentation.
+Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par Antoni, rien de publié) :
+
+- `3311fb5` H16 état réel du moteur des Défis · `e944670` H15 option Level Up masquée (extension) · `2355f55` H13 mode
+  V1/V2 de la roue en « avancé » · `53b9981` H5 StreamElements ACTIVE repris en Production · `d167ca4` H4 TTS 5 min.
+- `ba1b669` H3 alertes 30 min + « Vider la file » · `04ccc3f` H2 travaux OBS des points expirés à 2 min + remboursement
+  · `67b1d04` P0-4 garde Core du live simulé · `5b792f8` P0-3 frontière de la roue (migration `enabled_at`, préparée
+  non appliquée) · `9e1e3fa` P0-2 une écriture Wallet par intention (Modération, Boutique) · `76de82e` F1 vérité des
+  états (Régie, échec Production, « Exécuter maintenant (réel) », Spotify à blanc).
+- Base PostgreSQL jetable pour les tests : conteneur Docker `studio-ux-test-pg`, port 55499,
+  `TEST_DATABASE_URL=postgres://postgres:uxtest@127.0.0.1:55499/raptoru_ux_test` (à supprimer en fin de chantier).
+- Commit de la documentation de l'audit.
 - `a49178a` Boutique : une action à la fois.
 - `cde6c4f` Test Lab : uniquement des arrêts en Production.
 - `0675b9b` lecteur Soundboard chargé au lancement, live simulé refusé en Production, mini-jeux, Caution.
