@@ -86,7 +86,7 @@ export function mountStudioHome(root: HTMLElement) {
   root.innerHTML = `
     <section class="hero"><div>
       <h1>Système</h1>
-      <p>Runtime local du stream : Studio démarre et surveille lui-même ce dont Hub, Bonk, Soundboard et TTS ont besoin. Aucun terminal, aucun <code>npm run bonk:lab</code>.</p>
+      <p>Le profil de Studio, les services qu’il démarre et surveille lui-même, ses connexions et son journal.</p>
     </div></section>
     <div class="grid home-grid">
       <article class="card wide" data-slot="control"></article>
@@ -106,19 +106,8 @@ export function mountStudioHome(root: HTMLElement) {
         <div data-slot="links"></div>
         <div data-slot="twitch-connections"></div>
       </article>
-      <article class="card">
-        <h2>Modules</h2>
-        <div class="home-modules">
-          <a class="home-module" href="/?tab=extension-lab&amp;surface=video"><b>Hub</b><span>Extension Lab · Vidéo</span></a>
-          <a class="home-module" href="/?tab=extension-lab&amp;surface=panel"><b>Bonk</b><span>Core local · providers · overlay OBS</span></a>
-          <a class="home-module" href="/?tab=soundboard"><b>Soundboard</b><span>Banque, réglages, lecteur local</span></a>
-          <a class="home-module" href="/?tab=extension-lab&amp;surface=panel"><b>TTS V2</b><span data-slot="tts-module">Core local · lecteur OBS · Lab</span></a>
-          <a class="home-module" href="/?tab=tombola"><b>Tombola V2</b><span>Préparer · En direct · Historique</span></a>
-          <a class="home-module" href="/?tab=moderation"><b>Modération V2</b><span>Core local · files, sanctions, remboursements, audit</span></a>
-        </div>
-      </article>
-      <article class="card">
-        <h2>Dev / Lab</h2>
+      <article class="card" data-slot="dev" hidden>
+        <h2>Outils de développement <span class="badge">Lab</span></h2>
         <div class="home-links">
           <a href="/?tab=extension-lab&amp;surface=video">Extension Lab · Vidéo</a>
           <a href="/?tab=extension-lab&amp;surface=panel">Extension Lab · Panel</a>
@@ -196,6 +185,8 @@ export function mountStudioHome(root: HTMLElement) {
     production = profile?.effective === 'production';
     const card = slot('players');
     card.hidden = !production;
+    // The Lab's tools (Extension Lab, Test Lab, prototypes) only where they exist: a confirmed Lab profile.
+    slot('dev').hidden = profile?.effective !== 'lab';
     if (production && !players) {
       const body = slot('players-body');
       // Each card prepends itself: mounted in reverse to read Bonk, Soundboard, TTS.
@@ -256,9 +247,6 @@ export function mountStudioHome(root: HTMLElement) {
     const ttsQueue = tts?.queue
       ? `${tts.queue.waiting.length} en attente · ≈ ${Math.round(tts.queue.wait_ms / 1000)} s`
       : '—';
-    slot('tts-module').textContent = tts?.enabled
-      ? `${ttsState} · ${ttsQueue}${tts.current ? ` · en cours : ${tts.current.cast.character_id} (${tts.current.viewer_display_name})` : ''}`
-      : 'Indisponible';
     slot('links').innerHTML = `
       <div class="row home-row"><span>OBS WebSocket</span><span><span class="badge ${obs[0]}">${obs[1]}</span></span></div>
       <p class="home-detail">${production ? 'Connexion depuis la carte « Bonk — overlay OBS (Production) » ci-dessous' : 'Connexion depuis la carte « Bonk OBS Lab » de l’Extension Lab'} (mot de passe jamais stocké).</p>

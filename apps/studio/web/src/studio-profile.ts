@@ -93,9 +93,13 @@ export function mountStudioProfile(
     await refresh();
   };
 
+  /** At least one read was attempted: an unread profile is then said, never an endless « Chargement… ». */
+  let attempted = false;
   function render() {
     if (!status) {
-      card.innerHTML = '<h2>Profil Studio</h2><p class="muted">Chargement…</p>';
+      card.innerHTML = attempted
+        ? '<h2>Profil Studio <span class="badge warn">Non confirmé</span></h2><p class="muted">Le serveur Studio ne répond pas : profil illisible. Nouvel essai toutes les 3 secondes.</p>'
+        : '<h2>Profil Studio</h2><p class="muted">Chargement…</p>';
       return;
     }
     const p = status.production;
@@ -151,6 +155,7 @@ export function mountStudioProfile(
     } catch {
       /* server restarting: keep the last view */
     }
+    attempted = true;
     // Jamais lu : l’état n’est pas confirmé (pas de « Lab sûr » supposé).
     if (!status && topbar) {
       topbar.textContent = 'Profil non confirmé';

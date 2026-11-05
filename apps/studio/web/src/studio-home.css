@@ -32,30 +32,6 @@
   color: var(--ko);
   border-color: color-mix(in srgb, var(--ko) 45%, transparent);
 }
-.home-modules {
-  display: grid;
-  gap: 8px;
-}
-.home-module {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  text-decoration: none;
-}
-.home-module:hover {
-  border-color: var(--accent);
-}
-.home-module span {
-  color: var(--muted);
-  font-size: 12px;
-}
-.home-module.is-off {
-  opacity: 0.55;
-}
 .home-links {
   display: flex;
   flex-wrap: wrap;
