@@ -148,6 +148,32 @@ Ordre recommandé : F1 → F2 → F4 → F3 → F5 → F6 (au fil des pages) →
 - **H1 change la Production** : hors live, plus aucun achat lié au stream ; à annoncer aux viewers ;
 - l'extension (H15, P0-2 de la console partagée, texte `stream_offline`) par Antoni.
 
+### Opération fondation totale (05/11) — consolidation et migrations, [architecture/MIGRATIONS.md](architecture/MIGRATIONS.md)
+
+Codé et testé automatiquement, vu en navigateur sur la pile isolée ; rien de validé par Antoni ni publié.
+
+| Fait | Commit |
+|---|---|
+| Porte chat des modules | `0148b26` |
+| 13 constats d'une revue indépendante corrigés (dont un P0 latent : achat forgé par le cockpit) | `77e614d` |
+| D4 › « Autres modules » (extension et Studio) | `104acb7`, `d080506` |
+| `createStudioServer` en options nommées | `f354ead` |
+| Adaptateur Votekick | `c026907` |
+| Adaptateur Caution | `957bcc3` |
+| Adaptateurs d'état Random Ban, Jeu des mots, Boutique d'événement | `ec2f170` |
+| Page du socle en tuiles, panneau de réglages compact | `4c97661` |
+
+Reste :
+- adaptateurs Roue du Sub, Spotify, Points de chaîne ;
+- exécuteur OBS générique ;
+- extraction de `ui.js` ;
+- Bonk, Soundboard, TTS et Tombola hors de l'hôte (D20).
+
+**Déploiement** (le jour du GO), migrations dans cet ordre :
+1. `20261121160000` (réglages) ;
+2. `20261121180000` (journal des modules, avec les colonnes de réservation) ;
+3. `20261121190000` (origine chat `module:<id>`, liste du Core principal).
+
 ### Socle modulaire (mission fondatrice du 05/11) — [architecture/](architecture/)
 
 Codé et testé automatiquement ; rien de validé par Antoni ni publié.

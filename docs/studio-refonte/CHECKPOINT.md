@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026 — mission « Opération fondation totale » EN COURS (Lab uniquement, rien de validé ni publié).**
+**Mis à jour : 05/11/2026 — « Opération fondation totale » : phase de consolidation et premières migrations livrées en code (`d46e912`, arbre propre). Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -108,10 +108,42 @@ Puis :
 
 Stratégies et matrices de parité : `architecture/MIGRATIONS.md`.
 
-Suite prévue (mise à jour), dans l'ordre :
-1. Studio : page « Modules du socle » en vue d'ensemble compacte, vérification visuelle du Centre de contrôle.
-2. Suites de régression complètes, puis mise à jour de la documentation (CONTRATS, GUIDE_*, PREUVES, FRICTIONS).
-3. Selon le temps : adaptateurs d'état pour Roue du Sub, Spotify et Points de chaîne ; extraction progressive de `ui.js`.
+Puis :
+
+| Commit | Contenu |
+|---|---|
+| `4c97661` | page « Modules du socle » en tuiles ; panneau de réglages compact avec un vrai interrupteur |
+| `d46e912` | Prettier et documentation (CONTRATS § 9, FRICTIONS, DECISIONS D15-D20, guides, PREUVES) |
+
+Suites complètes avant `d46e912` :
+
+| Suite | Résultat |
+|---|---|
+| Core | 1 396 |
+| Intégration PostgreSQL | 191 |
+| Studio | 884 |
+| Extension | 78 |
+| Bot | 287 |
+| Lint, typecheck | propres |
+
+Vu dans un navigateur, sur la pile isolée (port 4411) :
+- achat dans l'Extension Lab ;
+- remboursement depuis D4 › « Autres modules », dans l'extension et dans Studio ;
+- tuiles du socle ;
+- réglages, y compris en largeur mobile.
+
+Prochaines étapes (ordre conseillé) :
+1. Antoni valide dans le vrai Lab (`npm run studio`) :
+   - Modules du socle ;
+   - Points de chaîne › Votekick et Caution (nouveaux panneaux) ;
+   - D4 › Autres modules ;
+   - le coffre dans l'Extension Lab.
+2. Adaptateurs d'état pour Roue du Sub, Spotify et Points de chaîne (modèle : `status-adapters.ts`).
+3. Exécuteur OBS générique côté Studio (`claim` / `report`) et page d'overlay par module.
+4. Extraction progressive de `ui.js` (historique), module par module, avec tests de parité.
+5. Le jour du GO de déploiement :
+   - migrations `20261121170000` / `180000` / `190000`, dans l'ordre (voir ROADMAP) ;
+   - supprimer le conteneur de test `studio-ux-test-pg`.
 
 ## Prochaine action
 

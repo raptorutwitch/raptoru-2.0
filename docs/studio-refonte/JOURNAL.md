@@ -116,3 +116,28 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   Deux plantages 0xC0000409, relancés seuls et verts.
 - Vu en navigateur sur la pile isolée (4411) : trois défauts trouvés et corrigés (`dbb1798`).
 
+## 05/11/2026 — Opération fondation totale (consolidation, premières migrations)
+
+- **Revue indépendante du socle.** Un sous-agent en lecture seule a relevé 13 constats, tous corrigés (`77e614d`).
+  P0 latent : le cockpit de Studio relayait une action viewer avec le viewer nommé dans le corps de la requête.
+- **Porte chat** (`0148b26`). L'origine `module:<id>` est autorisée par une seule migration pour tous les futurs modules.
+- **D4 › « Autres modules »**, dans l'extension et dans Studio, avec une seule implémentation.
+- **Friction S1 traitée.** Deux trous silencieux trouvés en navigateur dans la pile d'aperçu : relais et `/api/lab`
+  absents.
+- **Adaptateurs.**
+  - Votekick : délai de relance et plage de sanction.
+  - Caution : tarifs ; le devis garde son prix ; « prolongé » compté en minutes.
+  - Random Ban, Jeu des mots, Boutique d'événement : état seulement.
+  - Matrices de parité dans `architecture/MIGRATIONS.md`.
+- **Studio.** Page du socle en tuiles ; panneau de réglages compact avec un vrai interrupteur, partagé par Bonk et Points
+  de chaîne.
+- **Suites.**
+
+  | Suite | Résultat |
+  |---|---|
+  | Core | 1 396 |
+  | Intégration | 191 |
+  | Studio | 884 |
+  | Extension | 78 |
+  | Bot | 287 |
+
