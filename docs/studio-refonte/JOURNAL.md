@@ -199,3 +199,10 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Défaut trouvé : Échap ne fermait pas l'historique d'un utilisateur dans la console V1 (focus perdu) ; corrigé.
 - Studio : Alertes en onglets (même contenu, rangé par tâche) ; Système débarrassé de la carte « Modules » trompeuse en
   Production ; Prêt pour le live replie ce qui est prêt.
+
+## 05/11/2026 — Lab cible
+
+- Décision d'Antoni : deux environnements (Lab local, Production VPS) ; staging gardé intact, sans maintenance.
+- Le Core principal tourne en `CORE_ENVIRONMENT=lab` (gardes au démarrage) ; un seul assemblage pour Production et Lab.
+- L'Extension Lab parle au vrai `/v1/ext` ; le transport Production de Studio fonctionne contre le Core Lab local :
+  une interaction TTS complète passe sans aucune route `/v1/lab`.

@@ -43,3 +43,16 @@ attend Antoni.
 | D18 | Un interrupteur qui est un drapeau de déploiement (`VOTEKICK_CHAT`, `CAUTION_CHAT`) est lu, jamais écrit depuis Studio | Changer une variable de Production exige le GO d'Antoni |
 | D19 | Caution : « prolongé » compté en minutes, plus en prix | Même règle SAMMI, indépendante d'un tarif changé pendant le devis |
 | D20 | Bonk, Soundboard, TTS et Tombola restent hors de l'hôte pour l'instant (E) | Supervision et modération D4 déjà complètes ; un adaptateur dupliquerait l'existant |
+
+## Deux environnements : Lab local et Production (05/11, décision d'Antoni)
+
+- **Lab local** : le véritable Core (même point d'entrée `index.ts`, même assemblage `main-server.ts`, mêmes migrations
+  que la Production, mêmes portes `/v1/ext`, `/v1/studio`, `/v1/bot`), `CORE_ENVIRONMENT=lab`, données fictives,
+  services extérieurs simulés à leur frontière (transport, jamais la règle).
+- **Production VPS** : le véritable Core, données et services réels.
+- **Pas de staging permanent.** Le Core staging existant (`core-staging.raptoru.fr`) n'est ni supprimé, ni arrêté, ni
+  modifié : son retrait éventuel fera l'objet d'une décision explicite. Un test distant ponctuel reste possible
+  (Hosted Test Twitch) sans le maintenir au quotidien.
+- Conséquence : `extension-lab/lab-ebs.ts` (second backend métier dans Studio), l'assemblage `bonk-lab/lab-core.ts`
+  et les migrations jumelles `_lab` sont à retirer une fois le Lab de Studio basculé (MIGRATIONS § « Lab cible »).
+

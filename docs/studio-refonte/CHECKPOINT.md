@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026 — Chemins V1 de l'extension sortis de `ui.js`, puis Studio : Alertes en onglets, Système, Prêt pour le live (`5080f9e` + docs). Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 05/11/2026 — Lab cible : le véritable Core en mode Lab (lots 1, 2, 3a, `6fe32e9`). Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -246,6 +246,18 @@ contrôle.
 
 À vérifier par Antoni (facultatif, ces écrans ne servent pas en Production) : un Studio Lab sans Lab Core
 (`BONK_LAB_CORE_URL` absent) affiche TTS, Tombola et modération V1 comme avant.
+
+### Lab cible : véritable Core en mode Lab (05/11, décision d'Antoni : Lab local + Production, pas de staging permanent)
+
+| Commit | Contenu |
+|---|---|
+| `67de267` | Core : `CORE_ENVIRONMENT=lab` gardé (base locale, chaîne fictive, pas de Twitch réel) ; `npm run lab` / `lab:reset` |
+| `356617d` | assemblage unique (`main-server.ts`) ; Extension Lab sur le vrai `/v1/ext` (Studio signe le JWT, relaie) |
+| `6fe32e9` | transport Production de Studio vers le Core Lab local ; boucle complète extension → Core → worker Studio → lecteur |
+
+Le `npm run studio` d'aujourd'hui n'a pas encore basculé (lot 3b, détail : architecture/MIGRATIONS.md § « Lab cible »).
+Pour essayer le nouveau Lab : `apps/core-api/.env.lab` (voir l'en-tête de `src/scripts/lab-reset.ts`), puis
+`npm run lab:reset -w @raptoru/core-api` et `npm run lab -w @raptoru/core-api`. Staging : intact.
 
 ## Prochaine action
 

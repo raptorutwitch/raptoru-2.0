@@ -185,3 +185,21 @@ Aucune n'est supprimée.
 `ui.js` : 3 444 → 1 642 lignes (6 005 au début des frontières). Il ne nomme plus aucun module payant ; restent les
 couleurs du Hub, la pastille « Ouverte / Fermée » de l'en-tête Tombola, le tutoriel global et l'Historique du viewer.
 
+## Lab cible : le véritable Core en mode Lab (05/11)
+
+| Lot | Contenu | Preuve |
+|---|---|---|
+| 1 (`67de267`) | `CORE_ENVIRONMENT=lab` : refus au démarrage d'une base non locale, d'une autre chaîne que la fictive 900100, d'une app Twitch réelle, de `OPS_TOKEN` ; écoute 127.0.0.1 seulement (Production : bind inchangé) ; noms des viewers par un annuaire fictif. `npm run lab` / `lab:reset` (`apps/core-api/.env.lab`, ignoré par git) | unitaires 4/4 ; essai sur la base Postgres jetable : 67 migrations, `/v1/ext/session` servi, jeton « lab. » refusé, vraie chaîne refusée |
+| 2 (`356617d`) | `main-server.ts` (`createMainCore`, `createMainServer`) : l'assemblage unique de Production et du Lab ; `lab/fixtures.ts` ; Studio `extension-lab/core-frontier.ts` : signe le JWT Twitch du compte fictif et relaie `/ext-lab/api/*` → `/v1/ext/*` | E2E `core-lab` 4/4 ; JWT accepté par le vérificateur du Core |
+| 3a (`6fe32e9`) | transport Production de Studio vers le Core Lab local : HTTP accepté sur loopback seulement et sur demande (`labLoopback`), identité liée à ce Core | E2E : TTS acheté dans l'extension → Core → worker TTS **de Production** de Studio → lecteur fictif → réglé, débité une fois ; aucune route `/v1/lab` |
+
+Reste (ordre) :
+1. **3b — `npm run studio` en Lab sur le Core principal** : le runtime local lance `index.ts` (`CORE_ENVIRONMENT=lab`,
+   base `raptoru_core_lab` locale, secrets générés), appaire Studio tout seul, et le profil Lab prend le chemin
+   Production (`createProductionRuntimes` + `labLoopback`, `cockpitClient` qui traduit déjà `/v1/lab/*` →
+   `/v1/studio/cockpit/*`). Extras du Lab à rebrancher : Extension Lab → `labFrontier` ; chat simulé → porte du bot
+   (`/v1/bot/chat`) au lieu de `/v1/lab/chat` ; Simulation de stream ; Wallet de test (cockpit).
+2. **4 — E2E sur l'assemblage principal** : porter les specs de `lab-stack.ts` vers `core-lab-stack.ts`.
+3. **5 — retraits** : `lab-ebs.ts`, `bonk-lab/lab-core.ts`, routes HTTP `/v1/lab/*`, migrations jumelles `_lab`
+   (module par module, quand le schéma de Production les couvre).
+
