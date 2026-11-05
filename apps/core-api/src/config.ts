@@ -29,8 +29,9 @@ const Env = z
       .string()
       .regex(/^[A-Za-z0-9+/]{20,}={0,2}$/)
       .optional(),
-    // Shown to the extension; payment stays simulated whatever this says (Lab test wallet).
-    CORE_ENVIRONMENT: z.enum(['staging']).default('staging'),
+    // Shown to the extension. `lab`: this Core runs on this PC for development (src/lab/environment.ts): fictional
+    // channel and Twitch, loopback only, refused at start when anything real is configured.
+    CORE_ENVIRONMENT: z.enum(['staging', 'lab']).default('staging'),
     // Lot 9: freshness of the alerts' animation (seconds since the Twitch event). Absent = off (no value chosen yet):
     // every alert is animated whatever its delay. Never touches a gain (Roue du Sub, Loyalty).
     ALERTS_MAX_AGE_SECONDS: z.coerce.number().int().positive().optional(),

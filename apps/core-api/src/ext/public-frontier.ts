@@ -19,6 +19,7 @@ import { subWheelRoutes } from '../http/sub-wheel-routes.js';
 import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { LabModerationService } from '../lab-moderation/service.js';
 import { AvatarCache, twitchAppUserLookup } from '../raffle-lab/avatars.js';
+import type { TwitchUserLookup } from '../raffle-lab/avatars.js';
 import { ExtFacade } from './ext-facade.js';
 import { internalLabCall } from './lab-internal.js';
 import { TwitchNames } from './twitch-names.js';
@@ -68,6 +69,8 @@ export function createPublicFrontier(
   db: Db,
   clock: Clock,
   config: CoreConfig,
+  /** `userLookup`: the viewers' names without Helix (the Lab's fictional directory). */
+  o: { userLookup?: TwitchUserLookup } = {},
 ): PublicFrontier | null {
   const channelId = config.TWITCH_CHANNEL_ID;
   if (!channelId) return null;
@@ -111,12 +114,13 @@ export function createPublicFrontier(
     ...modulesRoutes(core.modules),
   ]);
   const app =
-    config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
+    o.userLookup ??
+    (config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
       ? twitchAppUserLookup({
           clientId: config.TWITCH_APP_CLIENT_ID,
           clientSecret: config.TWITCH_APP_CLIENT_SECRET,
         })
-      : null;
+      : null);
   const secret = config.TWITCH_EXTENSION_SECRET
     ? Buffer.from(config.TWITCH_EXTENSION_SECRET, 'base64')
     : null;

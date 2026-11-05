@@ -8,6 +8,8 @@
     "module:new": "node scripts/new-module.mjs",
     "test": "vitest run --maxWorkers=4",
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "lab": "tsx --env-file=.env.lab src/index.ts",
+    "lab:reset": "tsx --env-file=.env.lab src/scripts/lab-reset.ts",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "db:migrate": "tsx --env-file-if-exists=.env src/scripts/migrate.ts",
     "daily:import-legacy": "tsx --env-file-if-exists=.env src/scripts/import-legacy-daily.ts",

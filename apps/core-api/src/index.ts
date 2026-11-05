@@ -21,8 +21,16 @@ import {
 } from './ext/public-frontier.js';
 import { createApp } from './http/server.js';
 import { helixLive, opsStatus } from './ops/status.js';
+import { labEnvironmentProblems, labUserLookup } from './lab/environment.js';
 
 const config = loadConfig();
+const lab = config.CORE_ENVIRONMENT === 'lab';
+// A Lab Core (this PC, fictional data) that could reach anything real refuses to start.
+const labProblems = labEnvironmentProblems(config);
+if (labProblems.length) {
+  console.error(`[core-api] Lab refusé : ${labProblems.join(' ; ')}`);
+  process.exit(1);
+}
 const problems = economyConfigProblems(config);
 if (problems.length) {
   console.error(
@@ -128,7 +136,13 @@ const liveOnTwitch =
 
 // Viewer frontier (/v1/ext/*, Twitch JWT) and Studio cockpit: only when the channel is configured.
 // Payment: the economy chosen above (Lab test wallet by default: nothing here moves real Jetons or Channel Points).
-const frontier = createPublicFrontier(core, db, systemClock, config);
+const frontier = createPublicFrontier(
+  core,
+  db,
+  systemClock,
+  config,
+  lab ? { userLookup: labUserLookup } : {},
+);
 frontier?.start();
 
 createApp({
@@ -192,7 +206,8 @@ createApp({
   botSecret: config.BOT_SECRET,
   studioSecret: config.STUDIO_SECRET,
   db,
-}).listen(config.PORT, () => {
+  // Lab: this machine only. Production: the same bind as always (no host = Node's default).
+}).listen({ port: config.PORT, ...(lab ? { host: '127.0.0.1' } : {}) }, () => {
   console.log(
     `[core-api] listening on :${config.PORT} (daily credits: ${dailyProvider.name}${dailyProvider.deferred ? ' off — pending, nothing sent' : ''}, loyalty preview ${config.LOYALTY_PREVIEW}, passive credits ${config.LOYALTY_PASSIVE_CREDITS}, event credits ${config.LOYALTY_EVENT_CREDITS})`,
   );
