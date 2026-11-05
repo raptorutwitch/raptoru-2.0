@@ -18,6 +18,10 @@ le travail touche au comportement d'un module.
 
 Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par Antoni, rien de publié) :
 
+- `c93dc4d` Jeu des mots dans « Prêt pour le live » · `f9e9724` **H1** achats liés au stream uniquement pendant le live
+  canonique (refus avant débit ; Lab jamais bloqué) · `2d2e7c6` Extension Lab « joue sur OBS » · `ad5eeb4` **F5** micro
+  et filtres rétablis à la fermeture de Studio · `0246e56` **P0-5** bot : événement de live rejoué tant que le Core ne
+  l'a pas enregistré.
 - `a0ed9a7` H8 Jeu des mots ON/OFF durable + intervalle (migration préparée) · `3e4e1db` / `38d8d43` F4 « Prêt pour le
   live » en tête du Centre de contrôle.
 - `3311fb5` H16 état réel du moteur des Défis · `e944670` H15 option Level Up masquée (extension) · `2355f55` H13 mode
@@ -81,10 +85,12 @@ Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par A
 
 ## Prochaine action
 
-1. H1 (interactions payantes uniquement en live, refus avant débit, source canonique) puis H6 (Spotify en fin de live).
-2. H10 / H12 / H14 (réglages : prix, recharges, Bonk, paliers du Daily) dans les pages des modules.
-3. H9 (fidélité `tier_unknown`), F3 (P0-5), F5 (restauration OBS à la fermeture).
-4. Tableau d'état détaillé : ROADMAP « État au 05/11 ».
+1. Vérifier le résultat de la suite d'intégration PostgreSQL lancée après H1 (fixtures canoniques sans live à ouvrir,
+   comme pour les tests unitaires : `test/live.ts`).
+2. H6 prêt dans `scratchpad` (non appliqué) : `closeAfterLive` Spotify, grâce de 10 min, raison `STREAM_ENDED`.
+3. H10 / H12 / H14 : interface Studio écrite (`web/src/module-settings.ts`, onglet Daily de Progression, non commités) ;
+   reste le Core (table `module_settings`, routes, lecture par `!rb`, `!fxcam`, Bonk ; route `daily/config`).
+4. H9 (complément `tier_unknown`) : conception à faire (donnée qui fait foi pour la période du gain).
 
 ## Reprendre
 
