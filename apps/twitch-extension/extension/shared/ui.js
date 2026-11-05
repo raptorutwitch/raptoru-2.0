@@ -21,7 +21,6 @@ import {
   createCurrencySwitch,
   createMultiCurrencyPayment,
   formatWalletExactValue,
-  normalizeSearchQuery,
   providerPresentation,
   UI_ICONS,
 } from './ui-primitives.js';
@@ -31,10 +30,10 @@ import { createBonkChargeur } from './bonk-chargeur.js';
 import { createBonkTour } from './bonk-tour.js';
 import { createTwitchEmoteDialog, createTwitchEmoteSource } from './bonk-twitch-source.js';
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
-import { hoverMarquee } from './hover-marquee.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
-import { createSoundPreview, soundPreviewUrls } from './soundboard-preview.js';
-import { createSoundboardFeedback } from './soundboard-feedback.js';
+import { readStoredIds, writeStoredIds } from './stored-ids.js';
+// The Soundboard screen registers itself as the variant of « soundboard » (soundboard-view.js).
+import './soundboard-view.js';
 import { createBonkSend } from './bonk-send.js';
 // Module variants register themselves (TTS V2, Tombola V2).
 import './tts-v2.js';
@@ -89,34 +88,6 @@ export function bonkTwemojiAssetPath(emote) {
 }
 
 // Icônes du Soundboard (sbx-*) : tracés simples, couleur héritée.
-const SBX_ICON_PATHS = {
-  play: '<path d="M8.5 6.2v11.6a.9.9 0 0 0 1.4.8l9.2-5.8a.9.9 0 0 0 0-1.6L9.9 5.4a.9.9 0 0 0-1.4.8Z" fill="currentColor"/>',
-  star: '<path class="sbx-star" d="M11.1 3.9a1 1 0 0 1 1.8 0l2.07 4.2 4.63.68a1 1 0 0 1 .56 1.7l-3.35 3.27.79 4.61a1 1 0 0 1-1.45 1.06L12 17.24l-4.15 2.18a1 1 0 0 1-1.45-1.06l.79-4.61-3.35-3.27a1 1 0 0 1 .56-1.7l4.63-.68Z" stroke-linejoin="round"/>',
-  speaker: '<path d="M4.5 9.6v4.8h3.2l4.3 3.7V5.9L7.7 9.6Z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path class="sbx-wave sbx-wave--1" d="M15.3 9.4a3.6 3.6 0 0 1 0 5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path class="sbx-wave sbx-wave--2" d="M17.9 6.9a7.2 7.2 0 0 1 0 10.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path class="sbx-mute" d="m15.6 9.8 4.4 4.4m0-4.4-4.4 4.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
-  search: '<circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-  close: '<path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-  sort: '<path d="M8 5v14m0 0-3-3m3 3 3-3M16 19V5m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
-  send: '<path d="M5 12h12m-4.5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>',
-  clock: '<circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8.2v4.3l2.8 1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-};
-
-function sbxIcon(name) {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('class', `sbx-icon sbx-icon--${name}`);
-  svg.innerHTML = SBX_ICON_PATHS[name];
-  return svg;
-}
-
-function sbxEqualizer() {
-  const eq = document.createElement('span');
-  eq.className = 'sbx-eq';
-  eq.setAttribute('aria-hidden', 'true');
-  eq.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
-  return eq;
-}
-
 function createNotificationBellIcon() {
   const createNode = typeof document.createElementNS === 'function'
     ? (tag) => document.createElementNS('http://www.w3.org/2000/svg', tag)
@@ -509,11 +480,6 @@ function fmtRafflePotAmount(value) {
   return number.toLocaleString('fr-FR').replace(/\u202f/gu, '\u00a0');
 }
 
-const SOUNDBOARD_FAVORITES_KEY = 'raptoru-live:soundboard-favorites';
-const SOUNDBOARD_RECENTS_KEY = 'raptoru-live:soundboard-recents';
-const SOUNDBOARD_ORDER_KEY = 'raptoru-live:soundboard-order';
-const SOUNDBOARD_ALIASES_KEY = 'raptoru-live:soundboard-aliases';
-export const SOUNDBOARD_ALIAS_MAX_LENGTH = 32;
 const TUTORIAL_DISABLED_PREFIX = 'raptoru-live:tutorial-disabled:';
 /** Tutoriel du module Bonk (bonk-tour.js) : même préférence « Ne plus afficher » que le tutoriel global. */
 const BONK_TUTORIAL = { id: 'bonk', version: 1 };
@@ -574,214 +540,6 @@ function normalizeTtsDraft(value) {
 
 function ttsDraftLength(value) {
   return Array.from(normalizeTtsDraft(value)).length;
-}
-
-function readStoredIds(key) {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(value) ? value.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredIds(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* stockage facultatif */ }
-}
-
-/**
- * Reconcile the viewer's personal Soundboard order with the current catalog.
- * Canonical IDs already known by the viewer keep their positions, new IDs are
- * appended in catalog order, and stale IDs are discarded.
- */
-export function normalizeSoundboardOrder(storedIds, catalogIds) {
-  const catalog = Array.isArray(catalogIds) ? catalogIds.map(String) : [];
-  const valid = new Set(catalog);
-  const seen = new Set();
-  const order = [];
-  for (const rawId of Array.isArray(storedIds) ? storedIds : []) {
-    const id = String(rawId);
-    if (!valid.has(id) || seen.has(id)) continue;
-    seen.add(id);
-    order.push(id);
-  }
-  for (const rawId of catalog) {
-    if (seen.has(rawId)) continue;
-    seen.add(rawId);
-    order.push(rawId);
-  }
-  return order;
-}
-
-/**
- * Apply a reorder made in a filtered view to the canonical personal order.
- * Hidden IDs keep their slots while the visible IDs receive the new relative
- * order. This keeps filtering a view and never turns it into a destructive
- * second ordering system.
- */
-export function reorderSoundboardVisibleSubset(order, visibleIds, reorderedVisibleIds) {
-  const base = Array.isArray(order) ? order.map(String) : [];
-  const visible = [];
-  const visibleSet = new Set();
-  for (const rawId of Array.isArray(visibleIds) ? visibleIds : []) {
-    const id = String(rawId);
-    if (visibleSet.has(id) || !base.includes(id)) continue;
-    visibleSet.add(id);
-    visible.push(id);
-  }
-  const nextVisible = [];
-  const seen = new Set();
-  for (const rawId of Array.isArray(reorderedVisibleIds) ? reorderedVisibleIds : []) {
-    const id = String(rawId);
-    if (!visibleSet.has(id) || seen.has(id)) continue;
-    seen.add(id);
-    nextVisible.push(id);
-  }
-  for (const id of visible) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    nextVisible.push(id);
-  }
-  let cursor = 0;
-  return base.map((id) => (visibleSet.has(id) ? nextVisible[cursor++] : id));
-}
-
-/** Insertion stricte : l'élément `from` prend la place `to`, seuls ceux d'entre les deux se décalent d'un rang. */
-export function moveSoundboardItem(ids, from, to) {
-  const next = Array.isArray(ids) ? [...ids] : [];
-  if (from < 0 || from >= next.length || to < 0 || to >= next.length || from === to) return next;
-  const [moved] = next.splice(from, 1);
-  next.splice(to, 0, moved);
-  return next;
-}
-
-/**
- * Destination d'un glisser, lue sur les positions relevées au début du geste (jamais sur des cartes en
- * mouvement). Le pointeur doit entrer franchement dans un emplacement (marge de 12 %) pour le choisir ; dans un
- * interstice ou hors de la grille, la destination courante est gardée : pas d'aller-retour autour d'une frontière.
- */
-export function soundboardDropSlot(slots, x, y, current) {
-  const hit = (Array.isArray(slots) ? slots : []).findIndex((slot) => (
-    x >= slot.left + slot.width * 0.12 && x <= slot.left + slot.width * 0.88
-    && y >= slot.top + slot.height * 0.12 && y <= slot.top + slot.height * 0.88
-  ));
-  return hit >= 0 ? hit : current;
-}
-
-export function normalizeSoundboardAlias(value, maxLength = SOUNDBOARD_ALIAS_MAX_LENGTH) {
-  const limit = Math.max(1, Number(maxLength) || SOUNDBOARD_ALIAS_MAX_LENGTH);
-  return Array.from(String(value ?? '')
-    // eslint-disable-next-line no-control-regex -- control characters are stripped on purpose
-    .replace(/[\u0000-\u001F\u007F-\u009F]/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim())
-    .slice(0, limit)
-    .join('');
-}
-
-function aliasValue(aliases, soundId) {
-  if (aliases instanceof Map) return normalizeSoundboardAlias(aliases.get(String(soundId)) ?? '');
-  return normalizeSoundboardAlias(aliases?.[String(soundId)] ?? '');
-}
-
-export function soundboardSoundLabel(sound, aliases = {}) {
-  const id = String(sound?.id ?? '');
-  return aliasValue(aliases, id) || String(sound?.label ?? id);
-}
-
-export function soundboardSoundMatchesQuery(sound, query, aliases = {}) {
-  const normalizedQuery = normalizeSearchQuery(String(query ?? '').trim());
-  if (!normalizedQuery) return true;
-  const id = String(sound?.id ?? '');
-  return normalizeSearchQuery(`${soundboardSoundLabel(sound, aliases)} ${sound?.label ?? ''} ${id}`)
-    .includes(normalizedQuery);
-}
-
-/**
- * Return a calculated Soundboard view without mutating the catalog or the
- * personal order. A–Z follows the displayed label (therefore a local alias
- * when present); all other business values remain catalog values.
- */
-export function sortSoundboardSounds(sounds, {
-  sort = 'custom',
-  customOrder = [],
-  recents = [],
-  aliases = {},
-  paymentMethod = 'tokens',
-  moduleTokenCost = 500,
-} = {}) {
-  const source = Array.isArray(sounds) ? [...sounds] : [];
-  const catalogIds = source.map((sound) => String(sound?.id ?? ''));
-  const personalOrder = normalizeSoundboardOrder(customOrder, catalogIds);
-  const personalRank = new Map(personalOrder.map((id, index) => [id, index]));
-  const recentRank = new Map(
-    (Array.isArray(recents) ? recents : []).map(String).map((id, index) => [id, index]),
-  );
-  const sourceRank = new Map(catalogIds.map((id, index) => [id, index]));
-  const displayedLabel = (sound) => soundboardSoundLabel(sound, aliases);
-  const labelKey = (sound) => displayedLabel(sound).trim();
-  const priceFor = (sound) => {
-    const preferred = paymentMethod === 'credits'
-      ? Number(sound?.credit_cost)
-      : Number(sound?.token_cost ?? moduleTokenCost);
-    const fallback = paymentMethod === 'credits'
-      ? Number(sound?.token_cost ?? moduleTokenCost)
-      : Number(sound?.credit_cost);
-    return Number.isFinite(preferred)
-      ? preferred
-      : Number.isFinite(fallback)
-        ? fallback
-        : Number.POSITIVE_INFINITY;
-  };
-  const compareSource = (a, b) => (sourceRank.get(String(a?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-    - (sourceRank.get(String(b?.id ?? '')) ?? Number.MAX_SAFE_INTEGER);
-  if (sort === 'alpha') {
-    return source.sort((a, b) => (
-      labelKey(a).localeCompare(labelKey(b), 'fr', { sensitivity: 'base' })
-      || compareSource(a, b)
-    ));
-  }
-  if (sort === 'price') {
-    return source.sort((a, b) => (
-      priceFor(a) - priceFor(b)
-      || labelKey(a).localeCompare(labelKey(b), 'fr', { sensitivity: 'base' })
-      || compareSource(a, b)
-    ));
-  }
-  if (sort === 'recent') {
-    return source.sort((a, b) => (
-      (recentRank.get(String(a?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-      - (recentRank.get(String(b?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-      || compareSource(a, b)
-    ));
-  }
-  return source.sort((a, b) => (
-    (personalRank.get(String(a?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-    - (personalRank.get(String(b?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-    || compareSource(a, b)
-  ));
-}
-
-function readStoredAliases(key, soundIds) {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || '{}');
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-    const valid = new Set([...soundIds].map(String));
-    return Object.fromEntries(Object.entries(value)
-      .map(([id, alias]) => [String(id), normalizeSoundboardAlias(alias)])
-      .filter(([id, alias]) => valid.has(id) && alias));
-  } catch {
-    return {};
-  }
-}
-
-function writeStoredAliases(key, aliases) {
-  try { localStorage.setItem(key, JSON.stringify(aliases)); } catch { /* stockage facultatif */ }
-}
-
-function rememberStoredId(key, id, limit = 12) {
-  const value = [String(id), ...readStoredIds(key).filter((candidate) => candidate !== String(id))];
-  writeStoredIds(key, value.slice(0, limit));
 }
 
 function tutorialPreferenceKey(tutorial) {
@@ -1130,9 +888,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let tutorialDisabled = false;
   // Chaque module possède sa monnaie ; le wallet est sa projection et son
   // sélecteur unique, tandis que la dépensabilité reste évaluée par le CTA.
-  let selectedPaymentMethod = 'tokens';
   /** The currency chosen per module (TTS today); a module variant reads and writes its own entry. */
-  const paymentChoice = { tts: 'tokens' };
+  const paymentChoice = { tts: 'tokens', soundboard: 'tokens' };
+  /** What a registered view keeps between two visits of its module (its form drafts): host.memory. */
+  const moduleMemory = {};
   // TTS V2 (Lab, Core-backed): one persistent view per opening of the module.
   // Moderation V2 (D4, Lab): persistent console reading / commanding Core while the module is open.
   /** « Modération › Commandes » (Commands V2) and whether it currently replaces the console. */
@@ -1145,12 +904,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let hostVariant = null;
 
   /** What a registered view receives from the host (module-registry.js): no module-specific code here. */
-  function variantContext(def, mod) {
+  function variantContext(def, mod, body = null) {
     return {
       document,
       client,
       module: mod,
       state,
+      /** The module body of this draw (rendered only): views that draw into the host's container (Soundboard). */
+      body,
       team: canModerate(),
       host: {
         home: () => navigateTo(null),
@@ -1166,31 +927,28 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           return list.length ? restrictionChips(document, list) : null;
         },
         stopRaffleTimer: () => stopRaffleTimer(),
+        memory: (moduleMemory[mod?.id] ??= {}),
+        /** The action runner (busy flag, refresh, notifications); `feedbackScope` + `onSettled`: the view says it. */
+        run: (node, task, options) => run(node, task, options),
+        /** The module's active restriction that holds actions (cooldown or block), or null. */
+        restriction: () => {
+          const restriction = restrictionOf(mod?.id);
+          return holdsAction(restriction) ? restriction : null;
+        },
+        interactions: () => ({ available: interactionsAvailableForState(), identityShared: identityShared() }),
+        redraw: () => renderPreservingViewport(),
+        /** The viewer-facing reason of a refusal, only when reliably known ('' otherwise). */
+        errorReason: (error) => soundboardFeedbackForError(error).reason,
       },
     };
   }
   let paymentWalletSync = null;
-  /** The Soundboard volume popover open: kept across redraws (a viewer's choice, like the Hub list). */
-  let soundboardVolumeOpen = false;
-  /**
-   * The Soundboard drawn on screen (built by soundboardForm, destroyed by the next render): what the host's shared
-   * listeners and its state updates may ask of it. It owns its drag, its cooldown countdown and its controls.
-   * `{ syncVolume(open), closeSearch(), deselect(), holdState() → bool, destroy() }`
-   */
-  let soundboardMount = null;
-  let soundboardVolumeHeaderButton = null;
   // Hub : module sélectionné dans le carousel et monnaie affichée par le wallet (consultation).
   let hubSelectedId = null;
   /** « Voir tous les modules » open: kept across the Hub's redraws (a new balance never closes it under the viewer). */
   let hubAllOpen = false;
   let hubWalletMethod = 'tokens';
   let hubCarousel = null;
-  // Soundboard feedback after a send (soundboard-feedback.js): its outcome and its timer are its own state.
-  const soundboardFeedback = createSoundboardFeedback({
-    document,
-    root: () => root,
-    reasonFor: (error) => soundboardFeedbackForError(error).reason,
-  });
   let moderationHistoryQuery = '';
   let moderationHistoryModule = '';
   let moderationHistoryStatus = '';
@@ -1221,8 +979,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   const moderationCustomDurationMinMs = 60_000;
   const moderationCustomDurationMaxMs = 365 * 24 * 60 * 60 * 1000;
   const isStudioPreview = new URLSearchParams(globalThis.location?.search || '').get('studio') === '1';
-  // Soundboard local preview (soundboard-preview.js): its audio, the sound heard and the volume are its own state.
-  const soundPreview = createSoundPreview({ document, root: () => root });
   let bonkEmotePicker = null;
   /** Bonk lot 5: the chargeur (persistent, like the picker) and the feedback slot of the current render. */
   let bonkChargeur = null;
@@ -1270,21 +1026,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let emoteAuthAttemptAt = 0;
   const drafts = {
     tts: { text: '' },
-    soundboard: {
-      selectedId: null,
-      query: '',
-      searchOpen: true,
-      sort: 'custom',
-      favoritesOnly: false,
-      // Tous / Favoris / Récents (filtre toujours visible).
-      view: 'all',
-    },
     bonk: { selectedId: null, activeGroupId: null, query: '', searchOpen: false },
   };
   root.classList.add('jdm-shell');
   root.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    if (notificationCenterOpen || viewerPreferencesOpen || tutorialOpen || soundboardVolumeOpen || drafts.soundboard.searchOpen || raffleHistoryOpen || moderationUserHistoryOpen) {
+    if (notificationCenterOpen || viewerPreferencesOpen || tutorialOpen || raffleHistoryOpen || moderationUserHistoryOpen) {
       event.preventDefault();
       event.stopPropagation();
     }
@@ -1305,16 +1052,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       queueMicrotask(() => root.querySelector('.jdm-viewer-preferences-toggle')?.focus({ preventScroll: true }));
       return;
     }
-    if (soundboardVolumeOpen) {
-      soundboardVolumeOpen = false;
-      soundboardMount?.syncVolume(false);
-      return;
-    }
-    if (drafts.soundboard.searchOpen) {
-      event.preventDefault();
-      soundboardMount?.closeSearch();
-      return;
-    }
     if (raffleHistoryOpen) {
       raffleHistoryOpen = false;
       renderPreservingViewport();
@@ -1326,30 +1063,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       renderPreservingViewport();
       queueMicrotask(() => root.querySelector('.jdm-mod-user-history-toggle')?.focus({ preventScroll: true }));
     }
-  });
-  // Une interaction dans le catalogue reste une interaction interne : elle ne
-  // doit pas faire disparaître la barre pendant qu'un viewer choisit un tri,
-  // active Favoris ou clique une carte. Seul un clic hors du corps Soundboard
-  // replie automatiquement la zone ; le bouton et Escape restent explicites.
-  root.addEventListener('click', (event) => {
-    if (!drafts.soundboard.searchOpen
-      || event.target?.closest?.('.rl-soundboard')) return;
-    const mount = soundboardMount;
-    queueMicrotask(() => {
-      if (drafts.soundboard.searchOpen) mount?.closeSearch();
-    });
-  }, true);
-  root.addEventListener('click', (event) => {
-    const target = event.target;
-    if (soundboardVolumeOpen && !event.target?.closest?.('.sbx-vol')) {
-      soundboardVolumeOpen = false;
-      soundboardMount?.syncVolume(false);
-    }
-    if (!soundboardMount || !target?.closest?.('.rl-soundboard')) return;
-    // Une carte et ses contrôles restent dans leur flux d'interaction. Tout
-    // clic dans le reste du module désélectionne la carte courante.
-    if (target.closest('.sbx-card, .sbx-dock, .sbx-head, .sbx-vol')) return;
-    soundboardMount.deselect();
   });
   document.addEventListener('click', (event) => {
     if (!notificationCenterOpen && !viewerPreferencesOpen) return;
@@ -1525,8 +1238,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function updateState(next, { render = true } = {}) {
-    // Soundboard ouvert et poll identique : rien à redessiner (grille, scroll et aperçu intacts).
-    const unchanged = render && (openModule === 'soundboard' || !openModule) && !loadError
+    // Hub and identical poll: nothing to redraw (an open module's view decides for itself: onState).
+    const unchanged = render && !openModule && !loadError
       && JSON.stringify(stableState(state)) === JSON.stringify(stableState(next));
     const previous = state;
     // An error screen shown before this state must be redrawn away: never absorbed by a live update.
@@ -1574,9 +1287,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       && hostVariant.onState(hostView, next, previous, variantContext(hostVariant, (next?.modules ?? []).find((m) => m.id === openModule)))) {
       return;
     }
-    // A Soundboard card being dragged: the new state waits for the end of the gesture (never a grid rebuilt under
-    // the pointer), then shows.
-    if (render && !unchanged && soundboardMount?.holdState()) return;
     if (render && !unchanged) renderPreservingViewport();
   }
 
@@ -1702,7 +1412,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       notificationCenterOpen = false;
       viewerPreferencesOpen = false;
     }
-    if (moduleId !== 'soundboard') soundPreview.stop();
     if (moduleId !== openModule) {
       // A new visit of Bonk follows a synchronization again; leaving it stops following.
       clearTimeout(emoteSyncTimer);
@@ -1715,7 +1424,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       hostViewId = null;
       hostVariant = null;
     }
-    if (moduleId !== 'soundboard') soundboardFeedback.clear();
     if (moduleId !== 'raffle_join') {
       stopRaffleTimer();
       raffleTimerSnapshot = null;
@@ -1729,7 +1437,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       // The last outcome belongs to this visit (as the Soundboard's feedback): never shown again on return.
       bonkSend.clear();
     }
-    soundboardVolumeOpen = false;
     if (moduleId === 'soundboard') {
       tutorialOpen = false;
       tutorialStep = 0;
@@ -1890,14 +1597,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     confirm,
     pending,
     notification = null,
+    /** `(ok, error)` once settled: a view that says the outcome itself (feedbackScope set) — the host stays quiet. */
+    onSettled = null,
   } = {}) {
     if (busy) return;
     busy = true;
     actionError = null;
-    if (feedbackScope === 'soundboard') successMessage = null;
+    if (feedbackScope) successMessage = null;
     if (errorScope === 'tts') ttsActionError = null;
     root.dataset.busy = '1';
-    if (feedbackScope !== 'soundboard') flash(
+    if (!feedbackScope) flash(
       node,
       pending === undefined ? 'Envoi en cours…' : (typeof pending === 'function' ? pending() : pending),
       'ok',
@@ -1928,7 +1637,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         ? String(confirmation.message || 'Commande envoyée, exécution non confirmée')
         : null;
       if (errorScope === 'tts') ttsActionError = null;
-      if (feedbackScope !== 'soundboard') {
+      if (!feedbackScope) {
         if (confirmation?.confirmed === true) {
           successMessage = String(confirmation.message || (typeof success === 'function' ? success(result) : success || 'Action exécutée ✓'));
         } else if (confirmation?.confirmed === false) {
@@ -1939,14 +1648,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         else if (result?.status === 'queued') successMessage = 'Action mise en file ✓';
         else successMessage = 'Action envoyée ✓';
       }
-      if (feedbackScope === 'soundboard') soundboardFeedback.set('success');
+      if (feedbackScope) onSettled?.(true);
     } catch (error) {
       const message = errorLabel(error?.code);
       if (errorScope === 'tts') ttsActionError = message;
-      else if (feedbackScope !== 'soundboard') actionError = message;
-      if (feedbackScope === 'soundboard') soundboardFeedback.set('error', error);
+      else if (!feedbackScope) actionError = message;
+      if (feedbackScope) onSettled?.(false, error);
       const notificationModule = notificationModuleForNode(node,
-        notification?.module || (errorScope === 'tts' ? 'tts' : feedbackScope === 'soundboard' ? 'soundboard' : null));
+        notification?.module || (errorScope === 'tts' ? 'tts' : feedbackScope || null));
       publishRuntimeNotification(runtimeNotificationForError(error, {
         module: notificationModule,
         title: notification?.title || `Action ${notificationModule === 'global' ? '' : `${notificationModule} `}échouée`.replace(/\s+/g, ' ').trim(),
@@ -2238,970 +1947,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
   // Soundboard viewer (markup sbx-*, feuille soundboard.css). Le son est la star : cartes lisibles,
   // aperçu distinct de l'achat, prix et envoi regroupés dans la barre d'action du bas.
-  function soundboardForm(mod, body) {
-    const pending = pendingFor('soundboard');
-    const interactionsAvailable = interactionsAvailableForState();
-    const sounds = Array.isArray(mod.sounds) ? mod.sounds : [];
-    const soundById = new Map(sounds.map((sound) => [String(sound.id), sound]));
-    const soundIds = new Set(soundById.keys());
-    if (!soundIds.has(drafts.soundboard.selectedId)) drafts.soundboard.selectedId = null;
-    if (!['custom', 'alpha', 'price'].includes(drafts.soundboard.sort)) drafts.soundboard.sort = 'custom';
-    if (!['all', 'favorites', 'recents'].includes(drafts.soundboard.view)) drafts.soundboard.view = 'all';
-    drafts.soundboard.searchOpen = true;
-    let selectedSound = drafts.soundboard.selectedId;
-    let selectedCreditRedemption = null;
-    let favorites = readStoredIds(SOUNDBOARD_FAVORITES_KEY).filter((id) => soundIds.has(id));
-    let recents = readStoredIds(SOUNDBOARD_RECENTS_KEY).filter((id) => soundIds.has(id));
-    let customOrder = normalizeSoundboardOrder(readStoredIds(SOUNDBOARD_ORDER_KEY), [...soundIds]);
-    let aliases = readStoredAliases(SOUNDBOARD_ALIASES_KEY, soundIds);
-    writeStoredIds(SOUNDBOARD_FAVORITES_KEY, favorites);
-    writeStoredIds(SOUNDBOARD_RECENTS_KEY, recents);
-    writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
-    writeStoredAliases(SOUNDBOARD_ALIASES_KEY, aliases);
-    const displayLabelFor = (sound) => soundboardSoundLabel(sound, aliases);
-
-    body.classList.add('rl-soundboard', 'sbx');
-
-    const { displayMethods, spendMethods } = walletPaymentMethods(mod, state);
-    const methods = displayMethods.length ? displayMethods : ['tokens'];
-    const supportsPaymentMethod = (method) => spendMethods.includes(method);
-    if (!methods.includes(selectedPaymentMethod)) selectedPaymentMethod = methods[0];
-    const tokenCostOf = (sound) => Number(sound?.token_cost ?? mod.token_cost ?? 500);
-    const creditCostOf = (sound) => Number(sound?.credit_cost ?? 1);
-
-    // État d'un son vu par le viewer. Core reste l'autorité (il refuse de toute façon) : ceci
-    // n'est qu'un affichage, recalculé chaque seconde pendant un cooldown.
-    const availability = (sound) => {
-      if (sound?.enabled === false) return { kind: 'disabled', label: 'Indisponible', hint: 'Ce son est désactivé' };
-      const left = (sound?.cooldown_until ? Date.parse(sound.cooldown_until) : 0) - Date.now();
-      if (left > 0) {
-        const seconds = Math.ceil(left / 1000);
-        return { kind: 'cooldown', label: `${seconds} s`, hint: `Disponible dans ${seconds} s`, left };
-      }
-      if (sound?.running && sound.playback_mode === 'ignore_if_running') {
-        return { kind: 'running', label: 'En cours', hint: 'Ce son est déjà en cours de lecture' };
-      }
-      return null;
-    };
-    const durationText = (sound) => {
-      if (String(sound.id) === 'random') return 'Son surprise';
-      const ms = Number(sound.duration_ms || 0);
-      return ms ? `${(ms / 1000).toFixed(1).replace('.', ',')} s` : '';
-    };
-
-    // --- En-tête : recherche, tri, filtres, état du lecteur -------------------------------------
-    const head = el('div', 'sbx-head');
-    const searchBox = el('label', 'sbx-search');
-    const search = el('input', 'sbx-search__input');
-    search.id = 'soundboard-search';
-    search.type = 'search';
-    search.placeholder = 'Rechercher un son';
-    search.value = drafts.soundboard.query;
-    search.autocomplete = 'off';
-    search.spellcheck = false;
-    search.setAttribute('aria-label', 'Rechercher un son');
-    search.dataset.draftKey = 'soundboard-query';
-    const clearSearch = el('button', 'sbx-search__clear');
-    clearSearch.type = 'button';
-    clearSearch.setAttribute('aria-label', 'Effacer la recherche');
-    clearSearch.append(sbxIcon('close'));
-    searchBox.append(sbxIcon('search'), search, clearSearch);
-
-    const sortWrap = el('div', 'sbx-sort');
-    const sortButton = el('button', 'sbx-iconbtn sbx-sort__button');
-    sortButton.type = 'button';
-    sortButton.title = 'Trier';
-    sortButton.setAttribute('aria-haspopup', 'menu');
-    sortButton.setAttribute('aria-expanded', 'false');
-    sortButton.setAttribute('aria-label', 'Trier le catalogue');
-    sortButton.append(sbxIcon('sort'));
-    const sortMenu = el('div', 'sbx-menu');
-    sortMenu.setAttribute('role', 'menu');
-    sortMenu.hidden = true;
-    const SORTS = [['custom', 'Mon ordre'], ['alpha', 'A → Z'], ['price', 'Prix croissant']];
-    const sortItems = SORTS.map(([value, label]) => {
-      const item = el('button', 'sbx-menu__item', label);
-      item.type = 'button';
-      item.dataset.sort = value;
-      item.setAttribute('role', 'menuitemradio');
-      item.addEventListener('click', () => {
-        drafts.soundboard.sort = value;
-        openSortMenu(false);
-        syncSort();
-        renderGrid();
-      });
-      return item;
-    });
-    const sortNote = el('p', 'sbx-menu__note', 'Mon ordre : maintiens une carte pour la déplacer.');
-    sortMenu.append(...sortItems, sortNote);
-    sortWrap.append(sortButton, sortMenu);
-    const syncSort = () => {
-      for (const item of sortItems) {
-        const on = item.dataset.sort === drafts.soundboard.sort;
-        item.classList.toggle('is-active', on);
-        item.setAttribute('aria-checked', String(on));
-      }
-      sortButton.classList.toggle('is-set', drafts.soundboard.sort !== 'custom');
-    };
-    const openSortMenu = (open) => {
-      sortMenu.hidden = !open;
-      sortWrap.classList.toggle('is-open', open);
-      sortButton.setAttribute('aria-expanded', String(open));
-    };
-    sortButton.addEventListener('click', () => openSortMenu(sortMenu.hidden));
-    sortWrap.addEventListener('focusout', () => queueMicrotask(() => {
-      if (!sortWrap.contains(document.activeElement)) openSortMenu(false);
-    }));
-    sortWrap.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape' || sortMenu.hidden) return;
-      event.stopPropagation();
-      openSortMenu(false);
-      sortButton.focus({ preventScroll: true });
-    });
-    syncSort();
-
-    const filters = el('div', 'sbx-filters');
-    filters.setAttribute('role', 'group');
-    filters.setAttribute('aria-label', 'Afficher');
-    const VIEWS = [['all', 'Tous'], ['favorites', 'Favoris'], ['recents', 'Récents']];
-    const filterButtons = VIEWS.map(([id, label]) => {
-      const chip = el('button', 'sbx-filter');
-      chip.type = 'button';
-      chip.dataset.view = id;
-      if (id === 'favorites') chip.append(sbxIcon('star'));
-      chip.append(el('span', 'sbx-filter__label', label), el('span', 'sbx-filter__count'));
-      chip.addEventListener('click', () => {
-        drafts.soundboard.view = id;
-        drafts.soundboard.favoritesOnly = id === 'favorites';
-        syncFilters();
-        renderGrid();
-      });
-      return chip;
-    });
-    filters.append(...filterButtons);
-    const syncFilters = () => {
-      for (const chip of filterButtons) {
-        const on = chip.dataset.view === drafts.soundboard.view;
-        chip.classList.toggle('is-active', on);
-        chip.setAttribute('aria-pressed', String(on));
-        const count = chip.dataset.view === 'favorites' ? favorites.length
-          : chip.dataset.view === 'recents' ? recents.length : sounds.length;
-        chip.querySelector('.sbx-filter__count').textContent = String(count);
-      }
-    };
-    syncFilters();
-
-    // Lecteur du Studio : information discrète (Core refuse de toute façon sans lecteur prêt).
-    const status = el('span', 'sbx-status');
-    if (mod.player_ready === false) {
-      status.classList.add('is-offline');
-      status.title = 'Le lecteur audio du Studio n’est pas prêt : un envoi serait refusé sans rien consommer.';
-      status.append(el('span', 'sbx-status__dot'), el('span', '', 'Lecteur hors ligne'));
-    } else if (mod.player_ready === true) {
-      status.classList.add('is-online');
-      status.title = 'Lecteur audio du Studio prêt';
-      status.append(el('span', 'sbx-status__dot'), el('span', '', 'Lecteur prêt'));
-    }
-
-    const searchRow = el('div', 'sbx-head__row');
-    searchRow.append(searchBox, sortWrap);
-    const filterRow = el('div', 'sbx-head__row sbx-head__row--filters');
-    filterRow.append(filters, status);
-    head.append(searchRow, filterRow);
-
-    // --- Grille ----------------------------------------------------------------------------------
-    const grid = el('div', 'sbx-grid');
-    grid.setAttribute('role', 'list');
-    grid.setAttribute('aria-label', 'Catalogue Soundboard');
-    grid.dataset.scrollKey = 'soundboard-grid';
-    hoverMarquee(grid, '.sbx-card', '.sbx-card__name', '.sbx-card__label');
-
-    const visibleSounds = () => {
-      let candidates = sounds.filter((sound) => soundboardSoundMatchesQuery(sound, drafts.soundboard.query, aliases));
-      if (drafts.soundboard.view === 'favorites') {
-        candidates = candidates.filter((sound) => favorites.includes(String(sound.id)));
-      } else if (drafts.soundboard.view === 'recents') {
-        return recents.map((id) => candidates.find((sound) => String(sound.id) === id)).filter(Boolean);
-      }
-      return sortSoundboardSounds(candidates, {
-        sort: drafts.soundboard.sort,
-        customOrder,
-        recents,
-        aliases,
-        paymentMethod: selectedPaymentMethod,
-        moduleTokenCost: mod.token_cost,
-      });
-    };
-
-    const selectSound = (sound) => {
-      selectedSound = String(sound.id);
-      drafts.soundboard.selectedId = selectedSound;
-      setActionState();
-      // La barre d'action grandit à la sélection : la carte choisie reste entièrement visible dans la grille.
-      requestAnimationFrame(() => {
-        const card = grid.querySelector('.sbx-card.is-selected');
-        if (!card) return;
-        const view = grid.getBoundingClientRect();
-        const rect = card.getBoundingClientRect();
-        if (rect.bottom > view.bottom) grid.scrollTop += rect.bottom - view.bottom + 6;
-        else if (rect.top < view.top) grid.scrollTop -= view.top - rect.top + 4;
-      });
-    };
-
-    // Réordonnancement personnel (tri « Mon ordre ») : appui long puis glisser, ou Alt+flèches. Insertion stricte
-    // (moveSoundboardItem) : seules les cartes entre l'origine et la destination se décalent d'une place. Pendant le
-    // geste, aucune carte ne change de place dans le DOM : les positions sont relevées au départ (soundboardDropSlot
-    // les lit, la destination ne dépend donc jamais de cartes en mouvement), la carte suit le pointeur et les autres
-    // glissent en transform. Au lâcher, les mêmes nœuds sont remis dans le nouvel ordre (aucune reconstruction, aucun
-    // flash) et l'ordre est enregistré une seule fois. Échap, pointercancel ou un rendu forcé annulent sans rien écrire.
-    let dragPending = null;
-    let dragSession = null;
-    let dragJustDroppedId = null;
-    let renderAfterDrag = false; // a new server state arrived during the drag: drawn once it ends
-    let cooldownTimer = null;
-    const dragDelayMs = 300;
-    const bindGlobalPointerTracking = (onMove, onUp, onCancel) => {
-      const target = globalThis.window;
-      if (!target || typeof target.addEventListener !== 'function') return () => {};
-      target.addEventListener('pointermove', onMove, { passive: false });
-      target.addEventListener('pointerup', onUp);
-      target.addEventListener('pointercancel', onCancel);
-      return () => {
-        target.removeEventListener('pointermove', onMove);
-        target.removeEventListener('pointerup', onUp);
-        target.removeEventListener('pointercancel', onCancel);
-      };
-    };
-    const clearDragPending = () => {
-      const current = dragPending;
-      dragPending = null;
-      if (!current) return;
-      if (current.timer !== null) globalThis.clearTimeout?.(current.timer);
-      current.detach?.();
-    };
-    /** Nouvel ordre visible : ordre personnel enregistré, puis les mêmes nœuds remis en place (pas de rendu). */
-    const applyVisibleOrder = (visibleIds, nextIds) => {
-      customOrder = reorderSoundboardVisibleSubset(customOrder, visibleIds, nextIds);
-      writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
-      const byId = new Map([...grid.querySelectorAll('.sbx-card')].map((card) => [String(card.dataset.soundId), card]));
-      grid.append(...nextIds.map((id) => byId.get(id)).filter(Boolean));
-    };
-    const layoutDrag = (session) => {
-      const { slots, cards, from } = session;
-      const box = grid.getBoundingClientRect();
-      const x = session.pointerX - box.left;
-      const y = session.pointerY - box.top + grid.scrollTop;
-      // La carte suit le pointeur avec la même prise qu'au départ, y compris quand la grille défile.
-      const origin = slots[from];
-      session.item.style.transform = `translate(${x - session.grabX - origin.left}px, ${y - session.grabY - origin.top}px) scale(1.04)`;
-      const target = soundboardDropSlot(slots, x, y, session.target);
-      if (target === session.target) return;
-      session.target = target;
-      cards.forEach((card, index) => {
-        if (index === from) return;
-        const next = index > from && index <= target ? index - 1 : index < from && index >= target ? index + 1 : index;
-        card.style.transform = next === index
-          ? ''
-          : `translate(${slots[next].left - slots[index].left}px, ${slots[next].top - slots[index].top}px)`;
-      });
-      session.marker.style.transform = `translate(${slots[target].left}px, ${slots[target].top}px)`;
-    };
-    // Bord haut / bas de la grille pendant le glisser : elle défile seule.
-    const autoScroll = (session) => {
-      if (dragSession !== session) return;
-      const box = grid.getBoundingClientRect();
-      const edge = Math.min(36, box.height / 4);
-      const step = session.pointerY < box.top + edge ? -7 : session.pointerY > box.bottom - edge ? 7 : 0;
-      if (step) {
-        const before = grid.scrollTop;
-        grid.scrollTop += step;
-        if (grid.scrollTop !== before) layoutDrag(session);
-      }
-      session.frame = globalThis.requestAnimationFrame?.(() => autoScroll(session)) ?? null;
-    };
-    const onDragKey = (event) => {
-      if (event.key !== 'Escape' || !dragSession) return;
-      event.preventDefault();
-      event.stopPropagation();
-      finishDrag();
-    };
-    const finishDrag = ({ commit = false } = {}) => {
-      clearDragPending();
-      const session = dragSession;
-      if (!session) return;
-      dragSession = null;
-      session.detach?.();
-      if (session.frame !== null) globalThis.cancelAnimationFrame?.(session.frame);
-      grid.removeEventListener('scroll', session.onScroll);
-      globalThis.removeEventListener?.('keydown', onDragKey, true);
-      session.marker.remove();
-      const { item, cards, from, target, visibleIds } = session;
-      // Le clic qui suit le lâcher n'est ni une sélection ni une désélection.
-      dragJustDroppedId = session.soundId;
-      globalThis.setTimeout?.(() => {
-        if (dragJustDroppedId === session.soundId) dragJustDroppedId = null;
-      }, 0);
-      if (!item.isConnected) return;
-      const dropped = item.getBoundingClientRect();
-      grid.classList.add('is-settling');
-      for (const card of cards) card.style.transform = '';
-      if (commit && target !== from) applyVisibleOrder(visibleIds, moveSoundboardItem(visibleIds, from, target));
-      // La carte part de là où elle a été lâchée et rejoint sa place ; les autres y sont déjà.
-      const landed = item.getBoundingClientRect();
-      item.style.transform = `translate(${dropped.left - landed.left}px, ${dropped.top - landed.top}px)`;
-      void item.offsetWidth;
-      grid.classList.remove('is-settling', 'is-dragging');
-      item.classList.remove('is-dragging');
-      item.style.transform = '';
-      if (renderAfterDrag) {
-        renderAfterDrag = false;
-        globalThis.setTimeout?.(() => renderPreservingViewport(), 220);
-      }
-    };
-    const beginDrag = (current) => {
-      if (dragPending !== current || dragSession || drafts.soundboard.sort !== 'custom') return;
-      current.detach?.();
-      dragPending = null;
-      const item = current.item;
-      const cards = [...grid.querySelectorAll('.sbx-card')];
-      const from = cards.indexOf(item);
-      if (from < 0) return;
-      const box = grid.getBoundingClientRect();
-      const slots = cards.map((card) => {
-        const rect = card.getBoundingClientRect();
-        return { left: rect.left - box.left, top: rect.top - box.top + grid.scrollTop, width: rect.width, height: rect.height };
-      });
-      const marker = el('div', 'sbx-drop-slot');
-      marker.setAttribute('aria-hidden', 'true');
-      marker.style.width = `${slots[from].width}px`;
-      marker.style.height = `${slots[from].height}px`;
-      grid.append(marker);
-      grid.classList.add('is-dragging');
-      item.classList.add('is-dragging');
-      const session = {
-        item,
-        cards,
-        slots,
-        from,
-        target: -1,
-        marker,
-        soundId: current.soundId,
-        pointerId: current.pointerId,
-        grabX: current.clientX - box.left - slots[from].left,
-        grabY: current.clientY - box.top + grid.scrollTop - slots[from].top,
-        pointerX: current.lastX ?? current.clientX,
-        pointerY: current.lastY ?? current.clientY,
-        visibleIds: cards.map((card) => String(card.dataset.soundId)),
-        detach: null,
-        frame: null,
-        onScroll: null,
-      };
-      dragSession = session;
-      session.target = from;
-      session.marker.style.transform = `translate(${slots[from].left}px, ${slots[from].top}px)`;
-      session.onScroll = () => layoutDrag(session);
-      grid.addEventListener('scroll', session.onScroll, { passive: true });
-      globalThis.addEventListener?.('keydown', onDragKey, true);
-      layoutDrag(session);
-      session.detach = bindGlobalPointerTracking(
-        (event) => {
-          if (event.pointerId !== session.pointerId) return;
-          event.preventDefault?.();
-          session.pointerX = Number(event.clientX) || 0;
-          session.pointerY = Number(event.clientY) || 0;
-          layoutDrag(session);
-        },
-        (event) => {
-          if (event.pointerId !== session.pointerId) return;
-          event.preventDefault?.();
-          finishDrag({ commit: true });
-        },
-        (event) => {
-          if (event.pointerId === session.pointerId) finishDrag();
-        },
-      );
-      session.frame = globalThis.requestAnimationFrame?.(() => autoScroll(session)) ?? null;
-    };
-    // Tactile : une fois le glisser commencé, le doigt déplace la carte, pas la grille (sinon pointercancel).
-    grid.addEventListener('touchmove', (event) => {
-      if (dragSession && event.cancelable) event.preventDefault();
-    }, { passive: false });
-    const dragExcludedTarget = (target) => Boolean(target?.closest?.('.sbx-card__play, .sbx-card__fav, .sbx-alias'));
-    const startDragPending = (item, soundId, event) => {
-      if (drafts.soundboard.sort !== 'custom' || drafts.soundboard.view !== 'all' || dragSession
-        || event.isPrimary === false || (event.button !== undefined && event.button !== 0)
-        || dragExcludedTarget(event.target)) return;
-      clearDragPending();
-      const pointerId = event.pointerId ?? 1;
-      const current = {
-        item,
-        soundId,
-        pointerId,
-        clientX: Number(event.clientX) || 0,
-        clientY: Number(event.clientY) || 0,
-        lastX: null,
-        lastY: null,
-        timer: null,
-        detach: null,
-      };
-      dragPending = current;
-      current.detach = bindGlobalPointerTracking(
-        (moveEvent) => {
-          if (moveEvent.pointerId !== pointerId || dragPending !== current) return;
-          current.lastX = Number(moveEvent.clientX) || 0;
-          current.lastY = Number(moveEvent.clientY) || 0;
-          // Bouger avant l'appui long = clic ou défilement, jamais un déplacement.
-          if (Math.hypot(current.lastX - current.clientX, current.lastY - current.clientY) > 10) clearDragPending();
-        },
-        (upEvent) => {
-          if (upEvent.pointerId === pointerId && dragPending === current) clearDragPending();
-        },
-        (upEvent) => {
-          if (upEvent.pointerId === pointerId && dragPending === current) clearDragPending();
-        },
-      );
-      current.timer = globalThis.setTimeout?.(() => beginDrag(current), dragDelayMs) ?? null;
-    };
-    const reorderWithKeyboard = (soundId, key) => {
-      if (drafts.soundboard.sort !== 'custom' || drafts.soundboard.view !== 'all') return false;
-      const visibleIds = [...grid.querySelectorAll('.sbx-card')].map((item) => String(item.dataset.soundId));
-      const index = visibleIds.indexOf(String(soundId));
-      if (index < 0) return false;
-      let columns = 1;
-      try {
-        columns = Math.max(1, getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/u).length);
-      } catch { /* une colonne par défaut */ }
-      const delta = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : key === 'ArrowUp' ? -columns : columns;
-      const target = Math.min(visibleIds.length - 1, Math.max(0, index + delta));
-      if (target === index) return false;
-      // Même règle que le glisser : insertion, jamais d'échange.
-      applyVisibleOrder(visibleIds, moveSoundboardItem(visibleIds, index, target));
-      grid.querySelector(`.sbx-card[data-sound-id="${CSS.escape(String(soundId))}"] .sbx-card__main`)
-        ?.focus({ preventScroll: true });
-      return true;
-    };
-
-    // Nom personnel (clic droit / Maj+F2) : stocké localement, n'affecte que ce viewer.
-    const openAliasEditor = (sound, card, returnFocus = null) => {
-      if (card.querySelector('.sbx-alias')) return;
-      const soundId = String(sound.id);
-      const originalLabel = String(sound.label ?? soundId);
-      const currentAlias = aliasValue(aliases, soundId);
-      const form = el('form', 'sbx-alias');
-      form.setAttribute('aria-label', `Nom personnel de ${originalLabel}`);
-      const input = el('input', 'sbx-alias__input');
-      input.type = 'text';
-      input.maxLength = SOUNDBOARD_ALIAS_MAX_LENGTH;
-      input.value = currentAlias;
-      input.placeholder = originalLabel;
-      input.autocomplete = 'off';
-      input.setAttribute('aria-label', `Nom personnel de ${originalLabel}`);
-      input.dataset.draftKey = `soundboard-alias-${soundId}`;
-      const save = el('button', 'sbx-alias__btn sbx-alias__btn--save', '✓');
-      save.type = 'submit';
-      save.setAttribute('aria-label', 'Valider le nom personnel');
-      const restore = el('button', 'sbx-alias__btn', '↺');
-      restore.type = 'button';
-      restore.hidden = !currentAlias;
-      restore.setAttribute('aria-label', 'Restaurer le nom original');
-      restore.title = 'Restaurer le nom original';
-      form.append(input, save, restore);
-      for (const type of ['click', 'pointerdown']) form.addEventListener(type, (event) => event.stopPropagation());
-      form.addEventListener('contextmenu', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      });
-      const persistAlias = (value) => {
-        const next = normalizeSoundboardAlias(value);
-        if (!next || normalizeSearchQuery(next) === normalizeSearchQuery(originalLabel)) delete aliases[soundId];
-        else aliases[soundId] = next;
-        writeStoredAliases(SOUNDBOARD_ALIASES_KEY, aliases);
-        renderGrid();
-      };
-      form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        persistAlias(input.value);
-      });
-      restore.addEventListener('click', (event) => {
-        event.preventDefault();
-        persistAlias('');
-      });
-      input.addEventListener('keydown', (event) => {
-        if (event.key !== 'Escape') return;
-        event.preventDefault();
-        event.stopPropagation();
-        renderGrid();
-        queueMicrotask(() => returnFocus?.focus?.({ preventScroll: true }));
-      });
-      card.classList.add('is-editing');
-      card.append(form);
-      input.focus({ preventScroll: true });
-      input.select();
-    };
-
-    const syncCard = (card) => {
-      const sound = soundById.get(String(card.dataset.soundId));
-      if (!sound) return;
-      const soundId = String(sound.id);
-      const unavailable = availability(sound);
-      const playing = !unavailable && sound.running === true;
-      card.dataset.state = unavailable?.kind ?? (playing ? 'playing' : 'available');
-      const selected = soundId === selectedSound;
-      card.classList.toggle('is-selected', selected);
-      const main = card.querySelector('.sbx-card__main');
-      main.disabled = Boolean(unavailable);
-      main.setAttribute('aria-pressed', String(selected));
-      main.title = unavailable ? unavailable.hint : aliases[soundId] ? `Nom original : ${sound.label ?? soundId}` : displayLabelFor(sound);
-      const meta = card.querySelector('.sbx-card__meta');
-      meta.replaceChildren();
-      if (unavailable?.kind === 'cooldown') {
-        meta.append(sbxIcon('clock'), el('span', '', unavailable.label));
-        const total = Number(sound.cooldown_ms || 0);
-        card.style.setProperty('--sbx-cd', total > 0 ? String(Math.min(1, unavailable.left / total)) : '0');
-      } else {
-        card.style.removeProperty('--sbx-cd');
-        if (unavailable) meta.append(el('span', '', unavailable.label));
-        else if (playing) meta.append(sbxEqualizer(), el('span', '', 'En lecture'));
-        else meta.append(el('span', '', durationText(sound)));
-      }
-      const favoriteOn = favorites.includes(soundId);
-      card.classList.toggle('is-favorite', favoriteOn);
-      const fav = card.querySelector('.sbx-card__fav');
-      fav.setAttribute('aria-pressed', String(favoriteOn));
-      fav.setAttribute('aria-label', favoriteOn
-        ? `Retirer ${displayLabelFor(sound)} des favoris`
-        : `Ajouter ${displayLabelFor(sound)} aux favoris`);
-      fav.title = favoriteOn ? 'Retirer des favoris' : 'Ajouter aux favoris';
-    };
-
-    const buildCard = (sound) => {
-      const soundId = String(sound.id);
-      const label = displayLabelFor(sound);
-      const card = el('div', 'sbx-card');
-      card.dataset.soundId = soundId;
-      card.setAttribute('role', 'listitem');
-      if (soundId === 'random') card.classList.add('is-random');
-
-      const main = el('button', 'sbx-card__main');
-      main.type = 'button';
-      main.setAttribute('aria-label', `Sélectionner ${label}`);
-      main.setAttribute('aria-keyshortcuts', 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown');
-
-      const play = el('button', 'sbx-card__play');
-      play.type = 'button';
-      play.dataset.soundId = soundId;
-      play.dataset.soundLabel = label;
-      if (!soundPreviewUrls(sound).length || sound.studio_placeholder === true) {
-        play.disabled = true;
-        play.classList.add('is-empty');
-        play.append(el('span', 'sbx-card__dice', soundId === 'random' ? '🎲' : '·'));
-        play.title = soundId === 'random' ? 'Son choisi au hasard à l’envoi' : 'Aperçu indisponible';
-        play.setAttribute('aria-label', play.title);
-      } else {
-        play.append(sbxIcon('play'), sbxEqualizer());
-      }
-      play.addEventListener('click', (event) => {
-        event.stopPropagation();
-        if (soundPreview.soundId === soundId) soundPreview.stop();
-        else void soundPreview.play(sound, play, { notice: showBarNotice });
-      });
-
-      const text = el('span', 'sbx-card__text');
-      const name = el('span', 'sbx-card__name');
-      // Sous-élément : porte l'ellipse au repos et glisse (transform) au survol en vue compacte.
-      name.append(el('span', 'sbx-card__label', label));
-      text.append(name, el('span', 'sbx-card__meta'));
-
-      const fav = el('button', 'sbx-card__fav');
-      fav.type = 'button';
-      fav.append(sbxIcon('star'));
-      fav.addEventListener('pointerdown', (event) => event.stopPropagation());
-      fav.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        favorites = favorites.includes(soundId) ? favorites.filter((id) => id !== soundId) : [soundId, ...favorites];
-        writeStoredIds(SOUNDBOARD_FAVORITES_KEY, favorites);
-        syncFilters();
-        if (drafts.soundboard.view === 'favorites') renderGrid();
-        else syncCard(card);
-        fav.classList.toggle('is-popping', favorites.includes(soundId));
-      });
-      fav.addEventListener('animationend', () => fav.classList.remove('is-popping'));
-
-      main.addEventListener('click', (event) => {
-        if (dragJustDroppedId === soundId) {
-          event.preventDefault();
-          dragJustDroppedId = null;
-          return;
-        }
-        selectSound(sound);
-      });
-      main.addEventListener('keydown', (event) => {
-        if (event.key === 'F2' && event.shiftKey) {
-          event.preventDefault();
-          openAliasEditor(sound, card, main);
-          return;
-        }
-        if (event.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
-          && reorderWithKeyboard(soundId, event.key)) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      });
-      card.addEventListener('pointerdown', (event) => startDragPending(card, soundId, event));
-      card.addEventListener('contextmenu', (event) => {
-        // Appui long tactile : le menu contextuel ne doit ni ouvrir le nom personnel ni couper le déplacement.
-        if (dragSession || dragPending) {
-          event.preventDefault();
-          return;
-        }
-        if (dragExcludedTarget(event.target)) return;
-        event.preventDefault();
-        openAliasEditor(sound, card, main);
-      });
-      card.append(main, play, text, fav);
-      syncCard(card);
-      return card;
-    };
-
-    const emptyMessage = () => {
-      if (drafts.soundboard.query.trim()) return ['Aucun son trouvé', `Rien ne correspond à « ${drafts.soundboard.query.trim()} ».`];
-      if (drafts.soundboard.view === 'favorites') return ['Pas encore de favori', 'Touche l’étoile d’une carte pour la retrouver ici.'];
-      if (drafts.soundboard.view === 'recents') return ['Aucun son récent', 'Tes derniers envois apparaîtront ici.'];
-      return ['Soundboard vide', 'Aucun son n’est disponible pour le moment.'];
-    };
-
-    const renderGrid = () => {
-      const previousScrollTop = grid.scrollTop;
-      const candidates = visibleSounds();
-      if (!candidates.length) {
-        const [title, copy] = emptyMessage();
-        const empty = el('div', 'sbx-empty');
-        empty.append(el('strong', '', title), el('span', '', copy));
-        grid.replaceChildren(empty);
-      } else {
-        grid.replaceChildren(...candidates.map(buildCard));
-      }
-      grid.classList.toggle('is-reorderable', drafts.soundboard.sort === 'custom' && drafts.soundboard.view === 'all');
-      setActionState();
-      soundPreview.syncButtons();
-      grid.scrollTop = previousScrollTop;
-    };
-
-    grid.addEventListener('click', (event) => {
-      // Clic de fin de glisser (pointeur relâché sur une autre carte) : ni sélection ni désélection globale.
-      if (dragJustDroppedId) {
-        event.stopPropagation();
-        return;
-      }
-      if (event.target === grid || event.target?.closest?.('.sbx-empty')) deselectSound();
-    });
-    search.addEventListener('input', () => {
-      drafts.soundboard.query = search.value;
-      clearSearch.hidden = !search.value;
-      renderGrid();
-    });
-    const resetSearch = () => {
-      const had = Boolean(search.value || drafts.soundboard.query);
-      drafts.soundboard.query = '';
-      search.value = '';
-      clearSearch.hidden = true;
-      if (had) renderGrid();
-    };
-    clearSearch.hidden = !search.value;
-    clearSearch.addEventListener('click', (event) => {
-      event.preventDefault();
-      resetSearch();
-      search.focus({ preventScroll: true });
-    });
-    search.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape' || !search.value) return;
-      event.preventDefault();
-      event.stopPropagation();
-      resetSearch();
-    });
-
-    // --- Barre d'action : son choisi, monnaie, prix, envoi -----------------------------------------
-    const dock = el('div', 'sbx-dock');
-    const toastSlot = el('div', 'sbx-toast-slot');
-    const bar = el('div', 'sbx-bar');
-    bar.setAttribute('role', 'group');
-    bar.setAttribute('aria-label', 'Envoyer le son sélectionné');
-    const barSound = el('div', 'sbx-bar__sound');
-    const barEyebrow = el('span', 'sbx-bar__eyebrow');
-    const barName = el('strong', 'sbx-bar__name');
-    barSound.append(barEyebrow, barName);
-
-    const walletSwitch = createCurrencySwitch({
-      className: 'sbx-wallet',
-      ariaLabel: 'Payer avec',
-      tipPlacement: 'above',
-      onChange: (method) => {
-        selectedPaymentMethod = method;
-        setActionState();
-        if (drafts.soundboard.sort === 'price') renderGrid();
-      },
-    });
-    const wallet = walletSwitch.node;
-
-    const price = el('div', 'sbx-price');
-    const priceValue = el('span', 'sbx-price__value');
-    const priceUnit = el('span', 'sbx-price__unit');
-    price.append(el('span', 'sbx-price__coin'), priceValue, priceUnit);
-
-    const send = el('button', 'sbx-send');
-    send.type = 'button';
-    send.append(el('span', 'sbx-send__label', 'Envoyer'), sbxIcon('send'), el('span', 'sbx-send__spinner'));
-    bar.append(barSound, wallet, price, send);
-    dock.append(toastSlot, bar);
-
-    let barNotice = null;
-    let barNoticeTimer = null;
-    function showBarNotice(message) {
-      barNotice = message;
-      clearTimeout(barNoticeTimer);
-      barNoticeTimer = setTimeout(() => {
-        barNotice = null;
-        if (body.isConnected) setActionState();
-      }, 3500);
-      setActionState();
-    }
-
-    const setActionState = () => {
-      const sound = soundById.get(String(selectedSound || ''));
-      const studioPlaceholder = isStudioPreview && sound?.studio_placeholder === true;
-      const creditCost = creditCostOf(sound);
-      const tokenCost = tokenCostOf(sound);
-      selectedCreditRedemption = sound
-        ? pending.find((action) => Number(action.credits_remaining ?? 0) >= creditCost) ?? null
-        : null;
-      if (!methods.includes(selectedPaymentMethod)) selectedPaymentMethod = methods[0];
-      const method = selectedPaymentMethod;
-      paymentWalletSync?.(methods, (next) => {
-        selectedPaymentMethod = next;
-        setActionState();
-      });
-      const usingCredits = method === 'credits';
-      const unavailable = sound ? availability(sound) : null;
-      const hasEnoughTokens = walletCanPayTokens(state.wallet, tokenCost);
-      const methodSupported = supportsPaymentMethod(method);
-      const methodAvailable = usingCredits ? Boolean(selectedCreditRedemption) : hasEnoughTokens;
-      const cost = usingCredits ? creditCost : tokenCost;
-      const unit = usingCredits ? `crédit${creditCost > 1 ? 's' : ''}` : 'jetons';
-      const restricted = holdsAction(restrictionOf('soundboard')) ? restrictionOf('soundboard') : null;
-      const hint = !sound ? ''
-        : studioPlaceholder ? 'Placeholder Studio · aucune action réelle'
-          : restricted ? restricted.kind === 'cooldown' ? 'Cooldown en cours' : 'Indisponible pour ton compte'
-          : unavailable ? unavailable.hint
-            : mod.player_ready === false ? 'Lecteur du Studio hors ligne'
-            : !interactionsAvailable && !state?.lab_mode
-              ? identityShared() ? 'Interactions en pause, rien ne sera consommé' : 'Partage ton identité Twitch pour envoyer'
-              : !methodSupported ? 'Paiement indisponible pour cette monnaie'
-                : usingCredits && !selectedCreditRedemption ? 'Aucun crédit Soundboard disponible'
-                  : !usingCredits && !hasEnoughTokens
-                    ? state?.wallet?.unavailable === true ? 'Solde de jetons indisponible' : 'Jetons insuffisants'
-                    : '';
-
-      body.dataset.paymentMethod = method;
-      body.classList.toggle('has-selection', Boolean(sound));
-      bar.dataset.empty = String(!sound);
-      bar.dataset.method = method;
-      walletSwitch.sync({
-        method,
-        methods,
-        amounts: {
-          tokens: state?.wallet?.unavailable ? null : state?.wallet?.available,
-          credits: Array.isArray(state?.pending_actions) ? soundboardCreditBalance() : null,
-        },
-      });
-      const eyebrow = barNotice || (!sound
-        ? mod.player_ready === false ? 'Lecteur du Studio hors ligne' : 'Écoute avec ▶, puis choisis un son'
-        : hint || 'Prêt à envoyer');
-      barEyebrow.textContent = eyebrow;
-      barEyebrow.dataset.tone = barNotice || hint || mod.player_ready === false ? 'warn' : sound ? 'ok' : 'muted';
-      barName.textContent = sound ? displayLabelFor(sound) : 'Choisis un son';
-      const nextPrice = sound ? fmt(cost) : '—';
-      if (priceValue.textContent !== nextPrice || price.dataset.method !== method) {
-        priceValue.textContent = nextPrice;
-        price.classList.remove('is-bump');
-        void price.offsetWidth;
-        price.classList.add('is-bump');
-      }
-      price.dataset.method = method;
-      priceUnit.textContent = unit;
-      send.disabled = studioPlaceholder || !sound || !methodSupported || !methodAvailable || Boolean(unavailable) || Boolean(restricted)
-        || (!interactionsAvailable && !state?.lab_mode);
-      const summary = sound ? `Envoyer ${displayLabelFor(sound)} pour ${fmt(cost)} ${unit}` : 'Choisis d’abord un son';
-      send.setAttribute('aria-label', summary);
-      send.title = summary;
-      for (const card of grid.querySelectorAll('.sbx-card')) {
-        const selected = card.dataset.soundId === selectedSound;
-        if (card.classList.contains('is-selected') !== selected) syncCard(card);
-      }
-    };
-
-    const deselectSound = () => {
-      soundPreview.stop();
-      selectedSound = null;
-      drafts.soundboard.selectedId = null;
-      setActionState();
-    };
-
-    const clearSound = () => {
-      soundPreview.stop();
-      if (selectedSound) {
-        rememberStoredId(SOUNDBOARD_RECENTS_KEY, selectedSound);
-        recents = readStoredIds(SOUNDBOARD_RECENTS_KEY).filter((id) => soundIds.has(id));
-      }
-      selectedSound = null;
-      drafts.soundboard.selectedId = null;
-      syncFilters();
-      renderGrid();
-    };
-
-    send.addEventListener('click', () => {
-      const sound = soundById.get(String(selectedSound || ''));
-      const method = selectedPaymentMethod;
-      if (!sound || send.disabled || !supportsPaymentMethod(method)) return;
-      if (method === 'credits') {
-        return run(body, () => selectedCreditRedemption
-          ? client.useRedemption(selectedCreditRedemption.redemption_id, 'soundboard', { sound_id: selectedSound })
-          : Promise.reject(Object.assign(new Error('insufficient_credits'), { code: 'insufficient_credits' })), {
-          feedbackScope: 'soundboard',
-          onSuccess: clearSound,
-        });
-      }
-      if (!walletCanPayTokens(state.wallet, tokenCostOf(sound))) return;
-      return run(body, () => client.spendTokens('soundboard', { sound_id: selectedSound }), {
-        feedbackScope: 'soundboard',
-        onSuccess: clearSound,
-      });
-    });
-
-    // --- Volume des aperçus (haut-parleur du titre) : réglage local, n'affecte que ce viewer ---
-    const volumeHeading = soundboardVolumeHeaderButton?.parentNode || null;
-    const volumeZone = el('div', 'sbx-vol');
-    const volumeHandle = soundboardVolumeHeaderButton || el('button', 'sbx-vol-trigger');
-    volumeHandle.type = 'button';
-    if (!volumeHandle.querySelector('svg')) volumeHandle.replaceChildren(sbxIcon('speaker'));
-    volumeHandle.setAttribute('aria-controls', 'soundboard-preview-volume-popover');
-    const volumePopover = el('div', 'sbx-vol__pop');
-    volumePopover.id = 'soundboard-preview-volume-popover';
-    volumePopover.setAttribute('role', 'dialog');
-    volumePopover.setAttribute('aria-label', 'Volume des aperçus');
-    volumePopover.addEventListener('click', (event) => event.stopPropagation());
-    const volumeHead = el('div', 'sbx-vol__head');
-    const volumeValue = el('span', 'sbx-vol__value');
-    volumeHead.append(el('strong', '', 'Volume des aperçus'), volumeValue);
-    const volumeRow = el('div', 'sbx-vol__row');
-    const volumeMute = el('button', 'sbx-vol__mute');
-    volumeMute.type = 'button';
-    volumeMute.append(sbxIcon('speaker'));
-    const volumeRange = el('input', 'sbx-vol__range');
-    volumeRange.type = 'range';
-    volumeRange.min = '0';
-    volumeRange.max = '100';
-    volumeRange.step = '5';
-    volumeRange.setAttribute('aria-label', 'Volume des aperçus');
-    // Focus given back after a redraw (a new state while the popover is open): Escape and the keyboard keep working.
-    volumeRange.dataset.draftKey = 'soundboard-preview-volume';
-    volumeRow.append(volumeMute, volumeRange);
-    volumePopover.append(volumeHead, volumeRow, el('p', 'sbx-vol__note', 'Pour toi seulement · rien n’est joué sur le stream'));
-    volumeZone.append(volumeHandle, volumePopover);
-    let volumeBeforeMute = soundPreview.volume || 60;
-    const paintVolume = () => {
-      const volume = soundPreview.volume;
-      const level = volume === 0 ? 'mute' : volume < 50 ? 'low' : 'high';
-      volumeZone.dataset.level = level;
-      volumeValue.textContent = volume ? `${volume} %` : 'Muet';
-      volumeRange.value = String(volume);
-      volumeRange.style.setProperty('--v', `${volume}%`);
-      volumeMute.setAttribute('aria-label', volume ? 'Couper les aperçus' : 'Réactiver les aperçus');
-      volumeMute.title = volumeMute.getAttribute('aria-label');
-    };
-    const setPreviewVolume = (value) => {
-      soundPreview.setVolume(value); // saved locally, applied at once to the preview being heard
-      paintVolume();
-    };
-    volumeRange.addEventListener('input', () => setPreviewVolume(volumeRange.value));
-    volumeMute.addEventListener('click', () => {
-      if (soundPreview.volume) {
-        volumeBeforeMute = soundPreview.volume;
-        setPreviewVolume(0);
-      } else setPreviewVolume(volumeBeforeMute || 60);
-    });
-    paintVolume();
-    const syncVolume = (open, { focus = false } = {}) => {
-      soundboardVolumeOpen = Boolean(open);
-      volumeZone.classList.toggle('is-open', soundboardVolumeOpen);
-      volumePopover.setAttribute('aria-hidden', String(!soundboardVolumeOpen));
-      volumeHandle.setAttribute('aria-expanded', String(soundboardVolumeOpen));
-      volumeHandle.setAttribute('aria-label', soundboardVolumeOpen
-        ? 'Fermer le volume des aperçus'
-        : 'Régler le volume des aperçus');
-      volumeHandle.title = 'Volume des aperçus';
-      for (const control of volumePopover.querySelectorAll('input, button')) {
-        control.tabIndex = soundboardVolumeOpen ? 0 : -1;
-      }
-      if (focus && soundboardVolumeOpen) {
-        requestAnimationFrame(() => volumeRange.focus({ preventScroll: true }));
-      }
-    };
-    volumeHandle.addEventListener('click', (event) => {
-      event.stopPropagation();
-      syncVolume(!soundboardVolumeOpen, { focus: !soundboardVolumeOpen });
-    });
-    volumeZone.addEventListener('focusout', () => {
-      queueMicrotask(() => {
-        // A redraw removes this zone (its focused slider fires focusout): a detached view never closes the popover
-        // the new view has just drawn open.
-        if (!volumeZone.isConnected) return;
-        if (soundboardVolumeOpen && !volumeZone.contains(document.activeElement)) syncVolume(false);
-      });
-    });
-    syncVolume(soundboardVolumeOpen);
-    if (soundboardVolumeHeaderButton) {
-      volumeHeading?.prepend(volumeZone);
-      soundboardVolumeHeaderButton = null;
-    } else {
-      searchRow.append(volumeZone);
-    }
-
-    body.append(head, grid, dock);
-    renderGrid();
-    // Compte à rebours sur place tant qu'un son est en cooldown (arrêté au prochain rendu).
-    if (sounds.some((sound) => sound.cooldown_until && Date.parse(sound.cooldown_until) > Date.now())) {
-      cooldownTimer = setInterval(() => {
-        for (const card of grid.querySelectorAll('.sbx-card[data-state="cooldown"]')) syncCard(card);
-        if (selectedSound) setActionState();
-      }, 1000);
-    }
-    soundboardMount = {
-      syncVolume,
-      closeSearch: resetSearch,
-      deselect: deselectSound,
-      holdState: () => {
-        if (!dragSession) return false;
-        renderAfterDrag = true;
-        return true;
-      },
-      destroy: () => {
-        finishDrag(); // a drag cut short by a redraw: its listeners go, nothing is reordered
-        clearInterval(cooldownTimer);
-      },
-    };
-    // Hauteur disponible sous l'en-tête : la grille défile dans le module, la barre reste visible.
-    requestAnimationFrame(() => {
-      if (!body.isConnected) return;
-      const top = body.getBoundingClientRect().top + (document.scrollingElement?.scrollTop ?? 0);
-      body.style.setProperty('--sb-top', `${Math.max(0, Math.round(top))}px`);
-      // Marges du conteneur sous le module (padding bas du panel) : rien ne doit déborder la page.
-      const page = document.scrollingElement;
-      const overflow = page ? page.scrollHeight - page.clientHeight : 0;
-      if (overflow > 0) body.style.setProperty('--sb-bottom', `${6 + overflow}px`);
-    });
-  }
-
   function bonkForm(mod, body) {
     const interactionsAvailable = interactionsAvailableForState();
     const favoriteKey = 'raptoru-live:bonk-favorites';
@@ -5184,7 +3929,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     return panel;
   }
 
-  const FORMS = { tts: ttsForm, soundboard: soundboardForm, bonk: bonkForm, raffle_join: raffleForm };
+  const FORMS = { tts: ttsForm, bonk: bonkForm, raffle_join: raffleForm };
 
   // --- rendu ---------------------------------------------------------------
 
@@ -5444,13 +4189,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function render() {
     hubCarousel?.destroy();
     hubCarousel = null;
-    soundboardMount?.destroy();
-    soundboardMount = null;
     root.replaceChildren();
     // Les callbacks pointent toujours vers le Soundboard actuellement rendu.
     // Un rerender d’état ne doit jamais conserver un listener vers une vue
     // démontée.
-    soundboardVolumeHeaderButton = null;
     paymentWalletSync = null;
     root.dataset.view = loadError ? 'error' : state ? (openModule ? 'module' : 'home') : 'loading';
     if (loadError) {
@@ -5574,7 +4316,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     });
     if (!headerSwitch) walletRow.append(tokenView, creditView);
     const syncWalletView = (methods = [], onMethodChange = null) => {
-      const mode = soundboardView ? selectedPaymentMethod : ttsView ? paymentChoice.tts : consultView ? hubWalletMethod : 'tokens';
+      const mode = soundboardView ? paymentChoice.soundboard : ttsView ? paymentChoice.tts : consultView ? hubWalletMethod : 'tokens';
       const showingCredits = mode === 'credits';
       tokenView.classList.toggle('is-active', !showingCredits);
       creditView.classList.toggle('is-active', showingCredits);
@@ -5833,7 +4575,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     } else {
       const mod = modules.find((candidate) => candidate.id === openModule);
       const screen = el('section', 'jdm-module-screen');
-      const isSoundboard = mod.id === 'soundboard';
       const isBonk = mod.id === 'bonk';
       const isRaffle = mod.id === 'raffle_join';
       const isModeration = mod.id === MODERATION_MODULE.id;
@@ -5841,7 +4582,25 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const session = sessionModule(mod.id);
       const variant = session ? null : moduleVariant({ module: mod, state, client, document });
       const registered = session ?? variant;
-      const head = el('header', `jdm-ui-header jdm-module__screen-head${isSoundboard ? ' jdm-module__screen-head--soundboard' : ''}${isBonk ? ' jdm-module__screen-head--bonk' : ''}${isRaffle ? ' jdm-module__screen-head--raffle' : ''}${isModeration ? ' jdm-module__screen-head--moderation' : ''}`);
+      // A registered view — a session module, a module variant or a module of the module host: created once while the
+      // module is open, kept across the host's refreshes, destroyed when it closes (navigateTo). No per-module branch.
+      const hostedView = mod.id !== ACTIONS_MODULE.id && Boolean(registered || (mod.host && viewerModuleView(mod.id)));
+      if (hostedView && (!hostView || hostViewId !== mod.id || hostVariant !== variant)) {
+        hostView?.destroy?.();
+        hostView = registered
+          ? registered.view(variantContext(registered, mod))
+          : viewerModuleView(mod.id)({ document, client, module: mod.server });
+        hostViewId = mod.id;
+        hostVariant = variant;
+        hostView.start?.(); // optional: TTS V2 has no start (it waits for the host's state)
+        // The team's moderation of a MODULE-HOST module only (never a session module or a variant: no mod.server).
+        const panel = !registered && canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
+        if (panel?.visible) {
+          hostView.node.append(panel.node);
+          void panel.refresh();
+        }
+      }
+      const head = el('header', `jdm-ui-header jdm-module__screen-head${registered?.headClass ? ` ${registered.headClass}` : ''}${isBonk ? ' jdm-module__screen-head--bonk' : ''}${isRaffle ? ' jdm-module__screen-head--raffle' : ''}${isModeration ? ' jdm-module__screen-head--moderation' : ''}`);
       head.setAttribute('aria-label', visibleModuleLabel(mod));
       const headLeft = el('div', 'jdm-module__screen-side jdm-module__screen-side--left');
       const headRight = el('div', 'jdm-module__screen-side jdm-module__screen-side--right');
@@ -5865,16 +4624,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         headLeft.append(status);
       }
       const heading = el('div', 'jdm-module__screen-title');
-      const screenIcon = isSoundboard
-        ? el('button', 'sbx-vol-trigger')
-        : el('span', 'jdm-module__screen-icon', mod.icon);
-      screenIcon.setAttribute('aria-hidden', 'true');
-      if (isSoundboard) {
-        screenIcon.type = 'button';
-        screenIcon.removeAttribute('aria-hidden');
-        screenIcon.setAttribute('aria-label', 'Ouvrir le volume des aperçus Soundboard');
-        screenIcon.title = 'Volume des aperçus Soundboard';
-        soundboardVolumeHeaderButton = screenIcon;
+      // The title's icon: the module's, or a control the view puts there (Soundboard: its volume popover).
+      let screenIcon = hostedView && registered?.headIcon ? registered.headIcon(hostView, variantContext(registered, mod)) : null;
+      if (!screenIcon) {
+        screenIcon = el('span', 'jdm-module__screen-icon', mod.icon);
+        screenIcon.setAttribute('aria-hidden', 'true');
       }
       if (!isModeration) heading.append(screenIcon);
       heading.append(el('strong', 'jdm-module__screen-name', visibleModuleLabel(mod)));
@@ -5897,7 +4651,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       item.classList.add('is-open');
       const body = el('div', 'jdm-module__body');
       if (!isModeration) body.dataset.scrollKey = `module-${mod.id}`;
-      if (!isSoundboard && !isModeration && registered?.intro !== false) {
+      if (!isModeration && registered?.intro !== false) {
         const intro = el('div', 'jdm-module__intro');
         intro.append(
           el('strong', 'jdm-module__intro-title', mod.label),
@@ -5907,28 +4661,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       if (mod.id === ACTIONS_MODULE.id) {
         body.append(personalHistory());
-      } else if (registered || (mod.host && viewerModuleView(mod.id))) {
-        // A registered view — a session module, a module variant or a module of the module host: created once while the
-        // module is open, kept across the host's refreshes, destroyed when it closes (navigateTo). No per-module branch.
+      } else if (hostedView) {
         Object.assign(body.dataset, registered?.bodyData ?? {});
         if (registered?.screenClass) screen.classList.add(registered.screenClass);
-        if (!hostView || hostViewId !== mod.id || hostVariant !== variant) {
-          hostView?.destroy?.();
-          hostView = registered
-            ? registered.view(variantContext(registered, mod))
-            : viewerModuleView(mod.id)({ document, client, module: mod.server });
-          hostViewId = mod.id;
-          hostVariant = variant;
-          hostView.start?.(); // optional: TTS V2 has no start (it waits for the host's state)
-          // The team's moderation of a MODULE-HOST module only (never a session module or a variant: no mod.server).
-          const panel = !registered && canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
-          if (panel?.visible) {
-            hostView.node.append(panel.node);
-            void panel.refresh();
-          }
-        }
-        variant?.rendered?.(hostView, variantContext(variant, mod));
-        body.append(hostView.node);
+        variant?.rendered?.(hostView, variantContext(variant, mod, body));
+        // A view either has its own node, or draws into the module body (Soundboard).
+        if (hostView.node) body.append(hostView.node);
         queueMicrotask(() => hostView?.attached?.());
       } else if (mod.id === MODERATION_MODULE.id) {
         const moderation = moderationForm();
@@ -5944,7 +4682,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         FORMS[mod.id]?.(mod, body);
       }
       item.append(body);
-      if (isSoundboard) (body.querySelector('.sbx-toast-slot') ?? item).append(soundboardFeedback.overlay());
       screen.append(head, item);
       // Every active restriction of the module (blocks and cooldown) in one popup, at each visit; the
       // module stays readable behind it.
@@ -5957,7 +4694,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         }));
       }
       root.append(screen);
-      if (isSoundboard) soundPreview.syncButtons();
     }
 
     if (tutorialOpen && !openModule) root.append(tutorialDialog(experience.tutorial));

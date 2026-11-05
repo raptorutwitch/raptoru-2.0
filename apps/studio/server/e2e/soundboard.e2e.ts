@@ -163,6 +163,12 @@ test('viewer: volume popover (kept across a new state, Escape closes it), Escape
     .getByRole('button', { name: 'Régler le volume des aperçus' })
     .click();
   await expect(page.locator('.sbx-vol.is-open')).toHaveCount(1);
+  // Its controls answer a mouse click (the popover must not close under the pointer).
+  await page.locator('.sbx-vol__mute').click();
+  await expect(page.locator('.sbx-vol.is-open')).toHaveCount(1);
+  await expect(page.locator('.sbx-vol__value')).toHaveText(/60/);
+  await page.locator('.sbx-vol__mute').click();
+  await expect(page.locator('.sbx-vol__value')).toHaveText('Muet');
   await markGrid();
   await changeBalance();
   await expect.poll(gridAlive, { timeout: 20_000 }).toBe(false); // redrawn
@@ -231,6 +237,83 @@ test('viewer: volume popover (kept across a new state, Escape closes it), Escape
   await expect.poll(gridAlive, { timeout: 10_000 }).toBe(false);
   await expect(shown(tokens).first()).toBeAttached(); // …and shows once the card is dropped
   await expect(grid(page)).toHaveCount(1);
+  expect(errors).toEqual([]);
+  await page.close();
+});
+
+test('viewer: pay with a Soundboard credit (dock and header follow the choice, one credit used, Jetons untouched); sort, filter, selection and currency kept across visits', async ({
+  browser,
+}) => {
+  expect(
+    (
+      await labCore('/v1/lab/wallet/900100', {
+        actor: STUDIO,
+        viewer_id: '900101',
+        op: 'set',
+        tokens: 20_000,
+        credits_soundboard: 2,
+      })
+    ).status,
+  ).toBe(200);
+  const wallet = async () =>
+    (await labCore('/v1/lab/wallet/900100/900101')).body as {
+      tokens: number;
+      credits_soundboard: number;
+    };
+  const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto('/ext/mobile.html?labRole=viewer');
+  await openModule(page, /^Soundboard|^Sons/);
+  await ready(page);
+  const bar = page.locator('.sbx-bar');
+  await page.getByRole('button', { name: 'Sélectionner Boop' }).click();
+  await expect(bar).toHaveAttribute('data-method', 'tokens');
+  await expect(page.locator('.sbx-price__unit')).toHaveText('jetons');
+  // The dock's switch: credits; the header's switch follows.
+  await page.locator('.sbx-wallet .rl-cswitch__chip').click();
+  await expect(bar).toHaveAttribute('data-method', 'credits');
+  await expect(page.locator('.rl-cswitch--header')).toHaveAttribute(
+    'data-method',
+    'credits',
+  );
+  await expect(page.locator('.sbx-price__unit')).toHaveText('crédit');
+  const send = page
+    .locator('.sbx-dock')
+    .getByRole('button', { name: /^Envoyer/ });
+  await expect(send).toBeEnabled({ timeout: 15_000 });
+  await send.click();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Envoyé au stream' }),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect.poll(async () => (await wallet()).credits_soundboard).toBe(1);
+  expect((await wallet()).tokens).toBe(20_000);
+
+  // Sort « A → Z », the « Récents » filter, a selection: kept when the viewer comes back.
+  await page.getByRole('button', { name: 'Trier le catalogue' }).click();
+  await page.getByRole('menuitemradio', { name: 'A → Z' }).click();
+  await expect(
+    page.locator('.sbx-menu__item[data-sort="alpha"]'),
+  ).toHaveAttribute('aria-checked', 'true');
+  await page.locator('[data-view="recents"]').click();
+  await page.getByRole('button', { name: 'Sélectionner Boop' }).click();
+  await expect(page.locator('.sbx-card.is-selected')).toHaveCount(1);
+  await back(page);
+  await openModule(page, /^Commandes$/);
+  await back(page);
+  await openModule(page, /^Soundboard|^Sons/);
+  await expect(
+    page.locator('.sbx-menu__item[data-sort="alpha"]'),
+  ).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('[data-view="recents"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.locator('.sbx-card.is-selected')).toHaveAttribute(
+    'data-sound-id',
+    /boop/i,
+  );
+  await expect(bar).toHaveAttribute('data-method', 'credits');
   expect(errors).toEqual([]);
   await page.close();
 });
