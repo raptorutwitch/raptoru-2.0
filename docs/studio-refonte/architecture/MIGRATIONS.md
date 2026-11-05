@@ -18,7 +18,7 @@ Mise à jour : 05/11/2026, mission « Opération fondation totale ». Inventaire
 |---|---|---|---|
 | Mini-jeux (Roulette, Slot, Duel) | B | **fait** (`e08d1a5`) | réglages H10 et supervision ; service inchangé |
 | Votekick | B | **fait** (ce lot) | H10 « délais » ; l'interrupteur est un drapeau de déploiement (lecture seule) ; la durée du vote reste dans `votekick_settings` (son écran) |
-| Caution | B | à faire | H10 « prix » ; argent : prix lus dans la transaction du devis ; interrupteur `CAUTION_CHAT` en lecture seule |
+| Caution | B | **fait** | H10 « prix » ; argent : tarifs lus dans la transaction du devis, le devis garde son prix ; interrupteur `CAUTION_CHAT` en lecture seule |
 | Random Ban | B (état seulement) | à faire | le prix est déjà un réglage ; la chance du streamer (2 %) est une probabilité : jamais réglable (H10) |
 | Boutique Halloween | B (état) | à faire | interrupteur en base et pouls persistant (`event_shop_studios`) |
 | Jeu des mots | B (état) | à faire | interrupteur et intervalle déjà en base (H8) ; « Prêt pour le live » le couvre déjà |
@@ -54,3 +54,16 @@ Mise à jour : 05/11/2026, mission « Opération fondation totale ». Inventaire
 | Écran | Points de chaîne › Votekick | même section, avec le panneau « Délais et durées d'exclusion » (même API que Bonk) | build web |
 
 Écart assumé : la plage de sanction est lue au verdict, pas à l'ouverture du vote. Un changement pendant un vote ouvert vaut donc pour ce vote. La durée du vote, elle, reste figée à l'ouverture.
+
+## Matrice de parité — Caution
+
+| Capacité | Avant | Après | Preuve |
+|---|---|---|---|
+| 1 000 Jetons par minute commencée | `CAUTION.pricePerMinute` | réglage `caution.price_per_minute` (défaut identique), lu à la création du devis | `caution-module.test.ts` |
+| Sourdine du streamer : 300 Jetons par 10 s | `CAUTION.mutePricePer10s` (décision du 27/10) | réglage `caution.mute_price_per_10s` | idem |
+| Le devis garde son prix ; un seul débit, au prix du devis | prix stocké dans `caution_requests` | inchangé | `caution-module.test.ts` (tarif changé avant « oui » : débit au prix du devis) |
+| « Prolongé » : refus si le timeout a été rallongé | prix actuel supérieur au prix du devis (tarif constant) | **même règle, comptée en minutes** : un tarif changé dans Studio ne déclenche jamais « prolongé » ; l'heure du devis vient du même instant que son prix | `caution.test.ts` (« prolongé » et « raccourci », inchangés) |
+| Oui / non, relecture, remboursement unique, incertain, concurrence, redémarrage | moteur | inchangés | `caution.test.ts` (tous verts, inchangés), `caution.integration.test.ts` sur PostgreSQL |
+| Interrupteur | `CAUTION_CHAT` (bascule SAMMI pas encore faite) | lu, jamais écrit | — |
+| État | écran Caution | en plus : « prêt » seulement si le bot s'est signalé depuis moins de 15 s | `caution-module.test.ts` |
+| Écran | Points de chaîne › Caution | même section, avec le panneau « Tarifs » | build web |

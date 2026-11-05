@@ -1,4 +1,5 @@
 import { ProgressionService } from '../progression/service.js';
+import { cautionModule, cautionRates } from '../modules/caution.js';
 import { miniGameLimits } from '../modules/mini-games.js';
 import { votekickLimits, votekickModule } from '../modules/votekick.js';
 import { modulesRoutes } from '../http/modules-routes.js';
@@ -168,6 +169,9 @@ export function createLabCore({
     { kind: 'votekick', label: 'Votekick', source: votekick },
     { kind: 'random_ban', label: 'Random Ban', source: randomBan.mutes },
   ]);
+  // Module host: Caution's adapter — H10 rates read in the quote's transaction, its supervision.
+  modules.add(cautionModule(caution, { chat: true }));
+  caution.rates = cautionRates(moduleSettings);
   const cpTwitch = new CpTwitchActions(db, systemClock);
   const spotify = new SpotifyService(db, systemClock, cpTwitch);
   const channelPoints = new ChannelPointsService(

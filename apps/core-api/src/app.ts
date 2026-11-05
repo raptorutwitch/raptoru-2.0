@@ -1,4 +1,5 @@
 import { ALERT_RULES, AlertsService } from './alerts/service.js';
+import { cautionModule, cautionRates } from './modules/caution.js';
 import { miniGameLimits } from './modules/mini-games.js';
 import { votekickLimits, votekickModule } from './modules/votekick.js';
 import { MODULES } from './modules/index.js';
@@ -156,6 +157,9 @@ export function createCore(
     { kind: 'votekick', label: 'Votekick', source: votekick },
     { kind: 'random_ban', label: 'Random Ban', source: randomBan.mutes },
   ]);
+  // Module host: Caution's adapter — H10 rates read in the quote's transaction, its supervision.
+  modules.add(cautionModule(caution, { chat: !!channel.cautionChat }));
+  caution.rates = cautionRates(moduleSettings);
   const ttsLab = new TtsLabService(db, clock, undefined, undefined, economy);
   const cpTwitch = new CpTwitchActions(db, clock);
   const spotify = new SpotifyService(db, clock, cpTwitch);

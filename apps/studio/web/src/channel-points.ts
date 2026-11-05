@@ -135,6 +135,15 @@ export function mountChannelPoints(root: HTMLElement) {
   ]);
   const spotify = mountSpotify($('spotify'));
   const caution = mountCaution($('caution'));
+  // Refonte H10 (module host « caution », adapter): the rates, set in the Core; a quote keeps the price it announced.
+  const cautionRatesNode = document.createElement('div');
+  root
+    .querySelector<HTMLElement>('[data-sat="caution"]')
+    ?.append(cautionRatesNode);
+  const cautionRates = mountSettingsPanel(cautionRatesNode, 'Tarifs', [
+    'caution.price_per_minute',
+    'caution.mute_price_per_10s',
+  ]);
   // Settings form: loaded when the tab opens, never in the 3 s refresh (it would erase what is being typed).
   const votekick = mountVotekickConfig($('votekick'));
   // Refonte H10 (module host « votekick », adapter): the initiator's delay and the sanction range, set in the Core.
@@ -540,6 +549,7 @@ export function mountChannelPoints(root: HTMLElement) {
       void load();
       void prices.refresh();
       void votekickLimits.refresh();
+      void cautionRates.refresh();
       void randomBan.load();
       void spotify.load();
       void caution.load();

@@ -100,7 +100,7 @@ describe('votekick rules (SAMMI parity)', () => {
   });
 
   it('caution: 1 000 Jetons per started minute', () => {
-    expect([0, 1, 59, 60, 61, 125].map(cautionPrice)).toEqual([
+    expect([0, 1, 59, 60, 61, 125].map((s) => cautionPrice(s))).toEqual([
       0, 1000, 1000, 1000, 2000, 3000,
     ]);
   });

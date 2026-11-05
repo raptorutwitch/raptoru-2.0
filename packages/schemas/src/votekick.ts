@@ -164,14 +164,23 @@ export function broadcasterMuteSeconds(durationS: number) {
   );
 }
 
-/** CAUTION_START: ceil(remaining s / 60) × 1 000 Jetons (0 when nothing is left). */
-export function cautionPrice(remainingS: number) {
-  return Math.max(0, Math.ceil(remainingS / 60)) * CAUTION.pricePerMinute;
+/** CAUTION_START: ceil(remaining s / 60) × 1 000 Jetons (0 when nothing is left); the rate is a Studio setting (H10). */
+export function cautionPrice(
+  remainingS: number,
+  perMinute: number = CAUTION.pricePerMinute,
+) {
+  return Math.max(0, Math.ceil(remainingS / 60)) * perMinute;
 }
 
-/** The streamer's mute: ceil(remaining s / 10) × 300 Jetons (60 s → 1 800, 120 s → 3 600, 300 s → 9 000). */
-export function cautionMutePrice(remainingS: number) {
-  return Math.max(0, Math.ceil(remainingS / 10)) * CAUTION.mutePricePer10s;
+/**
+ * The streamer's mute: ceil(remaining s / 10) × 300 Jetons (60 s → 1 800, 120 s → 3 600, 300 s → 9 000); the rate is a
+ * Studio setting (H10).
+ */
+export function cautionMutePrice(
+  remainingS: number,
+  per10s: number = CAUTION.mutePricePer10s,
+) {
+  return Math.max(0, Math.ceil(remainingS / 10)) * per10s;
 }
 
 /**

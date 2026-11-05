@@ -874,7 +874,8 @@ describe('module host through the real Production doors (architecture socle)', (
       'objectif_soiree',
       'coffre_mystere',
       'mini_games',
-      'votekick', // adapter added once its service exists (architecture/MIGRATIONS.md)
+      'votekick', // adapters added once their service exists (architecture/MIGRATIONS.md)
+      'caution',
     ]);
     const refund = await studio(
       `/v1/studio/cockpit/modules/${CHANNEL}/refund`,

@@ -44,7 +44,7 @@ describe('module host — real Lab chain (Lab Core + Studio client + Extension L
     const { core, ext } = await chain();
     // Studio's own routes through its real client (the allow-list once refused them).
     const cat = await core<{ modules: { id: string }[] }>('/v1/lab/modules/900100');
-    expect(cat.modules.map((m) => m.id)).toEqual(['objectif_soiree', 'coffre_mystere', 'mini_games', 'votekick']);
+    expect(cat.modules.map((m) => m.id)).toEqual(['objectif_soiree', 'coffre_mystere', 'mini_games', 'votekick', 'caution']);
     await core('/v1/lab/module-settings/900100', { key: 'coffre_mystere.enabled', value: 1 });
     // The viewer buys through the Lab EBS (fictional Lab wallet, stream live gate does not apply to Lab-only demos).
     const key = randomUUID();
