@@ -196,6 +196,14 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
         installation: f.installation,
       }),
     ).toThrow('https_core_url_required');
+    // The local Lab (labLoopback): plain HTTP to a loopback Core only, never to another host.
+    expect(() =>
+      prodCoreClient({
+        url: 'http://raptoru.fr',
+        installation: f.installation,
+        labLoopback: true,
+      }),
+    ).toThrow('https_core_url_required');
     // The client only speaks the production routes (never the Lab ones).
     expect(await codeOf(f.client()('/v1/lab/bonk/claim', {}))).toBe(
       'studio_route_required',
@@ -499,5 +507,41 @@ describe('production transport Studio → Core over local HTTPS (ASTRA-P1-019 lo
     expect(await readFile(f.identityFile, 'utf8')).toBe(
       '{"version":1,"installation_id":"broken"}',
     );
+  });
+});
+
+describe('local Lab on the main Core (decision of 05/11): the same transport, plain HTTP on loopback only', () => {
+  it('an identity bound to the loopback Lab Core reloads; only a labLoopback client may use it', async () => {
+    const { mkdtemp } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const dir = await mkdtemp(join(tmpdir(), 'studio-lab-identity-'));
+    const binding = { coreOrigin: 'http://127.0.0.1:4389', caSha256: null };
+    const created = await loadOrCreateInstallation(
+      join(dir, 'id.json'),
+      binding,
+    );
+    const reloaded = await loadOrCreateInstallation(
+      join(dir, 'id.json'),
+      binding,
+    );
+    expect(reloaded.installationId).toBe(created.installationId);
+    expect(() =>
+      prodCoreClient({ url: 'http://127.0.0.1:4389', installation: reloaded }),
+    ).toThrow('https_core_url_required');
+    expect(() =>
+      prodCoreClient({
+        url: 'http://127.0.0.1:4389',
+        installation: reloaded,
+        labLoopback: true,
+      }),
+    ).not.toThrow();
+    // Another loopback Core (another port): the credential never goes there.
+    expect(() =>
+      prodCoreClient({
+        url: 'http://127.0.0.1:4390',
+        installation: reloaded,
+        labLoopback: true,
+      }),
+    ).toThrow('Identité Studio liée à un autre Core');
   });
 });

@@ -54,7 +54,7 @@ const db = createPgliteDb(
   }),
 );
 await migrate(db, 'prod');
-await seedLabFixtures(db, { viewerTokens: 5000 });
+await seedLabFixtures(db, { viewerTokens: 20_000 });
 
 const core = createMainCore(
   db,
@@ -69,6 +69,78 @@ await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
 const coreUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 // The tests' own door to the Lab Core (fixtures, checks): the URL only, never a secret.
 console.log(`[e2e-core-lab] main Core (lab) on ${coreUrl}`);
+
+// Studio's PRODUCTION transport, as the installed Studio uses it against the VPS, here against the Lab Core: an
+// installation paired in the Lab Core's own table, the credential bound to that origin, plain HTTP allowed on loopback
+// only (labLoopback). The TTS worker is Production's (/v1/studio/tts); its player is FICTIONAL (no page, no sound: it
+// reports started → completed). « Studio » is closed at start; the tests open / close it (E2E_CORE_LAB_PORT + 1).
+const { mkdtemp } = await import('node:fs/promises');
+const { tmpdir } = await import('node:os');
+const { join } = await import('node:path');
+const { createServer } = await import('node:http');
+const { loadOrCreateInstallation } =
+  await import('../src/prod-transport/installation.js');
+const { prodCoreClient } = await import('../src/prod-transport/core-client.js');
+const { TtsWorker } = await import('../src/tts-lab/worker.js');
+const dir = await mkdtemp(join(tmpdir(), 'e2e-core-lab-'));
+const installation = await loadOrCreateInstallation(
+  join(dir, 'installation.json'),
+  { coreOrigin: coreUrl, caSha256: null },
+);
+await core.studioInstallations!.register(
+  installation.pairingCode,
+  'Studio Lab (E2E)',
+);
+const ttsWorker = await TtsWorker.open(
+  join(dir, 'tts-journal.json'),
+  prodCoreClient({ url: coreUrl, installation, labLoopback: true }),
+  {
+    base: '/v1/studio/tts',
+    studioId: installation.installationId,
+    channel: '900100',
+    configBase: '/v1/studio/cockpit/tts',
+  },
+);
+let studioOpen: ReturnType<typeof setInterval> | null = null;
+const openStudio = () => {
+  if (studioOpen) return;
+  const player = 'e2e-core-lab-player';
+  let busy = false;
+  studioOpen = setInterval(() => {
+    if (busy) return;
+    busy = true;
+    void ttsWorker
+      .playerHeartbeat(player, 12)
+      .then(() => ttsWorker.tick())
+      .then(() => ttsWorker.command(player))
+      .then(async (order) => {
+        if (!order || !('play' in order)) return;
+        const { interaction_id: id, delivery } = order.play;
+        await ttsWorker.playerAck(id, delivery.attempt_id!, player, 'started');
+        await ttsWorker.playerAck(
+          id,
+          delivery.attempt_id!,
+          player,
+          'completed',
+        );
+      })
+      .catch((e: Error) =>
+        console.error(`[e2e-core-lab] tts worker: ${e.message}`),
+      )
+      .finally(() => (busy = false));
+  }, 500);
+};
+createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/studio/open') openStudio();
+  else if (req.method === 'POST' && req.url === '/studio/close') {
+    if (studioOpen) clearInterval(studioOpen);
+    studioOpen = null;
+  } else {
+    res.writeHead(404).end();
+    return;
+  }
+  res.writeHead(204).end();
+}).listen(port + 1, '127.0.0.1');
 
 const studio = createStudioServer({
   lab: createTestLab(),

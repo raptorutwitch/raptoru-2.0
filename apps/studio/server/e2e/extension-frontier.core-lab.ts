@@ -43,7 +43,7 @@ test('viewer: the session is the main Core’s (Lab environment), authenticated 
     viewer_login: 'Viewer Lab',
     moderation_v2: true,
   });
-  expect((body.wallet as { available: number }).available).toBe(5000);
+  expect((body.wallet as { available: number }).available).toBe(20_000);
   // The Hub shows the Core's modules and balance.
   await page.getByRole('button', { name: 'Voir tous les modules' }).click();
   for (const tile of [/^TTS/, /^Soundboard|^Sons/, /^Bonk/, /^Tombola/])
@@ -92,7 +92,7 @@ test('Studio closed: the TTS says it is unavailable and nothing is debited (the 
   expect(
     ((await state.json()) as { wallet: { available: number } }).wallet
       .available,
-  ).toBe(5000);
+  ).toBe(20_000);
   expect(errors).toEqual([]);
   expect(outside).toEqual([]);
 });
@@ -145,4 +145,65 @@ test('the relay adds nothing: a token not signed with the Lab Core’s secret is
     headers: { authorization: `Bearer ${token.token}` },
   });
   expect(ok.status()).toBe(200);
+});
+
+test('Studio open: a TTS bought in the extension is played by Studio’s PRODUCTION worker and settled by the Core', async ({
+  request,
+}) => {
+  const control = `http://127.0.0.1:${Number(process.env.E2E_CORE_LAB_PORT ?? 4389) + 1}`;
+  const jwt = (
+    (await (await request.get('/ext-lab/token?role=viewer')).json()) as {
+      token: string;
+    }
+  ).token;
+  const auth = { authorization: `Bearer ${jwt}` };
+  const balance = async () =>
+    (
+      (await (
+        await request.get('/ext-lab/api/state', { headers: auth })
+      ).json()) as {
+        wallet: { available: number };
+      }
+    ).wallet.available;
+  const before = await balance();
+  await request.post(`${control}/studio/open`);
+  try {
+    // Accepted once Studio's worker and its player have reported to the Core (a few heartbeats).
+    let bought: Record<string, unknown> | null = null;
+    await expect
+      .poll(
+        async () => {
+          const r = await request.post('/ext-lab/api/actions/tokens', {
+            headers: {
+              ...auth,
+              'idempotency-key': `e2e-core-lab-buy-${Date.now()}`,
+            },
+            data: { module_id: 'tts', payload: { text: 'Bonjour le Lab' } },
+          });
+          if (r.ok()) bought = (await r.json()) as Record<string, unknown>;
+          return r.status();
+        },
+        { timeout: 20_000, intervals: [500] },
+      )
+      .toBe(200);
+    expect(bought).toMatchObject({ ok: true });
+    // The Core debited its own price once…
+    const after = await balance();
+    expect(after).toBeLessThan(before);
+    // …and the interaction ends « played » (the worker handed it to the player, which reported it read).
+    await expect
+      .poll(
+        async () =>
+          JSON.stringify(
+            await (
+              await request.get('/ext-lab/api/tts/state', { headers: auth })
+            ).json(),
+          ),
+        { timeout: 20_000 },
+      )
+      .toMatch(/completed|played/);
+    expect(await balance()).toBe(after); // settled, never refunded nor debited twice
+  } finally {
+    await request.post(`${control}/studio/close`);
+  }
 });
