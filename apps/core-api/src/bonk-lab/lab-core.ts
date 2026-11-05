@@ -85,6 +85,11 @@ export interface LabCoreOptions {
   /** The Lab channel's real Twitch broadcaster id (BONK_LAB_CHANNEL_TWITCH_ID), or ''. */
   channelTwitchId?: string;
   /**
+   * How the 7TV/BTTV/FFZ public catalogs are read (default: the network). The end-to-end harness passes FICTIONAL
+   * providers here: the same parsing and the same Core checks, no request leaves the machine.
+   */
+  thirdPartyFetch?: typeof fetch;
+  /**
    * Economy of every module of this runtime (Bonk, Soundboard, TTS, Tombola, Roue du Sub, moderation, Jeu des mots, mini-games). The Lab
    * test wallet unless a caller passes the result of economy/activation.ts selectEconomy (the launcher never does before
    * the cutover; the activation refuses a runtime whose modules are not all proven).
@@ -101,6 +106,7 @@ export function createLabCore({
   secret,
   twitch,
   channelTwitchId = '',
+  thirdPartyFetch,
   economy = labEconomy,
 }: LabCoreOptions): {
   server: Server;
@@ -120,7 +126,7 @@ export function createLabCore({
     : null;
   // 7TV/BTTV/FFZ public catalogs of the channel (no token), only when the launcher passes its id.
   const thirdParty = /^\d+$/.test(channelTwitchId)
-    ? new ThirdPartyEmotes(channelTwitchId, systemClock)
+    ? new ThirdPartyEmotes(channelTwitchId, systemClock, thirdPartyFetch)
     : null;
   const bonk = new BonkLabService(
     db,

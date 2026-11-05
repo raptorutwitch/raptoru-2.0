@@ -7,6 +7,7 @@
 import { randomBytes } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
+import type { BonkLabThirdPartyCatalog } from '@raptoru/schemas';
 import { createLabCore } from '../../../core-api/src/bonk-lab/lab-core.js';
 import { systemClock } from '../../../core-api/src/clock.js';
 import { migrate } from '../../../core-api/src/db/migrate.js';
@@ -34,7 +35,67 @@ const db = createPgliteDb(
 );
 await migrate(db, 'lab');
 const secret = randomBytes(32).toString('hex');
-const { server: core } = createLabCore({ db, clock: systemClock, secret });
+// FICTIONAL 7TV/BTTV/FFZ providers (Bonk): the Lab Core parses and checks them as it would the real ones; any other URL
+// is refused — this stack never reaches the network. Their CDN images are served locally by the Bonk E2E (page.route).
+const FICTIONAL_PROVIDERS: Record<string, unknown> = {
+  'https://7tv.io/v3/emote-sets/global': {
+    emotes: [
+      {
+        id: '0123456789abcdef01234567',
+        name: 'ClapFictif',
+        data: { animated: false },
+      },
+    ],
+  },
+  'https://7tv.io/v3/users/twitch/900100': {
+    user: { display_name: 'Raptoru_ (fictif)' },
+    emote_set: {
+      emotes: [
+        {
+          id: '89abcdef0123456789abcdef',
+          name: 'PepoFictif',
+          data: { animated: false },
+        },
+        {
+          id: 'fedcba9876543210fedcba98',
+          name: 'CatJamFictif',
+          data: { animated: true },
+        },
+      ],
+    },
+  },
+  'https://api.betterttv.net/3/cached/emotes/global': [],
+  'https://api.betterttv.net/3/cached/users/twitch/900100': {
+    channelEmotes: [
+      { id: 'aaaaaaaaaaaaaaaaaaaaaaaa', code: 'BttvFictif', imageType: 'png' },
+    ],
+    sharedEmotes: [],
+  },
+  'https://api.frankerfacez.com/v1/set/global': {
+    default_sets: [3],
+    sets: {
+      '3': {
+        emoticons: [{ id: 424242, name: 'FfzFictif', urls: { '1': 'x' } }],
+      },
+    },
+  },
+  'https://api.frankerfacez.com/v1/room/id/900100': { sets: {} },
+};
+const fictionalFetch = (async (input: string | URL | Request) => {
+  const url = String(input instanceof Request ? input.url : input);
+  if (!(url in FICTIONAL_PROVIDERS)) throw new Error(`e2e_no_network: ${url}`);
+  return new Response(JSON.stringify(FICTIONAL_PROVIDERS[url]), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}) as typeof fetch;
+const { server: core } = createLabCore({
+  db,
+  clock: systemClock,
+  secret,
+  channelTwitchId: '900100',
+  thirdPartyFetch: fictionalFetch,
+});
 await new Promise<void>((r) => core.listen(0, '127.0.0.1', r));
 const coreUrl = `http://127.0.0.1:${(core.address() as AddressInfo).port}`;
 
@@ -192,6 +253,57 @@ ext.connectLab(labCore);
             sound.interaction_id,
             attempt,
             player,
+            'completed',
+          );
+        }
+      })
+      .catch(() => undefined);
+  }, 2_000).unref();
+}
+// Bonk in the Extension Lab: the Studio Bonk worker (journal + this Lab Core only), WITHOUT its runtime (no OBS, no
+// linked Twitch viewer). The 7TV/BTTV/FFZ catalog is the Lab Core's (fictional providers) and a FICTIONAL overlay renderer
+// (no page, nothing drawn) that reports what it is handed as shown (started → completed), as the real overlay would.
+{
+  const { BonkWorker, localCoreClient } =
+    await import('../src/bonk-lab/worker.js');
+  const { mkdtemp: mk } = await import('node:fs/promises');
+  const { tmpdir: td } = await import('node:os');
+  const { join: j } = await import('node:path');
+  const dir = await mk(j(td(), 'e2e-bonk-'));
+  const bonkWorker = await BonkWorker.open(
+    j(dir, 'journal.json'),
+    localCoreClient(coreUrl, secret),
+  );
+  const bonkCore = localCoreClient(coreUrl, secret);
+  // The 7TV/BTTV/FFZ catalog comes from the Lab Core (its fictional providers above), as Studio's BonkRuntime reads it.
+  ext.connectBonk(bonkWorker, null, (refresh = false) =>
+    bonkCore<BonkLabThirdPartyCatalog>(
+      '/v1/lab/bonk/third-party/catalog' + (refresh ? '?refresh=1' : ''),
+    ),
+  );
+  bonkWorker.setObs(true, true); // fictional: no OBS here, the source is « ready »
+  const renderer = 'e2e-overlay-fictif';
+  setInterval(() => {
+    void bonkWorker
+      .rendererHeartbeat(renderer)
+      .then(() => bonkWorker.tick())
+      .then(async () => {
+        for (
+          let shot = await bonkWorker.command(renderer);
+          shot;
+          shot = await bonkWorker.command(renderer)
+        ) {
+          const attempt = shot.delivery.attempt_id!;
+          await bonkWorker.rendererAck(
+            shot.interaction_id,
+            attempt,
+            renderer,
+            'started',
+          );
+          await bonkWorker.rendererAck(
+            shot.interaction_id,
+            attempt,
+            renderer,
             'completed',
           );
         }
