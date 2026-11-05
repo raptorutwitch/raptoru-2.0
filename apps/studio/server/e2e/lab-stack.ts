@@ -117,6 +117,29 @@ const { ChallengesRelay } = await import('../src/challenges/relay.js');
 const ext = await LabEbs.create(EXTENSION_DIR);
 const labCore = localLabCoreClient(coreUrl, secret);
 ext.connectLab(labCore);
+// TTS V2 in the Extension Lab: the Studio TTS worker (journal + this Lab Core only; the voice is the player page's,
+// never opened here). Without it the Lab EBS offers the V1 form.
+{
+  const { TtsWorker, localTtsCoreClient } =
+    await import('../src/tts-lab/worker.js');
+  const { mkdtemp: mk } = await import('node:fs/promises');
+  const { tmpdir: td } = await import('node:os');
+  const { join: j } = await import('node:path');
+  const dir = await mk(j(td(), 'e2e-tts-'));
+  const ttsWorker = await TtsWorker.open(
+    j(dir, 'journal.json'),
+    localTtsCoreClient(coreUrl, secret),
+  );
+  ext.connectTts(ttsWorker);
+  // A FICTIONAL TTS player (no page, no sound): its heartbeat makes the TTS purchasable in this isolated Lab, as a
+  // real player page would; what it is handed is never played (the end guard releases it, as in Studio).
+  setInterval(() => {
+    void ttsWorker
+      .playerHeartbeat('e2e-player-fictif', 12)
+      .then(() => ttsWorker.tick())
+      .catch(() => undefined);
+  }, 2_000).unref();
+}
 // Studio's Halloween and Tombola tabs, on the same Lab Core (temporary data folder, gone with the process).
 const { mkdtemp, writeFile } = await import('node:fs/promises');
 const { tmpdir } = await import('node:os');
