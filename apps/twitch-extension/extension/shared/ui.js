@@ -5546,6 +5546,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       });
   }
 
+  /** Refonte H15: no announcement reads this preference yet (Level Up V2 is not live). */
+  const LEVEL_UP_ANNOUNCE_VISIBLE = false;
+
   function viewerPreferencesPanel() {
     syncViewerPreferenceIdentity();
     loadViewerPreference();
@@ -5602,7 +5605,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       try { await onRefresh?.(); } catch { /* le polling reprendra */ }
       refreshAction.disabled = false;
     });
-    panel.append(header, option, refreshAction);
+    // Refonte H15 (decided 05/11): « Annoncer mes Level Up » is read by nothing yet — hidden until it has a real effect.
+    // The preference already saved stays stored (never deleted); the code above is kept for that day.
+    panel.append(header, ...(LEVEL_UP_ANNOUNCE_VISIBLE ? [option] : []), refreshAction);
     return panel;
   }
 
