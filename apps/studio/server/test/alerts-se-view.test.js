@@ -112,7 +112,8 @@ describe('Dons StreamElements views', () => {
         },
         null,
       ),
-    ).toContain('jamais repris automatiquement');
+      // Refonte H5: the Lab resumes TEST, the Production profile resumes ACTIVE.
+    ).toContain('Profil Lab : ACTIVE n’est pas repris');
   });
 
   it('OBS source line', () => {
