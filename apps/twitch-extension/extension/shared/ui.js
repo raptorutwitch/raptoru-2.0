@@ -2,7 +2,7 @@
 // Les deux surfaces ont la MÊME logique et des CSS différents : une seule
 // implémentation métier, deux mises en page.
 
-import { ERROR_LABELS, errorLabel, newIdempotencyKey } from './api.js';
+import { ERROR_LABELS, errorLabel } from './api.js';
 import { modulePresentation, notificationCount, resolveExperience, syncNotificationCenter } from './experience.js';
 import {
   getNotifications,
@@ -15,26 +15,19 @@ import {
 import { createEmoteAccess } from './emote-access.js';
 import { walletPaymentMethods, walletCanPayTokens } from './wallet-payment.js';
 import {
-  createFeedbackSlot,
   createIconButton,
   createWalletFace,
   createCurrencySwitch,
   createMultiCurrencyPayment,
   formatWalletExactValue,
-  providerPresentation,
   UI_ICONS,
 } from './ui-primitives.js';
-import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
-import { createEmotePicker } from './emote-picker.js';
-import { createBonkChargeur } from './bonk-chargeur.js';
-import { createBonkTour } from './bonk-tour.js';
-import { createTwitchEmoteDialog, createTwitchEmoteSource } from './bonk-twitch-source.js';
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
-import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
-import { readStoredIds, writeStoredIds } from './stored-ids.js';
 // The Soundboard screen registers itself as the variant of « soundboard » (soundboard-view.js).
 import './soundboard-view.js';
-import { createBonkSend } from './bonk-send.js';
+// The Bonk screen registers itself as the variant of « bonk » (bonk-view.js).
+import './bonk-view.js';
+import { readTutorialDisabled, writeTutorialDisabled } from './tutorial-prefs.js';
 // Module variants register themselves (TTS V2, Tombola V2).
 import './tts-v2.js';
 // The D4 console registers itself as the variant of « moderation » (with its « Commandes » view).
@@ -68,25 +61,6 @@ const el = (tag, className, text) => {
   return node;
 };
 
-const TWEMOJI_UNICODE_IDS = new Set(
-  UNICODE_EMOJI_GROUPS.flatMap((group) => group.emotes ?? [])
-    .map((item) => Array.isArray(item) ? String(item[0]) : String(item?.id ?? '')),
-);
-
-// Les emotes Unicode du catalogue gardent leur identifiant et leur glyph
-// natifs. Seule leur couche visuelle pointe vers les SVG Twemoji locaux,
-// afin de ne jamais convertir une emote Twitch/7TV/BTTV/FFZ.
-export function bonkTwemojiAssetPath(emote) {
-  const id = String(emote?.id ?? '').toLowerCase();
-  if (emote?.source !== 'unicode' || !TWEMOJI_UNICODE_IDS.has(id)) return null;
-  const codepoints = id.slice('unicode:'.length)
-    .replace(/-fe0f/g, '')
-    .split('-')
-    .map((part) => part.replace(/^0+(?=[0-9a-f])/, ''))
-    .join('-');
-  return codepoints ? `assets/twemoji/svg/${codepoints}.svg` : null;
-}
-
 // Icônes du Soundboard (sbx-*) : tracés simples, couleur héritée.
 function createNotificationBellIcon() {
   const createNode = typeof document.createElementNS === 'function'
@@ -118,357 +92,6 @@ function createNotificationBellIcon() {
   return svg;
 }
 
-function createTwitchBrandIcon() {
-  const createNode = typeof document.createElementNS === 'function'
-    ? (tag) => document.createElementNS('http://www.w3.org/2000/svg', tag)
-    : (tag) => document.createElement(tag);
-  const svg = createNode('svg');
-  svg.classList.add('jdm-emote-source__twitch-mark');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'Twitch');
-  svg.setAttribute('focusable', 'false');
-
-  // Marque locale, monochrome et autonome : aucune image distante ni
-  // dépendance au rendu de la police du viewer.
-  const bubble = createNode('path');
-  bubble.setAttribute('d', 'M3 3h18v11l-4 4h-4l-3 3v-3H3V3Z');
-  bubble.setAttribute('fill', 'none');
-  bubble.setAttribute('stroke', 'currentColor');
-  bubble.setAttribute('stroke-linejoin', 'round');
-  bubble.setAttribute('stroke-width', '1.8');
-  const bars = createNode('path');
-  bars.setAttribute('d', 'M9 7v5M15 7v5');
-  bars.setAttribute('fill', 'none');
-  bars.setAttribute('stroke', 'currentColor');
-  bars.setAttribute('stroke-linecap', 'round');
-  bars.setAttribute('stroke-width', '1.8');
-  svg.append(bubble, bars);
-  return svg;
-}
-
-const BONK_SOURCE_PRIORITY = Object.freeze({
-  twitch: 20,
-  '7tv': 30,
-  bttv: 40,
-  ffz: 50,
-  unicode: 60,
-});
-
-const BONK_ARTIFICIAL_GROUP_IDS = new Set(['twitch-sub-dofus-preview']);
-
-function normalizedBonkSource(value) {
-  const source = String(value ?? '').trim().toLowerCase().replace(/[_\s]+/g, '-');
-  if (!source) return '';
-  if (source === '7tv' || source.includes('7tv') || source.includes('seven-tv')) return '7tv';
-  if (source === 'bttv' || source.includes('bttv') || source.includes('betterttv')) return 'bttv';
-  if (source === 'ffz' || source.includes('frankerfacez')) return 'ffz';
-  if (source === 'unicode' || source.includes('emoji')) return 'unicode';
-  if (source === 'twitch' || source.includes('twitch') || source.includes('helix')) return 'twitch';
-  return '';
-}
-
-function bonkGroupSource(group = {}) {
-  const explicit = normalizedBonkSource(group.source ?? group.provider ?? group.platform);
-  if (explicit) return explicit;
-  const firstEmote = Array.isArray(group.emotes) && group.emotes.length && !Array.isArray(group.emotes[0])
-    ? group.emotes[0]
-    : null;
-  const itemSource = normalizedBonkSource(firstEmote?.source ?? firstEmote?.provider ?? firstEmote?.platform);
-  if (itemSource) return itemSource;
-  const hint = `${group.id ?? ''} ${group.label ?? ''}`.toLowerCase();
-  return normalizedBonkSource(hint) || 'twitch';
-}
-
-function firstBonkText(records, keys) {
-  for (const record of records) {
-    if (!record || typeof record !== 'object') continue;
-    for (const key of keys) {
-      const value = record[key];
-      if (value === null || value === undefined || typeof value === 'object') continue;
-      const text = String(value).trim();
-      if (text) return text;
-    }
-  }
-  return '';
-}
-
-function firstBonkImageUrl(records, keys) {
-  for (const record of records) {
-    if (!record || typeof record !== 'object') continue;
-    for (const key of keys) {
-      const value = record[key];
-      if (typeof value !== 'string' || !value.trim()) continue;
-      try {
-        // Only consume an URL explicitly supplied by the runtime. A relative
-        // string is not a profile image contract and must not be turned into
-        // a made-up hôte local/network asset by the picker.
-        const url = new URL(value.trim());
-        if (url.protocol === 'https:' || url.protocol === 'http:') return url.href;
-      } catch {
-        // An invalid or relative avatar is deliberately ignored. The rail
-        // keeps its text fallback instead of inventing a network asset.
-      }
-    }
-  }
-  return '';
-}
-
-function firstBonkAssetPath(records, keys) {
-  for (const record of records) {
-    if (!record || typeof record !== 'object') continue;
-    for (const key of keys) {
-      const value = String(record[key] ?? '').trim().replaceAll('\\', '/');
-      if (/^assets\/bonk\/[a-z0-9/_-]+\.svg$/iu.test(value)) return value;
-    }
-  }
-  return '';
-}
-
-function bonkChannelIdentity(group = {}) {
-  const firstEmote = Array.isArray(group.emotes) && group.emotes.length && !Array.isArray(group.emotes[0])
-    ? group.emotes[0]
-    : null;
-  const nested = [
-    group.channel,
-    group.broadcaster,
-    group.owner,
-    group.user,
-    group.channel_info,
-    group.broadcaster_info,
-    firstEmote?.channel,
-    firstEmote?.broadcaster,
-    firstEmote?.owner,
-    firstEmote?.user,
-  ].filter((value) => value && typeof value === 'object');
-  const records = [group, ...nested, firstEmote].filter(Boolean);
-  const id = firstBonkText(records, [
-    'channel_id', 'broadcaster_id', 'twitch_channel_id', 'owner_id', 'user_id', 'twitch_user_id',
-  ]) || firstBonkText(nested, ['id', 'channelId', 'broadcasterId', 'twitchId', 'userId']);
-  const login = firstBonkText(records, [
-    'channel_login', 'broadcaster_login', 'user_login', 'login', 'username',
-  ]) || (typeof group.channel === 'string' ? group.channel.trim() : '');
-  const displayName = firstBonkText(records, [
-    'channel_display_name', 'broadcaster_name', 'display_name', 'channel_name', 'name',
-  ]);
-  const avatarUrl = firstBonkImageUrl(records, [
-    'channel_avatar_url', 'avatar_url', 'profile_image_url', 'profile_image', 'profileImageUrl', 'avatar',
-  ]);
-  const avatarAsset = firstBonkAssetPath(records, [
-    'channel_avatar_asset', 'avatar_asset', 'local_avatar_asset',
-  ]);
-  if (!id && !login) return null;
-  const key = id ? `id:${id}` : `login:${login.toLocaleLowerCase('fr')}`;
-  return {
-    key,
-    id,
-    login,
-    displayName: displayName || login,
-    avatarUrl,
-    avatarAsset,
-  };
-}
-
-function isBonkTwitchGlobal(group, source) {
-  if (source !== 'twitch') return false;
-  if (group.scope === 'global' || group.type === 'global' || group.is_global === true || group.global === true) return true;
-  if (String(group.owner_id ?? '').trim() === '0') return true;
-  const hint = `${group.id ?? ''} ${group.label ?? ''}`.toLowerCase();
-  return /(?:^|[-_:\s])global(?:[-_:\s]|$)/u.test(hint);
-}
-
-function isArtificialBonkGroup(group) {
-  const id = String(group?.id ?? '').trim().toLowerCase();
-  const label = String(group?.label ?? '').trim().toLocaleLowerCase('fr');
-  return BONK_ARTIFICIAL_GROUP_IDS.has(id)
-    || label === 'dofus & co';
-}
-
-function bonkGroupPriority(group) {
-  const source = String(group?.source || 'twitch');
-  if (source === 'twitch' && isBonkTwitchGlobal(group, source)) return 10;
-  return BONK_SOURCE_PRIORITY[source] ?? 90;
-}
-
-/**
- * Reconcile runtime groups into stable source entries without changing emote
- * IDs. Twitch channel groups are merged only when the API provides an actual
- * channel ID/login; otherwise the original group remains a safe fallback.
- */
-export function organizeBonkSourceGroups(rawGroups = []) {
-  const merged = new Map();
-  const channelAliases = new Map();
-  let order = 0;
-  for (const rawGroup of Array.isArray(rawGroups) ? rawGroups : []) {
-    if (!rawGroup || typeof rawGroup !== 'object' || !Array.isArray(rawGroup.emotes) || !rawGroup.emotes.length) continue;
-    if (isArtificialBonkGroup(rawGroup)) continue;
-    const source = bonkGroupSource(rawGroup);
-    const global = isBonkTwitchGlobal(rawGroup, source);
-    const channel = source === 'twitch' && !global ? bonkChannelIdentity(rawGroup) : null;
-    let key = global
-      ? 'twitch-global'
-      : channel
-        ? `twitch-channel:${channel.key}`
-        : `${source}:${String(rawGroup.id ?? `group-${order}`)}`;
-    if (channel) {
-      const aliases = [
-        channel.id ? `id:${channel.id}` : '',
-        channel.login ? `login:${channel.login.toLocaleLowerCase('fr')}` : '',
-      ].filter(Boolean);
-      const knownKey = aliases.map((alias) => channelAliases.get(alias)).find(Boolean);
-      if (knownKey) key = knownKey;
-      for (const alias of aliases) channelAliases.set(alias, key);
-    }
-    const current = merged.get(key);
-    const group = {
-      ...rawGroup,
-      id: global ? 'twitch-global' : channel ? key : String(rawGroup.id ?? `group-${order}`),
-      source,
-      label: global
-        ? 'Twitch'
-        : channel?.displayName || String(rawGroup.label ?? 'Twitch'),
-      icon: global ? String(rawGroup.icon || 'T') : String(rawGroup.icon || ''),
-      emotes: [...rawGroup.emotes],
-      _bonkOrder: order,
-    };
-    if (channel) {
-      if (channel.id) group.channel_id = channel.id;
-      if (channel.login) group.channel_login = channel.login;
-      if (channel.displayName) group.channel_display_name = channel.displayName;
-      if (channel.avatarUrl) group.channel_avatar_url = channel.avatarUrl;
-      if (channel.avatarAsset) group.channel_avatar_asset = channel.avatarAsset;
-    }
-    if (!current) {
-      merged.set(key, group);
-    } else {
-      current.emotes.push(...group.emotes);
-      if (!current.channel_id && group.channel_id) current.channel_id = group.channel_id;
-      if (!current.channel_login && group.channel_login) current.channel_login = group.channel_login;
-      if (!current.channel_display_name && group.channel_display_name) {
-        current.channel_display_name = group.channel_display_name;
-        current.label = group.channel_display_name;
-      }
-      if (!current.channel_avatar_url && group.channel_avatar_url) current.channel_avatar_url = group.channel_avatar_url;
-      if (!current.channel_avatar_asset && group.channel_avatar_asset) current.channel_avatar_asset = group.channel_avatar_asset;
-    }
-    order += 1;
-  }
-  return [...merged.values()]
-    .sort((left, right) => bonkGroupPriority(left) - bonkGroupPriority(right) || left._bonkOrder - right._bonkOrder)
-    .map(({ _bonkOrder, ...group }) => group);
-}
-
-export function normalizeBonkEmote(group, item) {
-  if (Array.isArray(item)) {
-    return {
-      id: String(item[0]),
-      glyph: String(item[1]),
-      label: String(item[2]),
-      source: normalizedBonkSource(group.source) || bonkGroupSource(group),
-      groupId: group.id,
-      previewOnly: Boolean(group.preview_only),
-    };
-  }
-  return {
-    ...item,
-    id: String(item.id),
-    label: String(item.label ?? item.name ?? item.id),
-    source: normalizedBonkSource(item.source) || normalizedBonkSource(group.source) || bonkGroupSource(group),
-    groupId: group.id,
-    previewOnly: Boolean(item.preview_only ?? group.preview_only),
-  };
-}
-
-export function buildBonkEmoteIndex(rawGroups = []) {
-  const seenEmoteIds = new Set();
-  const realGroups = organizeBonkSourceGroups(rawGroups).map((group) => {
-    const emotes = [];
-    for (const item of group.emotes ?? []) {
-      const emote = normalizeBonkEmote(group, item);
-      if (seenEmoteIds.has(emote.id)) continue;
-      seenEmoteIds.add(emote.id);
-      emotes.push(emote);
-    }
-    return { ...group, emotes };
-  }).filter((group) => group.emotes.length);
-  const emoteById = new Map();
-  for (const group of realGroups) {
-    for (const item of group.emotes) emoteById.set(item.id, item);
-  }
-  return { realGroups, emoteById };
-}
-
-/**
- * Keep only canonical favorite IDs that still exist in the current catalog.
- * The order is personal (most recently toggled first) and duplicates are
- * removed without mutating the stored array.
- */
-export function normalizeBonkFavoriteIds(storedIds, emoteIds) {
-  const valid = new Set(
-    emoteIds && typeof emoteIds[Symbol.iterator] === 'function'
-      ? [...emoteIds].map(String)
-      : [],
-  );
-  const seen = new Set();
-  const result = [];
-  for (const rawId of Array.isArray(storedIds) ? storedIds : []) {
-    const id = String(rawId);
-    if (!valid.has(id) || seen.has(id)) continue;
-    seen.add(id);
-    result.push(id);
-  }
-  return result;
-}
-
-/**
- * Toggle one canonical Bonk favorite. Invalid/stale IDs are ignored so a
- * persisted favorite can never create a synthetic emote in the UI.
- */
-export function toggleBonkFavoriteIds(storedIds, emoteId, emoteIds) {
-  const id = String(emoteId ?? '');
-  const available = new Set(
-    emoteIds && typeof emoteIds[Symbol.iterator] === 'function'
-      ? [...emoteIds].map(String)
-      : [],
-  );
-  const current = normalizeBonkFavoriteIds(storedIds, available);
-  if (!id || !available.has(id)) return current;
-  return current.includes(id)
-    ? current.filter((candidate) => candidate !== id)
-    : [id, ...current];
-}
-
-/**
- * Build the rail from groups that contain real emotes. Virtual entries are
- * derived from the current favorite/recent IDs on every render so they never
- * become stale after a toggle or a catalog refresh.
- */
-export function buildBonkVisibleGroups(realGroups, { favoriteIds = [], recentIds = [] } = {}) {
-  const groups = [];
-  if (Array.isArray(favoriteIds) && favoriteIds.length) {
-    groups.push({ id: 'favorites', label: 'Favoris', icon: '⭐', source: 'virtual' });
-  }
-  if (Array.isArray(recentIds) && recentIds.length) {
-    groups.push({ id: 'recents', label: 'Récents', icon: '🕘', source: 'virtual' });
-  }
-  return [
-    ...groups,
-    ...(Array.isArray(realGroups) ? realGroups.filter((group) => group?.emotes?.length) : []),
-  ];
-}
-
-// Lab : seul le rôle viewer devient le compte Twitch connecté ; modérateur et broadcaster gardent
-// une identité fictive sans emotes Twitch personnelles (Core refuserait : viewer_not_linked).
-export const BONK_TWITCH_ROLE_HINT = 'Disponible en rôle viewer lié à Twitch';
-export function bonkTwitchLockedForRole(state) {
-  return state?.environment === 'lab' && ['moderator', 'broadcaster'].includes(state?.role);
-}
-
-export function isBonkEmoteSelectable(emote, { demoMode = false, twitchLocked = false } = {}) {
-  if (twitchLocked && emote?.source === 'twitch') return false;
-  return !(emote?.previewOnly && !demoMode);
-}
-
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 
 // Le pot garde une valeur exacte et groupée. On remplace l'espace fine de
@@ -480,9 +103,6 @@ function fmtRafflePotAmount(value) {
   return number.toLocaleString('fr-FR').replace(/\u202f/gu, '\u00a0');
 }
 
-const TUTORIAL_DISABLED_PREFIX = 'raptoru-live:tutorial-disabled:';
-/** Tutoriel du module Bonk (bonk-tour.js) : même préférence « Ne plus afficher » que le tutoriel global. */
-const BONK_TUTORIAL = { id: 'bonk', version: 1 };
 // Soundboard help copy, kept for the tutorial (not wired yet).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const SOUNDBOARD_HELP_PAGES = Object.freeze([
@@ -534,22 +154,6 @@ function normalizeTtsDraft(value) {
 
 function ttsDraftLength(value) {
   return Array.from(normalizeTtsDraft(value)).length;
-}
-
-function tutorialPreferenceKey(tutorial) {
-  return `${TUTORIAL_DISABLED_PREFIX}${tutorial?.id ?? 'core'}:v${tutorial?.version ?? 1}`;
-}
-
-function readTutorialDisabled(tutorial) {
-  try { return localStorage.getItem(tutorialPreferenceKey(tutorial)) === '1'; } catch { return false; }
-}
-
-function writeTutorialDisabled(tutorial, disabled) {
-  try {
-    const key = tutorialPreferenceKey(tutorial);
-    if (disabled) localStorage.setItem(key, '1');
-    else localStorage.removeItem(key);
-  } catch { /* stockage facultatif */ }
 }
 
 function raffleSeconds(raffle) {
@@ -648,43 +252,6 @@ export function shouldAutoOpenTutorial({
     && !tutorialDisabled
     && !openModule
     && !modules.some((module) => module?.id === 'bonk');
-}
-
-/**
- * Lance immédiatement une intention Bonk et ne sérialise jamais les appels.
- * Une erreur de rafraîchissement ne transforme pas une action déjà acceptée
- * en échec visible ; l'action elle-même reste toutefois signalée au caller.
- */
-export function dispatchBonkImmediately(task, {
-  onRefresh = async () => {},
-  onSuccess = () => {},
-  onError = () => {},
-} = {}) {
-  let request;
-  try {
-    request = task();
-  } catch (error) {
-    request = Promise.reject(error);
-  }
-  return Promise.resolve(request)
-    .then(async (result) => {
-      try { await onRefresh(); } catch { /* le prochain polling récupérera l'état */ }
-      onSuccess(result);
-      return result;
-    })
-    .catch((error) => {
-      onError(error);
-      return null;
-    });
-}
-
-// Twitch interprète parfois un double-clic rapide sur la surface de
-// l'extension comme une demande de plein écran. Cette protection reste
-// strictement attachée au CTA Bonk : elle neutralise uniquement l'événement
-// agrégé `dblclick`, jamais les deux `click` qui l'ont produit.
-export function preventBonkDoubleClick(event) {
-  event?.preventDefault?.();
-  event?.stopPropagation?.();
 }
 
 /**
@@ -801,7 +368,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       team: canModerate(),
       host: {
         home: () => navigateTo(null),
-        refresh: () => { void onRefresh?.(); },
+        refresh: () => onRefresh?.(),
         payment: {
           get: () => paymentChoice[mod?.id] ?? 'tokens',
           set: (method) => { paymentChoice[mod?.id] = method; },
@@ -825,6 +392,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         redraw: () => renderPreservingViewport(),
         /** The viewer-facing reason of a refusal, only when reliably known ('' otherwise). */
         errorReason: (error) => soundboardFeedbackForError(error).reason,
+        /** The viewer's Twitch emotes (emote-access.js): catalog, authorization. */
+        emotes: emoteAccess,
+        /** A failure of this module in the notification centre. */
+        notifyError: (error, { title } = {}) => publishRuntimeNotification(runtimeNotificationForError(error, {
+          module: mod?.id,
+          title: title ?? `Action ${mod?.id} échouée`,
+          actionModule: mod?.id,
+        })),
       },
     };
   }
@@ -865,31 +440,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   const moderationCustomDurationMinMs = 60_000;
   const moderationCustomDurationMaxMs = 365 * 24 * 60 * 60 * 1000;
   const isStudioPreview = new URLSearchParams(globalThis.location?.search || '').get('studio') === '1';
-  let bonkEmotePicker = null;
   /** Bonk lot 5: the chargeur (persistent, like the picker) and the feedback slot of the current render. */
-  let bonkChargeur = null;
-  let bonkTour = null;
-  let bonkTourAutoOpened = false;
   /** « Récents » shown while Bonk stays open: frozen, so a catalogue click never reflows the grid. */
-  let bonkRecentsShown = null;
   // Bonk sending and its last outcome (bonk-send.js): requests in flight, message and slot are its own state.
-  const bonkSend = createBonkSend({
-    refresh: () => onRefresh?.(),
-    notice: (text, kind) => bonkChargeur?.notice(text, kind),
-    errorText: (code) => errorLabel(code),
-    notifyError: (error) => publishRuntimeNotification(runtimeNotificationForError(error, {
-      module: 'bonk',
-      title: 'Bonk non envoyé',
-      actionModule: 'bonk',
-    })),
-    redraw: () => renderPreservingViewport(),
-  });
   let raffleHistoryOpen = false;
   let raffleTimer = null;
   let raffleTimerSnapshot = null;
   let raffleJoinConfirmedWindowId = null;
-  // Bonk : fenêtre « Lie ton compte Twitch » ouverte depuis la source Twitch de la colonne latérale.
-  let bonkTwitchLinkOpen = false;
   // Access to the viewer's Twitch emotes (emote-access.js): catalog, authorization and its notice are its own state.
   const emoteAccess = createEmoteAccess({
     document,
@@ -903,7 +460,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   });
   const drafts = {
     tts: { text: '' },
-    bonk: { selectedId: null, activeGroupId: null, query: '', searchOpen: false },
   };
   root.classList.add('jdm-shell');
   root.addEventListener('keydown', (event) => {
@@ -1172,11 +728,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     captureScrollPositions();
     if (moduleId !== openModule) restrictionsSeen = new Set();
     openModule = moduleId;
-    if (moduleId !== 'bonk') {
-      bonkChargeur?.reset();
-      // The last outcome belongs to this visit (as the Soundboard's feedback): never shown again on return.
-      bonkSend.clear();
-    }
     if (moduleId === 'soundboard') {
       tutorialOpen = false;
       tutorialStep = 0;
@@ -1549,437 +1100,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
   // Soundboard viewer (markup sbx-*, feuille soundboard.css). Le son est la star : cartes lisibles,
   // aperçu distinct de l'achat, prix et envoi regroupés dans la barre d'action du bas.
-  function bonkForm(mod, body) {
-    const interactionsAvailable = interactionsAvailableForState();
-    const favoriteKey = 'raptoru-live:bonk-favorites';
-    const recentKey = 'raptoru-live:bonk-recents';
-    let favorites = readStoredIds(favoriteKey);
-    let recents = readStoredIds(recentKey);
-
-    // Bonk lot 5 : le catalogue charge le chargeur (bonk-chargeur.js), qui tire en Manuel (1 clic =
-    // 1 Bonk) ou envoie la salve en Auto. UX validée : prototypes/bonk-salves-ux/serie7/final.html.
-
-    let oauthControls = null;
-    emoteAccess.ensure();
-    const twitchStatus = emoteAccess.status();
-    // Compte Twitch non lié : une source « Twitch » dans la colonne latérale (bonk-twitch-source.js) au
-    // lieu d'un bandeau permanent ; sa fenêtre lance le vrai flow OAuth (beginEmoteAuthorization).
-    let twitchSource = null;
-    if (state?.emotes?.twitch_connected === false) {
-      twitchSource = createTwitchEmoteSource({
-        document,
-        reauth: twitchStatus === 'reauth_required',
-        open: bonkTwitchLinkOpen,
-        onOpen: () => {
-          bonkTwitchLinkOpen = true;
-          renderPreservingViewport();
-        },
-      });
-      if (bonkTwitchLinkOpen) {
-        const dialog = createTwitchEmoteDialog({
-          document,
-          reauth: twitchStatus === 'reauth_required',
-          starting: emoteAccess.starting,
-          onAuthorize: () => {
-            bonkTwitchLinkOpen = false;
-            dialog.node.remove();
-            emoteAccess.begin(body);
-          },
-          onClose: () => {
-            bonkTwitchLinkOpen = false;
-            renderPreservingViewport();
-            queueMicrotask(() => root.querySelector('.rl-twitch-src')?.focus({ preventScroll: true }));
-          },
-        });
-        body.append(dialog.node);
-        queueMicrotask(dialog.focus);
-      }
-    } else if (state?.emotes?.twitch_connected === true) {
-      oauthControls = el('div', 'jdm-emote-oauth-controls');
-      const refresh = createIconButton({
-        icon: UI_ICONS.refresh,
-        label: 'Actualiser les emotes Twitch',
-        title: 'Actualiser les emotes Twitch',
-        className: 'jdm-emote-oauth-button',
-        iconClassName: 'jdm-emote-oauth-button__icon',
-      });
-      refresh.addEventListener('click', () => emoteAccess.load({ force: true }));
-      const disconnect = createIconButton({
-        icon: UI_ICONS.close,
-        label: 'Retirer l’accès Twitch aux emotes',
-        title: 'Retirer l’accès Twitch',
-        className: 'jdm-emote-oauth-button',
-        iconClassName: 'jdm-emote-oauth-button__icon',
-      });
-      disconnect.addEventListener('click', () => emoteAccess.disconnect(body));
-      oauthControls.append(refresh, disconnect);
-      // Placés dans la ligne de recherche du picker (voir plus bas), plus au-dessus de la grille.
-    }
-    // Twitch emotes state: a short line in the picker's search row (the module body hides its hints in
-    // the video component), never an empty grid read as « no emotes ». The cached catalog stays usable
-    // while it syncs and when Twitch is briefly unreachable; a needed reconnection opens its window.
-    let twitchStatusNode = null;
-    if (twitchStatus === 'syncing') {
-      twitchStatusNode = el('span', 'rl-twitch-status', 'Synchronisation des emotes Twitch…');
-      twitchStatusNode.setAttribute('role', 'status');
-    } else if (twitchStatus === 'stale') {
-      twitchStatusNode = el('span', 'rl-twitch-status', 'Emotes en cache · Twitch momentanément indisponible');
-      twitchStatusNode.setAttribute('role', 'status');
-    } else if (twitchStatus === 'reauth_required') {
-      twitchStatusNode = el('button', 'rl-twitch-status rl-twitch-status--reauth', 'Reconnexion Twitch nécessaire');
-      twitchStatusNode.type = 'button';
-      twitchStatusNode.addEventListener('click', () => {
-        bonkTwitchLinkOpen = true;
-        renderPreservingViewport();
-      });
-    }
-    if (twitchStatusNode) {
-      oauthControls ??= el('div', 'jdm-emote-oauth-controls');
-      oauthControls.prepend(twitchStatusNode);
-    }
-    if (emoteAccess.loading && !emoteAccess.catalog) {
-      body.append(el('p', 'jdm-hint', 'Chargement de tes emotes Twitch…'));
-    } else if (emoteAccess.error) {
-      body.append(el('p', 'jdm-hint', emoteAccess.error));
-    }
-    if (emoteAccess.catalog?.diagnostics) {
-      const info = emoteAccess.catalog.diagnostics;
-      const details = el('details', 'jdm-emote-diagnostics');
-      details.append(el('summary', null, 'Diagnostic emotes'));
-      details.append(el('pre', null, JSON.stringify(info, null, 2)));
-      body.append(details);
-    }
-
-    const rawRealGroups = [
-      ...(emoteAccess.catalog?.groups ?? mod.emote_catalog?.groups ?? []),
-      ...UNICODE_EMOJI_GROUPS,
-    ];
-    const { realGroups, emoteById } = buildBonkEmoteIndex(rawRealGroups);
-
-    const normalizedFavorites = normalizeBonkFavoriteIds(favorites, emoteById.keys());
-    if (normalizedFavorites.length !== favorites.length
-      || normalizedFavorites.some((id, index) => id !== favorites[index])) {
-      writeStoredIds(favoriteKey, normalizedFavorites);
-    }
-    favorites = normalizedFavorites;
-    recents = recents.filter((id) => emoteById.has(id));
-    if (recents.length !== readStoredIds(recentKey).length) writeStoredIds(recentKey, recents);
-
-    bonkRecentsShown ??= recents;
-    const shownRecents = bonkRecentsShown.filter((id) => emoteById.has(id));
-    const getGroups = () => buildBonkVisibleGroups(realGroups, {
-      favoriteIds: favorites,
-      recentIds: shownRecents,
-    });
-    const groupEmotes = (group) => {
-      if (group.id === 'favorites') return favorites.map((id) => emoteById.get(id)).filter(Boolean);
-      if (group.id === 'recents') return shownRecents.map((id) => emoteById.get(id)).filter(Boolean);
-      return group.emotes.map((item) => normalizeBonkEmote(group, item));
-    };
-
-    // Adaptateur vers le picker générique : grille statique (static_url), animation au survol
-    // ou à la sélection via image_url. Twemoji reste la couche visuelle des emotes Unicode.
-    const demoMode = state?.demo_mode === true;
-    const twitchLocked = bonkTwitchLockedForRole(state);
-    const pickerItem = (emote) => {
-      const twemoji = bonkTwemojiAssetPath(emote);
-      const roleLocked = twitchLocked && emote.source === 'twitch';
-      return {
-        id: emote.id,
-        label: emote.label,
-        ...(roleLocked ? { hint: `${emote.label} · ${BONK_TWITCH_ROLE_HINT}` } : {}),
-        // image_url est l'URL animée quand l'emote l'est : animée directement dans la grille.
-        src: twemoji ?? emote.image_url ?? null,
-        animated: emote.animated === true,
-        glyph: emote.mark ?? emote.glyph,
-        disabled: !isBonkEmoteSelectable(emote, { demoMode, twitchLocked }),
-      };
-    };
-    // Familles (Récents, Favoris, Twitch, Bits, Extension, Emoji) : voir bonk-picker-groups.js.
-    const PROVIDER_KEYWORDS = {
-      bits: ['bits'],
-      '7tv': ['7tv', 'seventv'],
-      bttv: ['bttv', 'betterttv'],
-      ffz: ['ffz', 'frankerfacez'],
-    };
-    const pickerGroups = () => {
-      const arranged = arrangeBonkPickerGroups(getGroups(), groupEmotes);
-      // Avatar Twitch d'une chaîne (s'il est connu) réutilisé pour son contexte Extension.
-      const avatars = new Map();
-      for (const { group } of arranged) {
-        if (group?.source !== 'twitch') continue;
-        const avatar = providerPresentation(group).avatarUrl;
-        if (avatar) avatars.set(String(group.channel_display_name ?? group.label).toLowerCase(), avatar);
-      }
-      return arranged.map((entry) => {
-        const { group, family } = entry;
-        const provider = group ? providerPresentation(group) : null;
-        const isExtension = family?.id === 'extension';
-        const label = entry.label ?? (group.id === 'twitch-global'
-          ? 'Twitch'
-          : String(group.label || provider.label || 'Emoji'));
-        const globalContext = isExtension && entry.scope === 'global';
-        const parts = entry.parts?.map((part) => ({
-          id: part.id,
-          label: part.label,
-          iconSrc: part.iconSrc,
-          keywords: PROVIDER_KEYWORDS[part.provider] ?? [],
-          emotes: part.emotes.map(pickerItem),
-        }));
-        return {
-          id: entry.id,
-          label,
-          keywords: [
-            group?.channel_login,
-            group?.channel_display_name,
-            ...(PROVIDER_KEYWORDS[family?.id] ?? []),
-            ...(isExtension ? ['extension'] : []),
-          ].filter(Boolean),
-          matchLabel: family?.id !== 'emoji',
-          icon: isExtension || provider?.icon === 'twitch' ? label.slice(0, 1).toUpperCase() : provider?.icon ?? '•',
-          iconSrc: entry.iconSrc ?? (globalContext ? 'assets/twemoji/svg/1f310.svg' : null),
-          iconNode: group?.id === 'twitch-global' ? createTwitchBrandIcon() : null,
-          avatarUrl: isExtension
-            ? (globalContext ? null : avatars.get(label.toLowerCase()) ?? null)
-            : provider?.avatarUrl ?? null,
-          family: family
-            ? { ...family, iconNode: family.id === 'twitch' ? createTwitchBrandIcon() : null }
-            : null,
-          virtual: group?.source === 'virtual',
-          // Ordre personnel : glisser-déposer (souris) dans la section Favoris uniquement.
-          reorderable: entry.id === 'favorites',
-          ...(parts ? { parts } : {}),
-          emotes: parts ? parts.flatMap((part) => part.emotes) : entry.emotes.map(pickerItem),
-        };
-      });
-    };
-
-    // Instance unique : le rendu global (polling) la déplace sans reconstruire ses cellules.
-    bonkEmotePicker ??= createEmotePicker({
-      label: 'Emotes Bonk',
-      railKey: 'raptoru-live:bonk-rail-open',
-    });
-    const emotePicker = bonkEmotePicker;
-    const picker = el('div', 'jdm-bonk-picker rl-bonk-picker');
-    const bonkFeedback = createFeedbackSlot({
-      className: 'jdm-bonk-feedback',
-      label: 'Retour du Bonk',
-    });
-    const chargeur = bonkChargeurView();
-    const restricted = holdsAction(restrictionOf('bonk'));
-    // Core's price and salve bounds (module): the chargeur never decides them.
-    chargeur.configure({
-      cost: mod.token_cost,
-      volley: mod.volley ?? null,
-      ready: interactionsAvailable && !restricted,
-      reason: restricted
-        ? 'Bonk indisponible pour toi pour le moment'
-        : 'Interactions indisponibles pour le moment',
-    });
-
-    const toggleFavorite = (emoteId) => {
-      const id = String(emoteId ?? '');
-      if (!emoteById.has(id)) return false;
-      favorites = toggleBonkFavoriteIds(favorites, id, emoteById.keys());
-      writeStoredIds(favoriteKey, favorites);
-      emotePicker.setData(pickerGroups());
-      syncSelection();
-      return true;
-    };
-
-    emotePicker.setHandlers({
-      onSelect: (id) => {
-        const emote = emoteById.get(id);
-        if (!emote || !isBonkEmoteSelectable(emote, { demoMode, twitchLocked })) return;
-        drafts.bonk.selectedId = emote.id;
-        // One catalogue click = one munition; the emote flies from its cell (read before re-render).
-        const cell = emotePicker.scroller.querySelector(`[data-id="${CSS.escape(emote.id)}"]`);
-        chargeur.add(emote, cell);
-        recents = [emote.id, ...recents.filter((item) => item !== emote.id)].slice(0, 36);
-        writeStoredIds(recentKey, recents);
-        emotePicker.setData(pickerGroups());
-      },
-      onFavorite: (id) => toggleFavorite(id),
-      onReorder: (ids) => {
-        // Même ensemble, nouvel ordre : aucune emote ne peut être ajoutée ou perdue ici.
-        const next = normalizeBonkFavoriteIds(ids, emoteById.keys());
-        if (next.length !== favorites.length || next.some((id) => !favorites.includes(id))) return;
-        favorites = next;
-        writeStoredIds(favoriteKey, favorites);
-        emotePicker.setData(pickerGroups());
-        syncSelection();
-      },
-    });
-
-    // The chargeur shows the selection: no redundant selection state in the catalogue (validated UX).
-    function syncSelection() {
-      emotePicker.setState({ selected: [], favorites, queue: new Map(), next: null });
-    }
-
-    picker.append(emotePicker.nav, emotePicker.searchRow, emotePicker.scroller, bonkFeedback, chargeur.node);
-    body.append(picker);
-    if (!interactionsAvailable && !state?.lab_mode) {
-      body.append(el('p', 'jdm-hint', identityShared()
-        ? 'Interactions temporairement indisponibles : SAMMI se reconnecte. Aucun jeton ne sera consommé.'
-        : 'Partage ton identité Twitch pour utiliser les interactions. Aucun jeton ne sera consommé.'));
-    }
-    emotePicker.setExtras(oauthControls);
-    emotePicker.setLead(twitchSource);
-    emotePicker.setData(pickerGroups());
-    emotePicker.attached();
-    chargeur.attached();
-    syncSelection();
-    bonkSend.mount(bonkFeedback);
-  }
-
-  /** Bonk lot 5: the payload of one shot, or null (feedback shown) when this emote cannot be fired. */
-  function bonkShotPayload(emote) {
-    const twitchLocked = bonkTwitchLockedForRole(state);
-    if (!isBonkEmoteSelectable(emote, { demoMode: state?.demo_mode === true, twitchLocked })) {
-      bonkSend.refuse(twitchLocked && emote.source === 'twitch'
-        ? `${BONK_TWITCH_ROLE_HINT}.`
-        : 'Connecte tes emotes Twitch pour utiliser celle-ci.');
-      return null;
-    }
-    // Le Bonk vise la caméra du streamer, pas un autre spectateur.
-    return {
-      target_login: 'streamer',
-      emotes: [emote.id],
-      emote_source: emote.source,
-      emote_glyph: emote.glyph ?? null,
-    };
-  }
-
-  /** Emote face inside the chargeur (same sources as the picker: Twemoji, CDN image, mark, glyph). */
-  function bonkChargeurEmote(emote) {
-    const src = bonkTwemojiAssetPath(emote) ?? emote.image_url;
-    if (src) {
-      const image = el('img', 'bkc-am__img');
-      image.src = src;
-      image.alt = '';
-      image.draggable = false;
-      return image;
-    }
-    if (emote.mark) {
-      const mark = el('span', 'bkc-am__mark', emote.mark);
-      mark.dataset.tone = emote.tone ?? 'violet';
-      return mark;
-    }
-    return el('span', 'bkc-am__glyph', emote.glyph ?? '◌');
-  }
-
-  /**
-   * The chargeur, created once. Manuel: each click = one individual Bonk (unchanged Core admission).
-   * Auto: one click = the remaining munitions as one salve, admitted and paid atomically by Core.
-   */
-  function bonkChargeurView() {
-    bonkChargeur ??= createBonkChargeur({
-      document,
-      renderEmote: bonkChargeurEmote,
-      newKey: newIdempotencyKey,
-      onHelp: () => bonkTourView().start(),
-      onFire: (emote) => {
-        const payload = bonkShotPayload(emote);
-        if (!payload) return Promise.resolve(false);
-        return bonkSend.send(() => client.spendTokens('bonk', payload));
-      },
-      onSalve: (emotes, cadenceMs, key) => {
-        const shots = [];
-        for (const emote of emotes) {
-          const payload = bonkShotPayload(emote);
-          if (!payload) return Promise.resolve(false);
-          shots.push({
-            emote_source: payload.emote_source,
-            emote: payload.emotes[0],
-            emote_glyph: payload.emote_glyph,
-          });
-        }
-        return bonkSend.send(() => client.spendBonkSalve(key, {
-          target_login: 'streamer',
-          shots,
-          cadence_ms: cadenceMs,
-        }));
-      },
-    });
-    // Twitch interprète un double-clic rapide comme un plein écran : neutralisé sur tout le chargeur.
-    bonkChargeur.node.ondblclick = preventBonkDoubleClick;
-    return bonkChargeur;
-  }
-
-  // Tutoriel Bonk : une info par bulle, la zone concernée mise en avant (bonk-tour.js).
-  function bonkTourView() {
-    bonkTour ??= createBonkTour({
-      document,
-      steps: bonkTourSteps,
-      isDisabled: () => readTutorialDisabled(BONK_TUTORIAL),
-      setDisabled: (disabled) => writeTutorialDisabled(BONK_TUTORIAL, disabled),
-      // Pendant le tutoriel, le chargeur reste déplié, même vide : les bulles montrent ses vrais contrôles.
-      onOpenChange: (open) => bonkChargeur?.showcase(open),
-    });
-    return bonkTour;
-  }
-  function bonkTourSteps() {
-    const find = (selector) => () => root.querySelector(selector);
-    const twitchSource = root.querySelector('.rl-twitch-src');
-    const connected = state?.emotes?.twitch_connected === true;
-    return [
-      {
-        icon: '💥',
-        title: 'Bienvenue dans Bonk !',
-        body: 'Envoie tes emotes préférées droit au visage du streamer. On te montre comment en quelques bulles.',
-      },
-      {
-        icon: '🔗',
-        title: 'Tes emotes Twitch',
-        body: connected
-          ? 'Ton compte Twitch est connecté : tes emotes sont déjà dans le catalogue.'
-          : 'Connecte ton compte Twitch pour récupérer tes emotes et débloquer un catalogue plus étoffé. C’est ici, dans la colonne de gauche.',
-        // Le bouton Twitch de la colonne de gauche ; à défaut (pas encore proposé), la colonne elle-même.
-        target: find(connected
-          ? '.jdm-emote-oauth-controls'
-          : twitchSource ? '.rl-twitch-src' : '.jdm-module[data-module="bonk"] .rl-picker__nav'),
-        action: twitchSource
-          ? { label: 'Connecter mon compte Twitch', run: () => root.querySelector('.rl-twitch-src')?.click() }
-          : undefined,
-      },
-      {
-        icon: '🎯',
-        title: 'Remplis ton chargeur',
-        body: 'Clique sur les emotes du catalogue : elles s’ajoutent dans ton chargeur, juste ici.',
-        target: find('.bkc-dock'),
-      },
-      {
-        icon: '✋',
-        title: 'Gère tes munitions',
-        body: [
-          '**Clic gauche** sur une emote pour en retirer **une unité**.',
-          '**Clic droit** pour retirer **toute l’emote** de la file.',
-        ],
-        target: find('.bkc-dock'),
-      },
-      {
-        icon: '👆',
-        title: 'Mode Manuel',
-        body: '1 clic = 1 emote envoyée. Chargeur vide ? « ↻ Recharger » remet ta composition pour la rejouer.',
-        target: find('.bkc-right'),
-      },
-      {
-        icon: '⚡',
-        title: 'Mode Auto',
-        body: [
-          '1 clic envoie d’un coup toute la salve qui reste dans tes munitions.',
-          'L’éclair règle la vitesse : 4 niveaux, de Lent à Très rapide.',
-        ],
-        target: find('.bkc-right'),
-      },
-      {
-        icon: '🎉',
-        title: 'Amuse-toi bien !',
-        body: 'Tu peux revoir ce tutoriel à tout moment avec le bouton « ? » à côté de Bonk.',
-      },
-    ];
-  }
-
   function raffleForm(mod, body) {
     stopRaffleTimer();
     const raffle = state?.raffle ?? { open: false };
@@ -3522,7 +2642,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     return panel;
   }
 
-  const FORMS = { tts: ttsForm, bonk: bonkForm, raffle_join: raffleForm };
+  const FORMS = { tts: ttsForm, raffle_join: raffleForm };
 
   // --- rendu ---------------------------------------------------------------
 
@@ -4169,7 +3289,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     } else {
       const mod = modules.find((candidate) => candidate.id === openModule);
       const screen = el('section', 'jdm-module-screen');
-      const isBonk = mod.id === 'bonk';
       const isRaffle = mod.id === 'raffle_join';
       const isModeration = mod.id === MODERATION_MODULE.id;
       // A registered view takes the module's screen: a session module, or a variant of a module the session lists.
@@ -4194,7 +3313,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           void panel.refresh();
         }
       }
-      const head = el('header', `jdm-ui-header jdm-module__screen-head${registered?.headClass ? ` ${registered.headClass}` : ''}${isBonk ? ' jdm-module__screen-head--bonk' : ''}${isRaffle ? ' jdm-module__screen-head--raffle' : ''}${isModeration ? ' jdm-module__screen-head--moderation' : ''}`);
+      const head = el('header', `jdm-ui-header jdm-module__screen-head${registered?.headClass ? ` ${registered.headClass}` : ''}${isRaffle ? ' jdm-module__screen-head--raffle' : ''}${isModeration ? ' jdm-module__screen-head--moderation' : ''}`);
       head.setAttribute('aria-label', visibleModuleLabel(mod));
       const headLeft = el('div', 'jdm-module__screen-side jdm-module__screen-side--left');
       const headRight = el('div', 'jdm-module__screen-side jdm-module__screen-side--right');
@@ -4226,13 +3345,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       if (!isModeration) heading.append(screenIcon);
       heading.append(el('strong', 'jdm-module__screen-name', visibleModuleLabel(mod)));
-      if (isBonk) heading.append(bonkChargeurView().helpButton);
+      // A control the view puts after the title (Bonk: its tour's « ? »).
+      const headAfter = hostedView && registered?.headAfter ? registered.headAfter(hostView, variantContext(registered, mod)) : null;
+      if (headAfter) heading.append(headAfter);
       head.append(headLeft, heading, headRight);
       if (!isModeration && !walletRow.classList.contains('rl-cswitch')) {
         walletRow.classList.add('jdm-wallet--shell-header');
-        if (isBonk) {
-          walletRow.classList.add('jdm-wallet--bonk-header');
-        }
+        if (registered?.walletClass) walletRow.classList.add(registered.walletClass);
       }
 
       if (!isModeration) headRight.append(walletRow);
@@ -4291,21 +3410,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
 
     if (tutorialOpen && !openModule) root.append(tutorialDialog(experience.tutorial));
-    // Tutoriel Bonk : ouvert une fois par chargement en arrivant sur Bonk (sauf « Ne plus afficher »),
-    // fermé dès qu'on quitte le module.
-    if (openModule === 'bonk' && state && !loadError) {
-      if (!bonkTourAutoOpened) {
-        bonkTourAutoOpened = true;
-        if (!readTutorialDisabled(BONK_TUTORIAL)) {
-          setTimeout(() => {
-            if (openModule === 'bonk') bonkTourView().start();
-          }, 400);
-        }
-      }
-    } else if (bonkTour?.open) {
-      bonkTour.close();
-    }
-    if (openModule !== 'bonk') bonkRecentsShown = null;
   }
 
   return {
