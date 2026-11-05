@@ -313,6 +313,12 @@ export class AlertsRuntime {
       }
       return reply(200, this.twitchView());
     }
+    // Refonte H3: « Vider la file » — the waiting alerts only (Core keeps the history; nothing is paid).
+    if (req.method === 'POST' && p === '/clear')
+      return reply(
+        200,
+        await this.d.core(`${this.base}/${this.d.channelId}/clear`, {}),
+      );
     if (req.method === 'GET' && p === '/placement')
       return reply(200, { variants: this.placement.all() });
     const placed = /^\/placement\/([a-z0-9_]{1,64})$/.exec(p);

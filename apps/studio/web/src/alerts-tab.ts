@@ -17,6 +17,7 @@ import {
   variantLabel,
 } from './alerts-view.js';
 import { mountCalibration } from './alerts-calibrate.js';
+import { CLEAR_QUEUE_CONFIRM, clearedText } from './shell/regie.js';
 import { mountSeDonations } from './alerts-se.js';
 import { mountTwitchMode } from './alerts-twitch.js';
 import { mountAlertVariants } from './alerts-variants.js';
@@ -97,7 +98,11 @@ export function mountAlerts(root: HTMLElement) {
             <p class="al-hint" data-role="scrub-marks">Timeline : image figée de la vraie vidéo, textes à cet instant, sans son.</p>
           </div>
           <div class="al-columns">
-            <div><h2>File des alertes</h2><div data-role="queue"></div></div>
+            <div><h2>File des alertes</h2>
+              <p class="al-hint">Une alerte qui attend plus de 30 min n’est plus jouée (elle reste dans l’historique).
+                <button type="button" class="al-small" data-act="clear-queue">Vider la file d’attente…</button></p>
+              <p class="al-hint" data-role="clear-result"></p>
+              <div data-role="queue"></div></div>
             <div><h2>Source OBS</h2>
               <div class="al-url"><input readonly data-role="obs-url"/><button type="button" class="al-small" data-act="copy">Copier</button></div>
               <p class="al-hint">Source navigateur 1920×1080, fond transparent. Seule consommatrice de la file.</p>
@@ -314,6 +319,28 @@ export function mountAlerts(root: HTMLElement) {
     const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
     if (!act) return;
     if (act === 'stop') return send({ type: 'stop' });
+    if (act === 'clear-queue') {
+      if (!confirm(CLEAR_QUEUE_CONFIRM)) return;
+      const out = $('clear-result');
+      try {
+        const res = await fetch('/api/alerts/clear', {
+          method: 'POST',
+          headers: HEADERS,
+          body: '{}',
+        });
+        const body = (await res.json()) as {
+          cleared?: number;
+          in_flight?: number;
+          error?: string;
+        };
+        if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+        out.textContent = clearedText(body.cleared ?? 0, body.in_flight ?? 0);
+      } catch (e) {
+        out.textContent = `Refusé : ${(e as Error).message}`;
+      }
+      void refresh();
+      return;
+    }
     if (act === 'replay') return last && play(last);
     if (act === 'copy') {
       const url = $<HTMLInputElement>('obs-url').value;

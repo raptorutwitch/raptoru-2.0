@@ -146,3 +146,38 @@ describe('« Donner » (Boutique): one key per intent (P0-2)', () => {
     ).not.toBe(k);
   });
 });
+
+describe('Alertes « Vider la file » (H3)', () => {
+  it('offered in the Régie only when alerts wait, with its real scope', async () => {
+    const { CLEAR_QUEUE_CONFIRM, LIVE_ACTIONS, clearedText } =
+      await import('../../web/src/shell/regie.ts');
+    const with3 = liveHtml(
+      {
+        tombola: 'none',
+        alerts: { playing: 1, queued: 3, source: true },
+        tts: 'off',
+        spotify: null,
+      },
+      'production',
+      href,
+    );
+    expect(with3).toContain('data-live="alerts-clear"');
+    expect(with3).toContain('Plus jouée après 30 min');
+    const none = liveHtml(
+      {
+        tombola: 'none',
+        alerts: { playing: 0, queued: 0, source: true },
+        tts: 'off',
+        spotify: null,
+      },
+      'production',
+      href,
+    );
+    expect(none).not.toContain('data-live="alerts-clear"');
+    expect(LIVE_ACTIONS['alerts-clear']!.confirm).toBe(CLEAR_QUEUE_CONFIRM);
+    expect(CLEAR_QUEUE_CONFIRM).toContain('Celle déjà en lecture se termine');
+    expect(clearedText(2, 1)).toBe(
+      '2 alerte(s) en attente retirée(s) · 1 déjà prise(s) par le lecteur : elle(s) se termine(nt) normalement.',
+    );
+  });
+});

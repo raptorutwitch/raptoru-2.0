@@ -7,6 +7,12 @@
 import type { SupervisionSnapshot } from '../supervision-banner.js';
 
 const HEADERS = { 'content-type': 'application/json', 'x-raptoru-studio': '1' };
+
+/** Refonte H3: « Vider la file » — what it does, said before (waiting alerts only, nothing paid). */
+export const CLEAR_QUEUE_CONFIRM =
+  'Vider la file d’attente des alertes ?\n\nLes alertes qui attendent ne seront pas jouées (elles restent dans l’historique). Celle déjà en lecture se termine normalement. Aucun Jeton, aucun événement Twitch : les gains (Roue du Sub, fidélité) ne dépendent pas de l’animation.';
+export const clearedText = (cleared: number, inFlight: number) =>
+  `${cleared} alerte(s) en attente retirée(s)${inFlight ? ` · ${inFlight} déjà prise(s) par le lecteur : elle(s) se termine(nt) normalement` : ''}.`;
 const esc = (t: unknown) =>
   String(t ?? '').replace(
     /[&<>"']/g,
@@ -332,6 +338,11 @@ export const LIVE_ACTIONS: Record<
         command: { action: 'cancel', reason: 'annulée depuis Studio' },
       }),
   },
+  'alerts-clear': {
+    label: 'Vider la file d’attente…',
+    confirm: CLEAR_QUEUE_CONFIRM,
+    run: () => post('/api/alerts/clear', {}),
+  },
   'tts-pause': {
     label: 'Pause TTS',
     run: () =>
@@ -420,7 +431,8 @@ export function liveHtml(
       a === null
         ? unknown
         : `<p class="rs-state ${a.source === null ? 'is-unknown' : a.source ? 'is-ok' : 'is-down'}">${a.playing ? `${a.playing} en lecture` : 'Rien en lecture'} · ${a.queued} en attente</p>
-           <p class="rs-muted">Source OBS : ${a.source === null ? 'inconnue' : a.source ? 'vue' : 'absente (les alertes attendent)'}.</p>`,
+           <p class="rs-muted">Source OBS : ${a.source === null ? 'inconnue' : a.source ? 'vue' : 'absente (les alertes attendent)'}. Plus jouée après 30 min d’attente.</p>
+           ${a.queued ? `<div class="rs-live-acts">${btn('alerts-clear', 'danger')}</div>` : ''}`,
     )}
     ${card(
       'TTS',

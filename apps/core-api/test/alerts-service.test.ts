@@ -483,3 +483,32 @@ describe('freshness of the animation (lot 9, OFF by default)', () => {
     expect(await count('alert_events')).toBe(3);
   });
 });
+
+describe('refonte H3: 30 min by default, « Vider la file »', () => {
+  it('the Core wires 30 min when ALERTS_MAX_AGE_SECONDS is not set', async () => {
+    const { setup } = await import('./helpers.js');
+    const core = await setup({ db, clock });
+    expect(core.alerts.maxAgeMs).toBe(ALERT_RULES.defaultMaxAgeMs);
+    expect(ALERT_RULES.defaultMaxAgeMs).toBe(30 * 60_000);
+  });
+
+  it('clears the waiting alerts only: the one playing ends normally; history and events kept; idempotent', async () => {
+    const a = await alerts.receive(ev({ source_event_id: 'a' }));
+    await alerts.receive(ev({ source_event_id: 'b' }));
+    await alerts.receive(ev({ source_event_id: 'c' }));
+    const playing = (await alerts.claim(CH, 'studio-A'))!;
+    expect(playing.alert_id).toBe(a.alert!.alert_id);
+    await ack(playing.alert_id, playing.attempt_id!, 'started');
+    expect(await alerts.clearQueue(CH)).toEqual({ cleared: 2, in_flight: 1 });
+    expect(await alerts.clearQueue(CH)).toEqual({ cleared: 0, in_flight: 1 });
+    await ack(playing.alert_id, playing.attempt_id!, 'completed');
+    expect(await alerts.claim(CH, 'studio-A')).toBeNull();
+    const state = await alerts.state(CH);
+    expect(
+      state.recent.filter(
+        (r) => (r.failure as { code?: string } | null)?.code === 'cleared',
+      ),
+    ).toHaveLength(2);
+    expect(await count('alert_events')).toBe(3);
+  });
+});

@@ -110,6 +110,13 @@ export function alertsRoutes(
       handle: ({ params }) => alerts.state(channel(params[0]!)),
     },
     {
+      // Refonte H3: « Vider la file » (waiting alerts only; those playing end normally).
+      method: 'POST',
+      pattern: at('/(\\d{1,32})/clear'),
+      auth,
+      handle: ({ params }) => alerts.clearQueue(channel(params[0]!)),
+    },
+    {
       method: 'GET',
       pattern: at('/items/([0-9a-f-]{36})'),
       auth,

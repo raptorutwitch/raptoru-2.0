@@ -1,4 +1,4 @@
-import { AlertsService } from './alerts/service.js';
+import { ALERT_RULES, AlertsService } from './alerts/service.js';
 import { BotInstanceService } from './bot-instance/service.js';
 import { DockActivityService } from './dock/service.js';
 import { EventShopService } from './event-shop/service.js';
@@ -100,7 +100,7 @@ export function createCore(
     twitchApp?: { clientId: string; clientSecret: string } | null;
     /** Duel targets by login without Twitch (tests). */
     loginLookup?: LoginLookup | null;
-    /** Lot 9: alerts older than this are recorded, not animated (null / absent: off). */
+    /** Lot 9: alerts older than this are recorded, not animated (absent: 30 min, refonte H3). */
     alertsMaxAgeMs?: number | null;
     /** `!caution` answered in the chat (main Core: CAUTION_CHAT=true; SAMMI still answers it until the cutover). */
     cautionChat?: boolean;
@@ -157,7 +157,8 @@ export function createCore(
     db,
     clock,
     undefined,
-    channel.alertsMaxAgeMs ?? null,
+    // Refonte H3: 30 min unless the channel sets its own (ALERTS_MAX_AGE_SECONDS).
+    channel.alertsMaxAgeMs ?? ALERT_RULES.defaultMaxAgeMs,
   );
   // Boutique d'événement (docs/HALLOWEEN.md): Bonbons for real Twitch subs / gifts, once per event.
   const eventShop = new EventShopService(db, clock, economy);
