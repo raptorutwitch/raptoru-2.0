@@ -173,12 +173,12 @@ describe('module host — real Lab chain (Lab Core + Studio client + Extension L
     });
     const failed = await core<{ activity: { status: string } }>(
       `${base}/report`,
-      { activity_id: id, status: 'failed' },
+      { activity_id: id, status: 'failed', player: 'obs-a' },
     );
     expect(failed.activity.status).toBe('refunded');
     const again = await core<{ activity: { status: string } }>(
       `${base}/report`,
-      { activity_id: id, status: 'done' },
+      { activity_id: id, status: 'done', player: 'obs-a' },
     );
     expect(again.activity.status).toBe('refunded'); // decided once
     expect((await core<{ items: unknown[] }>(`${base}/queue`)).items).toEqual(

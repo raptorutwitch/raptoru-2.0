@@ -58,8 +58,17 @@ describe('module host — consolidation', () => {
     ).toEqual([]); // never two players
     core.clock.advance(10_000); // past the expiry, inside the lease
     await core.modules.tick();
+    // Another player cannot report it while obs-a's lease runs.
+    await expect(
+      core.modules.report(CH, 'coffre_mystere', {
+        activity_id: shown,
+        status: 'failed',
+        player: 'obs-b',
+      }),
+    ).rejects.toMatchObject({ code: 'claimed_by_another_player' });
     const done = await core.modules.report(CH, 'coffre_mystere', {
       activity_id: shown,
+      player: 'obs-a',
       status: 'done',
     });
     expect(done.activity.status).toBe('done');

@@ -229,15 +229,23 @@ export function mountModuleHost(root: HTMLElement) {
     const m = modules?.find((x) => x.id === card?.dataset.module);
     if (!m) return;
     if (t.closest('[data-claim]')) {
-      void postJson<{ items: Activity[] }>(
-        `/api/modules/${m.id}/claim`,
-        {},
-      ).then(
+      const held = claimed.get(m.id) ?? [];
+      void postJson<{ items: Activity[] }>(`/api/modules/${m.id}/claim`, {
+        limit: held.length + 1,
+      }).then(
         (out) => {
-          claimed.set(m.id, [...(claimed.get(m.id) ?? []), ...out.items]);
-          message = out.items.length
+          // Its own claims come back first: one entry per action; only a NEW one counts as taken.
+          const known = new Set(held.map((a) => a.activity_id));
+          const fresh = out.items.filter((a) => !known.has(a.activity_id));
+          claimed.set(m.id, [
+            ...held.filter((a) =>
+              out.items.some((x) => x.activity_id === a.activity_id),
+            ),
+            ...fresh,
+          ]);
+          message = fresh.length
             ? 'Action prise par le lecteur fictif.'
-            : 'Aucune action en attente.';
+            : 'Aucune nouvelle action en attente.';
           void render();
         },
         (err: Error) => ((message = `Refusé : ${err.message}`), void render()),
@@ -248,19 +256,23 @@ export function mountModuleHost(root: HTMLElement) {
     if (report) {
       const id = report.dataset.report!;
       const status = report.dataset.status!;
-      void postJson(`/api/modules/${m.id}/report`, {
+      void postJson<{ activity?: Activity }>(`/api/modules/${m.id}/report`, {
         activity_id: id,
         status,
       }).then(
-        () => {
+        (out) => {
           claimed.set(
             m.id,
             (claimed.get(m.id) ?? []).filter((a) => a.activity_id !== id),
           );
+          // The Core's real outcome: an action already decided (expired, refunded) stays as it was.
+          const st = out.activity?.status ?? '';
           message =
-            status === 'done'
+            st === 'done' && status === 'done'
               ? 'Montrée : action terminée.'
-              : 'Échec : remboursée une fois (débit d’origine).';
+              : st === 'refunded' && status === 'failed'
+                ? 'Échec : remboursée une fois (débit d’origine).'
+                : `Déjà décidée avant ce compte rendu : ${STATUS_FR[st] ?? st}.`;
           void render();
         },
         (err: Error) => ((message = `Refusé : ${err.message}`), void render()),

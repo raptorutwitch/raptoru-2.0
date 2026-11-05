@@ -206,10 +206,12 @@ describe('démonstration B — Coffre mystère (paid viewer module)', () => {
     ).items;
     await t.host.report(CH, 'coffre_mystere', {
       activity_id: first!.activity_id,
+      player: 'obs-test',
       status: 'done',
     });
     await t.host.report(CH, 'coffre_mystere', {
       activity_id: second!.activity_id,
+      player: 'obs-test',
       status: 'failed',
     });
     const items = (

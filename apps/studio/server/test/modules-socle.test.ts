@@ -113,25 +113,33 @@ describe('modules relay (one for every module)', () => {
 });
 
 describe('the fictional player (Lab only)', () => {
-  it('Lab: claim with Studio’s fixed player name, report passes only the activity and status; the catalog says so', async () => {
+  it('Lab: claim and report as Studio’s fixed player (a body player is ignored), bounded limit; the catalog says so', async () => {
     const r = await relay({ items: [] }, true);
     expect(await (await r.api('/api/modules')).json()).toMatchObject({
       lab_player: true,
     });
-    await r.api('/api/modules/coffre_mystere/claim', { player: 'evil' });
+    await r.api('/api/modules/coffre_mystere/claim', {
+      player: 'evil',
+      limit: 99,
+    });
     await r.api('/api/modules/coffre_mystere/report', {
       activity_id: 'a1',
       status: 'failed',
       result: { x: 1 },
+      player: 'evil',
     });
     expect(r.calls.slice(1)).toEqual([
       {
         path: '/v1/lab/modules/900100/coffre_mystere/claim',
-        body: { player: 'studio-lab-fictif' },
+        body: { player: 'studio-lab-fictif', limit: 10 },
       },
       {
         path: '/v1/lab/modules/900100/coffre_mystere/report',
-        body: { activity_id: 'a1', status: 'failed' },
+        body: {
+          activity_id: 'a1',
+          status: 'failed',
+          player: 'studio-lab-fictif',
+        },
       },
     ]);
   });

@@ -97,6 +97,7 @@ describe.skipIf(!isLocal)('module host, real Postgres, two Cores', () => {
       .items)
       await A.report(CH, 'coffre_mystere', {
         activity_id: left.activity_id,
+        player: 'obs-test',
         status: 'done',
       });
     const { activity } = await A.viewer(CH, 'coffre_mystere', 'ouvrir', {

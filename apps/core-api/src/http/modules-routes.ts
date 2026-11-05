@@ -33,6 +33,10 @@ const ReportCall = z.strictObject({
   activity_id: z.uuid(),
   status: z.enum(['done', 'failed']),
   result: z.unknown().optional(),
+  player: z
+    .string()
+    .regex(/^[A-Za-z0-9:_-]{1,64}$/)
+    .optional(),
 });
 const RefundCall = z.strictObject({
   actor: LabActor,

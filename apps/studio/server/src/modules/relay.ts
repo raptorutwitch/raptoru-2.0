@@ -67,8 +67,16 @@ export function modulesRelay(
             await core(
               `${base}/${m[1]}/${m[2]}`,
               m[2] === 'claim'
-                ? { player: 'studio-lab-fictif' }
-                : { activity_id: b.activity_id, status: b.status },
+                ? {
+                    player: 'studio-lab-fictif',
+                    // « the next one »: one more than it already holds (its own claims come back first).
+                    limit: Math.min(Math.max(Number(b.limit) || 1, 1), 10),
+                  }
+                : {
+                    activity_id: b.activity_id,
+                    status: b.status,
+                    player: 'studio-lab-fictif',
+                  },
             ),
           ),
           true

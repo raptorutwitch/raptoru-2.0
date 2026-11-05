@@ -677,15 +677,32 @@ export class ModuleHost {
   async report(
     channelId: string,
     id: string,
-    r: { activity_id: string; status: 'done' | 'failed'; result?: unknown },
+    r: {
+      activity_id: string;
+      status: 'done' | 'failed';
+      result?: unknown;
+      /** The reporting player: an action ANOTHER player holds (lease running) is that player's to report. */
+      player?: string;
+    },
   ) {
     this.module(id);
     return this.ctx.db.tx(async (q) => {
-      const own = await q.query(
-        'select 1 from module_activity where activity_id = $1 and channel_id = $2',
-        [r.activity_id, channelId],
-      );
-      if (!own.length) throw new ModuleError(404, 'activity_not_found');
+      const own = (
+        await q.query<{ claimed_by: string | null; claimed_at: Date | null }>(
+          'select claimed_by, claimed_at from module_activity where activity_id = $1 and channel_id = $2 and module_id = $3 for update',
+          [r.activity_id, channelId, id],
+        )
+      )[0];
+      if (!own) throw new ModuleError(404, 'activity_not_found');
+      const leased =
+        own.claimed_by &&
+        own.claimed_at &&
+        this.ctx.clock.now().getTime() - new Date(own.claimed_at).getTime() <
+          PLAYER_LEASE_MS;
+      if (leased && own.claimed_by !== r.player)
+        throw new ModuleError(409, 'claimed_by_another_player', {
+          player: own.claimed_by,
+        });
       return {
         activity: await this.settleIn(
           q,
