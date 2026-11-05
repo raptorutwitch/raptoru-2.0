@@ -1,3 +1,4 @@
+import { getJson, postJson } from './http.js';
 // « Modération » tab — the SAME D4 console as the extension (apps/twitch-extension/extension/shared/
 // moderation-v2.js, served by this Studio under /ext/), with Studio as the actor (the broadcaster):
 // one moderation, one implementation, the same Core read models and commands (/api/lab/* → local
@@ -19,6 +20,9 @@ type ConsoleFactory = (options: {
   client: {
     modV2: (path: string) => Promise<unknown>;
     modV2Act: (command: Json, key?: string) => Promise<unknown>;
+    moduleModerationList?: () => Promise<unknown>;
+    moduleModerationActivity?: (id: string) => Promise<unknown>;
+    moduleModerationRefund?: (activityId: string, reason: string) => Promise<unknown>;
   };
   assetBase?: string;
 }) => ConsoleView;
@@ -165,6 +169,27 @@ export function mountModeration(root: HTMLElement) {
               '/actions',
               key ? { command, idempotency_key: key } : { command },
             ),
+          // « Autres modules » (module host): the same panels as the extension, through Studio's relay /api/modules
+          // (the actor is Studio, the broadcaster — forced by the relay).
+          moduleModerationList: async () => {
+            const { modules } = await getJson<{
+              modules: {
+                id: string;
+                label: string;
+                enabled: boolean;
+                moderation: { visible: boolean; refund: string } | null;
+              }[];
+            }>('/api/modules');
+            return {
+              modules: modules
+                .filter((m) => m.moderation?.visible)
+                .map((m) => ({ id: m.id, label: m.label, enabled: m.enabled, moderation: m.moderation })),
+            };
+          },
+          moduleModerationActivity: (id) =>
+            getJson(`/api/modules/activity?module=${encodeURIComponent(id)}&limit=100`),
+          moduleModerationRefund: (activityId, reason) =>
+            postJson('/api/modules/refund', { activity_id: activityId, reason }),
         },
         assetBase: '/ext/',
       });

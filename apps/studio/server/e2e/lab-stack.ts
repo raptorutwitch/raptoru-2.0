@@ -23,7 +23,7 @@ const { moduleSettingsRelay } = await import('../src/module-settings/relay.js');
 const { modulesRelay } = await import('../src/modules/relay.js');
 const { createTestLab } = await import('../src/test-lab/test-lab.js');
 const { LabEbs } = await import('../src/extension-lab/lab-ebs.js');
-const { localLabCoreClient } = await import('../src/lab-moderation/proxy.js');
+const { labProxy, localLabCoreClient } = await import('../src/lab-moderation/proxy.js');
 
 const db = createPgliteDb(
   new PGlite({
@@ -149,7 +149,9 @@ const studio = createStudioServer(
   null, // sound
   null, // runtime
   null, // tts
-  null, // labApi
+  // Studio's « Modération » tab (the D4 console with Studio as the actor): the same /api/lab relay as the real Studio,
+  // without players (no TTS / Soundboard worker on this stack).
+  labProxy({ channelId: '900100', core: labCore, players: async () => ({}), identities: () => [] }),
   raffle,
   null, // labChat
   null, // commands
