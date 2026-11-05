@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { isolate } from './isolation.js';
 
 // Parity of Bonk in the production Extension (mobile) → Lab EBS → Lab Core, with the Studio Bonk worker, the Lab Core's
 // FICTIONAL 7TV/BTTV/FFZ providers and a FICTIONAL overlay (no OBS, nothing drawn): written BEFORE any extraction of
@@ -42,22 +43,8 @@ const tokens = async () =>
   ((await labCore('/v1/lab/wallet/900100/900101')).body as { tokens: number })
     .tokens;
 
-async function isolatedPage(page: Page) {
-  const outside: string[] = [];
-  await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => {
-    const url = route.request().url();
-    if (
-      /^https:\/\/cdn\.(7tv\.app|betterttv\.net|frankerfacez\.com)\//.test(url)
-    )
-      return route.fulfill({
-        body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="#7c3aed"/></svg>',
-        contentType: 'image/svg+xml',
-      });
-    outside.push(url);
-    return route.abort();
-  });
-  return outside;
-}
+/** The page's outside requests (expected: none). Network isolation: isolation.ts. */
+const isolatedPage = async (page: Page) => (await isolate(page)).outside;
 async function openBonk(page: Page) {
   await page.getByRole('button', { name: 'Voir tous les modules' }).click();
   await page
@@ -248,3 +235,183 @@ for (const role of ['moderator', 'broadcaster'] as const) {
     await page.close();
   });
 }
+
+const moduleSetting = async (key: string, value: number) =>
+  expect(
+    (await labCore('/v1/lab/module-settings/900100', { key, value })).status,
+  ).toBe(200);
+const settings = async () =>
+  (await labCore('/v1/lab/module-settings/900100')).body as Record<
+    string,
+    unknown
+  >;
+
+test('viewer: the price and the delay set in Studio reach Bonk; a shot within the delay is refused by Core, nothing debited', async ({
+  browser,
+}) => {
+  const before = JSON.stringify(await settings());
+  await moduleSetting('bonk.price', 350);
+  await moduleSetting('bonk.cooldown_s', 0);
+  await setTokens(10_000);
+  const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
+  const outside = await isolatedPage(page);
+  try {
+    await page.goto('/ext/mobile.html?labRole=viewer');
+    await openBonk(page);
+    await page.getByRole('button', { name: 'Passer' }).click();
+    await emote(page, 'PepoFictif').click();
+    await emote(page, 'PepoFictif').click();
+    await expect(cta(page)).toHaveAttribute(
+      'aria-label',
+      /^Tirer 1 Bonk · ◆ 350/,
+      {
+        timeout: 15_000,
+      },
+    );
+    await expect(cta(page)).toBeEnabled({ timeout: 15_000 });
+    await cta(page).click();
+    await expect(status(page)).toContainText('Bonk accepté', {
+      timeout: 15_000,
+    });
+    await expect.poll(tokens).toBe(9_650);
+    // The streamer sets a delay between two Bonks (it counts from the shot just fired): Core refuses the next one;
+    // the viewer reads why, the magazine keeps its Bonk, nothing is debited.
+    await moduleSetting('bonk.cooldown_s', 60);
+    await expect(cta(page)).toBeEnabled({ timeout: 15_000 });
+    await cta(page).click();
+    await expect(status(page)).toContainText('Délai entre deux Bonks', {
+      timeout: 15_000,
+    });
+    await expect(count(page)).toHaveText('1/2');
+    expect(await tokens()).toBe(9_650);
+    expect(outside).toEqual([]);
+  } finally {
+    await moduleSetting('bonk.price', 200);
+    await moduleSetting('bonk.cooldown_s', 0);
+    await page.close();
+  }
+  expect(JSON.stringify(await settings())).toBe(before);
+});
+
+test('viewer: Twitch emotes through the fictional Twitch — a refused consent changes nothing; linked: the emotes by channel, a Twitch Bonk accepted, unlinked again', async ({
+  browser,
+}) => {
+  await setTokens(10_000);
+  const context = await browser.newContext({
+    viewport: { width: 400, height: 800 },
+  });
+  const iso = await isolate(context);
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto('/ext/mobile.html?labRole=viewer');
+  await openBonk(page);
+  await page.getByRole('button', { name: 'Passer' }).click();
+  const link = page.getByRole('button', {
+    name: 'Emotes Twitch · lier mon compte',
+  });
+  const authorize = async () => {
+    const popup = context.waitForEvent('page');
+    await link.click();
+    await page.getByRole('button', { name: 'Autoriser Twitch' }).click();
+    return popup;
+  };
+  // Refused at Twitch: the Studio's callback says so, the viewer closes the window, the extension says it is not
+  // confirmed; nothing is linked.
+  iso.twitchConsent = 'deny';
+  const refused = await authorize();
+  await expect(
+    refused.getByRole('heading', { name: 'Connexion Twitch annulée' }),
+  ).toBeVisible({
+    timeout: 15_000,
+  });
+  await refused.close();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Autorisation non confirmée' }),
+  ).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(link).toBeVisible();
+  // Granted: Core exchanges the code, checks the account and the read-only scope, reads the catalog.
+  iso.twitchConsent = 'grant';
+  const granted = await authorize();
+  await expect(
+    granted.getByRole('heading', { name: 'Connexion Twitch réussie' }),
+  ).toBeVisible({
+    timeout: 15_000,
+  });
+  await granted.close();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Emotes Twitch connectées' }),
+  ).toBeVisible({
+    timeout: 20_000,
+  });
+  for (const name of ['KappaFictif', 'raptorHype', 'raptorDance', 'autreWave'])
+    await expect(emote(page, name)).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /^Autre chaîne \(fictive\)/ }),
+  ).toBeVisible();
+  // A Twitch Bonk: Core accepts an emote of the viewer's own catalog and debits once.
+  await emote(page, 'raptorHype').click();
+  await expect(ammoOf(page, 'raptorHype')).toHaveText('1');
+  await expect(cta(page)).toBeEnabled({ timeout: 15_000 });
+  await cta(page).click();
+  await expect(status(page)).toContainText('Bonk accepté', { timeout: 15_000 });
+  await expect.poll(tokens).toBe(9_800);
+  // Unlinked at once (no confirmation): back to « lier mon compte » (the shared stack is left as found).
+  await page
+    .getByRole('button', { name: 'Retirer l’accès Twitch aux emotes' })
+    .click();
+  await expect(link).toBeVisible({ timeout: 20_000 });
+  await expect(emote(page, 'raptorHype')).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(iso.outside).toEqual([]);
+  await context.close();
+});
+
+for (const [name, path, width, height] of [
+  ['Twitch panel', '/ext/panel.html?labRole=viewer', 320, 500],
+  ['Twitch mobile', '/ext/mobile.html?labRole=viewer', 360, 640],
+] as const)
+  test(`${name} (${width}×${height}): Bonk fits — picker, magazine and fire button inside the screen, a shot works`, async ({
+    browser,
+  }) => {
+    await setTokens(10_000);
+    const page = await browser.newPage({ viewport: { width, height } });
+    const outside = await isolatedPage(page);
+    await page.goto(path);
+    await openBonk(page);
+    await page.getByRole('button', { name: 'Passer' }).click();
+    // The middle of an emote stays the emote's, even with the favourite star shown on hover (mouse).
+    const ffz = emote(page, 'FfzFictif');
+    await ffz.hover();
+    await expect(page.locator('.rl-picker__star')).toBeVisible();
+    expect(
+      await ffz.evaluate((cell) => {
+        const r = cell.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.x + r.width / 2,
+          r.y + r.height / 2,
+        );
+        return Boolean(hit && cell.contains(hit));
+      }),
+    ).toBe(true);
+    await ffz.click();
+    await expect(ammoOf(page, 'FfzFictif')).toHaveText('1');
+    const overflow = await page.evaluate(() => {
+      const root = document.scrollingElement!;
+      return root.scrollWidth - root.clientWidth;
+    });
+    expect(overflow).toBeLessThanOrEqual(0);
+    const box = (await cta(page).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y + box.height).toBeLessThanOrEqual(height);
+    await expect(cta(page)).toBeEnabled({ timeout: 15_000 });
+    await cta(page).click();
+    await expect(status(page)).toContainText('Bonk accepté', {
+      timeout: 15_000,
+    });
+    expect(outside).toEqual([]);
+    await page.close();
+  });

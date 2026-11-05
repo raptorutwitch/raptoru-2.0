@@ -81,13 +81,117 @@ const FICTIONAL_PROVIDERS: Record<string, unknown> = {
   },
   'https://api.frankerfacez.com/v1/room/id/900100': { sets: {} },
 };
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 const fictionalFetch = (async (input: string | URL | Request) => {
   const url = String(input instanceof Request ? input.url : input);
   if (!(url in FICTIONAL_PROVIDERS)) throw new Error(`e2e_no_network: ${url}`);
-  return new Response(JSON.stringify(FICTIONAL_PROVIDERS[url]), {
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-  });
+  return json(FICTIONAL_PROVIDERS[url]);
+}) as typeof fetch;
+
+// A FICTIONAL Twitch for the viewer's emotes (Bonk « Twitch » source): the Lab Core runs its real OAuth code exchange,
+// token validation (client, account, exact read-only scope), Helix catalog and storage on these answers. The account
+// is the Lab viewer itself (900101), so linking it never changes whose wallet a test reads. Anything else is refused.
+const E2E_TWITCH = {
+  clientId: 'e2e-fictional-client',
+  callbackPort: port - 2,
+  viewer: {
+    id: '900101',
+    login: 'viewer_fictif',
+    display_name: 'Viewer fictif',
+  },
+};
+const TWITCH_USERS: Record<
+  string,
+  { id: string; login: string; display_name: string }
+> = {
+  '900101': E2E_TWITCH.viewer,
+  '900100': {
+    id: '900100',
+    login: 'raptoru_fictif',
+    display_name: 'Raptoru_ (fictif)',
+  },
+  '900200': {
+    id: '900200',
+    login: 'autre_chaine',
+    display_name: 'Autre chaîne (fictive)',
+  },
+};
+const TWITCH_EMOTES = [
+  {
+    id: 'e2eRaptorHype',
+    name: 'raptorHype',
+    emote_type: 'subscriptions',
+    emote_set_id: '1001',
+    owner_id: '900100',
+    format: ['static'],
+  },
+  {
+    id: 'e2eRaptorDance',
+    name: 'raptorDance',
+    emote_type: 'subscriptions',
+    emote_set_id: '1001',
+    owner_id: '900100',
+    format: ['static', 'animated'],
+  },
+  {
+    id: 'e2eAutreWave',
+    name: 'autreWave',
+    emote_type: 'subscriptions',
+    emote_set_id: '2002',
+    owner_id: '900200',
+    format: ['static'],
+  },
+  {
+    id: 'e2eKappaFictif',
+    name: 'KappaFictif',
+    emote_type: 'globals',
+    emote_set_id: '0',
+    owner_id: '0',
+    format: ['static'],
+  },
+];
+const fictionalTwitch = (async (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => {
+  const url = new URL(String(input instanceof Request ? input.url : input));
+  const path = `${url.host}${url.pathname}`;
+  if (path === 'id.twitch.tv/oauth2/token') {
+    const form = new URLSearchParams(String(init?.body ?? ''));
+    if (form.get('client_id') !== E2E_TWITCH.clientId)
+      return json({ message: 'invalid client' }, 400);
+    return json({
+      access_token: 'e2e-access',
+      refresh_token: 'e2e-refresh',
+      expires_in: 14_400,
+    });
+  }
+  if (path === 'id.twitch.tv/oauth2/validate')
+    return json({
+      client_id: E2E_TWITCH.clientId,
+      login: E2E_TWITCH.viewer.login,
+      user_id: E2E_TWITCH.viewer.id,
+      scopes: ['user:read:emotes'],
+      expires_in: 14_400,
+    });
+  if (path === 'id.twitch.tv/oauth2/revoke') return json({});
+  if (path === 'api.twitch.tv/helix/users')
+    return json({
+      data: url.searchParams
+        .getAll('id')
+        .map((id) => TWITCH_USERS[id])
+        .filter(Boolean),
+    });
+  if (path === 'api.twitch.tv/helix/chat/emotes/user') {
+    if (url.searchParams.get('user_id') !== E2E_TWITCH.viewer.id)
+      return json({ data: [] });
+    return json({ data: TWITCH_EMOTES, pagination: {} });
+  }
+  throw new Error(`e2e_no_network: ${url.href}`);
 }) as typeof fetch;
 const { server: core } = createLabCore({
   db,
@@ -95,6 +199,12 @@ const { server: core } = createLabCore({
   secret,
   channelTwitchId: '900100',
   thirdPartyFetch: fictionalFetch,
+  twitch: {
+    clientId: E2E_TWITCH.clientId,
+    clientSecret: 'e2e-fictional-secret',
+  },
+  twitchFetch: fictionalTwitch,
+  twitchRedirectUri: `http://127.0.0.1:${E2E_TWITCH.callbackPort}/callback`,
 });
 await new Promise<void>((r) => core.listen(0, '127.0.0.1', r));
 const coreUrl = `http://127.0.0.1:${(core.address() as AddressInfo).port}`;
@@ -284,7 +394,10 @@ ext.connectLab(labCore);
   );
   const bonkCore = localCoreClient(coreUrl, secret);
   // The 7TV/BTTV/FFZ catalog comes from the Lab Core (its fictional providers above), as Studio's BonkRuntime reads it.
-  ext.connectBonk(bonkWorker, null, (refresh = false) =>
+  // The Studio's real viewer link (callback listener on its own E2E port, never the Studio's 3789).
+  const { ViewerAuth } = await import('../src/bonk-lab/viewer-auth.js');
+  const viewerAuth = new ViewerAuth(bonkCore, E2E_TWITCH.callbackPort);
+  ext.connectBonk(bonkWorker, viewerAuth, (refresh = false) =>
     bonkCore<BonkLabThirdPartyCatalog>(
       '/v1/lab/bonk/third-party/catalog' + (refresh ? '?refresh=1' : ''),
     ),

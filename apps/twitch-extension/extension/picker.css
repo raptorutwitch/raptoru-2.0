@@ -333,8 +333,10 @@ html body.component-view .rl-picker__glyph { font-size: 25px; }
   position: absolute;
   z-index: 3;
   display: grid;
-  width: 24px;
-  height: 24px;
+  /* Proportional to the cell (40 %, 24 px at most): on the 44 px cells of the panel / video component a fixed 24 px
+     star covered the middle of the emote, and a click there after hovering added a favourite instead of a Bonk. */
+  width: min(24px, calc(var(--rl-cell, 44px) * .4));
+  height: min(24px, calc(var(--rl-cell, 44px) * .4));
   place-items: center;
   padding: 0;
   border: 0;
@@ -343,7 +345,7 @@ html body.component-view .rl-picker__glyph { font-size: 25px; }
   opacity: .45;
   transition: opacity .12s ease, transform .12s ease, filter .12s ease;
 }
-.rl-picker__star svg { width: 17px; height: 17px; overflow: visible; pointer-events: none; }
+.rl-picker__star svg { width: 72%; height: 72%; max-width: 17px; max-height: 17px; overflow: visible; pointer-events: none; }
 .rl-picker__star path {
   fill: transparent;
   stroke: rgba(244, 238, 255, .75);

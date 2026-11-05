@@ -442,6 +442,11 @@ export class BonkLabService {
   /** Refonte H12: the module settings (price, delay between two purchases), set by the Core assembly. */
   settings: ModuleSettings | null = null;
 
+  /** What the Lab façade shows the viewer: the price Core applies now (module settings) — never another one. */
+  currentPrice(channelId: string) {
+    return this.unitPrice(this.db, channelId);
+  }
+
   /** The price of one Bonk now (the Core's setting, else today's price). */
   private unitPrice(q: Queryable, channelId: string) {
     return this.settings

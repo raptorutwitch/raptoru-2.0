@@ -90,6 +90,13 @@ export interface LabCoreOptions {
    */
   thirdPartyFetch?: typeof fetch;
   /**
+   * How Twitch (OAuth + Helix) is reached for the viewer's emotes, and where the authorization comes back (default: the
+   * network and the Studio loopback). The end-to-end harness passes a FICTIONAL Twitch here: the same OAuth checks,
+   * scopes, catalog and storage, no request leaves the machine.
+   */
+  twitchFetch?: typeof fetch;
+  twitchRedirectUri?: string;
+  /**
    * Economy of every module of this runtime (Bonk, Soundboard, TTS, Tombola, Roue du Sub, moderation, Jeu des mots, mini-games). The Lab
    * test wallet unless a caller passes the result of economy/activation.ts selectEconomy (the launcher never does before
    * the cutover; the activation refuses a runtime whose modules are not all proven).
@@ -107,6 +114,8 @@ export function createLabCore({
   twitch,
   channelTwitchId = '',
   thirdPartyFetch,
+  twitchFetch,
+  twitchRedirectUri,
   economy = labEconomy,
 }: LabCoreOptions): {
   server: Server;
@@ -122,7 +131,9 @@ export function createLabCore({
   if (secret.length < 32) throw new Error('bonk_secret_required');
   // Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
   const viewers = twitch
-    ? new TwitchViewerCatalog(db, systemClock, twitch)
+    ? new TwitchViewerCatalog(db, systemClock, twitch, twitchFetch, {
+        ...(twitchRedirectUri ? { redirectUri: twitchRedirectUri } : {}),
+      })
     : null;
   // 7TV/BTTV/FFZ public catalogs of the channel (no token), only when the launcher passes its id.
   const thirdParty = /^\d+$/.test(channelTwitchId)

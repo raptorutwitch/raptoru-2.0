@@ -668,6 +668,8 @@ export const ERROR_LABELS = {
   bonk_paused: 'Le Bonk est en pause : rien n’a été débité.',
   viewer_blocked: 'Cette interaction est indisponible pour ton compte.',
   viewer_cooldown: 'Cooldown en cours : réessaie un peu plus tard.',
+  // The streamer's delay between two Bonks of one viewer (Studio module settings, H12).
+  bonk_cooldown: 'Délai entre deux Bonks : réessaie dans un instant. Rien n’a été débité.',
   global_pause: 'Raptoru est en pause : les nouvelles interactions sont refusées, rien n’a été débité.',
   message_blocked: 'Ce message contient un mot interdit : rien n’a été débité.',
   raffle_paused: 'La tombola est en pause.',

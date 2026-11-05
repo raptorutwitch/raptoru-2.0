@@ -8,7 +8,6 @@ import {
 } from '@raptoru/schemas';
 import { z } from 'zod';
 import {
-  BONK_LAB_RULES,
   bonkVolleyRules,
   BonkLabError409,
   BonkLabNotFoundError,
@@ -27,6 +26,8 @@ import { HttpError, limitParam, parse, type Route } from './server.js';
 
 const Uuid = z.uuid();
 const Digits = z.string().regex(/^\d+$/);
+/** The Lab's channel (the simulator's, as the Studio worker uses it). */
+const LAB_BONK_CHANNEL = '900100';
 
 export async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   try {
@@ -77,8 +78,11 @@ export function bonkLabRoutes(
       method: 'GET',
       pattern: /^\/v1\/lab\/bonk\/rules$/,
       auth: 'studio',
-      handle: async () => ({
-        cost: BONK_LAB_RULES.simulatedCost,
+      // The cost is the price Core will charge (module setting « bonk.price »), as the public frontier shows it.
+      handle: async ({ url }) => ({
+        cost: await bonk.currentPrice(
+          url.searchParams.get('channel_id') ?? LAB_BONK_CHANNEL,
+        ),
         volley: bonkVolleyRules(),
       }),
     },

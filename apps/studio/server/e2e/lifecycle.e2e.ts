@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { isolate } from './isolation.js';
 
 // The modules' lifecycle contract in the production Extension (mobile) on the isolated Lab stack, for every role:
 // - one view per open module, nothing left behind by the module just closed (Hub → module → Hub → other → back);
@@ -53,19 +54,7 @@ const OWN_READS: Partial<Record<Mod, RegExp>> = {
 };
 
 async function preparePage(page: Page) {
-  const outside: string[] = [];
-  await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => {
-    const url = route.request().url();
-    if (
-      /^https:\/\/cdn\.(7tv\.app|betterttv\.net|frankerfacez\.com)\//.test(url)
-    )
-      return route.fulfill({
-        body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"/>',
-        contentType: 'image/svg+xml',
-      });
-    outside.push(url);
-    return route.abort();
-  });
+  const { outside } = await isolate(page);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   const requests: { at: number; url: string }[] = [];
