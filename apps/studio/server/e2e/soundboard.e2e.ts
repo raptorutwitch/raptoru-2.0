@@ -92,6 +92,12 @@ test('viewer: search, favourite, preview, buy once (debit, recents), leave and c
     .getByRole('button', { name: /^Envoyer/ });
   await expect(send).toBeEnabled({ timeout: 15_000 });
   await send.click();
+  // Post-purchase feedback: a polite status toast, gone by itself (it never stays over the grid).
+  const toast = page
+    .getByRole('status')
+    .filter({ hasText: 'Envoyé au stream' });
+  await expect(toast).toBeVisible({ timeout: 15_000 });
+  await expect(toast).toHaveCount(0, { timeout: 10_000 });
   await expect(page.locator('[data-view="recents"]')).toContainText('1', {
     timeout: 15_000,
   });
