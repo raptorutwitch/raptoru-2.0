@@ -901,6 +901,11 @@ describe('module host through the real Production doors (architecture socle)', (
     expect((await ext('/modules/v3/moderation/refund', jwt, { activity_id: id, reason: 'x' })).status).toBe(403);
     const mod = viewer('9001', 'moderator');
     const journal = (await ext('/modules/v3/moderation/coffre_mystere/activity', mod)).body;
+    // The team's list (D4 « Autres modules »): moderable modules, switched off ones too; never for a viewer.
+    expect((await ext('/modules/v3/moderation', jwt)).status).toBe(403);
+    expect((await ext('/modules/v3/moderation', mod)).body.modules).toEqual([
+      { id: 'coffre_mystere', label: 'Coffre mystère', enabled: true, moderation: { visible: true, refund: 'moderator' } },
+    ]);
     // A module the policy hides from the team (or an unknown one): no journal.
     expect((await ext('/modules/v3/moderation/objectif_soiree/activity', mod)).status).toBe(404);
     expect(journal.items.some((r: { activity_id: string }) => r.activity_id === id)).toBe(true);

@@ -6,6 +6,8 @@
 // (Studio = broadcaster), so Studio and the extension show the same moderation.
 import { moneyHtml } from './currency.js';
 import { freshRestrictionFilters, restrictionRows, restrictionsView } from './moderation-restrictions.js';
+// The module host's modules (architecture socle): the same generic panels as under each module, one implementation.
+import { createHostModerationSection } from './module-moderation.js';
 
 const P = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -227,6 +229,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   let audit = null;
   let restr = { active: null, history: null, failed: false }; // Restrictions view (Core read models)
   let destroyed = false;
+  /** « Autres modules » (module host): created on first opening, kept across repaints. */
+  let hostSection = null;
   let pollTimer = null;
   let tick = null;
   const can = (p) => me.permissions.includes(p);
@@ -628,6 +632,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       <div class="side__scroll" data-scroll="side"><nav class="mods" data-mods aria-label="Modules">${MOD_KEYS.map((m) => modLine(m, selM === m)).join('')}</nav>
       <button class="sidelink${t.v === 'history' && !t.vid ? ' is-sel' : ''}" data-act="history" data-histlink>${ic('history')}Historique</button>
       <button class="sidelink${t.v === 'restrictions' ? ' is-sel' : ''}" data-act="restrictions" data-restrlink>${ic('ban')}Restrictions</button>
+      <button class="sidelink${t.v === 'hostmods' ? ' is-sel' : ''}" data-act="hostmods" data-hostlink>${ic('shield')}Autres modules</button>
       ${onCommands ? `<button class="sidelink" data-act="commands">${ic('note')}Commandes</button>` : ''}</div>
       <div class="side__foot" data-foot>${footHtml()}</div>`;
   }
@@ -851,7 +856,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       <div class="scroll" data-scroll="${key}"><div class="pane__body ${anim}">${scr.body}</div></div></section>`;
   }
   const viewFor = (s) =>
-    s.v === 'module' ? moduleView(s.m) : s.v === 'viewer' ? viewerView(s.id) : s.v === 'history' ? historyView(s.vid) : s.v === 'jetons' ? jetonsView(s.vid) : s.v === 'restrictions' ? restrictionsView(RH, nav.rf, restr) : { body: '' };
+    s.v === 'module' ? moduleView(s.m) : s.v === 'viewer' ? viewerView(s.id) : s.v === 'history' ? historyView(s.vid) : s.v === 'jetons' ? jetonsView(s.vid) : s.v === 'restrictions' ? restrictionsView(RH, nav.rf, restr) : s.v === 'hostmods' ? { kicker: 'Modération', title: 'Autres modules', body: '<div data-hostmods></div>' } : { body: '' };
   const banner = () =>
     gPaused() ? `<div class="gbanner">${ic('pause')}<span class="grow">Pause globale · nouvelles interactions refusées${overview.global.refused ? ` (${overview.global.refused})` : ''}</span><button class="btn btn--sm" data-act="global-resume">Lever</button></div>` : '';
   let builtMode = null;
@@ -886,6 +891,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
         side.querySelector('[data-mods]').innerHTML = MOD_KEYS.map((m) => modLine(m, t.v === 'module' && t.m === m)).join('');
         side.querySelector('[data-histlink]').classList.toggle('is-sel', t.v === 'history' && !t.vid);
         side.querySelector('[data-restrlink]').classList.toggle('is-sel', t.v === 'restrictions');
+        side.querySelector('[data-hostlink]')?.classList.toggle('is-sel', t.v === 'hostmods');
         side.querySelector('[data-foot]').innerHTML = footHtml();
       }
     }
@@ -906,6 +912,9 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
         stage.querySelector('[data-foot]').innerHTML = footHtml();
       }
     } else stage.innerHTML = banner() + pane('main', viewFor(t), nav.stack.length > 1);
+    // The host modules' panels are live DOM (their own form and journal): moved back in after each repaint.
+    const hostSlot = stage.querySelector('[data-hostmods]');
+    if (hostSlot && hostSection) hostSlot.append(hostSection.node);
     const vcol = L.querySelector('[data-vcol]');
     if (vcol) {
       const show = md === 'window' && nav.viewer;
@@ -1567,6 +1576,14 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     },
     history: (d) => open.history(d.v),
     restrictions: () => open.restrictions(),
+    hostmods: () => {
+      closeSearch();
+      closeDrawers();
+      hostSection ??= createHostModerationSection({ document, client });
+      void hostSection.refresh();
+      if (top().v === 'hostmods') render();
+      else push({ v: 'hostmods' });
+    },
     'restr-module': (d) => open.restrictions({ module: d.m }),
     // From a viewer card: that viewer, and the module the card was opened from (if any).
     'viewer-restr': (d) => open.restrictions({ viewer: d.v, module: [...nav.stack].reverse().find((s) => s.v === 'module')?.m ?? 'any' }),

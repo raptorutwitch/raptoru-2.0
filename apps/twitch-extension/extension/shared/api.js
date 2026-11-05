@@ -520,6 +520,7 @@ export function createClient({
         idempotencyKey,
       }),
     /** Team only (the server refuses others): the host modules' journal, and the refund of an original debit. */
+    moduleModerationList: () => call('GET', '/modules/v3/moderation'),
     moduleModerationActivity: (id) => call('GET', `/modules/v3/moderation/${encodeURIComponent(id)}/activity`),
     moduleModerationRefund: (activityId, reason) =>
       call('POST', '/modules/v3/moderation/refund', { body: { activity_id: activityId, reason } }),

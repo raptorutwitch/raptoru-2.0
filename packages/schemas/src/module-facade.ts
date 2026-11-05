@@ -49,10 +49,29 @@ export async function moduleFacade(o: {
   try {
     // Moderation of the host's modules (GUIDE_MODERATION.md): the shared journal and the refund of an original debit.
     const modJournal = new RegExp(`^/moderation/(${ID})/activity$`).exec(sub);
-    if (modJournal || sub === '/moderation/refund') {
+    if (modJournal || sub === '/moderation/refund' || sub === '/moderation') {
       // The journal names every viewer: team only (the refund's permission is checked again by the Core).
       if (!o.moderator || (o.moderator.role !== 'moderator' && o.moderator.role !== 'broadcaster'))
         return { status: 403, body: { ok: false, error: 'forbidden' } };
+      if (o.method === 'GET' && sub === '/moderation') {
+        // The team's list (the D4 console): every module whose policy shows it — switched off ones too (their journal
+        // and refunds still matter).
+        const { modules } = await o.call<{ modules: CatalogModule[] }>(base);
+        return {
+          status: 200,
+          body: {
+            ok: true,
+            modules: modules
+              .filter((x) => x.moderation?.visible)
+              .map((x) => ({
+                id: x.id,
+                label: x.label,
+                enabled: x.enabled,
+                moderation: { visible: true, refund: x.moderation!.refund },
+              })),
+          },
+        };
+      }
       if (o.method === 'GET' && modJournal) {
         // One module's journal (never a slice of every module's), and only a module whose policy shows it to the team.
         const { modules } = await o.call<{ modules: CatalogModule[] }>(base);

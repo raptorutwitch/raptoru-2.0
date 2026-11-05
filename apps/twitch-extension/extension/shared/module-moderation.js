@@ -18,18 +18,18 @@ export function moduleJournalHtml(items, { refund }) {
       const can = refund === 'moderator' && r.amount > 0 && r.status !== 'refunded';
       const why = r.reason ? ` · « ${esc(r.reason)} »` : '';
       return `<li><b>${esc(r.viewer?.display_name ?? '—')}</b> · ${esc(r.action)} · ${r.amount ? `${r.amount} J` : 'gratuit'} · ${esc(STATUS[r.status] ?? r.status)}${why}${
-        can ? ` <button type="button" class="btn btn--ghost" data-refund="${esc(r.activity_id)}">Rembourser</button>` : ''
+        can ? ` <button type="button" class="btn btn--sm" data-refund="${esc(r.activity_id)}">Rembourser</button>` : ''
       }</li>`;
     })
     .join('')}</ul>`;
 }
 
-export function createModuleModerationPanel({ document, client, module }) {
+export function createModuleModerationPanel({ document, client, module, heading = true }) {
   const policy = module.moderation ?? { visible: false, refund: 'never' };
   const node = document.createElement('section');
   node.className = 'rp-module-moderation';
   // The reason is typed INLINE: no window.prompt (an extension frame may not show browser dialogs).
-  node.innerHTML = `<h3>Modération</h3><p class="rp-feedback" data-slot="msg" role="status"></p>
+  node.innerHTML = `${heading ? '<h3>Modération</h3>' : ''}<p class="rp-feedback" data-slot="msg" role="status"></p>
     <form data-slot="form" hidden><label>Motif du remboursement <input name="reason" maxlength="200" required></label>
     <button type="submit" class="rl-pay__cta">Rembourser</button> <button type="button" data-cancel>Annuler</button></form>
     <div data-slot="journal"></div>`;
@@ -77,4 +77,41 @@ export function createModuleModerationPanel({ document, client, module }) {
     void refresh();
   });
   return { node, refresh, visible: !!policy.visible };
+}
+
+/**
+ * Every moderable module of the host in one place (the D4 console's « Modules »): the SAME panel and the same API as the
+ * panel under each module — never a second implementation.
+ */
+export function createHostModerationSection({ document, client }) {
+  const node = document.createElement('div');
+  node.className = 'rp-host-moderation';
+  const panels = new Map();
+  const refresh = async () => {
+    if (typeof client.moduleModerationList !== 'function') {
+      node.innerHTML = '<p class="rp-muted">Modules du socle indisponibles avec cette version.</p>';
+      return;
+    }
+    let modules;
+    try {
+      modules = (await client.moduleModerationList()).modules ?? [];
+    } catch {
+      node.innerHTML = '<p class="rp-muted">Modules du socle indisponibles (serveur).</p>';
+      return;
+    }
+    node.textContent = '';
+    if (!modules.length) node.innerHTML = '<p class="rp-muted">Aucun module du socle à modérer.</p>';
+    for (const m of modules) {
+      let p = panels.get(m.id);
+      if (!p) {
+        p = createModuleModerationPanel({ document, client, module: m, heading: false });
+        panels.set(m.id, p);
+      }
+      const head = document.createElement('h2');
+      head.textContent = m.enabled ? m.label : `${m.label} (coupé)`;
+      node.append(head, p.node);
+      void p.refresh();
+    }
+  };
+  return { node, refresh };
 }
