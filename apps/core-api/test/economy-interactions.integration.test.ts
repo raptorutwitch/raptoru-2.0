@@ -3,6 +3,7 @@
 // the same moderation refund and the same expiry sweep from both instances — never paid twice.
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
+import { openCanonicalLive } from './live.js';
 import type { LabActor, LabModerationCommand } from '@raptoru/schemas';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -45,6 +46,8 @@ describe.skipIf(!isLocal)(
     beforeEach(async () => {
       await a.query('drop schema public cascade; create schema public;');
       await migrate(a, 'all');
+      // Refonte H1: the paid stream interactions need the canonical live, opened here as Twitch would.
+      await openCanonicalLive(a, clock);
     });
     afterAll(async () => {
       for (const db of pools) await db.close();

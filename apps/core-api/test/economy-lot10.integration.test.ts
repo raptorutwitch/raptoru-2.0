@@ -6,6 +6,7 @@
 // a spend, an internal refund after a failed sound, ledger = balances, the Lab never touched.
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
+import { openCanonicalLive } from './live.js';
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { Server } from 'node:http';
@@ -65,6 +66,8 @@ describe.skipIf(!isLocal)(
       pools.push(a, b);
       await a.query('drop schema public cascade; create schema public;');
       await migrate(a, 'prod');
+      // Refonte H1: the paid stream interactions need the canonical live, opened here as Twitch would.
+      await openCanonicalLive(a, clock);
       await a.query(LEGACY_TABLE);
     }, LOCK_WAIT_MS);
     afterAll(async () => {

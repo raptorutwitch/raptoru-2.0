@@ -3,6 +3,7 @@
 // racing on two Core pools pay each block / event once; purchases racing never admit two plays nor spend a Bonbon twice.
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
+import { openCanonicalLive } from './live.js';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPgDb, type Db } from '../src/db/db.js';
@@ -34,6 +35,8 @@ describe.skipIf(!isLocal)('Halloween shop, real Postgres', () => {
     await a.query('drop schema public cascade; create schema public;');
     await migrate(a, 'all');
     clock = new FakeClock(new Date('2026-10-31T18:00:00Z'));
+    // Refonte H1: the paid stream interactions need the canonical live, opened here as Twitch would.
+    await openCanonicalLive(a, clock);
   });
   afterAll(async () => {
     for (const db of pools) await db.close();

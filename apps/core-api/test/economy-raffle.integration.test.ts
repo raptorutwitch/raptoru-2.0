@@ -3,6 +3,7 @@
 // payout retried from both instances — always one credit per winner and round.
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
+import { openCanonicalLive } from './live.js';
 import {
   RaffleCommand,
   type LabActor,
@@ -52,6 +53,8 @@ describe.skipIf(!isLocal)('canonical Tombola, real Postgres', () => {
     await a.query('drop schema public cascade; create schema public;');
     await migrate(a, 'all');
     clock = new FakeClock(new Date('2026-10-19T19:00:00Z'));
+    // Refonte H1: the paid stream interactions need the canonical live, opened here as Twitch would.
+    await openCanonicalLive(a, clock);
   });
   afterAll(async () => {
     for (const db of pools) await db.close();

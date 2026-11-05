@@ -3,6 +3,7 @@
 // wheel gain landing while the viewer spends on Bonk and wins a Tombola — one credit per gain, nothing lost.
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
+import { openCanonicalLive } from './live.js';
 import { randomUUID } from 'node:crypto';
 import {
   type AlertEventInput,
@@ -59,6 +60,8 @@ describe.skipIf(!isLocal)('canonical Roue du Sub, real Postgres', () => {
     await a.query('drop schema public cascade; create schema public;');
     await migrate(a, 'all');
     clock = new FakeClock(new Date('2026-10-19T21:30:00Z'));
+    // Refonte H1: the paid stream interactions need the canonical live, opened here as Twitch would.
+    await openCanonicalLive(a, clock);
   });
   afterAll(async () => {
     for (const db of pools) await db.close();
