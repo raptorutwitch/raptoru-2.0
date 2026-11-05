@@ -4,6 +4,10 @@ import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
 import type { EconomyPort } from '../economy/economy.js';
+import {
+  DEFAULT_MINI_GAME_LIMITS,
+  type MiniGameLimitsReader,
+} from '../modules/mini-games.js';
 import * as D from './duel-rules.js';
 import type { Rng } from './rules.js';
 import type { TwitchUser } from './twitch-login.js';
@@ -45,6 +49,7 @@ export class DuelService {
     private readonly resolveTarget: TargetResolver,
     /** Stakes: locks, balances, cap and the atomic transfer (the Lab wallet today). */
     private readonly economy: EconomyPort,
+    private readonly limits: MiniGameLimitsReader = async () => DEFAULT_MINI_GAME_LIMITS,
   ) {}
 
   async chat(
@@ -110,6 +115,7 @@ export class DuelService {
       }
     return this.db.tx(async (q) => {
       const now = this.clock.now();
+      const L = await this.limits(q, msg.channel_id);
       const replay = await q.query(
         'select 1 from mini_game_duels where channel_id = $1 and challenge_message_id = $2',
         [msg.channel_id, msg.message_id],
@@ -144,7 +150,7 @@ export class DuelService {
         [
           msg.channel_id,
           msg.chatter.id,
-          new Date(now.getTime() - D.DUEL_RULES.cooldownMs),
+          new Date(now.getTime() - L.duelCooldownMs),
         ],
       );
       if (recent.length) return { outcome: 'ignored' as const }; // cooldown: silent
@@ -166,7 +172,7 @@ export class DuelService {
         return refuse('pending');
       if (busy.length)
         return refuse('target_busy', { target: target.display_name });
-      const bet = D.resolveDuelBet(cmd.arg, balance);
+      const bet = D.resolveDuelBet(cmd.arg, balance, L.duelMaxBet);
       if ('refused' in bet)
         return bet.refused === 'insufficient'
           ? refuse('insufficient')

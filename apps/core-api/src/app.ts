@@ -1,4 +1,5 @@
 import { ALERT_RULES, AlertsService } from './alerts/service.js';
+import { miniGameLimits } from './modules/mini-games.js';
 import { MODULES } from './modules/index.js';
 import { ModuleHost } from './modules/host.js';
 import { ModuleSettings } from './module-settings/service.js';
@@ -237,6 +238,7 @@ export function createCore(
       // Refonte H10: !rb and !fxcam prices from the module settings (defaults = today's prices).
       chatPrices: moduleSettings.chatPrices(),
       hostChatModules: modules.chatModules(),
+      miniGameLimits: miniGameLimits(moduleSettings),
       // « !roue » and the invitations: silent while the wheel is in mode v1 (production today).
       subWheel,
       eventShop,

@@ -224,12 +224,14 @@ export const PAGES: readonly Page[] = [
   },
   {
     id: 'mini-games',
+    // Démonstration C (architecture socle): the historical module's card on the host — its real state, stakes and delays.
+    anchor: 'mini_games',
     label: 'Roulette · Slots · Duels',
     section: 'modules',
     group: 'Jeux & tirages',
     icon: 'dice',
-    view: 'simulation',
-    desc: 'Commandes du chat ; essais dans la simulation.',
+    view: 'modules',
+    desc: 'État, mises et délais ; interrupteur et essais dans la simulation.',
     keywords: 'roulette slot machine duel',
   },
   {

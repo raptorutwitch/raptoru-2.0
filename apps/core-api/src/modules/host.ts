@@ -210,6 +210,7 @@ export class ModuleHost {
   }
 
   private async enabled(q: Queryable, channelId: string, d: ModuleDefinition) {
+    if (d.enabled) return d.enabled(this.ctxFor(d), q, channelId);
     return d.viewer
       ? (await this.ctx.settings.get(q, channelId, `${d.id}.enabled`)) === 1
       : true;

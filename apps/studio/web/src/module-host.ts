@@ -101,7 +101,7 @@ function cardHtml(m: CatalogModule) {
     ${m.moderation ? `<p class="rs-muted">Modération : ${esc(m.moderation.note)}</p>` : ''}
     <div data-role="settings"></div>
     ${m.admin.length ? `<div class="rs-buttons">${m.admin.map((a) => `<button type="button" class="rs-btn" data-admin="${esc(a.name)}">${esc(a.label)}</button>`).join('')}</div>` : ''}
-    <h3>Activité</h3><div data-role="activity"><p class="rs-muted">Lecture…</p></div></section>`;
+    ${m.capabilities.includes('history') ? '<h3>Activité</h3><div data-role="activity"><p class="rs-muted">Lecture…</p></div>' : ''}</section>`;
 }
 
 export function mountModuleHost(root: HTMLElement) {
@@ -129,6 +129,8 @@ export function mountModuleHost(root: HTMLElement) {
           'Réglages',
           [...(m.viewer.length ? [`${m.id}.enabled`] : []), ...m.settings],
         ).refresh();
+      // No journal on the host for this module (a historical one keeps its own): never an empty « Activité ».
+      if (!m.capabilities.includes('history')) continue;
       const act = await tryGetJson<{ items: Activity[] }>(
         `/api/modules/activity?module=${m.id}&limit=20`,
       );

@@ -51,7 +51,12 @@ export type DuelBet =
  * `%` / `all` (of the challenger's balance), rounded down; above 100 000 → brought back to 100 000; never more
  * than the challenger's balance.
  */
-export function resolveDuelBet(arg: string | null, balance: number): DuelBet {
+export function resolveDuelBet(
+  arg: string | null,
+  balance: number,
+  /** The channel's cap (setting H10); default = the historical value. */
+  maxBet: number = DUEL_RULES.maxBet,
+): DuelBet {
   let amount: number;
   const a = arg?.toLowerCase() ?? null;
   if (a === null) amount = 0;
@@ -68,8 +73,8 @@ export function resolveDuelBet(arg: string | null, balance: number): DuelBet {
       amount = Math.floor(Number(num[1]!.replace(',', '.')) * mult);
     } else return { refused: 'invalid' };
   }
-  const capped = amount > DUEL_RULES.maxBet;
-  if (capped) amount = DUEL_RULES.maxBet;
+  const capped = amount > maxBet;
+  if (capped) amount = maxBet;
   if (amount > balance) return { refused: 'insufficient' };
   return { amount, capped };
 }

@@ -9,7 +9,8 @@ import {
 // Refonte H10 / H12 (decided 05/11/2026) — prices, delays and limits of the modules, set from Studio and read by the
 // executors from here, the ONE place. Per channel, bounded by the Core, defaults = what the Core applies today. Never
 // the odds, the prize tables, the deduplication or the internal safety parameters (decision H10).
-// Next keys (same mechanism, not wired yet): Caution prices, Votekick delays, mini-games stakes and delays, Duel cap.
+// Next keys (same mechanism, not wired yet): Caution prices, Votekick delays. Mini-games stakes, delays and Duel cap:
+// declared by their module on the host (modules/mini-games.ts, démonstration C).
 
 export const MODULE_SETTINGS = {
   'random_ban.price': {

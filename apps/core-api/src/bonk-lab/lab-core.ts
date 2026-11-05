@@ -1,4 +1,5 @@
 import { ProgressionService } from '../progression/service.js';
+import { miniGameLimits } from '../modules/mini-games.js';
 import { modulesRoutes } from '../http/modules-routes.js';
 import { MODULES } from '../modules/index.js';
 import { ModuleHost } from '../modules/host.js';
@@ -207,6 +208,7 @@ export function createLabCore({
     createChatGames({
       chatPrices: moduleSettings.chatPrices(),
       hostChatModules: modules.chatModules(),
+      miniGameLimits: miniGameLimits(moduleSettings),
       db,
       clock: systemClock,
       economy,

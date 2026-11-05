@@ -873,6 +873,7 @@ describe('module host through the real Production doors (architecture socle)', (
     expect(cat.modules.map((m: { id: string }) => m.id)).toEqual([
       'objectif_soiree',
       'coffre_mystere',
+      'mini_games',
     ]);
     const refund = await studio(
       `/v1/studio/cockpit/modules/${CHANNEL}/refund`,

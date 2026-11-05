@@ -1,5 +1,6 @@
 import type { ModuleDefinition } from './kit.js';
 import { coffreMystere } from './coffre-mystere.js';
+import { miniGames } from './mini-games.js';
 import { objectifSoiree } from './objectif-soiree.js';
 
 // THE list of the modules built on the module host (docs/studio-refonte/architecture/GUIDE_MODULE.md). Adding a module
@@ -9,4 +10,5 @@ import { objectifSoiree } from './objectif-soiree.js';
 export const MODULES: readonly ModuleDefinition[] = [
   objectifSoiree, // démonstration A (Lab only)
   coffreMystere, // démonstration B (Lab only)
+  miniGames, // démonstration C: a historical module joining the host (settings + supervision)
 ];

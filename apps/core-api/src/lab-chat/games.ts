@@ -1,4 +1,5 @@
 import type { Clock } from '../clock.js';
+import type { MiniGameLimitsReader } from '../modules/mini-games.js';
 import { CommandsAdmission } from '../commands/admission.js';
 import {
   raffleReservedWords,
@@ -61,6 +62,8 @@ export function createChatGames(o: {
   chatPrices?: ChatPrices;
   /** Chat modules of the module host (modules/host.ts), after the historical ones. */
   hostChatModules?: LabChatModule[];
+  /** Mini-games stakes, delays and Duel cap (module host « mini_games », H10); absent = historical values. */
+  miniGameLimits?: MiniGameLimitsReader;
   /** `!caution pseudo` + `oui` / `non` (absent: no chat Caution — the main Core only with CAUTION_CHAT=true). */
   caution?: CautionService | null;
   /** `!votekick pseudo`, `!kick`, `!save` (absent: no Votekick — the main Core only with VOTEKICK_CHAT=true). */
@@ -96,6 +99,7 @@ export function createChatGames(o: {
     undefined,
     o.loginLookup ?? (o.twitch ? twitchAppLoginLookup(o.twitch) : null),
     o.economy,
+    o.miniGameLimits,
   );
   const chatModules: LabChatModule[] = [
     { name: 'commands', chat: (m) => admission.chat(m) },

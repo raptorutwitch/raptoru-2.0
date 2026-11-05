@@ -311,7 +311,7 @@ describe('the host on the canonical economy (Production)', () => {
       economy,
       settings,
     });
-    expect(host.ids).toEqual(['echantillon']);
+    expect(host.ids).toEqual(['mini_games', 'echantillon']); // demos A and B are Lab only; mini-games is Production
     await settings.set(CH, 'echantillon.enabled', 1, 'test');
     await core.wallet.wallet.credit({
       key: 'fund-mod-1',
