@@ -95,11 +95,23 @@ Phase 1 (consolidation du socle) :
 | `0148b26` | porte chat des modules : `chatWords` réservés contre Commandes V2, `ctx.say` (origine `module:<id>`), interrupteur du socle pour les lecteurs du chat, échec isolé ; migration `20261121190000_cmd_steps_module_origin_lab.sql` préparée |
 | `77e614d` | correctifs d'une revue indépendante (13 constats, détail dans DECISIONS) : falsification d'achat par le cockpit (P0 latent), auto-remboursement, prix confirmé, réservation des lecteurs OBS avec bail, catalogue et travaux périodiques isolés, modération de l'extension sans `prompt` |
 
-Suite prévue, dans l'ordre :
-1. Intégrer les modules du socle à la console D4 de l'extension (même API ; ton message du 05/11 tranche D11).
-2. Inventaire des modules historiques et matrices de parité (`architecture/MIGRATIONS.md`).
-3. Migrations par familles, avec le modèle de la démo C (adaptateur : réglages, état, interrupteur propre).
-4. Studio : console de modération globale, refonte des vues, vérification visuelle.
+Puis :
+
+| Commit | Contenu |
+|---|---|
+| `104acb7` | D4 › « Autres modules » (extension) |
+| `d080506` | même D4 dans Studio, et la pile d'aperçu reçoit `/api/lab` |
+| `f354ead` | `createStudioServer` en options nommées (S1) |
+| `c026907` | adaptateur Votekick |
+| `957bcc3` | adaptateur Caution |
+| `ec2f170` | adaptateurs d'état Random Ban, Jeu des mots, Boutique d'événement |
+
+Stratégies et matrices de parité : `architecture/MIGRATIONS.md`.
+
+Suite prévue (mise à jour), dans l'ordre :
+1. Studio : page « Modules du socle » en vue d'ensemble compacte, vérification visuelle du Centre de contrôle.
+2. Suites de régression complètes, puis mise à jour de la documentation (CONTRATS, GUIDE_*, PREUVES, FRICTIONS).
+3. Selon le temps : adaptateurs d'état pour Roue du Sub, Spotify et Points de chaîne ; extraction progressive de `ui.js`.
 
 ## Prochaine action
 
