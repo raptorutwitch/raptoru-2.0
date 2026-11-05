@@ -181,3 +181,43 @@ describe('Alertes « Vider la file » (H3)', () => {
     );
   });
 });
+
+describe('Défis: the engine as it is (H16)', () => {
+  it('off on purpose is not an outage; ON is green only with a recent good pass; absent sources said', async () => {
+    const { engineHtml } = await import('../../web/src/challenges.ts');
+    const now = Date.parse('2026-11-05T20:00:00Z');
+    const ok = {
+      status: 'done',
+      started_at: '2026-11-05T19:59:30Z',
+      finished_at: '2026-11-05T19:59:31Z',
+    };
+    expect(
+      engineHtml({ enabled: false, every_s: 60 }, null, [], now),
+    ).toContain('Comptage automatique coupé sur ce Core');
+    expect(
+      engineHtml({ enabled: false, every_s: 60 }, null, [], now),
+    ).not.toMatch(/is-down|is-ok/);
+    expect(engineHtml({ enabled: true, every_s: 60 }, ok, [], now)).toContain(
+      'rs-state is-ok',
+    );
+    expect(
+      engineHtml(
+        { enabled: true, every_s: 60 },
+        { ...ok, finished_at: '2026-11-05T19:40:00Z' },
+        [],
+        now,
+      ),
+    ).toContain('aucun passage récent');
+    expect(
+      engineHtml(
+        { enabled: true, every_s: 60 },
+        { ...ok, status: 'failed', error: 'boom' },
+        [],
+        now,
+      ),
+    ).toContain('rs-state is-down');
+    expect(
+      engineHtml(undefined, null, [{ label: 'Daily', available: false }], now),
+    ).toContain('Jamais comptés sur ce Core (source absente) : Daily');
+  });
+});

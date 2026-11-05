@@ -148,6 +148,11 @@ const OPTIONAL = ['viewers', 'lab_viewers', 'loyalty_exclusions'];
 export class ChallengeService {
   /** The public tables this database has (read once the challenge tables exist). */
   private tables: Set<string> | null = null;
+  /**
+   * Refonte H16: does this Core run the automatic recount (CHALLENGES_ENGINE=true, set by the server that starts the
+   * timer)? Read-only for Studio: activating it is a separate operation (Coolify), never from Studio.
+   */
+  engineEnabled = false;
 
   constructor(
     private readonly db: Db,
@@ -301,6 +306,8 @@ export class ChallengeService {
         },
       })),
       last_run: runs[0] ?? null,
+      // Refonte H16: what Studio shows of the engine (never a switch).
+      engine: { enabled: this.engineEnabled, every_s: 60 },
     };
   }
 

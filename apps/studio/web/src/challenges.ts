@@ -175,9 +175,66 @@ const CONFIRM: Record<string, string> = {
 
 type Mode = 'list' | 'edit' | 'detail';
 
+export interface Engine {
+  enabled: boolean;
+  every_s: number;
+}
+
+/**
+ * Refonte H16 — the engine as it really is (read only: activating it is a separate operation, on Antoni's GO). Off on
+ * purpose is not an outage; ON is green only with a recent good pass; a metric whose source is absent says so.
+ */
+export function engineHtml(
+  e: Engine | undefined,
+  last: {
+    status: string;
+    started_at: string;
+    finished_at: string | null;
+    error?: string | null;
+  } | null,
+  metrics: { label: string; available: boolean }[],
+  now: number,
+) {
+  const missing = metrics.filter((m) => !m.available).map((m) => m.label);
+  const lastAt = last ? Date.parse(last.finished_at ?? last.started_at) : NaN;
+  const [cls, text] =
+    e === undefined
+      ? [
+          'is-unknown',
+          'État du comptage automatique inconnu (Core sans cette information).',
+        ]
+      : !e.enabled
+        ? [
+            '',
+            'Comptage automatique coupé sur ce Core (réglage serveur CHALLENGES_ENGINE). Un défi actif n’avance qu’avec « Recompter et verser ». L’activer est une opération séparée, faite sur ton GO.',
+          ]
+        : last && last.status !== 'done'
+          ? [
+              'is-down',
+              `Comptage automatique actif, mais le dernier passage a échoué${last.error ? ` (${last.error})` : ''}.`,
+            ]
+          : !last || now - lastAt > 3 * e.every_s * 1000
+            ? [
+                'is-unknown',
+                `Comptage automatique actif, mais aucun passage récent (toutes les ${e.every_s} s attendu).`,
+              ]
+            : [
+                'is-ok',
+                `Comptage automatique actif : toutes les ${e.every_s} s.`,
+              ];
+  return `<section class="rs-panel ch-engine" data-role="engine"><h2>Moteur</h2>
+    <p class="rs-state ${cls}">${esc(text)}</p>${
+      missing.length
+        ? `<p class="rs-muted">Jamais comptés sur ce Core (source absente) : ${esc(missing.join(', '))}.</p>`
+        : ''
+    }</section>`;
+}
+
 export function mountChallenges(root: HTMLElement) {
   let defs: Def[] = [];
   let lastRun: Run | null = null;
+  /** Refonte H16: the Core's automatic recount (undefined: an older Core that does not say). */
+  let engine: Engine | undefined;
   let metrics: Metric[] = [];
   let items: Item[] = [];
   let form: ChallengeForm = { ...BLANK_FORM };
@@ -219,6 +276,7 @@ export function mountChallenges(root: HTMLElement) {
       ]);
       defs = list.challenges as Def[];
       lastRun = (list.last_run as Run | null) ?? null;
+      engine = list.engine as Engine | undefined;
       // The definition being edited, as it is now (its status changed from the list).
       if (editing)
         editing =
@@ -288,6 +346,7 @@ export function mountChallenges(root: HTMLElement) {
         <p>Le Core compte chaque défi à partir des données des modules et verse la récompense une seule fois par viewer et par période. Aucun défi n’existe par défaut : chacun est créé ici.</p></div>
         <button type="button" class="rs-btn primary" data-act="new">Créer un défi</button></header>
       ${flashHtml()}
+      ${engineHtml(engine, lastRun, metrics, Date.now())}
       ${
         defs.length
           ? `<section class="rs-panel"><h2>Catalogue</h2><div class="rs-scroll"><table class="rs-tbl"><thead><tr><th>Défi</th><th>Condition</th><th>Récompense</th><th>État</th><th class="num">Participants</th><th class="num">Terminés</th><th>Récompenses</th><th></th></tr></thead><tbody>
@@ -388,7 +447,7 @@ export function mountChallenges(root: HTMLElement) {
               ${form.reward_kind === 'jetons' ? `<label>Montant <span class="rs-unit"><input type="number" min="1" data-f="reward_amount" value="${esc(form.reward_amount)}" ${at('reward_amount')}><em>Jetons</em></span></label>` : ''}
             </div>
             ${form.reward_kind === 'reward' && !items.length ? '<p class="rs-note">Aucun objet publié dans la Boutique : crée-le d’abord dans <a href="/?p=shop">Boutique</a>.</p>' : ''}
-            <p class="rs-muted">Versée automatiquement, une seule fois par viewer${form.period === 'once' ? '' : ' <b>et par période</b> (elle se répète chaque ' + (form.period === 'week' ? 'semaine' : 'mois') + ')'}. Aucun budget maximal n’est garanti : il dépend du nombre de viewers qui termineront.</p>
+            <p class="rs-muted">${engine?.enabled ? 'Versée automatiquement (recomptage chaque minute)' : 'Versée au prochain « Recompter et verser » (comptage automatique coupé sur ce Core)'}, une seule fois par viewer${form.period === 'once' ? '' : ' <b>et par période</b> (elle se répète chaque ' + (form.period === 'week' ? 'semaine' : 'mois') + ')'}. Aucun budget maximal n’est garanti : il dépend du nombre de viewers qui termineront.</p>
           </section>
         </div>
         <aside class="ch-side">

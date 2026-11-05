@@ -696,3 +696,17 @@ describe('challenges on the main Core HTTP', () => {
     ).toBe(200);
   });
 });
+
+describe('Refonte H16: the engine state, read only', () => {
+  it('the list says whether this Core recounts by itself (off by default; the server sets it, never Studio)', async () => {
+    const core = await setup();
+    expect((await core.challenges.list(CH)).engine).toEqual({
+      enabled: false,
+      every_s: 60,
+    });
+    core.challenges.engineEnabled = true;
+    expect((await core.challenges.list(CH)).engine.enabled).toBe(true);
+    // Reading it never counts nor pays.
+    expect(await core.db.query('select * from challenge_runs')).toHaveLength(0);
+  });
+});

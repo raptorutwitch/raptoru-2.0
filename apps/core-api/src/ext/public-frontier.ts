@@ -222,6 +222,7 @@ export function createPublicFrontier(
           );
       }, 5000);
       // Défis: the recount (only with CHALLENGES_ENGINE=true; nothing without the tables or a live challenge).
+      core.challenges.engineEnabled = config.CHALLENGES_ENGINE === 'true';
       let counting = false;
       const challengesTick =
         config.CHALLENGES_ENGINE === 'true'
