@@ -68,8 +68,8 @@ test('« Voir tous les modules » stays open when a new state arrives (here the 
       tokens: 4_321,
     }),
   });
-  // The Hub redraws with the new balance (proved by its balance button); the list the viewer opened is still there.
-  await expect(page.locator('body')).toContainText(/4[\s  ]?321|4,3\s?K/, {
+  // The Hub redraws with the new balance (proved by the balance text); the list the viewer opened is still there.
+  await expect(page.locator('body')).toContainText(/4[\s\u202f\u00a0]?321|4,3\s?K/, {
     timeout: 20_000,
   });
   await page.waitForTimeout(1_000);
