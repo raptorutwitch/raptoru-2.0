@@ -148,6 +148,17 @@ Ordre recommandé : F1 → F2 → F4 → F3 → F5 → F6 (au fil des pages) →
 - **H1 change la Production** : hors live, plus aucun achat lié au stream ; à annoncer aux viewers ;
 - l'extension (H15, P0-2 de la console partagée, texte `stream_offline`) par Antoni.
 
+### Mission d'exécution (05/11) — `b9ea6c4` → `2d9f7b2`
+
+Fait :
+- variantes de module (TTS V2, Tombola V2, D4) sorties de `ui.js` ;
+- liste du Hub corrigée ;
+- P1 « écran vide en modérateur » corrigé.
+
+Reste :
+- Soundboard et Bonk (E2E de parité d'abord) ;
+- TTS V1, Tombola V1 et modération V1 restent dans `ui.js` tant que leurs V2 ne les remplacent pas partout.
+
 ### Mission continue (05/11) — `66cab2b` → `4624658`
 
 Fait :

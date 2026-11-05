@@ -83,3 +83,16 @@ Règles :
   - redéployer l'image du Core `8a897a5` et le bot précédent ;
   - les migrations restent en place (additives, compatibles) ;
   - Studio : réinstaller la version précédente.
+
+## 7. Extension — mission d'exécution (05/11)
+
+Les commits `50e8601`, `602401a` et `2d9f7b2` ne changent que l'extension : aucune route du Core, aucune migration, aucun
+contrat d'API.
+- **Ordre.** Livrable avec le Core ou après lui ; jamais publiée par Claude. Antoni l'envoie à Twitch.
+- **Avant l'envoi**, vérification manuelle dans le vrai Lab, en viewer et en modérateur :
+  - TTS V2 : achat, retour, mise à jour en direct ;
+  - Tombola V2 : `!join` du chat ;
+  - D4 › Commandes ;
+  - la liste « Voir tous les modules » ouverte pendant un changement de solde.
+- **Retour arrière** : republier la version précédente de l'extension. L'état est côté Core, rien n'est à migrer.
+

@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026 — « Mission continue » livrée en code (`4624658` + docs, arbre propre). Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 05/11/2026 — « Mission d'exécution » (extension) : variantes et D4 sortis de `ui.js` (`2d9f7b2` + docs). Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -158,16 +158,28 @@ Vu en navigateur (pile isolée, port 4411) :
 - achat, prise par le lecteur fictif, échec, « remboursé » chez le viewer et dans Studio ;
 - Centre de contrôle en 1440 et 420 px.
 
+### Mission d'exécution (05/11) — extension
+
+| Commit | Contenu |
+|---|---|
+| `b9ea6c4` | E2E de parité TTS V2 et Tombola V2, avant toute modification |
+| `50e8601` | variantes de module (`onState`) : TTS V2 et Tombola V2 sortis de `ui.js` |
+| `602401a` | la liste « Voir tous les modules » ne se referme plus toute seule |
+| `3483612` | correction de lint d'un test |
+| `2d9f7b2` | D4 sorti de `ui.js` ; P1 corrigé (écran vide en modérateur sur TTS V2 et Tombola V2) ; chemin rapide prouvé par mutation |
+
+`ui.js` : 6 289 → 6 214 lignes. E2E de l'extension : 15 verts.
+
 Prochaines étapes (ordre conseillé) :
-1. Antoni valide dans le vrai Lab (`npm run studio`) :
-   - Modules du socle et le lecteur fictif du Coffre ;
-   - Points de chaîne › Votekick et Caution ;
-   - D4 › Autres modules ;
-   - Hub de l'extension (Commandes, Roue du Sub, Événements).
-2. Extension : généraliser la mise à jour sans re-rendu (`update(state)`), puis sortir TTS V2 et Tombola V2 de `ui.js`.
-3. Un vrai exécuteur OBS Studio pour un module du socle (modèle : le lecteur fictif ; page d'overlay propre).
-4. Bonk, Soundboard, TTS, Tombola : adaptateurs seulement si un besoin concret le justifie (D20).
-5. Le jour du GO : suivre `LIVRAISON.md`.
+1. Antoni valide dans le vrai Lab (`npm run studio`), en viewer **et** en modérateur :
+   - le Hub de l'extension ;
+   - TTS V2 (achat, retour) ;
+   - Tombola V2 ;
+   - D4 › Commandes.
+2. Soundboard puis Bonk : E2E de parité d'abord, extraction ensuite (`architecture/MIGRATIONS.md`, § extension).
+3. Adaptateurs Core et Studio, seulement là où ils apportent un vrai gain (Roue du Sub, Points de chaîne).
+4. Le jour du GO : suivre `LIVRAISON.md`. L'extension ne change aucune route du Core : elle peut être livrée après le Core
+   ou avec lui.
 
 ## Prochaine action
 

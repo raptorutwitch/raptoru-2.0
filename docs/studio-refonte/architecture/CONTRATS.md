@@ -147,3 +147,28 @@ migration est exigée avant le premier.
 | Isolation | `catalog`, `status`, `tick` | un module illisible est listé « inconnu » sans vider le catalogue ; chaque travail périodique tourne à part, jamais deux fois en même temps |
 | Modération d'équipe | façade `GET /modules/v3/moderation`, `GET /modules/v3/moderation/<id>/activity` | liste des modules modérables (coupés compris), journal d'un seul module dont la politique est visible ; équipe seulement |
 | Studio | `createStudioServer(options)` | options nommées (friction S1) |
+
+## 10. Extension : variantes de module et rafraîchissement rapide (05/11, `50e8601`, `2d9f7b2`)
+
+`registerModuleVariant({ id, match, view, rendered?, onState?, intro?, bodyData?, screenClass?, ownHeader? })` dans
+`module-registry.js`. Une variante prend le module que la session liste quand `match(env)` est vrai.
+
+| Hook | Rôle |
+|---|---|
+| `view(ctx)` | crée la vue une fois tant que le module est ouvert ; `start()` facultatif ; `destroy()` à la sortie (`navigateTo`) |
+| `rendered(view, ctx)` | appelé à chaque dessin du module par l'hôte |
+| `onState(view, next, prev, ctx)` | renvoie `true` si la vue a absorbé le nouvel état : l'hôte ne redessine pas (pas d'animation rejouée). Jamais pendant un écran d'erreur |
+
+`ctx.host` fournit ce que `ui.js` passait à la main :
+- `home()`, `refresh()` ;
+- `payment` : le choix de monnaie, rangé par module dans `paymentChoice` ;
+- `walletMethods()`, `restrictionChips(id)`, `stopRaffleTimer()`.
+
+Un seul emplacement dans `ui.js` (`hostView`, `hostViewId`, `hostVariant`) sert aux modules de session, aux variantes et
+aux vues du socle. Le panneau de modération du socle n'est monté que pour une vue du socle.
+
+Consommateurs :
+- TTS V2 (`tts-v2.js`) ;
+- Tombola V2 (`tombola-v2.js`) ;
+- console D4 (`moderation-v2.js`, avec sa bascule vers « Commandes »).
+

@@ -110,3 +110,20 @@ Restent dans `ui.js` (raccord historique, couplé au chemin de rafraîchissement
 Les extraire demande d'abord de généraliser la mise à jour sans re-rendu (`update(state)`, devise de paiement). C'est le
 prochain obstacle.
 
+## Extension : variantes sorties de `ui.js` (05/11, mission d'exécution)
+
+| Module | Retiré de `ui.js` | Preuve |
+|---|---|---|
+| TTS V2 (`50e8601`) | variable de vue, règle de rafraîchissement rapide (`ttsV2Only`, `withoutTtsV2`), remise à zéro, `ttsV2Form`, branchement ; la monnaie passe par `paymentChoice` | `tts-tombola.e2e.ts` écrit **avant** l'extraction ; test du chemin rapide vérifié par mutation |
+| Tombola V2 (`50e8601`) | variable, retour anticipé de `updateState`, remise à zéro, branche de rendu, `isTombolaV2` (3 usages) | `tts-tombola.e2e.ts` : manche lancée en son absence, `!join` du chat reçu en direct, Hub et retour |
+| Console D4 et sa vue « Commandes » (`2d9f7b2`) | deux variables de vue, la bascule, la remise à zéro, la branche (environ 40 lignes), le retour anticipé, 2 imports | `commands-public.e2e.ts` (D4 › Commandes en modérateur), parcours modérateur de `tts-tombola.e2e.ts` |
+
+`ui.js` passe de 6 289 à 6 214 lignes. Le compte de lignes n'est pas l'objectif : ce qui compte, c'est qu'une vue avec
+mise à jour en direct n'écrive plus rien dans `ui.js`.
+
+Pas fait :
+- **Soundboard** (`soundboardForm`, environ 1 000 lignes) et **Bonk** (`bonkForm`, environ 450 lignes). Ils dépendent de
+  nombreuses variables internes de `ui.js` (glisser, volume, aperçus, émotes, délais, en-tête) et du chemin rapide
+  (Soundboard « inchangé », glisser en cours). Aucun E2E de l'extension ne les couvre.
+- Lot suivant : E2E de parité d'abord, puis extraction avec un `ctx`, sur le modèle de TTS.
+

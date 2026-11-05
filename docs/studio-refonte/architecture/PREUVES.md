@@ -149,3 +149,14 @@ Limites mesurées :
 | Spotify H6 | la grâce n'avait pas été vérifiée de bout en bout | vérifié : seules les demandes `QUEUED` sont annulées, une coupure plus courte que la grâce et une reconnexion ne touchent rien | `MIGRATIONS.md` § Spotify | — |
 | Livraison | aucun plan | `LIVRAISON.md` : 8 migrations, coexistence des versions, ordre, contrôles, retour arrière | — | le jour du GO |
 
+## Mission d'exécution (05/11) : extension
+
+| Lot | Problème | Changement | Preuve |
+|---|---|---|---|
+| Parité d'abord (`b9ea6c4`) | aucun E2E de l'extension sur TTS V2 et Tombola V2 ; la pile d'aperçu n'offrait que TTS V1 | `tts-tombola.e2e.ts` vert **avant** de toucher au code ; vrai worker TTS et lecteur fictif sur la pile | 2 E2E |
+| Variantes (`50e8601`) | les règles de rafraîchissement rapide de chaque module étaient codées dans `ui.js` | `registerModuleVariant` (`onState`) : TTS V2 et Tombola V2 dans leurs propres fichiers | les mêmes E2E, verts après ; une régression (`start` absent) trouvée par eux et corrigée |
+| Liste du Hub (`602401a`) | « Voir tous les modules » se refermait sous le viewer à chaque nouvel état | l'état ouvert est conservé entre deux dessins | reproduit (1 tuile → 0), corrigé, E2E de non-régression |
+| D4 (`2d9f7b2`) | console et vue « Commandes » câblées dans `ui.js` | variante de « moderation » | `commands-public.e2e.ts`, parcours modérateur |
+| P1 (`2d9f7b2`) | écran vide pour un modérateur sur TTS V2 et Tombola V2 (panneau du socle monté à tort) | panneau réservé aux vues du socle | E2E en modérateur ; confirmé aussi par la revue |
+| Chemin rapide prouvé | l'E2E ne prouvait pas `onState` (signalé par la revue) | marqueur sur l'en-tête de l'hôte, vérifié à la lecture d'état suivante | mutation : `onState` forcé à `false` → échec ; code réel → succès |
+

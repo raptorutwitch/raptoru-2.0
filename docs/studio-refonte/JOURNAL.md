@@ -154,3 +154,16 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - `LIVRAISON.md` préparé. Rien n'est exécuté.
 - Revue indépendante des deux changements structurels : aucun P0 / P1, 3 P2 corrigés (`4624658`).
 
+## 05/11/2026 — Mission d'exécution (extension)
+
+- E2E de parité TTS V2 et Tombola V2 écrits et verts **avant** l'extraction. Il a fallu brancher sur la pile un vrai
+  worker TTS et un lecteur fictif : jusque-là, la pile ne montrait que le TTS V1.
+- `registerModuleVariant` (`onState`) : TTS V2, Tombola V2 puis D4 sortis de `ui.js`.
+- Défauts trouvés en route :
+  - `start()` absent sur TTS V2, ce qui faisait planter le dessin ;
+  - P1 : écran vide en modérateur, trouvé par l'E2E et par la revue ;
+  - la liste du Hub se refermait à chaque nouvel état (défaut ancien, visible des viewers) ;
+  - deux E2E fragiles (tuile de carrousel cachée), consolidés.
+- Revue indépendante de `50e8601` : 1 P1 et 1 P2, corrigés dans `2d9f7b2`. Le test du chemin rapide est vérifié par
+  mutation.
+
