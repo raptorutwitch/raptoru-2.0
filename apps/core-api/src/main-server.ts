@@ -1,5 +1,6 @@
 import type { Server } from 'node:http';
 import { createCore, type Core } from './app.js';
+import { ThirdPartyEmotes } from './bonk-lab/third-party-emotes.js';
 import type { CreditProvider } from './daily/credits.js';
 import type { EconomyPort } from './economy/economy.js';
 import type { Clock } from './clock.js';
@@ -37,6 +38,9 @@ export function createMainCore(
       // The streamer of the chat modules (Tombola, Commands V2, games) and the Twitch app (Duel targets by login).
       broadcasterId: config.TWITCH_CHANNEL_ID ?? null,
       broadcasterLogin: config.TWITCH_CHANNEL_LOGIN,
+      emoteCatalog: config.EMOTE_CATALOG_CHANNEL_ID
+        ? new ThirdPartyEmotes(config.EMOTE_CATALOG_CHANNEL_ID, clock)
+        : null,
       twitchApp:
         config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
           ? {

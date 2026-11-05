@@ -56,6 +56,12 @@ const Env = z
       .url()
       .refine((u) => u.startsWith('https://'), 'https only')
       .optional(),
+    // Bonk: the Twitch channel whose PUBLIC 7TV / BTTV / FFZ catalogs are offered (read-only GETs, no token, no account).
+    // Absent = none (default). The Lab may name the real channel here: it only reads public catalogs.
+    EMOTE_CATALOG_CHANNEL_ID: z
+      .string()
+      .regex(/^\d{1,32}$/)
+      .optional(),
     // Delivery tooling (docs/CICD.md): bearer token of the read-only GET /v1/ops/status. Absent = no such route.
     OPS_TOKEN: z.string().min(32).optional(),
     /** raptoru.fr's server (a viewer equips a title / badges): the route is mounted only when set. */

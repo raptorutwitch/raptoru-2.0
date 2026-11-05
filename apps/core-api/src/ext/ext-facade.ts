@@ -9,7 +9,11 @@ import {
   type TwitchViewerCatalog,
   TwitchViewerError,
 } from '../bonk-lab/twitch-viewer.js';
-import { twitchEmoteGroups } from './twitch-emote-groups.js';
+import type { BonkLabThirdPartyCatalog } from '@raptoru/schemas';
+import {
+  thirdPartyEmoteGroups,
+  twitchEmoteGroups,
+} from './twitch-emote-groups.js';
 import type { LabCall, LabCallError } from './lab-internal.js';
 import type { ExtCaller } from './twitch-jwt.js';
 import type { TwitchName, TwitchNames } from './twitch-names.js';
@@ -448,6 +452,13 @@ export class ExtFacade {
       )?.settings.find((x) => x.key === 'bonk.price')?.value ??
         BONK_LAB_RULES.simulatedCost,
     );
+    // The channel's PUBLIC 7TV / BTTV / FFZ catalogs when this Core reads them (EMOTE_CATALOG_CHANNEL_ID, off by
+    // default: none, as before); the service caches them.
+    const thirdPartyGroups = await this.core<BonkLabThirdPartyCatalog>(
+      '/v1/lab/bonk/third-party/catalog',
+    )
+      .then(thirdPartyEmoteGroups)
+      .catch(() => []);
     const modules: Json[] = [
       {
         ...MODULE_PRESENTATION.tts,
@@ -484,7 +495,7 @@ export class ExtFacade {
       {
         ...MODULE_PRESENTATION.bonk,
         token_cost: bonkPrice,
-        emote_catalog: { groups: [] },
+        emote_catalog: { groups: thirdPartyGroups },
       },
     ].map((m) =>
       this.real && REAL_DESCRIPTION[String(m.id)]

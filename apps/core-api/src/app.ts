@@ -1,3 +1,4 @@
+import { ThirdPartyEmotes } from './bonk-lab/third-party-emotes.js';
 import { ALERT_RULES, AlertsService } from './alerts/service.js';
 import {
   eventShopModule,
@@ -113,6 +114,8 @@ export function createCore(
     /** Random Ban V3: the streamer's login (history, the chat line of his mute). */
     broadcasterLogin?: string | null;
     twitchApp?: { clientId: string; clientSecret: string } | null;
+    /** Bonk: the channel's PUBLIC 7TV / BTTV / FFZ catalogs (read-only, no token); null = none (default). */
+    emoteCatalog?: ThirdPartyEmotes | null;
     /** Duel targets by login without Twitch (tests). */
     loginLookup?: LoginLookup | null;
     /** Lot 9: alerts older than this are recorded, not animated (absent: 30 min, refonte H3). */
@@ -132,7 +135,13 @@ export function createCore(
   const soundLab = new SoundLabService(db, clock, undefined, economy);
   // Refonte H10 / H12: prices, delays and limits set from Studio, read by the executors (module-settings/service.ts).
   const moduleSettings = new ModuleSettings(db, clock);
-  const bonkLab = new BonkLabService(db, clock, twitchViewers, null, economy);
+  const bonkLab = new BonkLabService(
+    db,
+    clock,
+    twitchViewers,
+    channel.emoteCatalog ?? null,
+    economy,
+  );
   bonkLab.settings = moduleSettings;
   // The module host: every module of modules/index.ts, on this Core's economy (Lab-only modules never on canonical).
   const modules = new ModuleHost(MODULES, {
