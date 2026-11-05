@@ -1198,6 +1198,7 @@ export class LabEbs {
             }
           : null,
         idempotencyKey: headers.idempotencyKey,
+        moderator: this.labActor(caller),
       });
       if (out) return { status: out.status, body: out.body as Json };
     }

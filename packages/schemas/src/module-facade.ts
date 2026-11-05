@@ -20,6 +20,7 @@ interface CatalogModule {
   capabilities: string[];
   enabled: boolean;
   viewer: { name: string; label: string; price: number; live_only: boolean }[];
+  moderation: { visible: boolean; refund: 'never' | 'moderator' } | null;
 }
 
 const ID = '[a-z][a-z0-9_]{1,40}';
@@ -34,6 +35,11 @@ export async function moduleFacade(o: {
   body: unknown;
   viewer: { id: string; display_name: string } | null;
   idempotencyKey?: string | null;
+  /**
+   * The verified caller as a moderation actor when the caller is on the channel's team (null otherwise): the Core
+   * checks the permission (refund: moderator) and audits — the façade never decides.
+   */
+  moderator?: { id: string; role: string; via: 'extension'; display_name?: string } | null;
 }): Promise<ModuleFacadeReply | null> {
   if (o.path !== '/modules/v3' && !o.path.startsWith('/modules/v3/'))
     return null;
@@ -41,6 +47,31 @@ export async function moduleFacade(o: {
   const sub = o.path.slice('/modules/v3'.length);
   let m: RegExpExecArray | null;
   try {
+    // Moderation of the host's modules (GUIDE_MODERATION.md): the shared journal and the refund of an original debit.
+    if (sub === '/moderation/activity' || sub === '/moderation/refund') {
+      // The journal names every viewer: team only (the refund's permission is checked again by the Core).
+      if (!o.moderator || (o.moderator.role !== 'moderator' && o.moderator.role !== 'broadcaster'))
+        return { status: 403, body: { ok: false, error: 'forbidden' } };
+      if (o.method === 'GET' && sub === '/moderation/activity')
+        return {
+          status: 200,
+          body: { ok: true, ...(await o.call<Record<string, unknown>>(`${base}/activity`)) },
+        };
+      if (o.method === 'POST' && sub === '/moderation/refund') {
+        const b = (o.body ?? {}) as { activity_id?: unknown; reason?: unknown };
+        return {
+          status: 200,
+          body: {
+            ok: true,
+            ...(await o.call<Record<string, unknown>>(`${base}/refund`, {
+              actor: o.moderator,
+              activity_id: b.activity_id,
+              reason: b.reason,
+            })),
+          },
+        };
+      }
+    }
     if (o.method === 'GET' && sub === '') {
       // Only what a viewer needs: the modules that have viewer actions (capability negotiation: the server's list).
       const { modules } = await o.call<{ modules: CatalogModule[] }>(base);
@@ -57,6 +88,10 @@ export async function moduleFacade(o: {
               category: x.category,
               enabled: x.enabled,
               actions: x.viewer,
+              // The policy only (what the team's panel may show); the permission is checked by the Core.
+              moderation: x.moderation
+                ? { visible: x.moderation.visible, refund: x.moderation.refund }
+                : null,
             })),
         },
       };

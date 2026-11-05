@@ -8,6 +8,7 @@ import {
 } from '../extension/shared/module-registry.js';
 import { createIntent, createPurchaseButton, isRetryable } from '../extension/shared/purchase.js';
 import { coffreHistoryHtml } from '../extension/shared/coffre-mystere.js';
+import { moduleJournalHtml } from '../extension/shared/module-moderation.js';
 
 // Architecture socle, extension side: the registry (server-listed AND known modules only), the purchase per intent
 // (one key until the server decided), the demo view's pure part. A tiny fake DOM: no browser needed.
@@ -117,5 +118,22 @@ describe('Coffre mystère (démonstration B) — viewer history', () => {
     expect(html).toContain('&lt;b&gt;clé&lt;/b&gt;');
     expect(html).toContain('en route vers le stream');
     expect(html).toContain('remboursé');
+  });
+});
+
+describe('module moderation panel (host, generic)', () => {
+  const rows = [
+    { activity_id: 'a1', viewer: { display_name: '<i>Zoé</i>' }, action: 'ouvrir', amount: 100, status: 'queued' },
+    { activity_id: 'a2', viewer: { display_name: 'Max' }, action: 'ouvrir', amount: 100, status: 'refunded', reason: 'test' },
+    { activity_id: 'a3', viewer: null, action: 'ajouter', amount: 0, status: 'done' },
+  ];
+  it('a refund button only on a paid, not yet refunded row, and only when the policy allows it', () => {
+    const html = moduleJournalHtml(rows, { refund: 'moderator' });
+    expect(html.match(/data-refund=/g)).toHaveLength(1);
+    expect(html).toContain('data-refund="a1"');
+    expect(html).toContain('&lt;i&gt;Zoé&lt;/i&gt;');
+    expect(html).toContain('« test »');
+    expect(moduleJournalHtml(rows, { refund: 'never' })).not.toContain('data-refund');
+    expect(moduleJournalHtml([], { refund: 'moderator' })).toContain('Rien dans le journal');
   });
 });

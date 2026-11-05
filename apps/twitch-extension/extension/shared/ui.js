@@ -43,6 +43,7 @@ import { createEventShopView } from './events-shop.js';
 import { createTombolaV2View } from './tombola-v2.js';
 // The module host (architecture socle): viewer modules register themselves; ui.js only hosts them.
 import { hostModules, loadHostModules, viewerModuleView } from './module-registry.js';
+import { createModuleModerationPanel } from './module-moderation.js';
 import './coffre-mystere.js';
 import {
   hideRestrictions,
@@ -6238,6 +6239,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           hostView = viewerModuleView(mod.id)({ document, client, module: mod.server });
           hostViewId = mod.id;
           hostView.start();
+          // The team's moderation of this module: the host's generic panel, never written by the module.
+          const panel = canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
+          if (panel?.visible) {
+            hostView.node.append(panel.node);
+            void panel.refresh();
+          }
         }
         body.append(hostView.node);
         queueMicrotask(() => hostView?.attached?.());

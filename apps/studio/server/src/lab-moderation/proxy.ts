@@ -52,6 +52,10 @@ const PREFIXES = [
   // Halloween « Titres » in the Extension Lab: the shop's catalogue, a viewer's side and the purchase (Lab Core).
   '/v1/cosmetics/catalog',
   '/v1/site/cosmetics/',
+  // Réglages H10 / H12 / H14 (bounded module settings, Daily steps) and the module host (architecture socle).
+  '/v1/lab/module-settings/',
+  '/v1/lab/daily/',
+  '/v1/lab/modules/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */

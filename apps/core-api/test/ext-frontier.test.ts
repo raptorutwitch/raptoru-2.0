@@ -885,5 +885,27 @@ describe('module host through the real Production doors (architecture socle)', (
     expect(refund.body).toMatchObject({ refunded: 100 });
     expect((await ext('/session', jwt)).body.wallet.available).toBe(before);
     void core;
+  });  it('the team moderates from the extension: the journal is team only, a moderator refunds the original debit once', async () => {
+    const { ext, studio } = await fixture();
+    await studio(`/v1/studio/cockpit/module-settings/${CHANNEL}`, { key: 'coffre_mystere.enabled', value: 1 });
+    const jwt = viewer('4245');
+    const bought = await ext('/modules/v3/coffre_mystere/ouvrir', jwt, {}, randomUUID());
+    expect(bought.body.ok).toBe(true);
+    const id = bought.body.activity.activity_id;
+    // The policy travels with the catalog (what the team's panel may show).
+    const entry = (await ext('/modules/v3', jwt)).body.modules.find((m: { id: string }) => m.id === 'coffre_mystere');
+    expect(entry.moderation).toEqual({ visible: true, refund: 'moderator' });
+    // A viewer: neither the journal nor a refund (even of their own purchase).
+    expect((await ext('/modules/v3/moderation/activity', jwt)).status).toBe(403);
+    expect((await ext('/modules/v3/moderation/refund', jwt, { activity_id: id, reason: 'x' })).status).toBe(403);
+    const mod = viewer('9001', 'moderator');
+    const journal = (await ext('/modules/v3/moderation/activity', mod)).body;
+    expect(journal.items.some((r: { activity_id: string }) => r.activity_id === id)).toBe(true);
+    expect((await ext('/modules/v3/moderation/refund', mod, { activity_id: id })).status).toBe(400); // no reason
+    const before = (await ext('/session', jwt)).body.wallet.available;
+    const out = await ext('/modules/v3/moderation/refund', mod, { activity_id: id, reason: 'coffre jamais affiché' });
+    expect(out.body).toMatchObject({ ok: true, refunded: 100, activity: { status: 'refunded', reason: 'coffre jamais affiché' } });
+    expect((await ext('/modules/v3/moderation/refund', mod, { activity_id: id, reason: 'encore' })).body.error).toBe('already_refunded');
+    expect((await ext('/session', jwt)).body.wallet.available).toBe(before + 100);
   });
 });

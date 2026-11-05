@@ -269,6 +269,7 @@ export class ExtFacade {
         ? { id: who.viewer.id, display_name: who.viewer.display_name }
         : null,
       idempotencyKey,
+      moderator: who.team && who.viewer ? this.actor(who) : null,
     });
     if (mod) return mod as ExtReply;
     return fail(404, 'not_available');

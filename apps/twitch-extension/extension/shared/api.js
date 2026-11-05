@@ -515,6 +515,10 @@ export function createClient({
     moduleState: (id) => call('GET', `/modules/v3/${encodeURIComponent(id)}/state`),
     moduleAct: (id, action, input, idempotencyKey) =>
       call('POST', `/modules/v3/${encodeURIComponent(id)}/${encodeURIComponent(action)}`, { body: { input }, idempotencyKey }),
+    /** Team only (the server refuses others): the host modules' journal, and the refund of an original debit. */
+    moduleModerationActivity: () => call('GET', '/modules/v3/moderation/activity'),
+    moduleModerationRefund: (activityId, reason) =>
+      call('POST', '/modules/v3/moderation/refund', { body: { activity_id: activityId, reason } }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
     commandsPublic: () => call('GET', '/commands/public'),
     /** Roue du Sub V2 (R8): the caller's own tours (identity from the token), and « Lancer mes tours ». */
