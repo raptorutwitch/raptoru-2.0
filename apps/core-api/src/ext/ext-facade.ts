@@ -1,4 +1,5 @@
 import { eventTitlesView } from '@raptoru/schemas';
+import { moduleFacade } from '@raptoru/schemas';
 import { subWheelExt } from './sub-wheel-ext.js';
 import {
   BONK_LAB_RULES,
@@ -257,6 +258,19 @@ export class ExtFacade {
         );
       return this.legacyModeration(method, path, body, who);
     }
+    // The module host (architecture socle): ONE door for every module, shared with the Lab EBS (@raptoru/schemas).
+    const mod = await moduleFacade({
+      call: this.core,
+      channelId: this.C,
+      method,
+      path,
+      body,
+      viewer: who.viewer
+        ? { id: who.viewer.id, display_name: who.viewer.display_name }
+        : null,
+      idempotencyKey,
+    });
+    if (mod) return mod as ExtReply;
     return fail(404, 'not_available');
   }
 

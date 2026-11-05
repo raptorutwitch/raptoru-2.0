@@ -41,6 +41,9 @@ import { createCommandsPublicView } from './commands-public.js';
 import { createSubWheelView } from './sub-wheel-ext.js';
 import { createEventShopView } from './events-shop.js';
 import { createTombolaV2View } from './tombola-v2.js';
+// The module host (architecture socle): viewer modules register themselves; ui.js only hosts them.
+import { hostModules, loadHostModules, viewerModuleView } from './module-registry.js';
+import './coffre-mystere.js';
 import {
   hideRestrictions,
   holdsAction,
@@ -1212,6 +1215,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let commandsPublicView = null;
   let subWheelView = null;
   let eventShopView = null;
+  /** The open module of the module host (one at a time) and its id. */
+  let hostView = null;
+  let hostViewId = null;
   let paymentWalletSync = null;
   let soundboardVolumeOpen = false;
   let soundboardVolumeSync = null;
@@ -1447,7 +1453,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (id === COMMANDS_PUBLIC_MODULE.id) return commandsPublicAvailable() ? COMMANDS_PUBLIC_MODULE : null;
     if (id === SUB_WHEEL_MODULE.id) return subWheelAvailable() ? SUB_WHEEL_MODULE : null;
     if (id === EVENT_SHOP_MODULE.id) return eventShopAvailable() ? eventShopModule(state?.event_shop) : null;
-    return (state?.modules ?? []).find((m) => m.id === id) ?? null;
+    return (state?.modules ?? []).find((m) => m.id === id) ?? hostModules().find((m) => m.id === id) ?? null;
   }
 
   /** « Roue du Sub » (R8): offered by the EBS (Lab today; the production frontier keeps it hidden in mode v1). */
@@ -1795,6 +1801,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
     if (moduleId !== COMMANDS_PUBLIC_MODULE.id) commandsPublicView = null;
     if (moduleId !== SUB_WHEEL_MODULE.id) subWheelView = null;
+    if (moduleId !== hostViewId) {
+      hostView?.destroy?.();
+      hostView = null;
+      hostViewId = null;
+    }
     if (moduleId !== EVENT_SHOP_MODULE.id) {
       eventShopView?.destroy();
       eventShopView = null;
@@ -5941,6 +5952,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (canModerate() && !modules.some((mod) => mod.id === MODERATION_MODULE.id)) {
       modules.push(MODERATION_MODULE);
     }
+    // Modules of the module host: listed by the server, shown only when this build has their view.
+    void loadHostModules(client, () => renderPreservingViewport());
+    for (const mod of hostModules()) if (!modules.some((m) => m.id === mod.id)) modules.push(mod);
     if (openModule && !modules.some((mod) => mod.id === openModule)) openModule = null;
     root.dataset.view = openModule ? 'module' : 'home';
 
@@ -6218,6 +6232,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           eventShopView.start();
         }
         body.append(eventShopView.node);
+      } else if (mod.host && viewerModuleView(mod.id)) {
+        // A module of the module host: its own view, hosted (no per-module branch here).
+        if (!hostView || hostViewId !== mod.id) {
+          hostView = viewerModuleView(mod.id)({ document, client, module: mod.server });
+          hostViewId = mod.id;
+          hostView.start();
+        }
+        body.append(hostView.node);
+        queueMicrotask(() => hostView?.attached?.());
       } else if (mod.id === SUB_WHEEL_MODULE.id) {
         // Roue du Sub V2 (R8): the viewer's own tours (+ the team's part for moderators), Core's projection only.
         if (!subWheelView) {

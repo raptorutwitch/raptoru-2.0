@@ -509,6 +509,12 @@ export function createClient({
     modV2: (path) => call('GET', `/moderation/v2/${path}`),
     /** Moderation V2 command, executed and audited by Core with the caller's permissions. */
     modV2Act: (command, key) => call('POST', '/moderation/v2/actions', { body: { command }, idempotencyKey: key ?? newIdempotencyKey() }),
+    // The module host (architecture socle): ONE door for every module — the server's list, a module's state for this
+    // viewer, an action with the intent's key (purchase.js keeps it until the server decided).
+    moduleCatalog: () => call('GET', '/modules/v3'),
+    moduleState: (id) => call('GET', `/modules/v3/${encodeURIComponent(id)}/state`),
+    moduleAct: (id, action, input, idempotencyKey) =>
+      call('POST', `/modules/v3/${encodeURIComponent(id)}/${encodeURIComponent(action)}`, { body: { input }, idempotencyKey }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
     commandsPublic: () => call('GET', '/commands/public'),
     /** Roue du Sub V2 (R8): the caller's own tours (identity from the token), and « Lancer mes tours ». */
@@ -657,6 +663,8 @@ export const ERROR_LABELS = {
   message_blocked: 'Ce message contient un mot interdit : rien n’a été débité.',
   raffle_paused: 'La tombola est en pause.',
   module_disabled: 'Ce module est désactivé pour le moment.',
+  too_many_waiting: 'Tu as déjà des achats en attente : patiente un peu.',
+  idempotency_conflict: 'Cette demande a déjà été envoyée autrement : recharge le module.',
   // Refonte H1: paid stream interactions only during the live (refused before any debit).
   stream_offline: 'Disponible uniquement pendant le live : rien n’a été débité.',
   tts_banned: 'Tu ne peux pas utiliser le TTS pour le moment.',

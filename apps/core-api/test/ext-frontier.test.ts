@@ -821,3 +821,69 @@ describe('operator: Studio installations over HTTPS (Studio secret)', () => {
     expect(anonymous.status).toBe(401);
   });
 });
+
+describe('module host through the real Production doors (architecture socle)', () => {
+  it('cockpit sets and reads, the extension buys once per intent (replay = same answer), moderation refunds once', async () => {
+    const { core, ext, studio } = await fixture();
+    const jwt = viewer('4244');
+    // OFF by default: listed (the server says it exists), not buyable.
+    const list = (await ext('/modules/v3', jwt)).body;
+    expect(
+      list.modules.find((m: { id: string }) => m.id === 'coffre_mystere'),
+    ).toMatchObject({ enabled: false });
+    expect(
+      (await ext('/modules/v3/coffre_mystere/ouvrir', jwt, {})).body.error,
+    ).toBe('module_disabled');
+    // Studio (paired installation) switches it ON through the cockpit, as the broadcaster.
+    expect(
+      (
+        await studio(`/v1/studio/cockpit/module-settings/${CHANNEL}`, {
+          key: 'coffre_mystere.enabled',
+          value: 1,
+        })
+      ).status,
+    ).toBe(200);
+    const before = (await ext('/session', jwt)).body.wallet.available;
+    const key = randomUUID();
+    const first = await ext('/modules/v3/coffre_mystere/ouvrir', jwt, {}, key);
+    const again = await ext('/modules/v3/coffre_mystere/ouvrir', jwt, {}, key);
+    expect(first.body).toMatchObject({
+      ok: true,
+      replayed: false,
+      activity: { status: 'queued', amount: 100 },
+    });
+    expect(again.body).toMatchObject({ ok: true, replayed: true });
+    expect((await ext('/session', jwt)).body.wallet.available).toBe(
+      before - 100,
+    );
+    // The viewer's own state; anonymous viewers cannot buy.
+    const state = (await ext('/modules/v3/coffre_mystere/state', jwt)).body;
+    expect(state.recent).toHaveLength(1);
+    expect(
+      (
+        await ext(
+          '/modules/v3/coffre_mystere/ouvrir',
+          token({ role: 'viewer' }),
+          {},
+        )
+      ).body.error,
+    ).toBe('identity_required');
+    // Studio sees it in the shared journal and refunds the ORIGINAL debit once.
+    const cat = (await studio(`/v1/studio/cockpit/modules/${CHANNEL}`)).body;
+    expect(cat.modules.map((m: { id: string }) => m.id)).toEqual([
+      'objectif_soiree',
+      'coffre_mystere',
+    ]);
+    const refund = await studio(
+      `/v1/studio/cockpit/modules/${CHANNEL}/refund`,
+      {
+        actor: { id: 'evil', role: 'viewer', via: 'extension' }, // replaced by the cockpit (broadcaster)
+        activity_id: first.body.activity.activity_id,
+        reason: 'test',
+      },
+    );
+    expect(refund.body).toMatchObject({ refunded: 100 });
+    expect((await ext('/session', jwt)).body.wallet.available).toBe(before);
+    void core;
+  });
+});

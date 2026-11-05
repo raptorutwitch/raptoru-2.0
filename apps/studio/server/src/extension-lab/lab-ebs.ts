@@ -5,6 +5,7 @@ import {
   type SoundLabSound,
   type TtsLabViewerState,
 } from '@raptoru/schemas';
+import { moduleFacade } from '@raptoru/schemas';
 import type { SoundWorker } from '../sound-lab/worker.js';
 import type { TtsWorker } from '../tts-lab/worker.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
@@ -1181,6 +1182,24 @@ export class LabEbs {
         headers.idempotencyKey,
       );
       if (out) return out;
+    }
+    // The module host (architecture socle): the SAME door as the Production façade (@raptoru/schemas moduleFacade).
+    if (this.labCore && path.startsWith('/modules/v3')) {
+      const out = await moduleFacade({
+        call: this.labCore,
+        channelId: LAB_CHANNEL.id,
+        method,
+        path,
+        body,
+        viewer: caller.identityShared
+          ? {
+              id: caller.identity.twitchUserId,
+              display_name: caller.identity.displayName,
+            }
+          : null,
+        idempotencyKey: headers.idempotencyKey,
+      });
+      if (out) return { status: out.status, body: out.body as Json };
     }
     // Roue du Sub V2 (R8): the viewer's own tours, the team's actions — the caller's verified identity, Core decides.
     if (this.labCore && path.startsWith('/sub-wheel/')) {

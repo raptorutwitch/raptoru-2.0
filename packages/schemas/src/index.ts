@@ -28,3 +28,4 @@ export * from './event-shop.js';
 export * from './progression.js';
 export * from './cosmetics.js';
 export * from './challenges.js';
+export * from './module-facade.js';
