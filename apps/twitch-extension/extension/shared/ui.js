@@ -12,7 +12,7 @@ import {
   resolveNotification,
   unreadNotificationCount,
 } from './notifications.js';
-import { RUNTIME } from './runtime-config.js';
+import { createEmoteAccess } from './emote-access.js';
 import { walletPaymentMethods, walletCanPayTokens } from './wallet-payment.js';
 import {
   createFeedbackSlot,
@@ -483,7 +483,6 @@ function fmtRafflePotAmount(value) {
 const TUTORIAL_DISABLED_PREFIX = 'raptoru-live:tutorial-disabled:';
 /** Tutoriel du module Bonk (bonk-tour.js) : même préférence « Ne plus afficher » que le tutoriel global. */
 const BONK_TUTORIAL = { id: 'bonk', version: 1 };
-const EMOTE_CATALOG_REFRESH_MS = 10 * 60 * 1000;
 // Soundboard help copy, kept for the tutorial (not wired yet).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const SOUNDBOARD_HELP_PAGES = Object.freeze([
@@ -493,11 +492,6 @@ const SOUNDBOARD_HELP_PAGES = Object.freeze([
   'Utilise 🔍 pour retrouver rapidement un son.',
   '🔊 règle le volume de tes aperçus.',
 ]);
-export const EMOTE_AUTH_POLL_INTERVAL_MS = 2_000;
-export const EMOTE_AUTH_TIMEOUT_MS = 90_000;
-export const EMOTE_AUTH_POPUP_GRACE_MS = 5_000;
-/** Après une tentative, une autorisation vue plus tard par le serveur est encore confirmée pendant ce délai. */
-const EMOTE_AUTH_LATE_WINDOW_MS = 10 * 60_000;
 const ACTIONS_MODULE = Object.freeze({
   id: 'actions',
   label: 'Actions',
@@ -644,16 +638,6 @@ function raffleTotalSeconds(raffle) {
   return null;
 }
 
-export function emoteCatalogStateKey(emotes, twitchUserId = '') {
-  return [
-    String(twitchUserId || ''),
-    emotes?.twitch_connected === true ? 'viewer' : 'public',
-    emotes?.seven_tv === true ? '7tv' : 'no-7tv',
-    emotes?.bttv === true ? 'bttv' : 'no-bttv',
-    emotes?.ffz === true ? 'ffz' : 'no-ffz',
-  ].join('|');
-}
-
 export function shouldAutoOpenTutorial({
   isStudioPreview = false,
   tutorialDisabled = false,
@@ -664,104 +648,6 @@ export function shouldAutoOpenTutorial({
     && !tutorialDisabled
     && !openModule
     && !modules.some((module) => module?.id === 'bonk');
-}
-
-/**
- * Attend la confirmation serveur d'une autorisation viewer sans dépendre de
- * window.opener. Le premier contrôle est immédiat, puis les contrôles restent
- * séquentiels pour ne jamais empiler des GET /state.
- */
-export function createEmoteAuthorizationPoller({
-  check,
-  isPopupClosed = () => false,
-  onSuccess = () => {},
-  onStopped = () => {},
-  intervalMs = EMOTE_AUTH_POLL_INTERVAL_MS,
-  timeoutMs = EMOTE_AUTH_TIMEOUT_MS,
-  popupGraceMs = EMOTE_AUTH_POPUP_GRACE_MS,
-  now = () => Date.now(),
-  schedule = (callback, delay) => globalThis.setTimeout(callback, delay),
-  cancel = (timer) => globalThis.clearTimeout(timer),
-} = {}) {
-  if (typeof check !== 'function') throw new TypeError('oauth_poll_check_required');
-  const safeNow = () => {
-    const value = Number(now());
-    return Number.isFinite(value) ? value : Date.now();
-  };
-  const safeDelay = (value) => Math.max(0, Number(value) || 0);
-  let active = false;
-  let timer = null;
-  let generation = 0;
-  let startedAt = 0;
-  let popupClosedAt = null;
-
-  function clearTimer() {
-    if (timer !== null) cancel(timer);
-    timer = null;
-  }
-
-  async function stop(reason, { notify = true } = {}) {
-    const wasActive = active;
-    active = false;
-    generation += 1;
-    clearTimer();
-    if (notify && wasActive) await onStopped(reason);
-  }
-
-  async function tick(runGeneration) {
-    if (!active || runGeneration !== generation) return;
-    const current = safeNow();
-    if (current - startedAt >= timeoutMs) {
-      await stop('timeout');
-      return;
-    }
-
-    let closed;
-    try { closed = isPopupClosed() === true; } catch { closed = true; }
-    if (closed && popupClosedAt === null) popupClosedAt = current;
-
-    let confirmed = false;
-    try { confirmed = (await check({ popupClosed: closed })) === true; } catch { /* prochain poll */ }
-    if (!active || runGeneration !== generation) return;
-    if (confirmed) {
-      await stop('success', { notify: false });
-      await onSuccess();
-      return;
-    }
-
-    const afterCheck = safeNow();
-    if (afterCheck - startedAt >= timeoutMs) {
-      await stop('timeout');
-      return;
-    }
-    if (popupClosedAt !== null && afterCheck - popupClosedAt >= popupGraceMs) {
-      await stop('popup_closed');
-      return;
-    }
-
-    const remainingGrace = popupClosedAt === null
-      ? intervalMs
-      : Math.max(0, popupGraceMs - (afterCheck - popupClosedAt));
-    timer = schedule(() => {
-      timer = null;
-      void tick(runGeneration);
-    }, safeDelay(Math.min(intervalMs, remainingGrace)));
-  }
-
-  return {
-    start() {
-      void stop('restart', { notify: false });
-      active = true;
-      generation += 1;
-      startedAt = safeNow();
-      popupClosedAt = null;
-      void tick(generation);
-    },
-    stop(reason = 'cancelled') {
-      return stop(reason);
-    },
-    get active() { return active; },
-  };
 }
 
 /**
@@ -1002,28 +888,19 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let raffleTimer = null;
   let raffleTimerSnapshot = null;
   let raffleJoinConfirmedWindowId = null;
-  let emoteCatalog = null;
-  let emoteCatalogKey = null;
-  let emoteCatalogLoadedAt = 0;
-  let emoteLoading = false;
-  let emoteError = null;
-  let emoteCatalogGeneration = 0;
-  let emoteForceReloadPending = false;
-  let emoteAuthorizationStarting = false;
   // Bonk : fenêtre « Lie ton compte Twitch » ouverte depuis la source Twitch de la colonne latérale.
   let bonkTwitchLinkOpen = false;
-  // Twitch emotes being synchronized (Core reloads them in the background): re-read every 3 s, at most
-  // 20 times per visit of Bonk, one timer only; stops as soon as the state is stable or Bonk is left.
-  let emoteSyncTimer = null;
-  let emoteSyncReads = 0;
-  let emoteAuthorizationPopup = null;
-  let emoteAuthorizationPoller = null;
-  let emoteAuthorizationFinishing = false;
-  // Autorisation des emotes vue par le viewer (en cours · autorisé · non confirmé · erreur) : redessinée à chaque
-  // render, elle ne se perd plus quand le panneau se reconstruit pendant que le viewer est dans la fenêtre Twitch.
-  let emoteAuthNotice = null;
-  let emoteAuthNoticeTimer = null;
-  let emoteAuthAttemptAt = 0;
+  // Access to the viewer's Twitch emotes (emote-access.js): catalog, authorization and its notice are its own state.
+  const emoteAccess = createEmoteAccess({
+    document,
+    window,
+    client,
+    getState: () => state,
+    applyState: (next) => updateState(next, { render: false }),
+    redraw: () => renderPreservingViewport(),
+    refreshHost: () => onRefresh?.(),
+    following: () => openModule === 'bonk',
+  });
   const drafts = {
     tts: { text: '' },
     bonk: { selectedId: null, activeGroupId: null, query: '', searchOpen: false },
@@ -1074,23 +951,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     notificationCenterOpen = false;
     viewerPreferencesOpen = false;
     renderPreservingViewport();
-  });
-
-  window.addEventListener('message', (event) => {
-    const data = event.data;
-    if (
-      event.source !== emoteAuthorizationPopup
-      || data?.type !== 'raptoru:oauth-complete'
-      || data?.flow !== 'viewer-emotes'
-      || data?.ok !== true
-    ) return;
-    let oauthOrigin;
-    try { oauthOrigin = new URL(RUNTIME.siteUrl).origin; } catch { return; }
-    if (!oauthOrigin || event.origin !== oauthOrigin) return;
-
-    // Le message est le chemin rapide, mais le serveur reste l'autorité :
-    // on relit /state avant de considérer l'autorisation comme terminée.
-    void confirmEmoteAuthorization();
   });
 
   function pendingFor(moduleId) {
@@ -1244,8 +1104,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const previous = state;
     // An error screen shown before this state must be redrawn away: never absorbed by a live update.
     const hadLoadError = !!loadError;
-    const previousKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
-    const nextKey = emoteCatalogStateKey(next?.emotes, next?.twitch_user_id);
     const nextRaffle = next?.raffle;
     const nextWindowId = String(nextRaffle?.window_id || '').trim();
     if (raffleJoinConfirmedWindowId
@@ -1261,22 +1119,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         raffle: { ...nextRaffle, joined: true },
       };
     }
-    const wasTwitchConnected = state?.emotes?.twitch_connected === true;
     state = next;
-    // Validation reconnue après la fin de l'attente (fenêtre fermée tôt, retour tardif) : confirmée quand même,
-    // dès que le serveur la voit — jamais avant.
-    if (!wasTwitchConnected && next?.emotes?.twitch_connected === true && !emoteAuthorizationPoller
-      && emoteAuthAttemptAt && Date.now() - emoteAuthAttemptAt < EMOTE_AUTH_LATE_WINDOW_MS) {
-      queueMicrotask(() => void confirmEmoteAuthorization({ refreshed: true }));
-    }
-    if (previousKey !== nextKey) {
-      emoteCatalogGeneration += 1;
-      emoteCatalog = null;
-      emoteCatalogKey = null;
-      emoteCatalogLoadedAt = 0;
-      emoteError = null;
-      if (render) queueMicrotask(() => loadEmotes({ force: true }));
-    }
+    emoteAccess.onState(previous, next, { render });
     loadError = null;
     retryLoad = null;
     actionError = null;
@@ -1300,105 +1144,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
 
-  /** `kind` : pending · success · info · error ; null retire le message. */
-  function setEmoteAuthNotice(kind, text = '') {
-    clearTimeout(emoteAuthNoticeTimer);
-    emoteAuthNoticeTimer = null;
-    const notice = kind ? { kind, text } : null;
-    emoteAuthNotice = notice;
-    renderPreservingViewport();
-    if (!notice || kind === 'pending') return;
-    // Le viewer est peut-être encore dans la fenêtre Twitch : le résultat reste jusqu'à son retour sur
-    // l'extension (pointeur ou focus), puis 8 s.
-    const arm = () => {
-      document.removeEventListener('pointermove', arm);
-      document.removeEventListener('focusin', arm);
-      if (emoteAuthNotice !== notice) return;
-      emoteAuthNoticeTimer = setTimeout(() => {
-        if (emoteAuthNotice === notice) setEmoteAuthNotice(null);
-      }, 8_000);
-    };
-    document.addEventListener('pointermove', arm);
-    document.addEventListener('focusin', arm);
-  }
-
-  function emoteAuthNoticeView({ kind, text }) {
-    const box = el('div', `rl-emote-auth rl-emote-auth--${kind}`);
-    box.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-    const mark = el('span', 'rl-emote-auth__mark', kind === 'success' ? '✓' : kind === 'error' ? '!' : kind === 'info' ? 'i' : '');
-    mark.setAttribute('aria-hidden', 'true');
-    box.append(mark, el('span', 'rl-emote-auth__text', text));
-    if (kind !== 'pending') {
-      const close = el('button', 'rl-emote-auth__close', '✕');
-      close.type = 'button';
-      close.setAttribute('aria-label', 'Fermer le message');
-      close.addEventListener('click', () => setEmoteAuthNotice(null));
-      box.append(close);
-    }
-    return box;
-  }
-
-  function closeEmoteAuthorizationPopup() {
-    const popup = emoteAuthorizationPopup;
-    emoteAuthorizationPopup = null;
-    try { popup?.close(); } catch { /* fenêtre déjà fermée */ }
-  }
-
-  async function confirmEmoteAuthorization({ refreshed = false } = {}) {
-    if (emoteAuthorizationFinishing) return false;
-    emoteAuthorizationFinishing = true;
-    try {
-      if (!refreshed) {
-        const next = await client.refresh();
-        if (next && typeof next === 'object') updateState(next, { render: false });
-      }
-      if (state?.emotes?.twitch_connected !== true) return false;
-
-      const poller = emoteAuthorizationPoller;
-      emoteAuthorizationPoller = null;
-      await poller?.stop('success');
-      closeEmoteAuthorizationPopup();
-      emoteAuthorizationStarting = false;
-      renderPreservingViewport();
-      emoteAuthAttemptAt = 0;
-      setEmoteAuthNotice('success', 'Emotes Twitch connectées : tes emotes personnelles sont disponibles.');
-      await loadEmotes({ force: true });
-      return true;
-    } catch {
-      // Le polling garde la main si une relecture transitoire échoue.
-      return false;
-    } finally {
-      emoteAuthorizationFinishing = false;
-    }
-  }
-
-  function startEmoteAuthorizationPolling() {
-    const popup = emoteAuthorizationPopup;
-    let poller;
-    poller = createEmoteAuthorizationPoller({
-      check: async () => {
-        const next = await client.refresh();
-        if (next && typeof next === 'object') updateState(next, { render: false });
-        return state?.emotes?.twitch_connected === true;
-      },
-      isPopupClosed: () => {
-        try { return popup?.closed === true; } catch { return true; }
-      },
-      onSuccess: () => confirmEmoteAuthorization({ refreshed: true }),
-      onStopped: (reason) => {
-        if (emoteAuthorizationPoller === poller) emoteAuthorizationPoller = null;
-        if (reason === 'success') return;
-        emoteAuthorizationStarting = false;
-        closeEmoteAuthorizationPopup();
-        if (reason === 'timeout' || reason === 'popup_closed') {
-          setEmoteAuthNotice('info', 'Autorisation non confirmée. Si tu viens de valider sur Twitch, la confirmation s’affichera ici ; sinon, réessaie.');
-        } else renderPreservingViewport();
-      },
-    });
-    emoteAuthorizationPoller = poller;
-    poller.start();
-  }
-
   function stopRaffleTimer() {
     if (raffleTimer === null) return;
     if (typeof globalThis.clearInterval === 'function') globalThis.clearInterval(raffleTimer);
@@ -1412,12 +1157,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       notificationCenterOpen = false;
       viewerPreferencesOpen = false;
     }
-    if (moduleId !== openModule) {
-      // A new visit of Bonk follows a synchronization again; leaving it stops following.
-      clearTimeout(emoteSyncTimer);
-      emoteSyncTimer = null;
-      emoteSyncReads = 0;
-    }
+    if (moduleId !== openModule) emoteAccess.leaveVisit();
     if (moduleId !== hostViewId) {
       hostView?.destroy?.();
       hostView = null;
@@ -1445,148 +1185,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     restoreScrollPositions();
   }
 
-  /** not_linked · syncing · ready · stale · reauth_required (same values in the Lab and on Twitch). */
-  function twitchEmotesStatus() {
-    const key = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
-    const known = emoteCatalog && emoteCatalogKey === key ? emoteCatalog.twitch_status : null;
-    return known ?? state?.emotes?.twitch_status ?? (state?.emotes?.twitch_connected === true ? 'ready' : 'not_linked');
-  }
-
-  function followEmoteSync() {
-    clearTimeout(emoteSyncTimer);
-    emoteSyncTimer = null;
-    if (twitchEmotesStatus() !== 'syncing' || openModule !== 'bonk' || emoteSyncReads >= 20) return;
-    emoteSyncReads += 1;
-    emoteSyncTimer = setTimeout(() => {
-      emoteSyncTimer = null;
-      void loadEmotes({ poll: true });
-    }, 3000);
-  }
-
-  async function loadEmotes({ force = false, poll = false } = {}) {
-    if (emoteLoading) {
-      if (force) emoteForceReloadPending = true;
-      return;
-    }
-    const requestKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
-    if (!force && !poll && emoteCatalog
-      && emoteCatalogKey === requestKey
-      && Date.now() - emoteCatalogLoadedAt < EMOTE_CATALOG_REFRESH_MS) return;
-    if (!state?.emotes?.connected || !client.emotes) return;
-    const generation = emoteCatalogGeneration;
-    emoteLoading = true;
-    emoteError = null;
-    try {
-      const result = force && client.refreshEmotes
-        ? await client.refreshEmotes()
-        : await client.emotes();
-      if (!result.connected) throw Object.assign(new Error('emotes_not_connected'), { code: 'emotes_not_connected' });
-      if (generation === emoteCatalogGeneration
-        && requestKey === emoteCatalogStateKey(state?.emotes, state?.twitch_user_id)) {
-        emoteCatalog = {
-          groups: result.groups ?? [],
-          count: Number(result.count || 0),
-          diagnostics: result.diagnostics ?? null,
-          twitch_connected: result.twitch_connected === true,
-          twitch_status: result.twitch_status
-            ?? (result.twitch_connected === true ? 'ready' : 'not_linked'),
-        };
-        emoteCatalogKey = requestKey;
-        emoteCatalogLoadedAt = Date.now();
-      }
-    } catch {
-      if (generation === emoteCatalogGeneration) {
-        emoteError = 'Impossible de charger le catalogue d’emotes pour le moment.';
-      }
-    } finally {
-      emoteLoading = false;
-      renderPreservingViewport();
-      followEmoteSync();
-      if (emoteForceReloadPending) {
-        emoteForceReloadPending = false;
-        queueMicrotask(() => loadEmotes({ force: true }));
-      }
-    }
-  }
-
   function flash(node, message, kind = 'error') {
     const box = el('p', `jdm-flash jdm-flash--${kind}`, message);
     node.append(box);
     setTimeout(() => box.remove(), 4000);
-  }
-
-  async function beginEmoteAuthorization(node) {
-    if (emoteAuthorizationStarting) return;
-    if (state?.identity_shared !== true) {
-      const requestIdShare = window.Twitch?.ext?.actions?.requestIdShare;
-      if (typeof requestIdShare !== 'function') {
-        flash(node, 'Le partage d’identité est indisponible dans cet aperçu. Ouvre l’extension sur Twitch.', 'error');
-        return;
-      }
-      try {
-        requestIdShare();
-        flash(node, 'Confirme d’abord le partage d’identité Twitch, puis autorise tes emotes.', 'ok');
-      } catch {
-        flash(node, 'Twitch n’a pas pu ouvrir la demande d’identité. Rouvre l’extension puis réessaie.', 'error');
-      }
-      return;
-    }
-
-    if (emoteAuthorizationPopup && !emoteAuthorizationPopup.closed) {
-      try { emoteAuthorizationPopup.focus(); } catch { /* focus best effort */ }
-      flash(node, 'La fenêtre Twitch est déjà ouverte.', 'ok');
-      return;
-    }
-    // Blank window first, in the click itself (browsers keep the user gesture). Raptoru Studio refuses it
-    // (only its own pages open inside; https links go to the system browser): then the Twitch URL itself
-    // is opened, which Studio hands to the system browser.
-    const popup = window.open('about:blank', '_blank');
-    emoteAuthorizationPopup = popup;
-    emoteAuthorizationStarting = true;
-    try {
-      const result = await client.startEmoteOAuth();
-      const authorizationUrl = new URL(String(result?.authorization_url || ''));
-      if (
-        authorizationUrl.protocol !== 'https:'
-        || authorizationUrl.hostname !== 'id.twitch.tv'
-        || authorizationUrl.pathname !== '/oauth2/authorize'
-      ) throw new Error('invalid_oauth_url');
-      emoteAuthAttemptAt = Date.now();
-      if (popup) {
-        popup.location.replace(authorizationUrl.href);
-        startEmoteAuthorizationPolling();
-        setEmoteAuthNotice('pending', 'Autorisation en cours : valide dans la fenêtre Twitch, la confirmation s’affichera ici.');
-      } else {
-        // Studio answers null too when it opened the system browser: the message covers both cases.
-        window.open(authorizationUrl.href, '_blank');
-        startEmoteAuthorizationPolling();
-        setEmoteAuthNotice('pending', 'Connexion Twitch ouverte dans ton navigateur : valide, puis reviens ici. Si rien ne s’ouvre, autorise les fenêtres Twitch.');
-      }
-    } catch (error) {
-      const poller = emoteAuthorizationPoller;
-      emoteAuthorizationPoller = null;
-      void poller?.stop('start_failed');
-      try { popup.close(); } catch { /* fenêtre déjà fermée */ }
-      closeEmoteAuthorizationPopup();
-      emoteAuthorizationStarting = false;
-      setEmoteAuthNotice('error', `Autorisation Twitch impossible : ${errorLabel(error?.code)}`);
-    }
-  }
-
-  async function disconnectEmoteAuthorization(node) {
-    if (!client.disconnectEmotes) return;
-    try {
-      await client.disconnectEmotes();
-      emoteCatalogGeneration += 1;
-      emoteCatalog = null;
-      emoteError = null;
-      if (state?.emotes) state.emotes.twitch_connected = false;
-      try { await onRefresh?.(); } catch { /* le polling synchronisera l’état */ }
-      flash(node, 'Accès aux emotes personnelles retiré. Les emotes publiques restent disponibles.', 'ok');
-      await loadEmotes({ force: true });
-    } catch (error) {
-      flash(node, errorLabel(error?.code), 'error');
-    }
   }
 
   async function run(node, task, {
@@ -1957,18 +1559,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     // Bonk lot 5 : le catalogue charge le chargeur (bonk-chargeur.js), qui tire en Manuel (1 clic =
     // 1 Bonk) ou envoie la salve en Auto. UX validée : prototypes/bonk-salves-ux/serie7/final.html.
 
-    const emoteStateKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
     let oauthControls = null;
-    const emoteCatalogExpired = !emoteCatalogLoadedAt
-      || Date.now() - emoteCatalogLoadedAt >= EMOTE_CATALOG_REFRESH_MS;
-    if (state?.emotes?.connected
-      && (!emoteCatalog || emoteCatalogKey !== emoteStateKey || emoteCatalogExpired)
-      && !emoteLoading) {
-      queueMicrotask(loadEmotes);
-    } else if (!emoteLoading && !emoteSyncTimer && twitchEmotesStatus() === 'syncing') {
-      queueMicrotask(followEmoteSync);
-    }
-    const twitchStatus = twitchEmotesStatus();
+    emoteAccess.ensure();
+    const twitchStatus = emoteAccess.status();
     // Compte Twitch non lié : une source « Twitch » dans la colonne latérale (bonk-twitch-source.js) au
     // lieu d'un bandeau permanent ; sa fenêtre lance le vrai flow OAuth (beginEmoteAuthorization).
     let twitchSource = null;
@@ -1986,11 +1579,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         const dialog = createTwitchEmoteDialog({
           document,
           reauth: twitchStatus === 'reauth_required',
-          starting: emoteAuthorizationStarting,
+          starting: emoteAccess.starting,
           onAuthorize: () => {
             bonkTwitchLinkOpen = false;
             dialog.node.remove();
-            beginEmoteAuthorization(body);
+            emoteAccess.begin(body);
           },
           onClose: () => {
             bonkTwitchLinkOpen = false;
@@ -2010,7 +1603,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         className: 'jdm-emote-oauth-button',
         iconClassName: 'jdm-emote-oauth-button__icon',
       });
-      refresh.addEventListener('click', () => loadEmotes({ force: true }));
+      refresh.addEventListener('click', () => emoteAccess.load({ force: true }));
       const disconnect = createIconButton({
         icon: UI_ICONS.close,
         label: 'Retirer l’accès Twitch aux emotes',
@@ -2018,7 +1611,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         className: 'jdm-emote-oauth-button',
         iconClassName: 'jdm-emote-oauth-button__icon',
       });
-      disconnect.addEventListener('click', () => disconnectEmoteAuthorization(body));
+      disconnect.addEventListener('click', () => emoteAccess.disconnect(body));
       oauthControls.append(refresh, disconnect);
       // Placés dans la ligne de recherche du picker (voir plus bas), plus au-dessus de la grille.
     }
@@ -2044,13 +1637,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       oauthControls ??= el('div', 'jdm-emote-oauth-controls');
       oauthControls.prepend(twitchStatusNode);
     }
-    if (emoteLoading && !emoteCatalog) {
+    if (emoteAccess.loading && !emoteAccess.catalog) {
       body.append(el('p', 'jdm-hint', 'Chargement de tes emotes Twitch…'));
-    } else if (emoteError) {
-      body.append(el('p', 'jdm-hint', emoteError));
+    } else if (emoteAccess.error) {
+      body.append(el('p', 'jdm-hint', emoteAccess.error));
     }
-    if (emoteCatalog?.diagnostics) {
-      const info = emoteCatalog.diagnostics;
+    if (emoteAccess.catalog?.diagnostics) {
+      const info = emoteAccess.catalog.diagnostics;
       const details = el('details', 'jdm-emote-diagnostics');
       details.append(el('summary', null, 'Diagnostic emotes'));
       details.append(el('pre', null, JSON.stringify(info, null, 2)));
@@ -2058,7 +1651,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
 
     const rawRealGroups = [
-      ...(emoteCatalog?.groups ?? mod.emote_catalog?.groups ?? []),
+      ...(emoteAccess.catalog?.groups ?? mod.emote_catalog?.groups ?? []),
       ...UNICODE_EMOJI_GROUPS,
     ];
     const { realGroups, emoteById } = buildBonkEmoteIndex(rawRealGroups);
@@ -2940,7 +2533,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       identityAction.disabled = Boolean(state?.emotes?.twitch_connected);
       identityAction.addEventListener('click', () => {
         if (state?.emotes?.twitch_connected) return;
-        beginEmoteAuthorization(card);
+        emoteAccess.begin(card);
       });
     }
 
@@ -4208,7 +3801,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
 
     syncNotificationCenter(state);
-    if (emoteAuthNotice) root.append(emoteAuthNoticeView(emoteAuthNotice));
+    const emoteNotice = emoteAccess.noticeView();
+    if (emoteNotice) root.append(emoteNotice);
 
     const experience = resolveExperience(state);
     root.dataset.theme = experience.theme.id;
