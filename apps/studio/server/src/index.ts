@@ -347,7 +347,7 @@ const RELAYED =
   /^\/api\/(mini-games\/|module-settings$|daily\/config$|modules(\/|$))/;
 
 /** Several relays behind one handler slot: the first that knows the path answers. */
-function chainRelays(
+export function chainRelays(
   ...handlers: ((
     req: IncomingMessage,
     res: ServerResponse,

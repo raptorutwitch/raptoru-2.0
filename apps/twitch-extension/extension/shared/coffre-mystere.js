@@ -21,7 +21,8 @@ export function coffreHistoryHtml(recent) {
 export function createCoffreView({ document, client, module }) {
   const node = document.createElement('section');
   node.className = 'rp-module rp-coffre';
-  node.innerHTML = `<h2>${esc(module.label)}</h2><p class="rp-muted">${esc(module.description)}</p>
+  // The host header already shows the module's name: only its description here.
+  node.innerHTML = `<p class="rp-muted">${esc(module.description)}</p>
     <div data-slot="buy"></div><p class="rp-feedback" data-slot="msg" role="status"></p>
     <h3>Mes coffres</h3><div data-slot="history"></div>`;
   const $ = (s) => node.querySelector(`[data-slot="${s}"]`);

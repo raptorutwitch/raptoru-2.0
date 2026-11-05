@@ -17,7 +17,10 @@ const port = Number(process.env.E2E_PORT ?? 4399);
 process.env.STUDIO_SERVER_NO_LISTEN = '1';
 // Studio only answers requests addressed to its own host:port (anti DNS-rebinding guard).
 process.env.PORT = String(port);
-const { createStudioServer, EXTENSION_DIR } = await import('../src/index.js');
+const { chainRelays, createStudioServer, EXTENSION_DIR } = await import('../src/index.js');
+const { miniGamesRelay } = await import('../src/mini-games/relay.js');
+const { moduleSettingsRelay } = await import('../src/module-settings/relay.js');
+const { modulesRelay } = await import('../src/modules/relay.js');
 const { createTestLab } = await import('../src/test-lab/test-lab.js');
 const { LabEbs } = await import('../src/extension-lab/lab-ebs.js');
 const { localLabCoreClient } = await import('../src/lab-moderation/proxy.js');
@@ -152,7 +155,12 @@ const studio = createStudioServer(
   null, // commands
   null, // profile
   null, // wordGame
-  null, // miniGames
+  // Mini-games, bounded settings (H10 / H12 / H14) and the module host: the same relay chain as the real Studio.
+  chainRelays(
+    miniGamesRelay(labCore, '900100'),
+    moduleSettingsRelay(labCore, '900100'),
+    modulesRelay(labCore, '900100'),
+  ),
   null, // alerts
   null, // points
   null, // twitchConnections

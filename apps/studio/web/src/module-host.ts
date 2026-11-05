@@ -72,7 +72,8 @@ export function statusHtml(m: CatalogModule) {
       ? 'Coupé (réglage) : invisible pour les viewers.'
       : s.summary;
   return `<p class="rs-state ${cls}">${esc(text)}</p>${
-    s.intention !== 'off' && s.reasons.length
+    // Off too: a historical module says where its own switch is.
+    s.reasons.length
       ? `<ul class="rs-muted">${s.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`
       : ''
   }`;

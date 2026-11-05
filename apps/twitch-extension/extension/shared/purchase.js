@@ -33,13 +33,14 @@ export const isRetryable = (e) =>
  */
 export function createPurchaseButton({ document, onResult, run }) {
   const intent = createIntent();
+  // The house payment look (rl-pay of ui-primitives / base.css): no style of its own to load.
   const node = document.createElement('div');
-  node.className = 'rp-purchase';
+  node.className = 'rl-pay rp-purchase';
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'btn btn--primary';
-  const note = document.createElement('p');
-  note.className = 'rp-purchase__note';
+  button.className = 'rl-pay__cta';
+  const note = document.createElement('span');
+  note.className = 'rl-pay__hint';
   node.append(button, note);
   let armed = false;
   let busy = false;
