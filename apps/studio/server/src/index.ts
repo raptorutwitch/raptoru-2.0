@@ -744,6 +744,20 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
+    // Refonte F5 (P1-5): first give the mic and the filters back (at most 3 s: quitting is never blocked).
+    void Promise.race([
+      pointsRef
+        ?.restoreBeforeExit()
+        .catch((e: Error) =>
+          console.error(
+            '[studio-server] OBS restore on exit failed',
+            e.message,
+          ),
+        ),
+      new Promise((r) => setTimeout(r, 3000)),
+    ]).finally(stopEverything);
+  };
+  const stopEverything = () => {
     bonk?.stop();
     sound?.stop();
     tts?.stop();

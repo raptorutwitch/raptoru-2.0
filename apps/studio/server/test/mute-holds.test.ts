@@ -407,3 +407,21 @@ describe('« Test Caution Random Ban » in Studio (27/10)', () => {
     expect(sent).toEqual([{ caution: true }, {}, {}]);
   });
 });
+
+describe('Refonte F5 (P1-5): Studio closing during a mute', () => {
+  it('every hold released at once: the mic comes back before OBS is disconnected; a mic muted before stays muted', async () => {
+    const l = await lab();
+    await l.holds.hold(MIC, 'random_ban:r9', l.clock.now() + 60_000);
+    await l.holds.hold(MIC, 'cp:Micro', l.clock.now() + 6_000);
+    expect(l.muted()).toBe(true);
+    await l.holds.releaseAll(); // no time passed
+    expect(l.muted()).toBe(false);
+    expect(l.holds.pending).toBe(0);
+
+    const m = await lab();
+    m.obs.inputs.get(MIC)!.muted = true; // the streamer's own mute
+    await m.holds.hold(MIC, 'random_ban:r10', m.clock.now() + 60_000);
+    await m.holds.releaseAll();
+    expect(m.muted()).toBe(true);
+  });
+});
