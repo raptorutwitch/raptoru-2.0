@@ -53,7 +53,12 @@ test('TTS V2: open, send a message, leave and come back without reloading — on
   const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
   await page.goto('/ext/mobile.html?labRole=viewer');
   await open(page, /^TTS/);
-  await expect(page.locator('.ttsv2')).toHaveCount(1);
+  // Settled screen (a TTS left by an earlier run would replace the first composer drawn).
+  await expect(page.locator('.ttsv2[data-recovered]')).toHaveCount(1, {
+    timeout: 15_000,
+  });
+  const again = page.locator('.ttsv2 [data-act="tts-again"]').first();
+  if (await again.isVisible()) await again.click();
   await page.locator('.ttsv2 [data-msg]').fill('Bonjour la parité');
   // Available once the (fictional) player has reported in: a viewer waits for the enabled button too.
   const confirm = page.locator('.ttsv2 [data-act="confirm"]');
@@ -159,13 +164,13 @@ test('TTS V2 live update: a change of ITS part reaches the view without a host r
   const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
   await page.goto('/ext/mobile.html?labRole=viewer');
   await open(page, /^TTS/);
-  // The previous test left this viewer on « message sent »: back to a composer, as the viewer would.
-  const again = page.locator('.ttsv2 [data-act="tts-again"]').first();
-  await expect(
-    page.locator('.ttsv2 [data-msg], .ttsv2 [data-act="tts-again"]').first(),
-  ).toBeVisible({
+  // The view draws its composer at once, then shows the viewer's current TTS if there is one (the previous test's):
+  // wait for that decision (`data-recovered`), never for the first composer drawn.
+  await expect(page.locator('.ttsv2[data-recovered]')).toHaveCount(1, {
     timeout: 15_000,
   });
+  // The previous test left this viewer on « message sent »: back to a composer, as the viewer would.
+  const again = page.locator('.ttsv2 [data-act="tts-again"]').first();
   if (await again.isVisible()) await again.click();
   await page.locator('.ttsv2 [data-msg]').fill('Court');
   const pay = page.locator('.ttsv2 [data-act="confirm"]');

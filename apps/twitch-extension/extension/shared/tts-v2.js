@@ -713,7 +713,10 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
       if (!recovered) {
         recovered = true;
         paint(); // compose at once; the recorded / current TTS (if any) takes over below
-        CAL.ready.then(() => { if (!destroyed) void recover(); });
+        // `data-recovered` once that decision is made: the screen shown is then the settled one (readiness signal).
+        CAL.ready
+          .then(() => (destroyed ? null : recover()))
+          .finally(() => { node.dataset.recovered = '1'; });
         schedulePoll(POLL_MS);
       }
     },

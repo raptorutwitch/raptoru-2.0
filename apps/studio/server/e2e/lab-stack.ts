@@ -132,11 +132,26 @@ ext.connectLab(labCore);
   );
   ext.connectTts(ttsWorker);
   // A FICTIONAL TTS player (no page, no sound): its heartbeat makes the TTS purchasable in this isolated Lab, as a
-  // real player page would; what it is handed is never played (the end guard releases it, as in Studio).
+  // real player page would, and it reports what it is handed as read (started → completed) without playing anything.
+  // Settling every purchase at once matters: an unreported one is refunded ~15 s later and that balance change would
+  // land in whichever test runs then.
+  const player = 'e2e-player-fictif';
   setInterval(() => {
     void ttsWorker
-      .playerHeartbeat('e2e-player-fictif', 12)
+      .playerHeartbeat(player, 12)
       .then(() => ttsWorker.tick())
+      .then(() => ttsWorker.command(player))
+      .then(async (order) => {
+        if (!order || !('play' in order)) return;
+        const { interaction_id: id, delivery } = order.play;
+        await ttsWorker.playerAck(id, delivery.attempt_id!, player, 'started');
+        await ttsWorker.playerAck(
+          id,
+          delivery.attempt_id!,
+          player,
+          'completed',
+        );
+      })
       .catch(() => undefined);
   }, 2_000).unref();
 }
@@ -154,10 +169,33 @@ ext.connectLab(labCore);
     localSoundCoreClient(coreUrl, secret),
   );
   ext.connectSound(soundWorker);
+  // It reports every sound handed to it as played (started → completed), never playing anything (see the TTS player).
+  const player = 'e2e-player-fictif';
   setInterval(() => {
     void soundWorker
-      .playerHeartbeat('e2e-player-fictif', true)
+      .playerHeartbeat(player, true)
       .then(() => soundWorker.tick())
+      .then(async () => {
+        for (
+          let sound = await soundWorker.command(player);
+          sound;
+          sound = await soundWorker.command(player)
+        ) {
+          const attempt = sound.delivery.attempt_id!;
+          await soundWorker.playerAck(
+            sound.interaction_id,
+            attempt,
+            player,
+            'started',
+          );
+          await soundWorker.playerAck(
+            sound.interaction_id,
+            attempt,
+            player,
+            'completed',
+          );
+        }
+      })
       .catch(() => undefined);
   }, 2_000).unref();
 }
