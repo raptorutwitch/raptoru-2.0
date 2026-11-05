@@ -190,3 +190,21 @@ Le contrat de la § 10 (`view` / `rendered` / `onState` / `destroy`) reste le se
 
 Signal de disponibilité : `.ttsv2[data-recovered]` quand la vue TTS a décidé de son écran (composer ou TTS en cours).
 
+## 12. Extension : extensions du contrat de variante (05/11, frontières Soundboard et Bonk)
+
+Toujours un seul contrat (`registerModuleVariant`, § 10). Chaque ajout répond à au moins deux besoins réels (Soundboard
+et Bonk) et reste facultatif : TTS V2, Tombola V2 et D4 n'en utilisent aucun et n'ont pas changé.
+
+| Ajout | Rôle | Utilisé par |
+|---|---|---|
+| `rendered(view, ctx)` reçoit `ctx.body` ; une vue sans `node` n'est pas ajoutée | la vue dessine dans le conteneur de l'hôte (`.jdm-module__body`, que leur CSS met en forme) | Soundboard, Bonk |
+| `headClass`, `headIcon(view)`, `headAfter(view)`, `walletClass` | l'en-tête reste celui de l'hôte ; la vue y place son contrôle | Soundboard (volume), Bonk (« ? », classes) |
+| `host.memory` | objet par module gardé pour la vie du panneau (brouillons ; instances qui survivent à une visite) | Soundboard (tri, filtre, sélection), Bonk (picker, chargeur, tutoriel, envoi) |
+| `host.run(node, task, { feedbackScope, onSettled })` | l'exécuteur d'actions de l'hôte (occupé, rafraîchissement, notifications) ; la vue dit le résultat elle-même | Soundboard |
+| `host.restriction()`, `host.interactions()`, `host.redraw()`, `host.refresh()` (renvoie la promesse) | état de l'hôte lu au moment voulu | Soundboard, Bonk |
+| `host.errorReason(error)`, `host.notifyError(error, { title })` | raison lisible d'un refus ; centre de notifications | Soundboard, Bonk |
+| `host.emotes` | le service d'accès aux emotes Twitch (`emote-access.js`), propre au panneau | Bonk (et le tutoriel global, directement) |
+
+Règle des instances persistantes : une instance gardée dans `host.memory` (chargeur, tutoriel de Bonk) ne capture jamais
+la fermeture d'une vue ; ses rappels passent par `memory.handlers`, que la vue ouverte remplace.
+

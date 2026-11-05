@@ -180,3 +180,13 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Pile E2E morte une fois en cours de série (`ERR_CONNECTION_REFUSED`, puis `fetch failed`) : non reproduite depuis ;
   journaux complets conservés à chaque série pour la prochaine occurrence.
 
+## 05/11/2026 — Frontières Soundboard et Bonk
+
+- Soundboard puis Bonk deviennent des variantes de module dans leurs fichiers ; les extensions du contrat (corps du
+  module, en-tête, mémoire, services de l'hôte) servent les deux. `ui.js` 6 005 → 3444 lignes.
+- Les E2E de parité, écrits avant, ont trouvé 6 défauts réels : tri et volume inutilisables à la souris, Échap avalé,
+  prix Bonk faux dans le Lab, délai Bonk sans libellé, étoile couvrant l'emote sur les cellules de 44 px.
+- Twitch fictif dans le Lab Core (OAuth, scope, catalogue) : le parcours Twitch de Bonk est testé sans Twitch.
+- Outils : les skills navigateur / bureau n'ont pas d'outil branché dans cette session ; Playwright et les captures
+  avant/après restent la vérification visuelle.
+

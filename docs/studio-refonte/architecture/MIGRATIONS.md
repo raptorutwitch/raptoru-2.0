@@ -147,3 +147,21 @@ Méthode : E2E de parité écrit et vert **avant** chaque extraction, puis extra
 - changement de comportement assumé : un appui long pas encore devenu glisser est annulé par un nouveau dessin (avant, son
   minuteur lançait un glisser sur une grille détachée et retenait les états suivants).
 
+## Extension : frontières Soundboard et Bonk (05/11, « terminer les découplages »)
+
+| Lot | Ancien chemin | Nouveau chemin | Preuve |
+|---|---|---|---|
+| Soundboard (`9c45e91`) | `soundboardForm` (≈ 960 lignes) dans `ui.js` + branches de l'hôte (3 globales, brouillons, bouton de volume passé par l'en-tête, écouteurs Échap / clic sur la racine, règles « état identique » et « glisser » dans `updateState`, démontage dans `render` / `navigateTo`, 2 branches dans `run`, `selectedPaymentMethod`) | `soundboard-view.js` (variante), `soundboard-model.js` (règles pures), `stored-ids.js` | `soundboard.e2e.ts` 5/5 (dont paiement en crédit, persistance entre visites) ; mutation du glisser ; captures avant/après identiques |
+| Scénario Bonk (`d163944`) | aucun Twitch, prix et délai figés, écrans étroits non vérifiés | Twitch fictif dans le Lab Core (OAuth, scope, catalogue) ; prix et délai depuis les réglages Studio ; panneau 320 et mobile 360 | `bonk.e2e.ts` 8/8 ; suite E2E complète 83/83 |
+| Accès aux emotes (`ae85b0c`) | 17 variables, 10 fonctions, un écouteur `message`, 2 blocs de `updateState` dans `ui.js` | `emote-access.js`, service de l'hôte (son avis s'affiche sur tous les écrans ; le tutoriel global l'utilise aussi) | `bonk.e2e.ts` (liaison, refus, déliaison) |
+| Bonk (`9a2c504`) | `bonkForm` + 5 aides, 6 globales + `drafts.bonk`, branches d'en-tête, de `navigateTo` et de fin de `render`, ≈ 400 lignes de règles | `bonk-view.js` (variante), `bonk-model.js`, `tutorial-prefs.js` | `bonk.e2e.ts` + E2E extension 26/26 ; captures avant/après identiques à l'œil |
+
+`ui.js` : 6 005 → 3444 lignes (− 43 %). Ce que `ui.js` sait encore de ces deux modules :
+- noms et couleurs dans le Hub, crédits Soundboard dans la console de modération V1, tutoriel global : connaissance
+  légitime de l'hôte ;
+- **le porte-monnaie de l'en-tête** reconnaît encore la Soundboard par son identifiant (monnaie affichée, solde de
+  crédits) : environ 4 lignes, rarement modifiées. Les rendre déclaratives n'apporte pas assez pour le risque.
+
+Développer Soundboard ou Bonk ne demande plus de toucher `ui.js` : écran, état, écouteurs, minuteries, persistance et
+règles sont dans leurs fichiers ; seuls un nouveau service de l'hôte ou un nouvel emplacement d'en-tête le feraient.
+

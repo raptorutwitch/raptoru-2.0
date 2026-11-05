@@ -176,3 +176,31 @@ Revue indépendante (sous-agent, code seul) : 1 défaut réel (message Bonk d'un
 (glisser), 4 remarques ; corrigés dans `d3e564a` sauf « `channelTwitchId: '900100'` touche aussi Random Ban / Votekick sur
 la pile » (hypothèse, aucun test n'en dépend aujourd'hui) — noté ici.
 
+## Frontières Soundboard et Bonk (05/11)
+
+| Lot | Problème précis | Preuve |
+|---|---|---|
+| Tri de la Soundboard (`9c45e91`) | à la souris, choisir « A → Z » ou « Prix » ne faisait rien (le menu se fermait au `mousedown`, avant le clic) | E2E en échec avant, vert après |
+| Volume de la Soundboard (`9c45e91`) | à la souris, « couper » fermait l'aperçu sans agir | idem |
+| Échap (`9c45e91`) | après une visite de la Soundboard, Échap n'atteignait plus les historiques Tombola V1 / modération V1 | par construction (la pile E2E n'offre que les V2) |
+| Prix Bonk du Lab (`d163944`) | l'extension affichait 200 quand le Core facturait le prix réglé dans Studio | E2E en échec avant (200 au lieu de 350), vert après |
+| Délai Bonk (`d163944`) | « Une erreur est survenue. » au lieu du délai réglé par le streamer | E2E |
+| Étoile des favoris (`d163944`) | cellules de 44 px (panneau, composant vidéo) : l'étoile couvrait le milieu de l'emote, un clic après survol ajoutait un favori au lieu d'un Bonk | E2E en échec avec l'ancien CSS (320 px), vert après |
+| Pile E2E (`59bb0fb`) | deux morts en cours de série, jamais reproduites depuis (≈ 15 séries) | erreurs fatales désormais écrites dans le journal ; non provoqué |
+
+Identités fictives : canal 900100 (le Lab) et compte Twitch 900101 (le viewer Lab). Random Ban, Votekick et Caution
+traitent 900100 comme le streamer, ce qui correspond aux conventions du Lab ; aucun E2E de ces modules sur la pile, leurs
+tests Core ont leurs propres fixtures ; suite E2E complète 83/83 après l'ajout.
+
+Revue indépendante (sous-agent, code seul) des frontières : 1 défaut réel (Échap sorti du panneau : l'Overlay vidéo
+ferme son tiroir sur un Échap de la page ; latent avec les pages actuelles, toujours en vue composant) et 4 points
+(vue gardée si le module disparaît, clics écoutés sur tout le document, tutoriel Bonk perdu sur un retour rapide, étoile
+réduite sur les grandes cellules) : corrigés dans `dccec77`, avec un test qui échoue sur la version d'avant. La même
+série a révélé que le prix Bonk n'était relu qu'au premier chargement (corrigé : relu à chaque lecture de l'extension).
+
+Tests rendus déterministes : `halloween-studio` comptait les tuiles du Hub sur une page encore en chargement (échec
+sous charge, jamais seul) et laissait la pile en « testeurs seulement » en cas d'échec (cascade sur 2 autres specs).
+- Studio « + Testeur extension » : bouton actif mais inerte tant que l'historique du viewer n'était pas chargé (le clic
+  partait avec un identifiant vide). Visible seulement sous charge ; désactivé comme « Créditer ». Suite E2E complète
+  84/84 après reconstruction de l'interface Studio (la pile sert `apps/studio/web/dist`).
+

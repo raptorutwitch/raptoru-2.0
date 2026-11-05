@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026 — Continuation : Soundboard, Bonk, cycle de vie (`d3e564a` + docs). Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 05/11/2026 — Frontières Soundboard et Bonk terminées (`dccec77` + docs). Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -201,6 +201,25 @@ Prochaines étapes (ordre conseillé) :
    salve, favori, retour au Hub), en viewer puis modérateur.
 2. Sortir `soundboardForm` dans son fichier (les E2E de parité sont prêts).
 3. Bonk : simulateur Lab de l'autorisation Twitch des émotes, puis extraction du catalogue.
+
+### Frontières Soundboard et Bonk (05/11)
+
+| Commit | Contenu |
+|---|---|
+| `9c45e91` | Soundboard = variante dans son fichier ; 3 défauts à la souris corrigés (tri, volume, Échap) |
+| `d163944` | scénario Bonk déterministe (Twitch fictif, prix et délai Studio, écrans étroits) ; 3 défauts corrigés (prix Lab, libellé du délai, étoile sur cellules de 44 px) |
+| `ae85b0c` | accès aux emotes Twitch = service de l'hôte (`emote-access.js`) |
+| `9a2c504` | Bonk = variante dans son fichier |
+| `59bb0fb` | la pile E2E écrit la cause de sa mort |
+| `dccec77` | corrections de la revue indépendante |
+
+`ui.js` : 6 005 → 3444 lignes. Soundboard et Bonk : écran, état, écouteurs, minuteries et règles dans leurs fichiers ;
+`ui.js` ne garde que leur nom dans le Hub et le porte-monnaie d'en-tête de la Soundboard.
+
+Prochaines étapes (ordre conseillé) :
+1. Antoni valide dans le vrai Lab (`npm run studio`) : Soundboard (tri à la souris, volume, glisser, crédits) et Bonk
+   (tir, salve, Twitch lié, panneau Twitch étroit), en viewer puis en modérateur.
+2. TTS V1, Tombola V1 et modération V1 : encore dans `ui.js` ; à sortir quand on y retouche (même méthode).
 
 ## Prochaine action
 
