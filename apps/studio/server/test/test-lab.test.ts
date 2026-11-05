@@ -330,7 +330,10 @@ describe('secrets never reach logs or the UI', () => {
 describe('Studio HTTP API', () => {
   it('requires the Studio header and a loopback Host', async () => {
     const { lab } = fakeLab();
-    const server = createStudioServer(lab, () => {});
+    const server = createStudioServer({
+      lab,
+      onShutdown: () => {},
+    });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     const port = (server.address() as AddressInfo).port;
     const url = `http://127.0.0.1:${port}/api/test-lab/core/start`;

@@ -17,13 +17,15 @@ const port = Number(process.env.E2E_PORT ?? 4399);
 process.env.STUDIO_SERVER_NO_LISTEN = '1';
 // Studio only answers requests addressed to its own host:port (anti DNS-rebinding guard).
 process.env.PORT = String(port);
-const { chainRelays, createStudioServer, EXTENSION_DIR } = await import('../src/index.js');
+const { chainRelays, createStudioServer, EXTENSION_DIR } =
+  await import('../src/index.js');
 const { miniGamesRelay } = await import('../src/mini-games/relay.js');
 const { moduleSettingsRelay } = await import('../src/module-settings/relay.js');
 const { modulesRelay } = await import('../src/modules/relay.js');
 const { createTestLab } = await import('../src/test-lab/test-lab.js');
 const { LabEbs } = await import('../src/extension-lab/lab-ebs.js');
-const { labProxy, localLabCoreClient } = await import('../src/lab-moderation/proxy.js');
+const { labProxy, localLabCoreClient } =
+  await import('../src/lab-moderation/proxy.js');
 
 const db = createPgliteDb(
   new PGlite({
@@ -141,42 +143,33 @@ const raffle = await RaffleRuntime.create({
   dir: join(data, 'raffle'),
   overlayDir: join(import.meta.dirname, '..', 'raffle-overlay'),
 });
-const studio = createStudioServer(
-  createTestLab(),
-  () => {},
-  ext,
-  null, // bonk
-  null, // sound
-  null, // runtime
-  null, // tts
+const studio = createStudioServer({
+  lab: createTestLab(),
+  onShutdown: () => {},
+  extLab: ext,
   // Studio's « Modération » tab (the D4 console with Studio as the actor): the same /api/lab relay as the real Studio,
   // without players (no TTS / Soundboard worker on this stack).
-  labProxy({ channelId: '900100', core: labCore, players: async () => ({}), identities: () => [] }),
+  labApi: labProxy({
+    channelId: '900100',
+    core: labCore,
+    players: async () => ({}),
+    identities: () => [],
+  }),
   raffle,
-  null, // labChat
-  null, // commands
-  null, // profile
-  null, // wordGame
   // Mini-games, bounded settings (H10 / H12 / H14) and the module host: the same relay chain as the real Studio.
-  chainRelays(
+  relays: chainRelays(
     miniGamesRelay(labCore, '900100'),
     moduleSettingsRelay(labCore, '900100'),
     modulesRelay(labCore, '900100'),
   ),
-  null, // alerts
-  null, // points
-  null, // twitchConnections
-  null, // control
-  null, // supervision
-  null, // dock
   halloween,
   // Progression (docs/PROGRESSION.md): Studio's panel relay to this Lab Core.
-  new ProgressionRelay({ core: labCore, environment: 'lab' }),
+  progression: new ProgressionRelay({ core: labCore, environment: 'lab' }),
   // Boutique cosmétique V1: Studio's « Boutique » tab relay to this Lab Core.
-  new CosmeticsRelay({ core: labCore, environment: 'lab' }),
+  cosmetics: new CosmeticsRelay({ core: labCore, environment: 'lab' }),
   // Défis: Studio's « Défis » tab relay to this Lab Core.
-  new ChallengesRelay({ core: labCore, environment: 'lab' }),
-);
+  challenges: new ChallengesRelay({ core: labCore, environment: 'lab' }),
+});
 // The browser tests that need the Lab Core itself (a simulated live, a chat message) read where it is here.
 await writeFile(
   join(tmpdir(), `raptoru-e2e-core-${port}.json`),

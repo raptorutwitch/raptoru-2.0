@@ -394,46 +394,78 @@ export async function stopAll(
   );
 }
 
-export function createStudioServer(
-  lab: TestLab,
-  onShutdown: () => void,
-  extLab: LabEbs | null = null,
-  bonk: BonkRuntime | null = null,
-  sound: SoundRuntime | null = null,
-  runtime: LocalRuntime | null = null,
-  tts: TtsRuntime | null = null,
-  labApi: ReturnType<typeof labProxy> | null = null,
-  raffle: RaffleRuntime | null = null,
-  labChat: LabChatIngress | null = null,
-  commands: ReturnType<typeof commandsRelay> | null = null,
+/**
+ * Everything the Studio server serves, by NAME (friction S1: 24 positional parameters let a caller silently pass
+ * null in the wrong slot — the preview stack lost the relays and the Lab API that way). Absent = not served.
+ */
+export interface StudioServerOptions {
+  lab: TestLab;
+  onShutdown: () => void;
+  extLab?: LabEbs | null;
+  bonk?: BonkRuntime | null;
+  sound?: SoundRuntime | null;
+  runtime?: LocalRuntime | null;
+  tts?: TtsRuntime | null;
+  labApi?: ReturnType<typeof labProxy> | null;
+  raffle?: RaffleRuntime | null;
+  labChat?: LabChatIngress | null;
+  commands?: ReturnType<typeof commandsRelay> | null;
   /** Studio profile (Lab / Production) status and main-process-only switch (ASTRA-P1-019 lot 2). */
-  profile: ProfileApiDeps | null = null,
+  profile?: ProfileApiDeps | null;
   /** Jeu des mots V1 (Lab): panel relay + OBS sound source. */
-  wordGame: WordGameRuntime | null = null,
+  wordGame?: WordGameRuntime | null;
   /** Roulette and Slot V1 (Lab): the switch « Mini-jeux » (Simulation de stream panel). */
   /** The relay chain to the profile's Core (mini-games, module settings, Daily, module host). */
-  relays: ReturnType<typeof chainRelays> | null = null,
+  relays?: ReturnType<typeof chainRelays> | null;
   /** Twitch alerts V1 (Lab): OBS source + media, Studio preview, queue relay. */
-  alerts: AlertsRuntime | null = null,
+  alerts?: AlertsRuntime | null;
   /** Points de chaîne V1: tab API and the OBS executor of the redemptions. */
-  points: ChannelPointsRuntime | null = null,
+  points?: ChannelPointsRuntime | null;
   /** Account diagnostics are passive; authorization is an explicit, guarded user action. */
-  twitchConnections: TwitchConnections | null = null,
+  twitchConnections?: TwitchConnections | null;
   /** Centre de contrôle (lot 3): one status per module, the bot first. */
-  control: ControlCenter | null = null,
+  control?: ControlCenter | null;
   /** Incidents of the live (incident 22/10): global banner and desktop notifications. */
-  supervision: { handle: Supervisor['handle']; origin: string } | null = null,
+  supervision?: { handle: Supervisor['handle']; origin: string } | null;
   /** Dock OBS V1: its own local server (another port); here only Studio's panel API (docs/OBS_DOCK.md). */
-  dock: DockRuntime | null = null,
+  dock?: DockRuntime | null;
   /** Halloween (docs/HALLOWEEN.md): the overlay engine, its page and media, Studio's panel and the shop relay. */
-  halloween: HalloweenRuntime | null = null,
+  halloween?: HalloweenRuntime | null;
   /** Progression native (docs/PROGRESSION.md): Studio's panel relay to the profile's Core. */
-  progression: ProgressionRelay | null = null,
+  progression?: ProgressionRelay | null;
   /** Boutique cosmétique V1: the « Boutique » tab relay and the preview's stylesheet / images. */
-  cosmetics: CosmeticsRelay | null = null,
+  cosmetics?: CosmeticsRelay | null;
   /** Défis (docs/CHALLENGES.md): the « Défis » tab relay to the profile's Core. */
-  challenges: ChallengesRelay | null = null,
-) {
+  challenges?: ChallengesRelay | null;
+}
+
+export function createStudioServer(o: StudioServerOptions) {
+  const {
+    lab,
+    onShutdown,
+    extLab = null,
+    bonk = null,
+    sound = null,
+    runtime = null,
+    tts = null,
+    labApi = null,
+    raffle = null,
+    labChat = null,
+    commands = null,
+    profile = null,
+    wordGame = null,
+    relays = null,
+    alerts = null,
+    points = null,
+    twitchConnections = null,
+    control = null,
+    supervision = null,
+    dock = null,
+    halloween = null,
+    progression = null,
+    cosmetics = null,
+    challenges = null,
+  } = o;
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
     try {
@@ -1218,9 +1250,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     .start()
     .catch((e: Error) => console.error('[halloween] start failed', e.message));
   halloweenRef = halloween;
-  const httpServer = createStudioServer(
+  const httpServer = createStudioServer({
     lab,
-    shutdown,
+    onShutdown: shutdown,
     extLab,
     bonk,
     sound,
@@ -1230,8 +1262,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     raffle,
     labChat,
     // Commands V2: the Lab Core, or the main Core through the production cockpit (lot 8: it hosts the chat games).
-    labCore ? commandsRelay(labCore, cockpitChannel) : null,
-    {
+    commands: labCore ? commandsRelay(labCore, cockpitChannel) : null,
+    profile: {
       plan,
       runtimeDir: paths.runtimeDir,
       env: { ...process.env, RAPTORU_MAIN_TOKEN: mainToken },
@@ -1245,7 +1277,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       },
     },
     wordGame,
-    labCore
+    relays: labCore
       ? chainRelays(
           miniGamesRelay(labCore, cockpitChannel),
           moduleSettingsRelay(labCore, cockpitChannel),
@@ -1258,15 +1290,24 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     // Centre de contrôle: the Production bot through the paired Studio's Core client (Lab profile: not followed), then
     // the viewer interactions as Studio sees them (supervision/signals.ts).
     control,
-    { handle: supervisor.handle.bind(supervisor), origin: studioOrigin },
+    supervision: {
+      handle: supervisor.handle.bind(supervisor),
+      origin: studioOrigin,
+    },
     dock,
     halloween,
-    new ProgressionRelay({ core: alertsCore, environment: alertsEnv }),
+    progression: new ProgressionRelay({
+      core: alertsCore,
+      environment: alertsEnv,
+    }),
     // Boutique cosmétique V1 (docs/COSMETIC_SHOP.md): the profile's Core decides; Studio edits and previews.
-    new CosmeticsRelay({ core: alertsCore, environment: alertsEnv }),
+    cosmetics: new CosmeticsRelay({ core: alertsCore, environment: alertsEnv }),
     // Défis: definitions, recount and follow-up; the Core counts and pays, Studio only edits and shows.
-    new ChallengesRelay({ core: alertsCore, environment: alertsEnv }),
-  );
+    challenges: new ChallengesRelay({
+      core: alertsCore,
+      environment: alertsEnv,
+    }),
+  });
   supervisor.start();
   if (dock)
     dock.server.listen().then(
