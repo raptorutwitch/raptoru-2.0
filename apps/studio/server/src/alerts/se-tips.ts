@@ -248,12 +248,15 @@ export class SeTipsLink {
     const saved = (await read<{ mode?: unknown }>('se-mode.json', {})).mode;
     const journal = await read<SeJournalEntry[]>('se-journal.json', []);
     const mode = SE_MODES.includes(saved as SeMode) ? (saved as SeMode) : 'off';
-    // Never an automatic start of the real alerts: a saved ACTIVE resumes as TEST (observation).
+    // Refonte H5 (decided 05/11): a saved ACTIVE resumes ACTIVE in the confirmed Production profile (donations must not
+    // fall silent after a restart); in the Lab it resumes as TEST (observation). OFF / TEST chosen stay as chosen. Without
+    // a token it waits for one (« no_token »): nothing is ever played without StreamElements' authorization.
+    const restore = mode === 'active' && d.environment === 'production';
     return new SeTipsLink(
       d,
-      mode === 'active' ? 'test' : mode,
+      mode === 'active' && !restore ? 'test' : mode,
       Array.isArray(journal) ? journal.slice(-JOURNAL_MAX) : [],
-      mode === 'active',
+      mode === 'active' && !restore,
     );
   }
 

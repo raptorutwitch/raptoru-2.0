@@ -880,7 +880,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     labCore && labProfile ? 'lab' : production ? 'production' : null;
   const alertsCore =
     alertsEnv === 'lab' ? labCore : (production?.alertsCore ?? null);
-  // Real StreamElements donations: own mode (OFF by default, ACTIVE never resumed at start), token from Electron main.
+  // Real StreamElements donations: own mode (OFF by default; ACTIVE resumed in Production only, refonte H5), token from
+  // Electron main.
   const se =
     alertsCore && alertsEnv
       ? await SeTipsLink.open({

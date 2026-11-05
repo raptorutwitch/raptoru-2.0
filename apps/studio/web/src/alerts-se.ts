@@ -115,7 +115,7 @@ export function seStatusView(s: SeStatus | null, error: string | null) {
     ? `<p class="al-hint">Dernier don reçu : ${esc(time(s.last_event.at))} — ${esc(s.last_event.name ?? 'sans nom')}, ${esc(s.last_event.amount ?? '?')} ${esc(s.last_event.currency ?? '')} → <b>${esc(DECISION[s.last_event.decision])}</b>.</p>`
     : '<p class="al-hint">Aucun don reçu pour l’instant.</p>';
   return `
-    ${s.resumed_from_active ? '<p class="al-error">ACTIVE n’est jamais repris automatiquement au démarrage de Studio : mode TEST (observation). Choisis ACTIVE à nouveau pour jouer les vrais événements.</p>' : ''}
+    ${s.resumed_from_active ? '<p class="al-error">Profil Lab : ACTIVE n’est pas repris au démarrage de Studio, mode TEST (observation). Choisis ACTIVE à nouveau pour jouer les vrais événements. En profil Production, ACTIVE est repris.</p>' : ''}
     <p class="al-hint">Compte : ${s.token.present ? `jeton enregistré (${s.token.type === 'apikey' ? 'Overlay Token' : 'JWT'})` : 'non connecté'}${s.room ? ` · chaîne ${esc(s.room)}` : ''}</p>
     <p class="${ok ? 'al-ok' : bad ? 'al-error' : 'al-hint'}">${esc(s.state_label)}</p>
     ${s.mode !== 'off' && s.token.present ? `<p class="al-hint">${topics}</p>` : ''}
