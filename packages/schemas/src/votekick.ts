@@ -77,11 +77,29 @@ export interface VotekickVerdict {
   durationS: number;
 }
 
-/** The timeout minutes for a vote count: round(5 + (count − 2) × 25 / 18), within [5, 30]. */
-export function votekickMinutes(count: number) {
+/** The sanction range in minutes (Studio setting H10; default = the SAMMI rule 5-30). */
+export interface VotekickRange {
+  minMinutes: number;
+  maxMinutes: number;
+}
+export const VOTEKICK_DEFAULT_RANGE: VotekickRange = {
+  minMinutes: VOTEKICK.minMinutes,
+  maxMinutes: VOTEKICK.maxMinutes,
+};
+
+/**
+ * The timeout minutes for a vote count: round(min + (count − 2) × (max − min) / 18), within [min, max] — with the
+ * default range exactly the SAMMI rule round(5 + (count − 2) × 25 / 18) in [5, 30].
+ */
+export function votekickMinutes(
+  count: number,
+  range: VotekickRange = VOTEKICK_DEFAULT_RANGE,
+) {
+  const lo = Math.min(range.minMinutes, range.maxMinutes);
+  const hi = Math.max(range.minMinutes, range.maxMinutes);
   // ponytail: Math.round; GameMaker's round() may differ on .5 — only count 11 lands on .5 (17.5): to check in SAMMI.
-  const m = Math.round(5 + ((count - 2) * 25) / 18);
-  return Math.min(VOTEKICK.maxMinutes, Math.max(VOTEKICK.minMinutes, m));
+  const m = Math.round(lo + ((count - 2) * (hi - lo)) / 18);
+  return Math.min(hi, Math.max(lo, m));
 }
 
 /**
@@ -92,6 +110,7 @@ export function votekickMinutes(count: number) {
 export function votekickVerdict(
   t: VotekickTally,
   coin: () => 0 | 1,
+  range: VotekickRange = VOTEKICK_DEFAULT_RANGE,
 ): VotekickVerdict {
   const total = t.kick + t.save;
   const none = (outcome: VotekickOutcome): VotekickVerdict => ({
@@ -112,7 +131,7 @@ export function votekickVerdict(
   });
   if (total < VOTEKICK.quorum) return none('no_quorum');
   if (t.kick > t.save) {
-    const minutes = votekickMinutes(t.kick);
+    const minutes = votekickMinutes(t.kick, range);
     const otherSaves = t.save - (t.targetSaved ? 1 : 0);
     return otherSaves === 0
       ? sanction(
@@ -123,7 +142,7 @@ export function votekickVerdict(
       : sanction('target_timeout', 'target', minutes);
   }
   if (total >= VOTEKICK.coinflipMinVotes && t.kick === t.save) {
-    const minutes = votekickMinutes(t.kick);
+    const minutes = votekickMinutes(t.kick, range);
     return coin() === 0
       ? sanction('coinflip_target', 'target', minutes)
       : sanction('coinflip_initiator', 'initiator', minutes);
@@ -132,7 +151,7 @@ export function votekickVerdict(
     return sanction(
       'backfire',
       'initiator',
-      votekickMinutes(t.save) * VOTEKICK.doubleFactor,
+      votekickMinutes(t.save, range) * VOTEKICK.doubleFactor,
     );
   return none('no_timeout');
 }

@@ -1,5 +1,6 @@
 import { ProgressionService } from '../progression/service.js';
 import { miniGameLimits } from '../modules/mini-games.js';
+import { votekickLimits, votekickModule } from '../modules/votekick.js';
 import { modulesRoutes } from '../http/modules-routes.js';
 import { MODULES } from '../modules/index.js';
 import { ModuleHost } from '../modules/host.js';
@@ -149,6 +150,9 @@ export function createLabCore({
   // Commands V2 answers become durable steps, handed to the Lab Twitch adapter only while « Sortie chat réelle » is
   // ON (OFF by default); Duel finds its target by login with the Lab app credentials of the Tombola avatars.
   const votekick = new VotekickService(db, systemClock, broadcasterOf);
+  // Module host: Votekick's adapter (its chat is always mounted in the Lab).
+  modules.add(votekickModule(votekick, { chat: true }));
+  votekick.limits = votekickLimits(moduleSettings);
   // Random Ban V3: the streamer as an exceptional target (his mic muted in OBS by Studio).
   const randomBan = new RandomBanService(db, systemClock, undefined, {
     streamer: () => {

@@ -1,0 +1,56 @@
+# Migration des modules historiques vers le socle
+
+Mise à jour : 05/11/2026, mission « Opération fondation totale ». Inventaire : sous-agent en lecture seule, recoupé dans le code.
+
+## Stratégies
+
+- **A — migration complète** : le module est réécrit sur l'hôte.
+- **B — adaptateur** : le moteur reste, il expose les contrats communs (réglages bornés, état, interrupteur lu, journal le cas échéant).
+- **C — intégration partielle** : seulement les réglages, l'état ou l'interface.
+- **D — transversal** : ce n'est pas un module métier.
+- **E — conservé** : la migration rapporterait trop peu.
+
+**Règle.** Aucun ancien chemin n'est retiré avant que son remplaçant soit implémenté, testé et équivalent. Un adaptateur ne crée jamais un deuxième exécuteur : le moteur historique reste le seul à agir.
+
+## Choix par module
+
+| Module | Stratégie | État au 05/11 | Raison |
+|---|---|---|---|
+| Mini-jeux (Roulette, Slot, Duel) | B | **fait** (`e08d1a5`) | réglages H10 et supervision ; service inchangé |
+| Votekick | B | **fait** (ce lot) | H10 « délais » ; l'interrupteur est un drapeau de déploiement (lecture seule) ; la durée du vote reste dans `votekick_settings` (son écran) |
+| Caution | B | à faire | H10 « prix » ; argent : prix lus dans la transaction du devis ; interrupteur `CAUTION_CHAT` en lecture seule |
+| Random Ban | B (état seulement) | à faire | le prix est déjà un réglage ; la chance du streamer (2 %) est une probabilité : jamais réglable (H10) |
+| Boutique Halloween | B (état) | à faire | interrupteur en base et pouls persistant (`event_shop_studios`) |
+| Jeu des mots | B (état) | à faire | interrupteur et intervalle déjà en base (H8) ; « Prêt pour le live » le couvre déjà |
+| Bonk, Soundboard, TTS | E pour l'instant | — | supervision Studio (`signals.ts`) et modération D4 complètes ; un adaptateur dupliquerait l'existant |
+| Tombola | E pour l'instant | — | modération D4 complète, configuration propre (ordonnanceur) |
+| Roue du Sub, Spotify, Points de chaîne, Alertes | C plus tard | — | moteurs riches avec leurs écrans ; candidats à un état commun seulement |
+| Daily, Fidélité, Progression, Défis, Boutique cosmétique | D | — | systèmes économiques ou communautaires transversaux, pas des interactions |
+| Commandes V2, Modération, Supervision, Lab, Simulation | D | — | l'outillage lui-même |
+
+## Matrice de parité — Mini-jeux
+
+| Capacité | Avant | Après | Preuve |
+|---|---|---|---|
+| Mise mini Roulette 20, délai 10 s | constantes `rules.ts` | réglages `mini_games.*` (défaut identique), lus dans la transaction | `mini-games-settings.test.ts` (défauts puis valeurs) |
+| `!slots` mise 20, délai 2 s | constantes | réglages | idem |
+| Plafond Duel 100 000, délai 30 s | constantes `duel-rules.ts` | réglages | idem (duel plafonné à 500) |
+| Chances, gains, textes | constantes | **inchangés** | `mini-games-rules.test.ts`, `duel-rules.test.ts` sans modification |
+| Interrupteur « Mini-jeux » | `mini_game_channels` (Simulation) | inchangé, lu par l'hôte | test supervision |
+| Hors live | silence et notice | inchangé | `mini-games-service.test.ts` |
+| Écran | Simulation | carte du module (état, réglages) ; interrupteur toujours sur Simulation | vu en navigateur |
+
+## Matrice de parité — Votekick
+
+| Capacité | Avant | Après | Preuve |
+|---|---|---|---|
+| Délai de relance 1 h | `VOTEKICK.initiatorCooldownMs` | réglage `votekick.initiator_cooldown_min` (défaut 60), enregistré à l'ouverture | `votekick-module.test.ts` (10 min appliquées) |
+| Sanction 5-30 min, courbe `round(5 + (n−2)×25/18)` | constantes | réglages min / max, même courbe `round(min + (n−2)×(max−min)/18)` ; défaut identique | `votekick-module.test.ts`, `votekick-rules.test.ts` inchangé |
+| Perfect et Backfire ×2, quorum 3, pile ou face à 4 | règles | **inchangées** (H10 : pas les probabilités) | `votekick-service.test.ts` (61 tests, inchangés) |
+| Durée du vote 15-300 s | `votekick_settings` (son écran) | inchangée, au même endroit | `votekick-service.test.ts` |
+| Interrupteur | `VOTEKICK_CHAT` (déploiement) | lu par l'hôte, jamais écrit | — |
+| Sourdine du streamer, Caution | moteur | inchangés | `votekick-service.test.ts` |
+| État | écran Votekick | en plus : « prêt » seulement si le bot s'est signalé depuis moins de 15 s | `votekick-module.test.ts` |
+| Écran | Points de chaîne › Votekick | même section, avec le panneau « Délais et durées d'exclusion » (même API que Bonk) | build web |
+
+Écart assumé : la plage de sanction est lue au verdict, pas à l'ouverture du vote. Un changement pendant un vote ouvert vaut donc pour ce vote. La durée du vote, elle, reste figée à l'ouverture.

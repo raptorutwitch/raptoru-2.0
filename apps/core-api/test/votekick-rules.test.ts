@@ -16,7 +16,7 @@ const v = (kick: number, save: number, targetSaved = false, coin = heads) =>
 
 describe('votekick rules (SAMMI parity)', () => {
   it('minutes: round(5 + (n − 2) × 25 / 18) within [5, 30]', () => {
-    expect([1, 2, 3, 4, 5, 6, 10, 19, 20, 50].map(votekickMinutes)).toEqual([
+    expect([1, 2, 3, 4, 5, 6, 10, 19, 20, 50].map((n) => votekickMinutes(n))).toEqual([
       5, 5, 6, 8, 9, 11, 16, 29, 30, 30,
     ]);
   });

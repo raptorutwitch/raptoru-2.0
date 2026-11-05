@@ -1,4 +1,8 @@
 import { randomInt, randomUUID } from 'node:crypto';
+import {
+  DEFAULT_VOTEKICK_LIMITS,
+  type VotekickLimits,
+} from '../modules/votekick.js';
 import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import {
   broadcasterMuteSeconds,
@@ -156,6 +160,13 @@ export class VotekickService implements CautionMutes {
 
   /** Refonte H1: the economy of this Core (canonical: a vote starts only during the canonical live). Set by createCore. */
   economy: { readonly mode: 'lab' | 'canonical' } = { mode: 'lab' };
+
+  /**
+   * Refonte H10 (module host « votekick »): the initiator's delay and the sanction range, read in the transaction that
+   * uses them. Set by createCore / the Lab Core; default = the SAMMI rules (1 h, 5-30 min).
+   */
+  limits: (q: Queryable, channelId: string) => Promise<VotekickLimits> =
+    async () => DEFAULT_VOTEKICK_LIMITS;
 
   /** The Twitch profile pictures (the Tombola's cache, lab_viewer_avatars): the target's picture for the overlay. */
   private avatars: { ensure(ids: string[]): Promise<unknown> } | null = null;
@@ -552,7 +563,11 @@ export class VotekickService implements CautionMutes {
     await q.query(
       `insert into votekick_cooldowns (channel_id, initiator_id, until_at) values ($1, $2, $3)
        on conflict (channel_id, initiator_id) do update set until_at = excluded.until_at`,
-      [ch, r.initiator_id, this.ms(VOTEKICK.initiatorCooldownMs)],
+      [
+        ch,
+        r.initiator_id,
+        this.ms((await this.limits(q, ch)).initiatorCooldownMs),
+      ],
     );
     await this.say(
       q,
@@ -783,7 +798,11 @@ export class VotekickService implements CautionMutes {
     const targetSaved = ballots.some(
       (b) => b.voter_id === r.target_id && b.choice === 'save',
     );
-    const v = votekickVerdict({ kick, save, targetSaved }, this.coin);
+    const L = await this.limits(q, r.channel_id);
+    const v = votekickVerdict({ kick, save, targetSaved }, this.coin, {
+      minMinutes: L.minMinutes,
+      maxMinutes: L.maxMinutes,
+    });
     const punished =
       v.punished === 'target'
         ? { id: r.target_id!, login: r.target_login! }

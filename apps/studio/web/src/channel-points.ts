@@ -137,6 +137,20 @@ export function mountChannelPoints(root: HTMLElement) {
   const caution = mountCaution($('caution'));
   // Settings form: loaded when the tab opens, never in the 3 s refresh (it would erase what is being typed).
   const votekick = mountVotekickConfig($('votekick'));
+  // Refonte H10 (module host « votekick », adapter): the initiator's delay and the sanction range, set in the Core.
+  const votekickLimitsNode = document.createElement('div');
+  root
+    .querySelector<HTMLElement>('[data-sat="votekick"]')
+    ?.append(votekickLimitsNode);
+  const votekickLimits = mountSettingsPanel(
+    votekickLimitsNode,
+    'Délais et durées d’exclusion',
+    [
+      'votekick.initiator_cooldown_min',
+      'votekick.sanction_min_minutes',
+      'votekick.sanction_max_minutes',
+    ],
+  );
   const subWheel = mountSubWheel($('sub-wheel'));
 
   const reward = () => state?.rewards.find((r) => r.id === selected) ?? null;
@@ -525,6 +539,7 @@ export function mountChannelPoints(root: HTMLElement) {
       if (!visible) return;
       void load();
       void prices.refresh();
+      void votekickLimits.refresh();
       void randomBan.load();
       void spotify.load();
       void caution.load();

@@ -1,5 +1,6 @@
 import { ALERT_RULES, AlertsService } from './alerts/service.js';
 import { miniGameLimits } from './modules/mini-games.js';
+import { votekickLimits, votekickModule } from './modules/votekick.js';
 import { MODULES } from './modules/index.js';
 import { ModuleHost } from './modules/host.js';
 import { ModuleSettings } from './module-settings/service.js';
@@ -136,6 +137,9 @@ export function createCore(
   });
   const votekick = new VotekickService(db, clock, broadcasterOf);
   votekick.economy = economy; // refonte H1: votes only during the canonical live
+  // Module host (architecture MIGRATIONS.md): Votekick's adapter — H10 delays and range, its supervision.
+  modules.add(votekickModule(votekick, { chat: !!channel.votekickChat }));
+  votekick.limits = votekickLimits(moduleSettings);
   // Random Ban V3: the streamer as an exceptional target (his mic muted in OBS), never while Votekick mutes him.
   const randomBan = new RandomBanService(db, clock, undefined, {
     streamer: () =>

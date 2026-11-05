@@ -91,38 +91,8 @@ export class ModuleHost {
       settings: ModuleSettings;
     },
   ) {
-    for (const d of defs) {
-      // A Lab-only module (demonstration, experiment) never exists on the canonical economy (Production).
-      if (d.labOnly && deps.economy.mode === 'canonical') continue;
-      const problems = checkModule(d);
-      if (problems.length)
-        throw new Error(`invalid module ${d.id}: ${problems.join('; ')}`);
-      if (this.modules.has(d.id))
-        throw new Error(`module declared twice: ${d.id}`);
-      this.modules.set(d.id, d);
-      deps.settings.register(
-        Object.fromEntries([
-          ...(this.hasSwitch(d)
-            ? [
-                [
-                  `${d.id}.enabled`,
-                  {
-                    label: `${d.label} : actif`,
-                    unit: '0 / 1',
-                    default: d.enabledByDefault ? 1 : 0,
-                    min: 0,
-                    max: 1,
-                    help: 'interrupteur du module (0 = coupé pour les viewers et le chat)',
-                  },
-                ] as const,
-              ]
-            : []),
-          ...Object.entries(d.settings ?? {}).map(
-            ([k, s]) => [`${d.id}.${k}`, s] as const,
-          ),
-        ]),
-      );
-    }
+    this.deps = deps;
+    for (const d of defs) this.add(d);
     const unscoped = () => Promise.reject(new Error('use ctxFor(module)'));
     this.ctx = {
       ...deps,
@@ -133,6 +103,51 @@ export class ModuleHost {
       settle: unscoped,
       state: { get: unscoped, set: unscoped },
     };
+  }
+
+  private readonly deps: {
+    db: Db;
+    clock: Clock;
+    economy: EconomyPort;
+    settings: ModuleSettings;
+  };
+
+  /**
+   * Registers a module (constructor list, or an adapter built once its historical service exists — e.g. Votekick).
+   * Checked like the others; its settings registered; a Lab-only module never on the canonical economy.
+   */
+  add(d: ModuleDefinition) {
+    const deps = this.deps;
+    // A Lab-only module (demonstration, experiment) never exists on the canonical economy (Production).
+    if (d.labOnly && deps.economy.mode === 'canonical') return;
+    const problems = checkModule(d);
+    if (problems.length)
+      throw new Error(`invalid module ${d.id}: ${problems.join('; ')}`);
+    if (this.modules.has(d.id))
+      throw new Error(`module declared twice: ${d.id}`);
+    this.modules.set(d.id, d);
+    deps.settings.register(
+      Object.fromEntries([
+        ...(this.hasSwitch(d)
+          ? [
+              [
+                `${d.id}.enabled`,
+                {
+                  label: `${d.label} : actif`,
+                  unit: '0 / 1',
+                  default: d.enabledByDefault ? 1 : 0,
+                  min: 0,
+                  max: 1,
+                  help: 'interrupteur du module (0 = coupé pour les viewers et le chat)',
+                },
+              ] as const,
+            ]
+          : []),
+        ...Object.entries(d.settings ?? {}).map(
+          ([k, s]) => [`${d.id}.${k}`, s] as const,
+        ),
+      ]),
+    );
   }
 
   /** The context a module sees: its own settings and state by short key (never another module's). */
@@ -219,7 +234,10 @@ export class ModuleHost {
                     return { outcome: 'ignored' };
                   return await inner.chat!(msg);
                 } catch (e) {
-                  console.error(`[modules] ${d.id} chat failed`, (e as Error).message);
+                  console.error(
+                    `[modules] ${d.id} chat failed`,
+                    (e as Error).message,
+                  );
                   return { outcome: 'module_error' };
                 }
               }
@@ -248,7 +266,11 @@ export class ModuleHost {
    * never holds the others back, and is never started twice at once.
    */
   async tick() {
-    const run = async (what: string, d: ModuleDefinition, job: () => Promise<unknown>) => {
+    const run = async (
+      what: string,
+      d: ModuleDefinition,
+      job: () => Promise<unknown>,
+    ) => {
       const k = `${d.id}:${what}`;
       if (this.running.has(k)) return;
       this.running.add(k);
@@ -262,8 +284,12 @@ export class ModuleHost {
     };
     await Promise.all(
       [...this.modules.values()].flatMap((d) => [
-        ...(d.expireQueuedMs ? [run('expiry', d, () => this.expireQueued(d))] : []),
-        ...(d.tick ? [run('tick', d, async () => d.tick!(this.ctxFor(d)))] : []),
+        ...(d.expireQueuedMs
+          ? [run('expiry', d, () => this.expireQueued(d))]
+          : []),
+        ...(d.tick
+          ? [run('tick', d, async () => d.tick!(this.ctxFor(d)))]
+          : []),
       ]),
     );
   }
@@ -622,7 +648,14 @@ export class ModuleHost {
                and (claimed_at is null or claimed_at < $6 or claimed_by = $5)
              order by created_at limit $3 for update skip locked)
           returning *`,
-        [channelId, id, Math.min(Math.max(limit, 1), 10), now, player, new Date(now.getTime() - PLAYER_LEASE_MS)],
+        [
+          channelId,
+          id,
+          Math.min(Math.max(limit, 1), 10),
+          now,
+          player,
+          new Date(now.getTime() - PLAYER_LEASE_MS),
+        ],
       );
       return { items: rows.map(activityView), lease_ms: PLAYER_LEASE_MS };
     });
@@ -652,7 +685,13 @@ export class ModuleHost {
       );
       if (!own.length) throw new ModuleError(404, 'activity_not_found');
       return {
-        activity: await this.settleIn(q, r.activity_id, { status: r.status, result: r.result }, 'lecteur', id),
+        activity: await this.settleIn(
+          q,
+          r.activity_id,
+          { status: r.status, result: r.result },
+          'lecteur',
+          id,
+        ),
       };
     });
   }
