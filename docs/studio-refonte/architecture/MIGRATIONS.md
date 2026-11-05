@@ -193,13 +193,24 @@ couleurs du Hub, la pastille « Ouverte / Fermée » de l'en-tête Tombola, le t
 | 2 (`356617d`) | `main-server.ts` (`createMainCore`, `createMainServer`) : l'assemblage unique de Production et du Lab ; `lab/fixtures.ts` ; Studio `extension-lab/core-frontier.ts` : signe le JWT Twitch du compte fictif et relaie `/ext-lab/api/*` → `/v1/ext/*` | E2E `core-lab` 4/4 ; JWT accepté par le vérificateur du Core |
 | 3a (`6fe32e9`) | transport Production de Studio vers le Core Lab local : HTTP accepté sur loopback seulement et sur demande (`labLoopback`), identité liée à ce Core | E2E : TTS acheté dans l'extension → Core → worker TTS **de Production** de Studio → lecteur fictif → réglé, débité une fois ; aucune route `/v1/lab` |
 
+| émotes (`f46e8fc`) | 7TV / BTTV / FFZ publics : option du Core `EMOTE_CATALOG_CHANNEL_ID` (lecture seule, sans jeton, coupée par défaut, identique Lab / Production : la Production ne la pose pas, rien n'y change). Twitch : fictif dans le Lab (en Production ce sont les émotes personnelles de chaque viewer : il faudrait un vrai compte et un secret d'app) | unitaires : coupé = catalogue vide et aucun appel ; activé = GET seulement, aucun en-tête d'identification |
+| 3b (`2041804`) | `STUDIO_LAB_CORE=main npm run studio` (opt-in ; sans la variable : l'ancien Lab, inchangé). Le runtime prépare (`lab-prepare.ts` : base `raptoru_core_lab`, migrateur Production, fixtures la première fois, appairage) puis lance `dist/index.js` sur 4302 avec un environnement construit de zéro (aucune variable du processus Studio, secrets générés pour ce PC). Studio prend le chemin du profil Production (workers `/v1/studio`, cockpit) vers ce Core, Extension Lab sur son `/v1/ext` | runtime 35/35 ; Studio 893/894 (sound-lab : charge, 3/3 seul) ; essai réel sur la base jetable : préparation idempotente, session Studio, wallet de test |
+| chat (`ac0263a`) | le simulateur de chat joue le bot sur la porte `/v1/bot/chat` du Core Lab ; le Core n'accepte `source: simulator` (et « récents ») qu'en `CORE_ENVIRONMENT=lab` ; Production : Twitch seulement, inchangé | unitaires lab / staging ; essai réel : « !tombola » simulé reçu par les modules |
+| modules (`3abcb38`) | alertes, points de chaîne (effets, Votekick, **simulateur** Spotify), Random Ban, Roue, Dock, Halloween, Progression, Boutique, Défis en mode Lab vers les routes `/v1/studio/<module>` du Core Lab (`studioRoutesClient`), journaux sous `lab-main/` | essai réel : 8 familles de routes répondent |
+
+Coupé dans ce mode (lecture d'un vrai service extérieur) : StreamElements, ingestion du chat Twitch. Le Bonk Twitch y est
+sans émotes Twitch (fictif à venir) ; 7TV / BTTV / FFZ réels possibles avec `STUDIO_LAB_EMOTE_CATALOG_CHANNEL_ID=83603689`.
+
+Essayer : `npm run build -w @raptoru/core-api` puis `STUDIO_LAB_CORE=main npm run studio` (profil Lab). Revenir : relancer
+sans la variable (l'ancien Lab et ses données sont intacts ; le nouveau garde les siennes dans `raptoru_core_lab` et
+`runtime/lab-main/`).
+
 Reste (ordre) :
-1. **3b — `npm run studio` en Lab sur le Core principal** : le runtime local lance `index.ts` (`CORE_ENVIRONMENT=lab`,
-   base `raptoru_core_lab` locale, secrets générés), appaire Studio tout seul, et le profil Lab prend le chemin
-   Production (`createProductionRuntimes` + `labLoopback`, `cockpitClient` qui traduit déjà `/v1/lab/*` →
-   `/v1/studio/cockpit/*`). Extras du Lab à rebrancher : Extension Lab → `labFrontier` ; chat simulé → porte du bot
-   (`/v1/bot/chat`) au lieu de `/v1/lab/chat` ; Simulation de stream ; Wallet de test (cockpit).
-2. **4 — E2E sur l'assemblage principal** : porter les specs de `lab-stack.ts` vers `core-lab-stack.ts`.
-3. **5 — retraits** : `lab-ebs.ts`, `bonk-lab/lab-core.ts`, routes HTTP `/v1/lab/*`, migrations jumelles `_lab`
+1. Outils propres au Lab que le Core principal ne sert pas encore (404 dans ce mode) : `simulate` de Spotify, simulateurs
+   de la Roue (présence, abonnements), « Tester » éventuels — à ouvrir dans le Core en `CORE_ENVIRONMENT=lab` seulement.
+2. Twitch fictif du Bonk dans ce mode (comptes et émotes fictifs, OAuth simulé) ; liste des identités de l'Extension Lab.
+3. **4 — E2E sur l'assemblage principal** : porter les specs de `lab-stack.ts` vers `core-lab-stack.ts`.
+4. Après validation d'Antoni : le Core principal devient le Lab par défaut.
+5. **5 — retraits** : `lab-ebs.ts`, `bonk-lab/lab-core.ts`, routes HTTP `/v1/lab/*`, migrations jumelles `_lab`
    (module par module, quand le schéma de Production les couvre).
 

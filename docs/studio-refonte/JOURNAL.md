@@ -206,3 +206,10 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Le Core principal tourne en `CORE_ENVIRONMENT=lab` (gardes au démarrage) ; un seul assemblage pour Production et Lab.
 - L'Extension Lab parle au vrai `/v1/ext` ; le transport Production de Studio fonctionne contre le Core Lab local :
   une interaction TTS complète passe sans aucune route `/v1/lab`.
+
+## 06/11/2026 — Lab cible (suite)
+
+- Choix d'Antoni : catalogues d'émotes réels en lecture seule, le reste fictif. 7TV / BTTV / FFZ publics = option du Core
+  coupée par défaut ; Twitch fictif (un vrai catalogue Twitch demanderait un vrai compte et un secret d'app).
+- `npm run studio` peut tourner sur le véritable Core en mode Lab (opt-in), avec le chemin du profil Production, le
+  simulateur de chat sur la porte du bot (Lab seulement) et les modules en mode Lab (simulateur Spotify).

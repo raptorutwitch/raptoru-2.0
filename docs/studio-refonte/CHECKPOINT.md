@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026 — Lab cible : le véritable Core en mode Lab (lots 1, 2, 3a, `6fe32e9`). Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 06/11/2026 — Lab cible : `npm run studio` peut tourner sur le véritable Core (opt-in `STUDIO_LAB_CORE=main`, `3abcb38`). Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -255,7 +255,13 @@ contrôle.
 | `356617d` | assemblage unique (`main-server.ts`) ; Extension Lab sur le vrai `/v1/ext` (Studio signe le JWT, relaie) |
 | `6fe32e9` | transport Production de Studio vers le Core Lab local ; boucle complète extension → Core → worker Studio → lecteur |
 
-Le `npm run studio` d'aujourd'hui n'a pas encore basculé (lot 3b, détail : architecture/MIGRATIONS.md § « Lab cible »).
+| `f46e8fc` | 7TV / BTTV / FFZ publics : option du Core coupée par défaut (lecture seule) ; Twitch fictif dans le Lab |
+| `2041804` | `STUDIO_LAB_CORE=main npm run studio` : le Lab sur le véritable Core (opt-in ; l'ancien Lab reste le défaut) |
+| `ac0263a` | simulateur de chat sur la porte du bot, en Lab seulement |
+| `3abcb38` | alertes, points de chaîne (simulateur Spotify), Random Ban, Roue, Dock, Halloween… en mode Lab sur ce Core |
+
+À essayer par Antoni : `npm run build -w @raptoru/core-api`, puis `STUDIO_LAB_CORE=main npm run studio` ; ce qui reste
+et ce qui est coupé dans ce mode : architecture/MIGRATIONS.md § « Lab cible ».
 Pour essayer le nouveau Lab : `apps/core-api/.env.lab` (voir l'en-tête de `src/scripts/lab-reset.ts`), puis
 `npm run lab:reset -w @raptoru/core-api` et `npm run lab -w @raptoru/core-api`. Staging : intact.
 
