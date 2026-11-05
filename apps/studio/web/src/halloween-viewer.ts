@@ -90,7 +90,7 @@ export function viewerFinderHtml(
     ? `<div class="hw-viewer">
         <div class="hw-viewer-head"><b>${esc(picked.name)}</b> <small>${esc(h?.viewer_id ?? '')}</small>
           <span class="hw-balance">${h ? `${h.balance} 🍬` : '…'}</span>
-          ${tester === null ? '' : `<button type="button" data-tester="${esc(h?.viewer_id ?? '')}" aria-pressed="${tester}">${tester ? '✓ Testeur extension' : '+ Testeur extension'}</button>`}
+          ${tester === null ? '' : `<button type="button" data-tester="${esc(h?.viewer_id ?? '')}" aria-pressed="${tester}"${h ? '' : ' disabled'}>${tester ? '✓ Testeur extension' : '+ Testeur extension'}</button>`}
           <button type="button" class="primary" data-credit="${esc(h?.viewer_id ?? '')}" data-name="${esc(picked.name)}"${h ? '' : ' disabled'}>Créditer</button></div>
         ${
           h
