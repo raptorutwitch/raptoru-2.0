@@ -36,3 +36,43 @@ test('Roue du Sub and Commandes open their own view from the Hub; back and again
   await expect(page.locator('.cmdx--public')).toHaveCount(0);
   await page.close();
 });
+
+test('« Voir tous les modules » stays open when a new state arrives (here the balance) — it used to close under the viewer', async ({
+  browser,
+}) => {
+  const { readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const PORT = Number(process.env.E2E_PORT ?? 4399);
+  const core = JSON.parse(
+    readFileSync(join(tmpdir(), `raptoru-e2e-core-${PORT}.json`), 'utf8'),
+  ) as {
+    url: string;
+    secret: string;
+  };
+  const page = await hub(browser, 'viewer');
+  const tile = page
+    .getByRole('button', { name: /^Commandes$/ })
+    .filter({ visible: true });
+  await expect(tile).toHaveCount(1);
+  await fetch(core.url + '/v1/lab/wallet/900100', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${core.secret}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      actor: { id: 'studio', role: 'broadcaster', via: 'studio' },
+      viewer_id: '900101',
+      op: 'set',
+      tokens: 4_321,
+    }),
+  });
+  // The Hub redraws with the new balance (proved by its balance button); the list the viewer opened is still there.
+  await expect(page.locator('body')).toContainText(/4[\s  ]?321|4,3\s?K/, {
+    timeout: 20_000,
+  });
+  await page.waitForTimeout(1_000);
+  await expect(tile).toHaveCount(1);
+  await page.close();
+});

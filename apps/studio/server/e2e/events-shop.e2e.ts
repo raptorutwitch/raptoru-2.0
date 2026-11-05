@@ -36,6 +36,7 @@ test('the 565×376 video component scrolls the module (wheel), its section tabs 
   await all.first().click();
   await page
     .getByRole('button', { name: /^Événements/ })
+    .filter({ visible: true }) // the list's tile, never a hidden carousel card of the same name
     .first()
     .click();
   await expect(page.locator('.evs-item').first()).toBeVisible();
