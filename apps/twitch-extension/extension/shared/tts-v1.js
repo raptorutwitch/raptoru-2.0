@@ -244,6 +244,8 @@ registerModuleVariant({
   id: 'tts',
   // Registered after TTS V2 (imported above): exactly the sessions V2 does not take.
   match: (env) => !ttsV2Applies(env),
+  // The header wallet: tokens, or the TTS credits (one pending TTS reward = one use).
+  wallet: { label: 'TTS', credits: (state) => (state?.pending_actions ?? []).filter((a) => a.module_id === 'tts').length },
   view: () => ({ node: null }),
   rendered: (_view, ctx) => drawTtsV1(ctx),
 });

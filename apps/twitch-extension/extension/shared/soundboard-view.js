@@ -1136,6 +1136,13 @@ export function createSoundboardView({ document, client, host, root }) {
 registerModuleVariant({
   id: 'soundboard',
   match: () => true,
+  // The header wallet: tokens, or the Soundboard credits (each pending reward holds `credits_remaining` uses).
+  wallet: {
+    label: 'Soundboard',
+    credits: (state) => (state?.pending_actions ?? [])
+      .filter((a) => a.module_id === 'soundboard')
+      .reduce((total, action) => total + Math.max(0, Number(action.credits_remaining ?? 1)), 0),
+  },
   intro: false,
   headClass: 'jdm-module__screen-head--soundboard',
   view: (ctx) => createSoundboardView(ctx),

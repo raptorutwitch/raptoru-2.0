@@ -53,6 +53,10 @@ test('TTS V1 (viewer): quote, send in tokens, draft kept across visits, credits,
   await field.fill('Avec un crédit');
   await page.locator('.rl-pay--tts').getByRole('button', { name: /crédit/i }).first().click();
   await expect(page.locator('.jdm-module__body')).toHaveAttribute('data-payment-method', 'credits');
+  // The header wallet follows: it shows the TTS credits (one pending reward = 1).
+  const headerWallet = page.locator('.jdm-module__screen-head [data-wallet-mode]');
+  await expect(headerWallet).toHaveAttribute('data-wallet-mode', 'credits');
+  await expect(headerWallet).toHaveAttribute('data-wallet-exact-value', '1');
   await expect(page.locator('.rl-pay--tts [aria-label^="Envoyer pour"]')).toHaveAttribute('aria-label', 'Envoyer pour 1 crédit');
   await page.locator('.rl-pay--tts [aria-label^="Envoyer pour"]').click();
   await expect(flash(page)).toBeVisible();

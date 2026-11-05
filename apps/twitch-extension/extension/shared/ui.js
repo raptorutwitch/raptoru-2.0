@@ -239,7 +239,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   // Chaque module possède sa monnaie ; le wallet est sa projection et son
   // sélecteur unique, tandis que la dépensabilité reste évaluée par le CTA.
   /** The currency chosen per module (TTS today); a module variant reads and writes its own entry. */
-  const paymentChoice = { tts: 'tokens', soundboard: 'tokens' };
+  const paymentChoice = {};
   /** What a registered view keeps between two visits of its module (its form drafts): host.memory. */
   const moduleMemory = {};
   // TTS V2 (Lab, Core-backed): one persistent view per opening of the module.
@@ -364,17 +364,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     viewerPreferencesOpen = false;
     renderPreservingViewport();
   });
-
-  function pendingFor(moduleId) {
-    return (state?.pending_actions ?? []).filter((a) => a.module_id === moduleId);
-  }
-
-  function soundboardCreditBalance() {
-    return pendingFor('soundboard').reduce(
-      (total, action) => total + Math.max(0, Number(action.credits_remaining ?? 1)),
-      0,
-    );
-  }
 
   function canModerate() {
     return state?.moderation?.tts?.can_moderate === true;
@@ -1188,12 +1177,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
     // solde jetons
     const wallet = state.wallet ?? {};
-    const soundboardView = openModule === 'soundboard'
-      && (state.modules ?? []).some((candidate) => candidate.id === 'soundboard');
+    // A module that is paid in tokens or in its own credits says so (its variant's `wallet`): the header wallet becomes its
+    // currency switch, with its credit balance and name. No module id here.
+    const openSessionModule = openModule ? (state.modules ?? []).find((candidate) => candidate.id === openModule) : null;
+    const payment = openSessionModule && !sessionModule(openModule)
+      ? moduleVariant({ module: openSessionModule, state, client, document })?.wallet ?? null
+      : null;
     const moderationView = openModule === MODERATION_MODULE.id && canModerate();
-    const ttsView = openModule === 'tts';
     const raffleView = openModule === 'raffle_join';
-    const paymentView = soundboardView || ttsView;
+    const paymentView = Boolean(payment);
     const hubView = !openModule;
     const historyView = openModule === ACTIONS_MODULE.id;
     const consultView = hubView || historyView;
@@ -1216,8 +1208,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (!headerSwitch) {
       walletRow.setAttribute('role', 'group');
     }
-    if (soundboardView && !headerSwitch) walletRow.classList.add('jdm-soundboard-wallet');
-    // Une récompense TTS en attente = une utilisation, comme dans ttsForm.
     // Sans liste API, aucun zéro/solde fictif n'est présenté.
     const creditsKnown = Array.isArray(state.pending_actions);
     // Hub : total des crédits de tous les modules ; ils restent propres à chaque module.
@@ -1229,8 +1219,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
     const moduleCredits = consultView
       ? [...hubCreditsByModule.values()].reduce((sum, value) => sum + value, 0)
-      : ttsView ? pendingFor('tts').length : soundboardCreditBalance();
-    const creditModule = ttsView ? 'TTS' : 'Soundboard';
+      : payment ? payment.credits(state) : 0;
+    const creditModule = payment?.label ?? '';
     const creditWord = `crédit${moduleCredits > 1 ? 's' : ''}`;
     const exactCreditValue = creditsKnown ? formatWalletExactValue(moduleCredits) : 'Solde indisponible';
     const exactTokenValue = wallet.unavailable
@@ -1249,7 +1239,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     });
     if (!headerSwitch) walletRow.append(tokenView, creditView);
     const syncWalletView = (methods = [], onMethodChange = null) => {
-      const mode = soundboardView ? paymentChoice.soundboard : ttsView ? paymentChoice.tts : consultView ? hubWalletMethod : 'tokens';
+      const mode = payment ? (paymentChoice[openModule] ?? 'tokens') : consultView ? hubWalletMethod : 'tokens';
       const showingCredits = mode === 'credits';
       tokenView.classList.toggle('is-active', !showingCredits);
       creditView.classList.toggle('is-active', showingCredits);
