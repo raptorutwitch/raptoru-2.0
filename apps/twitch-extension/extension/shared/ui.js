@@ -34,6 +34,7 @@ import { createTwitchEmoteDialog, createTwitchEmoteSource } from './bonk-twitch-
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { hoverMarquee } from './hover-marquee.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
+import { createSoundPreview, soundPreviewUrls } from './soundboard-preview.js';
 // Module variants register themselves (TTS V2, Tombola V2).
 import './tts-v2.js';
 // The D4 console registers itself as the variant of « moderation » (with its « Commandes » view).
@@ -507,24 +508,6 @@ function fmtRafflePotAmount(value) {
   return number.toLocaleString('fr-FR').replace(/\u202f/gu, '\u00a0');
 }
 
-function soundPreviewUrls(sound) {
-  const variants = Array.isArray(sound?.variants) ? sound.variants : [];
-  const urls = variants.length
-    ? variants.map((variant) => variant?.preview_url)
-    : [sound?.preview_url];
-  return urls.filter(Boolean).map(String);
-}
-
-function chooseSoundPreviewUrl(sound) {
-  const urls = soundPreviewUrls(sound);
-  if (!urls.length) return null;
-  const raw = Number(Math.random());
-  const bounded = Number.isFinite(raw) ? raw : 0;
-  const index = Math.min(urls.length - 1, Math.max(0, Math.floor(bounded * urls.length)));
-  return urls[index];
-}
-
-const PREVIEW_VOLUME_KEY = 'raptoru-live:soundboard-preview-volume';
 const SOUNDBOARD_FAVORITES_KEY = 'raptoru-live:soundboard-favorites';
 const SOUNDBOARD_RECENTS_KEY = 'raptoru-live:soundboard-recents';
 const SOUNDBOARD_ORDER_KEY = 'raptoru-live:soundboard-order';
@@ -814,25 +797,6 @@ function writeTutorialDisabled(tutorial, disabled) {
     if (disabled) localStorage.setItem(key, '1');
     else localStorage.removeItem(key);
   } catch { /* stockage facultatif */ }
-}
-
-function clampPreviewVolume(value) {
-  return Math.max(0, Math.min(100, Number(value) || 0));
-}
-
-function readPreviewVolume() {
-  try {
-    const saved = Number(localStorage.getItem(PREVIEW_VOLUME_KEY));
-    // Twitch exige que l'audio d'une extension soit coupé par défaut.
-    // Le viewer peut l'activer explicitement avec le curseur avant l'aperçu.
-    return Number.isFinite(saved) ? clampPreviewVolume(saved) : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function savePreviewVolume(value) {
-  try { localStorage.setItem(PREVIEW_VOLUME_KEY, String(value)); } catch { /* stockage facultatif */ }
 }
 
 function raffleSeconds(raffle) {
@@ -1267,12 +1231,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   const moderationCustomDurationMinMs = 60_000;
   const moderationCustomDurationMaxMs = 365 * 24 * 60 * 60 * 1000;
   const isStudioPreview = new URLSearchParams(globalThis.location?.search || '').get('studio') === '1';
-  let previewAudio = null;
-  let previewRestore = null;
-  let previewSoundId = null;
-  // Twitch démarre l'audio d'une extension à 0 %. Le viewer l'active
-  // explicitement avec le curseur ; ce réglage local n'affecte aucun débit.
-  let previewVolume = readPreviewVolume();
+  // Soundboard local preview (soundboard-preview.js): its audio, the sound heard and the volume are its own state.
+  const soundPreview = createSoundPreview({ document, root: () => root });
   let bonkInFlight = 0;
   let bonkFeedbackMessage = '';
   let bonkFeedbackKind = 'ok';
@@ -1733,20 +1693,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     poller.start();
   }
 
-  function stopSoundPreview() {
-    const audio = previewAudio;
-    const restore = previewRestore;
-    previewAudio = null;
-    previewRestore = null;
-    previewSoundId = null;
-    try {
-      audio?.pause();
-      if (audio) audio.currentTime = 0;
-    } catch { /* le nettoyage audio reste best-effort */ }
-    restore?.();
-    syncSoundboardPreviewButtons();
-  }
-
   function stopRaffleTimer() {
     if (raffleTimer === null) return;
     if (typeof globalThis.clearInterval === 'function') globalThis.clearInterval(raffleTimer);
@@ -1760,7 +1706,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       notificationCenterOpen = false;
       viewerPreferencesOpen = false;
     }
-    if (moduleId !== 'soundboard') stopSoundPreview();
+    if (moduleId !== 'soundboard') soundPreview.stop();
     if (moduleId !== openModule) {
       // A new visit of Bonk follows a synchronization again; leaving it stops following.
       clearTimeout(emoteSyncTimer);
@@ -2390,19 +2336,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     syncControls();
   }
 
-  function syncSoundboardPreviewButtons() {
-    for (const button of root.querySelectorAll('.sbx-card__play')) {
-      if (button.disabled) continue;
-      const active = Boolean(previewSoundId) && button.dataset.soundId === previewSoundId;
-      const label = button.dataset.soundLabel || 'ce son';
-      button.classList.toggle('is-previewing', active);
-      button.closest('.sbx-card')?.classList.toggle('is-previewing', active);
-      button.setAttribute('aria-pressed', String(active));
-      button.title = active ? 'Arrêter l’aperçu' : 'Écouter (aperçu, rien n’est envoyé)';
-      button.setAttribute('aria-label', active ? `Arrêter l’aperçu de ${label}` : `Écouter ${label}`);
-    }
-  }
-
   // Soundboard viewer (markup sbx-*, feuille soundboard.css). Le son est la star : cartes lisibles,
   // aperçu distinct de l'achat, prix et envoi regroupés dans la barre d'action du bas.
   function soundboardForm(mod, body) {
@@ -2598,53 +2531,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         paymentMethod: selectedPaymentMethod,
         moduleTokenCost: mod.token_cost,
       });
-    };
-
-    const playSoundPreview = async (sound, trigger = null) => {
-      if (!soundPreviewUrls(sound).length) return;
-      if (!previewVolume) {
-        showBarNotice('Monte le volume des aperçus (🔊 en haut) pour écouter.');
-        return;
-      }
-      let audio = null;
-      const soundId = String(sound.id);
-      const restore = () => {
-        trigger?.classList.remove('is-previewing');
-        if (previewRestore === restore) {
-          previewRestore = null;
-          if (previewAudio === audio) previewAudio = null;
-          if (previewSoundId === soundId) previewSoundId = null;
-        }
-        syncSoundboardPreviewButtons();
-      };
-      const previewUrl = chooseSoundPreviewUrl(sound);
-      try {
-        stopSoundPreview();
-        audio = new Audio();
-        previewAudio = audio;
-        audio.preload = 'auto';
-        audio.src = new URL(String(previewUrl), document.baseURI).href;
-        audio.volume = previewVolume / 100;
-        previewRestore = restore;
-        previewSoundId = soundId;
-        syncSoundboardPreviewButtons();
-        audio.addEventListener('ended', restore, { once: true });
-        await audio.play();
-      } catch (error) {
-        if (previewAudio !== audio) {
-          restore();
-          return;
-        }
-        const mediaCode = Number(audio?.error?.code || 0);
-        const errorCode = mediaCode ? `MEDIA_${mediaCode}` : String(error?.name || 'AUDIO_ERROR');
-        console.warn('[Raptoru Live] sound_preview_failed', {
-          code: errorCode,
-          source: String(previewUrl || ''),
-          message: String(error?.message || audio?.error?.message || 'preview_failed').slice(0, 180),
-        });
-        stopSoundPreview();
-        showBarNotice(`Aperçu indisponible (${errorCode}). Rien n’a été envoyé.`);
-      }
     };
 
     const selectSound = (sound) => {
@@ -3018,8 +2904,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       play.addEventListener('click', (event) => {
         event.stopPropagation();
-        if (previewSoundId === soundId) stopSoundPreview();
-        else void playSoundPreview(sound, play);
+        if (soundPreview.soundId === soundId) soundPreview.stop();
+        else void soundPreview.play(sound, play, { notice: showBarNotice });
       });
 
       const text = el('span', 'sbx-card__text');
@@ -3100,7 +2986,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       grid.classList.toggle('is-reorderable', drafts.soundboard.sort === 'custom' && drafts.soundboard.view === 'all');
       setActionState();
-      syncSoundboardPreviewButtons();
+      soundPreview.syncButtons();
       grid.scrollTop = previousScrollTop;
     };
 
@@ -3258,7 +3144,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     };
 
     const deselectSound = () => {
-      stopSoundPreview();
+      soundPreview.stop();
       selectedSound = null;
       drafts.soundboard.selectedId = null;
       setActionState();
@@ -3266,7 +3152,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     soundboardDeselect = deselectSound;
 
     const clearSound = () => {
-      stopSoundPreview();
+      soundPreview.stop();
       if (selectedSound) {
         rememberStoredId(SOUNDBOARD_RECENTS_KEY, selectedSound);
         recents = readStoredIds(SOUNDBOARD_RECENTS_KEY).filter((id) => soundIds.has(id));
@@ -3324,26 +3210,25 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     volumeRow.append(volumeMute, volumeRange);
     volumePopover.append(volumeHead, volumeRow, el('p', 'sbx-vol__note', 'Pour toi seulement · rien n’est joué sur le stream'));
     volumeZone.append(volumeHandle, volumePopover);
-    let volumeBeforeMute = previewVolume || 60;
+    let volumeBeforeMute = soundPreview.volume || 60;
     const paintVolume = () => {
-      const level = previewVolume === 0 ? 'mute' : previewVolume < 50 ? 'low' : 'high';
+      const volume = soundPreview.volume;
+      const level = volume === 0 ? 'mute' : volume < 50 ? 'low' : 'high';
       volumeZone.dataset.level = level;
-      volumeValue.textContent = previewVolume ? `${previewVolume} %` : 'Muet';
-      volumeRange.value = String(previewVolume);
-      volumeRange.style.setProperty('--v', `${previewVolume}%`);
-      volumeMute.setAttribute('aria-label', previewVolume ? 'Couper les aperçus' : 'Réactiver les aperçus');
+      volumeValue.textContent = volume ? `${volume} %` : 'Muet';
+      volumeRange.value = String(volume);
+      volumeRange.style.setProperty('--v', `${volume}%`);
+      volumeMute.setAttribute('aria-label', volume ? 'Couper les aperçus' : 'Réactiver les aperçus');
       volumeMute.title = volumeMute.getAttribute('aria-label');
-      if (previewAudio) previewAudio.volume = previewVolume / 100;
     };
     const setPreviewVolume = (value) => {
-      previewVolume = clampPreviewVolume(value);
-      savePreviewVolume(previewVolume);
+      soundPreview.setVolume(value); // saved locally, applied at once to the preview being heard
       paintVolume();
     };
     volumeRange.addEventListener('input', () => setPreviewVolume(volumeRange.value));
     volumeMute.addEventListener('click', () => {
-      if (previewVolume) {
-        volumeBeforeMute = previewVolume;
+      if (soundPreview.volume) {
+        volumeBeforeMute = soundPreview.volume;
         setPreviewVolume(0);
       } else setPreviewVolume(volumeBeforeMute || 60);
     });
@@ -6167,7 +6052,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         }));
       }
       root.append(screen);
-      if (isSoundboard) syncSoundboardPreviewButtons();
+      if (isSoundboard) soundPreview.syncButtons();
     }
 
     if (tutorialOpen && !openModule) root.append(tutorialDialog(experience.tutorial));
