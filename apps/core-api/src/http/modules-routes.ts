@@ -24,6 +24,11 @@ const AdminCall = z.strictObject({
   actor: LabActor,
   input: z.unknown().optional(),
 });
+const ReportCall = z.strictObject({
+  activity_id: z.uuid(),
+  status: z.enum(['done', 'failed']),
+  result: z.unknown().optional(),
+});
 const RefundCall = z.strictObject({
   actor: LabActor,
   activity_id: z.uuid(),
@@ -85,6 +90,19 @@ export function modulesRoutes(host: ModuleHost): Route[] {
       pattern: at(`${M}\\/status`),
       auth: 'studio',
       handle: ({ params }) => mapped(() => host.status(params[0]!, params[1]!)),
+    },
+    {
+      method: 'GET',
+      pattern: at(`${M}\\/queue`),
+      auth: 'studio',
+      handle: ({ params }) => mapped(() => host.queue(params[0]!, params[1]!)),
+    },
+    {
+      method: 'POST',
+      pattern: at(`${M}\\/report`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() => host.report(params[0]!, params[1]!, parse(ReportCall, body))),
     },
     {
       method: 'GET',

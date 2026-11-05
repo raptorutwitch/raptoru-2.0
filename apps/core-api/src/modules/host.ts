@@ -462,6 +462,38 @@ export class ModuleHost {
     };
   }
 
+  /**
+   * The player's door (OBS executor in Studio, architecture § 9 — no universal player): the module's waiting actions,
+   * oldest first, then its report through the same single settlement (a failure refunds the original debit once).
+   */
+  async queue(channelId: string, id: string, limit = 10) {
+    this.module(id);
+    const rows = await this.ctx.db.query<ActivityRow>(
+      `select * from module_activity where channel_id = $1 and module_id = $2 and status = 'queued'
+        order by created_at limit $3`,
+      [channelId, id, Math.min(limit, 50)],
+    );
+    return { items: rows.map(activityView) };
+  }
+
+  async report(
+    channelId: string,
+    id: string,
+    r: { activity_id: string; status: 'done' | 'failed'; result?: unknown },
+  ) {
+    this.module(id);
+    return this.ctx.db.tx(async (q) => {
+      const own = await q.query(
+        'select 1 from module_activity where activity_id = $1 and channel_id = $2',
+        [r.activity_id, channelId],
+      );
+      if (!own.length) throw new ModuleError(404, 'activity_not_found');
+      return {
+        activity: await this.settleIn(q, r.activity_id, { status: r.status, result: r.result }, 'lecteur', id),
+      };
+    });
+  }
+
   /** Finishes a `queued` action (its player played it, or failed): a failure is refunded once (original debit). */
   settle(
     activityId: string,

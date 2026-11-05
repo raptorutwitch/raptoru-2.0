@@ -62,4 +62,23 @@ describe('module host — real Lab chain (Lab Core + Studio client + Extension L
       'already_refunded',
     );
   });
+  it('an OBS player’s door: the waiting actions, then ONE report — a failure refunds the original debit once', async () => {
+    const { core, ext } = await chain();
+    await core('/v1/lab/module-settings/900100', { key: 'coffre_mystere.enabled', value: 1 });
+    const bought = await ext('viewer', 'POST', '/modules/v3/coffre_mystere/ouvrir', {}, randomUUID());
+    const id = (bought.body.activity as { activity_id: string }).activity_id;
+    const base = '/v1/lab/modules/900100/coffre_mystere';
+    const queue = await core<{ items: { activity_id: string; amount: number }[] }>(`${base}/queue`);
+    expect(queue.items.map((i) => i.activity_id)).toEqual([id]);
+    await expect(core('/v1/lab/modules/900100/objectif_soiree/report', { activity_id: id, status: 'done' })).rejects.toMatchObject({
+      status: 404, // another module's action: never settled through this door
+    });
+    const failed = await core<{ activity: { status: string } }>(`${base}/report`, { activity_id: id, status: 'failed' });
+    expect(failed.activity.status).toBe('refunded');
+    const again = await core<{ activity: { status: string } }>(`${base}/report`, { activity_id: id, status: 'done' });
+    expect(again.activity.status).toBe('refunded'); // decided once
+    expect((await core<{ items: unknown[] }>(`${base}/queue`)).items).toEqual([]);
+    const refunds = (await ext('moderator', 'GET', '/modules/v3/moderation/activity')).body.items as { status: string }[];
+    expect(refunds.filter((r) => r.status === 'refunded')).toHaveLength(1);
+  });
 });
