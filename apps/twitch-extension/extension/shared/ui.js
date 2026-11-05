@@ -36,8 +36,8 @@ import { hoverMarquee } from './hover-marquee.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
 // Module variants register themselves (TTS V2, Tombola V2).
 import './tts-v2.js';
-import { createModerationV2View } from './moderation-v2.js';
-import { createCommandsV2View } from './commands-v2.js';
+// The D4 console registers itself as the variant of « moderation » (with its « Commandes » view).
+import './moderation-v2.js';
 // Session modules: each registers itself (card, availability, view) — the import order is the Hub order.
 import './commands-public.js';
 import './sub-wheel-ext.js';
@@ -1181,10 +1181,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   const paymentChoice = { tts: 'tokens' };
   // TTS V2 (Lab, Core-backed): one persistent view per opening of the module.
   // Moderation V2 (D4, Lab): persistent console reading / commanding Core while the module is open.
-  let moderationV2View = null;
   /** « Modération › Commandes » (Commands V2) and whether it currently replaces the console. */
-  let commandsV2View = null;
-  let commandsV2Shown = false;
   /** Tombola V2 (Lab): persistent screen reading Core itself (never rebuilt by the host's polling). */
   /** Commands V2 public list (phase F), kept while « Commandes » is open. */
   /** The open module of the module host (one at a time) and its id. */
@@ -1574,6 +1571,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const unchanged = render && (openModule === 'soundboard' || !openModule) && !loadError
       && JSON.stringify(stableState(state)) === JSON.stringify(stableState(next));
     const previous = state;
+    // An error screen shown before this state must be redrawn away: never absorbed by a live update.
+    const hadLoadError = !!loadError;
     const previousKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
     const nextKey = emoteCatalogStateKey(next?.emotes, next?.twitch_user_id);
     const nextRaffle = next?.raffle;
@@ -1613,12 +1612,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     ttsActionError = null;
     syncViewerPreferenceIdentity(next);
     // The open module's own live update (module variants: TTS V2, Tombola V2…): absorbed, the host does not redraw.
-    if (render && !loadError && hostView && hostViewId === openModule && hostVariant?.onState
+    if (render && !hadLoadError && hostView && hostViewId === openModule && hostVariant?.onState
       && hostVariant.onState(hostView, next, previous, variantContext(hostVariant, (next?.modules ?? []).find((m) => m.id === openModule)))) {
       return;
     }
     // Moderation V2 open: the console polls Core itself; a host re-render would only reset it.
-    if (render && openModule === MODERATION_MODULE.id && moderationV2View && canModerate()) return;
     if (render && !unchanged && soundboardDragging) {
       soundboardRenderAfterDrag = true;
       return;
@@ -1768,12 +1766,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       clearTimeout(emoteSyncTimer);
       emoteSyncTimer = null;
       emoteSyncReads = 0;
-    }
-    if (moduleId !== MODERATION_MODULE.id) {
-      moderationV2View?.destroy();
-      moderationV2View = null;
-      commandsV2View = null;
-      commandsV2Shown = false;
     }
     if (moduleId !== hostViewId) {
       hostView?.destroy?.();
@@ -6125,43 +6117,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       if (mod.id === ACTIONS_MODULE.id) {
         body.append(personalHistory());
-      } else if (mod.id === MODERATION_MODULE.id && state?.moderation_v2 === true && client?.modV2) {
-        // Moderation V2 (D4): same Core as Studio (read models + commands), no local state.
-        body.dataset.modV2 = '1';
-        // The D4 console is the whole screen (its own header and way back to the Hub): no host header.
-        screen.classList.add('jdm-module-screen--modv2');
-        if (!moderationV2View) {
-          moderationV2View = createModerationV2View({
-            document,
-            client,
-            onChange: () => { void onRefresh?.(); },
-            onBack: () => navigateTo(null),
-            // « Modération › Commandes »: the commands view takes the console's place, and gives it back.
-            // Video and Mobile only (not the Panel).
-            onCommands: client.cmdV2 && !document.body.classList.contains('panel-view') ? () => {
-              if (!commandsV2View) {
-                commandsV2View = createCommandsV2View({
-                  document,
-                  client,
-                  onBack: () => {
-                    commandsV2Shown = false;
-                    commandsV2View.node.replaceWith(moderationV2View.node);
-                    queueMicrotask(() => moderationV2View?.attached());
-                  },
-                });
-                commandsV2View.start();
-              }
-              commandsV2Shown = true;
-              moderationV2View.node.replaceWith(commandsV2View.node);
-              queueMicrotask(() => commandsV2View?.attached());
-            } : null,
-          });
-          moderationV2View.start();
-        }
-        // The commands view stays in place across the host's refreshes while it is open.
-        const shownView = commandsV2Shown && commandsV2View ? commandsV2View : moderationV2View;
-        body.append(shownView.node);
-        queueMicrotask(() => shownView?.attached());
       } else if (registered || (mod.host && viewerModuleView(mod.id))) {
         // A registered view — a session module, a module variant or a module of the module host: created once while the
         // module is open, kept across the host's refreshes, destroyed when it closes (navigateTo). No per-module branch.
@@ -6175,8 +6130,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           hostViewId = mod.id;
           hostVariant = variant;
           hostView.start?.(); // optional: TTS V2 has no start (it waits for the host's state)
-          // The team's moderation of a host module: the generic panel, never written by the module.
-          const panel = !session && canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
+          // The team's moderation of a MODULE-HOST module only (never a session module or a variant: no mod.server).
+          const panel = !registered && canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
           if (panel?.visible) {
             hostView.node.append(panel.node);
             void panel.refresh();

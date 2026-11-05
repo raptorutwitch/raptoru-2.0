@@ -1,3 +1,5 @@
+import { registerModuleVariant } from './module-registry.js';
+import { createCommandsV2View } from './commands-v2.js';
 // Moderation V2 (D4) — the console of the validated prototype `prototypes/moderation-v2-d4` (left
 // column = context, right zone = one intention; compact stack on Panel / Mobile), on the REAL Core:
 // every list comes from Core read models (/moderation/v2/*), every action is a Core command executed
@@ -1855,3 +1857,57 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     },
   };
 }
+
+// Module variant (module-registry.js): the D4 console takes over the « moderation » module when the session says
+// `moderation_v2` (same Core as Studio: read models + commands, no local state). The whole screen (its own header and
+// way back to the Hub); « Modération › Commandes » swaps in the Commands V2 view and gives the console back (Video and
+// Mobile only, not the Panel); the commands view stays in place across the host's refreshes while it is open.
+registerModuleVariant({
+  id: 'moderation',
+  match: ({ state, client }) => state?.moderation_v2 === true && !!client?.modV2,
+  intro: false,
+  bodyData: { modV2: '1' },
+  screenClass: 'jdm-module-screen--modv2',
+  view: ({ document, client, host }) => {
+    let commands = null;
+    let commandsShown = false;
+    const consoleView = createModerationV2View({
+      document,
+      client,
+      onChange: () => host.refresh(),
+      onBack: () => host.home(),
+      onCommands:
+        client.cmdV2 && !document.body.classList.contains('panel-view')
+          ? () => {
+              if (!commands) {
+                commands = createCommandsV2View({
+                  document,
+                  client,
+                  onBack: () => {
+                    commandsShown = false;
+                    commands.node.replaceWith(consoleView.node);
+                    queueMicrotask(() => consoleView.attached());
+                  },
+                });
+                commands.start();
+              }
+              commandsShown = true;
+              consoleView.node.replaceWith(commands.node);
+              queueMicrotask(() => commands?.attached());
+            }
+          : null,
+    });
+    const shown = () => (commandsShown && commands ? commands : consoleView);
+    return {
+      get node() {
+        return shown().node;
+      },
+      start: () => consoleView.start(),
+      attached: () => shown().attached(),
+      destroy: () => consoleView.destroy(),
+    };
+  },
+  // The console polls Core itself: a host redraw would only reset it (a moderator only, as before).
+  onState: (view, next, prev, ctx) => ctx.team === true,
+});
+
