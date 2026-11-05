@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import type { LabCoreCall } from '../lab-moderation/proxy.js';
+import { StudioTransportError } from '../prod-transport/core-client.js';
 import {
   loadOrCreateInstallation,
   type StudioInstallation,
@@ -112,6 +114,37 @@ export class MainLabCore {
     };
   }
 
+  /** The bot's door of this Lab Core (chat simulator): its own Lab bot secret, loopback only. */
+  async botCall<T>(
+    path: string,
+    body?: unknown,
+    options?: { timeoutMs?: number },
+  ): Promise<T> {
+    const res = await fetch(`${this.url}${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: {
+        authorization: `Bearer ${this.secrets.bot}`,
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(options?.timeoutMs ?? 5000),
+    }).catch((e: Error) => {
+      throw new StudioTransportError('core_unreachable', e.message);
+    });
+    const json = (await res.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    if (!res.ok)
+      throw new StudioTransportError(
+        String(json.error ?? 'invalid_response'),
+        `Core ${res.status}`,
+        res.status,
+        json,
+      );
+    return json as T;
+  }
+
   /** Database created if missing, pending migrations (production migrator), first fixtures, Studio paired. */
   prepare(env: Record<string, string>): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -147,6 +180,35 @@ export class MainLabCore {
       );
     });
   }
+}
+
+/**
+ * The cockpit of the main Lab Core, with the chat on the BOT's door: the Studio chat simulator plays the bot (its Lab
+ * secret, this loopback Core only); the Core accepts a simulated message there in its Lab environment only. Every other
+ * Lab path goes to the cockpit unchanged (production.ts cockpitClient).
+ */
+export function withSimulatedChat(
+  core: MainLabCore,
+  cockpit: LabCoreCall,
+): LabCoreCall {
+  return <T>(
+    path: string,
+    body?: unknown,
+    options?: { timeoutMs?: number },
+  ) => {
+    const recent = /^\/v1\/lab\/chat\/(\d{1,32})\/recent$/.exec(path);
+    const bot =
+      path === '/v1/lab/chat'
+        ? '/v1/bot/chat'
+        : path === '/v1/lab/stream'
+          ? '/v1/bot/stream'
+          : recent
+            ? `/v1/bot/chat/${recent[1]}/recent`
+            : null;
+    return bot
+      ? core.botCall<T>(bot, body, options)
+      : cockpit<T>(path, body, options);
+  };
 }
 
 /**

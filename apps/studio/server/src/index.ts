@@ -42,7 +42,11 @@ import {
 } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { LabEbs } from './extension-lab/lab-ebs.js';
-import { MainLabCore, MAIN_LAB_CHANNEL } from './runtime/main-lab-core.js';
+import {
+  MainLabCore,
+  MAIN_LAB_CHANNEL,
+  withSimulatedChat,
+} from './runtime/main-lab-core.js';
 import {
   EXT_PREFIX,
   EXTENSION_CSP,
@@ -988,7 +992,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Moderation V2 + TTS configuration + Lab test wallet: Core decides, Studio relays. Production: the
   // same cockpit on the Production Core (installation credential, the Core's own channel).
   const labCore = transport
-    ? transport.cockpit
+    ? mainLab
+      ? withSimulatedChat(mainLab, transport.cockpit)
+      : transport.cockpit
     : labCoreUrl
       ? localLabCoreClient(labCoreUrl, process.env.BONK_LAB_SECRET ?? '')
       : null;

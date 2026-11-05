@@ -23,6 +23,11 @@ export function botChatRoutes(
   router: LabChatRouter,
   games: Pick<ChatGames, 'steps'>,
   channelId: string,
+  /**
+   * The main Core in its Lab environment only (CORE_ENVIRONMENT=lab, fictional Jetons): Studio's chat simulator plays
+   * the bot on this same door, and reads the recent messages back. Never in Production: Twitch messages only there.
+   */
+  o: { simulator?: boolean } = {},
 ): Route[] {
   const channel = (id: string) => {
     if (id !== channelId)
@@ -40,11 +45,22 @@ export function botChatRoutes(
       handle: ({ body }) => {
         const m = parse(LabChatMessage, body);
         channel(m.channel_id);
-        if (m.source !== 'twitch')
+        if (m.source !== 'twitch' && !(o.simulator && m.source === 'simulator'))
           throw new HttpError(400, { error: 'twitch_source_required' });
         return mappedModeration(() => router.message(m));
       },
     },
+    ...(o.simulator
+      ? [
+          {
+            method: 'GET' as const,
+            pattern: /^\/v1\/bot\/chat\/(\d{1,32})\/recent$/,
+            auth: 'bot' as const,
+            handle: async ({ params }: { params: string[] }) =>
+              router.recent(channel(params[0]!)),
+          },
+        ]
+      : []),
     {
       method: 'POST',
       pattern: /^\/v1\/bot\/stream$/,

@@ -145,6 +145,8 @@ export function createPublicFrontier(
           core.progression.chatModule,
         ]),
         games: core.chat,
+        // Lab environment only: Studio's chat simulator on the bot's door (never in Production).
+        simulator: config.CORE_ENVIRONMENT === 'lab',
       },
       ext: secret
         ? {

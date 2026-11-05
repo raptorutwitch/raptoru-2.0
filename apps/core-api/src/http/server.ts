@@ -184,7 +184,12 @@ export interface AppDeps {
    * Chat games of the main Core (lot 8): /v1/bot/chat, /v1/bot/stream, /v1/bot/commands/<channel>/steps/* for the
    * production bot (bot secret), the cockpit's channel only.
    */
-  chatIngress?: { router: LabChatRouter; games: ChatGames };
+  /** `simulator`: the Lab environment only (Studio's chat simulator on the bot's door, bot-chat-routes.ts). */
+  chatIngress?: {
+    router: LabChatRouter;
+    games: ChatGames;
+    simulator?: boolean;
+  };
 }
 
 type Auth =
@@ -366,7 +371,14 @@ function routes({
       ? studioCockpitRoutes(cockpit.core, cockpit.channelId)
       : []),
     ...(chatIngress && cockpit?.channelId
-      ? botChatRoutes(chatIngress.router, chatIngress.games, cockpit.channelId)
+      ? botChatRoutes(
+          chatIngress.router,
+          chatIngress.games,
+          cockpit.channelId,
+          {
+            simulator: chatIngress.simulator === true,
+          },
+        )
       : []),
     ...(ext ? extRoutes(ext.facade) : []),
     ...loyaltyRoutes(
