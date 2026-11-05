@@ -34,16 +34,17 @@ import { createTwitchEmoteDialog, createTwitchEmoteSource } from './bonk-twitch-
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
 import { hoverMarquee } from './hover-marquee.js';
 import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
-import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
+// Module variants register themselves (TTS V2, Tombola V2).
+import './tts-v2.js';
 import { createModerationV2View } from './moderation-v2.js';
 import { createCommandsV2View } from './commands-v2.js';
 // Session modules: each registers itself (card, availability, view) — the import order is the Hub order.
 import './commands-public.js';
 import './sub-wheel-ext.js';
 import './events-shop.js';
-import { createTombolaV2View } from './tombola-v2.js';
+import './tombola-v2.js';
 // The module host (architecture socle): viewer modules register themselves; ui.js only hosts them.
-import { hostModules, loadHostModules, sessionModule, sessionModules, viewerModuleView } from './module-registry.js';
+import { hostModules, loadHostModules, moduleVariant, sessionModule, sessionModules, viewerModuleView } from './module-registry.js';
 import { createModuleModerationPanel } from './module-moderation.js';
 import './coffre-mystere.js';
 import {
@@ -1176,20 +1177,47 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   // Chaque module possède sa monnaie ; le wallet est sa projection et son
   // sélecteur unique, tandis que la dépensabilité reste évaluée par le CTA.
   let selectedPaymentMethod = 'tokens';
-  let ttsPaymentMethod = 'tokens';
+  /** The currency chosen per module (TTS today); a module variant reads and writes its own entry. */
+  const paymentChoice = { tts: 'tokens' };
   // TTS V2 (Lab, Core-backed): one persistent view per opening of the module.
-  let ttsV2View = null;
   // Moderation V2 (D4, Lab): persistent console reading / commanding Core while the module is open.
   let moderationV2View = null;
   /** « Modération › Commandes » (Commands V2) and whether it currently replaces the console. */
   let commandsV2View = null;
   let commandsV2Shown = false;
   /** Tombola V2 (Lab): persistent screen reading Core itself (never rebuilt by the host's polling). */
-  let tombolaV2View = null;
   /** Commands V2 public list (phase F), kept while « Commandes » is open. */
   /** The open module of the module host (one at a time) and its id. */
   let hostView = null;
   let hostViewId = null;
+  /** The variant definition behind hostView (null: a session or host module view). */
+  let hostVariant = null;
+
+  /** What a registered view receives from the host (module-registry.js): no module-specific code here. */
+  function variantContext(def, mod) {
+    return {
+      document,
+      client,
+      module: mod,
+      state,
+      team: canModerate(),
+      host: {
+        home: () => navigateTo(null),
+        refresh: () => { void onRefresh?.(); },
+        payment: {
+          get: () => paymentChoice[mod?.id] ?? 'tokens',
+          set: (method) => { paymentChoice[mod?.id] = method; },
+          sync: (methods, onChange) => paymentWalletSync?.(methods, onChange),
+        },
+        walletMethods: () => walletPaymentMethods(mod, state),
+        restrictionChips: (id) => {
+          const list = restrictionsOf(id);
+          return list.length ? restrictionChips(document, list) : null;
+        },
+        stopRaffleTimer: () => stopRaffleTimer(),
+      },
+    };
+  }
   let paymentWalletSync = null;
   let soundboardVolumeOpen = false;
   let soundboardVolumeSync = null;
@@ -1205,6 +1233,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let soundboardVolumeHeaderButton = null;
   // Hub : module sélectionné dans le carousel et monnaie affichée par le wallet (consultation).
   let hubSelectedId = null;
+  /** « Voir tous les modules » open: kept across the Hub's redraws (a new balance never closes it under the viewer). */
+  let hubAllOpen = false;
   let hubWalletMethod = 'tokens';
   let hubCarousel = null;
   let soundboardFeedback = null;
@@ -1543,9 +1573,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     // Soundboard ouvert et poll identique : rien à redessiner (grille, scroll et aperçu intacts).
     const unchanged = render && (openModule === 'soundboard' || !openModule) && !loadError
       && JSON.stringify(stableState(state)) === JSON.stringify(stableState(next));
-    // TTS V2 open: queue / status updates go to the persistent view (no replayed animation).
-    const ttsV2Only = render && openModule === 'tts' && ttsV2View && !loadError
-      && JSON.stringify(withoutTtsV2(state)) === JSON.stringify(withoutTtsV2(next));
+    const previous = state;
     const previousKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
     const nextKey = emoteCatalogStateKey(next?.emotes, next?.twitch_user_id);
     const nextRaffle = next?.raffle;
@@ -1584,18 +1612,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     actionError = null;
     ttsActionError = null;
     syncViewerPreferenceIdentity(next);
-    if (ttsV2Only) {
-      ttsV2View.update((next?.modules ?? []).find((m) => m.id === 'tts'), next);
+    // The open module's own live update (module variants: TTS V2, Tombola V2…): absorbed, the host does not redraw.
+    if (render && !loadError && hostView && hostViewId === openModule && hostVariant?.onState
+      && hostVariant.onState(hostView, next, previous, variantContext(hostVariant, (next?.modules ?? []).find((m) => m.id === openModule)))) {
       return;
     }
     // Moderation V2 open: the console polls Core itself; a host re-render would only reset it.
     if (render && openModule === MODERATION_MODULE.id && moderationV2View && canModerate()) return;
-    // Tombola V2 open: the screen reads Core itself; the host only hands it the balance.
-    if (render && openModule === 'raffle_join' && tombolaV2View
-      && (next?.modules ?? []).some((m) => m.id === 'raffle_join' && m.raffle_v2)) {
-      tombolaV2View.update(next);
-      return;
-    }
     if (render && !unchanged && soundboardDragging) {
       soundboardRenderAfterDrag = true;
       return;
@@ -1612,10 +1635,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     return { ...value, raffle: { ...value.raffle, ends_in_s: null } };
   }
 
-  function withoutTtsV2(value) {
-    if (!value || !Array.isArray(value.modules)) return value;
-    return { ...value, modules: value.modules.map((m) => (m.id === 'tts' ? { ...m, tts_v2: null } : m)) };
-  }
 
   /** `kind` : pending · success · info · error ; null retire le message. */
   function setEmoteAuthNotice(kind, text = '') {
@@ -1737,6 +1756,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function navigateTo(moduleId) {
+    hubAllOpen = false; // a module opened (or the Hub again): the list starts closed
     if (moduleId !== null && !moduleById(moduleId)) return;
     if (moduleId !== null) {
       notificationCenterOpen = false;
@@ -1749,10 +1769,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       emoteSyncTimer = null;
       emoteSyncReads = 0;
     }
-    if (moduleId !== 'tts') {
-      ttsV2View?.destroy();
-      ttsV2View = null;
-    }
     if (moduleId !== MODERATION_MODULE.id) {
       moderationV2View?.destroy();
       moderationV2View = null;
@@ -1763,10 +1779,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       hostView?.destroy?.();
       hostView = null;
       hostViewId = null;
-    }
-    if (moduleId !== 'raffle_join') {
-      tombolaV2View?.destroy();
-      tombolaV2View = null;
+      hostVariant = null;
     }
     if (moduleId !== 'soundboard') clearSoundboardFeedback({ render: false });
     if (moduleId !== 'raffle_join') {
@@ -2180,36 +2193,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
   // --- formulaires par module ----------------------------------------------
 
-  // TTS V2 (D3): Core decides price, cast, cooldown and queue; the view only shows and pays.
-  function ttsV2Form(mod, body) {
-    body.querySelector('.jdm-module__intro')?.remove();
-    body.dataset.ttsV2 = '1';
-    const { displayMethods } = walletPaymentMethods(mod, state);
-    if (!ttsV2View) {
-      ttsV2View = createTtsV2View({
-        document,
-        client,
-        surface: ttsV2Surface(document),
-        assetBase: './',
-        lab: state?.environment === 'lab',
-        onPaymentMethod: (method, locked) => {
-          ttsPaymentMethod = method;
-          paymentWalletSync?.(locked ? [method] : displayMethods, (next) => {
-            ttsPaymentMethod = next;
-            ttsV2View?.setCurrency(next);
-          });
-        },
-        onPurchased: () => { void onRefresh?.(); },
-      });
-      ttsV2View.setCurrency(ttsPaymentMethod);
-    }
-    ttsV2View.update(mod, state);
-    body.append(ttsV2View.node);
-    queueMicrotask(() => ttsV2View?.attached());
-  }
-
   function ttsForm(mod, body) {
-    if (mod.tts_v2 && typeof client?.ttsBuy === 'function') return ttsV2Form(mod, body);
     const pending = pendingFor('tts');
     const interactionsAvailable = state?.interactions?.available !== false;
     const moderation = state?.moderation?.tts ?? {};
@@ -2227,9 +2211,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
     const normalizePaymentMethod = (methods) => {
       const available = methods.length ? methods : ['tokens'];
-      if (available.includes(ttsPaymentMethod)) return ttsPaymentMethod;
-      ttsPaymentMethod = available[0];
-      return ttsPaymentMethod;
+      if (available.includes(paymentChoice.tts)) return paymentChoice.tts;
+      paymentChoice.tts = available[0];
+      return paymentChoice.tts;
     };
 
     const quoteFor = (raw) => {
@@ -2310,7 +2294,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       actions.setAttribute('aria-hidden', String(!hasText));
       body.dataset.paymentMethod = method;
       paymentWalletSync?.(methods, (next) => {
-        ttsPaymentMethod = next;
+        paymentChoice.tts = next;
         syncControls();
       });
       paymentControl?.sync({
@@ -2344,7 +2328,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       actionLabel,
       enableMethodSwitch: true,
       onMethodChange: (method) => {
-        ttsPaymentMethod = method;
+        paymentChoice.tts = method;
         syncControls();
       },
       onAction: (method) => {
@@ -5808,7 +5792,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     });
     if (!headerSwitch) walletRow.append(tokenView, creditView);
     const syncWalletView = (methods = [], onMethodChange = null) => {
-      const mode = soundboardView ? selectedPaymentMethod : ttsView ? ttsPaymentMethod : consultView ? hubWalletMethod : 'tokens';
+      const mode = soundboardView ? selectedPaymentMethod : ttsView ? paymentChoice.tts : consultView ? hubWalletMethod : 'tokens';
       const showingCredits = mode === 'credits';
       tokenView.classList.toggle('is-active', !showingCredits);
       creditView.classList.toggle('is-active', showingCredits);
@@ -6049,6 +6033,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           selectedId: hubSelectedId,
           onSelect: (id) => { hubSelectedId = id; },
           onOpen: (id) => navigateTo(id),
+          popoverOpen: hubAllOpen,
+          onPopover: (open) => { hubAllOpen = open; },
         });
       }
       // Hauteur disponible sous le haut du Hub : rien ne déborde de la surface Twitch.
@@ -6069,7 +6055,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const isBonk = mod.id === 'bonk';
       const isRaffle = mod.id === 'raffle_join';
       const isModeration = mod.id === MODERATION_MODULE.id;
-      const isTombolaV2 = isRaffle && mod.raffle_v2 === true && typeof client?.raffleState === 'function';
+      // A registered view takes the module's screen: a session module, or a variant of a module the session lists.
+      const session = sessionModule(mod.id);
+      const variant = session ? null : moduleVariant({ module: mod, state, client, document });
+      const registered = session ?? variant;
       const head = el('header', `jdm-ui-header jdm-module__screen-head${isSoundboard ? ' jdm-module__screen-head--soundboard' : ''}${isBonk ? ' jdm-module__screen-head--bonk' : ''}${isRaffle ? ' jdm-module__screen-head--raffle' : ''}${isModeration ? ' jdm-module__screen-head--moderation' : ''}`);
       head.setAttribute('aria-label', visibleModuleLabel(mod));
       const headLeft = el('div', 'jdm-module__screen-side jdm-module__screen-side--left');
@@ -6119,15 +6108,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       if (!isModeration) headRight.append(walletRow);
       // Active restrictions: chips on the left of the header (next to the way back), not by the wallet.
       const restrictions = restrictionsOf(mod.id);
-      if (restrictions.length && !isTombolaV2) headLeft.append(restrictionChips(document, restrictions));
+      if (restrictions.length && !registered?.ownHeader) headLeft.append(restrictionChips(document, restrictions));
 
       const item = el('section', 'jdm-module');
       item.dataset.module = mod.id;
       item.classList.add('is-open');
       const body = el('div', 'jdm-module__body');
       if (!isModeration) body.dataset.scrollKey = `module-${mod.id}`;
-      const session = sessionModule(mod.id);
-      if (!isSoundboard && !isModeration && !isTombolaV2 && session?.intro !== false) {
+      if (!isSoundboard && !isModeration && registered?.intro !== false) {
         const intro = el('div', 'jdm-module__intro');
         intro.append(
           el('strong', 'jdm-module__intro-title', mod.label),
@@ -6174,16 +6162,19 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         const shownView = commandsV2Shown && commandsV2View ? commandsV2View : moderationV2View;
         body.append(shownView.node);
         queueMicrotask(() => shownView?.attached());
-      } else if (session || (mod.host && viewerModuleView(mod.id))) {
-        // A registered view — a session module or a module of the module host: created once while the module is open,
-        // kept across the host's refreshes, destroyed when it closes (navigateTo). No per-module branch here.
-        Object.assign(body.dataset, session?.bodyData ?? {});
-        if (!hostView || hostViewId !== mod.id) {
-          hostView = session
-            ? session.view({ document, client, module: mod, team: canModerate() })
+      } else if (registered || (mod.host && viewerModuleView(mod.id))) {
+        // A registered view — a session module, a module variant or a module of the module host: created once while the
+        // module is open, kept across the host's refreshes, destroyed when it closes (navigateTo). No per-module branch.
+        Object.assign(body.dataset, registered?.bodyData ?? {});
+        if (registered?.screenClass) screen.classList.add(registered.screenClass);
+        if (!hostView || hostViewId !== mod.id || hostVariant !== variant) {
+          hostView?.destroy?.();
+          hostView = registered
+            ? registered.view(variantContext(registered, mod))
             : viewerModuleView(mod.id)({ document, client, module: mod.server });
           hostViewId = mod.id;
-          hostView.start();
+          hostVariant = variant;
+          hostView.start?.(); // optional: TTS V2 has no start (it waits for the host's state)
           // The team's moderation of a host module: the generic panel, never written by the module.
           const panel = !session && canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
           if (panel?.visible) {
@@ -6191,30 +6182,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
             void panel.refresh();
           }
         }
+        variant?.rendered?.(hostView, variantContext(variant, mod));
         body.append(hostView.node);
         queueMicrotask(() => hostView?.attached?.());
-      } else if (isTombolaV2) {
-        // Tombola V2 (validated prototype): its own header and way back to the Hub, Core's state only.
-        body.dataset.tmbV2 = '1';
-        screen.classList.add('jdm-module-screen--tmbv2');
-        stopRaffleTimer();
-        if (!tombolaV2View) {
-          tombolaV2View = createTombolaV2View({
-            document,
-            client,
-            onBack: () => navigateTo(null),
-            onJoined: () => { void onRefresh?.(); },
-          });
-          tombolaV2View.start();
-        }
-        tombolaV2View.update(state);
-        // Its own header (the host's is hidden): the restriction chips go after its way back.
-        const tmbHead = tombolaV2View.node.querySelector('.head');
-        tmbHead?.querySelector('.rl-rchips')?.remove();
-        const tmbRestrictions = restrictionsOf(mod.id);
-        if (tmbHead && tmbRestrictions.length) tmbHead.querySelector('[data-act="back"]')?.after(restrictionChips(document, tmbRestrictions));
-        body.append(tombolaV2View.node);
-        queueMicrotask(() => tombolaV2View?.attached());
       } else if (mod.id === MODERATION_MODULE.id) {
         const moderation = moderationForm();
         if (moderation) {

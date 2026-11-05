@@ -29,7 +29,8 @@ const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' };
 
 async function open(page: Page, tile: RegExp) {
   await page.getByRole('button', { name: 'Voir tous les modules' }).click();
-  await page.getByRole('button', { name: tile }).first().click();
+  // The visible tile of the list (a Hub carousel card with the same name may be hidden behind it).
+  await page.getByRole('button', { name: tile }).filter({ visible: true }).first().click();
 }
 const back = (page: Page) =>
   page.getByRole('button', { name: 'Retour au Hub' }).click();
@@ -50,7 +51,10 @@ test('TTS V2: open, send a message, leave and come back without reloading — on
   await open(page, /^TTS/);
   await expect(page.locator('.ttsv2')).toHaveCount(1);
   await page.locator('.ttsv2 [data-msg]').fill('Bonjour la parité');
-  await page.locator('.ttsv2 [data-act="confirm"]').click();
+  // Available once the (fictional) player has reported in: a viewer waits for the enabled button too.
+  const confirm = page.locator('.ttsv2 [data-act="confirm"]');
+  await expect(confirm).toBeEnabled({ timeout: 15_000 });
+  await confirm.click();
   await expect(
     page.getByRole('button', { name: 'Envoyer un autre message' }).first(),
   ).toBeVisible({

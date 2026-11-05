@@ -11,6 +11,7 @@
 //   - after a refresh, the current TTS is found again from the viewer state.
 // The view is persistent (created once per opening of the module): the host re-appends the same
 // node on each render, so an animation in progress is never restarted by a poll.
+import { registerModuleVariant } from './module-registry.js';
 import { CHARACTERS, CHARACTERS_BY_ID, resolveCast, voiceTraits } from './tts-characters.js';
 import { createCalibration } from './tts-calibration.js';
 import { errorLabel, newIdempotencyKey } from './api.js';
@@ -730,3 +731,39 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
     },
   };
 }
+
+// Module variant (module-registry.js): TTS V2 takes over the session's « tts » module when the session offers it.
+registerModuleVariant({
+  id: 'tts',
+  match: ({ module, client }) => !!module?.tts_v2 && typeof client?.ttsBuy === 'function',
+  intro: false,
+  bodyData: { ttsV2: '1' },
+  view: ({ document, client, state, host }) => {
+    const view = createTtsV2View({
+      document,
+      client,
+      surface: ttsV2Surface(document),
+      assetBase: './',
+      lab: state?.environment === 'lab',
+      onPaymentMethod: (method, locked) => {
+        host.payment.set(method);
+        host.payment.sync(locked ? [method] : host.walletMethods().displayMethods, (next) => {
+          host.payment.set(next);
+          view.setCurrency(next);
+        });
+      },
+      onPurchased: () => host.refresh(),
+    });
+    view.setCurrency(host.payment.get());
+    return view;
+  },
+  rendered: (view, { module, state }) => view.update(module, state),
+  // Queue / status updates go to the persistent view (no replayed animation) when ONLY its part of the state changed.
+  onState: (view, next, prev) => {
+    const others = (s) =>
+      !s || !Array.isArray(s.modules) ? s : { ...s, modules: s.modules.map((m) => (m.id === 'tts' ? { ...m, tts_v2: null } : m)) };
+    if (JSON.stringify(others(prev)) !== JSON.stringify(others(next))) return false;
+    view.update((next?.modules ?? []).find((m) => m.id === 'tts'), next);
+    return true;
+  },
+});

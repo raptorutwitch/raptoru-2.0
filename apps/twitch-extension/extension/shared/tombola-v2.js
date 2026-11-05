@@ -10,6 +10,7 @@
 // Anti-flicker (validated): the structure is rebuilt only when the screen changes (aucune → ouverte →
 // tirage → résultat…); between two reads only the small values move (seconds, ring, counters, rows,
 // join zone), so the scroll, a click in progress and the animations are never reset by polling.
+import { registerModuleVariant } from './module-registry.js';
 import { errorLabel } from './api.js';
 import { hoverMarquee } from './hover-marquee.js';
 import { fitMoney, moneyHtml, unitHtml } from './currency.js';
@@ -578,3 +579,31 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     },
   };
 }
+
+// Module variant (module-registry.js): Tombola V2 (validated prototype) takes over the session's « raffle_join » module
+// when the session says `raffle_v2`. Its own header and way back to the Hub; Core's state only (it reads Core itself);
+// the host only hands it the balance.
+registerModuleVariant({
+  id: 'raffle_join',
+  match: ({ module, client }) => module?.raffle_v2 === true && typeof client?.raffleState === 'function',
+  intro: false,
+  ownHeader: true,
+  bodyData: { tmbV2: '1' },
+  screenClass: 'jdm-module-screen--tmbv2',
+  view: ({ document, client, host }) =>
+    createTombolaV2View({ document, client, onBack: () => host.home(), onJoined: () => host.refresh() }),
+  rendered: (view, { module, state, host }) => {
+    host.stopRaffleTimer(); // the V1 countdown never runs under the V2 screen
+    view.update(state);
+    // Its own header (the host's is hidden): the restriction chips go after its way back.
+    const head = view.node.querySelector('.head');
+    head?.querySelector('.rl-rchips')?.remove();
+    const chips = host.restrictionChips(module.id);
+    if (head && chips) head.querySelector('[data-act="back"]')?.after(chips);
+  },
+  onState: (view, next) => {
+    if (!(next?.modules ?? []).some((m) => m.id === 'raffle_join' && m.raffle_v2)) return false;
+    view.update(next);
+    return true;
+  },
+});

@@ -284,3 +284,32 @@ describe('the real session modules register themselves', () => {
     ).toBe(false);
   });
 });
+
+describe('module variants (TTS V2, Tombola V2 take over their module when the session says so)', () => {
+  it('the real variants register themselves and match only when the session offers them', async () => {
+    vi.resetModules();
+    const reg = await import('../extension/shared/module-registry.js');
+    await import('../extension/shared/tts-v2.js');
+    await import('../extension/shared/tombola-v2.js');
+    const env = (module, client = {}) => ({ module, client, state: {}, document: {} });
+    expect(reg.moduleVariant(env({ id: 'tts', tts_v2: { rules: {} } }, { ttsBuy() {} }))?.id).toBe('tts');
+    expect(reg.moduleVariant(env({ id: 'tts', tts_v2: null }, { ttsBuy() {} }))).toBeNull(); // V1 form
+    expect(reg.moduleVariant(env({ id: 'tts', tts_v2: {} }, {}))).toBeNull(); // older client
+    const tombola = reg.moduleVariant(env({ id: 'raffle_join', raffle_v2: true }, { raffleState() {} }));
+    expect(tombola).toMatchObject({ id: 'raffle_join', ownHeader: true, intro: false, screenClass: 'jdm-module-screen--tmbv2' });
+    expect(reg.moduleVariant(env({ id: 'raffle_join', raffle_v2: false }, { raffleState() {} }))).toBeNull();
+  });
+  it('TTS V2 absorbs a state where only its part changed, and lets the host redraw otherwise', async () => {
+    vi.resetModules();
+    const reg = await import('../extension/shared/module-registry.js');
+    await import('../extension/shared/tts-v2.js');
+    const def = reg.moduleVariant({ module: { id: 'tts', tts_v2: {} }, client: { ttsBuy() {} } });
+    const seen = [];
+    const view = { update: (mod) => seen.push(mod) };
+    const base = { wallet: { available: 10 }, modules: [{ id: 'tts', tts_v2: { a: 1 } }, { id: 'bonk' }] };
+    const onlyTts = { ...base, modules: [{ id: 'tts', tts_v2: { a: 2 } }, { id: 'bonk' }] };
+    expect(def.onState(view, onlyTts, base)).toBe(true);
+    expect(seen).toEqual([{ id: 'tts', tts_v2: { a: 2 } }]);
+    expect(def.onState(view, { ...onlyTts, wallet: { available: 9 } }, base)).toBe(false); // the balance: host redraws
+  });
+});

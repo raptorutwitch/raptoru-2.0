@@ -56,6 +56,7 @@ export async function loadHostModules(client, onChange, now = Date.now()) {
 export function resetHostModulesForTests() {
   views.clear();
   sessionDefs.clear();
+  variantDefs.length = 0;
   catalog = [];
   loaded = false;
   lastLoad = 0;
@@ -84,4 +85,27 @@ export function sessionModule(id) {
 /** In registration order (the import order in ui.js). */
 export function sessionModules() {
   return [...sessionDefs.values()];
+}
+
+// --- Module variants ------------------------------------------------------------------------------------------------
+// A view that takes over a module the SESSION lists when it applies (TTS V2 when the session says `tts_v2`, Tombola V2
+// when it says `raffle_v2`…). Registered from the module's own file: ui.js has no branch, state or fast-refresh rule of
+// its own for it. The smallest lifecycle contract (every hook optional, so a module without live updates writes none):
+//   view(ctx) → { node, start?(), attached?(), destroy?() }  created once while the module is open, destroyed on leaving
+//   rendered?(view, ctx)                                       each time the host draws the module (fresh module / state)
+//   onState?(view, next, prev, ctx) → boolean                  a new session state while it is open: true = absorbed
+//                                                              (the host does not redraw — no replayed animation)
+// ctx = { document, client, module, state, team, host }, host = { home(), refresh(), payment, walletMethods(),
+// restrictionChips(id) } — what ui.js used to hand these modules by hand.
+
+const variantDefs = [];
+
+/** `def` = { id, match({ module, state, client, document }) → boolean, view, rendered?, onState?, intro?, bodyData?,
+ * screenClass?, ownHeader? (the module draws its own header: the host puts no restriction chips in its own) }. */
+export function registerModuleVariant(def) {
+  variantDefs.push(def);
+}
+
+export function moduleVariant(env) {
+  return variantDefs.find((d) => d.id === env.module?.id && d.match(env)) ?? null;
 }
