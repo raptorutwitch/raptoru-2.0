@@ -1,4 +1,6 @@
 import { ProgressionService } from '../progression/service.js';
+import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
+import { ModuleSettings } from '../module-settings/service.js';
 import { progressionRoutes } from '../http/progression-routes.js';
 import { createServer, type Server } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
@@ -114,6 +116,9 @@ export function createLabCore({
     thirdParty,
     economy,
   );
+  // Refonte H10 / H12: the same module settings as the main Core.
+  const moduleSettings = new ModuleSettings(db, systemClock);
+  bonk.settings = moduleSettings;
   const sound = new SoundLabService(db, systemClock, undefined, economy);
   const tts = new TtsLabService(db, systemClock, undefined, undefined, economy);
   // The Lab channel's real Twitch broadcaster (the launcher's channel): the streamer of every Lab chat
@@ -188,6 +193,7 @@ export function createLabCore({
   );
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
+      chatPrices: moduleSettings.chatPrices(),
       db,
       clock: systemClock,
       economy,
@@ -270,6 +276,11 @@ export function createLabCore({
     ...spotifyRoutes(spotify, cpTwitch),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
+    // Refonte H10 / H12 / H14: module settings and Daily steps.
+    ...moduleSettingsRoutes(moduleSettings, db, {
+      channelId: null,
+      production: false,
+    }),
   ];
   const server = createServer(async (req, res) => {
     const send = (status: number, body: unknown) => {

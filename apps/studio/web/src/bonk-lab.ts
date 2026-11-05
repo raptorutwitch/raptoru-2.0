@@ -1,3 +1,4 @@
+import { mountSettingsPanel } from './module-settings.js';
 import { mountBonkTarget } from './bonk-target.js';
 
 const obsText = (code: string) =>
@@ -30,6 +31,13 @@ export function mountBonkLab(
     <button type="button" data-bonk-test="1">1 Bonk</button> <button type="button" data-bonk-test="5">Rafale de 5</button> <button type="button" data-bonk-test="10">Salve de 10</button>
     ${options.production ? '<br><small>Visible en direct si la source Bonk est dans la scène diffusée.</small>' : ''}</p></div><ol data-bonk="history"></ol>`;
   root.prepend(panel);
+  // Refonte H12: the price per Bonk and the delay between two Bonk of a viewer, set in the Core (bounded there).
+  const limits = document.createElement('div');
+  panel.append(limits);
+  void mountSettingsPanel(limits, 'Prix et limites du Bonk', [
+    'bonk.price',
+    'bonk.cooldown_s',
+  ]).refresh();
   const el = <T extends HTMLElement>(key: string) =>
     panel.querySelector<T>(`[data-bonk="${key}"]`)!;
   const call = async (path: string, body?: unknown) => {

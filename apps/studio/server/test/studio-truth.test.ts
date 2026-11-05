@@ -220,3 +220,59 @@ describe('Défis: the engine as it is (H16)', () => {
     ).toContain('Jamais comptés sur ce Core (source absente) : Daily');
   });
 });
+
+describe('Réglages des modules (H10 / H12) and Daily steps (H14) — views', () => {
+  it('a setting shows its bounds and default, says when it was changed; unavailable Core said', async () => {
+    const { settingsPanelHtml } =
+      await import('../../web/src/module-settings.ts');
+    const s = [
+      {
+        key: 'bonk.price',
+        label: 'Prix d’un Bonk',
+        unit: 'Jetons',
+        value: 350,
+        default: 200,
+        min: 10,
+        max: 100_000,
+      },
+      {
+        key: 'bonk.cooldown_s',
+        label: 'Délai',
+        unit: 's',
+        value: 0,
+        default: 0,
+        min: 0,
+        max: 600,
+      },
+    ];
+    const html = settingsPanelHtml('Prix et limites du Bonk', s, [
+      'bonk.price',
+      'bonk.cooldown_s',
+    ]);
+    expect(html).toContain('De 10 à 100');
+    expect(html).toContain('par défaut 200 · <b>modifié</b>');
+    expect(html).toContain('data-ms-save="bonk.cooldown_s"');
+    expect(html).toContain(
+      'Les probabilités et les gains ne se règlent pas ici',
+    );
+    expect(settingsPanelHtml('X', null, ['bonk.price'])).toContain(
+      'Réglages indisponibles',
+    );
+  });
+  it('Daily: one field per step, the last repeats, fixed reset time shown, never editable', async () => {
+    const { dailyHtml } = await import('../../web/src/progression.ts');
+    const html = dailyHtml({
+      steps: [500, 700, 900],
+      default_steps: [500, 700, 900],
+      bounds: { max_steps: 30, max_value: 20_000 },
+      reset_time: '16:00 (heure de Paris)',
+    });
+    expect(html.match(/data-daily-step=/g)).toHaveLength(3);
+    expect(html).toContain('3e stream et suivants');
+    expect(html).toContain(
+      'Remise à zéro fixe : <b>16:00 (heure de Paris)</b>',
+    );
+    expect(html).not.toContain('modifiés');
+    expect(dailyHtml(null)).toContain('Paliers indisponibles');
+  });
+});

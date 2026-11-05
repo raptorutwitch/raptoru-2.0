@@ -19,7 +19,7 @@ type Reward = {
   /** Boutique cosmétique: a draft is never granted (the Core refuses it). */
   status?: string;
 };
-type Tab = 'viewers' | 'catalog' | 'rules' | 'import';
+type Tab = 'viewers' | 'catalog' | 'rules' | 'daily' | 'import';
 type State = {
   enabled: boolean;
   rules: Record<string, number | boolean | string[]>;
@@ -129,11 +129,42 @@ const RULES: [string, string, string][] = [
   ['curve_exponent', 'Courbe : exposant', '0.05'],
 ];
 
+/** Refonte H14 — the Daily steps (Jetons per consecutive stream; the last one repeats). */
+export interface DailySteps {
+  steps: number[];
+  default_steps: number[];
+  bounds: { max_steps: number; max_value: number };
+  /** Fixed (decision H14): shown, never edited. */
+  reset_time: string;
+}
+
+export function dailyHtml(d: DailySteps | null) {
+  if (!d)
+    return '<section class="rs-panel"><h2>Daily</h2><p class="rs-muted">Paliers indisponibles sur ce profil (Core sans cette route).</p></section>';
+  const changed = d.steps.join(',') !== d.default_steps.join(',');
+  return `<section class="rs-panel pg-daily"><h2>Daily</h2>
+    <p>Jetons reçus avec <code>!daily</code> selon le nombre de streams d’affilée. Le dernier palier se répète. Remise à zéro fixe : <b>${esc(d.reset_time)}</b>.</p>
+    <div class="rs-fields">${d.steps
+      .map(
+        (v, i) =>
+          `<label>${i + 1}${i ? 'e' : 'er'} stream${i === d.steps.length - 1 ? ' et suivants' : ''} <input type="number" min="0" max="${d.bounds.max_value}" step="1" value="${v}" data-daily-step="${i}"> Jetons</label>`,
+      )
+      .join('')}</div>
+    <p class="rs-muted">De 1 à ${d.bounds.max_steps} paliers, ${d.bounds.max_value.toLocaleString('fr-FR')} Jetons au plus chacun, jamais en baisse d’un palier au suivant.${changed ? ' Paliers <b>modifiés</b> (valeurs d’origine : ' + d.default_steps.join(' · ') + ').' : ''}</p>
+    <div class="rs-buttons"><button type="button" class="rs-btn primary" data-act="daily-save">Enregistrer…</button>
+      <button type="button" class="rs-btn" data-act="daily-add">Ajouter un palier</button>
+      <button type="button" class="rs-btn" data-act="daily-remove"${d.steps.length > 1 ? '' : ' disabled'}>Retirer le dernier</button>
+      <button type="button" class="rs-btn" data-act="daily-default">Revenir aux valeurs d’origine</button></div>
+    <p class="rs-muted">Chaque !daily garde le montant calculé à son heure : un changement ne verse et ne retire rien rétroactivement.</p></section>`;
+}
+
 export function mountProgression(root: HTMLElement) {
   let state: State | null = null;
   let error = '';
   let flash = '';
   let tab: Tab = 'viewers';
+  /** Refonte H14: the Daily steps as the Core holds them (null: a Core without the route). */
+  let daily: DailySteps | null = null;
   let results: ViewerRow[] = [];
   let selected: { row: ViewerRow; detail: Detail; journal: Journal } | null =
     null;
@@ -166,6 +197,9 @@ export function mountProgression(root: HTMLElement) {
     try {
       state = (await call('/api/progression/state')) as unknown as State;
       error = '';
+      daily = (await call('/api/daily/config').catch(
+        () => null,
+      )) as unknown as DailySteps | null;
       importStatus = (await call('/api/progression/import/status').catch(
         () => null,
       )) as unknown as ImportStatus | null;
@@ -215,8 +249,8 @@ export function mountProgression(root: HTMLElement) {
         <p>${s.enabled ? 'La présence et le chat rapportent de l’XP.' : 'Rien n’est compté tant que la progression est inactive.'} Présence = vue dans deux relevés des chatters de suite (toutes les 2 min) ; un spectateur absent de cette liste n’est pas compté.</p></div>
         <button type="button" data-act="toggle" class="rs-btn ${s.enabled ? '' : 'primary'}">${s.enabled ? 'Désactiver…' : 'Activer'}</button></header>
       ${flash ? `<p class="rs-flash${/^(Refusé|Liste impossible|Rattachement impossible|Import)/.test(flash) ? ' is-bad' : ''}" role="status">${esc(flash)}</p>` : ''}
-      <div class="rs-seg" role="tablist" aria-label="Progression">${tabBtn('viewers', 'Viewers')}${tabBtn('catalog', 'Titres et badges')}${tabBtn('rules', 'Règles d’XP')}${tabBtn('import', 'Reprise WizeBot')}</div>
-      ${tab === 'viewers' ? viewersHtml(d) : tab === 'catalog' ? catalogHtml(s) : tab === 'rules' ? rulesHtml(s) : importHtml()}
+      <div class="rs-seg" role="tablist" aria-label="Progression">${tabBtn('viewers', 'Viewers')}${tabBtn('catalog', 'Titres et badges')}${tabBtn('rules', 'Règles d’XP')}${tabBtn('daily', 'Daily')}${tabBtn('import', 'Reprise WizeBot')}</div>
+      ${tab === 'viewers' ? viewersHtml(d) : tab === 'catalog' ? catalogHtml(s) : tab === 'rules' ? rulesHtml(s) : tab === 'daily' ? dailyHtml(daily) : importHtml()}
     </div>`;
   }
 
@@ -416,6 +450,29 @@ export function mountProgression(root: HTMLElement) {
         () => call('/api/progression/settings', { enabled: !state!.enabled }),
         state.enabled ? 'Progression désactivée.' : 'Progression activée.',
       );
+    } else if (a === 'daily-save' && daily) {
+      const steps = [
+        ...root.querySelectorAll<HTMLInputElement>('[data-daily-step]'),
+      ].map((i) => Number(i.value));
+      if (
+        !confirm(
+          `Enregistrer ces paliers du Daily ?\n\n${steps.map((v, i) => `${i + 1}${i ? 'e' : 'er'} stream : ${v.toLocaleString('fr-FR')} Jetons`).join('\n')}\n\nAppliqués aux prochains !daily. Les récompenses déjà reçues ne changent pas ; rien n’est versé rétroactivement.`,
+        )
+      )
+        return;
+      void act(
+        () => call('/api/daily/config', { steps }),
+        'Paliers du Daily enregistrés.',
+      );
+    } else if (a === 'daily-add' && daily) {
+      daily = { ...daily, steps: [...daily.steps, daily.steps.at(-1) ?? 0] };
+      render();
+    } else if (a === 'daily-remove' && daily && daily.steps.length > 1) {
+      daily = { ...daily, steps: daily.steps.slice(0, -1) };
+      render();
+    } else if (a === 'daily-default' && daily) {
+      daily = { ...daily, steps: [...daily.default_steps] };
+      render();
     } else if (a === 'rules') {
       const rules: Json = {};
       for (const [k] of RULES) rules[k] = Number(val(`[data-rule="${k}"]`));

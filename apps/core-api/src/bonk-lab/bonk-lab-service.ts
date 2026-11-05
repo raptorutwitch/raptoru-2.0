@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { ModuleSettings } from '../module-settings/service.js';
 import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import type {
   BonkLabAckRequest,
@@ -438,6 +439,16 @@ export class BonkLabService {
     );
   }
 
+  /** Refonte H12: the module settings (price, delay between two purchases), set by the Core assembly. */
+  settings: ModuleSettings | null = null;
+
+  /** The price of one Bonk now (the Core's setting, else today's price). */
+  private unitPrice(q: Queryable, channelId: string) {
+    return this.settings
+      ? this.settings.get(q, channelId, 'bonk.price')
+      : Promise.resolve(BONK_LAB_RULES.simulatedCost);
+  }
+
   /** Moderation V2 (Core): refused before admission, nothing recorded. */
   private async assertAdmissible(
     q: Queryable,
@@ -470,6 +481,27 @@ export class BonkLabService {
         'viewer_cooldown',
         `cooldown imposed by moderation (${Math.ceil(imposed / 1000)} s)`,
       );
+    // Refonte H12: the streamer's delay between two purchases of one viewer (a salve is one purchase; 0 = none).
+    const delayS = this.settings
+      ? await this.settings.get(q, channelId, 'bonk.cooldown_s')
+      : 0;
+    if (delayS > 0) {
+      const last = (
+        await q.query<{ at: Date | null }>(
+          `select max(created_at) as at from bonk_lab_interactions
+           where channel_id = $1 and viewer_id = $2 and status <> 'refused'`,
+          [channelId, viewerId],
+        )
+      )[0]?.at;
+      const left = last
+        ? delayS * 1000 - (now0.getTime() - new Date(last).getTime())
+        : 0;
+      if (left > 0)
+        throw new BonkLabError409(
+          'bonk_cooldown',
+          `next Bonk in ${Math.ceil(left / 1000)} s`,
+        );
+    }
   }
 
   /** Executable now and room for `count` more open Bonks (bounded queue), else refused. */
@@ -511,6 +543,8 @@ export class BonkLabService {
       resolved: ResolvedEmote;
       sequence: number;
       now: Date;
+      /** Refonte H12: the price of this Bonk, read once per request from the module settings. */
+      price: number;
       volley: {
         id: string;
         index: number;
@@ -542,7 +576,7 @@ export class BonkLabService {
         shot.resolved.animated,
         shot.now,
         shot.sequence,
-        BONK_LAB_RULES.simulatedCost,
+        shot.price,
         BONK_LAB_RULES.simulatedCurrency,
         shot.labSessionId,
         new Date(shot.now.getTime() + BONK_LAB_RULES.expiresAfterMs),
@@ -593,6 +627,7 @@ export class BonkLabService {
       await this.assertAdmissible(q, req.channel_id, req.viewer.id);
       const emote = await this.resolveEmote(q, req.viewer.id, req.emote, pre);
       await this.assertCapacity(q, req.channel_id, 1);
+      const price = await this.unitPrice(q, req.channel_id);
 
       const seq = await this.allocate(q, req.channel_id, 1);
       const now = this.clock.now();
@@ -608,6 +643,7 @@ export class BonkLabService {
         resolved: emote,
         sequence: seq,
         now,
+        price,
         volley: null,
       });
       await seeViewer(
@@ -622,7 +658,7 @@ export class BonkLabService {
         channelId: req.channel_id,
         viewer: req.viewer,
         currency: 'tokens',
-        amount: BONK_LAB_RULES.simulatedCost,
+        amount: price,
         module: 'bonk',
         interactionId: id,
       });
@@ -709,6 +745,7 @@ export class BonkLabService {
       await this.assertCapacity(q, req.channel_id, count);
 
       const first = await this.allocate(q, req.channel_id, count);
+      const price = await this.unitPrice(q, req.channel_id);
       const now = this.clock.now();
       const volleyId = randomUUID();
       const ids = req.emotes.map(() => randomUUID());
@@ -723,6 +760,7 @@ export class BonkLabService {
           emote,
           resolved: resolved[index]!,
           sequence: first + index,
+          price,
           now,
           volley: {
             id: volleyId,
@@ -744,7 +782,7 @@ export class BonkLabService {
           channelId: req.channel_id,
           viewer: req.viewer,
           currency: 'tokens',
-          amount: BONK_LAB_RULES.simulatedCost,
+          amount: price,
           module: 'bonk',
           interactionId: id,
         });

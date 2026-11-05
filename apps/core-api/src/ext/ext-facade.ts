@@ -424,6 +424,15 @@ export class ExtFacade {
         }
       : null;
 
+    // Refonte H12: the Bonk price the Core applies now (module settings), never an assumed constant.
+    const bonkPrice = Number(
+      (
+        await this.core<{ settings: { key: string; value: number }[] }>(
+          `/v1/lab/module-settings/${this.C}`,
+        ).catch(() => null)
+      )?.settings.find((x) => x.key === 'bonk.price')?.value ??
+        BONK_LAB_RULES.simulatedCost,
+    );
     const modules: Json[] = [
       {
         ...MODULE_PRESENTATION.tts,
@@ -457,7 +466,11 @@ export class ExtFacade {
           running: s.running,
         })),
       },
-      { ...MODULE_PRESENTATION.bonk, emote_catalog: { groups: [] } },
+      {
+        ...MODULE_PRESENTATION.bonk,
+        token_cost: bonkPrice,
+        emote_catalog: { groups: [] },
+      },
     ].map((m) =>
       this.real && REAL_DESCRIPTION[String(m.id)]
         ? { ...m, description: REAL_DESCRIPTION[String(m.id)] }

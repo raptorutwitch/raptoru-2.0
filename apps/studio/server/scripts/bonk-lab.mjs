@@ -111,6 +111,7 @@ try {
     '20261120120000_challenges_lab.sql',
     '20261121120000_sub_wheel_enabled_at_lab.sql',
     '20261121140000_word_game_settings_lab.sql',
+    '20261121150000_module_settings_lab.sql',
   ]) {
     if (
       (

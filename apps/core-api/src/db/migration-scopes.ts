@@ -98,6 +98,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261120130000_challenges.sql',
   // Roue du Sub: the live boundary moves only on OFF → ON (refonte P0-3); Lab twin 20261121120000.
   '20261121130000_sub_wheel_enabled_at.sql',
+  // Module settings: prices, delays, limits set from Studio (refonte H10 / H12); Lab twin 20261121150000.
+  '20261121160000_module_settings.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -198,6 +200,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261121120000_sub_wheel_enabled_at_lab.sql',
   // Jeu des mots: durable ON / OFF and interval (refonte H8); the main Core applies it too (MAIN_CORE_LAB_MIGRATIONS).
   '20261121140000_word_game_settings_lab.sql',
+  // Module settings: the Lab twin of 20261121160000_module_settings.sql (same content).
+  '20261121150000_module_settings_lab.sql',
 ]);
 
 /**

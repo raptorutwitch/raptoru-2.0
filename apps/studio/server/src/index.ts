@@ -1,4 +1,5 @@
 import { BonkRuntime } from './bonk-lab/runtime.js';
+import { moduleSettingsRelay } from './module-settings/relay.js';
 import { bootPlan } from './prod-transport/profile.js';
 import {
   createProductionRuntimes,
@@ -339,6 +340,20 @@ const TEST_LAB_PRODUCTION_ACTIONS = new Set([
   'stop-all',
   'logs/clear',
 ]);
+/** Several relays behind one handler slot: the first that knows the path answers. */
+function chainRelays(
+  ...handlers: ((
+    req: IncomingMessage,
+    res: ServerResponse,
+    url: URL,
+  ) => Promise<boolean>)[]
+) {
+  return async (req: IncomingMessage, res: ServerResponse, url: URL) => {
+    for (const h of handlers) if (await h(req, res, url)) return true;
+    return false;
+  };
+}
+
 export function testLabActionAllowed(name: string, production: boolean) {
   return !production || TEST_LAB_PRODUCTION_ACTIONS.has(name);
 }
@@ -511,6 +526,16 @@ export function createStudioServer(
           return url.pathname === '/api/mini-games/state'
             ? send(res, 200, { available: false })
             : send(res, 503, { error: 'lab_core_unavailable' });
+        if (await miniGames(req, res, url)) return;
+      }
+      // Refonte H10 / H12 / H14: module settings and Daily steps, relayed to the profile's Core (same relay chain).
+      if (
+        url.pathname === '/api/module-settings' ||
+        url.pathname === '/api/daily/config'
+      ) {
+        if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
+        if (!miniGames)
+          return send(res, 503, { error: 'lab_core_unavailable' });
         if (await miniGames(req, res, url)) return;
       }
       // Moderation V2 cockpit / TTS configuration / Lab test wallet (relayed to the local Lab Core).
@@ -1215,7 +1240,12 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       },
     },
     wordGame,
-    labCore ? miniGamesRelay(labCore, cockpitChannel) : null,
+    labCore
+      ? chainRelays(
+          miniGamesRelay(labCore, cockpitChannel),
+          moduleSettingsRelay(labCore, cockpitChannel),
+        )
+      : null,
     alerts,
     points,
     twitchConnections,

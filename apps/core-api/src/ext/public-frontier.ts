@@ -1,4 +1,5 @@
 import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
+import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
 import { eventShopRoutes } from '../http/event-shop-routes.js';
 import type { Core } from '../app.js';
 import { TwitchViewerCatalog } from '../bonk-lab/twitch-viewer.js';
@@ -99,6 +100,11 @@ export function createPublicFrontier(
       channelId,
       production: false,
       site: true,
+    }),
+    // Refonte H10 / H12 / H14: Studio's module settings and Daily steps (through the cockpit), the façade's Bonk price.
+    ...moduleSettingsRoutes(core.moduleSettings, db, {
+      channelId,
+      production: false,
     }),
   ]);
   const app =

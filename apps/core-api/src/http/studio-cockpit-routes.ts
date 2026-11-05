@@ -14,13 +14,13 @@ const STUDIO_ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
 
 /** Allowed Lab sub-paths: `<prefix>/<channel>/…` (channel checked) or a channel-less route. */
 const CHANNEL_ROUTES =
-  /^(moderation|raffle|wallet|commands|word-game|mini-games)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
+  /^(moderation|raffle|wallet|commands|word-game|mini-games|module-settings)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
 /** Never through the cockpit: the executor side of the chat answers belongs to the bot. */
 const BOT_ONLY = /^commands\/\d{1,32}\/steps\/(claim|[0-9a-f-]{36}\/ack)$/;
 // Channel-less: TTS rules; Soundboard bank configuration (prices, cooldowns, stack / queue / ignore,
 // enabled, volume protection) — the « Soundboard config » screen.
 const PLAIN_ROUTES =
-  /^(tts\/rules(\/reset)?|sound\/(config|settings|sounds\/[a-z0-9][a-z0-9_-]{0,47}))$/;
+  /^(tts\/rules(\/reset)?|sound\/(config|settings|sounds\/[a-z0-9][a-z0-9_-]{0,47})|daily\/config)$/;
 
 export function studioCockpitRoutes(core: LabCall, channelId: string): Route[] {
   const target = (rest: string, search: string) => {

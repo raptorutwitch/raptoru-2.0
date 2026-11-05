@@ -1,3 +1,4 @@
+import { mountSettingsPanel } from './module-settings.js';
 import { COLOR_CAM_PRESETS, FX_CAM } from '@raptoru/schemas';
 import {
   actionLabel,
@@ -123,6 +124,15 @@ export function mountChannelPoints(root: HTMLElement) {
   const $ = (role: string) =>
     root.querySelector<HTMLElement>(`[data-role="${role}"]`)!;
   const randomBan = mountRandomBan($('random-ban'));
+  // Refonte H10: the chat prices of !rb and !fxcam, set in the Core (bounded there), shown in the Random Ban section.
+  const chatPrices = document.createElement('div');
+  root
+    .querySelector<HTMLElement>('[data-sat="random-ban"]')
+    ?.append(chatPrices);
+  const prices = mountSettingsPanel(chatPrices, 'Prix dans le chat', [
+    'random_ban.price',
+    'fx_cam.price',
+  ]);
   const spotify = mountSpotify($('spotify'));
   const caution = mountCaution($('caution'));
   // Settings form: loaded when the tab opens, never in the 3 s refresh (it would erase what is being typed).
@@ -514,6 +524,7 @@ export function mountChannelPoints(root: HTMLElement) {
       timer = null;
       if (!visible) return;
       void load();
+      void prices.refresh();
       void randomBan.load();
       void spotify.load();
       void caution.load();

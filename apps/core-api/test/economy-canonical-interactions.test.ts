@@ -537,3 +537,73 @@ describe('Refonte H1: paid stream interactions only during the canonical live', 
     ).toBe('ok');
   });
 });
+
+describe('Refonte H12: Bonk price and delay from the module settings', () => {
+  const withSettings = async () => {
+    const f = await canonical();
+    const { ModuleSettings } =
+      await import('../src/module-settings/service.js');
+    const settings = new ModuleSettings(f.core.db, f.core.clock);
+    f.s.bonk.settings = settings;
+    await f.fund(100_000);
+    return { f, settings };
+  };
+  it('default = the price applied today (200); a new price is really debited (single and per shot of a salve)', async () => {
+    const { f, settings } = await withSettings();
+    await f.s.bonk.admit({
+      ...f.base,
+      idempotency_key: 'p-1',
+      emote: f.emote('😀'),
+    });
+    expect(await f.balance()).toBe(100_000 - 200);
+    await settings.set(CH, 'bonk.price', 350, 'test');
+    await f.s.bonk.admit({
+      ...f.base,
+      idempotency_key: 'p-2',
+      emote: f.emote('😀'),
+    });
+    expect(await f.balance()).toBe(100_000 - 200 - 350);
+    await f.s.bonk.admitVolley({
+      ...f.base,
+      idempotency_key: 'p-3',
+      emotes: [f.emote('😀'), f.emote('😀')],
+      cadence_ms: 200,
+    });
+    expect(await f.balance()).toBe(100_000 - 200 - 350 - 700);
+    await consistent(f.core.db);
+  });
+  it('delay between two purchases of a viewer: refused before payment inside it, accepted after; a salve is one purchase', async () => {
+    const { f, settings } = await withSettings();
+    await settings.set(CH, 'bonk.cooldown_s', 30, 'test');
+    await f.s.bonk.admitVolley({
+      ...f.base,
+      idempotency_key: 'c-1',
+      emotes: [f.emote('😀'), f.emote('😀'), f.emote('😀')],
+      cadence_ms: 200,
+    });
+    const after = await f.balance();
+    f.core.clock.advance(8_000);
+    await f.ready(); // Studio still there (fresh heartbeat)
+    expect(
+      await code(
+        f.s.bonk.admit({
+          ...f.base,
+          idempotency_key: 'c-2',
+          emote: f.emote('😀'),
+        }),
+      ),
+    ).toBe('bonk_cooldown');
+    expect(await f.balance()).toBe(after);
+    f.core.clock.advance(22_001);
+    await f.ready();
+    expect(
+      await code(
+        f.s.bonk.admit({
+          ...f.base,
+          idempotency_key: 'c-3',
+          emote: f.emote('😀'),
+        }),
+      ),
+    ).toBe('ok');
+  });
+});
