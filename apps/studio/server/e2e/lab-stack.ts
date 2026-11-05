@@ -140,6 +140,27 @@ ext.connectLab(labCore);
       .catch(() => undefined);
   }, 2_000).unref();
 }
+// Soundboard in the Extension Lab: the Studio sound worker (journal + this Lab Core only) and a FICTIONAL player (no
+// page, never any sound) whose heartbeat makes the sounds purchasable, as a real player page would.
+{
+  const { SoundWorker, localSoundCoreClient } =
+    await import('../src/sound-lab/worker.js');
+  const { mkdtemp: mk } = await import('node:fs/promises');
+  const { tmpdir: td } = await import('node:os');
+  const { join: j } = await import('node:path');
+  const dir = await mk(j(td(), 'e2e-sound-'));
+  const soundWorker = await SoundWorker.open(
+    j(dir, 'journal.json'),
+    localSoundCoreClient(coreUrl, secret),
+  );
+  ext.connectSound(soundWorker);
+  setInterval(() => {
+    void soundWorker
+      .playerHeartbeat('e2e-player-fictif', true)
+      .then(() => soundWorker.tick())
+      .catch(() => undefined);
+  }, 2_000).unref();
+}
 // Studio's Halloween and Tombola tabs, on the same Lab Core (temporary data folder, gone with the process).
 const { mkdtemp, writeFile } = await import('node:fs/promises');
 const { tmpdir } = await import('node:os');
