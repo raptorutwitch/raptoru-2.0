@@ -882,6 +882,9 @@ Effort : S (moins d'une demi-journée), M (environ un jour), L (plusieurs jours)
 
 ## H. Arbitrages pour Antoni
 
+> **05/11/2026 : arbitrages tranchés par Antoni.** Décisions et état de mise en œuvre : [CONTEXTE.md](CONTEXTE.md) § 18 ;
+> choix techniques pris en les appliquant : § 19. Le tableau ci-dessous reste l'état du 04/11 (historique).
+
 Tant qu'une décision n'est pas prise, **le comportement actuel est conservé**. Les évidences techniques ne sont pas
 listées ici : elles sont traitées dans le backlog.
 
