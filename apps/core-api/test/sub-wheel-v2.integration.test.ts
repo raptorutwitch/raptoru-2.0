@@ -48,6 +48,7 @@ const CHALLENGES = '20261120130000_challenges.sql';
 const SW_ENABLED_AT = '20261121130000_sub_wheel_enabled_at.sql';
 const WORD_SETTINGS = '20261121140000_word_game_settings_lab.sql';
 const MODULE_SETTINGS = '20261121160000_module_settings.sql';
+const MODULE_ACTIVITY = '20261121180000_module_activity.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -643,7 +644,8 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== FRAMES &&
           f !== CHALLENGES &&
           f !== SW_ENABLED_AT &&
-          f !== MODULE_SETTINGS,
+          f !== MODULE_SETTINGS &&
+          f !== MODULE_ACTIVITY,
       ),
       lab: [
         ...MIGRATION_SCOPES.lab,
@@ -665,6 +667,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
         CHALLENGES,
         SW_ENABLED_AT,
         MODULE_SETTINGS,
+        MODULE_ACTIVITY,
       ],
       // Refonte H8: a main Core file production did not hold on 25/10.
       mainCore: MIGRATION_SCOPES.mainCore!.filter((f) => f !== WORD_SETTINGS),
@@ -720,6 +723,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       SW_ENABLED_AT,
       WORD_SETTINGS,
       MODULE_SETTINGS,
+      MODULE_ACTIVITY,
     ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(

@@ -59,6 +59,8 @@ export function createChatGames(o: {
   channelPoints?: ChannelPointsService | null;
   /** Prices of the chat interactions (default: the validated ones, chat-interactions/prices.ts). */
   chatPrices?: ChatPrices;
+  /** Chat modules of the module host (modules/host.ts), after the historical ones. */
+  hostChatModules?: LabChatModule[];
   /** `!caution pseudo` + `oui` / `non` (absent: no chat Caution — the main Core only with CAUTION_CHAT=true). */
   caution?: CautionService | null;
   /** `!votekick pseudo`, `!kick`, `!save` (absent: no Votekick — the main Core only with VOTEKICK_CHAT=true). */
@@ -164,6 +166,7 @@ export function createChatGames(o: {
       chat: (m) => wheel.chat(m),
     });
   }
+  chatModules.push(...(o.hostChatModules ?? []));
   return {
     commands,
     admission,

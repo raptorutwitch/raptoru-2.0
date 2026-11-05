@@ -1,4 +1,5 @@
 import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
+import { modulesRoutes } from '../http/modules-routes.js';
 import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
 import { eventShopRoutes } from '../http/event-shop-routes.js';
 import type { Core } from '../app.js';
@@ -106,6 +107,8 @@ export function createPublicFrontier(
       channelId,
       production: false,
     }),
+    // The module host (architecture socle): catalog, status, admin, viewer, activity, refund — once for every module.
+    ...modulesRoutes(core.modules),
   ]);
   const app =
     config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
@@ -220,6 +223,10 @@ export function createPublicFrontier(
           );
       }, 1000);
       // Refonte H6: the waiting song requests closed and refunded after the end of the live (every 30 s, idempotent).
+      // The module host's periodic jobs (one loop for every module).
+      const modulesTick = setInterval(() => {
+        void core.modules.tick();
+      }, 5000);
       const spotifyEndTick = setInterval(() => {
         core.spotify
           .closeAfterLive(channelId)
@@ -256,6 +263,7 @@ export function createPublicFrontier(
         clearInterval(eventShopTick);
         clearInterval(spotifyTick);
         clearInterval(spotifyEndTick);
+        clearInterval(modulesTick);
         clearInterval(votekickTick);
         clearInterval(wordGameTick);
         clearInterval(raffleTick);

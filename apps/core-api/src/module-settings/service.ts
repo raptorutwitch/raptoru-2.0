@@ -44,7 +44,18 @@ export const MODULE_SETTINGS = {
   },
 } as const;
 export type ModuleSettingKey = keyof typeof MODULE_SETTINGS;
-const KEYS = Object.keys(MODULE_SETTINGS) as ModuleSettingKey[];
+
+/** One bounded setting (integers only: prices, seconds, counts, 0/1 switches). */
+export interface SettingSpec {
+  label: string;
+  unit: string;
+  default: number;
+  min: number;
+  max: number;
+  help?: string;
+  /** Shown under « Paramètres avancés » in Studio. */
+  advanced?: boolean;
+}
 
 export class ModuleSettingsError extends Error {
   constructor(
@@ -58,6 +69,25 @@ export class ModuleSettingsError extends Error {
 export class ModuleSettings {
   /** Does this database hold the table (a Core whose migration is not applied keeps the defaults)? */
   private table: boolean | null = null;
+  /** The historical settings plus those the module host registers (modules/host.ts). */
+  private readonly specs = new Map<string, SettingSpec>(
+    Object.entries(MODULE_SETTINGS) as [string, SettingSpec][],
+  );
+
+  /** A module's settings (`<module>.<key>`), declared once in its definition (modules/kit.ts). */
+  register(specs: Record<string, SettingSpec>) {
+    for (const [key, spec] of Object.entries(specs)) {
+      if (this.specs.has(key))
+        throw new Error(`module setting declared twice: ${key}`);
+      this.specs.set(key, spec);
+    }
+  }
+
+  private spec(key: string) {
+    const s = this.specs.get(key);
+    if (!s) throw new ModuleSettingsError(400, 'unknown_setting');
+    return s;
+  }
 
   constructor(
     private readonly db: Db,
@@ -75,15 +105,16 @@ export class ModuleSettings {
   }
 
   /** The value an executor applies now (the caller's transaction when it has one). */
-  async get(q: Queryable, channelId: string, key: ModuleSettingKey) {
-    if (!(await this.ready(q))) return MODULE_SETTINGS[key].default;
+  async get(q: Queryable, channelId: string, key: ModuleSettingKey | string) {
+    const spec = this.spec(key);
+    if (!(await this.ready(q))) return spec.default;
     const row = (
       await q.query<{ value: number | string }>(
         'select value from module_settings where channel_id = $1 and key = $2',
         [channelId, key],
       )
     )[0];
-    return row ? Number(row.value) : MODULE_SETTINGS[key].default;
+    return row ? Number(row.value) : spec.default;
   }
 
   /** What Studio shows: every setting with its value, default and bounds. */
@@ -97,8 +128,7 @@ export class ModuleSettings {
         channelId,
       ]))
         stored.set(r.key, Number(r.value));
-    return KEYS.map((key) => {
-      const d = MODULE_SETTINGS[key];
+    return [...this.specs.entries()].map(([key, d]) => {
       return {
         key,
         label: d.label,
@@ -108,15 +138,14 @@ export class ModuleSettings {
         min: d.min,
         max: d.max,
         ...('help' in d ? { help: d.help } : {}),
+        ...(d.advanced ? { advanced: true } : {}),
       };
     });
   }
 
   /** Validated here (integer, bounds, known key), whatever Studio sent; applied to the next purchases only. */
   async set(channelId: string, key: string, value: unknown, actor: string) {
-    if (!KEYS.includes(key as ModuleSettingKey))
-      throw new ModuleSettingsError(400, 'unknown_setting');
-    const d = MODULE_SETTINGS[key as ModuleSettingKey];
+    const d = this.spec(key);
     if (
       typeof value !== 'number' ||
       !Number.isInteger(value) ||

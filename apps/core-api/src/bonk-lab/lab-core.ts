@@ -1,4 +1,7 @@
 import { ProgressionService } from '../progression/service.js';
+import { modulesRoutes } from '../http/modules-routes.js';
+import { MODULES } from '../modules/index.js';
+import { ModuleHost } from '../modules/host.js';
 import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
 import { ModuleSettings } from '../module-settings/service.js';
 import { progressionRoutes } from '../http/progression-routes.js';
@@ -99,6 +102,8 @@ export function createLabCore({
   spotify: SpotifyService;
   /** Défis: one recount pass (the Lab process's timer). */
   challenges: { tick: () => Promise<unknown> };
+  /** The module host (its periodic jobs run by the Lab process). */
+  modules: ModuleHost;
 } {
   if (secret.length < 32) throw new Error('bonk_secret_required');
   // Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
@@ -119,6 +124,13 @@ export function createLabCore({
   // Refonte H10 / H12: the same module settings as the main Core.
   const moduleSettings = new ModuleSettings(db, systemClock);
   bonk.settings = moduleSettings;
+  // The module host: the SAME list as the main Core (modules/index.ts).
+  const modules = new ModuleHost(MODULES, {
+    db,
+    clock: systemClock,
+    economy,
+    settings: moduleSettings,
+  });
   const sound = new SoundLabService(db, systemClock, undefined, economy);
   const tts = new TtsLabService(db, systemClock, undefined, undefined, economy);
   // The Lab channel's real Twitch broadcaster (the launcher's channel): the streamer of every Lab chat
@@ -194,6 +206,7 @@ export function createLabCore({
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
       chatPrices: moduleSettings.chatPrices(),
+      hostChatModules: modules.chatModules(),
       db,
       clock: systemClock,
       economy,
@@ -281,6 +294,8 @@ export function createLabCore({
       channelId: null,
       production: false,
     }),
+    // The module host (architecture socle).
+    ...modulesRoutes(modules),
   ];
   const server = createServer(async (req, res) => {
     const send = (status: number, body: unknown) => {
@@ -343,5 +358,6 @@ export function createLabCore({
     votekick,
     spotify,
     challenges: { tick: () => challenges.tick(LAB_PROGRESSION_CHANNEL) },
+    modules,
   };
 }

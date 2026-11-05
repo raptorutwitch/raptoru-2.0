@@ -1,4 +1,6 @@
 import { ALERT_RULES, AlertsService } from './alerts/service.js';
+import { MODULES } from './modules/index.js';
+import { ModuleHost } from './modules/host.js';
 import { ModuleSettings } from './module-settings/service.js';
 import { BotInstanceService } from './bot-instance/service.js';
 import { DockActivityService } from './dock/service.js';
@@ -86,6 +88,8 @@ export interface Core {
   chat: ChatGames;
   /** Refonte H10 / H12: the module settings (prices, delays, limits). */
   moduleSettings: ModuleSettings;
+  /** The module host (modules/host.ts): the modules of modules/index.ts. */
+  modules: ModuleHost;
 }
 
 export function createCore(
@@ -122,6 +126,13 @@ export function createCore(
   const moduleSettings = new ModuleSettings(db, clock);
   const bonkLab = new BonkLabService(db, clock, twitchViewers, null, economy);
   bonkLab.settings = moduleSettings;
+  // The module host: every module of modules/index.ts, on this Core's economy (Lab-only modules never on canonical).
+  const modules = new ModuleHost(MODULES, {
+    db,
+    clock,
+    economy,
+    settings: moduleSettings,
+  });
   const votekick = new VotekickService(db, clock, broadcasterOf);
   votekick.economy = economy; // refonte H1: votes only during the canonical live
   // Random Ban V3: the streamer as an exceptional target (his mic muted in OBS), never while Votekick mutes him.
@@ -204,6 +215,7 @@ export function createCore(
     // The Bonk accepts a Twitch emote only from the viewer's own catalog (none: Twitch emotes off).
     bonkLab,
     moduleSettings,
+    modules,
     twitchViewers,
     soundLab,
     ttsLab,
@@ -224,6 +236,7 @@ export function createCore(
     chat: createChatGames({
       // Refonte H10: !rb and !fxcam prices from the module settings (defaults = today's prices).
       chatPrices: moduleSettings.chatPrices(),
+      hostChatModules: modules.chatModules(),
       // « !roue » and the invitations: silent while the wheel is in mode v1 (production today).
       subWheel,
       eventShop,

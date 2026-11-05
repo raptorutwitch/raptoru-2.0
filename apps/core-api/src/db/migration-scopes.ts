@@ -100,6 +100,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261121130000_sub_wheel_enabled_at.sql',
   // Module settings: prices, delays, limits set from Studio (refonte H10 / H12); Lab twin 20261121150000.
   '20261121160000_module_settings.sql',
+  // Module host journal (architecture socle): history, intent keys, refund link; Lab twin 20261121170000.
+  '20261121180000_module_activity.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -202,6 +204,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261121140000_word_game_settings_lab.sql',
   // Module settings: the Lab twin of 20261121160000_module_settings.sql (same content).
   '20261121150000_module_settings_lab.sql',
+  // Module host journal: the Lab twin of 20261121180000_module_activity.sql (same content).
+  '20261121170000_module_activity_lab.sql',
 ]);
 
 /**

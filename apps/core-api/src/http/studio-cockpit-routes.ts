@@ -14,7 +14,7 @@ const STUDIO_ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
 
 /** Allowed Lab sub-paths: `<prefix>/<channel>/…` (channel checked) or a channel-less route. */
 const CHANNEL_ROUTES =
-  /^(moderation|raffle|wallet|commands|word-game|mini-games|module-settings)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
+  /^(moderation|raffle|wallet|commands|word-game|mini-games|module-settings|modules)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
 /** Never through the cockpit: the executor side of the chat answers belongs to the bot. */
 const BOT_ONLY = /^commands\/\d{1,32}\/steps\/(claim|[0-9a-f-]{36}\/ack)$/;
 // Channel-less: TTS rules; Soundboard bank configuration (prices, cooldowns, stack / queue / ignore,
