@@ -5,6 +5,7 @@ import { moduleSettingsRelay } from './module-settings/relay.js';
 import { bootPlan } from './prod-transport/profile.js';
 import {
   createProductionRuntimes,
+  studioRoutesClient,
   fromMain,
   handleProfileApi,
   type ProfileApiDeps,
@@ -1062,11 +1063,16 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Twitch alerts V1 (§ 22): ONE runtime, on the Core of the profile — the Lab Core, or the paired production Core
   // (/v1/studio/alerts). Media, calibration and the OBS source token are shared by both profiles (runtimeDir/alerts:
   // the OBS URL does not change at the cutover); the StreamElements mode and journal are per profile.
-  // The local Lab on the main Core takes the Production routes (/v1/studio/*) of ITS Core; what reaches a real outside
-  // service in Production (StreamElements, the points de chaîne's Spotify, the chat ingress) stays off there (below).
+  // The local Lab on the main Core: the module runtimes keep their Lab mode (simulators, Lab folders — their journals
+  // under runtimeDir/lab-main, never mixed with the historical Lab's) on that Core's own Studio routes
+  // (studioRoutesClient). What reads a real outside service stays off there: StreamElements, the Twitch chat ingress.
+  const labModuleDir = (name: string) =>
+    mainLab
+      ? join(paths.runtimeDir, 'lab-main', name)
+      : join(paths.runtimeDir, name);
   const alertsEnv: 'lab' | 'production' | null = mainLab
     ? labMainRuntimes
-      ? 'production'
+      ? 'lab'
       : null
     : labCore && labProfile
       ? 'lab'
@@ -1074,7 +1080,11 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         ? 'production'
         : null;
   const alertsCore =
-    alertsEnv === 'lab' ? labCore : (transport?.alertsCore ?? null);
+    mainLab && labMainRuntimes
+      ? studioRoutesClient(labMainRuntimes.alertsCore)
+      : alertsEnv === 'lab'
+        ? labCore
+        : (transport?.alertsCore ?? null);
   // Real StreamElements donations: own mode (OFF by default; ACTIVE resumed in Production only, refonte H5), token from
   // Electron main.
   const se =
@@ -1192,9 +1202,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // in Core, or an explicit « Tester »). Twitch reception: the Lab chat adapter's broadcaster connection (Lab) or
   // the production bot (Production).
   const broadcasterTokenFile = twitchTokenFiles().broadcaster;
-  // Not yet on the main Core's Lab: its Production side plays on the real Spotify account (a Lab mode comes next).
+  // On the main Core's Lab too, in its Lab mode (environment 'lab': the Spotify simulator, never the real account).
   const points =
-    alertsCore && alertsEnv && !mainLab
+    alertsCore && alertsEnv
       ? await ChannelPointsRuntime.create({
           core: alertsCore,
           environment: alertsEnv,
@@ -1202,7 +1212,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           origin: `http://${host}:${port}`,
           dir:
             alertsEnv === 'lab'
-              ? join(paths.runtimeDir, 'channel-points')
+              ? labModuleDir('channel-points')
               : join(paths.runtimeDir, 'production', 'channel-points'),
           obs: () => bonk?.obs ?? null,
           // Effects player (P0.1): one OBS browser source; media imported by effects/import-cli.ts.
@@ -1232,7 +1242,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           // Spotify V2: the Lab plays on the simulator; Production on the broadcaster's account (panel « Musique »).
           spotifyDir:
             alertsEnv === 'lab'
-              ? join(paths.runtimeDir, 'spotify-lab')
+              ? labModuleDir('spotify-lab')
               : join(paths.runtimeDir, 'production', 'spotify'),
           twitch: () => ({
             scope: hasTwitchScope(
