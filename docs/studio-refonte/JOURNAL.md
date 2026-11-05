@@ -85,3 +85,34 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Suite E2E complète du 04/11 : `effects-player` (6 échecs sous charge, passe seul), `tombola-bonbons` bloqué une fois,
   `alerts` « families » une fois (4/4 seul) ; aucun fichier de la refonte n'y touche.
 - Essai Régie sur pile isolée : Tombola fictive lancée, mise en pause, annulée depuis la Régie.
+
+## 05/11/2026 — mission fondatrice « socle modulaire »
+
+- Constats mesurés par quatre analyses en lecture seule, recoupées dans le code (`architecture/FRICTIONS.md`). Un module
+  transversal coûtait ~45 fichiers et ~65 endroits.
+- Socle : contrat + `checkModule`, hôte unique dans les deux Cores, journal générique, routes, relais Studio,
+  fournisseur du Centre de contrôle, page générique, porte de l'extension partagée Production / Lab, registre, achat
+  par intention, modération générique, porte du lecteur OBS, générateur.
+- Démos :
+  - A : 1 fichier + 2 lignes ;
+  - B : 2 fichiers + 3 lignes ;
+  - C : mini-jeux, 6 réglages H10 et supervision, règles et tests conservés.
+- Bugs trouvés et corrigés :
+  - liste blanche du client Lab de Studio sans `/v1/lab/module-settings/`, `/v1/lab/daily/`, `/v1/lab/modules/` : les
+    réglages H10 / H12 / H14 étaient refusés en profil Lab, et les tests de l'époque contournaient ce client ;
+  - contrôle d'hôte absent sur trois relais Studio ;
+  - typecheck du serveur Studio rouge.
+- Suites :
+
+  | Suite | Résultat |
+  |---|---|
+  | Core | 1 380 verts |
+  | Intégration PostgreSQL | 191 verts |
+  | Studio | 884 verts |
+  | Extension | 78 verts |
+  | Bot | 287 verts |
+  | Build web, lint, typecheck | propres |
+
+  Deux plantages 0xC0000409, relancés seuls et verts.
+- Vu en navigateur sur la pile isolée (4411) : trois défauts trouvés et corrigés (`dbb1798`).
+

@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 05/11/2026, mise en œuvre des décisions H1-H16 en cours (GO d'Antoni du 05/11, Lab uniquement).**
+**Mis à jour : 05/11/2026, mission « socle modulaire » terminée en code (Lab uniquement, rien de validé ni publié).**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -88,22 +88,28 @@ Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par A
 
 ## Prochaine action
 
-**Mission « socle modulaire » (05/11, GO Lab)** en cours. Constats : `architecture/FRICTIONS.md`, intention :
-`architecture/VISION.md`.
+**Mission « socle modulaire » (05/11, GO Lab) : codée et testée automatiquement.** Tout est dans
+[architecture/](architecture/) : VISION, FRICTIONS (statuts), CONTRATS, GUIDE_MODULE / EXTENSION / MODERATION / LAB,
+PREUVES (mesures des démos A, B, C et limites), DECISIONS (D11 **à arbitrer** : onglet « Modules » de la console D4).
 
-- Fait : socle Core `e780437`.
-  - `apps/core-api/src/modules/` : kit (contrat, vérifications), host (catalogue, réglages, actions admin et viewer,
-    paiement, journal, remboursement, expiration), `index.ts` = la liste unique.
-  - Routes génériques `http/modules-routes.ts`.
-  - Démos A `objectif-soiree.ts` et B `coffre-mystere.ts` (Lab uniquement).
-- Reste, dans l'ordre :
-  1. Studio : un relais générique `/api/modules*` dans la chaîne de relais (corriger le contrôle d'hôte de Progression,
-     Boutique et Défis) ; `web/src/http.ts` partagé ; vue générique `module-host` (page Laboratoire) ; fournisseur
-     « Modules » du Centre de contrôle.
-  2. Extension : routes génériques `/modules/v3/<id>/…` dans `ext-facade.ts` et `lab-ebs.ts` ; `shared/module-registry.js`,
-     `shared/purchase.js` (clé par intention), vue `shared/coffre-mystere.js`, branche générique dans `ui.js`.
-  3. Démo C : mini-jeux (réglages H10 via `module_settings`, état au catalogue).
-  4. Docs `architecture/` : CONTRATS, GUIDE_MODULE, GUIDE_EXTENSION, GUIDE_MODERATION, GUIDE_LAB, PREUVES, DECISIONS.
+- Commits :
+
+  | Commit | Contenu |
+  |---|---|
+  | `54b2b87` | docs |
+  | `e780437` | Core |
+  | `037a7db` | Studio |
+  | `8a2d862` | extension |
+  | `8ef2912` | modération extension + **liste blanche Lab corrigée** (les réglages H10 / H12 / H14 étaient refusés en profil Lab) |
+  | `e08d1a5` | démo C mini-jeux |
+  | `5a418f1` / `90f1147` | générateur `module:new` + contrôle de navigation |
+  | `c4166e2` | porte du lecteur OBS |
+
+- À faire par Antoni : voir dans le Lab réel (`npm run studio`, profil Lab) :
+  - Laboratoire › Modules du socle ;
+  - la carte Roulette · Slots · Duels ;
+  - le Coffre dans l'Extension Lab, avec une identité viewer puis modérateur.
+- Ensuite, au choix d'Antoni : migrer un module historique quand il est retouché (modèle : démo C).
 
 ## Reprendre
 
@@ -117,7 +123,6 @@ npx vitest run test/studio-shell.test.ts test/raffle-lab.test.ts test/simulation
 dev\apercu-refonte-studio.cmd    (aperçu navigateur, données fictives)
 ```
 
-`npx tsc -p tsconfig.json` sur le serveur signale 3 erreurs anciennes dans `test/studio-shell.test.ts` (imports `.ts`).
-Utiliser `tsconfig.build.json`.
+`npx tsc -p tsconfig.json` sur le serveur Studio est de nouveau propre (`8ef2912`).
 
 Mettre à jour ce fichier et ROADMAP.md à chaque lot commité ; le détail daté va dans JOURNAL.md.

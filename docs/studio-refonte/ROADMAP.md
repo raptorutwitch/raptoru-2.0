@@ -139,7 +139,7 @@ Ordre recommandé : F1 → F2 → F4 → F3 → F5 → F6 (au fil des pages) →
 | F3 | P0-5 (bot : événement de live rejoué tant que le Core ne l'a pas enregistré) ; H9 (complément de fidélité) | pont des jeux et fenêtre de confiance Helix ; P2-9 ; P1-10 alerte sur l'âge du relevé des abonnés |
 | F4 | « Prêt pour le live » (18 contrôles, lecture seule) | relance au passage en live + notification ; P1-3 configuration effective détaillée ; P1-4 supervision du lecteur d'effets et des overlays |
 | F5 | P1-5 : micro et filtres rétablis à la fermeture | avertir avant de quitter pendant un effet (Electron) ; P1-6 ; P1-8 |
-| F6 | H8, H10 (`!rb`, `!fxcam`, Bonk), H12, H13, H14, H15, H16 | H10 : Caution, Votekick, mini-jeux, Duel (même mécanisme) ; pages Mini-jeux et Votekick |
+| F6 | H8, H10 (`!rb`, `!fxcam`, Bonk, **mini-jeux et Duel** via le socle, `e08d1a5`), H12, H13, H14, H15, H16 ; page Mini-jeux = carte du module | H10 : Caution, Votekick (même mécanisme) ; page Votekick |
 | F7 | H1, H5, H6 | P2-1 session de live unique (`lab_stream_sessions` miroir), P2-2 variables = plafond |
 
 **Ordre de déploiement à respecter le jour du GO** :
@@ -147,6 +147,20 @@ Ordre recommandé : F1 → F2 → F4 → F3 → F5 → F6 (au fil des pages) →
 - Core, bot et Studio ensemble (une ancienne version de Studio n'envoie pas la clé exigée par « Créditer / Débiter ») ;
 - **H1 change la Production** : hors live, plus aucun achat lié au stream ; à annoncer aux viewers ;
 - l'extension (H15, P0-2 de la console partagée, texte `stream_offline`) par Antoni.
+
+### Socle modulaire (mission fondatrice du 05/11) — [architecture/](architecture/)
+
+Codé et testé automatiquement ; rien de validé par Antoni ni publié.
+
+- Fait : contrat de module et hôte (`e780437`), Studio (`037a7db`), extension (`8a2d862`), modération des modules
+  depuis l'extension et correction de la liste blanche Lab (`8ef2912`), démonstration C mini-jeux (`e08d1a5`),
+  générateur et contrôle de navigation (`5a418f1`).
+- Reste (secondaire, voir `architecture/PREUVES.md` § Limites) :
+  - migrer les modules historiques un par un quand ils sont retouchés ;
+  - onglet « Modules » de la console D4 : **à arbitrer** (DECISIONS D11) ;
+  - paramètres positionnels de `createStudioServer` (S1) ;
+  - réponses chat des modules du socle (origine `cmd_steps` en CHECK SQL) ;
+  - migration `module_activity` de Production le jour du premier module non `labOnly` avec journal.
 
 ## Régressions et instabilités connues
 

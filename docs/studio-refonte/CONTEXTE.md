@@ -127,6 +127,10 @@ actifs ou files OBS de Production ; ne pas relier un aperçu local au Core de Pr
 
 ## 9. Ajouter un module (convention)
 
+**Depuis le 05/11 : un nouveau module se construit sur le socle** — [architecture/GUIDE_MODULE.md](architecture/GUIDE_MODULE.md)
+(`npm run module:new`, une ligne dans `core-api/src/modules/index.ts`, une page `view: 'modules'` + `anchor`). La
+convention ci-dessous reste celle des modules historiques et des écrans qui ne sont pas des modules.
+
 1. Choisir sa destination selon l'usage réel (une des six, ou Laboratoire) — **jamais un septième onglet principal**.
 2. Déclarer une page dans `PAGES` (`registry.ts`) : `id`, `label`, `section`, `group` (Modules), `icon`, `desc`,
    `keywords`. Elle apparaît alors dans la barre / le catalogue / Ctrl+K / le fil d'Ariane.
