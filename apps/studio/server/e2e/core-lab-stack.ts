@@ -61,6 +61,7 @@ const { ChannelPointsRuntime } =
   await import('../src/channel-points/runtime.js');
 const { EffectsPlayer } = await import('../src/effects/player.js');
 const { AlertMediaStore } = await import('../src/alerts/media-store.js');
+const { AlertsRuntime } = await import('../src/alerts/runtime.js');
 const { LabChatIngress } = await import('../src/lab-chat/ingress.js');
 const { CoreLabPanel, labChatIdentities } =
   await import('../src/extension-lab/core-lab-panel.js');
@@ -317,6 +318,15 @@ const points = await ChannelPointsRuntime.create({
   twitch: () => ({ scope: false, adapter_running: false }),
 });
 points.start();
+const alerts = await AlertsRuntime.create({
+  channelId: CHANNEL,
+  core: labCore,
+  environment: 'lab',
+  origin,
+  dir: join(dir, 'alerts'),
+  playerDir: join(import.meta.dirname, '..', 'alerts-player'),
+  media: await AlertMediaStore.open(join(dir, 'alerts-media')),
+});
 const labChat = await LabChatIngress.create({
   core: labCore,
   origin,
@@ -337,6 +347,7 @@ const studio = createStudioServer({
     identities: labChatIdentities,
   }),
   raffle,
+  alerts,
   relays: chainRelays(
     miniGamesRelay(labCore, CHANNEL),
     moduleSettingsRelay(labCore, CHANNEL),

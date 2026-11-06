@@ -35,7 +35,7 @@ import type { Ctx, Overview, View } from './moderation-ui.js';
 type Tab =
   'desk' | 'journal' | 'restrictions' | 'team' | 'words' | 'others' | 'wallet';
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'desk', label: 'Régie' },
+  { id: 'desk', label: 'Files' },
   { id: 'journal', label: 'Historique' },
   { id: 'restrictions', label: 'Restrictions' },
   { id: 'team', label: 'Équipe' },

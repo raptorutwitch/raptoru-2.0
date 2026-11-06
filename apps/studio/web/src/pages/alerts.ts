@@ -532,8 +532,12 @@ export function mountAlerts(root: HTMLElement) {
     if (!v) {
       patch(
         z('tracks'),
-        `<p class="d-note bad">${catError ? `Catalogue indisponible : ${esc(catError)}` : 'Chargement…'}</p>`,
+        `<p class="d-note bad" style="grid-column:1 / -1">${catError ? `Catalogue indisponible : ${esc(catError)}` : 'Chargement…'}</p>`,
       );
+      if (catError)
+        stage.setMissing(
+          '<b>Aperçu indisponible</b><span>Le serveur de Studio ne répond pas pour les alertes.</span>',
+        );
       return;
     }
     const f = familyById(famId);

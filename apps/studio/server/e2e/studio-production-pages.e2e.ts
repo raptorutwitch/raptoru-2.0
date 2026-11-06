@@ -43,16 +43,16 @@ test('TTS and Bonk have their page, with the Production card', async ({
   await expect(
     page.getByRole('heading', { level: 1, name: 'TTS' }),
   ).toBeVisible();
+  // The stage, the opening of the module and the priced rule, as in the Lab: the Core decides in both.
+  await expect(page.getByText('Prix selon la longueur')).toBeVisible();
   await expect(
-    page.getByRole('tab', { name: 'Prix et limites' }),
+    page.getByRole('button', { name: 'Fermé', exact: true }),
   ).toBeVisible();
-  // Production: pause and stop stay in Modération; the Lab's buttons are absent.
-  await expect(
-    page.getByRole('button', { name: 'Pause', exact: true }),
-  ).toHaveCount(0);
-  await expect(page.getByText('onglet « Modération »')).toBeVisible();
-  await page.getByRole('tab', { name: 'Prix et limites' }).click();
-  await expect(page.getByText('Paliers de prix')).toBeVisible();
+  await page
+    .locator('#tab-tts')
+    .getByRole('button', { name: 'Réglages', exact: true })
+    .click();
+  await expect(page.getByLabel('Adresse de la source OBS')).toBeVisible();
 
   await page.goto('/?p=bonk');
   await expect(
@@ -60,7 +60,7 @@ test('TTS and Bonk have their page, with the Production card', async ({
   ).toBeVisible();
   const bonk = page.locator('#tab-bonk');
   await expect(bonk.getByText('Prix et délai')).toBeVisible();
-  await bonk.getByRole('button', { name: 'Réglages' }).click();
+  await bonk.getByRole('button', { name: 'Réglages', exact: true }).click();
   await expect(bonk.getByText('Connexion OBS', { exact: true })).toBeVisible();
   await expect(bonk.getByLabel('URL de la source OBS Bonk')).toBeVisible();
 });

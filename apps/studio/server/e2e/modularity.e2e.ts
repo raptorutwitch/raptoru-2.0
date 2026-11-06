@@ -41,7 +41,7 @@ const setSetting = async (page: Page, key: string, value: string) => {
   await page.locator(`[data-ms-input="${key}"]`).fill(value);
   await page.locator(`[data-ms-save="${key}"]`).click();
   // Un prix est une règle d'économie : Studio dit l'effet et demande.
-  await page.locator('dialog.d-dlg [data-yes]').click();
+  await page.locator('dialog.d-dlg[open] [data-yes]').click();
   await expect(page.locator(`[data-setting="${key}"]`)).toContainText(
     'modifié',
   );
@@ -70,9 +70,7 @@ test('a module of the host appears everywhere from its own file, and its rules a
   // Studio sets it: switch, price, and the delay added by the module's own file.
   const on = page.locator('[data-ms-toggle="coffre_mystere.enabled"]');
   await on.check();
-  await expect(page.locator('[data-module="coffre_mystere"]')).toContainText(
-    'Activé',
-  );
+  await expect(on).toBeChecked();
   await setSetting(page, 'coffre_mystere.prix', '150');
   await setSetting(page, 'coffre_mystere.delai_s', '600');
 

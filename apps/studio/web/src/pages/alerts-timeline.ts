@@ -40,7 +40,7 @@ const ramps = (enterMs: number, exitMs: number, span: number) =>
   `<em class="alr-ramp in" style="width:${pct(enterMs, span)}%" data-fx="in"></em><em class="alr-ramp out" style="width:${pct(exitMs, span)}%" data-fx="out"></em>`;
 
 const clipHtml = (c: Clip, t: TimelineView) =>
-  `<div class="alr-clip t ${t.sel === 'text' ? 'sel' : ''}" data-clip="${c.key}" style="left:${pct(c.in, t.length)}%;width:${pct(c.end - c.in, t.length)}%" title="Glisser pour déplacer">${ramps(c.enterMs, c.exitMs, c.end - c.in)}<u class="l" data-edge="in" aria-label="Entrée du texte"></u><span>${esc(c.label)}</span><u class="r" data-edge="out" aria-label="Sortie du texte"></u></div>`;
+  `<div class="alr-clip t ${t.sel === 'text' ? 'sel' : ''}" data-clip="${c.key}" style="left:${pct(Math.min(c.in, t.length), t.length)}%;width:${pct(Math.max(0, Math.min(c.end, t.length) - c.in), t.length)}%" title="Glisser pour déplacer">${ramps(c.enterMs, c.exitMs, c.end - c.in)}<u class="l" data-edge="in" aria-label="Entrée du texte"></u><span>${esc(c.label)}</span><u class="r" data-edge="out" aria-label="Sortie du texte"></u></div>`;
 
 export function tracksHtml(t: TimelineView) {
   const { v, look, length, videoMs } = t;
