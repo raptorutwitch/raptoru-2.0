@@ -6,6 +6,9 @@ ce qui apparaît en cours de route va en P2 ou dans [ROADMAP.md](ROADMAP.md).
 Ce jalon n'est pas la fin du développement : c'est le moment où l'on arrête de reconstruire les fondations pour créer,
 remplacer et améliorer librement les modules.
 
+**Recette du 06/11** : Antoni ne valide pas l'UX/UI (critères S). Elle est reprise entièrement dans
+[REDESIGN.md](REDESIGN.md). Le jalon n'est pas validé.
+
 **Validation** : seul Antoni valide, à la main, dans Electron ([RECETTE_FOUNDATION.md](RECETTE_FOUNDATION.md)). Un test
 automatique n'est jamais une validation.
 

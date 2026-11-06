@@ -234,3 +234,10 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Incident maîtrisé : un essai de la commande avec l'ancienne version du script (écriture refusée, non vue) a lancé Electron à
   côté du Studio installé. Le verrou d'instance l'a fermé aussitôt : pas de serveur, pas de Core, fenêtre du Studio installé
   seulement remise au premier plan. Le Studio installé a continué sans interruption. D'où le refus explicite (D32).
+
+## 06/11/2026 — Recette UX/UI refusée, redesign intégral
+
+- Antoni, après test dans Electron : meilleure navigation, mais pages internes héritées, formulaires techniques, textes
+  envahissants, confirmations natives, débordements. Mission : vraie refonte du produit, sans conservatisme.
+- Trois directions prototypées sur TTS, Tombola et Alertes avec une simulation commune : `prototypes/studio-redesign/`.
+- Polices embarquées en local (OFL), pour que les prototypes et le futur Studio ne dépendent d'aucun réseau.

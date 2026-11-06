@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 06/11/2026 — Jalon STUDIO FOUNDATION COMPLETE techniquement terminé, en attente de la recette d'Antoni : voir [FOUNDATION_COMPLETE.md](FOUNDATION_COMPLETE.md). Lab sur le vrai Core par défaut. Rien de validé ni publié.**
+**Mis à jour : 06/11/2026 — Recette d'Antoni : fondation technique conservée, UX/UI **non validée**. Redesign intégral lancé, trois directions à choisir : voir [REDESIGN.md](REDESIGN.md).**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -15,7 +15,7 @@ le travail touche au comportement d'un module.
 - Vérifier d'abord `git -C "<worktree>" status --short` et `git log --oneline -8`. L'arbre doit être propre.
 - Captures de référence : [captures/foundation/](captures/foundation/).
 
-## STUDIO FOUNDATION COMPLETE (06/11) : recette attendue
+## STUDIO FOUNDATION COMPLETE (06/11) : UX/UI refusée à la recette, reprise dans [REDESIGN.md](REDESIGN.md)
 
 Ligne d'arrivée et état de chaque critère : [FOUNDATION_COMPLETE.md](FOUNDATION_COMPLETE.md). Recette d'Antoni :
 [RECETTE_FOUNDATION.md](RECETTE_FOUNDATION.md). Retrait de l'ancien Lab, préparé, non exécuté :
