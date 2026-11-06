@@ -213,3 +213,11 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   coupée par défaut ; Twitch fictif (un vrai catalogue Twitch demanderait un vrai compte et un secret d'app).
 - `npm run studio` peut tourner sur le véritable Core en mode Lab (opt-in), avec le chemin du profil Production, le
   simulateur de chat sur la porte du bot (Lab seulement) et les modules en mode Lab (simulateur Spotify).
+
+## 06/11/2026 — Parité du Lab sur le véritable Core
+
+- Toutes les specs E2E tournent sur l'assemblage de Production ; premier passage 73/91, puis corrigé famille par famille.
+- Défauts réels trouvés par cette parité : le Core disait toujours `twitch_connected: false` à l'extension (la liaison
+  Twitch n'était jamais confirmée, en Production aussi) ; le build Studio sortait en erreur depuis `8ef2912`.
+- Verrous : Electron reconnectait l'OBS enregistré et le Test Lab pouvait lancer le vrai bot : refusés dans ce Lab.
+- Le retrait de l'ancien Lab attend la validation d'Antoni.

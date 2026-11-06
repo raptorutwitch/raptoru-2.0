@@ -1,5 +1,15 @@
 # Lab : tester un module sans Twitch, OBS ni Production
 
+## Le Lab sur le véritable Core (cible, décision du 05/11)
+
+`npm run studio:lab` : Studio prépare la base `raptoru_core_lab`, lance le Core principal (`CORE_ENVIRONMENT=lab`, port
+4302, 127.0.0.1) et lui parle comme au VPS. Twitch, comptes, Jetons et OBS y sont fictifs ; le Core refuse de démarrer avec
+une base distante, une autre chaîne que 900100, une app Twitch réelle ou `OPS_TOKEN`.
+
+- Remettre à zéro : `npm run lab:reset -w @raptoru/core-api` (`.env.lab`, voir l'en-tête du script).
+- Vérifier : `E2E_STACK=main npx playwright test` (toutes les specs) ; recette sur un vrai serveur : `studio-lab.boot.ts`.
+- La suite du document décrit l'ancien Lab, encore le défaut jusqu'à la bascule.
+
 ## Ce qui est isolé, et comment le vérifier
 
 | Élément | Lab | Vérification |

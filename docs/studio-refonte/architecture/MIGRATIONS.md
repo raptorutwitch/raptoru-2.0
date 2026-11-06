@@ -198,19 +198,38 @@ couleurs du Hub, la pastille « Ouverte / Fermée » de l'en-tête Tombola, le t
 | chat (`ac0263a`) | le simulateur de chat joue le bot sur la porte `/v1/bot/chat` du Core Lab ; le Core n'accepte `source: simulator` (et « récents ») qu'en `CORE_ENVIRONMENT=lab` ; Production : Twitch seulement, inchangé | unitaires lab / staging ; essai réel : « !tombola » simulé reçu par les modules |
 | modules (`3abcb38`) | alertes, points de chaîne (effets, Votekick, **simulateur** Spotify), Random Ban, Roue, Dock, Halloween, Progression, Boutique, Défis en mode Lab vers les routes `/v1/studio/<module>` du Core Lab (`studioRoutesClient`), journaux sous `lab-main/` | essai réel : 8 familles de routes répondent |
 
-Coupé dans ce mode (lecture d'un vrai service extérieur) : StreamElements, ingestion du chat Twitch. Le Bonk Twitch y est
-sans émotes Twitch (fictif à venir) ; 7TV / BTTV / FFZ réels possibles avec `STUDIO_LAB_EMOTE_CATALOG_CHANNEL_ID=83603689`.
+| parité (`7a907dd`) | le cockpit porte toute la table Lab en `CORE_ENVIRONMENT=lab` (`lab/routes.ts`) : simulateurs Spotify / Roue, tests d'alertes, chat simulé ; Twitch fictif à la frontière (OAuth réel sur réponses fictives, page de consentement locale, comptes fictifs) ; portée de migrations `main-lab` ; Commandes et Roue dans la façade ; page Extension Lab sur le Core (`core-lab-panel.ts`) | toutes les specs E2E sur le Core principal (`E2E_STACK=main`) |
+| verrous (`0748f3f`) | OBS fictif par défaut (reconnexion automatique d'Electron refusée, `LAB_OBS=real` pour le vrai OBS du PC) ; Test Lab (bot et Core sur les vrais `.env`) refusé ; autorisation de comptes Twitch refusée ; images locales des emotes fictives | recette `studio-lab.boot.ts` sur un vrai serveur Studio : 5/5 |
 
-Essayer : `npm run build -w @raptoru/core-api` puis `STUDIO_LAB_CORE=main npm run studio` (profil Lab). Revenir : relancer
-sans la variable (l'ancien Lab et ses données sont intacts ; le nouveau garde les siennes dans `raptoru_core_lab` et
-`runtime/lab-main/`).
+**Lancer le nouveau Lab :** `npm run studio:lab` (Studio installé fermé : même port 4100). Options : `LAB_EMOTES=83603689`
+(7TV / BTTV / FFZ publics de la chaîne, lecture seule) ; `LAB_OBS=real` (OBS de ce PC).
 
-Reste (ordre) :
-1. Outils propres au Lab que le Core principal ne sert pas encore (404 dans ce mode) : `simulate` de Spotify, simulateurs
-   de la Roue (présence, abonnements), « Tester » éventuels — à ouvrir dans le Core en `CORE_ENVIRONMENT=lab` seulement.
-2. Twitch fictif du Bonk dans ce mode (comptes et émotes fictifs, OAuth simulé) ; liste des identités de l'Extension Lab.
-3. **4 — E2E sur l'assemblage principal** : porter les specs de `lab-stack.ts` vers `core-lab-stack.ts`.
-4. Après validation d'Antoni : le Core principal devient le Lab par défaut.
-5. **5 — retraits** : `lab-ebs.ts`, `bonk-lab/lab-core.ts`, routes HTTP `/v1/lab/*`, migrations jumelles `_lab`
-   (module par module, quand le schéma de Production les couvre).
+**Résultats (06/11) :** toutes les specs E2E sur le Core principal 91/91 ; outils du Lab (`core-lab`) 9/9 ; recette sur un
+vrai serveur Studio 5/5 ; Core 1 405 + intégration sur vrai Postgres 204/204 ; Studio 893/894 sous charge (échecs de
+charge, relancés seuls) ; ancienne pile : échantillon extension 25/25. Rien n'a été essayé à la main par Antoni.
+
+### Parité ancien Lab → Lab sur le véritable Core
+
+| Fonction de l'ancien Lab | Nouveau Lab | Preuve |
+|---|---|---|
+| Extension (Hub, TTS, Soundboard, Bonk, Tombola, modération, rôles, identité) | `/v1/ext` réel, JWT signé par Studio | E2E complet |
+| Lecteurs OBS (overlay Bonk, Soundboard, TTS) | vraies pages, workers de Production | recette sur vrai serveur |
+| Page Extension Lab (wallets, modules, Tombola, journal) | `core-lab-panel.ts`, sans état | `core-lab` |
+| Simulateur de chat, identités | même écran, routes Lab du cockpit | `core-lab` |
+| Simulateur Spotify, simulateurs de la Roue | mêmes écrans | `core-lab` |
+| Catalogue Bonk | fictif ; 7TV / BTTV / FFZ réels en option ; liaison Twitch fictive complète | `bonk.e2e`, `ext-emote-catalog` |
+| Alertes, points de chaîne, Random Ban, Votekick, Caution, Dock, Halloween, Progression, Boutique, Défis | mode Lab, routes Lab du cockpit | E2E complet |
+| Wallet de test | cockpit | E2E |
+
+**Volontairement absent du nouveau Lab :** liaison Twitch d'un vrai compte et vraies emotes personnelles ; lecture du vrai
+chat et des vrais événements Twitch ; vrais dons StreamElements ; Test Lab (bot réel). Un don se simule depuis Alertes.
+
+### Proposition de bascule (à décider par Antoni)
+
+1. Antoni essaie `npm run studio:lab` et valide les parcours.
+2. Bascule : `npm run studio` lance le Core principal ; l'ancien Lab reste atteignable une version (`STUDIO_LAB_CORE=legacy`).
+3. E2E : `core-lab-stack.ts` devient l'unique pile.
+4. Retraits (≈ 4 000 lignes) : `lab-ebs.ts` (2 469) + 3 façades (308), `bonk-lab/lab-core.ts` et `local-server.ts` (509),
+   `e2e/lab-stack.ts` (525), `scripts/bonk-lab.mjs` (210), clients `/v1/lab` directs ; puis, module par module, les
+   migrations jumelles `_lab` quand plus rien ne les lit, et 23 fichiers de tests à porter vers l'assemblage principal.
 

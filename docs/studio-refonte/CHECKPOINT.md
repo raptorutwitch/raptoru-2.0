@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 06/11/2026 — Lab cible : `npm run studio` peut tourner sur le véritable Core (opt-in `STUDIO_LAB_CORE=main`, `3abcb38`). Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 06/11/2026 — Lab sur le véritable Core : parité vérifiée (`npm run studio:lab`), bascule à décider par Antoni. Lab uniquement, rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -260,8 +260,11 @@ contrôle.
 | `ac0263a` | simulateur de chat sur la porte du bot, en Lab seulement |
 | `3abcb38` | alertes, points de chaîne (simulateur Spotify), Random Ban, Roue, Dock, Halloween… en mode Lab sur ce Core |
 
-À essayer par Antoni : `npm run build -w @raptoru/core-api`, puis `STUDIO_LAB_CORE=main npm run studio` ; ce qui reste
-et ce qui est coupé dans ce mode : architecture/MIGRATIONS.md § « Lab cible ».
+| `7a907dd` | parité : table Lab derrière le cockpit, Twitch fictif, page Extension Lab, toutes les specs E2E sur le Core principal |
+| `0748f3f` | verrous (OBS fictif, Test Lab, Twitch) ; recette sur un vrai serveur Studio ; build Studio réparé |
+
+À essayer par Antoni : `npm run studio:lab` (Studio installé fermé). Parité, absences voulues et proposition de bascule :
+architecture/MIGRATIONS.md § « Lab cible ».
 Pour essayer le nouveau Lab : `apps/core-api/.env.lab` (voir l'en-tête de `src/scripts/lab-reset.ts`), puis
 `npm run lab:reset -w @raptoru/core-api` et `npm run lab -w @raptoru/core-api`. Staging : intact.
 
