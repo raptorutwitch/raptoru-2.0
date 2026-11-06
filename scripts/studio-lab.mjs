@@ -3,6 +3,7 @@
 // database, fictional channel). The Lab profile must be selected (the default); the installed Studio must be closed (same
 // port 4100).
 // Optional: LAB_EMOTES=<Twitch channel id> reads that channel's PUBLIC 7TV / BTTV / FFZ catalogs (read-only, no token).
+// Optional: LAB_OBS=real uses the OBS of this PC (fictional by default: no connection, the saved one is refused).
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 

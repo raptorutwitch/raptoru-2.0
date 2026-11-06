@@ -145,6 +145,8 @@ export class ThirdPartyEmotes {
     private readonly clock: Clock,
     private readonly fetchImpl: Fetch = globalThis.fetch,
     private readonly cacheMs = CACHE_MS,
+    /** The Lab's fictional catalogs: a local image in place of the CDN URL (their ids exist on no CDN). */
+    private readonly imageUrl: ((e: ThirdPartyEmote) => string) | null = null,
   ) {
     if (!/^\d+$/.test(channelTwitchId))
       throw new Error('channel_twitch_id_required');
@@ -259,7 +261,9 @@ export class ThirdPartyEmotes {
     this.cached = {
       fetched_at: this.clock.now().toISOString(),
       channel_display_name: channelName,
-      emotes,
+      emotes: this.imageUrl
+        ? emotes.map((e) => ({ ...e, url: this.imageUrl!(e) }))
+        : emotes,
       errors,
     };
     return this.cached;

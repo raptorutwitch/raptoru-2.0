@@ -610,7 +610,7 @@ export function createLocalRuntime(
         prepare: (env) => mainCore.prepare(env),
         providers: mainCore.emoteCatalog
           ? `Twitch fictif · 7TV / BTTV / FFZ publics de la chaîne ${mainCore.emoteCatalog} (lecture seule)`
-          : 'Twitch fictif · catalogues publics 7TV / BTTV / FFZ : désactivés',
+          : 'Twitch fictif · 7TV / BTTV / FFZ fictifs',
       },
     });
   return new LocalRuntime({

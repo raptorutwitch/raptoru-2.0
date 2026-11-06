@@ -50,6 +50,13 @@ export function labExtensionToken(
   return `${head}.${createHmac('sha256', f.extensionSecret).update(head).digest('base64url')}`;
 }
 
+/** The image of a fictional emote: its initials on a colour taken from its id. */
+export function fictionalEmoteSvg(id: string): string {
+  const hue = [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+  const mark = id.replace(/^e2e/, '').slice(0, 2).toUpperCase();
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 112"><rect width="112" height="112" rx="24" fill="hsl(${hue} 70% 45%)"/><text x="56" y="72" font-family="sans-serif" font-size="48" font-weight="700" text-anchor="middle" fill="#fff">${mark}</text></svg>`;
+}
+
 export function labRoleOf(value: string | null): LabRole {
   return value === 'moderator' || value === 'broadcaster' ? value : 'viewer';
 }

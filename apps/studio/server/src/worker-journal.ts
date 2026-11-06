@@ -48,4 +48,6 @@ export interface RuntimeWiring {
   transport: Required<WorkerTransport>;
   /** The local Lab on the main Core: the history and queue reads are available (through its cockpit). */
   labReads?: boolean;
+  /** The local Lab on the main Core: a fictional OBS (no connection, the Bonk source « ready »), unless LAB_OBS=real. */
+  fictionalObs?: boolean;
 }

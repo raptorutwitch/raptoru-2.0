@@ -59,6 +59,7 @@ import {
   TWITCH_EXT_MOCK_PATH,
 } from './extension-lab/twitch-mock.js';
 import {
+  fictionalEmoteSvg,
   labExtensionToken,
   labRoleOf,
   relayToFrontier,
@@ -302,6 +303,20 @@ async function extensionLabRoute(
       'x-frame-options': 'SAMEORIGIN',
     });
     res.end(file.body);
+    return true;
+  }
+  // The Lab's fictional emotes (Twitch, 7TV, BTTV, FFZ): a local image, never a CDN.
+  const fictionalEmote = frontier
+    ? /^\/ext-lab\/fictional-emote\/[a-z0-9]+-([A-Za-z0-9_]{1,64})\.svg$/.exec(
+        url.pathname,
+      )
+    : null;
+  if (fictionalEmote) {
+    res.writeHead(200, {
+      'content-type': 'image/svg+xml',
+      'cache-control': 'no-store',
+    });
+    res.end(fictionalEmoteSvg(fictionalEmote[1]!));
     return true;
   }
   if (frontier && url.pathname === LAB_TOKEN_PATH) {
@@ -728,6 +743,13 @@ export function createStudioServer(o: StudioServerOptions) {
         return;
       }
       const name = url.pathname.replace('/api/test-lab/', '');
+      // The Lab on the main Core: the Test Lab's bot and Core run on the real .env files, never from here.
+      if (labPanel && req.method === 'POST' && name !== 'preflight')
+        return send(res, 409, {
+          error: 'lab_main_core',
+          message:
+            'Lab sur le véritable Core : le Test Lab (bot et Core sur les vrais .env) est coupé.',
+        });
       const action = req.method === 'POST' ? actions[name] : undefined;
       if (!action) return send(res, 404, { error: 'not_found' });
       if (!testLabActionAllowed(name, profile?.plan.effective === 'production'))
@@ -877,7 +899,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           },
           installation: mainLab.installation,
         },
-        { labLoopback: true },
+        { labLoopback: true, fictionalObs: process.env.LAB_OBS !== 'real' },
       ).catch((error: Error) => {
         lab.logs.add(
           'studio',
@@ -1279,13 +1301,19 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     envFile: paths.botEnv,
     production: !labProfile,
     canAuthorize: () =>
-      lab.tokenOperationsBusy || labChat?.status().enabled
+      mainLab
         ? {
             ok: false,
             reason:
-              'Coupe Ingestion chat Twitch dans Simulation, arrête le bot dans Test Lab et attends la fin des opérations. Arrête aussi les anciens processus lancés à part.',
+              'Lab sur le véritable Core : Twitch y est fictif, aucun compte réel ne se connecte ici.',
           }
-        : { ok: true },
+        : lab.tokenOperationsBusy || labChat?.status().enabled
+          ? {
+              ok: false,
+              reason:
+                'Coupe Ingestion chat Twitch dans Simulation, arrête le bot dans Test Lab et attends la fin des opérations. Arrête aussi les anciens processus lancés à part.',
+            }
+          : { ok: true },
   });
   twitchConnectionsRef = twitchConnections;
   // Supervision (incident 22/10): what would make the Core refuse a viewer, read from the live runtimes.
@@ -1300,7 +1328,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     sound: sound?.worker ?? null,
     bonk: bonk
       ? {
-          obsConnected: bonk.obs.connected,
+          obsConnected: bonk.obs.connected || bonk.fictionalObs,
           obsReconnecting: bonk.obs.reconnecting,
           obsError: bonk.obs.error,
           sourceReady: bonk.sourceReady,

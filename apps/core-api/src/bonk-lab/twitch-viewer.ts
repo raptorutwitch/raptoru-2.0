@@ -74,6 +74,8 @@ export interface TwitchViewerOptions {
   tokenKey?: Buffer | null;
   /** Where the viewer consents (default: Twitch). The Lab: its fictional consent page (lab/fictional-twitch.ts). */
   authorizeUrl?: string;
+  /** The Lab's fictional Twitch: a local image in place of the CDN URL (its ids exist on no CDN). */
+  emoteImageUrl?: (id: string) => string;
 }
 
 /** CDN URL built only from a validated Twitch emote id (dark theme, largest scale). */
@@ -86,6 +88,7 @@ export function twitchEmoteUrl(id: string, format: 'static' | 'animated') {
 export class TwitchViewerCatalog {
   private readonly redirectUri: string | null;
   private readonly authorizeUrl: string;
+  private readonly emoteImageUrl: ((id: string) => string) | null;
   private readonly tokenKey: Buffer | null;
   /** Background catalog reloads in flight, and the last one's error (per viewer, this process). */
   private readonly syncs = new Map<string, Promise<void>>();
@@ -103,6 +106,7 @@ export class TwitchViewerCatalog {
         ? VIEWER_REDIRECT_URI
         : options.redirectUri;
     this.tokenKey = options.tokenKey ?? null;
+    this.emoteImageUrl = options.emoteImageUrl ?? null;
     this.authorizeUrl =
       options.authorizeUrl ?? 'https://id.twitch.tv/oauth2/authorize';
   }
@@ -448,8 +452,11 @@ export class TwitchViewerCatalog {
         owner_display_name: owner?.display_name ?? null,
         formats,
         animated,
-        url: twitchEmoteUrl(e.id, animated ? 'animated' : 'static'),
-        static_url: twitchEmoteUrl(e.id, 'static'),
+        url:
+          this.emoteImageUrl?.(e.id) ??
+          twitchEmoteUrl(e.id, animated ? 'animated' : 'static'),
+        static_url:
+          this.emoteImageUrl?.(e.id) ?? twitchEmoteUrl(e.id, 'static'),
       });
     }
     const fetchedAt = this.clock.now();

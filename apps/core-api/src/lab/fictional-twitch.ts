@@ -178,12 +178,17 @@ export const labEmoteProvidersFetch = (async (
   return json(PROVIDERS[url]);
 }) as typeof fetch;
 
+/** A fictional emote's image: served by the Lab's Studio (same origin as the extension and the overlay), never a CDN. */
+export const labEmoteImage = (provider: string, id: string) =>
+  `/ext-lab/fictional-emote/${provider.replace(/\W/g, '')}-${id}.svg`;
+
 /** The viewers' Twitch emotes in the Lab: the real catalog code, on the fictional Twitch. */
 export function labTwitchViewers(db: Db, clock: Clock, port: number) {
   return new TwitchViewerCatalog(db, clock, LAB_TWITCH_APP, labTwitchFetch, {
     redirectUri: `http://127.0.0.1:${port}/v1/ext/emotes/oauth/callback`,
     authorizeUrl: `http://127.0.0.1:${port}${LAB_TWITCH_AUTHORIZE_PATH}`,
     tokenKey: createHash('sha256').update('raptoru-lab-fictional').digest(),
+    emoteImageUrl: (id) => labEmoteImage('twitch', id),
   });
 }
 

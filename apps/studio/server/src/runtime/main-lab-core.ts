@@ -89,9 +89,9 @@ export class MainLabCore {
 
   /** The Core's whole environment (nothing else is passed): its local database, fictional channel, own secrets. */
   env(coreDatabaseUrl: string | undefined): Record<string, string> {
-    if (!coreDatabaseUrl)
-      throw new Error('DATABASE_URL absent de apps/core-api/.env');
-    const db = new URL(coreDatabaseUrl);
+    const url = process.env.STUDIO_LAB_DATABASE_URL || coreDatabaseUrl;
+    if (!url) throw new Error('DATABASE_URL absent de apps/core-api/.env');
+    const db = new URL(url);
     if (!LOCAL_HOSTS.includes(db.hostname))
       throw new Error(
         'base locale requise (DATABASE_URL doit viser 127.0.0.1)',

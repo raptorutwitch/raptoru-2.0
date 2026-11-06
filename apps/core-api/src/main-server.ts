@@ -14,6 +14,7 @@ import {
 import { createApp } from './http/server.js';
 import { LAB_CHANNEL, labUserLookup } from './lab/environment.js';
 import {
+  labEmoteImage,
   labEmoteProvidersFetch,
   labTwitchConsentRoutes,
 } from './lab/fictional-twitch.js';
@@ -47,7 +48,13 @@ export function createMainCore(
       emoteCatalog: config.EMOTE_CATALOG_CHANNEL_ID
         ? new ThirdPartyEmotes(config.EMOTE_CATALOG_CHANNEL_ID, clock)
         : lab
-          ? new ThirdPartyEmotes(LAB_CHANNEL.id, clock, labEmoteProvidersFetch)
+          ? new ThirdPartyEmotes(
+              LAB_CHANNEL.id,
+              clock,
+              labEmoteProvidersFetch,
+              undefined,
+              (e) => labEmoteImage(e.provider, e.id),
+            )
           : null,
       twitchApp:
         config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET

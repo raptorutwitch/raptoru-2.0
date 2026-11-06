@@ -61,6 +61,8 @@ export class BonkRuntime {
     /** Production profile: remote Core over the future-prod transport (ASTRA-P1-019). */
     readonly production: boolean,
     private readonly labReads = false,
+    /** The Lab's fictional OBS: never a connection (Electron's saved one included), the source counts as ready. */
+    readonly fictionalObs = false,
     /** Where the Bonks aim (lot 2), one file per profile next to its journal. */
     readonly settings: BonkSettingsStore,
   ) {
@@ -99,6 +101,7 @@ export class BonkRuntime {
       core,
       !!production,
       production?.labReads === true,
+      production?.fictionalObs === true,
       settings,
     );
   }
@@ -144,7 +147,7 @@ export class BonkRuntime {
   /** Live OBS / overlay state (moderation cockpit). */
   summary() {
     return {
-      obs: this.obs.connected,
+      obs: this.obs.connected || this.fictionalObs,
       ready: this.worker.ready,
       source_ready: this.sourceReady,
     };
@@ -153,6 +156,12 @@ export class BonkRuntime {
   start() {
     const loop = new WorkerLoop(
       async () => {
+        if (this.fictionalObs) {
+          this.sourceReady = true;
+          this.worker.setObs(true, true);
+          await this.worker.tick();
+          return;
+        }
         if (Date.now() - this.lastObsCheck > 2000) {
           this.sourceReady = await this.obs.sourceReady(this.overlayUrl);
           this.lastObsCheck = Date.now();
@@ -258,7 +267,8 @@ export class BonkRuntime {
         }
         reply(200, {
           enabled: true,
-          obs: this.obs.connected,
+          obs: this.obs.connected || this.fictionalObs,
+          obs_fictional: this.fictionalObs,
           obs_reconnecting: this.obs.reconnecting,
           obs_error: this.obs.error,
           ready: this.worker.ready,
@@ -271,6 +281,7 @@ export class BonkRuntime {
         req.method === 'POST' &&
         url.pathname === '/api/bonk-lab/connect'
       ) {
+        if (this.fictionalObs) throw new Error('lab_obs_fictional');
         await this.obs.connect(Number(body.port), String(body.password ?? ''));
         reply(200, { ok: true });
       } else if (
