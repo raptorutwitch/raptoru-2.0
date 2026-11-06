@@ -3,7 +3,7 @@
 // — on an in-memory PostgreSQL (PGlite), and Studio in front of it exactly as `npm run studio` wires it on that Core:
 // workers over Studio's Production transport, every screen through the cockpit, the Extension Lab on the Core's real
 // /v1/ext (Studio signs the Lab JWT and relays). Fictional data only; no Twitch, no OBS, no network.
-// E2E_CORE_LAB_PLAYERS=1 (E2E_STACK=main): fictional players connected from the start; otherwise « Studio » is closed
+// E2E_CORE_LAB_PLAYERS=1 (default stack): fictional players connected from the start; otherwise « Studio » is closed
 // and the tests open / close it (port + 1).
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';

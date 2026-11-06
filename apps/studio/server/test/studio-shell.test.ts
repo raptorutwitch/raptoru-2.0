@@ -45,7 +45,8 @@ describe('shell registry', () => {
     expect(pageFromSearch('?p=challenges&tab=shop')?.id).toBe('challenges');
     for (const p of PAGES)
       expect(pageFromSearch(hrefOf(p).slice(1))?.id).toBe(p.id);
-    expect(hrefOf(pageById('tts')!)).toBe('/?p=tts&surface=panel');
+    expect(hrefOf(pageById('tts')!)).toBe('/?p=tts');
+    expect(hrefOf(pageById('bonk')!)).toBe('/?p=bonk');
   });
 
   it('breadcrumbs are at most three levels and a section home is one level', () => {

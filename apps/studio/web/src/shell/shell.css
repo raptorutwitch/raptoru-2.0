@@ -66,6 +66,7 @@ body {
 .rs-side {
   position: sticky;
   top: 0;
+  box-sizing: border-box;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -73,9 +74,15 @@ body {
   padding: 14px 10px 12px;
   background: var(--rs-sidebar);
   border-right: 1px solid var(--rs-border);
-  overflow: auto;
-  scrollbar-width: thin;
+  overflow: hidden;
   z-index: 30;
+}
+.rs-favs {
+  /* The favourites give way first: search, sections, Laboratoire and the profile stay in sight on a small window. */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 .rs-brand {
   display: flex;
@@ -189,10 +196,13 @@ body {
 .rs-profile {
   display: block;
   margin: 0;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-radius: var(--rs-r-ctl);
   font-size: 12px;
   line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border: 1px solid var(--rs-border);
   color: var(--rs-muted);
   background: var(--rs-surface);
@@ -335,11 +345,53 @@ body {
   background: var(--rs-warning);
 }
 
-/* Incidents : une ligne chacun, sous l'en-tête (jamais plusieurs grands bandeaux). */
+/* Incidents : une seule ligne sous l'en-tête, le détail à la demande (jamais plusieurs grands bandeaux). */
 .rs-incidents {
-  display: grid;
-  gap: 1px;
   border-bottom: 1px solid var(--rs-border);
+}
+.rs-inc-bar summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 24px;
+  font-size: 13px;
+  cursor: pointer;
+  list-style: none;
+}
+.rs-inc-bar summary::-webkit-details-marker {
+  display: none;
+}
+.rs-inc-bar summary i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.rs-inc-bar summary span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rs-muted);
+}
+.rs-inc-bar summary em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--rs-muted);
+}
+.rs-inc-bar.is-down summary {
+  background: var(--rs-danger-bg);
+}
+.rs-inc-bar.is-down summary i {
+  background: var(--rs-danger);
+}
+.rs-inc-bar.is-up summary {
+  background: var(--rs-success-bg);
+}
+.rs-inc-bar.is-up summary i {
+  background: var(--rs-success);
 }
 .rs-inc {
   display: flex;
@@ -348,15 +400,11 @@ body {
   gap: 4px 12px;
   padding: 7px 24px;
   font-size: 13px;
-}
-.rs-inc.is-down {
-  background: var(--rs-danger-bg);
+  border-top: 1px solid var(--rs-border);
+  background: var(--rs-sidebar);
 }
 .rs-inc.is-down b {
   color: var(--rs-danger);
-}
-.rs-inc.is-up {
-  background: var(--rs-success-bg);
 }
 .rs-inc.is-up b {
   color: var(--rs-success);
@@ -389,6 +437,56 @@ body {
 }
 
 /* --- Primitives ------------------------------------------------------------------------------------------------ */
+/* État lisible d'un coup d'œil : un point et un mot, jamais la couleur seule. */
+.rs-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--rs-muted);
+}
+.rs-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--rs-dim);
+}
+.rs-status.is-ok {
+  color: var(--rs-success);
+}
+.rs-status.is-ok i {
+  background: var(--rs-success);
+}
+.rs-status.is-warn {
+  color: var(--rs-warning);
+}
+.rs-status.is-warn i {
+  background: var(--rs-warning);
+}
+.rs-status.is-down {
+  color: var(--rs-danger);
+}
+.rs-status.is-down i {
+  background: var(--rs-danger);
+}
+.rs-eyebrow {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rs-dim);
+}
+.rs-links {
+  display: flex;
+  gap: 14px;
+  margin: 10px 0 0;
+}
+.rs-links a {
+  color: var(--rs-accent);
+}
 .rs-btn {
   display: inline-flex;
   align-items: center;
@@ -544,7 +642,7 @@ body {
 }
 .rs-row {
   display: grid;
-  grid-template-columns: 20px minmax(110px, auto) minmax(0, 1fr) auto;
+  grid-template-columns: 20px 150px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   min-height: 40px;
@@ -573,6 +671,33 @@ body {
 .rs-fav-mark {
   font-style: normal;
   color: var(--rs-warning);
+}
+
+/* Onglets d'une page (module-frame.ts) : un soulignement, la même chose partout. */
+.rs-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--rs-border);
+}
+.rs-tabs button {
+  padding: 8px 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--rs-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rs-tabs button:hover {
+  color: var(--rs-text);
+}
+.rs-tabs button[aria-selected='true'] {
+  color: var(--rs-text);
+  border-bottom-color: var(--rs-accent);
 }
 
 /* --- Pages, formulaires, tableaux (primitives partagées par les ateliers) ---------------------------------------- */
@@ -1097,37 +1222,123 @@ body {
   }
 }
 
-/* Refonte F4 — « Prêt pour le live » (read-only checklist). */
+/* Centre de contrôle : le verdict, ce qui demande une action, le détail à la demande. */
+.rs-centre {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(260px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .rs-centre {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.rs-verdict {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--rs-border);
+}
+.rs-verdict h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+}
+.rs-verdict p.rs-muted {
+  margin: 4px 0 0;
+}
+.rs-verdict.is-down h2 {
+  color: var(--rs-danger);
+}
+.rs-verdict.is-warn h2 {
+  color: var(--rs-warning);
+}
+.rs-verdict.is-ok h2 {
+  color: var(--rs-success);
+}
+.rs-counts {
+  display: flex;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rs-counts li {
+  display: grid;
+  font-size: 12px;
+  color: var(--rs-dim);
+}
+.rs-counts b {
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--rs-text);
+}
 .rs-ready-list {
   list-style: none;
-  margin: 0.5rem 0 0;
+  margin: 0;
   padding: 0;
-  display: grid;
-  /* One small card per check, problems first (ordered by the code): scanned at a glance before a live. */
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 8px;
 }
 .rs-ready-row {
+  border-bottom: 1px solid var(--rs-border);
+}
+.rs-ready-row summary {
   display: grid;
-  align-content: start;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--rs-border);
-  border-radius: var(--rs-r-ctl);
-  background: var(--rs-canvas);
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  cursor: pointer;
+  list-style: none;
 }
-.rs-ready-row .rs-state {
-  margin: 0;
+.rs-ready-row summary::-webkit-details-marker {
+  display: none;
 }
-.rs-ready-row small {
-  color: var(--rs-muted, inherit);
+.rs-ready-row summary:hover b {
+  color: var(--rs-accent);
 }
-.rs-ready-row em {
-  font-style: normal;
+.rs-ready-row .rs-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rs-ready-row b {
   font-weight: 600;
 }
 .rs-ready-row a {
   color: var(--rs-accent);
+  font-size: 13px;
+}
+.rs-ready-row p {
+  margin: 0 0 8px 160px;
+  font-size: 13px;
+  color: var(--rs-muted);
+}
+.rs-ready > details {
+  margin-top: 10px;
+}
+.rs-ready > details > summary {
+  cursor: pointer;
+  color: var(--rs-muted);
+  font-size: 13px;
+}
+.rs-ready > p.rs-muted {
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+.rs-tiles.is-compact {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+.rs-tiles.is-compact .rs-tile {
+  padding: 7px 10px;
+  align-items: center;
+}
+.rs-tiles.is-compact .rs-ic {
+  margin: 0;
 }
 
 /* Réglages bornés (module-settings.ts): one compact row per setting — label and bounds, the value with its unit, save. */

@@ -1,14 +1,13 @@
 import { defineConfig } from '@playwright/test';
 
-// Browser E2E (ASTRA-P1-018): a few critical chains only, on an isolated stack (e2e/lab-stack.ts:
-// real Lab Core on an in-memory database + real Extension Lab EBS/Studio routes). No Twitch, no Docker,
-// no real data. Run: `npm run e2e` (once: `npx playwright install chromium`).
+// Browser E2E (ASTRA-P1-018): the critical chains on an isolated stack (e2e/core-lab-stack.ts: the main Core in its Lab
+// environment on an in-memory database, Studio in front). No Twitch, no Docker, no real data.
+// Run: `npm run e2e` (once: `npx playwright install chromium`).
 const PORT = Number(process.env.E2E_PORT ?? 4399);
 // The target Lab (decision of 05/11): the main Core in its Lab environment, Studio in front (e2e/core-lab-stack.ts).
 const CORE_LAB_PORT = Number(process.env.E2E_CORE_LAB_PORT ?? 4389);
-// E2E_STACK=main: EVERY *.e2e.ts on the main Core in its Lab environment (players connected), in place of the historical
-// stack: the measure of the Lab's parity before the historical Lab is retired.
-const MAIN = process.env.E2E_STACK === 'main';
+// E2E_STACK=legacy: every *.e2e.ts on the historical stack (Lab Core assembly + Lab EBS), until its removal.
+const LEGACY = process.env.E2E_STACK === 'legacy';
 // E2E_BOOT=1: the acceptance of the Lab against a real Studio server started by hand (e2e/studio-lab.boot.ts): no stack.
 const BOOT = process.env.E2E_BOOT === '1';
 
@@ -35,58 +34,50 @@ export default defineConfig({
   projects: BOOT
     ? [{ name: 'boot', testMatch: '*.boot.ts' }]
     : [
-        // The historical Lab stack (Lab Core assembly + Lab EBS), or the main Core with E2E_STACK=main: every *.e2e.ts.
+        // Every *.e2e.ts on the main Core in its Lab environment, players connected.
         { name: 'lab', testMatch: '*.e2e.ts' },
-        // The main Core in its Lab environment (*.core-lab.ts), « Studio » opened and closed by the tests.
-        ...(MAIN
-          ? []
-          : [
-              {
-                name: 'core-lab',
-                testMatch: '*.core-lab.ts',
-                use: { baseURL: `http://127.0.0.1:${CORE_LAB_PORT}` },
-              },
-            ]),
+        // The same Core, « Studio » opened and closed by the tests (*.core-lab.ts).
+        {
+          name: 'core-lab',
+          testMatch: '*.core-lab.ts',
+          use: { baseURL: `http://127.0.0.1:${CORE_LAB_PORT}` },
+        },
       ],
   webServer: BOOT
     ? []
     : [
-        ...(MAIN
-          ? [
-              {
-                command: 'npx tsx e2e/core-lab-stack.ts',
-                url: `http://127.0.0.1:${PORT}/ext/mobile.html`,
-                reuseExistingServer: false,
-                timeout: 90_000,
-                env: {
-                  E2E_CORE_LAB_PORT: String(PORT),
-                  E2E_CORE_LAB_PLAYERS: '1',
-                },
-                stdout: 'pipe' as const,
-                stderr: 'pipe' as const,
+        LEGACY
+          ? {
+              command: 'npx tsx e2e/lab-stack.ts',
+              url: `http://127.0.0.1:${PORT}/ext/mobile.html`,
+              // Always a fresh stack (fresh in-memory database): a busy port is an explicit error.
+              reuseExistingServer: false,
+              timeout: 60_000,
+              env: { E2E_PORT: String(PORT) },
+              stdout: 'pipe' as const,
+              // The stack's own diagnostics ([e2e-stack] lines: fatal errors, exit) always reach the run log.
+              stderr: 'pipe' as const,
+            }
+          : {
+              command: 'npx tsx e2e/core-lab-stack.ts',
+              url: `http://127.0.0.1:${PORT}/ext/mobile.html`,
+              reuseExistingServer: false,
+              timeout: 90_000,
+              env: {
+                E2E_CORE_LAB_PORT: String(PORT),
+                E2E_CORE_LAB_PLAYERS: '1',
               },
-            ]
-          : [
-              {
-                command: 'npx tsx e2e/lab-stack.ts',
-                url: `http://127.0.0.1:${PORT}/ext/mobile.html`,
-                // Always a fresh stack (fresh in-memory database): a busy port is an explicit error.
-                reuseExistingServer: false,
-                timeout: 60_000,
-                env: { E2E_PORT: String(PORT) },
-                stdout: 'pipe' as const,
-                // The stack's own diagnostics ([e2e-stack] lines: fatal errors, exit) always reach the run log.
-                stderr: 'pipe' as const,
-              },
-              {
-                command: 'npx tsx e2e/core-lab-stack.ts',
-                url: `http://127.0.0.1:${CORE_LAB_PORT}/ext/mobile.html`,
-                reuseExistingServer: false,
-                timeout: 60_000,
-                env: { E2E_CORE_LAB_PORT: String(CORE_LAB_PORT) },
-                stdout: 'pipe' as const,
-                stderr: 'pipe' as const,
-              },
-            ]),
+              stdout: 'pipe' as const,
+              stderr: 'pipe' as const,
+            },
+        {
+          command: 'npx tsx e2e/core-lab-stack.ts',
+          url: `http://127.0.0.1:${CORE_LAB_PORT}/ext/mobile.html`,
+          reuseExistingServer: false,
+          timeout: 90_000,
+          env: { E2E_CORE_LAB_PORT: String(CORE_LAB_PORT) },
+          stdout: 'pipe' as const,
+          stderr: 'pipe' as const,
+        },
       ],
 });

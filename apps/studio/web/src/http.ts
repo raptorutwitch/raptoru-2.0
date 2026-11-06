@@ -46,3 +46,10 @@ export const postJson = <T>(path: string, body: unknown) =>
 /** Same, but « not readable » becomes null (a view showing « inconnu », never an invented value). */
 export const tryGetJson = <T>(path: string) =>
   call<T>(path).catch(() => null as T | null);
+
+let mainLab: Promise<boolean> | null = null;
+/** The Lab runs on the main Core (real chat, real bot and the Test Lab do not exist there). Read once. */
+export const labOnMainCore = () =>
+  (mainLab ??= tryGetJson<{ lab_core?: string }>('/api/runtime/status').then(
+    (r) => r?.lab_core === 'main',
+  ));

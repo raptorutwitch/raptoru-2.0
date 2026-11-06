@@ -799,33 +799,49 @@ const esc = (t: unknown) =>
   );
 const CLS: Record<Level, string> = {
   ok: 'is-ok',
-  warn: 'is-unknown',
+  warn: 'is-warn',
   error: 'is-down',
-  unknown: 'is-unknown',
-  off: '',
+  unknown: 'is-warn',
+  off: 'is-off',
 };
 
-/** The panel (pure): what needs attention in sight; what is ready, then what is off on purpose, folded. */
+/** The sentence at the top of the Centre (pure). */
+export function verdict(checks: Check[]) {
+  const n = (l: Level) => checks.filter((x) => x.level === l).length;
+  const bad = n('error') + n('warn');
+  if (bad) return `${bad} point${bad > 1 ? 's' : ''} à corriger avant le live`;
+  return n('unknown')
+    ? `Rien à corriger · ${n('unknown')} à vérifier toi-même`
+    : 'Tout est prêt pour le live';
+}
+
+/** The verdict and its counters, then what needs attention in sight; what is ready and off on purpose, folded (pure). */
 export function readinessHtml(
   checks: Check[] | undefined,
   href: (page: string) => string,
+  lab = false,
 ) {
   if (!checks)
     return '<section class="rs-panel rs-ready"><h2>Prêt pour le live</h2><p class="rs-muted">Vérification…</p></section>';
   const s = summary(checks);
   const row = (x: Check) =>
-    `<li class="rs-ready-row" data-check="${esc(x.id)}"><span class="rs-state ${CLS[x.level]}"><b>${esc(x.label)}</b> · ${esc(x.state)}</span>
-      <small>${esc(x.why)}${x.consequence ? ` <em>Pour les viewers : ${esc(x.consequence)}</em>` : ''}${x.fix ? ` <a href="${href(x.fix.page)}">${esc(x.fix.label)}</a>` : ''}</small></li>`;
+    `<li class="rs-ready-row" data-check="${esc(x.id)}"><details><summary><span class="rs-status ${CLS[x.level]}"><i></i>${esc(x.state)}</span><b>${esc(x.label)}</b>${x.fix ? `<a href="${href(x.fix.page)}">${esc(x.fix.label)}</a>` : ''}</summary>
+      <p>${esc(x.why)}</p>${x.consequence ? `<p class="rs-ready-why"><b>Pour les viewers :</b> ${esc(x.consequence)}</p>` : ''}</details></li>`;
   const sorted = ordered(checks);
   // In sight: what needs attention (problems, « non vérifié »). Folded: what is ready, what is off on purpose.
   const on = sorted.filter((x) => x.level !== 'off' && x.level !== 'ok');
   const ok = sorted.filter((x) => x.level === 'ok');
   const off = sorted.filter((x) => x.level === 'off');
-  return `<section class="rs-panel rs-ready" data-role="readiness"><h2>Prêt pour le live</h2>
-    <p class="rs-state ${CLS[s.level]}">${esc(s.text)}</p>
-    <p class="rs-muted">Lecture seule : rien n’est activé ni coupé d’ici. Chaque correction se fait dans la page indiquée.</p>
+  const count = (n: number, label: string, cls: string) =>
+    `<li class="${cls}"><b>${n}</b>${label}</li>`;
+  const bad = on.filter((x) => x.level !== 'unknown').length;
+  return `<section class="rs-panel rs-ready" data-role="readiness">
+    <div class="rs-verdict ${CLS[s.level]}"><div><p class="rs-eyebrow">Prêt pour le live</p><h2>${esc(verdict(checks))}</h2>
+      ${lab ? '<p class="rs-muted">Lab : services locaux et lecteurs de ce PC, pas ton vrai stream.</p>' : ''}</div>
+      <ul class="rs-counts">${count(bad, 'à corriger', 'is-down')}${count(on.length - bad, 'à vérifier', 'is-warn')}${count(ok.length, 'prêts', 'is-ok')}${count(off.length, 'coupés', 'is-off')}</ul></div>
     <ul class="rs-ready-list">${on.map(row).join('')}</ul>
     ${ok.length ? `<details class="rs-ready-ok"><summary>Prêt (${ok.length})</summary><ul class="rs-ready-list">${ok.map(row).join('')}</ul></details>` : ''}
-    ${off.length ? `<details><summary>Coupé volontairement (${off.length})</summary><ul class="rs-ready-list">${off.map(row).join('')}</ul></details>` : ''}
+    ${off.length ? `<details class="rs-ready-off"><summary>Coupé volontairement (${off.length})</summary><ul class="rs-ready-list">${off.map(row).join('')}</ul></details>` : ''}
+    <p class="rs-muted">Lecture seule : chaque correction se fait dans la page indiquée.</p>
   </section>`;
 }

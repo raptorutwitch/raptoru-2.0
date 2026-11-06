@@ -5,6 +5,8 @@
 export interface SimState {
   /** Production profile: the mini-games switch below is the viewers' real one. */
   production?: boolean;
+  /** The Lab on the main Core: the chat is the simulator's, neither real ingestion nor real output exist. */
+  chatFictional?: boolean;
   /** Shared live session (Tombola status); undefined = unavailable (Production profile / no Lab Core). */
   stream?: { source: string; started_at: string } | null;
   ingress?: {
@@ -45,7 +47,7 @@ type Tone = 'on' | 'off' | 'warn' | 'na';
 export function simStates(
   s: SimState,
 ): { key: string; label: string; tone: Tone }[] {
-  return [
+  const all: { key: string; label: string; tone: Tone }[] = [
     {
       key: 'live',
       label: 'Live',
@@ -73,6 +75,9 @@ export function simStates(
       tone: !s.games ? 'na' : s.games.enabled ? 'on' : 'off',
     },
   ];
+  return s.chatFictional
+    ? all.filter((x) => x.key === 'live' || x.key === 'games')
+    : all;
 }
 
 /** The top bar button: one dot per service. */
@@ -191,7 +196,7 @@ export function simPanel(
   return `<div class="sim-panel" role="dialog" aria-label="Simulation de stream">
     <div class="sim-head"><b>Simulation de stream</b><span class="sim-chip${writesRealChat(s) ? ' sim-chip--warn' : ''}">${writesRealChat(s) ? 'Écrit dans le vrai chat' : 'Aucune écriture dans le vrai chat'}</span></div>
     ${error ? `<p class="sim-error">${esc(error)}</p>` : ''}
-    ${live}${ingress}${output}${games}
+    ${s.chatFictional ? `${live}${games}` : `${live}${ingress}${output}${games}`}
     <p class="sim-muted sim-foot">Réglages détaillés : onglets Tombola, Commandes, Jeu des mots.</p>
   </div>`;
 }

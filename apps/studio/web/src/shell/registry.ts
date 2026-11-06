@@ -23,6 +23,8 @@ export const VIEW_IDS = [
   'shop',
   'challenges',
   'modules',
+  'tts',
+  'bonk',
 ] as const;
 export type ViewId = (typeof VIEW_IDS)[number];
 
@@ -112,7 +114,7 @@ export const LAB_SECTION: Section = {
   home: 'labo',
 };
 
-export const PAGES: readonly Page[] = [
+export const PAGES: Page[] = [
   // --- Centre / Régie --------------------------------------------------------------------------------------------
   {
     id: 'centre',
@@ -166,9 +168,8 @@ export const PAGES: readonly Page[] = [
     section: 'modules',
     group: 'Sons & voix',
     icon: 'mic',
-    view: 'extension-lab',
-    params: { surface: 'panel' },
-    desc: 'Voix, file et lecteur OBS (carte TTS de l’Extension Lab en profil Lab).',
+    view: 'tts',
+    desc: 'File, source OBS, prix et limites.',
     keywords: 'text to speech voix',
   },
   {
@@ -240,9 +241,8 @@ export const PAGES: readonly Page[] = [
     section: 'modules',
     group: 'Effets & mise en scène',
     icon: 'sparkle',
-    view: 'extension-lab',
-    params: { surface: 'panel' },
-    desc: 'Overlay OBS, cibles, salves (carte Bonk de l’Extension Lab en profil Lab).',
+    view: 'bonk',
+    desc: 'Connexion OBS, overlay, zone d’impact, prix.',
     keywords: 'bonk overlay obs',
   },
   {
@@ -393,7 +393,7 @@ export const PAGES: readonly Page[] = [
     desc: 'Live simulé, chat fictif, scénarios.',
     keywords: 'sim chat fictif',
   },
-  // Architecture socle: the modules of the module host — one generic view, one page per module (its anchor).
+  // Architecture socle: the overview of the module host. Each of its modules has a page, added from the Core's catalog.
   {
     id: 'socle-modules',
     label: 'Modules du socle',
@@ -402,26 +402,6 @@ export const PAGES: readonly Page[] = [
     view: 'modules',
     desc: 'Modules construits sur le socle commun : état, réglages, actions, activité.',
     keywords: 'socle module catalogue démonstration',
-  },
-  {
-    id: 'objectif-soiree',
-    label: 'Objectif de soirée (démo)',
-    section: 'labo',
-    icon: 'grid',
-    view: 'modules',
-    anchor: 'objectif_soiree',
-    desc: 'Démonstration A du socle : compteur d’objectif (Lab).',
-    keywords: 'objectif compteur démonstration socle',
-  },
-  {
-    id: 'coffre-mystere',
-    label: 'Coffre mystère (démo)',
-    section: 'labo',
-    icon: 'grid',
-    view: 'modules',
-    anchor: 'coffre_mystere',
-    desc: 'Démonstration B du socle : achat en Jetons fictifs, lecteur fictif, modération (Lab).',
-    keywords: 'coffre jetons extension démonstration socle',
   },
   {
     id: 'test-lab',
@@ -444,6 +424,31 @@ export const PAGES: readonly Page[] = [
 ];
 
 const BY_ID = new Map(PAGES.map((p) => [p.id, p]));
+
+/**
+ * A module of the Core without a page of its own gets the generic one: the catalogue, the palette, favourites and
+ * routing follow by themselves, so a new module needs no line here. Idempotent.
+ */
+export function addHostModulePages(
+  modules: { id: string; label: string; description: string }[],
+) {
+  for (const m of modules) {
+    const id = m.id.replace(/_/g, '-');
+    if (BY_ID.has(id) || PAGES.some((p) => p.anchor === m.id)) continue;
+    const page: Page = {
+      id,
+      label: m.label,
+      section: 'modules',
+      group: 'Nouveaux modules',
+      icon: 'puzzle',
+      view: 'modules',
+      anchor: m.id,
+      desc: m.description,
+    };
+    PAGES.push(page);
+    BY_ID.set(id, page);
+  }
+}
 export const pageById = (id: string | null | undefined) =>
   id ? BY_ID.get(id) : undefined;
 export const sectionOf = (p: Page) =>

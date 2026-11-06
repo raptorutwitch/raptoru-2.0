@@ -139,7 +139,8 @@ export function regieHtml(opts: {
 }) {
   const active = opts.sup?.incidents.filter((i) => !i.endedAt) ?? [];
   const cp = opts.cp;
-  return `<div class="rs-cols">
+  return `${liveHtml(opts.live, opts.profile ?? 'unknown', opts.href, opts.liveMessage)}
+  <div class="rs-cols">
     <section class="rs-panel"><h2>En ce moment</h2>
       <p class="rs-state ${!opts.supOk ? 'is-unknown' : active.length ? 'is-down' : 'is-ok'}">${
         !opts.supOk
@@ -169,9 +170,7 @@ export function regieHtml(opts: {
       <p class="rs-muted">${opts.message ? `${esc(opts.message)} · ` : ''}Règles et historique : <a href="${opts.href('channel-points')}">Récompenses Twitch</a>.</p>
     </section>
   </div>
-  ${liveHtml(opts.live, opts.profile ?? 'unknown', opts.href, opts.liveMessage)}
   <section class="rs-panel"><h2>Contrôles par module</h2>
-    <p class="rs-muted">Chaque arrêt est nommé et limité à son module ; il n’existe pas d’« arrêter tout ».</p>
     <div class="rs-rows">${REGIE_CONTROLS.map((c) => `<a class="rs-row rs-row-2" href="${opts.href(c.page)}"><b>${esc(c.title)}</b><small>${esc(c.what)}</small></a>`).join('')}</div>
   </section>`;
 }

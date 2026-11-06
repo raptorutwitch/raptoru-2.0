@@ -7,8 +7,8 @@ import {
   type StudioInstallation,
 } from '../prod-transport/installation.js';
 
-// The local Lab on the MAIN Core (decision of 05/11/2026; opt-in STUDIO_LAB_CORE=main while the historical Lab Core
-// stays the default): Studio's runtime prepares and starts apps/core-api/dist/index.js with CORE_ENVIRONMENT=lab — the
+// The local Lab on the MAIN Core (decision of 05/11/2026; the default since 06/11, STUDIO_LAB_CORE=legacy is the way
+// back to the historical Lab Core until its removal): Studio's runtime prepares and starts apps/core-api/dist/index.js with CORE_ENVIRONMENT=lab — the
 // Production entry point, assembly and schema — then talks to it exactly as the installed Studio talks to the VPS
 // (installation credential, /v1/studio, /v1/ext), over plain HTTP on loopback only.
 // - Its environment is built HERE, from nothing (a clean environment: no variable of Studio's process reaches it), with
@@ -45,6 +45,18 @@ async function loadOrCreateSecrets(file: string): Promise<Secrets> {
 }
 
 const LOCAL_HOSTS = ['127.0.0.1', 'localhost'];
+
+/**
+ * Which Core the Lab runs on: the main one, unless asked otherwise or packaged (an installer carries no apps/core-api).
+ * Pure (tested).
+ */
+export const labCoreChoice = (env: {
+  STUDIO_LAB_CORE?: string | undefined;
+  RAPTORU_PACKAGED?: string | undefined;
+}): 'main' | 'legacy' =>
+  env.STUDIO_LAB_CORE === 'legacy' || env.RAPTORU_PACKAGED === '1'
+    ? 'legacy'
+    : 'main';
 
 export class MainLabCore {
   readonly url = `http://127.0.0.1:${MAIN_LAB_CORE_PORT}`;

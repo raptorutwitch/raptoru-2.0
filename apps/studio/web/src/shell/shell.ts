@@ -29,6 +29,7 @@ import {
   PAGES,
   SECTIONS,
   LAB_SECTION,
+  addHostModulePages,
   crumbsOf,
   hrefOf,
   moduleGroups,
@@ -42,8 +43,22 @@ import {
   renderHistory,
   type SupervisionSnapshot,
 } from '../supervision-banner.js';
+import { labOnMainCore, tryGetJson } from '../http.js';
+import {
+  type CatalogFilter,
+  type HostModuleStatus,
+  inFilter,
+  pageStates,
+} from '../module-states.js';
 
 const HEADERS = { 'x-raptoru-studio': '1' };
+const LEVEL_CLASS: Record<string, string> = {
+  ok: 'is-ok',
+  warn: 'is-warn',
+  error: 'is-down',
+  unknown: 'is-warn',
+  off: 'is-off',
+};
 const FAV_KEY = 'raptoru-studio-favs';
 const RECENT_KEY = 'raptoru-studio-recent';
 const LAST_KEY = 'raptoru-studio-page';
@@ -166,7 +181,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
         hour: '2-digit',
         minute: '2-digit',
       });
-    strip.innerHTML = [
+    const rows = [
       ...active.map(
         (i) =>
           `<div class="rs-inc is-down" role="alert"><b>${esc(i.label)}</b><span>${esc(i.value)}${i.cause ? ` · ${esc(i.cause)}` : ''} · depuis ${t(i.startedAt)}</span><em>${i.action === 'manual' ? 'Action requise' : 'Récupération automatique'}</em>${i.hint ? `<small>${esc(i.hint)}</small>` : ''}</div>`,
@@ -176,7 +191,21 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
           `<div class="rs-inc is-up" role="status"><b>${esc(i.label)} rétabli</b><span>de ${t(i.startedAt)} à ${t(i.endedAt!)}${i.cause ? ` · ${esc(i.cause)}` : ''}</span><button type="button" class="rs-btn quiet sm" data-sup-ack="${esc(i.id)}">Vu</button></div>`,
       ),
     ].join('');
-    strip.hidden = !(active.length || ended.length);
+    // One line, whatever the number of incidents: the page stays in place; the detail opens on demand.
+    const names = [...active, ...ended].map((i) => i.label).join(', ');
+    const html = rows
+      ? `<details class="rs-inc-bar ${active.length ? 'is-down' : 'is-up'}"${incidentsOpen ? ' open' : ''}><summary><i></i><b>${active.length ? `${active.length} incident${active.length > 1 ? 's' : ''}` : `${ended.length} rétabli${ended.length > 1 ? 's' : ''}`}</b><span>${esc(names)}</span><em>Détails</em></summary>${rows}</details>`
+      : '';
+    if (strip.dataset.sig !== html) {
+      strip.dataset.sig = html;
+      strip.innerHTML = html;
+    }
+    strip.hidden = !html;
+    // The full-height views (Modération, Commandes, Extension Lab) sit under the bar and the incident line.
+    document.documentElement.style.setProperty(
+      '--topbar-h',
+      `${$('.rs-top').offsetHeight + (html ? strip.offsetHeight : 0)}px`,
+    );
   }
   async function pollSup() {
     const snap = await fetchSupervision();
@@ -188,12 +217,18 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
         loadChannelPoints(),
         loadLive(),
       ]);
-    // Refonte F4: « Prêt pour le live », read from the modules' own routes while the Centre is open.
-    if (current.hub === 'centre') ready = readiness(await loadReadiness());
+    // Refonte F4: « Prêt pour le live », read from the modules' own routes while the Centre or the catalogue is open.
+    if (current.hub === 'centre' || current.hub === 'modules') {
+      ready = readiness(await loadReadiness());
+      hostModules =
+        (await tryGetJson<{ modules: HostModuleStatus[] }>('/api/modules'))
+          ?.modules ?? null;
+    }
     if (
       current.hub === 'centre' ||
       current.hub === 'activite' ||
-      current.hub === 'regie'
+      current.hub === 'regie' ||
+      current.hub === 'modules'
     )
       drawHub();
   }
@@ -203,6 +238,21 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   let regieMsg = '';
   let regieLive: LiveState | undefined;
   let liveMsg = '';
+  let hostModules: HostModuleStatus[] | null = null;
+  let catalogFilter: CatalogFilter = 'all';
+  let incidentsOpen = false;
+  let labMain = false;
+  void labOnMainCore().then((main) => {
+    labMain = main;
+    if (current.hub === 'labo') drawHub();
+  });
+  $('.rs-incidents').addEventListener(
+    'toggle',
+    (e) => {
+      incidentsOpen = (e.target as HTMLDetailsElement).open;
+    },
+    true,
+  );
   hub.addEventListener('click', (e) => {
     const liveId = (e.target as HTMLElement).closest<HTMLElement>('[data-live]')
       ?.dataset.live;
@@ -243,8 +293,26 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   // --- Pages de regroupement ------------------------------------------------------------------------------------
   const card = (p: Page) =>
     `<a class="rs-tile" href="${hrefOf(p)}" data-page="${p.id}">${icon(p.icon)}<span><b>${esc(p.label)}</b><small>${esc(p.desc)}</small></span></a>`;
+  const chip = (p: Page) =>
+    `<a class="rs-tile" href="${hrefOf(p)}" data-page="${p.id}">${icon(p.icon)}<span><b>${esc(p.label)}</b></span></a>`;
   const list = (ids: string[]) =>
     ids.map((id) => pageById(id)).filter((p): p is Page => !!p);
+  /** Rewrites the page only when it changed; what the streamer unfolded stays unfolded across refreshes. */
+  function setHub(html: string) {
+    if (hub.dataset.sig === html) return;
+    hub.dataset.sig = html;
+    const open = new Set(
+      [...hub.querySelectorAll<HTMLElement>('details[open]')].map(
+        (d) =>
+          d.closest<HTMLElement>('[data-check]')?.dataset.check ?? d.className,
+      ),
+    );
+    hub.innerHTML = html;
+    for (const d of hub.querySelectorAll<HTMLDetailsElement>('details'))
+      d.open = open.has(
+        d.closest<HTMLElement>('[data-check]')?.dataset.check ?? d.className,
+      );
+  }
   function drawHub() {
     const h = current.hub;
     if (!h) return;
@@ -252,47 +320,86 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
       `<header class="rs-page-head"><h1>${esc(title)}</h1><p>${lead}</p></header>`;
     if (h === 'centre') {
       const active = sup?.incidents.filter((i) => !i.endedAt) ?? [];
-      hub.innerHTML = `${head('Centre de contrôle', 'L’état de Studio et des services, ce qui demande ton attention, et tes accès rapides.')}
-        ${readinessHtml(ready, (id) => hrefOf(pageById(id) ?? pageById('centre')!))}
-        <div class="rs-cols">
-          <section class="rs-panel"><h2>Santé</h2>
-            <p class="rs-state ${!supOk ? 'is-unknown' : active.length ? 'is-down' : 'is-ok'}">${!supOk ? 'Supervision indisponible (serveur Studio injoignable ou supervision absente) : état inconnu.' : active.length ? `${active.length} incident(s) en cours — détails ci-dessus.` : `Aucun incident sur les éléments suivis : ${SUPERVISED}.`}</p>
-            <p class="rs-muted">Profil, Core, bot, comptes Twitch, OBS et lecteurs : <a href="${hrefOf(pageById('systeme')!)}" data-page="systeme">Système</a>.</p>
-            <h3>Dernières coupures</h3>${sup ? renderHistory(sup.history, 6) : '<p class="rs-muted">—</p>'}
-            <p><a href="${hrefOf(pageById('activite')!)}" data-page="activite">Tout l’historique</a></p></section>
-          <section class="rs-panel"><h2>Favoris</h2><div class="rs-tiles">${list(favs).map(card).join('') || '<p class="rs-muted">Aucun favori.</p>'}</div>
-            <h2>Récents</h2><div class="rs-tiles">${
-              list(recent.filter((r) => r !== 'centre'))
-                .slice(0, 4)
-                .map(card)
-                .join('') || '<p class="rs-muted">—</p>'
+      const profile =
+        document.querySelector<HTMLElement>('.rs-profile')?.dataset.profile;
+      setHub(`${head('Centre de contrôle', 'Ce qui demande ton attention avant et pendant le live.')}
+        <div class="rs-centre">
+          <div>${readinessHtml(
+            ready,
+            (id) => hrefOf(pageById(id) ?? pageById('centre')!),
+            profile === 'lab',
+          )}</div>
+          <div>
+            <section class="rs-panel"><h2>Santé</h2>
+              <p class="rs-status ${!supOk ? 'is-warn' : active.length ? 'is-down' : 'is-ok'}"><i></i>${!supOk ? 'Supervision indisponible' : active.length ? `${active.length} incident${active.length > 1 ? 's' : ''} en cours` : 'Aucun incident en cours'}</p>
+              ${sup?.history.length ? `<h3>Dernières coupures</h3>${renderHistory(sup.history, 4)}` : ''}
+              <p class="rs-links"><a href="${hrefOf(pageById('activite')!)}" data-page="activite">Activité</a><a href="${hrefOf(pageById('systeme')!)}" data-page="systeme">Système</a></p></section>
+            <section class="rs-panel"><h2>Accès rapides</h2><div class="rs-tiles is-compact">${
+              [
+                ...list(favs),
+                ...list(
+                  recent.filter((r) => r !== 'centre' && !favs.includes(r)),
+                ),
+              ]
+                .slice(0, 6)
+                .map(chip)
+                .join('') || '<p class="rs-muted">Aucun favori.</p>'
             }</div></section>
-        </div>
-        <section class="rs-panel"><h2>Préparer le live</h2><div class="rs-tiles">${list(['regie', 'moderation', 'alerts', 'channel-points', 'tombola', 'simulation']).map(card).join('')}</div></section>`;
+          </div>
+        </div>`);
     } else if (h === 'regie') {
-      hub.innerHTML = `${head('Régie live', 'Pendant le stream : l’état réel, les coupures nommées et l’accès direct aux contrôles de chaque module (mêmes écrans, aucune copie).')}
-        ${regieHtml({ sup, supOk, cp: regieCp, message: regieMsg, live: regieLive, liveMessage: liveMsg, profile: document.querySelector<HTMLElement>('.rs-profile')?.dataset.profile ?? 'unknown', href: (id) => hrefOf(pageById(id)!) })}`;
+      setHub(`${head('Régie live', 'Tenir le stream : les files, les coupures et les contrôles de chaque module.')}
+        ${regieHtml({ sup, supOk, cp: regieCp, message: regieMsg, live: regieLive, liveMessage: liveMsg, profile: document.querySelector<HTMLElement>('.rs-profile')?.dataset.profile ?? 'unknown', href: (id) => hrefOf(pageById(id) ?? pageById('regie')!) })}`);
     } else if (h === 'modules') {
-      hub.innerHTML = `${head('Modules', 'Toutes les fonctionnalités, regroupées. Un clic ouvre le module ; Ctrl+K pour aller plus vite.')}
-        <div class="rs-catalog">${moduleGroups()
-          .map(
-            (g) =>
-              `<section class="rs-panel"><h2>${esc(g.group)}</h2><div class="rs-rows">${g.pages.map((p) => `<a class="rs-row" href="${hrefOf(p)}" data-page="${p.id}">${icon(p.icon)}<b>${esc(p.label)}</b><small>${esc(p.desc)}</small>${favs.includes(p.id) ? '<em class="rs-fav-mark" title="Favori">★</em>' : ''}</a>`).join('')}</div></section>`,
-          )
-          .join('')}</div>`;
+      const states = pageStates(ready, hostModules);
+      const groups = moduleGroups()
+        .map((g) => ({
+          ...g,
+          pages: g.pages.filter((p) =>
+            inFilter(states.get(p.id), catalogFilter),
+          ),
+        }))
+        .filter((g) => g.pages.length);
+      const FILTERS: [CatalogFilter, string][] = [
+        ['all', 'Tous'],
+        ['attention', 'À regarder'],
+        ['on', 'Prêts'],
+        ['off', 'Coupés'],
+      ];
+      const status = (id: string) => {
+        const s = states.get(id);
+        return s
+          ? `<span class="rs-status ${LEVEL_CLASS[s.level]}"><i></i>${esc(s.text)}</span>`
+          : '<span></span>';
+      };
+      setHub(`<header class="rs-page-head rs-head-row"><div><h1>Modules</h1><p>L’état réel de chaque module. Un clic l’ouvre.</p></div>
+        <div class="rs-seg" role="group" aria-label="Filtrer les modules">${FILTERS.map(([id, label]) => `<button type="button" data-filter="${id}" aria-pressed="${catalogFilter === id}">${label}</button>`).join('')}</div></header>
+        <div class="rs-catalog">${
+          groups
+            .map(
+              (g) =>
+                `<section class="rs-panel"><h2>${esc(g.group)}</h2><div class="rs-rows">${g.pages.map((p) => `<a class="rs-row" href="${hrefOf(p)}" data-page="${p.id}">${icon(p.icon)}<b>${esc(p.label)}</b><small>${esc(p.desc)}</small>${favs.includes(p.id) ? '<em class="rs-fav-mark" title="Favori">★</em>' : ''}${status(p.id)}</a>`).join('')}</div></section>`,
+            )
+            .join('') || '<p class="rs-muted">Aucun module dans ce filtre.</p>'
+        }</div>`);
     } else if (h === 'communaute') {
-      hub.innerHTML = `${head('Communauté', 'Viewers, progression, cosmétiques et défis. Le Core décide des Jetons, des possessions et des récompenses.')}
-        <div class="rs-tiles">${list(['progression', 'shop', 'challenges', 'moderation']).map(card).join('')}</div>
-        <p class="rs-muted">Jetons et Daily : gérés par le Core (opérations dans les modules concernés) ; aucune console de solde n’est ajoutée par la refonte.</p>`;
+      setHub(`${head('Communauté', 'Viewers, progression, cosmétiques et défis.')}
+        <div class="rs-tiles">${list(['progression', 'shop', 'challenges', 'moderation']).map(card).join('')}</div>`);
     } else if (h === 'activite') {
-      hub.innerHTML = `${head('Activité', 'Incidents et historiques. Le détail de chaque historique reste dans son module.')}
+      setHub(`${head('Activité', 'Ce qui s’est passé : coupures, achats des modules, décisions de modération.')}
         <div class="rs-cols"><section class="rs-panel"><h2>Coupures et incidents</h2>${sup ? renderHistory(sup.history, 40) : `<p class="rs-muted">${supOk ? 'Chargement…' : 'Supervision indisponible.'}</p>`}</section>
-        <section class="rs-panel"><h2>Historiques des modules</h2><div class="rs-tiles">${list(['shop', 'challenges', 'alerts', 'channel-points', 'tombola', 'moderation']).map(card).join('')}</div></section></div>`;
+        <section class="rs-panel"><h2>Historiques des modules</h2><div class="rs-tiles">${list(['shop', 'challenges', 'alerts', 'channel-points', 'tombola', 'moderation']).map(card).join('')}</div></section></div>`);
     } else if (h === 'labo') {
-      hub.innerHTML = `${head('Laboratoire', 'Outils de test isolés. Ouvrir le Laboratoire ne change pas le profil Studio.')}
-        <div class="rs-tiles">${list(['simulation', 'test-lab', 'extension-lab']).map(card).join('')}
+      setHub(`${head('Laboratoire', 'Tester sans Twitch, sans OBS réel et sans Jetons réels.')}
+        <div class="rs-tiles">${list(
+          labMain
+            ? ['simulation', 'extension-lab', 'socle-modules']
+            : ['simulation', 'test-lab', 'extension-lab', 'socle-modules'],
+        )
+          .map(card)
+          .join('')}
           <a class="rs-tile" href="/?p=extension-lab&amp;surface=video">${icon('puzzle')}<span><b>Extension · Vidéo</b><small>Surface vidéo de l’extension</small></span></a>
-          <a class="rs-tile" href="/?p=extension-lab&amp;surface=mobile">${icon('puzzle')}<span><b>Extension · Mobile</b><small>Surface mobile de l’extension</small></span></a></div>`;
+          <a class="rs-tile" href="/?p=extension-lab&amp;surface=mobile">${icon('puzzle')}<span><b>Extension · Mobile</b><small>Surface mobile de l’extension</small></span></a></div>`);
     }
   }
 
@@ -308,10 +415,13 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
       hub.hidden = false;
       drawHub();
       hub.scrollTop = 0;
-      if (p.hub === 'regie') void pollSup(); // l'état des points de chaîne tout de suite, pas au prochain relevé
+      // Live data now, not at the next tick.
+      if (p.hub === 'regie' || p.hub === 'centre' || p.hub === 'modules')
+        void pollSup();
     } else {
       hub.hidden = true;
       hub.innerHTML = '';
+      delete hub.dataset.sig;
       deps.showView(p.view!, p.anchor ?? null);
     }
     // Extension Lab : la surface demandée (TTS, Bonk → panel ; vidéo, mobile) passe par ses propres boutons.
@@ -365,6 +475,11 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
       drawSide();
       drawHead();
       if (current.hub) drawHub();
+    }
+    const filter = t.closest<HTMLElement>('[data-filter]')?.dataset.filter;
+    if (filter) {
+      catalogFilter = filter as CatalogFilter;
+      drawHub();
     }
     if (t.closest('.rs-menu')) app.classList.toggle('rs-drawer-open');
     if (t.closest('.rs-scrim')) app.classList.remove('rs-drawer-open');
@@ -458,6 +573,17 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
       }
     })();
   open(asked ?? last ?? pageById('centre')!, { push: false });
+  // The Core's modules: their pages exist from now on, and an address opened before the answer is honoured.
+  void tryGetJson<{
+    modules: (HostModuleStatus & { label: string; description: string })[];
+  }>('/api/modules').then((r) => {
+    if (!r) return;
+    hostModules = r.modules;
+    addHostModulePages(r.modules);
+    const late = pageFromSearch(location.search);
+    if (late && late !== current && late.anchor) open(late, { push: false });
+    else if (current.hub === 'modules') drawHub();
+  });
   history.replaceState(
     { p: current.id },
     '',

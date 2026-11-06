@@ -21,15 +21,18 @@ export function mountBonkLab(
       : '<h3>Bonk OBS Lab</h3><p>Coût simulé, aucun débit ni progression. Impacts autour de la cible réglée ci-dessous, dans une source 1920 × 1080.</p>'
   }
     <p data-bonk="status">Lecture du statut…</p>
-    <div data-bonk="controls" hidden><label>Port OBS <input data-bonk="port" type="number" value="4455"></label>
+    <div data-bonk="controls" hidden>
+    <h4>Connexion OBS</h4>
+    <div class="rs-fieldrow"><label>Port OBS <input data-bonk="port" type="number" value="4455"></label>
     <label>Mot de passe OBS <input data-bonk="password" type="password" autocomplete="off"></label>
-    <button data-bonk="connect" type="button">Connecter OBS local</button><button data-bonk="disconnect" type="button">Déconnecter</button>
-    <p>Dans une scène de test OBS, ajoute (ou mets à jour) une source navigateur nommée exactement <strong>Raptoru Bonk Lab</strong>${options.production ? ' (nom historique, à garder tel quel)' : ''}, 1920 × 1080, avec cette URL :</p>
-    <p><input data-bonk="url" readonly aria-label="URL de la source OBS Bonk" style="width:100%"> <button type="button" data-bonk="copy">Copier</button></p>
-    <p>La source doit rester active. Ne l’ajoute pas à la scène diffusée.${options.production ? ' L’URL change avec le profil : remets celle-ci après un changement de profil.' : ' Sélectionne 😀 dans Bonk à gauche.'}</p>
-    <p>Tester le rendu (aperçu local : ni Core, ni paiement, ni historique) :
-    <button type="button" data-bonk-test="1">1 Bonk</button> <button type="button" data-bonk-test="5">Rafale de 5</button> <button type="button" data-bonk-test="10">Salve de 10</button>
-    ${options.production ? '<br><small>Visible en direct si la source Bonk est dans la scène diffusée.</small>' : ''}</p></div><ol data-bonk="history"></ol>`;
+    <button data-bonk="connect" type="button">Connecter OBS local</button><button data-bonk="disconnect" type="button">Déconnecter</button></div>
+    <h4>Source OBS</h4>
+    <p class="muted">Dans une scène de test, une source navigateur nommée exactement <strong>Raptoru Bonk Lab</strong>${options.production ? ' (nom historique, à garder tel quel)' : ''}, 1920 × 1080. Elle doit rester active ; ne l’ajoute pas à la scène diffusée.${options.production ? ' L’URL change avec le profil : remets celle-ci après un changement de profil.' : '<span class="xlab-only"> Sélectionne 😀 dans Bonk à gauche.</span>'}</p>
+    <p class="rs-copy"><input data-bonk="url" readonly aria-label="URL de la source OBS Bonk"> <button type="button" data-bonk="copy">Copier</button></p>
+    <h4>Tester le rendu</h4>
+    <p class="muted">Aperçu local : ni Core, ni paiement, ni historique.${options.production ? ' Visible en direct si la source Bonk est dans la scène diffusée.' : ''}</p>
+    <div class="rs-buttons"><button type="button" data-bonk-test="1">1 Bonk</button> <button type="button" data-bonk-test="5">Rafale de 5</button> <button type="button" data-bonk-test="10">Salve de 10</button></div>
+    </div><ol data-bonk="history"></ol>`;
   root.prepend(panel);
   // Refonte H12: the price per Bonk and the delay between two Bonk of a viewer, set in the Core (bounded there).
   const limits = document.createElement('div');

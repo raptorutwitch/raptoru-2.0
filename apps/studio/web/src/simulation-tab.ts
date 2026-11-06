@@ -4,6 +4,7 @@ import {
   type ChatIn,
   type StepOut,
 } from './sim-chat-view.js';
+import { labOnMainCore } from './http.js';
 import {
   getJson,
   loadSimState,
@@ -63,6 +64,15 @@ export function mountSimulationTab(root: HTMLElement) {
   </section>`;
   const $ = <T extends HTMLElement>(id: string) =>
     root.querySelector<T>(`[data-id="${id}"]`)!;
+
+  // The Lab on the main Core: the chat is the simulator's, nothing reaches Twitch either way.
+  void labOnMainCore().then((main) => {
+    if (!main) return;
+    root.querySelector('.st-head .sim-muted')!.textContent =
+      'Lab · chat simulé, une seule entrée pour tous les modules. Rien n’arrive à Twitch.';
+    root.querySelector('.sc-head .sim-muted')!.textContent =
+      'messages reçus par le Core · réponses préparées pour le bot, jamais envoyées';
+  });
 
   void getJson('/api/lab-chat/identities').then((r) => {
     const ids = (r?.identities ?? []) as {

@@ -46,7 +46,11 @@ import {
   CoreLabPanel,
   labChatIdentities,
 } from './extension-lab/core-lab-panel.js';
-import { MainLabCore, MAIN_LAB_CHANNEL } from './runtime/main-lab-core.js';
+import {
+  labCoreChoice,
+  MainLabCore,
+  MAIN_LAB_CHANNEL,
+} from './runtime/main-lab-core.js';
 import {
   EXT_PREFIX,
   EXTENSION_CSP,
@@ -696,6 +700,8 @@ export function createStudioServer(o: StudioServerOptions) {
         return send(res, 200, {
           enabled: Boolean(runtime),
           packaged: process.env.RAPTORU_PACKAGED === '1',
+          // Which Lab Core answers: the screens drop what cannot work on the main Core.
+          lab_core: labPanel ? 'main' : 'legacy',
           dataRoot: DATA_ROOT,
           ...(runtime ? runtime.status() : {}),
         });
@@ -812,14 +818,14 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Standalone Studio: the local runtime (Postgres → base Lab → Core local) is started and watched
   // here; Bonk and Soundboard workers use its per-session secret. `npm run bonk:lab` (BONK_LAB_ONLY)
   // keeps its own launcher and environment.
-  // The local Lab on the MAIN Core (decision of 05/11/2026), opt-in until Antoni validates it: STUDIO_LAB_CORE=main.
-  // The Production entry point runs here with CORE_ENVIRONMENT=lab and Studio talks to it as to the VPS (its transport,
-  // its cockpit, the Extension's /v1/ext). Without the switch: the historical Lab Core, unchanged.
+  // The local Lab on the MAIN Core (decision of 05/11/2026), the default: the Production entry point runs here with
+  // CORE_ENVIRONMENT=lab and Studio talks to it as to the VPS (its transport, its cockpit, the Extension's /v1/ext).
+  // STUDIO_LAB_CORE=legacy: the historical Lab Core, until its removal.
   const mainLab =
     labProfile &&
     plan.startLabCore &&
     process.env.BONK_LAB_ONLY !== '1' &&
-    process.env.STUDIO_LAB_CORE === 'main'
+    labCoreChoice(process.env) === 'main'
       ? await MainLabCore.open({
           runtimeDir: paths.runtimeDir,
           coreDir: join(REPO_ROOT, 'apps', 'core-api'),

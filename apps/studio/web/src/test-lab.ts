@@ -1,5 +1,6 @@
 // Temporary Test Lab tab: local control panel for the presence shadow test.
 // Talks only to the local Studio server; receives no secret.
+import { labOnMainCore } from './http.js';
 
 type Step = { step: string; ok: boolean; detail: string };
 type Status = {
@@ -227,6 +228,15 @@ function render(s: Status): string {
 }
 
 export function mountTestLab(root: HTMLElement): void {
+  // On the main Core the Lab prepares itself: bot and Core of the real .env files are never started from here.
+  void labOnMainCore().then((main) => {
+    if (main)
+      root.innerHTML = `<div class="rs-page"><div class="rs-page-head"><h1>Test Lab</h1><p>Sans objet sur le véritable Core : Studio prépare et surveille lui-même le Lab (page Système), et le bot réel ne peut pas démarrer d’ici.</p></div></div>`;
+    else mountPanel(root);
+  });
+}
+
+function mountPanel(root: HTMLElement): void {
   root.innerHTML = `<div id="panel"><p>Connexion au serveur Studio…</p></div>
     <section class="card wide logs">
       <h2>Logs <span class="filters">${['all', 'core', 'bot', 'presence', 'preflight', 'studio', 'errors'].map((f) => `<label><input type="radio" name="logf" value="${f}" ${f === 'all' ? 'checked' : ''}/> ${f}</label>`).join('')}</span>

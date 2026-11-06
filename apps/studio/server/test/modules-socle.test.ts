@@ -13,7 +13,7 @@ import {
 import { modulesRelay } from '../src/modules/relay.js';
 import { MODULES } from '../../../core-api/src/modules/index.js';
 import { checkModule } from '../../../core-api/src/modules/kit.js';
-import { PAGES } from '../../web/src/shell/registry.ts';
+import { addHostModulePages, PAGES } from '../../web/src/shell/registry.ts';
 
 // Architecture socle, Studio side: ONE relay, ONE Control Center provider and ONE generic page for every module of the
 // module host. Fictional modules and data.
@@ -276,15 +276,22 @@ describe('generic module page (pure parts)', () => {
 });
 
 describe('automatic checks (architecture socle § 11)', () => {
-  it('every host module passes the contract and has ITS Studio page (navigation is never forgotten)', () => {
+  it('every host module passes the contract and gets ITS Studio page from the catalog, without a line in the registry', () => {
+    addHostModulePages(
+      MODULES.map((m) => ({
+        id: m.id,
+        label: m.label,
+        description: m.description,
+      })),
+    );
+    addHostModulePages([
+      { id: MODULES[0]!.id, label: 'bis', description: 'idempotent' },
+    ]);
     for (const m of MODULES) {
       expect(checkModule(m), m.id).toEqual([]);
-      const pages = PAGES.filter(
-        (p) => p.view === 'modules' && p.anchor === m.id,
-      );
       expect(
-        pages,
-        `${m.id}: one page { view: 'modules', anchor: '${m.id}' } in shell/registry.ts`,
+        PAGES.filter((p) => p.view === 'modules' && p.anchor === m.id),
+        m.id,
       ).toHaveLength(1);
     }
   });

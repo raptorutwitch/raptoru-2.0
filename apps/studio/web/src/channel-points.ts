@@ -311,9 +311,15 @@ export function mountChannelPoints(root: HTMLElement) {
     sw.className = state?.settings.enabled ? '' : 'cp-primary';
     sw.disabled = !state;
     $('status').innerHTML = statusView(state, error);
-    // Kept while open (the URL may be selected for copying).
-    if (!$('effects').querySelector('details[open]'))
-      $('effects').innerHTML = effectsView(state?.effects ?? null);
+    // Not rewritten while its URL is selected for copying. Open by default on its own page, where it is the content.
+    const box = $('effects');
+    const sel = getSelection();
+    if (!sel || sel.isCollapsed || !box.contains(sel.anchorNode))
+      box.innerHTML = effectsView(
+        state?.effects ?? null,
+        !!box.querySelector('details[open]') ||
+          root.querySelector<HTMLElement>('.cp')!.dataset.focus === 'effects',
+      );
     $('rewards').innerHTML = state ? rewardsView(state, selected) : '';
     $('history').innerHTML = state ? historyView(state) : '';
     renderEditor();

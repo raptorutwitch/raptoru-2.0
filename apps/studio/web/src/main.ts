@@ -16,9 +16,10 @@ import './channel-points.css';
 import './spotify.css';
 import './sub-wheel.css';
 import './halloween.css';
+import './studio-theme.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
-import { mountSoundConfig } from './sound-config.js';
+import { mountBonkPage, mountSoundPage, mountTtsPage } from './module-pages.js';
 import { mountUpdateWidget } from './update.js';
 import { mountStudioHome } from './studio-home.js';
 import { mountModeration } from './moderation.js';
@@ -76,7 +77,9 @@ if (app) {
     challenges: mountChallenges(el('challenges')),
     simulation: mountSimulationTab(el('simulation')),
     'extension-lab': mountExtensionLab(el('extension-lab')),
-    soundboard: mountSoundConfig(el('soundboard')),
+    soundboard: mountSoundPage(el('soundboard')),
+    tts: mountTtsPage(el('tts')),
+    bonk: mountBonkPage(el('bonk')),
     modules: mountModuleHost(el('modules')),
   };
   mountUpdateWidget(app.querySelector<HTMLElement>('.update-widget')!);

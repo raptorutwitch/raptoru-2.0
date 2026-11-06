@@ -66,9 +66,6 @@ export function mountTtsLab(
   }
     <p data-tts="status">Lecture du statut…</p>
     <div data-tts="box" hidden>
-      <p><b>Source OBS</b> (navigateur, 1920×1080, fond transparent) :</p>
-      <p><input data-tts="overlay" readonly style="width:100%" aria-label="URL de la source OBS TTS"> <button type="button" data-act="copy">Copier</button></p>
-      <p class="muted">Un seul lecteur à la fois : la source OBS, ou l’aperçu ci-dessous.</p>
       <div class="actions">
         ${
           options.production
@@ -86,6 +83,9 @@ export function mountTtsLab(
       </div>
       <p data-tts="current"></p>
       <ol data-tts="queue"></ol>
+      <h4>Source OBS</h4>
+      <p class="muted">Navigateur, 1920×1080, fond transparent. Un seul lecteur à la fois : cette source, ou l’aperçu.</p>
+      <p class="rs-copy"><input data-tts="overlay" readonly aria-label="URL de la source OBS TTS"> <button type="button" data-act="copy">Copier</button></p>
       <details><summary>Historique</summary><ol data-tts="history"></ol></details>
     </div>`;
   root.prepend(panel);

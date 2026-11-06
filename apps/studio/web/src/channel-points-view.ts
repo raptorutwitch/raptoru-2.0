@@ -308,11 +308,11 @@ function effectsChip(e: CpState['effects']) {
 }
 
 /** The effects player's OBS source (URL to copy) and the imported sounds. */
-export function effectsView(e: CpState['effects']) {
+export function effectsView(e: CpState['effects'], open = false) {
   if (!e) return '';
   const all = [...effectItems(e), ...(e.interaction_media ?? [])];
   const missing = all.filter((s) => !s.available).length;
-  return `<details class="cp-effects"><summary>Lecteur d’effets (source OBS)</summary>
+  return `<details class="cp-effects"${open ? ' open' : ''}><summary>Lecteur d’effets (source OBS)</summary>
     <p class="cp-muted">Une seule source navigateur OBS (1920 × 1080, plein cadre) joue les sons et vidéos d’effet, tout
       de suite et en superposition, hors Soundboard. URL de la source :</p>
     <input class="cp-url" readonly value="${esc(e.url)}"/>

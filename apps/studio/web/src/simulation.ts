@@ -1,3 +1,4 @@
+import { labOnMainCore } from './http.js';
 import {
   confirmFor,
   type SimState,
@@ -60,16 +61,18 @@ export const SIM_CHANGED = 'raptoru:simulation-changed';
 
 /** The effective states of the four services, from their existing routes (read only). */
 export async function loadSimState(): Promise<SimState> {
-  const [raffle, ingress, output, games] = await Promise.all([
+  const [raffle, ingress, output, games, chatFictional] = await Promise.all([
     getJson('/api/raffle/status'),
     getJson('/api/lab-chat/status'),
     getJson('/api/lab-chat/output'),
     getJson('/api/mini-games/state'),
+    labOnMainCore(),
   ]);
   // Production profile: the Studio server refuses a simulated live (it would open the real shared session).
   const production = raffle?.simulated_stream === false;
   const state: SimState = {
     production,
+    chatFictional,
     stream:
       raffle && 'stream' in raffle && !production
         ? (raffle.stream as SimState['stream'])

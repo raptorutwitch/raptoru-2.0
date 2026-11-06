@@ -35,7 +35,7 @@ test('Défis: a fictional retroactive challenge checked, saved, activated, compl
     .click();
 
   // The historical Lab has no canonical Wallet and no Daily: those metrics cannot be chosen there. The main Core has them.
-  if (process.env.E2E_STACK !== 'main')
+  if (process.env.E2E_STACK === 'legacy')
     await expect(
       tab.locator('[data-f="metric"] option[value="daily_claims"]'),
     ).toHaveAttribute('disabled', '');

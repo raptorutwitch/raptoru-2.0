@@ -78,12 +78,11 @@ export function wordGameView(
       ? `<span class="wg-chip wg-chip--live">En live</span><span class="wg-chip ${s.stopped ? 'wg-chip--stop' : 'wg-chip--on'}">${s.stopped ? 'Arrêté pour ce live' : 'Actif'}</span>`
       : `<span class="wg-chip wg-chip--off">Hors live</span><span class="wg-chip wg-chip--off">Jeu à l’arrêt</span>`;
   const settings = s.interval
-    ? `<h2>Réglages</h2>
-    <div class="wg-settings">
+    ? `<div class="wg-settings">
       <button type="button" class="wg-btn ${enabled ? '' : 'wg-btn--primary'}" data-action="${enabled ? 'disable' : 'enable'}" ${busy ? 'disabled' : ''}>${enabled ? 'Désactiver le jeu' : 'Activer le jeu'}</button>
       <span class="wg-muted">${enabled ? 'Activé : un mot apparaît automatiquement pendant chaque live.' : 'Désactivé : aucun mot automatique, même après un redémarrage ou un nouveau live. Les mots déjà affichés restent trouvables jusqu’à la fin du live.'}</span>
-      <label>Un mot toutes les <input type="number" min="1" max="60" step="1" value="${Math.round(s.interval.min_s / 60)}" data-interval="min" aria-label="Intervalle minimal en minutes"></label>
-      <label>à <input type="number" min="1" max="60" step="1" value="${Math.round(s.interval.max_s / 60)}" data-interval="max" aria-label="Intervalle maximal en minutes"> min</label>
+      <label class="wg-field">Un mot toutes les <input type="number" min="1" max="60" step="1" value="${Math.round(s.interval.min_s / 60)}" data-interval="min" aria-label="Intervalle minimal en minutes"></label>
+      <label class="wg-field">à <input type="number" min="1" max="60" step="1" value="${Math.round(s.interval.max_s / 60)}" data-interval="max" aria-label="Intervalle maximal en minutes"> min</label>
       <button type="button" class="wg-btn" data-action="interval" ${busy ? 'disabled' : ''}>Enregistrer l’intervalle</button>
       <span class="wg-muted">Au hasard entre les deux (par défaut 5 à 15 min), de 1 à 60 min. « Arrêter » ne vaut que pour le live en cours.</span>
     </div>`
@@ -120,7 +119,7 @@ export function wordGameView(
       ? `<label class="wg-volume">Volume du son de bonne réponse <input type="range" min="0" max="100" step="5" value="${s.sound_volume}" data-volume aria-label="Volume du son de bonne réponse"><output>${s.sound_volume} %</output></label>`
       : '';
   return `<section class="wg">
-    <div class="wg-head"><h1>Jeu des mots</h1><div class="wg-status">${status}${s.environment === 'production' ? '<span class="wg-chip wg-chip--on">Core principal</span>' : '<span class="wg-chip wg-chip--off">Core Lab · portefeuille de test</span>'}</div></div>
+    <header class="rs-page-head rs-head-row"><div><h1>Jeu des mots</h1><p>Des mots mélangés à retrouver dans le chat pendant le live.</p></div><div class="wg-status">${status}${s.environment === 'production' ? '<span class="wg-chip wg-chip--on">Core principal</span>' : '<span class="wg-chip wg-chip--off">Core Lab · portefeuille de test</span>'}</div></header>
     <div class="wg-actions">
       <button type="button" class="wg-btn" data-action="${s.stopped ? 'start' : 'stop'}" ${off ? 'disabled' : ''}>${s.stopped ? 'Reprendre' : 'Arrêter'}</button>
       <button type="button" class="wg-btn wg-btn--primary" data-action="new_word" ${off ? 'disabled' : ''}>Nouveau mot</button>
@@ -128,14 +127,21 @@ export function wordGameView(
     </div>
     ${error ? `<p class="wg-error">${esc(error)}</p>` : ''}
     ${enabled ? next : ''}
-    <h2>Mots actifs <span class="wg-count">${s.active.length}</span></h2>
-    ${words}
-    <h2>Série</h2>
-    ${streak}
-    <h2>Dernières trouvailles</h2>
-    ${recent}
-    ${settings}
-    ${volume}
-    ${player}
+    <div class="wg-cols">
+      <div class="rs-panel">
+        <h2>Mots actifs <span class="wg-count">${s.active.length}</span></h2>
+        ${words}
+        <h2>Série</h2>
+        ${streak}
+        <h2>Dernières trouvailles</h2>
+        ${recent}
+      </div>
+      <div class="rs-panel">
+        <h2>${settings ? 'Réglages' : 'Son'}</h2>
+        ${settings}
+        ${volume}
+        ${player}
+      </div>
+    </div>
   </section>`;
 }

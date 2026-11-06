@@ -1,11 +1,9 @@
 // « Studio » tab: single entry point. Local runtime state (Postgres, base Lab, Core local, providers,
 // OBS, players), module access and Dev/Lab tools. Talks only to the local Studio server; no secret.
 
-import { mountBonkLab } from './bonk-lab.js';
 import { mountControlCenter } from './control-center.js';
-import { mountSoundLab } from './sound-lab.js';
+import { moduleFrame } from './module-frame.js';
 import { mountStudioProfile } from './studio-profile.js';
-import { mountTtsLab } from './tts-lab.js';
 import { mountTwitchConnections } from './twitch-connections.js';
 
 type Service = {
@@ -83,46 +81,52 @@ async function getJson<T>(path: string): Promise<T | null> {
 }
 
 export function mountStudioHome(root: HTMLElement) {
-  root.innerHTML = `
-    <section class="hero"><div>
-      <h1>Système</h1>
-      <p>Le profil de Studio, les services qu’il démarre et surveille lui-même, ses connexions et son journal.</p>
-    </div></section>
-    <div class="grid home-grid">
+  const frame = moduleFrame(root, {
+    id: 'systeme',
+    title: 'Système',
+    lead: 'Les services de Studio, ses connexions, son profil et son journal.',
+    tabs: [
+      ['services', 'Services'],
+      ['links', 'Connexions'],
+      ['profile', 'Profil'],
+      ['log', 'Journal'],
+      ['dev', 'Outils'],
+    ],
+  });
+  frame.panel('services').innerHTML = `<div class="grid home-grid">
       <article class="card wide" data-slot="control"></article>
-      <article class="card" data-slot="profile"></article>
-      <article class="card wide" data-slot="players" hidden>
-        <h2>Lecteurs Production</h2>
-        <p class="muted">Profil Production : les lecteurs se règlent ici (l’Extension Lab n’existe qu’en profil Lab). Sans lecteur prêt, le module reste indisponible.</p>
-        <div class="xlab-scene" data-slot="players-body"></div>
-      </article>
-      <article class="card">
+      <article class="card wide">
         <h2>Runtime local</h2>
         <div data-slot="services"><p class="muted">Chargement…</p></div>
-        <div class="actions"><button type="button" data-act="restart">Réessayer / redémarrer le Core local</button><button type="button" data-act="restart-server" hidden>Relancer le serveur Studio</button></div>
+        <div class="actions"><button type="button" data-act="restart">Réessayer / redémarrer le Core local</button><button type="button" data-act="restart-server" hidden>Redémarrer le serveur Studio</button></div>
       </article>
-      <article class="card">
+    </div>`;
+  frame.panel('links').innerHTML = `<div class="grid home-grid">
+      <article class="card wide">
         <h2>Connexions</h2>
         <div data-slot="links"></div>
         <div data-slot="twitch-connections"></div>
       </article>
-      <article class="card" data-slot="dev" hidden>
+    </div>`;
+  frame.panel('profile').innerHTML =
+    `<div class="grid home-grid"><article class="card wide" data-slot="profile"></article></div>`;
+  frame.panel('log').innerHTML =
+    `<div class="grid home-grid"><article class="card wide">
+        <h2>Journal du runtime</h2>
+        <pre class="home-log" data-slot="log">—</pre>
+      </article></div>`;
+  frame.panel('dev').innerHTML =
+    `<div class="grid home-grid"><article class="card wide" data-slot="dev">
         <h2>Outils de développement <span class="badge">Lab</span></h2>
         <div class="home-links">
           <a href="/?tab=extension-lab&amp;surface=video">Extension Lab · Vidéo</a>
           <a href="/?tab=extension-lab&amp;surface=panel">Extension Lab · Panel</a>
           <a href="/?tab=extension-lab&amp;surface=mobile">Extension Lab · Mobile</a>
-          <a href="/?tab=soundboard">Soundboard config</a>
-          <a href="/?tab=test-lab">Test Lab (Core 3000 · bot · logs)</a>
         </div>
         <h3>Prototypes</h3>
         <div data-slot="protos"><p class="muted">—</p></div>
-      </article>
-      <article class="card wide">
-        <h2>Journal du runtime</h2>
-        <pre class="home-log" data-slot="log">—</pre>
-      </article>
-    </div>`;
+      </article></div>`;
+  frame.hideTab('dev');
 
   const slot = (name: string) =>
     root.querySelector<HTMLElement>(`[data-slot="${name}"]`)!;
@@ -169,34 +173,13 @@ export function mountStudioHome(root: HTMLElement) {
       : '<p class="muted">Aucun prototype avec page d’entrée.</p>';
   }
 
-  // Production profile: the Bonk overlay, Soundboard player and TTS source are set up from this tab.
-  let players: { setVisible(v: boolean): void }[] | null = null;
   let production = false;
-  let profileRead = false;
-  let playersShown = false;
-  const showPlayers = (v: boolean) => {
-    if (v === playersShown) return; // each card polls on its own while shown
-    playersShown = v;
-    for (const p of players ?? []) p.setVisible(v);
-  };
   async function refresh() {
     const profile = await getJson<{ effective?: string }>('/api/profile');
-    profileRead ||= Boolean(profile?.effective);
     production = profile?.effective === 'production';
-    const card = slot('players');
-    card.hidden = !production;
-    // The Lab's tools (Extension Lab, Test Lab, prototypes) only where they exist: a confirmed Lab profile.
-    slot('dev').hidden = profile?.effective !== 'lab';
-    if (production && !players) {
-      const body = slot('players-body');
-      // Each card prepends itself: mounted in reverse to read Bonk, Soundboard, TTS.
-      players = [
-        mountTtsLab(body, { production: true }),
-        mountSoundLab(body, { production: true }),
-        mountBonkLab(body, { production: true }),
-      ];
-    }
-    showPlayers(visible && production);
+    // The Lab's tools (Extension Lab, prototypes) only where they exist: a confirmed Lab profile.
+    if (profile?.effective === 'lab') frame.showTab('dev');
+    else frame.hideTab('dev');
     const [rt, bonk, sound, tts, logs] = await Promise.all([
       getJson<RuntimeStatus>('/api/runtime/status'),
       getJson<BonkStatus>('/api/bonk-lab/status'),
@@ -282,20 +265,12 @@ export function mountStudioHome(root: HTMLElement) {
     timer = setTimeout(() => void loop(), 2000);
   };
   void loadPrototypes();
-  // Mounts the Production players at launch (Soundboard player: see sound-lab.ts), whichever page opens first;
-  // retried until the profile is known.
-  const primePlayers = async () => {
-    await refresh();
-    if (!profileRead) setTimeout(() => void primePlayers(), 5000);
-  };
-  void primePlayers();
   return {
     setVisible(v: boolean) {
       visible = v;
       clearTimeout(timer);
       twitchConnections.setVisible(v);
       control.setVisible(v);
-      showPlayers(v && production);
       if (v) void loop();
     },
   };

@@ -272,12 +272,7 @@ export function randomBanView(s: RbState | null, error: string | null) {
         }`
       : '';
   return `<div class="cp-status">${executor} ${player} ${mic}${s.animations_error ? ` ${chip('warn', 'Animations : Core injoignable', s.animations_error)}` : ''}${s.mute_error ? ` ${chip('warn', 'Mute du streamer : erreur', s.mute_error)}` : ''}</div>
-    ${missing.length ? `<p class="cp-error">Médias non importés : ${esc(missing.map((m) => m.label).join(', '))}</p>` : ''}
-    <p class="cp-muted">Règles fixes : une cible au hasard parmi les chatters présents (lurkers compris) qui suivent la
-      chaîne ; ni le streamer, ni les modérateurs, ni les déjà bannis ; VIP et acheteur possibles (CSC). Timeout par
-      LeCroupier_ : ${s.rules.duration_sub_s / 60} min pour un abonné, ${s.rules.duration_non_sub_s / 60} min sinon. Aucun éligible : flop, rien
-      n’est remboursé. Activation : règle « Ban aléatoire » ci-dessus (Interaction native « Random Ban »).${esc(v3)}</p>
-    ${trace}
+    ${missing.length ? `<details class="rs-rules"><summary>${missing.length} média${missing.length > 1 ? 's' : ''} non importé${missing.length > 1 ? 's' : ''}</summary><p>${esc(missing.map((m) => m.label).join(', '))}</p></details>` : ''}
     <div class="cp-buttons">
       <label class="cp-inline">Animation <select data-f="rb-outcome"><option value="ban">ban (au hasard)</option><option value="csc">CSC</option><option value="flop">flop</option></select></label>
       <button type="button" data-act="rb-animation" title="Joue l’animation dans OBS, aucun appel Twitch">Jouer l’animation dans OBS (réel)</button>
@@ -285,5 +280,10 @@ export function randomBanView(s: RbState | null, error: string | null) {
       <button type="button" data-act="rb-caution-test" title="Vraie sanction de 60 s sur ton compte, libérable par !caution raptoru_ : les jetons du payeur sont réellement débités">Sanction Caution de test (réelle)</button>
       <button type="button" data-act="rb-streamer-mute" title="Coupe vraiment ton micro dans OBS 60 s, rien d’autre (ni Twitch, ni jetons, ni chat, ni animation)">Couper mon micro 60 s (réel)</button>
     </div>
+    <details class="rs-rules"><summary>Règles du tirage</summary><p>Une cible au hasard parmi les chatters présents (lurkers compris) qui suivent la
+      chaîne ; ni le streamer, ni les modérateurs, ni les déjà bannis ; VIP et acheteur possibles (CSC). Timeout par
+      LeCroupier_ : ${s.rules.duration_sub_s / 60} min pour un abonné, ${s.rules.duration_non_sub_s / 60} min sinon. Aucun éligible : flop, rien
+      n’est remboursé. Activation : règle « Ban aléatoire » des Récompenses Twitch (Interaction native « Random Ban »).${esc(v3)}</p></details>
+    ${trace}
     ${rows ? `<table class="cp-history"><thead><tr><th>Heure</th><th>Acheteur</th><th>Résultat</th><th>Détail</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="cp-muted">Aucun Random Ban.</p>'}`;
 }
