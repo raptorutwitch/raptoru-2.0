@@ -87,11 +87,21 @@ test('Tombola V2: a round opened while away shows on return; join once; a chat !
   await expect(page.locator('.tmbx')).toHaveCount(1);
   await back(page);
   // While the viewer is on the Hub: Studio opens a round (Lab Core, as Studio's Tombola tab does).
-  const opened = await labCore('/v1/lab/raffle/900100/actions', {
-    actor: STUDIO,
-    command: { action: 'launch', kind: 'auto' },
-  });
-  expect(opened.status).toBe(200);
+  // The previous spec's round may still be in its reveal (the Core refuses a second one): wait for its end, only that.
+  await expect
+    .poll(
+      async () => {
+        const opened = await labCore('/v1/lab/raffle/900100/actions', {
+          actor: STUDIO,
+          command: { action: 'launch', kind: 'auto' },
+        });
+        return opened.body.error === 'raffle_already_open'
+          ? 'waiting'
+          : opened.status;
+      },
+      { timeout: 60_000, intervals: [1000] },
+    )
+    .toBe(200);
   await open(page, /^Tombola/);
   const join = page.locator('.tmbx [data-act="join"]');
   await expect(join).toBeVisible({ timeout: 15_000 });
