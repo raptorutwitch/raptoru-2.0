@@ -213,3 +213,49 @@ sous charge, jamais seul) et laissait la pile en « testeurs seulement » en cas
 Harnais : l'extension en mode démo sur la pile E2E (`runtime-config.js` servi par le test) ; fixtures locales ; requêtes
 sortantes enregistrées et vides.
 
+
+## Modularité sur le véritable Core (06/11, jalon Foundation)
+
+Trois preuves dans le Lab par défaut, sur le Core principal.
+
+### Un nouveau module
+
+Exercice réel : `npm run module:new -- minuteur_de_scene admin`, deux libellés et un état remplis, une ligne dans
+`modules/index.ts`, build, redémarrage d'un vrai serveur Studio. Sans autre changement :
+
+| Vu dans Studio | Résultat |
+|---|---|
+| Modules | ligne « Minuteur de scène » sous « Nouveaux modules », état réel |
+| Page | `?p=minuteur-de-scene` : état, réglage, action, activité |
+| Ctrl+K | trouvé |
+| Système | présent dans « État des services » |
+
+| Mesure | Avant le jalon | Maintenant |
+|---|---|---|
+| Fichiers écrits à la main | 1 | 1 |
+| Lignes de raccordement central | 2 (`index.ts`, `registry.ts`) | **1** (`index.ts`, plus son import) |
+| Vue viewer, si le module en a une | 1 fichier + 1 `import` | inchangé |
+| Lignes de Core, de Studio ou d'extension à ajouter pour le Wallet, la modération, le journal, le lecteur | 0 | 0 |
+
+Le module d'essai a été retiré ensuite : il ne prouvait rien de plus une fois mesuré.
+
+### Un parcours complet, automatisé
+
+`e2e/modularity.e2e.ts`, sur le Core principal : le Coffre mystère apparaît dans le catalogue, s'ouvre par son adresse,
+se trouve par Ctrl+K ; Studio l'active et fixe son prix ; l'extension l'achète au prix réglé ; le Core refuse le second achat
+et rien n'est débité ; Studio voit le journal ; le lecteur fictif prend l'action et rapporte un échec ; le débit d'origine est
+rendu une fois. Aucune ligne de ce module n'existe dans le registre Studio.
+
+### Un module existant qui évolue
+
+Coffre mystère reçoit « Délai entre deux coffres d'un viewer » : un réglage et une règle dans **son seul fichier**
+(`modules/coffre-mystere.ts`, 21 lignes). Le champ borné, la persistance, l'affichage dans Studio et le refus sans débit
+n'ont demandé aucune autre ligne.
+
+### Ce qui reste, honnêtement
+
+- Un module historique (TTS, Soundboard, Bonk, Tombola) garde son propre raccordement : c'est voulu (D20) ; leurs pages Studio
+  sont les leurs. Ils rejoignent le socle quand ils sont retouchés.
+- Un adaptateur de module historique demande encore `modules.add(...)` dans `app.ts` et dans `lab-core.ts` tant que l'ancien Lab
+  existe.
+- Un lecteur OBS réel d'un module du socle reste à écrire module par module (page d'overlay, exécuteur).

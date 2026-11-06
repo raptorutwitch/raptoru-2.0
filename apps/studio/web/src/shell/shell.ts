@@ -223,7 +223,11 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
         loadLive(),
       ]);
     // Refonte F4: « Prêt pour le live », read from the modules' own routes while the Centre or the catalogue is open.
-    if (current.hub === 'centre' || current.hub === 'modules') {
+    if (
+      current.hub === 'centre' ||
+      current.hub === 'modules' ||
+      current.hub === 'regie'
+    ) {
       ready = readiness(await loadReadiness());
       hostModules =
         (await tryGetJson<{ modules: HostModuleStatus[] }>('/api/modules'))
@@ -356,8 +360,24 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
           </div>
         </div>`);
     } else if (h === 'regie') {
-      setHub(`${head('Régie live', 'Tenir le stream : les files, les coupures et les contrôles de chaque module.')}
-        ${regieHtml({ sup, supOk, cp: regieCp, message: regieMsg, live: regieLive, liveMessage: liveMsg, profile: document.querySelector<HTMLElement>('.rs-profile')?.dataset.profile ?? 'unknown', href: (id) => hrefOf(pageById(id) ?? pageById('regie')!) })}`);
+      // What needs a look right now, among all the modules: without leaving the page, without a list to keep.
+      const watch = [...pageStates(ready, hostModules)].filter(
+        ([, st]) => st.level === 'error' || st.level === 'warn',
+      );
+      setHub(`${head('Régie live', 'Tenir le stream : les files, ce qui demande un regard, et les contrôles de chaque module.')}
+        ${regieHtml({ sup, supOk, cp: regieCp, message: regieMsg, live: regieLive, liveMessage: liveMsg, profile: document.querySelector<HTMLElement>('.rs-profile')?.dataset.profile ?? 'unknown', href: (id) => hrefOf(pageById(id) ?? pageById('regie')!) })}
+        ${
+          watch.length
+            ? `<section class="rs-panel"><h2>À surveiller</h2><div class="rs-rows">${watch
+                .map(([id, st]) => {
+                  const p = pageById(id);
+                  return p
+                    ? `<a class="rs-row rs-row-2" href="${hrefOf(p)}" data-page="${p.id}"><b>${esc(p.label)}</b><span class="rs-status ${LEVEL_CLASS[st.level]}"><i></i>${esc(st.text)}</span></a>`
+                    : '';
+                })
+                .join('')}</div></section>`
+            : ''
+        }`);
     } else if (h === 'modules') {
       const states = pageStates(ready, hostModules);
       const groups = moduleGroups()

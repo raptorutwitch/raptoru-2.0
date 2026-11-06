@@ -5,6 +5,9 @@ Lots d'Astra (étude § E.4) adaptés à ce qui a réellement été fait. Quatre
 par Antoni) · **Publié** (release Studio). À ce jour : rien n'est validé ni publié ; tout est sur `feat/studio-ux`
 (locale). « Habillé » = seules la palette et/ou la petite largeur ont été traitées, la composition est l'ancienne.
 
+**Depuis le 06/11, la ligne d'arrivée de la refonte est [FOUNDATION_COMPLETE.md](FOUNDATION_COMPLETE.md).** Le tableau
+ci-dessous reste l'historique par lot ; les états à jour sont là-bas.
+
 ## Vue d'ensemble
 
 | Lot | Périmètre | Code | Tests | Validé | Publié | Commit |

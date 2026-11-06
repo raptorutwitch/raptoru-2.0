@@ -5,7 +5,7 @@
 1. **Squelette** : `npm run module:new -w @raptoru/core-api -- <id> [admin|paid]`.
    - Le script écrit `core-api/src/modules/<id>.ts` et `core-api/test/module-<id>.test.ts`.
    - Le module est **Lab uniquement et coupé**.
-   - Le script n'écrase rien, ne touche à aucun fichier central et affiche les deux lignes restantes.
+   - Le script n'écrase rien, ne touche à aucun fichier central et affiche la ligne restante.
 2. **Logique propre** : remplir `run`, `status`, `viewerState` (et `chat` / `tick` si besoin). Tout le reste vient de
    l'hôte :
    - paiement, idempotence ;
@@ -13,8 +13,9 @@
    - journal, remboursement ;
    - routes, réglages, écran.
 3. **Une ligne** dans `core-api/src/modules/index.ts`.
-4. **Une page** dans `studio/web/src/shell/registry.ts` : `{ view: 'modules', anchor: '<id>', … }`. Un test vérifie
-   que chaque module a sa page.
+4. **Studio suit seul.** Le catalogue du Core donne au module sa page, sa ligne dans Modules (avec son état réel), sa place
+   dans la recherche Ctrl+K, les favoris et la supervision. Une entrée dans `shell/registry.ts` n'est utile que pour lui donner
+   un groupe ou son propre écran.
 5. **Vue viewer** (seulement si `viewer`) :
    - un fichier `twitch-extension/extension/shared/<id>.js` qui appelle `registerViewerModule('<id>', fabrique)` ;
    - une ligne `import './<id>.js'` dans `shared/ui.js`.
@@ -83,5 +84,5 @@ Modèles : `modules/votekick.ts`, `caution.ts`, `mini-games.ts`, `status-adapter
    - `status()`, qui lit ce qui marche vraiment.
 2. Le service reçoit une fonction de lecture des réglages (champ public, valeurs historiques par défaut). Il la lit dans
    **sa** transaction.
-3. `modules.add(xModule(service))` dans les deux Cores (`app.ts`, `lab-core.ts`).
+3. `modules.add(xModule(service))` dans `app.ts` (et `lab-core.ts` tant que l'ancien Lab existe).
 4. Écrire la matrice de parité dans `MIGRATIONS.md`, puis les tests : défauts identiques, réglage appliqué, état.

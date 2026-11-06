@@ -1,14 +1,22 @@
 # Lab : tester un module sans Twitch, OBS ni Production
 
-## Le Lab sur le véritable Core (cible, décision du 05/11)
+## Le Lab sur le véritable Core (par défaut depuis le 06/11)
 
-`npm run studio:lab` : Studio prépare la base `raptoru_core_lab`, lance le Core principal (`CORE_ENVIRONMENT=lab`, port
-4302, 127.0.0.1) et lui parle comme au VPS. Twitch, comptes, Jetons et OBS y sont fictifs ; le Core refuse de démarrer avec
-une base distante, une autre chaîne que 900100, une app Twitch réelle ou `OPS_TOKEN`.
+`npm run studio:lab` :
+- refuse de démarrer si un Studio tourne déjà (Electron ne ferait que lui donner le focus) ;
+- démarre la base du Lab, `raptoru-lab-core-pg` (Docker, `127.0.0.1:55460`, son propre volume) ;
+- ouvre Studio sur `.lab-data` : aucun `.env`, aucun jeton, aucun profil Production ne peuvent y être lus ;
+- Studio prépare `raptoru_core_lab` et lance le Core principal (`CORE_ENVIRONMENT=lab`, port 4302, 127.0.0.1), puis lui parle
+  comme au VPS.
 
-- Remettre à zéro : `npm run lab:reset -w @raptoru/core-api` (`.env.lab`, voir l'en-tête du script).
-- Vérifier : `E2E_STACK=main npx playwright test` (toutes les specs) ; recette sur un vrai serveur : `studio-lab.boot.ts`.
-- La suite du document décrit l'ancien Lab, encore le défaut jusqu'à la bascule.
+Twitch, comptes, Jetons et OBS y sont fictifs ; le Core refuse de démarrer avec une base distante, une autre chaîne que
+900100, une app Twitch réelle ou `OPS_TOKEN`.
+
+- Retour à l'ancien Lab : `npm run studio:legacy` ; `E2E_STACK=legacy npx playwright test`. Son retrait : [RETRAIT_ANCIEN_LAB.md](../RETRAIT_ANCIEN_LAB.md).
+- Vérifier : `npx playwright test` (toutes les specs) ; recette sur un vrai serveur : `studio-lab.boot.ts`.
+- **Attention** : `npm run studio` lit le dossier de données du checkout. Depuis le dossier principal, il y trouverait le profil
+  Production. Pour le Lab, toujours `npm run studio:lab`.
+- Le tableau ci-dessous et la suite décrivent encore l'ancien Lab là où ils citent `createLabCore`, `LabEbs` ou `lab-stack.ts`.
 
 ## Ce qui est isolé, et comment le vérifier
 
@@ -42,8 +50,7 @@ L'aperçu Studio de développement utilise le port 4411.
 
 Un test automatisé n'est pas une validation : c'est Antoni qui valide, dans le Lab réel.
 
-Vu en navigateur sur la pile isolée par Claude (PREUVES § Limites 7) : les pages Studio et l'achat dans l'Extension Lab.
-Ce qu'Antoni doit voir dans le vrai Lab (`npm run studio`) :
+Ce qu'Antoni doit voir dans le vrai Lab (`npm run studio:lab`) : [RECETTE_FOUNDATION.md](../RECETTE_FOUNDATION.md), notamment :
 - la page « Modules du socle » ;
 - la carte « Roulette · Slots · Duels » ;
 - le coffre dans l'Extension Lab ;

@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 06/11/2026 — Lab sur le véritable Core : parité vérifiée (`npm run studio:lab`), bascule à décider par Antoni. Lab uniquement, rien de validé ni publié.**
+**Mis à jour : 06/11/2026 — Mission STUDIO FOUNDATION COMPLETE en cours : voir [FOUNDATION_COMPLETE.md](FOUNDATION_COMPLETE.md). Lab sur le vrai Core par défaut. Rien de validé ni publié.**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.
@@ -13,6 +13,19 @@ le travail touche au comportement d'un module.
 - Production : Core 8a897a5, bot 4ba9243, site 74f7542, Studio **0.1.25 publiée** (sans la refonte ; installation sur
   le PC à confirmer). À revérifier soi-même : `docs/REPRISE.md` § 2.
 - Vérifier d'abord `git -C "<worktree>" status --short` et `git log --oneline -8`. L'arbre doit être propre.
+
+## Mission en cours : STUDIO FOUNDATION COMPLETE (06/11)
+
+Ligne d'arrivée et état de chaque critère : [FOUNDATION_COMPLETE.md](FOUNDATION_COMPLETE.md). Recette d'Antoni :
+[RECETTE_FOUNDATION.md](RECETTE_FOUNDATION.md). Retrait de l'ancien Lab, préparé, non exécuté :
+[RETRAIT_ANCIEN_LAB.md](RETRAIT_ANCIEN_LAB.md).
+
+- Lancer le Lab : `npm run studio:lab` (Studio installé fermé, Docker démarré). Retour arrière : `npm run studio:legacy`.
+- Vérifier : `cd apps/studio/server && npx playwright test` (vrai Core par défaut, `E2E_STACK=legacy` pour l'ancienne pile).
+- Serveur réel isolé pour regarder l'interface : `RAPTORU_DATA_ROOT=<scratch> PORT=4398 DOCK_PORT=4408
+  RAPTORU_LAB_PG_CONTAINER=studio-ux-test-pg STUDIO_LAB_DATABASE_URL=postgres://postgres:uxtest@127.0.0.1:55499/x node
+  apps/studio/server/dist/index.js` (jamais les ports 4100 / 4110 du Studio installé).
+- Base pour les suites d'intégration : `studio-ux-test-pg` (port 55499).
 
 ## Derniers commits (plus récent en haut)
 

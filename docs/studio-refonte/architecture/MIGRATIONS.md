@@ -224,12 +224,7 @@ vrai serveur Studio 5/5 ; Core 1 405 + intégration sur vrai Postgres 204/204 ; 
 **Volontairement absent du nouveau Lab :** liaison Twitch d'un vrai compte et vraies emotes personnelles ; lecture du vrai
 chat et des vrais événements Twitch ; vrais dons StreamElements ; Test Lab (bot réel). Un don se simule depuis Alertes.
 
-### Proposition de bascule (à décider par Antoni)
+### Bascule (06/11)
 
-1. Antoni essaie `npm run studio:lab` et valide les parcours.
-2. Bascule : `npm run studio` lance le Core principal ; l'ancien Lab reste atteignable une version (`STUDIO_LAB_CORE=legacy`).
-3. E2E : `core-lab-stack.ts` devient l'unique pile.
-4. Retraits (≈ 4 000 lignes) : `lab-ebs.ts` (2 469) + 3 façades (308), `bonk-lab/lab-core.ts` et `local-server.ts` (509),
-   `e2e/lab-stack.ts` (525), `scripts/bonk-lab.mjs` (210), clients `/v1/lab` directs ; puis, module par module, les
-   migrations jumelles `_lab` quand plus rien ne les lit, et 23 fichiers de tests à porter vers l'assemblage principal.
-
+Le Lab sur le Core principal est le défaut de la branche ; le retrait de l'ancien Lab attend la recette :
+[RETRAIT_ANCIEN_LAB.md](../RETRAIT_ANCIEN_LAB.md).

@@ -232,11 +232,11 @@ export function mountStudioHome(root: HTMLElement) {
       : '—';
     slot('links').innerHTML = `
       <div class="row home-row"><span>OBS WebSocket</span><span><span class="badge ${obs[0]}">${obs[1]}</span></span></div>
-      <p class="home-detail">${production ? 'Connexion depuis la carte « Bonk — overlay OBS (Production) » ci-dessous' : 'Connexion depuis la carte « Bonk OBS Lab » de l’Extension Lab'} (mot de passe jamais stocké).</p>
+      <p class="home-detail">Connexion depuis la page Bonk (mot de passe jamais stocké).</p>
       <div class="row home-row"><span>Lecteur Soundboard</span><span><span class="badge ${player[0]}">${player[1]}</span></span></div>
-      <p class="home-detail">Un clic d’activation par chargement (règle d’autoplay), ${production ? 'dans la carte « Soundboard — lecteur (Production) » ci-dessous' : 'dans l’onglet Soundboard config'}.</p>
+      <p class="home-detail">Un clic d’activation par chargement (règle d’autoplay), ${production ? 'en haut de la page Soundboard' : 'dans l’Extension Lab'}.</p>
       <div class="row home-row"><span>Lecteur TTS (OBS)</span><span><span class="badge ${ttsPlayer[0]}">${ttsPlayer[1]}</span></span></div>
-      <p class="home-detail">${production ? 'URL de la source OBS : carte « TTS — source OBS (Production) » ci-dessous.' : `Module ${esc(ttsState)} · file ${esc(ttsQueue)}. URL de la source OBS, file et modération : Extension Lab (carte « TTS V2 Lab »).`}</p>
+      <p class="home-detail">${production ? 'URL de la source OBS : page TTS.' : `Module ${esc(ttsState)} · file ${esc(ttsQueue)}. URL de la source OBS et file : page TTS.`}</p>
       <div class="row home-row"><span>Données locales</span><span>${rt ? (rt.packaged ? 'Application installée' : 'Repo (dev)') : '—'}</span></div>
       <p class="home-detail">${esc(rt?.dataRoot ?? '—')} · .env et jetons lus ici, jamais embarqués.</p>
       <div class="row home-row"><span>Économie</span><span>${production ? 'Core Production · Wallet canonique' : 'Core local · paiements simulés'}</span></div>

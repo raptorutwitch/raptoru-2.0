@@ -63,7 +63,7 @@ export const UNREACHABLE: ModuleStatus = {
   state: 'Injoignable',
   summary: 'Le serveur local de Studio ne répond pas : aucun statut lisible.',
   facts: [],
-  hint: 'Relancer le serveur Studio (carte « Runtime local »).',
+  hint: 'Relancer le serveur Studio (Système › Services).',
   checkedAt: new Date(0).toISOString(),
 };
 

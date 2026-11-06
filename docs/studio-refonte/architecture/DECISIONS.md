@@ -56,3 +56,16 @@ attend Antoni.
 - Conséquence : `extension-lab/lab-ebs.ts` (second backend métier dans Studio), l'assemblage `bonk-lab/lab-core.ts`
   et les migrations jumelles `_lab` sont à retirer une fois le Lab de Studio basculé (MIGRATIONS § « Lab cible »).
 
+
+## Mission Foundation (06/11)
+
+| # | Décision | Pourquoi | Alternative écartée |
+|---|---|---|---|
+| D30 | Le Lab tourne par défaut sur le Core principal ; `npm run studio:legacy` et `E2E_STACK=legacy` restent le retour arrière | Autorisé par Antoni une fois la parité prouvée (91/91) ; la validation Electron reste la sienne | Garder l'option et les deux défauts |
+| D31 | `npm run studio:lab` a sa propre base Docker et son propre dossier de données | Aucun `.env`, jeton ou profil Production ne peut y être lu, quel que soit le checkout | Lire `apps/core-api/.env` : absent du worktree, réel dans le dossier principal |
+| D32 | La commande refuse de démarrer à côté d'un autre Studio | Electron partage le verrou du Studio installé et ne fait que lui donner le focus : un échec muet | Dossier de profil séparé : Electron rejoindrait alors le serveur de Production sur le port 4100 |
+| D33 | TTS et Bonk ont une vraie page, aux deux profils ; le lecteur Soundboard de Production passe sur la page Soundboard | Ces pages renvoyaient à l'Extension Lab, absente en Production, et les réglages étaient cachés dans Système | Laisser les cartes dans Système |
+| D34 | La Configuration TTS quitte Modération pour la page TTS, mêmes routes et mêmes règles | Un prix se règle avec son module | Dupliquer l'écran |
+| D35 | Un module du socle reçoit sa page Studio du catalogue du Core | Une ligne de raccordement de moins, et plus de registre à oublier | Garder l'entrée obligatoire et le test qui la vérifiait |
+| D36 | Les vues historiques gardent leurs jetons, leurs valeurs viennent de la charte (`studio-theme.css`) ; la console D4 aussi, côté Studio seulement | Une identité visuelle sans fork ni réécriture ; l'extension garde ses couleurs | Réécrire chaque feuille |
+| D37 | Le retrait de l'ancien Lab reste préparé, pas exécuté, et le profil Lab du Studio installé devient une décision | `stage.mjs` embarque l'ancien Core Lab ; il faut choisir avant de le retirer | Retirer maintenant |

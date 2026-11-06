@@ -221,3 +221,16 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   Twitch n'était jamais confirmée, en Production aussi) ; le build Studio sortait en erreur depuis `8ef2912`.
 - Verrous : Electron reconnectait l'OBS enregistré et le Test Lab pouvait lancer le vrai bot : refusés dans ce Lab.
 - Le retrait de l'ancien Lab attend la validation d'Antoni.
+
+## 06/11/2026 — Mission STUDIO FOUNDATION COMPLETE
+
+- Critères fixés dans `FOUNDATION_COMPLETE.md`, puis captures de toutes les pages sur un vrai serveur isolé, avant de toucher à
+  l'interface.
+- Constats principaux : TTS et Bonk sans page (renvoi à l'Extension Lab, absente en Production) ; Centre illisible ; bandeaux
+  d'incidents sur toutes les pages ; catalogue sans état ; pied de barre tronqué (`box-sizing` absent de `.rs-side`) ; Test Lab et
+  contrôles de vrai chat affichés dans un Lab où ils ne peuvent pas marcher ; style de l'aperçu Boutique inaccessible sur le Core
+  principal (point dans le chemin, refusé par le cockpit).
+- Lancer `npm run studio:lab` depuis le dépôt lisait le dossier de données du checkout : corrigé, le Lab a son dossier et sa base.
+- Incident maîtrisé : un essai de la commande avec l'ancienne version du script (écriture refusée, non vue) a lancé Electron à
+  côté du Studio installé. Le verrou d'instance l'a fermé aussitôt : pas de serveur, pas de Core, fenêtre du Studio installé
+  seulement remise au premier plan. Le Studio installé a continué sans interruption. D'où le refus explicite (D32).

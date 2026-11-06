@@ -969,7 +969,8 @@ body {
 .rs-seg button:hover {
   color: var(--rs-text);
 }
-.rs-seg button[aria-selected='true'] {
+.rs-seg button[aria-selected='true'],
+.rs-seg button[aria-pressed='true'] {
   background: var(--rs-raised);
   color: var(--rs-text);
   box-shadow: inset 0 0 0 1px var(--rs-border);
