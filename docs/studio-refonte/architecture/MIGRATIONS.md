@@ -205,8 +205,8 @@ couleurs du Hub, la pastille « Ouverte / Fermée » de l'en-tête Tombola, le t
 (7TV / BTTV / FFZ publics de la chaîne, lecture seule) ; `LAB_OBS=real` (OBS de ce PC).
 
 **Résultats (06/11) :** toutes les specs E2E sur le Core principal 91/91 ; outils du Lab (`core-lab`) 9/9 ; recette sur un
-vrai serveur Studio 5/5 ; Core 1 405 + intégration sur vrai Postgres 204/204 ; Studio 893/894 sous charge (échecs de
-charge, relancés seuls) ; ancienne pile : échantillon extension 25/25. Rien n'a été essayé à la main par Antoni.
+vrai serveur Studio 5/5 ; Core 1 405 + intégration sur vrai Postgres 204/204 ; Studio 859 + 2 fichiers arrêtés par le crash Windows
+0xC0000409 connu, 39/39 relancés seuls ; ancienne pile : échantillon extension 25/25. Rien n'a été essayé à la main par Antoni.
 
 ### Parité ancien Lab → Lab sur le véritable Core
 
