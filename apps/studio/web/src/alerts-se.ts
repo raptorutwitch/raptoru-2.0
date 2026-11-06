@@ -183,6 +183,13 @@ export function mountSeDonations(host: HTMLElement) {
         headers: HEADERS,
         ...init,
       });
+      // The Lab has no StreamElements: nothing to ask again.
+      if (res.status === 404) {
+        clearInterval(poll);
+        error = 'Dons StreamElements : Production seulement.';
+        render();
+        return;
+      }
       const body = (await res.json()) as SeStatus & { error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       state = body;
@@ -233,9 +240,9 @@ export function mountSeDonations(host: HTMLElement) {
       await load();
     })();
   });
-  void load();
   // The journal keeps everything; while the tab is open it refreshes on its own.
-  setInterval(() => {
+  const poll = setInterval(() => {
     if (host.isConnected) void load();
   }, 2000);
+  void load();
 }

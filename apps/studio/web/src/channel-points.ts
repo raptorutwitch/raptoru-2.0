@@ -108,15 +108,12 @@ export function mountChannelPoints(root: HTMLElement) {
     <div class="cp-head"><h1>Récompenses Twitch <em>points de chaîne</em></h1>
       <button type="button" data-act="switch"></button></div>
     <div class="cp-status" data-role="status"></div>
-    <p class="cp-muted">Les récompenses viennent de Twitch (lecture seule : Raptoru ne les valide ni ne les rembourse).
-      Les règles sont propres à Raptoru et exécutées par Raptoru (Core et bot ; SAMMI est débranché depuis le 20/10).</p>
+    <p class="cp-muted">Les récompenses viennent de Twitch (lecture seule : Raptoru ne les valide ni ne les rembourse). Leurs règles sont celles de Raptoru.</p>
     <div class="cp-grid">
       <div><h2>Récompenses Twitch</h2><div data-role="rewards"></div></div>
       <div><h2>Actions de la récompense</h2><div data-role="editor"></div></div>
     </div>
     <h2>Historique</h2><div data-role="history"></div>
-    <h2>Modules réglés ici</h2>
-    <nav class="cp-sat-links">${SATS.map((x) => `<a href="/?p=${x.id}">${esc(x.title)}</a>`).join('')}</nav>
     </div>
     ${SATS.map((x) => `<section class="cp-sat" data-sat="${x.id}"><h2>${esc(x.title)}</h2><div class="cp-trig" data-role="trig-${x.id}"></div><div data-role="${x.id}"></div></section>`).join('')}
     <datalist id="cp-scenes"></datalist><datalist id="cp-sources"></datalist><datalist id="cp-filters"></datalist>

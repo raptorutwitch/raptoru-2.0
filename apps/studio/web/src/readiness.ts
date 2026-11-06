@@ -755,27 +755,21 @@ const get = async <T>(path: string): Promise<T | null> => {
 
 /** Every input from the module's own read route (a missing one stays null: « non vérifié »). */
 export async function loadReadiness(): Promise<ReadinessInput> {
-  const [
-    profile,
-    control,
-    channelPoints,
-    alerts,
-    se,
-    wheel,
-    games,
-    spotify,
-    wordGame,
-  ] = await Promise.all([
-    get<ReadinessInput['profile']>('/api/profile'),
-    get<{ modules: Module[] }>('/api/control/status'),
-    get<ReadinessInput['channelPoints']>('/api/channel-points/state'),
-    get<ReadinessInput['alerts']>('/api/alerts/state'),
-    get<ReadinessInput['se']>('/api/alerts/se'),
-    get<ReadinessInput['wheel']>('/api/sub-wheel/state'),
-    get<ReadinessInput['games']>('/api/mini-games/state'),
-    get<ReadinessInput['spotify']>('/api/spotify/state'),
-    get<NonNullable<ReadinessInput['wordGame']>>('/api/word-game/state'),
-  ]);
+  const profile = await get<ReadinessInput['profile']>('/api/profile');
+  const [control, channelPoints, alerts, se, wheel, games, spotify, wordGame] =
+    await Promise.all([
+      get<{ modules: Module[] }>('/api/control/status'),
+      get<ReadinessInput['channelPoints']>('/api/channel-points/state'),
+      get<ReadinessInput['alerts']>('/api/alerts/state'),
+      // No StreamElements in the Lab: nothing to ask.
+      profile?.effective === 'production'
+        ? get<ReadinessInput['se']>('/api/alerts/se')
+        : null,
+      get<ReadinessInput['wheel']>('/api/sub-wheel/state'),
+      get<ReadinessInput['games']>('/api/mini-games/state'),
+      get<ReadinessInput['spotify']>('/api/spotify/state'),
+      get<NonNullable<ReadinessInput['wordGame']>>('/api/word-game/state'),
+    ]);
   return {
     profile,
     modules: control?.modules ?? null,

@@ -1222,6 +1222,47 @@ body {
   }
 }
 
+/* Activité : un fil, le plus récent d'abord. */
+.rs-feed {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.rs-feed li {
+  display: grid;
+  grid-template-columns: 96px 112px 170px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  border-bottom: 1px solid var(--rs-border);
+  font-size: 13px;
+}
+.rs-feed time {
+  color: var(--rs-dim);
+  font-variant-numeric: tabular-nums;
+}
+.rs-feed a {
+  color: var(--rs-text);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rs-feed a:hover {
+  color: var(--rs-accent);
+}
+.rs-feed li > span:last-child {
+  color: var(--rs-muted);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .rs-feed li {
+    grid-template-columns: 1fr;
+    gap: 2px;
+    padding: 8px 0;
+  }
+}
+
 /* Centre de contrôle : le verdict, ce qui demande une action, le détail à la demande. */
 .rs-centre {
   display: grid;

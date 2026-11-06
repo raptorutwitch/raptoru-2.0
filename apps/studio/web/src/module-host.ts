@@ -159,14 +159,13 @@ function cardHtml(
   labPlayer = false,
   claimed: Activity[] = [],
 ) {
-  return `<section class="rs-panel" data-module="${esc(m.id)}"><h2>${esc(m.label)}${m.lab_only ? ' <span class="rs-chip">Lab</span>' : ''}</h2>
-    <p class="rs-muted">${esc(m.description)}</p>${statusHtml(m)}
-    ${m.viewer.length ? `<p class="rs-muted">Pour les viewers : ${m.viewer.map((v) => `${esc(v.label)} (${v.price ? `${v.price} Jetons` : 'gratuit'}${v.live_only ? ', pendant le live' : ''})`).join(' · ')}.</p>` : ''}
+  return `<div data-module="${esc(m.id)}">${statusHtml(m)}
+    ${m.viewer.length ? `<p class="rs-muted">Pour les viewers : ${m.viewer.map((v) => `${esc(v.label)} (${v.price ? `${v.price} Jetons` : 'gratuit'})`).join(' · ')}</p>` : ''}
     ${m.moderation ? `<p class="rs-muted">Modération : ${esc(m.moderation.note)}</p>` : ''}
+    ${m.admin.length ? `<div class="rs-buttons">${m.admin.map((a) => `<button type="button" class="rs-btn" data-admin="${esc(a.name)}">${esc(a.label)}${a.confirm ? '…' : ''}</button>`).join('')}</div>` : ''}
     <div data-role="settings"></div>
     ${playerHtml(m, labPlayer, claimed)}
-    ${m.admin.length ? `<div class="rs-buttons">${m.admin.map((a) => `<button type="button" class="rs-btn" data-admin="${esc(a.name)}">${esc(a.label)}</button>`).join('')}</div>` : ''}
-    ${m.capabilities.includes('history') ? '<h3>Activité</h3><div data-role="activity"><p class="rs-muted">Lecture…</p></div>' : ''}</section>`;
+    ${m.capabilities.includes('history') ? '<section class="rs-panel"><h2>Activité</h2><div data-role="activity"><p class="rs-muted">Lecture…</p></div></section>' : ''}</div>`;
 }
 
 export function mountModuleHost(root: HTMLElement) {
@@ -191,8 +190,8 @@ export function mountModuleHost(root: HTMLElement) {
     labPlayer = answer?.lab_player === true;
     const shown = modules?.filter((m) => !focus || m.id === focus) ?? [];
     root.innerHTML = `<div class="rs-page rs-form">
-      <header class="rs-page-head"><h1>${focus && shown[0] ? esc(shown[0].label) : 'Modules du socle'}</h1>
-      <p>Modules construits sur le socle commun : chacun a son état, ses réglages, ses actions et son activité, sans raccordement propre.</p></header>
+      <header class="rs-page-head"><h1>${focus && shown[0] ? esc(shown[0].label) : 'Modules du socle'}${focus && shown[0]?.lab_only ? ' <span class="rs-chip">Lab</span>' : ''}</h1>
+      <p>${focus && shown[0] ? esc(shown[0].description) : 'L’état, les réglages et l’activité des modules construits sur le socle commun.'}</p></header>
       ${message ? `<p class="rs-flash${message.startsWith('Refusé') ? ' is-bad' : ''}" role="status">${esc(message)}</p>` : ''}
       ${modules === null ? '<p class="rs-state is-unknown">Catalogue illisible : le Core de ce profil ne fournit pas les modules du socle.</p>' : !shown.length ? '<p class="rs-muted">Aucun module.</p>' : focus ? shown.map((m) => cardHtml(m, labPlayer, claimed.get(m.id))).join('') : overviewHtml(shown)}
     </div>`;

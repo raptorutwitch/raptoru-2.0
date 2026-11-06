@@ -336,9 +336,11 @@ export function mountBonkTarget(root: HTMLElement, call: Call) {
     q('shot-status').textContent = 'Capture…';
     void call('obs-screenshot').then(
       (r) => {
-        shot.src = String(r.image);
-        shot.hidden = false;
-        q('shot-status').textContent = '';
+        shot.hidden = !r.image;
+        if (r.image) shot.src = String(r.image);
+        q('shot-status').textContent = r.image
+          ? ''
+          : 'OBS fictif : pas de capture dans le Lab.';
       },
       (e: Error) => {
         shot.hidden = true;

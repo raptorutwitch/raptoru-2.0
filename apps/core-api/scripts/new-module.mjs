@@ -1,5 +1,6 @@
 // Module skeleton (docs/studio-refonte/architecture/GUIDE_MODULE.md): `npm run module:new -- <id> [admin|paid]`.
-// Writes src/modules/<id>.ts and test/module-<id>.test.ts, Lab only, OFF by default, then prints the two lines to add.
+// Writes src/modules/<id>.ts and test/module-<id>.test.ts (kebab-case names), Lab only, OFF by default, then prints the
+// one line to add: Studio's catalogue, page, palette and supervision follow from the Core's catalog.
 // It never edits a central file and never overwrites a file. Profiles: admin (démonstration A), paid (démonstration B).
 import console from 'node:console';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -13,9 +14,10 @@ if (!/^[a-z][a-z0-9_]{1,40}$/.test(id ?? '') || !['admin', 'paid'].includes(prof
   process.exit(1);
 }
 const name = id.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
+const file = id.replace(/_/g, '-');
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const files = {
-  [`src/modules/${id}.ts`]: `import type { ModuleDefinition } from './kit.js';
+  [`src/modules/${file}.ts`]: `import type { ModuleDefinition } from './kit.js';
 
 // TODO: what this module does, for whom (GUIDE_MODULE.md). Lab only until Antoni validates it.
 
@@ -58,9 +60,9 @@ ${
   },
 };
 `,
-  [`test/module-${id}.test.ts`]: `import { describe, expect, it } from 'vitest';
+  [`test/module-${file}.test.ts`]: `import { describe, expect, it } from 'vitest';
 import { checkModule } from '../src/modules/kit.js';
-import { ${name} } from '../src/modules/${id}.js';
+import { ${name} } from '../src/modules/${file}.js';
 
 describe('${id}', () => {
   it('passes the module contract', () => {
@@ -80,12 +82,12 @@ for (const [f, text] of Object.entries(files)) {
   console.log(`écrit  apps/core-api/${f}`);
 }
 console.log(`
-Reste à ajouter (2 lignes) :
-  apps/core-api/src/modules/index.ts       ${name},
-  apps/studio/web/src/shell/registry.ts    { id: '${id.replace(/_/g, '-')}', anchor: '${id}', label: '…', section: 'labo', group: '…', icon: '…', view: 'modules', desc: '…', keywords: '…' },${
+Reste à ajouter (1 ligne) :
+  apps/core-api/src/modules/index.ts       ${name},  (et son import depuis './${file}.js')
+Catalogue, page, recherche et supervision de Studio suivent seuls.${
   profile === 'paid'
     ? `
-Vue viewer (optionnelle) : apps/twitch-extension/extension/shared/${id.replace(/_/g, '-')}.js avec registerViewerModule('${id}', …)
+Vue viewer (optionnelle) : apps/twitch-extension/extension/shared/${file}.js avec registerViewerModule(...)
   + une ligne import dans shared/ui.js (voir coffre-mystere.js).`
     : ''
 }`);

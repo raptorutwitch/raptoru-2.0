@@ -304,8 +304,9 @@ export class BonkRuntime {
         req.method === 'GET' &&
         url.pathname === '/api/bonk-lab/obs-screenshot'
       ) {
-        if (!this.obs.connected) throw new Error('obs_offline');
-        reply(200, { image: await this.obs.programScreenshot() });
+        if (this.fictionalObs) reply(200, { image: null });
+        else if (!this.obs.connected) throw new Error('obs_offline');
+        else reply(200, { image: await this.obs.programScreenshot() });
       } else if (
         req.method === 'POST' &&
         url.pathname === '/api/bonk-lab/preview'

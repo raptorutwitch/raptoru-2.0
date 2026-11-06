@@ -57,6 +57,13 @@ export const coffreMystere: ModuleDefinition = {
       max: 10,
       advanced: true,
     },
+    delai_s: {
+      label: 'Délai entre deux coffres d’un viewer',
+      unit: 's',
+      default: 0,
+      min: 0,
+      max: 600,
+    },
   },
   moderation: {
     visible: true,
@@ -67,7 +74,20 @@ export const coffreMystere: ModuleDefinition = {
     ouvrir: {
       label: 'Ouvrir un coffre',
       price: (ctx, q, channelId) => ctx.setting(q, channelId, 'prix'),
-      async run(ctx, q, { channelId, viewer, activityId }) {
+      async run(ctx, q, { channelId, viewer, activityId, now }) {
+        const delay = await ctx.setting(q, channelId, 'delai_s');
+        const recent = await q.query(
+          `select 1 from module_activity where channel_id = $1 and module_id = 'coffre_mystere' and viewer_id = $2
+             and activity_id <> $3 and created_at > $4`,
+          [
+            channelId,
+            viewer.id,
+            activityId,
+            new Date(now.getTime() - delay * 1000),
+          ],
+        );
+        if (delay && recent.length)
+          throw new ModuleError(409, 'viewer_cooldown', { delay_s: delay });
         const limit = await ctx.setting(q, channelId, 'limite_par_viewer');
         const mine = await q.query(
           `select 1 from module_activity where channel_id = $1 and module_id = 'coffre_mystere' and viewer_id = $2

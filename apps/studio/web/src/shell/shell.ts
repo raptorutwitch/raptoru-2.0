@@ -14,7 +14,6 @@ import {
   loadChannelPoints,
   regieHtml,
   setChannelPoints,
-  SUPERVISED,
 } from './regie.js';
 import { icon } from './icons.js';
 import {
@@ -43,6 +42,12 @@ import {
   renderHistory,
   type SupervisionSnapshot,
 } from '../supervision-banner.js';
+import {
+  type FeedFilter,
+  feedHtml,
+  loadFeedSources,
+  mergeFeed,
+} from '../activity-feed.js';
 import { labOnMainCore, tryGetJson } from '../http.js';
 import {
   type CatalogFilter,
@@ -224,6 +229,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
         (await tryGetJson<{ modules: HostModuleStatus[] }>('/api/modules'))
           ?.modules ?? null;
     }
+    if (current.hub === 'activite') feed = await loadFeedSources();
     if (
       current.hub === 'centre' ||
       current.hub === 'activite' ||
@@ -239,6 +245,8 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   let regieLive: LiveState | undefined;
   let liveMsg = '';
   let hostModules: HostModuleStatus[] | null = null;
+  let feed: Awaited<ReturnType<typeof loadFeedSources>> | undefined;
+  let feedFilter: FeedFilter = 'all';
   let catalogFilter: CatalogFilter = 'all';
   let incidentsOpen = false;
   let labMain = false;
@@ -386,9 +394,29 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
       setHub(`${head('Communauté', 'Viewers, progression, cosmétiques et défis.')}
         <div class="rs-tiles">${list(['progression', 'shop', 'challenges', 'moderation']).map(card).join('')}</div>`);
     } else if (h === 'activite') {
-      setHub(`${head('Activité', 'Ce qui s’est passé : coupures, achats des modules, décisions de modération.')}
-        <div class="rs-cols"><section class="rs-panel"><h2>Coupures et incidents</h2>${sup ? renderHistory(sup.history, 40) : `<p class="rs-muted">${supOk ? 'Chargement…' : 'Supervision indisponible.'}</p>`}</section>
-        <section class="rs-panel"><h2>Historiques des modules</h2><div class="rs-tiles">${list(['shop', 'challenges', 'alerts', 'channel-points', 'tombola', 'moderation']).map(card).join('')}</div></section></div>`);
+      const missing = [
+        ...(sup ? [] : ['coupures']),
+        ...(feed?.modules ? [] : ['journal des modules']),
+        ...(feed?.audit ? [] : ['audit de modération']),
+      ];
+      const items = mergeFeed(
+        sup?.history ?? [],
+        feed?.modules ?? [],
+        feed?.audit ?? [],
+        (id) => pageById(id.replace(/_/g, '-'))?.label ?? id,
+      );
+      setHub(`${head('Activité', 'Ce qui s’est passé : coupures, actions des modules, décisions de modération.')}
+        <section class="rs-panel">${
+          feed === undefined
+            ? '<p class="rs-muted">Lecture…</p>'
+            : feedHtml(
+                items,
+                feedFilter,
+                (id) => hrefOf(pageById(id) ?? pageById('activite')!),
+                missing,
+              )
+        }</section>
+        <section class="rs-panel"><h2>Historiques détaillés</h2><div class="rs-tiles">${list(['shop', 'challenges', 'alerts', 'channel-points', 'tombola', 'moderation']).map(card).join('')}</div></section>`);
     } else if (h === 'labo') {
       setHub(`${head('Laboratoire', 'Tester sans Twitch, sans OBS réel et sans Jetons réels.')}
         <div class="rs-tiles">${list(
@@ -416,8 +444,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
       drawHub();
       hub.scrollTop = 0;
       // Live data now, not at the next tick.
-      if (p.hub === 'regie' || p.hub === 'centre' || p.hub === 'modules')
-        void pollSup();
+      if (p.hub !== 'communaute' && p.hub !== 'labo') void pollSup();
     } else {
       hub.hidden = true;
       hub.innerHTML = '';
@@ -479,6 +506,11 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
     const filter = t.closest<HTMLElement>('[data-filter]')?.dataset.filter;
     if (filter) {
       catalogFilter = filter as CatalogFilter;
+      drawHub();
+    }
+    const feedTo = t.closest<HTMLElement>('[data-feed]')?.dataset.feed;
+    if (feedTo) {
+      feedFilter = feedTo as FeedFilter;
       drawHub();
     }
     if (t.closest('.rs-menu')) app.classList.toggle('rs-drawer-open');
@@ -560,7 +592,9 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   });
 
   // --- Démarrage ------------------------------------------------------------------------------------------------
-  const asked = pageFromSearch(location.search);
+  const initialSearch = location.search;
+  const lastId = store.get<string>(LAST_KEY, '');
+  const asked = pageFromSearch(initialSearch);
   const last =
     pageById(store.get<string>(LAST_KEY, '')) ??
     (() => {
@@ -573,22 +607,26 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
       }
     })();
   open(asked ?? last ?? pageById('centre')!, { push: false });
-  // The Core's modules: their pages exist from now on, and an address opened before the answer is honoured.
+  history.replaceState(
+    { p: current.id },
+    '',
+    asked ? initialSearch || hrefOf(current) : hrefOf(current),
+  );
+  // The Core's modules: their pages exist from now on. An address, a favourite or the last page that named one, read
+  // before this answer, are honoured now.
   void tryGetJson<{
     modules: (HostModuleStatus & { label: string; description: string })[];
   }>('/api/modules').then((r) => {
     if (!r) return;
     hostModules = r.modules;
     addHostModulePages(r.modules);
-    const late = pageFromSearch(location.search);
-    if (late && late !== current && late.anchor) open(late, { push: false });
+    favs = store.get(FAV_KEY, DEFAULT_FAVS).filter((f) => pageById(f));
+    drawSide();
+    const late =
+      pageFromSearch(initialSearch) ?? (asked ? undefined : pageById(lastId));
+    if (late?.anchor && late !== current) open(late, { push: false });
     else if (current.hub === 'modules') drawHub();
   });
-  history.replaceState(
-    { p: current.id },
-    '',
-    asked ? location.search || hrefOf(current) : hrefOf(current),
-  );
   const loop = async () => {
     await pollSup();
     setTimeout(() => void loop(), 5000);
@@ -635,7 +673,7 @@ export function shellHtml(viewsHtml: string) {
       </div>
     </div>
     <dialog class="rs-palette" aria-label="Rechercher ou ouvrir">
-      <div class="rs-pal-in">${icon('search')}<input type="search" placeholder="Rechercher ou ouvrir… (Tombola, Spotify, défis…)" aria-controls="rs-pal-list" role="combobox" aria-expanded="true" autocomplete="off"></div>
+      <div class="rs-pal-in">${icon('search')}<input type="text" placeholder="Rechercher ou ouvrir… (Tombola, Spotify, défis…)" aria-controls="rs-pal-list" role="combobox" aria-expanded="true" autocomplete="off"></div>
       <div class="rs-pal-list" id="rs-pal-list" role="listbox"></div>
     </dialog>
   </div>`;

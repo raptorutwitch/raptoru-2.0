@@ -240,3 +240,33 @@ button.primary,
   margin: 8px 0 0;
   max-width: 900px;
 }
+
+/* Controls of the Lab bench's cards, as everywhere else. */
+.xlab-card
+  input:not([type='checkbox']):not([type='radio']):not([type='range']) {
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--rs-input-border);
+  border-radius: var(--rs-r-ctl);
+  background: var(--rs-canvas);
+  color: var(--rs-text);
+  font: inherit;
+}
+input[type='file']::file-selector-button {
+  margin-right: 10px;
+  padding: 5px 10px;
+  border: 1px solid var(--rs-border);
+  border-radius: var(--rs-r-ctl);
+  background: var(--rs-raised);
+  color: var(--rs-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The panel under the player stays whole on a normal window: the channel's other panels give way. */
+@media (max-width: 1560px) {
+  .tw-panel--ghost {
+    display: none;
+  }
+}
