@@ -219,6 +219,20 @@ test('a sound and a TTS bought in the extension are played by the REAL player pa
     wallet: { available: number };
     modules: { id: string; sounds?: { id: string; enabled?: boolean }[] }[];
   };
+  // The Core's own view of the player (its heartbeat reaches the Core a moment after Studio's).
+  await expect
+    .poll(
+      async () =>
+        (
+          (await (
+            await request.get('/ext-lab/api/session', {
+              headers: { authorization: `Bearer ${jwt}` },
+            })
+          ).json()) as { modules: { id: string; player_ready?: boolean }[] }
+        ).modules.find((m) => m.id === 'soundboard')?.player_ready,
+      { timeout: 20_000 },
+    )
+    .toBe(true);
   const soundId = session.modules
     .find((m) => m.id === 'soundboard')!
     .sounds!.find((s) => s.id !== 'random' && s.enabled !== false)!.id;

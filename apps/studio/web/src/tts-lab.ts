@@ -1,6 +1,8 @@
 // TTS V2 Lab panel: module state, OBS player, queue (count + estimated duration), current TTS and
 // the streamer's moderation primitives (Core API). One player page at a time: the OBS browser
 // source, or the preview below (loaded only on demand, so it never steals OBS's slot).
+import { statusError } from './http.js';
+
 type Interaction = {
   interaction_id: string;
   viewer_display_name: string;
@@ -146,7 +148,7 @@ export function mountTtsLab(
           ? 'lecteur sans voix Web Speech'
           : 'lecteur absent : ajoute la source OBS ou ouvre l’aperçu';
       el('status').textContent = s.error
-        ? `Erreur : ${s.error}`
+        ? statusError(s.error)
         : `Module ${STATE[s.module_state ?? 'active']} · ${player}`;
       const overlay = el<HTMLInputElement>('overlay');
       if (overlay.value !== s.overlayUrl) overlay.value = s.overlayUrl ?? '';

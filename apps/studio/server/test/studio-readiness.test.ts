@@ -214,6 +214,16 @@ describe('Prêt pour le live', () => {
   it('Lab profile: says the list does not check the stream; no Production-only lines', () => {
     const c = byId({ ...ready, profile: { effective: 'lab' } });
     expect(c.core).toMatchObject({ level: 'warn', state: 'Profil Lab' });
+    const up = [{ id: 'labcore', state: 'ready', detail: '' }];
+    expect(
+      byId({ ...ready, profile: { effective: 'lab' }, runtime: up }).core,
+    ).toMatchObject({ level: 'ok', state: 'Prêt' });
+    const down = [
+      { id: 'labcore', state: 'error', detail: 'fin du processus' },
+    ];
+    expect(
+      byId({ ...ready, profile: { effective: 'lab' }, runtime: down }).core,
+    ).toMatchObject({ level: 'error', state: 'Arrêté' });
     expect(c['twitch-chat']).toBeUndefined();
     expect(c.se).toBeUndefined();
     expect(c['chat-output']).toBeUndefined();

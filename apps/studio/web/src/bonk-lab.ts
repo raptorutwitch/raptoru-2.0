@@ -1,3 +1,4 @@
+import { statusError } from './http.js';
 import { mountSettingsPanel } from './module-settings.js';
 import { mountBonkTarget } from './bonk-target.js';
 
@@ -131,7 +132,7 @@ export function mountBonkLab(
       el('controls').hidden = !s.enabled;
       el('status').textContent = !s.enabled
         ? 'Non lancé. Utilise npm run bonk:lab depuis le dépôt.'
-        : (s.error ??
+        : ((s.error ? statusError(s.error) : null) ??
             (s.ready
               ? 'Prêt · les clics Bonk passent par Core et OBS'
               : s.obs

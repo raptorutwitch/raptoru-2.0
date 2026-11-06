@@ -1,5 +1,10 @@
 // Soundboard V2 Lab panel: status, the local player (embedded, needs one click to enable audio)
 // and the Core history. The player keeps running while this page stays open.
+import { statusError } from './http.js';
+
+const statusErrorOf = (e: string | null | undefined) =>
+  e ? statusError(e) : undefined;
+
 /** `production`: the same card for the Production profile (Studio tab), without Lab wording. */
 export function mountSoundLab(
   root: HTMLElement,
@@ -30,7 +35,7 @@ export function mountSoundLab(
       el('player-box').hidden = !s.enabled;
       el('status').textContent = !s.enabled
         ? 'Non lancé. Utilise npm run bonk:lab depuis le dépôt.'
-        : (s.error ??
+        : (statusErrorOf(s.error) ??
           (s.ready
             ? 'Prêt · les sons passent par Core et sont joués ici'
             : 'Lecteur en attente : active le son ci-dessous'));

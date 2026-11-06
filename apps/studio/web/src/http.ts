@@ -47,6 +47,14 @@ export const postJson = <T>(path: string, body: unknown) =>
 export const tryGetJson = <T>(path: string) =>
   call<T>(path).catch(() => null as T | null);
 
+/** A service error said in the streamer's words (a card's status line); an unknown code stays readable as it is. */
+export const statusError = (code: string) =>
+  ({
+    core_unavailable: 'Core injoignable : les demandes attendent son retour.',
+    lab_core_unavailable:
+      'Core injoignable : les demandes attendent son retour.',
+  })[code] ?? code;
+
 let mainLab: Promise<boolean> | null = null;
 /** The Lab runs on the main Core (real chat, real bot and the Test Lab do not exist there). Read once. */
 export const labOnMainCore = () =>

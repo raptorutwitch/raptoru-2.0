@@ -70,6 +70,8 @@ export interface ReadinessInput {
   } | null;
   games: { enabled?: boolean } | null;
   spotify: { admission?: string } | null;
+  /** Studio's own runtime in the Lab (Postgres, Lab Core…); absent in Production. */
+  runtime?: { id: string; state: string; detail: string }[] | undefined;
   /** Refonte H8: the word game's durable switch and interval (absent: an older Core). */
   wordGame?: {
     enabled?: boolean;
@@ -122,19 +124,40 @@ export function readiness(i: ReadinessInput): Check[] {
     out.push(
       NOT_READ('core', 'Core', { page: 'systeme', label: 'Profil (Système)' }),
     );
-  else if (!prod)
+  else if (!prod) {
+    const local = i.runtime?.find((s) => s.id === 'labcore');
     out.push(
-      c(
-        'core',
-        'Core',
-        'warn',
-        'Profil Lab',
-        'Studio est sur le Core local du Lab : cette liste ne vérifie pas ton stream.',
-        'Rien de ce qui est vérifié ici ne concerne les viewers.',
-        { page: 'systeme', label: 'Profil (Système)' },
-      ),
+      local && local.state !== 'ready'
+        ? c(
+            'core',
+            'Core local',
+            'error',
+            'Arrêté',
+            `${local.detail || 'Le Core du Lab ne répond plus.'} Studio le relance seul.`,
+            'Dans le Lab, l’extension et les simulations attendent.',
+            { page: 'systeme', label: 'Système' },
+          )
+        : local
+          ? c(
+              'core',
+              'Core local',
+              'ok',
+              'Prêt',
+              'Le Core du Lab répond.',
+              null,
+              null,
+            )
+          : c(
+              'core',
+              'Core',
+              'warn',
+              'Profil Lab',
+              'Studio est sur le Core local du Lab : cette liste ne vérifie pas ton stream.',
+              'Rien de ce qui est vérifié ici ne concerne les viewers.',
+              { page: 'systeme', label: 'Profil (Système)' },
+            ),
     );
-  else if (i.profile.production?.state === 'start_failed')
+  } else if (i.profile.production?.state === 'start_failed')
     out.push(
       c(
         'core',
@@ -755,7 +778,12 @@ const get = async <T>(path: string): Promise<T | null> => {
 
 /** Every input from the module's own read route (a missing one stays null: « non vérifié »). */
 export async function loadReadiness(): Promise<ReadinessInput> {
-  const profile = await get<ReadinessInput['profile']>('/api/profile');
+  const [profile, runtime] = await Promise.all([
+    get<ReadinessInput['profile']>('/api/profile'),
+    get<{ services?: NonNullable<ReadinessInput['runtime']> }>(
+      '/api/runtime/status',
+    ),
+  ]);
   const [control, channelPoints, alerts, se, wheel, games, spotify, wordGame] =
     await Promise.all([
       get<{ modules: Module[] }>('/api/control/status'),
@@ -772,6 +800,7 @@ export async function loadReadiness(): Promise<ReadinessInput> {
     ]);
   return {
     profile,
+    runtime: runtime?.services,
     modules: control?.modules ?? null,
     channelPoints,
     alerts,
