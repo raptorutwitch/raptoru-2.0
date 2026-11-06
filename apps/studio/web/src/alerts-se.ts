@@ -2,6 +2,8 @@
 // Twitch events), the account link (the token goes page → Electron main → server, never back), the connection state,
 // the last tip and a persistent diagnostic journal (Studio storage), refreshed while the tab is open.
 
+import { labOnMainCore } from './http.js';
+
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 
 export interface SeJournalEntry {
@@ -183,7 +185,7 @@ export function mountSeDonations(host: HTMLElement) {
         headers: HEADERS,
         ...init,
       });
-      // The Lab has no StreamElements: nothing to ask again.
+      // The historical Lab has no StreamElements either: nothing to ask again.
       if (res.status === 404) {
         clearInterval(poll);
         error = 'Dons StreamElements : Production seulement.';
@@ -241,8 +243,17 @@ export function mountSeDonations(host: HTMLElement) {
     })();
   });
   // The journal keeps everything; while the tab is open it refreshes on its own.
-  const poll = setInterval(() => {
-    if (host.isConnected) void load();
-  }, 2000);
-  void load();
+  let poll: ReturnType<typeof setInterval> | undefined;
+  // The Lab on the main Core has no StreamElements: nothing to ask, not even once.
+  void labOnMainCore().then((main) => {
+    if (main) {
+      error = 'Dons StreamElements : Production seulement.';
+      render();
+      return;
+    }
+    poll = setInterval(() => {
+      if (host.isConnected) void load();
+    }, 2000);
+    void load();
+  });
 }

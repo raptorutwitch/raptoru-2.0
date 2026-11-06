@@ -74,7 +74,8 @@ describe('Random Ban view', () => {
     );
     expect(html).toContain('Timeouts par lecroupier_ : droit manquant');
     expect(html).toContain('moderator:manage:banned_users');
-    expect(html).toContain('Médias non importés : Random Ban — CSC');
+    expect(html).toContain('1 média non importé');
+    expect(html).toContain('Random Ban — CSC');
     expect(html).toContain('3 min pour un abonné, 5 min sinon');
     expect(html).toContain('&lt;b&gt;T&lt;/b&gt; · 3 min (abonné)');
     expect(html).not.toContain('<b>T</b>');

@@ -1,6 +1,6 @@
 # Préparation de la future livraison de `feat/studio-ux` (rien n'est exécuté)
 
-Mis à jour le 05/11/2026. Référence Production présumée : `origin/main` = `8a897a5`, déployé le 04/11 d'après la mémoire de
+Mis à jour le 06/11/2026. Référence Production présumée : `origin/main` = `8a897a5`, déployé le 04/11 d'après la mémoire de
 session. **À reconfirmer sur Coolify avant tout GO** : `docs/REPRISE.md` sur `origin/main` date du 28/10.
 
 Ce document ne vaut pas autorisation. Chaque étape ci-dessous demande le GO explicite d'Antoni.
@@ -96,3 +96,24 @@ contrat d'API.
   - la liste « Voir tous les modules » ouverte pendant un changement de solde.
 - **Retour arrière** : republier la version précédente de l'extension. L'état est côté Core, rien n'est à migrer.
 
+
+## 8. Mission Foundation (06/11) : ce qui change au jour du GO
+
+Aucune nouvelle migration. Rien de ceci n'est publié.
+
+| Surface | Changement visible en Production |
+|---|---|
+| Studio | Nouveau Centre, catalogue avec états, Activité, Système en onglets, incidents sur une ligne |
+| Studio | **OBS se connecte depuis la page Bonk**, la source TTS depuis la page TTS, le lecteur Soundboard est en haut de la page Soundboard (ils étaient dans Système) |
+| Studio | Configuration TTS sur la page TTS (elle était dans Modération) ; mêmes routes |
+| Core | `twitch_connected` de la session reflète enfin la liaison Twitch du viewer (l'extension croyait tout viewer non lié) |
+| Core | Route `/v1/studio/cosmetics/style` ajoutée à côté de `style.json` ; sans effet pour un ancien Studio |
+| Extension | Aucun changement dans cette mission |
+
+**Contrôles ajoutés après livraison** : lecteur Soundboard chargé dès le lancement, sans ouvrir sa page ; connexion OBS mémorisée
+restaurée au démarrage ; `Prêt pour le live` cohérent avec la réalité en Production.
+
+**Retour arrière** : celui du § 6. L'ancien Lab reste dans la branche tant que [RETRAIT_ANCIEN_LAB.md](RETRAIT_ANCIEN_LAB.md)
+n'est pas exécuté ; il ne concerne que le développement.
+
+**Non vérifié ici** : aucun écran n'a tourné contre le vrai Core de Production ; la recette se fait dans le Lab.
