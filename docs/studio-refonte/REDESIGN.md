@@ -7,22 +7,38 @@ fondation technique (Core, Lab, modularité) reste la base.
 Les interfaces historiques ne sont plus des modèles : elles servent uniquement à retrouver les fonctions et les réglages.
 Toutes les fonctions métier, permissions et interactions Core sont conservées. Le Core reste l'unique autorité.
 
-## Phase 1 : trois directions (en cours)
+## Phase 1 : direction artistique (en cours)
 
-Galerie locale : `prototypes/studio-redesign/index.html`, ou `dev/apercu-directions.cmd` (dossier `prototypes/` ignoré par Git, comme les autres prototypes : il reste dans ce worktree). Fichiers statiques, données
-fictives, aucune connexion, aucune page fonctionnelle remplacée.
+Galerie locale : `prototypes/studio-redesign/index.html`, ou `dev/apercu-directions.cmd` (dossier `prototypes/` ignoré par
+Git, comme les autres prototypes : il reste dans ce worktree). Fichiers statiques, données fictives, aucune connexion, aucune
+page fonctionnelle remplacée.
 
-| Direction | Idée | Réglages |
-|---|---|---|
-| A · Régie | Console de diffusion : volets fixes, barre d'état globale | Inspecteur, valeurs à tirer |
-| B · Plateau | Une chose à l'écran, en très grand, dock de chapitres | Phrases à mots cliquables, tiroir |
-| C · Atelier | Établi de tuiles, une couleur par module | Directement sur les tuiles |
+**Retour d'Antoni sur A, B, C (06/11) : aucune ne convient comme direction définitive.**
 
-Écrans prototypés : TTS, Tombola, Alertes, avec leurs états (vide, pause, lecteur absent, en cours, résultat, lecture).
-Vérifié dans Chromium à 1024 × 768, 1360 × 900 et 1920 × 1080 : parcours souris et clavier scriptés, aucune erreur
-console. Non essayé dans Electron.
+| Direction | Verdict |
+|---|---|
+| A · Régie | Trop technique et dense. À garder : l'éditeur d'alertes (aperçu direct, timeline, déplacement, édition visuelle, tests) |
+| B · Plateau | Rejetée, à ne pas conserver |
+| C · Atelier | La moins éloignée, mais impersonnelle, éléments énormes, couleurs trop présentes, surtout Tombola. À garder : quelques tuiles, petits accents colorés, contrôles accessibles |
 
-**Attendu : le choix artistique d'Antoni.** Rien de la suite ne démarre avant.
+Il refuse : logiciel financier, console d'ingénieur, tableau de bord générique, grosses cartes identiques.
+
+**Direction D · Coulisses, en attente de sa validation.** Idée : Studio voit ce que voient les viewers et se règle directement
+dessus.
+
+- Identité reprise du stream, pas d'un modèle : bleu nuit et turquoise (raptoru.fr), Bahnschrift (overlays), Inter (site), rose
+  réservé à l'extension, or aux gros gains, ambre aux 10 dernières secondes (langage de `prototypes/tombola-v2/DA.md`).
+- Vrais contenus : personnages TTS du dépôt ; vraies alertes lues depuis `Videos\Alertes Twitch Pour Claude\Version webm`, sans
+  copie (le prototype ne les affiche donc que sur ce PC).
+- Deux signatures : le cadre de visée pour la sélection, la règle graduée pour le temps et les prix.
+- Une composition par module : scène et escalier des prix (TTS), ticket puis arène en spirale (Tombola), éditeur à timeline et
+  texte déplaçable (Alertes). Réglages sur l'objet, puis panneau à la demande avec recherche.
+
+Vérifié dans Chromium à 1024 × 768, 1360 × 900 et 1920 × 1080 : parcours scripté, vraies vidéos lues, aucune erreur console. Non
+essayé dans Electron.
+
+**Attendu : la validation artistique d'Antoni.** La refonte générale ne démarre pas avant. Une fois D validée, la mission
+reprend en autonomie sans nouveau cahier des charges.
 
 ## Phase 2 : exécution autonome après le choix
 

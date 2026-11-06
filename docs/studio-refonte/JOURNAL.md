@@ -241,3 +241,5 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   envahissants, confirmations natives, débordements. Mission : vraie refonte du produit, sans conservatisme.
 - Trois directions prototypées sur TTS, Tombola et Alertes avec une simulation commune : `prototypes/studio-redesign/`.
 - Polices embarquées en local (OFL), pour que les prototypes et le futur Studio ne dépendent d'aucun réseau.
+- Retour d'Antoni sur A, B, C : aucune retenue. Direction D conçue à partir de l'identité réelle du stream (site, overlays, DA Tombola,
+  personnages TTS, vraies alertes) et de son métier d'animateur : ces références manquaient aux trois premières.
