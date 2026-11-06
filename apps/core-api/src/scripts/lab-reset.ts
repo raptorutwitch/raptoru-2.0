@@ -43,7 +43,7 @@ try {
 
 const db = createPgDb(config.DATABASE_URL);
 try {
-  const applied = await migrate(db, 'prod');
+  const applied = await migrate(db, 'main-lab');
   await seedLabFixtures(db);
   console.log(
     `[lab-reset] ${name} : ${applied.length} migrations (périmètre Production), ${LAB_TWITCH_USERS.length} viewers fictifs, ${LAB_VIEWER_TOKENS} Jetons de test pour Viewer Lab`,

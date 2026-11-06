@@ -47,7 +47,7 @@ try {
 
 const db = createPgDb(config.DATABASE_URL);
 try {
-  const applied = await migrate(db, 'prod');
+  const applied = await migrate(db, 'main-lab');
   const seeded = await db.query(
     `select 1 from lab_wallets where channel_id = $1 and viewer_id = '900101'`,
     [config.TWITCH_CHANNEL_ID],

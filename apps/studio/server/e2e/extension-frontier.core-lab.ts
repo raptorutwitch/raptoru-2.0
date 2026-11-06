@@ -207,3 +207,124 @@ test('Studio open: a TTS bought in the extension is played by Studio’s PRODUCT
     await request.post(`${control}/studio/close`);
   }
 });
+
+// --- The Lab's own tools on the main Core ------------------------------------------------------------------------------
+const STUDIO = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
+
+test('Extension Lab page: wallets, module switches and the Tombola are the Core’s, read and commanded from the panel', async ({
+  request,
+}) => {
+  const state = async () =>
+    (await (
+      await request.get('/api/ext-lab/state', { headers: STUDIO })
+    ).json()) as {
+      wallets: Record<string, number>;
+      modules: Record<string, boolean>;
+      raffle: { open: boolean; participants: number; core: boolean };
+    };
+  const control = (name: string, data: unknown) =>
+    request.post(`/api/ext-lab/control/${name}`, { headers: STUDIO, data });
+  const jwt = (
+    (await (await request.get('/ext-lab/token?role=viewer')).json()) as {
+      token: string;
+    }
+  ).token;
+  const session = async () =>
+    (await (
+      await request.get('/ext-lab/api/session', {
+        headers: { authorization: `Bearer ${jwt}` },
+      })
+    ).json()) as {
+      wallet: { available: number };
+      module_states: Record<string, { enabled: boolean }>;
+    };
+
+  expect(
+    (await control('wallet', { role: 'moderator', amount: 777 })).ok(),
+  ).toBe(true);
+  expect((await state()).wallets.moderator).toBe(777);
+
+  expect((await control('module', { id: 'bonk', enabled: false })).ok()).toBe(
+    true,
+  );
+  expect((await state()).modules.bonk).toBe(false);
+  expect((await session()).module_states.bonk?.enabled).toBe(false);
+  expect((await control('module', { id: 'bonk', enabled: true })).ok()).toBe(
+    true,
+  );
+
+  expect(
+    (await control('raffle-open', { seconds: 60, jackpot: 1000 })).ok(),
+  ).toBe(true);
+  expect((await state()).raffle).toMatchObject({ open: true, core: true });
+  expect((await control('raffle-close', {})).ok()).toBe(true);
+  expect((await state()).raffle.open).toBe(false);
+  await control('raffle-draw', {});
+});
+
+test('chat simulator: a message reaches the Core’s modules; the real Twitch chat cannot be switched on', async ({
+  request,
+}) => {
+  const identities = (await (
+    await request.get('/api/lab-chat/identities', { headers: STUDIO })
+  ).json()) as { identities?: { id: string; login: string }[] };
+  expect(JSON.stringify(identities)).toContain('lab_modo');
+  const sent = await request.post('/api/lab-chat/simulate', {
+    headers: STUDIO,
+    data: {
+      viewer_id: '900101',
+      login: 'lab_viewer',
+      display_name: 'Viewer Lab',
+      text: 'salut le Lab',
+    },
+  });
+  expect(sent.ok()).toBe(true);
+  const recent = await (
+    await request.get('/api/lab-chat/recent', { headers: STUDIO })
+  ).text();
+  expect(recent).toContain('salut le Lab');
+  // No adapter, no token: the switch is refused, nothing connects to Twitch.
+  const on = await request.post('/api/lab-chat/ingress', {
+    headers: STUDIO,
+    data: { enabled: true },
+  });
+  expect(on.status()).toBe(409);
+  const output = await request.post('/api/lab-chat/output', {
+    headers: STUDIO,
+    data: { enabled: true },
+  });
+  expect(output.status()).toBe(409);
+});
+
+test('Spotify simulator: on the fictional Spotify, never a real account', async ({
+  request,
+}) => {
+  const state = (await (
+    await request.get('/api/spotify/state', { headers: STUDIO })
+  ).json()) as {
+    connection: { simulated: boolean };
+    sim: unknown;
+  };
+  expect(state.connection.simulated).toBe(true);
+  expect(state.sim).not.toBeNull();
+});
+
+test('Roue du Sub simulators: live, presence and a simulated sub reach the Core; the wheel records its spin', async ({
+  request,
+}) => {
+  const post = (path: string, data: unknown) =>
+    request.post(`/api/sub-wheel${path}`, { headers: STUDIO, data });
+  expect((await post('/lab/live', { on: true })).ok()).toBe(true);
+  expect(
+    (await post('/lab/presence', { readings: true, viewers: [] })).status(),
+  ).toBeLessThan(500);
+  const sub = await post('/lab/simulate', {
+    kind: 'sub',
+    viewer: { id: '900101', name: 'Viewer Lab' },
+    tier: 1,
+  });
+  expect(sub.status(), await sub.text()).toBe(200);
+  const state = await request.get('/api/sub-wheel/state', { headers: STUDIO });
+  expect(state.ok()).toBe(true);
+  await post('/lab/live', { on: false });
+});

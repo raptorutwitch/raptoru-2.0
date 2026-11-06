@@ -34,10 +34,11 @@ test('Défis: a fictional retroactive challenge checked, saved, activated, compl
     .getByRole('button', { name: 'Créer un défi' })
     .click();
 
-  // The Lab has no canonical Wallet and no Daily: those metrics cannot be chosen here.
-  await expect(
-    tab.locator('[data-f="metric"] option[value="daily_claims"]'),
-  ).toHaveAttribute('disabled', '');
+  // The historical Lab has no canonical Wallet and no Daily: those metrics cannot be chosen there. The main Core has them.
+  if (process.env.E2E_STACK !== 'main')
+    await expect(
+      tab.locator('[data-f="metric"] option[value="daily_claims"]'),
+    ).toHaveAttribute('disabled', '');
 
   await tab.locator('[data-f="challenge_id"]').fill('fictif-e2e');
   await tab.locator('[data-f="title"]').fill('Défi fictif (test e2e)');

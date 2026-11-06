@@ -46,4 +46,6 @@ export interface RuntimeWiring {
   /** Production journal file (never the Lab one). */
   journal: string;
   transport: Required<WorkerTransport>;
+  /** The local Lab on the main Core: the history and queue reads are available (through its cockpit). */
+  labReads?: boolean;
 }

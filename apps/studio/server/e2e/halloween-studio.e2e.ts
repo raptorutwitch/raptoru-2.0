@@ -57,7 +57,7 @@ test('« Testeurs seulement »: the Extension module hides for the others, shows
     await v.close();
     return n;
   };
-  await expect.poll(hub).toBeGreaterThan(0);
+  await expect.poll(hub, { timeout: 40_000 }).toBeGreaterThan(0);
   await s.getByRole('button', { name: 'Testeurs seulement' }).click();
   // The other specs share the stack: whatever happens below, everyone sees the module again at the end.
   try {

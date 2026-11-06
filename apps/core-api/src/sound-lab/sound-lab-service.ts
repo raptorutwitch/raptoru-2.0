@@ -394,6 +394,14 @@ export class SoundLabService {
   }
 
   /** Throws the precise reason when no fresh Studio with a live player can play a sound now. */
+  /** A Studio reported a ready player recently: what admission requires (presentation only, assertReady decides). */
+  async playerReady(): Promise<boolean> {
+    return this.assertReady(this.db).then(
+      () => true,
+      () => false,
+    );
+  }
+
   private async assertReady(q: Queryable, studioId: string | null = null) {
     const since = new Date(
       this.clock.now().getTime() - SOUND_LAB_RULES.heartbeatFreshMs,

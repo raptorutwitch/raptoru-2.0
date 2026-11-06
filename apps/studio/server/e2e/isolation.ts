@@ -20,6 +20,16 @@ export async function isolate(
   target: Page | BrowserContext,
 ): Promise<Isolation> {
   const iso: Isolation = { outside: [], twitchConsent: 'grant' };
+  // The Lab on the main Core: its fictional consent page (127.0.0.1), answered the same way.
+  await target.route(/\/v1\/ext\/lab\/twitch-authorize\?/, (route) => {
+    const url = new URL(route.request().url());
+    const back = new URL(String(url.searchParams.get('redirect_uri')));
+    if (iso.twitchConsent === 'grant')
+      back.searchParams.set('code', 'e2e-code');
+    else back.searchParams.set('error', 'access_denied');
+    back.searchParams.set('state', String(url.searchParams.get('state')));
+    return route.fulfill({ status: 302, headers: { location: back.href } });
+  });
   await target.route(/^https?:\/\/(?!127\.0\.0\.1[:/])/, (route) => {
     const url = new URL(route.request().url());
     if (IMAGE_HOSTS.test(url.host))

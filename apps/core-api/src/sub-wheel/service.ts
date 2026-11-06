@@ -341,7 +341,14 @@ export class SubWheelService {
            as tracked, to_regclass('lab_sw_presence') is not null as lab`,
       )
       .then((r): PresenceMode =>
-        r[0]?.tracked ? 'tracked' : r[0]?.lab ? 'lab_sim' : 'none',
+        // The main Core's Lab has both tables: its simulators are the presence there.
+        r[0]?.lab && this.options.labCredits === true
+          ? 'lab_sim'
+          : r[0]?.tracked
+            ? 'tracked'
+            : r[0]?.lab
+              ? 'lab_sim'
+              : 'none',
       )
       .catch((e: unknown) => {
         this.presence = undefined; // a failed read is never remembered

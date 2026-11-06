@@ -16,6 +16,7 @@ export class SoundRuntime {
     readonly origin: string,
     /** Production profile: remote Core over the future-prod transport (ASTRA-P1-019). */
     readonly production = false,
+    private readonly labReads = false,
   ) {}
   get playerUrl() {
     return `${this.origin}/sound-lab/player.html#${this.worker.token}`;
@@ -35,7 +36,12 @@ export class SoundRuntime {
       core,
       production?.transport,
     );
-    return new SoundRuntime(worker, origin, !!production);
+    return new SoundRuntime(
+      worker,
+      origin,
+      !!production,
+      production?.labReads === true,
+    );
   }
   start() {
     const loop = new WorkerLoop(
@@ -119,7 +125,7 @@ export class SoundRuntime {
         let coreError: string | null = null;
         try {
           // Production: no Lab history route on the execution transport.
-          if (!this.production)
+          if (!this.production || this.labReads)
             interactions = (await this.worker.recent()).interactions;
         } catch {
           coreError = 'core_unavailable';

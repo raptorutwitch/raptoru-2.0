@@ -12,7 +12,11 @@ import {
   type PublicFrontier,
 } from './ext/public-frontier.js';
 import { createApp } from './http/server.js';
-import { labUserLookup } from './lab/environment.js';
+import { LAB_CHANNEL, labUserLookup } from './lab/environment.js';
+import {
+  labEmoteProvidersFetch,
+  labTwitchConsentRoutes,
+} from './lab/fictional-twitch.js';
 import { helixLive, opsStatus } from './ops/status.js';
 
 /** The main Core's services, assembled from its configuration (the same call for Production and the Lab). */
@@ -23,6 +27,7 @@ export function createMainCore(
   economy: EconomyPort,
   dailyProvider: CreditProvider,
 ): Core {
+  const lab = config.CORE_ENVIRONMENT === 'lab';
   return createCore(
     db,
     clock,
@@ -38,9 +43,12 @@ export function createMainCore(
       // The streamer of the chat modules (Tombola, Commands V2, games) and the Twitch app (Duel targets by login).
       broadcasterId: config.TWITCH_CHANNEL_ID ?? null,
       broadcasterLogin: config.TWITCH_CHANNEL_LOGIN,
+      lab,
       emoteCatalog: config.EMOTE_CATALOG_CHANNEL_ID
         ? new ThirdPartyEmotes(config.EMOTE_CATALOG_CHANNEL_ID, clock)
-        : null,
+        : lab
+          ? new ThirdPartyEmotes(LAB_CHANNEL.id, clock, labEmoteProvidersFetch)
+          : null,
       twitchApp:
         config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
           ? {
@@ -94,6 +102,8 @@ export function createMainServer(
   );
 
   const server = createApp({
+    // The Lab's fictional Twitch consent page: its environment only.
+    ...(lab ? { labPublic: labTwitchConsentRoutes() } : {}),
     // Public Core: the /v1/lab/* routes (Studio secret, viewer in the body) are never served.
     labRoutes: false,
     ...frontier?.deps,

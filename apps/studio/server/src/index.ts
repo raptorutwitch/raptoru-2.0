@@ -5,7 +5,6 @@ import { moduleSettingsRelay } from './module-settings/relay.js';
 import { bootPlan } from './prod-transport/profile.js';
 import {
   createProductionRuntimes,
-  studioRoutesClient,
   fromMain,
   handleProfileApi,
   type ProfileApiDeps,
@@ -44,10 +43,10 @@ import {
 import { extname, join, normalize } from 'node:path';
 import { LabEbs } from './extension-lab/lab-ebs.js';
 import {
-  MainLabCore,
-  MAIN_LAB_CHANNEL,
-  withSimulatedChat,
-} from './runtime/main-lab-core.js';
+  CoreLabPanel,
+  labChatIdentities,
+} from './extension-lab/core-lab-panel.js';
+import { MainLabCore, MAIN_LAB_CHANNEL } from './runtime/main-lab-core.js';
 import {
   EXT_PREFIX,
   EXTENSION_CSP,
@@ -486,6 +485,8 @@ export interface StudioServerOptions {
   challenges?: ChallengesRelay | null;
   /** Extension Lab on the main Core's real /v1/ext (CORE_ENVIRONMENT=lab): Studio signs the Lab JWT and relays. */
   labFrontier?: LabFrontier | null;
+  /** The Extension Lab page's state and controls on that Core (no state of its own). */
+  labPanel?: CoreLabPanel | null;
 }
 
 export function createStudioServer(o: StudioServerOptions) {
@@ -515,6 +516,7 @@ export function createStudioServer(o: StudioServerOptions) {
     cosmetics = null,
     challenges = null,
     labFrontier = null,
+    labPanel = null,
   } = o;
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -700,13 +702,14 @@ export function createStudioServer(o: StudioServerOptions) {
       }
       // Extension Lab: state and controls of the local Lab EBS (fictitious data only).
       if (url.pathname.startsWith('/api/ext-lab/')) {
-        if (!extLab)
+        const panel = labPanel ?? extLab;
+        if (!panel)
           return send(res, 503, { error: 'extension_lab_unavailable' });
         if (req.method === 'GET' && url.pathname === '/api/ext-lab/state')
           return send(
             res,
             200,
-            extLab.snapshot(Number(url.searchParams.get('since') ?? 0)),
+            await panel.snapshot(Number(url.searchParams.get('since') ?? 0)),
           );
         const control = /^\/api\/ext-lab\/control\/([a-z-]+)$/.exec(
           url.pathname,
@@ -715,7 +718,7 @@ export function createStudioServer(o: StudioServerOptions) {
           return send(
             res,
             200,
-            await extLab.control(control[1]!, await readJson(req)),
+            await panel.control(control[1]!, await readJson(req)),
           );
         return send(res, 404, { error: 'not_found' });
       }
@@ -993,9 +996,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Moderation V2 + TTS configuration + Lab test wallet: Core decides, Studio relays. Production: the
   // same cockpit on the Production Core (installation credential, the Core's own channel).
   const labCore = transport
-    ? mainLab
-      ? withSimulatedChat(mainLab, transport.cockpit)
-      : transport.cockpit
+    ? transport.cockpit
     : labCoreUrl
       ? localLabCoreClient(labCoreUrl, process.env.BONK_LAB_SECRET ?? '')
       : null;
@@ -1018,7 +1019,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           soundboard: sound ? { ready: sound.worker.ready } : null,
           bonk: bonk ? bonk.summary() : null,
         }),
-        identities: () => extLab?.labIdentities() ?? [],
+        identities: () =>
+          mainLab ? labChatIdentities() : (extLab?.labIdentities() ?? []),
         onChange: () => extLab?.invalidateLab(),
       })
     : null;
@@ -1063,9 +1065,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Twitch alerts V1 (§ 22): ONE runtime, on the Core of the profile — the Lab Core, or the paired production Core
   // (/v1/studio/alerts). Media, calibration and the OBS source token are shared by both profiles (runtimeDir/alerts:
   // the OBS URL does not change at the cutover); the StreamElements mode and journal are per profile.
-  // The local Lab on the main Core: the module runtimes keep their Lab mode (simulators, Lab folders — their journals
-  // under runtimeDir/lab-main, never mixed with the historical Lab's) on that Core's own Studio routes
-  // (studioRoutesClient). What reads a real outside service stays off there: StreamElements, the Twitch chat ingress.
+  // The local Lab on the main Core: the module runtimes keep their Lab mode (simulators, Lab routes through the cockpit;
+  // journals under runtimeDir/lab-main, never mixed with the historical Lab's). What reads a real outside service stays
+  // off there: StreamElements, the Twitch chat ingress.
   const labModuleDir = (name: string) =>
     mainLab
       ? join(paths.runtimeDir, 'lab-main', name)
@@ -1080,11 +1082,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         ? 'production'
         : null;
   const alertsCore =
-    mainLab && labMainRuntimes
-      ? studioRoutesClient(labMainRuntimes.alertsCore)
-      : alertsEnv === 'lab'
-        ? labCore
-        : (transport?.alertsCore ?? null);
+    alertsEnv === 'lab' ? labCore : (transport?.alertsCore ?? null);
   // Real StreamElements donations: own mode (OFF by default; ACTIVE resumed in Production only, refonte H5), token from
   // Electron main.
   const se =
@@ -1152,8 +1150,17 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Lab module, plus the chat simulator. Never started automatically unless left ON and unblocked.
   // Lab profile only: in Production the chat / bot 2.0 stays off (no collision with SAMMI / legacy).
   const ingressLines: string[] = [];
-  const labChat: LabChatIngress | null =
-    labCore && labProfile && !mainLab
+  const labChat: LabChatIngress | null = mainLab
+    ? labCore
+      ? // The main Core's Lab: the chat SIMULATOR only. No adapter process, no token: the real Twitch chat cannot start.
+        await LabChatIngress.create({
+          core: labCore,
+          origin: `http://${host}:${port}`,
+          dir: labModuleDir('lab-chat'),
+          identities: labChatIdentities,
+        })
+      : null
+    : labCore && labProfile
       ? await LabChatIngress.create({
           core: labCore,
           origin: `http://${host}:${port}`,
@@ -1441,6 +1448,10 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       core: alertsCore,
       environment: alertsEnv,
     }),
+    labPanel:
+      mainLab && labCore
+        ? new CoreLabPanel(labCore, MAIN_LAB_CHANNEL.id)
+        : null,
     // The local Lab on the main Core: the Extension Lab speaks to its real /v1/ext (Studio signs the Lab JWT).
     labFrontier: mainLab
       ? {

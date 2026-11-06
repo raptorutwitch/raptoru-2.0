@@ -22,6 +22,7 @@ export class TtsRuntime {
     readonly origin: string,
     /** Production profile: remote Core over the future-prod transport (ASTRA-P1-019). */
     readonly production = false,
+    private readonly labReads = false,
   ) {}
   /** OBS browser source (1920×1080, transparent). */
   get overlayUrl() {
@@ -44,7 +45,12 @@ export class TtsRuntime {
       core,
       production?.transport,
     );
-    return new TtsRuntime(worker, origin, !!production);
+    return new TtsRuntime(
+      worker,
+      origin,
+      !!production,
+      production?.labReads === true,
+    );
   }
   start() {
     const loop = new WorkerLoop(
@@ -124,7 +130,8 @@ export class TtsRuntime {
         let coreError: string | null = null;
         try {
           // Production: no Lab queue route on the execution transport.
-          if (!this.production) queue = await this.worker.queue();
+          if (!this.production || this.labReads)
+            queue = await this.worker.queue();
         } catch {
           coreError = 'core_unavailable';
         }

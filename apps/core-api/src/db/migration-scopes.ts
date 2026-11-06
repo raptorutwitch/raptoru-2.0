@@ -19,7 +19,7 @@
 // MAIN_CORE_LAB_MIGRATIONS: the production migrator applies them too. A database already migrated (prod or
 // staging) gets only the ones it does not hold yet — by name, the migrator never re-runs a recorded file.
 
-export type MigrationScope = 'prod' | 'lab' | 'all' | 'staging';
+export type MigrationScope = 'prod' | 'lab' | 'all' | 'staging' | 'main-lab';
 
 /** Production schema (Daily, Presence, Wallet, Loyalty). */
 export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
@@ -278,6 +278,16 @@ export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261018120000_bonk_lab_volleys.sql',
 ]);
 
+/**
+ * The main Core in its Lab environment (CORE_ENVIRONMENT=lab): the production selection plus exactly these Lab files,
+ * what the Lab's test wallet and simulators need on top of the production schema (the ledger kinds of the Roue du Sub and
+ * the cosmetics, the Roue's presence simulator). Explicit and closed: never part of the production scope.
+ */
+export const MAIN_LAB_EXTRA_MIGRATIONS: readonly string[] = Object.freeze([
+  '20261103110000_sub_wheel_lab_sim.sql',
+  '20261118120500_lab_ledger_cosmetic.sql',
+]);
+
 export interface MigrationScopes {
   prod: readonly string[];
   lab: readonly string[];
@@ -286,6 +296,8 @@ export interface MigrationScopes {
   mainCore?: readonly string[];
   /** Lab files added to the production selection for the staging Core only. */
   stagingExtra?: readonly string[];
+  /** Lab files added to the production selection for the main Core's Lab environment only. */
+  mainLabExtra?: readonly string[];
 }
 
 export const MIGRATION_SCOPES: MigrationScopes = Object.freeze({
@@ -294,6 +306,7 @@ export const MIGRATION_SCOPES: MigrationScopes = Object.freeze({
   legacyLabInProd: LEGACY_LAB_IN_PROD,
   mainCore: MAIN_CORE_LAB_MIGRATIONS,
   stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
+  mainLabExtra: MAIN_LAB_EXTRA_MIGRATIONS,
 });
 
 export class MigrationScopeError extends Error {
@@ -343,13 +356,21 @@ export function selectMigrations(
       throw new MigrationScopeError(
         `${f} is listed as a staging extra but not as a Lab migration`,
       );
+  const mainLabExtra = new Set(scopes.mainLabExtra ?? []);
+  for (const f of mainLabExtra)
+    if (!lab.has(f))
+      throw new MigrationScopeError(
+        `${f} is listed as a main Lab extra but not as a Lab migration`,
+      );
   const keep =
     scope === 'prod'
       ? (f: string) => prod.has(f) || legacy.has(f)
-      : scope === 'staging'
-        ? (f: string) => prod.has(f) || legacy.has(f) || stagingExtra.has(f)
-        : scope === 'lab'
-          ? (f: string) => lab.has(f)
-          : () => true;
+      : scope === 'main-lab'
+        ? (f: string) => prod.has(f) || legacy.has(f) || mainLabExtra.has(f)
+        : scope === 'staging'
+          ? (f: string) => prod.has(f) || legacy.has(f) || stagingExtra.has(f)
+          : scope === 'lab'
+            ? (f: string) => lab.has(f)
+            : () => true;
   return sql.filter(keep).sort();
 }

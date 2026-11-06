@@ -20,6 +20,8 @@ import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { LabModerationService } from '../lab-moderation/service.js';
 import { AvatarCache, twitchAppUserLookup } from '../raffle-lab/avatars.js';
 import type { TwitchUserLookup } from '../raffle-lab/avatars.js';
+import { labTwitchViewers } from '../lab/fictional-twitch.js';
+import { labCockpitRoutes } from '../lab/routes.js';
 import { ExtFacade } from './ext-facade.js';
 import { internalLabCall } from './lab-internal.js';
 import { TwitchNames } from './twitch-names.js';
@@ -39,6 +41,8 @@ export function publicTwitchViewers(
   clock: Clock,
   config: CoreConfig,
 ): TwitchViewerCatalog | null {
+  if (config.CORE_ENVIRONMENT === 'lab')
+    return labTwitchViewers(db, clock, config.PORT);
   if (!config.TWITCH_APP_CLIENT_ID || !config.TWITCH_APP_CLIENT_SECRET)
     return null;
   return new TwitchViewerCatalog(
@@ -84,12 +88,21 @@ export function createPublicFrontier(
     // The same economy as every module of this Core (balances, activity, adjustments).
     core.economy,
   );
+  // The Lab environment (CORE_ENVIRONMENT=lab) carries the whole Lab table behind the same in-process call.
+  const lab = config.CORE_ENVIRONMENT === 'lab';
   const call = internalLabCall([
-    ...bonkLabRoutes(core.bonkLab),
+    ...bonkLabRoutes(core.bonkLab, lab ? core.twitchViewers : null),
     ...soundLabRoutes(core.soundLab),
     ...ttsLabRoutes(core.ttsLab),
-    // No Lab chat ingress here: the chat reaches this Core from the bot only (/v1/bot/chat, chatIngress below).
-    ...labModerationRoutes(moderation, core.ttsLab, core.raffleLab, []),
+    // No Lab chat ingress here: the chat reaches this Core from the bot only (/v1/bot/chat, chatIngress below). The Lab
+    // environment is the one exception: fictional Jetons, Studio's chat simulator through the cockpit.
+    ...labModerationRoutes(
+      moderation,
+      core.ttsLab,
+      core.raffleLab,
+      lab ? [...core.chat.chatModules, core.progression.chatModule] : [],
+    ),
+    ...(lab ? labCockpitRoutes(core, channelId) : []),
     // Chat games configuration for the Studio cockpit (lot 8): Commands V2, Jeu des mots, Roulette / Slot / Duel.
     ...commandsRoutes(core.chat.commands, core.chat.admission, core.chat.steps),
     ...wordGameRoutes(core.chat.wordGame),
@@ -132,12 +145,13 @@ export function createPublicFrontier(
       channelLogin: config.TWITCH_CHANNEL_LOGIN,
       environment: config.CORE_ENVIRONMENT,
       wallet: core.economy.mode === 'canonical',
+      lab,
     },
     core.twitchViewers,
   );
   return {
     deps: {
-      cockpit: { core: call, channelId },
+      cockpit: { core: call, channelId, lab },
       // The chat games' doors for the production bot: the Tombola first, then the chat games (same as the Lab).
       chatIngress: {
         router: chatRouter(core.raffleLab, [
@@ -145,8 +159,6 @@ export function createPublicFrontier(
           core.progression.chatModule,
         ]),
         games: core.chat,
-        // Lab environment only: Studio's chat simulator on the bot's door (never in Production).
-        simulator: config.CORE_ENVIRONMENT === 'lab',
       },
       ext: secret
         ? {

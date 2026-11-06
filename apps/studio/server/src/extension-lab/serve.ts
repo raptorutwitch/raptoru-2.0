@@ -32,6 +32,7 @@ export const RUNTIME = Object.freeze({
   apiBase: '${LAB_API_PREFIX}',
   siteUrl: '',
   buildId: 'extension-lab',
+  labTwitchAuthorizePath: '/v1/ext/lab/twitch-authorize',
 });
 `;
 

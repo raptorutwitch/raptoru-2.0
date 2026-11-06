@@ -27,9 +27,15 @@ const BOT_ONLY =
 const PLAIN_ROUTES =
   /^(tts\/rules(\/reset)?|sound\/(config|settings|sounds\/[a-z0-9][a-z0-9_-]{0,47})|daily\/config)$/;
 
-export function studioCockpitRoutes(core: LabCall, channelId: string): Route[] {
+export function studioCockpitRoutes(
+  core: LabCall,
+  channelId: string,
+  /** The Core's Lab environment: its whole Lab table (fictional data), the wrong-channel and viewer refusals kept. */
+  o: { lab?: boolean } = {},
+): Route[] {
   const target = (rest: string, search: string) => {
     if (BOT_ONLY.test(rest)) throw new HttpError(404, { error: 'not_found' });
+    if (o.lab) return `/v1/lab/${rest}${search}`;
     const channel = CHANNEL_ROUTES.exec(rest);
     if (channel) {
       if (channel[2] !== channelId)

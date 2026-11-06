@@ -60,6 +60,7 @@ export class BonkRuntime {
     private readonly core: CoreCall,
     /** Production profile: remote Core over the future-prod transport (ASTRA-P1-019). */
     readonly production: boolean,
+    private readonly labReads = false,
     /** Where the Bonks aim (lot 2), one file per profile next to its journal. */
     readonly settings: BonkSettingsStore,
   ) {
@@ -97,6 +98,7 @@ export class BonkRuntime {
       new ViewerAuth(core),
       core,
       !!production,
+      production?.labReads === true,
       settings,
     );
   }
@@ -249,7 +251,7 @@ export class BonkRuntime {
         let coreError: string | null = null;
         try {
           // Production: no Lab history route on the execution transport.
-          if (!this.production)
+          if (!this.production || this.labReads)
             interactions = (await this.worker.recent()).interactions;
         } catch {
           coreError = 'core_unavailable';

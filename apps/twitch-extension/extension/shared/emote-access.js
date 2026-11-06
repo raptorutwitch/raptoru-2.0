@@ -367,11 +367,14 @@ export function createEmoteAccess({ document, window: win, client, getState, app
     try {
       const result = await client.startEmoteOAuth();
       const authorizationUrl = new URL(String(result?.authorization_url || ''));
-      if (
-        authorizationUrl.protocol !== 'https:'
-        || authorizationUrl.hostname !== 'id.twitch.tv'
-        || authorizationUrl.pathname !== '/oauth2/authorize'
-      ) throw new Error('invalid_oauth_url');
+      // Twitch's page only; the Lab's fictional consent page when the Lab's runtime names it (never in a package).
+      const twitch = authorizationUrl.protocol === 'https:'
+        && authorizationUrl.hostname === 'id.twitch.tv'
+        && authorizationUrl.pathname === '/oauth2/authorize';
+      const lab = RUNTIME.labTwitchAuthorizePath
+        && authorizationUrl.hostname === '127.0.0.1'
+        && authorizationUrl.pathname === RUNTIME.labTwitchAuthorizePath;
+      if (!twitch && !lab) throw new Error('invalid_oauth_url');
       emoteAuthAttemptAt = Date.now();
       if (popup) {
         popup.location.replace(authorizationUrl.href);

@@ -114,6 +114,8 @@ export function createCore(
     /** Random Ban V3: the streamer's login (history, the chat line of his mute). */
     broadcasterLogin?: string | null;
     twitchApp?: { clientId: string; clientSecret: string } | null;
+    /** CORE_ENVIRONMENT=lab: the Lab's simulated events pay fictional gains (Roue du Sub, Bonbons, XP of the simulator). */
+    lab?: boolean;
     /** Bonk: the channel's PUBLIC 7TV / BTTV / FFZ catalogs (read-only, no token); null = none (default). */
     emoteCatalog?: ThirdPartyEmotes | null;
     /** Duel targets by login without Twitch (tests). */
@@ -194,7 +196,9 @@ export function createCore(
     broadcasterOf,
     withBonbonsRewards(economy),
   );
-  const subWheel = new SubWheelService(db, clock, undefined, economy);
+  const subWheel = new SubWheelService(db, clock, undefined, economy, {
+    labCredits: channel.lab === true,
+  });
   const alerts = new AlertsService(
     db,
     clock,
@@ -203,7 +207,9 @@ export function createCore(
     channel.alertsMaxAgeMs ?? ALERT_RULES.defaultMaxAgeMs,
   );
   // Boutique d'événement (docs/HALLOWEEN.md): Bonbons for real Twitch subs / gifts, once per event.
-  const eventShop = new EventShopService(db, clock, economy);
+  const eventShop = new EventShopService(db, clock, economy, {
+    rewardSimulations: channel.lab === true,
+  });
   alerts.attachListener('event_shop', (q, e) => eventShop.onAlert(q, e));
   // `!solde` shows the Bonbons too while the event is open (the channel's own shop).
   wallet.chat.balanceExtra = async (viewerId) => {
@@ -211,7 +217,9 @@ export function createCore(
     return ch ? eventShop.balanceLine(ch, viewerId) : null;
   };
   // Progression native (docs/PROGRESSION.md): XP from validated presence and chat, levels, titles and badges.
-  const progression = new ProgressionService(db, clock, broadcasterOf);
+  const progression = new ProgressionService(db, clock, broadcasterOf, {
+    lab: channel.lab === true,
+  });
   // The shop pays with this Core's economy (Jetons) and the event ledger (Bonbons).
   const cosmetics = new CosmeticShopService(db, clock, progression, economy);
   const chat = createChatGames({
