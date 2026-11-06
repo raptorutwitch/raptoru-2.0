@@ -2,28 +2,28 @@
    Tout est préfixé `rs-` : les feuilles des modules (encore historiques) ne sont jamais touchées par ces règles.
    Les jetons --rs-* sont la charte : toute nouvelle vue les utilise au lieu de couleurs propres. */
 :root {
-  --rs-canvas: #0f1416;
-  --rs-sidebar: #12191c;
-  --rs-surface: #182126;
-  --rs-raised: #202b31;
-  --rs-hover: #26343b;
-  --rs-border: #2c3a41;
-  --rs-input-border: #667e88;
-  --rs-text: #eef3f1;
-  --rs-muted: #b2c1c4;
-  --rs-dim: #8ea2a7;
-  --rs-accent: #83dfc1;
-  --rs-accent-ink: #0e241c;
-  --rs-accent-veil: rgba(131, 223, 193, 0.1);
-  --rs-success: #83dfc1;
+  --rs-canvas: #0d131c;
+  --rs-sidebar: #070b11;
+  --rs-surface: #111925;
+  --rs-raised: #162130;
+  --rs-hover: #1d2a3a;
+  --rs-border: rgb(160 220 230 / 0.13);
+  --rs-input-border: rgb(160 220 230 / 0.32);
+  --rs-text: #e9f0f4;
+  --rs-muted: #a3b5c2;
+  --rs-dim: #7a8e9d;
+  --rs-accent: #2fd8c4;
+  --rs-accent-ink: #04201d;
+  --rs-accent-veil: rgb(47 216 196 / 0.1);
+  --rs-success: #2fd8c4;
   --rs-success-bg: #1c3830;
-  --rs-warning: #f0c780;
+  --rs-warning: #ffb35c;
   --rs-warning-bg: #3a3122;
-  --rs-danger: #ff9797;
+  --rs-danger: #ff7d7d;
   --rs-danger-bg: #3c262a;
-  --rs-info: #9ecbff;
+  --rs-info: #86b4ff;
   --rs-info-bg: #223246;
-  --rs-focus: #c2a9ff;
+  --rs-focus: #2fd8c4;
   --rs-r-panel: 12px;
   --rs-r-ctl: 8px;
   --rs-side-w: 232px;

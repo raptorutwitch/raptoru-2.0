@@ -17,9 +17,14 @@ import './spotify.css';
 import './sub-wheel.css';
 import './halloween.css';
 import './studio-theme.css';
+import './shell/frame.css';
+import './ds/ds.css';
+import './mod/mod.css';
+import './pages/tts.css';
 import { mountExtensionLab } from './extension-lab.js';
 import { mountTestLab } from './test-lab.js';
-import { mountBonkPage, mountSoundPage, mountTtsPage } from './module-pages.js';
+import { mountBonkPage, mountSoundPage } from './module-pages.js';
+import { mountTtsPage } from './pages/tts.js';
 import { mountUpdateWidget } from './update.js';
 import { mountStudioHome } from './studio-home.js';
 import { mountModeration } from './moderation.js';
@@ -96,10 +101,6 @@ if (app) {
       views[id].setVisible?.(id === tab);
     }
     // L'Extension Lab remplit la fenêtre sous la barre du haut (pas de défilement de page).
-    document.documentElement.style.setProperty(
-      '--topbar-h',
-      `${app.querySelector<HTMLElement>('.rs-top')!.offsetHeight}px`,
-    );
     document.body.classList.toggle('lab-open', tab === 'extension-lab');
   };
   mountShell(app, { showView });

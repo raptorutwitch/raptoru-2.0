@@ -2,42 +2,11 @@ import { mountBonkLab } from './bonk-lab.js';
 import { moduleFrame, whenProfile } from './module-frame.js';
 import { mountSoundConfig } from './sound-config.js';
 import { mountSoundLab } from './sound-lab.js';
-import { mountTtsConfig } from './tts-config.js';
-import { mountTtsLab } from './tts-lab.js';
 
 // The pages of the modules whose controls live on the PC. Same cards in the Lab and in Production (their `production`
 // option says which wording and controls apply); the Extension Lab keeps its own copy of the cards next to the surfaces.
 
 type Card = { setVisible(v: boolean): void };
-
-export function mountTtsPage(root: HTMLElement) {
-  const frame = moduleFrame(root, {
-    id: 'tts',
-    title: 'TTS',
-    lead: 'Les messages lus à l’antenne : la file, la source OBS, les prix et les limites.',
-    tabs: [
-      ['live', 'Direct'],
-      ['rules', 'Prix et limites'],
-    ],
-  });
-  const rules = mountTtsConfig(frame.panel('rules'));
-  let card: Card | null = null;
-  let visible = false;
-  void whenProfile().then((p) => {
-    card = mountTtsLab(frame.panel('live'), { production: p === 'production' });
-    card.setVisible(visible);
-  });
-  frame.onTab((id) => {
-    if (id === 'rules') void rules.refresh();
-  });
-  return {
-    setVisible(v: boolean) {
-      visible = v;
-      card?.setVisible(v);
-      if (v && frame.current() === 'rules') void rules.refresh();
-    },
-  };
-}
 
 export function mountBonkPage(root: HTMLElement) {
   const frame = moduleFrame(root, {

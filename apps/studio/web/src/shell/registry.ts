@@ -63,6 +63,8 @@ export interface Page {
   hub?: 'centre' | 'regie' | 'modules' | 'communaute' | 'activite' | 'labo';
   /** Mots-clés de la palette (anciens noms, synonymes). */
   keywords?: string;
+  /** Jeton de couleur discret de sa famille (barre latérale). */
+  tint?: string;
 }
 
 export type IconName =
@@ -422,6 +424,26 @@ export const PAGES: Page[] = [
     keywords: 'extension hub vidéo panel mobile',
   },
 ];
+
+const TINT: Record<string, string> = {
+  tts: 'blue',
+  tombola: 'teal',
+  alerts: 'violet',
+  soundboard: 'green',
+  bonk: 'orange',
+  spotify: 'green',
+  commands: 'violet',
+  'sub-wheel': 'gold',
+  'channel-points': 'rose',
+  'word-game': 'teal',
+  'random-ban': 'red',
+  caution: 'red',
+  votekick: 'red',
+  moderation: 'red',
+  effects: 'orange',
+  halloween: 'orange',
+};
+for (const p of PAGES) p.tint = TINT[p.id];
 
 const BY_ID = new Map(PAGES.map((p) => [p.id, p]));
 

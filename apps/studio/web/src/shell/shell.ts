@@ -56,7 +56,19 @@ import {
   pageStates,
 } from '../module-states.js';
 
+const BRAND =
+  '<svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#06100e"/><path d="M16 42c9-18 22-18 32 0" fill="none" stroke="#27e3c0" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="26" r="11" fill="#f4c14e"/><path d="M26 27h12M32 21v12" stroke="#06100e" stroke-width="5" stroke-linecap="round"/><circle cx="49" cy="15" r="4" fill="#27e3c0"/></svg>';
 const HEADERS = { 'x-raptoru-studio': '1' };
+const navCount = new Map<string, string>();
+/** Un compteur vivant dans la barre latérale (file TTS, temps de la Tombola…) ; `null` l'efface. */
+export function setNavCount(page: string, text: string | null) {
+  if ((navCount.get(page) ?? null) === text) return;
+  if (text) navCount.set(page, text);
+  else navCount.delete(page);
+  document
+    .querySelector<HTMLElement>('.rs-side')
+    ?.dispatchEvent(new CustomEvent('rs-count'));
+}
 const LEVEL_CLASS: Record<string, string> = {
   ok: 'is-ok',
   warn: 'is-warn',
@@ -69,12 +81,17 @@ const RECENT_KEY = 'raptoru-studio-recent';
 const LAST_KEY = 'raptoru-studio-page';
 const LEGACY_TAB_KEY = 'raptoru-studio-tab';
 export const DEFAULT_FAVS = [
+  'tts',
   'tombola',
   'alerts',
+  'soundboard',
+  'bonk',
+  'spotify',
+  'commands',
+  'sub-wheel',
   'channel-points',
-  'challenges',
 ];
-export const MAX_FAVS = 6;
+export const MAX_FAVS = 10;
 
 const esc = (t: unknown) =>
   String(t ?? '').replace(
@@ -130,38 +147,27 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   const $ = <T extends HTMLElement = HTMLElement>(s: string) =>
     app.querySelector<T>(s)!;
   const hub = $('#rs-hub');
+  $('.rs-side').addEventListener('rs-count', () => drawSide());
 
   // --- Barre latérale -----------------------------------------------------------------------------------------------
   function drawSide() {
-    const link = (p: Page, on: boolean, cls = '') =>
-      `<a class="rs-nav ${cls}" href="${hrefOf(p)}" data-page="${p.id}"${on ? ' aria-current="page"' : ''}>${icon(p.icon)}<span>${esc(p.label)}</span></a>`;
+    const link = (p: Page, on: boolean) => {
+      const c = navCount.get(p.id);
+      return `<a class="rs-nav" href="${hrefOf(p)}" data-page="${p.id}" title="${esc(p.label)}"${p.tint ? ` style="--tint:var(--${p.tint})"` : ''}${on ? ' aria-current="page"' : ''}>${icon(p.icon)}<span>${esc(p.label)}</span>${c ? `<em>${esc(c)}</em>` : ''}</a>`;
+    };
     const here = sectionOf(current).id;
-    $('.rs-sections').innerHTML = SECTIONS.map((s) =>
-      link(pageById(s.home)!, here === s.id),
-    ).join('');
-    $('.rs-favs').innerHTML = favs.length
-      ? favs.map((f) => link(pageById(f)!, current.id === f, 'rs-fav')).join('')
-      : '<p class="rs-hint">Étoile ☆ en haut d’une page pour l’épingler ici.</p>';
-    $('.rs-lab').innerHTML = link(pageById(LAB_SECTION.home)!, here === 'labo');
+    const home = (id: string) => link(pageById(id)!, current.id === id);
+    $('.rs-sections').innerHTML = `${home('centre')}${home('regie')}${home('moderation')}`;
+    $('.rs-favs').innerHTML = `${favs
+      .map((f) => link(pageById(f)!, current.id === f))
+      .join('')}${link(pageById('modules')!, current.id === 'modules')}`;
+    $('.rs-lab').innerHTML = `${SECTIONS.filter((x) => ['communaute', 'activite', 'systeme'].includes(x.id))
+      .map((x) => link(pageById(x.home)!, here === x.id))
+      .join('')}${link(pageById(LAB_SECTION.home)!, here === 'labo')}`;
   }
 
   // --- En-tête --------------------------------------------------------------------------------------------------
   function drawHead() {
-    const crumbs = crumbsOf(current);
-    const sec = sectionOf(current);
-    $('.rs-crumbs').innerHTML = crumbs
-      .map((c, i) =>
-        i === 0 && crumbs.length > 1
-          ? `<a href="${hrefOf(pageById(sec.home)!)}" data-page="${sec.home}">${esc(c)}</a>`
-          : `<span${i === crumbs.length - 1 ? ' aria-current="location"' : ''}>${esc(c)}</span>`,
-      )
-      .join('<span class="rs-sep" aria-hidden="true">/</span>');
-    const fav = favs.includes(current.id);
-    const star = $('.rs-star');
-    star.hidden = !!current.hub && current.id !== 'regie';
-    star.setAttribute('aria-pressed', String(fav));
-    star.title = fav ? 'Retirer des favoris' : 'Ajouter aux favoris';
-    star.innerHTML = `${icon('star')}<span class="rs-sr">${star.title}</span>`;
     document.title = `${current.label} · Raptoru Studio`;
   }
 
@@ -169,6 +175,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   function drawSup() {
     const chip = $('.rs-health');
     const strip = $('.rs-incidents');
+    chip.setAttribute('title', 'État de Raptoru : ouvrir le détail');
     if (!supOk) {
       chip.className = 'rs-health is-unknown';
       chip.innerHTML = `<i></i>Supervision indisponible`;
@@ -209,7 +216,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
     // The full-height views (Modération, Commandes, Extension Lab) sit under the bar and the incident line.
     document.documentElement.style.setProperty(
       '--topbar-h',
-      `${$('.rs-top').offsetHeight + (html ? strip.offsetHeight : 0)}px`,
+      `${html ? strip.offsetHeight : 0}px`,
     );
   }
   async function pollSup() {
@@ -329,7 +336,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
     const h = current.hub;
     if (!h) return;
     const head = (title: string, lead: string) =>
-      `<header class="rs-page-head"><h1>${esc(title)}</h1><p>${lead}</p></header>`;
+      `<header class="d-head rs-hub-head"><h1>${esc(title)}</h1><span class="d-faint rs-hub-lead">${lead}</span></header>`;
     if (h === 'centre') {
       const active = sup?.incidents.filter((i) => !i.endedAt) ?? [];
       const profile =
@@ -400,13 +407,13 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
           ? `<span class="rs-status ${LEVEL_CLASS[s.level]}"><i></i>${esc(s.text)}</span>`
           : '<span></span>';
       };
-      setHub(`<header class="rs-page-head rs-head-row"><div><h1>Modules</h1><p>L’état réel de chaque module. Un clic l’ouvre.</p></div>
+      setHub(`<header class="d-head rs-hub-head"><h1>Modules</h1><span class="d-sp"></span>
         <div class="rs-seg" role="group" aria-label="Filtrer les modules">${FILTERS.map(([id, label]) => `<button type="button" data-filter="${id}" aria-pressed="${catalogFilter === id}">${label}</button>`).join('')}</div></header>
         <div class="rs-catalog">${
           groups
             .map(
               (g) =>
-                `<section class="rs-panel"><h2>${esc(g.group)}</h2><div class="rs-rows">${g.pages.map((p) => `<a class="rs-row" href="${hrefOf(p)}" data-page="${p.id}">${icon(p.icon)}<b>${esc(p.label)}</b><small>${esc(p.desc)}</small>${favs.includes(p.id) ? '<em class="rs-fav-mark" title="Favori">★</em>' : ''}${status(p.id)}</a>`).join('')}</div></section>`,
+                `<section class="rs-panel"><h2>${esc(g.group)}</h2><div class="rs-rows">${g.pages.map((p) => `<a class="rs-row" href="${hrefOf(p)}" data-page="${p.id}">${icon(p.icon)}<b>${esc(p.label)}</b><small>${esc(p.desc)}</small><button type="button" class="d-ib rs-fav-mark" data-fav="${p.id}" aria-pressed="${favs.includes(p.id)}" title="${favs.includes(p.id) ? 'Retirer de la barre latérale' : 'Épingler dans la barre latérale'}">${icon('star')}</button>${status(p.id)}</a>`).join('')}</div></section>`,
             )
             .join('') || '<p class="rs-muted">Aucun module dans ce filtre.</p>'
         }</div>`);
@@ -487,7 +494,6 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
     store.set(RECENT_KEY, recent);
     store.set(LAST_KEY, p.id);
     if (p.view) store.set(LEGACY_TAB_KEY, p.view); // l'ancien Studio retrouve son dernier onglet
-    app.classList.remove('rs-drawer-open');
     drawSide();
     drawHead();
   }
@@ -516,11 +522,12 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
         headers: { ...HEADERS, 'content-type': 'application/json' },
         body: JSON.stringify({ id: ack }),
       }).then(() => pollSup());
-    if (t.closest('.rs-star')) {
-      favs = toggleFav(favs, current.id);
+    const star = t.closest<HTMLElement>('[data-fav]')?.dataset.fav;
+    if (star) {
+      e.preventDefault();
+      favs = toggleFav(favs, star);
       store.set(FAV_KEY, favs);
       drawSide();
-      drawHead();
       if (current.hub) drawHub();
     }
     const filter = t.closest<HTMLElement>('[data-filter]')?.dataset.filter;
@@ -533,8 +540,6 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
       feedFilter = feedTo as FeedFilter;
       drawHub();
     }
-    if (t.closest('.rs-menu')) app.classList.toggle('rs-drawer-open');
-    if (t.closest('.rs-scrim')) app.classList.remove('rs-drawer-open');
     if (t.closest('.rs-search-btn')) palette.open();
     if (t.closest('.rs-health'))
       open(
@@ -665,27 +670,21 @@ export function shellHtml(viewsHtml: string) {
   return `
   <div class="rs-shell">
     <aside class="rs-side" aria-label="Navigation">
-      <div class="rs-brand"><i aria-hidden="true"></i><b>Raptoru</b><span>Studio</span></div>
+      <a class="rs-brand" href="/?p=centre" data-page="centre" aria-label="raptoru_ · Centre de contrôle">${BRAND}<span>raptoru_</span></a>
       <button type="button" class="rs-search-btn">${icon('search')}<span>Rechercher…</span><kbd>Ctrl K</kbd></button>
-      <nav class="rs-sections" aria-label="Rubriques"></nav>
-      <p class="rs-side-h">Favoris</p>
-      <nav class="rs-favs" aria-label="Favoris"></nav>
+      <nav class="rs-sections" aria-label="Pilotage"></nav>
+      <p class="rs-side-h">Modules</p>
+      <nav class="rs-favs" aria-label="Modules"></nav>
+      <span class="rs-grow"></span>
+      <nav class="rs-lab" aria-label="Communauté et système"></nav>
       <div class="rs-side-foot">
-        <nav class="rs-lab" aria-label="Laboratoire"></nav>
+        <div class="sim-widget"></div>
+        <button type="button" class="rs-health is-unknown"><i></i>Supervision…</button>
         <span class="topbar-safety rs-profile" data-profile="unknown">Profil en cours de lecture…</span>
         <div class="update-widget"></div>
       </div>
     </aside>
-    <div class="rs-scrim" aria-hidden="true"></div>
     <div class="rs-main">
-      <header class="topbar rs-top">
-        <button type="button" class="rs-menu" aria-label="Menu">${icon('menu')}</button>
-        <nav class="rs-crumbs" aria-label="Emplacement"></nav>
-        <button type="button" class="rs-star" aria-pressed="false"></button>
-        <span class="rs-grow"></span>
-        <div class="sim-widget"></div>
-        <button type="button" class="rs-health is-unknown"><i></i>Supervision…</button>
-      </header>
       <div class="rs-incidents" hidden></div>
       <div class="rs-content">
         <main id="rs-hub" class="rs-hub" hidden></main>

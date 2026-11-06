@@ -195,6 +195,17 @@ export class CharacterStage {
     const len = Array.from(String(message || '')).length;
     this.who.textContent = pseudo || '';
     this.bubble.classList.toggle('is-compact', len > 85 || pages.length > 1);
+    this.bubble.classList.remove('is-spoken');
+    // Chaque mot garde sa position dans le message : la voix dit où elle en est, le sous-titre suit.
+    const words = [...String(message || '').matchAll(/\S+/g)];
+    let w = 0;
+    this.pages = pages.map((page) =>
+      page
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((text) => ({ text, start: words[w++]?.index ?? 0 })),
+    );
+    this.page = -1;
     const perPage = clamp(
       (estimatedMs || Math.max(2500, len * 85)) / pages.length,
       1200,
@@ -202,7 +213,8 @@ export class CharacterStage {
     );
     let i = 0;
     const next = () => {
-      this.text.textContent = pages[i];
+      if (this.bubble.classList.contains('is-spoken')) return;
+      this.showPage(i);
       i += 1;
       if (i < pages.length) this.later(next, perPage);
     };
@@ -211,6 +223,32 @@ export class CharacterStage {
       () => this.bubble.classList.add('is-shown'),
       p.timing.bubbleDelayMs,
     );
+  }
+  showPage(i) {
+    if (i === this.page || !this.pages[i]) return;
+    this.page = i;
+    this.text.replaceChildren(
+      ...this.pages[i].flatMap((word, k) => {
+        const s = document.createElement('span');
+        s.className = 'tts-w';
+        s.dataset.at = String(word.start);
+        s.textContent = word.text;
+        return k ? [' ', s] : [s];
+      }),
+    );
+  }
+  /**
+   * La voix en est à ce caractère du message : les pages suivent la parole et les mots déjà dits s'allument. Sans ce signal
+   * (une voix sans repères), le sous-titre garde sa pagination au temps, tout blanc.
+   */
+  spokenAt(at) {
+    if (!this.pages?.length) return;
+    this.bubble.classList.add('is-spoken');
+    let i = this.pages.length - 1;
+    while (i > 0 && this.pages[i][0].start > at) i -= 1;
+    this.showPage(i);
+    for (const s of this.text.querySelectorAll('.tts-w'))
+      s.classList.toggle('is-said', Number(s.dataset.at) <= at);
   }
   hideBubble() {
     this.bubble.classList.remove('is-shown');

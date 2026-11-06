@@ -23,7 +23,7 @@ page fonctionnelle remplacée.
 
 Il refuse : logiciel financier, console d'ingénieur, tableau de bord générique, grosses cartes identiques.
 
-**Direction D · Coulisses, en attente de sa validation.** Idée : Studio voit ce que voient les viewers et se règle directement
+**Direction D · Coulisses, VALIDÉE le 06/11 après essai.** Idée : Studio voit ce que voient les viewers et se règle directement
 dessus.
 
 - Identité reprise du stream, pas d'un modèle : bleu nuit et turquoise (raptoru.fr), Bahnschrift (overlays), Inter (site), rose
@@ -37,7 +37,8 @@ dessus.
 Vérifié dans Chromium à 1024 × 768, 1360 × 900 et 1920 × 1080 : parcours scripté, vraies vidéos lues, aucune erreur console. Non
 essayé dans Electron.
 
-**Attendu : la validation artistique d'Antoni.** La refonte générale ne démarre pas avant. Une fois D validée, la mission
+**Phase 1 terminée.** Retours d’Antoni sur D et mission : BRIEF_PAGES.md, DESIGN_SYSTEM.md.
+La mission
 reprend en autonomie sans nouveau cahier des charges.
 
 ## Phase 2 : exécution autonome après le choix

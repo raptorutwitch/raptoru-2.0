@@ -1,0 +1,109 @@
+/* Détail d'une demande et fiche viewer : partagés par tous les modules. */
+.m-viewer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--raise);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.m-viewer:hover {
+  background: var(--raise2);
+}
+.m-viewer b {
+  flex: 1;
+  font-weight: 550;
+}
+.m-viewer .d-ic {
+  color: var(--ink3);
+}
+.m-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.m-card b {
+  display: block;
+  font: 600 17px var(--num);
+}
+.m-card small {
+  color: var(--ink3);
+  font-size: 12px;
+}
+.m-wallet {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 10px 0;
+  border-block: 1px solid var(--hair);
+}
+.m-wallet b {
+  display: block;
+  font-size: 17px;
+  font-weight: 600;
+}
+.m-wallet small {
+  color: var(--ink3);
+  font-size: 12px;
+}
+.m-h {
+  margin: 16px 0 6px;
+}
+.m-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  color: var(--ink2);
+}
+.m-line > .d-ic {
+  color: var(--ink3);
+}
+.m-line > span:not(.d-tag) {
+  flex: 1;
+  min-width: 0;
+}
+.m-line small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12px;
+}
+.m-cut {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m-rowbtn {
+  width: 100%;
+  padding: 2px 6px;
+  margin-inline: -6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink2);
+}
+.m-rowbtn:hover {
+  background: rgb(160 220 230 / 0.05);
+  color: var(--ink);
+}
+.m-note {
+  margin: 0 0 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--raise);
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.m-plus {
+  color: var(--teal);
+}

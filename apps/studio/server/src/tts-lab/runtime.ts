@@ -11,12 +11,20 @@ const PLAYER_FILES: Record<string, string> = {
   'player.html': 'text/html',
   'player.js': 'text/javascript',
   'stage.js': 'text/javascript',
+  'speech.js': 'text/javascript',
   'stage.css': 'text/css',
 };
 
 /** TTS V2 Lab in Studio: worker loop + local player page (OBS overlay) + status and moderation. */
 export class TtsRuntime {
   private loop: WorkerLoop | null = null;
+  /** Où en est le lecteur (signal d'affichage, jamais une preuve de lecture : seul l'ACK compte pour le Core). */
+  private spoken: {
+    interaction_id: string;
+    phase: string;
+    char: number;
+    at: number;
+  } | null = null;
   private constructor(
     readonly worker: TtsWorker,
     readonly origin: string,
@@ -148,6 +156,13 @@ export class TtsRuntime {
           error: coreError ?? this.worker.error,
           queue,
         });
+      } else if (req.method === 'GET' && url.pathname === '/api/tts-lab/live') {
+        reply(
+          200,
+          this.spoken && Date.now() - this.spoken.at < 15_000
+            ? this.spoken
+            : null,
+        );
       } else if (
         req.method === 'GET' &&
         url.pathname === '/api/tts-lab/audit'
@@ -173,6 +188,14 @@ export class TtsRuntime {
               Number(body.voices) || 0,
             )),
           });
+        } else if (url.pathname.endsWith('/progress')) {
+          this.spoken = {
+            interaction_id: String(body.interaction_id).slice(0, 64),
+            phase: String(body.phase).slice(0, 16),
+            char: Math.max(0, Number(body.char) || 0),
+            at: Date.now(),
+          };
+          reply(200, { ok: true });
         } else if (url.pathname.endsWith('/next')) {
           reply(200, {
             command: await this.worker.command(player, body.accept !== false),
