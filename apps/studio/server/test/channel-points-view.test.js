@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionLabel,
-  effectsView,
   historyView,
+  masterChip,
+  mediaCount,
   rewardsView,
   statusView,
-} from '../../web/src/channel-points-view.ts';
+} from '../../web/src/pages/rewards-model.ts';
 
-// Studio tab « Points de chaîne », pure views: Twitch texts escaped, readable French, no ids / JSON shown.
+// Page Récompenses Twitch, pure views: Twitch texts escaped, readable French, no ids / JSON shown.
+
+const q = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** One action's line of a redemption: its fate, its label, its reason. */
+const line = (kind, label, note = '') =>
+  new RegExp(
+    `rw-res is-${kind}"><svg.*?</svg><span>${q(label)}${note ? `<small>${q(note)}` : ''}`,
+  );
 
 const base = {
   settings: { enabled: false },
@@ -25,7 +33,16 @@ const base = {
 describe('Points de chaîne views', () => {
   it('status: switch OFF, missing Twitch authorization, OBS state; production says « bot de production »', () => {
     const lab = statusView(base, null);
-    expect(lab).toContain('Automatisations : OFF');
+    expect(masterChip(base, null, null)).toContain('Automatisations coupées');
+    // ON but not executable: never green on an intention.
+    const on = { ...base, settings: { enabled: true } };
+    expect(masterChip(on, null, 'OBS non connecté à Studio')).toContain(
+      'Actives, OBS non connecté à Studio',
+    );
+    expect(masterChip(on, null, null)).toContain('Automatisations actives');
+    expect(masterChip(null, 'Core injoignable', null)).toContain(
+      'Core injoignable',
+    );
     expect(lab).toContain('autorisation manquante');
     expect(lab).toContain('OBS non connecté');
     expect(statusView({ ...base, environment: 'production' }, null)).toContain(
@@ -114,8 +131,10 @@ describe('Points de chaîne views', () => {
     expect(html).not.toContain('<img');
     expect(html).toContain('désactivée sur Twitch');
     expect(html).toContain('automatisations désactivées');
-    expect(html).toContain('✓ Son « Eren cri »');
-    expect(html).toContain('✗ Passer sur la scène « BRB » — OBS non connecté');
+    expect(html).toMatch(line('done', 'Son « Eren cri »'));
+    expect(html).toMatch(
+      line('failed', 'Passer sur la scène « BRB »', 'OBS non connecté'),
+    );
     expect(html).toContain('Test Studio');
   });
 
@@ -137,7 +156,9 @@ describe('Points de chaîne views', () => {
         ...base,
         recent: [row([{ index: 0, status: 'pending', progress: 'queued' }])],
       }),
-    ).toContain('… Son « Eren cri » — en attente du lecteur Soundboard');
+    ).toMatch(
+      line('pending', 'Son « Eren cri »', 'en attente du lecteur Soundboard'),
+    );
     expect(
       historyView({
         ...base,
@@ -151,8 +172,12 @@ describe('Points de chaîne views', () => {
           row([{ index: 0, status: 'failed', error: 'player_offline' }]),
         ],
       }),
-    ).toContain(
-      '✗ Son « Eren cri » — lecteur Soundboard non ouvert ou son non activé',
+    ).toMatch(
+      line(
+        'failed',
+        'Son « Eren cri »',
+        'lecteur Soundboard non ouvert ou son non activé',
+      ),
     );
     expect(
       historyView({
@@ -163,7 +188,13 @@ describe('Points de chaîne views', () => {
           ]),
         ],
       }),
-    ).toContain('? Son « Eren cri » — lecture non confirmée par le lecteur');
+    ).toMatch(
+      line(
+        'unknown',
+        'Son « Eren cri »',
+        'lecture non confirmée par le lecteur',
+      ),
+    );
   });
 
   it('effect sounds: label with volume, player state chips, OBS URL, missing imports, readable failures', () => {
@@ -245,7 +276,7 @@ describe('Points de chaîne views', () => {
         },
       ],
     });
-    expect(fx).toContain('✓ FX Cam « rage »');
+    expect(fx).toMatch(line('done', 'FX Cam « rage »'));
     // Couleur Cam: the colour applied (drawn by Core for « aléatoire »); unknown readable.
     expect(
       actionLabel({
@@ -271,12 +302,20 @@ describe('Points de chaîne views', () => {
         },
       ],
     });
-    expect(color).toContain(
-      '✗ Interaction « Couleur Cam » — couleur inconnue — aucun remboursement possible',
+    expect(color).toMatch(
+      line(
+        'failed',
+        'Interaction « Couleur Cam »',
+        'couleur inconnue, aucun remboursement possible',
+      ),
     );
     expect(fx).toContain('« &lt;b&gt;feu&lt;/b&gt; »');
-    expect(fx).toContain(
-      '✗ Interaction « FX Cam » — effet inconnu (effets : prison, bighead, pixel, drunk, glitch, rage)',
+    expect(fx).toMatch(
+      line(
+        'failed',
+        'Interaction « FX Cam »',
+        'effet inconnu (effets : prison, bighead, pixel, drunk, glitch, rage)',
+      ),
     );
     expect(
       actionLabel({
@@ -301,14 +340,12 @@ describe('Points de chaîne views', () => {
       ),
     ).toContain('Lecteur d’effets : 2 en lecture');
     expect(statusView(base, null)).not.toContain('Lecteur d’effets');
-    const panel = effectsView(effects);
-    expect(panel).toContain(
-      'value="http://127.0.0.1:4100/effects/player.html#abc"',
-    );
-    expect(panel).toContain(
-      '2 / 3 média(s) importé(s) — à importer : Glory holes',
-    );
-    expect(effectsView(null)).toBe('');
+    expect(mediaCount(effects)).toEqual({
+      have: 2,
+      total: 3,
+      missing: ['Glory holes'],
+    });
+    expect(mediaCount(null)).toEqual({ have: 0, total: 0, missing: [] });
     const history = historyView({
       ...base,
       effects,
@@ -348,8 +385,12 @@ describe('Points de chaîne views', () => {
     expect(history).toContain(
       'lecteur d’effets non ouvert (source OBS absente)',
     );
-    expect(history).toContain(
-      'Son d’effet « Tiens bon ! » (41 %) — en cours de lecture',
+    expect(history).toMatch(
+      line(
+        'pending',
+        'Son d’effet « Tiens bon ! » (41 %)',
+        'en cours de lecture',
+      ),
     );
   });
 });

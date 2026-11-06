@@ -1,0 +1,609 @@
+/* Soundboard : le pupitre du son choisi, la banque dessous, le stream à droite. */
+.sb {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(236px, 290px);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px 20px;
+  height: 100%;
+  min-height: 600px;
+}
+
+/* --- Pupitre -------------------------------------------------------------------------------------------------------- */
+.sb-deck {
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hair);
+}
+.sb-dtop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  min-width: 0;
+}
+.sb-dtop [hidden] {
+  display: none;
+}
+.sb-name {
+  flex: 0 1 280px;
+  min-width: 100px;
+}
+.sb-name input {
+  width: 100%;
+  padding: 3px 6px;
+  margin-left: -6px;
+  border: 0;
+  outline: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink);
+  font: 600 19px var(--num);
+  transition: background 0.12s;
+}
+.sb-name input:hover {
+  background: var(--fill);
+}
+.sb-name input:focus {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--teal);
+}
+.sb-saved {
+  color: var(--ink3);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.sb-dsw {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 86px;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.sb-wave {
+  position: relative;
+  height: 76px;
+  margin-top: 8px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.sb-wave svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleY(var(--v));
+  transition: transform 0.16s var(--e);
+}
+.sb-wave path,
+.sb-rw path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.sb-w0 {
+  color: color-mix(in srgb, var(--mod) 42%, var(--raise3));
+}
+.sb-w1 {
+  color: var(--mod);
+  clip-path: inset(-50% calc(100% - var(--p)) -50% 0);
+}
+.sb-head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--p);
+  width: 1.5px;
+  background: var(--ink);
+  opacity: 0;
+}
+.sb-wave:hover .sb-head {
+  opacity: 0.35;
+}
+.is-playing .sb-head {
+  opacity: 1;
+}
+.sb-waveskel {
+  height: 100%;
+}
+.sb-nowave {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ink3);
+}
+.sb-nowave .d-ic {
+  font-size: 18px;
+  color: var(--mod);
+}
+/* La règle graduée du temps, sous la forme d'onde. */
+.sb-ruler {
+  position: relative;
+  height: 16px;
+  box-shadow: 0 -1px 0 var(--hair2);
+}
+.sb-ruler i {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 3px;
+  background: var(--hair3);
+}
+.sb-ruler i.big {
+  height: 6px;
+  background: var(--ink3);
+}
+.sb-ruler b {
+  position: absolute;
+  top: 5px;
+  left: 3px;
+  font: 500 11px var(--num);
+  color: var(--ink3);
+}
+.sb-ctl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 6px;
+}
+.sb-vol {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 170px;
+  min-width: 150px;
+  max-width: 270px;
+}
+.sb-vol b {
+  width: 38px;
+  flex: none;
+  text-align: right;
+  font: 600 13.5px var(--num);
+}
+.sb-num {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sb-num [data-scrub] {
+  cursor: ew-resize;
+}
+.sb-num .d-fld {
+  width: 76px;
+}
+.sb-mode {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  min-width: 0;
+}
+.sb-hint {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Banque --------------------------------------------------------------------------------------------------------- */
+.sb-bank {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  container: sbbank / inline-size;
+}
+.sb-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.sb-find {
+  flex: 0 1 220px;
+  min-width: 140px;
+  height: 30px;
+}
+.sb-find input {
+  margin-left: 6px;
+}
+.sb-count {
+  color: var(--ink3);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.sb-count b {
+  color: var(--ink);
+  font: 600 13.5px var(--num);
+}
+.sb-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 8px;
+}
+.sb-cats:empty {
+  display: none;
+}
+/* Les colonnes et les lignes partagent la même grille. */
+.sb-cols,
+.sb-row {
+  display: grid;
+  grid-template-columns: 30px minmax(110px, 1fr) minmax(
+      90px,
+      1.1fr
+    ) 44px 92px 56px 76px 32px;
+  gap: 0 10px;
+  align-items: center;
+}
+.sb-cols {
+  height: 28px;
+  margin-top: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--hair);
+}
+.sb-col {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink3);
+  font: 500 11.5px var(--num);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.sb-col:hover,
+.sb-col.on {
+  color: var(--ink);
+}
+.sb-col.is-bank {
+  grid-column: 1;
+}
+.sb-col.is-name {
+  grid-column: 2;
+  grid-row: 1;
+}
+.sb-col.is-dur {
+  grid-column: 4;
+  grid-row: 1;
+  justify-content: flex-end;
+}
+.sb-col.is-price {
+  grid-column: 5;
+  grid-row: 1;
+  justify-content: flex-end;
+}
+.sb-col.is-delay {
+  grid-column: 6;
+  grid-row: 1;
+  justify-content: flex-end;
+}
+.sb-col.is-vol {
+  grid-column: 7;
+  grid-row: 1;
+}
+.sb-up {
+  rotate: 90deg;
+}
+.sb-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0;
+}
+.sb-row {
+  position: relative;
+  min-height: 42px;
+  padding: 0 8px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.12s;
+  --vf-o: 1px;
+}
+.sb-row:hover {
+  background: rgb(160 220 230 / 0.05);
+}
+.sb-row.sel {
+  background: color-mix(in srgb, var(--mod) 7%, transparent);
+}
+.sb-row.off .sb-n,
+.sb-row.off .sb-rw,
+.sb-row.off .sb-v:not(.is-vol) {
+  opacity: 0.5;
+}
+.sb-pad {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--ink);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s,
+    transform 0.14s var(--spring);
+}
+.sb-pad:hover:not(:disabled) {
+  background: var(--mod);
+  color: var(--void);
+  transform: scale(1.08);
+}
+.sb-pad:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.sb-pad:disabled {
+  color: var(--ink3);
+  background: none;
+  cursor: default;
+}
+.is-on .sb-pad {
+  background: var(--mod);
+  color: var(--void);
+}
+.sb-n {
+  display: grid;
+  grid-template-columns: minmax(0, auto) 1fr;
+  gap: 0 6px;
+  align-items: center;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.sb-n b {
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-n small {
+  grid-column: 1 / -1;
+  color: var(--ink3);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-n small:empty {
+  display: none;
+}
+.sb-rw {
+  display: block;
+  min-width: 0;
+  height: 26px;
+  color: color-mix(in srgb, var(--mod) 58%, var(--raise3));
+  transition: color 0.12s;
+}
+.sb-row:hover .sb-rw,
+.sb-row.sel .sb-rw,
+.sb-row.is-on .sb-rw {
+  color: var(--mod);
+}
+.sb-rw > svg {
+  display: block;
+  width: var(--w);
+  height: 100%;
+}
+.sb-none {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 100%;
+  color: var(--ink3);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.sb-v {
+  color: var(--ink2);
+  font: 500 13px var(--num);
+  white-space: nowrap;
+  text-align: right;
+}
+.sb-v b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.sb-v i {
+  font-style: normal;
+  color: var(--ink3);
+}
+.sb-v em {
+  margin-left: 6px;
+  font-style: normal;
+  color: var(--ink3);
+  font-size: 12px;
+}
+.sb-v.is-vol {
+  display: flex;
+  align-items: center;
+}
+/* L'égaliseur : ce son joue sur le stream en ce moment. */
+.sb-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 11px;
+}
+.sb-eq u {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--mod);
+  transform-origin: bottom;
+  animation: sb-eq 0.8s ease-in-out infinite alternate;
+}
+.sb-eq u:nth-child(2) {
+  animation-delay: -0.45s;
+}
+.sb-eq u:nth-child(3) {
+  animation-delay: -0.2s;
+}
+@keyframes sb-eq {
+  from {
+    transform: scaleY(0.25);
+  }
+}
+
+/* --- Stream --------------------------------------------------------------------------------------------------------- */
+.sb-live {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.sb-plrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+}
+.sb-plwhy {
+  margin: 2px 0 4px;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.sb-frame {
+  margin-bottom: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.sb-frame iframe {
+  display: block;
+  width: 100%;
+  height: 76px;
+  border: 0;
+}
+.sb-lhead {
+  padding: 8px 0 4px;
+}
+.sb-lhead .d-seg {
+  display: grid;
+}
+.sb-llist {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -6px;
+  padding: 0 6px;
+}
+.sb-lfoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 6px;
+}
+.sb-lfoot:empty {
+  display: none;
+}
+.sb-sep {
+  padding: 10px 6px 2px;
+}
+.sb-r {
+  position: relative;
+  border-radius: 10px;
+  transition: background 0.12s;
+}
+.sb-r:hover {
+  background: rgb(160 220 230 / 0.05);
+}
+.sb-r__m {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 0 9px;
+  align-items: center;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.sb-r__m .d-pp {
+  grid-row: span 2;
+}
+.sb-r__m b {
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-r__m small {
+  color: var(--ink3);
+  font: 500 12.5px var(--num);
+  white-space: nowrap;
+}
+.sb-r__m p {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-r__x {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  background: var(--raise2);
+}
+.sb-r:hover .sb-r__x,
+.sb-r__x:focus-visible {
+  opacity: 1;
+}
+.sb-r.past .sb-r__m {
+  opacity: 0.66;
+}
+.sb-r.past:hover .sb-r__m {
+  opacity: 1;
+}
+
+/* Une banque étroite garde l'essentiel : jouer, voir, activer ; le reste vit sur le pupitre. */
+@container sbbank (max-width: 640px) {
+  .sb-cols,
+  .sb-row {
+    grid-template-columns: 30px minmax(100px, 1fr) minmax(
+        60px,
+        0.8fr
+      ) 40px 62px 32px;
+  }
+  .sb-v.is-delay,
+  .sb-v.is-vol,
+  .sb-col.is-delay,
+  .sb-col.is-vol,
+  .sb-v em {
+    display: none;
+  }
+}
+@media (max-width: 1180px) {
+  .sb {
+    grid-template-columns: minmax(0, 1fr) 232px;
+    gap: 10px 14px;
+  }
+}

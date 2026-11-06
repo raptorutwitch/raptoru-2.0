@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { votekickConfigView } from '../../web/src/votekick-config-view.ts';
+import {
+  votekickForm as votekickConfigView,
+  voteLocks,
+  voteRow,
+} from '../../web/src/pages/sanctions-model.ts';
 
-// Votekick — Studio settings section, pure view: the length and its limits, an older Core shown as such (60 s, read
+// Votekick — Studio page, pure parts: the length and its limits, an older Core shown as such (60 s, read
 // only), no sound by default, the imported sound named and escaped, the player's state said plainly.
 
 const base = {
@@ -28,7 +32,7 @@ describe('Votekick settings section', () => {
   it('no sound by default; only the sounds present are offered', () => {
     const html = votekickConfigView(base, ui);
     expect(html).not.toMatch(/name="enabled" checked/);
-    expect(html).toContain('<option value="">— aucun son —</option>');
+    expect(html).toContain('<option value="">Aucun son</option>');
     expect(html).toContain('Eren Scream');
     expect(html).not.toContain('Absent');
     expect(html).toMatch(/data-act="vk-preview" disabled/);
@@ -41,7 +45,7 @@ describe('Votekick settings section', () => {
       ui,
     );
     expect(html).toMatch(/value="60" disabled/);
-    expect(html).toContain('Le Core ne connaît pas encore ce réglage');
+    expect(html).toContain('Réglage pas encore disponible');
   });
 
   it('an imported sound: selected, its name escaped; the player offline is said', () => {
@@ -68,10 +72,88 @@ describe('Votekick settings section', () => {
       notice: null,
       busy: true,
     });
-    expect(html).toContain('<p class="cp-error">Fichier trop lourd</p>');
-    expect(html).toMatch(/<fieldset class="cp-action" disabled>/);
+    expect(html).toContain('<p class="d-note bad">Fichier trop lourd</p>');
+    expect(html).toMatch(/<fieldset disabled>/);
     expect(votekickConfigView(null, { ...ui, error: 'x' })).toContain(
-      'cp-error',
+      'd-note bad',
+    );
+  });
+});
+
+describe('Votekick follow-up', () => {
+  const live = (core, x = {}) => ({
+    core,
+    overlay: { action: 'clear' },
+    obs_mute: null,
+    last_restore: null,
+    error: null,
+    ...x,
+  });
+  const vote = {
+    vote_id: 'v',
+    mode: 'real',
+    status: 'done',
+    initiator: '<b>a</b>',
+    target: 'cible',
+    kick: 7,
+    save: 2,
+    outcome: 'target_timeout',
+    punished: 'cible',
+    minutes: 12,
+    sanction: 'twitch_timeout',
+    applied: 'uncertain',
+    reason: null,
+    error: null,
+    created_at: '2026-11-06T20:00:00Z',
+  };
+  it('the executor and the mute task: absent, silent or failed is never ready', () => {
+    expect(voteLocks(live({ executor: null }))).toContain(
+      'Exécuteur Twitch : absent',
+    );
+    expect(
+      voteLocks(
+        live({
+          executor: {
+            login: 'lecroupier_',
+            ready: false,
+            can_read: true,
+            can_timeout: true,
+            missing: [],
+          },
+        }),
+      ),
+    ).toContain('aucun signal récent');
+    expect(
+      voteLocks(
+        live({
+          executor: null,
+          mute: {
+            mute_id: 'm',
+            status: 'failed',
+            seconds: 60,
+            ends_at: null,
+            end_reason: null,
+          },
+        }),
+      ),
+    ).toContain('Tâche de mute : échec');
+    expect(
+      voteLocks(
+        live(
+          { executor: null },
+          { last_restore: { id: 'm', ok: false, mismatches: ['Micro'] } },
+        ),
+      ),
+    ).toContain('OBS non rétabli');
+  });
+  it('a vote: names escaped, verdict and what was really applied', () => {
+    const html = voteRow(vote);
+    expect(html).toContain('&lt;b&gt;a&lt;/b&gt;');
+    expect(html).toContain('7 KICK, 2 SAVE');
+    expect(html).toContain('Cible exclue');
+    expect(html).toContain('résultat incertain : vérifier sur Twitch');
+    expect(voteRow({ ...vote, mode: 'dry_run' })).toContain(
+      'sx-test">Test</i>',
     );
   });
 });

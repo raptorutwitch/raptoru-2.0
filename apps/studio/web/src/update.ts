@@ -42,9 +42,8 @@ export function mountUpdateWidget(root: HTMLElement): void {
   }
 
   root.innerHTML = `
-    <span class="update-version">Raptoru Studio <strong data-current></strong></span>
-    <button type="button" class="update-btn" data-action="check">Rechercher une mise à jour</button>
-    <span class="update-status" data-status hidden></span>`;
+    <button type="button" class="up-check" data-action="check" title="Rechercher une mise à jour"><i></i><span>Studio <strong data-current></strong></span></button>
+    <span class="up-status" data-status hidden></span>`;
 
   const currentEl = root.querySelector<HTMLElement>('[data-current]')!;
   const checkBtn = root.querySelector<HTMLButtonElement>(
@@ -55,7 +54,7 @@ export function mountUpdateWidget(root: HTMLElement): void {
   function actionButton(label: string, onClick: () => void): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'update-btn primary';
+    button.className = 'd-btn pri sm';
     button.textContent = label;
     button.addEventListener('click', () => {
       button.disabled = true;
@@ -71,6 +70,7 @@ export function mountUpdateWidget(root: HTMLElement): void {
     statusEl.replaceChildren();
     statusEl.hidden = false;
     statusEl.classList.remove('error');
+    root.dataset.state = state.status;
     switch (state.status) {
       case 'idle':
         statusEl.hidden = true;

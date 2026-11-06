@@ -36,26 +36,27 @@ test('Boutique: Studio creates, previews and sells a title; the site buys it onc
   await page.goto('/?tab=shop');
   const tab = page.locator('#tab-shop');
   const form = tab.locator('[data-role="item-form"]');
+  const toasts = page.locator('.d-toasts');
   const save = () => tab.locator('[data-act="save"]').click();
 
   // A title: glow, gold, published — the preview drawn by the Core's own classes.
   await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-roi');
   await form.locator('[data-f="label"]').fill('Roi des citrouilles');
-  await form.locator('[data-f="status"]').selectOption('published');
+  await form.locator('[data-status="published"]').click();
   await tab.locator('[data-l="use-color"]').check();
-  await tab.locator('[data-l="effect"]').selectOption('glow');
+  await tab.locator('[data-effect="glow"]').click();
   const preview = tab.locator('[data-preview] [data-look]').first();
   await expect(preview).toHaveText('Roi des citrouilles');
   await expect(preview).toHaveClass(/rc-fx-glow/);
   await save();
-  await expect(tab).toContainText('Enregistré.');
+  await expect(toasts).toContainText('Enregistré.');
   await expect(tab.locator('[data-row="e2e-roi"]')).toContainText('Publié');
 
   // A badge with its image (checked by the Core), served back to the preview.
   await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-citrouille');
-  await form.locator('[data-f="kind"]').selectOption('badge');
+  await form.locator('[data-kind="badge"]').click();
   await form.locator('[data-f="label"]').fill('Citrouille');
   await tab
     .locator('[data-role="image"]')
@@ -70,23 +71,25 @@ test('Boutique: Studio creates, previews and sells a title; the site buys it onc
 
   // The title on sale: 300 Jetons.
   await tab.locator('[data-edit="e2e-roi"]').click();
+  await tab.locator('[data-act="offer-new"]').click();
   const offer = tab.locator('[data-role="offer-form"]');
   await offer.locator('[data-o="offer_id"]').fill('e2e-roi-jetons');
   await offer.locator('[data-o="price"]').fill('300');
   await offer.locator('[data-o="enabled"]').check();
   await offer.getByRole('button', { name: 'Enregistrer l’offre' }).click();
-  await expect(tab).toContainText('Offre enregistrée.');
+  await expect(toasts).toContainText('Offre enregistrée.');
   await expect(tab.locator('[data-row="e2e-roi"]')).toContainText('300 Jetons');
 
   // Kirito_TV gets 500 Jetons (Studio's « Donner », in « Achats et dons »).
-  await tab.getByRole('tab', { name: 'Achats et dons' }).click();
+  await tab.getByRole('button', { name: 'Achats et dons' }).click();
   const award = tab.locator('[data-role="award-form"]');
   await award.locator('[data-a="viewer"]').fill('57012345');
   await award.locator('[data-a="viewer_name"]').fill('Kirito_TV');
-  await award.locator('[data-a="kind"]').selectOption('jetons');
+  await award.locator('[data-give="jetons"]').click();
   await award.locator('[data-a="amount"]').fill('500');
   await award.getByRole('button', { name: 'Donner' }).click();
-  await expect(tab).toContainText('Donné.');
+  await page.locator('.d-dlg [data-yes]').click();
+  await expect(toasts).toContainText('Donné.');
 
   // The draft badge is not for sale; the title is (public catalogue).
   const catalog = await labCore('/v1/cosmetics/catalog');
@@ -120,11 +123,12 @@ test('Boutique: Studio creates, previews and sells a title; the site buys it onc
 
   // Studio lists it and refunds it: the Jetons back, the title gone.
   await page.reload();
-  await tab.getByRole('tab', { name: 'Achats et dons' }).click();
+  await tab.getByRole('button', { name: 'Achats et dons' }).click();
   await expect(tab).toContainText('Kirito_TV');
-  page.once('dialog', (d) => void d.accept('test e2e'));
   await tab.getByRole('button', { name: 'Rembourser…' }).first().click();
-  await expect(tab).toContainText('Remboursé.');
+  await page.locator('.d-dlg textarea').fill('test e2e');
+  await page.locator('.d-dlg [data-yes]').click();
+  await expect(toasts).toContainText('Remboursé.');
   await expect(tab).toContainText('remboursé (test e2e)');
   const after = await labCore('/v1/site/cosmetics/viewers/57012345');
   expect(after.body.owned).not.toContain('e2e-roi');

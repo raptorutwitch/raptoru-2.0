@@ -1,0 +1,246 @@
+/* Système : le profil, puis des onglets verticaux. */
+.sy {
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr);
+  gap: 24px;
+  min-height: 100%;
+}
+.sy-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-self: start;
+  position: sticky;
+  top: 0;
+}
+.sy-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink2);
+  font: 450 13.5px var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.sy-tabs button[hidden] {
+  display: none;
+}
+.sy-tabs button:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+.sy-tabs button[aria-selected='true'] {
+  background: var(--raise);
+  color: var(--ink);
+}
+.sy-tabs .d-ic {
+  color: var(--ink3);
+}
+.sy-tabs [aria-selected='true'] .d-ic {
+  color: var(--teal);
+}
+.sy-panels {
+  min-width: 0;
+  max-width: 880px;
+}
+.sy-panels h2 {
+  margin: 16px 0 6px;
+}
+.sy-panels [role='tabpanel'] > :first-child h2 {
+  margin-top: 0;
+}
+.sy-r {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 0;
+  border-top: 1px solid var(--hair);
+}
+.sy-r:first-child {
+  border-top: 0;
+}
+.sy-r > .d-ic {
+  color: var(--ink3);
+  font-size: 15px;
+}
+.sy-r b {
+  font-weight: 550;
+}
+.sy-r p {
+  margin: 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.sy-acts {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.sy-log {
+  margin: 0;
+  max-height: calc(100vh - 110px);
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--void);
+  color: var(--ink2);
+  font-size: 12px;
+  white-space: pre-wrap;
+  scrollbar-width: thin;
+}
+.sy-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sy-links a {
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: var(--fill);
+  color: var(--ink);
+  font-size: 13px;
+  text-decoration: none;
+}
+.sy-links a:hover {
+  background: var(--fill2);
+}
+
+/* État des services */
+.sy-st {
+  padding: 9px 0;
+  border-top: 1px solid var(--hair);
+}
+.sy-st:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.sy-st header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sy-st h3 {
+  margin: 0;
+  font: 600 14.5px var(--num);
+}
+.sy-st > p {
+  margin: 2px 0 0;
+  color: var(--ink2);
+}
+.sy-st .d-kv [data-l='error'] {
+  color: var(--red);
+}
+.sy-st .d-kv [data-l='warn'] {
+  color: var(--amber);
+}
+
+/* Les deux prises : Lab et Production. */
+.sy-plugs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 16px;
+  margin: 2px 0 12px;
+}
+.sy-plug {
+  --vf: var(--teal);
+  --vf-o: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--sheet2);
+  opacity: 0.8;
+}
+.sy-plug.on {
+  opacity: 1;
+}
+.sy-plug--prod {
+  --vf: var(--red);
+}
+.sy-plug--prod.on {
+  background: rgb(255 125 125 / 0.08);
+}
+.sy-plug h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font: 600 17px var(--num);
+}
+.sy-plug p {
+  margin: 0;
+  color: var(--ink2);
+}
+.sy-plug .d-btn {
+  align-self: flex-start;
+  margin-top: auto;
+}
+.sy-plug--prod .d-btn.pri {
+  background: #ff8a8a;
+  color: #2c0707;
+}
+.sy-pair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sy-pair code {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--void);
+  font-size: 12.5px;
+  user-select: all;
+}
+
+/* Comptes Twitch */
+.sy-tw {
+  padding: 10px 0;
+  border-top: 1px solid var(--hair);
+}
+.sy-tw header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sy-tw h3 {
+  margin: 0;
+  font: 600 14.5px var(--num);
+}
+.sy-tw p {
+  margin: 2px 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.sy-tw .sy-acts {
+  margin-top: 6px;
+}
+.sy-tw-note {
+  margin: 6px 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.sy-tw-note a {
+  color: var(--teal);
+}
+
+@media (max-width: 1180px) {
+  .sy {
+    grid-template-columns: 136px minmax(0, 1fr);
+    gap: 14px;
+  }
+}

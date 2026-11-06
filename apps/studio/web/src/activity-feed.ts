@@ -40,6 +40,28 @@ const STATUS: Record<string, string> = {
   canceled: 'annulé',
 };
 
+/** Les décisions du journal d'audit, dans les mots du streamer ; un code inconnu reste lisible tel quel. */
+const AUDIT_FR: Record<string, string> = {
+  raffle_open: 'Tombola ouverte',
+  raffle_cancel: 'Tombola annulée',
+  raffle_draw: 'Tirage',
+  raffle_pause: 'Tombola en pause',
+  raffle_resume: 'Tombola reprise',
+  raffle_extend: 'Temps ajouté',
+  raffle_config: 'Réglages de la Tombola',
+  raffle_add_participant: 'Participant ajouté',
+  raffle_remove_participant: 'Participant retiré',
+  raffle_no_participants: 'Tombola sans participant',
+  scheduler_start: 'Tombola automatique lancée',
+  scheduler_stop: 'Tombola automatique arrêtée',
+  block_viewer: 'Viewer bloqué',
+  unblock_viewer: 'Viewer débloqué',
+  set_staff: 'Équipe modifiée',
+  set_permission: 'Droits modifiés',
+  word_add: 'Mot ajouté',
+  word_remove: 'Mot retiré',
+};
+
 /** Pure: newest first, at most `max`. */
 export function mergeFeed(
   history: HistoryEntry[],
@@ -67,7 +89,7 @@ export function mergeFeed(
       at: a.created_at,
       kind: 'moderation',
       title: a.module_id ? labels(a.module_id) : 'Modération',
-      text: `${a.actor} · ${a.action}${a.reason ? ` · ${a.reason}` : ''}`,
+      text: `${/^studio(:|$)/.test(a.actor) ? 'Studio' : a.actor} · ${AUDIT_FR[a.action] ?? a.action}${a.reason ? ` · ${a.reason}` : ''}`,
       page: 'moderation',
     })),
   ]
@@ -75,13 +97,19 @@ export function mergeFeed(
     .slice(0, max);
 }
 
-const KIND: Record<FeedKind, [string, string]> = {
-  incident: ['Incident', 'is-down'],
-  module: ['Module', 'is-ok'],
-  moderation: ['Modération', 'is-warn'],
+const KIND: Record<FeedKind, string> = {
+  incident: 'Incident',
+  module: 'Module',
+  moderation: 'Modération',
 };
+export const FEED_FILTERS: [FeedFilter, string][] = [
+  ['all', 'Tout'],
+  ['incident', 'Incidents'],
+  ['module', 'Modules'],
+  ['moderation', 'Modération'],
+];
 
-/** Pure. `read`: the sources that answered; a missing one is said, never read as « nothing happened ». */
+/** Pure. `missing`: the sources that did not answer; one is said, never read as « nothing happened ». */
 export function feedHtml(
   items: FeedItem[],
   filter: FeedFilter,
@@ -89,31 +117,27 @@ export function feedHtml(
   missing: string[],
 ) {
   const shown = items.filter((i) => filter === 'all' || i.kind === filter);
-  const when = (iso: string) =>
-    new Date(iso).toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    });
+  const hour = (iso: string) =>
+    new Date(iso).toLocaleTimeString('fr-FR', {
       hour: '2-digit',
       minute: '2-digit',
     });
-  const FILTERS: [FeedFilter, string][] = [
-    ['all', 'Tout'],
-    ['incident', 'Incidents'],
-    ['module', 'Modules'],
-    ['moderation', 'Modération'],
-  ];
-  return `<div class="rs-seg" role="group" aria-label="Filtrer l’activité">${FILTERS.map(([id, label]) => `<button type="button" data-feed="${id}" aria-pressed="${filter === id}">${label}</button>`).join('')}</div>
-    ${missing.length ? `<p class="rs-state is-unknown">Non lu : ${esc(missing.join(', '))}.</p>` : ''}
-    ${
-      shown.length
-        ? `<ol class="rs-feed">${shown
-            .map(
-              (i) =>
-                `<li><time>${esc(when(i.at))}</time><span class="rs-status ${KIND[i.kind][1]}"><i></i>${KIND[i.kind][0]}</span><a href="${href(i.page)}"><b>${esc(i.title)}</b></a><span>${esc(i.text)}</span></li>`,
-            )
-            .join('')}</ol>`
-        : '<p class="rs-muted">Rien pour l’instant.</p>'
-    }`;
+  let at = '';
+  const rows = shown
+    .map((i) => {
+      const d = day(i.at);
+      const head = d === at ? '' : `<li class="ac-day">${esc(d)}</li>`;
+      at = d;
+      return `${head}<li class="ac-e" data-kind="${i.kind}"><time>${esc(hour(i.at))}</time><i title="${KIND[i.kind]}"></i><a href="${href(i.page)}" data-page="${esc(i.page)}"><b>${esc(i.title)}</b><span>${esc(i.text)}</span></a></li>`;
+    })
+    .join('');
+  return `${missing.length ? `<p class="d-note bad">Non lu : ${esc(missing.join(', '))}.</p>` : ''}${rows ? `<ol class="ac-feed">${rows}</ol>` : '<p class="d-empty">Rien pour l’instant.</p>'}`;
 }
 
 /** The two read routes behind the feed (null: not readable on this profile). */

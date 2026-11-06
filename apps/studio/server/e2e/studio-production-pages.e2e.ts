@@ -59,9 +59,10 @@ test('TTS and Bonk have their page, with the Production card', async ({
     page.getByRole('heading', { level: 1, name: 'Bonk' }),
   ).toBeVisible();
   const bonk = page.locator('#tab-bonk');
+  await expect(bonk.getByText('Prix et délai')).toBeVisible();
+  await bonk.getByRole('button', { name: 'Réglages' }).click();
   await expect(bonk.getByText('Connexion OBS', { exact: true })).toBeVisible();
   await expect(bonk.getByLabel('URL de la source OBS Bonk')).toBeVisible();
-  await expect(bonk.getByText('Prix et limites du Bonk')).toBeVisible();
 });
 
 test('the Soundboard player is loaded at launch, whichever page opens first', async ({

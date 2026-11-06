@@ -2,6 +2,9 @@
 // per channel); the Core validates them against its bounds and every executor reads them from there. Studio only shows
 // and sends them. Never the odds nor the prize tables (decision H10).
 
+import { confirmBox, esc, fld, fmt, run, sw, toast } from './ds/ds.js';
+import { ApiError } from './http.js';
+
 export interface SettingView {
   key: string;
   label: string;
@@ -14,15 +17,6 @@ export interface SettingView {
 }
 
 const HEADERS = { 'content-type': 'application/json', 'x-raptoru-studio': '1' };
-const esc = (t: unknown) =>
-  String(t ?? '').replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ]!,
-  );
-const fmt = (n: number) => n.toLocaleString('fr-FR');
 const isSwitch = (s: SettingView) => s.min === 0 && s.max === 1;
 
 /** The panel (pure): one line per setting, its bounds and its default; a value off the default says so. */
@@ -30,10 +24,9 @@ export function settingsPanelHtml(
   title: string,
   settings: SettingView[] | null,
   keys: string[],
-  message = '',
 ) {
   if (!settings)
-    return `<section class="rs-panel ms-panel"><h2>${esc(title)}</h2><p class="rs-muted">Réglages indisponibles sur ce profil (Core sans réglages de modules).</p></section>`;
+    return `<section class="ms-panel"><h3>${esc(title)}</h3><p class="d-note">Réglages indisponibles sur ce profil.</p></section>`;
   const rows = keys
     .map((k) => settings.find((s) => s.key === k))
     .filter((s): s is SettingView => !!s)
@@ -41,20 +34,19 @@ export function settingsPanelHtml(
       isSwitch(s)
         ? // A 0 / 1 setting is a switch (never a number to type).
           `<div class="ms-row ms-row--switch" data-setting="${esc(s.key)}">
-        <label class="ms-label" for="ms-${esc(s.key)}">${esc(s.label)}<small class="rs-muted">${s.help ? esc(s.help) : ''}</small></label>
-        <label class="ms-switch"><input id="ms-${esc(s.key)}" type="checkbox" data-ms-toggle="${esc(s.key)}" ${s.value === 1 ? 'checked' : ''}> ${s.value === 1 ? 'Activé' : 'Coupé'}</label>
+        <label>${esc(s.label)}<small>${s.help ? esc(s.help) : s.value === 1 ? 'Activé' : 'Coupé'}</small></label>
+        ${sw(s.value === 1, `data-ms-toggle="${esc(s.key)}"`, s.label)}
       </div>`
         : `<div class="ms-row" data-setting="${esc(s.key)}">
-        <label class="ms-label" for="ms-${esc(s.key)}">${esc(s.label)}<small class="rs-muted">De ${fmt(s.min)} à ${fmt(s.max)} · par défaut ${fmt(s.default)}${s.value !== s.default ? ' · <b>modifié</b>' : ''}${s.help ? ` · ${esc(s.help)}` : ''}</small></label>
-        <span class="rs-unit ms-field"><input id="ms-${esc(s.key)}" type="number" min="${s.min}" max="${s.max}" step="1" value="${s.value}" data-ms-input="${esc(s.key)}"><em>${esc(s.unit)}</em></span>
-        <button type="button" class="rs-btn sm" data-ms-save="${esc(s.key)}">Enregistrer</button>
+        <label for="ms-${esc(s.key)}">${esc(s.label)}<small>De ${fmt(s.min)} à ${fmt(s.max)} · par défaut ${fmt(s.default)}${s.value !== s.default ? ' · <b>modifié</b>' : ''}${s.help ? ` · ${esc(s.help)}` : ''}</small></label>
+        ${fld(`id="ms-${esc(s.key)}" min="${s.min}" max="${s.max}" step="1" data-ms-input="${esc(s.key)}"`, s.value, s.unit)}
+        <button type="button" class="d-btn sm" data-ms-save="${esc(s.key)}">Enregistrer</button>
       </div>`,
     )
     .join('');
-  return `<section class="rs-panel ms-panel"><h2>${esc(title)}</h2>
-    <p class="rs-muted">Valeurs enregistrées dans le Core et appliquées aux prochains achats. Les probabilités et les gains ne se règlent pas ici.</p>
-    ${message ? `<p class="rs-flash${message.startsWith('Refusé') ? ' is-bad' : ''}" role="status">${esc(message)}</p>` : ''}
-    ${rows || '<p class="rs-muted">Aucun réglage pour ce module sur ce Core.</p>'}</section>`;
+  return `<section class="ms-panel"><h3>${esc(title)}</h3>
+    <p class="d-note">Valeurs appliquées aux prochains achats. Les probabilités et les gains ne se règlent pas ici.</p>
+    ${rows || '<p class="d-note">Aucun réglage pour ce module.</p>'}</section>`;
 }
 
 export async function loadSettings(): Promise<SettingView[] | null> {
@@ -77,29 +69,53 @@ export async function saveSetting(key: string, value: number) {
     error?: string;
     settings?: SettingView[];
   };
-  if (!res.ok) throw new Error(out.error ?? `HTTP ${res.status}`);
+  if (!res.ok)
+    throw new ApiError(res.status, out.error ?? `HTTP ${res.status}`);
   return out.settings ?? null;
 }
 
 const REFUSED: Record<string, string> = {
-  out_of_bounds: 'valeur hors des bornes',
-  unknown_setting: 'réglage inconnu',
+  out_of_bounds: 'Valeur hors des bornes.',
+  unknown_setting: 'Réglage inconnu.',
 };
 
-/** Mounts the panel in `host` (its own refresh and save; a confirmation states the real effect). */
+/**
+ * Mounts the panel in `host` (its own refresh and save). Un prix est une règle d'économie : sa confirmation dit l'effet réel. Un
+ * interrupteur agit tout de suite et se rattrape.
+ */
 export function mountSettingsPanel(
   host: HTMLElement,
   title: string,
   keys: string[],
 ) {
   let settings: SettingView[] | null = null;
-  let message = '';
   const render = () => {
-    host.innerHTML = settingsPanelHtml(title, settings, keys, message);
+    host.innerHTML = settingsPanelHtml(title, settings, keys);
+  };
+  const save = async (
+    btn: HTMLElement | null,
+    key: string,
+    value: number,
+    done: string,
+    undo?: () => void,
+  ) => {
+    let ok = false;
+    await run(
+      btn,
+      async () => {
+        const next = await saveSetting(key, value);
+        if (next) settings = next;
+        ok = true;
+      },
+      undefined,
+      REFUSED,
+    );
+    render();
+    if (ok) toast(done, undo ? { undo } : {});
   };
   host.addEventListener('click', (e) => {
-    const key = (e.target as HTMLElement).closest<HTMLElement>('[data-ms-save]')
-      ?.dataset.msSave;
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-ms-save]');
+    const key = b?.dataset.msSave;
     if (!key) return;
     const s = settings?.find((x) => x.key === key);
     const input = host.querySelector<HTMLInputElement>(
@@ -107,23 +123,21 @@ export function mountSettingsPanel(
     );
     const value = Number(input?.value);
     if (!s || !Number.isInteger(value)) return;
-    if (
-      !confirm(
-        `${s.label} : ${fmt(s.value)} → ${fmt(value)} ${s.unit} ?\n\nAppliqué aux prochains achats, sur le Core de ce profil. Rien de ce qui est déjà payé ne change.`,
-      )
-    )
-      return;
-    void saveSetting(key, value).then(
-      (next) => {
-        if (next) settings = next;
-        message = `${s.label} : ${fmt(value)} ${s.unit} enregistré.`;
-        render();
-      },
-      (err: Error) => {
-        message = `Refusé : ${REFUSED[err.message] ?? err.message}`;
-        render();
-      },
-    );
+    void confirmBox({
+      title: `${s.label} : ${fmt(s.value)} → ${fmt(value)} ${s.unit}`,
+      body: 'Appliqué aux prochains achats. Rien de ce qui est déjà payé ne change.',
+      yes: 'Enregistrer',
+      no: 'Annuler',
+      danger: false,
+    }).then((yes) => {
+      if (yes)
+        void save(
+          b,
+          key,
+          value,
+          `${s.label} : ${fmt(value)} ${s.unit} enregistré`,
+        );
+    });
   });
   host.addEventListener('change', (e) => {
     const box = (e.target as HTMLElement).closest<HTMLInputElement>(
@@ -133,24 +147,12 @@ export function mountSettingsPanel(
     const s = key ? settings?.find((x) => x.key === key) : null;
     if (!box || !s) return;
     const value = box.checked ? 1 : 0;
-    if (
-      !confirm(
-        `${s.label} : ${value ? 'activer' : 'couper'} ?\n\nSur le Core de ce profil.`,
-      )
-    ) {
-      box.checked = !box.checked;
-      return;
-    }
-    void saveSetting(s.key, value).then(
-      (next) => {
-        if (next) settings = next;
-        message = `${s.label} : ${value ? 'activé' : 'coupé'}.`;
-        render();
-      },
-      (err: Error) => {
-        message = `Refusé : ${REFUSED[err.message] ?? err.message}`;
-        render();
-      },
+    void save(
+      null,
+      s.key,
+      value,
+      `${s.label} : ${value ? 'activé' : 'coupé'}`,
+      () => void save(null, s.key, 1 - value, `${s.label} rétabli`),
     );
   });
   return {

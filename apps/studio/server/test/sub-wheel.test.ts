@@ -15,7 +15,11 @@ import type { ObsLike } from '../src/channel-points/obs-actions.js';
 import { ChannelPointsRuntime } from '../src/channel-points/runtime.js';
 import type { EffectsPlayer } from '../src/effects/player.js';
 import { localLabCoreClient } from '../src/lab-moderation/proxy.js';
-import { subWheelView } from '../../web/src/sub-wheel-view.js';
+import {
+  settingsPanel,
+  stateView,
+  subWheelView,
+} from '../../web/src/pages/sub-wheel-view.js';
 
 // Roue du Sub (docs/SUB_WHEEL.md) — the Lab chain with the REAL Lab Core and Studio's runtime with a simulated effects
 // player (the page itself is covered by Playwright): a Twitch sub → its alert → its wheel, after the alert, with the
@@ -245,15 +249,13 @@ describe('Roue du Sub — Studio section (pure view)', () => {
         },
       ],
     } as const;
-    // R4: the rows are in « Historique », the switch in « Réglages ».
+    // R4: the rows are in « Historique », the switch in the page's head.
     const html = subWheelView(state as never, null, {
       tab: 'history',
     });
-    expect(html).toContain('Roue : désactivée');
-    expect(subWheelView(state as never, null, { tab: 'settings' })).toContain(
-      'Activer la roue',
-    );
-    expect(html).toContain('1 gain(s) à attribuer : 18');
+    expect(stateView(state as never)).toContain('Roue désactivée');
+    expect(settingsPanel(state as never)).toContain('Tester l’animation');
+    expect(html).toContain('1 gain à attribuer : 18');
     expect(html).toContain('Médias non importés : Roue du Sub — fin casino');
     expect(html).toContain('&lt;b&gt;V&lt;/b&gt;');
     expect(html).not.toContain('<b>V</b>');

@@ -71,7 +71,7 @@ describe('Défis: the saved definition', () => {
         { label: 'Mots trouvés', unit: 'mots' },
       ),
     ).toBe(
-      '1 000 mots — Mots trouvés, une seule fois, à partir de l’activation.',
+      '1 000 mots : Mots trouvés, une seule fois, à partir de l’activation.',
     );
   });
 });

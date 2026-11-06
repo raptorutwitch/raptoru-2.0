@@ -1,0 +1,415 @@
+/* Bonk : la scène et son point d'impact, l'essai, la cible ; le stream et le prix à droite. */
+.bk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(236px, 280px);
+  gap: 12px 20px;
+  height: 100%;
+  min-height: 600px;
+}
+.bk-main {
+  min-width: 0;
+}
+.bk-scn {
+  width: min(100%, (100vh - 420px) * 16 / 9);
+  --vf-o: 0;
+  --vf: var(--mod);
+}
+.bk-shot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Le moteur de l'overlay dessine par-dessus la zone, sans jamais prendre un clic. */
+.bk-fit {
+  pointer-events: none;
+  z-index: 4;
+}
+.bk-hint {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink2);
+}
+.bk-all::before {
+  content: 'Toute l’image';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--mod);
+  font: 500 13px var(--num);
+  background: color-mix(in srgb, var(--mod) 8%, transparent);
+}
+
+/* La zone visée : le cadre de visée se tire et se redimensionne. */
+.bk-zone {
+  position: absolute;
+  z-index: 2;
+  background: color-mix(in srgb, var(--mod) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mod) 45%, transparent);
+  cursor: move;
+  touch-action: none;
+  --vf-o: -3px;
+  transition: background 0.12s;
+}
+.bk-zone:hover,
+.bk-zone.drag {
+  background: color-mix(in srgb, var(--mod) 18%, transparent);
+}
+.bk-zone:focus-visible {
+  outline: 0;
+  box-shadow: inset 0 0 0 1.5px var(--mod);
+}
+.bk-cross {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 17px;
+  height: 17px;
+  margin: -8px 0 0 -8px;
+  background:
+    linear-gradient(var(--mod) 0 0) 50% 0 / 1.5px 100% no-repeat,
+    linear-gradient(var(--mod) 0 0) 0 50% / 100% 1.5px no-repeat;
+  opacity: 0.8;
+  pointer-events: none;
+}
+.bk-zsize {
+  position: absolute;
+  left: 6px;
+  bottom: 4px;
+  font: 500 12px var(--num);
+  color: var(--ink);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
+  pointer-events: none;
+}
+.bk-h {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+}
+.bk-h.is-nw {
+  left: -7px;
+  top: -7px;
+  cursor: nwse-resize;
+}
+.bk-h.is-ne {
+  right: -7px;
+  top: -7px;
+  cursor: nesw-resize;
+}
+.bk-h.is-se {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
+}
+.bk-h.is-sw {
+  left: -7px;
+  bottom: -7px;
+  cursor: nesw-resize;
+}
+.bk-h.is-n,
+.bk-h.is-s {
+  left: 14px;
+  right: 14px;
+  width: auto;
+  cursor: ns-resize;
+}
+.bk-h.is-n {
+  top: -7px;
+}
+.bk-h.is-s {
+  bottom: -7px;
+}
+.bk-h.is-e,
+.bk-h.is-w {
+  top: 14px;
+  bottom: 14px;
+  height: auto;
+  cursor: ew-resize;
+}
+.bk-h.is-e {
+  right: -7px;
+}
+.bk-h.is-w {
+  left: -7px;
+}
+/* En Auto, la caméra trouvée est montrée, jamais tirée à la main. */
+.bk-autoz {
+  position: absolute;
+  z-index: 2;
+  box-shadow: inset 0 0 0 1.5px var(--mod);
+  background: color-mix(in srgb, var(--mod) 8%, transparent);
+}
+.bk-autoz span {
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  font: 500 12px var(--num);
+  color: var(--ink);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
+}
+
+.bk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 32px;
+  padding-top: 10px;
+  min-width: 0;
+}
+.bk-aimbar {
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--hair);
+}
+.bk-where,
+.bk-astate {
+  color: var(--ink3);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.bk-astate {
+  color: var(--ink2);
+}
+.bk-bar .d-tag img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+.bk-ctx {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.bk-ctx[hidden] {
+  display: none;
+}
+.bk-pin {
+  width: 170px;
+  height: 28px;
+}
+.bk-px {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bk-px [data-scrub] {
+  cursor: ew-resize;
+}
+.bk-px .d-fld {
+  width: 66px;
+}
+.bk-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  animation: d-rise 0.2s var(--e);
+}
+
+/* --- Colonne : les Bonk, puis le prix --------------------------------------------------------------------------------- */
+.bk-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.bk-lhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+}
+.bk-count {
+  color: var(--mod);
+  font: 500 12.5px var(--num);
+}
+.bk-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -6px;
+  padding: 0 6px;
+}
+.bk-r {
+  position: relative;
+  border-radius: 10px;
+  transition: background 0.12s;
+}
+.bk-r:hover {
+  background: rgb(160 220 230 / 0.05);
+}
+.bk-r__m {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 0 9px;
+  align-items: center;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.bk-r__m .d-pp {
+  grid-row: span 2;
+}
+.bk-r__m b {
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bk-r__m small {
+  grid-column: 2 / -1;
+  color: var(--ink3);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bk-r.on small {
+  color: var(--mod);
+}
+.bk-em {
+  display: inline-flex;
+}
+.bk-em img {
+  object-fit: contain;
+}
+.bk-r__x {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  background: var(--raise2);
+}
+.bk-r:hover .bk-r__x,
+.bk-r__x:focus-visible {
+  opacity: 1;
+}
+.bk-tarif {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 16px;
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--hair);
+}
+.bk-thead {
+  display: contents;
+}
+.bk-thead .d-lb {
+  grid-row: 1;
+}
+.bk-thead [data-z='tapply'] {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 28px;
+}
+.bk-tarif [data-z='tarif'] {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 28px;
+}
+.bk-trow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  flex: 1 1 260px;
+  justify-content: space-between;
+  max-width: 400px;
+  color: var(--ink2);
+}
+.bk-trow > span:first-child {
+  cursor: ew-resize;
+  min-width: 0;
+}
+.bk-trow small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12px;
+}
+.bk-trow .d-fld {
+  width: 92px;
+  flex: none;
+}
+.bk-pay {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  color: var(--ink3);
+  font-size: 12px;
+}
+
+/* --- Panneau ---------------------------------------------------------------------------------------------------------- */
+.bk-wide .d-fld {
+  width: auto;
+}
+.bk-obsbtns {
+  display: flex;
+  gap: 6px;
+}
+.bk-pv {
+  color: var(--ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.bk-cand {
+  margin: 6px 0;
+}
+.bk-cand small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.bk-wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 2px;
+  max-height: 200px;
+  overflow: auto;
+}
+.bk-wall button {
+  height: 38px;
+  padding: 4px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.bk-wall button:hover {
+  background: var(--fill2);
+}
+.bk-wall img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+@media (max-width: 1180px) {
+  .bk {
+    grid-template-columns: minmax(0, 1fr) 224px;
+    gap: 10px 14px;
+  }
+  .bk-where {
+    display: none;
+  }
+}

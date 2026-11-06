@@ -57,6 +57,10 @@ html, body {
     transition-duration: var(--money-fade-out, 300ms);
 }
 #alertAudio { display: none; }
+/* A transition saved in Studio (engine: withLook): the style's own entrance is off, the engine animates the element itself. */
+#pseudoText.fx-in, #erenSubtitle.fx-in { animation: none; opacity: 1; }
+#pseudoText.pseudo-don.fx-in { transform: translate(-50%, 0); }
+#alertVideo.bits-video.entered.fx-in { animation: none; }
 
 .pseudo-classic {
     position: absolute;
@@ -109,6 +113,8 @@ html, body {
         -2px 2px 0 #000, 2px 2px 0 #000,
         0 0 8px rgba(0, 0, 0, .6);
 }
+/* A colour saved in Studio for the variant (--name-fixed, set by the engine); none: as before. */
+.pseudo-dofus { color: var(--name-fixed, white); }
 .pseudo-dofus.show { animation: dofusIn .6s ease-out forwards; }
 .pseudo-dofus.hide { animation: dofusOut 1s ease-in forwards; }
 /* Finishing pass (17/10/2026): the name stays still in the banner (no 30 px rise in, no 10 px jump out); the golden
@@ -226,6 +232,7 @@ html, body {
     margin-bottom: 7px;
 }
 .don-name {
+    color: var(--name-fixed, inherit);
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -315,7 +322,7 @@ html, body {
     white-space: nowrap;
 }
 .pseudo-subgift .gift-name {
-    color: #6ee7ff;
+    color: var(--name-fixed, #6ee7ff);
     text-shadow:
         -3px -3px 0 #090a12, 3px -3px 0 #090a12,
         -3px 3px 0 #090a12, 3px 3px 0 #090a12,

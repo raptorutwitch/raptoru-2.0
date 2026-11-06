@@ -8,33 +8,36 @@ test('« Trouver un viewer » → Créditer: a real Twitch name, credited once, 
 }) => {
   const s = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
   await s.goto('/?tab=halloween');
+  await s
+    .locator('#tab-halloween')
+    .getByRole('button', { name: 'Viewers' })
+    .click();
   const finder = s.locator('#tab-halloween [data-role="viewer"]');
   await finder.getByPlaceholder('Pseudo Twitch ou id').fill('kirito');
   await finder.getByRole('button', { name: 'Chercher' }).click();
   await finder.getByRole('button', { name: /Kirito_TV/ }).click();
-  await expect(finder.locator('.hw-balance')).toHaveText('0 🍬');
+  await expect(finder.locator('.hw-balance')).toHaveText('0');
   await finder.getByRole('button', { name: 'Créditer' }).click();
   const form = s.locator('#tab-halloween [data-form="grant"]');
   await expect(form.locator('input[name="viewer"]')).toHaveValue('57012345');
   await form.locator('input[name="amount"]').fill('7');
   await form.locator('input[name="note"]').fill('concours e2e');
   // A double click: one confirmation (accepted), one credit.
-  const asked: string[] = [];
-  s.on('dialog', (d) => {
-    asked.push(d.message());
-    void d.accept();
-  });
   await form.getByRole('button', { name: 'Attribuer' }).dblclick();
-  await expect(finder.locator('.hw-balance')).toHaveText('7 🍬', {
+  await expect(s.locator('.d-dlg')).toHaveCount(1);
+  await expect(s.locator('.d-dlg')).toContainText(
+    'Donner 7 Bonbons à Kirito_TV ?',
+  );
+  await s.locator('.d-dlg [data-yes]').click();
+  await expect(finder.locator('.hw-balance')).toHaveText('7', {
     timeout: 10_000,
   });
-  await expect(finder).toContainText('+7 🍬');
+  await expect(finder).toContainText('+7');
   await expect(finder).toContainText('concours e2e');
-  expect(asked).toEqual(['Donner 7 Bonbons à 57012345 ?']);
   await s.waitForTimeout(1500);
   await finder.getByRole('button', { name: 'Chercher' }).click();
   await expect(finder.getByRole('button', { name: /Kirito_TV/ })).toContainText(
-    '7 🍬',
+    '7',
   );
 });
 
@@ -58,11 +61,18 @@ test('« Testeurs seulement »: the Extension module hides for the others, shows
     return n;
   };
   await expect.poll(hub, { timeout: 40_000 }).toBeGreaterThan(0);
+  const pageTab = (name: string) =>
+    s
+      .locator('#tab-halloween')
+      .getByRole('button', { name, exact: true })
+      .click();
+  await pageTab('Boutique');
   await s.getByRole('button', { name: 'Testeurs seulement' }).click();
   // The other specs share the stack: whatever happens below, everyone sees the module again at the end.
   try {
     await expect(s.locator('#tab-halloween')).toContainText('0 testeur');
     await expect.poll(hub, { timeout: 15_000 }).toBe(0);
+    await pageTab('Viewers');
     const finder = s.locator('#tab-halloween [data-role="viewer"]');
     await finder.getByPlaceholder('Pseudo Twitch ou id').fill('900101');
     await finder.getByRole('button', { name: 'Chercher' }).click();
@@ -70,12 +80,13 @@ test('« Testeurs seulement »: the Extension module hides for the others, shows
       .getByRole('button', { name: /900101/ })
       .first()
       .click();
-    await finder.getByRole('button', { name: '+ Testeur extension' }).click();
-    await expect(
-      finder.getByRole('button', { name: '✓ Testeur extension' }),
-    ).toBeVisible();
+    const tester = finder.getByRole('button', { name: 'Testeur extension' });
+    await expect(tester).toHaveAttribute('aria-pressed', 'false');
+    await tester.click();
+    await expect(tester).toHaveAttribute('aria-pressed', 'true');
     await expect.poll(hub, { timeout: 15_000 }).toBeGreaterThan(0);
   } finally {
+    await pageTab('Boutique');
     await s.getByRole('button', { name: 'Tous les viewers' }).click();
     await expect(s.locator('#tab-halloween')).toContainText(
       'Tous les viewers de l’extension publiée',

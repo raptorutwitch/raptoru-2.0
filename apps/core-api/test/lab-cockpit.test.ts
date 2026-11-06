@@ -112,6 +112,22 @@ describe('the main Core: Lab environment vs Production', () => {
     });
   });
 
+  it('Lab: a simulated alert keeps the viewer it is about (its actor is not the Studio operator)', async () => {
+    const lab = await boot('lab');
+    const res = await lab.cockpit('alerts/events', {
+      channel_id: CHANNEL,
+      source: 'simulation',
+      source_event_id: 'studio-test-1',
+      type: 'follow',
+      actor: { display_name: 'Raptoru_Fan' },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      outcome: 'queued',
+      alert: { data: { pseudo: 'Raptoru_Fan' } },
+    });
+  });
+
   it('Lab: the whole Lab table through the cockpit, the simulator, Commandes, the Roue, fictional emotes', async () => {
     const { cockpit, session } = await boot('lab');
     expect((await cockpit(`spotify/${CHANNEL}/state`)).status).toBe(200);

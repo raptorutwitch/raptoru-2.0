@@ -29,23 +29,25 @@ test('Boutique: an existing title is edited (name, look, rarity, Publié → Mas
   await page.goto('/?tab=shop');
   const tab = page.locator('#tab-shop');
   const form = tab.locator('[data-role="item-form"]');
+  const toasts = page.locator('.d-toasts');
   await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-gentil-fantome');
   await form.locator('[data-f="label"]').fill('Gentil fantôme');
-  await form.locator('[data-f="status"]').selectOption('published');
+  await form.locator('[data-status="published"]').click();
   await tab.locator('[data-act="save"]').click();
-  await expect(tab).toContainText('Enregistré.');
+  await expect(toasts).toContainText('Enregistré.');
   // A viewer owns it (Studio's « Donner », in « Achats et dons »).
-  await tab.getByRole('tab', { name: 'Achats et dons' }).click();
+  await tab.getByRole('button', { name: 'Achats et dons' }).click();
   const award = tab.locator('[data-role="award-form"]');
   await award.locator('[data-a="viewer"]').fill('57012399');
   await award.locator('[data-a="viewer_name"]').fill('Casper');
-  await award.locator('[data-a="kind"]').selectOption('reward');
+  await award.locator('[data-give="reward"]').click();
   await award
     .locator('[data-a="reward_id"]')
     .selectOption('e2e-gentil-fantome');
   await award.getByRole('button', { name: 'Donner' }).click();
-  await expect(tab).toContainText('Donné.');
+  await page.locator('.d-dlg [data-yes]').click();
+  await expect(toasts).toContainText('Donné.');
 
   // Edit the existing title: name, rarity, gradient look, state Masqué.
   await page.reload();
@@ -54,21 +56,19 @@ test('Boutique: an existing title is edited (name, look, rarity, Publié → Mas
     'e2e-gentil-fantome',
   );
   await form.locator('[data-f="label"]').fill('Loup-garou');
-  await form.locator('[data-f="rarity"]').selectOption('epic');
+  await form.locator('[data-rarity="epic"]').click();
   await tab.locator('[data-l="use-gradient"]').check();
-  await form.locator('[data-f="status"]').selectOption('hidden');
+  await form.locator('[data-status="hidden"]').click();
   await tab.locator('[data-act="save"]').click();
-  await expect(tab).toContainText('Enregistré.');
-  await expect(tab).not.toContainText('Refusé');
+  await expect(toasts).toContainText('Enregistré.');
   const row = tab.locator('[data-row="e2e-gentil-fantome"]');
   await expect(row).toContainText('Masqué');
   await expect(row).toContainText('1'); // owners
 
   // Back to Publié.
   await tab.locator('[data-edit="e2e-gentil-fantome"]').click();
-  await form.locator('[data-f="status"]').selectOption('published');
+  await form.locator('[data-status="published"]').click();
   await tab.locator('[data-act="save"]').click();
-  await expect(tab).toContainText('Enregistré.');
   await expect(row).toContainText('Publié');
 
   // The Core: same identifier, new name / rarity / look; the owner still has it.

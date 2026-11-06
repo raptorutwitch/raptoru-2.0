@@ -1,28 +1,19 @@
-// Régie live (refonte lot 7, étape 1) — ce qui compte pendant le stream, au même endroit, sans copie de module :
-// - les incidents en cours (supervision) ;
-// - les automatisations des points de chaîne : état réel du Core et action nommée (même route et même confirmation
-//   que la page Récompenses Twitch) ;
-// - les contrôles nommés de chaque module : un lien vers l'écran qui les porte déjà (aucun bouton recopié).
-// Pas d'« arrêter tout » : chaque arrêt est nommé et limité à son module.
+// Régie live : ce qui passe, ce qui attend une décision, les interventions. Ici les lectures, les actions et le rendu pur ; la
+// page (pages/regie.ts) les compose. Le shell fait un seul relevé (`loadLive`) : il nourrit la Régie et les compteurs de la barre
+// latérale, même page fermée. Chaque action passe par la route du module, avec sa propre confirmation. Pas d'« arrêter tout » :
+// chaque arrêt est nommé et limité à son module.
+import { clock, esc, fmt, ic, pp, type IcName } from '../ds/ds.js';
+import { ApiError, STUDIO_HEADERS } from '../http.js';
+import { modAct, modGet, type ModItem } from '../mod/mod.js';
 import type { SupervisionSnapshot } from '../supervision-banner.js';
-
-const HEADERS = { 'content-type': 'application/json', 'x-raptoru-studio': '1' };
 
 /** Refonte H3: « Vider la file » — what it does, said before (waiting alerts only, nothing paid). */
 export const CLEAR_QUEUE_CONFIRM =
   'Vider la file d’attente des alertes ?\n\nLes alertes qui attendent ne seront pas jouées (elles restent dans l’historique). Celle déjà en lecture se termine normalement. Aucun Jeton, aucun événement Twitch : les gains (Roue du Sub, fidélité) ne dépendent pas de l’animation.';
 export const clearedText = (cleared: number, inFlight: number) =>
   `${cleared} alerte(s) en attente retirée(s)${inFlight ? ` · ${inFlight} déjà prise(s) par le lecteur : elle(s) se termine(nt) normalement` : ''}.`;
-const esc = (t: unknown) =>
-  String(t ?? '').replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ]!,
-  );
 
-interface CpSummary {
+export interface CpSummary {
   enabled: boolean;
   rules: number;
   /**
@@ -46,190 +37,215 @@ export function cpBlocker(s: {
 }
 
 /** Named controls of each module, where they already live. `what` says exactly what can be done there. */
-export const REGIE_CONTROLS: { page: string; title: string; what: string }[] = [
+export const REGIE_CONTROLS: {
+  page: string;
+  title: string;
+  icon: IcName;
+  what: string;
+}[] = [
   {
     page: 'moderation',
     title: 'Modération',
-    what: 'Files D4, sanctions, remboursements ; en Production, pause, stop et file TTS.',
+    icon: 'mod',
+    what: 'Files D4, sanctions, remboursements, équipe.',
   },
   {
     page: 'tombola',
     title: 'Tombola',
+    icon: 'dice',
     what: 'Tirage en direct : pause, reprise, annulation (avec confirmation).',
   },
   {
     page: 'alerts',
     title: 'Alertes',
+    icon: 'bell',
     what: 'File : rejouer une alerte, arrêter celle en cours.',
   },
   {
     page: 'tts',
-    title: 'TTS (Lab)',
+    title: 'TTS',
+    icon: 'mic',
     what: 'Pause, reprise, stop de la lecture en cours, vider la file (remboursés).',
   },
   {
     page: 'spotify',
     title: 'Spotify',
+    icon: 'music',
     what: 'Demandes de musique : ouvrir / fermer, retirer une demande (remboursée).',
   },
   {
     page: 'random-ban',
     title: 'Random Ban',
+    icon: 'shield',
     what: 'Tirage à blanc, suivi des bans et du mute OBS.',
   },
   {
     page: 'sub-wheel',
     title: 'Roue du Sub',
+    icon: 'wheel',
     what: 'File, droits, tirages à vérifier.',
   },
   {
     page: 'word-game',
     title: 'Jeu des mots',
+    icon: 'puzzle',
     what: 'Manches et révélation locale.',
   },
   {
     page: 'halloween',
     title: 'Halloween',
+    icon: 'pumpkin',
     what: 'Effets de l’événement : arrêt de l’effet en cours.',
   },
 ];
 
 export async function loadChannelPoints(): Promise<CpSummary | null> {
-  try {
-    const res = await fetch('/api/channel-points/state', { headers: HEADERS });
-    if (!res.ok) return null;
-    const s = (await res.json()) as {
-      settings?: { enabled?: boolean };
-      rewards?: { rule?: { enabled?: boolean } | null }[];
-      obs?: { connected?: boolean };
-      effects?: { connected?: boolean; audio?: boolean } | null;
-      executor_error?: string | null;
-    };
-    return {
+  const s = await getJson<{
+    settings?: { enabled?: boolean };
+    rewards?: { rule?: { enabled?: boolean } | null }[];
+    obs?: { connected?: boolean };
+    effects?: { connected?: boolean; audio?: boolean } | null;
+    executor_error?: string | null;
+  }>('/api/channel-points/state');
+  return (
+    s && {
       enabled: !!s.settings?.enabled,
       rules: (s.rewards ?? []).filter((r) => r.rule?.enabled).length,
       blocker: cpBlocker(s),
-    };
-  } catch {
-    return null;
-  }
+    }
+  );
 }
 
-export { CP_OFF_CONFIRM, CP_ON_CONFIRM } from '../channel-points-view.js';
+export { CP_OFF_CONFIRM, CP_ON_CONFIRM } from '../pages/rewards-model.js';
 
-export async function setChannelPoints(enabled: boolean) {
-  const res = await fetch('/api/channel-points/settings', {
-    method: 'POST',
-    headers: HEADERS,
-    body: JSON.stringify({ enabled }),
-  });
-  const out = (await res.json().catch(() => ({}))) as { error?: string };
-  if (!res.ok) throw new Error(out.error ?? `HTTP ${res.status}`);
-}
-
-export function regieHtml(opts: {
-  sup: SupervisionSnapshot | null;
-  supOk: boolean;
-  cp: CpSummary | null | undefined;
-  message: string;
-  href: (page: string) => string;
-  live?: LiveState;
-  profile?: string;
-  liveMessage?: string;
-}) {
-  const active = opts.sup?.incidents.filter((i) => !i.endedAt) ?? [];
-  const cp = opts.cp;
-  return `${liveHtml(opts.live, opts.profile ?? 'unknown', opts.href, opts.liveMessage)}
-  <div class="rs-cols">
-    <section class="rs-panel"><h2>En ce moment</h2>
-      <p class="rs-state ${!opts.supOk ? 'is-unknown' : active.length ? 'is-down' : 'is-ok'}">${
-        !opts.supOk
-          ? 'Supervision indisponible : état inconnu.'
-          : active.length
-            ? `${active.length} incident(s) en cours : ${active.map((i) => esc(i.label)).join(', ')}.`
-            : `Aucun incident sur les éléments suivis : ${SUPERVISED}.`
-      }</p>
-      ${opts.supOk && !active.length ? `<p class="rs-muted">Non suivis ici : ${NOT_SUPERVISED}. Leur état est dans chaque module.</p>` : ''}
-      <p class="rs-muted"><a href="${opts.href('activite')}">Historique des coupures</a> · <a href="${opts.href('systeme')}">Connexions (Système)</a></p>
-    </section>
-    <section class="rs-panel" data-role="regie-cp"><h2>Points de chaîne</h2>
-      <p class="rs-state ${cp === undefined ? '' : cp === null ? 'is-unknown' : !cp.enabled ? '' : cp.blocker === null ? 'is-ok' : cp.blocker === undefined ? 'is-unknown' : 'is-down'}">${
-        cp === undefined
-          ? 'Lecture…'
-          : cp === null
-            ? 'État inconnu (Core du profil injoignable ou module absent).'
-            : !cp.enabled
-              ? `Automatisations coupées · ${cp.rules} récompense(s) avec une règle active (sans effet tant que c’est coupé).`
-              : cp.blocker === null
-                ? `Automatisations actives et exécutables · ${cp.rules} récompense(s) avec une règle active.`
-                : cp.blocker === undefined
-                  ? `Automatisations activées · ${cp.rules} récompense(s) avec une règle active · exécution non vérifiée.`
-                  : `Automatisations activées, mais ${esc(cp.blocker)} : les actions OBS et les sons attendent · ${cp.rules} récompense(s) avec une règle active.`
-      }</p>
-      ${cp ? `<button type="button" class="rs-btn ${cp.enabled ? 'danger' : ''}" data-regie="cp">${cp.enabled ? 'Couper les automatisations…' : 'Activer les automatisations…'}</button>` : ''}
-      <p class="rs-muted">${opts.message ? `${esc(opts.message)} · ` : ''}Règles et historique : <a href="${opts.href('channel-points')}">Récompenses Twitch</a>.</p>
-    </section>
-  </div>
-  <section class="rs-panel"><h2>Contrôles par module</h2>
-    <div class="rs-rows">${REGIE_CONTROLS.map((c) => `<a class="rs-row rs-row-2" href="${opts.href(c.page)}"><b>${esc(c.title)}</b><small>${esc(c.what)}</small></a>`).join('')}</div>
-  </section>`;
-}
+export const setChannelPoints = (enabled: boolean) =>
+  post('/api/channel-points/settings', { enabled });
 
 /** What the supervision follows today (server/src/supervision): an empty list of incidents means only this. */
-export const SUPERVISED = 'lien Studio ↔ Core, bot, TTS, Soundboard, Bonk';
+export const SUPERVISED = 'liaison Studio, bot, TTS, Soundboard, Bonk';
 export const NOT_SUPERVISED =
   'lecteur d’effets, source Alertes, overlays Tombola et Votekick, Spotify';
 
-// --- Files en direct (étape 2) : les routes de lecture et d'action que les modules utilisent déjà ---------------------
+// --- Lectures --------------------------------------------------------------------------------------------------------
 
+export interface LiveTombola {
+  raffle_id?: string;
+  status: string;
+  kind: string;
+  participants: number;
+  remaining_ms: number;
+  duration_ms?: number;
+  label: string;
+  /** Fin du décompte, sur l'horloge de ce PC : le décompte tourne entre deux relevés sans réécrire la page. */
+  ends_at?: number | null;
+}
 export interface LiveState {
-  tombola:
-    | {
-        status: string;
-        kind: string;
-        participants: number;
-        remaining_ms: number;
-        label: string;
-      }
-    | 'none'
-    | null;
-  alerts: { playing: number; queued: number; source: boolean | null } | null;
+  /** Le live en cours ; undefined : non lu. */
+  stream?: { source: string; started_at: string } | null;
+  /** La pause générale du Core. */
+  paused?: boolean;
+  tombola: LiveTombola | 'none' | null;
+  alerts: {
+    playing: number;
+    queued: number;
+    source: boolean | null;
+    items?: { id: string; type: string; who: string; playing: boolean }[];
+  } | null;
   tts:
     | {
         state: string;
         current: string | null;
-        /** null: the queue is not readable from this profile (Production: Modération). */
+        /** null: the queue could not be read. */
         waiting: number | null;
         /** The TTS player answers (Studio's worker); undefined: not read. */
         ready?: boolean;
+        playing?: ModItem | null;
+        queue?: ModItem[];
       }
     | 'off'
     | null;
+  sounds?: { state: string; playing: ModItem[]; waiting: ModItem[] } | null;
   spotify: {
     /** The Core's own admission: « ready », « MODULE_DISABLED » or the refusal reason (Studio absent, auth…). */
     admission: string;
     current: string | null;
     queue: number;
+    items?: { id: string; who: string; title: string }[];
+    verify?: number;
   } | null;
+  /** Tirages de la Roue à vérifier (relevé complet, Régie ouverte). */
+  wheel?: { reviews: number; duplicates: number } | null;
 }
 
-const getJson = async <T>(path: string): Promise<T | null> => {
+async function getJson<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(path, { headers: HEADERS });
+    const res = await fetch(path, { headers: STUDIO_HEADERS });
     return res.ok ? ((await res.json()) as T) : null;
   } catch {
     return null;
   }
-};
+}
 
-export async function loadLive(): Promise<LiveState> {
-  const [raffle, alerts, tts, sp] = await Promise.all([
+async function post(path: string, body: unknown) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: STUDIO_HEADERS,
+    body: JSON.stringify(body),
+  });
+  const out = (await res.json().catch(() => ({}))) as {
+    error?: string | { code?: string };
+    cleared?: number;
+    in_flight?: number;
+  };
+  if (!res.ok)
+    throw new ApiError(
+      res.status,
+      typeof out.error === 'string'
+        ? out.error
+        : (out.error?.code ?? `HTTP ${res.status}`),
+    );
+  return out;
+}
+
+interface Overview {
+  tts?: {
+    module_state?: string;
+    current?: ModItem | null;
+    waiting?: ModItem[];
+  };
+  soundboard?: {
+    module_state?: string;
+    playing?: ModItem[];
+    waiting?: ModItem[];
+  };
+  global?: { paused?: boolean };
+}
+const asSounds = (o: Overview | null): LiveState['sounds'] =>
+  o?.soundboard
+    ? {
+        state: o.soundboard.module_state ?? 'active',
+        playing: (o.soundboard.playing ?? []).map(soundItem),
+        waiting: (o.soundboard.waiting ?? []).map(soundItem),
+      }
+    : null;
+const soundItem = (i: ModItem): ModItem => ({ ...i, module: 'soundboard' });
+
+const RUNNING = ['opening', 'open', 'paused'];
+
+/**
+ * Le relevé commun. `full` : la Régie est ouverte, on lit aussi le live et les tirages de la Roue. Une lecture manquante reste
+ * null : la page dit « indisponible », jamais une valeur inventée.
+ */
+export async function loadLive(full = false): Promise<LiveState> {
+  const [raffle, alerts, tts, sp, overview, status, wheel] = await Promise.all([
     getJson<{
       round: {
+        raffle_id: string;
         status: string;
         kind: string;
         participants: number;
         remaining_ms: number;
+        duration_ms: number;
         amount: number;
         prize: string | null;
         currency: { label: string } | null;
@@ -237,36 +253,62 @@ export async function loadLive(): Promise<LiveState> {
     }>('/api/raffle/snapshot'),
     getJson<{
       enabled?: false;
-      in_flight: unknown[];
-      queued: unknown[];
+      in_flight: {
+        alert_id: string;
+        type: string;
+        data?: { pseudo?: unknown };
+      }[];
+      queued: {
+        alert_id: string;
+        type: string;
+        data?: { pseudo?: unknown };
+      }[];
       source?: { seen: boolean };
     }>('/api/alerts/state'),
-    getJson<{
-      enabled: boolean;
-      ready?: boolean;
-      module_state?: string;
-      queue?: {
-        current: { viewer_display_name: string } | null;
-        waiting: unknown[];
-      } | null;
-    }>('/api/tts-lab/status'),
+    getJson<{ enabled: boolean; ready?: boolean; module_state?: string }>(
+      '/api/tts-lab/status',
+    ),
     getJson<{
       admission: string;
       current: { title?: string; artists?: string } | null;
-      queue: unknown[];
+      queue: {
+        request_id: string;
+        viewer?: { name?: string };
+        track?: { title?: string } | null;
+        input?: string | null;
+      }[];
+      to_verify?: unknown[];
     }>('/api/spotify/state'),
+    modGet<Overview>('overview').catch(() => null),
+    full
+      ? getJson<{ stream?: LiveState['stream'] }>('/api/raffle/status')
+      : null,
+    full
+      ? getJson<{ reviews?: unknown[]; possible_duplicates?: unknown[] }>(
+          '/api/sub-wheel/state',
+        )
+      : null,
   ]);
   const r = raffle?.round;
+  const q = overview?.tts;
   return {
+    stream: status && 'stream' in status ? (status.stream ?? null) : undefined,
+    paused: overview?.global?.paused,
     tombola: !raffle
       ? null
       : !r
         ? 'none'
         : {
+            raffle_id: r.raffle_id,
             status: r.status,
             kind: r.kind,
             participants: r.participants,
             remaining_ms: r.remaining_ms,
+            duration_ms: r.duration_ms,
+            ends_at:
+              r.status === 'paused' || !RUNNING.includes(r.status)
+                ? null
+                : Date.now() + r.remaining_ms,
             label:
               r.kind === 'giveaway'
                 ? (r.prize ?? 'Giveaway')
@@ -279,17 +321,24 @@ export async function loadLive(): Promise<LiveState> {
             playing: alerts.in_flight.length,
             queued: alerts.queued.length,
             source: alerts.source ? alerts.source.seen : null,
+            items: [
+              ...alerts.in_flight.map((a) => alertItem(a, true)),
+              ...alerts.queued.map((a) => alertItem(a, false)),
+            ],
           },
     tts: !tts
       ? null
       : !tts.enabled
         ? 'off'
         : {
-            state: tts.module_state ?? 'active',
-            current: tts.queue?.current?.viewer_display_name ?? null,
-            waiting: tts.queue ? tts.queue.waiting.length : null,
+            state: q?.module_state ?? tts.module_state ?? 'active',
+            current: q?.current?.viewer_display_name ?? null,
+            waiting: q?.waiting ? q.waiting.length : null,
             ready: tts.ready,
+            playing: q?.current ?? null,
+            queue: q?.waiting ?? [],
           },
+    sounds: asSounds(overview),
     spotify: !sp
       ? null
       : {
@@ -297,10 +346,70 @@ export async function loadLive(): Promise<LiveState> {
           current: sp.current
             ? [sp.current.title, sp.current.artists]
                 .filter(Boolean)
-                .join(' — ') || 'en cours'
+                .join(' · ') || 'en cours'
             : null,
           queue: sp.queue.length,
+          items: sp.queue.map((x) => ({
+            id: x.request_id,
+            who: x.viewer?.name ?? '',
+            title: x.track?.title ?? x.input ?? '',
+          })),
+          verify: sp.to_verify?.length ?? 0,
         },
+    wheel: wheel && {
+      reviews: wheel.reviews?.length ?? 0,
+      duplicates: wheel.possible_duplicates?.length ?? 0,
+    },
+  };
+}
+const alertItem = (
+  a: { alert_id: string; type: string; data?: { pseudo?: unknown } },
+  playing: boolean,
+) => ({
+  id: a.alert_id,
+  type: a.type,
+  who: String(a.data?.pseudo ?? ''),
+  playing,
+});
+
+/** Garde la même échéance d'un relevé à l'autre tant qu'elle ne dérive pas : la page n'est pas réécrite pour rien. Pur. */
+export function steadyEnds(prev: LiveState | undefined, next: LiveState) {
+  const a = prev?.tombola;
+  const b = next.tombola;
+  if (
+    a &&
+    b &&
+    a !== 'none' &&
+    b !== 'none' &&
+    a.raffle_id === b.raffle_id &&
+    a.ends_at &&
+    b.ends_at &&
+    Math.abs(a.ends_at - b.ends_at) < 1500
+  )
+    b.ends_at = a.ends_at;
+  return next;
+}
+
+/** Les compteurs de la barre latérale. Pur ; `now` : pour le temps de la Tombola. */
+export function liveCounts(l: LiveState | undefined, now: number) {
+  const t = l?.tombola;
+  const tt = l?.tts;
+  const a = l?.alerts;
+  const waiting = tt && tt !== 'off' ? (tt.waiting ?? 0) : 0;
+  const n = a ? a.playing + a.queued : 0;
+  return {
+    tts: waiting ? String(waiting) : null,
+    alerts: n ? String(n) : null,
+    tombola:
+      !t || t === 'none'
+        ? null
+        : t.status === 'paused'
+          ? 'Pause'
+          : RUNNING.includes(t.status)
+            ? clock(((t.ends_at ?? now + t.remaining_ms) - now) / 1000)
+            : t.status === 'drawing' || t.status === 'revealing'
+              ? 'Tirage'
+              : null,
   };
 }
 
@@ -313,29 +422,44 @@ export function spotifyAdmission(a: string) {
       : `Demandes refusées : ${SPOTIFY_REFUSAL[a] ?? a}`;
 }
 const SPOTIFY_REFUSAL: Record<string, string> = {
-  STUDIO_UNAVAILABLE: 'Studio non vu par le Core',
+  STUDIO_UNAVAILABLE: 'Studio non vu par le serveur',
   AUTH_NOT_CONFIGURED: 'Spotify non connecté à Studio',
   AUTH_REQUIRED: 'Spotify à reconnecter',
   RATE_LIMITED: 'Spotify limite les appels',
 };
 
+// --- Actions ---------------------------------------------------------------------------------------------------------
+
 /** Named live actions, each through the module's own route, with its own confirmation wording. */
 export const LIVE_ACTIONS: Record<
   string,
-  { label: string; confirm?: string; run: () => Promise<void> }
+  {
+    label: string;
+    icon: IcName;
+    confirm?: string;
+    /** Ce qui s'est passé, dit après coup. */
+    done: string | ((out: { cleared?: number; in_flight?: number }) => string);
+    run: () => Promise<unknown>;
+  }
 > = {
   'tombola-pause': {
     label: 'Pause',
+    icon: 'pause',
+    done: 'Tombola en pause',
     run: () => post('/api/raffle/actions', { command: { action: 'pause' } }),
   },
   'tombola-resume': {
     label: 'Reprendre',
+    icon: 'play',
+    done: 'Tombola reprise',
     run: () => post('/api/raffle/actions', { command: { action: 'resume' } }),
   },
   'tombola-cancel': {
     label: 'Annuler la Tombola…',
+    icon: 'x',
     confirm:
       'Annuler la Tombola en cours ?\n\nLes inscriptions sont fermées, personne n’est payé. L’overlay affiche « Tombola annulée » quelques secondes, puis disparaît.',
+    done: 'Tombola annulée',
     run: () =>
       post('/api/raffle/actions', {
         command: { action: 'cancel', reason: 'annulée depuis Studio' },
@@ -343,118 +467,523 @@ export const LIVE_ACTIONS: Record<
   },
   'alerts-clear': {
     label: 'Vider la file d’attente…',
+    icon: 'trash',
     confirm: CLEAR_QUEUE_CONFIRM,
+    done: (o) => clearedText(o.cleared ?? 0, o.in_flight ?? 0),
     run: () => post('/api/alerts/clear', {}),
   },
   'tts-pause': {
-    label: 'Pause TTS',
+    label: 'Pause',
+    icon: 'pause',
+    done: 'TTS en pause, la file est gardée',
     run: () =>
-      post('/api/tts-lab/moderation', { actor: 'studio', action: 'pause' }),
+      modAct({
+        action: 'module_state',
+        module: 'tts',
+        state: 'paused',
+        waiting: 'keep',
+      }),
   },
   'tts-resume': {
-    label: 'Reprendre TTS',
+    label: 'Reprendre',
+    icon: 'play',
+    done: 'TTS repris',
     run: () =>
-      post('/api/tts-lab/moderation', { actor: 'studio', action: 'resume' }),
+      modAct({
+        action: 'module_state',
+        module: 'tts',
+        state: 'active',
+        waiting: 'keep',
+      }),
   },
   'tts-stop': {
-    label: 'Arrêter le message en cours…',
+    label: 'Arrêter le message…',
+    icon: 'stop',
     confirm:
       'Arrêter le message TTS en cours ?\n\nIl est coupé et son auteur est remboursé. La file continue ensuite.',
+    done: 'Message coupé et remboursé',
+    run: () => modAct({ action: 'stop_current', module: 'tts', refund: true }),
+  },
+  'sound-pause': {
+    label: 'Pause',
+    icon: 'pause',
+    done: 'Sons en pause, la file est gardée',
     run: () =>
-      post('/api/tts-lab/moderation', {
-        actor: 'studio',
-        action: 'stop_current',
-        refund: true,
+      modAct({
+        action: 'module_state',
+        module: 'soundboard',
+        state: 'paused',
+        waiting: 'keep',
+      }),
+  },
+  'sound-resume': {
+    label: 'Reprendre',
+    icon: 'play',
+    done: 'Sons repris',
+    run: () =>
+      modAct({
+        action: 'module_state',
+        module: 'soundboard',
+        state: 'active',
+        waiting: 'keep',
       }),
   },
 };
 
-async function post(path: string, body: unknown) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: HEADERS,
-    body: JSON.stringify(body),
-  });
-  const out = (await res.json().catch(() => ({}))) as {
-    error?: string | { code?: string };
-  };
-  if (!res.ok)
-    throw new Error(
-      typeof out.error === 'string'
-        ? out.error
-        : (out.error?.code ?? `HTTP ${res.status}`),
-    );
-}
+// --- Rendu pur ---------------------------------------------------------------------------------------------------------
 
 const TOMBOLA_FR: Record<string, string> = {
-  opening: 'ouverture',
-  open: 'inscriptions ouvertes',
-  paused: 'en pause',
-  drawing: 'tirage',
-  revealing: 'révélation',
-  revealed: 'terminée',
-  finished: 'terminée',
-  cancelled: 'annulée',
+  opening: 'Ouverture',
+  open: 'Inscriptions ouvertes',
+  paused: 'En pause',
+  drawing: 'Tirage',
+  revealing: 'Révélation',
+  revealed: 'Terminée',
+  finished: 'Terminée',
+  cancelled: 'Annulée',
 };
-const btn = (id: string, cls = '') =>
-  `<button type="button" class="rs-btn sm ${cls}" data-live="${id}">${esc(LIVE_ACTIONS[id]!.label)}</button>`;
-const unknown =
-  '<p class="rs-state is-unknown">Indisponible sur ce profil (module absent ou Core injoignable).</p>';
+const ALERT_FR: Record<string, string> = {
+  follow: 'Follow',
+  sub: 'Sub',
+  resub: 'Resub',
+  subgift: 'Sub offert',
+  bits: 'Bits',
+  raid: 'Raid',
+  donation: 'Don',
+};
+const n = (v: number, one: string, many = `${one}s`) =>
+  `${fmt(v)} ${v > 1 ? many : one}`;
 
-export function liveHtml(
-  live: LiveState | undefined,
+type Tone = 'ok' | 'warn' | 'bad' | 'off' | 'unknown';
+const btn = (id: string, cls = 'ghost') => {
+  const a = LIVE_ACTIONS[id]!;
+  return `<button type="button" class="d-btn sm ${cls}" data-live="${id}">${ic(a.icon)}${esc(a.label)}</button>`;
+};
+const idle = (text: string) => `<p class="rg-idle">${text}</p>`;
+const UNKNOWN = idle(
+  'Indisponible sur ce profil (module absent ou serveur injoignable).',
+);
+
+function track(o: {
+  id: string;
+  mod: string;
+  icon: IcName;
+  title: string;
+  href: string;
+  page: string;
+  tone: Tone;
+  state: string;
+  lane: string;
+  acts?: string;
+  busy?: boolean;
+}) {
+  return {
+    key: o.id,
+    html: `<section class="rg-t${o.busy ? ' on' : ''}" data-mod="${o.mod}" data-track="${o.id}">
+      <a class="rg-t__l" href="${o.href}" data-page="${o.page}" title="Ouvrir ${esc(o.title)}"><span class="rg-t__ic">${ic(o.icon)}</span><b>${esc(o.title)}</b><small data-tone="${o.tone}"><i></i>${esc(o.state)}</small></a>
+      <div class="rg-t__lane">${o.lane}</div>
+      <div class="rg-t__a">${o.acts ?? ''}</div>
+    </section>`,
+  };
+}
+
+const clip = (i: ModItem, text: string, more = true) =>
+  `<span class="rg-c"><button type="button" class="rg-c__m" data-item="${esc(i.interaction_id)}" title="${esc(text)}">${pp(i.viewer_display_name, 20)}<span>${esc(i.viewer_display_name)}</span></button>${more ? `<button type="button" class="d-ib rg-c__x" data-more="${esc(i.interaction_id)}" aria-label="Décider pour ${esc(i.viewer_display_name)}">${ic('more')}</button>` : ''}</span>`;
+const small = (who: string, what: string) =>
+  `<span class="rg-c rg-c--s" title="${esc(what)}">${who ? pp(who, 20) : ''}<span>${esc(who || what)}</span></span>`;
+
+function ttsTrack(live: LiveState, lab: boolean, href: (p: string) => string) {
+  const v = live.tts;
+  const base = {
+    id: 'tts',
+    mod: 'tts',
+    icon: 'mic' as IcName,
+    title: 'Voix',
+    page: 'tts',
+    href: href('tts'),
+  };
+  if (v === null)
+    return track({ ...base, tone: 'unknown', state: 'Inconnu', lane: UNKNOWN });
+  if (v === 'off')
+    return track({
+      ...base,
+      tone: 'off',
+      state: 'Coupé',
+      lane: idle('Module TTS coupé sur ce profil.'),
+    });
+  const tone: Tone =
+    v.state !== 'active'
+      ? 'off'
+      : v.ready === true
+        ? 'ok'
+        : v.ready === false
+          ? 'bad'
+          : 'unknown';
+  const state =
+    v.state === 'paused'
+      ? 'En pause'
+      : v.state === 'disabled'
+        ? 'Désactivé'
+        : v.ready === false
+          ? 'Activé, lecteur absent'
+          : v.ready === true
+            ? 'Actif'
+            : 'Activé (lecteur non vérifié)';
+  const i = v.playing;
+  const now = i
+    ? `<div class="rg-now" data-item="${esc(i.interaction_id)}">${pp(i.viewer_display_name, 28)}<div><b>${esc(i.viewer_display_name)}</b><p>${esc(i.message ?? i.detail ?? '')}</p><span class="d-prog"><i data-start="${esc(i.delivery?.started_at ?? '')}" data-dur="${i.estimated_duration_ms ?? 0}" style="width:0"></i></span></div></div>`
+    : v.current
+      ? `<div class="rg-now"><div><b>${esc(v.current)}</b><p>Lecture en cours</p></div></div>`
+      : '';
+  const q = v.queue ?? [];
+  const lane = `${now}${q.map((x) => clip(x, x.message ?? '')).join('')}${
+    !now && !q.length
+      ? idle(
+          v.waiting === null
+            ? 'File non lisible ici.'
+            : v.ready === false
+              ? 'Le lecteur ne répond pas. Les messages attendent, rien n’est perdu.'
+              : 'Personne ne parle.',
+        )
+      : ''
+  }${v.waiting !== null && v.waiting > q.length ? `<span class="rg-more">+${v.waiting - q.length}</span>` : ''}`;
+  const count = v.waiting ? ` · ${n(v.waiting, 'message')} en attente` : '';
+  return track({
+    ...base,
+    tone,
+    state: state + count,
+    busy: !!now,
+    lane,
+    acts: `${v.state === 'paused' ? btn('tts-resume') : v.state === 'active' ? btn('tts-pause') : ''}${v.current ? btn('tts-stop', 'bad') : ''}`,
+  });
+}
+
+function soundTrack(live: LiveState, href: (p: string) => string) {
+  const s = live.sounds;
+  const base = {
+    id: 'sounds',
+    mod: 'soundboard',
+    icon: 'sound' as IcName,
+    title: 'Sons',
+    page: 'soundboard',
+    href: href('soundboard'),
+  };
+  if (!s)
+    return track({ ...base, tone: 'unknown', state: 'Inconnu', lane: UNKNOWN });
+  const label = (i: ModItem) => `${i.sound_label ?? i.detail ?? 'Son'}`;
+  const now = s.playing
+    .map(
+      (i) =>
+        `<div class="rg-now rg-now--s">${pp(i.viewer_display_name, 28)}<div><b>${esc(label(i))}</b><p>${esc(i.viewer_display_name)}</p></div></div>`,
+    )
+    .join('');
+  return track({
+    ...base,
+    tone: s.state === 'active' ? 'ok' : 'off',
+    state:
+      s.state === 'paused'
+        ? 'En pause'
+        : s.state === 'disabled'
+          ? 'Désactivé'
+          : s.waiting.length
+            ? `${n(s.waiting.length, 'son')} en attente`
+            : 'Actif',
+    busy: !!now,
+    lane:
+      `${now}${s.waiting.map((i) => clip(i, label(i))).join('')}` ||
+      idle('Aucun son en cours.'),
+    acts:
+      s.state === 'paused'
+        ? btn('sound-resume')
+        : s.state === 'active'
+          ? btn('sound-pause')
+          : '',
+  });
+}
+
+function alertTrack(live: LiveState, href: (p: string) => string) {
+  const a = live.alerts;
+  const base = {
+    id: 'alerts',
+    mod: 'alerts',
+    icon: 'bell' as IcName,
+    title: 'Alertes',
+    page: 'alerts',
+    href: href('alerts'),
+  };
+  if (a === null)
+    return track({ ...base, tone: 'unknown', state: 'Inconnu', lane: UNKNOWN });
+  const items = a.items ?? [];
+  const now = items
+    .filter((x) => x.playing)
+    .map(
+      (x) =>
+        `<div class="rg-now rg-now--s">${x.who ? pp(x.who, 28) : ''}<div><b>${esc(ALERT_FR[x.type] ?? x.type)}</b><p>${esc(x.who)}</p></div></div>`,
+    )
+    .join('');
+  const next = items
+    .filter((x) => !x.playing)
+    .map((x) => small(x.who, ALERT_FR[x.type] ?? x.type))
+    .join('');
+  const line = `${a.playing ? `${a.playing} en lecture` : 'Rien en lecture'} · ${a.queued} en attente${a.queued ? ' · Plus jouée après 30 min d’attente' : ''}`;
+  return track({
+    ...base,
+    tone: a.source === null ? 'unknown' : a.source ? 'ok' : 'bad',
+    state:
+      a.source === null
+        ? 'Source inconnue'
+        : a.source
+          ? 'Source vue'
+          : 'Source absente',
+    busy: !!now,
+    lane: `${now}${next}${
+      !now && !next
+        ? idle(
+            a.source === false
+              ? 'Source OBS absente : les alertes attendent.'
+              : a.source === null
+                ? 'Source OBS inconnue.'
+                : 'Aucune alerte en attente.',
+          )
+        : ''
+    }${a.playing || a.queued ? `<span class="rg-note">${line}</span>` : ''}`,
+    acts: a.queued ? btn('alerts-clear', 'bad') : '',
+  });
+}
+
+function musicTrack(live: LiveState, href: (p: string) => string) {
+  const s = live.spotify;
+  const base = {
+    id: 'music',
+    mod: 'spotify',
+    icon: 'music' as IcName,
+    title: 'Musique',
+    page: 'spotify',
+    href: href('spotify'),
+  };
+  if (s === null)
+    return track({ ...base, tone: 'unknown', state: 'Inconnu', lane: UNKNOWN });
+  const items = s.items ?? [];
+  const now = s.current
+    ? `<div class="rg-now rg-now--s"><div><b>${esc(s.current)}</b><p>En cours</p></div></div>`
+    : '';
+  return track({
+    ...base,
+    tone:
+      s.admission === 'ready'
+        ? 'ok'
+        : s.admission === 'MODULE_DISABLED'
+          ? 'off'
+          : 'bad',
+    state:
+      s.admission === 'ready'
+        ? `Ouvert · ${s.queue} en file`
+        : s.admission === 'MODULE_DISABLED'
+          ? 'Fermé'
+          : 'Refusé',
+    busy: !!now,
+    lane: `${now}${items.map((x) => small(x.who, x.title)).join('')}${
+      !now && !items.length ? idle(esc(spotifyAdmission(s.admission))) : ''
+    }`,
+  });
+}
+
+function tombolaTrack(live: LiveState, href: (p: string) => string) {
+  const t = live.tombola;
+  const base = {
+    id: 'tombola',
+    mod: 'tombola',
+    icon: 'dice' as IcName,
+    title: 'Tombola',
+    page: 'tombola',
+    href: href('tombola'),
+  };
+  if (t === null)
+    return track({ ...base, tone: 'unknown', state: 'Inconnu', lane: UNKNOWN });
+  if (t === 'none')
+    return track({
+      ...base,
+      tone: 'off',
+      state: 'Fermée',
+      lane: idle('Aucune Tombola en cours.'),
+    });
+  const running = RUNNING.includes(t.status);
+  const left =
+    t.ends_at != null
+      ? `<b class="rg-time" data-ends="${t.ends_at}"></b>`
+      : running
+        ? `<b class="rg-time">${clock(t.remaining_ms / 1000)}</b>`
+        : '';
+  const pct =
+    t.duration_ms && t.status === 'paused'
+      ? Math.round((t.remaining_ms / t.duration_ms) * 100)
+      : 0;
+  return track({
+    ...base,
+    tone: t.status === 'paused' ? 'warn' : running ? 'ok' : 'off',
+    state: TOMBOLA_FR[t.status] ?? t.status,
+    busy: running,
+    lane: `<div class="rg-now rg-now--t">${left}<div><b>${esc(t.label)}</b><p>${n(t.participants, 'participant')}${t.kind === 'super' ? ' · Super' : ''}</p>${
+      t.duration_ms
+        ? `<span class="d-prog"><i data-ends="${t.ends_at ?? ''}" data-total="${t.duration_ms}" style="width:${pct}%"></i></span>`
+        : ''
+    }</div></div>`,
+    acts: running
+      ? `${t.status === 'paused' ? btn('tombola-resume') : btn('tombola-pause')}${btn('tombola-cancel', 'bad')}`
+      : '',
+  });
+}
+
+/** Les pistes de la Régie, une par famille de ce qui passe à l'antenne. */
+export function liveTracks(
+  live: LiveState,
   profile: string,
   href: (page: string) => string,
-  message = '',
 ) {
-  if (!live)
-    return '<section class="rs-panel"><h2>Files en direct</h2><p class="rs-muted">Lecture…</p></section>';
-  const lab = profile === 'lab';
-  const t = live.tombola;
-  const a = live.alerts;
-  const v = live.tts;
-  const s = live.spotify;
-  const card = (title: string, page: string, body: string) =>
-    `<section class="rs-live-card"><header><h3>${title}</h3><a href="${href(page)}">Ouvrir</a></header>${body}</section>`;
-  return `<section class="rs-panel"><h2>Files en direct</h2>${message ? `<p class="rs-flash${message.startsWith('Refusé') ? ' is-bad' : ''}" role="status">${esc(message)}</p>` : ''}<div class="rs-live">
-    ${card(
-      'Tombola',
-      'tombola',
-      t === null
-        ? unknown
-        : t === 'none'
-          ? '<p class="rs-state">Aucune Tombola en cours.</p>'
-          : `<p class="rs-state ${['open', 'opening'].includes(t.status) ? 'is-ok' : t.status === 'paused' ? 'is-unknown' : ''}">${esc(TOMBOLA_FR[t.status] ?? t.status)} · ${esc(t.label)}</p>
-             <p class="rs-muted">${t.participants} participant(s)${['open', 'opening', 'paused'].includes(t.status) ? ` · ${Math.ceil(t.remaining_ms / 1000)} s restantes` : ''}</p>
-             ${['open', 'opening', 'paused'].includes(t.status) ? `<div class="rs-live-acts">${t.status === 'paused' ? btn('tombola-resume') : btn('tombola-pause')}${btn('tombola-cancel', 'danger')}</div>` : ''}`,
-    )}
-    ${card(
-      'Alertes',
-      'alerts',
-      a === null
-        ? unknown
-        : `<p class="rs-state ${a.source === null ? 'is-unknown' : a.source ? 'is-ok' : 'is-down'}">${a.playing ? `${a.playing} en lecture` : 'Rien en lecture'} · ${a.queued} en attente</p>
-           <p class="rs-muted">Source OBS : ${a.source === null ? 'inconnue' : a.source ? 'vue' : 'absente (les alertes attendent)'}. Plus jouée après 30 min d’attente.</p>
-           ${a.queued ? `<div class="rs-live-acts">${btn('alerts-clear', 'danger')}</div>` : ''}`,
-    )}
-    ${card(
-      'TTS',
-      lab ? 'tts' : 'moderation',
-      v === null
-        ? unknown
-        : v === 'off'
-          ? '<p class="rs-state">Module TTS coupé sur ce profil.</p>'
-          : `<p class="rs-state ${v.state !== 'active' ? '' : v.ready === true ? 'is-ok' : v.ready === false ? 'is-down' : 'is-unknown'}">${v.state === 'paused' ? 'En pause' : v.state === 'disabled' ? 'Désactivé' : v.ready === false ? 'Activé, lecteur absent' : v.ready === true ? 'Actif' : 'Activé (lecteur non vérifié)'} · ${v.current ? `lit le message de ${esc(v.current)}` : 'aucun message en cours'}</p>
-             <p class="rs-muted">${v.waiting === null ? 'File non lisible ici.' : `${v.waiting} message(s) en attente.`} Un message non lu après 5 min d’attente est remboursé.${lab ? '' : ' En Production, pause, stop et file se pilotent dans Modération.'}</p>
-             ${lab ? `<div class="rs-live-acts">${v.state === 'paused' ? btn('tts-resume') : btn('tts-pause')}${v.current ? btn('tts-stop', 'danger') : ''}</div>` : ''}`,
-    )}
-    ${card(
-      'Spotify',
+  return [
+    ttsTrack(live, profile === 'lab', href),
+    ...(live.sounds === undefined ? [] : [soundTrack(live, href)]),
+    alertTrack(live, href),
+    musicTrack(live, href),
+    tombolaTrack(live, href),
+  ];
+}
+export const liveHtml = (
+  live: LiveState,
+  profile: string,
+  href: (page: string) => string,
+) =>
+  liveTracks(live, profile, href)
+    .map((t) => t.html)
+    .join('');
+
+/** Les automatisations de points de chaîne : l'état réel, jamais l'intention seule, et l'action nommée. */
+export function automationHtml(cp: CpSummary | null | undefined) {
+  const rules = cp ? n(cp.rules, 'récompense') : '';
+  const tone: Tone =
+    cp === undefined || cp === null
+      ? 'unknown'
+      : !cp.enabled
+        ? 'off'
+        : cp.blocker === null
+          ? 'ok'
+          : cp.blocker === undefined
+            ? 'unknown'
+            : 'bad';
+  const text =
+    cp === undefined
+      ? 'Lecture…'
+      : cp === null
+        ? 'État inconnu (serveur injoignable ou module absent).'
+        : !cp.enabled
+          ? `Automatisations coupées · ${rules} avec une règle active (sans effet tant que c’est coupé).`
+          : cp.blocker === null
+            ? `Automatisations actives et exécutables · ${rules} avec une règle active.`
+            : cp.blocker === undefined
+              ? `Automatisations activées · ${rules} avec une règle active · exécution non vérifiée.`
+              : `Automatisations activées, mais ${esc(cp.blocker)} : les actions OBS et les sons attendent · ${rules} avec une règle active.`;
+  return `<p class="rg-line" data-tone="${tone}"><i></i><span>${text}</span></p>${cp ? `<button type="button" class="d-btn sm ${cp.enabled ? 'bad' : ''}" data-regie="cp">${cp.enabled ? 'Couper les automatisations…' : 'Activer les automatisations…'}</button>` : ''}`;
+}
+
+/** Ce que la supervision sait : un « rien » ne vaut que pour ce qu'elle suit. */
+export function healthHtml(
+  sup: SupervisionSnapshot | null,
+  supOk: boolean,
+  href: (page: string) => string,
+) {
+  const active = sup?.incidents.filter((i) => !i.endedAt) ?? [];
+  return `<p class="rg-line" data-tone="${!supOk ? 'unknown' : active.length ? 'bad' : 'ok'}"><i></i><span>${
+    !supOk
+      ? 'Supervision indisponible : état inconnu.'
+      : active.length
+        ? `${n(active.length, 'incident')} en cours : ${active.map((i) => esc(i.label)).join(', ')}.`
+        : `Aucun incident sur les éléments suivis : ${SUPERVISED}.`
+  }</span></p>
+  ${supOk && !active.length ? `<p class="d-note">Non suivis ici : ${NOT_SUPERVISED}. Leur état est dans chaque module.</p>` : ''}
+  <p class="d-note"><a href="${href('activite')}" data-page="activite">Historique des coupures</a> · <a href="${href('systeme')}" data-page="systeme">Connexions</a></p>`;
+}
+
+export const controlsHtml = (href: (page: string) => string) =>
+  REGIE_CONTROLS.map(
+    (c) =>
+      `<a class="rg-go" href="${href(c.page)}" data-page="${c.page}" title="${esc(c.what)}">${ic(c.icon)}${esc(c.title)}</a>`,
+  ).join('');
+
+const SIGNAL_PAGE: Record<string, string> = {
+  tts: 'tts',
+  soundboard: 'soundboard',
+  bonk: 'bonk',
+  'core-link': 'systeme',
+  bot: 'systeme',
+};
+
+/** Ce qui attend une décision du streamer, le plus urgent d'abord. Pur. */
+export function decisions(
+  live: LiveState | undefined,
+  sup: SupervisionSnapshot | null,
+  href: (page: string) => string,
+) {
+  const out: { key: string; html: string }[] = [];
+  const link = (page: string, label: string) =>
+    `<a class="d-btn sm" href="${href(page)}" data-page="${page}">${esc(label)}</a>`;
+  const line = (
+    key: string,
+    tone: Tone,
+    title: string,
+    text: string,
+    acts: string,
+  ) =>
+    out.push({
+      key,
+      html: `<div class="rg-d d-in" data-tone="${tone}"><i></i><div class="rg-d__t"><b>${title}</b>${text ? `<p>${text}</p>` : ''}${acts ? `<div class="rg-d__a">${acts}</div>` : ''}</div></div>`,
+    });
+  for (const i of sup?.incidents ?? []) {
+    if (i.endedAt) continue;
+    line(
+      `inc:${i.id}`,
+      'bad',
+      esc(i.label),
+      `${esc(i.value)} · ${i.action === 'manual' ? 'Action requise' : 'Récupération automatique'}${i.hint ? `<small>${esc(i.hint)}</small>` : ''}`,
+      SIGNAL_PAGE[i.signal] ? link(SIGNAL_PAGE[i.signal]!, 'Ouvrir') : '',
+    );
+  }
+  const tts = live?.tts;
+  for (const i of tts && tts !== 'off' ? (tts.queue ?? []) : [])
+    if (i.review_status === 'pending')
+      line(
+        `tts:${i.interaction_id}`,
+        'warn',
+        `Message de ${esc(i.viewer_display_name)} à vérifier`,
+        esc(i.message ?? ''),
+        `<button type="button" class="d-btn sm" data-allow="${esc(i.interaction_id)}">${ic('check')}Laisser passer</button><button type="button" class="d-btn sm bad" data-more="${esc(i.interaction_id)}">Retirer…</button>`,
+      );
+  const sp = live?.spotify;
+  if (sp?.verify)
+    line(
       'spotify',
-      s === null
-        ? unknown
-        : `<p class="rs-state ${s.admission === 'ready' ? 'is-ok' : s.admission === 'MODULE_DISABLED' ? '' : 'is-down'}">${esc(spotifyAdmission(s.admission))} · ${s.queue} en file</p>
-           <p class="rs-muted">${s.current ? `En cours : ${esc(s.current)}` : 'Aucune demande en cours.'}</p>`,
-    )}
-  </div></section>`;
+      'warn',
+      `${n(sp.verify, 'demande')} de musique à vérifier`,
+      '',
+      link('spotify', 'Voir'),
+    );
+  const w = live?.wheel;
+  if (w && w.reviews + w.duplicates)
+    line(
+      'wheel',
+      'warn',
+      `${n(w.reviews + w.duplicates, 'tirage')} de la Roue à vérifier`,
+      '',
+      link('sub-wheel', 'Voir'),
+    );
+  for (const i of sup?.incidents ?? []) {
+    if (!i.endedAt || i.acknowledged) continue;
+    line(
+      `up:${i.id}`,
+      'ok',
+      `${esc(i.label)} rétabli`,
+      '',
+      `<button type="button" class="d-btn sm" data-sup-ack="${esc(i.id)}">Vu</button>`,
+    );
+  }
+  return out;
 }

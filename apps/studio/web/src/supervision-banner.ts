@@ -1,4 +1,4 @@
-// Global banner of the live incidents (incident 22/10, docs/PLAN_SUPERVISION_2026-10-23.md lot 2), above every tab.
+// The live incidents (incident 22/10, docs/PLAN_SUPERVISION_2026-10-23.md lot 2), in the shell's incident line.
 // Data: GET /api/supervision (apps/studio/server/src/supervision/supervisor.ts) — only CONFIRMED incidents (≥ 30 s), never
 // the microcoupures. An ongoing incident stays while it lasts; once over it turns green and stays until « Vu ».
 
@@ -29,7 +29,6 @@ export interface SupervisionSnapshot {
 }
 
 const HEADERS = { 'x-raptoru-studio': '1' };
-const REFRESH_MS = 5000;
 
 const esc = (t: unknown) =>
   String(t ?? '').replace(
@@ -89,7 +88,7 @@ export function renderBanner(snap: SupervisionSnapshot): string {
 /** Pure: the short history (newest first) for the Centre de contrôle. */
 export function renderHistory(history: HistoryEntry[], max = 15): string {
   if (!history.length)
-    return '<p class="muted">Aucune coupure depuis le démarrage de Studio.</p>';
+    return '<p class="d-note">Aucune coupure depuis le démarrage de Studio.</p>';
   return `<ul class="sup-history">${history
     .slice(0, max)
     .map(
@@ -106,34 +105,4 @@ export async function fetchSupervision(): Promise<SupervisionSnapshot | null> {
   } catch {
     return null;
   }
-}
-
-/** Mounted once under the top bar: polls whatever tab is open. */
-export function mountSupervisionBanner(root: HTMLElement) {
-  let last = '';
-  async function refresh() {
-    const snap = await fetchSupervision();
-    // Studio server unreachable: the Centre de contrôle says so; the banner keeps its last state.
-    if (!snap) return;
-    const html = renderBanner(snap);
-    if (html === last) return;
-    last = html;
-    root.innerHTML = html;
-    root.hidden = !html;
-  }
-  root.addEventListener('click', (e) => {
-    const id = (e.target as HTMLElement).closest<HTMLElement>('[data-sup-ack]')
-      ?.dataset.supAck;
-    if (!id) return;
-    void fetch('/api/supervision/ack', {
-      method: 'POST',
-      headers: { ...HEADERS, 'content-type': 'application/json' },
-      body: JSON.stringify({ id }),
-    }).then(() => refresh());
-  });
-  const loop = async () => {
-    await refresh();
-    setTimeout(() => void loop(), REFRESH_MS);
-  };
-  void loop();
 }

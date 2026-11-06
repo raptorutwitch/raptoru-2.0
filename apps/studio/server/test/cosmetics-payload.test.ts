@@ -1,7 +1,11 @@
-// Studio › Boutique « Enregistrer » (apps/studio/web/src/cosmetics.ts): only the item's own fields reach the Core.
+// Studio › Boutique « Enregistrer » (apps/studio/web/src/pages/shop-model.ts): only the item's own fields reach the Core.
 import { CosmeticItemInput } from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
-import { frameProblemsOf, itemPayload } from '../../web/src/cosmetics-item.js';
+import {
+  frameProblemsOf,
+  itemPayload,
+  offerState,
+} from '../../web/src/pages/shop-model.js';
 
 describe('Boutique: the saved item', () => {
   it('an item opened with « Modifier » (display fields of the list) is accepted by the Core’s strict schema', () => {
@@ -69,5 +73,20 @@ describe('Atelier: a frame checked before sending (raptoru.fr lot 3)', () => {
     expect(
       frameProblemsOf(new Uint8ClampedArray(128 * 64 * 4), 128, 64),
     ).toEqual(['le cadre doit être carré']);
+  });
+});
+
+describe('Boutique: an offer in words', () => {
+  it('stopped, not open yet, ended or on sale, from its own dates', () => {
+    const now = Date.parse('2026-11-06T12:00:00Z');
+    const o = { enabled: true, opens_at: null, closes_at: null };
+    expect(offerState({ ...o, enabled: false }, now).text).toBe('Arrêtée');
+    expect(
+      offerState({ ...o, opens_at: '2026-11-07T12:00:00Z' }, now).tone,
+    ).toBe('warn');
+    expect(
+      offerState({ ...o, closes_at: '2026-11-05T12:00:00Z' }, now).text,
+    ).toBe('Terminée');
+    expect(offerState(o, now).tone).toBe('ok');
   });
 });

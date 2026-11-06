@@ -69,9 +69,12 @@ test('« Voir tous les modules » stays open when a new state arrives (here the 
     }),
   });
   // The Hub redraws with the new balance (proved by the balance text); the list the viewer opened is still there.
-  await expect(page.locator('body')).toContainText(/4[\s\u202f\u00a0]?321|4,3\s?K/, {
-    timeout: 20_000,
-  });
+  await expect(page.locator('body')).toContainText(
+    /4[\s\u202f\u00a0]?321|4,3\s?K/,
+    {
+      timeout: 20_000,
+    },
+  );
   await page.waitForTimeout(1_000);
   await expect(tile).toHaveCount(1);
   await page.close();

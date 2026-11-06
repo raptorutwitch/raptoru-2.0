@@ -10,7 +10,7 @@ import {
   SNAP,
   toPixels,
   DEFAULT_ZONE,
-} from '../../web/src/bonk-zone.js';
+} from '../../web/src/pages/bonk-zone.js';
 import { LabObs } from '../src/bonk-lab/obs.js';
 import {
   BonkSettingsStore,

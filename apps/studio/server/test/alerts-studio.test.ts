@@ -167,6 +167,53 @@ describe('AlertPlacementStore (calibration, Studio storage)', () => {
     ]);
   });
 
+  it('a look (timings, transitions, colour, wording, volume) is saved and read back; any wrong value refuses the save', async () => {
+    const file = join(await tmp(), 'placement.json');
+    const store = await AlertPlacementStore.open(file);
+    const look = {
+      showAt: 900,
+      hideAt: 4000,
+      text: '{pseudo} arrive !',
+      textEnter: { kind: 'rise', ms: 400 },
+      textExit: { kind: 'cut', ms: 0 },
+      mediaExit: { kind: 'zoom', ms: 500 },
+      nameColor: '#7ef0b4',
+      volume: 0.3,
+      subtitles: [{}, { showAt: 1600, text: 'Merci {pseudo}' }],
+    };
+    const base = {
+      media: { x: 0, y: 0, scale: 1 },
+      text: { x: 0, y: 0, scale: 1 },
+    };
+    expect(await store.save('follow_eren', { ...base, look })).toEqual({
+      ...base,
+      look,
+    });
+    expect(
+      (await AlertPlacementStore.open(file)).get('follow_eren').look,
+    ).toEqual(look);
+    for (const bad of [
+      { showAt: 5000, hideAt: 100 },
+      { showAt: -1 },
+      { hideAt: 1.5 },
+      { textEnter: { kind: 'explode', ms: 100 } },
+      { textExit: { kind: 'fade', ms: 99999 } },
+      { nameColor: 'red; }' },
+      { volume: 2 },
+      { text: '' },
+      { text: 'x'.repeat(161) },
+      { subtitles: 'x' },
+      { unknown: 1 },
+    ])
+      await expect(
+        store.save('follow_eren', { ...base, look: bad }),
+      ).rejects.toThrow('invalid_placement');
+    expect(store.get('follow_eren').look).toEqual(look);
+    // Nothing left to apply: the variant is drawn as before, nothing stored.
+    await store.save('follow_eren', { ...base, look: {} });
+    expect(store.all()).toEqual({});
+  });
+
   it('refuses invalid values without changing anything; a corrupt or partly invalid file falls back per entry', async () => {
     const file = join(await tmp(), 'placement.json');
     const store = await AlertPlacementStore.open(file);
@@ -211,6 +258,7 @@ describe('AlertPlacementStore (calibration, Studio storage)', () => {
 async function setup(
   core: (path: string, body?: unknown) => unknown,
   media: string[] = ['Raid Titan.webm', 'Raptoru_Alerte_Raid_Sound.mp3'],
+  extra: { mediaImport?: boolean; environment?: 'lab' | 'production' } = {},
 ) {
   const store = await AlertMediaStore.open(join(await tmp(), 'media'));
   await store.import(
@@ -236,6 +284,7 @@ async function setup(
     dir: await tmp(),
     playerDir: PLAYER_DIR,
     media: store,
+    ...extra,
   });
   server.on('request', (req, res) => {
     void rt.handle(req, res, new URL(req.url!, origin)).then((done) => {
@@ -253,7 +302,7 @@ async function setup(
       headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify(body),
     });
-  return { origin, rt, token, calls, post };
+  return { origin, rt, token, calls, post, store };
 }
 
 describe('AlertsRuntime', () => {
@@ -582,6 +631,107 @@ describe('AlertsRuntime', () => {
     ).toEqual({ variants: { raid_default: P } });
     // Read at claim time: the next alert of the variant uses it.
     expect(await next()).toEqual(P);
+  });
+
+  it('media in the Lab: the catalogue names found in a folder are copied, the originals only read; refused anywhere else', async () => {
+    const H = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
+    const catalog = () => ({
+      variants: [
+        { id: 'raid_default', video: 'Raid Titan.webm', audio: null },
+        { id: 'hw_x', video: 'Halloween Jerry 1.webm', audio: null },
+      ],
+    });
+    const folder = await tmp();
+    await copyFile(join(FIX, 'video-1s.webm'), join(folder, 'Raid Titan.webm'));
+    await copyFile(
+      join(FIX, 'video-1s.webm'),
+      join(folder, 'Halloween Jerry 1.webm'),
+    );
+    await writeFile(join(folder, 'autre fichier.webm'), 'x');
+    const before = (await stat(join(folder, 'Raid Titan.webm'))).mtimeMs;
+    const { origin, store, post } = await setup(catalog, [], {
+      mediaImport: true,
+    });
+    const media = async () =>
+      (await (
+        await fetch(`${origin}/api/alerts/media`, { headers: H })
+      ).json()) as {
+        can_import: boolean;
+        suggested_folders: string[];
+        media: { name: string; available: boolean; variants: string[] }[];
+      };
+    expect((await media()).can_import).toBe(true);
+    expect(
+      (await media()).media.find((m) => m.name === 'Halloween Jerry 1.webm'),
+    ).toEqual({
+      name: 'Halloween Jerry 1.webm',
+      available: false,
+      variants: ['hw_x'],
+    });
+    // The Studio header is required, like the rest of the tab's API.
+    expect((await post('/api/alerts/media/import', { folder })).status).toBe(
+      403,
+    );
+    const res = await post('/api/alerts/media/import', { folder }, H);
+    expect(res.status).toBe(200);
+    const { report } = (await res.json()) as {
+      report: { name: string; result: string }[];
+    };
+    expect(
+      report.filter((r) => r.result !== 'missing').map((r) => r.name),
+    ).toEqual(
+      expect.arrayContaining(['Raid Titan.webm', 'Halloween Jerry 1.webm']),
+    );
+    expect(report.some((r) => r.name === 'autre fichier.webm')).toBe(false);
+    expect(store.path('Raid Titan.webm')).not.toBeNull();
+    expect((await stat(join(folder, 'Raid Titan.webm'))).mtimeMs).toBe(before);
+    // One media replaced by a file of the same type; only a name of the catalogue, only a full path.
+    const replace = (body: unknown) =>
+      post('/api/alerts/media/import', body, H);
+    const audio = join(FIX, 'audio-2_5s.mp3');
+    expect(
+      (await replace({ name: 'Raid Titan.webm', file: audio })).status,
+    ).toBe(400);
+    expect(
+      (await replace({ name: '../x.webm', file: join(FIX, 'video-1s.webm') }))
+        .status,
+    ).toBe(400);
+    expect(
+      (await replace({ name: 'Raid Titan.webm', file: 'video-1s.webm' }))
+        .status,
+    ).toBe(400);
+    expect((await replace({ folder: 'relatif' })).status).toBe(400);
+    expect((await replace({ folder: join(folder, 'nope') })).status).toBe(404);
+
+    const other = await setup(catalog, [], { environment: 'production' });
+    const refused = await other.post('/api/alerts/media/import', { folder }, H);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: 'lab_only' });
+    expect(other.store.path('Raid Titan.webm')).toBeNull();
+  });
+
+  it('replay: the visual replay of the dock, on the profile of this Studio, one key per click', async () => {
+    const H = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
+    const id = '00000000-0000-4000-8000-000000000001';
+    const key = '00000000-0000-4000-8000-000000000002';
+    const lab = await setup(() => ({ replay_alert_id: 'r', created: true }));
+    expect(
+      (await lab.post(`/api/alerts/replay/${id}`, { replay_key: 'x' }, H))
+        .status,
+    ).toBe(400);
+    expect(
+      (await lab.post(`/api/alerts/replay/${id}`, { replay_key: key }, H))
+        .status,
+    ).toBe(200);
+    expect(lab.calls.at(-1)).toEqual({
+      path: `/v1/lab/dock/${CH}/alerts/${id}/replay`,
+      body: { replay_key: key },
+    });
+    const prod = await setup(() => ({}), [], { environment: 'production' });
+    await prod.post(`/api/alerts/replay/${id}`, { replay_key: key }, H);
+    expect(prod.calls.at(-1)?.path).toBe(
+      `/v1/studio/dock/${CH}/alerts/${id}/replay`,
+    );
   });
 
   it('test event: a simulation through Core, only the event fields, a fresh id each time', async () => {

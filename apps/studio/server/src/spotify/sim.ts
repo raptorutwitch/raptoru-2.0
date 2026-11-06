@@ -5,6 +5,12 @@ import { normalizeText, type Candidate } from './search.js';
 // and 429 handling as for real. Explicit and isolated: never the real account, never the real queue. The panel drives
 // it (end of track, a track outside the requests, no device, a 429, a 200 instead of 204).
 
+/** A plain simulated cover (one hue per track), so the Lab's page shows what Production's shows. */
+const simCover = (id: string) => {
+  const hue = [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 3"><rect width="3" height="3" fill="hsl(${hue} 45% 32%)"/><circle cx="1" cy="1.2" r="1.2" fill="hsl(${(hue + 40) % 360} 55% 50%)"/></svg>`)}`;
+};
+
 const track = (
   id: string,
   name: string,
@@ -16,6 +22,7 @@ const track = (
   name,
   artists: artists.map((name) => ({ name })),
   duration_ms,
+  album: { images: [{ url: simCover(id) }] },
 });
 
 export const SIM_CATALOG: Candidate[] = [

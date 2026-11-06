@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   PAGES,
   VIEW_IDS,
@@ -12,11 +12,16 @@ import {
 } from '../../web/src/shell/registry.ts';
 import { MAX_FAVS, pushRecent, toggleFav } from '../../web/src/shell/shell.ts';
 import {
+  automationHtml,
+  controlsHtml,
   CP_OFF_CONFIRM,
+  decisions,
+  healthHtml,
+  liveCounts,
   LIVE_ACTIONS,
   liveHtml,
   REGIE_CONTROLS,
-  regieHtml,
+  steadyEnds,
 } from '../../web/src/shell/regie.ts';
 
 // Refonte Studio (lot 1) : le registre est la seule source de la navigation. Aucune vue ne doit disparaître et
@@ -104,15 +109,12 @@ describe('favourites and recents', () => {
 describe('Régie live', () => {
   const href = (id: string) => `/?p=${id}`;
   it('names each stop by module, never a global stop', () => {
-    const html = regieHtml({
-      sup: null,
-      supOk: true,
-      cp: { enabled: true, rules: 2 },
-      message: '',
-      href,
-    });
+    const html =
+      automationHtml({ enabled: true, rules: 2 }) +
+      healthHtml(null, true, href) +
+      controlsHtml(href);
     expect(html).toContain('Couper les automatisations…');
-    expect(html).toContain('2 récompense(s)');
+    expect(html).toContain('2 récompenses');
     expect(html.toLowerCase()).not.toMatch(
       /<button[^>]*>[^<]*(tout arr|arrêter tout|stop all)/,
     );
@@ -121,13 +123,7 @@ describe('Régie live', () => {
   });
 
   it('an unknown state offers no action', () => {
-    const html = regieHtml({
-      sup: null,
-      supOk: false,
-      cp: null,
-      message: '',
-      href,
-    });
+    const html = automationHtml(null);
     expect(html).toContain('État inconnu');
     expect(html).not.toContain('data-regie="cp"');
   });
@@ -154,17 +150,36 @@ describe('Régie live queues', () => {
   };
   it('shows real queue states and named actions only where they apply', () => {
     const lab = liveHtml(live, 'lab', href);
-    expect(lab).toContain('3 participant(s) · 41 s restantes');
+    expect(lab).toContain('3 participants');
+    expect(lab).toContain('0:41');
     expect(lab).toContain('data-live="tombola-pause"');
     expect(lab).toContain('data-live="tombola-cancel"');
     expect(lab).toContain('1 en lecture · 2 en attente');
     expect(lab).toContain('data-live="tts-stop"');
     expect(lab).toContain('Demandes fermées (module coupé)');
   });
-  it('Production: no TTS action here (Modération owns them)', () => {
+  it('Production: TTS actions go through the moderation door, as in the Modération page', async () => {
     const prod = liveHtml(live, 'production', href);
-    expect(prod).not.toContain('data-live="tts-');
-    expect(prod).toContain('Modération');
+    expect(prod).toContain('data-live="tts-stop"');
+    const seen: unknown[] = [];
+    vi.stubGlobal('fetch', async (_: string, init: { body: string }) => {
+      seen.push(JSON.parse(init.body));
+      return new Response('{}');
+    });
+    await LIVE_ACTIONS['tts-stop']!.run();
+    await LIVE_ACTIONS['tts-pause']!.run();
+    vi.unstubAllGlobals();
+    expect(seen).toEqual([
+      { command: { action: 'stop_current', module: 'tts', refund: true } },
+      {
+        command: {
+          action: 'module_state',
+          module: 'tts',
+          state: 'paused',
+          waiting: 'keep',
+        },
+      },
+    ]);
   });
   it('an unreadable module offers no action; a paused Tombola offers Reprendre', () => {
     const html = liveHtml(
@@ -180,6 +195,112 @@ describe('Régie live queues', () => {
     expect(html).toContain('data-live="tombola-resume"');
     expect(html).not.toContain('data-live="tts-');
     expect(html.match(/Indisponible sur ce profil/g)).toHaveLength(3);
+  });
+  it('the sidebar counters come from the same reading, and only say what is there', () => {
+    const now = 1_000_000;
+    expect(liveCounts(live, now)).toEqual({
+      tts: '4',
+      alerts: '3',
+      tombola: '0:41',
+    });
+    expect(
+      liveCounts(
+        { ...live, tombola: { ...live.tombola, ends_at: now + 5000 } },
+        now,
+      ).tombola,
+    ).toBe('0:05');
+    expect(
+      liveCounts(
+        { ...live, tombola: { ...live.tombola, status: 'paused' } },
+        now,
+      ).tombola,
+    ).toBe('Pause');
+    const quiet = {
+      tombola: 'none',
+      alerts: null,
+      tts: null,
+      spotify: null,
+    } as const;
+    expect(liveCounts(quiet, now)).toEqual({
+      tts: null,
+      alerts: null,
+      tombola: null,
+    });
+    expect(liveCounts(undefined, now).tts).toBeNull();
+  });
+  it('the Tombola deadline holds between two readings unless it really drifts', () => {
+    const at = (ends_at: number) => ({
+      ...live,
+      tombola: { ...live.tombola, raffle_id: 'r', ends_at },
+    });
+    const t = (l: ReturnType<typeof at>) => l.tombola.ends_at;
+    expect(t(steadyEnds(at(1000), at(1800)) as ReturnType<typeof at>)).toBe(
+      1000,
+    );
+    expect(t(steadyEnds(at(1000), at(9000)) as ReturnType<typeof at>)).toBe(
+      9000,
+    );
+  });
+  it('what needs a decision: a message to check has its verbs, a recovered incident its « Vu »', () => {
+    const list = decisions(
+      {
+        ...live,
+        tts: {
+          state: 'active',
+          current: null,
+          waiting: 1,
+          queue: [
+            {
+              interaction_id: 'i1',
+              viewer_id: '1',
+              viewer_display_name: 'Nina',
+              message: 'à lire',
+              status: 'queued',
+              created_at: '',
+              review_status: 'pending',
+            },
+          ],
+        },
+      },
+      {
+        now: '',
+        history: [],
+        incidents: [
+          {
+            id: 'x',
+            signal: 'tts',
+            label: 'TTS',
+            cause: null,
+            value: 'Lecteur absent',
+            hint: null,
+            action: 'manual',
+            startedAt: '',
+            confirmedAt: '',
+            endedAt: null,
+            acknowledged: false,
+          },
+          {
+            id: 'y',
+            signal: 'bonk',
+            label: 'Bonk',
+            cause: null,
+            value: '',
+            hint: null,
+            action: 'auto',
+            startedAt: '',
+            confirmedAt: '',
+            endedAt: 'fin',
+            acknowledged: false,
+          },
+        ],
+      },
+      href,
+    );
+    expect(list.map((d) => d.key)).toEqual(['inc:x', 'tts:i1', 'up:y']);
+    expect(list[0]!.html).toContain('Action requise');
+    expect(list[1]!.html).toContain('data-allow="i1"');
+    expect(list[1]!.html).toContain('data-more="i1"');
+    expect(list[2]!.html).toContain('data-sup-ack="y"');
   });
   it('destructive live actions confirm their consequences', () => {
     expect(LIVE_ACTIONS['tombola-cancel']!.confirm).toContain(

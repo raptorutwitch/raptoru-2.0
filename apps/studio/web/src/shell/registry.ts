@@ -12,8 +12,13 @@ export const VIEW_IDS = [
   'tombola',
   'commands',
   'word-game',
+  'mini-games',
   'alerts',
   'channel-points',
+  'effects',
+  'random-ban',
+  'caution',
+  'votekick',
   'simulation',
   'test-lab',
   'extension-lab',
@@ -25,6 +30,8 @@ export const VIEW_IDS = [
   'modules',
   'tts',
   'bonk',
+  'spotify',
+  'sub-wheel',
 ] as const;
 export type ViewId = (typeof VIEW_IDS)[number];
 
@@ -216,25 +223,24 @@ export const PAGES: Page[] = [
   },
   {
     id: 'sub-wheel',
-    anchor: 'sub-wheel',
     label: 'Roue du Sub',
     section: 'modules',
     group: 'Jeux & tirages',
     icon: 'wheel',
-    view: 'channel-points',
+    view: 'sub-wheel',
     desc: 'Droits, file, à vérifier.',
     keywords: 'roue sub wheel',
   },
   {
     id: 'mini-games',
-    // Démonstration C (architecture socle): the historical module's card on the host — its real state, stakes and delays.
+    // Its own page; the anchor links the host's module `mini_games` to it (catalogue, supervision).
     anchor: 'mini_games',
     label: 'Roulette · Slots · Duels',
     section: 'modules',
     group: 'Jeux & tirages',
     icon: 'dice',
-    view: 'modules',
-    desc: 'État, mises et délais ; interrupteur et essais dans la simulation.',
+    view: 'mini-games',
+    desc: 'Interrupteur, mises, délais et derniers tirages.',
     keywords: 'roulette slot machine duel',
   },
   {
@@ -249,56 +255,51 @@ export const PAGES: Page[] = [
   },
   {
     id: 'effects',
-    anchor: 'effects',
     label: 'Effets & lecteur d’effets',
     section: 'modules',
     group: 'Effets & mise en scène',
     icon: 'film',
-    view: 'channel-points',
+    view: 'effects',
     desc: 'FX Cam, couleur cam, lecteur d’effets.',
     keywords: 'fx cam couleur effets obs',
   },
   {
     id: 'random-ban',
-    anchor: 'random-ban',
     label: 'Random Ban',
     section: 'modules',
     group: 'Interactions à sanction',
     icon: 'shield',
-    view: 'channel-points',
+    view: 'random-ban',
     desc: 'Tirage, mute OBS du streamer, suivi.',
     keywords: 'rb ban timeout',
   },
   {
     id: 'caution',
-    anchor: 'caution',
     label: 'Caution',
     section: 'modules',
     group: 'Interactions à sanction',
     icon: 'shield',
-    view: 'channel-points',
+    view: 'caution',
     desc: 'Libérer une sanction contre des Jetons.',
     keywords: 'caution libération',
   },
   {
     id: 'votekick',
-    anchor: 'votekick',
     label: 'Votekick',
     section: 'modules',
     group: 'Interactions à sanction',
     icon: 'shield',
-    view: 'channel-points',
+    view: 'votekick',
     desc: 'Durée de vote, son de lancement.',
     keywords: 'vote kick',
   },
   {
     id: 'spotify',
-    anchor: 'spotify',
     label: 'Spotify',
     section: 'modules',
     group: 'Musique',
     icon: 'music',
-    view: 'channel-points',
+    view: 'spotify',
     desc: 'Demandes de musique, file, quotas.',
     keywords: 'musique song request file musicale',
   },
@@ -503,6 +504,7 @@ export const pageForLegacyTab = (tab: string | null) =>
       pageById(
         LEGACY[tab as ViewId] ??
           PAGES.find((p) => p.view === tab && !p.anchor)?.id ??
+          PAGES.find((p) => p.view === tab)?.id ??
           '',
       )
     : undefined;

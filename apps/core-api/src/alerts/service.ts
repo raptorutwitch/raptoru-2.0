@@ -247,7 +247,11 @@ export class AlertsService {
     const p = AlertVariantSettings.safeParse(patch);
     if (!p.success) throw new AlertError(400, 'invalid_variant_settings');
     const known = new Set(FOLLOW_WEIGHTS.map(([id]) => id));
-    if (p.data.follow?.some((id) => !known.has(id)))
+    if (
+      [...(p.data.follow ?? []), ...Object.keys(p.data.weights ?? {})].some(
+        (id) => !known.has(id),
+      )
+    )
       throw new AlertError(400, 'unknown_variant');
     for (const f of ['bits', 'raid', 'donation'] as const)
       if (p.data.families[f] === 'halloween')
@@ -255,9 +259,11 @@ export class AlertsService {
     return this.db.tx(async (q) => {
       const cur = await this.readVariants(q, channelId);
       const follow = p.data.follow ?? cur.follow;
+      const weights = { ...cur.weights, ...p.data.weights };
       const next: AlertVariantSettings = {
         families: { ...cur.families, ...p.data.families },
         ...(follow ? { follow: [...new Set(follow)] } : {}),
+        ...(Object.keys(weights).length ? { weights } : {}),
       };
       await q.query(
         `insert into alert_settings (channel_id, variants, updated_at) values ($1, $2, $3)

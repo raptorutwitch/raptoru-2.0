@@ -7,7 +7,7 @@ import {
   CANVAS,
   type Handle,
   type Zone,
-} from './bonk-zone.js';
+} from './pages/bonk-zone.js';
 
 // Bonk VNext lots 2–3 — « Cible des Bonk » editor (Auto / Manuel / Plein écran) of the Bonk card.
 // Everything happens on a local draft: moving or resizing the zone, the mode or the preferred Auto

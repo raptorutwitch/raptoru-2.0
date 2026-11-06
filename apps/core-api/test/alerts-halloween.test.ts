@@ -217,10 +217,28 @@ describe('variants per family (Studio › Alertes › Variantes, 30/10)', () => 
     });
   });
 
+  it('follow: a saved weight replaces the legacy one in the draw and stays with the other settings', async () => {
+    await alerts.updateVariantSettings(CH, {
+      follow: ['follow_eren', 'follow_discord'],
+      weights: { follow_discord: 60, follow_eren: 20 },
+    });
+    rolls = [0.2];
+    expect((await variantOf(ev()))!.id).toBe('follow_eren');
+    rolls = [0.3]; // legacy weights (20 / 1): Eren; saved ones (20 / 60): Discord
+    expect((await variantOf(ev()))!.id).toBe('follow_discord');
+    await alerts.updateVariantSettings(CH, { weights: { follow_eren: 40 } });
+    expect((await alerts.variantSettings(CH)).weights).toEqual({
+      follow_discord: 60,
+      follow_eren: 40,
+    });
+  });
+
   it('refused, nothing saved: empty selection, unknown variant, Halloween on a family without one, unknown family', async () => {
     for (const bad of [
       { follow: [] },
       { follow: ['nope'] },
+      { weights: { nope: 5 } },
+      { weights: { follow_eren: 0 } },
       { families: { raid: 'halloween' } },
       { families: { cheer: 'off' } },
       { families: { follow: 'sometimes' } },

@@ -40,6 +40,8 @@ const buy = async (page: Page) => {
 const setSetting = async (page: Page, key: string, value: string) => {
   await page.locator(`[data-ms-input="${key}"]`).fill(value);
   await page.locator(`[data-ms-save="${key}"]`).click();
+  // Un prix est une règle d'économie : Studio dit l'effet et demande.
+  await page.locator('dialog.d-dlg [data-yes]').click();
   await expect(page.locator(`[data-setting="${key}"]`)).toContainText(
     'modifié',
   );
@@ -50,10 +52,9 @@ test('a module of the host appears everywhere from its own file, and its rules a
   browser,
   request,
 }) => {
-  page.on('dialog', (d) => void d.accept());
   // Catalogue: there by itself, with its real state (off on purpose).
   await page.goto('/?p=modules');
-  const row = page.locator('a.rs-row', { hasText: 'Coffre mystère' });
+  const row = page.locator('a.cat-m', { hasText: 'Coffre mystère' });
   await expect(row).toContainText('Coupé', { timeout: 15_000 });
   await row.click();
   await expect(page).toHaveURL(/p=coffre-mystere/);
@@ -97,7 +98,9 @@ test('a module of the host appears everywhere from its own file, and its rules a
     .getByRole('button', { name: 'Prendre la prochaine action' })
     .click();
   await page.getByRole('button', { name: 'Échec (rembourse)' }).click();
-  await expect(page.locator('.rs-flash')).toContainText('remboursée une fois');
+  await expect(page.locator('.d-toast').last()).toContainText(
+    'remboursée une fois',
+  );
   await expect.poll(() => balance(ext)).toBe(before);
   await ext.close();
 

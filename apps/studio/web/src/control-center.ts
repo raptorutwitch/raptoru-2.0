@@ -1,8 +1,8 @@
+import { esc, patch, poller, stateChip } from './ds/ds.js';
 import { fetchSupervision, renderHistory } from './supervision-banner.js';
 
-// Centre de contrôle Studio (plan post-live, lot 3). One tile per module, every tile drawn by the SAME renderer from
-// the server's ModuleStatus (apps/studio/server/src/control-center/model.ts): a new module = a new server provider,
-// nothing to add here. Reading only for now; each module is still piloted from its own tab.
+// L'état des services dans Système. One entry per module, every one drawn by the SAME renderer from the server's ModuleStatus
+// (apps/studio/server/src/control-center/model.ts): a new module = a new server provider, nothing to add here. Reading only.
 
 export type StatusLevel = 'ok' | 'warn' | 'error' | 'off' | 'unknown';
 export interface StatusFact {
@@ -23,39 +23,31 @@ export interface ModuleStatus {
 }
 
 const HEADERS = { 'x-raptoru-studio': '1' };
-const REFRESH_MS = 5000;
-/** Badge class of the existing DA (style.css): ok · warn · ko · idle. */
-const BADGE: Record<StatusLevel, string> = {
-  ok: 'ok',
-  warn: 'warn',
-  error: 'ko',
-  off: 'idle',
-  unknown: 'idle',
+const DOT: Record<StatusLevel, '' | 'w' | 'off' | 'r'> = {
+  ok: '',
+  warn: 'w',
+  error: 'r',
+  off: 'off',
+  unknown: 'w',
 };
 
-const esc = (t: unknown) =>
-  String(t ?? '').replace(
-    /[&<>"]/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!,
-  );
-
-/** One module tile (pure: tested, reused by every module). */
+/** One module (pure: reused by every module). */
 export function renderStatusTile(s: ModuleStatus): string {
   const facts = s.facts
     .map(
       (f) =>
-        `<div class="cc-fact${f.level ? ` cc-${esc(f.level)}` : ''}"><span>${esc(f.label)}</span><b>${esc(f.value)}</b></div>`,
+        `<dt>${esc(f.label)}</dt><dd${f.level ? ` data-l="${esc(f.level)}"` : ''}>${esc(f.value)}</dd>`,
     )
     .join('');
-  return `<section class="cc-tile cc-${esc(s.level)}" data-module="${esc(s.id)}">
-    <header class="cc-head"><h3>${esc(s.label)}</h3><span class="badge ${BADGE[s.level]}">${esc(s.state)}</span></header>
-    <p class="cc-summary">${esc(s.summary)}</p>
-    ${facts ? `<div class="cc-facts">${facts}</div>` : ''}
-    ${s.hint ? `<p class="cc-hint">${esc(s.hint)}</p>` : ''}
+  return `<section class="sy-st" data-module="${esc(s.id)}">
+    <header><h3>${esc(s.label)}</h3>${stateChip(DOT[s.level], s.state)}</header>
+    <p>${esc(s.summary)}</p>
+    ${facts ? `<details class="d-acc"><summary>Détails techniques</summary><dl class="d-kv">${facts}</dl></details>` : ''}
+    ${s.hint ? `<p class="d-note">${esc(s.hint)}</p>` : ''}
   </section>`;
 }
 
-/** Studio server unreachable: one honest tile instead of stale ones. */
+/** Studio server unreachable: one honest entry instead of stale ones. */
 export const UNREACHABLE: ModuleStatus = {
   id: 'studio',
   label: 'Serveur Studio',
@@ -68,20 +60,16 @@ export const UNREACHABLE: ModuleStatus = {
 };
 
 export function mountControlCenter(root: HTMLElement) {
-  root.innerHTML = `<h2>État des services</h2>
-    <p class="muted">État réel des services du live (lecture seule). Les interventions se font depuis la <a href="/?p=regie">Régie live</a> et chaque module.</p>
-    <div class="cc-grid" data-slot="cc-tiles"><p class="muted">Chargement…</p></div>
-    <p class="cc-updated muted" data-slot="cc-updated"></p>
-    <h3>Coupures récentes</h3>
-    <p class="muted">Depuis le démarrage de Studio : chaque coupure, même courte, et son retour. Le détail reste dans le journal de Studio (studio-server.log).</p>
+  root.innerHTML = `<div data-slot="cc-tiles"><p class="d-note">Chargement…</p></div>
+    <p class="d-note" data-slot="cc-updated"></p>
+    <h2 class="d-lb">Coupures récentes</h2>
+    <p class="d-note">Depuis le démarrage de Studio : chaque coupure, même courte, et son retour.</p>
     <div data-slot="cc-history"></div>`;
   const tiles = root.querySelector<HTMLElement>('[data-slot="cc-tiles"]')!;
   const updated = root.querySelector<HTMLElement>('[data-slot="cc-updated"]')!;
   const history = root.querySelector<HTMLElement>('[data-slot="cc-history"]')!;
-  let visible = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
 
-  async function refresh() {
+  const read = poller(async () => {
     let modules: ModuleStatus[];
     try {
       const res = await fetch('/api/control/status', { headers: HEADERS });
@@ -90,21 +78,15 @@ export function mountControlCenter(root: HTMLElement) {
     } catch {
       modules = [UNREACHABLE];
     }
-    tiles.innerHTML = modules.map(renderStatusTile).join('');
+    patch(tiles, modules.map(renderStatusTile).join(''));
     const snap = await fetchSupervision();
-    if (snap) history.innerHTML = renderHistory(snap.history);
+    if (snap) patch(history, renderHistory(snap.history));
     updated.textContent = `Mis à jour à ${new Date().toLocaleTimeString('fr-FR')}`;
-  }
-  const loop = async () => {
-    if (!visible) return;
-    await refresh();
-    timer = setTimeout(() => void loop(), REFRESH_MS);
-  };
+  }, 5000);
   return {
     setVisible(v: boolean) {
-      visible = v;
-      clearTimeout(timer);
-      if (v) void loop();
+      if (v) read.start();
+      else read.stop();
     },
   };
 }

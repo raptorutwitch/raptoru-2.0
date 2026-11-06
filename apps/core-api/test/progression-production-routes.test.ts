@@ -66,6 +66,17 @@ describe('progression on the main Core HTTP', () => {
     expect((await call('/v1/progression/catalog')).status).toBe(200);
     // Studio's routes: the installation only.
     expect((await call('/v1/studio/progression/settings')).status).toBe(401);
+    expect((await call('/v1/studio/progression/leaderboard')).status).toBe(401);
+    const board = await call(
+      '/v1/studio/progression/leaderboard?by=watch&period=month',
+      undefined,
+      studio,
+    );
+    expect([board.status, board.body.period, board.body.by]).toEqual([
+      200,
+      'month',
+      'watch',
+    ]);
     expect(
       (
         await call(

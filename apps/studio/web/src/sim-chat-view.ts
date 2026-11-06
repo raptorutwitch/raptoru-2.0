@@ -3,6 +3,8 @@
 // answers are the real texts Core queued in cmd_steps (Commandes, Jeu des mots, mini-jeux). Nothing is
 // recomputed here, and reading never changes a step: « envoyé » only when Twitch acknowledged it.
 
+import { esc } from './http.js';
+
 export interface ChatIn {
   seq: number;
   message_id: string;
@@ -38,15 +40,6 @@ export interface StepOut {
 export type ChatItem =
   | { type: 'in'; key: string; at: number; msg: ChatIn }
   | { type: 'out'; key: string; at: number; step: StepOut };
-
-const esc = (s: unknown) =>
-  String(s ?? '').replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ]!,
-  );
 
 const time = (ms: number) =>
   new Date(ms).toLocaleTimeString('fr-FR', {
@@ -184,7 +177,7 @@ export function chatView(
   now: number,
 ): string {
   if (!items.length)
-    return '<p class="sc-empty">Aucun message. Envoyez un message ci-dessous : il passe par la même entrée Core que le vrai chat.</p>';
+    return '<p class="sc-empty">Aucun message. Écris ci-dessous : le message passe par la même entrée que le vrai chat.</p>';
   return items
     .map((i) => {
       if (i.type === 'in') {

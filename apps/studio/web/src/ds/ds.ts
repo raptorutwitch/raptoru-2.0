@@ -150,7 +150,7 @@ export function keyed(
     patch(el, empty);
     return;
   }
-  if (el.dataset.sig) {
+  if (el.dataset.sig !== undefined) {
     delete el.dataset.sig;
     el.innerHTML = '';
   }
@@ -362,7 +362,7 @@ export function errText(e: unknown, more: Record<string, string> = {}) {
   };
   const b = x.body ?? (x.details as unknown as typeof x.body);
   if (b?.errors?.length) return b.errors.join(' ');
-  const code = x.code ?? b?.error ?? '';
+  const code = x.code ?? b?.error;
   return (
     more[code] ??
     REFUS[code] ??
@@ -629,7 +629,12 @@ export function page(
       else panel.open();
     },
     set(html) {
+      // Une partie dépliée le reste quand un relevé réécrit le panneau.
+      const open = [...pbody.querySelectorAll('details')].map((d) => d.open);
       patch(pbody, html);
+      pbody.querySelectorAll('details').forEach((d, i) => {
+        if (open[i]) d.open = true;
+      });
       filter();
     },
   };

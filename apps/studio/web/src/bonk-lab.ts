@@ -9,30 +9,23 @@ const obsText = (code: string) =>
       ? 'Port OBS invalide'
       : code;
 
-/** `production`: the same card for the Production profile (Studio tab), without Lab wording. */
-export function mountBonkLab(
-  root: HTMLElement,
-  options: { production?: boolean } = {},
-) {
+/** The Bonk card of the Extension Lab: OBS connection, overlay, test, zone, prices. */
+export function mountBonkLab(root: HTMLElement) {
   const panel = document.createElement('section');
-  panel.className = 'xlab-card';
-  panel.innerHTML = `${
-    options.production
-      ? '<h3>Bonk — overlay OBS (Production)</h3><p>Overlay servi par Studio avec le jeton du profil Production (différent de celui du Lab). Paiement réel en Jetons au Wallet Raptoru du Core, remboursé une seule fois si le Bonk n’est pas joué.</p>'
-      : '<h3>Bonk OBS Lab</h3><p>Coût simulé, aucun débit ni progression. Impacts autour de la cible réglée ci-dessous, dans une source 1920 × 1080.</p>'
-  }
+  panel.className = 'xl-card';
+  panel.innerHTML = `<h3>Bonk</h3><p>Coût simulé, aucun débit ni progression. Impacts autour de la cible réglée ci-dessous, dans une source 1920 × 1080.</p>
     <p data-bonk="status">Lecture du statut…</p>
     <div data-bonk="controls" hidden>
     <h4>Connexion OBS</h4>
-    <div class="rs-fieldrow"><label>Port OBS <input data-bonk="port" type="number" value="4455"></label>
+    <div class="xl-fields"><label>Port OBS <input data-bonk="port" type="number" value="4455"></label>
     <label>Mot de passe OBS <input data-bonk="password" type="password" autocomplete="off"></label>
     <button data-bonk="connect" type="button">Connecter OBS local</button><button data-bonk="disconnect" type="button">Déconnecter</button></div>
     <h4>Source OBS</h4>
-    <p class="muted">Dans une scène de test, une source navigateur nommée exactement <strong>Raptoru Bonk Lab</strong>${options.production ? ' (nom historique, à garder tel quel)' : ''}, 1920 × 1080. Elle doit rester active ; ne l’ajoute pas à la scène diffusée.${options.production ? ' L’URL change avec le profil : remets celle-ci après un changement de profil.' : '<span class="xlab-only"> Sélectionne 😀 dans Bonk à gauche.</span>'}</p>
-    <p class="rs-copy"><input data-bonk="url" readonly aria-label="URL de la source OBS Bonk"> <button type="button" data-bonk="copy">Copier</button></p>
+    <p class="d-note">Dans une scène de test, une source navigateur nommée exactement <strong>Raptoru Bonk Lab</strong>, 1920 × 1080. Elle doit rester active ; ne l’ajoute pas à la scène diffusée. Sélectionne 😀 dans Bonk, dans l’extension.</p>
+    <p class="xl-copy"><input data-bonk="url" readonly aria-label="URL de la source OBS Bonk"> <button type="button" data-bonk="copy">Copier</button></p>
     <h4>Tester le rendu</h4>
-    <p class="muted">Aperçu local : ni Core, ni paiement, ni historique.${options.production ? ' Visible en direct si la source Bonk est dans la scène diffusée.' : ''}</p>
-    <div class="rs-buttons"><button type="button" data-bonk-test="1">1 Bonk</button> <button type="button" data-bonk-test="5">Rafale de 5</button> <button type="button" data-bonk-test="10">Salve de 10</button></div>
+    <p class="d-note">Aperçu local : ni Core, ni paiement, ni historique.</p>
+    <div class="xl-fields"><button type="button" data-bonk-test="1">1 Bonk</button> <button type="button" data-bonk-test="5">Rafale de 5</button> <button type="button" data-bonk-test="10">Salve de 10</button></div>
     </div><ol data-bonk="history"></ol>`;
   root.prepend(panel);
   // Refonte H12: the price per Bonk and the delay between two Bonk of a viewer, set in the Core (bounded there).
@@ -146,7 +139,7 @@ export function mountBonkLab(
       el('history').replaceChildren();
       for (const i of (s.interactions ?? []).slice(0, 12)) {
         const li = document.createElement('li');
-        li.textContent = `#${i.channel_sequence} ${i.viewer_display_name} — ${i.status}${i.error ? ' · ' + i.error.code : ''}`;
+        li.textContent = `#${i.channel_sequence} ${i.viewer_display_name} · ${i.status}${i.error ? ' · ' + i.error.code : ''}`;
         el('history').append(li);
       }
     } catch {

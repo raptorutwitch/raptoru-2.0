@@ -70,7 +70,9 @@ export function studioCockpitRoutes(
           body && typeof body === 'object' && !Array.isArray(body)
             ? { ...(body as Record<string, unknown>) }
             : {};
-        if ('actor' in payload) payload.actor = STUDIO_ACTOR;
+        // A simulated alert event names the viewer it is about (`actor`), never who acts: only the Lab environment reaches it.
+        if ('actor' in payload && params[0] !== 'alerts/events')
+          payload.actor = STUDIO_ACTOR;
         return relay(target(params[0]!, url.search), payload);
       },
     },

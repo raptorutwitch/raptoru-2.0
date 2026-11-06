@@ -207,7 +207,7 @@ async function serveStatic(pathname: string, res: ServerResponse) {
       'content-type': MIME[extname(rel)] ?? 'application/octet-stream',
       'content-security-policy':
         // Moderation console: Bonk emotes of the Twitch / 7TV / BTTV / FFZ CDNs (images only).
-        "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com",
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com https://i.scdn.co",
       'x-frame-options': 'DENY',
     });
     res.end(body);
@@ -1172,6 +1172,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           media: await AlertMediaStore.open(
             join(paths.runtimeDir, 'alerts', 'media'),
           ),
+          mediaImport: Boolean(mainLab),
         })
       : null;
   // Single Lab chat ingress: ONE Twitch chat connection (bot adapter, switch OFF by default) for every

@@ -38,7 +38,7 @@ import {
   trashRestore,
   who,
 } from '../dock-page/dock-view.js';
-import { dockPanelView } from '../../web/src/dock-panel.ts';
+import { dockPanelView } from '../../web/src/pages/alerts-sources.ts';
 
 // Dock OBS V1.2 (docs/OBS_DOCK.md) — the dock page's pure part: families (identity, filters), labels and notes,
 // avatars, compact times, states, the one-click replay button, viewer text never inserted as HTML, the grouping

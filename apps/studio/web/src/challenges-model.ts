@@ -110,6 +110,72 @@ export function formOf(d: {
   };
 }
 
+export interface Engine {
+  enabled: boolean;
+  every_s: number;
+}
+
+/**
+ * Refonte H16 — the engine as it really is (read only: activating it is a separate operation, on Antoni's GO). Off on
+ * purpose is not an outage; ON is green only with a recent good pass; a metric whose source is absent says so.
+ */
+export function engineState(
+  e: Engine | undefined,
+  last: {
+    status: string;
+    started_at: string;
+    finished_at: string | null;
+    error?: string | null;
+  } | null,
+  metrics: { label: string; available: boolean }[],
+  now: number,
+) {
+  const missing = metrics.filter((m) => !m.available).map((m) => m.label);
+  const lastAt = last ? Date.parse(last.finished_at ?? last.started_at) : NaN;
+  const [tone, short, text]: [
+    'ok' | 'off' | 'unknown' | 'down',
+    string,
+    string,
+  ] =
+    e === undefined
+      ? [
+          'unknown',
+          'Comptage inconnu',
+          'État du comptage automatique inconnu sur ce profil.',
+        ]
+      : !e.enabled
+        ? [
+            'off',
+            'Comptage coupé',
+            'Comptage automatique coupé sur ce serveur. Un défi actif n’avance qu’avec « Recompter et verser ». L’activer est une opération séparée, faite sur ton GO.',
+          ]
+        : last && last.status !== 'done'
+          ? [
+              'down',
+              'Comptage en échec',
+              `Comptage automatique actif, mais le dernier passage a échoué${last.error ? ` (${last.error})` : ''}.`,
+            ]
+          : !last || now - lastAt > 3 * e.every_s * 1000
+            ? [
+                'unknown',
+                'Comptage sans passage récent',
+                `Comptage automatique actif, mais aucun passage récent (toutes les ${e.every_s} s attendu).`,
+              ]
+            : [
+                'ok',
+                'Comptage actif',
+                `Comptage automatique actif : toutes les ${e.every_s} s.`,
+              ];
+  return {
+    tone,
+    short,
+    text,
+    missing: missing.length
+      ? `Jamais comptés ici (source absente) : ${missing.join(', ')}.`
+      : '',
+  };
+}
+
 /** A plain-French sentence of the condition (the preview and the list). */
 export function conditionText(
   d: {
@@ -121,7 +187,7 @@ export function conditionText(
   },
   metric: { label: string; unit: string } | undefined,
 ) {
-  const what = `${new Intl.NumberFormat('fr-FR').format(d.target)} ${metric?.unit ?? ''} — ${metric?.label ?? '?'}`;
+  const what = `${new Intl.NumberFormat('fr-FR').format(d.target)} ${metric?.unit ?? ''} : ${metric?.label ?? '?'}`;
   const when =
     d.period === 'week'
       ? 'chaque semaine (lundi → dimanche, heure de Paris)'

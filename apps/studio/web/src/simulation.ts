@@ -1,3 +1,4 @@
+import { confirmBox, patch, pop } from './ds/ds.js';
 import { labOnMainCore } from './http.js';
 import {
   confirmFor,
@@ -110,7 +111,16 @@ export async function runSimAction(
   const target = ACTIONS[action];
   if (!target) return null;
   const question = confirmFor(action, state);
-  if (question && !window.confirm(question)) return null;
+  if (
+    question &&
+    !(await confirmBox({
+      title: 'Effet réel',
+      body: question,
+      yes: 'Continuer',
+      no: 'Annuler',
+    }))
+  )
+    return null;
   try {
     await post(...target);
     return null;
@@ -124,69 +134,67 @@ export async function runSimAction(
   }
 }
 
+/** Le widget de la barre latérale : l'état en points, le panneau en surcouche, depuis n'importe quelle page. */
 export function mountSimulation(root: HTMLElement) {
   let state: SimState | null = null;
-  let open = false;
+  let panel: HTMLElement | null = null;
   let busy = false;
   let error: string | null = null;
   let timer = 0;
 
-  const render = () => {
-    root.innerHTML =
-      simButton(state, open) + (open ? simPanel(state, busy, error) : '');
+  const paint = () => {
+    patch(root, simButton(state, !!panel));
+    if (panel) patch(panel, simPanel(state, busy, error));
   };
-
   async function refresh() {
     state = await loadSimState();
-    render();
+    paint();
   }
-
   const schedule = () => {
     window.clearTimeout(timer);
     timer = window.setTimeout(
-      () => {
-        void refresh().finally(schedule);
-      },
-      open ? POLL_OPEN_MS : POLL_CLOSED_MS,
+      () => void refresh().finally(schedule),
+      panel ? POLL_OPEN_MS : POLL_CLOSED_MS,
     );
   };
-
-  root.addEventListener('click', (ev) => {
-    const b = (ev.target as HTMLElement).closest<HTMLButtonElement>(
-      '[data-sim]',
-    );
-    if (!b || b.disabled) return;
-    const action = b.dataset.sim!;
-    if (action === 'panel') {
-      open = !open;
-      error = null;
-      render();
-      void refresh();
-      schedule();
-      return;
-    }
+  const action = (b: HTMLButtonElement) => {
     if (!state) return;
     busy = true;
     error = null;
-    render();
-    void runSimAction(action, state).then((e) => {
+    paint();
+    void runSimAction(b.dataset.sim!, state).then((e) => {
       error = e;
       busy = false;
       void refresh();
     });
+  };
+  root.addEventListener('click', (ev) => {
+    const b = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+      '[data-sim="panel"]',
+    );
+    if (!b) return;
+    if (panel) return panel.hidePopover();
+    error = null;
+    panel = pop(b, simPanel(state, busy, error), undefined, {
+      cls: 'sim-pop',
+      onClose: () => {
+        panel = null;
+        paint();
+        schedule();
+      },
+    });
+    panel.addEventListener('click', (e) => {
+      const x = (e.target as HTMLElement).closest<HTMLButtonElement>(
+        '[data-sim]',
+      );
+      if (x && !x.disabled) action(x);
+    });
+    paint();
+    void refresh();
+    schedule();
   });
   window.addEventListener(SIM_CHANGED, () => void refresh());
-
-  // Escape closes the panel.
-  document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && open) {
-      open = false;
-      render();
-      schedule();
-    }
-  });
-
-  render();
+  paint();
   void refresh();
   schedule();
 }

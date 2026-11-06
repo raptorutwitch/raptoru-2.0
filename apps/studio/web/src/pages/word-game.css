@@ -1,0 +1,359 @@
+/* Jeu des mots : le plateau tel que le lit le chat, la règle de l'intervalle, la série et les trouvailles. */
+.wg {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 316px;
+  gap: 0 20px;
+  height: 100%;
+  min-height: 590px;
+}
+.wg [hidden] {
+  display: none !important;
+}
+.wg-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.wg-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+  padding-bottom: 8px;
+}
+.wg-tr {
+  display: inline-flex;
+  gap: 6px;
+}
+.wg-next-t {
+  color: var(--ink2);
+  font-size: 13px;
+}
+.wg-count {
+  color: var(--ink);
+}
+.wg-board {
+  flex: 1;
+  min-height: 150px;
+  overflow: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 14px 24px;
+  padding: 18px;
+  border-radius: 12px;
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.wg-board > .d-empty {
+  width: 100%;
+  align-self: center;
+}
+.wg-board > .d-skel {
+  width: 100%;
+}
+.wg-w {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+}
+.wg-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.wg-tiles span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 46px;
+  border-radius: 7px;
+  background: var(--raise);
+  box-shadow:
+    inset 0 1px 0 var(--hair2),
+    0 2px 0 var(--sheet);
+  color: var(--ink);
+  font: 600 25px var(--num);
+}
+.wg-w.d-in .wg-tiles span {
+  animation: wg-drop 0.34s var(--spring) backwards;
+  animation-delay: calc(var(--i) * 26ms);
+}
+@keyframes wg-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) rotate(-5deg);
+  }
+}
+.wg-w.gold .wg-tiles span {
+  background: rgb(233 196 106 / 0.13);
+  box-shadow: inset 0 0 0 1px rgb(233 196 106 / 0.5);
+  color: var(--gold);
+}
+.wg-w footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 27px;
+  color: var(--ink3);
+}
+.wg-w time {
+  font: 500 13px var(--num);
+  font-variant-numeric: tabular-nums;
+}
+.wg-answer {
+  color: var(--teal);
+  font: 600 14px var(--num);
+  animation: d-rise 0.2s var(--e);
+}
+.wg-iv {
+  flex: none;
+  padding-top: 10px;
+}
+.wg-ivh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-height: 30px;
+  color: var(--ink2);
+}
+.wg-ivh .d-fld {
+  width: 58px;
+}
+.wg-ivh .d-fld:has(span) {
+  width: 78px;
+}
+.wg-apply {
+  display: inline-flex;
+  gap: 4px;
+  animation: d-rise 0.2s var(--e);
+}
+.wg-rule {
+  position: relative;
+  height: 40px;
+  margin: 12px 12px 22px;
+  box-shadow: 0 1px 0 var(--hair2);
+  touch-action: none;
+  user-select: none;
+}
+.wg-band {
+  position: absolute;
+  bottom: 0;
+  height: 100%;
+  border-radius: 4px 4px 0 0;
+  background: color-mix(in srgb, var(--teal) 16%, transparent);
+  box-shadow: inset 0 1.5px 0 color-mix(in srgb, var(--teal) 60%, transparent);
+}
+.wg-tick {
+  position: absolute;
+  bottom: -19px;
+  translate: -50% 0;
+  color: var(--ink3);
+  font: 500 12px var(--num);
+}
+.wg-tick::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  height: 4px;
+  width: 1px;
+  background: var(--hair3);
+}
+.wg-h {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: 15px;
+  margin-left: -8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: ew-resize;
+}
+.wg-h::before {
+  content: '';
+  position: absolute;
+  left: 6.5px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--teal);
+}
+.wg-h b {
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  translate: -50% 0;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--teal);
+  color: var(--teal-ink);
+  font: 600 12px/16px var(--num);
+}
+.wg-next {
+  position: absolute;
+  z-index: 1;
+  top: -3px;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--ink);
+  transition: left 1s linear;
+  pointer-events: none;
+}
+
+.wg-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+.wg-side h2 {
+  margin: 0 0 6px;
+}
+.wg-streak {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.wg-streak p {
+  margin: 0;
+}
+.wg-streak strong {
+  font-weight: 600;
+}
+.wg-wins {
+  flex: 1 1 50%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.wg-wins > div {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.wg-wins p {
+  margin: 0;
+}
+.wg-wins ul,
+.wg-chat ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wg-win {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.wg-win b {
+  font-weight: 600;
+}
+.wg-win time {
+  margin-left: 6px;
+  color: var(--ink3);
+  font: 500 12px var(--num);
+}
+.wg-found {
+  display: block;
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+.wg-found i {
+  font-style: normal;
+}
+.wg-found i.gold {
+  color: var(--gold);
+}
+.wg-found .d-ic {
+  color: var(--amber);
+  font-size: 11px;
+}
+.wg-win small {
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--ink3);
+  font-size: 12px;
+}
+.wg-win strong {
+  color: var(--teal);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wg-win strong.gold {
+  color: var(--gold);
+}
+.wg-chat {
+  flex: 1 1 42%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.wg-chat ul {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font-size: 13px;
+}
+.wg-l {
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+}
+.wg-l b {
+  color: var(--teal);
+  font-weight: 650;
+}
+.wg-l.ann {
+  margin: 3px 0;
+  padding: 5px 8px;
+  border-left: 3px solid var(--teal);
+  border-radius: 3px 8px 8px 3px;
+  background: rgb(47 216 196 / 0.08);
+}
+.wg-l small {
+  height: 18px;
+  margin-top: 2px;
+  padding: 0 5px;
+  font-size: 11.5px;
+}
+.wg-vol {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wg-vol output {
+  flex: none;
+  width: 46px;
+  color: var(--ink);
+  font: 500 13px var(--num);
+  text-align: right;
+}
+
+@media (max-width: 1180px) {
+  .wg {
+    grid-template-columns: minmax(0, 1fr) 264px;
+    gap: 0 14px;
+  }
+  .wg-tiles span {
+    width: 32px;
+    height: 40px;
+    font-size: 21px;
+  }
+}

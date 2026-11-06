@@ -1,22 +1,14 @@
-// Soundboard V2 Lab panel: status, the local player (embedded, needs one click to enable audio)
-// and the Core history. The player keeps running while this page stays open.
+// The Lab's Soundboard player, in the Extension Lab: status, the local player (embedded, needs one click to enable audio) and the
+// history. It keeps running while Studio stays open; a second player would double the sounds.
 import { statusError } from './http.js';
 
 const statusErrorOf = (e: string | null | undefined) =>
   e ? statusError(e) : undefined;
 
-/** `production`: the same card for the Production profile (Studio tab), without Lab wording. */
-export function mountSoundLab(
-  root: HTMLElement,
-  options: { production?: boolean } = {},
-) {
+export function mountSoundLab(root: HTMLElement) {
   const panel = document.createElement('section');
-  panel.className = 'xlab-card';
-  panel.innerHTML = `${
-    options.production
-      ? '<h3>Soundboard — lecteur (Production)</h3><p>Core de production → Studio → lecteur local (jeton du profil Production). Paiement réel au Wallet Raptoru du Core (Jetons ou crédits Soundboard, remboursés une seule fois si le son n’est pas joué) ; les récompenses Points de chaîne sont payées sur Twitch.</p>'
-      : '<h3>Soundboard Lab</h3><p>Extension → Core → Studio → lecteur local. Coût simulé, aucun débit ni progression.</p>'
-  }
+  panel.className = 'xl-card';
+  panel.innerHTML = `<h3>Soundboard</h3><p>Le lecteur du Lab : coût simulé, aucun débit ni progression.</p>
     <p data-sound="status">Lecture du statut…</p>
     <div data-sound="player-box" hidden>
       <iframe data-sound="player" title="Lecteur Soundboard" style="width:100%;height:52px;border:0;border-radius:8px"></iframe>
@@ -45,7 +37,7 @@ export function mountSoundLab(
       el('history').replaceChildren();
       for (const i of (s.interactions ?? []).slice(0, 10)) {
         const li = document.createElement('li');
-        li.textContent = `#${i.channel_sequence} ${i.viewer_display_name} · ${i.sound_label} — ${i.status}${i.error ? ' · ' + i.error.code : ''}`;
+        li.textContent = `#${i.channel_sequence} ${i.viewer_display_name} · ${i.sound_label} · ${i.status}${i.error ? ' · ' + i.error.code : ''}`;
         el('history').append(li);
       }
     } catch {
@@ -53,16 +45,6 @@ export function mountSoundLab(
     }
   };
   let timer: ReturnType<typeof setInterval> | undefined;
-  // Production: the Core refuses Soundboard purchases while this player is absent, so it is loaded at launch,
-  // not at the first visit of the page that shows it (retried until the profile's runtime answers).
-  if (options.production) {
-    const prime = async () => {
-      await refresh();
-      if (!el<HTMLIFrameElement>('player').getAttribute('src'))
-        setTimeout(() => void prime(), 5000);
-    };
-    void prime();
-  }
   return {
     setVisible(visible: boolean) {
       clearInterval(timer);

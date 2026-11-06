@@ -185,7 +185,7 @@ export function whoSentence(a: Audience) {
     return 'Personne ne peut l’utiliser.';
   return a.groups.includes('broadcaster')
     ? 'Seulement ces personnes. Une personne exclue ne peut jamais l’utiliser.'
-    : 'Seulement ces personnes — le streamer aussi n’y a accès que s’il en fait partie (groupe Streamer).';
+    : 'Seulement ces personnes : le streamer aussi n’y a accès que s’il en fait partie (groupe Streamer).';
 }
 export const cooldownShort = (c: CmdConfig['cooldown']) =>
   c.enabled
@@ -243,28 +243,90 @@ export function insertAt(
   };
 }
 
-/** Example rendering for « Aperçu dans le chat » (the real one is Core's, in « Tester »). */
-export function previewText(m: {
-  mode: ReplyMode;
-  text: string;
-  to: string;
-  to_login?: string;
-}) {
-  const ex = Object.fromEntries(
-    VARIABLES.map((v) => [v[0], v[0] === '{target}' ? 'Aouh' : v[3]]),
-  );
+/** The example value of each variable, when the viewer of the preview typed nothing for it. */
+export const PREVIEW_EXAMPLE: Record<string, string> = Object.fromEntries(
+  VARIABLES.map((v) => [v[0], v[3]]),
+);
+
+/**
+ * Example rendering for « Aperçu dans le chat » (the real one is Core's, in « Tester »). `vars`: the values of this
+ * preview, token → value, over the examples.
+ */
+export function previewText(
+  m: {
+    mode: ReplyMode;
+    text: string;
+    to: string;
+    to_login?: string;
+  },
+  vars: Record<string, string> = {},
+) {
+  const ex = { ...PREVIEW_EXAMPLE, ...vars };
   const body = m.text.replace(/\{[a-z_]+\}/g, (t) => ex[t] ?? t);
   const to =
     m.mode === 'reply'
       ? ''
       : m.to === 'author'
-        ? 'PixelMamie'
+        ? ex['{display_name}']
         : m.to === 'target'
-          ? 'Aouh'
+          ? ex['{target}']
           : m.to === 'user'
             ? (m.to_login ?? '…')
             : '';
   return `${to ? `@${to} ` : ''}${body}`;
+}
+
+/**
+ * What the viewer of the preview typed, as variables: the same reading of the arguments as Core, for the screen only.
+ * An argument not typed keeps its example; Core's refusal of a wrong message is « Tester »'s answer.
+ */
+export function previewVars(
+  c: Pick<CmdConfig, 'args'>,
+  viewer: { login: string; display_name: string },
+  typed: string,
+) {
+  const tokens = typed.trim().split(/\s+/).filter(Boolean).slice(1);
+  const vars: Record<string, string> = {
+    '{display_name}': viewer.display_name,
+    '{user}': viewer.login,
+  };
+  let i = 0;
+  for (const a of c.args) {
+    if (a.type === 'text' || i >= tokens.length) break;
+    const t = tokens[i++]!;
+    if (a.type === 'mention') vars['{target}'] ??= t.replace(/^@/, '');
+    else vars['{amount}'] ??= t;
+  }
+  if (tokens.length) vars['{args}'] = tokens.join(' ');
+  return vars;
+}
+
+export interface PreviewLine {
+  key: string;
+  mode: ReplyMode;
+  text: string;
+}
+/** The bot's messages in sending order (`reply_first`), from the draft. The silent reply writes nothing. */
+export function previewLines(
+  c: Pick<CmdConfig, 'reply' | 'actions' | 'reply_first'>,
+  vars: Record<string, string> = {},
+): PreviewLine[] {
+  const chat = c.actions.flatMap((a) =>
+    a.type === 'chat' && a.mode !== 'silent'
+      ? [{ key: a.id, mode: a.mode, text: previewText(a, vars) }]
+      : [],
+  );
+  const reply =
+    c.reply.mode === 'silent'
+      ? []
+      : [
+          {
+            key: 'reply',
+            mode: c.reply.mode,
+            text: previewText(c.reply, vars),
+          },
+        ];
+  return c.reply_first ? [...reply, ...chat] : [...chat, ...reply];
 }
 
 // ------------------------------------------------------------------ state of a command (from Core)

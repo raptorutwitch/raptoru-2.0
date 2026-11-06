@@ -161,7 +161,7 @@ describe('Prêt pour le live', () => {
     expect(c.alerts!.consequence).toContain('(2)');
     expect(c.games).toMatchObject({
       state: 'Bloqués par le serveur',
-      fix: { page: 'centre' },
+      fix: { page: 'systeme' },
     });
     expect(c.cp!.state).toBe('Activés, en attente'); // the intention ON is never green without OBS
   });
@@ -183,7 +183,7 @@ describe('Prêt pour le live', () => {
     const list = ordered(readiness(input));
     expect(list.at(-1)!.level).toBe('off');
     expect(readinessHtml(readiness(input), (p) => `/?p=${p}`)).toContain(
-      'Coupé volontairement (5)',
+      '<b>5</b>coupés',
     );
   });
 
@@ -249,31 +249,39 @@ describe('Prêt pour le live', () => {
     });
   });
 
-  it('what is ready is folded after what needs attention: problems and « non vérifié » stay in sight', () => {
-    const checks = readiness({ ...ready, alerts: null });
+  it('the chain shows every check; the steps are the problems only, « non vérifié » stays in sight', () => {
+    const checks = readiness({
+      ...ready,
+      alerts: null,
+      channelPoints: { obs: { connected: false } },
+    });
     const html = readinessHtml(checks, (p) => `/?p=${p}`);
-    const okCount = checks.filter((x) => x.level === 'ok').length;
-    expect(okCount).toBeGreaterThan(0);
-    expect(html).toContain(
-      `<details class="rs-ready-ok"><summary>Prêt (${okCount})</summary>`,
-    );
-    const folded = html.slice(html.indexOf('rs-ready-ok'));
-    expect(folded).not.toContain('data-check="alerts"'); // the unchecked one is above, in sight
-    expect(html.indexOf('data-check="alerts"')).toBeLessThan(
-      html.indexOf('rs-ready-ok'),
-    );
-    // All ready: nothing but the summary and the folded list.
+    // Tout est dans la chaîne, sans en perdre un seul.
+    const chain = html.slice(html.indexOf('ce-chain'), html.indexOf('ce-todo'));
+    for (const c of checks) expect(chain).toContain(`data-check="${c.id}"`);
+    // Le « non vérifié » n'est pas un geste à faire, mais il reste à portée.
+    const todo = html.slice(html.indexOf('ce-todo'));
+    expect(todo).not.toContain('data-step="alerts"');
+    expect(todo).toContain('data-check="alerts"');
+    expect(todo).toContain('data-step="obs"');
+    expect(todo).not.toContain('data-step="extension"');
+    // Tout est prêt : aucun geste, pas de liste vide.
     const allOk = readiness(ready).filter(
       (x) => x.level === 'ok' || x.level === 'off',
     );
-    expect(readinessHtml(allOk, (p) => `/?p=${p}`)).toContain(
-      '<ul class="rs-ready-list"></ul>',
-    );
+    const calm = readinessHtml(allOk, (p) => `/?p=${p}`);
+    expect(calm).toContain('Rien à corriger.');
+    expect(calm).not.toContain('data-step=');
   });
 
-  it('the panel never offers an action button (read only)', () => {
-    const html = readinessHtml(readiness(ready), (p) => `/?p=${p}`);
-    expect(html).not.toContain('<button');
+  it('read only: its buttons only open the detail of a check, the fixes are links to the pages', () => {
+    const html = readinessHtml(
+      readiness({ ...ready, channelPoints: { obs: { connected: false } } }),
+      (p) => `/?p=${p}`,
+    );
+    for (const b of html.match(/<button[^>]*>/g) ?? [])
+      expect(b).toContain('data-check=');
+    expect(html).toContain('href="/?p=bonk"');
     expect(html).toContain('Lecture seule');
   });
 

@@ -29,30 +29,20 @@ test('Studio launches a Tombola in Bonbons; the winners joined from the Extensio
   };
   const s = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
   await s.goto('/?tab=tombola');
-  await s
-    .getByRole('button', { name: /Montant fixe/ })
-    .first()
-    .click();
+  await s.locator('[data-mode="fixed"]').click();
   await s
     .getByRole('button', { name: /^Bonbons/ })
     .first()
     .click();
   // Bonbons are counted in units: the Jetons-sized amount became 10, « Aléatoire » is off, the presets are small.
   await expect(s.locator('[data-cfg="fixed_amount"]')).toHaveValue('10');
-  await expect(s.getByRole('button', { name: /Aléatoire/ })).toBeDisabled();
+  await expect(s.locator('[data-mode="random"]')).toBeDisabled();
   // Each setting saved before the next (a click during the previous save would be overwritten by its answer).
   await s.locator('[data-fixed="20"]').click();
   await expect(s.locator('[data-cfg="fixed_amount"]')).toHaveValue('20');
   await s.waitForTimeout(800);
-  await s
-    .getByRole('button', { name: /Nombre fixe/ })
-    .first()
-    .click();
-  await expect(s.locator('#tab-tombola')).toContainText('Nombre de gagnants');
-  const count = s
-    .getByText('Nombre de gagnants')
-    .locator('..')
-    .locator('input');
+  await s.locator('[data-win="custom"]').click();
+  const count = s.locator('[data-cfg="winners_custom"]');
   await count.fill('2');
   await count.blur();
   await s.waitForTimeout(800);

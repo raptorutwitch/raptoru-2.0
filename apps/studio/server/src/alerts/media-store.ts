@@ -8,6 +8,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { extname, join } from 'node:path';
 
 // Twitch alerts V1 (A2) — the alert media in Studio's own storage (<runtimeDir>/alerts/media, under the data root: it
@@ -36,6 +37,18 @@ export const ALERT_MEDIA = [
   'Raid Titan.webm',
   'Raptoru_Alerte_Raid_Sound.mp3',
 ] as const;
+
+/** Where the catalogue's files are kept on the streamer's PC: what the Lab offers to import from, when they exist. */
+export const USUAL_FOLDERS = [
+  join(homedir(), 'Videos', 'Alertes Twitch Pour Claude', 'Version webm'),
+  join(homedir(), 'Documents', 'Twitch', 'Alertes', 'Raid'),
+  join(
+    homedir(),
+    'Documents',
+    'Raptoru 2.0 - Livraisons',
+    '2026-10-31-halloween-alertes',
+  ),
+];
 
 const TYPES: Record<string, string> = {
   '.webm': 'video/webm',

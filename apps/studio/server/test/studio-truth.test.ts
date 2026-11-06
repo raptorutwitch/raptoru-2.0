@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { runNowConfirm } from '../../web/src/channel-points-view.ts';
-import { cpBlocker, liveHtml, regieHtml } from '../../web/src/shell/regie.ts';
+import { runNowConfirm } from '../../web/src/pages/rewards-model.ts';
+import {
+  automationHtml,
+  cpBlocker,
+  healthHtml,
+  liveHtml,
+} from '../../web/src/shell/regie.ts';
 import { botStatusProvider } from '../src/control-center/bot.js';
 import { readSignals } from '../src/supervision/signals.js';
 
@@ -9,21 +14,15 @@ import { readSignals } from '../src/supervision/signals.js';
 
 const href = (id: string) => `/?p=${id}`;
 const green = (html: string, text: string) =>
-  new RegExp(`class="rs-state is-ok">[^<]*${text}`).test(html);
+  new RegExp(`data-tone="ok"><i></i><span>[^<]*${text}`).test(html);
 
 describe('Régie: intention ≠ constat', () => {
   it('channel points ON with OBS down: not green, the reason and the consequence', () => {
     const blocker = cpBlocker({ obs: { connected: false } });
-    const html = regieHtml({
-      sup: null,
-      supOk: true,
-      cp: { enabled: true, rules: 2, blocker },
-      message: '',
-      href,
-    });
+    const html = automationHtml({ enabled: true, rules: 2, blocker });
     expect(html).toContain('OBS non connecté à Studio');
     expect(html).toContain('les actions OBS et les sons attendent');
-    expect(html).not.toContain('rs-state is-ok">Automatisations');
+    expect(green(html, 'Automatisations')).toBe(false);
   });
   it('channel points ON and executable: green; effects player absent: not green', () => {
     expect(
@@ -35,23 +34,15 @@ describe('Régie: intention ≠ constat', () => {
     expect(
       cpBlocker({ obs: { connected: true }, effects: { connected: false } }),
     ).toBe('lecteur d’effets absent');
-    const ok = regieHtml({
-      sup: null,
-      supOk: true,
-      cp: { enabled: true, rules: 1, blocker: null },
-      message: '',
-      href,
-    });
+    const ok = automationHtml({ enabled: true, rules: 1, blocker: null });
     expect(green(ok, 'Automatisations actives et exécutables')).toBe(true);
   });
   it('no incident says what is followed and what is not', () => {
-    const html = regieHtml({
-      sup: { now: '', incidents: [], history: [] },
-      supOk: true,
-      cp: null,
-      message: '',
+    const html = healthHtml(
+      { now: '', incidents: [], history: [] },
+      true,
       href,
-    });
+    );
     expect(html).toContain('Aucun incident sur les éléments suivis');
     expect(html).toContain('Non suivis ici');
     expect(html).not.toContain('Aucun incident confirmé en cours.');
@@ -76,7 +67,7 @@ describe('Régie: intention ≠ constat', () => {
       'production',
       href,
     );
-    expect(html).not.toContain('is-ok');
+    expect(html).not.toContain('data-tone="ok"');
     expect(html).toContain('Activé, lecteur absent');
     expect(html).toContain('File non lisible ici.');
     expect(html).toContain('Demandes refusées : Spotify non connecté à Studio');
@@ -126,7 +117,7 @@ describe('« Exécuter maintenant (réel) » (H11)', () => {
 
 describe('« Donner » (Boutique): one key per intent (P0-2)', () => {
   it('same intent and gift → same key; another viewer, item or intent → another', async () => {
-    const { awardKey } = await import('../../web/src/cosmetics.ts');
+    const { awardKey } = await import('../../web/src/pages/shop-model.ts');
     const g = { kind: 'jetons', amount: 500 };
     const k = awardKey('11111111-1111-4111-8111-111111111111', '4242', g);
     expect(awardKey('11111111-1111-4111-8111-111111111111', '4242', g)).toBe(k);
@@ -183,41 +174,39 @@ describe('Alertes « Vider la file » (H3)', () => {
 
 describe('Défis: the engine as it is (H16)', () => {
   it('off on purpose is not an outage; ON is green only with a recent good pass; absent sources said', async () => {
-    const { engineHtml } = await import('../../web/src/challenges.ts');
+    const { engineState } = await import('../../web/src/challenges-model.ts');
     const now = Date.parse('2026-11-05T20:00:00Z');
     const ok = {
       status: 'done',
       started_at: '2026-11-05T19:59:30Z',
       finished_at: '2026-11-05T19:59:31Z',
     };
-    expect(
-      engineHtml({ enabled: false, every_s: 60 }, null, [], now),
-    ).toContain('Comptage automatique coupé sur ce Core');
-    expect(
-      engineHtml({ enabled: false, every_s: 60 }, null, [], now),
-    ).not.toMatch(/is-down|is-ok/);
-    expect(engineHtml({ enabled: true, every_s: 60 }, ok, [], now)).toContain(
-      'rs-state is-ok',
+    const off = engineState({ enabled: false, every_s: 60 }, null, [], now);
+    expect(off.text).toContain('Comptage automatique coupé');
+    expect(off.tone).toBe('off');
+    expect(engineState({ enabled: true, every_s: 60 }, ok, [], now).tone).toBe(
+      'ok',
     );
     expect(
-      engineHtml(
+      engineState(
         { enabled: true, every_s: 60 },
         { ...ok, finished_at: '2026-11-05T19:40:00Z' },
         [],
         now,
-      ),
+      ).text,
     ).toContain('aucun passage récent');
     expect(
-      engineHtml(
+      engineState(
         { enabled: true, every_s: 60 },
         { ...ok, status: 'failed', error: 'boom' },
         [],
         now,
-      ),
-    ).toContain('rs-state is-down');
+      ).tone,
+    ).toBe('down');
     expect(
-      engineHtml(undefined, null, [{ label: 'Daily', available: false }], now),
-    ).toContain('Jamais comptés sur ce Core (source absente) : Daily');
+      engineState(undefined, null, [{ label: 'Daily', available: false }], now)
+        .missing,
+    ).toContain('Jamais comptés ici (source absente) : Daily');
   });
 });
 
@@ -260,7 +249,8 @@ describe('Réglages des modules (H10 / H12) and Daily steps (H14) — views', ()
     );
   });
   it('Daily: one field per step, the last repeats, fixed reset time shown, never editable', async () => {
-    const { dailyHtml } = await import('../../web/src/progression.ts');
+    const { dailyHtml } =
+      await import('../../web/src/pages/progression-model.ts');
     const html = dailyHtml({
       steps: [500, 700, 900],
       default_steps: [500, 700, 900],
@@ -274,5 +264,20 @@ describe('Réglages des modules (H10 / H12) and Daily steps (H14) — views', ()
     );
     expect(html).not.toContain('modifiés');
     expect(dailyHtml(null)).toContain('Paliers indisponibles');
+  });
+  it("the curve shown before « Appliquer » is the Core's formula; two dragged points stay within its limits", async () => {
+    const { curveXp, fitCurve } =
+      await import('../../web/src/pages/progression-model.ts');
+    const { xpForLevel } =
+      await import('../../../core-api/src/progression/service.ts');
+    const rules = { curve_base: 60, curve_exponent: 1.6 };
+    for (const level of [1, 2, 10, 42, 250])
+      expect(curveXp(level, rules)).toBe(xpForLevel(level, rules as never));
+    const fit = fitCurve({ level: 30, xp: 13_000 }, { level: 100, xp: 67_000 });
+    expect(curveXp(100, fit)).toBeGreaterThan(66_000);
+    expect(curveXp(100, fit)).toBeLessThan(68_000);
+    const flat = fitCurve({ level: 30, xp: 5 }, { level: 100, xp: 5 });
+    expect(flat.curve_exponent).toBeGreaterThanOrEqual(1);
+    expect(flat.curve_base).toBeGreaterThanOrEqual(1);
   });
 });

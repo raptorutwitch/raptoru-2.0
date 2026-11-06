@@ -196,10 +196,7 @@ export function readiness(i: ReadinessInput): Check[] {
   // --- Bot and Twitch -----------------------------------------------------------------------------------------------
   if (!bot)
     out.push(
-      NOT_READ('bot', 'Bot LeCroupier_', {
-        page: 'centre',
-        label: 'Centre de contrôle',
-      }),
+      NOT_READ('bot', 'Bot LeCroupier_', { page: 'systeme', label: 'Système' }),
     );
   else
     out.push(
@@ -212,7 +209,7 @@ export function readiness(i: ReadinessInput): Check[] {
         bot.level === 'ok' || bot.level === 'off'
           ? null
           : 'Commandes, jeux, Daily, fidélité et points de chaîne dépendent de lui.',
-        bot.hint ? { page: 'centre', label: 'Centre de contrôle (bot)' } : null,
+        bot.hint ? { page: 'systeme', label: 'Système (bot)' } : null,
       ),
     );
   if (prod) {
@@ -224,10 +221,7 @@ export function readiness(i: ReadinessInput): Check[] {
     ) =>
       out.push(
         v === undefined
-          ? NOT_READ(id, label, {
-              page: 'centre',
-              label: 'Centre de contrôle (bot)',
-            })
+          ? NOT_READ(id, label, { page: 'systeme', label: 'Système (bot)' })
           : v === null
             ? c(
                 id,
@@ -255,7 +249,7 @@ export function readiness(i: ReadinessInput): Check[] {
                   'Coupé',
                   'Le bot ne reçoit plus ces événements de Twitch.',
                   conseq,
-                  { page: 'centre', label: 'Centre de contrôle (bot)' },
+                  { page: 'systeme', label: 'Système (bot)' },
                 ),
       );
     tw(
@@ -279,7 +273,7 @@ export function readiness(i: ReadinessInput): Check[] {
           'Inutilisable',
           'Le jeton de raptoru_ du bot est refusé par Twitch.',
           'Fidélité, points de chaîne et sanctions ne fonctionnent pas.',
-          { page: 'centre', label: 'Centre de contrôle (bot)' },
+          { page: 'systeme', label: 'Système (bot)' },
         ),
       );
   }
@@ -600,7 +594,7 @@ export function readiness(i: ReadinessInput): Check[] {
               'Bloqués par le serveur',
               'Activés, mais le bot n’a pas les jeux chat (CHAT_GAMES).',
               '!roulette, !slots et !duel ne répondent pas.',
-              { page: 'centre', label: 'Centre de contrôle (bot)' },
+              { page: 'systeme', label: 'Système (bot)' },
             )
           : prod && chatGames === undefined
             ? c(
@@ -651,7 +645,7 @@ export function readiness(i: ReadinessInput): Check[] {
               'Bloquée par le serveur',
               'Le bot n’envoie aucune réponse de jeux ni de commandes (CHAT_GAMES_OUTPUT).',
               'Commandes et jeux décidés, mais rien n’est écrit dans le chat.',
-              { page: 'centre', label: 'Centre de contrôle (bot)' },
+              { page: 'systeme', label: 'Système (bot)' },
             ),
     );
   const wg = i.wordGame;
@@ -820,13 +814,6 @@ const esc = (t: unknown) =>
         ch
       ]!,
   );
-const CLS: Record<Level, string> = {
-  ok: 'is-ok',
-  warn: 'is-warn',
-  error: 'is-down',
-  unknown: 'is-warn',
-  off: 'is-off',
-};
 
 /** The sentence at the top of the Centre (pure). */
 export function verdict(checks: Check[]) {
@@ -838,33 +825,102 @@ export function verdict(checks: Check[]) {
     : 'Tout est prêt pour le live';
 }
 
-/** The verdict and its counters, then what needs attention in sight; what is ready and off on purpose, folded (pure). */
+/** La chaîne du live : du serveur aux viewers, chaque vérification à sa place. Le nom court s'affiche, le nom complet reste au détail. */
+export const CHAIN: {
+  id: string;
+  title: string;
+  /** Là où ça arrive. */
+  end: string;
+  checks: [id: string, short: string][];
+}[] = [
+  {
+    id: 'link',
+    title: 'Le bot et Twitch',
+    end: 'Le chat',
+    checks: [
+      ['core', 'Serveur'],
+      ['bot', 'Bot'],
+      ['twitch-chat', 'Chat Twitch'],
+      ['twitch-broadcaster', 'Subs, bits, points'],
+      ['twitch-token', 'Autorisation'],
+      ['chat-output', 'Sortie chat'],
+    ],
+  },
+  {
+    id: 'stage',
+    title: 'OBS et ses lecteurs',
+    end: 'L’écran',
+    checks: [
+      ['obs', 'OBS'],
+      ['effects', 'Lecteur d’effets'],
+      ['soundboard', 'Soundboard'],
+      ['tts', 'TTS'],
+      ['bonk', 'Bonk'],
+      ['alerts', 'Alertes'],
+      ['se', 'Dons'],
+    ],
+  },
+  {
+    id: 'mods',
+    title: 'Les modules',
+    end: 'Les viewers',
+    checks: [
+      ['cp', 'Points de chaîne'],
+      ['wheel', 'Roue du Sub'],
+      ['games', 'Mini-jeux'],
+      ['word-game', 'Jeu des mots'],
+      ['spotify', 'Spotify'],
+      ['extension', 'Extension'],
+    ],
+  },
+];
+
+const node = (x: Check, short: string) =>
+  `<button type="button" class="ce-n" data-check="${esc(x.id)}" data-l="${x.level}" title="${esc(`${x.label} : ${x.state}`)}"><i></i>${esc(short)}</button>`;
+
+/** La réponse à « est-ce prêt, et sinon que faire ? » : le verdict, la chaîne complète, puis les gestes dans l'ordre (pure). */
 export function readinessHtml(
   checks: Check[] | undefined,
   href: (page: string) => string,
   lab = false,
 ) {
   if (!checks)
-    return '<section class="rs-panel rs-ready"><h2>Prêt pour le live</h2><p class="rs-muted">Vérification…</p></section>';
+    return '<section class="ce-v"><h2>Prêt pour le live ?</h2><p class="d-faint">Vérification…</p></section>';
   const s = summary(checks);
-  const row = (x: Check) =>
-    `<li class="rs-ready-row" data-check="${esc(x.id)}"><details><summary><span class="rs-status ${CLS[x.level]}"><i></i>${esc(x.state)}</span><b>${esc(x.label)}</b>${x.fix ? `<a href="${href(x.fix.page)}">${esc(x.fix.label)}</a>` : ''}</summary>
-      <p>${esc(x.why)}</p>${x.consequence ? `<p class="rs-ready-why"><b>Pour les viewers :</b> ${esc(x.consequence)}</p>` : ''}</details></li>`;
   const sorted = ordered(checks);
-  // In sight: what needs attention (problems, « non vérifié »). Folded: what is ready, what is off on purpose.
-  const on = sorted.filter((x) => x.level !== 'off' && x.level !== 'ok');
-  const ok = sorted.filter((x) => x.level === 'ok');
-  const off = sorted.filter((x) => x.level === 'off');
-  const count = (n: number, label: string, cls: string) =>
-    `<li class="${cls}"><b>${n}</b>${label}</li>`;
-  const bad = on.filter((x) => x.level !== 'unknown').length;
-  return `<section class="rs-panel rs-ready" data-role="readiness">
-    <div class="rs-verdict ${CLS[s.level]}"><div><p class="rs-eyebrow">Prêt pour le live</p><h2>${esc(verdict(checks))}</h2>
-      ${lab ? '<p class="rs-muted">Lab : services locaux et lecteurs de ce PC, pas ton vrai stream.</p>' : ''}</div>
-      <ul class="rs-counts">${count(bad, 'à corriger', 'is-down')}${count(on.length - bad, 'à vérifier', 'is-warn')}${count(ok.length, 'prêts', 'is-ok')}${count(off.length, 'coupés', 'is-off')}</ul></div>
-    <ul class="rs-ready-list">${on.map(row).join('')}</ul>
-    ${ok.length ? `<details class="rs-ready-ok"><summary>Prêt (${ok.length})</summary><ul class="rs-ready-list">${ok.map(row).join('')}</ul></details>` : ''}
-    ${off.length ? `<details class="rs-ready-off"><summary>Coupé volontairement (${off.length})</summary><ul class="rs-ready-list">${off.map(row).join('')}</ul></details>` : ''}
-    <p class="rs-muted">Lecture seule : chaque correction se fait dans la page indiquée.</p>
-  </section>`;
+  const todo = sorted.filter((x) => x.level === 'error' || x.level === 'warn');
+  const toCheck = sorted.filter((x) => x.level === 'unknown');
+  const n = (l: Level) => checks.filter((x) => x.level === l).length;
+  const count = (v: number, label: string, l: string) =>
+    `<li data-l="${l}"><b>${v}</b>${label}</li>`;
+  const byId = new Map(checks.map((x) => [x.id, x]));
+  const known = new Set(CHAIN.flatMap((l) => l.checks.map(([id]) => id)));
+  const lanes = CHAIN.map((l, i) => {
+    const extra =
+      i === CHAIN.length - 1
+        ? checks.filter((x) => !known.has(x.id)).map((x) => node(x, x.label))
+        : [];
+    const nodes = [
+      ...l.checks.flatMap(([id, short]) => {
+        const x = byId.get(id);
+        return x ? [node(x, short)] : [];
+      }),
+      ...extra,
+    ];
+    return `<div class="ce-lane" data-lane="${l.id}"><h3 class="d-lb">${esc(l.title)}</h3><div class="ce-wire">${nodes.join('')}<span class="ce-end">${esc(l.end)}</span></div></div>`;
+  }).join('');
+  const step = (x: Check, at: number) =>
+    `<li class="ce-s" data-step="${esc(x.id)}" data-l="${x.level}"><span class="ce-s__n">${at + 1}</span><div><h3>${esc(x.label)}<em>${esc(x.state)}</em></h3><p>${esc(x.why)}</p>${x.consequence ? `<p class="ce-s__v"><b>Pour les viewers :</b> ${esc(x.consequence)}</p>` : ''}</div>${x.fix ? `<a class="d-btn sm" href="${href(x.fix.page)}" data-page="${esc(x.fix.page)}">${esc(x.fix.label)}</a>` : ''}</li>`;
+  return `<section class="ce-v" data-role="readiness" data-l="${s.level}">
+      <div class="ce-v__t"><h2>${esc(verdict(checks))}</h2>${lab ? '<p>Lab : services locaux et lecteurs de ce PC, pas ton vrai stream.</p>' : ''}</div>
+      <ul class="ce-counts">${count(todo.length, 'à corriger', 'error')}${count(toCheck.length, 'à vérifier', 'unknown')}${count(n('ok'), 'prêts', 'ok')}${count(n('off'), 'coupés', 'off')}</ul>
+      <div class="ce-rule" aria-hidden="true">${sorted.map((x) => `<i data-l="${x.level}"></i>`).join('')}</div>
+    </section>
+    <section class="ce-chain" aria-label="La chaîne du live">${lanes}</section>
+    <section class="ce-todo">
+      <h2 class="d-lb">${todo.length ? 'À faire, dans l’ordre' : 'À faire'}</h2>
+      ${todo.length ? `<ol class="ce-steps">${todo.map(step).join('')}</ol>` : '<p class="ce-calm">Rien à corriger.</p>'}
+      ${toCheck.length ? `<h2 class="d-lb">Studio ne peut pas le vérifier : à toi de regarder</h2><div class="ce-unk">${toCheck.map((x) => node(x, x.label)).join('')}</div>` : ''}
+      <p class="d-note">Lecture seule : chaque correction se fait dans la page indiquée.</p>
+    </section>`;
 }

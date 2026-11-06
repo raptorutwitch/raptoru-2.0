@@ -37,11 +37,10 @@ dessus.
 Vérifié dans Chromium à 1024 × 768, 1360 × 900 et 1920 × 1080 : parcours scripté, vraies vidéos lues, aucune erreur console. Non
 essayé dans Electron.
 
-**Phase 1 terminée.** Retours d’Antoni sur D et mission : BRIEF_PAGES.md, DESIGN_SYSTEM.md.
-La mission
-reprend en autonomie sans nouveau cahier des charges.
+**Phase 1 terminée le 06/11 : D validée.** Consigne de chaque page : [BRIEF_PAGES.md](BRIEF_PAGES.md). Règles :
+[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
-## Phase 2 : exécution autonome après le choix
+## Phase 2 : exécution autonome (en cours)
 
 Ordre prévu, ajustable selon les dépendances :
 

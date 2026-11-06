@@ -5,13 +5,24 @@ import {
   endPlan,
   fill,
   formatAmount,
+  FX_KINDS,
+  fxFrames,
   giftCounterDuration,
   schedule,
   NAME_COLORS,
   pickNameColor,
   templateParts,
   textParts,
+  withLook,
 } from '../alerts-player/timeline.js';
+import { TRANSITIONS } from '../src/alerts/placement-store.ts';
+import {
+  clipsOf,
+  moveClip,
+  setFx,
+  TRANSITIONS as PAGE_TRANSITIONS,
+} from '../../web/src/pages/alerts-model.ts';
+import { NAME_COLORS as PAGE_COLORS } from '../../web/src/pages/alerts-inspector.ts';
 import { ALERT_VARIANTS } from '../../../core-api/src/alerts/variants.ts';
 import { playLeaseMs } from '../../../core-api/src/alerts/service.ts';
 
@@ -204,7 +215,8 @@ describe('families (OBS source layers)', () => {
   it('same families, mapping and stacking order as the Core contract and the Studio tab', async () => {
     const { ALERT_FAMILIES, ALERT_TYPES, alertFamilyOf } =
       await import('@raptoru/schemas');
-    const { familyOfType } = await import('../../web/src/alerts-view.ts');
+    const { familyOfType } =
+      await import('../../web/src/pages/alerts-model.ts');
     const { FAMILY_ORDER, familyLayer, familyOf } =
       await import('../alerts-player/timeline.js');
     expect(FAMILY_ORDER).toEqual([...ALERT_FAMILIES]);
@@ -226,5 +238,144 @@ describe('families (OBS source layers)', () => {
       expect(pickNameColor(busy)).toBe(NAME_COLORS[5]);
     for (let i = 0; i < 20; i++)
       expect(busy.slice(1)).not.toContain(pickNameColor(busy.slice(1)));
+  });
+});
+
+describe('a variant look (Studio › Alertes): timings, transitions, wording', () => {
+  const steps = (v) => schedule(v).map((s) => `${s.action}@${s.at}`);
+
+  it('no look: exactly the steps of the frozen variant', () => {
+    for (const v of Object.values(V)) {
+      expect(withLook(v, undefined)).toBe(v);
+      expect(schedule(withLook(v, {}))).toEqual(schedule(v));
+    }
+  });
+
+  it('moves the text; a zone keeps the length of its own fade; the end of the alert never moves', () => {
+    const raid = withLook(V.raid_default, { showAt: 2000, hideAt: 9000 });
+    expect(raid.showAt).toBe(2000);
+    expect(raid.fadeOutAt).toBe(9000 - 350);
+    const bits = withLook(V.bits_default, { hideAt: 3000 });
+    expect(bits.duration).toBe(V.bits_default.duration);
+    expect(bits.mediaMs).toBe(V.bits_default.mediaMs);
+  });
+
+  it('its own exit ends at hideAt and clears the block, for every style', () => {
+    const exit = { textExit: { kind: 'fade', ms: 300 } };
+    expect(steps(withLook(V.follow_eren, exit))).toEqual([
+      'text-show@800',
+      'text-exit@4200',
+      'text-clear@4500',
+    ]);
+    expect(steps(withLook(V.bits_default, exit))).toEqual([
+      'text-show@800',
+      'text-exit@3850',
+      'text-clear@4150',
+    ]);
+    expect(steps(withLook(V.don_moneytest, exit))).toContain('text-clear@6800');
+    const eren = steps(withLook(V.eren_sub, exit));
+    expect(eren).not.toContain('subtitle-tremble@1050');
+    expect(eren).toContain('subtitle-exit@1100');
+    expect(eren).toContain('subtitle-clear@1400');
+    // Coupe nette : pas d'animation, le texte part à hideAt.
+    expect(
+      steps(withLook(V.follow_eren, { textExit: { kind: 'cut', ms: 0 } })),
+    ).toEqual(['text-show@800', 'text-clear@4500']);
+  });
+
+  it('the media leaves before the alert ends; its own fade gives way on that side only', () => {
+    const mediaExit = { kind: 'fade', ms: 500 };
+    expect(steps(withLook(V.follow_eren, { mediaExit }))).toContain(
+      'video-exit@5792',
+    );
+    const don = withLook(V.don_moneytest, { mediaExit });
+    expect(steps(don)).toContain('video-exit@7400');
+    expect(steps(don).some((s) => s.startsWith('video-fade-out'))).toBe(false);
+    expect(don.videoFade.in).toBe(V.don_moneytest.videoFade.in);
+    const entered = withLook(V.don_moneytest, {
+      mediaEnter: { kind: 'rise', ms: 400 },
+    });
+    expect(entered.videoFade.in).toBe(0);
+    expect(entered.videoFade.outAt).toBe(V.don_moneytest.videoFade.outAt);
+  });
+
+  it('wording: only a style that reads its template; subtitles one by one; viewer data stays plain text', () => {
+    expect(
+      textParts(withLook(V.follow_eren, { text: 'Bienvenue {pseudo}' }), {
+        pseudo: '<b>',
+      }),
+    ).toEqual([
+      ['', 'Bienvenue '],
+      ['alert-name', '<b>'],
+    ]);
+    const eren = withLook(V.eren_sub, {
+      subtitles: [{}, { text: 'Merci {pseudo}', hideAt: 3000 }],
+    });
+    expect(eren.subtitles[0]).toEqual(V.eren_sub.subtitles[0]);
+    expect(eren.subtitles[1]).toMatchObject({
+      text: 'Merci {pseudo}',
+      hideAt: 3000,
+    });
+  });
+
+  it('frames: opacity alone for a fade, a transform added to the element for the others', () => {
+    expect(fxFrames('cut', 'enter')).toBeNull();
+    expect(fxFrames('fade', 'exit')).toEqual({
+      opacity: [1, 0],
+      transform: null,
+    });
+    expect(fxFrames('rise', 'enter').transform[0]).toBe('translate(0px, 40px)');
+    expect(fxFrames('rise', 'exit').transform[1]).toBe('translate(0px, -40px)');
+    expect(fxFrames('zoom', 'enter').transform).toEqual([
+      'scale(0.82)',
+      'scale(1)',
+    ]);
+    for (const kind of FX_KINDS)
+      for (const phase of ['enter', 'exit'])
+        expect(JSON.stringify(fxFrames(kind, phase))).not.toContain('NaN');
+  });
+
+  it('engine, server and page offer the same transitions and colours', () => {
+    expect(TRANSITIONS).toEqual(FX_KINDS);
+    expect(
+      PAGE_TRANSITIONS.map(([k]) => k)
+        .filter((k) => k !== 'origin')
+        .sort(),
+    ).toEqual([...FX_KINDS].sort());
+    expect(PAGE_COLORS).toEqual(NAME_COLORS);
+  });
+
+  it('the timeline shows what the engine does, for every variant', () => {
+    for (const v of Object.values(V)) {
+      const text = schedule(v).filter((s) =>
+        /^(text|subtitle)-show/.test(s.action),
+      );
+      expect(clipsOf(v).length, v.id).toBe(text.length);
+      for (const [i, c] of clipsOf(v).entries())
+        expect(c.in, v.id).toBe(text[i].at);
+    }
+    const v = V.follow_eren;
+    const [c] = clipsOf(v);
+    expect(moveClip(v, { nameColor: '#7ef0b4' }, c, 1000, 4000)).toEqual({
+      nameColor: '#7ef0b4',
+      showAt: 1000,
+      hideAt: 4000 - c.tail,
+    });
+    // A block put back where it was saves nothing.
+    expect(moveClip(v, {}, c, c.in, c.end)).toEqual({});
+    const eren = V.eren_sub;
+    const sub = clipsOf(eren)[1];
+    expect(moveClip(eren, {}, sub, sub.in, sub.end)).toEqual({});
+    expect(moveClip(eren, {}, sub, 1600, sub.end).subtitles).toEqual([
+      {},
+      { showAt: 1600 },
+    ]);
+    // Origin wipes the setting, a cut has no length.
+    expect(
+      setFx({ textEnter: { kind: 'fade', ms: 300 } }, 'textEnter', 'origin'),
+    ).toEqual({});
+    expect(setFx({}, 'textExit', 'cut')).toEqual({
+      textExit: { kind: 'cut', ms: 0 },
+    });
   });
 });

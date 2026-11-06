@@ -1,14 +1,24 @@
 import { describe, expect, it } from 'vitest';
+import { simPanel, spotifyPanel } from '../../web/src/pages/spotify-panel.js';
 import {
-  spotifyView,
+  alertsView,
+  countsView,
+  etas,
+  historyRows,
+  nowView,
+  openingView,
+  queueRows,
+  stateView,
+  timeView,
+  verifyNote,
   type SpRequest,
   type SpState,
   type SpUi,
-} from '../../web/src/spotify-view.js';
+} from '../../web/src/pages/spotify-view.js';
 
-// Spotify V2 — the Studio section « Musique » (pure render): the main space « File musicale » (the request playing, the
-// queue with each requester's limits, its moderation, the folded decisions), the playback's freshness in diagnostics, the secondary spaces (viewers' exceptions, settings, Raptoru's reward,
-// connection and diagnostics, Lab simulator), escaped texts.
+// Spotify V2 — the Studio page (pure render): what plays, the queue with each requester's limits, its decisions, the last
+// decisions, the playback's freshness; the panel (quotas, viewers' exceptions, Raptoru's reward, connection and technical
+// details, Lab simulator); escaped texts.
 
 const NOW = Date.parse('2026-10-25T20:00:00Z');
 const TRACK = {
@@ -106,26 +116,38 @@ const state = (over: Partial<SpState> = {}): SpState => ({
   ...over,
 });
 const ui = (over: Partial<SpUi> = {}): SpUi => ({
-  tab: 'live',
   fields: {},
   who: [],
   now: NOW,
   ...over,
 });
 const idle = { error: null, watching: false, fast_lane: false };
+/** What the page shows outside its panel. */
+const live = (s: SpState, u = ui()) =>
+  [
+    stateView(s),
+    openingView(s),
+    alertsView(s),
+    nowView(s, u),
+    countsView(s),
+    verifyNote(s),
+    queueRows(s, u)
+      .map((r) => r.html)
+      .join(''),
+    historyRows(s)
+      .map((r) => r.html)
+      .join(''),
+  ].join('');
 
-describe('Studio « Musique » — main space', () => {
-  it('« File musicale »: the request playing and its requester, the queue with « Retirer »; settings and reward live elsewhere', () => {
-    const html = spotifyView(state(), null, ui());
-    expect(html).toContain('File musicale');
+describe('Studio Spotify — what plays and the queue', () => {
+  it('the request playing and its requester, the queue with its removal; quotas, reward and connection live in the panel', () => {
+    const html = live(state());
     expect(html).toContain('Demandes ouvertes');
-    expect(html).toMatch(
-      /Numb — Linkin Park<\/b><small>@demandeur · demandée il y a 1 min/,
-    );
+    expect(html).toContain('Numb');
+    expect(html).toContain('@demandeur · demandée il y a 1 min');
     expect(html).toContain('data-act="sp-remove"');
     expect(html).toContain('data-act="sp-skip"');
-    // No Spotify progress bar nor freshness here (diagnostics space).
-    expect(html).not.toContain('sp-bar');
+    // A fresh reading needs no « Actualiser ».
     expect(html).not.toContain('data-act="sp-refresh"');
     expect(html).not.toContain('data-act="sp-save"');
     expect(html).not.toContain('data-act="sp-reward"');
@@ -133,14 +155,14 @@ describe('Studio « Musique » — main space', () => {
   });
 
   it('escapes every viewer text', () => {
-    const html = spotifyView(state(), null, ui());
+    const html = live(state());
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('viewer<b>');
     expect(html).toContain('&lt;script&gt;');
   });
 
   it('counters and each requester’s quota · cooldown · exception, from Core', () => {
-    const html = spotifyView(
+    const html = live(
       state({
         viewers: [
           {
@@ -161,8 +183,6 @@ describe('Studio « Musique » — main space', () => {
           refunded: 0,
         },
       }),
-      null,
-      ui(),
     );
     expect(html).toContain(
       '<b>1 en file</b> · 1 à vérifier · 12 aujourd’hui (9 jouées, 2 refusées, 1 annulée)',
@@ -171,16 +191,52 @@ describe('Studio « Musique » — main space', () => {
   });
 
   it('the Core deployed before (no viewers, no today): « — », nothing invented', () => {
-    const html = spotifyView(state(), null, ui());
+    const html = live(state());
     expect(html).toContain('aujourd’hui : —');
-    expect(html).toMatch(/<td><small>—<\/small><\/td>/);
+    expect(html).toMatch(/spo-quota"[^>]*>—</);
   });
 
-  it('no request playing: no banner (never a playlist track), the skip stays at hand', () => {
-    const html = spotifyView(state({ current: null }), null, ui());
-    expect(html).not.toContain('sp-playing');
-    expect(html).not.toContain('Numb — Linkin Park</b><small>@demandeur');
+  it('no request playing: a playlist track never gets a requester, the skip stays at hand', () => {
+    const html = live(state({ current: null }));
+    expect(html).toContain('Hors demandes');
+    expect(html).toContain('Numb');
+    expect(html).not.toContain('@demandeur');
     expect(html).toContain('Passer la musique');
+  });
+
+  it('a stale reading says its age and offers « Actualiser », nothing plays on by itself; none at all says so', () => {
+    const stale = nowView(
+      state({ current: null, studio: playback(180_000) }),
+      ui(),
+    );
+    expect(stale).toContain('Dernier titre relevé');
+    expect(stale).toContain('Lu il y a 3 min');
+    expect(stale).toContain('data-act="sp-refresh"');
+    expect(stale).not.toContain('spo-eq');
+    const none = nowView(state({ current: null, studio: null }), ui());
+    expect(none).toContain('Aucune lecture relevée');
+  });
+
+  it('the cover Studio saw, else a neutral mark (never another track’s)', () => {
+    const url = 'https://i.scdn.co/image/abc';
+    expect(nowView(state({ covers: { [TRACK.id]: url } }), ui())).toContain(
+      `src="${url}"`,
+    );
+    expect(nowView(state(), ui())).toContain('spo-cov--none');
+  });
+
+  it('the wait of each track: what is left of the current one, then those before it; unknown without a reading', () => {
+    const second = req({
+      request_id: '00000000-0000-4000-8000-000000000002',
+    });
+    const s = state({ queue: [req(), second] });
+    const { list, end } = etas(s, NOW);
+    // 185 s, 60 s read 2 s ago.
+    expect(list.get(req().request_id)).toBe(123_000);
+    expect(list.get(second.request_id)).toBe(123_000 + 185_000);
+    expect(end).toBe(123_000 + 2 * 185_000);
+    expect(timeView(s, ui())).toContain('2 titres');
+    expect(timeView(state({ studio: null }), ui())).toContain('fin inconnue');
   });
 
   it('an uncertain addition still in the queue: one row with Retirer, Rembourser and Garder', () => {
@@ -189,109 +245,110 @@ describe('Studio « Musique » — main space', () => {
       state: 'UNKNOWN',
       reason: 'QUEUE_RESULT_UNKNOWN',
     });
-    const html = spotifyView(
+    const rows = queueRows(
       state({ queue: [uncertain], to_verify: [uncertain] }),
-      null,
       ui(),
     );
-    expect(html.match(/000000000002/g)).toHaveLength(3);
-    expect(html).toContain('à vérifier');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.html.match(/000000000002/g)).toHaveLength(3);
+    expect(rows[0]!.html).toContain('à vérifier');
     // Being searched: listed, no action.
-    const searching = spotifyView(
+    const [searching] = queueRows(
       state({
         queue: [],
         to_verify: [],
         in_progress: [req({ state: 'SEARCHING', track: null })],
       }),
-      null,
       ui(),
     );
-    expect(searching).toContain('recherche…');
-    expect(searching).toContain('« &lt;script&gt;x&lt;/script&gt; »');
-    expect(searching).not.toContain('data-act="sp-remove"');
+    expect(searching!.html).toContain('recherche…');
+    expect(searching!.html).toContain('« &lt;script&gt;x&lt;/script&gt; »');
+    expect(searching!.html).not.toContain('data-act="sp-remove"');
   });
 
-  it('the last decisions are folded, and stay open once opened', () => {
-    expect(spotifyView(state(), null, ui())).toContain(
-      '<details class="sp-more" data-fold="decisions"><summary>Dernières décisions (1)',
-    );
-    expect(
-      spotifyView(state(), null, ui({ open: { decisions: true } })),
-    ).toContain('data-fold="decisions" open>');
+  it('the last decisions: why it was refused, and what happened on Twitch', () => {
+    const [row] = historyRows(state());
+    expect(row!.html).toContain('Refusée');
+    expect(row!.html).toContain('aucun titre assez proche');
+    expect(row!.html).toContain('non remboursable');
   });
 
-  it('diagnostics: the last Spotify reading and « Actualiser », disabled while Spotify limits the calls', () => {
-    const tech = spotifyView(
+  it('uncertain requests can be refunded or kept (nothing sent to Twitch)', () => {
+    const html = live(state());
+    expect(html).toContain('data-decision="refund"');
+    expect(html).toContain('data-decision="keep"');
+    expect(verifyNote(state())).toContain('Spotify n’a pas confirmé l’ajout');
+  });
+
+  it('closed requests: one clear line and the button to open them; open but refused: the reason', () => {
+    const closed = state({
+      settings: { ...state().settings, enabled: false },
+      admission: 'MODULE_DISABLED',
+    });
+    expect(stateView(closed)).toContain('Demandes fermées');
+    expect(openingView(closed)).toContain('Ouvrir les demandes');
+    const refused = state({ admission: 'NO_DEVICE' });
+    expect(stateView(refused)).toContain('ouvertes mais refusées');
+    expect(openingView(refused)).toContain('aucun appareil Spotify actif');
+    expect(openingView(state())).toBe('');
+  });
+});
+
+describe('Studio Spotify — the panel', () => {
+  it('technical details: the last Spotify reading and « Actualiser », disabled while Spotify limits the calls', () => {
+    const tech = spotifyPanel(
       state({ studio: playback(180_000), local: idle }),
-      null,
-      ui({ tab: 'tech' }),
+      ui(),
     );
     expect(tech).toContain('Numb — Linkin Park');
     expect(tech).toContain('il y a 3 min');
     expect(tech).toMatch(/data-act="sp-refresh"\s+title/);
-    const limited = spotifyView(
-      state({
-        api: {
-          limited_until: new Date(NOW + 60_000).toISOString(),
-          quota_exceeded: false,
-          calls_last_minute: 0,
-          rate_high: false,
-          backoff_until: null,
-        },
-      }),
-      null,
-      ui({ tab: 'tech' }),
+    const limited = state({
+      api: {
+        limited_until: new Date(NOW + 60_000).toISOString(),
+        quota_exceeded: false,
+        calls_last_minute: 0,
+        rate_high: false,
+        backoff_until: null,
+      },
+    });
+    expect(spotifyPanel(limited, ui())).toMatch(
+      /data-act="sp-refresh" disabled/,
     );
-    expect(limited).toMatch(/data-act="sp-refresh" disabled/);
-    expect(limited).toContain('Spotify limite les appels');
+    expect(alertsView(limited)).toContain('Spotify limite les appels');
   });
 
-  it('uncertain requests can be refunded or kept (nothing sent to Twitch)', () => {
-    const html = spotifyView(state(), null, ui());
-    expect(html).toContain('data-decision="refund"');
-    expect(html).toContain('data-decision="keep"');
-    expect(html).toContain('non remboursable');
-  });
-
-  it('closed requests: one clear line and the button to open them', () => {
-    const html = spotifyView(
-      state({
-        settings: { ...state().settings, enabled: false },
-        admission: 'MODULE_DISABLED',
-      }),
-      null,
-      ui(),
-    );
-    expect(html).toContain('Demandes fermées');
-    expect(html).toContain('Ouvrir les demandes');
-  });
-});
-
-describe('Studio « Musique » — secondary spaces', () => {
-  it('Viewers: exceptions with the global value as fallback, and the way back to the global values', () => {
-    const html = spotifyView(state(), null, ui({ tab: 'viewers' }));
+  it('exceptions: the global value as fallback, and the way back to the global values', () => {
+    const html = spotifyPanel(state(), ui());
     expect(html).toContain('@habitue');
     expect(html).toContain('global (10 min)');
     expect(html).toContain('data-act="sp-ov-reset"');
     expect(html).toContain('data-act="sp-ov-save"');
   });
 
-  it('Réglages: the historical global settings, with the way back to them', () => {
-    const html = spotifyView(state(), null, ui({ tab: 'settings' }));
+  it('quotas: the historical global settings, with the way back to them; what is typed is kept', () => {
+    const html = spotifyPanel(state(), ui());
     expect(html).toContain('data-act="sp-save"');
     expect(html).toContain('data-act="sp-historical"');
     expect(html).toContain('historique : 2');
+    expect(
+      spotifyPanel(state(), ui({ fields: { 'set-pending': '7' } })),
+    ).toContain('value="7"');
   });
 
-  it('Récompense Twitch: owner, permission, price and claims explained; creation only while none exists', () => {
-    const html = spotifyView(state(), null, ui({ tab: 'reward' }));
+  it('the end of a live is said: a fixed rule, not a setting', () => {
+    expect(spotifyPanel(state(), ui())).toContain('Fin du live');
+  });
+
+  it('Twitch reward: owner, permission, price and claims explained; creation only while none exists', () => {
+    const html = spotifyPanel(state(), ui());
     expect(html).toContain('L’application Twitch de Raptoru');
     expect(html).toContain('channel:manage:redemptions');
     expect(html).toContain('1 500 points');
     expect(html).toContain('value="Choisi la prochaine musique"');
     expect(html).toContain('ne valide jamais une réclamation');
     expect(html).toContain('data-act="sp-reward"');
-    const made = spotifyView(
+    const made = spotifyPanel(
       state({
         managed_rewards: [
           {
@@ -301,26 +358,22 @@ describe('Studio « Musique » — secondary spaces', () => {
           },
         ],
       }),
-      null,
-      ui({ tab: 'reward' }),
+      ui(),
     );
     expect(made).toContain('Récompense active');
     expect(made).toContain('Identifiant Twitch : <code>r</code>');
     expect(made).not.toContain('data-act="sp-reward"');
   });
 
-  it('Production: connection and redirect URI in « Connexion et diagnostic », no simulator', () => {
-    const html = spotifyView(state(), null, ui({ tab: 'tech' }));
+  it('Production: connection and redirect URI, no simulator', () => {
+    const html = spotifyPanel(state(), ui());
     expect(html).toContain('http://127.0.0.1:4100/api/spotify/oauth/callback');
     expect(html).toContain('data-act="sp-connect"');
-    expect(html).not.toContain('Simulateur (Lab)');
-    // Asking for the simulator outside the Lab falls back on the main space.
-    expect(spotifyView(state(), null, ui({ tab: 'sim' }))).toContain(
-      'Dernières décisions',
-    );
+    expect(html).not.toContain('data-act="sp-simulate"');
+    expect(simPanel(state(), ui())).toBe('');
   });
 
-  it('Lab: the simulator space, no connection form', () => {
+  it('Lab: the simulator, no connection form', () => {
     const lab = state({
       environment: 'lab',
       connection: {
@@ -340,11 +393,7 @@ describe('Studio « Musique » — secondary spaces', () => {
         calls: 4,
       },
     });
-    expect(spotifyView(lab, null, ui({ tab: 'sim' }))).toContain(
-      'data-act="sp-simulate"',
-    );
-    expect(spotifyView(lab, null, ui({ tab: 'tech' }))).not.toContain(
-      'data-act="sp-connect"',
-    );
+    expect(spotifyPanel(lab, ui())).toContain('data-act="sp-simulate"');
+    expect(spotifyPanel(lab, ui())).not.toContain('data-act="sp-connect"');
   });
 });

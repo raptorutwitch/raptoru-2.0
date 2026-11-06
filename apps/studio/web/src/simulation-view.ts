@@ -2,6 +2,8 @@
 // the shared session, real Twitch chat ingestion, real chat output through LeCroupier_, mini-games) with
 // their effective states. Nothing is decided here; the detailed settings stay in their own tabs.
 
+import { esc, ic } from './ds/ds.js';
+
 export interface SimState {
   /** Production profile: the mini-games switch below is the viewers' real one. */
   production?: boolean;
@@ -22,15 +24,6 @@ export interface SimState {
   } | null;
   games?: { enabled: boolean } | null;
 }
-
-const esc = (s: unknown) =>
-  String(s ?? '').replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ]!,
-  );
 
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString('fr-FR', {
@@ -90,7 +83,7 @@ export function simButton(s: SimState | null, open: boolean): string {
         )
         .join('')
     : '';
-  return `<button type="button" class="sim-toggle${open ? ' is-open' : ''}" data-sim="panel" aria-expanded="${open}">Simulation ${dots}</button>`;
+  return `<button type="button" class="sim-toggle${open ? ' is-open' : ''}" data-sim="panel" aria-expanded="${open}" title="Simulation">${ic('flask')}<span>Simulation</span><em>${dots}</em></button>`;
 }
 
 const row = (
@@ -103,7 +96,7 @@ const row = (
   `<div class="sim-row"><span class="sim-dot sim-dot--${tone}"></span><div class="sim-what"><b>${label}</b><span>${state}</span>${note ? `<small>${note}</small>` : ''}</div>${button}</div>`;
 
 const btn = (action: string, label: string, busy: boolean, danger = false) =>
-  `<button type="button" class="sim-btn${danger ? ' sim-btn--danger' : ''}" data-sim="${action}" ${busy ? 'disabled' : ''}>${label}</button>`;
+  `<button type="button" class="d-btn sm ${danger ? 'bad' : ''}" data-sim="${action}" ${busy ? 'disabled' : ''}>${label}</button>`;
 
 /** The panel's HTML. `busy` disables the buttons while an action runs; `error` is the last refusal. */
 export function simPanel(
@@ -112,7 +105,7 @@ export function simPanel(
   error: string | null = null,
 ): string {
   if (!s)
-    return `<div class="sim-panel"><p class="sim-muted">Chargement…</p></div>`;
+    return `<div class="sim-panel"><p class="d-note">Chargement…</p></div>`;
   const live =
     s.stream === undefined
       ? row('Live simulé', 'Indisponible (profil Lab uniquement)', 'na', '')
@@ -124,7 +117,7 @@ export function simPanel(
               : `En direct (simulation) depuis ${esc(hhmm(s.stream.started_at))}`,
             'on',
             s.stream.source === 'twitch'
-              ? '<span class="sim-muted">fin par Twitch</span>'
+              ? '<span class="d-note">fin par Twitch</span>'
               : btn('stream_end', 'Terminer', busy),
           )
         : row(
@@ -190,14 +183,14 @@ export function simPanel(
           busy,
         ),
         s.production
-          ? 'Interrupteur réel des viewers (Core Production, vrais Jetons) : ce n’est pas une simulation.'
-          : 'Profil Lab : Core local, Jetons fictifs.',
+          ? 'Interrupteur réel des viewers (vrais Jetons) : ce n’est pas une simulation.'
+          : 'Profil Lab : Jetons fictifs.',
       );
   return `<div class="sim-panel" role="dialog" aria-label="Simulation de stream">
-    <div class="sim-head"><b>Simulation de stream</b><span class="sim-chip${writesRealChat(s) ? ' sim-chip--warn' : ''}">${writesRealChat(s) ? 'Écrit dans le vrai chat' : 'Aucune écriture dans le vrai chat'}</span></div>
-    ${error ? `<p class="sim-error">${esc(error)}</p>` : ''}
+    <div class="sim-head"><b>Simulation de stream</b><span class="d-tag ${writesRealChat(s) ? 'warn' : 'ok'}">${writesRealChat(s) ? 'Écrit dans le vrai chat' : 'Aucune écriture dans le vrai chat'}</span></div>
+    ${error ? `<p class="d-note bad">${esc(error)}</p>` : ''}
     ${s.chatFictional ? `${live}${games}` : `${live}${ingress}${output}${games}`}
-    <p class="sim-muted sim-foot">Réglages détaillés : onglets Tombola, Commandes, Jeu des mots.</p>
+    <p class="d-note">Réglages détaillés : pages Tombola, Commandes, Jeu des mots.</p>
   </div>`;
 }
 

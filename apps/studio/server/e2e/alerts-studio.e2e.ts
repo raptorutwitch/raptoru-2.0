@@ -1,73 +1,101 @@
 import { expect, test } from '@playwright/test';
 import { isolate } from './isolation.js';
 
-// The Studio « Alertes » page in tabs (refonte, lot 5): every block of the former single column is still on the page
-// (its loaders keep running), one tab shown at a time, keyboard tabs, the preview keeps its scale after a tab change.
+// La page Alertes de Studio (direction D) : familles, scène sur le vrai moteur, timeline, inspecteur, file, panneau Sources. Sur la
+// pile de test les médias sont absents : la page le dit et propose l'import, et tout ce qui ne dépend pas d'une image reste réglable.
 
-const ROLES = [
-  'category',
-  'variant',
-  'form',
-  'calib',
-  'queue',
-  'obs-url',
-  'source',
-  'media',
-  'dock',
-  'twitch',
-  'se',
-  'variants',
-];
-
-test('Alertes: four tabs, every block kept once, keyboard, preview scale after a tab change', async ({
+test('Alertes: families, timeline, draft and save, queue, sources, keyboard', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const { outside } = await isolate(page);
   await page.goto('/?p=alerts');
-  const tab = (n: string) => page.getByRole('tab', { name: n });
-  await expect(tab('Créer et tester')).toHaveAttribute('aria-selected', 'true');
-  for (const role of ROLES)
-    await expect(page.locator(`[data-role="${role}"]`), role).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Lancer' })).toBeVisible();
-  await expect(page.locator('[data-role="twitch"]')).toBeHidden();
-  const panels: [string, string][] = [
-    ['File et OBS', 'queue'],
-    ['Sources d’événements', 'twitch'],
-    ['Variantes', 'variants'],
-  ];
-  for (const [name, role] of panels) {
-    await tab(name).click();
-    await expect(tab(name)).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByRole('tabpanel')).toHaveCount(1);
-    await expect(page.locator(`[data-role="${role}"]`)).toBeAttached();
-    await expect(page.getByRole('button', { name: 'Lancer' })).toBeHidden();
-  }
-  await tab('Variantes').press('ArrowLeft');
-  await expect(tab('Sources d’événements')).toBeFocused();
-  await expect(tab('Sources d’événements')).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await tab('Sources d’événements').press('Home');
-  await expect(tab('Créer et tester')).toBeFocused();
-  await expect(page.getByRole('button', { name: 'Lancer' })).toBeVisible();
+  const view = page.locator('#tab-alerts');
+  const family = (id: string) => view.locator(`[data-fam="${id}"]`);
+
+  // Huit familles, celle choisie est dite, sans onglets.
+  for (const id of [
+    'follow',
+    'sub',
+    'prime',
+    'resub',
+    'gift',
+    'bits',
+    'raid',
+    'donation',
+  ])
+    await expect(family(id)).toBeVisible();
+  await expect(family('follow')).toHaveAttribute('aria-pressed', 'true');
+  await expect(view.getByRole('tab')).toHaveCount(0);
+  await expect(view.getByText('Quand Follow arrive')).toBeVisible();
+  await expect(view.getByText('Tirage au sort')).toBeVisible();
+
+  // L'aperçu est le vrai moteur, à l'échelle de la scène.
   await expect
-    .poll(async () =>
-      Number(
-        await page
-          .locator('.al-stage')
-          .evaluate((e) => getComputedStyle(e).getPropertyValue('--al-scale')),
-      ),
+    .poll(() =>
+      view.locator('[data-fit]').evaluate((e) => getComputedStyle(e).transform),
     )
-    .toBeGreaterThan(0.2);
-  // Back to Alertes later: the tab chosen is kept while Studio runs.
-  await tab('File et OBS').click();
+    .toMatch(/^matrix\(0\.\d+/);
+
+  // Le bloc de texte se règle sur la timeline : brouillon, puis enregistrement.
+  await family('raid').click();
+  await expect(view.getByText('Quand Raid arrive')).toBeVisible();
+  const clip = view.locator('[data-clip="text"]');
+  const box = (await clip.boundingBox())!;
+  await page.mouse.move(box.x + box.width - 3, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 60, box.y + box.height / 2, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect(view.getByText('Non enregistré')).toBeVisible();
+  await view.getByRole('button', { name: 'Annuler' }).click();
+  await expect(view.getByText('Non enregistré')).toHaveCount(0);
+
+  // Une transition choisie reste un brouillon jusqu'à l'enregistrement.
+  await clip.click();
+  await view.locator('[data-fx-kind="textEnter"]').selectOption('rise');
+  await expect(view.locator('[data-fx-ms="textEnter"]')).toHaveValue('400');
+  await view.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(view.getByText('Non enregistré')).toHaveCount(0);
+  await view.locator('[data-fx-kind="textEnter"]').selectOption('origin');
+  await view.getByRole('button', { name: 'Enregistrer' }).click();
+  await view.locator('[data-unsel]').first().click();
+
+  // Le test passe par la vraie file du Core Lab et s'y voit.
+  await family('bits').click();
+  await view.getByRole('button', { name: 'Envoyer en file' }).click();
+  await expect(view.locator('.alr-qp').first()).toBeVisible();
+  await view.getByRole('button', { name: 'Vider', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Vider la file' })
+    .click();
+  await expect(view.locator('.alr-qp')).toHaveCount(0);
+  await view.getByRole('button', { name: 'Historique' }).click();
+  await expect(page.getByRole('heading', { name: 'Historique' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  // Sources : Twitch, Dons, Médias, Dock, adresse OBS masquée.
+  await view.locator('[data-panel]').click();
+  for (const name of [
+    'Source OBS',
+    'Événements Twitch',
+    'Dons StreamElements',
+    'Médias',
+    'Profil Halloween',
+    'Dock OBS',
+  ])
+    await expect(view.getByRole('heading', { name })).toBeVisible();
+  await expect(view.getByLabel('Adresse de la source OBS')).toHaveValue(/#•+$/);
+  await view.locator('[data-pclose]').click();
+
+  // Revenir sur Alertes retrouve la famille choisie.
   await page.locator('a.rs-nav[data-page="centre"]').click();
   await expect(
     page.getByRole('heading', { name: 'Centre de contrôle' }),
   ).toBeVisible();
   await page.locator('a.rs-nav[data-page="alerts"]').first().click();
-  await expect(tab('File et OBS')).toHaveAttribute('aria-selected', 'true');
+  await expect(family('bits')).toHaveAttribute('aria-pressed', 'true');
   expect(outside).toEqual([]);
 });

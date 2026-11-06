@@ -617,7 +617,7 @@ test('calibration: the OBS source draws the SAVED placement, never changes an al
   await rt.placement.save('raid_default', P2);
   await page.waitForTimeout(400);
   await expect(place).toHaveAttribute('style', /translate\(100px, -50px\)/);
-  expect(await page.locator('.al-box, .al-h, .al-calib-layer').count()).toBe(0);
+  expect(await page.locator('.alr-box, .alr-h, .alr-edit').count()).toBe(0);
   await until(first.alert!.alert_id, ['completed']);
   // The next alert of the variant uses the new values.
   const second = await event({
@@ -841,6 +841,81 @@ test('families: follow, subscription and raid play together in ONE source; each 
   );
   // Each alert cleaned its own layer.
   await expect(page.locator('.alert-layer')).toHaveCount(0);
+});
+
+test('a saved look plays in the OBS source: its timings, its transitions, its colour, the alert still ends by itself', async ({
+  page,
+}) => {
+  await rt.placement.save('raid_default', {
+    media: { x: 0, y: 0, scale: 1 },
+    text: { x: 0, y: 0, scale: 1 },
+    look: {
+      showAt: 100,
+      hideAt: 900,
+      textEnter: { kind: 'rise', ms: 400 },
+      textExit: { kind: 'fade', ms: 300 },
+      mediaEnter: { kind: 'fade', ms: 200 },
+      nameColor: '#7ef0b4',
+    },
+  });
+  await page.goto(rt.playerUrl);
+  const sent = await event({
+    type: 'raid',
+    actor: { display_name: 'Regle' },
+    viewers: 2,
+  });
+  await until(sent.alert!.alert_id, ['playing']);
+  const name = page.locator('#pseudoText .zone-name');
+  await expect(name).toHaveText('Regle');
+  await expect(name).toHaveCSS('color', 'rgb(126, 240, 180)');
+  await expect(page.locator('#pseudoText')).toHaveClass(/fx-in/);
+  // Gone at the new hideAt, long before the end of the media.
+  await expect(page.locator('#pseudoText')).toHaveText('', { timeout: 2000 });
+  await until(sent.alert!.alert_id, ['completed']);
+  await rt.placement.save('raid_default', {
+    media: { x: 0, y: 0, scale: 1 },
+    text: { x: 0, y: 0, scale: 1 },
+  });
+});
+
+test('the preview timeline freezes a transition at its own instant, centred text included', async ({
+  page,
+}) => {
+  const p = await preview(page);
+  const v = ALERT_VARIANTS.raid_default;
+  const look = { showAt: 500, textEnter: { kind: 'rise', ms: 400 } };
+  const seek = (ms: number) =>
+    page.evaluate(
+      ([variant, at, l]) =>
+        window.postMessage(
+          {
+            type: 'seek',
+            variant,
+            data: { pseudo: 'Fige', viewers: 1 },
+            ms: at,
+            placement: {
+              media: { x: 0, y: 0, scale: 1 },
+              text: { x: 0, y: 0, scale: 1 },
+              look: l,
+            },
+          },
+          location.origin,
+        ),
+      [v, ms, look] as const,
+    );
+  await seek(700);
+  const box = page.locator('#pseudoText');
+  await expect
+    .poll(() => box.evaluate((e) => getComputedStyle(e).opacity))
+    .not.toBe('0');
+  await expect
+    .poll(() => box.evaluate((e) => Number(getComputedStyle(e).opacity)))
+    .toBeLessThan(1);
+  await seek(1000);
+  await expect
+    .poll(() => box.evaluate((e) => getComputedStyle(e).opacity))
+    .toBe('1');
+  await p.stop();
 });
 
 test('families: the preview overlap test plays other families beside the edited one, never the queue', async ({

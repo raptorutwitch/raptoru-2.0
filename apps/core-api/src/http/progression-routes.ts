@@ -110,6 +110,25 @@ export function progressionRoutes(
         ),
     },
     {
+      // Studio's roster: the same rankings as the public read (Production's Studio reaches /v1/studio/* only).
+      method: 'GET',
+      pattern: admin('/leaderboard'),
+      auth,
+      handle: ({ url }) =>
+        svc.leaderboard(
+          ch,
+          limitParam(url, 100, 200),
+          parse(
+            z.enum(['xp', 'watch', 'messages']),
+            url.searchParams.get('by') ?? 'xp',
+          ),
+          parse(
+            z.enum(['all', 'week', 'month']),
+            url.searchParams.get('period') ?? 'all',
+          ),
+        ),
+    },
+    {
       method: 'GET',
       pattern: admin('/viewers'),
       auth,

@@ -290,7 +290,7 @@ describe('automatic checks (architecture socle § 11)', () => {
     for (const m of MODULES) {
       expect(checkModule(m), m.id).toEqual([]);
       expect(
-        PAGES.filter((p) => p.view === 'modules' && p.anchor === m.id),
+        PAGES.filter((p) => p.anchor === m.id),
         m.id,
       ).toHaveLength(1);
     }

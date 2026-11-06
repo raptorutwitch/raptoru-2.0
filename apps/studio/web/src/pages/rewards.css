@@ -1,0 +1,695 @@
+/* Récompenses Twitch : la liste, le fil de la récompense, ce qui s'est vraiment passé. Effets et lecteur en bas du fichier.
+   La mise en page suit la largeur utile, panneau de réglages ouvert compris : requêtes de conteneur, pas de fenêtre. */
+.d-body:has(> .rw, > .fxp, > .sx) {
+  container-type: inline-size;
+}
+.rw {
+  display: grid;
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr) minmax(
+      260px,
+      330px
+    );
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px 20px;
+  height: 100%;
+  min-height: 560px;
+}
+.rw-pulse {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-height: 20px;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.rw-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.rw-fact[title] {
+  cursor: help;
+}
+
+.rw-list,
+.rw-log {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.rw-find {
+  flex: none;
+  margin-bottom: 8px;
+  gap: 6px;
+  color: var(--ink3);
+}
+.rw-rs,
+.rw-hs {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -6px;
+  padding: 2px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+}
+.rw-r {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  padding: 8px 6px;
+  margin-bottom: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  --vf: var(--mod);
+  --vf-o: 0;
+  transition: background 0.12s;
+}
+.rw-r:hover,
+.rw-r.is-sel {
+  background: rgb(160 220 230 / 0.05);
+}
+.rw-pts {
+  font: 600 13.5px var(--num);
+  color: var(--mod);
+  text-align: right;
+  white-space: nowrap;
+  padding-top: 1px;
+}
+.rw-pts.big {
+  font-size: 22px;
+  line-height: 1;
+}
+.rw-pts small {
+  margin-left: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink3);
+}
+.rw-rt {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.rw-rt b {
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-rt small {
+  color: var(--ink3);
+  font-size: 12px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.rw-rt .d-tag {
+  height: 20px;
+  font-size: 11.5px;
+}
+
+/* Le fil : du rachat aux actions, dans l'ordre. */
+.rw-wire {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.rw-wh {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding-bottom: 8px;
+}
+.rw-wt {
+  min-width: 0;
+}
+.rw-wt h2 {
+  margin: 0;
+  font: 600 17px var(--num);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-wt p {
+  margin: 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-steps {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0 4px 0 0;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+}
+.rw-steps > li {
+  position: relative;
+  padding-left: 26px;
+}
+/* Le fil lui-même. */
+.rw-steps > li::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: color-mix(in srgb, var(--mod) 45%, transparent);
+}
+.rw-steps > li:first-child::before {
+  top: 15px;
+}
+.rw-steps > li:last-child::before {
+  bottom: calc(100% - 15px);
+}
+.rw-steps > li::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 13px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1.5px var(--mod);
+}
+.rw-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  color: var(--ink2);
+}
+.rw-start .d-ic {
+  color: var(--mod);
+}
+.rw-sh {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+  transition: background 0.12s;
+}
+.rw-sh:hover,
+.rw-step.is-open .rw-sh {
+  background: rgb(160 220 230 / 0.05);
+}
+.rw-st {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.rw-st i {
+  font: 500 12px var(--num);
+  font-style: normal;
+  color: var(--ink3);
+}
+.rw-st > .d-ic:first-of-type {
+  color: var(--mod);
+}
+.rw-st span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rw-st > .d-ic:last-child {
+  color: var(--ink3);
+  font-size: 11px;
+  transition: transform 0.18s var(--e);
+}
+.rw-step.is-open .rw-st > .d-ic:last-child {
+  transform: rotate(180deg);
+}
+.rw-sb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
+  padding: 8px 8px 12px 8px;
+  animation: d-rise 0.2s var(--e);
+}
+.rw-f {
+  display: grid;
+  gap: 3px;
+  flex: 1 1 170px;
+  min-width: 0;
+}
+.rw-f small {
+  color: var(--ink3);
+  font-size: 12px;
+}
+.rw-f.rw-type {
+  flex-basis: 100%;
+}
+.rw-f.rw-num {
+  flex: 0 0 104px;
+}
+.rw-f .d-fld {
+  width: 100%;
+}
+.rw-vol {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+}
+.rw-vol b {
+  font: 500 13px var(--num);
+  color: var(--ink2);
+  white-space: nowrap;
+  min-width: 40px;
+  text-align: right;
+}
+.rw-desc {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.rw-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink2);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+.rw-open:hover {
+  color: var(--ink);
+}
+.rw-end {
+  padding-top: 4px;
+  padding-bottom: 6px;
+}
+.rw-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-height: 44px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hair);
+}
+.rw-try,
+.rw-apply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rw-try small {
+  color: var(--ink3);
+  font-size: 12px;
+}
+.rw-tryin {
+  width: 130px;
+  gap: 6px;
+  color: var(--ink3);
+}
+
+/* L'historique : se lit en une ligne, s'ouvre sur le sort de chaque action. */
+.rw-loghead {
+  flex: none;
+  height: 28px;
+  margin-bottom: 8px;
+}
+.rw-loghead .d-seg button {
+  padding: 0 8px;
+}
+.rw-h {
+  border-radius: 8px;
+  margin-bottom: 1px;
+}
+.rw-h summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.12s;
+}
+.rw-h summary::-webkit-details-marker {
+  display: none;
+}
+.rw-h summary:hover {
+  background: rgb(160 220 230 / 0.05);
+}
+.rw-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.rw-who b {
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-hr {
+  grid-row: 2;
+  grid-column: 1 / 3;
+  color: var(--ink3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-h time {
+  grid-row: 2;
+  grid-column: 3;
+  color: var(--ink3);
+  font: 500 12px var(--num);
+  text-align: right;
+}
+.rw-h .d-tag {
+  grid-column: 2 / 4;
+  height: 20px;
+  font-size: 11.5px;
+  justify-self: end;
+}
+.rw-h blockquote {
+  margin: 0 6px 4px;
+  color: var(--ink2);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.rw-ress {
+  margin: 0;
+  padding: 2px 6px 8px;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.rw-res {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+.rw-res .d-ic {
+  margin-top: 2px;
+  font-size: 13px;
+}
+.rw-res small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12px;
+}
+.rw-res.is-done .d-ic {
+  color: var(--teal);
+}
+.rw-res.is-failed .d-ic {
+  color: var(--red);
+}
+.rw-res.is-unknown .d-ic {
+  color: var(--amber);
+}
+.rw-res.is-failed small {
+  color: var(--ink2);
+}
+.rw-why {
+  margin: 0 6px 8px;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.rw-trig {
+  display: grid;
+  gap: 2px;
+}
+.rw-link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 6px;
+  margin: 0 -6px;
+  border-radius: 6px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.rw-link:hover {
+  background: rgb(160 220 230 / 0.07);
+}
+.rw-link b {
+  font-weight: 500;
+}
+.rw-link small {
+  color: var(--ink3);
+  white-space: nowrap;
+}
+
+@container (max-width: 1040px) {
+  .rw {
+    grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+    grid-template-rows: auto minmax(420px, 1fr) minmax(220px, auto);
+    height: auto;
+  }
+  .rw-log {
+    grid-column: 1 / -1;
+  }
+  .rw-rs,
+  .rw-steps {
+    max-height: 62vh;
+  }
+}
+
+/* --- Effets et lecteur ------------------------------------------------------------------------------------------------ */
+.fxp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 12px 24px;
+  height: 100%;
+  min-height: 560px;
+}
+.fxp-stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.fxp-stage .d-scn {
+  flex: none;
+  --vf-o: 0;
+  --vf: var(--mod);
+  width: min(100%, (100vh - 420px) * 16 / 9);
+}
+.fxp-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 0 28px;
+  text-align: center;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.fxp-hint b {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.fxp-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 18px;
+}
+.fxp-bars u {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--mod);
+  transform-origin: bottom;
+  animation: fxp-bar 0.9s ease-in-out infinite alternate;
+}
+.fxp-bars u:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.fxp-bars u:nth-child(3) {
+  animation-delay: 0.45s;
+}
+.fxp-bars u:nth-child(4) {
+  animation-delay: 0.1s;
+}
+@keyframes fxp-bar {
+  from {
+    transform: scaleY(0.25);
+  }
+}
+.fxp-url {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+  padding: 10px 0 8px;
+}
+.fxp-url small {
+  grid-column: 1 / -1;
+  color: var(--ink3);
+  font-size: 12px;
+}
+.fxp-mhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 6px;
+}
+.fxp-mhead small {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.fxp-miss {
+  color: var(--amber);
+}
+.fxp-media {
+  flex: 1;
+  min-height: 90px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+}
+.fxp-m {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  border-radius: 7px;
+}
+.fxp-m:hover {
+  background: rgb(160 220 230 / 0.05);
+}
+.fxp-m.is-off .fxp-ml {
+  color: var(--ink3);
+}
+.fxp-ml {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fxp-m small {
+  color: var(--ink3);
+  font: 500 12px var(--num);
+}
+.fxp-m .d-tag {
+  height: 20px;
+  font-size: 11.5px;
+}
+.fxp-natives {
+  min-width: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+}
+.fxp-n {
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--hair);
+}
+.fxp-n:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.fxp-n header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.fxp-n header .d-ic {
+  color: var(--mod);
+}
+.fxp-n header .d-btn .d-ic {
+  color: inherit;
+}
+.fxp-n h2 {
+  margin: 0;
+  font: 600 15px var(--num);
+}
+.fxp-n header small {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fxp-n p {
+  margin: 4px 0 6px;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.fxp-chips {
+  margin-bottom: 6px;
+}
+.fxp-chips .d-tag {
+  height: 22px;
+  font-size: 12px;
+}
+.fxp-rw {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.fxp-rw .rw-link {
+  margin: 0;
+  gap: 6px;
+}
+@container (max-width: 860px) {
+  .fxp {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+  .fxp-stage .d-scn {
+    width: min(100%, 520px);
+  }
+  .fxp-media {
+    max-height: 240px;
+  }
+  .fxp-natives {
+    overflow: visible;
+  }
+}

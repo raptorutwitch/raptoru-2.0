@@ -295,6 +295,15 @@ export class BonkRuntime {
       ) {
         reply(200, this.autoView());
       } else if (
+        req.method === 'GET' &&
+        url.pathname === '/api/bonk-lab/catalog'
+      ) {
+        // The channel's 7TV/BTTV/FFZ emotes, for Studio's Bonk page (read only).
+        reply(
+          200,
+          await this.thirdPartyCatalog(url.searchParams.has('refresh')),
+        );
+      } else if (
         req.method === 'POST' &&
         url.pathname === '/api/bonk-lab/settings'
       ) {
