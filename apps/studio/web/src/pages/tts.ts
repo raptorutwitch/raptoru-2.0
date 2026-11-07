@@ -26,6 +26,7 @@ import {
   copy,
 } from '../ds/ds.js';
 import {
+  type ApiError,
   getJson,
   labOnMainCore,
   postJson,
@@ -748,12 +749,22 @@ export function mountTtsPage(root: HTMLElement) {
       async () => {
         if (!(await needPlayer()))
           throw Object.assign(new Error('no_player'), { code: 'no_player' });
-        await postJson('/api/ext-lab/purchase', {
-          viewer_id: v.id,
-          key: crypto.randomUUID(),
-          module_id: 'tts',
-          payload: { text },
-        });
+        const key = crypto.randomUUID();
+        // Le Core apprend l'arrivée du lecteur quelques secondes après Studio : même achat, même clé, jamais deux débits.
+        for (let i = 0; ; i++) {
+          try {
+            await postJson('/api/ext-lab/purchase', {
+              viewer_id: v.id,
+              key,
+              module_id: 'tts',
+              payload: { text },
+            });
+            break;
+          } catch (e) {
+            if ((e as ApiError).code !== 'player_offline' || i >= 14) throw e;
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
         input.value = '';
         paintRule();
         slow.now();
@@ -762,6 +773,8 @@ export function mountTtsPage(root: HTMLElement) {
       {
         no_player:
           'Le lecteur de Studio n’a trouvé aucune voix sur ce PC. Ouvre la source OBS, ou vérifie les voix Windows.',
+        player_offline:
+          'Le lecteur ne répond pas au Core : réessaie dans un instant.',
         viewer_busy: `${v.name} a déjà un message en attente : choisis un autre viewer.`,
         viewer_cooldown: `${v.name} est encore en délai. Choisis un autre viewer, ou retire son délai en Modération.`,
         insufficient_funds: `${v.name} n’a pas assez de Jetons Lab : ajoute-lui des Jetons.`,

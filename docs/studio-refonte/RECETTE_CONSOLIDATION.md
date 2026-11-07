@@ -5,7 +5,7 @@ Environ 30 minutes, dans Electron, sur le Lab. Ferme le Studio installé, démar
 Au premier lancement, le Lab a son propre dossier : tes favoris y repartent de zéro.
 
 1. **Médias.** Alertes → Réglages → Médias : 0 sur 29, les emplacements et leurs fichiers. Clique « Importer les 28 fichiers trouvés », puis
-   « Importer » sur « Copie du Studio installé » pour `Raid Titan.webm`. Attendu : 29 sur 29, tes originaux intacts. Puis Effets → « Importer ce qui manque ».
+   « Importer » sur « Copie du Studio installé » pour `Raid Titan.webm`. Attendu : 29 sur 29, tes originaux intacts. Puis Effets → « Importer ».
 2. **TTS.** Écris un message. « Écouter » ne touche pas la file. Choisis Luna_lab, clique « Simuler l’achat » : le lecteur Studio s'ouvre seul,
    le message passe en file puis se lit, le solde baisse. Enchaîne deux viewers. Teste Passer, Passer et rembourser, le détail. Si elle n'a pas assez, « +50 000 ».
 3. **Tombola.** Une manche complète.

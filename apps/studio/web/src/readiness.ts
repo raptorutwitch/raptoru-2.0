@@ -38,6 +38,8 @@ interface Module {
 
 /** What the page read (null: the route did not answer / the module is absent from this profile). */
 export interface ReadinessInput {
+  /** The Lab on the main Core (fictional OBS, no real viewer). */
+  labMain?: boolean;
   profile: {
     effective?: string;
     production?: { state?: string; detail?: string | null };
@@ -104,7 +106,28 @@ function botFlags(m: Module | undefined) {
   return (m?.data?.flags ?? null) as Record<string, unknown> | null;
 }
 
+/** The Lab on the main Core: OBS is fictional and a player opens when used. Neither is something to fix before a live. */
+const LAB_FICTIONAL: Record<string, string> = {
+  obs: 'OBS fictif',
+  effects: 'Non ouvert',
+  alerts: 'Source non ouverte',
+};
+const inLab = (c: Check): Check =>
+  LAB_FICTIONAL[c.id] && c.level !== 'ok'
+    ? {
+        ...c,
+        level: 'off',
+        state: LAB_FICTIONAL[c.id]!,
+        consequence: null,
+      }
+    : c;
+
 export function readiness(i: ReadinessInput): Check[] {
+  const out = moduleChecks(i);
+  return i.labMain ? out.map(inLab) : out;
+}
+
+function moduleChecks(i: ReadinessInput): Check[] {
   const out: Check[] = [];
   const prod = i.profile?.effective === 'production';
   const bot = i.modules?.find((m) => m.id === 'bot');
@@ -777,9 +800,10 @@ const get = async <T>(path: string): Promise<T | null> => {
 export async function loadReadiness(): Promise<ReadinessInput> {
   const [profile, runtime] = await Promise.all([
     get<ReadinessInput['profile']>('/api/profile'),
-    get<{ services?: NonNullable<ReadinessInput['runtime']> }>(
-      '/api/runtime/status',
-    ),
+    get<{
+      services?: NonNullable<ReadinessInput['runtime']>;
+      lab_core?: string;
+    }>('/api/runtime/status'),
   ]);
   const [control, channelPoints, alerts, se, wheel, games, spotify, wordGame] =
     await Promise.all([
@@ -796,6 +820,7 @@ export async function loadReadiness(): Promise<ReadinessInput> {
       get<NonNullable<ReadinessInput['wordGame']>>('/api/word-game/state'),
     ]);
   return {
+    labMain: runtime?.lab_core === 'main',
     profile,
     runtime: runtime?.services,
     modules: control?.modules ?? null,

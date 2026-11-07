@@ -161,7 +161,7 @@ export function mountEffectsPage(root: HTMLElement) {
           ['native', `Interactions ${natives.length}`],
         ],
         tab,
-      )}<span class="d-sp"></span><small class="${count.missing.length ? 'fxp-miss' : 'd-faint'}" title="${esc(count.missing.join(', '))}">${count.have} / ${count.total} importés</small>${count.missing.length && s?.environment === 'lab' ? `<button type="button" class="d-btn sm" data-import title="Cherche dans tes dossiers habituels, puis dans la copie du Studio installé. Tes fichiers sont seulement lus.">${ic('upload')}Importer ce qui manque</button>` : ''}`,
+      )}<span class="d-sp"></span><small class="${count.missing.length ? 'fxp-miss' : 'd-faint'}" title="${esc(count.missing.join(', '))}">${count.have} / ${count.total} importés</small>${count.missing.length && s?.environment === 'lab' ? `<button type="button" class="d-btn sm" data-import title="Cherche dans tes dossiers habituels, puis dans la copie du Studio installé. Tes fichiers sont seulement lus.">${ic('upload')}Importer</button>` : ''}`,
     );
     const rows =
       tab === 'sounds' ? sounds : tab === 'videos' ? videos : natives;
@@ -192,7 +192,7 @@ export function mountEffectsPage(root: HTMLElement) {
         const cur = picked[n.id] ?? n.chips?.[0];
         return `<article class="fxp-n" data-native="${n.id}">
           <header>${ic(it.icon)}<h2>${esc(it.label)}</h2><small title="${esc(n.note)}">${esc(n.note)}</small>
-            <button type="button" class="d-btn sm" data-try="${n.id}" ${rewards.length ? '' : 'disabled title="Relie d’abord une récompense à cette interaction"'}>${ic('play')}Tester pour de vrai…</button>
+            <button type="button" class="d-btn sm" data-try="${n.id}" ${rewards.length ? '' : 'disabled title="Relie d’abord une récompense à cette interaction"'}>${ic('play')}${s?.environment === 'lab' ? 'Tester' : 'Tester pour de vrai…'}</button>
           </header>
           <p>${esc(it.description.split(' Effets reconnus')[0]!)}</p>
           ${n.chips ? `<div class="d-tags fxp-chips">${n.chips.map((c) => `<button type="button" class="d-tag ${c === cur ? 'ok' : ''}" data-chip="${n.id}" data-v="${esc(c)}" aria-pressed="${c === cur}">${esc(c)}</button>`).join('')}</div>` : ''}

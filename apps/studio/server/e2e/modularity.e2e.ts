@@ -69,7 +69,11 @@ test('a module of the host appears everywhere from its own file, and its rules a
 
   // Studio sets it: switch, price, and the delay added by the module's own file.
   const on = page.locator('[data-ms-toggle="coffre_mystere.enabled"]');
-  await on.check();
+  await on.click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Activer' })
+    .click();
   await expect(on).toBeChecked();
   await setSetting(page, 'coffre_mystere.prix', '150');
   await setSetting(page, 'coffre_mystere.delai_s', '600');

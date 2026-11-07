@@ -71,7 +71,18 @@ absent » ne sont plus des incidents dans le Lab : un lecteur s'y ouvre à l'usa
 | Import des médias, achat TTS simulé | `c50d4c5` | Testé sur Lab isolé, Chromium |
 | Écarts d'audit, Lead Moderators, Spotify, Récompenses | `c00f1a9` | Idem |
 | Laboratoire, Simulation, Équipe, Activité, Communauté, Système, catalogue | `742d399` | Idem |
-| Effets, dossier Electron du Lab, E2E des simulateurs, documents | voir `git log` | Voir CHECKPOINT |
+| Effets, dossier Electron du Lab, E2E des simulateurs, documents | `83306b8` | Idem |
+| Centre du Lab, achat TTS dans Electron, vérifications finales | voir `git log` | Vraie fenêtre Electron, dossier isolé |
+
+## Vérifications du 07/11
+
+Core 1 614 sur 1 615 avec PostgreSQL (le fichier interrompu par le crash Windows connu passe seul). Studio 944 sur 955 (même crash, le fichier passe seul, 16 sur 16). Bot 287. E2E : 104 passés
+sur 106, les 2 échecs venaient d'un port occupé par le serveur d'essai et d'une spec à mettre à jour, les deux passent ensuite. Lint, types, build propres.
+
+Vraie fenêtre Electron : dossier `Raptoru Studio Lab` confirmé, 12 pages sans erreur ni débordement, lecteur Studio ouvert seul avec 13 vraies voix Windows, achat simulé : 12 000 → 4 500 Jetons Lab,
+voix coupée pendant le test. Ce test a trouvé un vrai défaut : le Core apprend le lecteur quelques secondes après Studio, l'achat était refusé ; il est relancé avec la même clé.
+
+Non vérifié : `npm run studio:lab` de bout en bout (il utilise le port 4100), le vrai son de la voix, tes 29 médias dans `.lab-data` (l'import reste ton geste), le profil Production, le déploiement du correctif Lead Moderator.
 
 ## Ordre de déploiement à retenir
 
