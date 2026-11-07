@@ -1,6 +1,7 @@
 import { esc, fld, grp, hhmm, row } from '../ds/ds.js';
 import {
   REASONS,
+  STATES,
   agoMs,
   minutes,
   trackLabel,
@@ -243,7 +244,7 @@ export function simBar(s: SpState, ui: SpUi) {
     </div>
     <p class="d-note">${
       last
-        ? `Dernière décision : <b>${esc(last.viewer.name)}</b>, ${esc(`« ${last.input} »`)} → ${esc(REASONS[last.reason ?? ''] ?? last.state)}.`
+        ? `Dernière décision : <b>${esc(last.viewer.name)}</b>, ${esc(`« ${last.input} »`)} → ${esc(REASONS[last.reason ?? ''] ?? STATES[last.state] ?? last.state)}.`
         : 'Aucune demande pour l’instant.'
     } Spotify joue ${esc(m.current ?? 'rien')}${m.limited ? ', limité (429)' : ''}${m.device_active ? '' : ', sans appareil'}.</p>
     ${said ? `<ul class="spo-sim__said" aria-label="Réponses du bot">${said}</ul>` : ''}

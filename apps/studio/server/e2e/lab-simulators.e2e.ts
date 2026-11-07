@@ -103,6 +103,8 @@ test('Spotify: a request and its decision from the page, without any account', a
 }) => {
   await page.goto('/?p=spotify');
   const tab = page.locator('#tab-spotify');
+  // The page reads the module's state first: decide only once it is drawn (an earlier spec may have closed the module).
+  await expect(tab.getByText(/Spotify joue|Aucune demande/).first()).toBeVisible();
   if (await tab.getByText('Demandes fermées').count()) {
     await tab.getByRole('button', { name: 'Ouvert' }).click();
     await page
@@ -112,8 +114,10 @@ test('Spotify: a request and its decision from the page, without any account', a
   }
   await tab.locator('[data-sim-try="zzzzqqq"]').click();
   await tab.getByRole('button', { name: 'Demander' }).click();
+  // The fictional search answers through Studio's Spotify worker: a few seconds on a loaded stack.
   await expect(tab.locator('.spo-sim')).toContainText(
     'aucun titre assez proche',
+    { timeout: 20_000 },
   );
 });
 
