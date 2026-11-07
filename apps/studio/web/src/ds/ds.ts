@@ -574,7 +574,13 @@ export const panelBtn = (on: boolean, label = 'Réglages') =>
  */
 export function page(
   root: HTMLElement,
-  o: { title: string; mod?: string; panel?: boolean },
+  o: {
+    title: string;
+    mod?: string;
+    panel?: boolean;
+    /** Sections du panneau repliées tant que le streamer ne les a jamais ouvertes (titres exacts). */
+    folded?: string[];
+  },
 ): Page {
   root.innerHTML = `<div class="d-page" ${o.mod ? `data-mod="${esc(o.mod)}"` : ''}>
     <header class="d-head"><h1>${esc(o.title)}</h1><span data-d="state"></span><span class="d-sp"></span><span data-d="actions" style="display:contents"></span></header>
@@ -588,8 +594,51 @@ export function page(
   const aside = root.querySelector<HTMLElement>('.d-panel');
   const pbody = q('pbody');
   const find = root.querySelector<HTMLInputElement>('[data-pfind]');
+  // Sections repliables : un clic sur le titre. Le choix du streamer est gardé par page ; la recherche montre tout.
+  const FOLD_KEY = `rs-fold:${o.title}`;
+  let folds: Record<string, boolean> = {};
+  try {
+    folds = JSON.parse(localStorage.getItem(FOLD_KEY) ?? '{}') as typeof folds;
+  } catch {
+    /* préférence d'affichage seulement */
+  }
+  const isFolded = (t: string) => folds[t] ?? !!o.folded?.includes(t);
+  const paintFolds = () =>
+    pbody?.querySelectorAll<HTMLElement>(':scope > .d-grp').forEach((g) => {
+      const h = g.querySelector<HTMLElement>(':scope > h3');
+      if (!h) return;
+      const t = h.textContent?.trim() ?? '';
+      g.classList.toggle('is-folded', isFolded(t));
+      h.tabIndex = 0;
+      h.setAttribute('role', 'button');
+      h.setAttribute('aria-expanded', String(!isFolded(t)));
+    });
+  const fold = (h: HTMLElement) => {
+    const t = h.textContent?.trim() ?? '';
+    folds[t] = !isFolded(t);
+    try {
+      localStorage.setItem(FOLD_KEY, JSON.stringify(folds));
+    } catch {
+      /* préférence d'affichage seulement */
+    }
+    paintFolds();
+  };
+  pbody?.addEventListener('click', (e) => {
+    const h = (e.target as HTMLElement).closest<HTMLElement>(
+      ':scope > .d-grp > h3',
+    );
+    if (h && pbody.contains(h)) fold(h);
+  });
+  pbody?.addEventListener('keydown', (e) => {
+    const h = e.target as HTMLElement;
+    if ((e.key === 'Enter' || e.key === ' ') && h.matches('.d-grp > h3')) {
+      e.preventDefault();
+      fold(h);
+    }
+  });
   const filter = () => {
     const s = (find?.value ?? '').toLowerCase().trim();
+    pbody?.classList.toggle('is-finding', !!s);
     pbody?.querySelectorAll<HTMLElement>('.d-grp').forEach((g) => {
       let any = false;
       g.querySelectorAll<HTMLElement>('[data-k]').forEach((r) => {
@@ -642,6 +691,7 @@ export function page(
       pbody.querySelectorAll('details').forEach((d, i) => {
         if (open[i]) d.open = true;
       });
+      paintFolds();
       filter();
     },
   };

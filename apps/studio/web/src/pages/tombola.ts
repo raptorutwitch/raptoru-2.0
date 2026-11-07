@@ -74,6 +74,8 @@ import { leftText, ticketHtml } from './tombola-ticket.js';
 // /api/raffle/* et n'envoie que des intentions. La configuration est toujours envoyée entière, le Core la valide.
 
 type Slot = 'normal' | 'super' | 'giveaway';
+/** Le résultat reste à l’écran une minute après la fin de la manche, puis la préparation revient seule. */
+const AUTO_BACK_MS = 60_000;
 const FOCUS_KEYS = [
   'cfg',
   'band',
@@ -103,7 +105,21 @@ const NUMERIC = new Set([
 ]);
 
 export function mountTombolaPage(root: HTMLElement) {
-  const p = page(root, { title: 'Tombola', mod: 'tombola', panel: true });
+  const p = page(root, {
+    title: 'Tombola',
+    mod: 'tombola',
+    panel: true,
+    folded: [
+      'Instruction à l’écran',
+      'Nom et textes',
+      'Durées sur l’overlay',
+      'Résultat dans l’extension',
+      'Sons d’ouverture',
+      'Stream',
+      'Source OBS',
+      'Accès des viewers',
+    ],
+  });
   p.body.innerHTML = `<div class="tb-state" data-z="state"></div>
   <div class="tb" data-z="prep" hidden>
     <div class="tb-l">
@@ -149,6 +165,8 @@ export function mountTombolaPage(root: HTMLElement) {
   /** La manche finie reste à l'écran jusqu'à « Terminer » : le Core, lui, l'a déjà rangée. */
   let held: Round | null = null;
   let dismissed: string | null = null;
+  /** Quand la manche montrée a quitté le Core (terminée) : le résultat reste affiché AUTO_BACK_MS, puis la préparation revient. */
+  let endedAt = 0;
   let bands: BandsDraft | null = null;
   let editing: { list: CmdList; i: number } | null = null;
   const cmdErr: Record<CmdList, string> = {
@@ -246,6 +264,15 @@ export function mountTombolaPage(root: HTMLElement) {
       ? await api<Card>(`/rounds/${c.raffle_id}`).catch(() => card)
       : null;
     if (!r && held && card?.status === 'cancelled') held = null;
+    // Retour seul à la préparation : rien n'est rejoué ni repayé, la manche reste dans l'historique.
+    if (r || !held) endedAt = 0;
+    else if (!endedAt) endedAt = Date.now();
+    else if (Date.now() - endedAt > AUTO_BACK_MS) {
+      dismissed = held.raffle_id;
+      held = null;
+      card = null;
+      endedAt = 0;
+    }
     if (reads++ % 5 === 0 || ended) await readHistory();
     refreshFiche();
     stagePrep.load(
@@ -305,7 +332,7 @@ export function mountTombolaPage(root: HTMLElement) {
         on
           ? `<button type="button" class="d-btn bad" data-cancel>Annuler</button><span class="tb-gap"></span><button type="button" class="d-btn" data-extend>+30 s</button>${r!.status === 'paused' ? `<button type="button" class="d-btn" data-resume>${ic('play')}Reprendre</button>` : `<button type="button" class="d-btn" data-pause>${ic('pause')}Pause</button>`}<button type="button" class="d-btn pri" data-draw>Tirer maintenant</button>`
           : done
-            ? '<button type="button" class="d-btn pri" data-finish>Terminer</button>'
+            ? `${endedAt ? `<span class="d-faint tb-back">Retour à la préparation dans ${Math.max(0, Math.ceil((AUTO_BACK_MS - (Date.now() - endedAt)) / 1000))} s</span>` : ''}<button type="button" class="d-btn pri" data-finish title="Revient à la préparation. Le tirage, les gains et l’historique sont gardés : rien n’est retiré ni rejoué.">Fermer le résultat</button>`
             : ''
       }${r ? `<button type="button" class="d-btn ghost" data-hist>${ic('hist')}Historique</button>` : ''}${panelBtn(p.panel.isOpen())}`,
     );
@@ -707,6 +734,7 @@ export function mountTombolaPage(root: HTMLElement) {
       dismissed = shown()?.raffle_id ?? null;
       held = null;
       card = null;
+      endedAt = 0;
       void readHistory().then(() => paint());
       return paint();
     }

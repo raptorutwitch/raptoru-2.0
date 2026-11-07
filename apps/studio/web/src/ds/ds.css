@@ -787,6 +787,31 @@ button.d-tag:hover {
   color: var(--mod);
   font-size: 13px;
 }
+/* Panneau de réglages : une section se replie sur son titre ; la recherche l'ignore. */
+.d-panel__b > .d-grp > h3 {
+  cursor: pointer;
+  user-select: none;
+}
+.d-panel__b > .d-grp > h3::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border: solid var(--ink3);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+  transition: transform 0.15s;
+}
+.d-panel__b > .d-grp.is-folded > h3::after {
+  transform: rotate(-45deg);
+}
+.d-panel__b > .d-grp.is-folded > h3 {
+  margin-bottom: 0;
+  color: var(--ink2);
+}
+.d-panel__b:not(.is-finding) > .d-grp.is-folded > :not(h3) {
+  display: none;
+}
 .d-row {
   display: flex;
   align-items: center;
