@@ -57,6 +57,7 @@ import {
   setFx,
   STATUS,
   togglePool,
+  LAST_BALLON,
   toggleFollow,
   TYPE_LABEL,
   type VariantSettings,
@@ -1022,16 +1023,19 @@ export function mountAlerts(root: HTMLElement) {
     if (d.w) return void postSettings({ weights: { [d.w]: Number(t.value) } });
     if (d.ballon) {
       const [kind, n] = d.ballon.split(':');
+      const next = togglePool(
+        sources.pools() ?? undefined,
+        kind as 'sub',
+        Number(n),
+        t.checked,
+      );
+      if (!next) {
+        t.checked = true;
+        return void toast(LAST_BALLON);
+      }
       void run(null, async () => {
         await postJson('/api/halloween/admin/settings', {
-          rules: {
-            halloween_ballon: togglePool(
-              sources.pools() ?? undefined,
-              kind as 'sub',
-              Number(n),
-              t.checked,
-            ),
-          },
+          rules: { halloween_ballon: next },
         });
         await sources.read();
         paintInsp();

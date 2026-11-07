@@ -214,19 +214,8 @@ export function alertTest(key: string) {
     test_profile: 'halloween',
   };
 }
-/** Une case du Ballon → les nouvelles réserves (jamais vides : la dernière reste). */
-export function togglePool(
-  pools: BallonPools | undefined,
-  kind: keyof BallonPools,
-  n: number,
-  on: boolean,
-): BallonPools {
-  const cur = { ...BALLON_ALL, ...(pools ?? {}) };
-  const set = new Set(cur[kind]);
-  if (on) set.add(n);
-  else if (set.size > 1) set.delete(n);
-  return { ...cur, [kind]: [...set].sort((a, b) => a - b) };
-}
+/** Une case du Ballon : la même règle que la page Alertes (null = elle viderait le tirage). */
+export { togglePool, LAST_BALLON } from './alerts-model.js';
 
 // --- Règles de la boutique ------------------------------------------------------------------------------------------------
 

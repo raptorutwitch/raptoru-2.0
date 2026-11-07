@@ -109,9 +109,10 @@ describe('Studio › Alertes › familles et variantes', () => {
     expect(chance(s, 'follow_dofus_ebene')).toBe(0);
   });
 
-  it('ballons: the last one of a draw stays', () => {
+  it('ballons: the last one of a draw cannot be unticked (the Core keeps one; the screen must not pretend)', () => {
     const one = { sub: [2], prime: [1, 2, 3, 4], resub: [1, 2, 3, 4] };
-    expect(togglePool(one, 'sub', 2, false).sub).toEqual([2]);
-    expect(togglePool(one, 'sub', 4, true).sub).toEqual([2, 4]);
+    expect(togglePool(one, 'sub', 2, false)).toBeNull();
+    expect(togglePool(one, 'sub', 4, true)?.sub).toEqual([2, 4]);
+    expect(togglePool(undefined, 'prime', 4, false)?.prime).toEqual([1, 2, 3]);
   });
 });

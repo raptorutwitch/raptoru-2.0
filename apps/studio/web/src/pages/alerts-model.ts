@@ -222,20 +222,28 @@ export function chance(s: VariantSettings | null, id: string) {
   return total ? Math.round((weightOf(s, id) / total) * 100) : 0;
 }
 
-/** Une case Ballon basculée → les nouveaux tirages (jamais vide : le dernier reste). */
+/**
+ * Une case Ballon basculée → les nouveaux tirages. null : elle viderait le tirage, que le Core refuse (il en garde toujours une) ;
+ * l'écran doit alors la laisser cochée, sinon elle « se recoche » au retour sur la page.
+ */
 export function togglePool(
   pools: BallonPools | undefined,
   kind: keyof BallonPools,
   n: number,
   on: boolean,
-): BallonPools {
+): BallonPools | null {
   const all = [1, 2, 3, 4];
   const cur = { sub: all, prime: all, resub: all, ...(pools ?? {}) };
   const set = new Set(cur[kind]);
   if (on) set.add(n);
-  else if (set.size > 1) set.delete(n);
-  return { ...cur, [kind]: [...set].sort((a, b) => a - b) };
+  else set.delete(n);
+  return set.size
+    ? { ...cur, [kind]: [...set].sort((a, b) => a - b) }
+    : null;
 }
+
+export const LAST_BALLON =
+  'Dernière animation du tirage : le Ballon en garde toujours une. Pour ne plus jouer le Ballon, choisis « Habituel » pour cette famille.';
 
 const BALLONS = ['Bonbons', 'Citrouilles', 'Bonbons maïs', 'Araignées'];
 const NAMES: Record<string, string> = {

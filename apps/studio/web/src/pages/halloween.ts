@@ -36,6 +36,7 @@ import {
   RULE_GROUPS,
   rulesFromInputs,
   togglePool,
+  LAST_BALLON,
   type BallonPools,
   type CatalogVariant,
   type ChaosObs,
@@ -593,7 +594,7 @@ export function mountHalloweenPage(root: HTMLElement) {
       </div>
       <div class="hw-ballon"><h3>Ballon tiré au hasard parmi</h3>
         <div class="hw-bg" style="--n:${BALLON_FR.length}"><span></span>${BALLON_FR.map((l) => `<small>${l}</small>`).join('')}
-        ${BALLON_KINDS.map(([k, label]) => `<b>${label}</b>${[1, 2, 3, 4].map((n) => `<span>${sw(pools[k].includes(n), `data-ballon="${k}:${n}"`, `${label} : ${BALLON_FR[n - 1]}`)}</span>`).join('')}`).join('')}</div></div>
+        ${BALLON_KINDS.map(([k, label]) => `<b>${label}</b>${[1, 2, 3, 4].map((n) => `<span ${pools[k].length === 1 && pools[k][0] === n ? `title="${esc(LAST_BALLON)}"` : ''}>${sw(pools[k].includes(n), `data-ballon="${k}:${n}"`, `${label} : ${BALLON_FR[n - 1]}`, { disabled: pools[k].length === 1 && pools[k][0] === n })}</span>`).join('')}`).join('')}</div></div>
       <p class="d-note ${missing.length ? 'warn' : ''}">${!alertCatalog ? 'État des médias indisponible.' : missing.length ? `Médias absents de ce PC, l’alerte habituelle sera jouée à la place : ${missing.map(esc).join(', ')}.` : `${hw.length} variantes Halloween, tous leurs médias sont sur ce PC.`}</p>
       <p class="d-note">Les tests sont gratuits, sans événement Twitch, joués par la source OBS « Alertes », même profil coupé. Raid, bits et dons ne changent pas. Placement du texte : page Alertes.</p>`,
     );
@@ -992,18 +993,21 @@ export function mountHalloweenPage(root: HTMLElement) {
     const t = e.target as HTMLInputElement;
     if (t.dataset.ballon && admin) {
       const [kind, n] = t.dataset.ballon.split(':');
+      const next = togglePool(
+        rules()?.halloween_ballon,
+        kind as keyof BallonPools,
+        Number(n),
+        t.checked,
+      );
+      if (!next) {
+        t.checked = true;
+        return void toast(LAST_BALLON);
+      }
       return void act(
         null,
         () =>
           postJson('/api/halloween/admin/settings', {
-            rules: {
-              halloween_ballon: togglePool(
-                rules()?.halloween_ballon,
-                kind as keyof BallonPools,
-                Number(n),
-                t.checked,
-              ),
-            },
+            rules: { halloween_ballon: next },
           }),
         'Ballons enregistrés.',
       );

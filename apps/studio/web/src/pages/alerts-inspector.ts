@@ -2,6 +2,7 @@ import { esc, fld, ic, numrow, row, seg, sw } from '../ds/ds.js';
 import {
   type AlertVariantInfo,
   ballonOf,
+  LAST_BALLON,
   type BallonPools,
   BITS_MINIMUM,
   canEditText,
@@ -149,8 +150,9 @@ function variantRow(o: InspectorView, v: AlertVariantInfo) {
   }
   if (b) {
     const pool = o.pools?.[b.kind] ?? [1, 2, 3, 4];
+    const last = pool.length === 1 && pool[0] === b.n;
     return `<div class="alr-var ${on ? 'on' : ''}" data-var="${esc(v.id)}">${thumb(v)}<p><span>${esc(name)}</span><em>Halloween</em></p>
-      <div class="alr-var__b">${miss}<span class="d-sp"></span>${o.pools ? sw(pool.includes(b.n), `data-ballon="${b.kind}:${b.n}"`, `${name} dans le tirage`) : ''}</div></div>`;
+      <div class="alr-var__b">${miss}<span class="d-sp"></span>${o.pools ? `<span ${last ? `title="${esc(LAST_BALLON)}"` : ''}>${sw(pool.includes(b.n), `data-ballon="${b.kind}:${b.n}"`, `${name} dans le tirage`, { disabled: last })}</span>` : ''}</div></div>`;
   }
   return `<div class="alr-var ${on ? 'on' : ''}" data-var="${esc(v.id)}">${thumb(v)}<p><span>${esc(name)}</span>${isHalloween(v) ? '<em>Halloween</em>' : ''}</p>
     <div class="alr-var__b">${miss || `<small>${esc(triggerOf(v))}</small>`}</div></div>`;
@@ -188,7 +190,7 @@ function familyPane(o: InspectorView) {
   const type = v ? String(familyEvent(f.id, v, o.fake).type) : f.id;
   return `<section class="d-grp"><h3>Quand ${esc(f.label)} arrive</h3>${seg('data-mode', modes, o.mode, 'block')}
       <p class="d-note ${o.mode === 'off' ? 'bad' : ''}">${esc(playsText(o.mode, f.usual, f.halloween))}</p></section>
-    <section class="d-grp"><h3>${title}</h3>${usual.map((x) => variantRow(o, x)).join('')}${hw.length ? `<p class="d-lb alr-sub">Halloween</p>${hw.map((x) => variantRow(o, x)).join('')}` : ''}
+    <section class="d-grp"><h3>${title}</h3>${usual.map((x) => variantRow(o, x)).join('')}${hw.length ? `<p class="d-lb alr-sub">Halloween</p>${o.pools && hw.some((x) => ballonOf(x.id)) ? '<p class="d-note">Les cases choisissent les Ballons du tirage. Ce choix reste enregistré quand le profil Halloween est coupé ; il ne sert que lorsqu’il est actif.</p>' : ''}${hw.map((x) => variantRow(o, x)).join('')}` : ''}
       ${v && o.canReplace ? `<div class="alr-reset"><button type="button" class="d-btn ghost sm" data-a="replace">${ic('upload')}Remplacer le média</button></div>` : ''}
       ${v ? details(v, o) : ''}</section>
     <section class="d-grp"><h3>Tester avec</h3><div class="d-tags">${Object.entries(
