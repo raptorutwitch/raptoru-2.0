@@ -124,7 +124,7 @@ function soundPane(o: InspectorView) {
   const v = o.cur!;
   const vol = Math.round((o.look.volume ?? v.volume ?? 0.5) * 100);
   return `<section class="d-grp"><h3>${ic('sound')}Son<button type="button" class="d-ib alr-close" data-unsel aria-label="Fermer">${ic('x')}</button></h3>
-      <dl class="d-kv"><dt>Fichier</dt><dd>${esc(v.audio ?? `Son de la vidéo`)}</dd>${v.keepAudio ? '<dt>Fin</dt><dd>Continue après la vidéo</dd>' : ''}${v.tts ? '<dt>Voix</dt><dd>Le don est lu à voix haute</dd>' : ''}</dl>
+      <dl class="d-kv"><dt>Fichier</dt><dd>${esc(v.audio ?? 'Aucun fichier son : seulement celui de la vidéo, si elle en a un')}</dd>${v.keepAudio ? '<dt>Fin</dt><dd>Continue après la vidéo</dd>' : ''}${v.tts ? '<dt>Voix</dt><dd>Le don est lu à voix haute</dd>' : ''}</dl>
       <div class="d-row"><span>Volume dans OBS</span><span class="alr-size"><input class="d-range" type="range" min="0" max="100" value="${vol}" data-obs-vol aria-label="Volume dans OBS"><b>${vol} %</b></span></div>
       <p class="d-note">Le curseur de la timeline ne règle que l’aperçu.</p></section>`;
 }
@@ -167,7 +167,7 @@ function details(v: AlertVariantInfo, o: InspectorView) {
     ${v.type === 'bits' ? detailRow('Seuil', `${BITS_MINIMUM} Bits`) : ''}
     ${detailRow('Priorité', v.priority ?? 0)}
     ${detailRow('Vidéo', v.video ?? 'Aucune')}
-    ${detailRow('Son', v.audio ?? 'Celui de la vidéo')}
+    ${detailRow('Son', v.audio ?? 'Aucun fichier : celui de la vidéo, si elle en a un')}
     ${detailRow('Volume', `${Math.round((o.look.volume ?? v.volume ?? 0.5) * 100)} %`)}
     ${v.duration ? detailRow('Durée imposée', s(v.duration + 300)) : v.mediaMs ? detailRow('Durée', s(v.mediaMs)) : ''}
     ${v.loop ? detailRow('Vidéo', 'En boucle') : ''}

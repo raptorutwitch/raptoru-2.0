@@ -771,6 +771,7 @@ export function mountTtsPage(root: HTMLElement) {
     const text = input.value.trim();
     if (!text) return input.focus();
     const v = labViewer(viewerSel.value);
+    const short = `${v.name} n’a pas assez de Jetons Lab (${fmt(bals.get(v.id) ?? 0)} pour ${fmt(tierOf(Array.from(text).length)?.price ?? 0)}) : clique « +50 000 ».`;
     await run(
       btn,
       async () => {
@@ -804,7 +805,9 @@ export function mountTtsPage(root: HTMLElement) {
           'Le lecteur ne répond pas au Core : réessaie dans un instant.',
         viewer_busy: `${v.name} a déjà un message en attente : choisis un autre viewer.`,
         viewer_cooldown: `${v.name} est encore en délai. Choisis un autre viewer, ou retire son délai en Modération.`,
-        insufficient_funds: `${v.name} n’a pas assez de Jetons Lab (${fmt(bals.get(v.id) ?? 0)} pour ${fmt(tierOf(Array.from(text).length)?.price ?? 0)}) : clique « +50 000 ».`,
+        // Le Core répond insufficient_tokens (economy.ts) ; l'ancien code reste compris.
+        insufficient_tokens: short,
+        insufficient_funds: short,
         stream_offline:
           'Le TTS se paie pendant le live : démarre un live simulé (Simulation, barre latérale).',
         tts_paused: 'Le TTS est en pause : passe-le à Ouvert.',

@@ -159,6 +159,7 @@ const REFUS = {
   already_owned: 'Ce viewer a déjà cet objet.',
   already_refunded: 'Cet achat est déjà remboursé.',
   insufficient_funds: 'Solde insuffisant.',
+  insufficient_tokens: 'Solde insuffisant.',
   invalid_request: 'Vérifie les champs : un nom, un identifiant valable.',
 };
 const when = (iso: string) =>
