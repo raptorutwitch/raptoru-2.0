@@ -34,12 +34,21 @@ export const LAB_ACCOUNTS: Record<
 const ROLES = Object.keys(LAB_ACCOUNTS) as Role[];
 
 /** Who the chat simulator can speak as. */
-export const labChatIdentities = () =>
-  ROLES.map((r) => ({
+export const labChatIdentities = () => [
+  ...ROLES.map((r) => ({
     id: LAB_ACCOUNTS[r].twitchUserId,
     label: `${LAB_ACCOUNTS[r].displayName} (${r})`,
     login: LAB_ACCOUNTS[r].login,
-  }));
+    role: r,
+  })),
+  // The simulators' other viewers (core-api lab/environment.ts): several viewers fill a queue or a quota.
+  ...['Luna', 'Kiwi', 'Nox', 'Mila'].map((name, i) => ({
+    id: String(900201 + i),
+    label: `${name}_lab (viewer)`,
+    login: `${name.toLowerCase()}_lab`,
+    role: 'viewer' as const,
+  })),
+];
 
 const ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
 const MODULE_IDS = ['tts', 'soundboard', 'bonk'] as const;

@@ -1,5 +1,6 @@
 import type { MiniGamePlay, MiniGamesState } from '@raptoru/schemas';
 import {
+  confirmBox,
   errText,
   esc,
   fld,
@@ -239,6 +240,18 @@ export function mountMiniGamesPage(root: HTMLElement) {
   const tick = poller(read, 2500);
 
   async function setOpen(enabled: boolean, input: HTMLElement | null) {
+    if (
+      production &&
+      !(await confirmBox({
+        title: enabled ? 'Ouvrir les mini-jeux ?' : 'Fermer les mini-jeux ?',
+        body: enabled
+          ? 'Roulette, Slot et Duel s’ouvrent pour les vrais viewers : vrais Jetons, pendant les lives.'
+          : 'Roulette, Slot et Duel se ferment pour les vrais viewers.',
+        yes: enabled ? 'Ouvrir' : 'Fermer',
+        no: 'Annuler',
+      }))
+    )
+      return paintHead();
     const ok = await run(
       input,
       () => postJson('/api/mini-games/settings', { enabled }),
@@ -259,11 +272,22 @@ export function mountMiniGamesPage(root: HTMLElement) {
       ([k, v]) => of(k)?.value !== v,
     );
     const before = changes.map(([k]) => [k, of(k)!.value] as [string, number]);
+    const yes = await confirmBox({
+      title:
+        changes.length > 1
+          ? `Appliquer ${changes.length} changements ?`
+          : 'Appliquer ce changement ?',
+      body: `${changes.map(([k, v]) => `${of(k)!.label} : ${fmt(of(k)!.value)} → ${fmt(v)}`).join(' · ')}. Appliqué aux prochains tirages, ${production ? 'sur le vrai Core' : 'sur le Core du Lab'}.`,
+      yes: 'Appliquer',
+      no: 'Annuler',
+      danger: false,
+    });
+    if (!yes) return;
     const ok = await run(btn, () => send(changes), undefined, {
       out_of_bounds: 'Valeur hors des bornes.',
       unknown_setting: 'Réglage inconnu.',
     });
-    // Refusé : le réglage reste à l'écran, à corriger.
+    // Refusé : les réglages sont envoyés un par un. Ce qui est passé se relit, le reste reste à l'écran, à corriger.
     if (!ok) return read();
     toast('Appliqué aux prochains tirages', {
       undo: () =>

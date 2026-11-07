@@ -1431,6 +1431,8 @@ export async function setModuleState(
   state: 'active' | 'paused' | 'disabled',
   waiting: ModItem[] = [],
 ) {
+  // Déjà dans cet état : ni commande, ni ligne d'audit, ni question sur la file.
+  if (btn?.getAttribute('aria-pressed') === 'true') return false;
   let keep = 'keep';
   if (state === 'disabled' || (state === 'paused' && waiting.length)) {
     const pick = await choiceBox({

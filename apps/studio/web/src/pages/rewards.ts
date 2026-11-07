@@ -174,7 +174,12 @@ export function mountRewardsPage(root: HTMLElement) {
       );
       return;
     }
-    patch(z('list'), rewardsView(s, selected, find));
+    patch(
+      z('list'),
+      !s.rewards.length && s.environment === 'lab'
+        ? `<div class="d-empty"><p>Le Lab n’a pas de vrai Twitch : aucune récompense n’arrive ici.</p><button type="button" class="d-btn pri sm" data-lab-catalog>${ic('plus')}Charger le catalogue fictif</button><p class="d-note">Récompenses et actions fictives, créées par les mêmes règles du Core. Rien ne va sur Twitch ni en Production.</p></div>`
+        : rewardsView(s, selected, find),
+    );
   };
   const paintLog = () => {
     const r = reward();
@@ -695,6 +700,17 @@ export function mountRewardsPage(root: HTMLElement) {
     if (f === 'scene' || f === 'source')
       void loadLists(String(a.scene ?? ''), String(a.source ?? ''));
     paintFoot();
+  });
+  z('list').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>(
+      '[data-lab-catalog]',
+    );
+    if (b)
+      void run(
+        b,
+        () => postJson('/api/channel-points/lab-catalog', {}),
+        'Catalogue fictif chargé',
+      ).then(() => tick.now());
   });
   p.root.addEventListener('change', (e) => {
     const t = e.target as HTMLInputElement;

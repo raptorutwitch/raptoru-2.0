@@ -146,6 +146,7 @@ export interface SpIdentity {
   id: string;
   label: string;
   login?: string;
+  role?: string;
 }
 
 /** L'état propre à la page : ce qui est en cours de saisie, les identités du Lab, l'heure (passée : la vue reste pure). */
@@ -153,6 +154,8 @@ export interface SpUi {
   fields: Record<string, string>;
   who: SpIdentity[];
   now: number;
+  replies?: string[];
+  simClosed?: boolean;
 }
 
 export const trackLabel = (t: SpTrack | null) =>

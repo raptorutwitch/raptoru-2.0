@@ -16,7 +16,13 @@ import {
 } from '../ds/ds.js';
 import { getJson, postJson, tryGetJson } from '../http.js';
 import { setNavCount } from '../shell/shell.js';
-import { HISTORICAL, REWARD_TITLE, spotifyPanel } from './spotify-panel.js';
+import {
+  HISTORICAL,
+  REWARD_TITLE,
+  simBar,
+  spotifyPanel,
+} from './spotify-panel.js';
+import type { StepOut } from '../sim-chat-view.js';
 import {
   alertsView,
   countsView,
@@ -60,6 +66,7 @@ export function mountSpotifyPage(root: HTMLElement) {
       <div data-z="open"></div>
       <section class="spo-now" data-z="now" aria-label="Lecture en cours"><div class="d-skel" style="height:200px;grid-column:1/-1"></div></section>
       <div class="spo-quotas" data-z="quotas"></div>
+      <div data-z="simbar"></div>
       <section class="spo-tl" data-z="time" aria-label="La file dans le temps"></section>
       <div class="spo-counts" data-z="counts"></div>
     </div>
@@ -77,6 +84,13 @@ export function mountSpotifyPage(root: HTMLElement) {
   let list: 'file' | 'past' = 'file';
   const ui: SpUi = { fields: {}, who: [], now: Date.now() };
 
+  z('simbar').addEventListener(
+    'toggle',
+    (e) => {
+      ui.simClosed = !(e.target as HTMLDetailsElement).open;
+    },
+    true,
+  );
   const typing = () => {
     const a = document.activeElement;
     return (
@@ -130,6 +144,8 @@ export function mountSpotifyPage(root: HTMLElement) {
     patch(z('quotas'), quotasView(s));
     patch(z('time'), timeView(s, ui));
     patch(z('counts'), countsView(s));
+    if (!z('simbar').contains(document.activeElement))
+      patch(z('simbar'), simBar(s, ui));
     patch(
       z('qhead'),
       seg(
@@ -168,6 +184,14 @@ export function mountSpotifyPage(root: HTMLElement) {
               '/api/lab-chat/identities',
             )
           )?.identities ?? [];
+      if (state?.sim)
+        ui.replies = (
+          await tryGetJson<{ steps: StepOut[] }>('/api/lab-chat/steps')
+        )?.steps
+          ?.filter((x) => x.origin === 'music' && x.params.text)
+          .slice(0, 3)
+          .map((x) => x.params.text!)
+          .reverse();
       const n = (state?.queue.length ?? 0) + (state?.in_progress.length ?? 0);
       setNavCount('spotify', n ? String(n) : null);
     } catch (e) {
@@ -206,9 +230,12 @@ export function mountSpotifyPage(root: HTMLElement) {
   const field = (f: string) =>
     (
       ui.fields[f] ??
-      p.panel.body.querySelector<HTMLInputElement>(`[data-f="${f}"]`)?.value ??
+      p.root.querySelector<HTMLInputElement>(`[data-f="${f}"]`)?.value ??
       ''
     ).trim();
+  const simWho = () =>
+    z('simbar').querySelector<HTMLSelectElement>('[data-f="sim-who"]')
+      ?.selectedOptions[0];
   /** Un nombre facultatif : vide → null. */
   const opt = (f: string) => (field(f) === '' ? null : Number(field(f)));
 
@@ -414,10 +441,25 @@ export function mountSpotifyPage(root: HTMLElement) {
           'Création demandée : le bot la fait sur Twitch',
         );
     },
+    'sp-chat': (el) => {
+      const who = simWho();
+      if (!who) return;
+      return void run(
+        el,
+        () =>
+          postJson('/api/lab-chat/simulate', {
+            viewer_id: who.value,
+            display_name: who.textContent,
+            login: who.dataset.login,
+            role: who.dataset.role,
+            text: el.dataset.text,
+          }),
+        undefined,
+        ERRORS,
+      ).then(read);
+    },
     'sp-simulate': (el) => {
-      const who =
-        p.panel.body.querySelector<HTMLSelectElement>('[data-f="sim-who"]')
-          ?.selectedOptions[0];
+      const who = simWho();
       if (!who) return;
       return post(
         el,
@@ -441,6 +483,12 @@ export function mountSpotifyPage(root: HTMLElement) {
     const l = t.closest<HTMLElement>('[data-list]');
     if (l) {
       list = l.dataset.list as 'file' | 'past';
+      return paint();
+    }
+    const sim = t.closest<HTMLElement>('[data-sim-try]');
+    if (sim) {
+      ui.fields['sim-text'] = sim.dataset.simTry!;
+      (document.activeElement as HTMLElement | null)?.blur();
       return paint();
     }
     const go = t.closest<HTMLElement>('[data-open]');

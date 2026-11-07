@@ -1,5 +1,6 @@
 import { esc, fld, grp, hhmm, row } from '../ds/ds.js';
 import {
+  REASONS,
   agoMs,
   minutes,
   trackLabel,
@@ -196,38 +197,59 @@ function technical(s: SpState, ui: SpUi) {
   );
 }
 
-export function simPanel(s: SpState, ui: SpUi) {
+const TRIES: [string, string][] = [
+  ['numb linkin park', 'Numb'],
+  ['mr brightside', 'Mr. Brightside'],
+  ['blinding lights', 'Blinding Lights'],
+  ['long test track', 'Trop long'],
+  ['zzzzqqq', 'Introuvable'],
+  ['https://youtu.be/x', 'Lien refusé'],
+];
+const CHAT = [
+  '!song',
+  '!songqueue',
+  '!mysong',
+  '!songcancel',
+  '!songskip',
+  '!songremove 1',
+];
+
+/** Ce qui s'essaie dans le Lab : demandes, commandes, incidents. Toujours le Core du Lab, jamais ton compte Spotify. */
+export function simBar(s: SpState, ui: SpUi) {
   const m = s.sim;
   if (!m) return '';
-  const time =
-    m.progress_ms !== null
-      ? ` (${Math.floor(m.progress_ms / 60_000)}:${String(Math.floor((m.progress_ms % 60_000) / 1000)).padStart(2, '0')})`
-      : '';
   const btn = (what: string, label: string) =>
     `<button type="button" class="d-btn ghost sm" data-act="sp-sim" data-what="${what}">${label}</button>`;
-  return grp(
-    'Simulateur',
-    'flask',
-    `<div class="d-row col" data-k="simulateur lab test demande viewer spotify événement">
-      <p class="spo-state">Joue <b>${esc(m.current ?? 'rien')}</b>${time} · file Spotify : ${esc(m.queue.join(', ') || 'vide')} · ${m.calls} appels reçus${m.limited ? ' · <b>limité (429)</b>' : ''}${m.device_active ? '' : ' · <b>aucun appareil</b>'}${m.queue_answer !== 204 ? ` · prochain ajout : réponse ${m.queue_answer}` : ''}</p>
+  const last = s.recent[0];
+  const said = (ui.replies ?? []).map((t) => `<li>${esc(t)}</li>`).join('');
+  return `<details class="spo-sim" ${ui.simClosed ? '' : 'open'}><summary class="d-lb">Simulateur · Spotify fictif</summary>
+    ${s.settings.enabled ? '' : '<p class="d-note bad">Demandes fermées : le Core refusera tout. Passe à Ouvert en haut de page.</p>'}
+    <div class="spo-sim__r">
       <label class="d-fld"><select data-f="sim-who" aria-label="Viewer">${ui.who
         .map(
           (i) =>
-            `<option value="${esc(i.id)}" data-login="${esc(i.login ?? '')}" ${ui.fields['sim-who'] === i.id ? 'selected' : ''}>${esc(i.label)}</option>`,
+            `<option value="${esc(i.id)}" data-login="${esc(i.login ?? '')}" data-role="${esc(i.role ?? 'viewer')}" ${ui.fields['sim-who'] === i.id ? 'selected' : ''}>${esc(i.label)}</option>`,
         )
         .join('')}</select></label>
-      <label class="d-fld"><input type="text" data-f="sim-text" aria-label="Demande" value="${esc(val(ui, 'sim-text', 'numb linkin park'))}"></label>
-      <button type="button" class="d-btn sm" data-act="sp-simulate">Simuler une demande</button>
-      <div class="spo-btns">
-        ${btn('near-end', 'Fin du titre (3 s)')}${btn('external', 'Titre hors demandes')}
-        ${btn(m.device_active ? 'no-device' : 'device', m.device_active ? 'Couper l’appareil' : 'Rallumer l’appareil')}
-        ${btn('rate-limit', 'Limite 429 (30 s)')}${btn('answer-200', 'Prochain ajout : 200')}${btn('answer-500', 'Prochain ajout : 500')}
-      </div>
-      <small>Rien de tout ceci ne touche ton compte Spotify ni Twitch. Les commandes se testent dans Simulation, avec les mêmes viewers.</small>
-    </div>`,
-    'lab test',
-  );
+      <label class="d-fld spo-sim__t"><input type="text" data-f="sim-text" aria-label="Demande" placeholder="Titre + artiste, ou lien Spotify" value="${esc(val(ui, 'sim-text', 'numb linkin park'))}"></label>
+      <button type="button" class="d-btn sm pri" data-act="sp-simulate">Demander</button>
+    </div>
+    <div class="d-tags">${TRIES.map(([t, l]) => `<button type="button" class="d-tag add" data-sim-try="${esc(t)}">${esc(l)}</button>`).join('')}</div>
+    <div class="d-tags">${CHAT.map((c) => `<button type="button" class="d-tag" data-act="sp-chat" data-text="${esc(c)}"><code>${esc(c)}</code></button>`).join('')}</div>
+    <div class="spo-btns">
+      ${btn('near-end', 'Fin du titre')}${btn('external', 'Titre hors demandes')}
+      ${btn(m.device_active ? 'no-device' : 'device', m.device_active ? 'Couper l’appareil' : 'Rallumer l’appareil')}
+      ${btn('rate-limit', 'Limite 429')}${btn('answer-200', 'Ajout incertain')}${btn('answer-500', 'Ajout en erreur')}
+    </div>
+    <p class="d-note">${
+      last
+        ? `Dernière décision : <b>${esc(last.viewer.name)}</b>, ${esc(`« ${last.input} »`)} → ${esc(REASONS[last.reason ?? ''] ?? last.state)}.`
+        : 'Aucune demande pour l’instant.'
+    } Spotify joue ${esc(m.current ?? 'rien')}${m.limited ? ', limité (429)' : ''}${m.device_active ? '' : ', sans appareil'}.</p>
+    ${said ? `<ul class="spo-sim__said" aria-label="Réponses du bot">${said}</ul>` : ''}
+    <small>Réordonner la file ou approuver une demande n’existe pas dans Raptoru : ce n’est pas une panne. Rien ici ne touche ton compte Spotify ni Twitch.</small>
+  </details>`;
 }
 
 export const spotifyPanel = (s: SpState, ui: SpUi) =>
-  `${quotas(s, ui)}${exceptions(s, ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${simPanel(s, ui)}${technical(s, ui)}`;
+  `${quotas(s, ui)}${exceptions(s, ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${technical(s, ui)}`;

@@ -14,6 +14,7 @@ import {
   type ChannelPointsService,
   CpError,
 } from '../channel-points/service.js';
+import { loadLabRewards } from '../lab/rewards-catalog.js';
 import { HttpError, parse, type Route } from './server.js';
 
 // Points de chaîne V1 — the routes of the ONE implementation (docs/CHANNEL_POINTS_V1.md), same sub-paths twice:
@@ -140,6 +141,16 @@ export function channelPointsRoutes(
         mapped(() => cp.effectReport(params[0]!, parse(CpEffectReport, body))),
     },
   ];
+  if (!production)
+    studio.push({
+      // The Lab has no Twitch: a fictional catalogue, through the same doors. Lab table only: the Production cockpit's
+      // allow-list (http/studio-cockpit-routes.ts) never reaches `channel-points`.
+      method: 'POST',
+      pattern: at(base, '/(\\d{1,32})/lab-catalog'),
+      auth,
+      handle: ({ params }) =>
+        mapped(() => loadLabRewards(cp, channel(params[0]!))),
+    });
   // Redemptions and the reward list: the Lab adapter (Studio secret) or, in production, the bot (bot secret).
   const ingestBase = production ? '/v1/bot/channel-points' : base;
   const ingestAuth = production ? ('bot' as const) : auth;

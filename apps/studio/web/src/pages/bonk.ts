@@ -689,6 +689,17 @@ export function mountBonkPage(root: HTMLElement) {
     );
     const send = (key: string, value: number) =>
       postJson('/api/module-settings', { key, value });
+    const yes = await confirmBox({
+      title:
+        list.length > 1
+          ? `Appliquer ${list.length} changements ?`
+          : 'Appliquer ce changement ?',
+      body: `${list.map((s) => `${s.label} : ${fmt(s.value)} → ${fmt(prices[s.key]!)}`).join(' · ')}. Appliqué aux prochains achats. Rien de ce qui est déjà payé ne change.`,
+      yes: 'Appliquer',
+      no: 'Annuler',
+      danger: false,
+    });
+    if (!yes) return;
     const ok = await run(
       b,
       async () => {

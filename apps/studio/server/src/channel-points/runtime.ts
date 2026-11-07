@@ -484,6 +484,10 @@ export class ChannelPointsRuntime {
       );
     if (p === '/test')
       return reply(200, await this.d.core(`${ch}/test`, await this.body(req)));
+    if (p === '/lab-catalog')
+      return this.d.environment === 'lab'
+        ? reply(200, await this.d.core(`${ch}/lab-catalog`, {}))
+        : reply(403, { error: 'lab_only' });
     const rule = /^\/rules\/([A-Za-z0-9-]{1,128})$/.exec(p);
     if (rule)
       return reply(

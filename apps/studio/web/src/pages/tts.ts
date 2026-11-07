@@ -25,7 +25,7 @@ import {
   toast,
   copy,
 } from '../ds/ds.js';
-import { getJson, postJson, tryGetJson } from '../http.js';
+import { getJson, postJson, statusError, tryGetJson } from '../http.js';
 import {
   act,
   marked,
@@ -285,15 +285,17 @@ export function mountTtsPage(root: HTMLElement) {
       ? stateChip('w', qError || 'Lecture…')
       : globalPaused
         ? stateChip('w', 'Pause globale')
-        : !up
-          ? stateChip('w', seen ? 'Lecteur sans voix' : 'Aucun lecteur')
-          : st === 'paused'
-            ? stateChip('w', 'Pause')
-            : st === 'disabled'
-              ? stateChip('off', 'Fermé aux viewers')
-              : q.current
-                ? stateChip('live', 'À l’antenne')
-                : stateChip('', `Prêt · ${player?.player?.voices ?? 0} voix`);
+        : player?.error
+          ? stateChip('r', statusError(player.error))
+          : !up
+            ? stateChip('w', seen ? 'Lecteur sans voix' : 'Aucun lecteur')
+            : st === 'paused'
+              ? stateChip('w', 'Pause')
+              : st === 'disabled'
+                ? stateChip('off', 'Fermé aux viewers')
+                : q.current
+                  ? stateChip('live', 'À l’antenne')
+                  : stateChip('', `Prêt · ${player?.player?.voices ?? 0} voix`);
     patch(p.state, chip);
     patch(
       p.actions,
@@ -511,14 +513,25 @@ export function mountTtsPage(root: HTMLElement) {
     const d = draft;
     const t = d.tiers[i]!;
     const html = `<div class="d-form"><h3>${t.min} à ${t.max ?? '∞'} caractères</h3>
+      ${t.max === null ? '' : `<div class="d-row"><span>Jusqu’à</span>${fld(`data-limit min="${t.min}" max="${d.tiers[i + 1]?.max ? d.tiers[i + 1]!.max! - 1 : 100_000}" step="1"`, t.max, 'car.')}</div>`}
       <div class="d-row"><span>Prix</span>${fld('data-e="price" step="250" min="0"', t.price, 'J')}</div>
       <div class="d-row"><span>Crédits TTS</span>${fld('data-e="credit_cost" min="0"', t.credit_cost, 'cr')}</div>
       <div class="d-row"><span>Attente du viewer</span>${fld('data-e="cooldown_seconds" step="15" min="0"', t.cooldown_seconds, 's')}</div>
-      <div style="display:flex;justify-content:space-between"><button type="button" class="d-btn ghost sm" data-split ${d.tiers.length >= 12 ? 'disabled' : ''}>${ic('plus')}Couper en deux</button><button type="button" class="d-btn bad sm" data-del ${d.tiers.length < 2 ? 'disabled' : ''}>Retirer</button></div></div>`;
+      <div style="display:flex;justify-content:space-between"><button type="button" class="d-btn ghost sm" data-split ${d.tiers.length >= 12 || (t.max !== null && t.max <= t.min) ? 'disabled' : ''}>${ic('plus')}Couper en deux</button><button type="button" class="d-btn bad sm" data-del ${d.tiers.length < 2 ? 'disabled' : ''}>Retirer</button></div></div>`;
     pop(b, html, (el) => {
       el.addEventListener('input', (e) => {
         const f = (e.target as HTMLInputElement).dataset.e as
           keyof Tier | undefined;
+        const lim = e.target as HTMLInputElement;
+        if (lim.dataset.limit !== undefined) {
+          const next = d.tiers[i + 1];
+          const v = Math.round(Number(lim.value));
+          if (v >= t.min && (!next?.max || v < next.max)) {
+            t.max = v;
+            clampLimits(d);
+            paintRule();
+          }
+        }
         if (f) {
           (t[f] as number) = Number((e.target as HTMLInputElement).value);
           paintRule();
@@ -533,9 +546,7 @@ export function mountTtsPage(root: HTMLElement) {
           paintRule();
         }
         if (x?.matches('[data-split]')) {
-          const mid = t.max
-            ? Math.max(t.min, Math.round((t.min + t.max) / 20) * 10)
-            : t.min + 200;
+          const mid = t.max ? Math.floor((t.min + t.max) / 2) : t.min + 200;
           d.tiers.splice(i, 0, { ...t, max: mid });
           clampLimits(d);
           el.hidePopover();

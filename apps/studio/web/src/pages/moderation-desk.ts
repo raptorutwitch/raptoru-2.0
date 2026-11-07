@@ -418,16 +418,26 @@ export function mountDesk(ctx: Ctx): View {
     const t = e.target as HTMLInputElement;
     const id = t.dataset.hsw;
     if (!id) return;
-    void saveSetting(`${id}.enabled`, t.checked ? 1 : 0).then(
-      () => {
+    void confirmBox({
+      title: t.checked ? 'Ouvrir ce module ?' : 'Fermer ce module ?',
+      body: 'Appliqué sur le Core de ce profil, pour les viewers.',
+      yes: t.checked ? 'Ouvrir' : 'Fermer',
+      no: 'Annuler',
+      danger: !t.checked,
+    }).then(async (yes) => {
+      if (!yes) {
+        t.checked = !t.checked;
+        return;
+      }
+      try {
+        await saveSetting(`${id}.enabled`, t.checked ? 1 : 0);
         toast(t.checked ? 'Ouvert aux viewers' : 'Fermé aux viewers');
         modChanged();
-      },
-      (err: Error) => {
+      } catch (err) {
         t.checked = !t.checked;
-        toast(err.message, { bad: true });
-      },
-    );
+        toast((err as Error).message, { bad: true });
+      }
+    });
   });
   el.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;

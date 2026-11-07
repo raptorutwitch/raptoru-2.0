@@ -7,6 +7,7 @@ import {
   run,
   seg,
   sw,
+  toast,
   type Page,
 } from '../ds/ds.js';
 import {
@@ -616,6 +617,8 @@ export function mountSources(
 
   const setTwitch = async (mode: TwitchState['mode']) => {
     if (mode === twitch?.mode) return;
+    if (twitch?.available === false)
+      return void toast('Indisponible dans ce profil.', { bad: true });
     if (
       mode === 'active' &&
       !(await confirmBox({

@@ -147,13 +147,25 @@ export function mountSettingsPanel(
     const s = key ? settings?.find((x) => x.key === key) : null;
     if (!box || !s) return;
     const value = box.checked ? 1 : 0;
-    void save(
-      null,
-      s.key,
-      value,
-      `${s.label} : ${value ? 'activé' : 'coupé'}`,
-      () => void save(null, s.key, 1 - value, `${s.label} rétabli`),
-    );
+    void confirmBox({
+      title: `${s.label} : ${value ? 'activer' : 'couper'} ?`,
+      body: 'Appliqué sur le Core de ce profil.',
+      yes: value ? 'Activer' : 'Couper',
+      no: 'Annuler',
+      danger: false,
+    }).then((yes) => {
+      if (!yes) {
+        box.checked = !box.checked;
+        return;
+      }
+      void save(
+        null,
+        s.key,
+        value,
+        `${s.label} : ${value ? 'activé' : 'coupé'}`,
+        () => void save(null, s.key, 1 - value, `${s.label} rétabli`),
+      );
+    });
   });
   return {
     async refresh() {

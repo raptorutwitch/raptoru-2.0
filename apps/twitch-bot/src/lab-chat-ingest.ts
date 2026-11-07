@@ -83,7 +83,9 @@ export function chatRole(
 ): 'broadcaster' | 'moderator' | 'viewer' {
   const sets = badgeSets(badges);
   if (sets.includes('broadcaster')) return 'broadcaster';
-  if (sets.includes('moderator')) return 'moderator';
+  // Twitch shows a Lead Moderator's badge INSTEAD of the moderator badge: they are a moderator all the same.
+  if (sets.includes('moderator') || sets.includes('lead_moderator'))
+    return 'moderator';
   return 'viewer';
 }
 
