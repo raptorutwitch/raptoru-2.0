@@ -147,7 +147,7 @@ export const when = (iso?: string | null) => {
 
 /** Les permissions accordées à un modérateur (mêmes noms que le Core, qui seul les vérifie). */
 export const PERMS: Record<string, readonly [string, string]> = {
-  wallet: ['Admin Wallet', 'Créditer ou débiter Jetons et crédits.'],
+  wallet: ['Portefeuilles (admin)', 'Créditer ou débiter Jetons et crédits.'],
   modules: ['Fermer un module', 'Passer un module en « Fermé ».'],
   globalPause: ['Pause globale', 'Refuser toutes les nouvelles interactions.'],
   perms: ['Gérer les permissions', 'Accorder ces permissions aux autres mods.'],
@@ -197,7 +197,7 @@ const ACTION: Record<string, string> = {
   note_add: 'Note',
   word_add: 'Mot ajouté',
   word_remove: 'Mot retiré',
-  wallet_adjust: 'Wallet admin',
+  wallet_adjust: 'Portefeuille ajusté (admin)',
   raffle_open: 'Tombola ouverte',
   raffle_close: 'Tombola fermée',
   raffle_draw: 'Tirage Tombola',
@@ -215,9 +215,9 @@ const ACTION: Record<string, string> = {
   scheduler_resume: 'Tombola · automatique repris',
   config_update: 'Réglages TTS',
   config_reset: 'Réglages TTS (origine)',
-  lab_wallet_set: 'Wallet de test défini',
-  lab_wallet_adjust: 'Wallet de test ajusté',
-  lab_wallet_reset: 'Wallet de test réinitialisé',
+  lab_wallet_set: 'Portefeuille de test défini',
+  lab_wallet_adjust: 'Portefeuille de test ajusté',
+  lab_wallet_reset: 'Portefeuille de test réinitialisé',
   sw_mode: 'Roue du Sub · mode',
   sw_draw_request: 'Roue du Sub · tirage demandé',
   sw_grant: 'Roue du Sub · tour accordé',
@@ -769,7 +769,7 @@ export function walletForm(
     ${fld('data-wa', s.amount, '', 'min="1" aria-label="Montant"')}
     <textarea class="d-area" data-wr style="min-height:48px" placeholder="Raison (ex. bug Soundboard)" maxlength="200">${esc(s.reason)}</textarea>
     <p class="d-note" data-res>${after()}</p>
-    <p class="d-note">Mouvement réel sur le Wallet de ce profil, tracé dans l’audit.</p>
+    <p class="d-note">Mouvement réel sur le portefeuille de ce profil, tracé dans l’audit.</p>
     <button type="button" class="d-btn pri" data-go>${sign > 0 ? 'Créditer' : 'Débiter'}</button>`;
   const el = pop(anchor, body(), undefined, { cls: 'd-form m-form' });
   el.addEventListener('input', (e) => {

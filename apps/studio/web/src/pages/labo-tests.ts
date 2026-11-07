@@ -337,7 +337,7 @@ export function mountTestLab(root: HTMLElement) {
 function mountPanel(p: DPage) {
   patch(
     p.state,
-    stateChip('', 'Sans Wallet, sans crédits, aucun message chat'),
+    stateChip('', 'Sans portefeuille, sans crédits, aucun message chat'),
   );
   p.actions.innerHTML = `<span data-z="all"></span>`;
   p.body.innerHTML = `<div class="tl"><div data-z="panel"><p class="d-note">Connexion au serveur Studio…</p></div>

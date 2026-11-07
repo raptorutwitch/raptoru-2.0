@@ -295,7 +295,7 @@ export function mountDesk(ctx: Ctx): View {
     if (!hosts.length) return;
     patch(
       strip('host', 'h'),
-      `<div class="ms-t">${ic('puzzle')}<b>Autres</b></div><p class="ms-hint">Modules du socle</p>`,
+      `<div class="ms-t">${ic('puzzle')}<b>Autres</b></div><p class="ms-hint" title="Les modules construits sur le socle commun (Coffre mystère…) : ouverts ou coupés ici, leur détail est dans Autres modules.">Modules du socle : ouvrir ou couper</p>`,
     );
     const dot = (h: (typeof hosts)[number]) =>
       h.status.intention === 'off'

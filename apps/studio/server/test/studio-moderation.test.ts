@@ -87,7 +87,7 @@ describe('la modération de Studio', () => {
   it('un refus de droits nomme la permission qui manque', () => {
     expect(
       modErr(new ApiError(403, 'forbidden', { grant: 'wallet' })),
-    ).toContain('Admin Wallet');
+    ).toContain('Portefeuilles (admin)');
     expect(
       modErr(new ApiError(403, 'forbidden', { permission: 'grant.sensitive' })),
     ).toContain('Sanctions sensibles');

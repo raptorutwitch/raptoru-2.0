@@ -51,7 +51,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'team', label: 'Équipe' },
   { id: 'words', label: 'Mots surveillés' },
   { id: 'others', label: 'Autres modules' },
-  { id: 'wallet', label: 'Wallet de test' },
+  { id: 'wallet', label: 'Portefeuille de test' },
 ];
 const KEYS = [
   ['/', 'Chercher un viewer'],

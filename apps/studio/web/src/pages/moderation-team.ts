@@ -37,7 +37,7 @@ const OPS: [string, [string, string][]][] = [
       ['refund', 'Rembourser en retirant une demande'],
       ['refund.manual', 'Remboursement manuel'],
       ['wallet.admin', 'Créditer ou débiter'],
-      ['wallet.lab', 'Wallet de test'],
+      ['wallet.lab', 'Portefeuille de test'],
     ],
   ],
   [
@@ -193,7 +193,7 @@ export function mountTeam(): View {
     if (add) {
       const yes = await confirmBox({
         title: `Nommer ${b.dataset.name} supermod ?`,
-        body: 'Un supermod a toutes les permissions : remboursements, Wallet, sanctions sensibles, pause globale.',
+        body: 'Un supermod a toutes les permissions : remboursements, portefeuilles, sanctions sensibles, pause globale.',
         yes: 'Nommer supermod',
         no: 'Annuler',
       });

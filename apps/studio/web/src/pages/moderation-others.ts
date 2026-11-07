@@ -233,7 +233,7 @@ export function mountLabWallet(): View {
     if (op === 'adjust') out[b.dataset.k!] = Number(b.dataset.n);
     if (op === 'reset') {
       const yes = await confirmBox({
-        title: 'Remettre ce Wallet de test à zéro ?',
+        title: 'Remettre ce portefeuille de test à zéro ?',
         body: 'Il revient aux valeurs par défaut du Lab.',
         yes: 'Remettre à zéro',
         no: 'Annuler',
@@ -243,7 +243,7 @@ export function mountLabWallet(): View {
     b.classList.add('is-busy');
     try {
       await postJson('/api/lab/wallet', out);
-      toast('Wallet de test mis à jour');
+      toast('Portefeuille de test mis à jour');
     } catch (e) {
       toast(modErr(e), { bad: true });
     }
