@@ -89,3 +89,41 @@ Production (aucune connexion).
 - Code mort à arbitrer : `moderation.ts`, `moderation.css`, `tts-config.ts`.
 - Modération à 1024 px : la 5e colonne des files demande un petit défilement horizontal.
 - Rien n'a tourné contre la vraie Production ; le badge de ta modératrice reste à confirmer.
+
+## Dernière correction ciblée (07/11, après la recette)
+
+Recette précédente validée, sauf Récompenses Twitch. Rien n'a changé dans le Core (contrats, droits, remboursements).
+
+| Lot | Commit | Vérifié |
+|---|---|---|
+| Récompenses Twitch refaite : galerie, fiche latérale (Twitch → actions Raptoru → test → demandes), fil des demandes | `db60c10` | navigateur sur le Lab à 1360 et 1024 (catalogue, fiche, ajout, test, interrupteur, détail d'une demande), tests de vues, E2E |
+| TTS : solde, prix, manque, « Créditer N Jetons à X » | `41bbd33` | navigateur sur le Lab (crédit puis achat débloqué) |
+
+**Récompenses.** Trois objets séparés à l'écran : la récompense sur Twitch (lue), les actions de Raptoru (la règle du Core,
+seule chose réglée), les demandes. Crédits TTS et Crédits Soundboard sont deux familles distinctes à l'écran (même action
+`credits` du Core). L'interrupteur d'une carte enregistre la même règle par la même route. Un brouillon non enregistré survit
+à la fermeture de la fiche. Aucune récompense réelle créée, modifiée ni supprimée ; le catalogue du Lab reste fictif.
+
+**Crédit TTS.** Passe par le portefeuille du Lab (`/v1/lab/wallet`), comme Modération → Portefeuille de test ; le Core de
+Production démarre sans ces routes (`labRoutes: false`) et la zone n'apparaît que sur le Core du Lab.
+
+**Halloween, vérifié sur le Core du Lab (`.lab-data`), réglages remis à l'identique ensuite.**
+
+| Situation | Follow | Sub | Prime | Resub | Subgift | Bits, Raid |
+|---|---|---|---|---|---|---|
+| Profil OFF, familles Auto | habituelle | Eren | Eren | Eren | habituelle | habituelles |
+| Profil OFF, Ballons changés (Sub 2, Prime 3, Resub 1-4) | — | Eren | Eren | Eren | — | — |
+| Profil ON, Auto | Miss Minute | Ballon 2 | Ballon 3 | Ballon 1 ou 4 | Halloween 5 | habituelles |
+| Profil ON, Follow « Habituelle », Sub « Off » | habituelle | aucune | Ballon 3 | — | — | — |
+| Profil OFF, Follow forcé « Halloween » | Miss Minute | Eren | — | — | — | — |
+| Réactivation (ON, Auto) | Miss Minute | Ballon 2 | — | — | Halloween 5 | — |
+
+Les Ballons se règlent profil coupé et ne jouent pas tant qu'il l'est ; chaque variante Halloween porte l'habituelle en
+secours ; « Raid forcé Halloween » est refusé (`no_halloween_variant`). Seule trace : les familles Sub, Resub et Subgift sont
+maintenant écrites « Auto » au lieu d'absentes (même comportement). Les 42 alertes de test ont été retirées de la file.
+
+**Raid Titan.** `Documents\Twitch\Alertes\Raid` contient `Titan Avi 4.avi` (le master) et `Raptoru_Alerte_Raid_Sound.mp3`
+(identique octet pour octet à la copie stockée). La WebM historique en est tirée : 1920 × 1080, 12 i/s, 239 images des deux
+côtés, transparence identique image par image (ffmpeg, PSNR alpha infini), même image à l'œil. **Pas de reconstruction
+nécessaire**, aucun fichier produit. Import dans le Lab depuis « Copie du Studio installé » : 29 sur 29, empreinte identique,
+original du Studio installé inchangé (daté du 16/10) ; aperçu Alertes → Raid : vidéo et MP3 sur la frise, fond transparent.

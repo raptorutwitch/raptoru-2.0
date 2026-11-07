@@ -1,25 +1,37 @@
-# Recette finale dans Electron (environ 30 minutes)
+# Recette : dernière correction ciblée (environ 15 minutes)
 
 Studio installé fermé, Docker démarré, puis dans `studio-ux` : `npm run studio:lab`. Rien ne parle à Twitch, OBS, Spotify ni
-StreamElements réels. Fermer la fenêtre arrête tout (serveur, Core du Lab) en quelques secondes.
+StreamElements réels. Fermer la fenêtre arrête tout. La recette précédente (retour arrière, Tombola, Modération…) est validée.
 
-1. **Retour arrière.** Laboratoire → une porte (TTS…) → bouton ‹ en haut de la barre latérale, puis › . Essaie Alt + ← et le bouton
-   « précédent » de la souris. Recliquer la page affichée n'ajoute rien à l'historique.
-2. **Ballons Halloween.** Alertes → Sub. Ton Lab n'a que l'Araignée dans le tirage : sa case est grisée, l'infobulle explique pourquoi.
-   Coche un autre Ballon, décoche l'Araignée, change de page, reviens : le choix tient. Le texte sépare le profil Halloween (coupé) du
-   tirage enregistré.
-3. **Médias.** Alertes → Réglages → Médias : la ligne `Raid Titan.webm` dit d'où il vient. Importe-le depuis « Copie du Studio installé »
-   (29 sur 29). Alertes → Bits → Son : « aucun fichier son » (la vidéo des Bits n'en a jamais eu).
-4. **TTS.** Écris un message long : le prix suit, le menu des viewers montre chaque solde. Choisis un viewer pauvre : « pas assez »
-   s'affiche, l'achat refusé le dit en clair. « Tous +50 000 », puis deux achats par deux viewers. Clique un message en file : le détail
-   s'ouvre, rien n'est retiré sans un bouton explicite.
-5. **Tombola.** Une manche complète. Au résultat : « Fermer le résultat » revient à la préparation ; sinon le retour se fait seul après une
-   minute. Rien n'est repayé. Réglages : sections repliables, la recherche les ouvre. Son d'ouverture : vide dans le Lab (normal, voir
-   FINALISATION.md) ; importe un son pour l'entendre via la source OBS du Lab, jamais dans Studio.
-6. **Modération.** Files : des colonnes courtes quand elles sont presque vides. Équipe : pas de défilement latéral. « Portefeuille de test ».
-7. **Récompenses.** Catalogue fictif, puis « Crédit Soundboard » : en haut la récompense sur Twitch, dessous ce que fait Raptoru, à droite les
-   demandes. La ligne d'état dit « Twitch : fictif (Lab) ».
-8. **Simulation.** « Agir en tant que » en haut à droite. Envoie un Follow : il s'inscrit sous les boutons, avec un lien vers Alertes.
-9. **Tour rapide** à 1024 × 768 : Activité (début et fin de live notés « Live »), Communauté, Système.
+## 1. Récompenses Twitch (page refaite)
 
-Dis-moi aussi si ta modératrice a le badge **Lead Moderator**.
+1. **Parcourir.** La page montre une carte par récompense : tuile avec le coût en points et l’icône de ce qu’elle déclenche,
+   « Achetable » ou « En pause sur Twitch », les actions de Raptoru en pastilles, l’heure de la dernière demande. Filtres en
+   haut (Toutes, Reliées, Sans action, Coupées, Indisponibles sur Twitch), recherche par nom. Le fil des demandes reste à droite.
+2. **Interrupteur général.** Coupé : un bandeau ambre le dit au-dessus des cartes (« Activer… » demande confirmation).
+3. **Couper une récompense.** L’interrupteur d’une carte coupe ou rallume ses actions Raptoru, avec « Annuler » dans la
+   notification. Rien ne change sur Twitch.
+4. **La fiche.** Clique la carte « Crédit Soundboard ». Le panneau latéral montre dans l’ordre : la récompense sur Twitch
+   (lue, jamais modifiée), « rachetée, elle déclenche », puis l’action **Crédits Soundboard** avec son nombre. « Ajouter une
+   action » propose des tuiles par famille : **Crédits TTS** et **Crédits Soundboard** sont deux choix séparés.
+   Ajoute une action, ferme le panneau sans enregistrer : la carte affiche « Pas enregistrée », la fiche la reprend.
+5. **Tester.** Dans la fiche, la liste dit ce que le test fera vraiment (« à blanc », « RÉEL »), puis « Tester » → « Exécuter ».
+   La demande apparaît dans la fiche et dans le fil.
+6. **Une demande.** Clique une ligne du fil : qui, quelle récompense, ce que Raptoru a fait action par action, la règle de
+   remboursement, et « Voir la fiche ».
+
+## 2. TTS : créditer un viewer fictif
+
+Écris un long message, choisis un viewer pauvre (le menu montre les soldes). Sous le menu : solde, prix du message et
+« Il manque … ». « Simuler l’achat » attend ; le bouton ambre « Créditer 50 000 Jetons à … » le débloque en un clic.
+« Préparer les 5 viewers » réarme un scénario à plusieurs. Cette zone n’existe que dans le Lab.
+
+## 3. Halloween (vérifié sur le Core du Lab, voir FINALISATION.md)
+
+Alertes → Sub : les Ballons se règlent même profil Halloween coupé. Simulation → Follow et Sub : alertes habituelles.
+Active le profil Halloween (Alertes → Réglages) : Follow et Sub passent en Halloween. Recoupe-le en fin d’essai.
+
+## 4. Raid Titan
+
+Alertes → Réglages → Médias : ligne « Copie du Studio installé » → Importer (29 sur 29). Alertes → Raid : la vidéo joue avec
+son MP3, fond transparent.
