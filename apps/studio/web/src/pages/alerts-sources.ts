@@ -373,10 +373,16 @@ export interface ImportReport {
   where: string;
 }
 
+/** D'où vient un média dont le nom ne se retrouve pas dans les dossiers (diagnostic du 07/11, FINALISATION.md). */
+const ORIGIN: Record<string, string> = {
+  'Raid Titan.webm':
+    'Fabriqué le 16/10 depuis « Titan Avi 4.avi » (Documents\\Twitch\\Alertes\\Raid), converti en WebM transparent : il n’existe que dans la copie du Studio installé. « Alerte Titan DERNIERE FINALE » est un autre média.',
+};
 const whyMissing = (x: MediaEntry) => {
-  if (x.found_in?.length) return `Trouvé : ${x.found_in.join(', ')}.`;
-  if (x.name === 'Raid Titan.webm')
-    return 'Absent des dossiers : il se fabrique depuis « Titan Avi 4.avi ». Utilise la copie du Studio installé, ou l’outil d’import.';
+  const origin = ORIGIN[x.name] ? ` ${ORIGIN[x.name]}` : '';
+  if (x.found_in?.length)
+    return `Trouvé : ${x.found_in.join(', ')}.${origin}${x.found_in.every((f) => /Studio install/i.test(f)) ? ' Importe-le avec le bouton de la ligne « Copie du Studio installé ».' : ''}`;
+  if (origin) return `${origin.trim()} Importe-le depuis la copie du Studio installé.`;
   return 'Introuvable ici. Indique le dossier qui le contient, ou remplace-le depuis l’aperçu.';
 };
 
