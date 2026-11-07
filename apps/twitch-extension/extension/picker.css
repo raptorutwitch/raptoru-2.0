@@ -333,6 +333,7 @@ html body.component-view .rl-picker__glyph { font-size: 25px; }
   position: absolute;
   z-index: 3;
   display: grid;
+  /* Default size; emote-picker.js sizes it from the hovered cell (40 %, 24 px at most). */
   width: 24px;
   height: 24px;
   place-items: center;
@@ -343,7 +344,7 @@ html body.component-view .rl-picker__glyph { font-size: 25px; }
   opacity: .45;
   transition: opacity .12s ease, transform .12s ease, filter .12s ease;
 }
-.rl-picker__star svg { width: 17px; height: 17px; overflow: visible; pointer-events: none; }
+.rl-picker__star svg { width: 72%; height: 72%; max-width: 17px; max-height: 17px; overflow: visible; pointer-events: none; }
 .rl-picker__star path {
   fill: transparent;
   stroke: rgba(244, 238, 255, .75);

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import type {
   SoundLabAckRequest,
   SoundLabAdmitRequest,
@@ -393,6 +394,14 @@ export class SoundLabService {
   }
 
   /** Throws the precise reason when no fresh Studio with a live player can play a sound now. */
+  /** A Studio reported a ready player recently: what admission requires (presentation only, assertReady decides). */
+  async playerReady(): Promise<boolean> {
+    return this.assertReady(this.db).then(
+      () => true,
+      () => false,
+    );
+  }
+
   private async assertReady(q: Queryable, studioId: string | null = null) {
     const since = new Date(
       this.clock.now().getTime() - SOUND_LAB_RULES.heartbeatFreshMs,
@@ -497,6 +506,11 @@ export class SoundLabService {
         throw new SoundLabError409(
           'soundboard_paused',
           'Soundboard paused by moderation',
+        );
+      if (!(await liveForPaid(q, this.economy)))
+        throw new SoundLabError409(
+          STREAM_OFFLINE,
+          'Soundboard only during the live',
         );
       if (
         await activeBlock(q, req.channel_id, req.viewer.id, 'soundboard', now)

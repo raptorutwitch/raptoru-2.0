@@ -5,6 +5,7 @@ import {
   type SoundLabSound,
   type TtsLabViewerState,
 } from '@raptoru/schemas';
+import { moduleFacade } from '@raptoru/schemas';
 import type { SoundWorker } from '../sound-lab/worker.js';
 import type { TtsWorker } from '../tts-lab/worker.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
@@ -257,6 +258,9 @@ export class LabEbs {
   private bonkWorker: BonkWorker | null = null;
   /** Core's salve bounds (Bonk lot 5), read once from Core and shown by the chargeur; null until known. */
   private bonkVolley: Json | null = null;
+  /** The price Core charges for a Bonk now (module settings), re-read at most once a second; null until known. */
+  private bonkCost: number | null = null;
+  private bonkRulesAt = 0;
   private viewerAuth: ViewerAuth | null = null;
   private thirdPartyCatalog:
     ((refresh?: boolean) => Promise<BonkLabThirdPartyCatalog>) | null = null;
@@ -1033,11 +1037,24 @@ export class LabEbs {
     if (this.bonkWorker && (path === '/session' || path.startsWith('/emotes')))
       // Never forced from the extension: Core caches the public catalogs 10 min.
       await this.refreshThirdParty();
-    if (this.bonkWorker && !this.bonkVolley && path === '/session')
-      this.bonkVolley = await this.bonkWorker
+    if (
+      this.bonkWorker &&
+      // The extension's reads (first session, then its polling): a Studio price change shows while Bonk is open.
+      ['/session', '/state'].includes(path.split('?')[0]!) &&
+      Date.now() - this.bonkRulesAt >= 1000
+    ) {
+      this.bonkRulesAt = Date.now();
+      // Core not ready: the last known values stay (no Auto and the demo price until first known).
+      await this.bonkWorker
         .rules()
-        .then((r) => r.volley as Json)
-        .catch(() => null); // Core not ready: the chargeur shows no Auto until known
+        .then((r) => {
+          this.bonkVolley = r.volley as Json;
+          this.bonkCost = Number.isFinite(Number(r.cost))
+            ? Number(r.cost)
+            : null;
+        })
+        .catch(() => undefined);
+    }
 
     // Bonk Lab with a connected Twitch account: the viewer role IS that account (user_id = token
     // owner), like a real Twitch JWT would say. Other roles keep their fictitious identities.
@@ -1181,6 +1198,25 @@ export class LabEbs {
         headers.idempotencyKey,
       );
       if (out) return out;
+    }
+    // The module host (architecture socle): the SAME door as the Production façade (@raptoru/schemas moduleFacade).
+    if (this.labCore && path.startsWith('/modules/v3')) {
+      const out = await moduleFacade({
+        call: this.labCore,
+        channelId: LAB_CHANNEL.id,
+        method,
+        path,
+        body,
+        viewer: caller.identityShared
+          ? {
+              id: caller.identity.twitchUserId,
+              display_name: caller.identity.displayName,
+            }
+          : null,
+        idempotencyKey: headers.idempotencyKey,
+        moderator: this.labActor(caller),
+      });
+      if (out) return { status: out.status, body: out.body as Json };
     }
     // Roue du Sub V2 (R8): the viewer's own tours, the team's actions — the caller's verified identity, Core decides.
     if (this.labCore && path.startsWith('/sub-wheel/')) {
@@ -2030,6 +2066,8 @@ export class LabEbs {
             description: 'Bonk OBS Lab · coût simulé, aucun débit',
             // Salves (lot 5): Core's bounds; absent until read (the chargeur then offers no Auto).
             ...(this.bonkVolley ? { volley: this.bonkVolley } : {}),
+            // The price Core charges (a Studio change shows at the next read), never a price of its own.
+            ...(this.bonkCost !== null ? { token_cost: this.bonkCost } : {}),
           }
         : m.id === 'soundboard' && this.soundWorker
           ? // Soundboard Lab: the Core catalog with its live state, simulated payment.

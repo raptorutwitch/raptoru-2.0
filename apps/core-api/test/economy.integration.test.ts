@@ -2,6 +2,7 @@
 // transaction and cannot prove the locks): Core Wallet debit + Bonk admission in one transaction.
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
+import { openCanonicalLive } from './live.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   BONK_LAB_RULES,
@@ -42,6 +43,8 @@ describe.skipIf(!isLocal)('Core Wallet + admission on a real Postgres', () => {
   /** Two Core instances (two pools) on the same database, like a rolling restart. */
   async function twoCores(viewerId: string, funds: number) {
     const clock = new FakeClock(new Date());
+    // Refonte H1: the paid stream interactions need the canonical live, opened here as Twitch would.
+    await openCanonicalLive(pool(), clock);
     const services = [pool(), pool()].map(
       (db) =>
         new BonkLabService(

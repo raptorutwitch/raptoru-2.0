@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { openCanonicalLive } from './live.js';
 import type { LabActor, LabModerationCommand } from '@raptoru/schemas';
 import {
   BONK_LAB_RULES,
@@ -23,6 +24,7 @@ let seq = 0;
 
 async function canonical() {
   const core = await setup();
+  await openCanonicalLive(core.db, core.clock);
   const port = coreWalletEconomy(core.wallet.wallet);
   /** A fresh set of services on the same database (a Core restart). */
   const services = () => {
@@ -429,8 +431,179 @@ describe('Lab economy unchanged (regression)', () => {
         delta: 100,
         reason: 'test',
       } as LabModerationCommand,
+      idempotency_key: 'test-intent-lab-0001',
     });
     expect((await mod.wallet(CH, V.id)).tokens).toBe(before.tokens + 100);
     expect(await count(core.db, 'wallet_transactions')).toBe(0);
+  });
+});
+
+describe('Refonte H1: paid stream interactions only during the canonical live', () => {
+  const offline = async () => {
+    const f = await canonical();
+    await f.core.streams.offline();
+    await f.fund(100_000);
+    return f;
+  };
+  it('offline: TTS, Soundboard, Bonk refused BEFORE any debit (stream_offline); nothing stored', async () => {
+    const f = await offline();
+    const before = await count(f.core.db, 'wallet_transactions');
+    expect(
+      await code(
+        f.s.tts.admit({
+          ...f.base,
+          idempotency_key: 'h1-tts',
+          text: 'Salut',
+          payment_method: 'tokens',
+        }),
+      ),
+    ).toBe('stream_offline');
+    expect(
+      await code(
+        f.s.sound.admit({
+          ...f.base,
+          idempotency_key: 'h1-sound',
+          sound_id: 'boop',
+          payment_method: 'tokens',
+        }),
+      ),
+    ).toBe('stream_offline');
+    expect(
+      await code(
+        f.s.bonk.admit({
+          ...f.base,
+          idempotency_key: 'h1-bonk',
+          emote: f.emote('😀'),
+        }),
+      ),
+    ).toBe('stream_offline');
+    expect(await f.balance()).toBe(100_000);
+    expect(await count(f.core.db, 'wallet_transactions')).toBe(before);
+    await consistent(f.core.db);
+  });
+  it('offline → online: accepted and paid once; the same request replayed stays one debit; online again (same live) changes nothing', async () => {
+    const f = await offline();
+    await openCanonicalLive(f.core.db, f.core.clock, 'test-live-2');
+    await openCanonicalLive(f.core.db, f.core.clock, 'test-live-2'); // event received twice
+    const req = {
+      ...f.base,
+      idempotency_key: 'h1-tts-live',
+      text: 'Salut',
+      payment_method: 'tokens' as const,
+    };
+    const { interaction } = await f.s.tts.admit(req);
+    await f.s.tts.admit(req);
+    expect(await f.balance()).toBe(100_000 - interaction.simulated_cost);
+    await consistent(f.core.db);
+  });
+  it('online → offline: a message already admitted keeps its normal life (never refused afterwards); new ones refused', async () => {
+    const f = await offline();
+    await openCanonicalLive(f.core.db, f.core.clock, 'test-live-3');
+    const { interaction } = await f.s.tts.admit({
+      ...f.base,
+      idempotency_key: 'h1-before-end',
+      text: 'Salut',
+      payment_method: 'tokens',
+    });
+    await f.core.streams.offline();
+    const after = await f.s.tts.get(interaction.interaction_id);
+    expect(after.status).toBe('queued');
+    expect(
+      await code(
+        f.s.tts.admit({
+          ...f.base,
+          idempotency_key: 'h1-after-end',
+          text: 'Salut',
+          payment_method: 'tokens',
+        }),
+      ),
+    ).toBe('stream_offline');
+  });
+  it('the Lab test wallet is never gated (tests stay possible in an isolated Lab)', async () => {
+    const core = await setup();
+    const tts = new TtsLabService(core.db, core.clock, Math.random);
+    await tts.heartbeat({ studio_instance_id: STUDIO, player_ready: true });
+    expect(
+      await code(
+        tts.admit({
+          channel_id: CH,
+          viewer: V,
+          lab_session_id: 'lab-1',
+          idempotency_key: 'h1-lab',
+          text: 'Salut',
+          payment_method: 'tokens',
+        }),
+      ),
+    ).toBe('ok');
+  });
+});
+
+describe('Refonte H12: Bonk price and delay from the module settings', () => {
+  const withSettings = async () => {
+    const f = await canonical();
+    const { ModuleSettings } =
+      await import('../src/module-settings/service.js');
+    const settings = new ModuleSettings(f.core.db, f.core.clock);
+    f.s.bonk.settings = settings;
+    await f.fund(100_000);
+    return { f, settings };
+  };
+  it('default = the price applied today (200); a new price is really debited (single and per shot of a salve)', async () => {
+    const { f, settings } = await withSettings();
+    await f.s.bonk.admit({
+      ...f.base,
+      idempotency_key: 'p-1',
+      emote: f.emote('😀'),
+    });
+    expect(await f.balance()).toBe(100_000 - 200);
+    await settings.set(CH, 'bonk.price', 350, 'test');
+    await f.s.bonk.admit({
+      ...f.base,
+      idempotency_key: 'p-2',
+      emote: f.emote('😀'),
+    });
+    expect(await f.balance()).toBe(100_000 - 200 - 350);
+    await f.s.bonk.admitVolley({
+      ...f.base,
+      idempotency_key: 'p-3',
+      emotes: [f.emote('😀'), f.emote('😀')],
+      cadence_ms: 200,
+    });
+    expect(await f.balance()).toBe(100_000 - 200 - 350 - 700);
+    await consistent(f.core.db);
+  });
+  it('delay between two purchases of a viewer: refused before payment inside it, accepted after; a salve is one purchase', async () => {
+    const { f, settings } = await withSettings();
+    await settings.set(CH, 'bonk.cooldown_s', 30, 'test');
+    await f.s.bonk.admitVolley({
+      ...f.base,
+      idempotency_key: 'c-1',
+      emotes: [f.emote('😀'), f.emote('😀'), f.emote('😀')],
+      cadence_ms: 200,
+    });
+    const after = await f.balance();
+    f.core.clock.advance(8_000);
+    await f.ready(); // Studio still there (fresh heartbeat)
+    expect(
+      await code(
+        f.s.bonk.admit({
+          ...f.base,
+          idempotency_key: 'c-2',
+          emote: f.emote('😀'),
+        }),
+      ),
+    ).toBe('bonk_cooldown');
+    expect(await f.balance()).toBe(after);
+    f.core.clock.advance(22_001);
+    await f.ready();
+    expect(
+      await code(
+        f.s.bonk.admit({
+          ...f.base,
+          idempotency_key: 'c-3',
+          emote: f.emote('😀'),
+        }),
+      ),
+    ).toBe('ok');
   });
 });

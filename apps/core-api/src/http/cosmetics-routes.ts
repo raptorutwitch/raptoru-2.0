@@ -110,7 +110,8 @@ export function cosmeticsRoutes(
     {
       // The stylesheet on Studio's own channel too (the installed Studio may only call /v1/studio/*).
       method: 'GET',
-      pattern: admin('/style.json'),
+      // Without its extension too: the cockpit's paths carry no dot.
+      pattern: admin('/style(?:\\.json)?'),
       auth,
       handle: async () => ({ css: COSMETICS_CSS }),
     },

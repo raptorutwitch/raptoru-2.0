@@ -112,6 +112,79 @@ export function donationSizes(pseudo, title, message) {
 /** Legacy gift counter: 0 → N in min(1 500, 650 + 18 × N) ms (ease-out cubic). */
 export const giftCounterDuration = (count) => Math.min(1500, 650 + count * 18);
 
+/**
+ * Studio › Alertes (06/11/2026): the transitions a variant may get in place of its style's own animation, saved per variant
+ * with its placement. `cut` = no animation. Offsets in stage pixels, the same in the OBS source and the preview.
+ */
+export const FX_KINDS = [
+  'cut',
+  'fade',
+  'rise',
+  'drop',
+  'left',
+  'right',
+  'zoom',
+];
+
+/** Web Animations frames of a transition: opacity alone (replaces), transform added to the element's own (centring). */
+export function fxFrames(kind, phase) {
+  if (!FX_KINDS.includes(kind) || kind === 'cut') return null;
+  const enter = phase === 'enter';
+  const opacity = enter ? [0, 1] : [1, 0];
+  const dy = { rise: 40, drop: -40 }[kind] * (enter ? 1 : -1);
+  const away = {
+    rise: `translate(0px, ${dy}px)`,
+    drop: `translate(0px, ${dy}px)`,
+    left: 'translate(-90px, 0px)',
+    right: 'translate(90px, 0px)',
+    zoom: 'scale(0.82)',
+  }[kind];
+  if (!away) return { opacity, transform: null };
+  const rest = kind === 'zoom' ? 'scale(1)' : 'translate(0px, 0px)';
+  return { opacity, transform: enter ? [away, rest] : [rest, away] };
+}
+
+/** When the alert stops by itself (ms, 0 = unknown): what a media exit is counted back from. */
+export const alertEndMs = (v) =>
+  v.duration ? v.duration + 300 : v.loop ? 0 : (v.mediaMs ?? 0);
+
+const num = (n) => Number.isFinite(n);
+
+/**
+ * The variant as the look saved in Studio plays it: only what the look sets changes, and neither the alert's length nor its
+ * media (a frozen variant stays frozen, Core's lease still holds).
+ */
+export function withLook(v, look) {
+  if (!look) return v;
+  const out = { ...v, fx: {} };
+  for (const k of ['textEnter', 'textExit', 'mediaEnter', 'mediaExit'])
+    if (FX_KINDS.includes(look[k]?.kind))
+      out.fx[k] = {
+        kind: look[k].kind,
+        ms: Math.max(0, Number(look[k].ms) || 0),
+      };
+  if (num(look.showAt)) out.showAt = look.showAt;
+  if (num(look.hideAt)) {
+    // A zone's own fade keeps its length, ending at the new time.
+    if (num(v.fadeOutAt))
+      out.fadeOutAt = look.hideAt - (v.hideAt - v.fadeOutAt);
+    out.hideAt = look.hideAt;
+  }
+  if (v.text && typeof look.text === 'string' && look.text.trim())
+    out.text = look.text;
+  if (v.subtitles && Array.isArray(look.subtitles))
+    out.subtitles = v.subtitles.map((s, i) => ({ ...s, ...look.subtitles[i] }));
+  if (num(look.volume)) out.volume = look.volume;
+  // Its own media transition replaces the variant's fade on that side.
+  if (v.videoFade && (out.fx.mediaEnter || out.fx.mediaExit))
+    out.videoFade = {
+      ...v.videoFade,
+      ...(out.fx.mediaEnter ? { in: 0 } : {}),
+      ...(out.fx.mediaExit ? { outAt: undefined } : {}),
+    };
+  return out;
+}
+
 /** Default fade before hideAt when a zone variant has no fadeOutAt (legacy: gifts 220 ms, bits 350 ms). */
 const FADE_BEFORE_HIDE = {
   'pseudo-subgift': 220,
@@ -128,17 +201,25 @@ export function schedule(v) {
   const add = (at, action, extra = {}) => {
     if (Number.isFinite(at)) steps.push({ at, action, ...extra });
   };
+  /** A transition of its own: it ends at `end`, where the block is cleared. */
+  const leave = (end, step, clear, extra) => {
+    if (exit.kind !== 'cut') add(end - exit.ms, step, extra);
+    add(end, clear, extra);
+  };
+  const exit = v.fx?.textExit;
   switch (v.textStyle) {
     case 'pseudo-classic':
     case 'pseudo-dofus':
       if (v.text) {
         add(v.showAt, 'text-show');
-        add(v.hideAt, 'text-hide');
+        if (exit) leave(v.hideAt, 'text-exit', 'text-clear');
+        else add(v.hideAt, 'text-hide');
       }
       break;
     case 'eren-subs':
       (v.subtitles ?? []).forEach((s, index) => {
         add(s.showAt, 'subtitle-show', { index });
+        if (exit) return leave(s.hideAt, 'subtitle-exit', 'subtitle-clear');
         add(Math.max(s.showAt, s.hideAt - 350), 'subtitle-tremble', { index });
         add(s.hideAt, 'subtitle-out', { index });
       });
@@ -147,15 +228,26 @@ export function schedule(v) {
     case 'pseudo-bits':
     case 'pseudo-zone':
       add(v.showAt, 'text-show');
-      add(v.fadeOutAt ?? v.hideAt - FADE_BEFORE_HIDE[v.textStyle], 'text-fade');
-      add(v.hideAt, 'text-clear');
+      if (exit) leave(v.hideAt, 'text-exit', 'text-clear');
+      else {
+        add(
+          v.fadeOutAt ?? v.hideAt - FADE_BEFORE_HIDE[v.textStyle],
+          'text-fade',
+        );
+        add(v.hideAt, 'text-clear');
+      }
       break;
     case 'pseudo-don':
       add(v.showAt, 'text-show');
-      add(v.hideAt, 'text-hide');
+      if (exit) leave(v.hideAt, 'text-exit', 'text-clear');
+      else add(v.hideAt, 'text-hide');
       if (v.videoFade) add(v.videoFade.outAt, 'video-fade-out');
       break;
   }
+  const mediaExit = v.fx?.mediaExit;
+  const end = alertEndMs(v);
+  if (mediaExit && mediaExit.kind !== 'cut' && end > 0)
+    add(end - mediaExit.ms, 'video-exit');
   return steps.sort((a, b) => a.at - b.at);
 }
 

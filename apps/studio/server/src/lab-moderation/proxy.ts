@@ -52,6 +52,10 @@ const PREFIXES = [
   // Halloween « Titres » in the Extension Lab: the shop's catalogue, a viewer's side and the purchase (Lab Core).
   '/v1/cosmetics/catalog',
   '/v1/site/cosmetics/',
+  // Réglages H10 / H12 / H14 (bounded module settings, Daily steps) and the module host (architecture socle).
+  '/v1/lab/module-settings/',
+  '/v1/lab/daily/',
+  '/v1/lab/modules/',
 ];
 
 /** Local Lab Core only, moderation / wallet / TTS rules / Tombola / Lab chat routes only. */
@@ -222,6 +226,10 @@ export function labProxy(d: LabProxyDeps) {
         const out = await d.core(`/v1/lab/moderation/${C}/actions`, {
           actor: STUDIO_ACTOR,
           command: body.command as LabModerationCommand,
+          // Refonte P0-2: the console's intent key goes to Core, which applies a money action once per key.
+          ...(typeof body.idempotency_key === 'string'
+            ? { idempotency_key: body.idempotency_key }
+            : {}),
         });
         d.onChange?.();
         reply(200, out);

@@ -1,0 +1,448 @@
+/* TTS : la scène, la file, la règle des prix. */
+.tts {
+  display: grid;
+  grid-template-columns: minmax(0, 2.7fr) minmax(250px, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px 20px;
+  height: 100%;
+  min-height: 620px;
+}
+.tts-voice {
+  min-width: 0;
+}
+.tts-voice .d-scn {
+  width: min(100%, (100vh - 360px) * 16 / 9);
+  --vf-o: 0;
+}
+.tts-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--ink2);
+}
+.tts-hint b {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 15px;
+}
+.tts-trans {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  min-width: 0;
+}
+.tts-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.tts-who b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tts-sub {
+  margin: 6px 0 0;
+  min-height: 21px;
+  font: 500 15px/21px var(--text);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tts-sub.is-spoken .tts-w {
+  color: var(--ink3);
+  transition: color 0.16s;
+}
+.tts-sub.is-spoken .tts-w.is-said {
+  color: var(--ink);
+}
+.tts-time {
+  font: 500 13.5px var(--num);
+  color: var(--ink2);
+  white-space: nowrap;
+}
+
+.tts-q {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.tts-qhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 30px;
+  margin-bottom: 4px;
+}
+.tts-qlist {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -6px;
+  padding: 0 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+}
+.tts-qfoot:empty {
+  display: none;
+}
+.tts-qfoot {
+  padding-top: 6px;
+}
+.tts-r {
+  position: relative;
+  border-radius: 10px;
+  transition: background 0.12s;
+}
+.tts-r:hover {
+  background: var(--fill0);
+}
+.tts-r__m {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 0 10px;
+  align-items: center;
+  width: 100%;
+  padding: 7px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.tts-r__m .d-pp {
+  grid-row: span 2;
+}
+.tts-r__m b {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tts-r__m small {
+  color: var(--ink3);
+  font: 500 12.5px var(--num);
+  white-space: nowrap;
+}
+.tts-r__m p {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tts-r__m mark {
+  background: none;
+  color: var(--amber);
+}
+.tts-r__x {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  background: var(--raise2);
+}
+.tts-r:hover .tts-r__x,
+.tts-r__x:focus-visible {
+  opacity: 1;
+}
+.tts-r.past .tts-r__m {
+  opacity: 0.66;
+}
+.tts-r.past:hover .tts-r__m {
+  opacity: 1;
+}
+
+.tts-tarif {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 180px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hair);
+}
+.tts-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-height: 32px;
+  min-width: 0;
+}
+.tts-try {
+  display: grid;
+  gap: 8px;
+}
+.tts-ways {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.tts-way {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+}
+.tts-way .d-lb {
+  flex: 1 1 100%;
+}
+.tts-way[hidden] {
+  display: none;
+}
+.tts-bal {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink2);
+}
+.tts-bal b {
+  color: var(--ink);
+}
+.tts-sum {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+.tts-bal .tts-short,
+.tts-bal .tts-short b {
+  color: var(--amber);
+}
+.tts-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--teal);
+}
+/* Le manque, et l'action qui le comble, juste au-dessus du bouton d'achat. */
+.tts-need {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--amber-l);
+  border-radius: 8px;
+  background: var(--amber-a);
+  color: var(--ink);
+  font-size: 13px;
+}
+.tts-need > span {
+  flex: 1 1 200px;
+}
+.tts-tools {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tts-way > .d-btn:last-child {
+  margin-left: auto;
+}
+.tts-way .tts-cast:has([data-viewer]) {
+  min-width: 190px;
+}
+.tts-tryin {
+  flex: 1;
+  min-width: 180px;
+  height: 32px;
+}
+.tts-tryin input {
+  margin-left: 7px;
+  font-size: 13.5px !important;
+}
+.tts-cast {
+  height: 32px;
+  width: 118px;
+  flex: none;
+}
+.tts-cast select {
+  color: var(--ink);
+}
+.tts-read {
+  display: flex;
+  gap: 14px;
+  white-space: nowrap;
+  color: var(--ink2);
+}
+.tts-read b {
+  font: 600 15px var(--num);
+  color: var(--ink);
+}
+.tts-rule {
+  position: relative;
+  flex: 1;
+  min-height: 96px;
+  max-height: 170px;
+  margin-bottom: 20px;
+  user-select: none;
+  box-shadow: 0 1px 0 var(--hair2);
+  touch-action: none;
+}
+.tts-seg {
+  position: absolute;
+  bottom: 0;
+  height: var(--hp);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    height 0.22s var(--e),
+    filter 0.12s;
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--teal) var(--a), transparent),
+    color-mix(in srgb, var(--teal) calc(var(--a) * 0.35), transparent)
+  );
+  box-shadow: inset 0 1.5px 0
+    color-mix(in srgb, var(--teal) calc(var(--a) * 3), transparent);
+  text-align: left;
+  overflow: hidden;
+}
+.tts-seg:hover {
+  filter: brightness(1.25);
+}
+.tts-seg.hit {
+  --a: 30% !important;
+}
+.tts-seg b {
+  font: 600 17px var(--num);
+  white-space: nowrap;
+}
+.tts-seg span {
+  color: var(--ink2);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.tts-lim {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: 13px;
+  margin-left: -7px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: ew-resize;
+}
+.tts-lim::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--hair3);
+  transition: background 0.12s;
+}
+.tts-lim:hover::before,
+.tts-lim.drag::before,
+.tts-lim:focus-visible::before {
+  background: var(--teal);
+}
+.tts-lim span {
+  position: absolute;
+  left: 50%;
+  bottom: -19px;
+  translate: -50% 0;
+  font: 500 12.5px var(--num);
+  color: var(--ink3);
+}
+.tts-lim.drag span,
+.tts-lim:hover span {
+  color: var(--teal);
+}
+.tts-mark {
+  position: absolute;
+  z-index: 3;
+  top: -9px;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+  transition: left 0.14s var(--e);
+}
+.tts-mark::before {
+  content: '';
+  position: absolute;
+  left: -0.75px;
+  top: 8px;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--ink);
+}
+.tts-mark::after {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 0;
+  border: 5px solid transparent;
+  border-top: 8px solid var(--ink);
+}
+.tts-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  animation: d-rise 0.2s var(--e);
+}
+.tts-wordform {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+.tts-wordform .d-seg {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.tts-here {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 1180px) {
+  .tts {
+    grid-template-columns: minmax(0, 1.4fr) minmax(240px, 1fr);
+  }
+  .tts-read span:nth-child(n + 3) {
+    display: none;
+  }
+}

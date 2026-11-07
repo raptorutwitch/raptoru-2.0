@@ -72,6 +72,10 @@ export interface TwitchViewerOptions {
   redirectUri?: string | null;
   /** EXT_TOKEN_KEY (32 bytes): tokens encrypted at rest. Null = stored as they are (local Lab Core). */
   tokenKey?: Buffer | null;
+  /** Where the viewer consents (default: Twitch). The Lab: its fictional consent page (lab/fictional-twitch.ts). */
+  authorizeUrl?: string;
+  /** The Lab's fictional Twitch: a local image in place of the CDN URL (its ids exist on no CDN). */
+  emoteImageUrl?: (id: string) => string;
 }
 
 /** CDN URL built only from a validated Twitch emote id (dark theme, largest scale). */
@@ -83,6 +87,8 @@ export function twitchEmoteUrl(id: string, format: 'static' | 'animated') {
 
 export class TwitchViewerCatalog {
   private readonly redirectUri: string | null;
+  private readonly authorizeUrl: string;
+  private readonly emoteImageUrl: ((id: string) => string) | null;
   private readonly tokenKey: Buffer | null;
   /** Background catalog reloads in flight, and the last one's error (per viewer, this process). */
   private readonly syncs = new Map<string, Promise<void>>();
@@ -100,6 +106,9 @@ export class TwitchViewerCatalog {
         ? VIEWER_REDIRECT_URI
         : options.redirectUri;
     this.tokenKey = options.tokenKey ?? null;
+    this.emoteImageUrl = options.emoteImageUrl ?? null;
+    this.authorizeUrl =
+      options.authorizeUrl ?? 'https://id.twitch.tv/oauth2/authorize';
   }
 
   // --- OAuth ---------------------------------------------------------------------------------------
@@ -123,7 +132,7 @@ export class TwitchViewerCatalog {
       'insert into bonk_lab_oauth_states (state, created_at, expires_at, viewer_id) values ($1, $2, $3, $4)',
       [state, now, new Date(now.getTime() + STATE_TTL_MS), viewerId],
     );
-    const url = new URL('https://id.twitch.tv/oauth2/authorize');
+    const url = new URL(this.authorizeUrl);
     url.search = new URLSearchParams({
       client_id: this.app.clientId,
       redirect_uri: this.redirectUri,
@@ -253,6 +262,15 @@ export class TwitchViewerCatalog {
    * - not_linked: never linked, or unlinked by the viewer.
    * `waitMs`: how long to wait for the reload before answering (forced refresh).
    */
+  /** This viewer's Twitch emotes are linked (the session's `twitch_connected`). */
+  async isLinked(userId: string): Promise<boolean> {
+    const rows = await this.db.query(
+      'select 1 from bonk_lab_viewer_tokens where user_id = $1',
+      [userId],
+    );
+    return rows.length > 0;
+  }
+
   async emotesState(
     userId: string,
     { force = false, waitMs = 0 } = {},
@@ -434,8 +452,11 @@ export class TwitchViewerCatalog {
         owner_display_name: owner?.display_name ?? null,
         formats,
         animated,
-        url: twitchEmoteUrl(e.id, animated ? 'animated' : 'static'),
-        static_url: twitchEmoteUrl(e.id, 'static'),
+        url:
+          this.emoteImageUrl?.(e.id) ??
+          twitchEmoteUrl(e.id, animated ? 'animated' : 'static'),
+        static_url:
+          this.emoteImageUrl?.(e.id) ?? twitchEmoteUrl(e.id, 'static'),
       });
     }
     const fetchedAt = this.clock.now();

@@ -3,6 +3,8 @@
 // answers are the real texts Core queued in cmd_steps (Commandes, Jeu des mots, mini-jeux). Nothing is
 // recomputed here, and reading never changes a step: « envoyé » only when Twitch acknowledged it.
 
+import { esc } from './http.js';
+
 export interface ChatIn {
   seq: number;
   message_id: string;
@@ -17,7 +19,13 @@ export interface ChatIn {
 export interface StepOut {
   step_id: string;
   origin?:
-    'commands' | 'word_game' | 'mini_game' | 'raffle' | 'sub_wheel' | 'music';
+    | 'commands'
+    | 'word_game'
+    | 'mini_game'
+    | 'raffle'
+    | 'sub_wheel'
+    | 'music'
+    | `module:${string}`;
   kind: string;
   status: string;
   params: { mode?: string; text?: string };
@@ -32,15 +40,6 @@ export interface StepOut {
 export type ChatItem =
   | { type: 'in'; key: string; at: number; msg: ChatIn }
   | { type: 'out'; key: string; at: number; step: StepOut };
-
-const esc = (s: unknown) =>
-  String(s ?? '').replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ]!,
-  );
 
 const time = (ms: number) =>
   new Date(ms).toLocaleTimeString('fr-FR', {
@@ -71,6 +70,11 @@ const OUTCOME_FR: Record<string, string> = {
   rejected: 'refusée',
   refused: 'refusée',
 };
+/** A module of the module host answers with `module:<id>` (shown as its id; the historical ones by name). */
+const originLabel = (o: string | undefined) =>
+  o?.startsWith('module:')
+    ? `Module ${o.slice(7)}`
+    : (ORIGIN_FR[o ?? 'commands'] ?? o ?? '');
 const ORIGIN_FR: Record<string, string> = {
   commands: 'Commandes',
   word_game: 'Jeu des mots',
@@ -173,7 +177,7 @@ export function chatView(
   now: number,
 ): string {
   if (!items.length)
-    return '<p class="sc-empty">Aucun message. Envoyez un message ci-dessous : il passe par la même entrée Core que le vrai chat.</p>';
+    return '<p class="sc-empty">Aucun message. Écris ci-dessous : le message passe par la même entrée que le vrai chat.</p>';
   return items
     .map((i) => {
       if (i.type === 'in') {
@@ -196,7 +200,7 @@ export function chatView(
       }
       const s = i.step;
       const st = stepState(s, outputOn, now);
-      return `<div class="sc-msg sc-msg--bot" data-key="${esc(i.key)}"><div class="sc-line"><time>${time(i.at)}</time><span class="sc-src sc-src--bot">${esc(ORIGIN_FR[s.origin ?? 'commands'] ?? s.origin)}</span><b class="sc-who sc-who--bot">LeCroupier_</b><span class="sc-text">${esc(s.params.text)}</span></div><div class="sc-meta"><span class="sc-state sc-state--${st.tone}" title="Statut Core : ${esc(s.status)}">${esc(st.label)}</span>${s.params.mode === 'announce' ? '<span class="sc-tag">annonce</span>' : ''}</div></div>`;
+      return `<div class="sc-msg sc-msg--bot" data-key="${esc(i.key)}"><div class="sc-line"><time>${time(i.at)}</time><span class="sc-src sc-src--bot">${esc(originLabel(s.origin))}</span><b class="sc-who sc-who--bot">LeCroupier_</b><span class="sc-text">${esc(s.params.text)}</span></div><div class="sc-meta"><span class="sc-state sc-state--${st.tone}" title="Statut Core : ${esc(s.status)}">${esc(st.label)}</span>${s.params.mode === 'announce' ? '<span class="sc-tag">annonce</span>' : ''}</div></div>`;
     })
     .join('');
 }

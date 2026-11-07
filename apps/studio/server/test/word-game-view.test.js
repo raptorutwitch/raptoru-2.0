@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   ageLabel,
   keepRevealed,
-  wordGameView,
-} from '../../web/src/word-game-view.ts';
+  ruleHtml,
+  ruleMin,
+  ruleX,
+  wgZones,
+  wordAge,
+} from '../../web/src/pages/word-game-view.ts';
 
 // Jeu des mots V1 — Studio panel view (Lot 4): what the streamer sees, from Core's state only
 // (docs/WORD_GAME_PARITY.md § 14). The clear words never appear (only what the chat saw).
@@ -32,6 +36,14 @@ const word = (over = {}) => ({
   age_seconds: 75,
   ...over,
 });
+/** La page entière : ses zones mises bout à bout. */
+const wordGameView = (...args) => {
+  const { board, boardEmpty, ...zones } = wgZones(...args);
+  return [
+    ...Object.values(zones),
+    board.length ? board.map((b) => b.html).join('') : boardEmpty,
+  ].join('');
+};
 const button = (html, action) =>
   new RegExp(
     `<button[^>]*data-action="${action}"([^>]*)>([^<]*)</button>`,
@@ -71,10 +83,10 @@ describe('panel view', () => {
     expect(html).toContain('le jeu ne tourne que pendant un live');
   });
 
-  it('live and active: « En live » + « Actif », Arrêter and Nouveau mot enabled, next word', () => {
+  it('live and open: « En live » + « Ouvert », Arrêter and Nouveau mot enabled, next word', () => {
     const html = wordGameView(state(), NOW);
     expect(html).toContain('En live');
-    expect(html).toContain('Actif');
+    expect(html).toContain('Ouvert');
     expect(button(html, 'stop')).toMatchObject({ 1: ' ', 2: 'Arrêter' });
     expect(button(html, 'new_word')[1]).not.toContain('disabled');
     expect(html).toContain('Prochain mot dans ~2:05');
@@ -98,28 +110,24 @@ describe('panel view', () => {
     expect(button(html, 'new_word')[1]).toContain('disabled');
   });
 
-  it('active words: shuffled form, age (ticking between polls), golden and manual marks, never the clear word', () => {
-    const html = wordGameView(
-      state({
-        active: [
-          word({
-            occurrence_id: 'jdm-2',
-            shuffled: 'quiner',
-            word: 'requin',
-            golden: true,
-            age_seconds: 3725,
-          }),
-          word({ source: 'manual' }),
-        ],
-      }),
-      NOW + 5000,
-    );
+  it('active words: shuffled form as the chat reads it, age (ticking between polls), golden and manual marks, never the clear word', () => {
+    const gold = word({
+      occurrence_id: 'jdm-2',
+      shuffled: 'quiner',
+      word: 'requin',
+      golden: true,
+      age_seconds: 3725,
+    });
+    const manual = word({ source: 'manual' });
+    const html = wordGameView(state({ active: [gold, manual] }), NOW + 5000);
     expect(html).toContain('🔸 quiner 🔸');
     expect(html).toContain('doré');
     expect(html).toContain('lagne');
     expect(html).toContain('manuel');
-    expect(html).toContain('1:02:10');
-    expect(html).toContain('1:20');
+    expect(html).toContain('-&gt; lagne &lt;-');
+    expect(html).toContain('data-age="jdm-2"');
+    expect(wordAge(gold, NOW + 5000, NOW)).toBe('1:02:10');
+    expect(wordAge(manual, NOW + 5000, NOW)).toBe('1:20');
     expect(html).not.toContain('requin');
     expect(html).not.toContain('>angle<');
     expect(html).toContain('Mots actifs <span class="wg-count">2</span>');
@@ -133,7 +141,7 @@ describe('panel view', () => {
       NOW,
     );
     expect(after).toContain('lagne');
-    expect(after).toContain('0:00');
+    expect(after).not.toContain('Aucun mot en cours.');
   });
 
   it('streak and recent wins (viewer, word, gain, time)', () => {
@@ -159,8 +167,9 @@ describe('panel view', () => {
       NOW,
     );
     expect(html).toContain('<strong>Alice</strong> · 3 mots d’affilée');
-    expect(html).toContain('angle, requin');
-    expect(html).toContain('+2600 jetons');
+    expect(html).toMatch(/angle<\/i>, <i[^>]*>requin/);
+    expect(html).toMatch(/\+2.600 Jetons/);
+    expect(html).toContain('combo +500');
     expect(html).toMatch(/<time>\d{2}:\d{2}:30<\/time>/);
     expect(wordGameView(state(), NOW)).toContain('Aucune série en cours.');
     expect(wordGameView(state(), NOW)).toContain(
@@ -243,5 +252,42 @@ describe('panel view', () => {
       '10:00',
       '1:02:05',
     ]);
+  });
+});
+
+describe('panel view: durable switch and interval (refonte H8)', () => {
+  it('ON: « Désactiver le jeu », the interval in minutes, no confusion with « Arrêter » (this live only)', () => {
+    const html = wordGameView(
+      state({ enabled: true, interval: { min_s: 300, max_s: 900 } }),
+      NOW,
+    );
+    expect(button(html, 'disable')[2]).toBe('Fermer le jeu');
+    expect(
+      wgZones(state({ interval: { min_s: 300, max_s: 900 } }), NOW).interval,
+    ).toBe('on');
+    const rule = ruleHtml(5, 15);
+    expect(rule).toContain('aria-label="Intervalle minimal : 5 minutes"');
+    expect(rule).toContain('aria-label="Intervalle maximal : 15 minutes"');
+    expect([1, 5, 15, 60].map((m) => ruleMin(ruleX(m)))).toEqual([
+      1, 5, 15, 60,
+    ]);
+    expect(html).toContain('« Arrêter » ne vaut que pour le live en cours');
+  });
+  it('OFF on purpose: said as a setting, never as a failure; no next-word line; « Activer le jeu »', () => {
+    const html = wordGameView(
+      state({
+        enabled: false,
+        running: false,
+        interval: { min_s: 300, max_s: 900 },
+      }),
+      NOW,
+    );
+    expect(html).toContain('Fermé : aucun mot automatique');
+    expect(html).not.toContain('Prochain mot');
+    expect(button(html, 'enable')[2]).toBe('Ouvrir le jeu');
+  });
+  it('an older Core without the setting: no settings block, historical behaviour', () => {
+    expect(wordGameView(state(), NOW)).not.toContain('data-action="disable"');
+    expect(wgZones(state(), NOW).interval).toBe('');
   });
 });

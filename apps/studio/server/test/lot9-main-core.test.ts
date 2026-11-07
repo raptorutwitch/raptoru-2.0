@@ -341,7 +341,7 @@ describe('real Twitch alerts, Studio Production profile (main Core over HTTPS)',
       environment: 'production',
       managed_by: 'production_bot',
       bot: null,
-      max_age_ms: null,
+      max_age_ms: 1_800_000 /* refonte H3: 30 min by default */,
     });
     expect(await s.api('/api/alerts/twitch', { mode: 'active' })).toMatchObject(
       { status: 409, error: 'set_on_production_bot' },

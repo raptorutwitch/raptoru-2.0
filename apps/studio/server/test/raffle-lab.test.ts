@@ -26,7 +26,10 @@ afterEach(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
 });
 
-async function setup(overlayDir?: string) {
+async function setup(
+  overlayDir?: string,
+  opts: { simulatedStream?: boolean; stream?: unknown } = {},
+) {
   dir = await mkdtemp(join(tmpdir(), 'raffle-lab-'));
   const calls: { path: string; body?: unknown }[] = [];
   server = createServer();
@@ -37,12 +40,17 @@ async function setup(overlayDir?: string) {
       core: (async (path: string, body?: unknown) => {
         calls.push({ path, body });
         if (path.endsWith('/settings'))
-          return { config: {}, scheduler: { state: 'stopped' } };
+          return {
+            config: {},
+            scheduler: { state: 'stopped' },
+            stream: opts.stream ?? null,
+          };
         return { ok: true, path };
       }) as never,
       origin,
       dir: join(dir, 'raffle-lab'),
       overlayDir: overlayDir ?? join(dir, 'overlay'),
+      simulatedStream: opts.simulatedStream,
     });
   let rt = await make();
   server.on('request', (req, res) => {
@@ -243,5 +251,54 @@ describe('Tombola Studio relay', () => {
     };
     expect(st.overlay_url).toBe(f.rt.overlayUrl);
     expect(st.ingest).toBeUndefined();
+  });
+});
+
+describe('Tombola simulated live (Production profile)', () => {
+  const act = (f: Awaited<ReturnType<typeof setup>>, action: string) =>
+    f.studio('/api/raffle/actions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ command: { action } }),
+    });
+
+  it('Lab: the simulated live is offered and relayed', async () => {
+    const f = await setup();
+    const st = (await (await f.studio('/api/raffle/status')).json()) as {
+      simulated_stream: boolean;
+    };
+    expect(st.simulated_stream).toBe(true);
+    expect((await act(f, 'stream_start')).status).toBe(200);
+    expect(f.calls.at(-1)?.path).toBe('/v1/lab/raffle/900100/actions');
+  });
+
+  it('Production: never starts a simulated live', async () => {
+    const f = await setup(undefined, { simulatedStream: false });
+    const st = (await (await f.studio('/api/raffle/status')).json()) as {
+      simulated_stream: boolean;
+    };
+    expect(st.simulated_stream).toBe(false);
+    const start = await act(f, 'stream_start');
+    expect(start.status).toBe(403);
+    expect(await start.json()).toEqual({ error: 'simulated_stream_lab_only' });
+    expect(f.calls.some((c) => c.path.endsWith('/actions'))).toBe(false);
+  });
+
+  it('Production: never ends a Twitch live', async () => {
+    const f = await setup(undefined, {
+      simulatedStream: false,
+      stream: { source: 'twitch' },
+    });
+    expect((await act(f, 'stream_end')).status).toBe(403);
+    expect(f.calls.some((c) => c.path.endsWith('/actions'))).toBe(false);
+  });
+
+  it('Production: a simulated live left open (older Studio) can still be ended', async () => {
+    const f = await setup(undefined, {
+      simulatedStream: false,
+      stream: { source: 'simulated' },
+    });
+    expect((await act(f, 'stream_end')).status).toBe(200);
+    expect(f.calls.at(-1)?.path).toBe('/v1/lab/raffle/900100/actions');
   });
 });

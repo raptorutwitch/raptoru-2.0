@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { activeSession } from '../stream/stream-sessions.js';
 import {
   SPOTIFY_RULES,
   type SpotifyAutoSkipReport,
@@ -197,6 +198,9 @@ const isTombstone = (r: RequestRow) =>
   (r.state === 'CANCELED' || r.state === 'REMOVED_BY_MOD') &&
   r.auto_skip &&
   !!r.track;
+
+/** Refonte H6: a live is over (for the Spotify queue) only this long after its canonical end — a brief cut is not an end. */
+export const SPOTIFY_END_GRACE_MS = 10 * 60_000;
 
 export class SpotifyService {
   private readonly resultListeners: ((
@@ -1243,6 +1247,52 @@ export class SpotifyService {
       `select distinct channel_id from spotify_jobs where status in ('queued', 'running')`,
     );
     for (const c of channels) await this.tick(c.channel_id);
+  }
+
+  /**
+   * Refonte H6 (decided 05/11): at the canonical end of the live, the requests still waiting in the queue (accepted,
+   * never started) are canceled and refunded ONCE when the reward allows it (Twitch CANCELED, Raptoru's rewards only —
+   * never promised as done). The song playing keeps its normal end; an uncertain addition is never refunded; a request
+   * still being searched is handled at the next pass, once it is queued or refused.
+   * « End »: no open canonical session (stream_sessions) and the last one ended at least END_GRACE_MS ago — a brief cut
+   * (Twitch reconnecting, a new stream id within the grace) is not an end. Replays (double offline event, restart,
+   * several Cores) change nothing: one state transition per request, one refund key per redemption.
+   */
+  async closeAfterLive(channelId: string) {
+    const changed: string[] = [];
+    await this.db.tx(async (q) => {
+      await this.lock(q, channelId);
+      if (await activeSession(q)) return;
+      const last = (
+        await q.query<{ ended_at: Date | null }>(
+          'select max(ended_at) as ended_at from stream_sessions',
+        )
+      )[0]?.ended_at;
+      if (!last) return;
+      const now = this.clock.now();
+      if (now.getTime() - new Date(last).getTime() < SPOTIFY_END_GRACE_MS)
+        return;
+      const waiting = await q.query<RequestRow>(
+        `select * from spotify_requests where channel_id = $1 and state = 'QUEUED' and received_at <= $2
+         order by seq for update`,
+        [channelId, last],
+      );
+      const st = await this.studio(q, channelId);
+      for (const r of waiting) {
+        if (r.request_id === st?.current_request_id) continue; // playing now: never canceled here
+        await this.refundTwitch(q, r);
+        await this.update(q, r.request_id, {
+          state: 'CANCELED',
+          reason: 'STREAM_ENDED',
+          end_reason: 'STREAM_ENDED',
+          ended_at: now,
+          auto_skip: !!r.queued_at,
+        });
+        changed.push(r.request_id);
+      }
+    });
+    for (const id of changed) await this.told(channelId, { request_id: id });
+    return changed.length;
   }
 
   /** Leases and Studio's absence of one channel. */

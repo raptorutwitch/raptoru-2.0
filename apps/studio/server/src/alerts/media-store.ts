@@ -3,12 +3,14 @@ import { createReadStream, existsSync } from 'node:fs';
 import {
   copyFile,
   mkdir,
+  readdir,
   readFile,
   rename,
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, extname, join, resolve } from 'node:path';
 
 // Twitch alerts V1 (A2) — the alert media in Studio's own storage (<runtimeDir>/alerts/media, under the data root: it
 // survives Studio updates and is never in Git). Same principle as the Tombola launch sounds: content-addressed copies
@@ -36,6 +38,127 @@ export const ALERT_MEDIA = [
   'Raid Titan.webm',
   'Raptoru_Alerte_Raid_Sound.mp3',
 ] as const;
+
+/** Where the catalogue's files are kept on the streamer's PC: what the Lab offers to import from, when they exist. */
+export const USUAL_FOLDERS = [
+  join(homedir(), 'Videos', 'Alertes Twitch Pour Claude', 'Version webm'),
+  join(homedir(), 'Documents', 'Twitch', 'Alertes', 'Raid'),
+  join(
+    homedir(),
+    'Documents',
+    'Raptoru 2.0 - Livraisons',
+    '2026-10-31-halloween-alertes',
+  ),
+];
+
+/** Studio's settings file: names the data folder of the installed Studio. Read only. */
+export const STUDIO_CONFIG = join(
+  process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'),
+  'Raptoru Studio',
+  'studio.json',
+);
+
+/** Where a media can come from: a usual folder (exact names) or the installed Studio's copies (hashed names). */
+export interface MediaOrigin {
+  id: string;
+  label: string;
+  path: string;
+  /** The installed Studio's own storage: only read, and imported on an explicit confirmation. */
+  reserve: boolean;
+  files: Map<string, { from: string; sha256?: string }>;
+}
+
+const nameKey = (n: string) => n.normalize('NFC').toLowerCase();
+
+async function folderFiles(dir: string, names: readonly string[]) {
+  const onDisk = new Map(
+    (await readdir(dir).catch(() => [] as string[])).map((f) => [
+      nameKey(f),
+      f,
+    ]),
+  );
+  const files: MediaOrigin['files'] = new Map();
+  for (const name of names) {
+    const f = onDisk.get(nameKey(name));
+    if (f) files.set(name, { from: join(dir, f) });
+  }
+  return files;
+}
+
+async function reserveOrigin(
+  config: string,
+  ownDir: string,
+  names: readonly string[],
+  store: 'alerts' | 'effects',
+): Promise<MediaOrigin | null> {
+  try {
+    const { dataRoot } = JSON.parse(await readFile(config, 'utf8')) as {
+      dataRoot?: string;
+    };
+    if (!dataRoot) return null;
+    const dir = join(
+      dataRoot,
+      'apps',
+      'studio',
+      'server',
+      '.runtime',
+      store,
+      'media',
+    );
+    if (resolve(dir) === resolve(ownDir)) return null;
+    const { files: manifest } = JSON.parse(
+      await readFile(join(dir, 'manifest.json'), 'utf8'),
+    ) as Manifest;
+    const files: MediaOrigin['files'] = new Map();
+    for (const name of names) {
+      const e = manifest[name];
+      if (e && existsSync(join(dir, e.file)))
+        files.set(name, { from: join(dir, e.file), sha256: e.sha256 });
+    }
+    return {
+      id: 'reserve',
+      label: 'Copie du Studio installé',
+      path: dir,
+      reserve: true,
+      files,
+    };
+  } catch {
+    return null; // no installed Studio on this PC, or an unreadable manifest: nothing to offer.
+  }
+}
+
+/** The places on this PC that hold catalogue media, and which ones each holds. Only reads; never copies anything. */
+export async function findMediaOrigins(
+  names: readonly string[],
+  ownDir: string,
+  o: {
+    folders?: readonly string[];
+    config?: string;
+    store?: 'alerts' | 'effects';
+  } = {},
+) {
+  const origins: MediaOrigin[] = [];
+  for (const path of o.folders ?? USUAL_FOLDERS) {
+    if (!existsSync(path) || resolve(path) === resolve(ownDir)) continue;
+    origins.push({
+      id: `folder:${origins.length}`,
+      label: path.includes('halloween')
+        ? 'Livraison Halloween'
+        : basename(path),
+      path,
+      reserve: false,
+      files: await folderFiles(path, names),
+    });
+  }
+  const reserve = await reserveOrigin(
+    o.config ?? STUDIO_CONFIG,
+    ownDir,
+    names,
+    o.store ?? 'alerts',
+  );
+  if (reserve) origins.push(reserve);
+  return origins;
+}
 
 const TYPES: Record<string, string> = {
   '.webm': 'video/webm',
@@ -109,17 +232,22 @@ export class AlertMediaStore {
    * Copies each source file into the store (content-addressed; an identical file already stored is not copied
    * again). The copy's hash must equal the original's; the originals are only read.
    */
-  async import(entries: { name: string; from: string }[]) {
+  async import(entries: { name: string; from: string; sha256?: string }[]) {
     const report: {
       name: string;
-      result: 'copied' | 'unchanged' | 'missing';
+      result: 'copied' | 'unchanged' | 'missing' | 'corrupt';
+      from?: string;
     }[] = [];
-    for (const { name, from } of entries) {
+    for (const { name, from, sha256: expected } of entries) {
       if (!existsSync(from)) {
         report.push({ name, result: 'missing' });
         continue;
       }
       const hash = await sha256(from);
+      if (expected && hash !== expected) {
+        report.push({ name, result: 'corrupt', from });
+        continue;
+      }
       const file = `${hash}${extname(name).toLowerCase()}`;
       const target = join(this.dir, file);
       let result: 'copied' | 'unchanged' = 'unchanged';
@@ -137,7 +265,7 @@ export class AlertMediaStore {
         source: from,
         imported_at: new Date().toISOString(),
       };
-      report.push({ name, result });
+      report.push({ name, result, from });
     }
     await writeFile(
       join(this.dir, 'manifest.json.tmp'),

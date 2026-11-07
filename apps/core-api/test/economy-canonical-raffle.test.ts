@@ -335,3 +335,37 @@ describe('Tombola V2 on the canonical Wallet', () => {
     });
   });
 });
+
+describe('Refonte P0-4: no simulated live on the canonical economy (Core guard, whatever Studio does)', () => {
+  it('stream_start refused; a Twitch live cannot be ended from Studio; nothing opened', async () => {
+    const t = await canonical();
+    expect(await t.code(t.act({ action: 'stream_start' }))).toBe(
+      'simulated_stream_lab_only',
+    );
+    expect(
+      await t.core.db.query('select 1 from lab_stream_sessions'),
+    ).toHaveLength(0);
+    await t.raffle.streamEvent({
+      channel_id: CH,
+      event: 'online',
+      twitch_stream_id: 'live-fictif-1',
+    });
+    expect(await t.code(t.act({ action: 'stream_end' }))).toBe(
+      'twitch_stream_not_simulated',
+    );
+    expect(
+      await t.core.db.query(
+        'select 1 from lab_stream_sessions where ended_at is null',
+      ),
+    ).toHaveLength(1);
+  });
+  it('a simulated session left open before the guard can still be ended', async () => {
+    const t = await canonical();
+    await t.core.db.query(
+      `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by)
+       values ('00000000-0000-4000-8000-000000000001', $1, $2, 'simulated', 'Studio')`,
+      [CH, T0],
+    );
+    expect(await t.code(t.act({ action: 'stream_end' }))).toBe('ok');
+  });
+});

@@ -49,6 +49,12 @@ export function soundLabRoutes(sound: SoundLabService): Route[] {
   return [
     {
       method: 'GET',
+      pattern: /^\/v1\/lab\/sound\/player-ready$/,
+      auth: 'studio',
+      handle: async () => ({ player_ready: await sound.playerReady() }),
+    },
+    {
+      method: 'GET',
       pattern: /^\/v1\/lab\/sound\/channels\/([^/]+)\/catalog$/,
       auth: 'studio',
       handle: ({ params }) =>

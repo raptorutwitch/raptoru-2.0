@@ -141,7 +141,12 @@ describe('alerts in the Production profile', () => {
     sockets.at(-1)!.onmessage!({
       data: JSON.stringify({ type: 'welcome', data: {} }),
     });
-    sockets.at(-1)!.onmessage!({ data: JSON.stringify(SE_TIP_EXAMPLE) });
+    // A tip of NOW: since refonte H3 an alert older than 30 min is recorded, never animated.
+    const fresh = {
+      ...SE_TIP_EXAMPLE,
+      data: { ...SE_TIP_EXAMPLE.data, createdAt: new Date().toISOString() },
+    };
+    sockets.at(-1)!.onmessage!({ data: JSON.stringify(fresh) });
     await new Promise((r) => setTimeout(r, 300));
     const state = await api('/api/alerts/state');
     expect(

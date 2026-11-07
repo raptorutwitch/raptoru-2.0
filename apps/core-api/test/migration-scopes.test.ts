@@ -235,7 +235,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
     const files = await readdir(DEFAULT_MIGRATIONS_DIR);
     const prod = selectMigrations(files, 'prod');
     const old = selectMigrations(files, 'prod', OLD_PROD);
-    expect(old.length).toBe(46);
+    expect(old.length).toBe(49);
     expect(prod.filter((f) => !old.includes(f))).toEqual([
       ...MAIN_CORE_LAB_MIGRATIONS,
     ]);
@@ -246,7 +246,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a blank database: everything once; again: nothing', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod')).length).toBe(62);
+    expect((await migrate(db, 'prod')).length).toBe(67);
     expect(await migrate(db, 'prod')).toEqual([]);
     for (const t of ['cmd_steps', 'word_game_words', 'mini_game_duels'])
       expect(
@@ -261,7 +261,13 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
   const SETTINGS = '20261107130000_votekick_settings.sql';
   const SPOTIFY = '20261108130000_spotify.sql';
   const MUSIC = '20261108140000_cmd_steps_music_lab.sql';
-  const mainCoreBefore = MAIN_CORE_LAB_MIGRATIONS.filter((f) => f !== MUSIC);
+  // Refonte H8 (05/11): a main Core Lab file after everything production holds — absent from every past database.
+  const WORD_SETTINGS = '20261121140000_word_game_settings_lab.sql';
+  // Module host (05/11): the chat answers' module origin, after everything production holds.
+  const MODULE_ORIGIN = '20261121190000_cmd_steps_module_origin_lab.sql';
+  const mainCoreBefore = MAIN_CORE_LAB_MIGRATIONS.filter(
+    (f) => f !== MUSIC && f !== WORD_SETTINGS && f !== MODULE_ORIGIN,
+  );
   // Roue du Sub V2: its production files come after everything production holds (25/10: 46 files). In the past
   // databases below they did not exist yet: classified Lab there, so the folder stays valid.
   const SUB_WHEEL_V2 = [
@@ -285,6 +291,11 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
     '20261118130000_cosmetic_shop.sql',
     '20261119130000_cosmetic_frames_banners.sql',
     '20261120130000_challenges.sql',
+    '20261121130000_sub_wheel_enabled_at.sql',
+    WORD_SETTINGS,
+    '20261121160000_module_settings.sql',
+    '20261121180000_module_activity.sql',
+    MODULE_ORIGIN,
   ];
   const prodBeforeWheel = PROD_MIGRATIONS.filter(
     (f) => !AFTER_25_10.includes(f),
@@ -398,13 +409,21 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       ...MIGRATION_SCOPES,
       prod: prodBeforeWheel,
       lab: labBeforeWheel,
+      mainCore: MAIN_CORE_LAB_MIGRATIONS.filter(
+        (f) => f !== WORD_SETTINGS && f !== MODULE_ORIGIN,
+      ),
     };
     expect((await migrate(db, 'prod', undefined, before)).length).toBe(46);
     const held = await origins(db);
     expect(await migrate(db, 'prod')).toEqual(AFTER_25_10);
-    // BLOCKING (RV2-0): the Roue V2 never narrows the chat queue's origins (Tombola « raffle », Spotify « music »).
-    expect(await origins(db)).toBe(held);
-    for (const o of EVERY_ORIGIN) expect(held, o).toContain(`'${o}'`);
+    // BLOCKING (RV2-0): the Roue V2 never narrows the chat queue's origins (Tombola « raffle », Spotify « music »);
+    // the module host only WIDENS them (`module:<id>`, 20261121190000).
+    const after = await origins(db);
+    for (const o of EVERY_ORIGIN) {
+      expect(held, o).toContain(`'${o}'`);
+      expect(after, o).toContain(`'${o}'`);
+    }
+    expect(after).toContain('^module:[a-z][a-z0-9_]{1,40}$');
     expect(await migrate(db, 'prod')).toEqual([]);
   });
 
@@ -419,7 +438,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a database migrated by the previous production selection: only the main Core files, once', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(46);
+    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(49);
     expect(await migrate(db, 'prod')).toEqual([...MAIN_CORE_LAB_MIGRATIONS]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
@@ -431,7 +450,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
     };
     expect((await migrate(db, 'staging', undefined, OLD_STAGING)).length).toBe(
-      50,
+      53,
     );
     expect(await migrate(db, 'prod')).toEqual(
       MAIN_CORE_LAB_MIGRATIONS.filter(

@@ -4,7 +4,7 @@ import {
   bonkTwitchLockedForRole,
   isBonkEmoteSelectable,
   normalizeBonkEmote,
-} from '../extension/shared/ui.js';
+} from '../extension/shared/bonk-model.js';
 
 // Lab: only the viewer role is the connected Twitch account. In the moderator / broadcaster roles
 // the identity is fictitious, so its Twitch emotes would be refused by Core (viewer_not_linked).

@@ -1,4 +1,7 @@
-# Statistiques des modules par viewer (raptoru.fr lot 4) — Lab, non livré
+# Statistiques des modules par viewer (raptoru.fr lot 4)
+
+> **En Production depuis le 04/11/2026** (Core `8a897a5`, site `74f7542`). Visibles **par le viewer lui-même seulement**
+> (route du site, jeton du site). Les rendre publiques reste une décision d'Antoni.
 
 Agrégats **en lecture seule**, calculés à partir de ce que chaque module écrit **déjà** en Production. Rien de nouveau
 n'est enregistré, rien n'est estimé. Code : `apps/core-api/src/module-stats/service.ts` ; test :

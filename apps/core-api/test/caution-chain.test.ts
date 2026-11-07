@@ -1,4 +1,5 @@
 import type { LabChatMessage } from '@raptoru/schemas';
+import { openCanonicalLive } from './live.js';
 import { describe, expect, it } from 'vitest';
 import {
   createCautionExecutor,
@@ -100,6 +101,7 @@ async function chain(
 ) {
   const core = await setup();
   core.clock.set(new Date('2026-10-23T20:00:00Z'));
+  await openCanonicalLive(core.db, core.clock);
   const now = () => core.clock.now().getTime();
   const economy: EconomyPort =
     kind === 'lab' ? labEconomy : coreWalletEconomy(core.wallet.wallet);

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
-import { join, extname } from 'node:path';
+import { dirname, join, extname } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { SoundLibrary } from './library.js';
 import { SoundWorker, localSoundCoreClient } from './worker.js';
 import { WorkerLoop } from '../worker-loop.js';
 import { paths, REPO_ROOT } from '../test-lab/local-env.js';
@@ -14,8 +15,11 @@ export class SoundRuntime {
   private constructor(
     readonly worker: SoundWorker,
     readonly origin: string,
+    /** The streamer's categories of the bank, one file per profile. */
+    readonly library: SoundLibrary,
     /** Production profile: remote Core over the future-prod transport (ASTRA-P1-019). */
     readonly production = false,
+    private readonly labReads = false,
   ) {}
   get playerUrl() {
     return `${this.origin}/sound-lab/player.html#${this.worker.token}`;
@@ -29,13 +33,17 @@ export class SoundRuntime {
         process.env.BONK_LAB_CORE_URL!,
         process.env.BONK_LAB_SECRET!,
       );
-    const worker = await SoundWorker.open(
+    const journal =
       production?.journal ??
-        join(paths.runtimeDir, 'sound-lab', 'journal.json'),
-      core,
-      production?.transport,
+      join(paths.runtimeDir, 'sound-lab', 'journal.json');
+    const worker = await SoundWorker.open(journal, core, production?.transport);
+    return new SoundRuntime(
+      worker,
+      origin,
+      await SoundLibrary.open(join(dirname(journal), 'sound-library.json')),
+      !!production,
+      production?.labReads === true,
     );
-    return new SoundRuntime(worker, origin, !!production);
   }
   start() {
     const loop = new WorkerLoop(
@@ -119,7 +127,7 @@ export class SoundRuntime {
         let coreError: string | null = null;
         try {
           // Production: no Lab history route on the execution transport.
-          if (!this.production)
+          if (!this.production || this.labReads)
             interactions = (await this.worker.recent()).interactions;
         } catch {
           coreError = 'core_unavailable';
@@ -136,6 +144,13 @@ export class SoundRuntime {
         url.pathname === '/api/sound-lab/config'
       ) {
         reply(200, await this.worker.config());
+      } else if (url.pathname === '/api/sound-lab/library') {
+        reply(200, {
+          categories:
+            req.method === 'POST'
+              ? await this.library.set(body.sound_id, body.category)
+              : this.library.categories,
+        });
       } else if (
         req.method === 'POST' &&
         /^\/api\/sound-lab\/sounds\/[a-z0-9][a-z0-9_-]{0,47}$/.test(

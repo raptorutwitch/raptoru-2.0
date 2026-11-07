@@ -188,6 +188,11 @@ export class ChannelPointsRuntime {
     void loop();
   }
 
+  /** Refonte F5: before Studio exits — OBS changes of the running effects and mutes restored now. */
+  restoreBeforeExit() {
+    return this.obs.restoreNow();
+  }
+
   stop() {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
@@ -479,6 +484,14 @@ export class ChannelPointsRuntime {
       );
     if (p === '/test')
       return reply(200, await this.d.core(`${ch}/test`, await this.body(req)));
+    if (p === '/effects-import')
+      return this.d.environment === 'lab' && this.d.effects
+        ? reply(200, { report: await this.d.effects.importMissing() })
+        : reply(403, { error: 'lab_only' });
+    if (p === '/lab-catalog')
+      return this.d.environment === 'lab'
+        ? reply(200, await this.d.core(`${ch}/lab-catalog`, {}))
+        : reply(403, { error: 'lab_only' });
     const rule = /^\/rules\/([A-Za-z0-9-]{1,128})$/.exec(p);
     if (rule)
       return reply(

@@ -5,6 +5,7 @@
 // cockpit (installation credential). Nothing reaches Twitch: the Duel target lookup is injected.
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
+import { openCanonicalLive } from './live.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 import { RaffleCommand, type LabActor } from '@raptoru/schemas';
@@ -52,6 +53,8 @@ describe.skipIf(!isLocal)(
       await a.query('drop schema public cascade; create schema public;');
       // The production selection only (lot 8: it now holds the chat games' tables).
       await migrate(a, 'prod');
+      // Refonte H1: the paid stream interactions need the canonical live, opened here as Twitch would.
+      await openCanonicalLive(a, clock);
     }, LOCK_WAIT_MS);
     afterAll(async () => {
       for (const s of servers) await new Promise((r) => s.close(() => r(null)));

@@ -45,6 +45,11 @@ const ECONOMY = '20261117130000_halloween_economy.sql';
 const COSMETICS = '20261118130000_cosmetic_shop.sql';
 const FRAMES = '20261119130000_cosmetic_frames_banners.sql';
 const CHALLENGES = '20261120130000_challenges.sql';
+const SW_ENABLED_AT = '20261121130000_sub_wheel_enabled_at.sql';
+const WORD_SETTINGS = '20261121140000_word_game_settings_lab.sql';
+const MODULE_ORIGIN = '20261121190000_cmd_steps_module_origin_lab.sql';
+const MODULE_SETTINGS = '20261121160000_module_settings.sql';
+const MODULE_ACTIVITY = '20261121180000_module_activity.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -638,7 +643,10 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== ECONOMY &&
           f !== COSMETICS &&
           f !== FRAMES &&
-          f !== CHALLENGES,
+          f !== CHALLENGES &&
+          f !== SW_ENABLED_AT &&
+          f !== MODULE_SETTINGS &&
+          f !== MODULE_ACTIVITY,
       ),
       lab: [
         ...MIGRATION_SCOPES.lab,
@@ -658,7 +666,14 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
         COSMETICS,
         FRAMES,
         CHALLENGES,
+        SW_ENABLED_AT,
+        MODULE_SETTINGS,
+        MODULE_ACTIVITY,
       ],
+      // Refonte H8: a main Core file production did not hold on 25/10.
+      mainCore: MIGRATION_SCOPES.mainCore!.filter(
+        (f) => f !== WORD_SETTINGS && f !== MODULE_ORIGIN,
+      ),
     };
     expect(await migrate(a, 'prod', undefined, at46)).toHaveLength(46);
     // What production really holds in its chat queue: Tombola announcements and Spotify answers.
@@ -708,6 +723,11 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       COSMETICS,
       FRAMES,
       CHALLENGES,
+      SW_ENABLED_AT,
+      WORD_SETTINGS,
+      MODULE_SETTINGS,
+      MODULE_ACTIVITY,
+      MODULE_ORIGIN,
     ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(

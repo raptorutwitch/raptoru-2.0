@@ -17,7 +17,7 @@ import {
   chaosParams,
   obsLine,
   readChaos,
-} from '../../web/src/halloween-chaos.js';
+} from '../../web/src/pages/halloween-model.js';
 
 // Halloween Chaos (docs/HALLOWEEN.md § 4 bis): « Écran retourné » / « Flou » on the whole monitor. The Chaos window (the
 // overlay page in its « chaos » role, excluded from captures by Electron) takes the Chaos effects, the overlay page the

@@ -171,9 +171,15 @@ export class WordGameRuntime {
           return reply(413, { error: 'body_too_large' });
       }
       const body = JSON.parse(raw || '{}') as Record<string, unknown>;
-      // Only the action fields reach Core (it validates them: start / stop / new_word + request_id).
+      // Only the action fields reach Core (it validates them: start / stop / new_word + request_id; settings, refonte H8).
       const action: Record<string, unknown> = { action: body.action };
-      if ('request_id' in body) action.request_id = body.request_id;
+      for (const k of [
+        'request_id',
+        'enabled',
+        'interval_min_s',
+        'interval_max_s',
+      ])
+        if (k in body) action[k] = body[k];
       return reply(200, await this.d.core(`${base}/actions`, action));
     }
     reply(404, { error: 'not_found' });

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { Agent as HttpAgent, request as httpRequest } from 'node:http';
 import { Agent, request } from 'node:https';
 import { Readable } from 'node:stream';
 import type { CoreCall } from '../bonk-lab/worker.js';
@@ -59,10 +60,20 @@ export function prodCoreClient(options: {
   ca?: string | Buffer;
   timeoutMs?: number;
   protocolVersion?: number;
+  /**
+   * The local Lab (decision of 05/11/2026: the main Core runs on this PC with CORE_ENVIRONMENT=lab): plain HTTP is
+   * accepted for a loopback Core only, and only when the caller says so. Every other check stays (credential bound to
+   * that origin, protocol version, no redirect).
+   */
+  labLoopback?: boolean;
 }): ProdCoreCall {
   const base = new URL(options.url);
+  const plain =
+    options.labLoopback === true &&
+    base.protocol === 'http:' &&
+    ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname);
   if (
-    base.protocol !== 'https:' ||
+    (base.protocol !== 'https:' && !plain) ||
     base.pathname !== '/' ||
     base.username ||
     base.password ||
@@ -80,7 +91,10 @@ export function prodCoreClient(options: {
       'identity_mismatch',
       'Identité Studio liée à un autre Core : régénération requise',
     );
-  const agent = new Agent({ keepAlive: true, ca: ca ?? undefined });
+  const agent = plain
+    ? new HttpAgent({ keepAlive: true })
+    : new Agent({ keepAlive: true, ca: ca ?? undefined });
+  const send = (plain ? httpRequest : request) as typeof request;
   const timeoutMs = options.timeoutMs ?? 5000;
   const version = String(options.protocolVersion ?? STUDIO_PROTOCOL_VERSION);
 
@@ -97,7 +111,7 @@ export function prodCoreClient(options: {
     new Promise<Response>((resolve, reject) => {
       if (!path.startsWith('/v1/studio/'))
         return reject(new Error('studio_route_required'));
-      const req = request(new URL(path, base), {
+      const req = send(new URL(path, base), {
         method: 'GET',
         agent,
         signal,
@@ -149,7 +163,7 @@ export function prodCoreClient(options: {
         req.destroy();
         reject(e);
       };
-      const req = request(new URL(path, base), {
+      const req = send(new URL(path, base), {
         method: payload === undefined ? 'GET' : 'POST',
         agent,
         headers: {

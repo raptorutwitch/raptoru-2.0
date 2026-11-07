@@ -9,6 +9,7 @@ import type {
 import { describe, expect, it } from 'vitest';
 import { spotifyRoutes } from '../src/http/spotify-routes.js';
 import { SpotifyChat } from '../src/spotify/chat.js';
+import { SPOTIFY_END_GRACE_MS } from '../src/spotify/service.js';
 import { setup } from './helpers.js';
 
 // Spotify V2, Core side (docs/SPOTIFY_V2.md): the historical rules (spotify-v2/service.js, moderation.js, scheduler.js)
@@ -428,6 +429,30 @@ describe('Spotify V2 — a song request (« Choisi la prochaine musique ! »)', 
       code: 'already_settled',
     });
     expect((await t.spotify.state(CH)).to_verify).toEqual([]);
+  });
+
+  it('a Studio test of the rule (simulation) is a dry run: no request, no job, no skip (refonte H11)', async () => {
+    const t = await lab();
+    await t.sync();
+    const out = await t.redeem(1, 'Daft Punk One More Time', {
+      source: 'simulation',
+    });
+    expect(out.redemption.results[0]).toMatchObject({
+      status: 'done',
+      detail: 'simulation : aucune demande Spotify créée (à blanc)',
+    });
+    await t.cp.receive({
+      channel_id: CH,
+      source: 'simulation',
+      redemption_id: randomUUID(),
+      reward: { id: SKIP_REWARD, title: 'Skip la musique', cost: 2000 },
+      user: viewer(2),
+      twitch_status: 'unfulfilled',
+      redeemed_at: t.core.clock.now().toISOString(),
+    });
+    expect(await t.requests()).toEqual([]);
+    expect((await t.sync()).jobs).toEqual([]);
+    expect(await t.replies()).toEqual([]);
   });
 
   it('a redelivered redemption creates nothing more', async () => {
@@ -1357,5 +1382,64 @@ describe("Spotify V2 — per-viewer exceptions, chat origin, Raptoru's reward", 
         body: { prompt: 'x', title: 'x'.repeat(46) },
       } as never),
     ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('Refonte H6: Spotify at the end of the live', () => {
+  const ended = async (t: Awaited<ReturnType<typeof lab>>) => {
+    const { StreamSessions } = await import('../src/stream/stream-sessions.js');
+    const s = new StreamSessions(t.core.db, t.core.clock);
+    await s.online({ streamId: 'h6-live', startedAt: t.core.clock.now() });
+    return s;
+  };
+  it('queued, never played: canceled and refunded ONCE after the grace; the song playing is kept; replays change nothing', async () => {
+    const t = await lab({ managed: true });
+    await t.sync();
+    const sessions = await ended(t);
+    await t.redeem(1, 'Daft Punk One More Time');
+    await t.studio('queued', track(1, 'One More Time', ['Daft Punk']));
+    await t.redeem(2, 'Justice D.A.N.C.E.');
+    await t.studio('queued', track(2, 'D.A.N.C.E.', ['Justice']));
+    // The first one starts playing: kept.
+    await t.sync(t.playing(track(1, 'One More Time', ['Daft Punk'])));
+    await sessions.offline();
+    t.core.clock.advance(SPOTIFY_END_GRACE_MS - 1_000);
+    expect(await t.spotify.closeAfterLive(CH)).toBe(0); // a brief cut is not an end
+    t.core.clock.advance(2_000);
+    expect(await t.spotify.closeAfterLive(CH)).toBe(1);
+    expect(await t.spotify.closeAfterLive(CH)).toBe(0); // double end / restart
+    const reqs = await t.requests();
+    expect(reqs.map((r) => [r.state, r.reason])).toEqual([
+      ['PLAYING', expect.anything()],
+      ['CANCELED', 'STREAM_ENDED'],
+    ]);
+    const refunds = (await t.actions()).filter(
+      (a) => (a.payload as { status?: string }).status === 'CANCELED',
+    );
+    expect(refunds).toHaveLength(1);
+  });
+  it('a new live within the grace (Twitch reconnecting): nothing canceled', async () => {
+    const t = await lab({ managed: true });
+    await t.sync();
+    const sessions = await ended(t);
+    await t.redeem(1, 'Daft Punk One More Time');
+    await t.studio('queued', track(1, 'One More Time', ['Daft Punk']));
+    await sessions.offline();
+    t.core.clock.advance(60_000);
+    await sessions.online({
+      streamId: 'h6-live-2',
+      startedAt: t.core.clock.now(),
+    });
+    t.core.clock.advance(SPOTIFY_END_GRACE_MS);
+    expect(await t.spotify.closeAfterLive(CH)).toBe(0);
+    expect((await t.requests())[0]!.state).toBe('QUEUED');
+  });
+  it('never live (no canonical session): nothing touched', async () => {
+    const t = await lab();
+    await t.sync();
+    await t.redeem(1, 'Daft Punk One More Time');
+    await t.studio('queued', track(1, 'One More Time', ['Daft Punk']));
+    t.core.clock.advance(SPOTIFY_END_GRACE_MS * 3);
+    expect(await t.spotify.closeAfterLive(CH)).toBe(0);
   });
 });

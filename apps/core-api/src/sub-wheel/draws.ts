@@ -50,8 +50,8 @@ function liveStartSql(mode: PresenceMode) {
 
 /**
  * Live feedback 29/10: the viewer of row `s` just showed up in THIS live — its sub / resub reached us while the wheel
- * was on (acquired after the live started and after the last change of the wheel's settings: a right kept while the
- * wheel was off still waits for its presence), or it asked its own wheel (chat answer, `!roue`, extension) during it.
+ * was on (acquired after the live started and after the wheel was last switched ON — `enabled_at`, never another
+ * setting, refonte P0-3: a right kept while the wheel was off still waits for its presence), or it asked its own wheel (chat answer, `!roue`, extension) during it.
  * Counts as present: the chatters list (read every 2 min, lagging, missing some viewers) never makes it wait.
  */
 function liveInteractionSql(mode: PresenceMode) {
@@ -59,7 +59,7 @@ function liveInteractionSql(mode: PresenceMode) {
   const start = liveStartSql(mode);
   return `(${start} is not null and (
     (s.queue = 'auto' and s.acquired_at >= ${start}
-      and s.acquired_at >= (select w.updated_at from sw_settings w where w.channel_id = s.channel_id and w.enabled))
+      and s.acquired_at >= (select w.enabled_at from sw_settings w where w.channel_id = s.channel_id and w.enabled))
     or (${VIEWER_REQUEST} and s.requested_at >= ${start})))`;
 }
 

@@ -176,7 +176,7 @@ describe('Comptes Twitch view: an expired access token is not an alarm (23/10)',
     await vi.waitFor(() =>
       expect(f.element.innerHTML).toContain('renouvelable'),
     );
-    expect(f.element.innerHTML).not.toContain('badge ko');
+    expect(f.element.innerHTML).not.toContain('d-dot r');
     expect(f.element.innerHTML).toContain('Aucune réautorisation');
     f.view.setVisible(false);
   });
@@ -193,7 +193,7 @@ describe('Comptes Twitch view: an expired access token is not an alarm (23/10)',
     await vi.waitFor(() =>
       expect(f.element.innerHTML).toContain('Réautorisation nécessaire'),
     );
-    expect(f.element.innerHTML).toContain('badge ko');
+    expect(f.element.innerHTML).toContain('d-dot r');
     f.view.setVisible(false);
   });
 });

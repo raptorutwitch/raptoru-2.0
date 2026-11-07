@@ -64,8 +64,11 @@ export class CosmeticsRelay {
           if (!this.css || Date.now() - this.css.at > 60_000)
             this.css = {
               // Studio's own route (production allows /v1/studio/* only; Lab: /v1/lab/cosmetics/*).
-              text: (await core<{ css: string }>(`${this.base}/style.json`))
-                .css,
+              text: (
+                await core<{ css: string }>(
+                  `${this.base}/style${this.d.environment === 'production' ? '.json' : ''}`,
+                )
+              ).css,
               at: Date.now(),
             };
           res.writeHead(200, {

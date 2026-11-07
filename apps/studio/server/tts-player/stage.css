@@ -160,6 +160,13 @@
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
+.tts-bubble.is-spoken .tts-w {
+  color: rgba(255, 255, 255, 0.46);
+  transition: color 160ms ease;
+}
+.tts-bubble.is-spoken .tts-w.is-said {
+  color: #fff;
+}
 .tts-bubble__who:empty {
   display: none;
 }

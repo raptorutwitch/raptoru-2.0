@@ -29,8 +29,9 @@ const Env = z
       .string()
       .regex(/^[A-Za-z0-9+/]{20,}={0,2}$/)
       .optional(),
-    // Shown to the extension; payment stays simulated whatever this says (Lab test wallet).
-    CORE_ENVIRONMENT: z.enum(['staging']).default('staging'),
+    // Shown to the extension. `lab`: this Core runs on this PC for development (src/lab/environment.ts): fictional
+    // channel and Twitch, loopback only, refused at start when anything real is configured.
+    CORE_ENVIRONMENT: z.enum(['staging', 'lab']).default('staging'),
     // Lot 9: freshness of the alerts' animation (seconds since the Twitch event). Absent = off (no value chosen yet):
     // every alert is animated whatever its delay. Never touches a gain (Roue du Sub, Loyalty).
     ALERTS_MAX_AGE_SECONDS: z.coerce.number().int().positive().optional(),
@@ -54,6 +55,12 @@ const Env = z
       .string()
       .url()
       .refine((u) => u.startsWith('https://'), 'https only')
+      .optional(),
+    // Bonk: the Twitch channel whose PUBLIC 7TV / BTTV / FFZ catalogs are offered (read-only GETs, no token, no account).
+    // Absent = none (default). The Lab may name the real channel here: it only reads public catalogs.
+    EMOTE_CATALOG_CHANNEL_ID: z
+      .string()
+      .regex(/^\d{1,32}$/)
       .optional(),
     // Delivery tooling (docs/CICD.md): bearer token of the read-only GET /v1/ops/status. Absent = no such route.
     OPS_TOKEN: z.string().min(32).optional(),

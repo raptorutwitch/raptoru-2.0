@@ -34,6 +34,8 @@ describe('Studio cockpit in the Production profile', () => {
         delta: 1000,
         reason: 'test',
       },
+      // Refonte P0-2: a Wallet adjustment carries its intent key.
+      idempotency_key: 'prod-cockpit-test-0001',
     });
     expect(
       await cockpit<{ tokens: number }>(`/v1/lab/wallet/${CHANNEL}/4242`),

@@ -1,0 +1,540 @@
+/* Extension Lab : l'extension à sa vraie taille dans un décor Twitch approximatif, les coulisses à droite. */
+main.tab-full {
+  padding: 0;
+  display: block;
+}
+.xl {
+  --tw-bg: #0e0e10;
+  --tw-panel: #18181b;
+  --tw-line: #2f2f35;
+  --tw-purple: #9147ff;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px 14px;
+  height: 100%;
+}
+.xl.no-ins {
+  grid-template-columns: minmax(0, 1fr) 0;
+  column-gap: 0;
+}
+.xl.no-ins .xl-ins {
+  display: none;
+}
+.xl-acts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.xl-acts a {
+  text-decoration: none;
+}
+.xl-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 4px;
+  color: var(--ink2);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.xl-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.xl-surfaces {
+  display: flex;
+  gap: 2px;
+}
+.xl-surfaces button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 10px 0 7px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink2);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.xl-surfaces span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+.xl-surfaces b {
+  font: 500 12.5px var(--text);
+  white-space: nowrap;
+}
+.xl-surfaces button:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+.xl-surfaces button.on {
+  background: var(--rose-a);
+  color: var(--ink);
+}
+.xl-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 12px;
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  overflow: hidden;
+}
+.xl-stage {
+  container-type: inline-size;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: safe center;
+  justify-content: safe center;
+  padding: 14px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+}
+.xl-stage iframe {
+  display: block;
+  border: 0;
+  background: transparent;
+}
+.xl-ctx {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--hair);
+  overflow: hidden;
+}
+.xl-ctx code {
+  min-width: 0;
+  margin-left: auto;
+  color: var(--ink3);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xl-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 46px;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--hair3);
+  border-radius: 12px;
+  background: var(--raise2);
+  white-space: nowrap;
+}
+.xl-toast[hidden] {
+  display: none;
+}
+
+/* Décor Twitch : le contexte, pas l'extension. */
+.tw-channel {
+  width: 1000px;
+  max-width: 100%;
+  display: grid;
+  gap: 14px;
+}
+.tw-player-mini {
+  height: 120px;
+  background: #000;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: #555;
+}
+.tw-panels {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  align-items: flex-start;
+}
+.tw-panel,
+.tw-panel-ext {
+  width: 318px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+@container (max-width: 700px) {
+  .tw-panel--ghost {
+    display: none;
+  }
+}
+.tw-panel--ghost {
+  height: 160px;
+  background: var(--tw-panel);
+  border: 1px dashed var(--tw-line);
+  display: grid;
+  place-items: center;
+  color: #555;
+}
+.tw-panel-ext {
+  outline: 2px solid var(--tw-purple);
+  outline-offset: 2px;
+  background: var(--tw-bg);
+}
+.tw-phone {
+  flex: none;
+  border: 10px solid #222;
+  border-radius: 36px;
+  overflow: hidden;
+  background: var(--tw-bg);
+  display: flex;
+  flex-direction: column;
+  box-sizing: content-box;
+}
+.tw-phone-status {
+  height: 28px;
+  font-size: 11px;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+}
+.tw-phone-player {
+  background: #000;
+  display: grid;
+  place-items: center;
+  color: #555;
+}
+.tw-phone-tabs {
+  height: 40px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--tw-line);
+  font-size: 13px;
+  color: #aaa;
+}
+.tw-phone-tabs .on {
+  color: #fff;
+  border-bottom: 2px solid var(--tw-purple);
+  padding: 10px 0 8px;
+}
+/* Video component: decor at 1:1 (no transform). Narrower stage → the decor's video side is cropped,
+   the extension viewport (right) always keeps its measured logical size. */
+.tw-player {
+  position: relative;
+  flex: none;
+  max-width: 100%;
+  margin-left: auto;
+  background: #000;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.tw-player-video {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #333;
+  font-size: 28px;
+  background: linear-gradient(135deg, #111 0%, #1a1025 100%);
+}
+.tw-component {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  outline: 2px dashed color-mix(in srgb, var(--tw-purple) 70%, transparent);
+}
+.tw-viewport-tag {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--tw-purple);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tw-component-column {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: #0008;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: #aaa;
+  font-style: normal;
+}
+.tw-window {
+  flex: none;
+  border: 1px solid var(--tw-line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--tw-bg);
+}
+.tw-window-bar {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #aaa;
+  background: var(--tw-panel);
+  border-bottom: 1px solid var(--tw-line);
+}
+.tw-dashboard {
+  display: flex;
+  flex: none;
+  gap: 16px;
+  align-items: flex-start;
+}
+.tw-dashboard-main {
+  width: 420px;
+  height: 640px;
+  border: 1px dashed var(--tw-line);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #555;
+}
+.xl-video-caption {
+  max-width: 640px;
+  text-align: center;
+}
+
+/* Coulisses */
+.xl-ins {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+}
+.xl-ins header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 27px;
+  margin-bottom: 4px;
+}
+.xl-ins h2 {
+  margin: 0;
+}
+.xl-screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  overflow: hidden;
+  background: repeating-conic-gradient(var(--check) 0 25%, var(--check2) 0 50%)
+    0 0 / 22px 22px;
+}
+.xl-idle {
+  padding: 12px;
+  color: var(--ink3);
+  font-size: 12.5px;
+  text-align: center;
+}
+.xl-fx {
+  position: absolute;
+  inset: auto 8px 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--back);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  animation: d-rise 0.22s var(--e);
+}
+.xl-fx small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12px;
+  font-weight: 400;
+}
+.xl-fx--tts {
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+.xl-fx--sound {
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+.xl-fx--raffle {
+  box-shadow: inset 0 0 0 1px var(--teal);
+}
+.xl-fx--muted {
+  color: var(--ink2);
+}
+.xl-fx--bonk {
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  background: none;
+}
+.xl-mark {
+  font-size: 54px;
+  line-height: 1;
+  animation: xl-bonk 0.6s var(--spring);
+}
+@keyframes xl-bonk {
+  from {
+    transform: scale(2.2) rotate(-14deg);
+    opacity: 0;
+  }
+}
+.xl-wallets .d-row,
+.xl-mods .d-row {
+  min-height: 30px;
+}
+.xl-raffle p {
+  margin: 6px 0 4px;
+  color: var(--ink2);
+}
+.xl-raffle b {
+  color: var(--ink);
+  font-weight: 500;
+}
+.xl-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.xl-row .d-fld {
+  width: 92px;
+}
+.xl-log {
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.xl-log:empty::before {
+  content: 'Rien pour l’instant.';
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.xl-log li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12.5px;
+  border-top: 1px solid var(--hair);
+}
+.xl-log li .d-ic {
+  margin-top: 2px;
+  color: var(--ink3);
+}
+.xl-log b {
+  font-weight: 550;
+}
+.xl-log small {
+  display: block;
+  color: var(--ink3);
+}
+.xl-log time {
+  font: 500 11.5px var(--num);
+  color: var(--ink3);
+}
+
+/* Les cartes de lecteurs du Lab */
+.xl-card {
+  padding: 8px 0;
+  border-top: 1px solid var(--hair);
+  color: var(--ink2);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.xl-card h3,
+.xl-card h4 {
+  margin: 6px 0 2px;
+  font: 600 13px var(--num);
+  color: var(--ink);
+}
+.xl-card p {
+  margin: 3px 0;
+}
+.xl-card ol {
+  margin: 4px 0;
+  padding-left: 18px;
+  color: var(--ink3);
+}
+.xl-card :is(button:not(.d-btn, .d-ib, [class*='bk-'])) {
+  height: 27px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--ink);
+  font: 500 12.5px var(--text);
+  cursor: pointer;
+}
+.xl-card :is(button:not(.d-btn, .d-ib)):hover {
+  background: var(--fill2);
+}
+.xl-card input:not([type='checkbox']):not([type='range']) {
+  min-width: 0;
+  height: 27px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--ink);
+  font: 400 12.5px var(--text);
+}
+.xl-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: end;
+}
+.xl-copy {
+  display: flex;
+  gap: 4px;
+}
+.xl-copy input {
+  flex: 1;
+}
+.xl-card label {
+  display: grid;
+  gap: 2px;
+}
+.xl-card details summary {
+  color: var(--ink3);
+  cursor: pointer;
+}
+
+@media (max-width: 1180px) {
+  .xl {
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+  .xl-surfaces b {
+    display: none;
+  }
+  .xl-id {
+    font-size: 0;
+    margin: 0;
+  }
+}

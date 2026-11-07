@@ -1,10 +1,14 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { join } from 'node:path';
+import { extname, isAbsolute, join } from 'node:path';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
-import type { AlertMediaStore } from './media-store.js';
+import {
+  ALERT_MEDIA,
+  type AlertMediaStore,
+  findMediaOrigins,
+} from './media-store.js';
 import { AlertPlacementStore } from './placement-store.js';
 import type { SeTipsLink } from './se-tips.js';
 
@@ -14,8 +18,12 @@ import type { SeTipsLink } from './se-tips.js';
 // missing in Studio's storage is reported failed (media_missing) at once: never played half, never replayed.
 // Calibration (17/10/2026): each claimed alert carries its variant's SAVED placement (placement-store.ts), read at
 // claim time, so a change applies from the next alert on and never moves one already playing.
+// Media in the Lab (06/11/2026): the Lab on the main Core has its own data folder, so the page can import the streamer's files
+// there (originals only read, content-addressed copies). Never offered anywhere else: the other profiles share the store of
+// the installed Studio.
 
 const MAX_BODY = 4096;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PLAYER_FILES: Record<string, string> = {
   'player.html': 'text/html; charset=utf-8',
   'player.js': 'text/javascript; charset=utf-8',
@@ -99,6 +107,10 @@ export interface AlertsRuntimeDeps {
    * Studio (/v1/studio/alerts). Same service, same sub-paths: only the base and the client change.
    */
   environment?: 'lab' | 'production';
+  /** This profile's media folder is its own (the Lab on the main Core): the page may import files into it. */
+  mediaImport?: boolean;
+  /** Where to look for media (tests); by default the usual folders and the installed Studio's settings. */
+  mediaOrigins?: { folders?: readonly string[]; config?: string };
 }
 
 /**
@@ -274,6 +286,28 @@ export class AlertsRuntime {
         variants: variants.map((v) => ({ ...v, missing: this.missing(v) })),
       });
     }
+    if (req.method === 'GET' && p === '/media')
+      return reply(200, await this.mediaView());
+    if (req.method === 'POST' && p === '/media/import')
+      return reply(200, await this.importMedia(await this.body(req)));
+    // « Rejouer » : the dock's visual replay (Core copies the alert, never the event again, no gain, one at a time).
+    const again = /^\/replay\/([0-9a-f-]{36})$/.exec(p);
+    if (req.method === 'POST' && again) {
+      const key = (await this.body(req)).replay_key;
+      if (typeof key !== 'string' || !UUID.test(key))
+        return reply(400, { error: 'bad_replay_key' });
+      const dock =
+        this.d.environment === 'production'
+          ? '/v1/studio/dock'
+          : '/v1/lab/dock';
+      return reply(
+        200,
+        await this.d.core(
+          `${dock}/${this.d.channelId}/alerts/${again[1]}/replay`,
+          { replay_key: key },
+        ),
+      );
+    }
     // Alertes › Variantes (30/10): which variants each family may play (the Core decides and validates).
     if (p === '/variants' && (req.method === 'GET' || req.method === 'POST'))
       return reply(
@@ -313,6 +347,12 @@ export class AlertsRuntime {
       }
       return reply(200, this.twitchView());
     }
+    // Refonte H3: « Vider la file » — the waiting alerts only (Core keeps the history; nothing is paid).
+    if (req.method === 'POST' && p === '/clear')
+      return reply(
+        200,
+        await this.d.core(`${this.base}/${this.d.channelId}/clear`, {}),
+      );
     if (req.method === 'GET' && p === '/placement')
       return reply(200, { variants: this.placement.all() });
     const placed = /^\/placement\/([a-z0-9_]{1,64})$/.exec(p);
@@ -332,6 +372,107 @@ export class AlertsRuntime {
       return reply(200, await this.d.core(`${this.base}/events`, event));
     }
     reply(404, { error: 'not_found' });
+  }
+
+  /** Every media the catalogue names (Halloween included) and the variants using it. */
+  private async mediaNames() {
+    const { variants } = await this.d.core<{ variants: Variant[] }>(
+      `${this.base}/catalog`,
+    );
+    const used = new Map<string, string[]>(ALERT_MEDIA.map((n) => [n, []]));
+    for (const v of variants)
+      for (const n of [v.video, v.audio])
+        if (n) used.set(n, [...(used.get(n) ?? []), v.id]);
+    return used;
+  }
+
+  private origins(names: readonly string[]) {
+    return findMediaOrigins(names, this.d.media.dir, this.d.mediaOrigins);
+  }
+
+  private async mediaView() {
+    const used = await this.mediaNames();
+    const origins = this.d.mediaImport
+      ? await this.origins([...used.keys()])
+      : [];
+    return {
+      can_import: Boolean(this.d.mediaImport),
+      ...(this.d.mediaImport ? { store_dir: this.d.media.dir } : {}),
+      origins: origins.map(({ id, label, path, reserve, files }) => ({
+        id,
+        label,
+        path,
+        reserve,
+        count: files.size,
+      })),
+      media: this.d.media
+        .status([...used.keys()])
+        .map(({ name, available, bytes, source }) => ({
+          name,
+          available,
+          bytes,
+          source,
+          variants: used.get(name),
+          found_in: origins
+            .filter((o) => o.files.has(name))
+            .map((o) => o.label),
+        })),
+    };
+  }
+
+  /**
+   * Lab only. { origin: 'all' }: what is still missing, from the usual folders (never the installed Studio's copies).
+   * { origin: <id> }: all that origin holds; the installed Studio's copies are checked against their recorded hash.
+   * { folder }: every media of the catalogue found in it (by its exact name). { name, file }: one media replaced by that
+   * file. The originals are only read; nothing but the catalogue's names enters the store.
+   */
+  private async importMedia(body: Record<string, unknown>) {
+    if (!this.d.mediaImport)
+      throw Object.assign(new Error('lab_only'), { status: 403 });
+    const used = await this.mediaNames();
+    const path = (v: unknown) => {
+      if (typeof v !== 'string' || !isAbsolute(v))
+        throw Object.assign(new Error('bad_path'), { status: 400 });
+      return v;
+    };
+    if (body.file !== undefined) {
+      const name = String(body.name ?? '');
+      const from = path(body.file);
+      if (
+        !used.has(name) ||
+        extname(name).toLowerCase() !== extname(from).toLowerCase()
+      )
+        throw Object.assign(new Error('bad_media'), { status: 400 });
+      if (!existsSync(from))
+        throw Object.assign(new Error('file_not_found'), { status: 404 });
+      return { report: await this.d.media.import([{ name, from }]) };
+    }
+    if (typeof body.origin === 'string') {
+      const origins = await this.origins([...used.keys()]);
+      const all = body.origin === 'all';
+      const chosen = origins.filter((o) =>
+        all ? !o.reserve : o.id === body.origin,
+      );
+      if (!all && !chosen.length)
+        throw Object.assign(new Error('origin_not_found'), { status: 404 });
+      const picks = new Map<string, { from: string; sha256?: string }>();
+      for (const o of chosen)
+        for (const [name, file] of o.files)
+          if (!picks.has(name) && !(all && this.d.media.path(name)))
+            picks.set(name, file);
+      return {
+        report: await this.d.media.import(
+          [...picks].map(([name, file]) => ({ name, ...file })),
+        ),
+      };
+    }
+    const folder = path(body.folder);
+    if (!existsSync(folder))
+      throw Object.assign(new Error('folder_not_found'), { status: 404 });
+    const report = await this.d.media.import(
+      [...used.keys()].map((name) => ({ name, from: join(folder, name) })),
+    );
+    return { report };
   }
 
   /**

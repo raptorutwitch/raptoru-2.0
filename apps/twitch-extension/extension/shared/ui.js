@@ -2,7 +2,7 @@
 // Les deux surfaces ont la MÊME logique et des CSS différents : une seule
 // implémentation métier, deux mises en page.
 
-import { ERROR_LABELS, errorLabel, newIdempotencyKey } from './api.js';
+import { ERROR_LABELS, errorLabel } from './api.js';
 import { modulePresentation, notificationCount, resolveExperience, syncNotificationCenter } from './experience.js';
 import {
   getNotifications,
@@ -12,35 +12,38 @@ import {
   resolveNotification,
   unreadNotificationCount,
 } from './notifications.js';
-import { RUNTIME } from './runtime-config.js';
-import { walletPaymentMethods, walletCanPayTokens } from './wallet-payment.js';
+import { createEmoteAccess } from './emote-access.js';
+import { walletPaymentMethods } from './wallet-payment.js';
 import {
-  createFeedbackSlot,
-  createIconButton,
   createWalletFace,
   createCurrencySwitch,
-  createMultiCurrencyPayment,
   formatWalletExactValue,
-  normalizeSearchQuery,
-  providerPresentation,
-  UI_ICONS,
-  updateFeedbackSlot,
 } from './ui-primitives.js';
-import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
-import { createEmotePicker } from './emote-picker.js';
-import { createBonkChargeur } from './bonk-chargeur.js';
-import { createBonkTour } from './bonk-tour.js';
-import { createTwitchEmoteDialog, createTwitchEmoteSource } from './bonk-twitch-source.js';
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
-import { hoverMarquee } from './hover-marquee.js';
-import { arrangeBonkPickerGroups } from './bonk-picker-groups.js';
-import { createTtsV2View, ttsV2Surface } from './tts-v2.js';
-import { createModerationV2View } from './moderation-v2.js';
-import { createCommandsV2View } from './commands-v2.js';
-import { createCommandsPublicView } from './commands-public.js';
-import { createSubWheelView } from './sub-wheel-ext.js';
-import { createEventShopView } from './events-shop.js';
-import { createTombolaV2View } from './tombola-v2.js';
+// The Soundboard screen registers itself as the variant of « soundboard » (soundboard-view.js).
+import './soundboard-view.js';
+// The Bonk screen registers itself as the variant of « bonk » (bonk-view.js).
+import './bonk-view.js';
+import { readTutorialDisabled, writeTutorialDisabled } from './tutorial-prefs.js';
+// Module variants register themselves (TTS V2, then TTS V1 for the sessions without V2; Tombola V2).
+import './tts-v2.js';
+import './tts-v1.js';
+// The D4 console registers itself as the variant of « moderation » (with its « Commandes » view).
+import './moderation-v2.js';
+// Moderation V1 for the sessions without the D4 console.
+import './moderation-v1.js';
+import { historyActionIcon, historyCost, historyQuantity } from './history-format.js';
+// Session modules: each registers itself (card, availability, view) — the import order is the Hub order.
+import './commands-public.js';
+import './sub-wheel-ext.js';
+import './events-shop.js';
+import './tombola-v2.js';
+// Tombola V1 for the sessions without V2 (its « open » rule is also the Hub's and the header's).
+import { raffleIsActive } from './tombola-v1.js';
+// The module host (architecture socle): viewer modules register themselves; ui.js only hosts them.
+import { hostModules, loadHostModules, moduleVariant, sessionModule, sessionModules, viewerModuleView } from './module-registry.js';
+import { createModuleModerationPanel } from './module-moderation.js';
+import './coffre-mystere.js';
 import {
   hideRestrictions,
   holdsAction,
@@ -61,54 +64,7 @@ const el = (tag, className, text) => {
   return node;
 };
 
-const TWEMOJI_UNICODE_IDS = new Set(
-  UNICODE_EMOJI_GROUPS.flatMap((group) => group.emotes ?? [])
-    .map((item) => Array.isArray(item) ? String(item[0]) : String(item?.id ?? '')),
-);
-
-// Les emotes Unicode du catalogue gardent leur identifiant et leur glyph
-// natifs. Seule leur couche visuelle pointe vers les SVG Twemoji locaux,
-// afin de ne jamais convertir une emote Twitch/7TV/BTTV/FFZ.
-export function bonkTwemojiAssetPath(emote) {
-  const id = String(emote?.id ?? '').toLowerCase();
-  if (emote?.source !== 'unicode' || !TWEMOJI_UNICODE_IDS.has(id)) return null;
-  const codepoints = id.slice('unicode:'.length)
-    .replace(/-fe0f/g, '')
-    .split('-')
-    .map((part) => part.replace(/^0+(?=[0-9a-f])/, ''))
-    .join('-');
-  return codepoints ? `assets/twemoji/svg/${codepoints}.svg` : null;
-}
-
 // Icônes du Soundboard (sbx-*) : tracés simples, couleur héritée.
-const SBX_ICON_PATHS = {
-  play: '<path d="M8.5 6.2v11.6a.9.9 0 0 0 1.4.8l9.2-5.8a.9.9 0 0 0 0-1.6L9.9 5.4a.9.9 0 0 0-1.4.8Z" fill="currentColor"/>',
-  star: '<path class="sbx-star" d="M11.1 3.9a1 1 0 0 1 1.8 0l2.07 4.2 4.63.68a1 1 0 0 1 .56 1.7l-3.35 3.27.79 4.61a1 1 0 0 1-1.45 1.06L12 17.24l-4.15 2.18a1 1 0 0 1-1.45-1.06l.79-4.61-3.35-3.27a1 1 0 0 1 .56-1.7l4.63-.68Z" stroke-linejoin="round"/>',
-  speaker: '<path d="M4.5 9.6v4.8h3.2l4.3 3.7V5.9L7.7 9.6Z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path class="sbx-wave sbx-wave--1" d="M15.3 9.4a3.6 3.6 0 0 1 0 5.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path class="sbx-wave sbx-wave--2" d="M17.9 6.9a7.2 7.2 0 0 1 0 10.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path class="sbx-mute" d="m15.6 9.8 4.4 4.4m0-4.4-4.4 4.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
-  search: '<circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-  close: '<path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-  sort: '<path d="M8 5v14m0 0-3-3m3 3 3-3M16 19V5m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
-  send: '<path d="M5 12h12m-4.5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>',
-  clock: '<circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8.2v4.3l2.8 1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-};
-
-function sbxIcon(name) {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('class', `sbx-icon sbx-icon--${name}`);
-  svg.innerHTML = SBX_ICON_PATHS[name];
-  return svg;
-}
-
-function sbxEqualizer() {
-  const eq = document.createElement('span');
-  eq.className = 'sbx-eq';
-  eq.setAttribute('aria-hidden', 'true');
-  eq.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
-  return eq;
-}
-
 function createNotificationBellIcon() {
   const createNode = typeof document.createElementNS === 'function'
     ? (tag) => document.createElementNS('http://www.w3.org/2000/svg', tag)
@@ -139,395 +95,8 @@ function createNotificationBellIcon() {
   return svg;
 }
 
-function createTwitchBrandIcon() {
-  const createNode = typeof document.createElementNS === 'function'
-    ? (tag) => document.createElementNS('http://www.w3.org/2000/svg', tag)
-    : (tag) => document.createElement(tag);
-  const svg = createNode('svg');
-  svg.classList.add('jdm-emote-source__twitch-mark');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'Twitch');
-  svg.setAttribute('focusable', 'false');
-
-  // Marque locale, monochrome et autonome : aucune image distante ni
-  // dépendance au rendu de la police du viewer.
-  const bubble = createNode('path');
-  bubble.setAttribute('d', 'M3 3h18v11l-4 4h-4l-3 3v-3H3V3Z');
-  bubble.setAttribute('fill', 'none');
-  bubble.setAttribute('stroke', 'currentColor');
-  bubble.setAttribute('stroke-linejoin', 'round');
-  bubble.setAttribute('stroke-width', '1.8');
-  const bars = createNode('path');
-  bars.setAttribute('d', 'M9 7v5M15 7v5');
-  bars.setAttribute('fill', 'none');
-  bars.setAttribute('stroke', 'currentColor');
-  bars.setAttribute('stroke-linecap', 'round');
-  bars.setAttribute('stroke-width', '1.8');
-  svg.append(bubble, bars);
-  return svg;
-}
-
-const BONK_SOURCE_PRIORITY = Object.freeze({
-  twitch: 20,
-  '7tv': 30,
-  bttv: 40,
-  ffz: 50,
-  unicode: 60,
-});
-
-const BONK_ARTIFICIAL_GROUP_IDS = new Set(['twitch-sub-dofus-preview']);
-
-function normalizedBonkSource(value) {
-  const source = String(value ?? '').trim().toLowerCase().replace(/[_\s]+/g, '-');
-  if (!source) return '';
-  if (source === '7tv' || source.includes('7tv') || source.includes('seven-tv')) return '7tv';
-  if (source === 'bttv' || source.includes('bttv') || source.includes('betterttv')) return 'bttv';
-  if (source === 'ffz' || source.includes('frankerfacez')) return 'ffz';
-  if (source === 'unicode' || source.includes('emoji')) return 'unicode';
-  if (source === 'twitch' || source.includes('twitch') || source.includes('helix')) return 'twitch';
-  return '';
-}
-
-function bonkGroupSource(group = {}) {
-  const explicit = normalizedBonkSource(group.source ?? group.provider ?? group.platform);
-  if (explicit) return explicit;
-  const firstEmote = Array.isArray(group.emotes) && group.emotes.length && !Array.isArray(group.emotes[0])
-    ? group.emotes[0]
-    : null;
-  const itemSource = normalizedBonkSource(firstEmote?.source ?? firstEmote?.provider ?? firstEmote?.platform);
-  if (itemSource) return itemSource;
-  const hint = `${group.id ?? ''} ${group.label ?? ''}`.toLowerCase();
-  return normalizedBonkSource(hint) || 'twitch';
-}
-
-function firstBonkText(records, keys) {
-  for (const record of records) {
-    if (!record || typeof record !== 'object') continue;
-    for (const key of keys) {
-      const value = record[key];
-      if (value === null || value === undefined || typeof value === 'object') continue;
-      const text = String(value).trim();
-      if (text) return text;
-    }
-  }
-  return '';
-}
-
-function firstBonkImageUrl(records, keys) {
-  for (const record of records) {
-    if (!record || typeof record !== 'object') continue;
-    for (const key of keys) {
-      const value = record[key];
-      if (typeof value !== 'string' || !value.trim()) continue;
-      try {
-        // Only consume an URL explicitly supplied by the runtime. A relative
-        // string is not a profile image contract and must not be turned into
-        // a made-up hôte local/network asset by the picker.
-        const url = new URL(value.trim());
-        if (url.protocol === 'https:' || url.protocol === 'http:') return url.href;
-      } catch {
-        // An invalid or relative avatar is deliberately ignored. The rail
-        // keeps its text fallback instead of inventing a network asset.
-      }
-    }
-  }
-  return '';
-}
-
-function firstBonkAssetPath(records, keys) {
-  for (const record of records) {
-    if (!record || typeof record !== 'object') continue;
-    for (const key of keys) {
-      const value = String(record[key] ?? '').trim().replaceAll('\\', '/');
-      if (/^assets\/bonk\/[a-z0-9/_-]+\.svg$/iu.test(value)) return value;
-    }
-  }
-  return '';
-}
-
-function bonkChannelIdentity(group = {}) {
-  const firstEmote = Array.isArray(group.emotes) && group.emotes.length && !Array.isArray(group.emotes[0])
-    ? group.emotes[0]
-    : null;
-  const nested = [
-    group.channel,
-    group.broadcaster,
-    group.owner,
-    group.user,
-    group.channel_info,
-    group.broadcaster_info,
-    firstEmote?.channel,
-    firstEmote?.broadcaster,
-    firstEmote?.owner,
-    firstEmote?.user,
-  ].filter((value) => value && typeof value === 'object');
-  const records = [group, ...nested, firstEmote].filter(Boolean);
-  const id = firstBonkText(records, [
-    'channel_id', 'broadcaster_id', 'twitch_channel_id', 'owner_id', 'user_id', 'twitch_user_id',
-  ]) || firstBonkText(nested, ['id', 'channelId', 'broadcasterId', 'twitchId', 'userId']);
-  const login = firstBonkText(records, [
-    'channel_login', 'broadcaster_login', 'user_login', 'login', 'username',
-  ]) || (typeof group.channel === 'string' ? group.channel.trim() : '');
-  const displayName = firstBonkText(records, [
-    'channel_display_name', 'broadcaster_name', 'display_name', 'channel_name', 'name',
-  ]);
-  const avatarUrl = firstBonkImageUrl(records, [
-    'channel_avatar_url', 'avatar_url', 'profile_image_url', 'profile_image', 'profileImageUrl', 'avatar',
-  ]);
-  const avatarAsset = firstBonkAssetPath(records, [
-    'channel_avatar_asset', 'avatar_asset', 'local_avatar_asset',
-  ]);
-  if (!id && !login) return null;
-  const key = id ? `id:${id}` : `login:${login.toLocaleLowerCase('fr')}`;
-  return {
-    key,
-    id,
-    login,
-    displayName: displayName || login,
-    avatarUrl,
-    avatarAsset,
-  };
-}
-
-function isBonkTwitchGlobal(group, source) {
-  if (source !== 'twitch') return false;
-  if (group.scope === 'global' || group.type === 'global' || group.is_global === true || group.global === true) return true;
-  if (String(group.owner_id ?? '').trim() === '0') return true;
-  const hint = `${group.id ?? ''} ${group.label ?? ''}`.toLowerCase();
-  return /(?:^|[-_:\s])global(?:[-_:\s]|$)/u.test(hint);
-}
-
-function isArtificialBonkGroup(group) {
-  const id = String(group?.id ?? '').trim().toLowerCase();
-  const label = String(group?.label ?? '').trim().toLocaleLowerCase('fr');
-  return BONK_ARTIFICIAL_GROUP_IDS.has(id)
-    || label === 'dofus & co';
-}
-
-function bonkGroupPriority(group) {
-  const source = String(group?.source || 'twitch');
-  if (source === 'twitch' && isBonkTwitchGlobal(group, source)) return 10;
-  return BONK_SOURCE_PRIORITY[source] ?? 90;
-}
-
-/**
- * Reconcile runtime groups into stable source entries without changing emote
- * IDs. Twitch channel groups are merged only when the API provides an actual
- * channel ID/login; otherwise the original group remains a safe fallback.
- */
-export function organizeBonkSourceGroups(rawGroups = []) {
-  const merged = new Map();
-  const channelAliases = new Map();
-  let order = 0;
-  for (const rawGroup of Array.isArray(rawGroups) ? rawGroups : []) {
-    if (!rawGroup || typeof rawGroup !== 'object' || !Array.isArray(rawGroup.emotes) || !rawGroup.emotes.length) continue;
-    if (isArtificialBonkGroup(rawGroup)) continue;
-    const source = bonkGroupSource(rawGroup);
-    const global = isBonkTwitchGlobal(rawGroup, source);
-    const channel = source === 'twitch' && !global ? bonkChannelIdentity(rawGroup) : null;
-    let key = global
-      ? 'twitch-global'
-      : channel
-        ? `twitch-channel:${channel.key}`
-        : `${source}:${String(rawGroup.id ?? `group-${order}`)}`;
-    if (channel) {
-      const aliases = [
-        channel.id ? `id:${channel.id}` : '',
-        channel.login ? `login:${channel.login.toLocaleLowerCase('fr')}` : '',
-      ].filter(Boolean);
-      const knownKey = aliases.map((alias) => channelAliases.get(alias)).find(Boolean);
-      if (knownKey) key = knownKey;
-      for (const alias of aliases) channelAliases.set(alias, key);
-    }
-    const current = merged.get(key);
-    const group = {
-      ...rawGroup,
-      id: global ? 'twitch-global' : channel ? key : String(rawGroup.id ?? `group-${order}`),
-      source,
-      label: global
-        ? 'Twitch'
-        : channel?.displayName || String(rawGroup.label ?? 'Twitch'),
-      icon: global ? String(rawGroup.icon || 'T') : String(rawGroup.icon || ''),
-      emotes: [...rawGroup.emotes],
-      _bonkOrder: order,
-    };
-    if (channel) {
-      if (channel.id) group.channel_id = channel.id;
-      if (channel.login) group.channel_login = channel.login;
-      if (channel.displayName) group.channel_display_name = channel.displayName;
-      if (channel.avatarUrl) group.channel_avatar_url = channel.avatarUrl;
-      if (channel.avatarAsset) group.channel_avatar_asset = channel.avatarAsset;
-    }
-    if (!current) {
-      merged.set(key, group);
-    } else {
-      current.emotes.push(...group.emotes);
-      if (!current.channel_id && group.channel_id) current.channel_id = group.channel_id;
-      if (!current.channel_login && group.channel_login) current.channel_login = group.channel_login;
-      if (!current.channel_display_name && group.channel_display_name) {
-        current.channel_display_name = group.channel_display_name;
-        current.label = group.channel_display_name;
-      }
-      if (!current.channel_avatar_url && group.channel_avatar_url) current.channel_avatar_url = group.channel_avatar_url;
-      if (!current.channel_avatar_asset && group.channel_avatar_asset) current.channel_avatar_asset = group.channel_avatar_asset;
-    }
-    order += 1;
-  }
-  return [...merged.values()]
-    .sort((left, right) => bonkGroupPriority(left) - bonkGroupPriority(right) || left._bonkOrder - right._bonkOrder)
-    .map(({ _bonkOrder, ...group }) => group);
-}
-
-export function normalizeBonkEmote(group, item) {
-  if (Array.isArray(item)) {
-    return {
-      id: String(item[0]),
-      glyph: String(item[1]),
-      label: String(item[2]),
-      source: normalizedBonkSource(group.source) || bonkGroupSource(group),
-      groupId: group.id,
-      previewOnly: Boolean(group.preview_only),
-    };
-  }
-  return {
-    ...item,
-    id: String(item.id),
-    label: String(item.label ?? item.name ?? item.id),
-    source: normalizedBonkSource(item.source) || normalizedBonkSource(group.source) || bonkGroupSource(group),
-    groupId: group.id,
-    previewOnly: Boolean(item.preview_only ?? group.preview_only),
-  };
-}
-
-export function buildBonkEmoteIndex(rawGroups = []) {
-  const seenEmoteIds = new Set();
-  const realGroups = organizeBonkSourceGroups(rawGroups).map((group) => {
-    const emotes = [];
-    for (const item of group.emotes ?? []) {
-      const emote = normalizeBonkEmote(group, item);
-      if (seenEmoteIds.has(emote.id)) continue;
-      seenEmoteIds.add(emote.id);
-      emotes.push(emote);
-    }
-    return { ...group, emotes };
-  }).filter((group) => group.emotes.length);
-  const emoteById = new Map();
-  for (const group of realGroups) {
-    for (const item of group.emotes) emoteById.set(item.id, item);
-  }
-  return { realGroups, emoteById };
-}
-
-/**
- * Keep only canonical favorite IDs that still exist in the current catalog.
- * The order is personal (most recently toggled first) and duplicates are
- * removed without mutating the stored array.
- */
-export function normalizeBonkFavoriteIds(storedIds, emoteIds) {
-  const valid = new Set(
-    emoteIds && typeof emoteIds[Symbol.iterator] === 'function'
-      ? [...emoteIds].map(String)
-      : [],
-  );
-  const seen = new Set();
-  const result = [];
-  for (const rawId of Array.isArray(storedIds) ? storedIds : []) {
-    const id = String(rawId);
-    if (!valid.has(id) || seen.has(id)) continue;
-    seen.add(id);
-    result.push(id);
-  }
-  return result;
-}
-
-/**
- * Toggle one canonical Bonk favorite. Invalid/stale IDs are ignored so a
- * persisted favorite can never create a synthetic emote in the UI.
- */
-export function toggleBonkFavoriteIds(storedIds, emoteId, emoteIds) {
-  const id = String(emoteId ?? '');
-  const available = new Set(
-    emoteIds && typeof emoteIds[Symbol.iterator] === 'function'
-      ? [...emoteIds].map(String)
-      : [],
-  );
-  const current = normalizeBonkFavoriteIds(storedIds, available);
-  if (!id || !available.has(id)) return current;
-  return current.includes(id)
-    ? current.filter((candidate) => candidate !== id)
-    : [id, ...current];
-}
-
-/**
- * Build the rail from groups that contain real emotes. Virtual entries are
- * derived from the current favorite/recent IDs on every render so they never
- * become stale after a toggle or a catalog refresh.
- */
-export function buildBonkVisibleGroups(realGroups, { favoriteIds = [], recentIds = [] } = {}) {
-  const groups = [];
-  if (Array.isArray(favoriteIds) && favoriteIds.length) {
-    groups.push({ id: 'favorites', label: 'Favoris', icon: '⭐', source: 'virtual' });
-  }
-  if (Array.isArray(recentIds) && recentIds.length) {
-    groups.push({ id: 'recents', label: 'Récents', icon: '🕘', source: 'virtual' });
-  }
-  return [
-    ...groups,
-    ...(Array.isArray(realGroups) ? realGroups.filter((group) => group?.emotes?.length) : []),
-  ];
-}
-
-// Lab : seul le rôle viewer devient le compte Twitch connecté ; modérateur et broadcaster gardent
-// une identité fictive sans emotes Twitch personnelles (Core refuserait : viewer_not_linked).
-export const BONK_TWITCH_ROLE_HINT = 'Disponible en rôle viewer lié à Twitch';
-export function bonkTwitchLockedForRole(state) {
-  return state?.environment === 'lab' && ['moderator', 'broadcaster'].includes(state?.role);
-}
-
-export function isBonkEmoteSelectable(emote, { demoMode = false, twitchLocked = false } = {}) {
-  if (twitchLocked && emote?.source === 'twitch') return false;
-  return !(emote?.previewOnly && !demoMode);
-}
-
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 
-// Le pot garde une valeur exacte et groupée. On remplace l'espace fine de
-// l'API Intl par une espace insécable normale pour que la séparation reste
-// perceptible dans la petite carte Tombola.
-function fmtRafflePotAmount(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '—';
-  return number.toLocaleString('fr-FR').replace(/\u202f/gu, '\u00a0');
-}
-
-function soundPreviewUrls(sound) {
-  const variants = Array.isArray(sound?.variants) ? sound.variants : [];
-  const urls = variants.length
-    ? variants.map((variant) => variant?.preview_url)
-    : [sound?.preview_url];
-  return urls.filter(Boolean).map(String);
-}
-
-function chooseSoundPreviewUrl(sound) {
-  const urls = soundPreviewUrls(sound);
-  if (!urls.length) return null;
-  const raw = Number(Math.random());
-  const bounded = Number.isFinite(raw) ? raw : 0;
-  const index = Math.min(urls.length - 1, Math.max(0, Math.floor(bounded * urls.length)));
-  return urls[index];
-}
-
-const PREVIEW_VOLUME_KEY = 'raptoru-live:soundboard-preview-volume';
-const SOUNDBOARD_FAVORITES_KEY = 'raptoru-live:soundboard-favorites';
-const SOUNDBOARD_RECENTS_KEY = 'raptoru-live:soundboard-recents';
-const SOUNDBOARD_ORDER_KEY = 'raptoru-live:soundboard-order';
-const SOUNDBOARD_ALIASES_KEY = 'raptoru-live:soundboard-aliases';
-export const SOUNDBOARD_ALIAS_MAX_LENGTH = 32;
-const TUTORIAL_DISABLED_PREFIX = 'raptoru-live:tutorial-disabled:';
-/** Tutoriel du module Bonk (bonk-tour.js) : même préférence « Ne plus afficher » que le tutoriel global. */
-const BONK_TUTORIAL = { id: 'bonk', version: 1 };
-const EMOTE_CATALOG_REFRESH_MS = 10 * 60 * 1000;
 // Soundboard help copy, kept for the tutorial (not wired yet).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const SOUNDBOARD_HELP_PAGES = Object.freeze([
@@ -537,11 +106,6 @@ const SOUNDBOARD_HELP_PAGES = Object.freeze([
   'Utilise 🔍 pour retrouver rapidement un son.',
   '🔊 règle le volume de tes aperçus.',
 ]);
-export const EMOTE_AUTH_POLL_INTERVAL_MS = 2_000;
-export const EMOTE_AUTH_TIMEOUT_MS = 90_000;
-export const EMOTE_AUTH_POPUP_GRACE_MS = 5_000;
-/** Après une tentative, une autorisation vue plus tard par le serveur est encore confirmée pendant ce délai. */
-const EMOTE_AUTH_LATE_WINDOW_MS = 10 * 60_000;
 const ACTIONS_MODULE = Object.freeze({
   id: 'actions',
   label: 'Actions',
@@ -559,33 +123,6 @@ const HUB_MODULE_STYLES = Object.freeze({
   event_shop: { icon: 'bat', color: '#7a1220', color2: '#d4561a' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
-/** Commands V2 « Commandes » (phase F): the channel's public command list, for every viewer. */
-const COMMANDS_PUBLIC_MODULE = Object.freeze({
-  id: 'commands',
-  label: 'Commandes',
-  icon: '!',
-  description: 'Les commandes à taper dans le chat.',
-});
-const SUB_WHEEL_MODULE = Object.freeze({
-  id: 'sub_wheel',
-  label: 'Roue du Sub',
-  icon: '🎡',
-  description: 'Tes tours de Roue du Sub.',
-});
-/** « Événements » (docs/HALLOWEEN.md): the edition of the moment, shown only while the Core says one is open. */
-const EVENT_SHOP_MODULE = Object.freeze({
-  id: 'event_shop',
-  label: 'Événements',
-  icon: '🦇',
-  description: 'Fais peur à Raptoru avec tes Bonbons.',
-});
-/** The module's card names the edition the Core announces (« Halloween 2026 — … »). */
-function eventShopModule(eventShop) {
-  const title = eventShop?.edition?.title;
-  return title
-    ? { ...EVENT_SHOP_MODULE, description: `${title} — fais peur à Raptoru avec tes Bonbons.` }
-    : EVENT_SHOP_MODULE;
-}
 const MODERATION_MODULE = Object.freeze({
   id: 'moderation',
   label: 'Modération',
@@ -601,357 +138,6 @@ function visibleModuleLabel(mod) {
   return mod?.id === ACTIONS_MODULE.id ? 'Historique' : mod?.label;
 }
 
-function normalizeTtsDraft(value) {
-  return String(value ?? '')
-    // eslint-disable-next-line no-control-regex -- control characters are stripped on purpose
-    .replace(/[\u0000-\u001F\u007F-\u009F]/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim();
-}
-
-function ttsDraftLength(value) {
-  return Array.from(normalizeTtsDraft(value)).length;
-}
-
-function readStoredIds(key) {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(value) ? value.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredIds(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* stockage facultatif */ }
-}
-
-/**
- * Reconcile the viewer's personal Soundboard order with the current catalog.
- * Canonical IDs already known by the viewer keep their positions, new IDs are
- * appended in catalog order, and stale IDs are discarded.
- */
-export function normalizeSoundboardOrder(storedIds, catalogIds) {
-  const catalog = Array.isArray(catalogIds) ? catalogIds.map(String) : [];
-  const valid = new Set(catalog);
-  const seen = new Set();
-  const order = [];
-  for (const rawId of Array.isArray(storedIds) ? storedIds : []) {
-    const id = String(rawId);
-    if (!valid.has(id) || seen.has(id)) continue;
-    seen.add(id);
-    order.push(id);
-  }
-  for (const rawId of catalog) {
-    if (seen.has(rawId)) continue;
-    seen.add(rawId);
-    order.push(rawId);
-  }
-  return order;
-}
-
-/**
- * Apply a reorder made in a filtered view to the canonical personal order.
- * Hidden IDs keep their slots while the visible IDs receive the new relative
- * order. This keeps filtering a view and never turns it into a destructive
- * second ordering system.
- */
-export function reorderSoundboardVisibleSubset(order, visibleIds, reorderedVisibleIds) {
-  const base = Array.isArray(order) ? order.map(String) : [];
-  const visible = [];
-  const visibleSet = new Set();
-  for (const rawId of Array.isArray(visibleIds) ? visibleIds : []) {
-    const id = String(rawId);
-    if (visibleSet.has(id) || !base.includes(id)) continue;
-    visibleSet.add(id);
-    visible.push(id);
-  }
-  const nextVisible = [];
-  const seen = new Set();
-  for (const rawId of Array.isArray(reorderedVisibleIds) ? reorderedVisibleIds : []) {
-    const id = String(rawId);
-    if (!visibleSet.has(id) || seen.has(id)) continue;
-    seen.add(id);
-    nextVisible.push(id);
-  }
-  for (const id of visible) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    nextVisible.push(id);
-  }
-  let cursor = 0;
-  return base.map((id) => (visibleSet.has(id) ? nextVisible[cursor++] : id));
-}
-
-/** Insertion stricte : l'élément `from` prend la place `to`, seuls ceux d'entre les deux se décalent d'un rang. */
-export function moveSoundboardItem(ids, from, to) {
-  const next = Array.isArray(ids) ? [...ids] : [];
-  if (from < 0 || from >= next.length || to < 0 || to >= next.length || from === to) return next;
-  const [moved] = next.splice(from, 1);
-  next.splice(to, 0, moved);
-  return next;
-}
-
-/**
- * Destination d'un glisser, lue sur les positions relevées au début du geste (jamais sur des cartes en
- * mouvement). Le pointeur doit entrer franchement dans un emplacement (marge de 12 %) pour le choisir ; dans un
- * interstice ou hors de la grille, la destination courante est gardée : pas d'aller-retour autour d'une frontière.
- */
-export function soundboardDropSlot(slots, x, y, current) {
-  const hit = (Array.isArray(slots) ? slots : []).findIndex((slot) => (
-    x >= slot.left + slot.width * 0.12 && x <= slot.left + slot.width * 0.88
-    && y >= slot.top + slot.height * 0.12 && y <= slot.top + slot.height * 0.88
-  ));
-  return hit >= 0 ? hit : current;
-}
-
-export function normalizeSoundboardAlias(value, maxLength = SOUNDBOARD_ALIAS_MAX_LENGTH) {
-  const limit = Math.max(1, Number(maxLength) || SOUNDBOARD_ALIAS_MAX_LENGTH);
-  return Array.from(String(value ?? '')
-    // eslint-disable-next-line no-control-regex -- control characters are stripped on purpose
-    .replace(/[\u0000-\u001F\u007F-\u009F]/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim())
-    .slice(0, limit)
-    .join('');
-}
-
-function aliasValue(aliases, soundId) {
-  if (aliases instanceof Map) return normalizeSoundboardAlias(aliases.get(String(soundId)) ?? '');
-  return normalizeSoundboardAlias(aliases?.[String(soundId)] ?? '');
-}
-
-export function soundboardSoundLabel(sound, aliases = {}) {
-  const id = String(sound?.id ?? '');
-  return aliasValue(aliases, id) || String(sound?.label ?? id);
-}
-
-export function soundboardSoundMatchesQuery(sound, query, aliases = {}) {
-  const normalizedQuery = normalizeSearchQuery(String(query ?? '').trim());
-  if (!normalizedQuery) return true;
-  const id = String(sound?.id ?? '');
-  return normalizeSearchQuery(`${soundboardSoundLabel(sound, aliases)} ${sound?.label ?? ''} ${id}`)
-    .includes(normalizedQuery);
-}
-
-/**
- * Return a calculated Soundboard view without mutating the catalog or the
- * personal order. A–Z follows the displayed label (therefore a local alias
- * when present); all other business values remain catalog values.
- */
-export function sortSoundboardSounds(sounds, {
-  sort = 'custom',
-  customOrder = [],
-  recents = [],
-  aliases = {},
-  paymentMethod = 'tokens',
-  moduleTokenCost = 500,
-} = {}) {
-  const source = Array.isArray(sounds) ? [...sounds] : [];
-  const catalogIds = source.map((sound) => String(sound?.id ?? ''));
-  const personalOrder = normalizeSoundboardOrder(customOrder, catalogIds);
-  const personalRank = new Map(personalOrder.map((id, index) => [id, index]));
-  const recentRank = new Map(
-    (Array.isArray(recents) ? recents : []).map(String).map((id, index) => [id, index]),
-  );
-  const sourceRank = new Map(catalogIds.map((id, index) => [id, index]));
-  const displayedLabel = (sound) => soundboardSoundLabel(sound, aliases);
-  const labelKey = (sound) => displayedLabel(sound).trim();
-  const priceFor = (sound) => {
-    const preferred = paymentMethod === 'credits'
-      ? Number(sound?.credit_cost)
-      : Number(sound?.token_cost ?? moduleTokenCost);
-    const fallback = paymentMethod === 'credits'
-      ? Number(sound?.token_cost ?? moduleTokenCost)
-      : Number(sound?.credit_cost);
-    return Number.isFinite(preferred)
-      ? preferred
-      : Number.isFinite(fallback)
-        ? fallback
-        : Number.POSITIVE_INFINITY;
-  };
-  const compareSource = (a, b) => (sourceRank.get(String(a?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-    - (sourceRank.get(String(b?.id ?? '')) ?? Number.MAX_SAFE_INTEGER);
-  if (sort === 'alpha') {
-    return source.sort((a, b) => (
-      labelKey(a).localeCompare(labelKey(b), 'fr', { sensitivity: 'base' })
-      || compareSource(a, b)
-    ));
-  }
-  if (sort === 'price') {
-    return source.sort((a, b) => (
-      priceFor(a) - priceFor(b)
-      || labelKey(a).localeCompare(labelKey(b), 'fr', { sensitivity: 'base' })
-      || compareSource(a, b)
-    ));
-  }
-  if (sort === 'recent') {
-    return source.sort((a, b) => (
-      (recentRank.get(String(a?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-      - (recentRank.get(String(b?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-      || compareSource(a, b)
-    ));
-  }
-  return source.sort((a, b) => (
-    (personalRank.get(String(a?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-    - (personalRank.get(String(b?.id ?? '')) ?? Number.MAX_SAFE_INTEGER)
-    || compareSource(a, b)
-  ));
-}
-
-function readStoredAliases(key, soundIds) {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || '{}');
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-    const valid = new Set([...soundIds].map(String));
-    return Object.fromEntries(Object.entries(value)
-      .map(([id, alias]) => [String(id), normalizeSoundboardAlias(alias)])
-      .filter(([id, alias]) => valid.has(id) && alias));
-  } catch {
-    return {};
-  }
-}
-
-function writeStoredAliases(key, aliases) {
-  try { localStorage.setItem(key, JSON.stringify(aliases)); } catch { /* stockage facultatif */ }
-}
-
-function rememberStoredId(key, id, limit = 12) {
-  const value = [String(id), ...readStoredIds(key).filter((candidate) => candidate !== String(id))];
-  writeStoredIds(key, value.slice(0, limit));
-}
-
-function tutorialPreferenceKey(tutorial) {
-  return `${TUTORIAL_DISABLED_PREFIX}${tutorial?.id ?? 'core'}:v${tutorial?.version ?? 1}`;
-}
-
-function readTutorialDisabled(tutorial) {
-  try { return localStorage.getItem(tutorialPreferenceKey(tutorial)) === '1'; } catch { return false; }
-}
-
-function writeTutorialDisabled(tutorial, disabled) {
-  try {
-    const key = tutorialPreferenceKey(tutorial);
-    if (disabled) localStorage.setItem(key, '1');
-    else localStorage.removeItem(key);
-  } catch { /* stockage facultatif */ }
-}
-
-function clampPreviewVolume(value) {
-  return Math.max(0, Math.min(100, Number(value) || 0));
-}
-
-function readPreviewVolume() {
-  try {
-    const saved = Number(localStorage.getItem(PREVIEW_VOLUME_KEY));
-    // Twitch exige que l'audio d'une extension soit coupé par défaut.
-    // Le viewer peut l'activer explicitement avec le curseur avant l'aperçu.
-    return Number.isFinite(saved) ? clampPreviewVolume(saved) : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function savePreviewVolume(value) {
-  try { localStorage.setItem(PREVIEW_VOLUME_KEY, String(value)); } catch { /* stockage facultatif */ }
-}
-
-function raffleSeconds(raffle) {
-  const endsAt = Date.parse(raffle?.ends_at || '');
-  if (Number.isFinite(endsAt)) return Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
-  return Math.max(0, Number(raffle?.ends_in_s || 0));
-}
-
-function raffleIsActive(raffle) {
-  return Boolean(raffle?.open) && !raffle?.unavailable && !raffle?.closed_at;
-}
-
-function raffleNumber(value) {
-  if (value === null || value === undefined || value === '') return null;
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : null;
-}
-
-function raffleAmount(record) {
-  const pot = record?.pot && typeof record.pot === 'object' ? record.pot : null;
-  const candidates = [
-    [pot, 'amount'],
-    [record, 'pot'],
-    [record, 'pot_amount'],
-    [record, 'total_pot'],
-    [record, 'total_amount'],
-    [record, 'prize_pool'],
-    [record, 'amount'],
-  ];
-  for (const [source, key] of candidates) {
-    const value = raffleNumber(source?.[key]);
-    if (value !== null) return value;
-  }
-  return null;
-}
-
-function raffleCurrency(record) {
-  const pot = record?.pot && typeof record.pot === 'object' ? record.pot : null;
-  for (const value of [pot?.currency, record?.currency, record?.pot_currency, record?.unit]) {
-    const text = String(value ?? '').trim();
-    if (text) return text.slice(0, 24);
-  }
-  return '';
-}
-
-function raffleDateLabel(value) {
-  const date = new Date(value || 0);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function raffleHistoryDate(row) {
-  for (const value of [row?.created_at, row?.drawn_at, row?.ended_at, row?.closed_at, row?.opened_at]) {
-    if (value) return value;
-  }
-  return null;
-}
-
-function raffleTimerSource(raffle) {
-  if (Number.isFinite(Date.parse(raffle?.ends_at || ''))) return 'ends_at';
-  if (raffleNumber(raffle?.ends_in_s) !== null) return 'ends_in_s';
-  return 'none';
-}
-
-function raffleTotalSeconds(raffle) {
-  for (const value of [
-    raffle?.total_duration_s,
-    raffle?.duration_s,
-    raffle?.duration_seconds,
-    raffle?.window_duration_s,
-  ]) {
-    const seconds = raffleNumber(value);
-    if (seconds !== null && seconds > 0) return Math.ceil(seconds);
-  }
-  const openedAt = Date.parse(raffle?.opened_at || '');
-  const endsAt = Date.parse(raffle?.ends_at || '');
-  if (Number.isFinite(openedAt) && Number.isFinite(endsAt) && endsAt > openedAt) {
-    return Math.max(1, Math.ceil((endsAt - openedAt) / 1000));
-  }
-  return null;
-}
-
-export function emoteCatalogStateKey(emotes, twitchUserId = '') {
-  return [
-    String(twitchUserId || ''),
-    emotes?.twitch_connected === true ? 'viewer' : 'public',
-    emotes?.seven_tv === true ? '7tv' : 'no-7tv',
-    emotes?.bttv === true ? 'bttv' : 'no-bttv',
-    emotes?.ffz === true ? 'ffz' : 'no-ffz',
-  ].join('|');
-}
-
 export function shouldAutoOpenTutorial({
   isStudioPreview = false,
   tutorialDisabled = false,
@@ -962,152 +148,6 @@ export function shouldAutoOpenTutorial({
     && !tutorialDisabled
     && !openModule
     && !modules.some((module) => module?.id === 'bonk');
-}
-
-/**
- * Attend la confirmation serveur d'une autorisation viewer sans dépendre de
- * window.opener. Le premier contrôle est immédiat, puis les contrôles restent
- * séquentiels pour ne jamais empiler des GET /state.
- */
-export function createEmoteAuthorizationPoller({
-  check,
-  isPopupClosed = () => false,
-  onSuccess = () => {},
-  onStopped = () => {},
-  intervalMs = EMOTE_AUTH_POLL_INTERVAL_MS,
-  timeoutMs = EMOTE_AUTH_TIMEOUT_MS,
-  popupGraceMs = EMOTE_AUTH_POPUP_GRACE_MS,
-  now = () => Date.now(),
-  schedule = (callback, delay) => globalThis.setTimeout(callback, delay),
-  cancel = (timer) => globalThis.clearTimeout(timer),
-} = {}) {
-  if (typeof check !== 'function') throw new TypeError('oauth_poll_check_required');
-  const safeNow = () => {
-    const value = Number(now());
-    return Number.isFinite(value) ? value : Date.now();
-  };
-  const safeDelay = (value) => Math.max(0, Number(value) || 0);
-  let active = false;
-  let timer = null;
-  let generation = 0;
-  let startedAt = 0;
-  let popupClosedAt = null;
-
-  function clearTimer() {
-    if (timer !== null) cancel(timer);
-    timer = null;
-  }
-
-  async function stop(reason, { notify = true } = {}) {
-    const wasActive = active;
-    active = false;
-    generation += 1;
-    clearTimer();
-    if (notify && wasActive) await onStopped(reason);
-  }
-
-  async function tick(runGeneration) {
-    if (!active || runGeneration !== generation) return;
-    const current = safeNow();
-    if (current - startedAt >= timeoutMs) {
-      await stop('timeout');
-      return;
-    }
-
-    let closed;
-    try { closed = isPopupClosed() === true; } catch { closed = true; }
-    if (closed && popupClosedAt === null) popupClosedAt = current;
-
-    let confirmed = false;
-    try { confirmed = (await check({ popupClosed: closed })) === true; } catch { /* prochain poll */ }
-    if (!active || runGeneration !== generation) return;
-    if (confirmed) {
-      await stop('success', { notify: false });
-      await onSuccess();
-      return;
-    }
-
-    const afterCheck = safeNow();
-    if (afterCheck - startedAt >= timeoutMs) {
-      await stop('timeout');
-      return;
-    }
-    if (popupClosedAt !== null && afterCheck - popupClosedAt >= popupGraceMs) {
-      await stop('popup_closed');
-      return;
-    }
-
-    const remainingGrace = popupClosedAt === null
-      ? intervalMs
-      : Math.max(0, popupGraceMs - (afterCheck - popupClosedAt));
-    timer = schedule(() => {
-      timer = null;
-      void tick(runGeneration);
-    }, safeDelay(Math.min(intervalMs, remainingGrace)));
-  }
-
-  return {
-    start() {
-      void stop('restart', { notify: false });
-      active = true;
-      generation += 1;
-      startedAt = safeNow();
-      popupClosedAt = null;
-      void tick(generation);
-    },
-    stop(reason = 'cancelled') {
-      return stop(reason);
-    },
-    get active() { return active; },
-  };
-}
-
-/**
- * Lance immédiatement une intention Bonk et ne sérialise jamais les appels.
- * Une erreur de rafraîchissement ne transforme pas une action déjà acceptée
- * en échec visible ; l'action elle-même reste toutefois signalée au caller.
- */
-export function dispatchBonkImmediately(task, {
-  onRefresh = async () => {},
-  onSuccess = () => {},
-  onError = () => {},
-} = {}) {
-  let request;
-  try {
-    request = task();
-  } catch (error) {
-    request = Promise.reject(error);
-  }
-  return Promise.resolve(request)
-    .then(async (result) => {
-      try { await onRefresh(); } catch { /* le prochain polling récupérera l'état */ }
-      onSuccess(result);
-      return result;
-    })
-    .catch((error) => {
-      onError(error);
-      return null;
-    });
-}
-
-// Twitch interprète parfois un double-clic rapide sur la surface de
-// l'extension comme une demande de plein écran. Cette protection reste
-// strictement attachée au CTA Bonk : elle neutralise uniquement l'événement
-// agrégé `dblclick`, jamais les deux `click` qui l'ont produit.
-export function preventBonkDoubleClick(event) {
-  event?.preventDefault?.();
-  event?.stopPropagation?.();
-}
-
-export function bonkFeedbackForResult(result = {}) {
-  // Bonk lot 5: a salve is admitted (and paid) as one block.
-  if (Array.isArray(result?.interactions) && result?.volley_id)
-    return `Salve ×${result.interactions.length} acceptée ✓`;
-  const status = String(result?.status ?? '').trim().toLowerCase();
-  if (status === 'queued') return 'Bonk accepté · en file ✓';
-  if (status === 'delivered') return 'Bonk livré ✓';
-  if (status === 'spawned') return 'Bonk apparu ✓';
-  return 'Bonk accepté ✓';
 }
 
 /**
@@ -1181,7 +221,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let retryLoad = null;
   let successMessage = null;
   let actionError = null;
-  let ttsActionError = null;
+  /** A refused action of a view that shows its own error (`errorScope` = its module id): { scope, message }. */
+  let scopedError = null;
   let tutorialOpen = false;
   let notificationCenterOpen = false;
   let viewerPreferencesOpen = false;
@@ -1197,131 +238,100 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let tutorialDisabled = false;
   // Chaque module possède sa monnaie ; le wallet est sa projection et son
   // sélecteur unique, tandis que la dépensabilité reste évaluée par le CTA.
-  let selectedPaymentMethod = 'tokens';
-  let ttsPaymentMethod = 'tokens';
+  /** The currency chosen per module (TTS today); a module variant reads and writes its own entry. */
+  const paymentChoice = {};
+  /** What a registered view keeps between two visits of its module (its form drafts): host.memory. */
+  const moduleMemory = {};
   // TTS V2 (Lab, Core-backed): one persistent view per opening of the module.
-  let ttsV2View = null;
   // Moderation V2 (D4, Lab): persistent console reading / commanding Core while the module is open.
-  let moderationV2View = null;
   /** « Modération › Commandes » (Commands V2) and whether it currently replaces the console. */
-  let commandsV2View = null;
-  let commandsV2Shown = false;
   /** Tombola V2 (Lab): persistent screen reading Core itself (never rebuilt by the host's polling). */
-  let tombolaV2View = null;
   /** Commands V2 public list (phase F), kept while « Commandes » is open. */
-  let commandsPublicView = null;
-  let subWheelView = null;
-  let eventShopView = null;
+  /** The open module of the module host (one at a time) and its id. */
+  let hostView = null;
+  let hostViewId = null;
+  /** The variant definition behind hostView (null: a session or host module view). */
+  let hostVariant = null;
+
+  /** What a registered view receives from the host (module-registry.js): no module-specific code here. */
+  function variantContext(def, mod, body = null) {
+    return {
+      document,
+      client,
+      /** The panel's root element: a view's listeners stay inside the panel (never document-wide). */
+      root,
+      module: mod,
+      state,
+      /** The module body of this draw (rendered only): views that draw into the host's container (Soundboard). */
+      body,
+      team: canModerate(),
+      host: {
+        home: () => navigateTo(null),
+        refresh: () => onRefresh?.(),
+        payment: {
+          get: () => paymentChoice[mod?.id] ?? 'tokens',
+          set: (method) => { paymentChoice[mod?.id] = method; },
+          sync: (methods, onChange) => paymentWalletSync?.(methods, onChange),
+        },
+        walletMethods: () => walletPaymentMethods(mod, state),
+        restrictionChips: (id) => {
+          const list = restrictionsOf(id);
+          return list.length ? restrictionChips(document, list) : null;
+        },
+        memory: (moduleMemory[mod?.id] ??= {}),
+        /** The action runner (busy flag, refresh, notifications); `feedbackScope` + `onSettled`: the view says it. */
+        run: (node, task, options) => run(node, task, options),
+        /** The message of this module's last refused action run with `errorScope: <module id>` (cleared by the next state). */
+        scopedError: () => (scopedError?.scope === mod?.id ? scopedError.message : null),
+        /** The host's action feedback, for a view that shows it in its own place (the success is shown once). */
+        feedback: () => {
+          const shown = { success: successMessage, error: actionError };
+          successMessage = null;
+          return shown;
+        },
+        /** The module's active restriction that holds actions (cooldown or block), or null. */
+        restriction: () => {
+          const restriction = restrictionOf(mod?.id);
+          return holdsAction(restriction) ? restriction : null;
+        },
+        interactions: () => ({ available: interactionsAvailableForState(), identityShared: identityShared() }),
+        redraw: () => renderPreservingViewport(),
+        /** The viewer-facing reason of a refusal, only when reliably known ('' otherwise). */
+        errorReason: (error) => soundboardFeedbackForError(error).reason,
+        /** The viewer's Twitch emotes (emote-access.js): catalog, authorization. */
+        emotes: emoteAccess,
+        /** A failure of this module in the notification centre. */
+        notifyError: (error, { title } = {}) => publishRuntimeNotification(runtimeNotificationForError(error, {
+          module: mod?.id,
+          title: title ?? `Action ${mod?.id} échouée`,
+          actionModule: mod?.id,
+        })),
+      },
+    };
+  }
   let paymentWalletSync = null;
-  let soundboardVolumeOpen = false;
-  let soundboardVolumeSync = null;
-  let soundboardSearchClose = null;
-  let soundboardDeselect = null;
-  let soundboardDragCancel = null;
-  // Glisser Soundboard en cours : un nouvel état serveur attend la fin du geste (sinon la grille serait
-  // reconstruite sous le pointeur) et s'affiche juste après.
-  let soundboardDragging = false;
-  let soundboardRenderAfterDrag = false;
-  // Compte à rebours des cooldowns Soundboard (mis à jour sur place, sans reconstruire la grille).
-  let soundboardCooldownTimer = null;
-  let soundboardVolumeHeaderButton = null;
   // Hub : module sélectionné dans le carousel et monnaie affichée par le wallet (consultation).
   let hubSelectedId = null;
+  /** « Voir tous les modules » open: kept across the Hub's redraws (a new balance never closes it under the viewer). */
+  let hubAllOpen = false;
   let hubWalletMethod = 'tokens';
   let hubCarousel = null;
-  let soundboardFeedback = null;
-  let soundboardFeedbackTimer = null;
-  let soundboardFeedbackSequence = 0;
-  let moderationHistoryQuery = '';
-  let moderationHistoryModule = '';
-  let moderationHistoryStatus = '';
-  let moderationUsersQuery = '';
-  let moderationUsers = null;
-  let moderationSelectedUser = null;
-  let moderationUserHistoryOpen = false;
-  let moderationSubmodule = 'users';
-  let moderationSuspensionSelectionUserId = '';
-  let moderationSuspendSelection = new Set();
-  let moderationUnsuspendSelection = new Set();
-  let moderationSuspensionDuration = '600000';
-  let moderationSuspensionCustomValue = '';
-  let moderationSuspensionCustomUnit = 'minutes';
-  const moderationSuspensionDurationOptions = [
-    ['600000', '10 min'],
-    ['3600000', '1 heure'],
-    ['86400000', '24 heures'],
-    ['', 'Indéfinie'],
-    ['custom', 'Personnalisée'],
-  ];
-  const moderationSuspensionDurationUnits = [
-    ['seconds', 'secondes'],
-    ['minutes', 'minutes'],
-    ['hours', 'heures'],
-    ['days', 'jours'],
-  ];
-  const moderationCustomDurationMinMs = 60_000;
-  const moderationCustomDurationMaxMs = 365 * 24 * 60 * 60 * 1000;
   const isStudioPreview = new URLSearchParams(globalThis.location?.search || '').get('studio') === '1';
-  let previewAudio = null;
-  let previewRestore = null;
-  let previewSoundId = null;
-  // Twitch démarre l'audio d'une extension à 0 %. Le viewer l'active
-  // explicitement avec le curseur ; ce réglage local n'affecte aucun débit.
-  let previewVolume = readPreviewVolume();
-  let bonkInFlight = 0;
-  let bonkFeedbackMessage = '';
-  let bonkFeedbackKind = 'ok';
-  let bonkEmotePicker = null;
-  /** Bonk lot 5: the chargeur (persistent, like the picker) and the feedback slot of the current render. */
-  let bonkChargeur = null;
-  let bonkTour = null;
-  let bonkTourAutoOpened = false;
-  /** « Récents » shown while Bonk stays open: frozen, so a catalogue click never reflows the grid. */
-  let bonkRecentsShown = null;
-  let bonkFeedbackNode = null;
-  let raffleHistoryOpen = false;
-  let raffleTimer = null;
-  let raffleTimerSnapshot = null;
-  let raffleJoinConfirmedWindowId = null;
-  let emoteCatalog = null;
-  let emoteCatalogKey = null;
-  let emoteCatalogLoadedAt = 0;
-  let emoteLoading = false;
-  let emoteError = null;
-  let emoteCatalogGeneration = 0;
-  let emoteForceReloadPending = false;
-  let emoteAuthorizationStarting = false;
-  // Bonk : fenêtre « Lie ton compte Twitch » ouverte depuis la source Twitch de la colonne latérale.
-  let bonkTwitchLinkOpen = false;
-  // Twitch emotes being synchronized (Core reloads them in the background): re-read every 3 s, at most
-  // 20 times per visit of Bonk, one timer only; stops as soon as the state is stable or Bonk is left.
-  let emoteSyncTimer = null;
-  let emoteSyncReads = 0;
-  let emoteAuthorizationPopup = null;
-  let emoteAuthorizationPoller = null;
-  let emoteAuthorizationFinishing = false;
-  // Autorisation des emotes vue par le viewer (en cours · autorisé · non confirmé · erreur) : redessinée à chaque
-  // render, elle ne se perd plus quand le panneau se reconstruit pendant que le viewer est dans la fenêtre Twitch.
-  let emoteAuthNotice = null;
-  let emoteAuthNoticeTimer = null;
-  let emoteAuthAttemptAt = 0;
-  const drafts = {
-    tts: { text: '' },
-    soundboard: {
-      selectedId: null,
-      query: '',
-      searchOpen: true,
-      sort: 'custom',
-      favoritesOnly: false,
-      // Tous / Favoris / Récents (filtre toujours visible).
-      view: 'all',
-    },
-    bonk: { selectedId: null, activeGroupId: null, query: '', searchOpen: false },
-  };
+  // Access to the viewer's Twitch emotes (emote-access.js): catalog, authorization and its notice are its own state.
+  const emoteAccess = createEmoteAccess({
+    document,
+    window,
+    client,
+    getState: () => state,
+    applyState: (next) => updateState(next, { render: false }),
+    redraw: () => renderPreservingViewport(),
+    refreshHost: () => onRefresh?.(),
+    following: () => openModule === 'bonk',
+  });
   root.classList.add('jdm-shell');
   root.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    if (notificationCenterOpen || viewerPreferencesOpen || tutorialOpen || soundboardVolumeOpen || drafts.soundboard.searchOpen || raffleHistoryOpen || moderationUserHistoryOpen) {
+    if (notificationCenterOpen || viewerPreferencesOpen || tutorialOpen) {
       event.preventDefault();
       event.stopPropagation();
     }
@@ -1342,51 +352,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       queueMicrotask(() => root.querySelector('.jdm-viewer-preferences-toggle')?.focus({ preventScroll: true }));
       return;
     }
-    if (soundboardVolumeOpen) {
-      soundboardVolumeOpen = false;
-      soundboardVolumeSync?.(false);
-      return;
-    }
-    if (drafts.soundboard.searchOpen) {
-      event.preventDefault();
-      soundboardSearchClose?.();
-      return;
-    }
-    if (raffleHistoryOpen) {
-      raffleHistoryOpen = false;
-      renderPreservingViewport();
-      queueMicrotask(() => root.querySelector('.jdm-raffle-history-toggle')?.focus({ preventScroll: true }));
-      return;
-    }
-    if (moderationUserHistoryOpen) {
-      moderationUserHistoryOpen = false;
-      renderPreservingViewport();
-      queueMicrotask(() => root.querySelector('.jdm-mod-user-history-toggle')?.focus({ preventScroll: true }));
-    }
-  });
-  // Une interaction dans le catalogue reste une interaction interne : elle ne
-  // doit pas faire disparaître la barre pendant qu'un viewer choisit un tri,
-  // active Favoris ou clique une carte. Seul un clic hors du corps Soundboard
-  // replie automatiquement la zone ; le bouton et Escape restent explicites.
-  root.addEventListener('click', (event) => {
-    if (!drafts.soundboard.searchOpen
-      || event.target?.closest?.('.rl-soundboard')) return;
-    const closeSearch = soundboardSearchClose;
-    queueMicrotask(() => {
-      if (drafts.soundboard.searchOpen) closeSearch?.();
-    });
-  }, true);
-  root.addEventListener('click', (event) => {
-    const target = event.target;
-    if (soundboardVolumeOpen && !event.target?.closest?.('.sbx-vol')) {
-      soundboardVolumeOpen = false;
-      soundboardVolumeSync?.(false);
-    }
-    if (!soundboardDeselect || !target?.closest?.('.rl-soundboard')) return;
-    // Une carte et ses contrôles restent dans leur flux d'interaction. Tout
-    // clic dans le reste du module désélectionne la carte courante.
-    if (target.closest('.sbx-card, .sbx-dock, .sbx-head, .sbx-vol')) return;
-    soundboardDeselect();
   });
   document.addEventListener('click', (event) => {
     if (!notificationCenterOpen && !viewerPreferencesOpen) return;
@@ -1399,34 +364,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     viewerPreferencesOpen = false;
     renderPreservingViewport();
   });
-
-  window.addEventListener('message', (event) => {
-    const data = event.data;
-    if (
-      event.source !== emoteAuthorizationPopup
-      || data?.type !== 'raptoru:oauth-complete'
-      || data?.flow !== 'viewer-emotes'
-      || data?.ok !== true
-    ) return;
-    let oauthOrigin;
-    try { oauthOrigin = new URL(RUNTIME.siteUrl).origin; } catch { return; }
-    if (!oauthOrigin || event.origin !== oauthOrigin) return;
-
-    // Le message est le chemin rapide, mais le serveur reste l'autorité :
-    // on relit /state avant de considérer l'autorisation comme terminée.
-    void confirmEmoteAuthorization();
-  });
-
-  function pendingFor(moduleId) {
-    return (state?.pending_actions ?? []).filter((a) => a.module_id === moduleId);
-  }
-
-  function soundboardCreditBalance() {
-    return pendingFor('soundboard').reduce(
-      (total, action) => total + Math.max(0, Number(action.credits_remaining ?? 1)),
-      0,
-    );
-  }
 
   function canModerate() {
     return state?.moderation?.tts?.can_moderate === true;
@@ -1444,26 +381,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function moduleById(id) {
     if (id === ACTIONS_MODULE.id) return ACTIONS_MODULE;
     if (id === MODERATION_MODULE.id) return canModerate() ? MODERATION_MODULE : null;
-    if (id === COMMANDS_PUBLIC_MODULE.id) return commandsPublicAvailable() ? COMMANDS_PUBLIC_MODULE : null;
-    if (id === SUB_WHEEL_MODULE.id) return subWheelAvailable() ? SUB_WHEEL_MODULE : null;
-    if (id === EVENT_SHOP_MODULE.id) return eventShopAvailable() ? eventShopModule(state?.event_shop) : null;
-    return (state?.modules ?? []).find((m) => m.id === id) ?? null;
+    const session = sessionModule(id);
+    if (session) return session.available(sessionEnv()) ? session.card(state) : null;
+    return (state?.modules ?? []).find((m) => m.id === id) ?? hostModules().find((m) => m.id === id) ?? null;
   }
 
-  /** « Roue du Sub » (R8): offered by the EBS (Lab today; the production frontier keeps it hidden in mode v1). */
-  function subWheelAvailable() {
-    return state?.sub_wheel === true && typeof client?.subWheelMe === 'function';
-  }
-
-  /** « Halloween »: the EBS's session carries `event_shop` only on a Core that has the shop. */
-  function eventShopAvailable() {
-    return state?.event_shop?.enabled === true && typeof client?.eventsState === 'function';
-  }
-
-  /** « Commandes » (public list, phase F): offered by the EBS, Video and Mobile only (not the Panel). */
-  function commandsPublicAvailable() {
-    return state?.commands_public === true && typeof client?.commandsPublic === 'function'
-      && !document.body.classList.contains('panel-view');
+  /** What a session module's availability reads (module-registry.js). */
+  function sessionEnv() {
+    return { state, client, document };
   }
 
   let runtimeNotificationSequence = 0;
@@ -1574,64 +499,22 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function updateState(next, { render = true } = {}) {
-    // Soundboard ouvert et poll identique : rien à redessiner (grille, scroll et aperçu intacts).
-    const unchanged = render && (openModule === 'soundboard' || !openModule) && !loadError
+    // Hub and identical poll: nothing to redraw (an open module's view decides for itself: onState).
+    const unchanged = render && !openModule && !loadError
       && JSON.stringify(stableState(state)) === JSON.stringify(stableState(next));
-    // TTS V2 open: queue / status updates go to the persistent view (no replayed animation).
-    const ttsV2Only = render && openModule === 'tts' && ttsV2View && !loadError
-      && JSON.stringify(withoutTtsV2(state)) === JSON.stringify(withoutTtsV2(next));
-    const previousKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
-    const nextKey = emoteCatalogStateKey(next?.emotes, next?.twitch_user_id);
-    const nextRaffle = next?.raffle;
-    const nextWindowId = String(nextRaffle?.window_id || '').trim();
-    if (raffleJoinConfirmedWindowId
-      && (!nextRaffle?.open || nextWindowId !== raffleJoinConfirmedWindowId)) {
-      raffleJoinConfirmedWindowId = null;
-    }
-    if (raffleJoinConfirmedWindowId
-      && nextRaffle?.open
-      && nextWindowId === raffleJoinConfirmedWindowId
-      && nextRaffle.joined !== true) {
-      next = {
-        ...next,
-        raffle: { ...nextRaffle, joined: true },
-      };
-    }
-    const wasTwitchConnected = state?.emotes?.twitch_connected === true;
+    const previous = state;
+    // An error screen shown before this state must be redrawn away: never absorbed by a live update.
+    const hadLoadError = !!loadError;
     state = next;
-    // Validation reconnue après la fin de l'attente (fenêtre fermée tôt, retour tardif) : confirmée quand même,
-    // dès que le serveur la voit — jamais avant.
-    if (!wasTwitchConnected && next?.emotes?.twitch_connected === true && !emoteAuthorizationPoller
-      && emoteAuthAttemptAt && Date.now() - emoteAuthAttemptAt < EMOTE_AUTH_LATE_WINDOW_MS) {
-      queueMicrotask(() => void confirmEmoteAuthorization({ refreshed: true }));
-    }
-    if (previousKey !== nextKey) {
-      emoteCatalogGeneration += 1;
-      emoteCatalog = null;
-      emoteCatalogKey = null;
-      emoteCatalogLoadedAt = 0;
-      emoteError = null;
-      if (render) queueMicrotask(() => loadEmotes({ force: true }));
-    }
+    emoteAccess.onState(previous, next, { render });
     loadError = null;
     retryLoad = null;
     actionError = null;
-    ttsActionError = null;
+    scopedError = null;
     syncViewerPreferenceIdentity(next);
-    if (ttsV2Only) {
-      ttsV2View.update((next?.modules ?? []).find((m) => m.id === 'tts'), next);
-      return;
-    }
-    // Moderation V2 open: the console polls Core itself; a host re-render would only reset it.
-    if (render && openModule === MODERATION_MODULE.id && moderationV2View && canModerate()) return;
-    // Tombola V2 open: the screen reads Core itself; the host only hands it the balance.
-    if (render && openModule === 'raffle_join' && tombolaV2View
-      && (next?.modules ?? []).some((m) => m.id === 'raffle_join' && m.raffle_v2)) {
-      tombolaV2View.update(next);
-      return;
-    }
-    if (render && !unchanged && soundboardDragging) {
-      soundboardRenderAfterDrag = true;
+    // The open module's own live update (module variants: TTS V2, Tombola V2…): absorbed, the host does not redraw.
+    if (render && !hadLoadError && hostView && hostViewId === openModule && hostVariant?.onState
+      && hostVariant.onState(hostView, next, previous, variantContext(hostVariant, (next?.modules ?? []).find((m) => m.id === openModule)))) {
       return;
     }
     if (render && !unchanged) renderPreservingViewport();
@@ -1646,174 +529,24 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     return { ...value, raffle: { ...value.raffle, ends_in_s: null } };
   }
 
-  function withoutTtsV2(value) {
-    if (!value || !Array.isArray(value.modules)) return value;
-    return { ...value, modules: value.modules.map((m) => (m.id === 'tts' ? { ...m, tts_v2: null } : m)) };
-  }
-
-  /** `kind` : pending · success · info · error ; null retire le message. */
-  function setEmoteAuthNotice(kind, text = '') {
-    clearTimeout(emoteAuthNoticeTimer);
-    emoteAuthNoticeTimer = null;
-    const notice = kind ? { kind, text } : null;
-    emoteAuthNotice = notice;
-    renderPreservingViewport();
-    if (!notice || kind === 'pending') return;
-    // Le viewer est peut-être encore dans la fenêtre Twitch : le résultat reste jusqu'à son retour sur
-    // l'extension (pointeur ou focus), puis 8 s.
-    const arm = () => {
-      document.removeEventListener('pointermove', arm);
-      document.removeEventListener('focusin', arm);
-      if (emoteAuthNotice !== notice) return;
-      emoteAuthNoticeTimer = setTimeout(() => {
-        if (emoteAuthNotice === notice) setEmoteAuthNotice(null);
-      }, 8_000);
-    };
-    document.addEventListener('pointermove', arm);
-    document.addEventListener('focusin', arm);
-  }
-
-  function emoteAuthNoticeView({ kind, text }) {
-    const box = el('div', `rl-emote-auth rl-emote-auth--${kind}`);
-    box.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-    const mark = el('span', 'rl-emote-auth__mark', kind === 'success' ? '✓' : kind === 'error' ? '!' : kind === 'info' ? 'i' : '');
-    mark.setAttribute('aria-hidden', 'true');
-    box.append(mark, el('span', 'rl-emote-auth__text', text));
-    if (kind !== 'pending') {
-      const close = el('button', 'rl-emote-auth__close', '✕');
-      close.type = 'button';
-      close.setAttribute('aria-label', 'Fermer le message');
-      close.addEventListener('click', () => setEmoteAuthNotice(null));
-      box.append(close);
-    }
-    return box;
-  }
-
-  function closeEmoteAuthorizationPopup() {
-    const popup = emoteAuthorizationPopup;
-    emoteAuthorizationPopup = null;
-    try { popup?.close(); } catch { /* fenêtre déjà fermée */ }
-  }
-
-  async function confirmEmoteAuthorization({ refreshed = false } = {}) {
-    if (emoteAuthorizationFinishing) return false;
-    emoteAuthorizationFinishing = true;
-    try {
-      if (!refreshed) {
-        const next = await client.refresh();
-        if (next && typeof next === 'object') updateState(next, { render: false });
-      }
-      if (state?.emotes?.twitch_connected !== true) return false;
-
-      const poller = emoteAuthorizationPoller;
-      emoteAuthorizationPoller = null;
-      await poller?.stop('success');
-      closeEmoteAuthorizationPopup();
-      emoteAuthorizationStarting = false;
-      renderPreservingViewport();
-      emoteAuthAttemptAt = 0;
-      setEmoteAuthNotice('success', 'Emotes Twitch connectées : tes emotes personnelles sont disponibles.');
-      await loadEmotes({ force: true });
-      return true;
-    } catch {
-      // Le polling garde la main si une relecture transitoire échoue.
-      return false;
-    } finally {
-      emoteAuthorizationFinishing = false;
-    }
-  }
-
-  function startEmoteAuthorizationPolling() {
-    const popup = emoteAuthorizationPopup;
-    let poller;
-    poller = createEmoteAuthorizationPoller({
-      check: async () => {
-        const next = await client.refresh();
-        if (next && typeof next === 'object') updateState(next, { render: false });
-        return state?.emotes?.twitch_connected === true;
-      },
-      isPopupClosed: () => {
-        try { return popup?.closed === true; } catch { return true; }
-      },
-      onSuccess: () => confirmEmoteAuthorization({ refreshed: true }),
-      onStopped: (reason) => {
-        if (emoteAuthorizationPoller === poller) emoteAuthorizationPoller = null;
-        if (reason === 'success') return;
-        emoteAuthorizationStarting = false;
-        closeEmoteAuthorizationPopup();
-        if (reason === 'timeout' || reason === 'popup_closed') {
-          setEmoteAuthNotice('info', 'Autorisation non confirmée. Si tu viens de valider sur Twitch, la confirmation s’affichera ici ; sinon, réessaie.');
-        } else renderPreservingViewport();
-      },
-    });
-    emoteAuthorizationPoller = poller;
-    poller.start();
-  }
-
-  function stopSoundPreview() {
-    const audio = previewAudio;
-    const restore = previewRestore;
-    previewAudio = null;
-    previewRestore = null;
-    previewSoundId = null;
-    try {
-      audio?.pause();
-      if (audio) audio.currentTime = 0;
-    } catch { /* le nettoyage audio reste best-effort */ }
-    restore?.();
-    syncSoundboardPreviewButtons();
-  }
-
-  function stopRaffleTimer() {
-    if (raffleTimer === null) return;
-    if (typeof globalThis.clearInterval === 'function') globalThis.clearInterval(raffleTimer);
-    raffleTimer = null;
-  }
 
   function navigateTo(moduleId) {
+    hubAllOpen = false; // a module opened (or the Hub again): the list starts closed
     if (moduleId !== null && !moduleById(moduleId)) return;
     if (moduleId !== null) {
       notificationCenterOpen = false;
       viewerPreferencesOpen = false;
     }
-    if (moduleId !== 'soundboard') stopSoundPreview();
-    if (moduleId !== openModule) {
-      // A new visit of Bonk follows a synchronization again; leaving it stops following.
-      clearTimeout(emoteSyncTimer);
-      emoteSyncTimer = null;
-      emoteSyncReads = 0;
-    }
-    if (moduleId !== 'tts') {
-      ttsV2View?.destroy();
-      ttsV2View = null;
-    }
-    if (moduleId !== MODERATION_MODULE.id) {
-      moderationV2View?.destroy();
-      moderationV2View = null;
-      commandsV2View = null;
-      commandsV2Shown = false;
-    }
-    if (moduleId !== COMMANDS_PUBLIC_MODULE.id) commandsPublicView = null;
-    if (moduleId !== SUB_WHEEL_MODULE.id) subWheelView = null;
-    if (moduleId !== EVENT_SHOP_MODULE.id) {
-      eventShopView?.destroy();
-      eventShopView = null;
-    }
-    if (moduleId !== 'raffle_join') {
-      tombolaV2View?.destroy();
-      tombolaV2View = null;
-    }
-    if (moduleId !== 'soundboard') clearSoundboardFeedback({ render: false });
-    if (moduleId !== 'raffle_join') {
-      stopRaffleTimer();
-      raffleTimerSnapshot = null;
-      raffleHistoryOpen = false;
+    if (moduleId !== openModule) emoteAccess.leaveVisit();
+    if (moduleId !== hostViewId) {
+      hostView?.destroy?.();
+      hostView = null;
+      hostViewId = null;
+      hostVariant = null;
     }
     captureScrollPositions();
     if (moduleId !== openModule) restrictionsSeen = new Set();
     openModule = moduleId;
-    if (moduleId !== 'bonk') bonkChargeur?.reset();
-    soundboardVolumeOpen = false;
     if (moduleId === 'soundboard') {
       tutorialOpen = false;
       tutorialStep = 0;
@@ -1822,196 +555,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     restoreScrollPositions();
   }
 
-  /** not_linked · syncing · ready · stale · reauth_required (same values in the Lab and on Twitch). */
-  function twitchEmotesStatus() {
-    const key = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
-    const known = emoteCatalog && emoteCatalogKey === key ? emoteCatalog.twitch_status : null;
-    return known ?? state?.emotes?.twitch_status ?? (state?.emotes?.twitch_connected === true ? 'ready' : 'not_linked');
-  }
-
-  function followEmoteSync() {
-    clearTimeout(emoteSyncTimer);
-    emoteSyncTimer = null;
-    if (twitchEmotesStatus() !== 'syncing' || openModule !== 'bonk' || emoteSyncReads >= 20) return;
-    emoteSyncReads += 1;
-    emoteSyncTimer = setTimeout(() => {
-      emoteSyncTimer = null;
-      void loadEmotes({ poll: true });
-    }, 3000);
-  }
-
-  async function loadEmotes({ force = false, poll = false } = {}) {
-    if (emoteLoading) {
-      if (force) emoteForceReloadPending = true;
-      return;
-    }
-    const requestKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
-    if (!force && !poll && emoteCatalog
-      && emoteCatalogKey === requestKey
-      && Date.now() - emoteCatalogLoadedAt < EMOTE_CATALOG_REFRESH_MS) return;
-    if (!state?.emotes?.connected || !client.emotes) return;
-    const generation = emoteCatalogGeneration;
-    emoteLoading = true;
-    emoteError = null;
-    try {
-      const result = force && client.refreshEmotes
-        ? await client.refreshEmotes()
-        : await client.emotes();
-      if (!result.connected) throw Object.assign(new Error('emotes_not_connected'), { code: 'emotes_not_connected' });
-      if (generation === emoteCatalogGeneration
-        && requestKey === emoteCatalogStateKey(state?.emotes, state?.twitch_user_id)) {
-        emoteCatalog = {
-          groups: result.groups ?? [],
-          count: Number(result.count || 0),
-          diagnostics: result.diagnostics ?? null,
-          twitch_connected: result.twitch_connected === true,
-          twitch_status: result.twitch_status
-            ?? (result.twitch_connected === true ? 'ready' : 'not_linked'),
-        };
-        emoteCatalogKey = requestKey;
-        emoteCatalogLoadedAt = Date.now();
-      }
-    } catch {
-      if (generation === emoteCatalogGeneration) {
-        emoteError = 'Impossible de charger le catalogue d’emotes pour le moment.';
-      }
-    } finally {
-      emoteLoading = false;
-      renderPreservingViewport();
-      followEmoteSync();
-      if (emoteForceReloadPending) {
-        emoteForceReloadPending = false;
-        queueMicrotask(() => loadEmotes({ force: true }));
-      }
-    }
-  }
-
   function flash(node, message, kind = 'error') {
     const box = el('p', `jdm-flash jdm-flash--${kind}`, message);
     node.append(box);
     setTimeout(() => box.remove(), 4000);
-  }
-
-  function clearSoundboardFeedback({ render: shouldRender = true } = {}) {
-    if (soundboardFeedbackTimer !== null) {
-      clearTimeout(soundboardFeedbackTimer);
-      soundboardFeedbackTimer = null;
-    }
-    soundboardFeedback = null;
-    if (shouldRender) renderPreservingViewport();
-  }
-
-  function setSoundboardFeedback(kind, error = null) {
-    if (soundboardFeedbackTimer !== null) clearTimeout(soundboardFeedbackTimer);
-    const reason = kind === 'error' ? soundboardFeedbackForError(error).reason : '';
-    const sequence = ++soundboardFeedbackSequence;
-    soundboardFeedback = { kind, reason, sequence };
-    const duration = reason ? 3_800 : kind === 'success' ? 2_300 : 2_900;
-    soundboardFeedbackTimer = setTimeout(() => {
-      if (soundboardFeedback?.sequence !== sequence) return;
-      soundboardFeedback = null;
-      soundboardFeedbackTimer = null;
-      // Retire uniquement la couche déjà montée. Un rerender ici pourrait
-      // déplacer le caret/viewport d’une autre interaction qui vient juste
-      // de commencer, et le feedback est purement décoratif.
-      try { root.querySelector('.sbx-toast')?.remove(); } catch { /* vue déjà démontée */ }
-    }, duration);
-  }
-
-  function createSoundboardFeedbackOverlay() {
-    const feedback = soundboardFeedback;
-    const toast = el('div', 'sbx-toast');
-    if (!feedback) {
-      toast.hidden = true;
-      toast.setAttribute('aria-hidden', 'true');
-      return toast;
-    }
-    const isError = feedback.kind === 'error';
-    toast.classList.add(isError ? 'is-error' : 'is-success');
-    toast.setAttribute('role', isError ? 'alert' : 'status');
-    toast.setAttribute('aria-live', isError ? 'assertive' : 'polite');
-    toast.setAttribute('aria-atomic', 'true');
-    const title = isError ? 'Non envoyé' : 'Envoyé au stream';
-    toast.append(el('span', 'sbx-toast__mark', isError ? '!' : '✓'));
-    const text = el('span', 'sbx-toast__text');
-    text.append(el('strong', '', title));
-    if (feedback.reason) text.append(el('span', '', feedback.reason));
-    toast.append(text);
-    return toast;
-  }
-
-  async function beginEmoteAuthorization(node) {
-    if (emoteAuthorizationStarting) return;
-    if (state?.identity_shared !== true) {
-      const requestIdShare = window.Twitch?.ext?.actions?.requestIdShare;
-      if (typeof requestIdShare !== 'function') {
-        flash(node, 'Le partage d’identité est indisponible dans cet aperçu. Ouvre l’extension sur Twitch.', 'error');
-        return;
-      }
-      try {
-        requestIdShare();
-        flash(node, 'Confirme d’abord le partage d’identité Twitch, puis autorise tes emotes.', 'ok');
-      } catch {
-        flash(node, 'Twitch n’a pas pu ouvrir la demande d’identité. Rouvre l’extension puis réessaie.', 'error');
-      }
-      return;
-    }
-
-    if (emoteAuthorizationPopup && !emoteAuthorizationPopup.closed) {
-      try { emoteAuthorizationPopup.focus(); } catch { /* focus best effort */ }
-      flash(node, 'La fenêtre Twitch est déjà ouverte.', 'ok');
-      return;
-    }
-    // Blank window first, in the click itself (browsers keep the user gesture). Raptoru Studio refuses it
-    // (only its own pages open inside; https links go to the system browser): then the Twitch URL itself
-    // is opened, which Studio hands to the system browser.
-    const popup = window.open('about:blank', '_blank');
-    emoteAuthorizationPopup = popup;
-    emoteAuthorizationStarting = true;
-    try {
-      const result = await client.startEmoteOAuth();
-      const authorizationUrl = new URL(String(result?.authorization_url || ''));
-      if (
-        authorizationUrl.protocol !== 'https:'
-        || authorizationUrl.hostname !== 'id.twitch.tv'
-        || authorizationUrl.pathname !== '/oauth2/authorize'
-      ) throw new Error('invalid_oauth_url');
-      emoteAuthAttemptAt = Date.now();
-      if (popup) {
-        popup.location.replace(authorizationUrl.href);
-        startEmoteAuthorizationPolling();
-        setEmoteAuthNotice('pending', 'Autorisation en cours : valide dans la fenêtre Twitch, la confirmation s’affichera ici.');
-      } else {
-        // Studio answers null too when it opened the system browser: the message covers both cases.
-        window.open(authorizationUrl.href, '_blank');
-        startEmoteAuthorizationPolling();
-        setEmoteAuthNotice('pending', 'Connexion Twitch ouverte dans ton navigateur : valide, puis reviens ici. Si rien ne s’ouvre, autorise les fenêtres Twitch.');
-      }
-    } catch (error) {
-      const poller = emoteAuthorizationPoller;
-      emoteAuthorizationPoller = null;
-      void poller?.stop('start_failed');
-      try { popup.close(); } catch { /* fenêtre déjà fermée */ }
-      closeEmoteAuthorizationPopup();
-      emoteAuthorizationStarting = false;
-      setEmoteAuthNotice('error', `Autorisation Twitch impossible : ${errorLabel(error?.code)}`);
-    }
-  }
-
-  async function disconnectEmoteAuthorization(node) {
-    if (!client.disconnectEmotes) return;
-    try {
-      await client.disconnectEmotes();
-      emoteCatalogGeneration += 1;
-      emoteCatalog = null;
-      emoteError = null;
-      if (state?.emotes) state.emotes.twitch_connected = false;
-      try { await onRefresh?.(); } catch { /* le polling synchronisera l’état */ }
-      flash(node, 'Accès aux emotes personnelles retiré. Les emotes publiques restent disponibles.', 'ok');
-      await loadEmotes({ force: true });
-    } catch (error) {
-      flash(node, errorLabel(error?.code), 'error');
-    }
   }
 
   async function run(node, task, {
@@ -2022,14 +569,16 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     confirm,
     pending,
     notification = null,
+    /** `(ok, error)` once settled: a view that says the outcome itself (feedbackScope set) — the host stays quiet. */
+    onSettled = null,
   } = {}) {
     if (busy) return;
     busy = true;
     actionError = null;
-    if (feedbackScope === 'soundboard') successMessage = null;
-    if (errorScope === 'tts') ttsActionError = null;
+    if (feedbackScope) successMessage = null;
+    if (errorScope) scopedError = null;
     root.dataset.busy = '1';
-    if (feedbackScope !== 'soundboard') flash(
+    if (!feedbackScope) flash(
       node,
       pending === undefined ? 'Envoi en cours…' : (typeof pending === 'function' ? pending() : pending),
       'ok',
@@ -2059,8 +608,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       actionError = confirmation?.confirmed === false
         ? String(confirmation.message || 'Commande envoyée, exécution non confirmée')
         : null;
-      if (errorScope === 'tts') ttsActionError = null;
-      if (feedbackScope !== 'soundboard') {
+      if (errorScope) scopedError = null;
+      if (!feedbackScope) {
         if (confirmation?.confirmed === true) {
           successMessage = String(confirmation.message || (typeof success === 'function' ? success(result) : success || 'Action exécutée ✓'));
         } else if (confirmation?.confirmed === false) {
@@ -2071,14 +620,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         else if (result?.status === 'queued') successMessage = 'Action mise en file ✓';
         else successMessage = 'Action envoyée ✓';
       }
-      if (feedbackScope === 'soundboard') setSoundboardFeedback('success');
+      if (feedbackScope) onSettled?.(true);
     } catch (error) {
       const message = errorLabel(error?.code);
-      if (errorScope === 'tts') ttsActionError = message;
-      else if (feedbackScope !== 'soundboard') actionError = message;
-      if (feedbackScope === 'soundboard') setSoundboardFeedback('error', error);
+      if (errorScope) scopedError = { scope: errorScope, message };
+      else if (!feedbackScope) actionError = message;
+      if (feedbackScope) onSettled?.(false, error);
       const notificationModule = notificationModuleForNode(node,
-        notification?.module || (errorScope === 'tts' ? 'tts' : feedbackScope === 'soundboard' ? 'soundboard' : null));
+        notification?.module || errorScope || feedbackScope || null);
       publishRuntimeNotification(runtimeNotificationForError(error, {
         module: notificationModule,
         title: notification?.title || `Action ${notificationModule === 'global' ? '' : `${notificationModule} `}échouée`.replace(/\s+/g, ' ').trim(),
@@ -2090,2316 +639,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       delete root.dataset.busy;
       renderPreservingViewport();
     }
-  }
-
-  function moderationAction(name, ...args) {
-    if (typeof client?.[name] !== 'function') {
-      return Promise.reject(Object.assign(new Error('moderation_action_unavailable'), {
-        code: 'moderation_action_unavailable',
-      }));
-    }
-    return client[name](...args);
-  }
-
-  const TTS_CONTROL_CONFIRMATION_TIMEOUT_MS = 8_000;
-  const waitForTtsControl = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const ttsControlFinalMessage = (action, result) => {
-    const final = String(result?.final_status || result?.status || '').toLowerCase();
-    if (final === 'no_active') return 'Aucun TTS actif.';
-    return ({
-      stop: 'TTS arrêté ✓',
-      pause: 'TTS en pause ✓',
-      resume: 'TTS repris ✓',
-      purge: 'File TTS purgée ✓',
-    })[action] || 'Action TTS exécutée ✓';
-  };
-  async function confirmTtsControl(result, action) {
-    const immediate = String(result?.final_status || result?.status || '').toLowerCase();
-    if (['executed', 'no_active'].includes(immediate)) {
-      return { confirmed: immediate === 'executed', message: ttsControlFinalMessage(action, result) };
-    }
-    const commandId = String(result?.command_id || '').trim();
-    if (!commandId || typeof client?.ttsControlStatus !== 'function') {
-      return { confirmed: false, message: 'Commande acceptée, exécution non confirmée' };
-    }
-    const deadline = Date.now() + TTS_CONTROL_CONFIRMATION_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      try {
-        const status = await client.ttsControlStatus(commandId);
-        const final = String(status?.final_status || status?.status || '').toLowerCase();
-        if (final === 'executed') return { confirmed: true, message: ttsControlFinalMessage(action, status) };
-        if (final === 'no_active') return { confirmed: false, message: 'Aucun TTS actif.' };
-        if (['failed', 'timeout', 'uncertain'].includes(final)) {
-          return { confirmed: false, message: final === 'failed'
-            ? 'La commande TTS a échoué.'
-            : 'Commande envoyée, exécution non confirmée' };
-        }
-      } catch (error) {
-        if (error?.code !== 'tts_control_status_not_found') {
-          return { confirmed: false, message: 'Commande acceptée, exécution non confirmée' };
-        }
-      }
-      await waitForTtsControl(250);
-    }
-    return { confirmed: false, message: 'Commande envoyée, exécution non confirmée' };
-  }
-
-  function runModerationControl(node, task, { action, acceptedMessage, successMessage } = {}) {
-    return run(node, task, {
-      pending: acceptedMessage,
-      success: successMessage,
-      confirm: (result) => confirmTtsControl(result, action),
-      notification: {
-        module: 'moderation',
-        title: 'Contrôle TTS non confirmé',
-        actionModule: 'moderation',
-        dedupeKey: `runtime:moderation:tts:${action}`,
-        shouldNotify: (confirmation) => confirmation?.confirmed === false
-          && String(confirmation?.message || '').trim() !== 'Aucun TTS actif.',
-      },
-    });
-  }
-
-  function syncBonkFeedback(node) {
-    if (!node) return;
-    const message = bonkFeedbackMessage || (bonkInFlight ? 'Bonk en cours…' : '');
-    updateFeedbackSlot(node, message, { kind: bonkFeedbackKind });
-    node.classList.toggle(
-      'jdm-bonk-feedback--error',
-      bonkFeedbackKind === 'error' && Boolean(message),
-    );
-  }
-
-
-  function sendBonk(node, task) {
-    // Chaque clic démarre immédiatement sa propre requête. Le client lui donne
-    // une clé d’idempotence unique ; aucun échec ne vide ou n’annule les autres.
-    bonkInFlight += 1;
-    bonkFeedbackMessage = 'Bonk en cours…';
-    bonkFeedbackKind = 'ok';
-    syncBonkFeedback(node);
-    let request;
-    try {
-      request = task();
-    } catch (error) {
-      request = Promise.reject(error);
-    }
-    return Promise.resolve(request)
-      .then(async (result) => {
-        try { await onRefresh?.(); } catch { /* le prochain polling récupérera l’état */ }
-        bonkFeedbackMessage = bonkFeedbackForResult(result);
-        bonkFeedbackKind = 'ok';
-        syncBonkFeedback(node);
-        // A salve has its own bubble at the end of its playback (bonk-chargeur.js).
-        if (!result?.volley_id) bonkChargeur?.notice(bonkFeedbackMessage);
-        return true;
-      })
-      .catch((error) => {
-        bonkFeedbackMessage = `Bonk non envoyé · ${errorLabel(error?.code)}`;
-        bonkFeedbackKind = 'error';
-        syncBonkFeedback(node);
-        bonkChargeur?.notice(bonkFeedbackMessage, 'error');
-        publishRuntimeNotification(runtimeNotificationForError(error, {
-          module: 'bonk',
-          title: 'Bonk non envoyé',
-          actionModule: 'bonk',
-        }));
-        return false;
-      })
-      .finally(() => {
-        bonkInFlight = Math.max(0, bonkInFlight - 1);
-        syncBonkFeedback(node);
-        renderPreservingViewport();
-      });
-  }
-
-  // --- formulaires par module ----------------------------------------------
-
-  // TTS V2 (D3): Core decides price, cast, cooldown and queue; the view only shows and pays.
-  function ttsV2Form(mod, body) {
-    body.querySelector('.jdm-module__intro')?.remove();
-    body.dataset.ttsV2 = '1';
-    const { displayMethods } = walletPaymentMethods(mod, state);
-    if (!ttsV2View) {
-      ttsV2View = createTtsV2View({
-        document,
-        client,
-        surface: ttsV2Surface(document),
-        assetBase: './',
-        lab: state?.environment === 'lab',
-        onPaymentMethod: (method, locked) => {
-          ttsPaymentMethod = method;
-          paymentWalletSync?.(locked ? [method] : displayMethods, (next) => {
-            ttsPaymentMethod = next;
-            ttsV2View?.setCurrency(next);
-          });
-        },
-        onPurchased: () => { void onRefresh?.(); },
-      });
-      ttsV2View.setCurrency(ttsPaymentMethod);
-    }
-    ttsV2View.update(mod, state);
-    body.append(ttsV2View.node);
-    queueMicrotask(() => ttsV2View?.attached());
-  }
-
-  function ttsForm(mod, body) {
-    if (mod.tts_v2 && typeof client?.ttsBuy === 'function') return ttsV2Form(mod, body);
-    const pending = pendingFor('tts');
-    const interactionsAvailable = state?.interactions?.available !== false;
-    const moderation = state?.moderation?.tts ?? {};
-    const ttsAvailable = interactionsAvailable
-      && !moderation.paused
-      && !moderation.blocked
-      && !moderation.viewer_busy
-      && Number(moderation.cooldown_remaining_s || 0) <= 0;
-    const approvalMode = moderation.mode === 'approval';
-    const ttsRules = mod.tts_rules && typeof mod.tts_rules === 'object' ? mod.tts_rules : null;
-    const actionLabel = approvalMode ? 'Soumettre' : 'Envoyer';
-    const { displayMethods, spendMethods } = walletPaymentMethods(mod, state);
-    const supportsPaymentMethod = (method) => spendMethods.includes(method);
-    const paymentMethodsFor = () => displayMethods;
-
-    const normalizePaymentMethod = (methods) => {
-      const available = methods.length ? methods : ['tokens'];
-      if (available.includes(ttsPaymentMethod)) return ttsPaymentMethod;
-      ttsPaymentMethod = available[0];
-      return ttsPaymentMethod;
-    };
-
-    const quoteFor = (raw) => {
-      const length = ttsDraftLength(normalizeTtsDraft(raw));
-      const tier = (ttsRules?.tiers || []).find((candidate) => (
-        length >= Number(candidate.min)
-          && (candidate.max === null || length <= Number(candidate.max))
-      ));
-      const multiplier = Number(tier?.price_multiplier || 1);
-      return {
-        length,
-        tier,
-        multiplier,
-        price: tier
-          ? Math.round(Number(ttsRules.base_price) * multiplier)
-          : Number(mod.token_cost || 0),
-      };
-    };
-
-    const maxChars = Math.max(1, Number(mod.max_chars) || 800);
-    const field = el('textarea', 'jdm-input jdm-tts-input');
-    // maxlength compte les unites UTF-16 dans le navigateur, alors que le
-    // contrat serveur compte les points de code. Le controle metier ci-dessous
-    // reste donc la source de verite ; cette borne evite seulement une saisie
-    // deraisonnable avant le retour serveur.
-    field.maxLength = maxChars * 2;
-    field.rows = 2;
-    field.placeholder = 'Ton message…';
-    field.setAttribute('aria-label', 'Message TTS');
-    field.dataset.draftKey = 'tts-text';
-    field.value = drafts.tts.text;
-
-    const counter = el('span', 'jdm-counter', `${ttsDraftLength(field.value)}/${maxChars}`);
-    const help = el('p', 'jdm-hint jdm-tts-help', 'Écris du texte pour le faire lire à l’oral sur le stream.');
-    const actions = el('div', 'jdm-actions jdm-tts-actions');
-    actions.setAttribute('aria-label', 'Actions TTS');
-
-    const payload = () => {
-      const text = normalizeTtsDraft(field.value);
-      if (!text) {
-        flash(body, 'Écris un message.');
-        return null;
-      }
-      if (Array.from(text).length > maxChars) {
-        flash(body, `Message trop long : ${maxChars} caractères maximum.`);
-        return null;
-      }
-      return { text };
-    };
-
-    let paymentControl = null;
-    const syncControls = () => {
-      const valid = Boolean(normalizeTtsDraft(field.value))
-        && ttsDraftLength(field.value) <= maxChars;
-      counter.textContent = `${ttsDraftLength(field.value)}/${maxChars}`;
-      const hasText = Boolean(normalizeTtsDraft(field.value));
-      const quote = quoteFor(field.value);
-      const methods = paymentMethodsFor();
-      const method = normalizePaymentMethod(methods);
-      const usingCredits = method === 'credits';
-      const cost = usingCredits ? 1 : quote.price;
-      const methodSupported = supportsPaymentMethod(method);
-      const methodAvailable = usingCredits ? pending.length > 0 : walletCanPayTokens(state.wallet, cost);
-      const unit = usingCredits ? 'crédit' : 'jetons';
-      const costLabel = `${fmt(cost)} ${unit}`;
-      if (hasText) {
-        const tierText = quote.tier
-          ? ` · palier ${quote.tier.id} · ×${String(quote.multiplier).replace('.', ',')}`
-          : '';
-        // Le prix reste dans le CTA : la ligne d'aide décrit uniquement la
-        // longueur et le palier pour éviter une seconde source visuelle de
-        // vérité sur le coût.
-        help.textContent = `${fmt(quote.length)} caractères${tierText}`;
-      } else {
-        help.textContent = 'Écris du texte pour le faire lire à l’oral sur le stream.';
-      }
-      actions.classList.toggle('is-visible', hasText);
-      actions.setAttribute('aria-hidden', String(!hasText));
-      body.dataset.paymentMethod = method;
-      paymentWalletSync?.(methods, (next) => {
-        ttsPaymentMethod = next;
-        syncControls();
-      });
-      paymentControl?.sync({
-        method,
-        methods,
-        cost: fmt(cost),
-        unit,
-        disabled: !valid || !ttsAvailable || !methodSupported || !methodAvailable,
-        hint: !ttsAvailable
-          ? 'TTS indisponible'
-          : !methodSupported
-            ? 'Paiement indisponible pour cette monnaie'
-            : usingCredits && !pending.length
-              ? 'Crédits TTS indisponibles'
-              : !usingCredits && !methodAvailable
-                ? 'Jetons insuffisants ou solde indisponible'
-                : '',
-        label: actionLabel,
-        ariaLabel: hasText ? `${actionLabel} pour ${costLabel}` : actionLabel,
-        title: hasText ? `${actionLabel} pour ${costLabel}` : actionLabel,
-        amounts: {
-          tokens: state?.wallet?.unavailable ? null : state?.wallet?.available,
-          credits: Array.isArray(state?.pending_actions) ? pending.length : null,
-        },
-      });
-    };
-
-    paymentControl = createMultiCurrencyPayment({
-      className: 'rl-pay--tts',
-      modern: true,
-      actionLabel,
-      enableMethodSwitch: true,
-      onMethodChange: (method) => {
-        ttsPaymentMethod = method;
-        syncControls();
-      },
-      onAction: (method) => {
-        if (!ttsAvailable || !supportsPaymentMethod(method)) return;
-        if (method === 'tokens' && !walletCanPayTokens(state.wallet, quoteFor(field.value).price)) return;
-        const data = payload();
-        if (!data) return;
-        if (method === 'credits') {
-          return run(body, () => pending[0]
-            ? client.useRedemption(pending[0].redemption_id, 'tts', data)
-            : Promise.reject(Object.assign(new Error('insufficient_credits'), { code: 'insufficient_credits' })), {
-            errorScope: 'tts',
-            onSuccess: () => { drafts.tts.text = ''; },
-          });
-        }
-        return run(body, () => client.spendTokens('tts', data), {
-          errorScope: 'tts',
-          onSuccess: () => { drafts.tts.text = ''; },
-        });
-      },
-    });
-
-    if (state?.lab_mode) {
-      const lab = el('button', 'jdm-btn jdm-ui-action jdm-btn--primary jdm-tts-action jdm-tts-action--lab', 'Tester gratuitement');
-      lab.type = 'button';
-      lab.addEventListener('click', () => {
-        const data = payload();
-        if (data) return run(body, () => client.runLab('tts', data), {
-          errorScope: 'tts',
-          onSuccess: () => { drafts.tts.text = ''; },
-        });
-      });
-      actions.append(lab);
-    }
-
-    field.addEventListener('input', () => {
-      drafts.tts.text = field.value;
-      syncControls();
-    });
-
-    const row = el('div', 'jdm-row');
-    row.append(counter);
-    const composer = el('div', 'jdm-tts-composer');
-    composer.append(field, row);
-    body.append(composer, help, actions);
-    actions.prepend(paymentControl.node);
-    if (ttsActionError) {
-      body.append(el('p', 'jdm-flash jdm-flash--error jdm-tts-error', ttsActionError));
-    }
-    if (!interactionsAvailable && !state?.lab_mode) {
-      body.append(el('p', 'jdm-hint', 'Interactions en pause : SAMMI se reconnecte. Ton crédit et tes jetons restent intacts.'));
-    } else if (moderation.paused) {
-      body.append(el('p', 'jdm-hint', 'Le TTS est mis en pause par la modération. Rien ne sera consommé.'));
-    } else if (moderation.blocked) {
-      body.append(el('p', 'jdm-hint', 'Le TTS n’est pas disponible pour ton compte.'));
-    } else if (moderation.viewer_busy) {
-      body.append(el('p', 'jdm-hint', 'Ton TTS précédent est encore en attente ou en lecture.'));
-    } else if (Number(moderation.cooldown_remaining_s || 0) > 0) {
-      body.append(el('p', 'jdm-hint', `Cooldown TTS : encore ${fmt(moderation.cooldown_remaining_s)} s.`));
-    } else if (approvalMode) {
-      body.append(el('p', 'jdm-hint', 'Validation active : ton message attendra un accord, sans consommer ton crédit ni tes jetons avant celui-ci.'));
-    }
-    if (mod.kinds?.includes('redemption')) {
-      body.append(el('p', 'jdm-hint jdm-tts-credit-hint',
-        `Ou utilise la récompense TTS (${fmt(mod.channel_points_cost)} points) dans le menu Twitch : elle apparaîtra ici.`));
-    }
-    syncControls();
-  }
-
-  function syncSoundboardPreviewButtons() {
-    for (const button of root.querySelectorAll('.sbx-card__play')) {
-      if (button.disabled) continue;
-      const active = Boolean(previewSoundId) && button.dataset.soundId === previewSoundId;
-      const label = button.dataset.soundLabel || 'ce son';
-      button.classList.toggle('is-previewing', active);
-      button.closest('.sbx-card')?.classList.toggle('is-previewing', active);
-      button.setAttribute('aria-pressed', String(active));
-      button.title = active ? 'Arrêter l’aperçu' : 'Écouter (aperçu, rien n’est envoyé)';
-      button.setAttribute('aria-label', active ? `Arrêter l’aperçu de ${label}` : `Écouter ${label}`);
-    }
-  }
-
-  // Soundboard viewer (markup sbx-*, feuille soundboard.css). Le son est la star : cartes lisibles,
-  // aperçu distinct de l'achat, prix et envoi regroupés dans la barre d'action du bas.
-  function soundboardForm(mod, body) {
-    const pending = pendingFor('soundboard');
-    const interactionsAvailable = interactionsAvailableForState();
-    const sounds = Array.isArray(mod.sounds) ? mod.sounds : [];
-    const soundById = new Map(sounds.map((sound) => [String(sound.id), sound]));
-    const soundIds = new Set(soundById.keys());
-    if (!soundIds.has(drafts.soundboard.selectedId)) drafts.soundboard.selectedId = null;
-    if (!['custom', 'alpha', 'price'].includes(drafts.soundboard.sort)) drafts.soundboard.sort = 'custom';
-    if (!['all', 'favorites', 'recents'].includes(drafts.soundboard.view)) drafts.soundboard.view = 'all';
-    drafts.soundboard.searchOpen = true;
-    let selectedSound = drafts.soundboard.selectedId;
-    let selectedCreditRedemption = null;
-    let favorites = readStoredIds(SOUNDBOARD_FAVORITES_KEY).filter((id) => soundIds.has(id));
-    let recents = readStoredIds(SOUNDBOARD_RECENTS_KEY).filter((id) => soundIds.has(id));
-    let customOrder = normalizeSoundboardOrder(readStoredIds(SOUNDBOARD_ORDER_KEY), [...soundIds]);
-    let aliases = readStoredAliases(SOUNDBOARD_ALIASES_KEY, soundIds);
-    writeStoredIds(SOUNDBOARD_FAVORITES_KEY, favorites);
-    writeStoredIds(SOUNDBOARD_RECENTS_KEY, recents);
-    writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
-    writeStoredAliases(SOUNDBOARD_ALIASES_KEY, aliases);
-    const displayLabelFor = (sound) => soundboardSoundLabel(sound, aliases);
-
-    body.classList.add('rl-soundboard', 'sbx');
-
-    const { displayMethods, spendMethods } = walletPaymentMethods(mod, state);
-    const methods = displayMethods.length ? displayMethods : ['tokens'];
-    const supportsPaymentMethod = (method) => spendMethods.includes(method);
-    if (!methods.includes(selectedPaymentMethod)) selectedPaymentMethod = methods[0];
-    const tokenCostOf = (sound) => Number(sound?.token_cost ?? mod.token_cost ?? 500);
-    const creditCostOf = (sound) => Number(sound?.credit_cost ?? 1);
-
-    // État d'un son vu par le viewer. Core reste l'autorité (il refuse de toute façon) : ceci
-    // n'est qu'un affichage, recalculé chaque seconde pendant un cooldown.
-    const availability = (sound) => {
-      if (sound?.enabled === false) return { kind: 'disabled', label: 'Indisponible', hint: 'Ce son est désactivé' };
-      const left = (sound?.cooldown_until ? Date.parse(sound.cooldown_until) : 0) - Date.now();
-      if (left > 0) {
-        const seconds = Math.ceil(left / 1000);
-        return { kind: 'cooldown', label: `${seconds} s`, hint: `Disponible dans ${seconds} s`, left };
-      }
-      if (sound?.running && sound.playback_mode === 'ignore_if_running') {
-        return { kind: 'running', label: 'En cours', hint: 'Ce son est déjà en cours de lecture' };
-      }
-      return null;
-    };
-    const durationText = (sound) => {
-      if (String(sound.id) === 'random') return 'Son surprise';
-      const ms = Number(sound.duration_ms || 0);
-      return ms ? `${(ms / 1000).toFixed(1).replace('.', ',')} s` : '';
-    };
-
-    // --- En-tête : recherche, tri, filtres, état du lecteur -------------------------------------
-    const head = el('div', 'sbx-head');
-    const searchBox = el('label', 'sbx-search');
-    const search = el('input', 'sbx-search__input');
-    search.id = 'soundboard-search';
-    search.type = 'search';
-    search.placeholder = 'Rechercher un son';
-    search.value = drafts.soundboard.query;
-    search.autocomplete = 'off';
-    search.spellcheck = false;
-    search.setAttribute('aria-label', 'Rechercher un son');
-    search.dataset.draftKey = 'soundboard-query';
-    const clearSearch = el('button', 'sbx-search__clear');
-    clearSearch.type = 'button';
-    clearSearch.setAttribute('aria-label', 'Effacer la recherche');
-    clearSearch.append(sbxIcon('close'));
-    searchBox.append(sbxIcon('search'), search, clearSearch);
-
-    const sortWrap = el('div', 'sbx-sort');
-    const sortButton = el('button', 'sbx-iconbtn sbx-sort__button');
-    sortButton.type = 'button';
-    sortButton.title = 'Trier';
-    sortButton.setAttribute('aria-haspopup', 'menu');
-    sortButton.setAttribute('aria-expanded', 'false');
-    sortButton.setAttribute('aria-label', 'Trier le catalogue');
-    sortButton.append(sbxIcon('sort'));
-    const sortMenu = el('div', 'sbx-menu');
-    sortMenu.setAttribute('role', 'menu');
-    sortMenu.hidden = true;
-    const SORTS = [['custom', 'Mon ordre'], ['alpha', 'A → Z'], ['price', 'Prix croissant']];
-    const sortItems = SORTS.map(([value, label]) => {
-      const item = el('button', 'sbx-menu__item', label);
-      item.type = 'button';
-      item.dataset.sort = value;
-      item.setAttribute('role', 'menuitemradio');
-      item.addEventListener('click', () => {
-        drafts.soundboard.sort = value;
-        openSortMenu(false);
-        syncSort();
-        renderGrid();
-      });
-      return item;
-    });
-    const sortNote = el('p', 'sbx-menu__note', 'Mon ordre : maintiens une carte pour la déplacer.');
-    sortMenu.append(...sortItems, sortNote);
-    sortWrap.append(sortButton, sortMenu);
-    const syncSort = () => {
-      for (const item of sortItems) {
-        const on = item.dataset.sort === drafts.soundboard.sort;
-        item.classList.toggle('is-active', on);
-        item.setAttribute('aria-checked', String(on));
-      }
-      sortButton.classList.toggle('is-set', drafts.soundboard.sort !== 'custom');
-    };
-    const openSortMenu = (open) => {
-      sortMenu.hidden = !open;
-      sortWrap.classList.toggle('is-open', open);
-      sortButton.setAttribute('aria-expanded', String(open));
-    };
-    sortButton.addEventListener('click', () => openSortMenu(sortMenu.hidden));
-    sortWrap.addEventListener('focusout', () => queueMicrotask(() => {
-      if (!sortWrap.contains(document.activeElement)) openSortMenu(false);
-    }));
-    sortWrap.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape' || sortMenu.hidden) return;
-      event.stopPropagation();
-      openSortMenu(false);
-      sortButton.focus({ preventScroll: true });
-    });
-    syncSort();
-
-    const filters = el('div', 'sbx-filters');
-    filters.setAttribute('role', 'group');
-    filters.setAttribute('aria-label', 'Afficher');
-    const VIEWS = [['all', 'Tous'], ['favorites', 'Favoris'], ['recents', 'Récents']];
-    const filterButtons = VIEWS.map(([id, label]) => {
-      const chip = el('button', 'sbx-filter');
-      chip.type = 'button';
-      chip.dataset.view = id;
-      if (id === 'favorites') chip.append(sbxIcon('star'));
-      chip.append(el('span', 'sbx-filter__label', label), el('span', 'sbx-filter__count'));
-      chip.addEventListener('click', () => {
-        drafts.soundboard.view = id;
-        drafts.soundboard.favoritesOnly = id === 'favorites';
-        syncFilters();
-        renderGrid();
-      });
-      return chip;
-    });
-    filters.append(...filterButtons);
-    const syncFilters = () => {
-      for (const chip of filterButtons) {
-        const on = chip.dataset.view === drafts.soundboard.view;
-        chip.classList.toggle('is-active', on);
-        chip.setAttribute('aria-pressed', String(on));
-        const count = chip.dataset.view === 'favorites' ? favorites.length
-          : chip.dataset.view === 'recents' ? recents.length : sounds.length;
-        chip.querySelector('.sbx-filter__count').textContent = String(count);
-      }
-    };
-    syncFilters();
-
-    // Lecteur du Studio : information discrète (Core refuse de toute façon sans lecteur prêt).
-    const status = el('span', 'sbx-status');
-    if (mod.player_ready === false) {
-      status.classList.add('is-offline');
-      status.title = 'Le lecteur audio du Studio n’est pas prêt : un envoi serait refusé sans rien consommer.';
-      status.append(el('span', 'sbx-status__dot'), el('span', '', 'Lecteur hors ligne'));
-    } else if (mod.player_ready === true) {
-      status.classList.add('is-online');
-      status.title = 'Lecteur audio du Studio prêt';
-      status.append(el('span', 'sbx-status__dot'), el('span', '', 'Lecteur prêt'));
-    }
-
-    const searchRow = el('div', 'sbx-head__row');
-    searchRow.append(searchBox, sortWrap);
-    const filterRow = el('div', 'sbx-head__row sbx-head__row--filters');
-    filterRow.append(filters, status);
-    head.append(searchRow, filterRow);
-
-    // --- Grille ----------------------------------------------------------------------------------
-    const grid = el('div', 'sbx-grid');
-    grid.setAttribute('role', 'list');
-    grid.setAttribute('aria-label', 'Catalogue Soundboard');
-    grid.dataset.scrollKey = 'soundboard-grid';
-    hoverMarquee(grid, '.sbx-card', '.sbx-card__name', '.sbx-card__label');
-
-    const visibleSounds = () => {
-      let candidates = sounds.filter((sound) => soundboardSoundMatchesQuery(sound, drafts.soundboard.query, aliases));
-      if (drafts.soundboard.view === 'favorites') {
-        candidates = candidates.filter((sound) => favorites.includes(String(sound.id)));
-      } else if (drafts.soundboard.view === 'recents') {
-        return recents.map((id) => candidates.find((sound) => String(sound.id) === id)).filter(Boolean);
-      }
-      return sortSoundboardSounds(candidates, {
-        sort: drafts.soundboard.sort,
-        customOrder,
-        recents,
-        aliases,
-        paymentMethod: selectedPaymentMethod,
-        moduleTokenCost: mod.token_cost,
-      });
-    };
-
-    const playSoundPreview = async (sound, trigger = null) => {
-      if (!soundPreviewUrls(sound).length) return;
-      if (!previewVolume) {
-        showBarNotice('Monte le volume des aperçus (🔊 en haut) pour écouter.');
-        return;
-      }
-      let audio = null;
-      const soundId = String(sound.id);
-      const restore = () => {
-        trigger?.classList.remove('is-previewing');
-        if (previewRestore === restore) {
-          previewRestore = null;
-          if (previewAudio === audio) previewAudio = null;
-          if (previewSoundId === soundId) previewSoundId = null;
-        }
-        syncSoundboardPreviewButtons();
-      };
-      const previewUrl = chooseSoundPreviewUrl(sound);
-      try {
-        stopSoundPreview();
-        audio = new Audio();
-        previewAudio = audio;
-        audio.preload = 'auto';
-        audio.src = new URL(String(previewUrl), document.baseURI).href;
-        audio.volume = previewVolume / 100;
-        previewRestore = restore;
-        previewSoundId = soundId;
-        syncSoundboardPreviewButtons();
-        audio.addEventListener('ended', restore, { once: true });
-        await audio.play();
-      } catch (error) {
-        if (previewAudio !== audio) {
-          restore();
-          return;
-        }
-        const mediaCode = Number(audio?.error?.code || 0);
-        const errorCode = mediaCode ? `MEDIA_${mediaCode}` : String(error?.name || 'AUDIO_ERROR');
-        console.warn('[Raptoru Live] sound_preview_failed', {
-          code: errorCode,
-          source: String(previewUrl || ''),
-          message: String(error?.message || audio?.error?.message || 'preview_failed').slice(0, 180),
-        });
-        stopSoundPreview();
-        showBarNotice(`Aperçu indisponible (${errorCode}). Rien n’a été envoyé.`);
-      }
-    };
-
-    const selectSound = (sound) => {
-      selectedSound = String(sound.id);
-      drafts.soundboard.selectedId = selectedSound;
-      setActionState();
-      // La barre d'action grandit à la sélection : la carte choisie reste entièrement visible dans la grille.
-      requestAnimationFrame(() => {
-        const card = grid.querySelector('.sbx-card.is-selected');
-        if (!card) return;
-        const view = grid.getBoundingClientRect();
-        const rect = card.getBoundingClientRect();
-        if (rect.bottom > view.bottom) grid.scrollTop += rect.bottom - view.bottom + 6;
-        else if (rect.top < view.top) grid.scrollTop -= view.top - rect.top + 4;
-      });
-    };
-
-    // Réordonnancement personnel (tri « Mon ordre ») : appui long puis glisser, ou Alt+flèches. Insertion stricte
-    // (moveSoundboardItem) : seules les cartes entre l'origine et la destination se décalent d'une place. Pendant le
-    // geste, aucune carte ne change de place dans le DOM : les positions sont relevées au départ (soundboardDropSlot
-    // les lit, la destination ne dépend donc jamais de cartes en mouvement), la carte suit le pointeur et les autres
-    // glissent en transform. Au lâcher, les mêmes nœuds sont remis dans le nouvel ordre (aucune reconstruction, aucun
-    // flash) et l'ordre est enregistré une seule fois. Échap, pointercancel ou un rendu forcé annulent sans rien écrire.
-    let dragPending = null;
-    let dragSession = null;
-    let dragJustDroppedId = null;
-    const dragDelayMs = 300;
-    const bindGlobalPointerTracking = (onMove, onUp, onCancel) => {
-      const target = globalThis.window;
-      if (!target || typeof target.addEventListener !== 'function') return () => {};
-      target.addEventListener('pointermove', onMove, { passive: false });
-      target.addEventListener('pointerup', onUp);
-      target.addEventListener('pointercancel', onCancel);
-      return () => {
-        target.removeEventListener('pointermove', onMove);
-        target.removeEventListener('pointerup', onUp);
-        target.removeEventListener('pointercancel', onCancel);
-      };
-    };
-    const clearDragPending = () => {
-      const current = dragPending;
-      dragPending = null;
-      if (!current) return;
-      if (current.timer !== null) globalThis.clearTimeout?.(current.timer);
-      current.detach?.();
-    };
-    /** Nouvel ordre visible : ordre personnel enregistré, puis les mêmes nœuds remis en place (pas de rendu). */
-    const applyVisibleOrder = (visibleIds, nextIds) => {
-      customOrder = reorderSoundboardVisibleSubset(customOrder, visibleIds, nextIds);
-      writeStoredIds(SOUNDBOARD_ORDER_KEY, customOrder);
-      const byId = new Map([...grid.querySelectorAll('.sbx-card')].map((card) => [String(card.dataset.soundId), card]));
-      grid.append(...nextIds.map((id) => byId.get(id)).filter(Boolean));
-    };
-    const layoutDrag = (session) => {
-      const { slots, cards, from } = session;
-      const box = grid.getBoundingClientRect();
-      const x = session.pointerX - box.left;
-      const y = session.pointerY - box.top + grid.scrollTop;
-      // La carte suit le pointeur avec la même prise qu'au départ, y compris quand la grille défile.
-      const origin = slots[from];
-      session.item.style.transform = `translate(${x - session.grabX - origin.left}px, ${y - session.grabY - origin.top}px) scale(1.04)`;
-      const target = soundboardDropSlot(slots, x, y, session.target);
-      if (target === session.target) return;
-      session.target = target;
-      cards.forEach((card, index) => {
-        if (index === from) return;
-        const next = index > from && index <= target ? index - 1 : index < from && index >= target ? index + 1 : index;
-        card.style.transform = next === index
-          ? ''
-          : `translate(${slots[next].left - slots[index].left}px, ${slots[next].top - slots[index].top}px)`;
-      });
-      session.marker.style.transform = `translate(${slots[target].left}px, ${slots[target].top}px)`;
-    };
-    // Bord haut / bas de la grille pendant le glisser : elle défile seule.
-    const autoScroll = (session) => {
-      if (dragSession !== session) return;
-      const box = grid.getBoundingClientRect();
-      const edge = Math.min(36, box.height / 4);
-      const step = session.pointerY < box.top + edge ? -7 : session.pointerY > box.bottom - edge ? 7 : 0;
-      if (step) {
-        const before = grid.scrollTop;
-        grid.scrollTop += step;
-        if (grid.scrollTop !== before) layoutDrag(session);
-      }
-      session.frame = globalThis.requestAnimationFrame?.(() => autoScroll(session)) ?? null;
-    };
-    const onDragKey = (event) => {
-      if (event.key !== 'Escape' || !dragSession) return;
-      event.preventDefault();
-      event.stopPropagation();
-      finishDrag();
-    };
-    const finishDrag = ({ commit = false } = {}) => {
-      clearDragPending();
-      const session = dragSession;
-      if (!session) return;
-      dragSession = null;
-      soundboardDragging = false;
-      soundboardDragCancel = null;
-      session.detach?.();
-      if (session.frame !== null) globalThis.cancelAnimationFrame?.(session.frame);
-      grid.removeEventListener('scroll', session.onScroll);
-      globalThis.removeEventListener?.('keydown', onDragKey, true);
-      session.marker.remove();
-      const { item, cards, from, target, visibleIds } = session;
-      // Le clic qui suit le lâcher n'est ni une sélection ni une désélection.
-      dragJustDroppedId = session.soundId;
-      globalThis.setTimeout?.(() => {
-        if (dragJustDroppedId === session.soundId) dragJustDroppedId = null;
-      }, 0);
-      if (!item.isConnected) return;
-      const dropped = item.getBoundingClientRect();
-      grid.classList.add('is-settling');
-      for (const card of cards) card.style.transform = '';
-      if (commit && target !== from) applyVisibleOrder(visibleIds, moveSoundboardItem(visibleIds, from, target));
-      // La carte part de là où elle a été lâchée et rejoint sa place ; les autres y sont déjà.
-      const landed = item.getBoundingClientRect();
-      item.style.transform = `translate(${dropped.left - landed.left}px, ${dropped.top - landed.top}px)`;
-      void item.offsetWidth;
-      grid.classList.remove('is-settling', 'is-dragging');
-      item.classList.remove('is-dragging');
-      item.style.transform = '';
-      if (soundboardRenderAfterDrag) {
-        soundboardRenderAfterDrag = false;
-        globalThis.setTimeout?.(() => renderPreservingViewport(), 220);
-      }
-    };
-    const beginDrag = (current) => {
-      if (dragPending !== current || dragSession || drafts.soundboard.sort !== 'custom') return;
-      current.detach?.();
-      dragPending = null;
-      const item = current.item;
-      const cards = [...grid.querySelectorAll('.sbx-card')];
-      const from = cards.indexOf(item);
-      if (from < 0) return;
-      const box = grid.getBoundingClientRect();
-      const slots = cards.map((card) => {
-        const rect = card.getBoundingClientRect();
-        return { left: rect.left - box.left, top: rect.top - box.top + grid.scrollTop, width: rect.width, height: rect.height };
-      });
-      const marker = el('div', 'sbx-drop-slot');
-      marker.setAttribute('aria-hidden', 'true');
-      marker.style.width = `${slots[from].width}px`;
-      marker.style.height = `${slots[from].height}px`;
-      grid.append(marker);
-      grid.classList.add('is-dragging');
-      item.classList.add('is-dragging');
-      const session = {
-        item,
-        cards,
-        slots,
-        from,
-        target: -1,
-        marker,
-        soundId: current.soundId,
-        pointerId: current.pointerId,
-        grabX: current.clientX - box.left - slots[from].left,
-        grabY: current.clientY - box.top + grid.scrollTop - slots[from].top,
-        pointerX: current.lastX ?? current.clientX,
-        pointerY: current.lastY ?? current.clientY,
-        visibleIds: cards.map((card) => String(card.dataset.soundId)),
-        detach: null,
-        frame: null,
-        onScroll: null,
-      };
-      dragSession = session;
-      soundboardDragging = true;
-      session.target = from;
-      session.marker.style.transform = `translate(${slots[from].left}px, ${slots[from].top}px)`;
-      session.onScroll = () => layoutDrag(session);
-      grid.addEventListener('scroll', session.onScroll, { passive: true });
-      globalThis.addEventListener?.('keydown', onDragKey, true);
-      layoutDrag(session);
-      session.detach = bindGlobalPointerTracking(
-        (event) => {
-          if (event.pointerId !== session.pointerId) return;
-          event.preventDefault?.();
-          session.pointerX = Number(event.clientX) || 0;
-          session.pointerY = Number(event.clientY) || 0;
-          layoutDrag(session);
-        },
-        (event) => {
-          if (event.pointerId !== session.pointerId) return;
-          event.preventDefault?.();
-          finishDrag({ commit: true });
-        },
-        (event) => {
-          if (event.pointerId === session.pointerId) finishDrag();
-        },
-      );
-      session.frame = globalThis.requestAnimationFrame?.(() => autoScroll(session)) ?? null;
-      soundboardDragCancel = () => finishDrag();
-    };
-    // Tactile : une fois le glisser commencé, le doigt déplace la carte, pas la grille (sinon pointercancel).
-    grid.addEventListener('touchmove', (event) => {
-      if (dragSession && event.cancelable) event.preventDefault();
-    }, { passive: false });
-    const dragExcludedTarget = (target) => Boolean(target?.closest?.('.sbx-card__play, .sbx-card__fav, .sbx-alias'));
-    const startDragPending = (item, soundId, event) => {
-      if (drafts.soundboard.sort !== 'custom' || drafts.soundboard.view !== 'all' || dragSession
-        || event.isPrimary === false || (event.button !== undefined && event.button !== 0)
-        || dragExcludedTarget(event.target)) return;
-      clearDragPending();
-      const pointerId = event.pointerId ?? 1;
-      const current = {
-        item,
-        soundId,
-        pointerId,
-        clientX: Number(event.clientX) || 0,
-        clientY: Number(event.clientY) || 0,
-        lastX: null,
-        lastY: null,
-        timer: null,
-        detach: null,
-      };
-      dragPending = current;
-      current.detach = bindGlobalPointerTracking(
-        (moveEvent) => {
-          if (moveEvent.pointerId !== pointerId || dragPending !== current) return;
-          current.lastX = Number(moveEvent.clientX) || 0;
-          current.lastY = Number(moveEvent.clientY) || 0;
-          // Bouger avant l'appui long = clic ou défilement, jamais un déplacement.
-          if (Math.hypot(current.lastX - current.clientX, current.lastY - current.clientY) > 10) clearDragPending();
-        },
-        (upEvent) => {
-          if (upEvent.pointerId === pointerId && dragPending === current) clearDragPending();
-        },
-        (upEvent) => {
-          if (upEvent.pointerId === pointerId && dragPending === current) clearDragPending();
-        },
-      );
-      current.timer = globalThis.setTimeout?.(() => beginDrag(current), dragDelayMs) ?? null;
-    };
-    const reorderWithKeyboard = (soundId, key) => {
-      if (drafts.soundboard.sort !== 'custom' || drafts.soundboard.view !== 'all') return false;
-      const visibleIds = [...grid.querySelectorAll('.sbx-card')].map((item) => String(item.dataset.soundId));
-      const index = visibleIds.indexOf(String(soundId));
-      if (index < 0) return false;
-      let columns = 1;
-      try {
-        columns = Math.max(1, getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/u).length);
-      } catch { /* une colonne par défaut */ }
-      const delta = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : key === 'ArrowUp' ? -columns : columns;
-      const target = Math.min(visibleIds.length - 1, Math.max(0, index + delta));
-      if (target === index) return false;
-      // Même règle que le glisser : insertion, jamais d'échange.
-      applyVisibleOrder(visibleIds, moveSoundboardItem(visibleIds, index, target));
-      grid.querySelector(`.sbx-card[data-sound-id="${CSS.escape(String(soundId))}"] .sbx-card__main`)
-        ?.focus({ preventScroll: true });
-      return true;
-    };
-
-    // Nom personnel (clic droit / Maj+F2) : stocké localement, n'affecte que ce viewer.
-    const openAliasEditor = (sound, card, returnFocus = null) => {
-      if (card.querySelector('.sbx-alias')) return;
-      const soundId = String(sound.id);
-      const originalLabel = String(sound.label ?? soundId);
-      const currentAlias = aliasValue(aliases, soundId);
-      const form = el('form', 'sbx-alias');
-      form.setAttribute('aria-label', `Nom personnel de ${originalLabel}`);
-      const input = el('input', 'sbx-alias__input');
-      input.type = 'text';
-      input.maxLength = SOUNDBOARD_ALIAS_MAX_LENGTH;
-      input.value = currentAlias;
-      input.placeholder = originalLabel;
-      input.autocomplete = 'off';
-      input.setAttribute('aria-label', `Nom personnel de ${originalLabel}`);
-      input.dataset.draftKey = `soundboard-alias-${soundId}`;
-      const save = el('button', 'sbx-alias__btn sbx-alias__btn--save', '✓');
-      save.type = 'submit';
-      save.setAttribute('aria-label', 'Valider le nom personnel');
-      const restore = el('button', 'sbx-alias__btn', '↺');
-      restore.type = 'button';
-      restore.hidden = !currentAlias;
-      restore.setAttribute('aria-label', 'Restaurer le nom original');
-      restore.title = 'Restaurer le nom original';
-      form.append(input, save, restore);
-      for (const type of ['click', 'pointerdown']) form.addEventListener(type, (event) => event.stopPropagation());
-      form.addEventListener('contextmenu', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      });
-      const persistAlias = (value) => {
-        const next = normalizeSoundboardAlias(value);
-        if (!next || normalizeSearchQuery(next) === normalizeSearchQuery(originalLabel)) delete aliases[soundId];
-        else aliases[soundId] = next;
-        writeStoredAliases(SOUNDBOARD_ALIASES_KEY, aliases);
-        renderGrid();
-      };
-      form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        persistAlias(input.value);
-      });
-      restore.addEventListener('click', (event) => {
-        event.preventDefault();
-        persistAlias('');
-      });
-      input.addEventListener('keydown', (event) => {
-        if (event.key !== 'Escape') return;
-        event.preventDefault();
-        event.stopPropagation();
-        renderGrid();
-        queueMicrotask(() => returnFocus?.focus?.({ preventScroll: true }));
-      });
-      card.classList.add('is-editing');
-      card.append(form);
-      input.focus({ preventScroll: true });
-      input.select();
-    };
-
-    const syncCard = (card) => {
-      const sound = soundById.get(String(card.dataset.soundId));
-      if (!sound) return;
-      const soundId = String(sound.id);
-      const unavailable = availability(sound);
-      const playing = !unavailable && sound.running === true;
-      card.dataset.state = unavailable?.kind ?? (playing ? 'playing' : 'available');
-      const selected = soundId === selectedSound;
-      card.classList.toggle('is-selected', selected);
-      const main = card.querySelector('.sbx-card__main');
-      main.disabled = Boolean(unavailable);
-      main.setAttribute('aria-pressed', String(selected));
-      main.title = unavailable ? unavailable.hint : aliases[soundId] ? `Nom original : ${sound.label ?? soundId}` : displayLabelFor(sound);
-      const meta = card.querySelector('.sbx-card__meta');
-      meta.replaceChildren();
-      if (unavailable?.kind === 'cooldown') {
-        meta.append(sbxIcon('clock'), el('span', '', unavailable.label));
-        const total = Number(sound.cooldown_ms || 0);
-        card.style.setProperty('--sbx-cd', total > 0 ? String(Math.min(1, unavailable.left / total)) : '0');
-      } else {
-        card.style.removeProperty('--sbx-cd');
-        if (unavailable) meta.append(el('span', '', unavailable.label));
-        else if (playing) meta.append(sbxEqualizer(), el('span', '', 'En lecture'));
-        else meta.append(el('span', '', durationText(sound)));
-      }
-      const favoriteOn = favorites.includes(soundId);
-      card.classList.toggle('is-favorite', favoriteOn);
-      const fav = card.querySelector('.sbx-card__fav');
-      fav.setAttribute('aria-pressed', String(favoriteOn));
-      fav.setAttribute('aria-label', favoriteOn
-        ? `Retirer ${displayLabelFor(sound)} des favoris`
-        : `Ajouter ${displayLabelFor(sound)} aux favoris`);
-      fav.title = favoriteOn ? 'Retirer des favoris' : 'Ajouter aux favoris';
-    };
-
-    const buildCard = (sound) => {
-      const soundId = String(sound.id);
-      const label = displayLabelFor(sound);
-      const card = el('div', 'sbx-card');
-      card.dataset.soundId = soundId;
-      card.setAttribute('role', 'listitem');
-      if (soundId === 'random') card.classList.add('is-random');
-
-      const main = el('button', 'sbx-card__main');
-      main.type = 'button';
-      main.setAttribute('aria-label', `Sélectionner ${label}`);
-      main.setAttribute('aria-keyshortcuts', 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown');
-
-      const play = el('button', 'sbx-card__play');
-      play.type = 'button';
-      play.dataset.soundId = soundId;
-      play.dataset.soundLabel = label;
-      if (!soundPreviewUrls(sound).length || sound.studio_placeholder === true) {
-        play.disabled = true;
-        play.classList.add('is-empty');
-        play.append(el('span', 'sbx-card__dice', soundId === 'random' ? '🎲' : '·'));
-        play.title = soundId === 'random' ? 'Son choisi au hasard à l’envoi' : 'Aperçu indisponible';
-        play.setAttribute('aria-label', play.title);
-      } else {
-        play.append(sbxIcon('play'), sbxEqualizer());
-      }
-      play.addEventListener('click', (event) => {
-        event.stopPropagation();
-        if (previewSoundId === soundId) stopSoundPreview();
-        else void playSoundPreview(sound, play);
-      });
-
-      const text = el('span', 'sbx-card__text');
-      const name = el('span', 'sbx-card__name');
-      // Sous-élément : porte l'ellipse au repos et glisse (transform) au survol en vue compacte.
-      name.append(el('span', 'sbx-card__label', label));
-      text.append(name, el('span', 'sbx-card__meta'));
-
-      const fav = el('button', 'sbx-card__fav');
-      fav.type = 'button';
-      fav.append(sbxIcon('star'));
-      fav.addEventListener('pointerdown', (event) => event.stopPropagation());
-      fav.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        favorites = favorites.includes(soundId) ? favorites.filter((id) => id !== soundId) : [soundId, ...favorites];
-        writeStoredIds(SOUNDBOARD_FAVORITES_KEY, favorites);
-        syncFilters();
-        if (drafts.soundboard.view === 'favorites') renderGrid();
-        else syncCard(card);
-        fav.classList.toggle('is-popping', favorites.includes(soundId));
-      });
-      fav.addEventListener('animationend', () => fav.classList.remove('is-popping'));
-
-      main.addEventListener('click', (event) => {
-        if (dragJustDroppedId === soundId) {
-          event.preventDefault();
-          dragJustDroppedId = null;
-          return;
-        }
-        selectSound(sound);
-      });
-      main.addEventListener('keydown', (event) => {
-        if (event.key === 'F2' && event.shiftKey) {
-          event.preventDefault();
-          openAliasEditor(sound, card, main);
-          return;
-        }
-        if (event.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
-          && reorderWithKeyboard(soundId, event.key)) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      });
-      card.addEventListener('pointerdown', (event) => startDragPending(card, soundId, event));
-      card.addEventListener('contextmenu', (event) => {
-        // Appui long tactile : le menu contextuel ne doit ni ouvrir le nom personnel ni couper le déplacement.
-        if (dragSession || dragPending) {
-          event.preventDefault();
-          return;
-        }
-        if (dragExcludedTarget(event.target)) return;
-        event.preventDefault();
-        openAliasEditor(sound, card, main);
-      });
-      card.append(main, play, text, fav);
-      syncCard(card);
-      return card;
-    };
-
-    const emptyMessage = () => {
-      if (drafts.soundboard.query.trim()) return ['Aucun son trouvé', `Rien ne correspond à « ${drafts.soundboard.query.trim()} ».`];
-      if (drafts.soundboard.view === 'favorites') return ['Pas encore de favori', 'Touche l’étoile d’une carte pour la retrouver ici.'];
-      if (drafts.soundboard.view === 'recents') return ['Aucun son récent', 'Tes derniers envois apparaîtront ici.'];
-      return ['Soundboard vide', 'Aucun son n’est disponible pour le moment.'];
-    };
-
-    const renderGrid = () => {
-      const previousScrollTop = grid.scrollTop;
-      const candidates = visibleSounds();
-      if (!candidates.length) {
-        const [title, copy] = emptyMessage();
-        const empty = el('div', 'sbx-empty');
-        empty.append(el('strong', '', title), el('span', '', copy));
-        grid.replaceChildren(empty);
-      } else {
-        grid.replaceChildren(...candidates.map(buildCard));
-      }
-      grid.classList.toggle('is-reorderable', drafts.soundboard.sort === 'custom' && drafts.soundboard.view === 'all');
-      setActionState();
-      syncSoundboardPreviewButtons();
-      grid.scrollTop = previousScrollTop;
-    };
-
-    grid.addEventListener('click', (event) => {
-      // Clic de fin de glisser (pointeur relâché sur une autre carte) : ni sélection ni désélection globale.
-      if (dragJustDroppedId) {
-        event.stopPropagation();
-        return;
-      }
-      if (event.target === grid || event.target?.closest?.('.sbx-empty')) deselectSound();
-    });
-    search.addEventListener('input', () => {
-      drafts.soundboard.query = search.value;
-      clearSearch.hidden = !search.value;
-      renderGrid();
-    });
-    const resetSearch = () => {
-      const had = Boolean(search.value || drafts.soundboard.query);
-      drafts.soundboard.query = '';
-      search.value = '';
-      clearSearch.hidden = true;
-      if (had) renderGrid();
-    };
-    soundboardSearchClose = resetSearch;
-    clearSearch.hidden = !search.value;
-    clearSearch.addEventListener('click', (event) => {
-      event.preventDefault();
-      resetSearch();
-      search.focus({ preventScroll: true });
-    });
-    search.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape' || !search.value) return;
-      event.preventDefault();
-      event.stopPropagation();
-      resetSearch();
-    });
-
-    // --- Barre d'action : son choisi, monnaie, prix, envoi -----------------------------------------
-    const dock = el('div', 'sbx-dock');
-    const toastSlot = el('div', 'sbx-toast-slot');
-    const bar = el('div', 'sbx-bar');
-    bar.setAttribute('role', 'group');
-    bar.setAttribute('aria-label', 'Envoyer le son sélectionné');
-    const barSound = el('div', 'sbx-bar__sound');
-    const barEyebrow = el('span', 'sbx-bar__eyebrow');
-    const barName = el('strong', 'sbx-bar__name');
-    barSound.append(barEyebrow, barName);
-
-    const walletSwitch = createCurrencySwitch({
-      className: 'sbx-wallet',
-      ariaLabel: 'Payer avec',
-      tipPlacement: 'above',
-      onChange: (method) => {
-        selectedPaymentMethod = method;
-        setActionState();
-        if (drafts.soundboard.sort === 'price') renderGrid();
-      },
-    });
-    const wallet = walletSwitch.node;
-
-    const price = el('div', 'sbx-price');
-    const priceValue = el('span', 'sbx-price__value');
-    const priceUnit = el('span', 'sbx-price__unit');
-    price.append(el('span', 'sbx-price__coin'), priceValue, priceUnit);
-
-    const send = el('button', 'sbx-send');
-    send.type = 'button';
-    send.append(el('span', 'sbx-send__label', 'Envoyer'), sbxIcon('send'), el('span', 'sbx-send__spinner'));
-    bar.append(barSound, wallet, price, send);
-    dock.append(toastSlot, bar);
-
-    let barNotice = null;
-    let barNoticeTimer = null;
-    function showBarNotice(message) {
-      barNotice = message;
-      clearTimeout(barNoticeTimer);
-      barNoticeTimer = setTimeout(() => {
-        barNotice = null;
-        if (body.isConnected) setActionState();
-      }, 3500);
-      setActionState();
-    }
-
-    const setActionState = () => {
-      const sound = soundById.get(String(selectedSound || ''));
-      const studioPlaceholder = isStudioPreview && sound?.studio_placeholder === true;
-      const creditCost = creditCostOf(sound);
-      const tokenCost = tokenCostOf(sound);
-      selectedCreditRedemption = sound
-        ? pending.find((action) => Number(action.credits_remaining ?? 0) >= creditCost) ?? null
-        : null;
-      if (!methods.includes(selectedPaymentMethod)) selectedPaymentMethod = methods[0];
-      const method = selectedPaymentMethod;
-      paymentWalletSync?.(methods, (next) => {
-        selectedPaymentMethod = next;
-        setActionState();
-      });
-      const usingCredits = method === 'credits';
-      const unavailable = sound ? availability(sound) : null;
-      const hasEnoughTokens = walletCanPayTokens(state.wallet, tokenCost);
-      const methodSupported = supportsPaymentMethod(method);
-      const methodAvailable = usingCredits ? Boolean(selectedCreditRedemption) : hasEnoughTokens;
-      const cost = usingCredits ? creditCost : tokenCost;
-      const unit = usingCredits ? `crédit${creditCost > 1 ? 's' : ''}` : 'jetons';
-      const restricted = holdsAction(restrictionOf('soundboard')) ? restrictionOf('soundboard') : null;
-      const hint = !sound ? ''
-        : studioPlaceholder ? 'Placeholder Studio · aucune action réelle'
-          : restricted ? restricted.kind === 'cooldown' ? 'Cooldown en cours' : 'Indisponible pour ton compte'
-          : unavailable ? unavailable.hint
-            : mod.player_ready === false ? 'Lecteur du Studio hors ligne'
-            : !interactionsAvailable && !state?.lab_mode
-              ? identityShared() ? 'Interactions en pause, rien ne sera consommé' : 'Partage ton identité Twitch pour envoyer'
-              : !methodSupported ? 'Paiement indisponible pour cette monnaie'
-                : usingCredits && !selectedCreditRedemption ? 'Aucun crédit Soundboard disponible'
-                  : !usingCredits && !hasEnoughTokens
-                    ? state?.wallet?.unavailable === true ? 'Solde de jetons indisponible' : 'Jetons insuffisants'
-                    : '';
-
-      body.dataset.paymentMethod = method;
-      body.classList.toggle('has-selection', Boolean(sound));
-      bar.dataset.empty = String(!sound);
-      bar.dataset.method = method;
-      walletSwitch.sync({
-        method,
-        methods,
-        amounts: {
-          tokens: state?.wallet?.unavailable ? null : state?.wallet?.available,
-          credits: Array.isArray(state?.pending_actions) ? soundboardCreditBalance() : null,
-        },
-      });
-      const eyebrow = barNotice || (!sound
-        ? mod.player_ready === false ? 'Lecteur du Studio hors ligne' : 'Écoute avec ▶, puis choisis un son'
-        : hint || 'Prêt à envoyer');
-      barEyebrow.textContent = eyebrow;
-      barEyebrow.dataset.tone = barNotice || hint || mod.player_ready === false ? 'warn' : sound ? 'ok' : 'muted';
-      barName.textContent = sound ? displayLabelFor(sound) : 'Choisis un son';
-      const nextPrice = sound ? fmt(cost) : '—';
-      if (priceValue.textContent !== nextPrice || price.dataset.method !== method) {
-        priceValue.textContent = nextPrice;
-        price.classList.remove('is-bump');
-        void price.offsetWidth;
-        price.classList.add('is-bump');
-      }
-      price.dataset.method = method;
-      priceUnit.textContent = unit;
-      send.disabled = studioPlaceholder || !sound || !methodSupported || !methodAvailable || Boolean(unavailable) || Boolean(restricted)
-        || (!interactionsAvailable && !state?.lab_mode);
-      const summary = sound ? `Envoyer ${displayLabelFor(sound)} pour ${fmt(cost)} ${unit}` : 'Choisis d’abord un son';
-      send.setAttribute('aria-label', summary);
-      send.title = summary;
-      for (const card of grid.querySelectorAll('.sbx-card')) {
-        const selected = card.dataset.soundId === selectedSound;
-        if (card.classList.contains('is-selected') !== selected) syncCard(card);
-      }
-    };
-
-    const deselectSound = () => {
-      stopSoundPreview();
-      selectedSound = null;
-      drafts.soundboard.selectedId = null;
-      setActionState();
-    };
-    soundboardDeselect = deselectSound;
-
-    const clearSound = () => {
-      stopSoundPreview();
-      if (selectedSound) {
-        rememberStoredId(SOUNDBOARD_RECENTS_KEY, selectedSound);
-        recents = readStoredIds(SOUNDBOARD_RECENTS_KEY).filter((id) => soundIds.has(id));
-      }
-      selectedSound = null;
-      drafts.soundboard.selectedId = null;
-      syncFilters();
-      renderGrid();
-    };
-
-    send.addEventListener('click', () => {
-      const sound = soundById.get(String(selectedSound || ''));
-      const method = selectedPaymentMethod;
-      if (!sound || send.disabled || !supportsPaymentMethod(method)) return;
-      if (method === 'credits') {
-        return run(body, () => selectedCreditRedemption
-          ? client.useRedemption(selectedCreditRedemption.redemption_id, 'soundboard', { sound_id: selectedSound })
-          : Promise.reject(Object.assign(new Error('insufficient_credits'), { code: 'insufficient_credits' })), {
-          feedbackScope: 'soundboard',
-          onSuccess: clearSound,
-        });
-      }
-      if (!walletCanPayTokens(state.wallet, tokenCostOf(sound))) return;
-      return run(body, () => client.spendTokens('soundboard', { sound_id: selectedSound }), {
-        feedbackScope: 'soundboard',
-        onSuccess: clearSound,
-      });
-    });
-
-    // --- Volume des aperçus (haut-parleur du titre) : réglage local, n'affecte que ce viewer ---
-    const volumeHeading = soundboardVolumeHeaderButton?.parentNode || null;
-    const volumeZone = el('div', 'sbx-vol');
-    const volumeHandle = soundboardVolumeHeaderButton || el('button', 'sbx-vol-trigger');
-    volumeHandle.type = 'button';
-    if (!volumeHandle.querySelector('svg')) volumeHandle.replaceChildren(sbxIcon('speaker'));
-    volumeHandle.setAttribute('aria-controls', 'soundboard-preview-volume-popover');
-    const volumePopover = el('div', 'sbx-vol__pop');
-    volumePopover.id = 'soundboard-preview-volume-popover';
-    volumePopover.setAttribute('role', 'dialog');
-    volumePopover.setAttribute('aria-label', 'Volume des aperçus');
-    volumePopover.addEventListener('click', (event) => event.stopPropagation());
-    const volumeHead = el('div', 'sbx-vol__head');
-    const volumeValue = el('span', 'sbx-vol__value');
-    volumeHead.append(el('strong', '', 'Volume des aperçus'), volumeValue);
-    const volumeRow = el('div', 'sbx-vol__row');
-    const volumeMute = el('button', 'sbx-vol__mute');
-    volumeMute.type = 'button';
-    volumeMute.append(sbxIcon('speaker'));
-    const volumeRange = el('input', 'sbx-vol__range');
-    volumeRange.type = 'range';
-    volumeRange.min = '0';
-    volumeRange.max = '100';
-    volumeRange.step = '5';
-    volumeRange.setAttribute('aria-label', 'Volume des aperçus');
-    volumeRow.append(volumeMute, volumeRange);
-    volumePopover.append(volumeHead, volumeRow, el('p', 'sbx-vol__note', 'Pour toi seulement · rien n’est joué sur le stream'));
-    volumeZone.append(volumeHandle, volumePopover);
-    let volumeBeforeMute = previewVolume || 60;
-    const paintVolume = () => {
-      const level = previewVolume === 0 ? 'mute' : previewVolume < 50 ? 'low' : 'high';
-      volumeZone.dataset.level = level;
-      volumeValue.textContent = previewVolume ? `${previewVolume} %` : 'Muet';
-      volumeRange.value = String(previewVolume);
-      volumeRange.style.setProperty('--v', `${previewVolume}%`);
-      volumeMute.setAttribute('aria-label', previewVolume ? 'Couper les aperçus' : 'Réactiver les aperçus');
-      volumeMute.title = volumeMute.getAttribute('aria-label');
-      if (previewAudio) previewAudio.volume = previewVolume / 100;
-    };
-    const setPreviewVolume = (value) => {
-      previewVolume = clampPreviewVolume(value);
-      savePreviewVolume(previewVolume);
-      paintVolume();
-    };
-    volumeRange.addEventListener('input', () => setPreviewVolume(volumeRange.value));
-    volumeMute.addEventListener('click', () => {
-      if (previewVolume) {
-        volumeBeforeMute = previewVolume;
-        setPreviewVolume(0);
-      } else setPreviewVolume(volumeBeforeMute || 60);
-    });
-    paintVolume();
-    const syncVolume = (open, { focus = false } = {}) => {
-      soundboardVolumeOpen = Boolean(open);
-      volumeZone.classList.toggle('is-open', soundboardVolumeOpen);
-      volumePopover.setAttribute('aria-hidden', String(!soundboardVolumeOpen));
-      volumeHandle.setAttribute('aria-expanded', String(soundboardVolumeOpen));
-      volumeHandle.setAttribute('aria-label', soundboardVolumeOpen
-        ? 'Fermer le volume des aperçus'
-        : 'Régler le volume des aperçus');
-      volumeHandle.title = 'Volume des aperçus';
-      for (const control of volumePopover.querySelectorAll('input, button')) {
-        control.tabIndex = soundboardVolumeOpen ? 0 : -1;
-      }
-      if (focus && soundboardVolumeOpen) {
-        requestAnimationFrame(() => volumeRange.focus({ preventScroll: true }));
-      }
-    };
-    soundboardVolumeSync = syncVolume;
-    volumeHandle.addEventListener('click', (event) => {
-      event.stopPropagation();
-      syncVolume(!soundboardVolumeOpen, { focus: !soundboardVolumeOpen });
-    });
-    volumeZone.addEventListener('focusout', () => {
-      queueMicrotask(() => {
-        if (soundboardVolumeOpen && !volumeZone.contains(document.activeElement)) syncVolume(false);
-      });
-    });
-    syncVolume(soundboardVolumeOpen);
-    if (soundboardVolumeHeaderButton) {
-      volumeHeading?.prepend(volumeZone);
-      soundboardVolumeHeaderButton = null;
-    } else {
-      searchRow.append(volumeZone);
-    }
-
-    body.append(head, grid, dock);
-    renderGrid();
-    // Compte à rebours sur place tant qu'un son est en cooldown (arrêté au prochain rendu).
-    if (sounds.some((sound) => sound.cooldown_until && Date.parse(sound.cooldown_until) > Date.now())) {
-      soundboardCooldownTimer = setInterval(() => {
-        for (const card of grid.querySelectorAll('.sbx-card[data-state="cooldown"]')) syncCard(card);
-        if (selectedSound) setActionState();
-      }, 1000);
-    }
-    // Hauteur disponible sous l'en-tête : la grille défile dans le module, la barre reste visible.
-    requestAnimationFrame(() => {
-      if (!body.isConnected) return;
-      const top = body.getBoundingClientRect().top + (document.scrollingElement?.scrollTop ?? 0);
-      body.style.setProperty('--sb-top', `${Math.max(0, Math.round(top))}px`);
-      // Marges du conteneur sous le module (padding bas du panel) : rien ne doit déborder la page.
-      const page = document.scrollingElement;
-      const overflow = page ? page.scrollHeight - page.clientHeight : 0;
-      if (overflow > 0) body.style.setProperty('--sb-bottom', `${6 + overflow}px`);
-    });
-  }
-
-  function bonkForm(mod, body) {
-    const interactionsAvailable = interactionsAvailableForState();
-    const favoriteKey = 'raptoru-live:bonk-favorites';
-    const recentKey = 'raptoru-live:bonk-recents';
-    let favorites = readStoredIds(favoriteKey);
-    let recents = readStoredIds(recentKey);
-
-    // Bonk lot 5 : le catalogue charge le chargeur (bonk-chargeur.js), qui tire en Manuel (1 clic =
-    // 1 Bonk) ou envoie la salve en Auto. UX validée : prototypes/bonk-salves-ux/serie7/final.html.
-
-    const emoteStateKey = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
-    let oauthControls = null;
-    const emoteCatalogExpired = !emoteCatalogLoadedAt
-      || Date.now() - emoteCatalogLoadedAt >= EMOTE_CATALOG_REFRESH_MS;
-    if (state?.emotes?.connected
-      && (!emoteCatalog || emoteCatalogKey !== emoteStateKey || emoteCatalogExpired)
-      && !emoteLoading) {
-      queueMicrotask(loadEmotes);
-    } else if (!emoteLoading && !emoteSyncTimer && twitchEmotesStatus() === 'syncing') {
-      queueMicrotask(followEmoteSync);
-    }
-    const twitchStatus = twitchEmotesStatus();
-    // Compte Twitch non lié : une source « Twitch » dans la colonne latérale (bonk-twitch-source.js) au
-    // lieu d'un bandeau permanent ; sa fenêtre lance le vrai flow OAuth (beginEmoteAuthorization).
-    let twitchSource = null;
-    if (state?.emotes?.twitch_connected === false) {
-      twitchSource = createTwitchEmoteSource({
-        document,
-        reauth: twitchStatus === 'reauth_required',
-        open: bonkTwitchLinkOpen,
-        onOpen: () => {
-          bonkTwitchLinkOpen = true;
-          renderPreservingViewport();
-        },
-      });
-      if (bonkTwitchLinkOpen) {
-        const dialog = createTwitchEmoteDialog({
-          document,
-          reauth: twitchStatus === 'reauth_required',
-          starting: emoteAuthorizationStarting,
-          onAuthorize: () => {
-            bonkTwitchLinkOpen = false;
-            dialog.node.remove();
-            beginEmoteAuthorization(body);
-          },
-          onClose: () => {
-            bonkTwitchLinkOpen = false;
-            renderPreservingViewport();
-            queueMicrotask(() => root.querySelector('.rl-twitch-src')?.focus({ preventScroll: true }));
-          },
-        });
-        body.append(dialog.node);
-        queueMicrotask(dialog.focus);
-      }
-    } else if (state?.emotes?.twitch_connected === true) {
-      oauthControls = el('div', 'jdm-emote-oauth-controls');
-      const refresh = createIconButton({
-        icon: UI_ICONS.refresh,
-        label: 'Actualiser les emotes Twitch',
-        title: 'Actualiser les emotes Twitch',
-        className: 'jdm-emote-oauth-button',
-        iconClassName: 'jdm-emote-oauth-button__icon',
-      });
-      refresh.addEventListener('click', () => loadEmotes({ force: true }));
-      const disconnect = createIconButton({
-        icon: UI_ICONS.close,
-        label: 'Retirer l’accès Twitch aux emotes',
-        title: 'Retirer l’accès Twitch',
-        className: 'jdm-emote-oauth-button',
-        iconClassName: 'jdm-emote-oauth-button__icon',
-      });
-      disconnect.addEventListener('click', () => disconnectEmoteAuthorization(body));
-      oauthControls.append(refresh, disconnect);
-      // Placés dans la ligne de recherche du picker (voir plus bas), plus au-dessus de la grille.
-    }
-    // Twitch emotes state: a short line in the picker's search row (the module body hides its hints in
-    // the video component), never an empty grid read as « no emotes ». The cached catalog stays usable
-    // while it syncs and when Twitch is briefly unreachable; a needed reconnection opens its window.
-    let twitchStatusNode = null;
-    if (twitchStatus === 'syncing') {
-      twitchStatusNode = el('span', 'rl-twitch-status', 'Synchronisation des emotes Twitch…');
-      twitchStatusNode.setAttribute('role', 'status');
-    } else if (twitchStatus === 'stale') {
-      twitchStatusNode = el('span', 'rl-twitch-status', 'Emotes en cache · Twitch momentanément indisponible');
-      twitchStatusNode.setAttribute('role', 'status');
-    } else if (twitchStatus === 'reauth_required') {
-      twitchStatusNode = el('button', 'rl-twitch-status rl-twitch-status--reauth', 'Reconnexion Twitch nécessaire');
-      twitchStatusNode.type = 'button';
-      twitchStatusNode.addEventListener('click', () => {
-        bonkTwitchLinkOpen = true;
-        renderPreservingViewport();
-      });
-    }
-    if (twitchStatusNode) {
-      oauthControls ??= el('div', 'jdm-emote-oauth-controls');
-      oauthControls.prepend(twitchStatusNode);
-    }
-    if (emoteLoading && !emoteCatalog) {
-      body.append(el('p', 'jdm-hint', 'Chargement de tes emotes Twitch…'));
-    } else if (emoteError) {
-      body.append(el('p', 'jdm-hint', emoteError));
-    }
-    if (emoteCatalog?.diagnostics) {
-      const info = emoteCatalog.diagnostics;
-      const details = el('details', 'jdm-emote-diagnostics');
-      details.append(el('summary', null, 'Diagnostic emotes'));
-      details.append(el('pre', null, JSON.stringify(info, null, 2)));
-      body.append(details);
-    }
-
-    const rawRealGroups = [
-      ...(emoteCatalog?.groups ?? mod.emote_catalog?.groups ?? []),
-      ...UNICODE_EMOJI_GROUPS,
-    ];
-    const { realGroups, emoteById } = buildBonkEmoteIndex(rawRealGroups);
-
-    const normalizedFavorites = normalizeBonkFavoriteIds(favorites, emoteById.keys());
-    if (normalizedFavorites.length !== favorites.length
-      || normalizedFavorites.some((id, index) => id !== favorites[index])) {
-      writeStoredIds(favoriteKey, normalizedFavorites);
-    }
-    favorites = normalizedFavorites;
-    recents = recents.filter((id) => emoteById.has(id));
-    if (recents.length !== readStoredIds(recentKey).length) writeStoredIds(recentKey, recents);
-
-    bonkRecentsShown ??= recents;
-    const shownRecents = bonkRecentsShown.filter((id) => emoteById.has(id));
-    const getGroups = () => buildBonkVisibleGroups(realGroups, {
-      favoriteIds: favorites,
-      recentIds: shownRecents,
-    });
-    const groupEmotes = (group) => {
-      if (group.id === 'favorites') return favorites.map((id) => emoteById.get(id)).filter(Boolean);
-      if (group.id === 'recents') return shownRecents.map((id) => emoteById.get(id)).filter(Boolean);
-      return group.emotes.map((item) => normalizeBonkEmote(group, item));
-    };
-
-    // Adaptateur vers le picker générique : grille statique (static_url), animation au survol
-    // ou à la sélection via image_url. Twemoji reste la couche visuelle des emotes Unicode.
-    const demoMode = state?.demo_mode === true;
-    const twitchLocked = bonkTwitchLockedForRole(state);
-    const pickerItem = (emote) => {
-      const twemoji = bonkTwemojiAssetPath(emote);
-      const roleLocked = twitchLocked && emote.source === 'twitch';
-      return {
-        id: emote.id,
-        label: emote.label,
-        ...(roleLocked ? { hint: `${emote.label} · ${BONK_TWITCH_ROLE_HINT}` } : {}),
-        // image_url est l'URL animée quand l'emote l'est : animée directement dans la grille.
-        src: twemoji ?? emote.image_url ?? null,
-        animated: emote.animated === true,
-        glyph: emote.mark ?? emote.glyph,
-        disabled: !isBonkEmoteSelectable(emote, { demoMode, twitchLocked }),
-      };
-    };
-    // Familles (Récents, Favoris, Twitch, Bits, Extension, Emoji) : voir bonk-picker-groups.js.
-    const PROVIDER_KEYWORDS = {
-      bits: ['bits'],
-      '7tv': ['7tv', 'seventv'],
-      bttv: ['bttv', 'betterttv'],
-      ffz: ['ffz', 'frankerfacez'],
-    };
-    const pickerGroups = () => {
-      const arranged = arrangeBonkPickerGroups(getGroups(), groupEmotes);
-      // Avatar Twitch d'une chaîne (s'il est connu) réutilisé pour son contexte Extension.
-      const avatars = new Map();
-      for (const { group } of arranged) {
-        if (group?.source !== 'twitch') continue;
-        const avatar = providerPresentation(group).avatarUrl;
-        if (avatar) avatars.set(String(group.channel_display_name ?? group.label).toLowerCase(), avatar);
-      }
-      return arranged.map((entry) => {
-        const { group, family } = entry;
-        const provider = group ? providerPresentation(group) : null;
-        const isExtension = family?.id === 'extension';
-        const label = entry.label ?? (group.id === 'twitch-global'
-          ? 'Twitch'
-          : String(group.label || provider.label || 'Emoji'));
-        const globalContext = isExtension && entry.scope === 'global';
-        const parts = entry.parts?.map((part) => ({
-          id: part.id,
-          label: part.label,
-          iconSrc: part.iconSrc,
-          keywords: PROVIDER_KEYWORDS[part.provider] ?? [],
-          emotes: part.emotes.map(pickerItem),
-        }));
-        return {
-          id: entry.id,
-          label,
-          keywords: [
-            group?.channel_login,
-            group?.channel_display_name,
-            ...(PROVIDER_KEYWORDS[family?.id] ?? []),
-            ...(isExtension ? ['extension'] : []),
-          ].filter(Boolean),
-          matchLabel: family?.id !== 'emoji',
-          icon: isExtension || provider?.icon === 'twitch' ? label.slice(0, 1).toUpperCase() : provider?.icon ?? '•',
-          iconSrc: entry.iconSrc ?? (globalContext ? 'assets/twemoji/svg/1f310.svg' : null),
-          iconNode: group?.id === 'twitch-global' ? createTwitchBrandIcon() : null,
-          avatarUrl: isExtension
-            ? (globalContext ? null : avatars.get(label.toLowerCase()) ?? null)
-            : provider?.avatarUrl ?? null,
-          family: family
-            ? { ...family, iconNode: family.id === 'twitch' ? createTwitchBrandIcon() : null }
-            : null,
-          virtual: group?.source === 'virtual',
-          // Ordre personnel : glisser-déposer (souris) dans la section Favoris uniquement.
-          reorderable: entry.id === 'favorites',
-          ...(parts ? { parts } : {}),
-          emotes: parts ? parts.flatMap((part) => part.emotes) : entry.emotes.map(pickerItem),
-        };
-      });
-    };
-
-    // Instance unique : le rendu global (polling) la déplace sans reconstruire ses cellules.
-    bonkEmotePicker ??= createEmotePicker({
-      label: 'Emotes Bonk',
-      railKey: 'raptoru-live:bonk-rail-open',
-    });
-    const emotePicker = bonkEmotePicker;
-    const picker = el('div', 'jdm-bonk-picker rl-bonk-picker');
-    const bonkFeedback = createFeedbackSlot({
-      className: 'jdm-bonk-feedback',
-      label: 'Retour du Bonk',
-    });
-    bonkFeedbackNode = bonkFeedback;
-    const chargeur = bonkChargeurView();
-    const restricted = holdsAction(restrictionOf('bonk'));
-    // Core's price and salve bounds (module): the chargeur never decides them.
-    chargeur.configure({
-      cost: mod.token_cost,
-      volley: mod.volley ?? null,
-      ready: interactionsAvailable && !restricted,
-      reason: restricted
-        ? 'Bonk indisponible pour toi pour le moment'
-        : 'Interactions indisponibles pour le moment',
-    });
-
-    const toggleFavorite = (emoteId) => {
-      const id = String(emoteId ?? '');
-      if (!emoteById.has(id)) return false;
-      favorites = toggleBonkFavoriteIds(favorites, id, emoteById.keys());
-      writeStoredIds(favoriteKey, favorites);
-      emotePicker.setData(pickerGroups());
-      syncSelection();
-      return true;
-    };
-
-    emotePicker.setHandlers({
-      onSelect: (id) => {
-        const emote = emoteById.get(id);
-        if (!emote || !isBonkEmoteSelectable(emote, { demoMode, twitchLocked })) return;
-        drafts.bonk.selectedId = emote.id;
-        // One catalogue click = one munition; the emote flies from its cell (read before re-render).
-        const cell = emotePicker.scroller.querySelector(`[data-id="${CSS.escape(emote.id)}"]`);
-        chargeur.add(emote, cell);
-        recents = [emote.id, ...recents.filter((item) => item !== emote.id)].slice(0, 36);
-        writeStoredIds(recentKey, recents);
-        emotePicker.setData(pickerGroups());
-      },
-      onFavorite: (id) => toggleFavorite(id),
-      onReorder: (ids) => {
-        // Même ensemble, nouvel ordre : aucune emote ne peut être ajoutée ou perdue ici.
-        const next = normalizeBonkFavoriteIds(ids, emoteById.keys());
-        if (next.length !== favorites.length || next.some((id) => !favorites.includes(id))) return;
-        favorites = next;
-        writeStoredIds(favoriteKey, favorites);
-        emotePicker.setData(pickerGroups());
-        syncSelection();
-      },
-    });
-
-    // The chargeur shows the selection: no redundant selection state in the catalogue (validated UX).
-    function syncSelection() {
-      emotePicker.setState({ selected: [], favorites, queue: new Map(), next: null });
-    }
-
-    picker.append(emotePicker.nav, emotePicker.searchRow, emotePicker.scroller, bonkFeedback, chargeur.node);
-    body.append(picker);
-    if (!interactionsAvailable && !state?.lab_mode) {
-      body.append(el('p', 'jdm-hint', identityShared()
-        ? 'Interactions temporairement indisponibles : SAMMI se reconnecte. Aucun jeton ne sera consommé.'
-        : 'Partage ton identité Twitch pour utiliser les interactions. Aucun jeton ne sera consommé.'));
-    }
-    emotePicker.setExtras(oauthControls);
-    emotePicker.setLead(twitchSource);
-    emotePicker.setData(pickerGroups());
-    emotePicker.attached();
-    chargeur.attached();
-    syncSelection();
-    syncBonkFeedback(bonkFeedback);
-  }
-
-  /** Bonk lot 5: the payload of one shot, or null (feedback shown) when this emote cannot be fired. */
-  function bonkShotPayload(emote) {
-    const twitchLocked = bonkTwitchLockedForRole(state);
-    if (!isBonkEmoteSelectable(emote, { demoMode: state?.demo_mode === true, twitchLocked })) {
-      bonkFeedbackMessage = twitchLocked && emote.source === 'twitch'
-        ? `${BONK_TWITCH_ROLE_HINT}.`
-        : 'Connecte tes emotes Twitch pour utiliser celle-ci.';
-      bonkFeedbackKind = 'error';
-      syncBonkFeedback(bonkFeedbackNode);
-      bonkChargeur?.notice(bonkFeedbackMessage, 'error');
-      return null;
-    }
-    // Le Bonk vise la caméra du streamer, pas un autre spectateur.
-    return {
-      target_login: 'streamer',
-      emotes: [emote.id],
-      emote_source: emote.source,
-      emote_glyph: emote.glyph ?? null,
-    };
-  }
-
-  /** Emote face inside the chargeur (same sources as the picker: Twemoji, CDN image, mark, glyph). */
-  function bonkChargeurEmote(emote) {
-    const src = bonkTwemojiAssetPath(emote) ?? emote.image_url;
-    if (src) {
-      const image = el('img', 'bkc-am__img');
-      image.src = src;
-      image.alt = '';
-      image.draggable = false;
-      return image;
-    }
-    if (emote.mark) {
-      const mark = el('span', 'bkc-am__mark', emote.mark);
-      mark.dataset.tone = emote.tone ?? 'violet';
-      return mark;
-    }
-    return el('span', 'bkc-am__glyph', emote.glyph ?? '◌');
-  }
-
-  /**
-   * The chargeur, created once. Manuel: each click = one individual Bonk (unchanged Core admission).
-   * Auto: one click = the remaining munitions as one salve, admitted and paid atomically by Core.
-   */
-  function bonkChargeurView() {
-    bonkChargeur ??= createBonkChargeur({
-      document,
-      renderEmote: bonkChargeurEmote,
-      newKey: newIdempotencyKey,
-      onHelp: () => bonkTourView().start(),
-      onFire: (emote) => {
-        const payload = bonkShotPayload(emote);
-        if (!payload) return Promise.resolve(false);
-        return sendBonk(bonkFeedbackNode, () => client.spendTokens('bonk', payload));
-      },
-      onSalve: (emotes, cadenceMs, key) => {
-        const shots = [];
-        for (const emote of emotes) {
-          const payload = bonkShotPayload(emote);
-          if (!payload) return Promise.resolve(false);
-          shots.push({
-            emote_source: payload.emote_source,
-            emote: payload.emotes[0],
-            emote_glyph: payload.emote_glyph,
-          });
-        }
-        return sendBonk(bonkFeedbackNode, () => client.spendBonkSalve(key, {
-          target_login: 'streamer',
-          shots,
-          cadence_ms: cadenceMs,
-        }));
-      },
-    });
-    // Twitch interprète un double-clic rapide comme un plein écran : neutralisé sur tout le chargeur.
-    bonkChargeur.node.ondblclick = preventBonkDoubleClick;
-    return bonkChargeur;
-  }
-
-  // Tutoriel Bonk : une info par bulle, la zone concernée mise en avant (bonk-tour.js).
-  function bonkTourView() {
-    bonkTour ??= createBonkTour({
-      document,
-      steps: bonkTourSteps,
-      isDisabled: () => readTutorialDisabled(BONK_TUTORIAL),
-      setDisabled: (disabled) => writeTutorialDisabled(BONK_TUTORIAL, disabled),
-      // Pendant le tutoriel, le chargeur reste déplié, même vide : les bulles montrent ses vrais contrôles.
-      onOpenChange: (open) => bonkChargeur?.showcase(open),
-    });
-    return bonkTour;
-  }
-  function bonkTourSteps() {
-    const find = (selector) => () => root.querySelector(selector);
-    const twitchSource = root.querySelector('.rl-twitch-src');
-    const connected = state?.emotes?.twitch_connected === true;
-    return [
-      {
-        icon: '💥',
-        title: 'Bienvenue dans Bonk !',
-        body: 'Envoie tes emotes préférées droit au visage du streamer. On te montre comment en quelques bulles.',
-      },
-      {
-        icon: '🔗',
-        title: 'Tes emotes Twitch',
-        body: connected
-          ? 'Ton compte Twitch est connecté : tes emotes sont déjà dans le catalogue.'
-          : 'Connecte ton compte Twitch pour récupérer tes emotes et débloquer un catalogue plus étoffé. C’est ici, dans la colonne de gauche.',
-        // Le bouton Twitch de la colonne de gauche ; à défaut (pas encore proposé), la colonne elle-même.
-        target: find(connected
-          ? '.jdm-emote-oauth-controls'
-          : twitchSource ? '.rl-twitch-src' : '.jdm-module[data-module="bonk"] .rl-picker__nav'),
-        action: twitchSource
-          ? { label: 'Connecter mon compte Twitch', run: () => root.querySelector('.rl-twitch-src')?.click() }
-          : undefined,
-      },
-      {
-        icon: '🎯',
-        title: 'Remplis ton chargeur',
-        body: 'Clique sur les emotes du catalogue : elles s’ajoutent dans ton chargeur, juste ici.',
-        target: find('.bkc-dock'),
-      },
-      {
-        icon: '✋',
-        title: 'Gère tes munitions',
-        body: [
-          '**Clic gauche** sur une emote pour en retirer **une unité**.',
-          '**Clic droit** pour retirer **toute l’emote** de la file.',
-        ],
-        target: find('.bkc-dock'),
-      },
-      {
-        icon: '👆',
-        title: 'Mode Manuel',
-        body: '1 clic = 1 emote envoyée. Chargeur vide ? « ↻ Recharger » remet ta composition pour la rejouer.',
-        target: find('.bkc-right'),
-      },
-      {
-        icon: '⚡',
-        title: 'Mode Auto',
-        body: [
-          '1 clic envoie d’un coup toute la salve qui reste dans tes munitions.',
-          'L’éclair règle la vitesse : 4 niveaux, de Lent à Très rapide.',
-        ],
-        target: find('.bkc-right'),
-      },
-      {
-        icon: '🎉',
-        title: 'Amuse-toi bien !',
-        body: 'Tu peux revoir ce tutoriel à tout moment avec le bouton « ? » à côté de Bonk.',
-      },
-    ];
-  }
-
-  function raffleForm(mod, body) {
-    stopRaffleTimer();
-    const raffle = state?.raffle ?? { open: false };
-    const unavailable = Boolean(raffle.unavailable);
-    const active = raffleIsActive(raffle);
-    const historyRows = Array.isArray(raffle.history) ? raffle.history : [];
-    const participants = Array.isArray(raffle.participants) ? raffle.participants : [];
-    const announcedParticipantCount = raffleNumber(raffle.participant_count);
-    const participantCount = announcedParticipantCount ?? participants.length;
-    const viewerLogin = String(raffle.viewer_login || '').trim().replace(/^@+/, '').toLowerCase();
-    const timerSource = raffleTimerSource(raffle);
-    const stateKey = unavailable ? 'unavailable' : active ? 'active' : 'inactive';
-
-    const screen = el('section', 'jdm-raffle-screen');
-    screen.dataset.raffleState = stateKey;
-    screen.setAttribute('aria-label', 'Tombola');
-
-    const historyToggle = createIconButton({
-      icon: UI_ICONS.history,
-      label: raffleHistoryOpen ? 'Fermer l’historique Tombola' : 'Ouvrir l’historique Tombola',
-      title: raffleHistoryOpen ? 'Fermer l’historique' : 'Historique des tombolas',
-      className: 'jdm-raffle-history-toggle',
-      iconClassName: 'jdm-raffle-history-toggle__icon',
-      visibleLabel: 'Historique',
-    });
-    historyToggle.setAttribute('aria-controls', 'raffle-history-panel');
-    historyToggle.setAttribute('aria-expanded', String(raffleHistoryOpen));
-    if (historyRows.length) historyToggle.append(el('span', 'jdm-raffle-history-count', String(historyRows.length)));
-
-    const layout = el('div', `jdm-raffle-layout${active ? ' is-active' : ' is-inactive'}`);
-    const overview = el('section', 'jdm-raffle-overview');
-    overview.setAttribute('aria-label', 'État de la Tombola');
-
-    const pot = el('section', 'jdm-raffle-pot');
-    const potAmount = raffleNumber(raffle.total);
-    const potUnit = 'jetons';
-    const potValue = el('strong', 'jdm-raffle-pot__value', potAmount === null ? '—' : fmtRafflePotAmount(potAmount));
-    const potUnitNode = el('span', 'jdm-raffle-pot__unit', potAmount === null ? '' : potUnit);
-    pot.append(
-      el('span', 'jdm-raffle-card__eyebrow', potAmount === null
-        ? (unavailable ? 'TOMBOLA INDISPONIBLE' : 'TOMBOLA FERMÉE')
-        : active ? 'À GAGNER' : 'POT'),
-      potValue,
-      potUnitNode,
-    );
-    if (potAmount !== null) pot.dataset.hasAmount = 'true';
-
-    const timer = el('section', 'jdm-raffle-timer');
-    timer.dataset.source = timerSource;
-    timer.dataset.closed = String(!active);
-    timer.setAttribute('role', 'timer');
-    const timerValue = el('time', 'jdm-raffle-timer__value', '0');
-    timer.append(timerValue);
-
-    const timerWindowId = String(raffle.window_id || '').trim();
-    const timerEndsAt = String(raffle.ends_at || '').trim();
-    const serverRemaining = raffleNumber(raffle.ends_in_s);
-    const snapshotRemaining = timerSource === 'ends_in_s' ? serverRemaining : null;
-    const explicitTotal = raffleTotalSeconds(raffle);
-    const snapshotChanged = !raffleTimerSnapshot
-      || raffleTimerSnapshot.active !== active
-      || raffleTimerSnapshot.windowId !== timerWindowId
-      || raffleTimerSnapshot.source !== timerSource
-      || raffleTimerSnapshot.endsAt !== timerEndsAt
-      || raffleTimerSnapshot.serverRemaining !== snapshotRemaining;
-    if (snapshotChanged) {
-      const initialRemaining = active
-        ? timerSource === 'ends_at'
-          ? raffleSeconds(raffle)
-          : serverRemaining ?? 0
-        : 0;
-      raffleTimerSnapshot = {
-        active,
-        windowId: timerWindowId,
-        source: timerSource,
-        endsAt: timerEndsAt,
-        serverRemaining: snapshotRemaining,
-        syncedAt: Date.now(),
-        initialRemaining,
-        totalSeconds: explicitTotal ?? Math.max(1, initialRemaining),
-      };
-    } else if (explicitTotal !== null) {
-      raffleTimerSnapshot.totalSeconds = explicitTotal;
-    }
-    const timerTotal = Math.max(1, Number(raffleTimerSnapshot?.totalSeconds || 1));
-    const currentTimerSeconds = () => {
-      if (!active) return 0;
-      if (timerSource === 'ends_at') return raffleSeconds(raffle);
-      if (timerSource === 'ends_in_s' && raffleTimerSnapshot?.serverRemaining !== null) {
-        return Math.max(0, Math.ceil(
-          raffleTimerSnapshot.serverRemaining - (Date.now() - raffleTimerSnapshot.syncedAt) / 1000,
-        ));
-      }
-      return 0;
-    };
-
-    const syncTimer = () => {
-      const seconds = currentTimerSeconds();
-      const hasTimerSource = timerSource !== 'none';
-      timerValue.textContent = active && hasTimerSource ? String(seconds) : active ? '—' : '0';
-      timerValue.setAttribute('aria-label', !active
-        ? (unavailable ? 'Tombola indisponible' : 'Tombola fermée')
-        : hasTimerSource
-          ? `${seconds} seconde${seconds > 1 ? 's' : ''} restante${seconds > 1 ? 's' : ''}`
-          : 'Temps restant indisponible');
-      timer.setAttribute('aria-label', !active
-        ? (unavailable ? 'Tombola indisponible' : 'Tombola fermée')
-        : hasTimerSource ? 'Temps restant' : 'Temps restant indisponible');
-      timerValue.dataset.seconds = String(seconds);
-      timer.dataset.seconds = String(seconds);
-      timer.dataset.totalSeconds = String(timerTotal);
-      timer.style.setProperty('--raffle-progress', String(
-        active && hasTimerSource ? Math.max(0, Math.min(1, seconds / timerTotal)) : 0,
-      ));
-    };
-    syncTimer();
-    if (active && timerSource !== 'none' && typeof globalThis.window?.setInterval === 'function') {
-      raffleTimer = globalThis.window.setInterval(syncTimer, 1000);
-    }
-
-    const joinZone = active ? el('div', 'jdm-raffle-join-zone jdm-raffle-join-drawer') : null;
-    if (joinZone) {
-      joinZone.setAttribute('aria-label', 'Inscription à la Tombola');
-      const joinCopy = el('div', 'jdm-raffle-join-drawer__copy');
-      joinCopy.append(
-        el('strong', 'jdm-raffle-join-drawer__title', raffle.joined ? 'Participation confirmée' : 'Participe au tirage'),
-        el('span', 'jdm-raffle-join-drawer__hint', raffle.joined
-          ? 'Ton inscription est déjà prise en compte.'
-          : 'Une inscription suffit pour participer.'),
-      );
-      const join = el('button', 'jdm-btn jdm-btn--primary jdm-raffle-join', raffle.joined ? 'Inscrit ✓' : 'Inscription');
-      join.type = 'button';
-      join.disabled = Boolean(raffle.joined);
-      join.setAttribute('aria-disabled', String(Boolean(raffle.joined)));
-      join.setAttribute('aria-label', raffle.joined ? 'Participation confirmée' : 'S’inscrire à la Tombola');
-      join.title = raffle.joined ? 'Participation confirmée' : 'Inscription à la Tombola';
-      if (!raffle.joined) join.addEventListener('click', () => run(joinZone, () => client.joinRaffle(), {
-        onSuccess: (result) => {
-          const windowId = String(result?.window_id || raffle.window_id || '').trim();
-          if (!windowId) return;
-          raffleJoinConfirmedWindowId = windowId;
-          if (state?.raffle?.window_id === windowId) {
-            state = { ...state, raffle: { ...state.raffle, joined: true } };
-          }
-        },
-        success: (result) => (result?.duplicate === true ? null : 'Inscription confirmée ✓'),
-      }));
-      joinZone.append(joinCopy, join);
-    }
-
-    overview.append(pot, timer);
-    if (joinZone) overview.append(joinZone);
-    if (!active) {
-      overview.append(el(
-        'p',
-        'jdm-raffle-state-copy',
-        unavailable ? 'La Tombola est momentanément indisponible.' : 'Aucune tombola en cours.',
-      ));
-    }
-
-    // Une zone de résultat existe dans la composition, mais elle ne lit que
-    // l'historique déjà livré par le serveur lorsque la tombola n'est plus
-    // active. Aucune donnée de gagnant n'est déduite de l'état ouvert : le
-    // délai de révélation reste donc entièrement piloté par le contrat actuel.
-    const latestResult = !active && historyRows.length ? historyRows[0] : null;
-    const resultWinners = Array.isArray(latestResult?.winners)
-      ? latestResult.winners.filter((winner) => String(
-        winner?.display_name ?? winner?.displayName ?? winner?.login ?? '',
-      ).trim())
-      : [];
-    const resultRevealed = resultWinners.length > 0;
-    const resultZone = el('section', `jdm-raffle-result${resultRevealed ? ' is-revealed' : ' is-waiting'}`);
-    resultZone.dataset.resultState = resultRevealed ? 'revealed' : 'waiting';
-    resultZone.setAttribute('aria-live', 'polite');
-    resultZone.setAttribute('aria-label', resultRevealed ? 'Résultat de la Tombola' : 'Résultat de la Tombola en attente');
-    resultZone.append(
-      el('span', 'jdm-raffle-result__eyebrow', resultRevealed ? 'DERNIER RÉSULTAT' : 'RÉSULTAT'),
-      el('strong', 'jdm-raffle-result__title', resultRevealed ? 'Gagnant(s)' : active ? 'Après le tirage' : 'En attente'),
-    );
-    if (resultRevealed) {
-      const resultList = el('ul', 'jdm-raffle-result__winners');
-      resultList.dataset.scrollKey = 'raffle-result-winners';
-      resultList.setAttribute('aria-label', 'Liste des gagnants');
-      const resultCurrency = raffleCurrency(latestResult);
-      for (const winner of resultWinners) {
-        const login = String(winner?.display_name ?? winner?.displayName ?? winner?.login ?? '')
-          .trim().replace(/^@+/, '');
-        if (!login) continue;
-        const amount = raffleAmount(winner);
-        const currency = raffleCurrency(winner) || resultCurrency;
-        const winnerLine = el('li', 'jdm-raffle-result__winner');
-        winnerLine.append(
-          el('strong', 'jdm-raffle-result__winner-name', `@${login}`),
-          ...(amount === null
-            ? []
-            : [el('span', 'jdm-raffle-result__winner-amount', `${fmt(amount)}${currency ? ` ${currency}` : ''}`)]),
-        );
-        resultList.append(winnerLine);
-      }
-      if (resultList.children.length) resultZone.append(resultList);
-    } else {
-      resultZone.append(el(
-        'span',
-        'jdm-raffle-result__hint',
-        active ? 'Le ou les gagnants apparaîtront ici après la révélation.' : 'Aucun gagnant communiqué pour le moment.',
-      ));
-    }
-
-    let participantSection;
-    if (active) {
-      participantSection = el('section', 'jdm-raffle-participants');
-      participantSection.setAttribute('aria-label', 'Participants à la Tombola');
-      const participantHead = el('div', 'jdm-raffle-participants__head');
-      participantHead.append(
-        el('strong', 'jdm-raffle-participants__count', `Participants · ${participantCount}`),
-      );
-      const participantList = el('ul', 'jdm-raffle-participants__list');
-      participantList.dataset.scrollKey = 'raffle-participants';
-      participantList.setAttribute('aria-label', 'Liste des participants');
-      if (!participants.length) {
-        participantList.append(el('li', 'jdm-hint', 'Aucun participant pour le moment.'));
-      } else {
-        for (const participant of participants) {
-          const login = String(participant?.login || '').trim().replace(/^@+/, '').toLowerCase();
-          if (!login) continue;
-          const displayName = String(participant?.display_name ?? participant?.displayName ?? login)
-            .trim().replace(/^@+/, '') || login;
-          const isViewer = Boolean(viewerLogin) && login === viewerLogin;
-          const sources = [
-            ...(Array.isArray(participant?.sources) ? participant.sources : []),
-            participant?.source,
-          ]
-            .map((value) => String(value || '').trim().toLowerCase())
-            .filter((value, index, values) => (
-              ['chat', 'extension'].includes(value) && values.indexOf(value) === index
-            ));
-          const explicitFirstSource = [
-            participant?.registration_source,
-            participant?.first_source,
-            participant?.source,
-          ]
-            .map((value) => String(value || '').trim().toLowerCase())
-            .find((value) => ['chat', 'extension'].includes(value));
-          const sourceTone = explicitFirstSource
-            ? explicitFirstSource
-            : sources.length > 1
-              ? 'mixed'
-              : sources[0] === 'chat'
-              ? 'chat'
-              : sources[0] === 'extension'
-                ? 'extension'
-                : 'unknown';
-          const sourceLabel = explicitFirstSource === 'chat'
-            ? 'Chat'
-            : explicitFirstSource === 'extension'
-              ? 'Extension'
-              : sources.length > 1
-                ? 'Sources multiples'
-            : sourceTone === 'chat'
-              ? 'Chat'
-              : sourceTone === 'extension'
-                ? 'Extension'
-                : 'Source inconnue';
-          const row = el('li', `jdm-raffle-participants__item${isViewer ? ' jdm-raffle-participants__item--self' : ''}`);
-          row.append(
-            el('strong', 'jdm-raffle-participants__login', `@${displayName}`),
-            el('span', `jdm-raffle-participants__source is-${sourceTone}`, sourceLabel),
-          );
-          if (isViewer) row.append(el('span', 'jdm-raffle-participants__viewer', '✓ Vous'));
-          participantList.append(row);
-        }
-      }
-      participantSection.append(participantHead, participantList, resultZone);
-      layout.append(overview, participantSection);
-    } else {
-      layout.append(overview, resultZone);
-    }
-
-    const historyPanel = el('aside', 'jdm-ui-drawer jdm-raffle-history-panel');
-    historyPanel.id = 'raffle-history-panel';
-    historyPanel.setAttribute('role', 'dialog');
-    historyPanel.setAttribute('aria-label', 'Historique des tombolas');
-    historyPanel.setAttribute('aria-hidden', String(!raffleHistoryOpen));
-    historyPanel.inert = !raffleHistoryOpen;
-    historyPanel.classList.toggle('is-screen-fallback', !active);
-    historyPanel.classList.toggle('is-open', raffleHistoryOpen);
-    const historyHead = el('div', 'jdm-raffle-history-panel__head');
-    const historyClose = createIconButton({
-      icon: UI_ICONS.close,
-      label: 'Fermer l’historique Tombola',
-      title: 'Fermer l’historique',
-      className: 'jdm-raffle-history__close',
-      iconClassName: 'jdm-raffle-history__close-icon',
-    });
-    historyClose.tabIndex = raffleHistoryOpen ? 0 : -1;
-    historyHead.append(
-      el('strong', 'jdm-raffle-history-panel__title', `Historique${historyRows.length ? ` · ${historyRows.length}` : ''}`),
-      el('span', 'jdm-raffle-history-panel__hint', 'Données fournies par le serveur'),
-      historyClose,
-    );
-    historyPanel.append(historyHead);
-    if (!historyRows.length) {
-      historyPanel.append(el('p', 'jdm-hint', 'Pas encore d’historique.'));
-    } else {
-      const historyList = el('ol', 'jdm-raffle-history__list');
-      historyList.dataset.scrollKey = 'raffle-history';
-      for (const [index, raffleRow] of historyRows.entries()) {
-        const entry = el('li', 'jdm-raffle-history__entry');
-        entry.dataset.historyIndex = String(index);
-        const dateLabel = raffleDateLabel(raffleHistoryDate(raffleRow));
-        entry.append(el('strong', 'jdm-raffle-history__entry-title', dateLabel ? `Tombola · ${dateLabel}` : 'Tombola'));
-        const rowAmount = raffleAmount(raffleRow);
-        const rowCurrency = raffleCurrency(raffleRow);
-        if (rowAmount !== null) {
-          entry.append(el('span', 'jdm-raffle-history__pot', `Pot : ${fmt(rowAmount)}${rowCurrency ? ` ${rowCurrency}` : ''}`));
-        }
-        const winners = el('ul', 'jdm-raffle-history__winners');
-        const winnerRows = Array.isArray(raffleRow?.winners) ? raffleRow.winners : [];
-        for (const winner of winnerRows) {
-          const login = String(winner?.display_name ?? winner?.displayName ?? winner?.login ?? '')
-            .trim().replace(/^@+/, '');
-          if (!login) continue;
-          const amount = raffleAmount(winner);
-          const currency = raffleCurrency(winner) || rowCurrency;
-          winners.append(el('li', 'jdm-raffle-history__winner', `@${login}${amount === null ? '' : ` · ${fmt(amount)}${currency ? ` ${currency}` : ''}`}`));
-        }
-        if (!winners.children.length) winners.append(el('li', 'jdm-raffle-history__winner jdm-raffle-history__winner--unknown', 'Résultat non communiqué'));
-        entry.append(winners);
-        historyList.append(entry);
-      }
-      historyPanel.append(historyList);
-    }
-
-    historyToggle.addEventListener('click', () => {
-      raffleHistoryOpen = !raffleHistoryOpen;
-      renderPreservingViewport();
-      queueMicrotask(() => root.querySelector(raffleHistoryOpen
-        ? '.jdm-raffle-history__close'
-        : '.jdm-raffle-history-toggle')?.focus({ preventScroll: true }));
-    });
-    historyClose.addEventListener('click', () => {
-      raffleHistoryOpen = false;
-      renderPreservingViewport();
-      queueMicrotask(() => root.querySelector('.jdm-raffle-history-toggle')?.focus({ preventScroll: true }));
-    });
-
-    screen.append(layout);
-    const historyFooter = el('footer', 'jdm-raffle-footer');
-    historyFooter.append(historyToggle);
-    screen.append(historyFooter, historyPanel);
-
-    body.append(screen);
-  }
-
-  function moderationForm() {
-    const moderation = state?.moderation?.tts;
-    if (!moderation?.can_moderate) return null;
-    const section = el('section', 'jdm-moderation jdm-moderation--screen');
-    section.setAttribute('aria-label', 'Console de modération');
-    const subnav = el('nav', 'jdm-moderation__subnav');
-    subnav.setAttribute('aria-label', 'Sous-modules de modération');
-    subnav.setAttribute('role', 'tablist');
-    const submodules = [
-      ['tts', '🚨', 'TTS urgence'],
-      ['history', '🕘', 'Historique'],
-      ['users', '👤', 'Utilisateurs'],
-      ['modules', '◫', 'Modules'],
-    ];
-    for (const [id, icon, label] of submodules) {
-      const selected = moderationSubmodule === id;
-      const tab = el('button', `jdm-btn jdm-moderation__tab${selected ? ' jdm-btn--primary' : ''}`);
-      tab.type = 'button';
-      tab.dataset.submodule = id;
-      tab.id = `moderation-tab-${id}`;
-      tab.setAttribute('role', 'tab');
-      tab.setAttribute('aria-selected', String(selected));
-      tab.setAttribute('aria-controls', 'moderation-panel');
-      tab.setAttribute('aria-label', label);
-      tab.title = label;
-      const iconNode = el('span', 'jdm-moderation__tab-icon', icon);
-      iconNode.setAttribute('aria-hidden', 'true');
-      tab.append(iconNode, el('span', 'jdm-moderation__tab-label', label));
-      tab.addEventListener('click', () => {
-        moderationSubmodule = id;
-        if (id !== 'users') moderationUserHistoryOpen = false;
-        renderPreservingViewport();
-      });
-      tab.addEventListener('keydown', (event) => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-        event.preventDefault();
-        const currentIndex = submodules.findIndex(([submoduleId]) => submoduleId === id);
-        const nextIndex = event.key === 'Home'
-          ? 0
-          : event.key === 'End'
-            ? submodules.length - 1
-            : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + submodules.length) % submodules.length;
-        const nextId = submodules[nextIndex][0];
-        const nextTab = subnav.querySelector(`[data-submodule="${nextId}"]`);
-        if (nextId === id) {
-          nextTab?.focus({ preventScroll: true });
-          return;
-        }
-        nextTab?.click();
-        root.querySelector(`[data-submodule="${nextId}"]`)?.focus({ preventScroll: true });
-      });
-      subnav.append(tab);
-    }
-    const content = el('div', 'jdm-moderation__subpanel');
-    content.dataset.scrollKey = 'module-moderation';
-    content.id = 'moderation-panel';
-    content.setAttribute('role', 'tabpanel');
-    content.setAttribute('aria-labelledby', `moderation-tab-${moderationSubmodule}`);
-    const ttsPanel = el('div', 'jdm-moderation__tts');
-    const pending = moderation.pending ?? [];
-    const ttsStateLabel = moderation.paused ? 'En pause' : 'Actif';
-    const ttsState = el('div', 'jdm-moderation__tts-status', `${ttsStateLabel} · ${pending.length} en attente`);
-    ttsState.setAttribute('role', 'status');
-    ttsState.setAttribute('aria-label', `État global du TTS : ${ttsStateLabel} · ${pending.length} en attente`);
-
-    const controls = el('div', 'jdm-moderation__controls');
-    controls.setAttribute('role', 'group');
-    controls.setAttribute('aria-label', 'Commandes TTS');
-    const pause = el('button', 'jdm-btn', moderation.paused ? 'Reprendre le TTS' : 'Pause TTS');
-    pause.type = 'button';
-    pause.addEventListener('click', () => runModerationControl(section, () => (
-      moderation.paused
-        ? client.resumeTts?.() ?? moderationAction('setTtsModeration', { paused: false })
-        : client.pauseTts?.() ?? moderationAction('setTtsModeration', { paused: true })
-    ), {
-      action: moderation.paused ? 'resume' : 'pause',
-      acceptedMessage: moderation.paused ? 'Reprise demandée…' : 'Pause demandée…',
-      successMessage: moderation.paused ? 'TTS repris ✓' : 'TTS en pause ✓',
-    }));
-    const stop = el('button', 'jdm-btn jdm-btn--danger', 'Stop TTS');
-    stop.type = 'button';
-    stop.addEventListener('click', () => runModerationControl(section,
-      () => client.stopTts?.() ?? moderationAction('stopTts'),
-      { action: 'stop', acceptedMessage: 'Arrêt demandé…', successMessage: 'TTS arrêté ✓' }));
-    const purge = el('button', 'jdm-btn jdm-btn--danger', 'Purger la file');
-    purge.type = 'button';
-    purge.addEventListener('click', () => runModerationControl(section,
-      () => client.purgeTts?.() ?? moderationAction('purgeTts'),
-      { action: 'purge', acceptedMessage: 'Purge demandée…', successMessage: 'File TTS purgée ✓' }));
-    controls.append(pause, stop, purge);
-    ttsPanel.append(ttsState, controls);
-
-    if (!pending.length) {
-      ttsPanel.append(el('p', 'jdm-hint', 'Aucun TTS en attente.'));
-    } else {
-      const list = el('div', 'jdm-moderation__list');
-      for (const item of pending) {
-        const card = el('article', 'jdm-moderation__item');
-        card.append(
-          el('strong', 'jdm-moderation__viewer', `@${item.login}`),
-          el('p', 'jdm-moderation__text', item.text),
-        );
-        const actions = el('div', 'jdm-moderation__actions');
-        actions.setAttribute('role', 'group');
-        actions.setAttribute('aria-label', `Actions TTS pour @${item.login}`);
-        const approve = el('button', 'jdm-btn jdm-btn--primary', 'Lire');
-        approve.type = 'button';
-        approve.addEventListener('click', () => run(card, () => moderationAction(
-          'decideTtsSubmission', item.submission_id, 'approve',
-        )));
-        const reject = el('button', 'jdm-btn', 'Refuser');
-        reject.type = 'button';
-        reject.addEventListener('click', () => run(card, () => moderationAction(
-          'decideTtsSubmission', item.submission_id, 'reject',
-        )));
-        const ban = el('button', 'jdm-btn jdm-btn--danger', 'Bloquer');
-        ban.type = 'button';
-        ban.addEventListener('click', () => run(card, () => {
-          if (typeof client?.rejectAndBanTtsSubmission !== 'function') {
-            return Promise.reject(Object.assign(new Error('moderation_atomic_unavailable'), {
-              code: 'moderation_atomic_unavailable',
-            }));
-          }
-          return client.rejectAndBanTtsSubmission(item.submission_id, {
-            reason: 'Blocage depuis l’extension',
-          });
-        }, { success: 'Demande refusée et utilisateur bloqué ✓' }));
-        actions.append(approve, reject, ban);
-        card.append(actions);
-        list.append(card);
-      }
-      ttsPanel.append(list);
-    }
-
-    if (moderationSubmodule === 'tts') content.append(ttsPanel);
-    if (moderationSubmodule === 'history') content.append(moderationHistoryPanel() ?? moderatorActivityHistory());
-    if (moderationSubmodule === 'users') content.append(moderationUsersPanel());
-    if (moderationSubmodule === 'modules') content.append(moderationModulesPanel());
-    section.append(subnav, content);
-    return section;
   }
 
   function tutorialDialog(tutorial) {
@@ -4459,7 +698,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       identityAction.disabled = Boolean(state?.emotes?.twitch_connected);
       identityAction.addEventListener('click', () => {
         if (state?.emotes?.twitch_connected) return;
-        beginEmoteAuthorization(card);
+        emoteAccess.begin(card);
       });
     }
 
@@ -4516,30 +755,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     return overlay;
   }
 
-  function historyCost(row) {
-    if (row?.cost == null || !Number.isFinite(Number(row.cost))) return '';
-    const units = {
-      channelpoints: 'PDC',
-      jetons: 'jetons',
-    };
-    const unit = units[row.currency] || String(row.currency || 'unités');
-    return `${fmt(row.cost)} ${unit}`;
-  }
-
   function historyIdentity(row) {
     const login = String(row?.login ?? '').trim().replace(/^@+/, '');
     const viewer = String(state?.viewer_login ?? '').trim().replace(/^@+/, '');
     if (!login || (viewer && login.toLowerCase() === viewer.toLowerCase())) return '';
     return `@${login} · `;
-  }
-
-  function historyActionIcon(action) {
-    return ({ tts: '💬', soundboard: '🔊', bonk: '🔨' })[String(action || '').toLowerCase()] || '✦';
-  }
-
-  function historyQuantity(row) {
-    const quantity = Number(row?.quantity ?? row?.count);
-    return Number.isFinite(quantity) && quantity > 1 ? ` ×${fmt(quantity)}` : '';
   }
 
   function personalHistory() {
@@ -4633,824 +853,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     section.append(list);
     return section;
   }
-
-  const moderationHistoryStatusLabels = Object.freeze({
-    queued: 'En file · en attente de SAMMI',
-    processing: 'Transmis à SAMMI',
-    accepted: 'Acceptée · en attente du bridge',
-    dispatched: 'Transmise à SAMMI',
-    executed: 'Exécutée',
-    enabled: 'Activé',
-    disabled: 'Désactivé',
-    failed: 'Échec d’exécution',
-    timeout: 'Délai dépassé · exécution non confirmée',
-    uncertain: 'Exécution non confirmée',
-    no_active: 'Aucun TTS actif',
-    played: 'Joué',
-    refunded: 'Remboursé',
-    refund_pending: 'Remboursement en cours',
-    failed_no_charge: 'Échec — aucun jeton perdu',
-    credit_restored: 'Crédit restauré — réessaie',
-    review: 'Vérification nécessaire',
-  });
-  const moderationHistoryStatusShortLabels = Object.freeze({
-    queued: 'En file',
-    processing: 'Envoi',
-    accepted: 'Acceptée',
-    dispatched: 'Transmise',
-    executed: 'Exécutée',
-    enabled: 'Activé',
-    disabled: 'Désactivé',
-    failed: 'Échec',
-    timeout: 'Délai',
-    uncertain: 'Incertain',
-    no_active: 'Aucun actif',
-    played: 'Joué',
-    refunded: 'Remboursé',
-    refund_pending: 'Rembours.',
-    failed_no_charge: 'Échec · 0 perdu',
-    credit_restored: 'Crédit restauré',
-    review: 'Vérif.',
-  });
-
-  function moderationHistoryRow(row, fallbackStatus = 'played') {
-    const requestedStatus = String(row?.status || fallbackStatus).trim().toLowerCase();
-    const status = moderationHistoryStatusLabels[requestedStatus] ? requestedStatus : fallbackStatus;
-    const actionId = String(row?.action || '').trim().toLowerCase();
-    const actionLabel = String(row?.label || ({
-      tts: 'TTS',
-      soundboard: 'Soundboard',
-      bonk: 'Bonk',
-    })[actionId] || 'Interaction');
-    const login = String(row?.login || '').trim().replace(/^@+/, '');
-    const identity = login ? `@${login}` : '';
-    const detail = actionId === 'tts' ? '' : String(row?.detail || '').trim();
-    const targetLogin = String(row?.target_login || '').trim().replace(/^@+/, '');
-    const quantity = historyQuantity(row);
-    const summaryParts = [identity, actionLabel, detail].filter(Boolean);
-    let summary = summaryParts.join(' · ') || 'Interaction';
-    if (quantity) summary += quantity;
-    if (targetLogin) summary += ` → @${targetLogin}`;
-    const cost = historyCost(row);
-    const statusLabel = moderationHistoryStatusLabels[status];
-    const date = new Date(row?.created_at || 0);
-    const when = Number.isNaN(date.getTime())
-      ? ''
-      : date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    const item = el('li', `jdm-history__item is-${status}`);
-    const icon = el('span', 'jdm-history__icon', historyActionIcon(actionId));
-    icon.setAttribute('aria-hidden', 'true');
-    const copy = el('span', 'jdm-history__copy');
-    copy.append(el('strong', 'jdm-history__action', summary));
-    const statusNode = el('span', 'jdm-history__status', moderationHistoryStatusShortLabels[status]);
-    statusNode.title = statusLabel;
-    statusNode.setAttribute('aria-label', statusLabel);
-    const timeNode = el('time', 'jdm-history__when', when);
-    if (when) timeNode.dateTime = date.toISOString();
-    const accessibleSummary = [summary, cost, statusLabel, when].filter(Boolean).join(' · ');
-    item.setAttribute('aria-label', accessibleSummary);
-    item.title = accessibleSummary;
-    item.append(icon, copy);
-    if (cost) item.append(el('span', 'jdm-history__cost', cost));
-    item.append(statusNode, timeNode);
-    return item;
-  }
-
-  function moderatorActivityHistory() {
-    const activity = state?.moderation?.activity;
-    if (!activity?.can_view) return null;
-    const rows = Array.isArray(activity.items) ? activity.items : [];
-    const details = el('details', 'jdm-mod-history');
-    details.open = true;
-    const summary = el('summary', 'jdm-mod-history__summary', `Historique du stream · modération${rows.length ? ` · ${rows.length}` : ''}`);
-    details.append(summary);
-    if (!rows.length) {
-      details.append(el('p', 'jdm-hint', 'Aucune interaction globale enregistrée.'));
-      return details;
-    }
-    const list = el('ol', 'jdm-history__list jdm-mod-history__list');
-    list.setAttribute('aria-label', 'Historique du stream');
-    for (const row of rows.slice(0, 20)) list.append(moderationHistoryRow(row));
-    details.append(list);
-    return details;
-  }
-
-  function moderationHistoryPanel() {
-    const history = state?.moderation?.history ?? state?.moderation?.activity;
-    if (!history?.can_view) return null;
-    const details = el('details', 'jdm-mod-history jdm-mod-history--panel');
-    details.open = true;
-    const rows = Array.isArray(history.items) ? history.items : [];
-    details.setAttribute('aria-label', 'Historique de modération');
-    details.append(el('summary', 'jdm-mod-history__summary', `Historique${rows.length ? ` · ${rows.length}` : ''}`));
-    const filters = el('div', 'jdm-mod-history__filters');
-    filters.setAttribute('role', 'search');
-    filters.setAttribute('aria-label', 'Filtres de l’historique');
-    const query = el('input', 'jdm-input jdm-mod-history__query');
-    query.type = 'search';
-    query.placeholder = 'Viewer / cible';
-    query.value = moderationHistoryQuery;
-    query.dataset.draftKey = 'moderation-history-query';
-    query.addEventListener('input', () => {
-      moderationHistoryQuery = query.value;
-    });
-    query.setAttribute('aria-label', 'Rechercher dans l’historique');
-    const module = document.createElement('select');
-    module.className = 'jdm-input jdm-mod-history__select';
-    module.setAttribute('aria-label', 'Filtrer par module');
-    for (const option of [['', 'Tous les modules'], ['tts', 'TTS'], ['soundboard', 'Soundboard'], ['bonk', 'Bonk']]) {
-      const node = document.createElement('option');
-      node.value = option[0];
-      node.textContent = option[1];
-      node.selected = moderationHistoryModule === option[0];
-      module.append(node);
-    }
-    const status = document.createElement('select');
-    status.className = 'jdm-input jdm-mod-history__select';
-    status.setAttribute('aria-label', 'Filtrer par statut');
-    for (const option of [['', 'Tous les statuts'], ['accepted', 'Acceptée'], ['queued', 'En file'], ['dispatched', 'Transmise'], ['processing', 'En traitement'], ['executed', 'Exécutée'], ['no_active', 'Aucun TTS actif'], ['failed', 'Échec'], ['timeout', 'Délai dépassé'], ['uncertain', 'Non confirmée'], ['played', 'Joué'], ['refund_pending', 'Remboursement en cours'], ['refunded', 'Remboursé'], ['failed_no_charge', 'Échec sans débit'], ['credit_restored', 'Crédit restauré'], ['review', 'Vérification nécessaire']]) {
-      const node = document.createElement('option');
-      node.value = option[0];
-      node.textContent = option[1];
-      node.selected = moderationHistoryStatus === option[0];
-      status.append(node);
-    }
-    module.addEventListener('change', () => {
-      moderationHistoryModule = module.value;
-    });
-    status.addEventListener('change', () => {
-      moderationHistoryStatus = status.value;
-    });
-    const reload = el('button', 'jdm-btn', 'Filtrer');
-    reload.type = 'button';
-    reload.addEventListener('click', () => {
-      moderationHistoryQuery = query.value;
-      moderationHistoryModule = module.value;
-      moderationHistoryStatus = status.value;
-      run(details, () => client.moderationHistory?.({
-        query: moderationHistoryQuery.trim(),
-        module_id: moderationHistoryModule,
-        status: moderationHistoryStatus,
-      }) ?? Promise.resolve(history), {
-        success: '',
-        onSuccess: (result) => {
-          if (result?.items) {
-            state.moderation.history = result;
-          }
-        },
-      });
-    });
-    filters.append(query, module, status, reload);
-    details.append(filters);
-    const filtered = rows.filter((row) => {
-      const wanted = moderationHistoryQuery.trim().toLowerCase();
-      const text = [row.login, row.target_login, row.action, row.detail].join(' ').toLowerCase();
-      return (!wanted || text.includes(wanted))
-        && (!moderationHistoryModule || row.action === moderationHistoryModule)
-        && (!moderationHistoryStatus || row.status === moderationHistoryStatus);
-    });
-    if (!filtered.length) {
-      details.append(el('p', 'jdm-hint', 'Aucune interaction pour ces filtres.'));
-      return details;
-    }
-    const list = el('ol', 'jdm-history__list jdm-mod-history__list');
-    list.setAttribute('aria-label', 'Historique de modération');
-    for (const row of filtered.slice(0, 50)) list.append(moderationHistoryRow(row));
-    details.append(list);
-    return details;
-  }
-
-  function moderationUserHistoryRows(selected) {
-    const profileRows = Array.isArray(selected?.audit)
-      ? selected.audit
-      : Array.isArray(selected?.history)
-        ? selected.history
-        : null;
-    if (profileRows?.length) return profileRows;
-
-    const selectedId = String(selected?.twitch_user_id || '');
-    const selectedLogin = String(selected?.login || '').trim().toLowerCase();
-    return (state?.moderation?.history?.items ?? []).filter((row) => (
-      (selectedId && String(row?.twitch_user_id || '') === selectedId)
-        || (selectedLogin && String(row?.login || '').trim().toLowerCase() === selectedLogin)
-    ));
-  }
-
-  function moderationUserHistoryPanel(selected) {
-    const login = String(selected?.login || selected?.twitch_user_id || '').trim();
-    const panel = el('aside', 'jdm-mod-user-history');
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', `Historique de @${login}`);
-    const head = el('div', 'jdm-mod-user-history__head');
-    head.append(el('strong', 'jdm-mod-user-history__title', `Historique · @${login}`));
-    const close = el('button', 'jdm-btn jdm-mod-user-history__close', '×');
-    close.type = 'button';
-    close.setAttribute('aria-label', 'Fermer l’historique utilisateur');
-    close.title = 'Fermer l’historique utilisateur';
-    close.addEventListener('click', () => {
-      moderationUserHistoryOpen = false;
-      renderPreservingViewport();
-      queueMicrotask(() => root.querySelector('.jdm-mod-user-history-toggle')?.focus({ preventScroll: true }));
-    });
-    head.append(close);
-    panel.append(head);
-
-    const rows = moderationUserHistoryRows(selected);
-    if (!rows.length) {
-      panel.append(el('p', 'jdm-mod-user-history__empty', 'Aucune interaction enregistrée pour cet utilisateur.'));
-      return panel;
-    }
-    const list = el('ol', 'jdm-history__list jdm-mod-user-history__list');
-    list.dataset.scrollKey = 'moderation-user-history';
-    list.setAttribute('aria-label', `Historique de @${login}`);
-    for (const row of rows.slice(0, 30)) list.append(moderationHistoryRow(row));
-    panel.append(list);
-    return panel;
-  }
-
-  function moderationModulesForUser(selected) {
-    const source = Array.isArray(selected?.suspendable_modules)
-      ? selected.suspendable_modules
-      : Array.isArray(state?.moderation?.suspendable_modules)
-        ? state.moderation.suspendable_modules
-        : (state?.modules ?? []);
-    const seen = new Set();
-    return source
-      .map((module) => ({
-        id: String(module?.id || '').trim(),
-        label: String(module?.label || module?.id || '').trim(),
-        icon: String(module?.icon || '').trim(),
-      }))
-      .filter((module) => module.id && module.label && !seen.has(module.id) && seen.add(module.id));
-  }
-
-  function moderationSuspensionsForUser(selected) {
-    if (Array.isArray(selected?.suspensions)) return selected.suspensions.filter(Boolean);
-    return selected?.suspension ? [selected.suspension] : [];
-  }
-
-  function moderationSuspensionForModule(moduleId, rows) {
-    return rows.find((row) => String(row?.module_id || '') === String(moduleId))
-      ?? rows.find((row) => !row?.module_id || row.module_id === '*')
-      ?? null;
-  }
-
-  function moderationSuspensionExpiryLabel(row) {
-    if (!row) return '';
-    const raw = row.expires_at;
-    if (raw === null || raw === undefined || raw === '') return 'indéfini';
-    const timestamp = typeof raw === 'number' || /^\d+$/.test(String(raw))
-      ? Number(raw)
-      : Date.parse(String(raw));
-    if (!Number.isFinite(timestamp)) return 'expiration inconnue';
-    const date = new Date(timestamp);
-    if (Number.isNaN(date.getTime())) return 'expiration inconnue';
-    return `jusqu’à ${date.toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })}`;
-  }
-
-  function moderationCustomDurationSelection(value, unit) {
-    const rawValue = String(value ?? '').trim();
-    const multiplier = new Map([
-      ['seconds', 1000],
-      ['minutes', 60_000],
-      ['hours', 3_600_000],
-      ['days', 86_400_000],
-    ]).get(String(unit));
-    if (!/^\d+$/.test(rawValue) || !Number.isSafeInteger(Number(rawValue)) || !multiplier) return null;
-    const amount = Number(rawValue);
-    const durationMs = amount * multiplier;
-    if (!Number.isSafeInteger(durationMs)
-      || durationMs < moderationCustomDurationMinMs
-      || durationMs > moderationCustomDurationMaxMs) return null;
-    const unitLabel = moderationSuspensionDurationUnits.find(([candidate]) => candidate === String(unit))?.[1];
-    const singular = {
-      seconds: 'seconde',
-      minutes: 'minute',
-      hours: 'heure',
-      days: 'jour',
-    }[String(unit)];
-    return {
-      durationMs,
-      label: `${amount} ${amount === 1 ? singular : unitLabel}`,
-    };
-  }
-
-  function moderationSuspensionDurationSelection(value, customValue, customUnit) {
-    const normalized = String(value);
-    if (normalized === '') return { durationMs: null, label: 'Indéfinie' };
-    if (normalized === 'custom') return moderationCustomDurationSelection(customValue, customUnit);
-    const preset = moderationSuspensionDurationOptions.find(([candidate]) => candidate === normalized);
-    if (!preset) return null;
-    return { durationMs: Number(preset[0]), label: preset[1] };
-  }
-
-  function moderationSuspensionDurationLabel(value, customValue, customUnit) {
-    return moderationSuspensionDurationSelection(value, customValue, customUnit)?.label
-      ?? 'durée personnalisée';
-  }
-
-  function moderationModuleLabels(moduleIds, modules) {
-    const labels = new Map(modules.map((module) => [module.id, module.label]));
-    return moduleIds.map((moduleId) => labels.get(moduleId) || moduleId);
-  }
-
-  async function refreshModerationUserProfile(userId) {
-    if (typeof client?.moderationUserProfile !== 'function') return null;
-    try {
-      const result = await client.moderationUserProfile(userId);
-      if (!result?.user) return null;
-      moderationSelectedUser = result.user;
-      state.moderation ??= {};
-      state.moderation.selected_user = result.user;
-      return result.user;
-    } catch {
-      // L'action est déjà confirmée. Le prochain polling ou l'ouverture de la
-      // fiche reprendra la source serveur sans transformer ce succès en erreur.
-      return null;
-    }
-  }
-
-  function moderationUsersPanel() {
-    const panel = el('section', 'jdm-mod-users');
-    panel.setAttribute('aria-label', 'Gestion des utilisateurs');
-    const searchRow = el('div', 'jdm-mod-history__filters jdm-mod-users__search');
-    searchRow.setAttribute('role', 'search');
-    searchRow.setAttribute('aria-label', 'Rechercher un utilisateur');
-    const query = el('input', 'jdm-input');
-    query.type = 'search';
-    query.placeholder = 'Login / ID Twitch';
-    query.value = moderationUsersQuery;
-    query.dataset.draftKey = 'moderation-users-query';
-    query.addEventListener('input', () => {
-      moderationUsersQuery = query.value;
-    });
-    query.setAttribute('aria-label', 'Rechercher un utilisateur');
-    const search = el('button', 'jdm-btn jdm-mod-users__search-button', 'Rechercher');
-    search.type = 'button';
-    search.setAttribute('aria-label', 'Rechercher cet utilisateur');
-    search.addEventListener('click', () => run(panel, () => moderationAction('moderationUsers', query.value.trim()), {
-      success: '',
-      onSuccess: (result) => {
-        moderationUsersQuery = query.value;
-        moderationUsers = Array.isArray(result?.items) ? result.items : [];
-        state.moderation.users = moderationUsers;
-      },
-    }));
-    searchRow.append(query, search);
-    panel.append(searchRow);
-    const users = Array.isArray(moderationUsers)
-      ? moderationUsers
-      : (state?.moderation?.users ?? []);
-    const selected = moderationSelectedUser ?? state?.moderation?.selected_user;
-    const list = el('div', 'jdm-mod-users__list');
-    list.setAttribute('role', 'group');
-    list.setAttribute('aria-label', 'Résultats utilisateurs');
-    if (!users.length) {
-      list.append(el('p', 'jdm-mod-users__empty', moderationUsersQuery.trim()
-        ? 'Aucun utilisateur trouvé.'
-        : 'Saisis un login ou un ID Twitch.'));
-    }
-    for (const user of users.slice(0, 20)) {
-      const label = `@${user.login || user.twitch_user_id}`;
-      const button = el('button', 'jdm-btn jdm-mod-users__user', label);
-      button.type = 'button';
-      button.classList.toggle('is-selected', String(selected?.twitch_user_id || '') === String(user.twitch_user_id || ''));
-      button.setAttribute('aria-label', `Ouvrir le profil de ${label}`);
-      button.title = `Ouvrir le profil de ${label}`;
-      button.addEventListener('click', () => run(panel, () => moderationAction('moderationUserProfile', user.twitch_user_id), {
-        success: '',
-        onSuccess: (result) => {
-          moderationSelectedUser = result?.user ?? user;
-          state.moderation.selected_user = moderationSelectedUser;
-          moderationUserHistoryOpen = false;
-        },
-      }));
-      list.append(button);
-    }
-    panel.append(list);
-    const selectedId = String(selected?.twitch_user_id || '');
-    if (selectedId !== moderationSuspensionSelectionUserId) {
-      moderationSuspensionSelectionUserId = selectedId;
-      moderationSuspendSelection.clear();
-      moderationUnsuspendSelection.clear();
-    }
-    const availableModules = moderationModulesForUser(selected);
-    const availableModuleIds = new Set(availableModules.map((module) => module.id));
-    for (const moduleId of moderationSuspendSelection) {
-      if (!availableModuleIds.has(moduleId)) moderationSuspendSelection.delete(moduleId);
-    }
-    const suspensionRows = moderationSuspensionsForUser(selected);
-    const activeModules = availableModules.filter((module) => moderationSuspensionForModule(module.id, suspensionRows));
-    const activeModuleIds = new Set(activeModules.map((module) => module.id));
-    for (const moduleId of moderationUnsuspendSelection) {
-      if (!activeModuleIds.has(moduleId)) moderationUnsuspendSelection.delete(moduleId);
-    }
-    if (selected) {
-      const card = el('div', 'jdm-mod-user-card');
-      card.setAttribute('role', 'region');
-      card.setAttribute('aria-label', `Actions pour @${selected.login || selected.twitch_user_id}`);
-      const balance = Number(selected.credits?.soundboard || 0);
-      const suspensionLabel = activeModules.length
-        ? `${activeModules.length} module${activeModules.length > 1 ? 's' : ''} suspendu${activeModules.length > 1 ? 's' : ''}`
-        : 'Aucune suspension active';
-      const identity = el('div', 'jdm-mod-user-card__identity');
-      identity.append(
-        el('span', 'jdm-mod-user-card__avatar', '👤'),
-        el('strong', 'jdm-mod-user-card__login', `@${selected.login || selected.twitch_user_id}`),
-      );
-      const statusNode = el('span', 'jdm-hint jdm-mod-user-card__status', suspensionLabel);
-      statusNode.dataset.state = activeModules.length ? 'suspended' : 'active';
-      card.append(
-        identity,
-        el('span', 'jdm-hint', `${balance} crédit${balance > 1 ? 's' : ''} Soundboard`),
-        statusNode,
-      );
-      if (selected.tts_banned) {
-        const banStatus = el('span', 'jdm-hint jdm-mod-user-card__tts-ban', 'TTS bloqué');
-        banStatus.dataset.state = 'banned';
-        const unban = el('button', 'jdm-btn jdm-btn--secondary jdm-mod-user-card__unban', 'Débloquer le TTS');
-        unban.type = 'button';
-        unban.setAttribute('aria-label', `Débloquer le TTS pour @${selected.login || selected.twitch_user_id}`);
-        unban.addEventListener('click', () => {
-          if (typeof client?.unbanTtsViewer !== 'function') return;
-          return run(card, () => client.unbanTtsViewer(selected.twitch_user_id), {
-            success: `TTS débloqué pour @${selected.login || selected.twitch_user_id} ✓`,
-            onSuccess: async () => {
-              selected.tts_banned = false;
-              await refreshModerationUserProfile(selected.twitch_user_id);
-            },
-          });
-        });
-        card.append(banStatus, unban);
-      }
-      const delta = el('input', 'jdm-input');
-      delta.type = 'number';
-      delta.min = '1';
-      delta.value = '1';
-      delta.step = '1';
-      delta.setAttribute('aria-label', 'Nombre de crédits Soundboard à ajuster');
-      const adjustmentAmount = () => {
-        const amount = Math.trunc(Number(delta.value));
-        if (!Number.isFinite(amount) || amount < 1) {
-          flash(card, 'Indique au moins 1 crédit.', 'error');
-          return null;
-        }
-        return amount;
-      };
-      const suspensionDuration = document.createElement('select');
-      suspensionDuration.className = 'jdm-input';
-      suspensionDuration.setAttribute('aria-label', 'Durée de la suspension');
-      for (const option of moderationSuspensionDurationOptions) {
-        const node = document.createElement('option');
-        node.value = option[0];
-        node.textContent = option[1];
-        node.selected = option[0] === moderationSuspensionDuration;
-        suspensionDuration.append(node);
-      }
-      suspensionDuration.value = moderationSuspensionDuration;
-      const customDurationValue = document.createElement('input');
-      customDurationValue.className = 'jdm-input';
-      customDurationValue.type = 'number';
-      customDurationValue.min = '1';
-      customDurationValue.step = '1';
-      customDurationValue.inputMode = 'numeric';
-      customDurationValue.value = moderationSuspensionCustomValue;
-      customDurationValue.setAttribute('aria-label', 'Valeur de la durée personnalisée');
-      const customDurationUnit = document.createElement('select');
-      customDurationUnit.className = 'jdm-input';
-      customDurationUnit.setAttribute('aria-label', 'Unité de la durée personnalisée');
-      for (const option of moderationSuspensionDurationUnits) {
-        const node = document.createElement('option');
-        node.value = option[0];
-        node.textContent = option[1];
-        node.selected = option[0] === moderationSuspensionCustomUnit;
-        customDurationUnit.append(node);
-      }
-      customDurationUnit.value = moderationSuspensionCustomUnit;
-      const customDurationFields = el('div', 'jdm-mod-user-card__custom-duration');
-      customDurationFields.append(customDurationValue, customDurationUnit);
-      const suspensionDurationControls = el('div', 'jdm-mod-user-card__duration-controls');
-      suspensionDurationControls.append(suspensionDuration, customDurationFields);
-      const syncDurationControls = () => {
-        const isCustom = suspensionDuration.value === 'custom';
-        const multiplier = new Map([
-          ['seconds', 1000],
-          ['minutes', 60_000],
-          ['hours', 3_600_000],
-          ['days', 86_400_000],
-        ]).get(customDurationUnit.value) || 60_000;
-        customDurationValue.min = String(Math.ceil(moderationCustomDurationMinMs / multiplier));
-        customDurationValue.max = String(Math.floor(moderationCustomDurationMaxMs / multiplier));
-        customDurationFields.hidden = !isCustom;
-        customDurationFields.setAttribute('aria-hidden', String(!isCustom));
-        customDurationValue.disabled = !isCustom;
-        customDurationUnit.disabled = !isCustom;
-      };
-      suspensionDuration.addEventListener('change', () => {
-        moderationSuspensionDuration = suspensionDuration.value;
-        syncDurationControls();
-      });
-      customDurationValue.addEventListener('input', () => {
-        moderationSuspensionCustomValue = customDurationValue.value;
-      });
-      customDurationUnit.addEventListener('change', () => {
-        moderationSuspensionCustomUnit = customDurationUnit.value;
-        syncDurationControls();
-      });
-      syncDurationControls();
-      const confirmWrite = (message) => typeof window.confirm !== 'function' || window.confirm(message);
-      const add = el('button', 'jdm-btn jdm-mod-user-card__credit-button', '+');
-      add.type = 'button';
-      add.setAttribute('aria-label', 'Ajouter des crédits Soundboard');
-      add.title = 'Ajouter des crédits Soundboard';
-      add.addEventListener('click', () => {
-        if (!confirmWrite('Ajouter ces crédits Soundboard à cet utilisateur ?')) return;
-        const amount = adjustmentAmount();
-        if (amount === null) return;
-        return run(card, () => moderationAction('adjustSoundboardCredits', {
-          twitch_user_id: selected.twitch_user_id,
-          delta: amount,
-          reason: 'Ajustement depuis la console',
-        }), {
-          onSuccess: async (result) => {
-            selected.credits = { ...(selected.credits || {}), soundboard: Number(result?.balance ?? balance) };
-            await refreshModerationUserProfile(selected.twitch_user_id);
-          },
-        });
-      });
-      const remove = el('button', 'jdm-btn jdm-mod-user-card__credit-button', '−');
-      remove.type = 'button';
-      remove.setAttribute('aria-label', 'Retirer des crédits Soundboard');
-      remove.title = 'Retirer des crédits Soundboard';
-      remove.addEventListener('click', () => {
-        if (!confirmWrite('Retirer ces crédits Soundboard à cet utilisateur ?')) return;
-        const amount = adjustmentAmount();
-        if (amount === null) return;
-        return run(card, () => moderationAction('adjustSoundboardCredits', {
-          twitch_user_id: selected.twitch_user_id,
-          delta: -amount,
-          reason: 'Ajustement depuis la console',
-        }), {
-          onSuccess: async (result) => {
-            selected.credits = { ...(selected.credits || {}), soundboard: Number(result?.balance ?? balance) };
-            await refreshModerationUserProfile(selected.twitch_user_id);
-          },
-        });
-      });
-      const historyToggle = el('button', 'jdm-btn jdm-mod-user-history-toggle', 'Historique');
-      historyToggle.type = 'button';
-      historyToggle.setAttribute('aria-expanded', String(moderationUserHistoryOpen));
-      historyToggle.setAttribute('aria-label', `Afficher l’historique de @${selected.login || selected.twitch_user_id}`);
-      historyToggle.addEventListener('click', () => {
-        moderationUserHistoryOpen = !moderationUserHistoryOpen;
-        renderPreservingViewport();
-      });
-      const creditsGroup = el('div', 'jdm-mod-user-card__group jdm-mod-user-card__group--credits');
-      creditsGroup.setAttribute('role', 'group');
-      creditsGroup.setAttribute('aria-label', 'Crédits Soundboard');
-      creditsGroup.append(
-        el('span', 'jdm-mod-user-card__group-label', 'Crédits'),
-        el('strong', 'jdm-mod-user-card__balance', String(balance)),
-        remove,
-        delta,
-        add,
-      );
-      const suspensionGroup = el('div', 'jdm-mod-user-card__group jdm-mod-user-card__group--suspension');
-      suspensionGroup.setAttribute('role', 'group');
-      suspensionGroup.setAttribute('aria-label', 'Suspension Extension');
-      suspensionGroup.append(el('span', 'jdm-mod-user-card__group-label', 'Accès'), historyToggle);
-      const suspensionStatusList = el('ul', 'jdm-mod-user-card__suspensions');
-      suspensionStatusList.setAttribute('aria-label', 'État des suspensions par module');
-      for (const module of availableModules) {
-        const row = moderationSuspensionForModule(module.id, suspensionRows);
-        const status = row ? `Suspendu · ${moderationSuspensionExpiryLabel(row)}` : 'Actif';
-        const item = el('li', 'jdm-mod-user-card__suspension');
-        item.dataset.moduleId = module.id;
-        item.dataset.state = row ? 'suspended' : 'active';
-        item.setAttribute('aria-label', `${module.label} — ${status}`);
-        item.append(
-          el('span', 'jdm-mod-user-card__suspension-module', `${module.icon ? `${module.icon} ` : ''}${module.label}`),
-          el('span', 'jdm-mod-user-card__suspension-state', status),
-        );
-        suspensionStatusList.append(item);
-      }
-      suspensionGroup.append(suspensionStatusList);
-
-      const createModulePicker = ({
-        legendText,
-        options,
-        selection,
-        actionText,
-        actionClass,
-        actionLabel,
-        extraControl = null,
-        onAction,
-      }) => {
-        const fieldset = document.createElement('fieldset');
-        fieldset.className = 'jdm-mod-user-card__module-picker';
-        const legend = el('legend', 'jdm-mod-user-card__module-picker-legend', legendText);
-        const optionList = el('div', 'jdm-mod-user-card__module-options');
-        optionList.setAttribute('role', 'group');
-        optionList.setAttribute('aria-label', legendText);
-        const inputs = [];
-        const optionIds = new Set(options.map((module) => module.id));
-        for (const module of options) {
-          const inputId = `moderation-${selectedId}-${module.id}-${actionText.toLowerCase()}`;
-          const optionLabel = el('label', 'jdm-mod-user-card__module-option');
-          const input = document.createElement('input');
-          input.type = 'checkbox';
-          input.value = module.id;
-          input.checked = selection.has(module.id);
-          input.setAttribute('id', inputId);
-          input.setAttribute('data-module-id', module.id);
-          input.setAttribute('aria-label', `${module.label} · ${actionText}`);
-          input.addEventListener('change', () => {
-            if (input.checked) selection.add(module.id);
-            else selection.delete(module.id);
-            sync();
-          });
-          optionLabel.htmlFor = inputId;
-          optionLabel.append(input, el('span', 'jdm-mod-user-card__module-option-label', `${module.icon ? `${module.icon} ` : ''}${module.label}`));
-          optionList.append(optionLabel);
-          inputs.push(input);
-        }
-        const selectAllLabel = el('label', 'jdm-mod-user-card__module-option jdm-mod-user-card__module-option--all');
-        const selectAll = document.createElement('input');
-        selectAll.type = 'checkbox';
-        selectAll.setAttribute('aria-label', `${actionText} sur tous les modules`);
-        selectAllLabel.append(selectAll, el('span', 'jdm-mod-user-card__module-option-label', 'Tout sélectionner'));
-        const actionRow = el('div', 'jdm-mod-user-card__suspension-actions');
-        if (extraControl) actionRow.append(extraControl);
-        const action = el('button', actionClass, actionText);
-        action.type = 'button';
-        action.disabled = true;
-        action.setAttribute('aria-label', actionLabel);
-        actionRow.append(action);
-        const sync = () => {
-          const selectedIds = [...selection].filter((moduleId) => optionIds.has(moduleId));
-          selectAll.checked = options.length > 0 && selectedIds.length === options.length;
-          selectAll.indeterminate = selectedIds.length > 0 && selectedIds.length < options.length;
-          selectAll.setAttribute('aria-checked', selectAll.indeterminate ? 'mixed' : String(selectAll.checked));
-          action.disabled = selectedIds.length === 0;
-          for (const input of inputs) input.checked = selection.has(input.value);
-        };
-        selectAll.addEventListener('change', () => {
-          if (selectAll.checked) {
-            for (const module of options) selection.add(module.id);
-          } else {
-            for (const module of options) selection.delete(module.id);
-          }
-          sync();
-        });
-        action.addEventListener('click', () => {
-          const selectedIds = [...selection].filter((moduleId) => optionIds.has(moduleId));
-          if (!selectedIds.length) return;
-          return onAction(selectedIds, moderationModuleLabels(selectedIds, options));
-        });
-        fieldset.append(legend, optionList, selectAllLabel, actionRow);
-        sync();
-        return fieldset;
-      };
-
-      const suspendPicker = createModulePicker({
-        legendText: 'Suspendre sur les modules',
-        options: availableModules,
-        selection: moderationSuspendSelection,
-        actionText: 'Suspendre',
-        actionClass: 'jdm-btn jdm-btn--danger jdm-mod-user-card__suspension-button',
-        actionLabel: `Suspendre @${selected.login || selected.twitch_user_id} sur les modules sélectionnés`,
-        extraControl: suspensionDurationControls,
-        onAction: (moduleIds, labels) => {
-          const duration = moderationSuspensionDurationSelection(
-            suspensionDuration.value,
-            customDurationValue.value,
-            customDurationUnit.value,
-          );
-          if (!duration) {
-            flash(card, 'La durée personnalisée doit être un entier d’au moins 1 minute et ne pas dépasser 365 jours.', 'error');
-            return;
-          }
-          const durationMs = duration.durationMs;
-          const durationLabel = moderationSuspensionDurationLabel(
-            suspensionDuration.value,
-            customDurationValue.value,
-            customDurationUnit.value,
-          ).toLowerCase();
-          if (!confirmWrite(`Suspendre @${selected.login || selected.twitch_user_id} pendant ${durationLabel} sur : ${labels.join(', ')} ?`)) return;
-          return run(card, async () => {
-            const result = await moderationAction('suspendUser', {
-              twitch_user_id: selected.twitch_user_id,
-              module_ids: moduleIds,
-              duration_ms: durationMs,
-              login: selected.login,
-              reason: 'Suspension depuis la console',
-            });
-            if (Array.isArray(result?.errors) && result.errors.length) {
-              throw Object.assign(new Error('moderation_batch_partial_failure'), { code: 'moderation_batch_partial_failure' });
-            }
-            if (result?.scope !== 'modules' || !Array.isArray(result?.suspensions)) {
-              throw Object.assign(new Error('moderation_batch_unavailable'), { code: 'moderation_batch_unavailable' });
-            }
-            return result;
-          }, {
-            success: () => `@${selected.login || selected.twitch_user_id} suspendu sur ${labels.join(' et ')} pendant ${durationLabel}.`,
-            onSuccess: async (result) => {
-              selected.suspensions = result.suspensions;
-              selected.suspension = result.suspensions.find((row) => !row?.module_id || row.module_id === '*')
-                ?? result.suspensions[0]
-                ?? null;
-              moderationSuspendSelection.clear();
-              moderationUnsuspendSelection.clear();
-              await refreshModerationUserProfile(selected.twitch_user_id);
-            },
-          });
-        },
-      });
-      suspensionGroup.append(suspendPicker);
-
-      if (activeModules.length) {
-        const restorePicker = createModulePicker({
-          legendText: 'Réactiver sur les modules suspendus',
-          options: activeModules,
-          selection: moderationUnsuspendSelection,
-          actionText: 'Réactiver',
-          actionClass: 'jdm-btn jdm-btn--secondary jdm-mod-user-card__suspension-button',
-          actionLabel: `Réactiver @${selected.login || selected.twitch_user_id} sur les modules sélectionnés`,
-          onAction: (moduleIds, labels) => {
-            if (!confirmWrite(`Réactiver @${selected.login || selected.twitch_user_id} sur : ${labels.join(', ')} ?`)) return;
-            return run(card, async () => {
-              const result = await moderationAction('unsuspendUser', {
-                twitch_user_id: selected.twitch_user_id,
-                module_ids: moduleIds,
-              });
-              if (Array.isArray(result?.errors) && result.errors.length) {
-                throw Object.assign(new Error('moderation_batch_partial_failure'), { code: 'moderation_batch_partial_failure' });
-              }
-              if (result?.scope !== 'modules' || !Array.isArray(result?.remaining_suspensions)) {
-                throw Object.assign(new Error('moderation_batch_unavailable'), { code: 'moderation_batch_unavailable' });
-              }
-              return result;
-            }, {
-              success: () => `@${selected.login || selected.twitch_user_id} réactivé sur ${labels.join(' et ')}.`,
-              onSuccess: async (result) => {
-                selected.suspensions = result.remaining_suspensions;
-                selected.suspension = result.remaining_suspensions.find((row) => !row?.module_id || row.module_id === '*')
-                  ?? result.remaining_suspensions[0]
-                  ?? null;
-                moderationUnsuspendSelection.clear();
-                await refreshModerationUserProfile(selected.twitch_user_id);
-              },
-            });
-          },
-        });
-        suspensionGroup.append(restorePicker);
-      }
-      card.append(creditsGroup, suspensionGroup);
-      panel.append(card);
-      if (moderationUserHistoryOpen) panel.append(moderationUserHistoryPanel(selected));
-    }
-    return panel;
-  }
-
-  function moderationModulesPanel() {
-    const panel = el('details', 'jdm-mod-modules');
-    panel.open = true;
-    panel.setAttribute('aria-label', 'États des modules');
-    panel.append(el('summary', 'jdm-mod-history__summary', 'Modules'));
-    const states = state?.moderation?.modules ?? state?.module_states ?? {};
-    const list = el('div', 'jdm-mod-modules__list');
-    list.setAttribute('role', 'group');
-    list.setAttribute('aria-label', 'Contrôles des modules');
-    for (const mod of state?.modules ?? []) {
-      const enabled = states[mod.id]?.enabled !== false;
-      const button = el('button', `jdm-btn${enabled ? '' : ' jdm-btn--danger'}`, `${mod.icon} ${mod.label} · ${enabled ? 'Actif' : 'Coupé'}`);
-      button.type = 'button';
-      button.setAttribute('aria-pressed', String(enabled));
-      button.setAttribute('aria-label', `${mod.label} · ${enabled ? 'Actif' : 'Coupé'}. Cliquer pour ${enabled ? 'couper' : 'activer'} le module.`);
-      button.title = `${mod.label} · ${enabled ? 'Actif' : 'Coupé'}`;
-      button.addEventListener('click', () => run(panel, () => moderationAction('setModuleControl', mod.id, !enabled), {
-        onSuccess: () => {
-          state.module_states ??= {};
-          state.module_states[mod.id] = { ...(state.module_states[mod.id] || {}), enabled: !enabled };
-          state.moderation ??= {};
-          state.moderation.modules ??= {};
-          state.moderation.modules[mod.id] = { ...(state.moderation.modules[mod.id] || {}), enabled: !enabled };
-        },
-      }));
-      list.append(button);
-    }
-    panel.append(list);
-    return panel;
-  }
-
-  const FORMS = { tts: ttsForm, soundboard: soundboardForm, bonk: bonkForm, raffle_join: raffleForm };
-
-  // --- rendu ---------------------------------------------------------------
 
   function notificationRelativeTime(value) {
     const parsed = Date.parse(value);
@@ -5546,6 +948,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       });
   }
 
+  /** Refonte H15: no announcement reads this preference yet (Level Up V2 is not live). */
+  const LEVEL_UP_ANNOUNCE_VISIBLE = false;
+
   function viewerPreferencesPanel() {
     syncViewerPreferenceIdentity();
     loadViewerPreference();
@@ -5602,7 +1007,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       try { await onRefresh?.(); } catch { /* le polling reprendra */ }
       refreshAction.disabled = false;
     });
-    panel.append(header, option, refreshAction);
+    // Refonte H15 (decided 05/11): « Annoncer mes Level Up » is read by nothing yet — hidden until it has a real effect.
+    // The preference already saved stays stored (never deleted); the code above is kept for that day.
+    panel.append(header, ...(LEVEL_UP_ANNOUNCE_VISIBLE ? [option] : []), refreshAction);
     return panel;
   }
 
@@ -5703,18 +1110,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function render() {
     hubCarousel?.destroy();
     hubCarousel = null;
-    soundboardDragCancel?.();
-    soundboardDragCancel = null;
-    clearInterval(soundboardCooldownTimer);
-    soundboardCooldownTimer = null;
     root.replaceChildren();
     // Les callbacks pointent toujours vers le Soundboard actuellement rendu.
     // Un rerender d’état ne doit jamais conserver un listener vers une vue
     // démontée.
-    soundboardVolumeSync = null;
-    soundboardSearchClose = null;
-    soundboardDeselect = null;
-    soundboardVolumeHeaderButton = null;
     paymentWalletSync = null;
     root.dataset.view = loadError ? 'error' : state ? (openModule ? 'module' : 'home') : 'loading';
     if (loadError) {
@@ -5730,7 +1129,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
 
     syncNotificationCenter(state);
-    if (emoteAuthNotice) root.append(emoteAuthNoticeView(emoteAuthNotice));
+    const emoteNotice = emoteAccess.noticeView();
+    if (emoteNotice) root.append(emoteNotice);
 
     const experience = resolveExperience(state);
     root.dataset.theme = experience.theme.id;
@@ -5777,12 +1177,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
     // solde jetons
     const wallet = state.wallet ?? {};
-    const soundboardView = openModule === 'soundboard'
-      && (state.modules ?? []).some((candidate) => candidate.id === 'soundboard');
+    // A module that is paid in tokens or in its own credits says so (its variant's `wallet`): the header wallet becomes its
+    // currency switch, with its credit balance and name. No module id here.
+    const openSessionModule = openModule ? (state.modules ?? []).find((candidate) => candidate.id === openModule) : null;
+    const payment = openSessionModule && !sessionModule(openModule)
+      ? moduleVariant({ module: openSessionModule, state, client, document })?.wallet ?? null
+      : null;
     const moderationView = openModule === MODERATION_MODULE.id && canModerate();
-    const ttsView = openModule === 'tts';
     const raffleView = openModule === 'raffle_join';
-    const paymentView = soundboardView || ttsView;
+    const paymentView = Boolean(payment);
     const hubView = !openModule;
     const historyView = openModule === ACTIONS_MODULE.id;
     const consultView = hubView || historyView;
@@ -5805,8 +1208,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (!headerSwitch) {
       walletRow.setAttribute('role', 'group');
     }
-    if (soundboardView && !headerSwitch) walletRow.classList.add('jdm-soundboard-wallet');
-    // Une récompense TTS en attente = une utilisation, comme dans ttsForm.
     // Sans liste API, aucun zéro/solde fictif n'est présenté.
     const creditsKnown = Array.isArray(state.pending_actions);
     // Hub : total des crédits de tous les modules ; ils restent propres à chaque module.
@@ -5818,8 +1219,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
     const moduleCredits = consultView
       ? [...hubCreditsByModule.values()].reduce((sum, value) => sum + value, 0)
-      : ttsView ? pendingFor('tts').length : soundboardCreditBalance();
-    const creditModule = ttsView ? 'TTS' : 'Soundboard';
+      : payment ? payment.credits(state) : 0;
+    const creditModule = payment?.label ?? '';
     const creditWord = `crédit${moduleCredits > 1 ? 's' : ''}`;
     const exactCreditValue = creditsKnown ? formatWalletExactValue(moduleCredits) : 'Solde indisponible';
     const exactTokenValue = wallet.unavailable
@@ -5838,7 +1239,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     });
     if (!headerSwitch) walletRow.append(tokenView, creditView);
     const syncWalletView = (methods = [], onMethodChange = null) => {
-      const mode = soundboardView ? selectedPaymentMethod : ttsView ? ttsPaymentMethod : consultView ? hubWalletMethod : 'tokens';
+      const mode = payment ? (paymentChoice[openModule] ?? 'tokens') : consultView ? hubWalletMethod : 'tokens';
       const showingCredits = mode === 'credits';
       tokenView.classList.toggle('is-active', !showingCredits);
       creditView.classList.toggle('is-active', showingCredits);
@@ -5922,21 +1323,26 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const modules = [...(state.modules ?? [])]
       .filter((mod) => mod.id !== MODERATION_MODULE.id);
     if (state.identity_shared && !modules.some((mod) => mod.id === ACTIONS_MODULE.id)) modules.push(ACTIONS_MODULE);
-    // « Commandes » (public, every viewer) when the EBS offers it — Video and Mobile, not the Panel.
-    if (commandsPublicAvailable() && !modules.some((mod) => mod.id === COMMANDS_PUBLIC_MODULE.id)) {
-      modules.push(COMMANDS_PUBLIC_MODULE);
-    }
-    if (subWheelAvailable() && !modules.some((mod) => mod.id === SUB_WHEEL_MODULE.id)) {
-      modules.push(SUB_WHEEL_MODULE);
-    }
-    // Halloween first: the event of the moment.
-    if (eventShopAvailable() && !modules.some((mod) => mod.id === EVENT_SHOP_MODULE.id)) {
-      modules.unshift(eventShopModule(state.event_shop));
+    // Session modules (Commandes, Roue du Sub, Événements…) when the EBS offers them: their own files decide.
+    for (const session of sessionModules()) {
+      if (!session.available(sessionEnv()) || modules.some((mod) => mod.id === session.id)) continue;
+      if (session.hubFirst) modules.unshift(session.card(state));
+      else modules.push(session.card(state));
     }
     if (canModerate() && !modules.some((mod) => mod.id === MODERATION_MODULE.id)) {
       modules.push(MODERATION_MODULE);
     }
+    // Modules of the module host: listed by the server, shown only when this build has their view.
+    void loadHostModules(client, () => renderPreservingViewport());
+    for (const mod of hostModules()) if (!modules.some((m) => m.id === mod.id)) modules.push(mod);
     if (openModule && !modules.some((mod) => mod.id === openModule)) openModule = null;
+    // Its view goes with it (as navigateTo does): no timer, audio, listener or tour left behind.
+    if (hostView && hostViewId !== openModule) {
+      hostView.destroy?.();
+      hostView = null;
+      hostViewId = null;
+      hostVariant = null;
+    }
     root.dataset.view = openModule ? 'module' : 'home';
 
     const moduleNotices = (mod) => notificationCount(state, mod.id);
@@ -6081,6 +1487,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           selectedId: hubSelectedId,
           onSelect: (id) => { hubSelectedId = id; },
           onOpen: (id) => navigateTo(id),
+          popoverOpen: hubAllOpen,
+          onPopover: (open) => { hubAllOpen = open; },
         });
       }
       // Hauteur disponible sous le haut du Hub : rien ne déborde de la surface Twitch.
@@ -6097,12 +1505,31 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     } else {
       const mod = modules.find((candidate) => candidate.id === openModule);
       const screen = el('section', 'jdm-module-screen');
-      const isSoundboard = mod.id === 'soundboard';
-      const isBonk = mod.id === 'bonk';
       const isRaffle = mod.id === 'raffle_join';
       const isModeration = mod.id === MODERATION_MODULE.id;
-      const isTombolaV2 = isRaffle && mod.raffle_v2 === true && typeof client?.raffleState === 'function';
-      const head = el('header', `jdm-ui-header jdm-module__screen-head${isSoundboard ? ' jdm-module__screen-head--soundboard' : ''}${isBonk ? ' jdm-module__screen-head--bonk' : ''}${isRaffle ? ' jdm-module__screen-head--raffle' : ''}${isModeration ? ' jdm-module__screen-head--moderation' : ''}`);
+      // A registered view takes the module's screen: a session module, or a variant of a module the session lists.
+      const session = sessionModule(mod.id);
+      const variant = session ? null : moduleVariant({ module: mod, state, client, document });
+      const registered = session ?? variant;
+      // A registered view — a session module, a module variant or a module of the module host: created once while the
+      // module is open, kept across the host's refreshes, destroyed when it closes (navigateTo). No per-module branch.
+      const hostedView = mod.id !== ACTIONS_MODULE.id && Boolean(registered || (mod.host && viewerModuleView(mod.id)));
+      if (hostedView && (!hostView || hostViewId !== mod.id || hostVariant !== variant)) {
+        hostView?.destroy?.();
+        hostView = registered
+          ? registered.view(variantContext(registered, mod))
+          : viewerModuleView(mod.id)({ document, client, module: mod.server });
+        hostViewId = mod.id;
+        hostVariant = variant;
+        hostView.start?.(); // optional: TTS V2 has no start (it waits for the host's state)
+        // The team's moderation of a MODULE-HOST module only (never a session module or a variant: no mod.server).
+        const panel = !registered && canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
+        if (panel?.visible) {
+          hostView.node.append(panel.node);
+          void panel.refresh();
+        }
+      }
+      const head = el('header', `jdm-ui-header jdm-module__screen-head${registered?.headClass ? ` ${registered.headClass}` : ''}${isRaffle ? ' jdm-module__screen-head--raffle' : ''}${isModeration ? ' jdm-module__screen-head--moderation' : ''}`);
       head.setAttribute('aria-label', visibleModuleLabel(mod));
       const headLeft = el('div', 'jdm-module__screen-side jdm-module__screen-side--left');
       const headRight = el('div', 'jdm-module__screen-side jdm-module__screen-side--right');
@@ -6126,40 +1553,34 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         headLeft.append(status);
       }
       const heading = el('div', 'jdm-module__screen-title');
-      const screenIcon = isSoundboard
-        ? el('button', 'sbx-vol-trigger')
-        : el('span', 'jdm-module__screen-icon', mod.icon);
-      screenIcon.setAttribute('aria-hidden', 'true');
-      if (isSoundboard) {
-        screenIcon.type = 'button';
-        screenIcon.removeAttribute('aria-hidden');
-        screenIcon.setAttribute('aria-label', 'Ouvrir le volume des aperçus Soundboard');
-        screenIcon.title = 'Volume des aperçus Soundboard';
-        soundboardVolumeHeaderButton = screenIcon;
+      // The title's icon: the module's, or a control the view puts there (Soundboard: its volume popover).
+      let screenIcon = hostedView && registered?.headIcon ? registered.headIcon(hostView, variantContext(registered, mod)) : null;
+      if (!screenIcon) {
+        screenIcon = el('span', 'jdm-module__screen-icon', mod.icon);
+        screenIcon.setAttribute('aria-hidden', 'true');
       }
       if (!isModeration) heading.append(screenIcon);
       heading.append(el('strong', 'jdm-module__screen-name', visibleModuleLabel(mod)));
-      if (isBonk) heading.append(bonkChargeurView().helpButton);
+      // A control the view puts after the title (Bonk: its tour's « ? »).
+      const headAfter = hostedView && registered?.headAfter ? registered.headAfter(hostView, variantContext(registered, mod)) : null;
+      if (headAfter) heading.append(headAfter);
       head.append(headLeft, heading, headRight);
       if (!isModeration && !walletRow.classList.contains('rl-cswitch')) {
         walletRow.classList.add('jdm-wallet--shell-header');
-        if (isBonk) {
-          walletRow.classList.add('jdm-wallet--bonk-header');
-        }
+        if (registered?.walletClass) walletRow.classList.add(registered.walletClass);
       }
 
       if (!isModeration) headRight.append(walletRow);
       // Active restrictions: chips on the left of the header (next to the way back), not by the wallet.
       const restrictions = restrictionsOf(mod.id);
-      if (restrictions.length && !isTombolaV2) headLeft.append(restrictionChips(document, restrictions));
+      if (restrictions.length && !registered?.ownHeader) headLeft.append(restrictionChips(document, restrictions));
 
       const item = el('section', 'jdm-module');
       item.dataset.module = mod.id;
       item.classList.add('is-open');
       const body = el('div', 'jdm-module__body');
       if (!isModeration) body.dataset.scrollKey = `module-${mod.id}`;
-      const isCommandsPublic = mod.id === COMMANDS_PUBLIC_MODULE.id;
-      if (!isSoundboard && !isModeration && !isTombolaV2 && !isCommandsPublic) {
+      if (!isModeration && registered?.intro !== false) {
         const intro = el('div', 'jdm-module__intro');
         intro.append(
           el('strong', 'jdm-module__intro-title', mod.label),
@@ -6169,104 +1590,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       }
       if (mod.id === ACTIONS_MODULE.id) {
         body.append(personalHistory());
-      } else if (mod.id === MODERATION_MODULE.id && state?.moderation_v2 === true && client?.modV2) {
-        // Moderation V2 (D4): same Core as Studio (read models + commands), no local state.
-        body.dataset.modV2 = '1';
-        // The D4 console is the whole screen (its own header and way back to the Hub): no host header.
-        screen.classList.add('jdm-module-screen--modv2');
-        if (!moderationV2View) {
-          moderationV2View = createModerationV2View({
-            document,
-            client,
-            onChange: () => { void onRefresh?.(); },
-            onBack: () => navigateTo(null),
-            // « Modération › Commandes »: the commands view takes the console's place, and gives it back.
-            // Video and Mobile only (not the Panel).
-            onCommands: client.cmdV2 && !document.body.classList.contains('panel-view') ? () => {
-              if (!commandsV2View) {
-                commandsV2View = createCommandsV2View({
-                  document,
-                  client,
-                  onBack: () => {
-                    commandsV2Shown = false;
-                    commandsV2View.node.replaceWith(moderationV2View.node);
-                    queueMicrotask(() => moderationV2View?.attached());
-                  },
-                });
-                commandsV2View.start();
-              }
-              commandsV2Shown = true;
-              moderationV2View.node.replaceWith(commandsV2View.node);
-              queueMicrotask(() => commandsV2View?.attached());
-            } : null,
-          });
-          moderationV2View.start();
-        }
-        // The commands view stays in place across the host's refreshes while it is open.
-        const shownView = commandsV2Shown && commandsV2View ? commandsV2View : moderationV2View;
-        body.append(shownView.node);
-        queueMicrotask(() => shownView?.attached());
-      } else if (mod.id === EVENT_SHOP_MODULE.id) {
-        // Halloween shop: Core's projection for the JWT's viewer; kept across the host's refreshes while open.
-        if (!eventShopView) {
-          eventShopView = createEventShopView({ document, client });
-          eventShopView.start();
-        }
-        body.append(eventShopView.node);
-      } else if (mod.id === SUB_WHEEL_MODULE.id) {
-        // Roue du Sub V2 (R8): the viewer's own tours (+ the team's part for moderators), Core's projection only.
-        if (!subWheelView) {
-          subWheelView = createSubWheelView({ document, client, team: canModerate() });
-          subWheelView.start();
-        }
-        body.append(subWheelView.node);
-        queueMicrotask(() => subWheelView?.attached());
-      } else if (isCommandsPublic) {
-        // Commands V2 public list (read-only, Core's public projection), under the host header.
-        body.dataset.cmdPub = '1';
-        if (!commandsPublicView) {
-          commandsPublicView = createCommandsPublicView({ document, client });
-          commandsPublicView.start();
-        }
-        body.append(commandsPublicView.node);
-        queueMicrotask(() => commandsPublicView?.attached());
-      } else if (isTombolaV2) {
-        // Tombola V2 (validated prototype): its own header and way back to the Hub, Core's state only.
-        body.dataset.tmbV2 = '1';
-        screen.classList.add('jdm-module-screen--tmbv2');
-        stopRaffleTimer();
-        if (!tombolaV2View) {
-          tombolaV2View = createTombolaV2View({
-            document,
-            client,
-            onBack: () => navigateTo(null),
-            onJoined: () => { void onRefresh?.(); },
-          });
-          tombolaV2View.start();
-        }
-        tombolaV2View.update(state);
-        // Its own header (the host's is hidden): the restriction chips go after its way back.
-        const tmbHead = tombolaV2View.node.querySelector('.head');
-        tmbHead?.querySelector('.rl-rchips')?.remove();
-        const tmbRestrictions = restrictionsOf(mod.id);
-        if (tmbHead && tmbRestrictions.length) tmbHead.querySelector('[data-act="back"]')?.after(restrictionChips(document, tmbRestrictions));
-        body.append(tombolaV2View.node);
-        queueMicrotask(() => tombolaV2View?.attached());
-      } else if (mod.id === MODERATION_MODULE.id) {
-        const moderation = moderationForm();
-        if (moderation) {
-          if (successMessage) {
-            moderation.prepend(el('p', 'jdm-flash jdm-flash--ok', successMessage));
-            successMessage = null;
-          }
-          if (actionError) moderation.prepend(el('p', 'jdm-flash jdm-flash--error', actionError));
-          body.append(moderation);
-        }
-      } else {
-        FORMS[mod.id]?.(mod, body);
+      } else if (hostedView) {
+        Object.assign(body.dataset, registered?.bodyData ?? {});
+        if (registered?.screenClass) screen.classList.add(registered.screenClass);
+        variant?.rendered?.(hostView, variantContext(variant, mod, body));
+        // A view either has its own node, or draws into the module body (Soundboard).
+        if (hostView.node) body.append(hostView.node);
+        queueMicrotask(() => hostView?.attached?.());
       }
       item.append(body);
-      if (isSoundboard) (body.querySelector('.sbx-toast-slot') ?? item).append(createSoundboardFeedbackOverlay());
       screen.append(head, item);
       // Every active restriction of the module (blocks and cooldown) in one popup, at each visit; the
       // module stays readable behind it.
@@ -6279,25 +1611,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         }));
       }
       root.append(screen);
-      if (isSoundboard) syncSoundboardPreviewButtons();
     }
 
     if (tutorialOpen && !openModule) root.append(tutorialDialog(experience.tutorial));
-    // Tutoriel Bonk : ouvert une fois par chargement en arrivant sur Bonk (sauf « Ne plus afficher »),
-    // fermé dès qu'on quitte le module.
-    if (openModule === 'bonk' && state && !loadError) {
-      if (!bonkTourAutoOpened) {
-        bonkTourAutoOpened = true;
-        if (!readTutorialDisabled(BONK_TUTORIAL)) {
-          setTimeout(() => {
-            if (openModule === 'bonk') bonkTourView().start();
-          }, 400);
-        }
-      }
-    } else if (bonkTour?.open) {
-      bonkTour.close();
-    }
-    if (openModule !== 'bonk') bonkRecentsShown = null;
   }
 
   return {

@@ -376,6 +376,19 @@ export class ObsActions {
     await this.save();
   }
 
+  /**
+   * Refonte F5 (P1-5): Studio is closing — every temporary change is reverted NOW (same rule: only where nothing changed
+   * meanwhile) and every mute hold released, before OBS is disconnected: no mic or filter left behind « for later ».
+   * OBS absent: kept on disk, as before, for the next start.
+   */
+  async restoreNow() {
+    const now = this.now();
+    for (const r of this.reverts) if (r.at > now) r.at = now;
+    await this.holds.releaseAll();
+    while (this.busy) await new Promise((r) => setTimeout(r, 20));
+    await this.tick();
+  }
+
   /** Reverts what is due, only where nothing changed meanwhile. OBS absent: kept for later (until stale). */
   async tick() {
     await this.holds.tick();

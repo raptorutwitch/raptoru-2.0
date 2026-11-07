@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { openCanonicalLive } from './live.js';
 import type { LabChatMessage } from '@raptoru/schemas';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -55,6 +56,7 @@ beforeEach(async () => {
   rolls = [];
   games = newGames();
   await games.setEnabled(CH, true);
+  await openCanonicalLive(db, clock);
   // The mini-games play only in live (the chat games' session).
   await db.query(
     `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by) values ($1, $2, $3, 'simulated', 'test')`,

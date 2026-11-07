@@ -1,6 +1,8 @@
 // TTS V2 Lab panel: module state, OBS player, queue (count + estimated duration), current TTS and
 // the streamer's moderation primitives (Core API). One player page at a time: the OBS browser
 // source, or the preview below (loaded only on demand, so it never steals OBS's slot).
+import { statusError } from './http.js';
+
 type Interaction = {
   interaction_id: string;
   viewer_display_name: string;
@@ -44,48 +46,33 @@ const secs = (ms: number) => {
     : `${s} s`;
 };
 const STATE: Record<string, string> = {
-  active: 'Actif',
-  paused: 'En pause',
-  disabled: 'Désactivé',
+  active: 'Ouvert',
+  paused: 'Pause',
+  disabled: 'Fermé',
 };
 
-/**
- * `production`: the same card for the Production profile (Studio tab), without Lab wording and without
- * the Lab moderation controls (pause / stop / purge: the « Modération » tab, on the same Core in Production).
- */
-export function mountTtsLab(
-  root: HTMLElement,
-  options: { production?: boolean } = {},
-) {
+/** The TTS card of the Extension Lab: state, player, queue and the streamer's moderation primitives. */
+export function mountTtsLab(root: HTMLElement) {
   const panel = document.createElement('section');
-  panel.className = 'xlab-card';
-  panel.innerHTML = `${
-    options.production
-      ? '<h3>TTS — source OBS (Production)</h3><p>Core de production → Studio → lecteur OBS (jeton du profil Production). Paiement réel au Wallet Raptoru du Core (Jetons ou crédits TTS), remboursé une seule fois si le message n’est jamais lu.</p>'
-      : '<h3>TTS V2 Lab</h3><p>Extension → Core → Studio → lecteur OBS. Coût simulé, remboursé si le message n’est jamais lu.</p>'
-  }
+  panel.className = 'xl-card';
+  panel.innerHTML = `<h3>TTS</h3><p>Coût simulé, remboursé si le message n’est jamais lu.</p>
     <p data-tts="status">Lecture du statut…</p>
     <div data-tts="box" hidden>
-      <p><b>Source OBS</b> (navigateur, 1920×1080, fond transparent) :</p>
-      <p><input data-tts="overlay" readonly style="width:100%" aria-label="URL de la source OBS TTS"> <button type="button" data-act="copy">Copier</button></p>
-      <p class="muted">Un seul lecteur à la fois : la source OBS, ou l’aperçu ci-dessous.</p>
-      <div class="actions">
-        ${
-          options.production
-            ? ''
-            : `<button type="button" data-act="pause">Pause</button>
+      <div class="xl-fields">
+        <button type="button" data-act="pause">Pause</button>
         <button type="button" data-act="resume">Reprendre</button>
         <button type="button" data-act="stop">Stop (rembourser)</button>
-        <button type="button" data-act="purge">Vider la file (rembourser)</button>`
-        }
+        <button type="button" data-act="purge">Vider la file (rembourser)</button>
         <button type="button" data-act="preview">Aperçu ici</button>
       </div>
-      ${options.production ? '<p class="muted">Pause, stop et file : onglet « Modération » (même Core, profil Production).</p>' : ''}
       <div data-tts="preview-box" hidden style="position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px">
         <iframe data-tts="preview" title="Aperçu du lecteur TTS" style="position:absolute;left:0;top:0;width:1920px;height:1080px;border:0;transform-origin:0 0"></iframe>
       </div>
       <p data-tts="current"></p>
       <ol data-tts="queue"></ol>
+      <h4>Source OBS</h4>
+      <p class="d-note">Navigateur, 1920×1080, fond transparent. Un seul lecteur à la fois : cette source, ou l’aperçu.</p>
+      <p class="xl-copy"><input data-tts="overlay" readonly aria-label="URL de la source OBS TTS"> <button type="button" data-act="copy">Copier</button></p>
       <details><summary>Historique</summary><ol data-tts="history"></ol></details>
     </div>`;
   root.prepend(panel);
@@ -127,7 +114,7 @@ export function mountTtsLab(
   addEventListener('resize', fit);
 
   const line = (i: Interaction) =>
-    `#${i.channel_sequence} ${esc(i.viewer_display_name)} · ${esc(i.cast.character_id)} (${esc(i.cast.voice_profile_id)}) · ${secs(i.estimated_duration_ms)} — ${esc(i.status)}${i.refund_status === 'refunded' ? ' · remboursé' : ''}${i.error ? ' · ' + esc(i.error.code) : ''}`;
+    `#${i.channel_sequence} ${esc(i.viewer_display_name)} · ${esc(i.cast.character_id)} (${esc(i.cast.voice_profile_id)}) · ${secs(i.estimated_duration_ms)} · ${esc(i.status)}${i.refund_status === 'refunded' ? ' · remboursé' : ''}${i.error ? ' · ' + esc(i.error.code) : ''}`;
 
   async function refresh() {
     try {
@@ -146,14 +133,14 @@ export function mountTtsLab(
           ? 'lecteur sans voix Web Speech'
           : 'lecteur absent : ajoute la source OBS ou ouvre l’aperçu';
       el('status').textContent = s.error
-        ? `Erreur : ${s.error}`
+        ? statusError(s.error)
         : `Module ${STATE[s.module_state ?? 'active']} · ${player}`;
       const overlay = el<HTMLInputElement>('overlay');
       if (overlay.value !== s.overlayUrl) overlay.value = s.overlayUrl ?? '';
       const q = s.queue;
       el('current').innerHTML = q?.current
         ? `<b>En cours :</b> ${line(q.current)}<br><i>« ${esc(q.current.message.slice(0, 140))} »</i>`
-        : '<span class="muted">Aucun TTS en cours.</span>';
+        : '<span class="d-note">Aucun TTS en cours.</span>';
       el('queue').innerHTML = (q?.waiting ?? [])
         .map((i) => `<li>${line(i)}</li>`)
         .join('');

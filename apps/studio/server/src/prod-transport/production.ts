@@ -141,15 +141,36 @@ export async function createProductionRuntimes(
   origin: string,
   runtimeDir: string,
   production: NonNullable<BootPlan['production']>,
+  /** The local Lab on the main Core: plain HTTP to that loopback Core (core-client.ts), journals under `runtimeDir`. */
+  o: { labLoopback?: boolean; fictionalObs?: boolean } = {},
 ): Promise<ProductionRuntimes> {
   const files = profileFiles(runtimeDir);
   const core = prodCoreClient({
     url: production.config.url,
     installation: production.installation,
     ca: production.config.ca,
+    labLoopback: o.labLoopback === true,
   });
+  // The local Lab: what Production's panels read elsewhere (history, queue, audit, TTS moderation) through the cockpit.
+  const moduleCore: typeof core = ((
+    path: string,
+    body?: unknown,
+    options?: { timeoutMs?: number },
+  ) =>
+    core(
+      o.labLoopback
+        ? path.replace(
+            /^\/v1\/studio\/(bonk|sound|tts)\/(channels\/\d+\/(?:interactions|queue|audit|moderation))/,
+            '/v1/studio/cockpit/$1/$2',
+          )
+        : path,
+      body,
+      options,
+    )) as typeof core;
   const wiring = (module: 'bonk' | 'sound' | 'tts') => ({
-    core,
+    core: moduleCore,
+    labReads: o.labLoopback === true,
+    fictionalObs: o.fictionalObs === true,
     journal: files.journal(module),
     transport: {
       base: `/v1/studio/${module}`,

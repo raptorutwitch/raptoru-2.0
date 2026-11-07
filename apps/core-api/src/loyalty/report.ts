@@ -82,7 +82,12 @@ export async function buildLoyaltyReport(
     const counted = mine.filter((r) =>
       ['preview', 'pending', 'credited'].includes(r.status),
     );
-    const unknown = mine.filter((r) => r.status === 'tier_unknown');
+    // Refonte H9: an unknown tier is now paid at the base rate (« provisional »), its complement decided later.
+    const unknown = mine.filter(
+      (r) =>
+        r.status === 'tier_unknown' ||
+        (r.breakdown as { provisional?: boolean } | null)?.provisional,
+    );
     const last = mine.at(-1)?.breakdown;
     const candidates = ['none', 't1', 't2', 't3'].map((t) => [
       t,

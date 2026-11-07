@@ -183,6 +183,10 @@ export const AlertVariantSettings = z.strictObject({
     .default({}),
   /** The usual follow variants that may be drawn (their legacy weights kept); absent = all. Never empty. */
   follow: z.array(z.string().min(1).max(64)).min(1).max(20).optional(),
+  /** The weight of a follow variant in the draw (06/11/2026); absent = its legacy weight. */
+  weights: z
+    .record(z.string().min(1).max(64), z.number().int().min(1).max(1000))
+    .optional(),
 });
 export type AlertVariantSettings = z.infer<typeof AlertVariantSettings>;
 

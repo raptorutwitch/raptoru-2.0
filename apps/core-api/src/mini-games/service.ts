@@ -8,6 +8,10 @@ import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
 import { type EconomyPort, labEconomy } from '../economy/economy.js';
 import { liveChannelSession } from '../stream/channel-sessions.js';
+import {
+  DEFAULT_MINI_GAME_LIMITS,
+  type MiniGameLimitsReader,
+} from '../modules/mini-games.js';
 import { DuelService, type DuelOutcome } from './duel.js';
 import { parseDuelCommand } from './duel-rules.js';
 import * as R from './rules.js';
@@ -73,6 +77,9 @@ export class MiniGamesService {
     private readonly lookupLogin: LoginLookup | null = null,
     /** Bets, gains and Duel stakes (Lab wallet by default; the canonical Wallet once P1-001 lot 2 wires it). */
     private readonly economy: EconomyPort = labEconomy,
+    /** Stakes, delays and Duel cap set from Studio (module host « mini_games », H10); default = historical values. */
+    private readonly limits: MiniGameLimitsReader = async () =>
+      DEFAULT_MINI_GAME_LIMITS,
   ) {
     this.duels = new DuelService(
       db,
@@ -80,6 +87,7 @@ export class MiniGamesService {
       rng,
       (login, msg) => this.resolveTarget(login, msg),
       economy,
+      limits,
     );
   }
 
@@ -131,9 +139,13 @@ export class MiniGamesService {
       return { outcome: 'ignored', skipped: 'disabled' };
     if (await this.offLive(msg))
       return { outcome: 'ignored', skipped: 'offline' };
-    const rules = R.MINI_GAME_RULES[cmd.game];
     return this.db.tx(async (q) => {
       const now = this.clock.now();
+      const L = await this.limits(q, msg.channel_id);
+      const rules =
+        cmd.game === 'roulette'
+          ? { minBet: L.rouletteMinBet, cooldownMs: L.rouletteCooldownMs }
+          : { minBet: L.slotMinBet, cooldownMs: L.slotCooldownMs };
       // The wallet lock first (economy port): the same viewer's games (and a resent message) are serialized here.
       const hold = await this.economy.hold(
         q,
@@ -161,7 +173,7 @@ export class MiniGamesService {
         now.getTime() - new Date(last.created_at).getTime() < rules.cooldownMs
       )
         return { outcome: 'ignored' as const, skipped: 'cooldown' as const };
-      const bet = R.resolveBet(cmd.game, cmd.arg, tokens);
+      const bet = R.resolveBet(cmd.game, cmd.arg, tokens, rules.minBet);
       if ('refused' in bet)
         return { outcome: 'ignored' as const, skipped: bet.refused };
       // A win that the wallet could not hold is refused before the draw (never a drawn-then-lost win).

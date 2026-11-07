@@ -1,0 +1,454 @@
+/* Interactions à sanction : un registre sobre, pas un jeu. Filets fins, chiffres alignés, aucune récompense visuelle. Le rouge
+   marque une sanction réelle ou ce qui l'empêche, rien d'autre. */
+.sx {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 8px 28px;
+  height: 100%;
+  min-height: 560px;
+}
+.sx-main,
+.sx-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.sx-main {
+  container: sxm / inline-size;
+}
+.sx-side {
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+}
+.sx h2.d-lb {
+  flex: none;
+  margin: 0 0 6px;
+  font-weight: 500;
+}
+.sx h2.sx-h {
+  margin-top: 16px;
+}
+.sx h2.sx-real {
+  color: var(--red);
+}
+
+/* Le barème. */
+.sx-draw {
+  flex: none;
+}
+.sx-odds {
+  height: 4px;
+  background:
+    repeating-linear-gradient(90deg, var(--hair3) 0 1px, transparent 1px 5%),
+    var(--fill2);
+  display: flex;
+  justify-content: flex-end;
+}
+.sx-odds i {
+  display: block;
+  height: 100%;
+  background: var(--red);
+}
+.sx-oddsl {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0 4px;
+  color: var(--ink3);
+  font: 500 11.5px var(--num);
+  letter-spacing: 0.04em;
+}
+.sx-lane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 0.75fr);
+  gap: 16px;
+  padding: 7px 0;
+  border-top: 1px solid var(--hair);
+}
+.sx-lane b {
+  font-weight: 600;
+}
+.sx-lane small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.sx-lane > span {
+  color: var(--ink);
+  font: 500 13.5px/1.35 var(--num);
+  text-align: right;
+}
+
+/* Le registre : une ligne par demande. */
+.sx-ledger {
+  flex: 1;
+  min-height: 120px;
+  overflow: auto;
+  border-top: 1px solid var(--hair);
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+}
+.sx-l {
+  display: grid;
+  grid-template-columns: 62px minmax(90px, 130px) minmax(0, 1fr) 176px;
+  gap: 1px 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 7px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--hair);
+  background: none;
+  color: var(--ink);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.sx-l:hover {
+  background: var(--fill0);
+}
+.sx-l time {
+  color: var(--ink3);
+  font: 500 12.5px var(--num);
+  font-variant-numeric: tabular-nums;
+}
+.sx-who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink2);
+}
+.sx-what {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sx-what small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.sx-what small.sx-due {
+  color: var(--amber);
+}
+.sx-what small.sx-due b {
+  font-weight: 600;
+}
+.sx-end {
+  justify-self: end;
+  white-space: nowrap;
+}
+.sx-end small {
+  color: var(--ink3);
+}
+.sx-end .d-tag {
+  height: 20px;
+  font-size: 11.5px;
+}
+.sx-test {
+  font-style: normal;
+  font: 500 11.5px var(--num);
+  letter-spacing: 0.04em;
+  color: var(--ink3);
+  text-transform: uppercase;
+}
+
+/* Les verrous : ce qui permet, ou empêche, d'appliquer. */
+.sx-locks {
+  display: grid;
+  gap: 5px;
+}
+.sx-lock {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr);
+  gap: 9px;
+  align-items: baseline;
+  font-size: 13.5px;
+}
+.sx-lock .d-dot {
+  transform: translateY(-1px);
+}
+.sx-lock small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+/* Les essais : ce qui ne sanctionne pas, puis ce qui agit vraiment. */
+.sx-tests {
+  display: grid;
+  gap: 6px;
+}
+.sx-tests .d-btn {
+  justify-content: flex-start;
+}
+.sx-tests.is-real {
+  padding-left: 10px;
+  border-left: 1.5px solid color-mix(in srgb, var(--red) 55%, transparent);
+}
+.sx-try {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.sx-try .d-seg button {
+  padding: 0 8px;
+}
+.sx-rules {
+  margin: 0;
+  padding: 0 0 0 14px;
+  display: grid;
+  gap: 4px;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.sx code {
+  font: 500 12.5px var(--num);
+  color: var(--ink);
+}
+.sr {
+  padding: 4px 0;
+}
+.sr > span:first-child small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+
+/* Caution : le devis. */
+.sx-alert:empty {
+  display: none;
+}
+.sx-due-bar {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--amber);
+  background: var(--amber-a);
+  color: var(--ink);
+  font-size: 13.5px;
+}
+.sx-open {
+  margin: 0 0 8px;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.sx-quote {
+  flex: none;
+}
+.sx-q {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 24px;
+  align-items: end;
+  padding: 8px 0 10px;
+  border-top: 1px solid var(--hair);
+}
+.sx-q small {
+  grid-column: 1 / -1;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.sx-qs {
+  grid-column: 1 / -1;
+}
+.sx-ql {
+  display: grid;
+  gap: 6px;
+  color: var(--ink2);
+}
+.sx-ql b {
+  font: 500 13.5px var(--num);
+  color: var(--ink);
+}
+.sx-rule,
+.vk-rule {
+  height: 22px;
+  background: repeating-linear-gradient(
+      90deg,
+      var(--hair3) 0 1px,
+      transparent 1px 10%
+    )
+    0 100% / calc(100% - 1px) 6px no-repeat;
+}
+.sx-qp {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: var(--ink3);
+}
+.sx-qp b {
+  font-size: 25px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+}
+
+/* Votekick. */
+.vk-scn {
+  flex: none;
+  --vf-o: 0;
+  --vf: var(--mod);
+  width: min(100%, (100vh - 430px) * 16 / 9);
+}
+.vk-frame {
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.vk-idle {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  color: var(--ink3);
+  font-size: 13.5px;
+  pointer-events: none;
+}
+.vk-idle b {
+  color: var(--ink);
+}
+.vk-live {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding-top: 8px;
+  flex-wrap: wrap;
+}
+.vk-live small {
+  font-size: 12.5px;
+  min-width: 0;
+}
+.vk-ring {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+}
+.vk-ring svg {
+  position: absolute;
+  inset: 0;
+}
+.vk-ring b {
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.vk-q {
+  flex: 1;
+  min-width: 0;
+}
+.vk-q b {
+  display: block;
+  font-weight: 600;
+}
+.vk-q small {
+  color: var(--ink3);
+}
+.vk-t {
+  color: var(--ink3);
+  font: 500 12.5px var(--num);
+}
+.vk-t b {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+.vk-form {
+  display: grid;
+  gap: 12px;
+}
+.vk-form fieldset {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.vk-form fieldset:disabled {
+  opacity: 0.6;
+}
+.vk-form legend {
+  padding: 0 0 4px;
+}
+.vk-form small {
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.vk-len {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  gap: 10px;
+  align-items: center;
+}
+.vk-sound {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.vk-sound .d-fld {
+  flex: 1 1 100%;
+}
+.vk-file {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.vk-file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.vk-vol {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 150px;
+  font: 500 13.5px var(--num);
+  color: var(--ink2);
+}
+.vk-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Le registre et le barème suivent la largeur de leur colonne. */
+@container sxm (max-width: 660px) {
+  .sx-l {
+    grid-template-columns: 58px minmax(0, 1fr) auto;
+  }
+  .sx-what {
+    grid-row: 2;
+    grid-column: 2 / -1;
+  }
+  .sx-lane {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .sx-lane > span {
+    text-align: left;
+  }
+}
+@container (max-width: 880px) {
+  .sx {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+  .sx-ledger {
+    flex: none;
+    max-height: 340px;
+  }
+  .sx-side {
+    overflow: visible;
+  }
+}

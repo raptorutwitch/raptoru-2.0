@@ -1,4 +1,17 @@
 import { ProgressionService } from '../progression/service.js';
+import {
+  eventShopModule,
+  randomBanModule,
+  wordGameModule,
+} from '../modules/status-adapters.js';
+import { cautionModule, cautionRates } from '../modules/caution.js';
+import { miniGameLimits } from '../modules/mini-games.js';
+import { votekickLimits, votekickModule } from '../modules/votekick.js';
+import { modulesRoutes } from '../http/modules-routes.js';
+import { MODULES } from '../modules/index.js';
+import { ModuleHost } from '../modules/host.js';
+import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
+import { ModuleSettings } from '../module-settings/service.js';
 import { progressionRoutes } from '../http/progression-routes.js';
 import { createServer, type Server } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
@@ -72,6 +85,18 @@ export interface LabCoreOptions {
   /** The Lab channel's real Twitch broadcaster id (BONK_LAB_CHANNEL_TWITCH_ID), or ''. */
   channelTwitchId?: string;
   /**
+   * How the 7TV/BTTV/FFZ public catalogs are read (default: the network). The end-to-end harness passes FICTIONAL
+   * providers here: the same parsing and the same Core checks, no request leaves the machine.
+   */
+  thirdPartyFetch?: typeof fetch;
+  /**
+   * How Twitch (OAuth + Helix) is reached for the viewer's emotes, and where the authorization comes back (default: the
+   * network and the Studio loopback). The end-to-end harness passes a FICTIONAL Twitch here: the same OAuth checks,
+   * scopes, catalog and storage, no request leaves the machine.
+   */
+  twitchFetch?: typeof fetch;
+  twitchRedirectUri?: string;
+  /**
    * Economy of every module of this runtime (Bonk, Soundboard, TTS, Tombola, Roue du Sub, moderation, Jeu des mots, mini-games). The Lab
    * test wallet unless a caller passes the result of economy/activation.ts selectEconomy (the launcher never does before
    * the cutover; the activation refuses a runtime whose modules are not all proven).
@@ -88,6 +113,9 @@ export function createLabCore({
   secret,
   twitch,
   channelTwitchId = '',
+  thirdPartyFetch,
+  twitchFetch,
+  twitchRedirectUri,
   economy = labEconomy,
 }: LabCoreOptions): {
   server: Server;
@@ -97,15 +125,19 @@ export function createLabCore({
   spotify: SpotifyService;
   /** Défis: one recount pass (the Lab process's timer). */
   challenges: { tick: () => Promise<unknown> };
+  /** The module host (its periodic jobs run by the Lab process). */
+  modules: ModuleHost;
 } {
   if (secret.length < 32) throw new Error('bonk_secret_required');
   // Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
   const viewers = twitch
-    ? new TwitchViewerCatalog(db, systemClock, twitch)
+    ? new TwitchViewerCatalog(db, systemClock, twitch, twitchFetch, {
+        ...(twitchRedirectUri ? { redirectUri: twitchRedirectUri } : {}),
+      })
     : null;
   // 7TV/BTTV/FFZ public catalogs of the channel (no token), only when the launcher passes its id.
   const thirdParty = /^\d+$/.test(channelTwitchId)
-    ? new ThirdPartyEmotes(channelTwitchId, systemClock)
+    ? new ThirdPartyEmotes(channelTwitchId, systemClock, thirdPartyFetch)
     : null;
   const bonk = new BonkLabService(
     db,
@@ -114,6 +146,16 @@ export function createLabCore({
     thirdParty,
     economy,
   );
+  // Refonte H10 / H12: the same module settings as the main Core.
+  const moduleSettings = new ModuleSettings(db, systemClock);
+  bonk.settings = moduleSettings;
+  // The module host: the SAME list as the main Core (modules/index.ts).
+  const modules = new ModuleHost(MODULES, {
+    db,
+    clock: systemClock,
+    economy,
+    settings: moduleSettings,
+  });
   const sound = new SoundLabService(db, systemClock, undefined, economy);
   const tts = new TtsLabService(db, systemClock, undefined, undefined, economy);
   // The Lab channel's real Twitch broadcaster (the launcher's channel): the streamer of every Lab chat
@@ -131,6 +173,9 @@ export function createLabCore({
   // Commands V2 answers become durable steps, handed to the Lab Twitch adapter only while « Sortie chat réelle » is
   // ON (OFF by default); Duel finds its target by login with the Lab app credentials of the Tombola avatars.
   const votekick = new VotekickService(db, systemClock, broadcasterOf);
+  // Module host: Votekick's adapter (its chat is always mounted in the Lab).
+  modules.add(votekickModule(votekick, { chat: true }));
+  votekick.limits = votekickLimits(moduleSettings);
   // Random Ban V3: the streamer as an exceptional target (his mic muted in OBS by Studio).
   const randomBan = new RandomBanService(db, systemClock, undefined, {
     streamer: () => {
@@ -146,6 +191,9 @@ export function createLabCore({
     { kind: 'votekick', label: 'Votekick', source: votekick },
     { kind: 'random_ban', label: 'Random Ban', source: randomBan.mutes },
   ]);
+  // Module host: Caution's adapter — H10 rates read in the quote's transaction, its supervision.
+  modules.add(cautionModule(caution, { chat: true }));
+  caution.rates = cautionRates(moduleSettings);
   const cpTwitch = new CpTwitchActions(db, systemClock);
   const spotify = new SpotifyService(db, systemClock, cpTwitch);
   const channelPoints = new ChannelPointsService(
@@ -188,6 +236,10 @@ export function createLabCore({
   );
   const { commands, admission, steps, wordGame, miniGames, chatModules } =
     createChatGames({
+      chatPrices: moduleSettings.chatPrices(),
+      hostChatModules: modules.chatModules(),
+      hostReservedWords: modules.reservedWords(),
+      miniGameLimits: miniGameLimits(moduleSettings),
       db,
       clock: systemClock,
       economy,
@@ -203,6 +255,10 @@ export function createLabCore({
       subWheel,
       eventShop,
     });
+  // Module host: supervision adapters of historical modules (they only READ their module's own state).
+  modules.add(randomBanModule(randomBan));
+  modules.add(wordGameModule(wordGame));
+  modules.add(eventShopModule);
   const alertsService = new AlertsService(db, systemClock);
   alertsService.attachListener('event_shop', (q, e) => eventShop.onAlert(q, e));
   const routes = [
@@ -270,6 +326,13 @@ export function createLabCore({
     ...spotifyRoutes(spotify, cpTwitch),
     // Commands V2 (configuration phase A, admission phase B): same Lab Core and database.
     ...commandsRoutes(commands, admission, steps),
+    // Refonte H10 / H12 / H14: module settings and Daily steps.
+    ...moduleSettingsRoutes(moduleSettings, db, {
+      channelId: null,
+      production: false,
+    }),
+    // The module host (architecture socle).
+    ...modulesRoutes(modules),
   ];
   const server = createServer(async (req, res) => {
     const send = (status: number, body: unknown) => {
@@ -332,5 +395,6 @@ export function createLabCore({
     votekick,
     spotify,
     challenges: { tick: () => challenges.tick(LAB_PROGRESSION_CHANNEL) },
+    modules,
   };
 }

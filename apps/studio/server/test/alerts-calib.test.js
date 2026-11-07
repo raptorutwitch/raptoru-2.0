@@ -8,8 +8,9 @@ import {
   samePlacement,
   scaleAbout,
   setField,
+  snapMove,
   textInstant,
-} from '../../web/src/alerts-calib.ts';
+} from '../../web/src/pages/alerts-place.ts';
 
 // Twitch alerts — calibration editor math (Studio tab, pure part): everything in 1920×1080 stage pixels, the media
 // transform being translate(x, y) scale(s) from the stage's top-left corner and the text one the same inside it.
@@ -31,6 +32,33 @@ const close = (a, b) => {
 };
 
 describe('calibration math (stage pixels)', () => {
+  it('a look survives every move and counts as a change', () => {
+    const p = { ...identity(), look: { showAt: 900 } };
+    expect(moveBy(p, 'media', 10, 0).look).toEqual({ showAt: 900 });
+    expect(moveBy(p, 'bitsBadge', 10, 0).look).toEqual({ showAt: 900 });
+    expect(samePlacement(p, identity())).toBe(false);
+    expect(samePlacement(p, { ...identity(), look: { showAt: 900 } })).toBe(
+      true,
+    );
+  });
+
+  it('guides: edges and centre stick to the edges and centre of the source', () => {
+    const box = { x: 800, y: 100, w: 300, h: 50 };
+    // Its centre lands 10 px from the middle of the stage: it sticks there.
+    expect(snapMove(box, 20, 0)).toMatchObject({ dx: 10, v: 960 });
+    // Far from any line: nothing changes, nothing is shown.
+    expect(snapMove(box, 200, 200)).toEqual({
+      dx: 200,
+      dy: 200,
+      v: null,
+      h: null,
+    });
+    expect(snapMove({ x: 5, y: 700, w: 100, h: 40 }, -2, 0)).toMatchObject({
+      dx: -5,
+      v: 0,
+    });
+  });
+
   it('moves the animation by the drawn delta; the text inside a scaled animation too', () => {
     const p = moveBy(identity(), 'media', 120, -40);
     expect(p.media).toEqual({ x: 120, y: -40, scale: 1 });

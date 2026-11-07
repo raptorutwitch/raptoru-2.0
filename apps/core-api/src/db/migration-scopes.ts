@@ -19,7 +19,7 @@
 // MAIN_CORE_LAB_MIGRATIONS: the production migrator applies them too. A database already migrated (prod or
 // staging) gets only the ones it does not hold yet — by name, the migrator never re-runs a recorded file.
 
-export type MigrationScope = 'prod' | 'lab' | 'all' | 'staging';
+export type MigrationScope = 'prod' | 'lab' | 'all' | 'staging' | 'main-lab';
 
 /** Production schema (Daily, Presence, Wallet, Loyalty). */
 export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
@@ -96,6 +96,12 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261119130000_cosmetic_frames_banners.sql',
   // Défis et succès (definitions, progress, awards, runs, log); Lab twin 20261120120000. Nothing seeded.
   '20261120130000_challenges.sql',
+  // Roue du Sub: the live boundary moves only on OFF → ON (refonte P0-3); Lab twin 20261121120000.
+  '20261121130000_sub_wheel_enabled_at.sql',
+  // Module settings: prices, delays, limits set from Studio (refonte H10 / H12); Lab twin 20261121150000.
+  '20261121160000_module_settings.sql',
+  // Module host journal (architecture socle): history, intent keys, refund link; Lab twin 20261121170000.
+  '20261121180000_module_activity.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -192,6 +198,16 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261119120000_cosmetic_frames_banners_lab.sql',
   // Défis et succès: the Lab twin of 20261120130000_challenges.sql (same content).
   '20261120120000_challenges_lab.sql',
+  // Roue du Sub live boundary: the Lab twin of 20261121130000_sub_wheel_enabled_at.sql (same content).
+  '20261121120000_sub_wheel_enabled_at_lab.sql',
+  // Jeu des mots: durable ON / OFF and interval (refonte H8); the main Core applies it too (MAIN_CORE_LAB_MIGRATIONS).
+  '20261121140000_word_game_settings_lab.sql',
+  // Module settings: the Lab twin of 20261121160000_module_settings.sql (same content).
+  '20261121150000_module_settings_lab.sql',
+  // Module host journal: the Lab twin of 20261121180000_module_activity.sql (same content).
+  '20261121170000_module_activity_lab.sql',
+  // Module host: the chat answers' origin `module:<id>` (one migration for every future module).
+  '20261121190000_cmd_steps_module_origin_lab.sql',
 ]);
 
 /**
@@ -248,6 +264,10 @@ export const MAIN_CORE_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261104120000_cp_redemptions_chat_source_lab.sql',
   // Spotify V2: the music answers' own origin in cmd_steps (shown « Musique »).
   '20261108140000_cmd_steps_music_lab.sql',
+  // Jeu des mots: durable ON / OFF and interval (refonte H8).
+  '20261121140000_word_game_settings_lab.sql',
+  // Module host: the chat answers' origin `module:<id>` (main Core too: its modules answer in the real chat queue).
+  '20261121190000_cmd_steps_module_origin_lab.sql',
 ]);
 
 export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([
@@ -258,6 +278,16 @@ export const STAGING_EXTRA_LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261018120000_bonk_lab_volleys.sql',
 ]);
 
+/**
+ * The main Core in its Lab environment (CORE_ENVIRONMENT=lab): the production selection plus exactly these Lab files,
+ * what the Lab's test wallet and simulators need on top of the production schema (the ledger kinds of the Roue du Sub and
+ * the cosmetics, the Roue's presence simulator). Explicit and closed: never part of the production scope.
+ */
+export const MAIN_LAB_EXTRA_MIGRATIONS: readonly string[] = Object.freeze([
+  '20261103110000_sub_wheel_lab_sim.sql',
+  '20261118120500_lab_ledger_cosmetic.sql',
+]);
+
 export interface MigrationScopes {
   prod: readonly string[];
   lab: readonly string[];
@@ -266,6 +296,8 @@ export interface MigrationScopes {
   mainCore?: readonly string[];
   /** Lab files added to the production selection for the staging Core only. */
   stagingExtra?: readonly string[];
+  /** Lab files added to the production selection for the main Core's Lab environment only. */
+  mainLabExtra?: readonly string[];
 }
 
 export const MIGRATION_SCOPES: MigrationScopes = Object.freeze({
@@ -274,6 +306,7 @@ export const MIGRATION_SCOPES: MigrationScopes = Object.freeze({
   legacyLabInProd: LEGACY_LAB_IN_PROD,
   mainCore: MAIN_CORE_LAB_MIGRATIONS,
   stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
+  mainLabExtra: MAIN_LAB_EXTRA_MIGRATIONS,
 });
 
 export class MigrationScopeError extends Error {
@@ -323,13 +356,21 @@ export function selectMigrations(
       throw new MigrationScopeError(
         `${f} is listed as a staging extra but not as a Lab migration`,
       );
+  const mainLabExtra = new Set(scopes.mainLabExtra ?? []);
+  for (const f of mainLabExtra)
+    if (!lab.has(f))
+      throw new MigrationScopeError(
+        `${f} is listed as a main Lab extra but not as a Lab migration`,
+      );
   const keep =
     scope === 'prod'
       ? (f: string) => prod.has(f) || legacy.has(f)
-      : scope === 'staging'
-        ? (f: string) => prod.has(f) || legacy.has(f) || stagingExtra.has(f)
-        : scope === 'lab'
-          ? (f: string) => lab.has(f)
-          : () => true;
+      : scope === 'main-lab'
+        ? (f: string) => prod.has(f) || legacy.has(f) || mainLabExtra.has(f)
+        : scope === 'staging'
+          ? (f: string) => prod.has(f) || legacy.has(f) || stagingExtra.has(f)
+          : scope === 'lab'
+            ? (f: string) => lab.has(f)
+            : () => true;
   return sql.filter(keep).sort();
 }

@@ -65,6 +65,14 @@ describe('relay', () => {
         reason: 'r',
       }),
     ).toEqual({ status: 404, body: { error: 'not_owned' } });
+    await call('/api/progression/leaderboard?by=watch&period=week&x=1');
+    expect(calls.at(-1)![0]).toBe(
+      '/v1/lab/progression/leaderboard?by=watch&period=week&limit=100',
+    );
+    await call('/api/progression/leaderboard?by=drop&period=table');
+    expect(calls.at(-1)![0]).toBe(
+      '/v1/lab/progression/leaderboard?by=xp&period=all&limit=100',
+    );
     await call('/api/progression/viewers?q=an%25');
     expect(calls.at(-1)![0]).toBe('/v1/lab/progression/viewers?q=an%25');
     server!.closeAllConnections();

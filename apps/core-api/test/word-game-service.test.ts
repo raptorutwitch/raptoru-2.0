@@ -867,3 +867,96 @@ describe('win events (OBS sound push)', () => {
     }
   });
 });
+
+describe('Refonte H8: durable ON / OFF and the interval', () => {
+  const words = async () =>
+    (
+      await db.query<{ n: number }>(
+        "select count(*)::int as n from word_game_words where channel_id = $1 and source = 'cycle'",
+        [CH],
+      )
+    )[0]!.n;
+
+  it('defaults keep today’s behaviour: ON, a word every 5 to 15 min', async () => {
+    rngValue = 0;
+    await live();
+    expect(await game.state(CH)).toMatchObject({
+      enabled: true,
+      running: true,
+      interval: { min_s: 300, max_s: 900 },
+    });
+    clock.advance(5 * MIN);
+    await game.tick();
+    expect(await words()).toBe(1);
+  });
+
+  it('OFF on purpose: no word, across a new live and a Core restart; offline change allowed; ON again → next word', async () => {
+    expect(
+      await game.act(CH, { action: 'settings', enabled: false }),
+    ).toMatchObject({
+      enabled: false,
+      running: false,
+    });
+    const s1 = await live();
+    clock.advance(60 * MIN);
+    await game.tick();
+    await endSession(s1);
+    clock.advance(MIN);
+    await live();
+    game = new WordGameService(db, clock, () => 0, BANK); // restart
+    clock.advance(60 * MIN);
+    await game.tick();
+    expect(await words()).toBe(0);
+    expect((await game.state(CH)).next_word_at).toBeNull();
+    const on = await game.act(CH, { action: 'settings', enabled: true });
+    expect(on).toMatchObject({ enabled: true, running: true });
+    expect(Date.parse(on.next_word_at!) - clock.now().getTime()).toBe(5 * MIN);
+    clock.advance(5 * MIN);
+    await game.tick();
+    expect(await words()).toBe(1);
+  });
+
+  it('the interval is really used; min > max and out of bounds are refused; values persist', async () => {
+    const s = await game.act(CH, {
+      action: 'settings',
+      interval_min_s: 120,
+      interval_max_s: 120,
+    });
+    expect(s.interval).toEqual({ min_s: 120, max_s: 120 });
+    await live();
+    clock.advance(2 * MIN);
+    await game.tick();
+    expect(await words()).toBe(1);
+    await expect(
+      game.act(CH, { action: 'settings', interval_min_s: 600 }),
+    ).rejects.toMatchObject({ code: 'invalid_interval' });
+    const { WordGameAction } = await import('@raptoru/schemas');
+    expect(
+      WordGameAction.safeParse({ action: 'settings', interval_min_s: 30 })
+        .success,
+    ).toBe(false);
+    expect(
+      WordGameAction.safeParse({ action: 'settings', interval_max_s: 3601 })
+        .success,
+    ).toBe(false);
+    game = new WordGameService(db, clock, () => 0.5, BANK);
+    expect((await game.state(CH)).interval).toEqual({ min_s: 120, max_s: 120 });
+  });
+
+  it('« Arrêter » stays a pause of this live (a new live resumes), distinct from OFF', async () => {
+    const s1 = await live();
+    await game.act(CH, { action: 'stop' });
+    expect(await game.state(CH)).toMatchObject({
+      enabled: true,
+      stopped: true,
+      running: false,
+    });
+    await endSession(s1);
+    await live();
+    expect(await game.state(CH)).toMatchObject({
+      enabled: true,
+      stopped: false,
+      running: true,
+    });
+  });
+});

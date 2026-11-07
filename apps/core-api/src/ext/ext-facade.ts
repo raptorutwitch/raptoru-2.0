@@ -1,4 +1,6 @@
 import { eventTitlesView } from '@raptoru/schemas';
+import { moduleFacade } from '@raptoru/schemas';
+import { commandsPublic, commandsTeam } from './commands-ext.js';
 import { subWheelExt } from './sub-wheel-ext.js';
 import {
   BONK_LAB_RULES,
@@ -8,7 +10,11 @@ import {
   type TwitchViewerCatalog,
   TwitchViewerError,
 } from '../bonk-lab/twitch-viewer.js';
-import { twitchEmoteGroups } from './twitch-emote-groups.js';
+import type { BonkLabThirdPartyCatalog } from '@raptoru/schemas';
+import {
+  thirdPartyEmoteGroups,
+  twitchEmoteGroups,
+} from './twitch-emote-groups.js';
 import type { LabCall, LabCallError } from './lab-internal.js';
 import type { ExtCaller } from './twitch-jwt.js';
 import type { TwitchName, TwitchNames } from './twitch-names.js';
@@ -74,6 +80,8 @@ export interface ExtConfig {
    * simulation. Absent / false: the Lab test wallet, everything says « simulated ».
    */
   wallet?: boolean;
+  /** CORE_ENVIRONMENT=lab: what Production keeps hidden today is shown in the Lab (Commandes, Roue du Sub). */
+  lab?: boolean;
 }
 
 /** Module descriptions when the payment is real (the canonical Wallet): what pays, never a price. */
@@ -212,6 +220,25 @@ export class ExtFacade {
       if (!caller.userId) return fail(403, 'identity_required');
       return ok(await this.twitch.startAuth(caller.userId));
     }
+    // Commandes: the Lab environment for now (Production keeps commands_public off).
+    if (this.config.lab && method === 'GET' && path === '/commands/public') {
+      const r = await commandsPublic(this.core, this.C);
+      return r.status === 200
+        ? ok(r.body)
+        : fail(r.status, 'commands_unavailable');
+    }
+    if (this.config.lab && path.startsWith('/commands/v2/')) {
+      if (!who.viewer) return fail(403, 'identity_required');
+      const r = await commandsTeam(
+        this.core,
+        this.C,
+        method,
+        path,
+        body as Json | undefined,
+        { ...this.actor(who), via: 'extension' },
+      );
+      return { status: r.status, body: r.body };
+    }
     // Roue du Sub V2 (R8): own tours / team actions — the JWT's identity, Core decides (sub-wheel-ext.ts).
     if (path.startsWith('/sub-wheel/'))
       return subWheelExt(
@@ -257,6 +284,20 @@ export class ExtFacade {
         );
       return this.legacyModeration(method, path, body, who);
     }
+    // The module host (architecture socle): ONE door for every module, shared with the Lab EBS (@raptoru/schemas).
+    const mod = await moduleFacade({
+      call: this.core,
+      channelId: this.C,
+      method,
+      path,
+      body,
+      viewer: who.viewer
+        ? { id: who.viewer.id, display_name: who.viewer.display_name }
+        : null,
+      idempotencyKey,
+      moderator: who.team && who.viewer ? this.actor(who) : null,
+    });
+    if (mod) return mod as ExtReply;
     return fail(404, 'not_available');
   }
 
@@ -264,12 +305,13 @@ export class ExtFacade {
 
   /** The viewer's Twitch emotes: state + catalog of the JWT's account (stored catalog at once). */
   private async emotes(caller: ExtCaller, force: boolean): Promise<Json> {
+    const publicGroups = await this.publicEmoteGroups();
     if (!this.twitch || !caller.userId)
       return {
         connected: true,
         twitch_connected: false,
         twitch_status: 'not_linked',
-        groups: [],
+        groups: publicGroups,
       };
     const s = await this.twitch.emotesState(caller.userId, {
       force,
@@ -281,8 +323,20 @@ export class ExtFacade {
       twitch_status: s.status,
       twitch_login: s.viewer?.display_name ?? null,
       ...(s.catalog ? { twitch_fetched_at: s.catalog.fetched_at } : {}),
-      groups: s.catalog ? twitchEmoteGroups(s.catalog) : [],
+      groups: [
+        ...(s.catalog ? twitchEmoteGroups(s.catalog) : []),
+        ...publicGroups,
+      ],
     };
+  }
+
+  /** The channel's PUBLIC 7TV / BTTV / FFZ catalogs when this Core reads them (off by default: none). */
+  private publicEmoteGroups() {
+    return this.core<BonkLabThirdPartyCatalog>(
+      '/v1/lab/bonk/third-party/catalog',
+    )
+      .then(thirdPartyEmoteGroups)
+      .catch(() => []);
   }
 
   /**
@@ -424,6 +478,22 @@ export class ExtFacade {
         }
       : null;
 
+    // Refonte H12: the Bonk price the Core applies now (module settings), never an assumed constant.
+    const bonkPrice = Number(
+      (
+        await this.core<{ settings: { key: string; value: number }[] }>(
+          `/v1/lab/module-settings/${this.C}`,
+        ).catch(() => null)
+      )?.settings.find((x) => x.key === 'bonk.price')?.value ??
+        BONK_LAB_RULES.simulatedCost,
+    );
+    const thirdPartyGroups = await this.publicEmoteGroups();
+    // The Lab shows its player's state (a pill; Core refuses without a ready player anyway).
+    const soundPlayer = this.config.lab
+      ? await this.core<{ player_ready: boolean }>(
+          '/v1/lab/sound/player-ready',
+        ).catch(() => null)
+      : null;
     const modules: Json[] = [
       {
         ...MODULE_PRESENTATION.tts,
@@ -435,6 +505,7 @@ export class ExtFacade {
       },
       {
         ...MODULE_PRESENTATION.soundboard,
+        ...(soundPlayer ? soundPlayer : {}),
         sounds: (catalog?.sounds ?? []).map((s) => ({
           id: s.id,
           label: s.label,
@@ -457,7 +528,11 @@ export class ExtFacade {
           running: s.running,
         })),
       },
-      { ...MODULE_PRESENTATION.bonk, emote_catalog: { groups: [] } },
+      {
+        ...MODULE_PRESENTATION.bonk,
+        token_cost: bonkPrice,
+        emote_catalog: { groups: thirdPartyGroups },
+      },
     ].map((m) =>
       this.real && REAL_DESCRIPTION[String(m.id)]
         ? { ...m, description: REAL_DESCRIPTION[String(m.id)] }
@@ -505,9 +580,9 @@ export class ExtFacade {
       environment: this.config.environment,
       payment_mode: this.paymentMode,
       moderation_v2: true,
-      commands_public: false,
+      commands_public: this.config.lab === true,
       // Roue du Sub V2 (R8): hidden while the production wheel is in mode v1 (the routes answer, the Hub shows nothing).
-      sub_wheel: false,
+      sub_wheel: this.config.lab === true,
       role: who.caller.role === 'external' ? 'viewer' : who.caller.role,
       channel_id: this.C,
       channel_login: this.config.channelLogin,
@@ -530,7 +605,12 @@ export class ExtFacade {
       notifications: [],
       interactions: { available: true, reason: null },
       locked_modules: [],
-      emotes: { connected: true, twitch_connected: false, connect_url: null },
+      emotes: {
+        connected: true,
+        twitch_connected:
+          v && this.twitch ? await this.twitch.isLinked(v.id) : false,
+        connect_url: null,
+      },
       moderation: who.team
         ? {
             tts: ttsModeration(true),

@@ -66,7 +66,7 @@ test('Atelier: a frame checked before sending, previewed at the site sizes, publ
 
   await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-braise');
-  await form.locator('[data-f="kind"]').selectOption('frame');
+  await form.locator('[data-kind="frame"]').click();
   await form.locator('[data-f="label"]').fill('Braise');
   await expect(tab).toContainText('carré de 128 à 512 px');
   // The look settings (title / badge) are hidden for a frame.
@@ -89,12 +89,12 @@ test('Atelier: a frame checked before sending, previewed at the site sizes, publ
     buffer: ring(156, 230),
   });
   await expect(tab).toContainText('Image acceptée (256 × 256');
-  const frames = tab.locator('[data-preview] .rc-av-frame');
+  const frames = tab.locator('[data-preview] .pc-frame');
   await expect(frames).toHaveCount(5);
   await expect(frames.first()).toHaveJSProperty('naturalWidth', 256);
-  await form.locator('[data-f="status"]').selectOption('published');
+  await form.locator('[data-status="published"]').click();
   await tab.locator('[data-act="save"]').click();
-  await expect(tab).toContainText('Enregistré.');
+  await expect(page.locator('.d-toasts')).toContainText('Enregistré.');
   await expect(tab.locator('[data-row="e2e-braise"]')).toContainText(
     'Cadre d’avatar',
   );
@@ -110,7 +110,7 @@ test('Atelier: a frame checked before sending, previewed at the site sizes, publ
   // A banner: a badge-size image is refused by the Core; a 4:1 one is previewed on the card.
   await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-aurore');
-  await form.locator('[data-f="kind"]').selectOption('banner');
+  await form.locator('[data-kind="banner"]').click();
   await form.locator('[data-f="label"]').fill('Aurore');
   await tab.locator('[data-role="image"]').setInputFiles({
     name: 'petit.png',
@@ -124,9 +124,7 @@ test('Atelier: a frame checked before sending, previewed at the site sizes, publ
     buffer: png(1024, 256, (x) => [20, 60 + (x >> 3), 100, 255]),
   });
   await expect(tab).toContainText('Image acceptée (1024 × 256');
-  await expect(
-    tab.locator('[data-preview] .rc-banner').first(),
-  ).toHaveAttribute(
+  await expect(tab.locator('[data-preview] .pc-band').first()).toHaveAttribute(
     'style',
     /--banner:url\('\/cosmetics\/images\/[0-9a-f]{64}'\)/,
   );

@@ -1,13 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionLabel,
-  effectsView,
-  historyView,
-  rewardsView,
+  masterChip,
+  mediaCount,
   statusView,
-} from '../../web/src/channel-points-view.ts';
+} from '../../web/src/pages/rewards-model.ts';
+import {
+  ADD_KINDS,
+  actionTitle,
+  feedRow,
+  filterRewards,
+  filtersHtml,
+  galleryHtml,
+  kindOf,
+  requestHtml,
+  requestsOf,
+  rewardCard,
+  ruleState,
+  twitchState,
+} from '../../web/src/pages/rewards-view.ts';
 
-// Studio tab « Points de chaîne », pure views: Twitch texts escaped, readable French, no ids / JSON shown.
+/** The requests as the page shows them: the feed row, then its detail panel. */
+const historyView = (s) =>
+  s.recent.map((x) => feedRow(x) + requestHtml(x, s, null)).join('');
+const rewardsView = (s) => galleryHtml(s, 'all', '', new Set());
+
+// Page Récompenses Twitch, pure views: Twitch texts escaped, readable French, no ids / JSON shown.
+
+const q = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** One action's line of a redemption: its fate, its label, its reason. */
+const line = (kind, label, note = '') =>
+  new RegExp(
+    `rw-res is-${kind}"><svg.*?</svg><span>${q(label)}${note ? `<small>${q(note)}` : ''}`,
+  );
 
 const base = {
   settings: { enabled: false },
@@ -25,9 +50,22 @@ const base = {
 describe('Points de chaîne views', () => {
   it('status: switch OFF, missing Twitch authorization, OBS state; production says « bot de production »', () => {
     const lab = statusView(base, null);
-    expect(lab).toContain('Automatisations : OFF');
-    expect(lab).toContain('autorisation manquante');
-    expect(lab).toContain('OBS non connecté');
+    expect(masterChip(base, null, null)).toContain('Automatisations coupées');
+    // ON but not executable: never green on an intention.
+    const on = { ...base, settings: { enabled: true } };
+    expect(masterChip(on, null, 'OBS non connecté à Studio')).toContain(
+      'Actives, OBS non connecté à Studio',
+    );
+    expect(masterChip(on, null, null)).toContain('Automatisations actives');
+    expect(masterChip(null, 'Core injoignable', null)).toContain(
+      'Core injoignable',
+    );
+    // The Lab has no Twitch: fictional, never shown as a failure.
+    expect(lab).toContain('Twitch : fictif (Lab)');
+    expect(lab).toContain('OBS non connecté (normal dans le Lab)');
+    expect(statusView({ ...base, environment: 'local' }, null)).toContain(
+      'autorisation manquante',
+    );
     expect(statusView({ ...base, environment: 'production' }, null)).toContain(
       'bot de production',
     );
@@ -112,10 +150,12 @@ describe('Points de chaîne views', () => {
     };
     const html = rewardsView(s, 'r1') + historyView(s);
     expect(html).not.toContain('<img');
-    expect(html).toContain('désactivée sur Twitch');
+    expect(html).toContain('Désactivée ou en pause sur Twitch');
     expect(html).toContain('automatisations désactivées');
-    expect(html).toContain('✓ Son « Eren cri »');
-    expect(html).toContain('✗ Passer sur la scène « BRB » — OBS non connecté');
+    expect(html).toMatch(line('done', 'Son « Eren cri »'));
+    expect(html).toMatch(
+      line('failed', 'Passer sur la scène « BRB »', 'OBS non connecté'),
+    );
     expect(html).toContain('Test Studio');
   });
 
@@ -137,7 +177,9 @@ describe('Points de chaîne views', () => {
         ...base,
         recent: [row([{ index: 0, status: 'pending', progress: 'queued' }])],
       }),
-    ).toContain('… Son « Eren cri » — en attente du lecteur Soundboard');
+    ).toMatch(
+      line('pending', 'Son « Eren cri »', 'en attente du lecteur Soundboard'),
+    );
     expect(
       historyView({
         ...base,
@@ -151,8 +193,12 @@ describe('Points de chaîne views', () => {
           row([{ index: 0, status: 'failed', error: 'player_offline' }]),
         ],
       }),
-    ).toContain(
-      '✗ Son « Eren cri » — lecteur Soundboard non ouvert ou son non activé',
+    ).toMatch(
+      line(
+        'failed',
+        'Son « Eren cri »',
+        'lecteur Soundboard non ouvert ou son non activé',
+      ),
     );
     expect(
       historyView({
@@ -163,7 +209,13 @@ describe('Points de chaîne views', () => {
           ]),
         ],
       }),
-    ).toContain('? Son « Eren cri » — lecture non confirmée par le lecteur');
+    ).toMatch(
+      line(
+        'unknown',
+        'Son « Eren cri »',
+        'lecture non confirmée par le lecteur',
+      ),
+    );
   });
 
   it('effect sounds: label with volume, player state chips, OBS URL, missing imports, readable failures', () => {
@@ -245,7 +297,7 @@ describe('Points de chaîne views', () => {
         },
       ],
     });
-    expect(fx).toContain('✓ FX Cam « rage »');
+    expect(fx).toMatch(line('done', 'FX Cam « rage »'));
     // Couleur Cam: the colour applied (drawn by Core for « aléatoire »); unknown readable.
     expect(
       actionLabel({
@@ -271,12 +323,20 @@ describe('Points de chaîne views', () => {
         },
       ],
     });
-    expect(color).toContain(
-      '✗ Interaction « Couleur Cam » — couleur inconnue — aucun remboursement possible',
+    expect(color).toMatch(
+      line(
+        'failed',
+        'Interaction « Couleur Cam »',
+        'couleur inconnue, aucun remboursement possible',
+      ),
     );
     expect(fx).toContain('« &lt;b&gt;feu&lt;/b&gt; »');
-    expect(fx).toContain(
-      '✗ Interaction « FX Cam » — effet inconnu (effets : prison, bighead, pixel, drunk, glitch, rage)',
+    expect(fx).toMatch(
+      line(
+        'failed',
+        'Interaction « FX Cam »',
+        'effet inconnu (effets : prison, bighead, pixel, drunk, glitch, rage)',
+      ),
     );
     expect(
       actionLabel({
@@ -301,14 +361,12 @@ describe('Points de chaîne views', () => {
       ),
     ).toContain('Lecteur d’effets : 2 en lecture');
     expect(statusView(base, null)).not.toContain('Lecteur d’effets');
-    const panel = effectsView(effects);
-    expect(panel).toContain(
-      'value="http://127.0.0.1:4100/effects/player.html#abc"',
-    );
-    expect(panel).toContain(
-      '2 / 3 média(s) importé(s) — à importer : Glory holes',
-    );
-    expect(effectsView(null)).toBe('');
+    expect(mediaCount(effects)).toEqual({
+      have: 2,
+      total: 3,
+      missing: ['Glory holes'],
+    });
+    expect(mediaCount(null)).toEqual({ have: 0, total: 0, missing: [] });
     const history = historyView({
       ...base,
       effects,
@@ -348,8 +406,117 @@ describe('Points de chaîne views', () => {
     expect(history).toContain(
       'lecteur d’effets non ouvert (source OBS absente)',
     );
-    expect(history).toContain(
-      'Son d’effet « Tiens bon ! » (41 %) — en cours de lecture',
+    expect(history).toMatch(
+      line(
+        'pending',
+        'Son d’effet « Tiens bon ! » (41 %)',
+        'en cours de lecture',
+      ),
     );
+  });
+});
+
+describe('Récompenses page (rebuilt 07/11): Twitch reward, Raptoru actions, requests kept apart', () => {
+  const reward = (id, title, actions, extra = {}) => ({
+    id,
+    title,
+    cost: 500,
+    twitch_enabled: true,
+    listed_by_twitch: true,
+    rule: actions ? { enabled: true, actions, version: 1 } : null,
+    ...extra,
+  });
+  const sb = { type: 'credits', currency: 'credits_soundboard', amount: 2 };
+  const tts = { type: 'credits', currency: 'credits_tts', amount: 3 };
+
+  it('the shared « credits » type reads as two different things: Crédits TTS and Crédits Soundboard', () => {
+    expect(actionTitle(sb)).toBe('Crédits Soundboard');
+    expect(actionTitle(tts)).toBe('Crédits TTS');
+    expect(kindOf(sb)).toBe('sb');
+    expect(kindOf(tts)).toBe('tts');
+    const html = galleryHtml(
+      { ...base, rewards: [reward('a', 'Crédit Soundboard', [sb])] },
+      'all',
+      '',
+      new Set(),
+    );
+    expect(html).toContain('Crédits Soundboard');
+    expect(html).not.toContain('Crédits TTS');
+  });
+
+  it('every action offered by « Ajouter une action » is a Core action as is (no new type)', () => {
+    const types = new Set([
+      'sound',
+      'effect_sound',
+      'effect_video',
+      'obs_source',
+      'obs_filter',
+      'obs_scene',
+      'credits',
+      'interaction',
+    ]);
+    for (const k of ADD_KINDS) expect(types).toContain(k.make().type);
+    expect(ADD_KINDS.find((k) => k.id === 'credits_sb').make()).toEqual({
+      type: 'credits',
+      currency: 'credits_soundboard',
+      amount: 0,
+    });
+    expect(actionLabel(ADD_KINDS[0].make())).toContain('nombre à choisir');
+  });
+
+  it('filters, Twitch availability, rule state; a pending draft locks the card switch', () => {
+    const s = {
+      ...base,
+      rewards: [
+        reward('a', 'Reliée', [sb]),
+        reward('b', 'Vide', null),
+        reward('c', 'Coupée', [tts], {
+          rule: { enabled: false, actions: [tts], version: 2 },
+        }),
+        reward('d', 'Pause', [tts], { twitch_enabled: false }),
+      ],
+    };
+    expect(filterRewards(s.rewards, 'linked').map((r) => r.id)).toEqual([
+      'a',
+      'd',
+    ]);
+    expect(filterRewards(s.rewards, 'none').map((r) => r.id)).toEqual(['b']);
+    expect(filterRewards(s.rewards, 'off').map((r) => r.id)).toEqual(['c']);
+    expect(filterRewards(s.rewards, 'twitch').map((r) => r.id)).toEqual(['d']);
+    expect(filterRewards(s.rewards, 'all', 'coup').map((r) => r.id)).toEqual([
+      'c',
+    ]);
+    expect(twitchState(s.rewards[3]).text).toBe(
+      'Désactivée ou en pause sur Twitch',
+    );
+    expect(ruleState(s.rewards[2]).text).toBe('Actions Raptoru coupées');
+    expect(ruleState(s.rewards[1]).text).toBe('Aucune action Raptoru');
+    const locked = rewardCard(s.rewards[0], s, { draft: true });
+    expect(locked).toMatch(/data-rule-toggle="a"[^>]*disabled/);
+    expect(locked).toContain('Pas enregistrée');
+    expect(filtersHtml(s, 'all')).toContain('data-filter="none"');
+  });
+
+  it('a request: feed row and detail escape Twitch texts; refunds are never manual', () => {
+    const hostile = '<img src=x onerror=alert(1)>';
+    const x = {
+      source: 'twitch',
+      redemption_id: 'r9',
+      reward: { id: 'a', title: hostile, cost: 500 },
+      user: { display_name: hostile },
+      user_input: hostile,
+      twitch_status: 'canceled',
+      received_at: '2026-11-07T20:00:00Z',
+      status: 'done',
+      reason: null,
+      actions: [sb],
+      results: [{ index: 0, status: 'done' }],
+    };
+    const s = { ...base, recent: [x], rewards: [reward('a', hostile, [sb])] };
+    const html = feedRow(x) + requestHtml(x, s, s.rewards[0]);
+    expect(html).not.toContain('<img');
+    expect(html).toContain('Annulée : points rendus au viewer');
+    expect(html).toContain('Aucun remboursement manuel');
+    expect(requestsOf(s, s.rewards[0])).toHaveLength(1);
   });
 });

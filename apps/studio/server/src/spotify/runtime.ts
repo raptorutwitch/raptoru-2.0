@@ -81,6 +81,9 @@ interface Reservation {
 }
 
 const VALID_ID = /^[A-Za-z0-9]{22}$/;
+/** Covers Studio remembers for its own page (read from the tracks it already fetches: no extra Spotify call). */
+const COVERS_MAX = 200;
+const COVER_URL = /^(https:\/\/i\.scdn\.co\/|data:image\/svg\+xml)/;
 
 /** A Spotify track → Core's shape, or null (episode, local file, no duration). */
 export function toTrack(c: Candidate | null | undefined): SpotifyTrack | null {
@@ -137,6 +140,7 @@ export class SpotifyRuntime {
   /** One reading due at this instant (after a skip), watched or not; 0 = none. */
   private readAt = 0;
   private lastManualRead = 0;
+  private readonly covers = new Map<string, string>();
   /** Timing of the song job in progress (Studio log only: where the seconds go). */
   private marks: [string, number][] = [];
   private mark(label: string) {
@@ -331,6 +335,17 @@ export class SpotifyRuntime {
     return answer;
   }
 
+  private noteCover(c: Candidate | null | undefined) {
+    // Spotify lists the sizes largest first: the middle one (300 px) is enough for the page.
+    const images = c?.album?.images ?? [];
+    const url = (images[1] ?? images[0])?.url;
+    if (!c?.id || !url || !COVER_URL.test(url)) return;
+    this.covers.delete(c.id);
+    this.covers.set(c.id, url);
+    if (this.covers.size > COVERS_MAX)
+      this.covers.delete(this.covers.keys().next().value!);
+  }
+
   /** One playback reading (forced: fresh) and the next reading's time (historical cadence). */
   private async poll(force: boolean) {
     let r: { data: SpotifyPlaybackRaw | null; at: number };
@@ -343,6 +358,7 @@ export class SpotifyRuntime {
       throw e;
     }
     const playback = toPlayback(r.data, r.at);
+    this.noteCover(r.data?.item);
     if (r.data?.device)
       this.device = {
         name: r.data.device.name.slice(0, 300),
@@ -627,6 +643,7 @@ export class SpotifyRuntime {
         if (chosen !== s.top.candidate) this.mark('titre (durée)');
       }
       const track = toTrack(chosen);
+      this.noteCover(chosen);
       if (!track)
         return { outcome: 'refused', reason: 'SPOTIFY_UNAVAILABLE', ...extra };
       if (track.duration_ms > job.max_duration_ms)
@@ -853,6 +870,7 @@ export class SpotifyRuntime {
           reservations: [...this.reservations.values()],
         },
         sim: this.d.sim?.view() ?? null,
+        covers: Object.fromEntries(this.covers),
       };
     }
     if (method !== 'POST')

@@ -33,6 +33,25 @@ export function createStreamWatcher(deps: {
   const log = deps.log ?? console.warn;
   let lastEventAt = -Infinity;
   let lastLiveConfirmedAt: number | null = null;
+  /**
+   * Refonte P0-5: an EventSub transition Core has not recorded yet (Core down, timeout). It is replayed by the next
+   * sync before anything else, and the trust window only starts once Core recorded it — a live is never missed for
+   * 5 min because Core did not answer the first time (the paid interactions follow this session, refonte H1).
+   */
+  let pending:
+    | { kind: 'online'; stream: HelixStream }
+    | { kind: 'offline'; endedAt: string }
+    | null = null;
+  const record = async (p: NonNullable<typeof pending>) => {
+    if (p.kind === 'online')
+      await deps.core.streamOnline({
+        streamId: p.stream.id,
+        startedAt: p.stream.started_at,
+      });
+    else await deps.core.streamOffline({ endedAt: p.endedAt });
+    if (pending === p) pending = null;
+    lastEventAt = now();
+  };
 
   const confirmLive = (streamId: string) => {
     lastLiveConfirmedAt = now();
@@ -52,21 +71,31 @@ export function createStreamWatcher(deps: {
     },
 
     async online(stream: HelixStream) {
-      lastEventAt = now();
-      await deps.core.streamOnline({
-        streamId: stream.id,
-        startedAt: stream.started_at,
-      });
+      pending = { kind: 'online', stream };
+      await record(pending);
       confirmLive(stream.id);
     },
 
     async offline() {
-      lastEventAt = now();
       confirmOffline();
-      await deps.core.streamOffline({ endedAt: new Date(now()).toISOString() });
+      pending = { kind: 'offline', endedAt: new Date(now()).toISOString() };
+      await record(pending);
     },
 
     async sync() {
+      if (pending) {
+        const p = pending;
+        try {
+          await record(p);
+          if (p.kind === 'online') confirmLive(p.stream.id);
+        } catch (error) {
+          log(
+            '[twitch-bot] Core still refuses the stream event, retrying at the next sync',
+            error,
+          );
+        }
+        return;
+      }
       if (now() - lastEventAt < EVENTSUB_TRUST_MS) return;
       let live: HelixStream | null;
       try {

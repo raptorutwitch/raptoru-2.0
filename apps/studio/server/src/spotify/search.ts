@@ -129,7 +129,13 @@ export interface Candidate {
   external_ids?: { isrc?: string };
   linked_from?: { id?: string; uri?: string };
   /** The release it comes from (always returned by the search, 26/10 diagnostic): tells editions apart. */
-  album?: { name?: string; album_type?: string; release_date?: string };
+  album?: {
+    name?: string;
+    album_type?: string;
+    release_date?: string;
+    /** Largest first (Spotify's order). Studio's own display only: never sent to Core. */
+    images?: { url?: string }[];
+  };
 }
 
 const artistNames = (c: Candidate) =>

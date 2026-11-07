@@ -1,11 +1,12 @@
+import { getJson, postJson } from './http.js';
 // « Modération » tab — the SAME D4 console as the extension (apps/twitch-extension/extension/shared/
 // moderation-v2.js, served by this Studio under /ext/), with Studio as the actor (the broadcaster):
 // one moderation, one implementation, the same Core read models and commands (/api/lab/* → local
 // Lab Core, which decides, stores and audits). Around it, the Studio-only tools D4 leaves to Studio:
-// Tombola (opening, draw, closing), supermods, TTS configuration and the Lab test wallet.
+// Tombola (opening, draw, closing), supermods and the Lab test wallet.
 
 type Json = Record<string, unknown>;
-type View = 'console' | 'raffle' | 'team' | 'config' | 'wallet';
+type View = 'console' | 'raffle' | 'team' | 'wallet';
 interface ConsoleView {
   node: HTMLElement;
   start(): void;
@@ -18,7 +19,13 @@ type ConsoleFactory = (options: {
   document: Document;
   client: {
     modV2: (path: string) => Promise<unknown>;
-    modV2Act: (command: Json) => Promise<unknown>;
+    modV2Act: (command: Json, key?: string) => Promise<unknown>;
+    moduleModerationList?: () => Promise<unknown>;
+    moduleModerationActivity?: (id: string) => Promise<unknown>;
+    moduleModerationRefund?: (
+      activityId: string,
+      reason: string,
+    ) => Promise<unknown>;
   };
   assetBase?: string;
 }) => ConsoleView;
@@ -82,7 +89,6 @@ export function mountModeration(root: HTMLElement) {
       <button class="mod-nav is-on" type="button" data-view="console">Console D4</button>
       <button class="mod-nav" type="button" data-view="raffle">Tombola <em>Studio</em></button>
       <button class="mod-nav" type="button" data-view="team">Supermods</button>
-      <button class="mod-nav" type="button" data-view="config">Configuration TTS</button>
       <button class="mod-nav" type="button" data-view="wallet">Wallet de test <em>Lab</em></button>
       <span class="mod-foot">Même console que l’extension · Core local · tout est audité</span>
     </nav>
@@ -91,12 +97,24 @@ export function mountModeration(root: HTMLElement) {
     <div class="mod-toast" data-id="toast" hidden></div>`;
   const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
     root.querySelector<T>(`[data-id="${id}"]`)!;
+  // Refonte F1 (P1-13): in Production this console acts on the real Core; the Lab test wallet does not exist there.
+  void fetch('/api/profile', { headers: { 'x-raptoru-studio': '1' } })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((p: { effective?: string } | null) => {
+      if (p?.effective !== 'production') return;
+      root.querySelector<HTMLElement>('[data-view="wallet"]')!.hidden = true;
+      root.querySelector<HTMLElement>('.mod-foot')!.textContent =
+        'Même console que l’extension · Core Production : sanctions, remboursements et Jetons réels · tout est audité';
+      ERRORS.lab_core_unavailable = ERRORS.core_unavailable =
+        'Core Production injoignable.';
+    })
+    .catch(() => undefined);
 
   let view: View = 'console';
   let visible = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let consoleView: ConsoleView | null = null;
-  const editing = () => view === 'config' || view === 'wallet';
+  const editing = () => view === 'wallet';
 
   const toast = (text: string, bad = false) => {
     const t = $('toast');
@@ -148,7 +166,42 @@ export function mountModeration(root: HTMLElement) {
         document,
         client: {
           modV2: (path) => api(`/${path}`),
-          modV2Act: (command) => api('/actions', { command }),
+          modV2Act: (command, key) =>
+            api(
+              '/actions',
+              key ? { command, idempotency_key: key } : { command },
+            ),
+          // « Autres modules » (module host): the same panels as the extension, through Studio's relay /api/modules
+          // (the actor is Studio, the broadcaster — forced by the relay).
+          moduleModerationList: async () => {
+            const { modules } = await getJson<{
+              modules: {
+                id: string;
+                label: string;
+                enabled: boolean;
+                moderation: { visible: boolean; refund: string } | null;
+              }[];
+            }>('/api/modules');
+            return {
+              modules: modules
+                .filter((m) => m.moderation?.visible)
+                .map((m) => ({
+                  id: m.id,
+                  label: m.label,
+                  enabled: m.enabled,
+                  moderation: m.moderation,
+                })),
+            };
+          },
+          moduleModerationActivity: (id) =>
+            getJson(
+              `/api/modules/activity?module=${encodeURIComponent(id)}&limit=100`,
+            ),
+          moduleModerationRefund: (activityId, reason) =>
+            postJson('/api/modules/refund', {
+              activity_id: activityId,
+              reason,
+            }),
         },
         assetBase: '/ext/',
       });
@@ -234,85 +287,6 @@ export function mountModeration(root: HTMLElement) {
       <p class="muted">Un mod apparaît ici dès qu’il ouvre la console de modération dans l’extension (rôle Twitch).</p>`;
   }
 
-  // --- TTS configuration ------------------------------------------------------------------------------------------
-  type Tier = {
-    min: number;
-    max: number | null;
-    price: number;
-    credit_cost: number;
-    cooldown_seconds: number;
-  };
-  type Rules = {
-    tiers: Tier[];
-    max_chars: number;
-    max_waiting_global: number;
-    max_waiting_weight_ms: number | null;
-    transition_gap_ms: number;
-    max_per_viewer: number;
-  };
-  let draft: Rules | null = null;
-  async function renderConfig(reload = true) {
-    const center = $('tool');
-    let customized = false;
-    let moduleState = '';
-    if (reload || !draft) {
-      const v = await api<{
-        rules: Rules;
-        customized: boolean;
-        module_state: string;
-      }>('/tts/rules');
-      draft = structuredClone(v.rules);
-      customized = v.customized;
-      moduleState = v.module_state;
-    }
-    const d = draft!;
-    const num = (field: string, value: number | null, attrs = '') =>
-      `<input type="number" data-f="${field}" value="${value ?? ''}" ${attrs}>`;
-    center.innerHTML = `<header class="mod-head"><h2>TTS · Configuration</h2><span class="muted">${customized ? 'Valeurs personnalisées' : 'Valeurs par défaut (legacy)'} · appliquées par Core dès l’enregistrement${moduleState ? ` · module ${esc(moduleState)}` : ''}</span></header>
-      <table class="mod-table mod-tiers"><thead><tr><th>Longueur min</th><th>Longueur max</th><th>Prix jetons</th><th>Crédits</th><th>Cooldown (s)</th><th></th></tr></thead><tbody>
-      ${d.tiers
-        .map(
-          (
-            t,
-            i,
-          ) => `<tr data-tier="${i}"><td>${num('min', t.min, 'min="1"')}</td><td>${num('max', t.max, `min="1" placeholder="${i === d.tiers.length - 1 ? 'ouvert' : ''}"`)}</td>
-            <td>${num('price', t.price, 'min="0" step="100"')}</td><td>${num('credit_cost', t.credit_cost, 'min="0"')}</td><td>${num('cooldown_seconds', t.cooldown_seconds, 'min="0"')}</td>
-            <td><button type="button" class="ghost" data-tier-del="${i}" ${d.tiers.length < 2 ? 'disabled' : ''}>Retirer</button></td></tr>`,
-        )
-        .join('')}</tbody></table>
-      <p><button type="button" class="ghost" data-tier-add>Ajouter un palier</button> <span class="muted">Dernier palier sans max = ouvert.</span></p>
-      <div class="mod-grid">
-        <fieldset><legend>Message</legend><label>Longueur max <input type="number" data-g="max_chars" value="${d.max_chars}" min="1"></label></fieldset>
-        <fieldset><legend>File</legend>
-          <label>Nombre max en attente <input type="number" data-g="max_waiting_global" value="${d.max_waiting_global}" min="1"></label>
-          <label>Durée max en attente (s, vide = aucune) <input type="number" data-g="max_waiting_weight_s" value="${d.max_waiting_weight_ms === null ? '' : Math.round(d.max_waiting_weight_ms / 1000)}" min="5"></label>
-          <label>Délai entre deux TTS (ms) <input type="number" data-g="transition_gap_ms" value="${d.transition_gap_ms}" min="0" step="100"></label></fieldset>
-        <fieldset><legend>Viewer</legend><label>TTS simultanés par viewer <input type="number" data-g="max_per_viewer" value="${d.max_per_viewer}" min="1"></label></fieldset>
-      </div>
-      <p class="bad" data-id="config-errors"></p>
-      <div class="actions"><button type="button" data-config-save>Enregistrer</button><button type="button" class="ghost" data-config-reset>Restaurer les valeurs par défaut</button><button type="button" class="ghost" data-config-reload>Annuler les modifications</button></div>`;
-  }
-  function readDraft(): Rules {
-    const d = structuredClone(draft!);
-    const n = (v: string) => (v.trim() === '' ? null : Number(v));
-    root.querySelectorAll<HTMLTableRowElement>('[data-tier]').forEach((row) => {
-      const t = d.tiers[Number(row.dataset.tier)]!;
-      for (const input of row.querySelectorAll<HTMLInputElement>('[data-f]')) {
-        const f = input.dataset.f as keyof Tier;
-        (t as Record<string, number | null>)[f] =
-          f === 'max' ? n(input.value) : Number(input.value);
-      }
-    });
-    for (const input of root.querySelectorAll<HTMLInputElement>('[data-g]')) {
-      const g = input.dataset.g!;
-      if (g === 'max_waiting_weight_s')
-        d.max_waiting_weight_ms =
-          n(input.value) === null ? null : Number(input.value) * 1000;
-      else (d as unknown as Record<string, number>)[g] = Number(input.value);
-    }
-    return d;
-  }
-
   // --- Lab test wallet tools (set / reset; the D4 « Wallet admin » is in the console) --------------------------
   let walletViewer: string | null = null;
   async function renderWallet() {
@@ -355,12 +329,11 @@ export function mountModeration(root: HTMLElement) {
       }`;
   }
 
-  async function renderTool(reload = true) {
+  async function renderTool() {
     if (view === 'console') return;
     try {
       if (view === 'raffle') await renderRaffle();
       else if (view === 'team') await renderTeam();
-      else if (view === 'config') await renderConfig(reload);
       else if (view === 'wallet') await renderWallet();
     } catch (e) {
       $('tool').innerHTML = `<p class="bad">${esc(errorText(e))}</p>`;
@@ -428,49 +401,6 @@ export function mountModeration(root: HTMLElement) {
         },
         'Cooldown TTS effacé',
       );
-    // TTS configuration
-    if (t.closest('[data-tier-add]') && draft) {
-      draft = readDraft();
-      const last = draft.tiers.at(-1)!;
-      const min = (last.max ?? last.min) + 1;
-      if (last.max === null) last.max = last.min;
-      draft.tiers.push({
-        min: Math.max(min, last.max + 1),
-        max: null,
-        price: last.price,
-        credit_cost: last.credit_cost,
-        cooldown_seconds: last.cooldown_seconds,
-      });
-      return void renderConfig(false);
-    }
-    const del = t.closest<HTMLElement>('[data-tier-del]');
-    if (del && draft) {
-      draft = readDraft();
-      draft.tiers.splice(Number(del.dataset.tierDel), 1);
-      return void renderConfig(false);
-    }
-    if (t.closest('[data-config-reload]')) return void renderConfig(true);
-    if (t.closest('[data-config-save]') && draft) {
-      const rules = readDraft();
-      try {
-        await api('/tts/rules', { rules });
-        toast('Configuration TTS enregistrée : appliquée aux prochains achats');
-        return void renderConfig(true);
-      } catch (e) {
-        $('config-errors').textContent = errorText(e);
-        return;
-      }
-    }
-    if (t.closest('[data-config-reset]')) {
-      if (!confirm('Restaurer les valeurs TTS par défaut (legacy) ?')) return;
-      try {
-        await api('/tts/rules/reset', {});
-        toast('Valeurs par défaut restaurées');
-      } catch (e) {
-        toast(errorText(e), true);
-      }
-      return void renderConfig(true);
-    }
     // Lab wallet tools
     const w = t.closest<HTMLElement>('[data-wallet]');
     if (w && walletViewer) {

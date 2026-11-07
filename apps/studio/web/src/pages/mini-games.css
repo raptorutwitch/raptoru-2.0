@@ -1,0 +1,207 @@
+/* Roulette · Slots · Duels : une table par jeu, et le fil des tirages. */
+.mg {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 0 24px;
+  height: 100%;
+  min-height: 560px;
+}
+.mg-tables {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.mg-bar {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+.mg-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  animation: d-rise 0.2s var(--e);
+}
+.mg-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+  color: var(--ink2);
+}
+.mg-t {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 236px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 4px 28px;
+  align-content: center;
+  min-height: 150px;
+  padding: 14px 0;
+  border-top: 1px solid var(--hair);
+}
+.mg-t header {
+  min-width: 0;
+}
+.mg-t h2 {
+  margin: 0 0 6px;
+  font: 600 19px var(--num);
+}
+.mg-t .d-tag {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 12.5px;
+}
+.mg-set {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+.mg-set .d-row .d-fld {
+  width: 96px;
+}
+.mg-res {
+  min-width: 0;
+  align-self: center;
+}
+.mg-res p {
+  margin: 0;
+}
+.mg-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 56px;
+  box-shadow: 0 1px 0 var(--hair2);
+}
+.mg-bars i {
+  flex: 0 1 14px;
+  height: var(--h);
+  min-width: 4px;
+  border-radius: 3px 3px 0 0;
+  background: var(--raise3);
+  transition: filter 0.12s;
+}
+.mg-bars i.w {
+  background: var(--teal);
+}
+.mg-bars i:hover {
+  filter: brightness(1.3);
+}
+.mg-res:has(.mg-reels) {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.mg-reels {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  animation: d-rise 0.24s var(--e);
+}
+.mg-reels span {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 54px;
+  border-radius: 8px;
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--hair2);
+  font-size: 25px;
+}
+.mg-reels.won span {
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+.mg-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+  font-size: 13.5px;
+  opacity: 0.75;
+}
+.mg-mini span.won {
+  box-shadow: 0 1.5px 0 var(--gold);
+}
+.mg-feed {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.mg-feed h2 {
+  flex: none;
+  margin: 8px 0 6px;
+}
+.mg-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -6px;
+  padding: 0 6px;
+}
+.mg-r {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.mg-r:hover {
+  background: var(--fill);
+}
+.mg-r b {
+  font-weight: 600;
+}
+.mg-r small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mg-r__w {
+  min-width: 0;
+}
+.mg-r__w b {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mg-r__g {
+  text-align: right;
+}
+.mg-r__g b {
+  color: var(--ink2);
+}
+.mg-r__g b.win {
+  color: var(--teal);
+}
+.mg-r__g b.gold {
+  color: var(--gold);
+}
+
+@media (max-width: 1180px) {
+  .mg {
+    grid-template-columns: minmax(0, 1fr) 256px;
+    gap: 0 16px;
+  }
+  .mg-t {
+    grid-template-columns: minmax(0, 1fr) 204px;
+    gap: 4px 16px;
+  }
+  .mg-mini {
+    display: none;
+  }
+}

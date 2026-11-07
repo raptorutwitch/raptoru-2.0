@@ -123,7 +123,10 @@ function parse(text: string): StudioInstallation {
     typeof data.secret !== 'string' ||
     !SECRET.test(data.secret) ||
     typeof data.core_origin !== 'string' ||
-    !/^https:\/\/[^/]+$/.test(data.core_origin) ||
+    // An https Core, or the local Lab's loopback Core (usable only by a labLoopback client: core-client.ts).
+    !/^(https:\/\/[^/]+|http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?)$/.test(
+      data.core_origin,
+    ) ||
     !(
       data.ca_sha256 === null ||
       (typeof data.ca_sha256 === 'string' && DIGEST.test(data.ca_sha256))

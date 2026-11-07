@@ -47,3 +47,6 @@ apps/twitch-extension/release/
 Backkup/
 # Production bot logs (local runtime data)
 apps/twitch-bot/logs/
+
+# The Lab data folder of npm run studio:lab
+.lab-data/

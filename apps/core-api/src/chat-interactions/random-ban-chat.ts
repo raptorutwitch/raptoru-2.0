@@ -1,4 +1,5 @@
 import type { LabChatMessage } from '@raptoru/schemas';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
@@ -47,6 +48,13 @@ export class RandomBanChat {
     const answer = (key: string, body: string) =>
       this.db.tx((q) => this.say(q, msg.channel_id, key, `@${name} - ${body}`));
     const key = `rb:msg:${msg.message_id}`;
+    if (!(await liveForPaid(this.db, this.economy))) {
+      await answer(
+        key,
+        'Random Ban disponible uniquement pendant le live · rien n’a été débité.',
+      );
+      return { outcome: STREAM_OFFLINE };
+    }
     if (!this.randomBan.executorReady(msg.channel_id)) {
       await answer(
         key,

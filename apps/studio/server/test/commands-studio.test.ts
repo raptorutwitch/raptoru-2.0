@@ -23,7 +23,9 @@ import {
   type ListResponse,
   type ListUi,
   NO_CATEGORY,
+  previewLines,
   previewText,
+  previewVars,
   quotaShort,
   reapply,
   RIGHTS,
@@ -665,6 +667,64 @@ describe('Commands tab view model', () => {
     expect(
       previewText({ mode: 'normal', text: 'Câlin à {target}', to: 'author' }),
     ).toBe('@PixelMamie Câlin à Aouh');
+  });
+
+  it('the live preview reads what the viewer typed, in sending order; the silent reply writes nothing', () => {
+    const c = cmd('hug').config;
+    const args = [
+      { name: 'cible', type: 'mention' as const, required: true },
+      { name: 'somme', type: 'number' as const, required: false },
+    ];
+    const vars = previewVars(
+      { args },
+      { login: 'luna_bzh', display_name: 'luna_bzh' },
+      '!hug @Aouh 500 merci',
+    );
+    expect(vars).toMatchObject({
+      '{display_name}': 'luna_bzh',
+      '{user}': 'luna_bzh',
+      '{target}': 'Aouh',
+      '{amount}': '500',
+      '{args}': '@Aouh 500 merci',
+    });
+    // Not typed: the example stays, Core's refusal is « Tester »'s answer.
+    expect(
+      previewVars({ args }, { login: 'a', display_name: 'A' }, '!hug')[
+        '{target}'
+      ],
+    ).toBeUndefined();
+    const other = {
+      id: 'a1',
+      type: 'chat' as const,
+      v: 1 as const,
+      on_error: 'continue' as const,
+      mode: 'announce' as const,
+      text: 'Merci {display_name}',
+      to: 'none' as const,
+    };
+    const draft = {
+      ...c,
+      reply: {
+        mode: 'normal' as const,
+        text: 'Câlin à {target}',
+        to: 'author' as const,
+      },
+      actions: [other],
+    };
+    expect(previewLines({ ...draft, reply_first: true }, vars)).toEqual([
+      { key: 'reply', mode: 'normal', text: '@luna_bzh Câlin à Aouh' },
+      { key: 'a1', mode: 'announce', text: 'Merci luna_bzh' },
+    ]);
+    expect(
+      previewLines({ ...draft, reply_first: false }, vars).map((l) => l.key),
+    ).toEqual(['a1', 'reply']);
+    expect(
+      previewLines({
+        ...draft,
+        actions: [],
+        reply: { mode: 'silent', text: '', to: 'none' },
+      }),
+    ).toEqual([]);
   });
 
   it('a 409 keeps my edits on top of the current version and names the fields changed on both sides', () => {

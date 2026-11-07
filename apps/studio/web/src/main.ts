@@ -1,240 +1,124 @@
 import './style.css';
-import './extension-lab.css';
-import './sound-config.css';
-import './studio-home.css';
-import './control-center.css';
-import './moderation.css';
-import './tombola.css';
-import './commands.css';
-import './word-game.css';
+import { mountModuleHost } from './module-host.js';
 import './bonk-target.css';
-import './simulation.css';
-import './alerts.css';
-import './channel-points.css';
-import './spotify.css';
-import './sub-wheel.css';
-import './halloween.css';
-import { mountExtensionLab } from './extension-lab.js';
-import { mountTestLab } from './test-lab.js';
-import { mountSoundConfig } from './sound-config.js';
+import './shell/frame.css';
+import './ds/ds.css';
+import './mod/mod.css';
+import './pages/tts.css';
+import './pages/alerts.css';
+import './pages/spotify.css';
+import './pages/sub-wheel.css';
+import './pages/commands.css';
+import './pages/word-game.css';
+import './pages/mini-games.css';
+import './pages/regie.css';
+import './pages/centre.css';
+import './pages/hubs.css';
+import './pages/labo.css';
+import './pages/labo-extension.css';
+import './pages/systeme.css';
+import './pages/rewards.css';
+import './pages/sanctions.css';
+import './pages/moderation.css';
+import './pages/soundboard.css';
+import './pages/bonk.css';
+import './pages/tombola.css';
+import './pages/player-card.css';
+import './pages/progression.css';
+import './pages/shop.css';
+import './pages/challenges.css';
+import './pages/halloween.css';
+import { mountExtensionLab } from './pages/labo-extension.js';
+import { mountTestLab } from './pages/labo-tests.js';
+import { mountBonkPage } from './pages/bonk.js';
+import { mountSoundboardPage } from './pages/soundboard.js';
+import { mountTtsPage } from './pages/tts.js';
+import { mountSpotifyPage } from './pages/spotify.js';
+import { mountSubWheelPage } from './pages/sub-wheel.js';
 import { mountUpdateWidget } from './update.js';
-import { mountStudioHome } from './studio-home.js';
-import { mountModeration } from './moderation.js';
-import { mountTombola } from './tombola.js';
-import { mountCommands } from './commands.js';
-import { mountWordGame } from './word-game.js';
+import { mountSysteme } from './pages/systeme.js';
+import { mountModeration } from './pages/moderation.js';
+import { mountTombolaPage } from './pages/tombola.js';
+import { mountCommandsPage } from './pages/commands.js';
+import { mountWordGamePage } from './pages/word-game.js';
+import { mountMiniGamesPage } from './pages/mini-games.js';
 import { mountSimulation } from './simulation.js';
-import { mountSimulationTab } from './simulation-tab.js';
-import { mountAlerts } from './alerts-tab.js';
-import { mountChannelPoints } from './channel-points.js';
-import { mountSupervisionBanner } from './supervision-banner.js';
-import { mountHalloween } from './halloween.js';
-import { mountProgression } from './progression.js';
-import { mountCosmetics } from './cosmetics.js';
-import { mountChallenges } from './challenges.js';
+import { mountSimulationPage } from './pages/simulation.js';
+import { mountAlerts } from './pages/alerts.js';
+import { mountRewardsPage } from './pages/rewards.js';
+import { mountEffectsPage } from './pages/effects.js';
+import { mountRandomBanPage } from './pages/sanctions-random-ban.js';
+import { mountCautionPage } from './pages/sanctions-caution.js';
+import { mountVotekickPage } from './pages/sanctions-votekick.js';
+import { mountHalloweenPage } from './pages/halloween.js';
+import { mountProgressionPage } from './pages/progression.js';
+import { mountShopPage } from './pages/shop.js';
+import { mountChallengesPage } from './pages/challenges.js';
+import { mountShell, shellHtml } from './shell/shell.js';
+import { VIEW_IDS, type ViewId } from './shell/registry.js';
 
-type TabId =
-  | 'studio'
-  | 'moderation'
-  | 'tombola'
-  | 'commands'
-  | 'word-game'
-  | 'alerts'
-  | 'channel-points'
-  | 'simulation'
-  | 'test-lab'
-  | 'extension-lab'
-  | 'soundboard'
-  | 'halloween'
-  | 'progression'
-  | 'shop'
-  | 'challenges';
-const TAB_KEY = 'raptoru-studio-tab';
+// Raptoru Studio : la coque (shell/) possède la navigation ; chaque vue est montée UNE seule fois ici, dans son conteneur
+// `#tab-<id>`, et la coque l'affiche. Mêmes instances, mêmes relevés, mêmes lecteurs. `?tab=<id>` reste un alias exact.
+
+interface View {
+  setVisible?(visible: boolean): void;
+  /** Une vue qui porte plusieurs pages (Récompenses Twitch et ses modules) n'en montre qu'une. */
+  setFocus?(focus: string | null): void;
+}
 
 const app = document.querySelector<HTMLDivElement>('#app');
 
 if (app) {
-  app.innerHTML = `
-    <header class="topbar">
-      <strong class="brand">Raptoru Studio</strong>
-      <nav class="tabs">
-        <button class="tab" type="button" data-tab="studio">Studio <em>runtime</em></button>
-        <button class="tab" type="button" data-tab="moderation">Modération <em>Core</em></button>
-        <button class="tab" type="button" data-tab="tombola">Tombola <em>Core</em></button>
-        <button class="tab" type="button" data-tab="commands">Commandes <em>Core</em></button>
-        <button class="tab" type="button" data-tab="word-game">Jeu des mots <em>Core</em></button>
-        <button class="tab" type="button" data-tab="alerts">Alertes <em>Core</em></button>
-        <button class="tab" type="button" data-tab="channel-points">Points de chaîne <em>Core</em></button>
-        <button class="tab" type="button" data-tab="halloween">Halloween <em>🎃</em></button>
-        <button class="tab" type="button" data-tab="progression">Progression <em>⭐</em></button>
-        <button class="tab" type="button" data-tab="shop">Boutique <em>🛍️</em></button>
-        <button class="tab" type="button" data-tab="challenges">Défis <em>🏆</em></button>
-        <button class="tab" type="button" data-tab="simulation">Simulation <em>Lab</em></button>
-        <button class="tab" type="button" data-tab="test-lab">Test Lab <em>services</em></button>
-        <button class="tab" type="button" data-tab="extension-lab">Extension Lab <em>preview</em></button>
-        <button class="tab" type="button" data-tab="soundboard">Soundboard <em>config</em></button>
-      </nav>
-      <div class="sim-widget"></div>
-      <div class="update-widget"></div>
-      <span class="topbar-safety">Local uniquement · aucun crédit réel</span>
-    </header>
-    <div class="sup-banner" hidden></div>
-    <main id="tab-studio"></main>
-    <main id="tab-moderation" hidden></main>
-    <main id="tab-tombola" class="tab-flush" hidden></main>
-    <main id="tab-commands" hidden></main>
-    <main id="tab-word-game" hidden></main>
-    <main id="tab-alerts" hidden></main>
-    <main id="tab-channel-points" hidden></main>
-    <main id="tab-halloween" hidden></main>
-    <main id="tab-progression" hidden></main>
-    <main id="tab-shop" hidden></main>
-    <main id="tab-challenges" hidden></main>
-    <main id="tab-simulation" hidden></main>
-    <main id="tab-test-lab" hidden></main>
-    <main id="tab-extension-lab" class="tab-full" hidden></main>
-    <main id="tab-soundboard" hidden></main>`;
-  mountSupervisionBanner(app.querySelector<HTMLElement>('.sup-banner')!);
-  const home = mountStudioHome(app.querySelector<HTMLElement>('#tab-studio')!);
-  mountTestLab(app.querySelector<HTMLElement>('#tab-test-lab')!);
-  const moderation = mountModeration(
-    app.querySelector<HTMLElement>('#tab-moderation')!,
+  const CLASS: Partial<Record<ViewId, string>> = {
+    'extension-lab': 'tab-full',
+  };
+  app.innerHTML = shellHtml(
+    VIEW_IDS.map(
+      (id) =>
+        `<main id="tab-${id}"${CLASS[id] ? ` class="${CLASS[id]}"` : ''} hidden></main>`,
+    ).join(''),
   );
-  const tombola = mountTombola(app.querySelector<HTMLElement>('#tab-tombola')!);
-  const commands = mountCommands(
-    app.querySelector<HTMLElement>('#tab-commands')!,
-  );
-  const wordGame = mountWordGame(
-    app.querySelector<HTMLElement>('#tab-word-game')!,
-  );
-  const alerts = mountAlerts(app.querySelector<HTMLElement>('#tab-alerts')!);
-  const channelPoints = mountChannelPoints(
-    app.querySelector<HTMLElement>('#tab-channel-points')!,
-  );
-  const halloween = mountHalloween(
-    app.querySelector<HTMLElement>('#tab-halloween')!,
-  );
-  const progression = mountProgression(
-    app.querySelector<HTMLElement>('#tab-progression')!,
-  );
-  const shop = mountCosmetics(app.querySelector<HTMLElement>('#tab-shop')!);
-  const challenges = mountChallenges(
-    app.querySelector<HTMLElement>('#tab-challenges')!,
-  );
-  const simulationTab = mountSimulationTab(
-    app.querySelector<HTMLElement>('#tab-simulation')!,
-  );
-  const extensionLab = mountExtensionLab(
-    app.querySelector<HTMLElement>('#tab-extension-lab')!,
-  );
-  const soundConfig = mountSoundConfig(
-    app.querySelector<HTMLElement>('#tab-soundboard')!,
-  );
+  const el = (id: ViewId) => app.querySelector<HTMLElement>(`#tab-${id}`)!;
+  const views: Record<ViewId, View> = {
+    studio: mountSysteme(el('studio')),
+    'test-lab': mountTestLab(el('test-lab')),
+    moderation: mountModeration(el('moderation')),
+    tombola: mountTombolaPage(el('tombola')),
+    commands: mountCommandsPage(el('commands')),
+    'word-game': mountWordGamePage(el('word-game')),
+    'mini-games': mountMiniGamesPage(el('mini-games')),
+    alerts: mountAlerts(el('alerts')),
+    'channel-points': mountRewardsPage(el('channel-points')),
+    effects: mountEffectsPage(el('effects')),
+    'random-ban': mountRandomBanPage(el('random-ban')),
+    caution: mountCautionPage(el('caution')),
+    votekick: mountVotekickPage(el('votekick')),
+    halloween: mountHalloweenPage(el('halloween')),
+    progression: mountProgressionPage(el('progression')),
+    shop: mountShopPage(el('shop')),
+    challenges: mountChallengesPage(el('challenges')),
+    simulation: mountSimulationPage(el('simulation')),
+    'extension-lab': mountExtensionLab(el('extension-lab')),
+    soundboard: mountSoundboardPage(el('soundboard')),
+    tts: mountTtsPage(el('tts')),
+    spotify: mountSpotifyPage(el('spotify')),
+    'sub-wheel': mountSubWheelPage(el('sub-wheel')),
+    bonk: mountBonkPage(el('bonk')),
+    modules: mountModuleHost(el('modules')),
+  };
   mountUpdateWidget(app.querySelector<HTMLElement>('.update-widget')!);
-  // « Simulation de stream »: live, chat ingestion, real output, mini-games (from any tab).
+  // L'entrée Simulation de la barre latérale, avec l'état du live fictif (depuis n'importe quelle page).
   mountSimulation(app.querySelector<HTMLElement>('.sim-widget')!);
 
-  const show = (tab: TabId) => {
-    for (const button of app.querySelectorAll<HTMLElement>('[data-tab]'))
-      button.classList.toggle('active', button.dataset.tab === tab);
-    app.querySelector<HTMLElement>('#tab-studio')!.hidden = tab !== 'studio';
-    home.setVisible(tab === 'studio');
-    app.querySelector<HTMLElement>('#tab-moderation')!.hidden =
-      tab !== 'moderation';
-    moderation.setVisible(tab === 'moderation');
-    app.querySelector<HTMLElement>('#tab-tombola')!.hidden = tab !== 'tombola';
-    tombola.setVisible(tab === 'tombola');
-    app.querySelector<HTMLElement>('#tab-commands')!.hidden =
-      tab !== 'commands';
-    commands.setVisible(tab === 'commands');
-    app.querySelector<HTMLElement>('#tab-word-game')!.hidden =
-      tab !== 'word-game';
-    wordGame.setVisible(tab === 'word-game');
-    app.querySelector<HTMLElement>('#tab-alerts')!.hidden = tab !== 'alerts';
-    alerts.setVisible(tab === 'alerts');
-    app.querySelector<HTMLElement>('#tab-channel-points')!.hidden =
-      tab !== 'channel-points';
-    channelPoints.setVisible(tab === 'channel-points');
-    app.querySelector<HTMLElement>('#tab-halloween')!.hidden =
-      tab !== 'halloween';
-    halloween.setVisible(tab === 'halloween');
-    app.querySelector<HTMLElement>('#tab-progression')!.hidden =
-      tab !== 'progression';
-    progression.setVisible(tab === 'progression');
-    app.querySelector<HTMLElement>('#tab-shop')!.hidden = tab !== 'shop';
-    shop.setVisible(tab === 'shop');
-    app.querySelector<HTMLElement>('#tab-challenges')!.hidden =
-      tab !== 'challenges';
-    challenges.setVisible(tab === 'challenges');
-    app.querySelector<HTMLElement>('#tab-simulation')!.hidden =
-      tab !== 'simulation';
-    simulationTab.setVisible(tab === 'simulation');
-    app.querySelector<HTMLElement>('#tab-test-lab')!.hidden =
-      tab !== 'test-lab';
-    app.querySelector<HTMLElement>('#tab-extension-lab')!.hidden =
-      tab !== 'extension-lab';
-    app.querySelector<HTMLElement>('#tab-soundboard')!.hidden =
-      tab !== 'soundboard';
-    soundConfig.setVisible(tab === 'soundboard');
-    // The lab fills the window below the top bar (no page scroll).
-    document.documentElement.style.setProperty(
-      '--topbar-h',
-      `${app.querySelector<HTMLElement>('.topbar')!.offsetHeight}px`,
-    );
-    document.body.classList.toggle('lab-open', tab === 'extension-lab');
-    extensionLab.setVisible(tab === 'extension-lab');
-    try {
-      localStorage.setItem(TAB_KEY, tab);
-    } catch {
-      /* private mode: tab not remembered */
+  let shown: ViewId | null | undefined;
+  const showView = (tab: ViewId | null, focus: string | null = null) => {
+    if (tab) views[tab].setFocus?.(focus);
+    if (tab === shown) return;
+    shown = tab;
+    for (const id of VIEW_IDS) {
+      el(id).hidden = id !== tab;
+      views[id].setVisible?.(id === tab);
     }
   };
-  app.querySelector('.tabs')!.addEventListener('click', (ev) => {
-    const tab = (ev.target as HTMLElement).closest<HTMLElement>('[data-tab]')
-      ?.dataset.tab as TabId | undefined;
-    if (tab) show(tab);
-  });
-  // ?tab=extension-lab (deep link) wins over the remembered tab.
-  let initial: TabId = 'studio';
-  try {
-    const remembered = localStorage.getItem(TAB_KEY);
-    if (
-      remembered === 'extension-lab' ||
-      remembered === 'moderation' ||
-      remembered === 'tombola' ||
-      remembered === 'commands' ||
-      remembered === 'word-game' ||
-      remembered === 'alerts' ||
-      remembered === 'channel-points' ||
-      remembered === 'halloween' ||
-      remembered === 'progression' ||
-      remembered === 'shop' ||
-      remembered === 'challenges' ||
-      remembered === 'simulation' ||
-      remembered === 'soundboard' ||
-      remembered === 'test-lab'
-    )
-      initial = remembered;
-  } catch {
-    /* ignore */
-  }
-  const asked = new URLSearchParams(location.search).get('tab');
-  if (
-    asked === 'studio' ||
-    asked === 'moderation' ||
-    asked === 'tombola' ||
-    asked === 'commands' ||
-    asked === 'word-game' ||
-    asked === 'alerts' ||
-    asked === 'channel-points' ||
-    asked === 'halloween' ||
-    asked === 'progression' ||
-    asked === 'shop' ||
-    asked === 'challenges' ||
-    asked === 'test-lab' ||
-    asked === 'extension-lab' ||
-    asked === 'soundboard'
-  )
-    initial = asked;
-  show(initial);
+  mountShell(app, { showView });
 }

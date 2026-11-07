@@ -734,7 +734,11 @@ export function createEmotePicker({ label = 'Emotes', placeholder = 'Emote ou ch
       star.hidden = true;
       return;
     }
-    const size = star.offsetWidth || 24;
+    // 40 % of the cell, 24 px at most: on 44 px cells (panel, video component) a 24 px star covered the middle of the
+    // emote, and a click there after hovering added a favourite instead of selecting it.
+    const size = Math.min(24, Math.round((cell.offsetWidth || 60) * 0.4));
+    star.style.width = `${size}px`;
+    star.style.height = `${size}px`;
     star.style.top = `${cell.offsetTop}px`;
     star.style.left = `${cell.offsetLeft + cell.offsetWidth - size}px`;
     star.hidden = false;

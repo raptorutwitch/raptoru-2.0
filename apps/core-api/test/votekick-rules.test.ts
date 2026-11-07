@@ -16,9 +16,9 @@ const v = (kick: number, save: number, targetSaved = false, coin = heads) =>
 
 describe('votekick rules (SAMMI parity)', () => {
   it('minutes: round(5 + (n − 2) × 25 / 18) within [5, 30]', () => {
-    expect([1, 2, 3, 4, 5, 6, 10, 19, 20, 50].map(votekickMinutes)).toEqual([
-      5, 5, 6, 8, 9, 11, 16, 29, 30, 30,
-    ]);
+    expect(
+      [1, 2, 3, 4, 5, 6, 10, 19, 20, 50].map((n) => votekickMinutes(n)),
+    ).toEqual([5, 5, 6, 8, 9, 11, 16, 29, 30, 30]);
   });
 
   it('fewer than 3 votes (initiator included): no quorum, nobody sanctioned', () => {
@@ -100,7 +100,7 @@ describe('votekick rules (SAMMI parity)', () => {
   });
 
   it('caution: 1 000 Jetons per started minute', () => {
-    expect([0, 1, 59, 60, 61, 125].map(cautionPrice)).toEqual([
+    expect([0, 1, 59, 60, 61, 125].map((s) => cautionPrice(s))).toEqual([
       0, 1000, 1000, 1000, 2000, 3000,
     ]);
   });

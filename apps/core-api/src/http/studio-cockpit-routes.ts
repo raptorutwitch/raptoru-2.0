@@ -14,17 +14,28 @@ const STUDIO_ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
 
 /** Allowed Lab sub-paths: `<prefix>/<channel>/…` (channel checked) or a channel-less route. */
 const CHANNEL_ROUTES =
-  /^(moderation|raffle|wallet|commands|word-game|mini-games)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
-/** Never through the cockpit: the executor side of the chat answers belongs to the bot. */
-const BOT_ONLY = /^commands\/\d{1,32}\/steps\/(claim|[0-9a-f-]{36}\/ack)$/;
+  /^(moderation|raffle|wallet|commands|word-game|mini-games|module-settings|modules)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
+/**
+ * Never through the cockpit: the executor side of the chat answers belongs to the bot; a module's VIEWER action belongs
+ * to the extension's door (the viewer from the verified Twitch token) — through here a Studio installation could spend
+ * any viewer's Jetons (the body names the viewer).
+ */
+const BOT_ONLY =
+  /^(commands\/\d{1,32}\/steps\/(claim|[0-9a-f-]{36}\/ack)|modules\/\d{1,32}\/[a-z0-9_]+\/viewer(\/.*)?)$/;
 // Channel-less: TTS rules; Soundboard bank configuration (prices, cooldowns, stack / queue / ignore,
 // enabled, volume protection) — the « Soundboard config » screen.
 const PLAIN_ROUTES =
-  /^(tts\/rules(\/reset)?|sound\/(config|settings|sounds\/[a-z0-9][a-z0-9_-]{0,47}))$/;
+  /^(tts\/rules(\/reset)?|sound\/(config|settings|sounds\/[a-z0-9][a-z0-9_-]{0,47})|daily\/config)$/;
 
-export function studioCockpitRoutes(core: LabCall, channelId: string): Route[] {
+export function studioCockpitRoutes(
+  core: LabCall,
+  channelId: string,
+  /** The Core's Lab environment: its whole Lab table (fictional data), the wrong-channel and viewer refusals kept. */
+  o: { lab?: boolean } = {},
+): Route[] {
   const target = (rest: string, search: string) => {
     if (BOT_ONLY.test(rest)) throw new HttpError(404, { error: 'not_found' });
+    if (o.lab) return `/v1/lab/${rest}${search}`;
     const channel = CHANNEL_ROUTES.exec(rest);
     if (channel) {
       if (channel[2] !== channelId)
@@ -59,7 +70,9 @@ export function studioCockpitRoutes(core: LabCall, channelId: string): Route[] {
           body && typeof body === 'object' && !Array.isArray(body)
             ? { ...(body as Record<string, unknown>) }
             : {};
-        if ('actor' in payload) payload.actor = STUDIO_ACTOR;
+        // A simulated alert event names the viewer it is about (`actor`), never who acts: only the Lab environment reaches it.
+        if ('actor' in payload && params[0] !== 'alerts/events')
+          payload.actor = STUDIO_ACTOR;
         return relay(target(params[0]!, url.search), payload);
       },
     },

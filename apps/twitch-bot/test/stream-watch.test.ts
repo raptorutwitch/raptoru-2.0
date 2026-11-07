@@ -77,4 +77,46 @@ describe('stream watcher', () => {
     await watcher.sync(); // afterwards Helix repairs any missed event
     expect(core.streamSync).toHaveBeenCalledWith({ live: null });
   });
+
+  it('refonte P0-5: Core down at the online event — the next sync replays it (not Helix), then the trust window starts', async () => {
+    const core = fakeCore();
+    core.streamOnline
+      .mockRejectedValueOnce(new Error('core down'))
+      .mockResolvedValue({});
+    let now = 0;
+    const watcher = createStreamWatcher({
+      core: core as never,
+      getStream: async () => null, // Helix still lags (offline)
+      now: () => now,
+      log: () => {},
+    });
+    await expect(watcher.online(live)).rejects.toThrow('core down');
+    expect(watcher.liveStateAgeSeconds()).toBeNull();
+    now = 60_000;
+    await watcher.sync(); // replays the online event: no Helix « offline » over it
+    expect(core.streamOnline).toHaveBeenCalledTimes(2);
+    expect(core.streamSync).not.toHaveBeenCalled();
+    expect(watcher.liveStateAgeSeconds()).toBe(0);
+    now = 60_000 + EVENTSUB_TRUST_MS - 1;
+    await watcher.sync(); // trust window counted from Core's record
+    expect(core.streamSync).not.toHaveBeenCalled();
+  });
+
+  it('refonte P0-5: Core down at the offline event — replayed once at the next sync, never twice', async () => {
+    const core = fakeCore();
+    core.streamOffline
+      .mockRejectedValueOnce(new Error('core down'))
+      .mockResolvedValue({});
+    const watcher = createStreamWatcher({
+      core: core as never,
+      getStream: async () => live,
+      now: () => 0,
+      log: () => {},
+    });
+    await expect(watcher.offline()).rejects.toThrow('core down');
+    await watcher.sync();
+    await watcher.sync();
+    expect(core.streamOffline).toHaveBeenCalledTimes(2);
+    expect(core.streamSync).not.toHaveBeenCalled();
+  });
 });

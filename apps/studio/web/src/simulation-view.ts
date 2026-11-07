@@ -1,8 +1,14 @@
-// Studio Lab — « Simulation de stream » panel, pure view. Gathers the existing switches (simulated live of
-// the shared session, real Twitch chat ingestion, real chat output through LeCroupier_, mini-games) with
-// their effective states. Nothing is decided here; the detailed settings stay in their own tabs.
+// Studio Lab — the simulated stream, pure view. The simulated live of the shared session and, on the legacy Lab, the real
+// Twitch chat ingestion and output, with their effective states. Nothing is decided here. A module's own switches live on
+// its page (Mini-jeux: the mini-games page).
+
+import { esc, ic } from './ds/ds.js';
 
 export interface SimState {
+  /** Production profile: no simulation at all. */
+  production?: boolean;
+  /** The Lab on the main Core: the chat is the simulator's, neither real ingestion nor real output exist. */
+  chatFictional?: boolean;
   /** Shared live session (Tombola status); undefined = unavailable (Production profile / no Lab Core). */
   stream?: { source: string; started_at: string } | null;
   ingress?: {
@@ -16,17 +22,7 @@ export interface SimState {
     write_scope?: boolean;
     executor_absent?: boolean;
   } | null;
-  games?: { enabled: boolean } | null;
 }
-
-const esc = (s: unknown) =>
-  String(s ?? '').replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ]!,
-  );
 
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString('fr-FR', {
@@ -43,7 +39,7 @@ type Tone = 'on' | 'off' | 'warn' | 'na';
 export function simStates(
   s: SimState,
 ): { key: string; label: string; tone: Tone }[] {
-  return [
+  const all: { key: string; label: string; tone: Tone }[] = [
     {
       key: 'live',
       label: 'Live',
@@ -65,16 +61,12 @@ export function simStates(
       label: 'Sortie',
       tone: !s.output ? 'na' : s.output.enabled ? 'warn' : 'off',
     },
-    {
-      key: 'games',
-      label: 'Jeux',
-      tone: !s.games ? 'na' : s.games.enabled ? 'on' : 'off',
-    },
   ];
+  return s.chatFictional ? all.filter((x) => x.key === 'live') : all;
 }
 
-/** The top bar button: one dot per service. */
-export function simButton(s: SimState | null, open: boolean): string {
+/** The sidebar entry: the way to the Simulation page, one dot per service. */
+export function simButton(s: SimState | null): string {
   const dots = s
     ? simStates(s)
         .map(
@@ -83,7 +75,7 @@ export function simButton(s: SimState | null, open: boolean): string {
         )
         .join('')
     : '';
-  return `<button type="button" class="sim-toggle${open ? ' is-open' : ''}" data-sim="panel" aria-expanded="${open}">Simulation ${dots}</button>`;
+  return `<a class="sim-toggle" href="?p=simulation" data-page="simulation" title="Ouvrir la simulation">${ic('flask')}<span>${s?.stream ? 'Live fictif en cours' : 'Simulation'}</span><em>${dots}</em></a>`;
 }
 
 const row = (
@@ -96,7 +88,7 @@ const row = (
   `<div class="sim-row"><span class="sim-dot sim-dot--${tone}"></span><div class="sim-what"><b>${label}</b><span>${state}</span>${note ? `<small>${note}</small>` : ''}</div>${button}</div>`;
 
 const btn = (action: string, label: string, busy: boolean, danger = false) =>
-  `<button type="button" class="sim-btn${danger ? ' sim-btn--danger' : ''}" data-sim="${action}" ${busy ? 'disabled' : ''}>${label}</button>`;
+  `<button type="button" class="d-btn sm ${danger ? 'bad' : ''}" data-sim="${action}" ${busy ? 'disabled' : ''}>${label}</button>`;
 
 /** The panel's HTML. `busy` disables the buttons while an action runs; `error` is the last refusal. */
 export function simPanel(
@@ -105,7 +97,7 @@ export function simPanel(
   error: string | null = null,
 ): string {
   if (!s)
-    return `<div class="sim-panel"><p class="sim-muted">Chargement…</p></div>`;
+    return `<div class="sim-panel"><p class="d-note">Chargement…</p></div>`;
   const live =
     s.stream === undefined
       ? row('Live simulé', 'Indisponible (profil Lab uniquement)', 'na', '')
@@ -117,7 +109,7 @@ export function simPanel(
               : `En direct (simulation) depuis ${esc(hhmm(s.stream.started_at))}`,
             'on',
             s.stream.source === 'twitch'
-              ? '<span class="sim-muted">fin par Twitch</span>'
+              ? '<span class="d-note">fin par Twitch</span>'
               : btn('stream_end', 'Terminer', busy),
           )
         : row(
@@ -128,13 +120,13 @@ export function simPanel(
           );
   const i = s.ingress;
   const ingress = !i
-    ? row('Ingestion chat Twitch', 'Indisponible', 'na', '')
+    ? row('Lecture du chat Twitch', 'Indisponible', 'na', '')
     : row(
-        'Ingestion chat Twitch',
+        'Lecture du chat Twitch',
         i.enabled
           ? i.running
-            ? `ON · connectée${i.token_login ? ` (${esc(i.token_login)})` : ''}`
-            : 'ON · démarrage…'
+            ? `Activée · connectée${i.token_login ? ` (${esc(i.token_login)})` : ''}`
+            : 'Activée · démarrage…'
           : 'OFF',
         i.enabled ? (i.running ? 'on' : 'warn') : 'off',
         i.blocked && !i.enabled
@@ -152,7 +144,7 @@ export function simPanel(
     : row(
         'Sortie réelle LeCroupier_',
         o.enabled
-          ? `ON · écrit dans le vrai chat${o.executor_absent ? ' (exécuteur absent : ingestion coupée ?)' : ''}`
+          ? `Activée · écrit dans le vrai chat${o.executor_absent ? ' (bot absent : lecture du chat coupée ?)' : ''}`
           : 'OFF',
         o.enabled ? 'warn' : 'off',
         btn(
@@ -165,25 +157,10 @@ export function simPanel(
           ? 'Autorisation d’écriture manquante pour LeCroupier_.'
           : 'Réponses Commandes, Jeu des mots, mini-jeux.',
       );
-  const g = s.games;
-  const games = !g
-    ? row('Mini-jeux Roulette / Slot', 'Indisponible', 'na', '')
-    : row(
-        'Mini-jeux Roulette / Slot',
-        g.enabled ? 'ON · !roulette et !slots répondent' : 'OFF',
-        g.enabled ? 'on' : 'off',
-        btn(
-          g.enabled ? 'games_off' : 'games_on',
-          g.enabled ? 'Désactiver' : 'Activer',
-          busy,
-        ),
-        'Coupez Roulette / Slot dans StreamElements pendant un test en vrai chat.',
-      );
-  return `<div class="sim-panel" role="dialog" aria-label="Simulation de stream">
-    <div class="sim-head"><b>Simulation de stream</b><span class="sim-chip${writesRealChat(s) ? ' sim-chip--warn' : ''}">${writesRealChat(s) ? 'Écrit dans le vrai chat' : 'Aucune écriture dans le vrai chat'}</span></div>
-    ${error ? `<p class="sim-error">${esc(error)}</p>` : ''}
-    ${live}${ingress}${output}${games}
-    <p class="sim-muted sim-foot">Réglages détaillés : onglets Tombola, Commandes, Jeu des mots.</p>
+  return `<div class="sim-panel">
+    ${writesRealChat(s) ? '<div class="sim-head"><span class="d-tag warn">Écrit dans le vrai chat</span></div>' : ''}
+    ${error ? `<p class="d-note bad">${esc(error)}</p>` : ''}
+    ${s.chatFictional ? live : `${live}${ingress}${output}`}
   </div>`;
 }
 
@@ -193,13 +170,11 @@ export function simPanel(
  */
 export function confirmFor(action: string, s: SimState): string | null {
   if (action === 'output_on')
-    return 'Activer la sortie réelle ? LeCroupier_ écrira dans le VRAI chat Twitch (Commandes, Jeu des mots, mini-jeux). Coupez dans SAMMI / StreamElements les modules que vous testez.';
+    return 'Activer la sortie réelle ? LeCroupier_ écrira dans le VRAI chat Twitch (Commandes, Jeu des mots, mini-jeux). Le bot de production répond aussi dans ce chat : évitez de tester un module qu’il exécute déjà.';
   if (!writesRealChat(s)) return null;
   if (action === 'stream_start')
     return 'La sortie réelle est ON : un live simulé fera publier le Jeu des mots dans le VRAI chat. Démarrer ?';
   if (action === 'ingress_on')
     return 'La sortie réelle est ON : les vrais viewers déclencheront des réponses de LeCroupier_ dans le VRAI chat. Activer l’ingestion ?';
-  if (action === 'games_on')
-    return 'La sortie réelle est ON : !roulette et !slots répondront dans le VRAI chat (pensez à couper StreamElements). Activer les mini-jeux ?';
   return null;
 }

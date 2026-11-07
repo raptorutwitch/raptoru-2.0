@@ -71,8 +71,9 @@ export function resolveBet(
   game: MiniGame,
   arg: string | null,
   balance: number,
+  /** The channel's minimum (setting H10); default = the historical value. */
+  min: number = MINI_GAME_RULES[game].minBet,
 ): Bet {
-  const min = MINI_GAME_RULES[game].minBet;
   let amount: number;
   let allIn = false;
   const a = arg?.toLowerCase() ?? null;

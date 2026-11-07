@@ -3,6 +3,7 @@ import {
   type FxCamEffectId,
   type LabChatMessage,
 } from '@raptoru/schemas';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import type { ChannelPointsService } from '../channel-points/service.js';
 import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
@@ -74,6 +75,12 @@ export class FxCamChat {
     const effect = typed as FxCamEffectId;
     const unavailable = () =>
       answer('FX Cam indisponible pour le moment · rien n’a été débité.');
+    if (!(await liveForPaid(this.db, this.economy))) {
+      await answer(
+        'FX Cam disponible uniquement pendant le live · rien n’a été débité.',
+      );
+      return { outcome: STREAM_OFFLINE };
+    }
     if (!this.channelPoints.studioReady(msg.channel_id)) {
       await unavailable();
       return { outcome: 'fx_unavailable' };

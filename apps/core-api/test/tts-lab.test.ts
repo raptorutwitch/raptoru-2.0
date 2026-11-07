@@ -371,6 +371,26 @@ describe('TTS V2 execution, cooldown and refunds', () => {
     expect(await refunds(c.interaction_id)).toBe(0);
   });
 
+  it('refonte H4: a waiting TTS expires at 5 min (not before), refunded once; its deadline is fixed at its creation', async () => {
+    const { core, tts } = await lab();
+    // Admitted, never claimed (Studio absent).
+    const a = await tts.admit(req());
+    expect(
+      Date.parse(a.interaction.expires_at) - core.clock.now().getTime(),
+    ).toBe(5 * MINUTE);
+    core.clock.advance(5 * MINUTE - 1_000);
+    expect(await tts.sweepExpired()).toBe(0);
+    expect((await tts.get(a.interaction.interaction_id)).status).toBe('queued');
+    core.clock.advance(2_000);
+    expect(await tts.sweepExpired()).toBe(1);
+    expect(await tts.get(a.interaction.interaction_id)).toMatchObject({
+      status: 'failed',
+      error: { code: 'expired' },
+      refund_status: 'refunded',
+    });
+    expect(await tts.sweepExpired()).toBe(0);
+  });
+
   it('expired queue entries fail and are refunded; a lost player lease is execution_unknown (not refunded)', async () => {
     const { core, tts } = await lab();
     await tts.moderate(CHANNEL, { action: 'pause', actor: 'mod' }); // nothing is claimed while paused

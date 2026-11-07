@@ -230,6 +230,7 @@ describe('Lab chat ingestion (Twitch → Lab Core, every module)', () => {
       chatRole([{ set_id: 'broadcaster' }, { set_id: 'subscriber' }]),
     ).toBe('broadcaster');
     expect(chatRole([{ set_id: 'moderator' }])).toBe('moderator');
+    expect(chatRole([{ set_id: 'lead_moderator' }])).toBe('moderator');
     expect(chatRole([{ set_id: 'vip' }])).toBe('viewer');
     expect(chatRole(undefined)).toBe('viewer');
   });

@@ -3,10 +3,12 @@
 // only. It implements what the extension uses (onAuthorized, onContext, onVisibilityChanged,
 // onHighlightChanged, onError, listen, actions.requestIdShare/minimize) and reads the simulated
 // context from the URL, like Twitch does (anchor, mode, platform, language…) plus lab parameters
-// (labRole, labIdentity, labLayout). The token is a readable lab token, never a Twitch JWT: only the
-// Studio's Lab EBS accepts it.
+// (labRole, labIdentity, labLayout). The token: on the main Core's Lab (core-frontier.ts), the Twitch Extension JWT
+// Studio signs for this fictional account (LAB_TOKEN_PATH), checked by the Core like a real one; otherwise a readable
+// « lab. » token that only the historical Lab EBS accepts.
 
 export const TWITCH_EXT_MOCK_PATH = '/ext-lab/twitch-ext-mock.js';
+export const LAB_TOKEN_PATH = '/ext-lab/token';
 
 export const TWITCH_EXT_MOCK_JS = String.raw`(() => {
   'use strict';
@@ -16,8 +18,14 @@ export const TWITCH_EXT_MOCK_JS = String.raw`(() => {
   const identityShared = query.get('labIdentity') !== '0';
   const layout = query.get('labLayout') || 'normal';
   const channelId = '900100';
-  const token = 'lab.' + btoa(JSON.stringify({ role, identity_shared: identityShared }))
+  const labToken = 'lab.' + btoa(JSON.stringify({ role, identity_shared: identityShared }))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // The JWT of the main Core's Lab when Studio offers one (404 otherwise: the historical Lab EBS and its lab token).
+  const tokenReady = fetch('/ext-lab/token?role=' + role + '&identity=' + (identityShared ? '1' : '0'), { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => (j && typeof j.token === 'string' ? j.token : labToken))
+    .catch(() => labToken);
+  const token = labToken;
   const opaqueUserId = 'U' + ({ viewer: '900101', moderator: '900102', broadcaster: '900100' })[role];
   const auth = {
     channelId,
@@ -52,7 +60,7 @@ export const TWITCH_EXT_MOCK_JS = String.raw`(() => {
   const ext = {
     version: 'lab',
     environment: 'lab',
-    onAuthorized(cb) { listeners.authorized.push(cb); later(() => cb({ ...auth })); },
+    onAuthorized(cb) { listeners.authorized.push(cb); tokenReady.then((t) => later(() => cb({ ...auth, token: t }))); },
     onContext(cb) { listeners.context.push(cb); later(() => cb({ ...context }, Object.keys(context))); },
     onVisibilityChanged(cb) { listeners.visibility.push(cb); later(() => cb(true, { ...context })); },
     onHighlightChanged(cb) { listeners.highlight.push(cb); },

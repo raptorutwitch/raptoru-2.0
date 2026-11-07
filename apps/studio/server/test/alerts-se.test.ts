@@ -221,6 +221,7 @@ async function link(
     core?: (path: string, body: unknown) => Promise<unknown>;
     main?: boolean;
     dir?: string;
+    environment?: 'lab' | 'production';
   } = {},
 ) {
   const dir = o.dir ?? (await mkdtemp(join(tmpdir(), 'se-tips-')));
@@ -236,6 +237,7 @@ async function link(
       return o.core ? o.core(path, body) : { outcome: 'queued' };
     }) as never,
     fromMain: () => o.main ?? true,
+    ...(o.environment ? { environment: o.environment } : {}),
     socket: (url) => {
       const s = new FakeSocket(url);
       sockets.push(s);
@@ -533,7 +535,29 @@ describe('SeTipsLink — token, reconnection, errors', () => {
     expect(again.se.status().journal).toHaveLength(1);
   });
 
-  it('a saved ACTIVE is never resumed by a Studio start: TEST (observation), said so, until chosen again', async () => {
+  it('refonte H5: Production profile — a saved ACTIVE resumes ACTIVE; a saved TEST or OFF stays; no token → it waits', async () => {
+    const t = await link({ environment: 'production' });
+    await t.se.setMode('active');
+    t.se.close();
+    const again = await link({ dir: t.dir, environment: 'production' });
+    expect(again.se.status()).toMatchObject({
+      mode: 'active',
+      resumed_from_active: false,
+      environment: 'production',
+      state: 'no_token',
+    });
+    expect(again.sockets).toHaveLength(0); // never connects without StreamElements' token
+    await again.se.setMode('off');
+    again.se.close();
+    const off = await link({ dir: t.dir, environment: 'production' });
+    expect(off.se.status()).toMatchObject({ mode: 'off' });
+    await off.se.setMode('test');
+    off.se.close();
+    const test = await link({ dir: t.dir, environment: 'production' });
+    expect(test.se.status()).toMatchObject({ mode: 'test' });
+  });
+
+  it('a saved ACTIVE is never resumed by a Studio start (Lab): TEST (observation), said so, until chosen again', async () => {
     const t = await link();
     await t.se.setMode('active');
     t.se.close();

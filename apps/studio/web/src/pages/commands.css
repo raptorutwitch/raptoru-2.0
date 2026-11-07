@@ -1,0 +1,1076 @@
+/* Commandes : la bibliothèque, l'éditeur, le faux chat. */
+.cdx {
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr) 304px;
+  gap: 0 20px;
+  height: 100%;
+  min-height: 590px;
+}
+.cdx [hidden] {
+  display: none !important;
+}
+.cdx-tile {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--c) 15%, transparent);
+  color: var(--c);
+  font-size: 15px;
+}
+button.cdx-tile {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+button.cdx-tile:hover {
+  background: color-mix(in srgb, var(--c) 26%, transparent);
+}
+.cdx-tile.lg {
+  grid-row: span 2;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  font-size: 25px;
+}
+
+/* --- Bibliothèque --- */
+.cdx-lib {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+.cdx-find {
+  height: 32px;
+  flex: none;
+  color: var(--ink3);
+}
+.cdx-find input {
+  margin-left: 7px;
+}
+.cdx-filters {
+  display: grid;
+  gap: 6px;
+}
+.cdx-chipline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.cdx-f {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink2);
+  font: 500 12.5px var(--text);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.cdx-f:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+.cdx-f.on {
+  background: var(--raise3);
+  color: var(--ink);
+}
+.cdx-f i {
+  color: var(--ink3);
+  font: 500 12.5px var(--num);
+}
+.cdx-f.warn i {
+  color: var(--amber);
+}
+.cdx-line {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.cdx-line .d-fld {
+  flex: 1;
+}
+.d-ib.is-on {
+  color: var(--mod);
+}
+.cdx-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -4px;
+  padding: 4px;
+}
+.cdx-gh {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 4px 3px;
+  color: var(--ink2);
+  font: 600 12.5px var(--num);
+}
+.cdx-gh:first-child {
+  margin-top: 0;
+}
+.cdx-gh .d-ic {
+  color: var(--c);
+}
+.cdx-gh span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cdx-gh i {
+  color: var(--ink3);
+  font-style: normal;
+  font-weight: 500;
+}
+.cdx-li {
+  --vf-o: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 0 9px;
+  align-items: center;
+  margin-bottom: 1px;
+  padding: 6px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.cdx-li:hover {
+  background: var(--fill);
+}
+.cdx-li.on {
+  background: var(--fill2);
+}
+.cdx-li.on::after {
+  --vf: var(--mod);
+}
+.cdx-li .cdx-tile {
+  grid-row: span 2;
+}
+.cdx-li.off .cdx-tile,
+.cdx-li.off .cdx-li__t b {
+  opacity: 0.5;
+}
+.cdx-li__t {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cdx-li__t b {
+  font: 600 13.5px var(--num);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cdx-li__t em {
+  color: var(--ink3);
+  font-size: 12.5px;
+  font-style: normal;
+  white-space: nowrap;
+}
+.cdx-li__t .d-tag {
+  height: 18px;
+  padding: 0 5px;
+  font-size: 11.5px;
+}
+.cdx-li__m {
+  grid-column: 2;
+  color: var(--ink3);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cdx-li__e {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.cdx-flag {
+  display: inline-grid;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.cdx-star {
+  width: 24px;
+  height: 24px;
+}
+.cdx-li .cdx-star:not(.on) {
+  display: none;
+}
+.cdx-li:hover .cdx-star,
+.cdx-li:focus-within .cdx-star {
+  display: inline-grid;
+}
+.cdx-star.on {
+  color: var(--gold);
+}
+.cdx-star.on .d-ic {
+  fill: currentColor;
+}
+.cdx-res {
+  flex: none;
+}
+.cdx-res summary .d-ic {
+  margin-right: 5px;
+}
+.cdx-res .d-tags {
+  max-height: 110px;
+  overflow: auto;
+  padding-bottom: 4px;
+}
+.cdx-retry {
+  margin-top: 10px;
+}
+
+/* --- Éditeur --- */
+.cdx-edit {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.cdx-sheet {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 8px 0 2px;
+}
+.cdx-none {
+  flex: 1;
+  align-content: center;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.cdx-none p {
+  margin: 0;
+  color: var(--ink2);
+}
+.cdx-head {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 0 12px;
+  align-items: center;
+  padding-bottom: 8px;
+}
+.cdx-id {
+  grid-row: span 2;
+  min-width: 0;
+}
+.cdx-name {
+  display: flex;
+  align-items: baseline;
+  font: 600 25px/1.2 var(--num);
+}
+.cdx-name span {
+  color: var(--mod);
+}
+.cdx-name input,
+.cdx-desc {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  outline: 0;
+  background: none;
+  transition: border-color 0.12s;
+}
+.cdx-name input {
+  font: inherit;
+}
+.cdx-name input:not([readonly]):hover,
+.cdx-desc:not([readonly]):hover {
+  border-bottom-color: var(--hair2);
+}
+.cdx-name input:focus,
+.cdx-desc:focus {
+  border-bottom-color: var(--mod);
+}
+.cdx-desc {
+  display: block;
+  margin-top: 1px;
+  color: var(--ink2) !important;
+  font: 400 13.5px/1.5 var(--text) !important;
+}
+.cdx-desc::placeholder,
+.cdx-name input::placeholder {
+  color: var(--ink3);
+  opacity: 0.75;
+}
+.cdx-acts {
+  grid-row: span 2;
+  align-self: start;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 2px 6px;
+  align-items: center;
+  justify-items: end;
+}
+.cdx-acts small {
+  grid-column: 1 / -1;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.cdx-alias {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+.cdx-chips {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.cdx-chips .d-tag .d-ic {
+  color: var(--ink3);
+  font-size: 11px;
+}
+.cdx-chips input {
+  flex: 1;
+  min-width: 74px;
+  height: 24px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 6px;
+  outline: 0;
+  background: none;
+  font: 400 13.5px var(--text);
+}
+.cdx-chips input:focus {
+  background: var(--fill);
+}
+.cdx-ro {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 2px 0;
+  color: var(--ink2);
+  font-size: 13.5px;
+}
+.cdx-ro .d-ic {
+  color: var(--ink3);
+}
+
+.cdx-ban {
+  display: flex;
+  gap: 9px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--amber-a);
+  color: var(--amber);
+}
+.cdx-ban.bad {
+  background: var(--red-a);
+  color: var(--red);
+}
+.cdx-ban > .d-ic {
+  margin-top: 3px;
+}
+.cdx-ban div {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+}
+.cdx-ban b {
+  font-weight: 600;
+}
+.cdx-ban span {
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.cdx-ban .cdx-ban__a {
+  display: flex;
+  gap: 6px;
+}
+
+.cdx-sec {
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--hair);
+}
+.cdx-sech {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 30px;
+  margin-bottom: 6px;
+}
+.cdx-sec .cdx-sech:has(.d-sp) {
+  justify-content: flex-start;
+}
+.cdx-sech .d-lb,
+.cdx-chath .d-lb,
+.cdx-alias .d-lb {
+  white-space: nowrap;
+}
+.cdx-write {
+  display: grid;
+  border-radius: 10px;
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px transparent;
+  transition:
+    box-shadow 0.12s,
+    background 0.12s;
+}
+.cdx-write:focus-within {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--mod);
+}
+.cdx-mirror,
+.cdx-write textarea {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 62px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 0;
+  font: 400 15px/1.5 var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cdx-mirror {
+  color: var(--ink);
+  pointer-events: none;
+}
+.cdx-mirror mark {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--mod) 20%, transparent);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--mod) 20%, transparent);
+  color: var(--mod);
+}
+.cdx-mirror mark.bad {
+  background: var(--red-b);
+  box-shadow: 0 0 0 1.5px var(--red-b);
+  color: var(--red);
+}
+.cdx-write textarea {
+  overflow: hidden;
+  outline: 0;
+  resize: none;
+  background: none;
+  color: transparent;
+  caret-color: var(--ink);
+}
+.cdx-write textarea::placeholder {
+  color: var(--ink3);
+}
+.cdx-write textarea::selection {
+  background: var(--teal-b);
+  color: transparent;
+}
+.cdx-vars {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.cdx-var {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--fill);
+  color: var(--ink2);
+  font: 500 12.5px var(--text);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.cdx-var:hover {
+  background: var(--fill2);
+  color: var(--mod);
+}
+.cdx-var:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.cdx-silent {
+  margin: 0;
+  padding: 16px 12px;
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--ink3);
+}
+.cdx-inl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.cdx-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cdx-step {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+.cdx-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 22px;
+  bottom: 0;
+  width: 1px;
+  background: var(--hair2);
+}
+.cdx-step i {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 21px;
+  height: 21px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: var(--raise2);
+  color: var(--ink2);
+  font: 600 12.5px var(--num);
+}
+.cdx-step.is-reply {
+  align-items: center;
+  color: var(--ink3);
+}
+.cdx-step.is-reply i {
+  margin-top: 0;
+  background: color-mix(in srgb, var(--mod) 22%, transparent);
+  color: var(--mod);
+}
+.cdx-step__b {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.cdx-step__b > .d-fld {
+  height: 28px;
+}
+.cdx-step__m {
+  display: flex;
+  gap: 4px;
+}
+.cdx-step__m .d-fld {
+  flex: 1;
+}
+.cdx-step__x {
+  display: flex;
+  flex: none;
+}
+.cdx-step__x .d-ib {
+  width: 24px;
+}
+.d-ic.cdx-up {
+  rotate: 180deg;
+}
+
+.cdx-rules {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--hair);
+  box-shadow: 0 0 0 1px var(--hair);
+}
+.cdx-rule {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 0;
+  background: var(--sheet);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.cdx-rule:hover {
+  background: var(--sheet2);
+}
+.cdx-rule:focus-visible {
+  outline-offset: -2px;
+}
+.cdx-rule small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.cdx-rule b {
+  font-weight: 500;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cdx-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 44px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hair);
+}
+.cdx-bar:empty {
+  display: none;
+}
+.cdx-st {
+  min-width: 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cdx-st.warn {
+  color: var(--amber);
+}
+
+/* --- Surcouches --- */
+.cdx-pop {
+  width: 304px;
+}
+.cdx-pop .d-tag .d-ic {
+  font-size: 11px;
+}
+.cdx-sent {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.cdx-inline {
+  display: grid;
+  grid-template-columns: auto 74px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--ink2);
+}
+.cdx-wide {
+  display: flex;
+}
+.cdx-syntax {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+.cdx-syntax code {
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--fill);
+  font: 500 13.5px var(--num);
+}
+.cdx-syntax small {
+  color: var(--ink3);
+}
+.cdx-arg {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  padding: 6px 0;
+  border-top: 1px solid var(--hair);
+}
+.cdx-arg .d-seg,
+.cdx-arg .d-row {
+  grid-column: 1 / -1;
+}
+.cdx-pub {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 9px;
+  background: var(--fill);
+}
+.cdx-pub > div {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.cdx-pub p {
+  margin: 0;
+  min-width: 0;
+}
+.cdx-pub b {
+  font: 600 13.5px var(--num);
+}
+.cdx-pub small {
+  display: block;
+  color: var(--ink2);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.cdx-icons {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.cdx-icons button {
+  display: grid;
+  place-items: center;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--c);
+  font-size: 15px;
+  cursor: pointer;
+}
+.cdx-icons button:hover {
+  background: var(--fill2);
+}
+.cdx-icons button.on {
+  background: color-mix(in srgb, var(--c) 24%, transparent);
+}
+.cdx-swatches {
+  display: flex;
+  justify-content: space-between;
+}
+.cdx-swatches button {
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--c);
+  cursor: pointer;
+  transition: transform 0.14s var(--spring);
+}
+.cdx-swatches button:hover {
+  transform: scale(1.14);
+}
+.cdx-swatches button.on {
+  box-shadow:
+    0 0 0 2px var(--pop),
+    0 0 0 3.5px var(--ink);
+}
+.cdx-tgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.cdx-tgrid label {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cdx-tgrid .d-lb {
+  font-size: 11.5px;
+}
+
+/* --- Faux chat --- */
+.cdx-chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 10px 10px;
+  border-radius: 12px;
+  background: var(--void);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.cdx-chath {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding-bottom: 4px;
+}
+.cdx-chath .d-tag {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11.5px;
+}
+.cdx-chath > span {
+  min-width: 0;
+}
+.cdx-who {
+  max-width: min(132px, 100%);
+  overflow: hidden;
+}
+.cdx-feed {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 2px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.cdx-l {
+  padding: 3px 4px;
+}
+.cdx-l b {
+  font-weight: 600;
+}
+.cdx-l .cdx-bot {
+  color: var(--teal);
+}
+.cdx-l mark {
+  background: none;
+  color: var(--teal);
+}
+.cdx-l small {
+  display: block;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.cdx-l .cdx-bad {
+  color: var(--red);
+}
+.cdx-l.ann {
+  margin: 4px 0;
+  padding: 6px 9px;
+  border-left: 3px solid var(--teal);
+  border-radius: 3px 8px 8px 3px;
+  background: var(--teal-a);
+}
+.cdx-l.ann small {
+  font-weight: 600;
+}
+.cdx-lnote {
+  margin: 3px 4px;
+  color: var(--ink3);
+  font-size: 12.5px;
+  font-style: italic;
+}
+.cdx-verdict {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hair2);
+  font-size: 13.5px;
+}
+.cdx-verdict header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--teal);
+}
+.cdx-verdict.no header {
+  color: var(--amber);
+}
+.cdx-verdict b {
+  font-weight: 600;
+}
+.cdx-verdict p {
+  margin: 0;
+  color: var(--ink2);
+}
+.cdx-real {
+  margin-top: 4px;
+}
+.cdx-checks {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.cdx-checks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 1px 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.cdx-checks li .d-ic {
+  margin-top: 3px;
+  color: var(--teal);
+}
+.cdx-checks li.no {
+  color: var(--ink);
+}
+.cdx-checks li.no .d-ic {
+  color: var(--amber);
+}
+.cdx-checks small {
+  display: block;
+  color: var(--ink3);
+}
+.cdx-compose {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+}
+.cdx-compose .d-fld {
+  flex: 1;
+  height: 32px;
+  color: var(--ink3);
+}
+.cdx-compose input {
+  margin-left: 7px;
+}
+.cdx-compose .d-btn {
+  height: 32px;
+}
+.cdx-chatnote {
+  margin: 5px 2px 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.cdx-chatnote:empty {
+  display: none;
+}
+
+/* --- Panneau et journal --- */
+.cdx-cat {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 0;
+}
+.cdx-cat .cdx-tile {
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  font-size: 13.5px;
+}
+.cdx-cat .d-fld {
+  flex: 1;
+}
+.cdx-cat .d-ib {
+  width: 22px;
+}
+.cdx-cat.new .d-ib {
+  width: 28px;
+}
+.cdx-right {
+  align-items: flex-start;
+  padding: 3px 0;
+}
+.cdx-rsw {
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
+  justify-items: center;
+  flex: none;
+}
+.cdx-rsw.d-lb {
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+}
+.cdx-sub {
+  padding-left: 12px;
+  font-size: 12.5px;
+}
+.cdx-sub .d-fld {
+  width: 66px;
+}
+.cdx-savers {
+  display: flex;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+.cdx-day {
+  margin: 12px 0 2px;
+  text-transform: none;
+}
+.cdx-j {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--hair);
+  font-size: 13.5px;
+}
+.cdx-j time {
+  padding-top: 3px;
+  color: var(--ink3);
+  font: 500 12.5px var(--num);
+}
+.cdx-j .d-tag {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 12.5px;
+}
+.cdx-j small {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink3);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.cdx-jsteps {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.cdx-diff {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.cdx-diff span {
+  color: var(--ink2);
+}
+.cdx-diff del {
+  color: var(--ink3);
+}
+.cdx-diff ins {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* Le panneau passe par-dessus : les trois colonnes restent lisibles. */
+@media (max-width: 1560px) {
+  [data-mod='commands'] .d-work.is-open {
+    grid-template-columns: minmax(0, 1fr) 0;
+  }
+  [data-mod='commands'] .d-work.is-open .d-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 6;
+    width: 316px;
+    box-shadow: -14px 0 40px var(--shade);
+  }
+}
+@media (max-width: 1180px) {
+  .cdx {
+    grid-template-columns: 216px minmax(0, 1fr) 256px;
+    gap: 0 12px;
+  }
+  .cdx-acts small {
+    display: none;
+  }
+  .cdx-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

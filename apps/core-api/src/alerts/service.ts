@@ -31,7 +31,7 @@ import { type AlertVariant, FOLLOW_WEIGHTS } from './variants.js';
 // - one alert in flight per channel AND family (unique index, 17/10/2026): follow, subscription (sub + gifts), bits,
 //   raid and donation play side by side; inside a family strictly first in, first out (arrival order; the legacy
 //   priority is kept on the row for information but no longer lets a later alert overtake an earlier one).
-// - freshness (lot 9, OFF unless maxAgeMs is set — no value chosen yet): an event whose Twitch time is older than
+// - freshness (lot 9; refonte H3, decided 05/11: 30 min by default, ALERTS_MAX_AGE_SECONDS overrides): an event whose Twitch time is older than
 //   maxAgeMs at reception, or an alert still waiting maxAgeMs after it, is recorded « expired » (failure « stale »),
 //   never animated. Only the animation is dropped: the Roue du Sub gain and Loyalty never depend on it.
 // Alerts never touch the wallet, the loyalty engine or any other economy.
@@ -42,7 +42,14 @@ export const ALERT_RULES = {
   /** When neither the media length nor the timings are known (raid). */
   defaultPlayMs: 10_000,
   maxAttempts: 3,
+  /** Refonte H3 (decided 05/11): freshness of the animation when ALERTS_MAX_AGE_SECONDS is not set. */
+  defaultMaxAgeMs: 30 * 60_000,
 } as const;
+
+const CLEARED_FAILURE = JSON.stringify({
+  code: 'cleared',
+  message: 'waiting queue cleared from Studio: recorded, not animated',
+});
 
 const STALE_FAILURE = JSON.stringify({
   code: 'stale',
@@ -240,7 +247,11 @@ export class AlertsService {
     const p = AlertVariantSettings.safeParse(patch);
     if (!p.success) throw new AlertError(400, 'invalid_variant_settings');
     const known = new Set(FOLLOW_WEIGHTS.map(([id]) => id));
-    if (p.data.follow?.some((id) => !known.has(id)))
+    if (
+      [...(p.data.follow ?? []), ...Object.keys(p.data.weights ?? {})].some(
+        (id) => !known.has(id),
+      )
+    )
       throw new AlertError(400, 'unknown_variant');
     for (const f of ['bits', 'raid', 'donation'] as const)
       if (p.data.families[f] === 'halloween')
@@ -248,9 +259,11 @@ export class AlertsService {
     return this.db.tx(async (q) => {
       const cur = await this.readVariants(q, channelId);
       const follow = p.data.follow ?? cur.follow;
+      const weights = { ...cur.weights, ...p.data.weights };
       const next: AlertVariantSettings = {
         families: { ...cur.families, ...p.data.families },
         ...(follow ? { follow: [...new Set(follow)] } : {}),
+        ...(Object.keys(weights).length ? { weights } : {}),
       };
       await q.query(
         `insert into alert_settings (channel_id, variants, updated_at) values ($1, $2, $3)
@@ -513,6 +526,25 @@ export class AlertsService {
           STALE_FAILURE,
         ],
       );
+  }
+
+  /**
+   * Refonte H3 « Vider la file »: every WAITING alert of the channel is recorded expired (failure « cleared »), never
+   * animated; those the player already took (claimed / playing) are left to end. History and Twitch events are kept;
+   * no economy is touched (an alert is never paid). Row by row atomic: a claim at the same instant takes it or not.
+   */
+  async clearQueue(channelId: string) {
+    const now = this.clock.now();
+    const cleared = await this.db.query<{ alert_id: string }>(
+      `update alert_items set status = 'expired', ended_at = $2, failure = $3
+       where channel_id = $1 and status = 'queued' returning alert_id`,
+      [channelId, now, CLEARED_FAILURE],
+    );
+    const busy = await this.db.query<{ n: number | string }>(
+      `select count(*) as n from alert_items where channel_id = $1 and status in ('claimed', 'playing')`,
+      [channelId],
+    );
+    return { cleared: cleared.length, in_flight: Number(busy[0]!.n) };
   }
 
   private async byId(q: Queryable, id: string) {

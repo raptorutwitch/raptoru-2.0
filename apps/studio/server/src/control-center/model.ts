@@ -28,6 +28,8 @@ export interface ModuleStatus {
   hint: string | null;
   /** When Studio read it (ISO). */
   checkedAt: string;
+  /** Structured facts for « Prêt pour le live » (refonte F4): never shown as such, never parsed from French. */
+  data?: Record<string, unknown>;
 }
 
 export interface StatusProvider {

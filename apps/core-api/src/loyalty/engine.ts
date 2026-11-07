@@ -27,6 +27,7 @@ import {
   endSubscription,
   resolveTiers,
   setSubscription,
+  SNAPSHOT_MAX_AGE_MS,
 } from './tiers.js';
 
 // source event → Loyalty calculation → Wallet. Presence and Twitch never see amounts; the Wallet
@@ -219,8 +220,14 @@ export class LoyaltyEngine {
         overrides.get(d.twitch_user_id) ?? null,
         false,
       );
+      // Refonte H9 (decided 05/11): an unknown tier pays the BASE rate now (never nothing, never a guess above it);
+      // the complement, if any, is decided later by verifiable data (reconcileUnknownTiers), once.
+      const provisional = breakdown.final === null;
+      const amount = provisional
+        ? (breakdown.candidates?.none ?? null)
+        : breakdown.final;
       const status: RewardStatus =
-        breakdown.final === null
+        amount === null
           ? 'tier_unknown'
           : mode === 'credit'
             ? 'pending'
@@ -233,9 +240,19 @@ export class LoyaltyEngine {
           viewerId: d.twitch_user_id,
           streamId: v.streamId,
           currencyId: config.currencyId,
-          amount: breakdown.final,
+          amount,
           status,
-          breakdown: { ...breakdown, tick, mode },
+          breakdown: provisional
+            ? {
+                ...breakdown,
+                final: amount,
+                tick,
+                mode,
+                provisional: true,
+                complement: 'awaiting',
+                tick_at: v.at.toISOString(),
+              }
+            : { ...breakdown, tick, mode },
         });
       }
       await q.query(
@@ -489,7 +506,12 @@ export class LoyaltyEngine {
   }
 
   async applySubscriptionSnapshot(snapshot: SubscriptionSnapshot) {
-    const r = await this.db.tx((q) => applySnapshot(q, snapshot));
+    const r = await this.db.tx(async (q) => {
+      // Refonte H9: the ticks paid at the base rate are settled by this snapshot BEFORE it replaces the known state
+      // (the event-sourced rows it overwrites are part of the evidence).
+      await reconcileUnknownTiers(q, snapshot);
+      return applySnapshot(q, snapshot);
+    });
     return { subscribers: r.count, added: r.added, previousAt: r.previousAt };
   }
 
@@ -624,5 +646,95 @@ export class LoyaltyEngine {
         [twitchUserId, limit],
       ),
     };
+  }
+}
+
+/**
+ * Refonte H9 — a passive tick paid at the base rate because the tier was unknown gets its complement from the FIRST
+ * complete subscriber snapshot fetched after the tick and within SNAPSHOT_MAX_AGE_MS of it (verifiable data close to the
+ * period of the gain), never from a supposed tier:
+ * - viewer listed with tier T → complement = candidates[T] − base, credited once (key passive-complement:<tick key>);
+ * - viewer absent → the base was right (« none »);
+ * - the viewer's known subscription changed through a Twitch event after the tick → which tier held at the tick
+ *   cannot be proven: nothing more (« undetermined »);
+ * - no such snapshot within the window → « expired », nothing more.
+ * Replays (same snapshot twice, two Cores, a restart) decide nothing twice: the decision is written on the tick row
+ * (status awaiting → decided, under row lock) and the complement has its own idempotency key.
+ */
+async function reconcileUnknownTiers(
+  q: Queryable,
+  snapshot: SubscriptionSnapshot,
+) {
+  const fetchedAt = new Date(snapshot.fetchedAt);
+  const waiting = await q.query<{
+    id: number;
+    idempotency_key: string;
+    twitch_user_id: string;
+    stream_id: string | null;
+    currency_id: string;
+    status: RewardStatus;
+    breakdown: {
+      candidates?: Record<'none' | 't1' | 't2' | 't3', number>;
+      tick_at?: string;
+      mode?: string;
+    };
+  }>(
+    `select id, idempotency_key, twitch_user_id, stream_id, currency_id, status, breakdown from loyalty_rewards
+     where source = 'passive_watch' and breakdown->>'complement' = 'awaiting' order by id for update`,
+  );
+  if (!waiting.length) return;
+  const tiers = new Map(
+    snapshot.subscribers.map((s) => [s.viewer.twitchUserId, s.tier]),
+  );
+  for (const w of waiting) {
+    const tickAt = new Date(w.breakdown.tick_at ?? 0);
+    if (fetchedAt < tickAt) continue; // an older snapshot never speaks for a later tick
+    const changed = (
+      await q.query(
+        `select 1 from viewer_subscriptions where twitch_user_id = $1 and source = 'event' and updated_at > $2`,
+        [w.twitch_user_id, tickAt],
+      )
+    ).length;
+    const tier = tiers.get(w.twitch_user_id) ?? 'none';
+    const c = w.breakdown.candidates;
+    const decision =
+      fetchedAt.getTime() - tickAt.getTime() > SNAPSHOT_MAX_AGE_MS
+        ? 'expired'
+        : changed
+          ? 'undetermined'
+          : !c || tier === 'none'
+            ? 'none'
+            : c[tier] - c.none > 0
+              ? 'paid'
+              : 'none';
+    if (decision === 'paid')
+      await insertReward(q, {
+        key: `passive-complement:${w.idempotency_key}`,
+        hashPayload: { of: w.idempotency_key, tier },
+        source: 'passive_watch',
+        viewerId: w.twitch_user_id,
+        streamId: w.stream_id,
+        currencyId: w.currency_id,
+        amount: c![tier] - c!.none,
+        status: w.status === 'preview' ? 'preview' : 'pending',
+        breakdown: {
+          complement_of: w.idempotency_key,
+          tier,
+          base_paid: c!.none,
+          due: c![tier],
+          snapshot_at: fetchedAt.toISOString(),
+        },
+      });
+    await q.query(
+      `update loyalty_rewards set breakdown = breakdown || $2::jsonb where id = $1`,
+      [
+        w.id,
+        JSON.stringify({
+          complement: decision,
+          complement_tier: decision === 'expired' ? null : tier,
+          complement_decided_at: fetchedAt.toISOString(),
+        }),
+      ],
+    );
   }
 }

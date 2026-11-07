@@ -302,7 +302,11 @@ describe('Extension Lab: HTTP routes', () => {
 
   it('extension pages are frameable by the Studio only; the lab API needs a lab token, lab state the Studio header', async () => {
     const lab = await newLab();
-    const server = createStudioServer({} as never, () => {}, lab);
+    const server = createStudioServer({
+      lab: {} as never,
+      onShutdown: () => {},
+      extLab: lab,
+    });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     const port = (server.address() as AddressInfo).port;
 
@@ -339,20 +343,11 @@ describe('Extension Lab: HTTP routes', () => {
   });
   it('Production profile (ASTRA-P1-019 lot 2): no Extension Lab — an explicit message, never the simulated (outdated) extension', async () => {
     const production = { plan: { effective: 'production' } } as never;
-    const server = createStudioServer(
-      {} as never,
-      () => {},
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      production,
-    );
+    const server = createStudioServer({
+      lab: {} as never,
+      onShutdown: () => {},
+      profile: production,
+    });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     const port = (server.address() as AddressInfo).port;
     const page = await get(port, '/ext/panel.html');
@@ -376,7 +371,11 @@ describe('Extension Lab: HTTP routes', () => {
     expect((await get(port, '/ext/')).status).toBe(409);
     await new Promise((r) => server.close(r));
     // Lab profile: the current extension is served as before.
-    const labServer = createStudioServer({} as never, () => {}, await newLab());
+    const labServer = createStudioServer({
+      lab: {} as never,
+      onShutdown: () => {},
+      extLab: await newLab(),
+    });
     await new Promise<void>((r) => labServer.listen(0, '127.0.0.1', r));
     const labPage = await get(
       (labServer.address() as AddressInfo).port,

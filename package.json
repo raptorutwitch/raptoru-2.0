@@ -28,6 +28,8 @@
     "test": "turbo run test --concurrency=1",
     "e2e": "turbo run build --filter=@raptoru/schemas && npm run test:e2e -w @raptoru/studio-server",
     "studio": "turbo run build && npm run start -w @raptoru/studio-desktop",
+    "studio:lab": "node scripts/studio-lab.mjs",
+    "studio:legacy": "node scripts/studio-lab.mjs --legacy",
     "studio:package": "turbo run build && npm run package:win -w @raptoru/studio-desktop",
     "studio:release": "node apps/studio/desktop/scripts/release.mjs",
     "bonk:lab": "npm run build && node apps/studio/server/scripts/bonk-lab.mjs"

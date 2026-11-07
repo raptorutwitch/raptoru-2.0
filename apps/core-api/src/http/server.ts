@@ -179,7 +179,10 @@ export interface AppDeps {
     limits?: { ip: BucketRule; viewer: BucketRule };
   };
   /** Studio cockpit over the installation credential (ASTRA-P1-019): needs studioInstallations. */
-  cockpit?: { core: LabCall; channelId: string };
+  /** Public routes of the Lab environment only (the fictional Twitch consent, lab/fictional-twitch.ts). */
+  labPublic?: Route[];
+  /** `lab`: the Core's Lab environment (its whole Lab table behind the cockpit, http/studio-cockpit-routes.ts). */
+  cockpit?: { core: LabCall; channelId: string; lab?: boolean };
   /**
    * Chat games of the main Core (lot 8): /v1/bot/chat, /v1/bot/stream, /v1/bot/commands/<channel>/steps/* for the
    * production bot (bot secret), the cockpit's channel only.
@@ -290,8 +293,10 @@ function routes({
   ext,
   cockpit,
   chatIngress,
+  labPublic = [],
 }: AppDeps): Route[] {
   return [
+    ...labPublic,
     ...walletRoutes(wallet),
     // raptoru.fr: Jeu des mots and Tombola rankings (public, read-only).
     ...(db ? publicStatsRoutes(db) : []),
@@ -363,7 +368,9 @@ function routes({
       ? [wordGameCockpitEvents(chatIngress.games.wordGame, cockpit.channelId)]
       : []),
     ...(studioInstallations && cockpit
-      ? studioCockpitRoutes(cockpit.core, cockpit.channelId)
+      ? studioCockpitRoutes(cockpit.core, cockpit.channelId, {
+          lab: cockpit.lab === true,
+        })
       : []),
     ...(chatIngress && cockpit?.channelId
       ? botChatRoutes(chatIngress.router, chatIngress.games, cockpit.channelId)

@@ -1,3 +1,4 @@
+import { registerSessionModule } from './module-registry.js';
 // « Événements » in the Hub (docs/HALLOWEEN.md) — the edition of the moment (Halloween 2026): its interactions, played
 // on Raptoru's own screen, and its currency, the Bonbons. Everything is Core's projection for the JWT's viewer: names,
 // thumbnails, descriptions, prices, categories, limits, cooldowns, the overlay's state, the ways to earn (the Jetons
@@ -465,3 +466,25 @@ export function createEventShopView({ document, client, onState }) {
     },
   };
 }
+
+/** « Événements » (docs/HALLOWEEN.md): the edition of the moment, shown only while the Core says one is open. */
+const EVENT_SHOP_MODULE = Object.freeze({
+  id: 'event_shop',
+  label: 'Événements',
+  icon: '🦇',
+  description: 'Fais peur à Raptoru avec tes Bonbons.',
+});
+
+registerSessionModule({
+  id: EVENT_SHOP_MODULE.id,
+  // The card names the edition the Core announces (« Halloween 2026 — … »).
+  card: (state) => {
+    const title = state?.event_shop?.edition?.title;
+    return title ? { ...EVENT_SHOP_MODULE, description: `${title} — fais peur à Raptoru avec tes Bonbons.` } : EVENT_SHOP_MODULE;
+  },
+  // The EBS's session carries `event_shop` only on a Core that has the shop.
+  available: ({ state, client }) => state?.event_shop?.enabled === true && typeof client?.eventsState === 'function',
+  // Halloween first: the event of the moment.
+  hubFirst: true,
+  view: ({ document, client }) => createEventShopView({ document, client }),
+});

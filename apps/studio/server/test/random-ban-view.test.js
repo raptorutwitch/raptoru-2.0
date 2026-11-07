@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { randomBanView, rbError } from '../../web/src/random-ban-view.ts';
+import {
+  rbDetail,
+  rbDraw,
+  rbError,
+  rbLocks,
+  rbRow,
+  rbTrace,
+} from '../../web/src/pages/sanctions-model.ts';
 
-// Random Ban V2 — Studio section, pure view: names escaped, refund owed said (never claimed done), missing rights
-// readable, the fixed rules shown, tests never presented as real.
+// Random Ban V2 — Studio page, pure parts: names escaped, refund owed said (never claimed done), missing rights
+// readable, the rules shown, tests never presented as real.
+
+const randomBanView = (s) =>
+  [
+    rbLocks(s),
+    rbDraw(s),
+    rbTrace(s),
+    ...s.recent.map(rbRow),
+    ...s.recent.map(rbDetail),
+  ].join('');
 
 const base = {
   rules: { duration_sub_s: 180, duration_non_sub_s: 300 },
@@ -39,46 +55,44 @@ const row = (over) => ({
 
 describe('Random Ban view', () => {
   it('executor rights, missing media, rules, results with escaped names, refund owed, CSC, tests marked', () => {
-    const html = randomBanView(
-      {
-        ...base,
-        recent: [
-          row({}),
-          row({
-            status: 'failed',
-            error: 'Twitch 400 : may not be put in a timeout',
-            refund: 'needed',
-            animation: null,
-            animation_status: 'none',
-          }),
-          row({
-            status: 'uncertain',
-            error: 'no_answer_after_timeout_request',
-            refund: 'to_verify',
-          }),
-          row({
-            target: { id: '1', name: 'Buyer', is_sub: false },
-            duration_s: 300,
-            animation: 'ban_csc',
-          }),
-          row({
-            status: 'flop',
-            target: null,
-            duration_s: null,
-            animation: 'flop',
-          }),
-          row({ mode: 'dry_run', status: 'simulated', source: 'test' }),
-        ],
-      },
-      null,
-    );
+    const html = randomBanView({
+      ...base,
+      recent: [
+        row({}),
+        row({
+          status: 'failed',
+          error: 'Twitch 400 : may not be put in a timeout',
+          refund: 'needed',
+          animation: null,
+          animation_status: 'none',
+        }),
+        row({
+          status: 'uncertain',
+          error: 'no_answer_after_timeout_request',
+          refund: 'to_verify',
+        }),
+        row({
+          target: { id: '1', name: 'Buyer', is_sub: false },
+          duration_s: 300,
+          animation: 'ban_csc',
+        }),
+        row({
+          status: 'flop',
+          target: null,
+          duration_s: null,
+          animation: 'flop',
+        }),
+        row({ mode: 'dry_run', status: 'simulated', source: 'test' }),
+      ],
+    });
     expect(html).toContain('Timeouts par lecroupier_ : droit manquant');
     expect(html).toContain('moderator:manage:banned_users');
-    expect(html).toContain('Médias non importés : Random Ban — CSC');
+    expect(html).toContain('1 média non importé');
+    expect(html).toContain('<small>CSC</small>');
     expect(html).toContain('3 min pour un abonné, 5 min sinon');
     expect(html).toContain('&lt;b&gt;T&lt;/b&gt; · 3 min (abonné)');
     expect(html).not.toContain('<b>T</b>');
-    expect(html).toContain('Rick &amp; Morty (miroir) — affichée');
+    expect(html).toContain('Rick &amp; Morty (miroir) · affichée');
     expect(html).toContain(
       '<b>Remboursement nécessaire</b> (non effectué : récompense créée par SAMMI)',
     );
@@ -88,10 +102,10 @@ describe('Random Ban view', () => {
     expect(html).toContain('Buyer (CSC) · 5 min');
     expect(html).toContain('aucun follower éligible');
     expect(html).toContain('(à blanc)');
-    expect(html).toContain('Tirage à blanc');
-    expect(rbError('executor_absent')).toContain('exécuteur Twitch absent');
-    expect(randomBanView({ ...base, executor: null }, null)).toContain(
-      'Exécuteur Twitch : absent',
+    expect(html).toContain('À blanc');
+    expect(rbError('executor_absent')).toContain('bot Twitch absent');
+    expect(randomBanView({ ...base, executor: null })).toContain(
+      'Bot Twitch : absent',
     );
   });
 });
@@ -108,42 +122,40 @@ describe('Random Ban V3 view', () => {
     },
   };
   it('the rules: buyer 4× rarer, streamer 2 % → 60 s mic mute, caution price', () => {
-    const html = randomBanView(
-      { ...v3, mic: { input: 'Micro', obs_connected: true, held_by: [] } },
-      null,
-    );
+    const html = randomBanView({
+      ...v3,
+      mic: { input: 'Micro', obs_connected: true, held_by: [] },
+    });
     expect(html).toContain('4 fois moins souvent');
     expect(html).toContain('2 % des fois');
     expect(html).toContain('coupé 60 s dans OBS');
     expect(html).toContain('300 jetons par tranche de 10 s');
     expect(html).toContain('Mute du streamer : prêt');
-    expect(html).toContain('data-act="rb-streamer-mute"');
+    // The rate is Caution's setting: the page shows the one in force.
+    expect(rbDraw(v3, 450)).toContain('450 jetons par tranche de 10 s');
   });
   it('the mic held by another effect / OBS absent: said; a streamer mute row reads as one', () => {
-    const held = randomBanView(
-      {
-        ...v3,
-        mic: {
-          input: 'Micro',
-          obs_connected: true,
-          held_by: ['votekick:mute:1'],
-        },
-        recent: [
-          row({
-            streamer_mute: true,
-            target: { id: '83603689', name: 'raptoru_', is_sub: null },
-            duration_s: 60,
-          }),
-        ],
+    const held = randomBanView({
+      ...v3,
+      mic: {
+        input: 'Micro',
+        obs_connected: true,
+        held_by: ['votekick:mute:1'],
       },
-      null,
-    );
+      recent: [
+        row({
+          streamer_mute: true,
+          target: { id: '83603689', name: 'raptoru_', is_sub: null },
+          duration_s: 60,
+        }),
+      ],
+    });
     expect(held).toContain('tenu par : votekick');
     expect(held).toContain('micro de raptoru_ coupé 60 s');
-    const off = randomBanView(
-      { ...v3, mic: { input: 'Micro', obs_connected: false, held_by: [] } },
-      null,
-    );
+    const off = randomBanView({
+      ...v3,
+      mic: { input: 'Micro', obs_connected: false, held_by: [] },
+    });
     expect(off).toContain('OBS non connecté');
   });
 });
@@ -160,63 +172,55 @@ describe('Random Ban V3 view — the streamer trace', () => {
     },
   };
   it('the summary: eligible, drawn, the run since the last win and its chance; reasons; each row its decision', () => {
-    const html = randomBanView(
-      {
-        ...v3,
-        streamer_trace: {
-          requests: 60,
-          traced: 52,
-          by_decision: { not_drawn: 49, drawn: 1, obs_not_ready: 2 },
-          eligible: 50,
-          drawn: 1,
-          obs_failed: 0,
-          eligible_since_last_drawn: 49,
-          luck_pct: 37.159,
-        },
-        recent: [
-          row({
-            status: 'flop',
-            target: null,
-            streamer_decision: { decision: 'not_drawn', draw: 734 },
-          }),
-          row({
-            status: 'flop',
-            target: null,
-            streamer_decision: {
-              decision: 'studio_silent',
-              studio_age_ms: 12400,
-            },
-          }),
-        ],
+    const html = randomBanView({
+      ...v3,
+      streamer_trace: {
+        requests: 60,
+        traced: 52,
+        by_decision: { not_drawn: 49, drawn: 1, obs_not_ready: 2 },
+        eligible: 50,
+        drawn: 1,
+        obs_failed: 0,
+        eligible_since_last_drawn: 49,
+        luck_pct: 37.159,
       },
-      null,
-    );
+      recent: [
+        row({
+          status: 'flop',
+          target: null,
+          streamer_decision: { decision: 'not_drawn', draw: 734 },
+        }),
+        row({
+          status: 'flop',
+          target: null,
+          streamer_decision: {
+            decision: 'studio_silent',
+            studio_age_ms: 12400,
+          },
+        }),
+      ],
+    });
     expect(html).toContain('éligible 50 fois, tiré 1 fois');
     expect(html).toContain('49 tirage(s) éligible(s) perdu(s)');
     expect(html).toContain('37.159 % de chances par simple malchance (normal)');
     expect(html).toContain('OBS non connecté × 2');
-    expect(html).toContain('Streamer : éligible, pas tiré (tirage 734/1000)');
-    expect(html).toContain(
-      'Streamer : Studio non vu par le Core (vu il y a 12 s)',
-    );
+    expect(html).toContain('éligible, pas tiré (tirage 734/1000)');
+    expect(html).toContain('Studio silencieux (vu il y a 12 s)');
   });
   it('a run too long for luck is flagged', () => {
-    const html = randomBanView(
-      {
-        ...v3,
-        streamer_trace: {
-          requests: 200,
-          traced: 200,
-          by_decision: { not_drawn: 200 },
-          eligible: 200,
-          drawn: 0,
-          obs_failed: 0,
-          eligible_since_last_drawn: 200,
-          luck_pct: 1.759,
-        },
+    const html = randomBanView({
+      ...v3,
+      streamer_trace: {
+        requests: 200,
+        traced: 200,
+        by_decision: { not_drawn: 200 },
+        eligible: 200,
+        drawn: 0,
+        obs_failed: 0,
+        eligible_since_last_drawn: 200,
+        luck_pct: 1.759,
       },
-      null,
-    );
+    });
     expect(html).toContain(
       'seulement 1.759 % de chances par simple malchance (à signaler)',
     );
@@ -224,31 +228,27 @@ describe('Random Ban V3 view — the streamer trace', () => {
 });
 
 describe('« Test Caution Random Ban » view', () => {
-  it('its button, and its row says Caution may end it with real Jetons', () => {
-    const html = randomBanView(
-      {
-        ...base,
-        recent: [
-          row({
-            source: 'test',
-            mode: 'real',
-            streamer_mute: true,
-            caution_test: true,
-            target: { id: '83603689', name: 'raptoru_', is_sub: null },
-            duration_s: 60,
-          }),
-          row({
-            source: 'test',
-            mode: 'real',
-            streamer_mute: true,
-            target: { id: '83603689', name: 'raptoru_', is_sub: null },
-            duration_s: 60,
-          }),
-        ],
-      },
-      null,
-    );
-    expect(html).toContain('data-act="rb-caution-test"');
+  it('its row says Caution may end it with real Jetons', () => {
+    const html = randomBanView({
+      ...base,
+      recent: [
+        row({
+          source: 'test',
+          mode: 'real',
+          streamer_mute: true,
+          caution_test: true,
+          target: { id: '83603689', name: 'raptoru_', is_sub: null },
+          duration_s: 60,
+        }),
+        row({
+          source: 'test',
+          mode: 'real',
+          streamer_mute: true,
+          target: { id: '83603689', name: 'raptoru_', is_sub: null },
+          duration_s: 60,
+        }),
+      ],
+    });
     expect(html).toContain(
       'test Caution : libérable par !caution, jetons réels',
     );

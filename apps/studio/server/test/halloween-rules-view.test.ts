@@ -1,6 +1,6 @@
-// The Halloween rules card (apps/studio/web/src/halloween.ts): what the streamer types becomes what the Core stores.
+// The Halloween rules (apps/studio/web/src/pages/halloween-model.ts): what the streamer types becomes what the Core stores.
 import { describe, expect, it } from 'vitest';
-import { rulesFromInputs } from '../../web/src/halloween.js';
+import { rulesFromInputs } from '../../web/src/pages/halloween-model.js';
 
 describe('Halloween rules typed in Studio', () => {
   it('seconds and euros are stored in ms and cents; empty Prime / resub = the sub’s amount (null)', () => {

@@ -341,7 +341,14 @@ export class SubWheelService {
            as tracked, to_regclass('lab_sw_presence') is not null as lab`,
       )
       .then((r): PresenceMode =>
-        r[0]?.tracked ? 'tracked' : r[0]?.lab ? 'lab_sim' : 'none',
+        // The main Core's Lab has both tables: its simulators are the presence there.
+        r[0]?.lab && this.options.labCredits === true
+          ? 'lab_sim'
+          : r[0]?.tracked
+            ? 'tracked'
+            : r[0]?.lab
+              ? 'lab_sim'
+              : 'none',
       )
       .catch((e: unknown) => {
         this.presence = undefined; // a failed read is never remembered
@@ -539,8 +546,11 @@ export class SubWheelService {
   /** The switch (persistent; OFF by default). */
   async setEnabled(channelId: string, enabled: boolean) {
     await this.db.query(
-      `insert into sw_settings (channel_id, enabled, updated_at) values ($1, $2, $3)
-       on conflict (channel_id) do update set enabled = $2, updated_at = $3`,
+      // enabled_at (refonte P0-3): the live boundary, moved only by an OFF → ON switch, never by a repeated ON.
+      `insert into sw_settings (channel_id, enabled, updated_at, enabled_at)
+         values ($1, $2, $3, case when $2 then $3::timestamptz end)
+       on conflict (channel_id) do update set enabled = $2, updated_at = $3,
+         enabled_at = case when $2 and not sw_settings.enabled then $3::timestamptz else sw_settings.enabled_at end`,
       [channelId, enabled, this.now()],
     );
     return this.settings(channelId);

@@ -1,4 +1,6 @@
 import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
+import { modulesRoutes } from '../http/modules-routes.js';
+import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
 import { eventShopRoutes } from '../http/event-shop-routes.js';
 import type { Core } from '../app.js';
 import { TwitchViewerCatalog } from '../bonk-lab/twitch-viewer.js';
@@ -17,6 +19,9 @@ import { subWheelRoutes } from '../http/sub-wheel-routes.js';
 import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { LabModerationService } from '../lab-moderation/service.js';
 import { AvatarCache, twitchAppUserLookup } from '../raffle-lab/avatars.js';
+import type { TwitchUserLookup } from '../raffle-lab/avatars.js';
+import { labTwitchViewers } from '../lab/fictional-twitch.js';
+import { labCockpitRoutes } from '../lab/routes.js';
 import { ExtFacade } from './ext-facade.js';
 import { internalLabCall } from './lab-internal.js';
 import { TwitchNames } from './twitch-names.js';
@@ -36,6 +41,8 @@ export function publicTwitchViewers(
   clock: Clock,
   config: CoreConfig,
 ): TwitchViewerCatalog | null {
+  if (config.CORE_ENVIRONMENT === 'lab')
+    return labTwitchViewers(db, clock, config.PORT);
   if (!config.TWITCH_APP_CLIENT_ID || !config.TWITCH_APP_CLIENT_SECRET)
     return null;
   return new TwitchViewerCatalog(
@@ -66,6 +73,8 @@ export function createPublicFrontier(
   db: Db,
   clock: Clock,
   config: CoreConfig,
+  /** `userLookup`: the viewers' names without Helix (the Lab's fictional directory). */
+  o: { userLookup?: TwitchUserLookup } = {},
 ): PublicFrontier | null {
   const channelId = config.TWITCH_CHANNEL_ID;
   if (!channelId) return null;
@@ -79,12 +88,21 @@ export function createPublicFrontier(
     // The same economy as every module of this Core (balances, activity, adjustments).
     core.economy,
   );
+  // The Lab environment (CORE_ENVIRONMENT=lab) carries the whole Lab table behind the same in-process call.
+  const lab = config.CORE_ENVIRONMENT === 'lab';
   const call = internalLabCall([
-    ...bonkLabRoutes(core.bonkLab),
+    ...bonkLabRoutes(core.bonkLab, lab ? core.twitchViewers : null),
     ...soundLabRoutes(core.soundLab),
     ...ttsLabRoutes(core.ttsLab),
-    // No Lab chat ingress here: the chat reaches this Core from the bot only (/v1/bot/chat, chatIngress below).
-    ...labModerationRoutes(moderation, core.ttsLab, core.raffleLab, []),
+    // No Lab chat ingress here: the chat reaches this Core from the bot only (/v1/bot/chat, chatIngress below). The Lab
+    // environment is the one exception: fictional Jetons, Studio's chat simulator through the cockpit.
+    ...labModerationRoutes(
+      moderation,
+      core.ttsLab,
+      core.raffleLab,
+      lab ? [...core.chat.chatModules, core.progression.chatModule] : [],
+    ),
+    ...(lab ? labCockpitRoutes(core, channelId) : []),
     // Chat games configuration for the Studio cockpit (lot 8): Commands V2, Jeu des mots, Roulette / Slot / Duel.
     ...commandsRoutes(core.chat.commands, core.chat.admission, core.chat.steps),
     ...wordGameRoutes(core.chat.wordGame),
@@ -100,14 +118,22 @@ export function createPublicFrontier(
       production: false,
       site: true,
     }),
+    // Refonte H10 / H12 / H14: Studio's module settings and Daily steps (through the cockpit), the façade's Bonk price.
+    ...moduleSettingsRoutes(core.moduleSettings, db, {
+      channelId,
+      production: false,
+    }),
+    // The module host (architecture socle): catalog, status, admin, viewer, activity, refund — once for every module.
+    ...modulesRoutes(core.modules),
   ]);
   const app =
-    config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
+    o.userLookup ??
+    (config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
       ? twitchAppUserLookup({
           clientId: config.TWITCH_APP_CLIENT_ID,
           clientSecret: config.TWITCH_APP_CLIENT_SECRET,
         })
-      : null;
+      : null);
   const secret = config.TWITCH_EXTENSION_SECRET
     ? Buffer.from(config.TWITCH_EXTENSION_SECRET, 'base64')
     : null;
@@ -119,12 +145,13 @@ export function createPublicFrontier(
       channelLogin: config.TWITCH_CHANNEL_LOGIN,
       environment: config.CORE_ENVIRONMENT,
       wallet: core.economy.mode === 'canonical',
+      lab,
     },
     core.twitchViewers,
   );
   return {
     deps: {
-      cockpit: { core: call, channelId },
+      cockpit: { core: call, channelId, lab },
       // The chat games' doors for the production bot: the Tombola first, then the chat games (same as the Lab).
       chatIngress: {
         router: chatRouter(core.raffleLab, [
@@ -213,6 +240,18 @@ export function createPublicFrontier(
             console.error('[core-api] spotify tick failed', e.message),
           );
       }, 1000);
+      // Refonte H6: the waiting song requests closed and refunded after the end of the live (every 30 s, idempotent).
+      // The module host's periodic jobs (one loop for every module).
+      const modulesTick = setInterval(() => {
+        void core.modules.tick();
+      }, 5000);
+      const spotifyEndTick = setInterval(() => {
+        core.spotify
+          .closeAfterLive(channelId)
+          .catch((e: Error) =>
+            console.error('[core-api] spotify end of live failed', e.message),
+          );
+      }, 30_000);
       // Boutique d'événement: overdue plays (not taken, not started, never ended) settled even when nobody reads.
       const eventShopTick = setInterval(() => {
         core.eventShop
@@ -222,6 +261,7 @@ export function createPublicFrontier(
           );
       }, 5000);
       // Défis: the recount (only with CHALLENGES_ENGINE=true; nothing without the tables or a live challenge).
+      core.challenges.engineEnabled = config.CHALLENGES_ENGINE === 'true';
       let counting = false;
       const challengesTick =
         config.CHALLENGES_ENGINE === 'true'
@@ -240,6 +280,8 @@ export function createPublicFrontier(
         if (challengesTick) clearInterval(challengesTick);
         clearInterval(eventShopTick);
         clearInterval(spotifyTick);
+        clearInterval(spotifyEndTick);
+        clearInterval(modulesTick);
         clearInterval(votekickTick);
         clearInterval(wordGameTick);
         clearInterval(raffleTick);

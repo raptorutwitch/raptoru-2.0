@@ -776,6 +776,7 @@ describe('Studio cockpit over the installation credential', () => {
         delta: 5000,
         reason: 'test staging',
       },
+      idempotency_key: 'test-intent-staging-01',
     });
     expect(r.status).toBe(200);
     expect((await ext('/session', viewer())).body.wallet.available).toBe(
@@ -818,5 +819,214 @@ describe('operator: Studio installations over HTTPS (Studio secret)', () => {
     // Never without the operator secret.
     const anonymous = await send('/v1/admin/studio/installations');
     expect(anonymous.status).toBe(401);
+  });
+});
+
+describe('module host through the real Production doors (architecture socle)', () => {
+  it('cockpit sets and reads, the extension buys once per intent (replay = same answer), moderation refunds once', async () => {
+    const { core, ext, studio } = await fixture();
+    const jwt = viewer('4244');
+    // OFF by default: not offered to viewers, and not buyable.
+    const list = (await ext('/modules/v3', jwt)).body;
+    expect(
+      list.modules.find((m: { id: string }) => m.id === 'coffre_mystere'),
+    ).toBeUndefined();
+    expect(
+      (await ext('/modules/v3/coffre_mystere/ouvrir', jwt, {})).body.error,
+    ).toBe('module_disabled');
+    // Studio (paired installation) switches it ON through the cockpit, as the broadcaster.
+    expect(
+      (
+        await studio(`/v1/studio/cockpit/module-settings/${CHANNEL}`, {
+          key: 'coffre_mystere.enabled',
+          value: 1,
+        })
+      ).status,
+    ).toBe(200);
+    const before = (await ext('/session', jwt)).body.wallet.available;
+    const key = randomUUID();
+    const first = await ext('/modules/v3/coffre_mystere/ouvrir', jwt, {}, key);
+    const again = await ext('/modules/v3/coffre_mystere/ouvrir', jwt, {}, key);
+    expect(first.body).toMatchObject({
+      ok: true,
+      replayed: false,
+      activity: { status: 'queued', amount: 100 },
+    });
+    expect(again.body).toMatchObject({ ok: true, replayed: true });
+    expect((await ext('/session', jwt)).body.wallet.available).toBe(
+      before - 100,
+    );
+    // The viewer's own state; anonymous viewers cannot buy.
+    const state = (await ext('/modules/v3/coffre_mystere/state', jwt)).body;
+    expect(state.recent).toHaveLength(1);
+    expect(
+      (
+        await ext(
+          '/modules/v3/coffre_mystere/ouvrir',
+          token({ role: 'viewer' }),
+          {},
+        )
+      ).body.error,
+    ).toBe('identity_required');
+    // Studio sees it in the shared journal and refunds the ORIGINAL debit once.
+    const cat = (await studio(`/v1/studio/cockpit/modules/${CHANNEL}`)).body;
+    expect(cat.modules.map((m: { id: string }) => m.id)).toEqual([
+      'objectif_soiree',
+      'coffre_mystere',
+      'mini_games',
+      'votekick', // adapters added once their service exists (architecture/MIGRATIONS.md)
+      'caution',
+      'random_ban',
+      'word_game',
+      'event_shop',
+    ]);
+    const refund = await studio(
+      `/v1/studio/cockpit/modules/${CHANNEL}/refund`,
+      {
+        actor: { id: 'evil', role: 'viewer', via: 'extension' }, // replaced by the cockpit (broadcaster)
+        activity_id: first.body.activity.activity_id,
+        reason: 'test',
+      },
+    );
+    expect(refund.body).toMatchObject({ refunded: 100 });
+    expect((await ext('/session', jwt)).body.wallet.available).toBe(before);
+    void core;
+  });
+  it('the team moderates from the extension: the journal is team only, a moderator refunds the original debit once', async () => {
+    const { ext, studio } = await fixture();
+    await studio(`/v1/studio/cockpit/module-settings/${CHANNEL}`, {
+      key: 'coffre_mystere.enabled',
+      value: 1,
+    });
+    const jwt = viewer('4245');
+    const bought = await ext(
+      '/modules/v3/coffre_mystere/ouvrir',
+      jwt,
+      {},
+      randomUUID(),
+    );
+    expect(bought.body.ok).toBe(true);
+    const id = bought.body.activity.activity_id;
+    // The policy travels with the catalog (what the team's panel may show).
+    const entry = (await ext('/modules/v3', jwt)).body.modules.find(
+      (m: { id: string }) => m.id === 'coffre_mystere',
+    );
+    expect(entry.moderation).toEqual({ visible: true, refund: 'moderator' });
+    // A viewer: neither the journal nor a refund (even of their own purchase).
+    expect(
+      (await ext('/modules/v3/moderation/coffre_mystere/activity', jwt)).status,
+    ).toBe(403);
+    expect(
+      (
+        await ext('/modules/v3/moderation/refund', jwt, {
+          activity_id: id,
+          reason: 'x',
+        })
+      ).status,
+    ).toBe(403);
+    const mod = viewer('9001', 'moderator');
+    const journal = (
+      await ext('/modules/v3/moderation/coffre_mystere/activity', mod)
+    ).body;
+    // The team's list (D4 « Autres modules »): moderable modules, switched off ones too; never for a viewer.
+    expect((await ext('/modules/v3/moderation', jwt)).status).toBe(403);
+    expect((await ext('/modules/v3/moderation', mod)).body.modules).toEqual([
+      {
+        id: 'coffre_mystere',
+        label: 'Coffre mystère',
+        enabled: true,
+        moderation: { visible: true, refund: 'moderator' },
+      },
+    ]);
+    // A module the policy hides from the team (or an unknown one): no journal.
+    expect(
+      (await ext('/modules/v3/moderation/objectif_soiree/activity', mod))
+        .status,
+    ).toBe(404);
+    expect(
+      journal.items.some((r: { activity_id: string }) => r.activity_id === id),
+    ).toBe(true);
+    expect(
+      (await ext('/modules/v3/moderation/refund', mod, { activity_id: id }))
+        .status,
+    ).toBe(400); // no reason
+    const before = (await ext('/session', jwt)).body.wallet.available;
+    const out = await ext('/modules/v3/moderation/refund', mod, {
+      activity_id: id,
+      reason: 'coffre jamais affiché',
+    });
+    expect(out.body).toMatchObject({
+      ok: true,
+      refunded: 100,
+      activity: { status: 'refunded', reason: 'coffre jamais affiché' },
+    });
+    expect(
+      (
+        await ext('/modules/v3/moderation/refund', mod, {
+          activity_id: id,
+          reason: 'encore',
+        })
+      ).body.error,
+    ).toBe('already_refunded');
+    expect((await ext('/session', jwt)).body.wallet.available).toBe(
+      before + 100,
+    );
+    // A moderator never refunds their own purchase.
+    const own = await ext(
+      '/modules/v3/coffre_mystere/ouvrir',
+      mod,
+      {},
+      randomUUID(),
+    );
+    expect(
+      (
+        await ext('/modules/v3/moderation/refund', mod, {
+          activity_id: own.body.activity.activity_id,
+          reason: 'moi',
+        })
+      ).body.error,
+    ).toBe('self_refund');
+  });
+
+  it('the cockpit never buys for a viewer; a purchase at a price the viewer did not confirm is refused before any debit', async () => {
+    const { ext, studio } = await fixture();
+    await studio(`/v1/studio/cockpit/module-settings/${CHANNEL}`, {
+      key: 'coffre_mystere.enabled',
+      value: 1,
+    });
+    // P0 (review 05/11): the body names the viewer — through the cockpit a Studio installation could spend anyone's Jetons.
+    const forged = await studio(
+      `/v1/studio/cockpit/modules/${CHANNEL}/coffre_mystere/viewer/ouvrir`,
+      {
+        viewer: { id: '4246', display_name: 'Victime' },
+        idempotency_key: randomUUID(),
+      },
+    );
+    expect(forged.status).toBe(404);
+    const jwt = viewer('4246');
+    const before = (await ext('/session', jwt)).body.wallet.available;
+    await studio(`/v1/studio/cockpit/module-settings/${CHANNEL}`, {
+      key: 'coffre_mystere.prix',
+      value: 500,
+    });
+    const stale = await ext(
+      '/modules/v3/coffre_mystere/ouvrir',
+      jwt,
+      { expected_price: 100 },
+      randomUUID(),
+    );
+    expect(stale.body).toMatchObject({
+      ok: false,
+      error: 'price_changed',
+      price: 500,
+    });
+    expect((await ext('/session', jwt)).body.wallet.available).toBe(before);
+    const ok = await ext(
+      '/modules/v3/coffre_mystere/ouvrir',
+      jwt,
+      { expected_price: 500 },
+      randomUUID(),
+    );
+    expect(ok.body).toMatchObject({ ok: true, activity: { amount: 500 } });
   });
 });

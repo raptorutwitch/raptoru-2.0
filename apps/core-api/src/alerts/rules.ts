@@ -83,7 +83,12 @@ export function decideAlert(
   rng: Rng,
   profile?: AlertProfile | null,
 ): AlertDecision {
-  const usual = decideUsual(e, rng, profile?.variants?.follow);
+  const usual = decideUsual(
+    e,
+    rng,
+    profile?.variants?.follow,
+    profile?.variants?.weights,
+  );
   if (usual.outcome !== 'queued') return usual;
   const family = alertVariantFamilyOf(e);
   const mode = (family && profile?.variants?.families[family]) || 'auto';
@@ -108,6 +113,8 @@ function decideUsual(
   rng: Rng,
   /** The follow variants allowed (absent / none known: all of them). */
   follow?: string[],
+  /** Their weights in the draw (absent: the legacy ones). */
+  weights?: Record<string, number>,
 ): AlertDecision {
   const pick = (id: string) => ({
     outcome: 'queued' as const,
@@ -116,7 +123,13 @@ function decideUsual(
   switch (e.type) {
     case 'follow': {
       const allowed = FOLLOW_WEIGHTS.filter(([id]) => follow?.includes(id));
-      return pick(weighted(allowed.length ? allowed : FOLLOW_WEIGHTS, rng));
+      const pool = allowed.length ? allowed : FOLLOW_WEIGHTS;
+      return pick(
+        weighted(
+          pool.map(([id, w]) => [id, weights?.[id] ?? w]),
+          rng,
+        ),
+      );
     }
     case 'sub':
     case 'resub':

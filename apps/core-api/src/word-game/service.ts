@@ -55,6 +55,10 @@ interface ChannelRow {
   announced_streak: number;
   announced_user_id: string | null;
   mots_at: Date | null;
+  /** Refonte H8 (columns added by 20261121140000_word_game_settings_lab.sql). */
+  enabled: boolean;
+  interval_min_s: number;
+  interval_max_s: number;
 }
 
 interface WordRow {
@@ -382,7 +386,7 @@ export class WordGameService {
   private async advance(q: Queryable, channelId: string) {
     const now = this.clock.now();
     const { row, live } = await this.enter(q, channelId, now);
-    if (!live || row.stopped || !row.next_word_at) return;
+    if (!live || !row.enabled || row.stopped || !row.next_word_at) return;
     if (new Date(row.next_word_at) > now) return;
     await this.generate(
       q,
@@ -394,7 +398,18 @@ export class WordGameService {
     );
     await q.query(
       'update word_game_channels set next_word_at = $2, updated_at = $3 where channel_id = $1',
-      [channelId, new Date(now.getTime() + R.nextWordDelayMs(this.rng)), now],
+      [channelId, this.nextAt(row, now), now],
+    );
+  }
+
+  /** The next cycle word from now, with this channel's interval (refonte H8). */
+  private nextAt(row: ChannelRow, now: Date) {
+    return new Date(
+      now.getTime() +
+        R.nextWordDelayMs(this.rng, {
+          min: row.interval_min_s * 1000,
+          max: row.interval_max_s * 1000,
+        }),
     );
   }
 
@@ -453,6 +468,47 @@ export class WordGameService {
     await this.db.tx(async (q) => {
       const now = this.clock.now();
       const { row, live } = await this.enter(q, channelId, now);
+      if (a.action === 'settings') {
+        // Refonte H8: allowed off live too; durable. Bounds: schema (60–3600 s) and min ≤ max here, with what is stored.
+        const next = {
+          enabled: a.enabled ?? row.enabled,
+          min: a.interval_min_s ?? row.interval_min_s,
+          max: a.interval_max_s ?? row.interval_max_s,
+        };
+        if (next.min > next.max)
+          throw new WordGameError(400, 'invalid_interval');
+        const running = !!live && next.enabled && !row.stopped;
+        const keep =
+          running &&
+          row.enabled &&
+          row.next_word_at &&
+          next.min === row.interval_min_s &&
+          next.max === row.interval_max_s;
+        await q.query(
+          `update word_game_channels set enabled = $2, interval_min_s = $3, interval_max_s = $4, next_word_at = $5,
+             updated_at = $6 where channel_id = $1`,
+          [
+            channelId,
+            next.enabled,
+            next.min,
+            next.max,
+            !running
+              ? null
+              : keep
+                ? row.next_word_at
+                : this.nextAt(
+                    {
+                      ...row,
+                      interval_min_s: next.min,
+                      interval_max_s: next.max,
+                    },
+                    now,
+                  ),
+            now,
+          ],
+        );
+        return;
+      }
       if (!live) throw new WordGameError(409, 'offline');
       if (a.action === 'stop' && !row.stopped)
         await q.query(
@@ -462,11 +518,7 @@ export class WordGameService {
       if (a.action === 'start' && row.stopped)
         await q.query(
           'update word_game_channels set stopped = false, next_word_at = $2, updated_at = $3 where channel_id = $1',
-          [
-            channelId,
-            new Date(now.getTime() + R.nextWordDelayMs(this.rng)),
-            now,
-          ],
+          [channelId, row.enabled ? this.nextAt(row, now) : null, now],
         );
       if (a.action === 'new_word') {
         // Like the legacy click on ShuffleWord: now, no announcement, the cycle is not shifted.
@@ -518,12 +570,18 @@ export class WordGameService {
     );
     const streak = streakOf(row, live);
     const stopped = current ? row!.stopped : false;
+    const enabled = row?.enabled ?? true;
     return {
       channel_id: channelId,
       live: !!live,
       session_id: live?.session_id ?? null,
-      running: !!live && !stopped,
+      running: !!live && enabled && !stopped,
       stopped,
+      enabled,
+      interval: {
+        min_s: row?.interval_min_s ?? R.WORD_INTERVAL_MS.min / 1000,
+        max_s: row?.interval_max_s ?? R.WORD_INTERVAL_MS.max / 1000,
+      },
       next_word_at:
         current && row!.next_word_at
           ? new Date(row!.next_word_at).toISOString()
@@ -602,7 +660,7 @@ export class WordGameService {
           [
             channelId,
             live.session_id,
-            new Date(now.getTime() + R.nextWordDelayMs(this.rng)),
+            row.enabled ? this.nextAt(row, now) : null,
             now,
           ],
         )

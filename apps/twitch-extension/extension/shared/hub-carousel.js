@@ -75,6 +75,9 @@ export function createHubCarousel({
   selectedId = null,
   onSelect = null,
   onOpen = null,
+  /** « Tous » open when created (the host keeps it across its redraws; closed by default). */
+  popoverOpen = false,
+  onPopover = null,
 }) {
   const make = (tag, className, text) => {
     const node = document.createElement(tag);
@@ -355,6 +358,7 @@ export function createHubCarousel({
     popover.hidden = !open;
     allButton.classList.toggle('is-open', open);
     allButton.setAttribute('aria-expanded', String(open));
+    onPopover?.(open);
   };
   allButton.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -362,7 +366,7 @@ export function createHubCarousel({
   });
   popover.addEventListener('click', (event) => event.stopPropagation());
   (launcherHost || rail).append(allButton);
-  setPopover(false);
+  setPopover(popoverOpen === true);
   // « Tous » se ferme sur un clic à côté ou avec Échap (sans remonter jusqu'au tiroir).
   const onOutside = (event) => {
     if (popover.hidden || popover.contains(event.target) || allButton.contains(event.target)) return;

@@ -9,12 +9,14 @@ import {
   endPlan,
   fill,
   formatAmount,
+  fxFrames,
   giftCounterDuration,
   pickNameColor,
   schedule,
   templateParts,
   textParts,
   visualLengthMs,
+  withLook,
 } from './timeline.js';
 
 export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
@@ -76,10 +78,41 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
   /** Drops every running / frozen CSS animation of the stage (their end state applies). */
   const clearAnimations = () =>
     stage.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+
+  /**
+   * A variant's own transition (Studio › Alertes, withLook). Web Animations on the element itself: no extra wrapper, and the
+   * `transform` is ADDED to the element's own (centring). getAnimations() sees them, so the timeline freezes them too.
+   */
+  const runFx = (el, fx, phase) => {
+    const frames = fxFrames(fx.kind, phase);
+    if (!frames) return;
+    const timing = {
+      duration: fx.ms,
+      fill: phase === 'enter' ? 'none' : 'forwards',
+      easing:
+        phase === 'enter'
+          ? 'cubic-bezier(.22, 1, .36, 1)'
+          : 'cubic-bezier(.4, 0, 1, 1)',
+    };
+    el.animate({ opacity: frames.opacity }, timing);
+    if (frames.transform)
+      el.animate(
+        { transform: frames.transform },
+        { ...timing, composite: 'add' },
+      );
+  };
+  const enterFx = (el, fx) => {
+    if (!fx) return;
+    el.classList.add('fx-in'); // the style's own entrance is off
+    runFx(el, fx, 'enter');
+  };
+  const dropFx = (el) => el.getAnimations().forEach((a) => a.cancel());
   /** Legacy TTS volume 1; the preview's volume slider applies to it too. */
   let ttsVolume = 1;
 
   const resetText = () => {
+    dropFx(text);
+    dropFx(subtitle);
     text.className = '';
     text.textContent = '';
     text.removeAttribute('style');
@@ -311,18 +344,23 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
       subtitle.style.fontSize = size + 'px';
     }
     subtitle.className = 'eren-subtitle show';
+    enterFx(subtitle, v.fx?.textEnter);
   }
 
   /** One text step of the variant's schedule (timeline.js). */
   function applyStep(v, data, step, later, ctx) {
     switch (step.action) {
       case 'text-show':
-        return showText(v, data, later, ctx);
+        showText(v, data, later, ctx);
+        return enterFx(text, v.fx?.textEnter);
+      case 'text-exit':
+        return runFx(text, v.fx.textExit, 'exit');
       case 'text-fade':
       case 'text-hide':
         text.className = v.textStyle + ' hide';
         return;
       case 'text-clear':
+        dropFx(text);
         text.className = '';
         text.textContent = '';
         return;
@@ -334,6 +372,15 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
       case 'subtitle-out':
         subtitle.className = 'eren-subtitle out';
         return;
+      case 'subtitle-exit':
+        return runFx(subtitle, v.fx.textExit, 'exit');
+      case 'subtitle-clear':
+        dropFx(subtitle);
+        subtitle.className = 'eren-subtitle';
+        subtitle.textContent = '';
+        return;
+      case 'video-exit':
+        return runFx(video, v.fx.mediaExit, 'exit');
       case 'video-fade-out':
         video.classList.remove('money-visible');
         video.classList.add('money-fading-out');
@@ -352,6 +399,16 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
       video.style.setProperty('--money-fade-out', v.videoFade.out + 'ms');
     }
   }
+
+  /** A colour saved for the variant stays; otherwise the alert's own (`nameColor`). */
+  const paintName = (look) => {
+    const fixed = /^#[0-9a-f]{6}$/i.test(look?.nameColor ?? '')
+      ? look.nameColor
+      : null;
+    stage.style.setProperty('--name-color', fixed ?? nameColor);
+    if (fixed) stage.style.setProperty('--name-fixed', fixed);
+    else stage.style.removeProperty('--name-fixed');
+  };
 
   /** Only the instance that started a speech may cut it (another family's Stop / end never touches the donation TTS). */
   let spoke = false;
@@ -379,15 +436,16 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
    * `onStarted` fires when the video really starts playing.
    */
   function play(
-    v,
+    frozen,
     data = {},
     { volume, onStarted, placement, nameColor: imposed } = {},
   ) {
     stop('replaced');
     place(placement); // fixed for the whole alert (the OBS source gets the saved values with the claim)
+    const v = withLook(frozen, placement?.look);
     // The OBS source picks it across its simultaneous alerts (`imposed`); alone, a new one each time.
     nameColor = imposed ?? pickNameColor(nameColor);
-    stage.style.setProperty('--name-color', nameColor);
+    paintName(placement?.look);
     ttsVolume = Math.min(1, Math.max(0, volume ?? 1));
     return new Promise((resolve) => {
       const timers = new Set();
@@ -402,7 +460,7 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
         timers.add(id);
       };
       let done = false;
-      const plan = endPlan(v);
+      const plan = endPlan(frozen); // a look never changes when the alert ends
       const finish = (reason) => {
         if (done) return;
         done = true;
@@ -444,6 +502,7 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
         video.oncanplay = null;
         video.style.visibility = 'visible';
         video.classList.add('entered'); // media entrance (bits), from its first visible image
+        enterFx(video, v.fx?.mediaEnter);
         if (v.videoFade) {
           void video.offsetWidth;
           video.classList.add('money-visible');
@@ -541,9 +600,11 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
    * them at that instant, each CSS animation paused at its own progress. No sound, no queue, no timer: the steps run
    * on a virtual clock. Resolves { ms, lengthMs, videoMs, marks }, or null when a newer seek / play replaced it.
    */
-  async function seek(v, data = {}, ms = 0, placement) {
+  async function seek(frozen, data = {}, ms = 0, placement) {
     stop('replaced');
     place(placement);
+    paintName(placement?.look);
+    const v = withLook(frozen, placement?.look);
     const token = seekToken;
     if (!v.video) return { ms, lengthMs: 0, videoMs: 0, marks: [] };
     dressVideo(v);
@@ -590,7 +651,10 @@ export function createAlertEngine({ stage, mediaUrl, log = () => {} }) {
     };
     for (const step of schedule(v))
       later(() => applyStep(v, data, step, later, ctx), step.at);
-    later(() => video.classList.add('entered'), 0);
+    later(() => {
+      video.classList.add('entered');
+      enterFx(video, v.fx?.mediaEnter);
+    }, 0);
     if (v.videoFade) later(() => video.classList.add('money-visible'), 0);
     // Running animations are moved to the virtual time first: a transition started by a later step (MoneyTest
     // fade-out after its fade-in) then starts from the value it really has at that instant.

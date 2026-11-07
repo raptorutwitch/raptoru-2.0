@@ -1,3 +1,4 @@
+import { registerSessionModule } from './module-registry.js';
 // Roue du Sub V2 (R8) — « Roue du Sub » in the Hub: the viewer's OWN tours (Core's projection, identity from the
 // verified token), « Lancer mes tours » (= « !roue oui »: the draws are asked, never credited here — each wheel is
 // drawn by Core when it is shown, the viewer present), and for the team (moderators, the streamer) the tours waiting
@@ -186,3 +187,19 @@ export function createSubWheelView({ document, client, team = false }) {
     },
   };
 }
+
+const SUB_WHEEL_MODULE = Object.freeze({
+  id: 'sub_wheel',
+  label: 'Roue du Sub',
+  icon: '🎡',
+  description: 'Tes tours de Roue du Sub.',
+});
+
+registerSessionModule({
+  id: SUB_WHEEL_MODULE.id,
+  card: () => SUB_WHEEL_MODULE,
+  // Offered by the EBS (Lab today; the production frontier keeps it hidden in mode v1).
+  available: ({ state, client }) => state?.sub_wheel === true && typeof client?.subWheelMe === 'function',
+  // The viewer's own tours (+ the team's part for moderators), Core's projection only.
+  view: ({ document, client, team }) => createSubWheelView({ document, client, team }),
+});

@@ -1,6 +1,7 @@
 // ASTRA-P1-001 lot 1 — the debit of the canonical Core Wallet and the admission of an interaction
 // are ONE transaction (economy/economy.ts, WalletService.spendIn / creditIn). The services are wired
 // to the Core Wallet here only: no runtime uses it yet (the Lab keeps its test wallet).
+import { openCanonicalLive } from './live.js';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/http/server.js';
@@ -26,6 +27,7 @@ const PRICE = BONK_LAB_RULES.simulatedCost;
 
 async function fixture(economy?: (core: TestCore) => EconomyPort) {
   const core = await setup();
+  await openCanonicalLive(core.db, core.clock);
   const port = economy ? economy(core) : coreWalletEconomy(core.wallet.wallet);
   const bonk = new BonkLabService(core.db, core.clock, null, null, port);
   await bonk.heartbeat({
@@ -231,6 +233,7 @@ describe('Core Wallet debit + admission in one transaction (ASTRA-P1-001 lot 1)'
 
   it('Soundboard and TTS on the same contract: Jetons debited atomically; no credits → refused (never paid in Jetons), nothing stored', async () => {
     const core = await setup();
+    await openCanonicalLive(core.db, core.clock);
     const port = coreWalletEconomy(core.wallet.wallet);
     const sound = new SoundLabService(core.db, core.clock, Math.random, port);
     const tts = new TtsLabService(
@@ -306,6 +309,7 @@ describe('Core Wallet debit + admission in one transaction (ASTRA-P1-001 lot 1)'
 
   it('moderation cancel with refund (Soundboard) goes through the Core Wallet: exact amount back, once', async () => {
     const core = await setup();
+    await openCanonicalLive(core.db, core.clock);
     const sound = new SoundLabService(
       core.db,
       core.clock,

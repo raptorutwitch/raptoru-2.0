@@ -1,3 +1,5 @@
+import { registerModuleVariant } from './module-registry.js';
+import { createCommandsV2View } from './commands-v2.js';
 // Moderation V2 (D4) — the console of the validated prototype `prototypes/moderation-v2-d4` (left
 // column = context, right zone = one intention; compact stack on Panel / Mobile), on the REAL Core:
 // every list comes from Core read models (/moderation/v2/*), every action is a Core command executed
@@ -6,6 +8,8 @@
 // (Studio = broadcaster), so Studio and the extension show the same moderation.
 import { moneyHtml } from './currency.js';
 import { freshRestrictionFilters, restrictionRows, restrictionsView } from './moderation-restrictions.js';
+// The module host's modules (architecture socle): the same generic panels as under each module, one implementation.
+import { createHostModerationSection } from './module-moderation.js';
 
 const P = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -227,6 +231,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   let audit = null;
   let restr = { active: null, history: null, failed: false }; // Restrictions view (Core read models)
   let destroyed = false;
+  /** « Autres modules » (module host): created on first opening, kept across repaints. */
+  let hostSection = null;
   let pollTimer = null;
   let tick = null;
   const can = (p) => me.permissions.includes(p);
@@ -443,11 +449,14 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     }
     return ERRORS[code] ?? e?.details?.message ?? code ?? 'Action impossible.';
   };
-  /** One Core command; the console then shows Core's new state. */
-  async function act(command, done) {
+  /**
+   * One Core command; the console then shows Core's new state. `key`: the intent's Idempotency-Key (refonte P0-2) —
+   * the same dialog sends the same key, so a double click or a retry after a lost answer applies once.
+   */
+  async function act(command, done, key) {
     let ok = true;
     try {
-      await client.modV2Act(command);
+      await client.modV2Act(command, key);
       if (done) toast(done, true);
       onChange?.();
     } catch (e) {
@@ -625,6 +634,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       <div class="side__scroll" data-scroll="side"><nav class="mods" data-mods aria-label="Modules">${MOD_KEYS.map((m) => modLine(m, selM === m)).join('')}</nav>
       <button class="sidelink${t.v === 'history' && !t.vid ? ' is-sel' : ''}" data-act="history" data-histlink>${ic('history')}Historique</button>
       <button class="sidelink${t.v === 'restrictions' ? ' is-sel' : ''}" data-act="restrictions" data-restrlink>${ic('ban')}Restrictions</button>
+      <button class="sidelink${t.v === 'hostmods' ? ' is-sel' : ''}" data-act="hostmods" data-hostlink>${ic('shield')}Autres modules</button>
       ${onCommands ? `<button class="sidelink" data-act="commands">${ic('note')}Commandes</button>` : ''}</div>
       <div class="side__foot" data-foot>${footHtml()}</div>`;
   }
@@ -848,7 +858,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       <div class="scroll" data-scroll="${key}"><div class="pane__body ${anim}">${scr.body}</div></div></section>`;
   }
   const viewFor = (s) =>
-    s.v === 'module' ? moduleView(s.m) : s.v === 'viewer' ? viewerView(s.id) : s.v === 'history' ? historyView(s.vid) : s.v === 'jetons' ? jetonsView(s.vid) : s.v === 'restrictions' ? restrictionsView(RH, nav.rf, restr) : { body: '' };
+    s.v === 'module' ? moduleView(s.m) : s.v === 'viewer' ? viewerView(s.id) : s.v === 'history' ? historyView(s.vid) : s.v === 'jetons' ? jetonsView(s.vid) : s.v === 'restrictions' ? restrictionsView(RH, nav.rf, restr) : s.v === 'hostmods' ? { kicker: 'Modération', title: 'Autres modules', body: '<div data-hostmods></div>' } : { body: '' };
   const banner = () =>
     gPaused() ? `<div class="gbanner">${ic('pause')}<span class="grow">Pause globale · nouvelles interactions refusées${overview.global.refused ? ` (${overview.global.refused})` : ''}</span><button class="btn btn--sm" data-act="global-resume">Lever</button></div>` : '';
   let builtMode = null;
@@ -883,6 +893,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
         side.querySelector('[data-mods]').innerHTML = MOD_KEYS.map((m) => modLine(m, t.v === 'module' && t.m === m)).join('');
         side.querySelector('[data-histlink]').classList.toggle('is-sel', t.v === 'history' && !t.vid);
         side.querySelector('[data-restrlink]').classList.toggle('is-sel', t.v === 'restrictions');
+        side.querySelector('[data-hostlink]')?.classList.toggle('is-sel', t.v === 'hostmods');
         side.querySelector('[data-foot]').innerHTML = footHtml();
       }
     }
@@ -903,6 +914,9 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
         stage.querySelector('[data-foot]').innerHTML = footHtml();
       }
     } else stage.innerHTML = banner() + pane('main', viewFor(t), nav.stack.length > 1);
+    // The host modules' panels are live DOM (their own form and journal): moved back in after each repaint.
+    const hostSlot = stage.querySelector('[data-hostmods]');
+    if (hostSlot && hostSection) hostSlot.append(hostSection.node);
     const vcol = L.querySelector('[data-vcol]');
     if (vcol) {
       const show = md === 'window' && nav.viewer;
@@ -1359,7 +1373,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   }
   function walletDialog(vid, sign) {
     dialog({
-      state: { amount: 500, cur: 'tokens', reason: '' },
+      // One key per opened dialog (refonte P0-2): every « Créditer / Débiter » click of this dialog is one intent.
+      state: { amount: 500, cur: 'tokens', reason: '', key: win.crypto.randomUUID() },
       render(s) {
         const v = cards.get(vid);
         const bal = Number(v?.wallet?.[s.cur] ?? 0);
@@ -1380,6 +1395,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
         void act(
           { action: 'wallet_adjust', viewer_id: vid, currency: s.cur, delta: sign * amount, reason: String(s.reason ?? '').trim() || undefined },
           `${sign > 0 ? '+' : '−'} ${fmt(amount)} ${CUR[s.cur]} · ${esc(nameOf(vid))}`,
+          // A changed amount or currency is another intent: a new key.
+          `${s.key}:${s.cur}:${sign * amount}`,
         );
       },
     });
@@ -1561,6 +1578,14 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     },
     history: (d) => open.history(d.v),
     restrictions: () => open.restrictions(),
+    hostmods: () => {
+      closeSearch();
+      closeDrawers();
+      hostSection ??= createHostModerationSection({ document, client });
+      void hostSection.refresh();
+      if (top().v === 'hostmods') render();
+      else push({ v: 'hostmods' });
+    },
     'restr-module': (d) => open.restrictions({ module: d.m }),
     // From a viewer card: that viewer, and the module the card was opened from (if any).
     'viewer-restr': (d) => open.restrictions({ viewer: d.v, module: [...nav.stack].reverse().find((s) => s.v === 'module')?.m ?? 'any' }),
@@ -1832,3 +1857,60 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     },
   };
 }
+
+// Module variant (module-registry.js): the D4 console takes over the « moderation » module when the session says
+// `moderation_v2` (same Core as Studio: read models + commands, no local state). The whole screen (its own header and
+// way back to the Hub); « Modération › Commandes » swaps in the Commands V2 view and gives the console back (Video and
+// Mobile only, not the Panel); the commands view stays in place across the host's refreshes while it is open.
+/** The D4 console takes « moderation » when the session says `moderation_v2` (otherwise moderation V1: moderation-v1.js). */
+export const moderationV2Applies = ({ state, client }) => state?.moderation_v2 === true && !!client?.modV2;
+
+registerModuleVariant({
+  id: 'moderation',
+  match: moderationV2Applies,
+  intro: false,
+  bodyData: { modV2: '1' },
+  screenClass: 'jdm-module-screen--modv2',
+  view: ({ document, client, host }) => {
+    let commands = null;
+    let commandsShown = false;
+    const consoleView = createModerationV2View({
+      document,
+      client,
+      onChange: () => host.refresh(),
+      onBack: () => host.home(),
+      onCommands:
+        client.cmdV2 && !document.body.classList.contains('panel-view')
+          ? () => {
+              if (!commands) {
+                commands = createCommandsV2View({
+                  document,
+                  client,
+                  onBack: () => {
+                    commandsShown = false;
+                    commands.node.replaceWith(consoleView.node);
+                    queueMicrotask(() => consoleView.attached());
+                  },
+                });
+                commands.start();
+              }
+              commandsShown = true;
+              consoleView.node.replaceWith(commands.node);
+              queueMicrotask(() => commands?.attached());
+            }
+          : null,
+    });
+    const shown = () => (commandsShown && commands ? commands : consoleView);
+    return {
+      get node() {
+        return shown().node;
+      },
+      start: () => consoleView.start(),
+      attached: () => shown().attached(),
+      destroy: () => consoleView.destroy(),
+    };
+  },
+  // The console polls Core itself: a host redraw would only reset it (a moderator only, as before).
+  onState: (view, next, prev, ctx) => ctx.team === true,
+});
+

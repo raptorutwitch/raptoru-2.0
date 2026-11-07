@@ -263,11 +263,25 @@ export function describeBot(s: BotStatus, readAt: Date): ModuleStatus {
 export function botStatusProvider(
   core: CoreCall | null,
   now: () => Date = () => new Date(),
+  /** Production profile selected but not started (refonte F1, P0-7): unknown, never « Profil Lab ». */
+  productionStartError: string | null = null,
 ): StatusProvider {
   return {
     id: ID,
     label: LABEL,
     async read() {
+      if (!core && productionStartError)
+        return {
+          ...base(now()),
+          level: 'unknown',
+          state: 'Inconnu',
+          summary:
+            'Le profil Production n’a pas démarré : Studio ne peut pas lire le statut du bot.',
+          facts: [
+            { label: 'Cause', value: productionStartError, level: 'error' },
+          ],
+          hint: 'Redémarrer Studio. Si cela se répète : carte « Profil » (Système) et journal studio-server.log.',
+        };
       if (!core)
         return {
           ...base(now()),
@@ -279,10 +293,12 @@ export function botStatusProvider(
           hint: null,
         };
       try {
-        return describeBot(
-          BotStatus.parse(await core('/v1/studio/status/bot')),
-          now(),
-        );
+        const s = BotStatus.parse(await core('/v1/studio/status/bot'));
+        const out = describeBot(s, now());
+        // Refonte F4: what the readiness list needs, structured (the bot's flags and Twitch connections).
+        return s.state === 'active' && s.active
+          ? { ...out, data: { flags: s.active.flags, health: s.active.health } }
+          : out;
       } catch (e) {
         const err = e instanceof StudioTransportError ? e : null;
         const missing = err?.status === 404;

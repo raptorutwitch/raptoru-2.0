@@ -88,11 +88,15 @@ async function play(i) {
     bttv: /^https:\/\/cdn\.betterttv\.net\/emote\/[0-9a-f]{24}\/3x$/,
     ffz: /^https:\/\/cdn\.frankerfacez\.com\/emote\/[0-9]{1,10}\/(animated\/)?[124]$/,
   };
+  // The Lab's fictional emotes: an image of this same Studio (their ids exist on no CDN).
+  const fictional =
+    /^\/ext-lab\/fictional-emote\/[a-z0-9]+-[A-Za-z0-9_]{1,64}\.svg$/;
   const src =
     i.provider === 'unicode' && twemojiUrl.test(i.emote_url)
       ? '/ext/' + i.emote_url
-      : Object.hasOwn(cdnUrl, i.provider) &&
-          cdnUrl[i.provider].test(i.emote_url)
+      : fictional.test(i.emote_url) ||
+          (Object.hasOwn(cdnUrl, i.provider) &&
+            cdnUrl[i.provider].test(i.emote_url))
         ? i.emote_url
         : null;
   if (!src || i.test_mode !== true || i.payment_mode !== 'simulated') {

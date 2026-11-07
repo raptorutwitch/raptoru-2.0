@@ -114,10 +114,15 @@ async function lab(random: () => number = Math.random) {
       viewer: { id: v, display_name: `V${v}` },
       idempotency_key: `r-${++seq}`,
     });
+  // A money action carries its intent key (refonte P0-2), like the consoles send it.
+  let keyN = 0;
   const act = (command: Record<string, unknown>, actor: LabActor = studio) =>
     m.act(CHANNEL, {
       actor,
       command: LabModerationCommand.parse(command),
+      ...(command.action === 'wallet_adjust'
+        ? { idempotency_key: `test-intent-${++keyN}` }
+        : {}),
     });
   const wallet = (v = '900101') => m.wallet(CHANNEL, v);
   const code = async (p: Promise<unknown>) => {
@@ -1031,10 +1036,17 @@ describe('D4 wallet admin', () => {
         "select 1 from lab_moderation_requests where idempotency_key = 'ext-retry-0002'",
       ),
     ).toHaveLength(0);
-    // Without a key: unchanged behaviour (two distinct actions).
-    await credit(1);
-    await credit(1);
-    expect((await wallet('900211')).tokens).toBe(before + 102);
+    // Without a key (refonte P0-2): refused, nothing applied — Core never invents the intent.
+    await expect(credit(1)).rejects.toMatchObject({
+      code: 'idempotency_key_required',
+    });
+    expect((await wallet('900211')).tokens).toBe(before + 100);
+    // Two clicks of one dialog (same key): applied once.
+    await Promise.allSettled([
+      credit(1, 'dialog-once-0001'),
+      credit(1, 'dialog-once-0001'),
+    ]);
+    expect((await wallet('900211')).tokens).toBe(before + 101);
   });
 
   it('credit / debit with « Admin Wallet », never below 0, exact ledger (actor, reason); refused without', async () => {
@@ -1365,11 +1377,12 @@ describe('D4 read models (history, ledger, drawer, search)', () => {
       'soundboard',
       'tts',
     ]);
+    // a waited 20 min unread: expired and refunded since refonte H4 (5 min); b was cancelled and refunded.
     expect(
       (await m.interactions(CHANNEL, { status: 'refunded' })).items.map(
         (i) => i.interaction_id,
       ),
-    ).toEqual([b.interaction_id]);
+    ).toEqual([b.interaction_id, a.interaction_id]);
     expect(
       (await m.interactions(CHANNEL, { module: 'soundboard' })).items,
     ).toHaveLength(1);

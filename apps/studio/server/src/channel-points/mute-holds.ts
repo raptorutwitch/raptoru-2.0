@@ -95,6 +95,14 @@ export class MuteHolds {
     return this.serial(() => this.drop(input, owner));
   }
 
+  /** Refonte F5 (P1-5): Studio is closing — every hold ends now (the voice comes back where it was live before). */
+  releaseAll() {
+    return this.serial(async () => {
+      for (const entry of Object.values(this.inputs))
+        for (const owner of Object.keys(entry.holds)) entry.holds[owner] = 0;
+    }).then(() => this.tick());
+  }
+
   /** Releases the holds past their time and retries the unmutes OBS missed (every 250 ms from ObsActions). */
   tick() {
     return this.serial(async () => {

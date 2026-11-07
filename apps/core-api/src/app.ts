@@ -1,4 +1,16 @@
-import { AlertsService } from './alerts/service.js';
+import { ThirdPartyEmotes } from './bonk-lab/third-party-emotes.js';
+import { ALERT_RULES, AlertsService } from './alerts/service.js';
+import {
+  eventShopModule,
+  randomBanModule,
+  wordGameModule,
+} from './modules/status-adapters.js';
+import { cautionModule, cautionRates } from './modules/caution.js';
+import { miniGameLimits } from './modules/mini-games.js';
+import { votekickLimits, votekickModule } from './modules/votekick.js';
+import { MODULES } from './modules/index.js';
+import { ModuleHost } from './modules/host.js';
+import { ModuleSettings } from './module-settings/service.js';
 import { BotInstanceService } from './bot-instance/service.js';
 import { DockActivityService } from './dock/service.js';
 import { EventShopService } from './event-shop/service.js';
@@ -83,6 +95,10 @@ export interface Core {
   economy: EconomyPort;
   /** Commands V2, Jeu des mots, Roulette / Slot / Duel: the same assembly as the Lab Core (lab-chat/games.ts). */
   chat: ChatGames;
+  /** Refonte H10 / H12: the module settings (prices, delays, limits). */
+  moduleSettings: ModuleSettings;
+  /** The module host (modules/host.ts): the modules of modules/index.ts. */
+  modules: ModuleHost;
 }
 
 export function createCore(
@@ -98,9 +114,13 @@ export function createCore(
     /** Random Ban V3: the streamer's login (history, the chat line of his mute). */
     broadcasterLogin?: string | null;
     twitchApp?: { clientId: string; clientSecret: string } | null;
+    /** CORE_ENVIRONMENT=lab: the Lab's simulated events pay fictional gains (Roue du Sub, Bonbons, XP of the simulator). */
+    lab?: boolean;
+    /** Bonk: the channel's PUBLIC 7TV / BTTV / FFZ catalogs (read-only, no token); null = none (default). */
+    emoteCatalog?: ThirdPartyEmotes | null;
     /** Duel targets by login without Twitch (tests). */
     loginLookup?: LoginLookup | null;
-    /** Lot 9: alerts older than this are recorded, not animated (null / absent: off). */
+    /** Lot 9: alerts older than this are recorded, not animated (absent: 30 min, refonte H3). */
     alertsMaxAgeMs?: number | null;
     /** `!caution` answered in the chat (main Core: CAUTION_CHAT=true; SAMMI still answers it until the cutover). */
     cautionChat?: boolean;
@@ -115,7 +135,28 @@ export function createCore(
   const wallet = createWalletModule(db, clock);
   const loyalty = new LoyaltyEngine(db, clock, wallet.wallet, loyaltyModes);
   const soundLab = new SoundLabService(db, clock, undefined, economy);
+  // Refonte H10 / H12: prices, delays and limits set from Studio, read by the executors (module-settings/service.ts).
+  const moduleSettings = new ModuleSettings(db, clock);
+  const bonkLab = new BonkLabService(
+    db,
+    clock,
+    twitchViewers,
+    channel.emoteCatalog ?? null,
+    economy,
+  );
+  bonkLab.settings = moduleSettings;
+  // The module host: every module of modules/index.ts, on this Core's economy (Lab-only modules never on canonical).
+  const modules = new ModuleHost(MODULES, {
+    db,
+    clock,
+    economy,
+    settings: moduleSettings,
+  });
   const votekick = new VotekickService(db, clock, broadcasterOf);
+  votekick.economy = economy; // refonte H1: votes only during the canonical live
+  // Module host (architecture MIGRATIONS.md): Votekick's adapter — H10 delays and range, its supervision.
+  modules.add(votekickModule(votekick, { chat: !!channel.votekickChat }));
+  votekick.limits = votekickLimits(moduleSettings);
   // Random Ban V3: the streamer as an exceptional target (his mic muted in OBS), never while Votekick mutes him.
   const randomBan = new RandomBanService(db, clock, undefined, {
     streamer: () =>
@@ -132,6 +173,9 @@ export function createCore(
     { kind: 'votekick', label: 'Votekick', source: votekick },
     { kind: 'random_ban', label: 'Random Ban', source: randomBan.mutes },
   ]);
+  // Module host: Caution's adapter — H10 rates read in the quote's transaction, its supervision.
+  modules.add(cautionModule(caution, { chat: !!channel.cautionChat }));
+  caution.rates = cautionRates(moduleSettings);
   const ttsLab = new TtsLabService(db, clock, undefined, undefined, economy);
   const cpTwitch = new CpTwitchActions(db, clock);
   const spotify = new SpotifyService(db, clock, cpTwitch);
@@ -142,6 +186,7 @@ export function createCore(
     randomBan,
     economy,
     spotify,
+    cpTwitch,
   );
   // The Tombola may also reward in Bonbons while the event is open (docs/HALLOWEEN.md); every other currency as before.
   const raffleLab = new RaffleLabService(
@@ -151,15 +196,20 @@ export function createCore(
     broadcasterOf,
     withBonbonsRewards(economy),
   );
-  const subWheel = new SubWheelService(db, clock, undefined, economy);
+  const subWheel = new SubWheelService(db, clock, undefined, economy, {
+    labCredits: channel.lab === true,
+  });
   const alerts = new AlertsService(
     db,
     clock,
     undefined,
-    channel.alertsMaxAgeMs ?? null,
+    // Refonte H3: 30 min unless the channel sets its own (ALERTS_MAX_AGE_SECONDS).
+    channel.alertsMaxAgeMs ?? ALERT_RULES.defaultMaxAgeMs,
   );
   // Boutique d'événement (docs/HALLOWEEN.md): Bonbons for real Twitch subs / gifts, once per event.
-  const eventShop = new EventShopService(db, clock, economy);
+  const eventShop = new EventShopService(db, clock, economy, {
+    rewardSimulations: channel.lab === true,
+  });
   alerts.attachListener('event_shop', (q, e) => eventShop.onAlert(q, e));
   // `!solde` shows the Bonbons too while the event is open (the channel's own shop).
   wallet.chat.balanceExtra = async (viewerId) => {
@@ -167,9 +217,38 @@ export function createCore(
     return ch ? eventShop.balanceLine(ch, viewerId) : null;
   };
   // Progression native (docs/PROGRESSION.md): XP from validated presence and chat, levels, titles and badges.
-  const progression = new ProgressionService(db, clock, broadcasterOf);
+  const progression = new ProgressionService(db, clock, broadcasterOf, {
+    lab: channel.lab === true,
+  });
   // The shop pays with this Core's economy (Jetons) and the event ledger (Bonbons).
   const cosmetics = new CosmeticShopService(db, clock, progression, economy);
+  const chat = createChatGames({
+    // Refonte H10: !rb and !fxcam prices from the module settings (defaults = today's prices).
+    chatPrices: moduleSettings.chatPrices(),
+    hostChatModules: modules.chatModules(),
+    hostReservedWords: modules.reservedWords(),
+    miniGameLimits: miniGameLimits(moduleSettings),
+    // « !roue » and the invitations: silent while the wheel is in mode v1 (production today).
+    subWheel,
+    eventShop,
+    db,
+    clock,
+    economy,
+    tts: ttsLab,
+    randomBan,
+    channelPoints,
+    caution: channel.cautionChat ? caution : null,
+    votekick: channel.votekickChat ? votekick : null,
+    spotify: channel.spotifyChat ? spotify : null,
+    raffle: raffleLab,
+    broadcasterOf,
+    twitch: channel.twitchApp ?? null,
+    loginLookup: channel.loginLookup ?? null,
+  });
+  // Module host: supervision adapters of historical modules (they only READ their module's own state).
+  modules.add(randomBanModule(randomBan));
+  modules.add(wordGameModule(chat.wordGame));
+  modules.add(eventShopModule);
   return {
     credits,
     daily: new DailyService(db, clock, credits),
@@ -192,7 +271,9 @@ export function createCore(
     wallet,
     loyalty,
     // The Bonk accepts a Twitch emote only from the viewer's own catalog (none: Twitch emotes off).
-    bonkLab: new BonkLabService(db, clock, twitchViewers, null, economy),
+    bonkLab,
+    moduleSettings,
+    modules,
     twitchViewers,
     soundLab,
     ttsLab,
@@ -210,23 +291,6 @@ export function createCore(
     cpTwitch,
     botInstances: new BotInstanceService(db, clock),
     economy,
-    chat: createChatGames({
-      // « !roue » and the invitations: silent while the wheel is in mode v1 (production today).
-      subWheel,
-      eventShop,
-      db,
-      clock,
-      economy,
-      tts: ttsLab,
-      randomBan,
-      channelPoints,
-      caution: channel.cautionChat ? caution : null,
-      votekick: channel.votekickChat ? votekick : null,
-      spotify: channel.spotifyChat ? spotify : null,
-      raffle: raffleLab,
-      broadcasterOf,
-      twitch: channel.twitchApp ?? null,
-      loginLookup: channel.loginLookup ?? null,
-    }),
+    chat,
   };
 }

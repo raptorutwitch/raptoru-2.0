@@ -1751,6 +1751,12 @@ export class RaffleLabService {
         return { ok: true, next_at: iso(next) };
       }
       case 'stream_start': {
+        // Refonte P0-4 (R4): on the canonical economy a simulated live would open the paid games on real Jetons.
+        if (this.economy.mode === 'canonical')
+          throw new RaffleLabError409(
+            'simulated_stream_lab_only',
+            'a simulated stream exists only on the Lab economy',
+          );
         if (await this.liveSession(q, channelId))
           throw new RaffleLabError409(
             'stream_already_live',
@@ -1774,6 +1780,12 @@ export class RaffleLabService {
           throw new RaffleLabError409(
             'no_live_stream',
             'no live stream session',
+          );
+        // Refonte P0-4: only Twitch ends a Twitch live on the canonical economy (a simulated one left open may be ended).
+        if (this.economy.mode === 'canonical' && live.source === 'twitch')
+          throw new RaffleLabError409(
+            'twitch_stream_not_simulated',
+            'a Twitch live ends with Twitch, not from Studio',
           );
         await this.endSession(
           q,

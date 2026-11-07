@@ -3,18 +3,19 @@ import {
   formView,
   PRESETS,
   previewData,
-  queueView,
+  queueHtml,
   testEvent,
-} from '../../web/src/alerts-view.ts';
+} from '../../web/src/pages/alerts-model.ts';
 import { alertData } from '../../../core-api/src/alerts/rules.ts';
 import { AlertEventInput } from '@raptoru/schemas';
 
-// Twitch alerts V1 (A2) — Studio tab « Alertes », pure part: the fake data presets make valid Core events, the
+// Twitch alerts V1 (A2) — Studio page « Alertes », pure part: the fake data presets make valid Core events, the
 // preview shows exactly the data Core would give the OBS source, and hostile viewer text is always escaped.
 
 const TYPES = [
   'follow',
   'sub',
+  'resub',
   'gift_community',
   'gift_targeted',
   'bits',
@@ -65,30 +66,27 @@ describe('escaping', () => {
     expect(form).not.toContain('<img');
     expect(form).not.toContain('<script');
     expect(form).toContain('&lt;img src=x onerror=alert(1)&gt;');
-    const queue = queueView(
-      {
-        in_flight: [],
-        queued: [
-          {
-            alert_id: 'a',
-            type: 'raid',
-            variant_id: 'raid_default',
-            data: { pseudo: hostile.pseudo },
-            status: 'queued',
-            attempts: 1,
-            created_at: null,
-            failure: { message: '<script>x</script>' },
-          },
-        ],
-        recent: [],
-        media: [],
-        player_url: '',
-        preview_url: '',
-      },
-      null,
-    );
+    const queue = queueHtml({
+      in_flight: [],
+      queued: [
+        {
+          alert_id: 'a',
+          type: 'raid',
+          variant_id: 'raid_default',
+          data: { pseudo: hostile.pseudo },
+          status: 'queued',
+          attempts: 1,
+          created_at: null,
+          failure: { message: '<script>x</script>' },
+        },
+      ],
+      recent: [],
+      media: [],
+      player_url: '',
+      preview_url: '',
+    });
     expect(queue).not.toContain('<img');
     expect(queue).not.toContain('<script');
-    expect(queue).toContain('En attente (1)');
+    expect(queue).toContain('En attente');
   });
 });

@@ -1,0 +1,414 @@
+/* Régie live : les pistes de ce qui passe, à droite ce qui attend une décision. */
+.rg {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(264px, 25%, 340px);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0 20px;
+  height: 100%;
+  min-height: 560px;
+}
+.rg-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.rg-tracks {
+  flex: 1;
+  display: grid;
+  grid-auto-rows: minmax(76px, 1fr);
+  border-block: 1px solid var(--hair);
+}
+.rg-t {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr) auto;
+  align-items: stretch;
+  border-top: 1px solid var(--hair);
+  transition: background 0.2s;
+}
+.rg-t:first-child {
+  border-top: 0;
+}
+.rg-t.on {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--mod) 7%, transparent),
+    transparent 62%
+  );
+}
+.rg-t__l {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-content: center;
+  gap: 1px 8px;
+  padding: 10px 10px 10px 2px;
+  color: var(--ink);
+  text-decoration: none;
+  border-right: 1px solid var(--hair);
+}
+.rg-t__l:hover b {
+  color: var(--mod);
+}
+.rg-t__ic {
+  grid-row: span 2;
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 15px;
+  color: var(--mod);
+  background: color-mix(in srgb, var(--mod) 11%, transparent);
+}
+/* Ce qui est à l'antenne respire. */
+.rg-t.on .rg-t__ic {
+  animation: rg-air 2.2s var(--e) infinite;
+}
+@keyframes rg-air {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--mod) 40%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+.rg-t__l b {
+  font: 600 15px var(--num);
+  transition: color 0.12s;
+}
+.rg-t__l small {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+  line-height: 1.25;
+}
+.rg-t__l small i {
+  flex: none;
+  transform: translateY(-1px);
+}
+[data-tone] > i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink3);
+}
+[data-tone='ok'] > i {
+  background: var(--teal);
+}
+[data-tone='warn'] > i,
+[data-tone='unknown'] > i {
+  background: var(--amber);
+}
+[data-tone='bad'] > i {
+  background: var(--red);
+}
+[data-tone='off'] > i {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--ink3);
+}
+
+.rg-t__lane {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 12px;
+  overflow: hidden;
+  /* La règle graduée, en fond de piste. */
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--hair) 0 1px,
+    transparent 1px 48px
+  );
+  background-size: 100% 5px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+}
+.rg-idle {
+  margin: 0;
+  color: var(--ink3);
+  font-size: 13.5px;
+}
+.rg-note {
+  margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rg-more {
+  flex: none;
+  color: var(--ink3);
+  font: 500 12.5px var(--num);
+}
+.rg-now {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 1 auto;
+  min-width: 180px;
+  max-width: min(62%, 420px);
+  padding: 7px 12px 7px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mod) 13%, var(--raise));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mod) 34%, transparent);
+}
+.rg-now[data-item] {
+  cursor: pointer;
+}
+.rg-now--s {
+  min-width: 120px;
+}
+.rg-now > div {
+  flex: 1;
+  min-width: 0;
+}
+.rg-now b {
+  display: block;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rg-now p {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rg-now .d-prog {
+  display: block;
+  margin-top: 5px;
+  height: 3px;
+}
+.rg-now .d-prog i {
+  transition: width 0.45s linear;
+}
+.rg-now--t {
+  min-width: 240px;
+}
+.rg-time {
+  flex: none;
+  min-width: 52px;
+  font: 600 25px var(--num) !important;
+  font-variant-numeric: tabular-nums;
+  color: var(--mod);
+  text-align: center;
+}
+.rg-c {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  max-width: 150px;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--ink);
+}
+.rg-c__m {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px 0 5px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: 500 12.5px var(--text);
+  cursor: pointer;
+}
+.rg-c__m span,
+.rg-c--s span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rg-c--s {
+  gap: 6px;
+  height: 30px;
+  padding: 0 9px 0 5px;
+  font: 500 12.5px var(--text);
+}
+.rg-c__x {
+  width: 22px;
+  height: 22px;
+  margin-right: 3px;
+  opacity: 0;
+}
+.rg-c:hover {
+  background: var(--fill2);
+}
+.rg-c:hover .rg-c__x,
+.rg-c__x:focus-visible {
+  opacity: 1;
+}
+.rg-t__a {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 0 0 8px;
+  min-width: 0;
+}
+.rg-t__a:empty {
+  display: none;
+}
+
+.rg-goes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+}
+.rg-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--ink2);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+.rg-go:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+.rg-go .d-ic {
+  color: var(--ink3);
+}
+
+.rg-side {
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--raise3) transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding-left: 18px;
+  border-left: 1px solid var(--hair);
+}
+.rg-side h2 {
+  margin: 2px 0 7px;
+}
+.rg-dec {
+  min-height: 92px;
+}
+.rg-calm {
+  margin: 0;
+  padding: 2px 0;
+  color: var(--ink2);
+}
+.rg-d {
+  display: flex;
+  gap: 9px;
+  padding: 8px 0;
+  border-top: 1px solid var(--hair);
+}
+.rg-d:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+.rg-d > i {
+  margin-top: 6px;
+}
+.rg-d__t {
+  flex: 1;
+  min-width: 0;
+}
+.rg-d b {
+  font-weight: 600;
+}
+.rg-d p {
+  margin: 1px 0 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.rg-d small {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.rg-d__a {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.rg-d__a a {
+  text-decoration: none;
+}
+.rg-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+.rg-line > i {
+  transform: translateY(-1px);
+}
+.rg-side .d-note a {
+  color: var(--ink2);
+}
+.rg-side .d-note a:hover {
+  color: var(--teal);
+}
+.rg-watch {
+  display: grid;
+}
+.rg-watch a {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 26px;
+  padding: 3px 0;
+  color: var(--ink);
+  text-decoration: none;
+}
+.rg-watch a:hover b {
+  color: var(--teal);
+}
+.rg-watch b {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rg-watch span {
+  margin-left: auto;
+  color: var(--ink3);
+  font-size: 12.5px;
+  text-align: right;
+}
+
+@media (max-width: 1180px) {
+  .rg-t {
+    grid-template-columns: 128px minmax(0, 1fr) auto;
+  }
+  .rg-now {
+    min-width: 150px;
+  }
+  .rg-note {
+    display: none;
+  }
+}

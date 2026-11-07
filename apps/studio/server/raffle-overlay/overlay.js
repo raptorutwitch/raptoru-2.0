@@ -1,4 +1,4 @@
-/* global document, location, fetch, localStorage, Audio, getComputedStyle, performance, requestAnimationFrame, setTimeout, clearTimeout, setInterval, URLSearchParams */
+/* global document, location, fetch, localStorage, Audio, getComputedStyle, performance, requestAnimationFrame, setTimeout, clearTimeout, setInterval, URLSearchParams, addEventListener, window */
 // Tombola V2 — the single OBS browser source (1920×1080, transparent), ported from the validated
 // prototype prototypes/tombola-v2/overlay.html: opening C4, join feedback FIFO, Reveal G (normal /
 // SUPER / giveaway), compact FULL OSEILLE roulette, cancellation, + « Aucun participant ».
@@ -25,6 +25,8 @@ const tb = $('tb');
 const params = new URLSearchParams(location.search);
 /** Studio preview: same page, never plays the launch sound (OBS is the only player). */
 const PREVIEW = params.get('preview') === '1';
+/** Studio preparation: the page shows the snapshot Studio sends it (next round's look); Core is not read. */
+const DEMO = PREVIEW && params.get('demo') === '1';
 const token = location.hash.slice(1);
 const POLL_LIVE_MS = 250;
 const POLL_IDLE_MS = 1000;
@@ -717,4 +719,10 @@ setInterval(() => {
   if (p !== phase) apply();
   else paintTimer();
 }, 200);
-void poll();
+if (DEMO)
+  addEventListener('message', (e) => {
+    if (e.origin !== location.origin || e.source !== window.parent) return;
+    snap = e.data;
+    apply();
+  });
+else void poll();

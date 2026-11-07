@@ -15,7 +15,10 @@ import {
   type RandomBanAnimationId,
   SUB_WHEEL_MEDIA,
 } from '@raptoru/schemas';
-import type { AlertMediaStore } from '../alerts/media-store.js';
+import {
+  type AlertMediaStore,
+  findMediaOrigins,
+} from '../alerts/media-store.js';
 import { SOUND_MAX_BYTES, soundFormat } from '../raffle-lab/runtime.js';
 
 // Effects player (P0.1, docs/EFFECTS_PLAYER.md) — Studio's native capability to play an effect at once on ONE local
@@ -155,6 +158,8 @@ export interface EffectsPlayerDeps {
   now?: () => number;
   /** Tests only: shorter delays. */
   rules?: Partial<typeof EFFECTS_RULES>;
+  /** Tests only: where the Lab's import looks. */
+  mediaOrigins?: { folders?: readonly string[]; config?: string };
 }
 
 export class EffectsPlayer {
@@ -204,6 +209,25 @@ export class EffectsPlayer {
   }
 
   /** The page as Studio sees it (Studio tab). */
+  /**
+   * The Lab's import, on the streamer's explicit request: what is missing, from the usual folders then the installed Studio's
+   * copies (hash checked). The originals are only read.
+   */
+  async importMissing() {
+    const names = CATALOGUE.map((c) => c.file);
+    const origins = await findMediaOrigins(names, this.d.media.dir, {
+      ...this.d.mediaOrigins,
+      store: 'effects',
+    });
+    const picks = new Map<string, { from: string; sha256?: string }>();
+    for (const o of origins)
+      for (const [name, file] of o.files)
+        if (!picks.has(name) && !this.d.media.path(name)) picks.set(name, file);
+    return this.d.media.import(
+      [...picks].map(([name, file]) => ({ name, ...file })),
+    );
+  }
+
   status() {
     const connected =
       this.page !== null && this.now() - this.page.at < this.rules.heartbeatMs;

@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import {
+  type CautionRates,
+  DEFAULT_CAUTION_RATES,
+} from '../modules/caution.js';
+import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
+import {
   CAUTION,
   CAUTION_EXEC,
   CAUTION_OPEN,
@@ -245,6 +250,13 @@ export class CautionService {
   }
 
   /** The Twitch executor told Core recently that it can read Twitch (memory: this Core only). */
+  /**
+   * Refonte H10 (module host « caution », adapter): the rates, read in the transaction of the quote. Set by createCore /
+   * the Lab Core; default = the SAMMI rule (1 000 Jetons per minute) and the decision of 27/10 (300 per 10 s of mute).
+   */
+  rates: (q: Queryable, channelId: string) => Promise<CautionRates> =
+    async () => DEFAULT_CAUTION_RATES;
+
   executorReady(channelId: string) {
     const e = this.executors.get(channelId);
     return !!e && this.now().getTime() - e.at < 15_000 && e.can_read;
@@ -286,6 +298,12 @@ export class CautionService {
     if (input === payer.login.toLowerCase()) {
       await answer(`${payer.login}, tu ne peux pas payer ta propre caution`);
       return { outcome: 'self' };
+    }
+    if (!(await liveForPaid(this.db, this.economy))) {
+      await answer(
+        'Caution disponible uniquement pendant le live · aucun jeton débité.',
+      );
+      return { outcome: STREAM_OFFLINE };
     }
     if (!this.executorReady(msg.channel_id)) {
       await answer('Caution indisponible pour le moment · aucun jeton débité.');
@@ -633,10 +651,12 @@ export class CautionService {
         muteId?: string,
       ) => {
         const remainingS = Math.ceil((endsAt.getTime() - now.getTime()) / 1000);
+        // The rates set in Studio (H10), read in this transaction; the quote then keeps ITS price until « oui ».
+        const rates = await this.rates(q, ch);
         const price =
           kind === 'mute'
-            ? cautionMutePrice(remainingS)
-            : cautionPrice(remainingS);
+            ? cautionMutePrice(remainingS, rates.mutePricePer10s)
+            : cautionPrice(remainingS, rates.pricePerMinute);
         await this.set(q, r.request_id, {
           ...who,
           kind,
@@ -644,7 +664,8 @@ export class CautionService {
           sanction_ends_at: endsAt,
           price,
           mute_id: muteId ?? null,
-          quote_expires_at: this.ms(CAUTION.quoteMs),
+          // From the SAME instant as the price (the confirmation re-derives the quote's time from it).
+          quote_expires_at: new Date(now.getTime() + CAUTION.quoteMs),
           lease_expires_at: null,
         });
         await this.say(q, ch, key, text(price, remainingS));
@@ -760,7 +781,15 @@ export class CautionService {
       const remainingS = Math.ceil(
         (new Date(s.ends_at).getTime() - now.getTime()) / 1000,
       );
-      if (cautionPrice(remainingS) > r.price!)
+      // Extended since the quote = more minutes to buy than the quote counted (the SAMMI check « price now > quoted
+      // price » with a constant rate). Compared in minutes, so a rate changed in Studio during the 30 s quote never
+      // reads « prolongé »: the debit is always the quoted price.
+      const quotedAt =
+        new Date(r.quote_expires_at!).getTime() - CAUTION.quoteMs;
+      const quotedS = Math.ceil(
+        (new Date(r.sanction_ends_at!).getTime() - quotedAt) / 1000,
+      );
+      if (cautionPrice(remainingS, 1) > cautionPrice(quotedS, 1))
         return stop(
           'refused',
           'extended',

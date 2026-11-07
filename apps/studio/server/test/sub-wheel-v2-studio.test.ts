@@ -19,10 +19,19 @@ import { localLabCoreClient } from '../src/lab-moderation/proxy.js';
 import { SubWheelRuntime } from '../src/sub-wheel/runtime.js';
 import {
   redrawConfirm,
-  rightsTab,
+  rightsSearch,
+  viewerCard,
+  type SwRightsUi,
   type SwViewerAdmin,
-} from '../../web/src/sub-wheel-rights-view.js';
-import { type SwState, subWheelView } from '../../web/src/sub-wheel-view.js';
+} from '../../web/src/pages/sub-wheel-rights-view.js';
+import {
+  labPanel,
+  nextTour,
+  settingsPanel,
+  stateView,
+  type SwState,
+  subWheelView,
+} from '../../web/src/pages/sub-wheel-view.js';
 
 // Roue du Sub V2, lot R4 — end to end in the Lab: a Twitch sub reaches the REAL Lab Core (alerts route) → its right
 // waits → Studio's section shows it (its state through Studio's /api/sub-wheel, rendered by the real view) → « Tirer »
@@ -193,14 +202,14 @@ async function chain(canonical: boolean) {
   let html = subWheelView(s, null);
   expect(html).toContain('Tours manuels');
   expect(html).toContain('Viewer&lt;3');
-  expect(html).toContain('Mois 14 <span class="sw-ok">confirmé</span>');
+  expect(html).toContain('Mois 14 <span class="whl-ok">confirmé</span>');
   expect(html).toContain(`data-act="sw-draw" data-spin="${right.spin_id}"`);
   // « Tirer » from Studio: the next wheel draws it.
   await l.api('POST', `/spins/${right.spin_id}/request`);
   s = await l.state();
   expect(s.rights![0]!.status).toBe('requested');
   html = subWheelView(s, null);
-  expect(html).toMatch(/Demandes de tirage <span class="sw-count">1/);
+  expect(html).toMatch(/Demandes de tirage <span class="whl-n">1/);
   // The simulated player shows the wheel Core drew, once.
   expect(await l.rt.subWheel.once()).toBe(true);
   expect(await l.rt.subWheel.once()).toBe(false);
@@ -261,7 +270,7 @@ describe('Roue du Sub V2 — R4, Lab end to end (Studio API, real Lab Core, simu
     ).rejects.toThrow();
     const s = await l.state();
     expect(s.settings.announce_delay_s).toBe(20);
-    const html = subWheelView(s, null, { tab: 'settings' });
+    const html = settingsPanel(s);
     expect(html).toContain('data-f="sw-announce-delay"');
     expect(html).toContain('value="20"');
     expect(html).toContain('Actuel : 20 s');
@@ -292,9 +301,7 @@ describe('Roue du Sub V2 — R4, Lab end to end (Studio API, real Lab Core, simu
     expect(html).toMatch(/À vérifier \(1\)/);
     // The blocked tour has no « Tirer »; the other one has.
     html = subWheelView(s, null);
-    expect(html).toContain(
-      '<span class="cp-tag cp-tag--warn">À vérifier</span>',
-    );
+    expect(html).toContain('<span class="d-tag warn">À vérifier</span>');
     await expect(
       l.api('POST', `/spins/${review.suspect.spin_id}/request`),
     ).rejects.toMatchObject({ body: { error: 'needs_review' } });
@@ -388,19 +395,23 @@ describe('Roue du Sub V2 — RV2-2 Studio « Droits » (real Lab Core)', () => {
     expect(r.redraw_of).toBe(right.spin_id);
     v = await card();
     expect(v.draws[0]).toMatchObject({ redraw_pending: true });
-    let html = rightsTab(
-      { query: 'wenu', hits: null, viewer: v, grantOpen: false },
-      true,
-    );
+    let html = viewerCard(v, {
+      query: 'wenu',
+      hits: null,
+      viewer: v,
+      grantOpen: false,
+    });
     expect(html).toContain('relance en attente');
     expect(await l.rt.subWheel.once()).toBe(true);
     v = await card();
     expect(v.counts.draws).toBe(2);
     expect(v.gains.awarded).toBeGreaterThan(gain);
-    html = rightsTab(
-      { query: 'wenu', hits: null, viewer: v, grantOpen: false },
-      true,
-    );
+    html = viewerCard(v, {
+      query: 'wenu',
+      hits: null,
+      viewer: v,
+      grantOpen: false,
+    });
     expect(html).toContain('nouveau tirage');
     expect(html.match(/data-act="swr-redraw"/g)).toHaveLength(2);
   });
@@ -443,9 +454,9 @@ describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player ca
     );
     let s = await l.state();
     expect(s.animations_waiting).toBe('effects_player_muted');
-    let html = subWheelView(s, null);
+    const html = subWheelView(s, null);
     expect(html).toContain('son bloqué');
-    expect(html).not.toContain('Lecteur prêt');
+    expect(stateView(s)).not.toContain('Lecteur prêt');
     // Sound allowed: the first wheel plays; while it plays, nothing else is claimed (never two at once).
     l.fx.audio = true;
     l.fx.hold = true;
@@ -466,8 +477,7 @@ describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player ca
       2,
     );
     s = await l.state();
-    html = subWheelView(s, null);
-    expect(html).toContain('Lecteur prêt');
+    expect(stateView(s)).toContain('Lecteur prêt');
   });
 
   it('a display that fails AFTER the draw: « Non affichée », paid once; « Rejouer l’animation » shows the SAME draw, nothing credited again', async () => {
@@ -519,9 +529,7 @@ describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player ca
     expect(s.recovery).toMatchObject({ retrying: 1, to_replay: 0 });
     let html = subWheelView(s, null, { tab: 'history' });
     expect(html).toContain('nouvel essai automatique');
-    expect(html).toContain(
-      '1 roue(s) jamais affichée(s) : nouvel essai automatique',
-    );
+    expect(html).toContain('1 roue jamais affichée : nouvel essai automatique');
     // Not before its delay: the second tour goes first (one at a time).
     expect(await l.rt.subWheel.once()).toBe(true);
     expect(await l.rt.subWheel.once()).toBe(false);
@@ -550,9 +558,7 @@ describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player ca
     });
     let s = await l.state();
     expect(s.lab_fail_next_start).toBe(true);
-    expect(subWheelView(s, null, { tab: 'lab' })).toContain(
-      'Prochain affichage : échec avant démarrage',
-    );
+    expect(labPanel(s)).toContain('Prochain affichage : échec avant démarrage');
     expect(await l.rt.subWheel.once()).toBe(true);
     expect(l.shown).toHaveLength(0);
     s = await l.state();
@@ -675,6 +681,8 @@ describe('Roue du Sub V2 — RV2-4 fix: a wheel is drawn only when the player ca
 });
 
 describe('Roue du Sub V2 — RV2-2 « Droits » (pure view)', () => {
+  const rightsTab = (ui: SwRightsUi, v2: boolean) =>
+    rightsSearch(ui, v2) + (ui.viewer ? viewerCard(ui.viewer, ui) : '');
   const viewer = (over: Partial<SwViewerAdmin> = {}): SwViewerAdmin => ({
     viewer: { id: '9301', login: 'wenuyr', name: 'Wenuyr' },
     counts: { available: 2, requested: 0, blocked: 0, drawing: 0, draws: 1 },
@@ -804,13 +812,13 @@ describe('Roue du Sub V2 — R4, the Studio section (pure view)', () => {
       },
       null,
     );
-    expect(html).toMatch(/Demandes de tirage <span class="sw-count">1/);
-    expect(html).toMatch(/File automatique <span class="sw-count">1/);
-    expect(html).toMatch(/Tours manuels <span class="sw-count">1/);
+    expect(html).toMatch(/Demandes de tirage <span class="whl-n">1/);
+    expect(html).toMatch(/File automatique <span class="whl-n">1/);
+    expect(html).toMatch(/Tours manuels <span class="whl-n">1/);
     expect(html).toContain('demandé par mod&lt;x&gt;');
-    expect(html).toContain('cp-chip--off">absent');
+    expect(html).toContain('d-tag off">absent');
     expect(html).toContain('présence inconnue');
-    expect(html).toContain('Mois ~6 <span class="sw-est">estimé</span>');
+    expect(html).toContain('Mois ~6 <span class="whl-est">estimé</span>');
     expect(html).toContain('message de resub');
     expect(html.match(/data-act="sw-draw"/g)).toHaveLength(1);
     expect(html).toContain('À vérifier</span>');
@@ -821,14 +829,44 @@ describe('Roue du Sub V2 — R4, the Studio section (pure view)', () => {
     expect(html).not.toContain('data-f="g-id"');
   });
 
+  it('the next tour: the requests, then the automatic queue, then the manual tours; never a blocked one', () => {
+    const blocked = right({ status: 'requested', blocked: true });
+    const manual = right({
+      right: {
+        queue: 'manual',
+        sub_month: 6,
+        month_source: 'estimated',
+        acquired_at: null,
+        drawn_at: null,
+      },
+    });
+    const auto = right({});
+    const requested = right({ status: 'requested' });
+    const next = (rights: never[]) => nextTour({ ...base, rights });
+    expect(next([blocked, manual, auto, requested])).toBe(requested);
+    expect(next([blocked, manual, auto])).toBe(auto);
+    expect(next([blocked, manual])).toBe(manual);
+    expect(next([blocked])).toBeNull();
+  });
+
   it('outside v2 the section says the V2 does not draw yet; settings: switch and the three modes', () => {
     const v1 = { ...base, settings: { enabled: true, mode: 'v1' as const } };
     expect(subWheelView(v1, null)).toContain('la V2 ne tire pas encore');
-    const html = subWheelView(v1, null, { tab: 'settings' });
-    expect(html).toContain('Désactiver la roue');
-    expect(html.match(/name="sw-mode"/g)).toHaveLength(3);
-    expect(html).toContain('value="v1" data-act="sw-mode" checked');
-    expect(html).toContain('diffuseur uniquement');
+    const html = settingsPanel(v1);
+    expect(stateView(v1)).toContain('Roue ouverte');
+    expect(html.match(/data-act="sw-mode"/g)).toHaveLength(3);
+    expect(html).toContain(
+      'data-act="sw-mode" data-mode="v1" aria-pressed="true"',
+    );
+    // Refonte H13: the mode is a rollback setting — folded under « Avancé », open only when not V2.
+    expect(html).toContain('<details class="d-acc whl-adv" open>');
+    const v2 = settingsPanel({
+      ...base,
+      settings: { enabled: true, mode: 'v2' as const },
+    });
+    expect(v2).toContain('<details class="d-acc whl-adv">');
+    expect(v2).toContain('Mode actuel : ');
+    expect(html).toContain('Diffuseur uniquement');
     expect(html).toContain('Tester l’animation');
   });
 
@@ -1025,11 +1063,9 @@ describe('Roue du Sub — Studio against a Core without the V2 yet (older produc
     const waiting = subWheelView(s, null);
     expect(waiting).toContain('ne gère pas encore la Roue du Sub V2');
     expect(subWheelView(s, null, { tab: 'history' })).toContain('Ancien');
-    const settings = subWheelView(s, null, {
-      tab: 'settings',
-    });
-    expect(settings).toContain('Activer la roue');
-    expect(settings).not.toContain('name="sw-mode"');
+    const settings = settingsPanel(s);
+    expect(settings).toContain('Tester l’animation');
+    expect(settings).not.toContain('data-act="sw-mode"');
   });
 
   it('any other failure stays an error (never hidden): /state down, or a V2 read failing with 500', async () => {

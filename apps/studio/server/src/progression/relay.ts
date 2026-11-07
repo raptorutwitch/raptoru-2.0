@@ -58,7 +58,12 @@ export class ProgressionRelay {
         encodeURIComponent((url.searchParams.get(name) ?? '').slice(0, 40));
       const viewer =
         /^\/api\/progression\/viewers\/(\d{1,32})(\/history)?$/.exec(p);
+      const by = /^(xp|watch|messages)$/.exec(url.searchParams.get('by') ?? '');
+      const period = /^(all|week|month)$/.exec(
+        url.searchParams.get('period') ?? '',
+      );
       const reads: Record<string, string> = {
+        'GET /api/progression/leaderboard': `/leaderboard?by=${by?.[0] ?? 'xp'}&period=${period?.[0] ?? 'all'}&limit=100`,
         'GET /api/progression/state': '/settings',
         'GET /api/progression/viewers': `/viewers?q=${q('q')}`,
         'GET /api/progression/import/status': '/import/status',

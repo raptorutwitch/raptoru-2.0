@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { seEntryView, seStatusView } from '../../web/src/alerts-se.ts';
-import { activeLabel, twitchStatusView } from '../../web/src/alerts-twitch.ts';
-import { sourceView } from '../../web/src/alerts-view.ts';
+import {
+  activeLabel,
+  seEntryView,
+  seStatusView,
+  sourceView,
+  twitchStatusView,
+} from '../../web/src/pages/alerts-sources.ts';
 
-// Studio tab « Alertes », pure views of the real-event sections: donor texts always escaped, states readable.
+// Studio page « Alertes », panneau Sources, pure views of the real-event sections: donor texts always escaped, states readable.
 
 const entry = (over = {}) => ({
   at: '2026-10-17T20:00:00.000Z',
@@ -56,7 +60,7 @@ describe('Dons StreamElements views', () => {
       null,
     );
     expect(html).toContain('Overlay Token');
-    expect(html).toContain('al-error');
+    expect(html).toContain('d-note bad');
     expect(html).toContain('refusé (err_unauthorized)');
     expect(html).toContain('&lt;b&gt;');
     expect(seStatusView(null, 'boom <x>')).toContain('boom &lt;x&gt;');
@@ -77,9 +81,9 @@ describe('Dons StreamElements views', () => {
     ).toContain('Follows : reçus');
   });
 
-  it('environment and safety: ACTIVE names its Core, a resumed ACTIVE is said, Twitch unavailable in Production', () => {
-    expect(activeLabel('lab')).toBe('ACTIVE · Core Lab');
-    expect(activeLabel('production')).toBe('ACTIVE · Core production');
+  it('environment and safety: Actif names its Core, a resumed ACTIVE is said, Twitch unavailable in Production', () => {
+    expect(activeLabel('lab')).toBe('Actif · Lab');
+    expect(activeLabel('production')).toBe('Actif · Production');
     const base = {
       mode: 'test',
       ingestion_enabled: true,
@@ -112,7 +116,8 @@ describe('Dons StreamElements views', () => {
         },
         null,
       ),
-    ).toContain('jamais repris automatiquement');
+      // Refonte H5: the Lab resumes TEST, the Production profile resumes ACTIVE.
+    ).toContain('Profil Lab : Actif n’est pas repris');
   });
 
   it('OBS source line', () => {

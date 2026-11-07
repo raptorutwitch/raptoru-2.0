@@ -10,6 +10,14 @@
 //   or left to Studio/Core as execution_unknown.
 import { CHARACTERS_BY_ID, resolveCast } from '/ext/shared/tts-characters.js';
 import { CharacterStage } from './stage.js';
+import {
+  continuousSpeech,
+  narratorVoice,
+  splitSpeech,
+  stableRandom,
+  vary,
+  voiceFor,
+} from './speech.js';
 
 const params = new URLSearchParams(location.search);
 const PREVIEW = params.get('preview') === '1';
@@ -20,7 +28,6 @@ const status = document.getElementById('status');
 const hud = document.getElementById('hud');
 const enable = document.getElementById('enable');
 const synth = window.speechSynthesis;
-const CHUNK_CHARS = 180; // legacy TTS_SPEECH_CHUNK_CHARS
 const START_TIMEOUT_MS = 8000;
 /**
  * End guard (ASTRA-P2-028), mirroring Core's playing lease (rules playing_lease_factor = 2,
@@ -34,7 +41,6 @@ const END_MARGIN_MS = 30_000;
 const inFlight = new Set();
 const VARIANT_MOUTH_HOLD_MS = 330; // legacy VARIANTE_BOURRE.pauseSeuil
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const seen = new Set();
 let voices = [];
 let gapMs = 1500;
@@ -92,6 +98,20 @@ const idleText = (state) =>
     : state === 'disabled'
       ? 'TTS désactivé.'
       : 'Prêt · en attente de TTS.';
+/** Où en est la lecture : Studio montre le même mot que la source OBS. Sans réponse attendue, rien ne dépend de ce signal. */
+function report(i, phase, char = 0) {
+  void fetch('/tts-lab/player/progress', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-tts-token': token },
+    body: JSON.stringify({
+      player,
+      interaction_id: i.interaction_id,
+      phase,
+      char,
+    }),
+    signal: AbortSignal.timeout(1000),
+  }).catch(() => {});
+}
 async function ack(i, event, error) {
   // Retry only the acknowledgement, never the reading. Bounded by the Core lease.
   for (let n = 0; n < 20; n++) {
@@ -118,98 +138,6 @@ function loadVoices() {
 if (synth) synth.addEventListener('voiceschanged', loadVoices);
 loadVoices();
 
-function findVoice(words) {
-  for (const word of words || []) {
-    const q = String(word).toLowerCase();
-    const v = voices.find(
-      (x) =>
-        x.name.toLowerCase().includes(q) ||
-        (x.lang && x.lang.toLowerCase().includes(q)),
-    );
-    if (v) return v;
-  }
-  return null;
-}
-/** Profile keywords → (strict: none) → exact lang → lang prefix → any French → first voice. */
-function voiceFor(profile) {
-  const match = findVoice(profile.match);
-  if (match) return match;
-  if (profile.strict) return null;
-  const lang = profile.lang.toLowerCase();
-  return (
-    voices.find((v) => v.lang && v.lang.toLowerCase() === lang) ||
-    voices.find(
-      (v) => v.lang && v.lang.toLowerCase().startsWith(lang.slice(0, 2)),
-    ) ||
-    voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('fr')) ||
-    voices[0] ||
-    null
-  );
-}
-const narratorVoice = () =>
-  findVoice([
-    'microsoft julie',
-    'julie',
-    'microsoft hortense',
-    'hortense',
-    'microsoft paul',
-    'paul',
-    'fr-fr',
-    'french',
-  ]) ||
-  voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('fr')) ||
-  voices[0] ||
-  null;
-
-/** Legacy splitSpeech: ≤ 180 code points, cut on a space / punctuation past 55 % of the chunk. */
-function splitSpeech(text, size = CHUNK_CHARS) {
-  const chars = Array.from(text || '');
-  const out = [];
-  let from = 0;
-  while (from < chars.length) {
-    let to = Math.min(chars.length, from + size);
-    if (to < chars.length) {
-      const floor = from + Math.max(1, Math.floor(size * 0.55));
-      for (let k = to - 1; k >= floor; k -= 1)
-        if (/\s/u.test(chars[k]) || /[,.;:!?…)]/u.test(chars[k])) {
-          to = k + 1;
-          break;
-        }
-    }
-    out.push(chars.slice(from, to).join(''));
-    from = to;
-  }
-  return out;
-}
-/** Legacy doitForcerParoleContinue: repetitive texts keep the mouth moving without boundaries. */
-function continuousSpeech(text) {
-  const s = text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]/g, '');
-  if (s.length < 8) return false;
-  if (/([aeiouy])\1{5,}/.test(s) || /(mdr|lol|ah|ha){3,}/.test(s)) return true;
-  return new Set(s.split('')).size <= 3;
-}
-/** Legacy creerAleatoireStable: variation seeded by the interaction (same reading on retry). */
-function stableRandom(seed) {
-  let h = 2166136261;
-  for (const c of String(seed)) {
-    h ^= c.codePointAt(0);
-    h = Math.imul(h, 16777619);
-  }
-  return () => {
-    h += 0x6d2b79f5;
-    let v = h;
-    v = Math.imul(v ^ (v >>> 15), v | 1);
-    v ^= v + Math.imul(v ^ (v >>> 7), v | 61);
-    return ((v ^ (v >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const vary = (base, amp, min, max, random) =>
-  clamp(base + (random() * 2 - 1) * (amp || 0), min, max);
-
 // --- one reading --------------------------------------------------------------------------------------
 
 function utter(text, { voice, lang, rate, pitch }) {
@@ -231,7 +159,8 @@ function speak(u, { onstart, onboundary, sid }) {
     const abandon = settle(resolve);
     inFlight.add(abandon);
     u.onstart = () => sid === session && onstart && onstart();
-    u.onboundary = () => sid === session && onboundary && onboundary();
+    u.onboundary = (e) =>
+      sid === session && onboundary && onboundary(e && e.charIndex);
     u.onend = () => settle(resolve)('end');
     u.onerror = (e) =>
       settle(reject)(
@@ -274,7 +203,7 @@ async function play(i) {
     if (!cast.ok) return await fail('invalid_cast', cast.error);
     if (!synth || !voices.length)
       return await fail('speech_unavailable', 'no Web Speech voice');
-    const voice = voiceFor(cast.voice);
+    const voice = voiceFor(voices, cast.voice);
     // Strict voice (drunk variant): Core promised this voice, so no silent substitute; nothing was
     // heard, the viewer is refunded by Core.
     if (!voice)
@@ -334,7 +263,7 @@ async function play(i) {
     synth.cancel();
     await speak(
       utter(`${pseudo} a dit.`, {
-        voice: narratorVoice(),
+        voice: narratorVoice(voices),
         lang: 'fr-FR',
         rate: 1,
         pitch: 1,
@@ -353,8 +282,12 @@ async function play(i) {
     if (!alive()) return;
     const continuous = continuousSpeech(i.message);
     const chunks = splitSpeech(i.message);
+    let offset = 0;
+    let lastReport = 0;
     for (let k = 0; k < chunks.length; k++) {
       if (!alive()) return;
+      const base = offset;
+      offset += chunks[k].length;
       await speak(
         utter(chunks[k], { voice, lang: cast.voice.lang, rate, pitch }),
         {
@@ -364,6 +297,7 @@ async function play(i) {
               ? () => {
                   markStarted();
                   stage.showBubble(pseudo, i.message);
+                  report(i, 'speaking');
                   lastBoundary = performance.now();
                   stage.pulse();
                   // Legacy lancerParoleContinue: repetitive text keeps the mouth open between words.
@@ -375,15 +309,22 @@ async function play(i) {
                   say(`${character.displayName} lit le message de ${pseudo}…`);
                 }
               : undefined,
-          onboundary: () => {
+          onboundary: (char) => {
             lastBoundary = performance.now();
             stage.pulse();
+            if (typeof char !== 'number') return;
+            stage.spokenAt(base + char);
+            if (lastBoundary - lastReport > 200) {
+              lastReport = lastBoundary;
+              report(i, 'speaking', base + char);
+            }
           },
         },
       );
     }
     if (!alive()) return;
     clearInterval(continuousTimer);
+    report(i, 'finished');
     await stage.finish();
     if (!alive()) return;
     await startedAck;

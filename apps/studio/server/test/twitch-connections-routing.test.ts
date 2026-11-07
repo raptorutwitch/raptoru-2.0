@@ -21,9 +21,11 @@ async function fixture(authorizing = false) {
     return true;
   });
   // No TestLab, OAuth child, real configuration or real tokens are constructed in this test.
-  const args: Parameters<typeof createStudioServer> = [{} as TestLab, () => {}];
-  args[16] = { authorizing, handle } as unknown as TwitchConnections;
-  const server = createStudioServer(...args);
+  const server = createStudioServer({
+    lab: {} as TestLab,
+    onShutdown: () => {},
+    twitchConnections: { authorizing, handle } as unknown as TwitchConnections,
+  });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   cleanups.push(
     () => new Promise<void>((resolve) => server.close(() => resolve())),

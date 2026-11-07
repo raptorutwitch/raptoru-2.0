@@ -1,6 +1,29 @@
-# Publication du chantier raptoru.fr (lots 1 à 5 + navigation, live, Daily) — plan, rien n'est fait
+# Publication du chantier raptoru.fr (lots 1 à 5 + navigation, live, Daily)
 
-État au 04/11/2026. **Chaque étape attend le GO explicite d'Antoni.** Aucune n'a été lancée.
+## 0. Compte rendu : livré le 04/11/2026 (GO complet d'Antoni)
+
+| Étape                                          | Résultat                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sauvegarde                                     | dump Coolify du 04/11 00:06 UTC téléchargé, puis vérifié (`pg_restore --list`, restauration complète dans un conteneur local supprimé ensuite : 60 migrations, Wallet = journal). Sauvegarde Coolify **01:44 UTC** déclenchée juste avant les migrations (API : `PATCH /databases/<db>/backups/<uuid>` `{ backup_now: true }`, planning inchangé) |
+| PR Core #55                                    | fusionnée : `main` = `8a897a5` ; CI verte (une relance du job e2e, instable)                                                                                                                                                                                                                                                                      |
+| Core                                           | `deploy core 8a897a5… --migrations-approved --go` : **déployé en 108 s**, hors live. Migrations appliquées : `20261119130000_cosmetic_frames_banners.sql`, `20261120130000_challenges.sql`                                                                                                                                                        |
+| Contrôles Core                                 | `/health` et `/ready` 200 ; commit signalé `8a897a5` ; bot `4ba9243` inchangé ; `rewardSteps` présent dans le statut Daily ; routes `/v1/site/*` (401 sans jeton) et `/v1/studio/*` (426 sans protocole) protégées ; catalogue public vide (événement fermé, comme avant)                                                                         |
+| Studio                                         | **0.1.25 publiée** par le workflow « studio-release » (`publish=public`) ; un test Windows instable (`alerts-se`, `ENOTEMPTY`) relancé une fois. **Installation sur le PC : à confirmer par Antoni**                                                                                                                                              |
+| PR site #116                                   | fusionnée : `74f7542`, déployée par Coolify en 90 s                                                                                                                                                                                                                                                                                               |
+| Contrôles site (visiteur, sans fausse session) | 7 pages × 2 largeurs sans erreur ni débordement ; `/api/live` : Helix réel, « offline » et photo de la chaîne ; Défis vide ; classement 500 lignes                                                                                                                                                                                                |
+| Protections                                    | `CHALLENGES_ENGINE` absent (= off) ; aucun défi ni cosmétique créé                                                                                                                                                                                                                                                                                |
+| Incident                                       | proxy API `coolify.raptoru.fr` en **502** : outil lancé avec `COOLIFY_URL=https://dashboard.raptoru.fr` (même Coolify, HTTPS). À réparer, car le workflow « Déployer » utilise `coolify.raptoru.fr`                                                                                                                                               |
+
+**Retour arrière** :
+
+- Core : `node scripts/coolify-deploy.mjs deploy core 8b2189ec82d7141365095add941411dfcb48a9e1 --rollback --go` ;
+- site : Coolify › redéployer `542b1f2` ;
+- Studio : réinstaller la 0.1.24.
+
+**Après la livraison** : parcours connectés et iPhone à vérifier par Antoni ; contenu (cosmétiques, défis) à créer ;
+`CHALLENGES_ENGINE` plus tard (§ 8). État du site : `lb-app/docs/SITE_CONTEXT.md` du dépôt du site.
+
+Les sections suivantes sont le **plan suivi**, à réutiliser comme modèle pour une prochaine publication.
 
 ## 1. Ce qui part, et d'où
 

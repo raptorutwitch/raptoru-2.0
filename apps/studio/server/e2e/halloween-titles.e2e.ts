@@ -31,18 +31,19 @@ test('Titres: created in Studio, sold in Bonbons, bought once in the extension, 
   await tab.getByRole('button', { name: 'Nouvel objet' }).click();
   await form.locator('[data-f="reward_id"]').fill('e2e-faucheuse');
   await form.locator('[data-f="label"]').fill('Faucheuse');
-  await form.locator('[data-f="status"]').selectOption('published');
+  await form.locator('[data-status="published"]').click();
   await tab.locator('[data-l="use-color"]').check();
   await tab.locator('[data-act="save"]').click();
-  await expect(tab).toContainText('Enregistré.');
+  await expect(page.locator('.d-toasts')).toContainText('Enregistré.');
   await tab.locator('[data-edit="e2e-faucheuse"]').click();
+  await tab.locator('[data-act="offer-new"]').click();
   const offer = tab.locator('[data-role="offer-form"]');
   await offer.locator('[data-o="offer_id"]').fill('e2e-faucheuse-bonbons');
-  await offer.locator('[data-o="currency"]').selectOption('bonbons');
+  await offer.locator('[data-ocur="bonbons"]').click();
   await offer.locator('[data-o="price"]').fill('25');
   await offer.locator('[data-o="enabled"]').check();
   await offer.getByRole('button', { name: 'Enregistrer l’offre' }).click();
-  await expect(tab).toContainText('Offre enregistrée.');
+  await expect(page.locator('.d-toasts')).toContainText('Offre enregistrée.');
 
   // Studio › Halloween: 40 Bonbons for Viewer Lab (a Lab grant).
   const studio = await page.request.post('/api/halloween/admin/grant', {

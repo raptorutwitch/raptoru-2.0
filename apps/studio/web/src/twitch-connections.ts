@@ -41,7 +41,10 @@ type Status = {
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
 const esc = (value: unknown) =>
-  String(value ?? '—').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  String(value ?? 'inconnu').replace(
+    /[&<>"']/g,
+    (c) => `&#${c.charCodeAt(0)};`,
+  );
 const date = (value: string | null) =>
   value ? new Date(value).toLocaleString('fr-FR') : 'jamais';
 const LABELS: Record<string, string> = {
@@ -136,7 +139,7 @@ export function mountTwitchConnections(root: HTMLElement) {
 
   function render() {
     if (!status) {
-      root.innerHTML = `<h3>Comptes Twitch</h3><p class="home-detail">${esc(error ?? 'Chargement…')}</p>`;
+      root.innerHTML = `<h2 class="d-lb">Comptes Twitch</h2><p class="d-note">${esc(error ?? 'Chargement…')}</p>`;
       return;
     }
     const current = status;
@@ -150,32 +153,32 @@ export function mountTwitchConnections(root: HTMLElement) {
           'twitch_unavailable',
           'store_busy',
         ].includes(a.state);
-        const tone =
+        const dot =
           a.state === 'ready'
-            ? 'ok'
+            ? ''
             : current.production
               ? passing
-                ? 'idle'
-                : 'warn'
+                ? 'off'
+                : 'w'
               : passing
-                ? 'warn'
-                : 'ko';
+                ? 'w'
+                : 'r';
         const unavailable = a.features
           .filter((f) => !f.scope_present)
           .map((f) => f.label);
-        return `<div class="twitch-connection">
-        <div class="row home-row"><b>${a.role === 'bot' ? 'Bot · LeCroupier_' : 'Streamer · raptoru_'}</b><span class="badge ${tone}">${esc(LABELS[a.state] ?? 'Non vérifié')}</span></div>
-        <p class="home-detail">Attendu : ${esc(a.expected.login)} (${esc(a.expected.user_id)}). Enregistré : ${esc(a.stored.login)} (${esc(a.stored.user_id)}).${a.validated ? ` Vérifié : ${esc(a.validated.login)} (${esc(a.validated.user_id)}).` : ''}</p>
-        <p class="home-detail">Dernière validation Twitch : ${esc(date(a.validated_at))}.${a.checked_at && a.checked_at !== a.validated_at ? ` Dernier essai : ${esc(date(a.checked_at))}.` : ''} Expiration enregistrée : ${a.stored.expires_at ? esc(date(a.stored.expires_at)) : 'inconnue'}${a.stored_expired ? ' (dépassée)' : ''}.</p>
-        ${unavailable.length ? `<p class="home-detail">Droits manquants pour : ${esc(unavailable.join(', '))}.</p>` : ''}
-        ${a.state === 'ready' ? (a.renewed_at ? `<p class="home-detail">Renouvelé automatiquement le ${esc(date(a.renewed_at))} (aucune réautorisation).</p>` : '') : `<p class="home-detail">${esc(advice(a.state, Boolean(current.production)))}</p>`}
-        ${a.state === 'pending_validation' ? '<p class="home-detail">Un renouvellement a été interrompu : « Vérifier » le termine.</p>' : ''}
-        <details data-twitch-details="${a.role}"><summary>Droits et source du jeton</summary>
-          <p class="home-detail">${a.validated ? 'Droits renvoyés par la dernière validation' : 'Droits enregistrés, non vérifiés'} : ${esc(a.scopes.join(' ') || 'aucun')}.</p>
-          <p class="home-detail">Profil approuvé : ${esc(a.required_scopes.join(' '))}. Manquants du profil : ${esc(a.missing_scopes.join(' ') || 'aucun')}.</p>
-          <p class="home-detail">Application : ${esc(a.client_id)}. Fichier : ${esc(a.token_file)}. Rafraîchissement enregistré : ${a.stored.refresh_available ? 'disponible' : 'absent'}.</p>
+        return `<div class="sy-tw">
+        <header><h3>${a.role === 'bot' ? 'Bot · LeCroupier_' : 'Streamer · raptoru_'}</h3><span class="d-state"><i class="d-dot ${dot}"></i>${esc(LABELS[a.state] ?? 'Non vérifié')}</span></header>
+        <p class="sy-d">Attendu : ${esc(a.expected.login)} (${esc(a.expected.user_id)}). Enregistré : ${esc(a.stored.login)} (${esc(a.stored.user_id)}).${a.validated ? ` Vérifié : ${esc(a.validated.login)} (${esc(a.validated.user_id)}).` : ''}</p>
+        <p class="sy-d">Dernière validation Twitch : ${esc(date(a.validated_at))}.${a.checked_at && a.checked_at !== a.validated_at ? ` Dernier essai : ${esc(date(a.checked_at))}.` : ''} Expiration enregistrée : ${a.stored.expires_at ? esc(date(a.stored.expires_at)) : 'inconnue'}${a.stored_expired ? ' (dépassée)' : ''}.</p>
+        ${unavailable.length ? `<p class="sy-d">Droits manquants pour : ${esc(unavailable.join(', '))}.</p>` : ''}
+        ${a.state === 'ready' ? (a.renewed_at ? `<p class="sy-d">Renouvelé automatiquement le ${esc(date(a.renewed_at))} (aucune réautorisation).</p>` : '') : `<p class="sy-d">${esc(advice(a.state, Boolean(current.production)))}</p>`}
+        ${a.state === 'pending_validation' ? '<p class="sy-d">Un renouvellement a été interrompu : « Vérifier » le termine.</p>' : ''}
+        <details class="d-acc" data-twitch-details="${a.role}"><summary>Détails techniques : droits et source du jeton</summary>
+          <p class="sy-d">${a.validated ? 'Droits renvoyés par la dernière validation' : 'Droits enregistrés, non vérifiés'} : ${esc(a.scopes.join(' ') || 'aucun')}.</p>
+          <p class="sy-d">Profil approuvé : ${esc(a.required_scopes.join(' '))}. Manquants du profil : ${esc(a.missing_scopes.join(' ') || 'aucun')}.</p>
+          <p class="sy-d">Application : ${esc(a.client_id)}. Fichier : ${esc(a.token_file)}. Rafraîchissement enregistré : ${a.stored.refresh_available ? 'disponible' : 'absent'}.</p>
         </details>
-        <div class="actions"><button type="button" data-twitch-action="verify" data-role="${a.role}" ${disabled || !current.configured ? 'disabled' : ''}>Vérifier</button>${current.production ? '' : `<button type="button" data-twitch-action="authorize" data-role="${a.role}" ${disabled || !current.configured || !current.authorization_allowed ? 'disabled' : ''}>Réautoriser Twitch</button>`}</div>
+        <div class="sy-acts"><button type="button" class="d-btn sm" data-twitch-action="verify" data-role="${a.role}" ${disabled || !current.configured ? 'disabled' : ''}>Vérifier</button>${current.production ? '' : `<button type="button" class="d-btn sm ghost" data-twitch-action="authorize" data-role="${a.role}" ${disabled || !current.configured || !current.authorization_allowed ? 'disabled' : ''}>Réautoriser Twitch</button>`}</div>
       </div>`;
       })
       .join('');
@@ -213,9 +216,9 @@ export function mountTwitchConnections(root: HTMLElement) {
           /* Invalid URLs never reach an external browser. */
         }
       }
-      flowHtml = `<p class="home-detail" role="status">${esc(messages[flow.state] ?? 'Autorisation en cours.')} ${link}</p>${['starting', 'waiting'].includes(flow.state) ? '<button type="button" data-twitch-action="cancel">Annuler</button>' : ''}`;
+      flowHtml = `<p class="sy-tw-note" role="status">${esc(messages[flow.state] ?? 'Autorisation en cours.')} ${link}</p>${['starting', 'waiting'].includes(flow.state) ? '<button type="button" class="d-btn sm ghost" data-twitch-action="cancel">Annuler</button>' : ''}`;
     }
-    const html = `<h3>Comptes Twitch${status.production ? ' — jetons de ce PC' : ''}</h3>${status.production ? '<p class="home-detail" role="note"><b>Non utilisés par le bot de Production (VPS)</b> : il garde ses propres jetons. Un problème du bot se lit dans le Centre de contrôle, pas ici.</p>' : ''}${accounts}${status.authorization_blocked_reason ? `<p class="home-detail">${esc(status.authorization_blocked_reason)}</p>` : ''}${flowHtml}${error ? `<p class="bad" role="alert">${esc(error)}</p>` : ''}<p class="home-detail">Vérifier interroge Twitch ; si l’accès a expiré, il le renouvelle avec l’autorisation enregistrée (sans nouveau consentement, même mécanisme que le bot). Les rôles Twitch et les abonnements EventSub ne sont pas vérifiés ici. L’autorisation permet des actions réelles même en Lab ; les automatismes restent réglés séparément. Les emotes viewer se connectent dans l’Extension.</p>`;
+    const html = `<h2 class="d-lb">Comptes Twitch${status.production ? ' · jetons de ce PC' : ''}</h2>${status.production ? '<p class="sy-tw-note" role="note"><b>Non utilisés par le bot de Production</b> : il garde ses propres jetons. Un problème du bot se lit dans Services, pas ici.</p>' : ''}${accounts}${status.authorization_blocked_reason ? `<p class="sy-tw-note">${esc(status.authorization_blocked_reason)}</p>` : ''}${flowHtml}${error ? `<p class="d-note bad" role="alert">${esc(error)}</p>` : ''}<p class="sy-tw-note">Vérifier interroge Twitch ; si l’accès a expiré, il le renouvelle avec l’autorisation enregistrée (sans nouveau consentement, même mécanisme que le bot). Les rôles Twitch et les abonnements EventSub ne sont pas vérifiés ici. L’autorisation permet des actions réelles même en Lab ; les automatismes restent réglés séparément. Les emotes viewer se connectent dans l’Extension.</p>`;
     if (html === lastHtml) return;
     const open = new Set(
       [...root.querySelectorAll<HTMLDetailsElement>('details[open]')].map(

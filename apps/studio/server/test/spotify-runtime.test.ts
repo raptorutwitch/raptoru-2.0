@@ -84,6 +84,7 @@ async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
       events.push('core auto-skip');
       return void core.autoSkips.push(body as Body);
     }
+    if (path.endsWith('/state')) return {};
     throw new Error(`unexpected ${path}`);
   };
   const reservationsFile =
@@ -322,6 +323,24 @@ describe('Spotify runtime (Studio)', () => {
     expect(await h.rt.api('POST', '/refresh', async () => ({}))).toEqual({
       read: true,
     });
+  });
+
+  it('the page gets the covers of the tracks Studio fetched; Core still gets only the track (its schema is strict)', async () => {
+    const h = await harness();
+    h.job(songJob(1, 'numb linkin park'));
+    await h.rt.once();
+    const { track } = h.core.reports[0]!.body as { track: { id: string } };
+    expect(Object.keys(track).sort()).toEqual([
+      'artists',
+      'duration_ms',
+      'id',
+      'title',
+      'uri',
+    ]);
+    const state = (await h.rt.api('GET', '/state', async () => ({}))) as {
+      covers: Record<string, string>;
+    };
+    expect(state.covers[track.id]).toMatch(/^data:image\/svg\+xml/);
   });
 
   it('timing lines in the Studio log: each song job step, and the auto-skip (playback progress when read, delays)', async () => {

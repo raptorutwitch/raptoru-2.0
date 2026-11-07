@@ -174,20 +174,22 @@ describe('passive: Presence → Loyalty', () => {
     ).toEqual({ validated_seconds: 480, ticks: 1 });
   });
 
-  it('unknown tier (no fresh snapshot) is flagged, never guessed; exclusion and override apply', async () => {
+  it('unknown tier (no fresh snapshot): paid at the BASE rate, flagged provisional, never guessed above (refonte H9); exclusion and override apply', async () => {
     const core = await live({ preview: true });
     await core.wallet.loyalty.setRate(bea, 3, 'studio', 'VIP');
     await core.loyalty.exclude(cid, 'bot account', 'studio');
     await watch(core, 0, 6, ['2001', '2002', '2003']);
     const rows = await rewards(core);
     expect(rows.map((r) => [r.twitch_user_id, r.status, r.amount])).toEqual([
-      ['2001', 'tier_unknown', null],
+      ['2001', 'preview', 10],
       ['2002', 'preview', 30],
       // 2003 is excluded: no tick at all.
     ]);
     expect(rows[0]!.breakdown).toMatchObject({
       tier: 'unknown',
       candidates: { none: 10, t1: 20, t2: 20, t3: 20 },
+      provisional: true,
+      complement: 'awaiting',
     });
 
     // A stale snapshot is not a proof of non-subscription.
@@ -642,5 +644,67 @@ describe('Rewards Twitch V1: frozen breakdowns and history', () => {
     ).toBe(10);
     for (const t of ['wallets', 'wallet_transactions', 'wallet_operations'])
       expect(await count(core.db, t)).toBe(0);
+  });
+});
+
+describe('Refonte H9: base rate now, the complement once from verifiable data', () => {
+  const unknownTick = async (opts: { credit?: boolean } = {}) => {
+    const core = await live(
+      opts.credit ? { passiveCredits: true } : { preview: true },
+    );
+    await watch(core, 0, 6, ['2001']); // no fresh snapshot: tier unknown, base paid
+    return core;
+  };
+  const complements = (core: TestCore) =>
+    core.db.query<{ amount: number; status: string }>(
+      "select amount, status from loyalty_rewards where idempotency_key like 'passive-complement:%' order by id",
+    );
+  const decision = async (core: TestCore) =>
+    (
+      await core.db.query<{ c: string }>(
+        "select breakdown->>'complement' as c from loyalty_rewards where idempotency_key like 'passive:%' order by id limit 1",
+      )
+    )[0]!.c;
+
+  it('the next snapshot lists the viewer T1: complement = due − base, credited ONCE (replayed snapshot, credit run twice)', async () => {
+    const core = await unknownTick({ credit: true });
+    core.clock.set(new Date(core.clock.now().getTime() + HOUR));
+    await snapshot(core, [{ viewer: aouh, tier: 't1' }]);
+    await snapshot(core, [{ viewer: aouh, tier: 't1' }]); // replay
+    await core.loyalty.processPending();
+    await core.loyalty.processPending();
+    expect(await complements(core)).toEqual([
+      { amount: 10, status: 'credited' },
+    ]);
+    expect(await decision(core)).toBe('paid');
+    expect((await core.wallet.wallet.getWallet('2001'))!.balance).toBe(20); // 10 base + 10 complement
+  });
+  it('absent from the snapshot: the base was right, nothing more', async () => {
+    const core = await unknownTick();
+    core.clock.set(new Date(core.clock.now().getTime() + HOUR));
+    await snapshot(core, []);
+    expect(await complements(core)).toEqual([]);
+    expect(await decision(core)).toBe('none');
+  });
+  it('first snapshot more than 36 h after the gain: expired, never paid on an old guess', async () => {
+    const core = await unknownTick();
+    core.clock.set(new Date(core.clock.now().getTime() + 40 * HOUR));
+    await snapshot(core, [{ viewer: aouh, tier: 't3' }]);
+    expect(await complements(core)).toEqual([]);
+    expect(await decision(core)).toBe('expired');
+  });
+  it('a sub event after the gain: the tier at the gain cannot be proven — nothing more (undetermined)', async () => {
+    const core = await unknownTick();
+    core.clock.set(new Date(core.clock.now().getTime() + HOUR));
+    await core.loyalty.handleEvent({
+      type: 'sub',
+      eventId: 'evt-h9-sub',
+      viewer: aouh,
+      tier: 't1',
+      isGift: false,
+    });
+    await snapshot(core, [{ viewer: aouh, tier: 't1' }]);
+    expect(await complements(core)).toEqual([]);
+    expect(await decision(core)).toBe('undetermined');
   });
 });

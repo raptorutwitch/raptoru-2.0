@@ -1,4 +1,7 @@
 import { BonkRuntime } from './bonk-lab/runtime.js';
+import { modulesStatusProvider } from './control-center/modules.js';
+import { modulesRelay } from './modules/relay.js';
+import { moduleSettingsRelay } from './module-settings/relay.js';
 import { bootPlan } from './prod-transport/profile.js';
 import {
   createProductionRuntimes,
@@ -40,15 +43,33 @@ import {
 import { extname, join, normalize } from 'node:path';
 import { LabEbs } from './extension-lab/lab-ebs.js';
 import {
+  CoreLabPanel,
+  labChatIdentities,
+} from './extension-lab/core-lab-panel.js';
+import {
+  labCoreChoice,
+  MainLabCore,
+  MAIN_LAB_CHANNEL,
+} from './runtime/main-lab-core.js';
+import {
   EXT_PREFIX,
   EXTENSION_CSP,
   extensionFile,
   LAB_API_PREFIX,
 } from './extension-lab/serve.js';
 import {
+  LAB_TOKEN_PATH,
   TWITCH_EXT_MOCK_JS,
   TWITCH_EXT_MOCK_PATH,
 } from './extension-lab/twitch-mock.js';
+import {
+  fictionalEmoteSvg,
+  labExtensionToken,
+  simulatedPurchase,
+  labRoleOf,
+  relayToFrontier,
+  type LabFrontier,
+} from './extension-lab/core-frontier.js';
 import {
   applyDataRootEnv,
   DATA_ROOT,
@@ -64,6 +85,7 @@ import { ControlCenter } from './control-center/model.js';
 import {
   type InteractionSources,
   interactionsStatusProvider,
+  labSignal,
   readSignals,
   type Signal,
 } from './supervision/signals.js';
@@ -187,7 +209,7 @@ async function serveStatic(pathname: string, res: ServerResponse) {
       'content-type': MIME[extname(rel)] ?? 'application/octet-stream',
       'content-security-policy':
         // Moderation console: Bonk emotes of the Twitch / 7TV / BTTV / FFZ CDNs (images only).
-        "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com",
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com https://i.scdn.co",
       'x-frame-options': 'DENY',
     });
     res.end(body);
@@ -231,6 +253,8 @@ async function extensionLabRoute(
   res: ServerResponse,
   url: URL,
   production = false,
+  /** The main Core in its Lab environment: the extension speaks to its real /v1/ext (no Lab EBS). */
+  frontier: LabFrontier | null = null,
 ): Promise<boolean> {
   // Production profile (ASTRA-P1-019 lot 2): no Lab façade at all. Without it, the extension would run
   // on the façade's in-memory simulation and look like an old version (legacy screens, no V2 data).
@@ -287,9 +311,55 @@ async function extensionLabRoute(
     res.end(file.body);
     return true;
   }
+  // The Lab's fictional emotes (Twitch, 7TV, BTTV, FFZ): a local image, never a CDN.
+  const fictionalEmote = frontier
+    ? /^\/ext-lab\/fictional-emote\/[a-z0-9]+-([A-Za-z0-9_]{1,64})\.svg$/.exec(
+        url.pathname,
+      )
+    : null;
+  if (fictionalEmote) {
+    res.writeHead(200, {
+      'content-type': 'image/svg+xml',
+      'cache-control': 'no-store',
+    });
+    res.end(fictionalEmoteSvg(fictionalEmote[1]!));
+    return true;
+  }
+  if (frontier && url.pathname === LAB_TOKEN_PATH) {
+    if (req.method !== 'GET' || !sameHost(req)) {
+      send(res, 403, { ok: false, error: 'forbidden_host' });
+      return true;
+    }
+    send(res, 200, {
+      token: labExtensionToken(
+        frontier,
+        labRoleOf(url.searchParams.get('role')),
+        url.searchParams.get('identity') !== '0',
+      ),
+    });
+    return true;
+  }
   if (url.pathname.startsWith(`${LAB_API_PREFIX}/`)) {
     if (!sameHost(req)) {
       send(res, 403, { ok: false, error: 'forbidden_host' });
+      return true;
+    }
+    if (frontier) {
+      const reply = await relayToFrontier(
+        frontier,
+        req.method ?? 'GET',
+        url.pathname.slice(LAB_API_PREFIX.length) + url.search,
+        req.method === 'POST' ? JSON.stringify(await readJson(req)) : undefined,
+        {
+          authorization: req.headers.authorization,
+          idempotencyKey: req.headers['idempotency-key'] as string | undefined,
+        },
+      );
+      res.writeHead(reply.status, {
+        'content-type': reply.contentType,
+        'cache-control': 'no-store',
+      });
+      res.end(reply.body);
       return true;
     }
     if (!extLab) {
@@ -328,6 +398,39 @@ const actions: Record<string, Action> = {
   'logs/clear': async (lab) => lab.logs.clear(),
 };
 
+/**
+ * Production profile: the Test Lab may only stop what it adopted. Starting its Core / bot would run a second
+ * Twitch-connected bot with this PC's tokens next to the production bot, outside the production Core's lease.
+ */
+const TEST_LAB_PRODUCTION_ACTIONS = new Set([
+  'postgres/stop',
+  'core/stop',
+  'bot/stop',
+  'stop-all',
+  'logs/clear',
+]);
+/** The paths served by the relay chain (relays to the profile's Core). */
+const RELAYED =
+  /^\/api\/(mini-games\/|module-settings$|daily\/config$|modules(\/|$))/;
+
+/** Several relays behind one handler slot: the first that knows the path answers. */
+export function chainRelays(
+  ...handlers: ((
+    req: IncomingMessage,
+    res: ServerResponse,
+    url: URL,
+  ) => Promise<boolean>)[]
+) {
+  return async (req: IncomingMessage, res: ServerResponse, url: URL) => {
+    for (const h of handlers) if (await h(req, res, url)) return true;
+    return false;
+  };
+}
+
+export function testLabActionAllowed(name: string, production: boolean) {
+  return !production || TEST_LAB_PRODUCTION_ACTIONS.has(name);
+}
+
 /** One stderr line for a crash: full stack (diagnosis) through the secret redaction. */
 export function crashLine(
   kind: string,
@@ -358,45 +461,84 @@ export async function stopAll(
   );
 }
 
-export function createStudioServer(
-  lab: TestLab,
-  onShutdown: () => void,
-  extLab: LabEbs | null = null,
-  bonk: BonkRuntime | null = null,
-  sound: SoundRuntime | null = null,
-  runtime: LocalRuntime | null = null,
-  tts: TtsRuntime | null = null,
-  labApi: ReturnType<typeof labProxy> | null = null,
-  raffle: RaffleRuntime | null = null,
-  labChat: LabChatIngress | null = null,
-  commands: ReturnType<typeof commandsRelay> | null = null,
+/**
+ * Everything the Studio server serves, by NAME (friction S1: 24 positional parameters let a caller silently pass
+ * null in the wrong slot — the preview stack lost the relays and the Lab API that way). Absent = not served.
+ */
+export interface StudioServerOptions {
+  lab: TestLab;
+  onShutdown: () => void;
+  extLab?: LabEbs | null;
+  bonk?: BonkRuntime | null;
+  sound?: SoundRuntime | null;
+  runtime?: LocalRuntime | null;
+  tts?: TtsRuntime | null;
+  labApi?: ReturnType<typeof labProxy> | null;
+  raffle?: RaffleRuntime | null;
+  labChat?: LabChatIngress | null;
+  commands?: ReturnType<typeof commandsRelay> | null;
   /** Studio profile (Lab / Production) status and main-process-only switch (ASTRA-P1-019 lot 2). */
-  profile: ProfileApiDeps | null = null,
+  profile?: ProfileApiDeps | null;
   /** Jeu des mots V1 (Lab): panel relay + OBS sound source. */
-  wordGame: WordGameRuntime | null = null,
+  wordGame?: WordGameRuntime | null;
   /** Roulette and Slot V1 (Lab): the switch « Mini-jeux » (Simulation de stream panel). */
-  miniGames: ReturnType<typeof miniGamesRelay> | null = null,
+  /** The relay chain to the profile's Core (mini-games, module settings, Daily, module host). */
+  relays?: ReturnType<typeof chainRelays> | null;
   /** Twitch alerts V1 (Lab): OBS source + media, Studio preview, queue relay. */
-  alerts: AlertsRuntime | null = null,
+  alerts?: AlertsRuntime | null;
   /** Points de chaîne V1: tab API and the OBS executor of the redemptions. */
-  points: ChannelPointsRuntime | null = null,
+  points?: ChannelPointsRuntime | null;
   /** Account diagnostics are passive; authorization is an explicit, guarded user action. */
-  twitchConnections: TwitchConnections | null = null,
+  twitchConnections?: TwitchConnections | null;
   /** Centre de contrôle (lot 3): one status per module, the bot first. */
-  control: ControlCenter | null = null,
+  control?: ControlCenter | null;
   /** Incidents of the live (incident 22/10): global banner and desktop notifications. */
-  supervision: { handle: Supervisor['handle']; origin: string } | null = null,
+  supervision?: { handle: Supervisor['handle']; origin: string } | null;
   /** Dock OBS V1: its own local server (another port); here only Studio's panel API (docs/OBS_DOCK.md). */
-  dock: DockRuntime | null = null,
+  dock?: DockRuntime | null;
   /** Halloween (docs/HALLOWEEN.md): the overlay engine, its page and media, Studio's panel and the shop relay. */
-  halloween: HalloweenRuntime | null = null,
+  halloween?: HalloweenRuntime | null;
   /** Progression native (docs/PROGRESSION.md): Studio's panel relay to the profile's Core. */
-  progression: ProgressionRelay | null = null,
+  progression?: ProgressionRelay | null;
   /** Boutique cosmétique V1: the « Boutique » tab relay and the preview's stylesheet / images. */
-  cosmetics: CosmeticsRelay | null = null,
+  cosmetics?: CosmeticsRelay | null;
   /** Défis (docs/CHALLENGES.md): the « Défis » tab relay to the profile's Core. */
-  challenges: ChallengesRelay | null = null,
-) {
+  challenges?: ChallengesRelay | null;
+  /** Extension Lab on the main Core's real /v1/ext (CORE_ENVIRONMENT=lab): Studio signs the Lab JWT and relays. */
+  labFrontier?: LabFrontier | null;
+  /** The Extension Lab page's state and controls on that Core (no state of its own). */
+  labPanel?: CoreLabPanel | null;
+}
+
+export function createStudioServer(o: StudioServerOptions) {
+  const {
+    lab,
+    onShutdown,
+    extLab = null,
+    bonk = null,
+    sound = null,
+    runtime = null,
+    tts = null,
+    labApi = null,
+    raffle = null,
+    labChat = null,
+    commands = null,
+    profile = null,
+    wordGame = null,
+    relays = null,
+    alerts = null,
+    points = null,
+    twitchConnections = null,
+    control = null,
+    supervision = null,
+    dock = null,
+    halloween = null,
+    progression = null,
+    cosmetics = null,
+    challenges = null,
+    labFrontier = null,
+    labPanel = null,
+  } = o;
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
     try {
@@ -481,6 +623,12 @@ export function createStudioServer(
       }
       // Halloween: overlay page / media (its key), Electron main (screens), Studio's panel and the shop relay.
       if (halloween && (await halloween.handle(req, res, url))) return;
+      // Security (architecture audit S2): these relays answered without the same-host check (DNS rebinding).
+      if (
+        /^\/api\/(progression|cosmetics|challenges)(\/|$)/.test(url.pathname) &&
+        !sameHost(req)
+      )
+        return send(res, 403, { error: 'forbidden_host' });
       if (progression && (await progression.handle(req, res, url))) return;
       if (cosmetics && (await cosmetics.handle(req, res, url))) return;
       if (challenges && (await challenges.handle(req, res, url))) return;
@@ -489,14 +637,14 @@ export function createStudioServer(
       if (points && (await points.handle(req, res, url))) return;
       if (url.pathname === '/api/alerts/state' && !alerts)
         return send(res, 200, { enabled: false });
-      // Roulette and Slot V1: Core decides; Studio relays the switch « Mini-jeux ».
-      if (url.pathname.startsWith('/api/mini-games/')) {
+      // Relays to the profile's Core — ONE chain, ONE host check (architecture socle): mini-games, module settings and
+      // Daily steps, the module host (/api/modules…). A new relay joins the chain where it is built, nothing here.
+      if (RELAYED.test(url.pathname)) {
         if (!sameHost(req)) return send(res, 403, { error: 'forbidden_host' });
-        if (!miniGames)
-          return url.pathname === '/api/mini-games/state'
-            ? send(res, 200, { available: false })
-            : send(res, 503, { error: 'lab_core_unavailable' });
-        if (await miniGames(req, res, url)) return;
+        if (relays && (await relays(req, res, url))) return;
+        return url.pathname === '/api/mini-games/state'
+          ? send(res, 200, { available: false })
+          : send(res, 503, { error: 'lab_core_unavailable' });
       }
       // Moderation V2 cockpit / TTS configuration / Lab test wallet (relayed to the local Lab Core).
       if (url.pathname.startsWith('/api/lab/')) {
@@ -515,6 +663,7 @@ export function createStudioServer(
           res,
           url,
           profile?.plan.effective === 'production',
+          labFrontier,
         )
       )
         return;
@@ -553,6 +702,8 @@ export function createStudioServer(
         return send(res, 200, {
           enabled: Boolean(runtime),
           packaged: process.env.RAPTORU_PACKAGED === '1',
+          // Which Lab Core answers: the screens drop what cannot work on the main Core.
+          lab_core: labPanel ? 'main' : 'legacy',
           dataRoot: DATA_ROOT,
           ...(runtime ? runtime.status() : {}),
         });
@@ -574,14 +725,32 @@ export function createStudioServer(
       }
       // Extension Lab: state and controls of the local Lab EBS (fictitious data only).
       if (url.pathname.startsWith('/api/ext-lab/')) {
-        if (!extLab)
+        const panel = labPanel ?? extLab;
+        if (!panel)
           return send(res, 503, { error: 'extension_lab_unavailable' });
         if (req.method === 'GET' && url.pathname === '/api/ext-lab/state')
           return send(
             res,
             200,
-            extLab.snapshot(Number(url.searchParams.get('since') ?? 0)),
+            await panel.snapshot(Number(url.searchParams.get('since') ?? 0)),
           );
+        if (req.method === 'POST' && url.pathname === '/api/ext-lab/purchase') {
+          const b = (await readJson(req)) as Record<string, unknown>;
+          const reply =
+            labFrontier &&
+            typeof b.viewer_id === 'string' &&
+            typeof b.key === 'string' &&
+            typeof b.module_id === 'string'
+              ? await simulatedPurchase(labFrontier, b.viewer_id, b.key, {
+                  module_id: b.module_id,
+                  payload: b.payload,
+                })
+              : null;
+          if (!reply) return send(res, 400, { error: 'invalid_request' });
+          res.writeHead(reply.status, { 'content-type': reply.contentType });
+          res.end(reply.body);
+          return;
+        }
         const control = /^\/api\/ext-lab\/control\/([a-z-]+)$/.exec(
           url.pathname,
         );
@@ -589,7 +758,7 @@ export function createStudioServer(
           return send(
             res,
             200,
-            await extLab.control(control[1]!, await readJson(req)),
+            await panel.control(control[1]!, await readJson(req)),
           );
         return send(res, 404, { error: 'not_found' });
       }
@@ -598,11 +767,22 @@ export function createStudioServer(
         onShutdown();
         return;
       }
-      const action =
-        req.method === 'POST'
-          ? actions[url.pathname.replace('/api/test-lab/', '')]
-          : undefined;
+      const name = url.pathname.replace('/api/test-lab/', '');
+      // The Lab on the main Core: the Test Lab's bot and Core run on the real .env files, never from here.
+      if (labPanel && req.method === 'POST' && name !== 'preflight')
+        return send(res, 409, {
+          error: 'lab_main_core',
+          message:
+            'Lab sur le véritable Core : le Test Lab (bot et Core sur les vrais .env) est coupé.',
+        });
+      const action = req.method === 'POST' ? actions[name] : undefined;
       if (!action) return send(res, 404, { error: 'not_found' });
+      if (!testLabActionAllowed(name, profile?.plan.effective === 'production'))
+        return send(res, 403, {
+          ok: false,
+          error:
+            'Test Lab : démarrage refusé en profil Production (un second bot Twitch tournerait hors du bail du Core de production).',
+        });
       return send(res, 200, { ok: true, result: await action(lab) });
     } catch (error) {
       const message = lab.deps.redact((error as Error).message);
@@ -657,13 +837,42 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Standalone Studio: the local runtime (Postgres → base Lab → Core local) is started and watched
   // here; Bonk and Soundboard workers use its per-session secret. `npm run bonk:lab` (BONK_LAB_ONLY)
   // keeps its own launcher and environment.
+  // The local Lab on the MAIN Core (decision of 05/11/2026), the default: the Production entry point runs here with
+  // CORE_ENVIRONMENT=lab and Studio talks to it as to the VPS (its transport, its cockpit, the Extension's /v1/ext).
+  // STUDIO_LAB_CORE=legacy: the historical Lab Core, until its removal.
+  const mainLab =
+    labProfile &&
+    plan.startLabCore &&
+    process.env.BONK_LAB_ONLY !== '1' &&
+    labCoreChoice(process.env) === 'main'
+      ? await MainLabCore.open({
+          runtimeDir: paths.runtimeDir,
+          coreDir: join(REPO_ROOT, 'apps', 'core-api'),
+          emoteCatalogChannelId:
+            process.env.STUDIO_LAB_EMOTE_CATALOG_CHANNEL_ID ?? null,
+        }).catch((error: Error) => {
+          lab.logs.add(
+            'studio',
+            `Lab sur le Core principal indisponible : ${lab.deps.redact(error.message)}`,
+            'error',
+          );
+          return null;
+        })
+      : null;
   const runtime =
     process.env.BONK_LAB_ONLY === '1' || !plan.startLabCore
       ? null
-      : createLocalRuntime(lab.logs, lab.deps.redact);
-  if (runtime) {
+      : createLocalRuntime(
+          lab.logs,
+          lab.deps.redact,
+          undefined,
+          mainLab ?? undefined,
+        );
+  if (runtime && !mainLab) {
     process.env.BONK_LAB_CORE_URL = runtime.coreUrl;
     process.env.BONK_LAB_SECRET = runtime.secret;
+  }
+  if (runtime) {
     // The Lab Core uses the same Postgres: the Test Lab never stops it under a running Lab Core.
     lab.deps.postgresUsers = () =>
       runtime.deps.labCore.running ? ['the Lab Core (Studio runtime)'] : [];
@@ -677,7 +886,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         `found ${service.name} (pid ${service.pid}) left running by a previous Studio session`,
       );
   }
-  const labCoreUrl = labProfile ? process.env.BONK_LAB_CORE_URL : undefined;
+  const labCoreUrl =
+    labProfile && !mainLab ? process.env.BONK_LAB_CORE_URL : undefined;
   // Production profile: the same Bonk / Soundboard / TTS runtimes over the future-prod transport
   // (own journals and player tokens). Started inside a guard: a failure falls back to nothing
   // running and an explicit error, never to a silent Lab Core.
@@ -697,20 +907,49 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         return null;
       })
     : null;
-  const bonk = production
-    ? production.bonk
+  // The local Lab on the main Core: the SAME runtimes as the Production profile (workers over /v1/studio, cockpit),
+  // to the loopback Core, journals under runtimeDir/lab-main — never the Production ones.
+  const labMainRuntimes = mainLab
+    ? await createProductionRuntimes(
+        `http://${host}:${port}`,
+        join(paths.runtimeDir, 'lab-main'),
+        {
+          config: {
+            url: mainLab.url,
+            origin: mainLab.url,
+            ca: undefined,
+            caSha256: null,
+            channelId: MAIN_LAB_CHANNEL.id,
+            label: 'Lab (Core principal)',
+          },
+          installation: mainLab.installation,
+        },
+        { labLoopback: true, fictionalObs: process.env.LAB_OBS !== 'real' },
+      ).catch((error: Error) => {
+        lab.logs.add(
+          'studio',
+          `Lab sur le Core principal : démarrage impossible (${lab.deps.redact(error.message)})`,
+          'error',
+        );
+        return null;
+      })
+    : null;
+  /** The profile's Core over Studio's transport: the VPS (Production) or the main Core of the local Lab. */
+  const transport = production ?? labMainRuntimes;
+  const bonk = transport
+    ? transport.bonk
     : labCoreUrl
       ? await BonkRuntime.create(`http://${host}:${port}`)
       : null;
   // Soundboard V2 Lab: same Lab Core (test only), local player page.
-  const sound = production
-    ? production.sound
+  const sound = transport
+    ? transport.sound
     : labCoreUrl
       ? await SoundRuntime.create(`http://${host}:${port}`)
       : null;
   // TTS V2 Lab: same Lab Core (test only), local player page / OBS overlay.
-  const tts = production
-    ? production.tts
+  const tts = transport
+    ? transport.tts
     : labCoreUrl
       ? await TtsRuntime.create(`http://${host}:${port}`)
       : null;
@@ -725,10 +964,24 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
+    // Refonte F5 (P1-5): first give the mic and the filters back (at most 3 s: quitting is never blocked).
+    void Promise.race([
+      pointsRef
+        ?.restoreBeforeExit()
+        .catch((e: Error) =>
+          console.error(
+            '[studio-server] OBS restore on exit failed',
+            e.message,
+          ),
+        ),
+      new Promise((r) => setTimeout(r, 3000)),
+    ]).finally(stopEverything);
+  };
+  const stopEverything = () => {
     bonk?.stop();
     sound?.stop();
     tts?.stop();
-    production?.link.stop();
+    transport?.link.stop();
     seRef?.close();
     void dockRef?.server.close();
     halloweenRef?.stop();
@@ -756,22 +1009,23 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     ).finally(() => process.exit(0));
   };
   // Lab profile only: in Production the façade would only serve its outdated simulation.
-  const extLab = !labProfile
-    ? null
-    : await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
-        lab.logs.add(
-          'studio',
-          `Extension Lab unavailable: ${error.message}`,
-          'error',
-        );
-        return null;
-      });
-  if (production) {
-    // Admissions will come from the public EBS (P1-006): no Lab façade on the production workers.
-    production.bonk.start();
-    production.sound.start();
-    production.tts.start();
-    production.link.start();
+  const extLab =
+    !labProfile || mainLab
+      ? null
+      : await LabEbs.create(EXTENSION_DIR).catch((error: Error) => {
+          lab.logs.add(
+            'studio',
+            `Extension Lab unavailable: ${error.message}`,
+            'error',
+          );
+          return null;
+        });
+  if (transport) {
+    // Admissions come from the Core's viewer frontier (/v1/ext): no Lab façade on these workers.
+    transport.bonk.start();
+    transport.sound.start();
+    transport.tts.start();
+    transport.link.start();
   }
   if (bonk && extLab && !production) {
     extLab.connectBonk(bonk.worker, bonk.viewerAuth, bonk.thirdPartyCatalog);
@@ -788,8 +1042,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   }
   // Moderation V2 + TTS configuration + Lab test wallet: Core decides, Studio relays. Production: the
   // same cockpit on the Production Core (installation credential, the Core's own channel).
-  const labCore = production
-    ? production.cockpit
+  const labCore = transport
+    ? transport.cockpit
     : labCoreUrl
       ? localLabCoreClient(labCoreUrl, process.env.BONK_LAB_SECRET ?? '')
       : null;
@@ -812,7 +1066,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           soundboard: sound ? { ready: sound.worker.ready } : null,
           bonk: bonk ? bonk.summary() : null,
         }),
-        identities: () => extLab?.labIdentities() ?? [],
+        identities: () =>
+          mainLab ? labChatIdentities() : (extLab?.labIdentities() ?? []),
         onChange: () => extLab?.invalidateLab(),
       })
     : null;
@@ -820,6 +1075,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   const raffle = labCore
     ? await RaffleRuntime.create({
         channelId: cockpitChannel,
+        simulatedStream: !production,
         core: labCore,
         origin: `http://${host}:${port}`,
         dir: join(paths.runtimeDir, 'raffle-lab'),
@@ -839,8 +1095,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         channelId: cockpitChannel,
         core: labCore,
         environment: production ? 'production' : 'lab',
-        events: production
-          ? production.cockpitEvents
+        events: transport
+          ? transport.cockpitEvents
           : localLabCoreEvents(labCoreUrl!, process.env.BONK_LAB_SECRET ?? ''),
         origin: `http://${host}:${port}`,
         dir: join(paths.runtimeDir, 'word-game'),
@@ -856,13 +1112,28 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // Twitch alerts V1 (§ 22): ONE runtime, on the Core of the profile — the Lab Core, or the paired production Core
   // (/v1/studio/alerts). Media, calibration and the OBS source token are shared by both profiles (runtimeDir/alerts:
   // the OBS URL does not change at the cutover); the StreamElements mode and journal are per profile.
-  const alertsEnv: 'lab' | 'production' | null =
-    labCore && labProfile ? 'lab' : production ? 'production' : null;
+  // The local Lab on the main Core: the module runtimes keep their Lab mode (simulators, Lab routes through the cockpit;
+  // journals under runtimeDir/lab-main, never mixed with the historical Lab's). What reads a real outside service stays
+  // off there: StreamElements, the Twitch chat ingress.
+  const labModuleDir = (name: string) =>
+    mainLab
+      ? join(paths.runtimeDir, 'lab-main', name)
+      : join(paths.runtimeDir, name);
+  const alertsEnv: 'lab' | 'production' | null = mainLab
+    ? labMainRuntimes
+      ? 'lab'
+      : null
+    : labCore && labProfile
+      ? 'lab'
+      : production
+        ? 'production'
+        : null;
   const alertsCore =
-    alertsEnv === 'lab' ? labCore : (production?.alertsCore ?? null);
-  // Real StreamElements donations: own mode (OFF by default, ACTIVE never resumed at start), token from Electron main.
+    alertsEnv === 'lab' ? labCore : (transport?.alertsCore ?? null);
+  // Real StreamElements donations: own mode (OFF by default; ACTIVE resumed in Production only, refonte H5), token from
+  // Electron main.
   const se =
-    alertsCore && alertsEnv
+    alertsCore && alertsEnv && !mainLab
       ? await SeTipsLink.open({
           dir:
             alertsEnv === 'lab'
@@ -920,14 +1191,24 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           media: await AlertMediaStore.open(
             join(paths.runtimeDir, 'alerts', 'media'),
           ),
+          mediaImport: Boolean(mainLab),
         })
       : null;
   // Single Lab chat ingress: ONE Twitch chat connection (bot adapter, switch OFF by default) for every
   // Lab module, plus the chat simulator. Never started automatically unless left ON and unblocked.
   // Lab profile only: in Production the chat / bot 2.0 stays off (no collision with SAMMI / legacy).
   const ingressLines: string[] = [];
-  const labChat: LabChatIngress | null =
-    labCore && labProfile
+  const labChat: LabChatIngress | null = mainLab
+    ? labCore
+      ? // The main Core's Lab: the chat SIMULATOR only. No adapter process, no token: the real Twitch chat cannot start.
+        await LabChatIngress.create({
+          core: labCore,
+          origin: `http://${host}:${port}`,
+          dir: labModuleDir('lab-chat'),
+          identities: labChatIdentities,
+        })
+      : null
+    : labCore && labProfile
       ? await LabChatIngress.create({
           core: labCore,
           origin: `http://${host}:${port}`,
@@ -976,6 +1257,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   // in Core, or an explicit « Tester »). Twitch reception: the Lab chat adapter's broadcaster connection (Lab) or
   // the production bot (Production).
   const broadcasterTokenFile = twitchTokenFiles().broadcaster;
+  // On the main Core's Lab too, in its Lab mode (environment 'lab': the Spotify simulator, never the real account).
   const points =
     alertsCore && alertsEnv
       ? await ChannelPointsRuntime.create({
@@ -985,7 +1267,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           origin: `http://${host}:${port}`,
           dir:
             alertsEnv === 'lab'
-              ? join(paths.runtimeDir, 'channel-points')
+              ? labModuleDir('channel-points')
               : join(paths.runtimeDir, 'production', 'channel-points'),
           obs: () => bonk?.obs ?? null,
           // Effects player (P0.1): one OBS browser source; media imported by effects/import-cli.ts.
@@ -1015,7 +1297,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           // Spotify V2: the Lab plays on the simulator; Production on the broadcaster's account (panel « Musique »).
           spotifyDir:
             alertsEnv === 'lab'
-              ? join(paths.runtimeDir, 'spotify-lab')
+              ? labModuleDir('spotify-lab')
               : join(paths.runtimeDir, 'production', 'spotify'),
           twitch: () => ({
             scope: hasTwitchScope(
@@ -1045,24 +1327,34 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     envFile: paths.botEnv,
     production: !labProfile,
     canAuthorize: () =>
-      lab.tokenOperationsBusy || labChat?.status().enabled
+      mainLab
         ? {
             ok: false,
             reason:
-              'Coupe Ingestion chat Twitch dans Simulation, arrête le bot dans Test Lab et attends la fin des opérations. Arrête aussi les anciens processus lancés à part.',
+              'Lab sur le véritable Core : Twitch y est fictif, aucun compte réel ne se connecte ici.',
           }
-        : { ok: true },
+        : lab.tokenOperationsBusy || labChat?.status().enabled
+          ? {
+              ok: false,
+              reason:
+                'Coupe Ingestion chat Twitch dans Simulation, arrête le bot dans Test Lab et attends la fin des opérations. Arrête aussi les anciens processus lancés à part.',
+            }
+          : { ok: true },
   });
   twitchConnectionsRef = twitchConnections;
   // Supervision (incident 22/10): what would make the Core refuse a viewer, read from the live runtimes.
   const studioOrigin = `http://${host}:${port}`;
+  // Refonte F1 (P0-7): a Production profile whose runtimes did not start is an incident, never « nothing runs here ».
+  const startFailed = productionError
+    ? { state: 'start_failed', detail: productionError as string | null }
+    : null;
   const interactionSources = (): InteractionSources => ({
-    link: production?.link ?? null,
+    link: transport?.link ?? startFailed,
     tts: tts?.worker ?? null,
     sound: sound?.worker ?? null,
     bonk: bonk
       ? {
-          obsConnected: bonk.obs.connected,
+          obsConnected: bonk.obs.connected || bonk.fictionalObs,
           obsReconnecting: bonk.obs.reconnecting,
           obsError: bonk.obs.error,
           sourceReady: bonk.sourceReady,
@@ -1072,12 +1364,21 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         }
       : null,
   });
-  const bot = botStatusProvider(production?.alertsCore ?? null);
+  const bot = botStatusProvider(
+    production?.alertsCore ?? null,
+    undefined,
+    productionError,
+  );
+  // The Lab: a player opens when it is used. Nothing absent here is an outage (no incident, no alarm on every page).
+  const interactionSignals = () => {
+    const signals = readSignals(interactionSources(), Date.now());
+    return mainLab ? signals.map(labSignal) : signals;
+  };
   const control = new ControlCenter(studioOrigin, [
     bot,
-    interactionsStatusProvider(() =>
-      readSignals(interactionSources(), Date.now()),
-    ),
+    // Every module of the module host, in one provider (architecture socle).
+    modulesStatusProvider(labCore, cockpitChannel),
+    interactionsStatusProvider(interactionSignals),
   ]);
   const supervisor = new Supervisor({
     read: async (): Promise<Signal[]> => {
@@ -1096,7 +1397,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
               },
             ]
           : [];
-      return [...botSignal, ...readSignals(interactionSources(), Date.now())];
+      return [...botSignal, ...interactionSignals()];
     },
     log: (line) => console.log(lab.deps.redact(line)),
   });
@@ -1134,7 +1435,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     environment: alertsEnv,
     channelId: cockpitChannel,
     studioId:
-      plan.production?.installation.installationId ?? 'studio-lab-halloween',
+      (plan.production?.installation ?? mainLab?.installation)
+        ?.installationId ?? 'studio-lab-halloween',
     fromMain: (req) => fromMain(req, { RAPTORU_MAIN_TOKEN: mainToken }),
     log: (line) => console.log(line),
     // Chaos: the viewers see the effect through filters on OBS's screen capture (Studio's one OBS connection).
@@ -1145,9 +1447,9 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     .start()
     .catch((e: Error) => console.error('[halloween] start failed', e.message));
   halloweenRef = halloween;
-  const httpServer = createStudioServer(
+  const httpServer = createStudioServer({
     lab,
-    shutdown,
+    onShutdown: shutdown,
     extLab,
     bonk,
     sound,
@@ -1157,8 +1459,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     raffle,
     labChat,
     // Commands V2: the Lab Core, or the main Core through the production cockpit (lot 8: it hosts the chat games).
-    labCore ? commandsRelay(labCore, cockpitChannel) : null,
-    {
+    commands: labCore ? commandsRelay(labCore, cockpitChannel) : null,
+    profile: {
       plan,
       runtimeDir: paths.runtimeDir,
       env: { ...process.env, RAPTORU_MAIN_TOKEN: mainToken },
@@ -1172,22 +1474,50 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       },
     },
     wordGame,
-    labCore ? miniGamesRelay(labCore, cockpitChannel) : null,
+    relays: labCore
+      ? chainRelays(
+          miniGamesRelay(labCore, cockpitChannel),
+          moduleSettingsRelay(labCore, cockpitChannel),
+          // The fictional player (claim / report) only off the Production profile.
+          modulesRelay(labCore, cockpitChannel, { labPlayer: !production }),
+        )
+      : null,
     alerts,
     points,
     twitchConnections,
     // Centre de contrôle: the Production bot through the paired Studio's Core client (Lab profile: not followed), then
     // the viewer interactions as Studio sees them (supervision/signals.ts).
     control,
-    { handle: supervisor.handle.bind(supervisor), origin: studioOrigin },
+    supervision: {
+      handle: supervisor.handle.bind(supervisor),
+      origin: studioOrigin,
+    },
     dock,
     halloween,
-    new ProgressionRelay({ core: alertsCore, environment: alertsEnv }),
+    progression: new ProgressionRelay({
+      core: alertsCore,
+      environment: alertsEnv,
+    }),
     // Boutique cosmétique V1 (docs/COSMETIC_SHOP.md): the profile's Core decides; Studio edits and previews.
-    new CosmeticsRelay({ core: alertsCore, environment: alertsEnv }),
+    cosmetics: new CosmeticsRelay({ core: alertsCore, environment: alertsEnv }),
     // Défis: definitions, recount and follow-up; the Core counts and pays, Studio only edits and shows.
-    new ChallengesRelay({ core: alertsCore, environment: alertsEnv }),
-  );
+    challenges: new ChallengesRelay({
+      core: alertsCore,
+      environment: alertsEnv,
+    }),
+    labPanel:
+      mainLab && labCore
+        ? new CoreLabPanel(labCore, MAIN_LAB_CHANNEL.id)
+        : null,
+    // The local Lab on the main Core: the Extension Lab speaks to its real /v1/ext (Studio signs the Lab JWT).
+    labFrontier: mainLab
+      ? {
+          coreUrl: mainLab.url,
+          extensionSecret: mainLab.extensionSecret,
+          channelId: MAIN_LAB_CHANNEL.id,
+        }
+      : null,
+  });
   supervisor.start();
   if (dock)
     dock.server.listen().then(
