@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>V1 de référence — 521 · 565 · 651</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #14121a;
+        --ink: #ece9f3;
+        --dim: #a29cb3;
+        --line: #2c2838;
+      }
+      body {
+        margin: 0;
+        padding: 24px 16px 48px;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 17px;
+        margin: 32px 0 10px;
+      }
+      p {
+        color: var(--dim);
+        max-width: 900px;
+        margin: 6px 0;
+      }
+      .row {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+        overflow-x: auto;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      figure {
+        margin: 0;
+        flex: none;
+      }
+      figcaption {
+        font-size: 13px;
+        color: var(--dim);
+        margin-top: 6px;
+      }
+      figcaption b {
+        color: var(--ink);
+      }
+      img {
+        display: block;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Choisir la V1 de référence</h1>
+    <p>
+      Captures du composant vidéo, <b>en taille réelle</b> (1 px CSS = 1 px ici,
+      zoom 100 %), même code (<code>main 13ed6e8</code>), mêmes données fictives
+      de la version calibration. 565 × 376 = ton réglage 65 % ; 651 × 434 =
+      réglage 75 % ; 521 × 347 = réglage 60 %.
+    </p>
+    <p>
+      Attention : 565 × 376 et 521 × 347 utilisent le profil « compact »
+      (hauteur 321–400 px) ; 651 × 434 utilise la composition normale, celle des
+      prototypes validés en 600 × 432.
+    </p>
+    <div id="views"></div>
+    <script>
+      const views = [
+        ['hub', 'Hub'],
+        ['tts', 'TTS'],
+        ['soundboard', 'Soundboard'],
+        ['raffle_join', 'Tombola'],
+        ['bonk', 'Bonk'],
+        ['moderation', 'Modération'],
+      ];
+      const sizes = [
+        ['521x347', '60 % — 521 × 347'],
+        ['565x376', '65 % — 565 × 376 (V1 actuelle)'],
+        ['651x434', '75 % — 651 × 434'],
+      ];
+      const root = document.getElementById('views');
+      for (const [id, label] of views) {
+        const h = document.createElement('h2');
+        h.textContent = label;
+        root.append(h);
+        const row = document.createElement('div');
+        row.className = 'row';
+        for (const [s, cap] of sizes) {
+          const [w, hgt] = s.split('x');
+          const f = document.createElement('figure');
+          f.innerHTML = `<img src="captures/v1/${id}-${s}.png" width="${w}" height="${hgt}" alt="${label} ${s}"><figcaption><b>${cap}</b></figcaption>`;
+          row.append(f);
+        }
+        root.append(row);
+      }
+    </script>
+  </body>
+</html>
